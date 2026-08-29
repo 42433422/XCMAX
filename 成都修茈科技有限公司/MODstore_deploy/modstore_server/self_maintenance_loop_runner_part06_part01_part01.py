@@ -244,7 +244,14 @@ def _python_supports_focused_tests(candidate: _facade().Path) -> bool:
         return False
     try:
         probe = _facade().subprocess.run(
-            [str(candidate), "-c", "import apscheduler, pytest"],
+            [
+                str(candidate),
+                "-c",
+                (
+                    "import sys, apscheduler, pytest; "
+                    "raise SystemExit(0 if sys.version_info >= (3, 11) else 1)"
+                ),
+            ],
             check=False,
             capture_output=True,
             text=True,

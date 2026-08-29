@@ -36,6 +36,7 @@ from modstore_server.self_maintenance_loop_runner import (
     _is_transient_employee_dispatch_failure,
     _load_loop_memory,
     _matches_focused_test_command,
+    _python_supports_focused_tests,
     _qa_task_text,
     _reconcile_requested_merge_feedback,
     _reconcile_retort_scope_remediations,
@@ -2214,13 +2215,18 @@ def test_report_only_review_and_qa_prompt_pin_target_branch(monkeypatch):
     assert "Verify both refs with `git cat-file -e`" in qa
     assert "file:///tmp/repo.git" in qa
     assert "`verified-python -m pytest focused.py -q`" in qa
-    assert "platform-equivalent local `python -m pytest` command" in qa
+    assert "platform-equivalent local Python" in qa
     assert "same focused test file" in qa
+    assert "cannot be resolved from PATH" in qa
+    assert "older than Python 3.11" in qa
+    assert "cannot import both apscheduler and pytest" in qa
+    assert "Resolve bare `python` or `python3` names with `command -v`" in qa
+    assert "assert sys.version_info >= (3, 11)" in qa
     assert "Materialize the COMPLETE target ref" in qa
     assert "do not archive only `成都修茈科技有限公司/MODstore_deploy`" in qa
     assert "sibling `FHD/` autonomy-guard SSOT" in qa
     assert "never report PASS with no successful focused tested_commands entry" in qa
-    assert "Do not fail solely because the scheduler's absolute Python path" in qa
+    assert "scheduler's configured Python is unavailable or unsupported" in qa
     assert (
         "python -m modstore_server.self_maintenance_diff_quality --tool black "
         "--base-ref origin/feat/base --target-ref origin/devfleet/codex/sub-1"
@@ -2254,6 +2260,42 @@ def test_focused_test_command_prefers_explicit_command(monkeypatch):
     )
 
     assert _focused_test_command() == "runtime-python -m pytest focused.py -q"
+
+
+def test_python_supports_focused_tests_requires_python_311_and_dependencies(monkeypatch, tmp_path):
+    candidate = tmp_path / "python"
+    candidate.write_text("#!/bin/sh\n", encoding="utf-8")
+    candidate.chmod(0o755)
+    probes = []
+
+    def run_probe(command, **kwargs):
+        probes.append(command)
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(loop_runner.subprocess, "run", run_probe)
+
+    assert _python_supports_focused_tests(candidate) is True
+    assert probes == [
+        [
+            str(candidate),
+            "-c",
+            "import sys, apscheduler, pytest; "
+            "raise SystemExit(0 if sys.version_info >= (3, 11) else 1)",
+        ]
+    ]
+
+
+def test_python_supports_focused_tests_rejects_failed_compatibility_probe(monkeypatch, tmp_path):
+    candidate = tmp_path / "python"
+    candidate.write_text("#!/bin/sh\n", encoding="utf-8")
+    candidate.chmod(0o755)
+    monkeypatch.setattr(
+        loop_runner.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=1),
+    )
+
+    assert _python_supports_focused_tests(candidate) is False
 
 
 def test_high_risk_report_detects_standalone_qa_fail():
