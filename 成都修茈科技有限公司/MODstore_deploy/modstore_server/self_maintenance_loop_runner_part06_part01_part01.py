@@ -239,7 +239,7 @@ def _base_para_input(
 
 
 def _python_supports_focused_tests(candidate: _facade().Path) -> bool:
-    """Return whether a Python executable has the loop's test dependencies."""
+    """Return whether Python can execute every mandatory QA command."""
     if not candidate.is_file() or not _facade().os.access(candidate, _facade().os.X_OK):
         return False
     try:
@@ -248,7 +248,7 @@ def _python_supports_focused_tests(candidate: _facade().Path) -> bool:
                 str(candidate),
                 "-c",
                 (
-                    "import sys, apscheduler, pytest; "
+                    "import sys, apscheduler, black, isort, pytest; "
                     "raise SystemExit(0 if sys.version_info >= (3, 11) else 1)"
                 ),
             ],
@@ -282,6 +282,11 @@ def _focused_test_command() -> str:
         or _facade().Path(__file__).resolve().parent.parent
     )
     runtime_root = _facade().os.environ.get("MODSTORE_RUNTIME_ROOT", "").strip()
+    path_candidates = [
+        _facade().Path(path)
+        for name in ("python3.13", "python3.12", "python3.11", "python3", "python")
+        if (path := _facade().shutil.which(name))
+    ]
     candidates = [
         _facade().Path(test_python_override).expanduser() if test_python_override else None,
         deploy_root / ".venv" / "bin" / "python",
@@ -294,6 +299,7 @@ def _focused_test_command() -> str:
             if runtime_root
             else None
         ),
+        *path_candidates,
         _facade().Path(_facade().sys.executable),
     ]
     test_python = next(

@@ -2219,9 +2219,12 @@ def test_report_only_review_and_qa_prompt_pin_target_branch(monkeypatch):
     assert "same focused test file" in qa
     assert "cannot be resolved from PATH" in qa
     assert "older than Python 3.11" in qa
-    assert "cannot import both apscheduler and pytest" in qa
-    assert "Resolve bare `python` or `python3` names with `command -v`" in qa
+    assert "required apscheduler, pytest, Black, and isort modules" in qa
+    assert "command -v python3.13 python3.12 python3.11 python3 python" in qa
+    assert "import sys, apscheduler, black, isort, pytest" in qa
     assert "assert sys.version_info >= (3, 11)" in qa
+    assert "same resolved absolute executable" in qa
+    assert "replace only that leading token" in qa
     assert "Materialize the COMPLETE target ref" in qa
     assert "do not archive only `成都修茈科技有限公司/MODstore_deploy`" in qa
     assert "sibling `FHD/` autonomy-guard SSOT" in qa
@@ -2262,6 +2265,30 @@ def test_focused_test_command_prefers_explicit_command(monkeypatch):
     assert _focused_test_command() == "runtime-python -m pytest focused.py -q"
 
 
+def test_focused_test_command_discovers_supported_versioned_python(monkeypatch, tmp_path):
+    candidate = tmp_path / "python3.11"
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", raising=False)
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_TEST_PYTHON", raising=False)
+    monkeypatch.delenv("MODSTORE_RUNTIME_ROOT", raising=False)
+    monkeypatch.setenv("MODSTORE_DEPLOY_ROOT", str(tmp_path / "deploy"))
+    monkeypatch.setattr(
+        loop_runner.shutil,
+        "which",
+        lambda name: str(candidate) if name == "python3.11" else None,
+    )
+    monkeypatch.setattr(
+        loop_runner,
+        "_python_supports_focused_tests",
+        lambda value: value == candidate,
+    )
+
+    assert _focused_test_command() == (
+        f"{candidate} -m pytest "
+        "'成都修茈科技有限公司/MODstore_deploy/tests/"
+        "test_self_maintenance_loop_runner_policy.py' -q"
+    )
+
+
 def test_python_supports_focused_tests_requires_python_311_and_dependencies(monkeypatch, tmp_path):
     candidate = tmp_path / "python"
     candidate.write_text("#!/bin/sh\n", encoding="utf-8")
@@ -2279,7 +2306,7 @@ def test_python_supports_focused_tests_requires_python_311_and_dependencies(monk
         [
             str(candidate),
             "-c",
-            "import sys, apscheduler, pytest; "
+            "import sys, apscheduler, black, isort, pytest; "
             "raise SystemExit(0 if sys.version_info >= (3, 11) else 1)",
         ]
     ]
