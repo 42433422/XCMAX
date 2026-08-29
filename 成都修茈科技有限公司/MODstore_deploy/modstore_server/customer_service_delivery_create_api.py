@@ -120,18 +120,17 @@ async def create_custom_delivery(
         .order_by(CustomerServiceTicket.id.asc())
         .all()
     )
-    purchase_key = str(purchase["purchase_key"])
-    purchase_initial_tickets: list[CustomerServiceTicket] = []
+    # The purchased account (user_id) is the delivery SSOT. Plan and entitlement
+    # rows may be replaced by a tier upgrade or commerce reconciliation; that must
+    # not grant the same account a second included initial delivery.
+    account_initial_tickets: list[CustomerServiceTicket] = []
     legacy_delivered = False
     for prior_ticket in prior_tickets:
         prior_evidence = _custom_delivery_evidence(prior_ticket)
         prior_terms = prior_evidence.get("delivery_terms")
         prior_terms = prior_terms if isinstance(prior_terms, dict) else {}
-        if (
-            str(prior_terms.get("pricing_mode") or "") == "initial_included"
-            and str(prior_terms.get("purchase_key") or "") == purchase_key
-        ):
-            purchase_initial_tickets.append(prior_ticket)
+        if str(prior_terms.get("pricing_mode") or "") == "initial_included":
+            account_initial_tickets.append(prior_ticket)
         if str(prior_ticket.status or "") in {"resolved", "closed", "done"} and not str(
             prior_terms.get("purchase_key") or ""
         ):
@@ -140,7 +139,7 @@ async def create_custom_delivery(
     active_initial = next(
         (
             ticket
-            for ticket in purchase_initial_tickets
+            for ticket in account_initial_tickets
             if str(ticket.status or "") not in {"resolved", "closed", "done"}
         ),
         None,
@@ -246,12 +245,14 @@ async def create_custom_delivery(
         db.commit()
         db.refresh(active_initial)
         return await _custom_delivery_payload(active_initial)
-    purchase_consumed = any(
+    initial_delivery_consumed = any(
         str(ticket.status or "") in {"resolved", "closed", "done"}
-        for ticket in purchase_initial_tickets
+        for ticket in account_initial_tickets
     )
     pricing_mode = (
-        "post_delivery_addon" if purchase_consumed or legacy_delivered else "initial_included"
+        "post_delivery_addon"
+        if initial_delivery_consumed or legacy_delivered
+        else "initial_included"
     )
     crm = custom_delivery_crm({})
     crm["assignment"] = {
