@@ -20,7 +20,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-from app.utils.operational_errors import BOUNDARY_ERRORS
+# launchd 环境无 PYTHONPATH，本脚本必须零项目依赖、可独立运行
+BOUNDARY_ERRORS: tuple[type[Exception], ...] = (Exception,)
 
 HOST = os.environ.get("XCMAX_REMOTE_HOST", "119.27.178.147")
 USER = os.environ.get("XCMAX_REMOTE_USER", "root")
