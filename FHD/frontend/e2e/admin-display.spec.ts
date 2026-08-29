@@ -120,6 +120,28 @@ async function installAdminDisplayMocks(page: Page) {
       })
       return
     }
+    if (path.endsWith('/api/xcmax/admin/market/users')) {
+      const users = Array.from({ length: 39 }, (_, index) => ({
+        id: index + 1,
+        username: `delivery-enterprise-${String(index + 1).padStart(2, '0')}`,
+        email: `delivery-${index + 1}@example.test`,
+        is_enterprise: true,
+      }))
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, users, total: users.length }),
+      })
+      return
+    }
+    if (path.endsWith('/api/xcmax/market-proxy/customer-service/custom-deliveries')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, items: [] }),
+      })
+      return
+    }
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -266,6 +288,68 @@ test('approval center keeps its header and status summary above a long audit str
       )
       expect(geometry.hubTop, `${viewport.name}: lists must start after the status summary`).toBeGreaterThanOrEqual(
         geometry.statusBottom,
+      )
+    })
+  }
+})
+
+test('delivery center keeps every section in document flow with a long enterprise roster', async ({ page }) => {
+  await installAdminDisplayMocks(page)
+
+  for (const viewport of VIEWPORTS) {
+    await test.step(viewport.name, async () => {
+      await page.setViewportSize(viewport)
+      await page.goto('/admin/delivery-center', { waitUntil: 'domcontentloaded' })
+      await page.locator('.app-shell.is-ready').waitFor({ state: 'visible', timeout: 20_000 })
+      await expect(page.locator('.enterprise-roster__grid article')).toHaveCount(39)
+
+      const geometry = await page.evaluate(() => {
+        const rect = (selector: string) => {
+          const node = document.querySelector<HTMLElement>(selector)
+          if (!node) throw new Error(`missing ${selector}`)
+          return node.getBoundingClientRect()
+        }
+        const centerNode = document.querySelector<HTMLElement>('.delivery-center')
+        if (!centerNode) throw new Error('missing .delivery-center')
+        const hero = rect('.delivery-hero')
+        const stats = rect('.delivery-stats')
+        const statCard = rect('.delivery-stats article')
+        const roster = rect('.enterprise-roster')
+        const toolbar = rect('.delivery-toolbar')
+        const empty = rect('.delivery-empty')
+        return {
+          statsHeight: stats.height,
+          statCardHeight: statCard.height,
+          heroBottom: hero.bottom,
+          statsTop: stats.top,
+          statsBottom: stats.bottom,
+          rosterTop: roster.top,
+          rosterBottom: roster.bottom,
+          toolbarTop: toolbar.top,
+          toolbarBottom: toolbar.bottom,
+          emptyTop: empty.top,
+          scrollHeight: centerNode.scrollHeight,
+          clientHeight: centerNode.clientHeight,
+        }
+      })
+
+      expect(geometry.statsTop, `${viewport.name}: statistics must start after the page header`).toBeGreaterThanOrEqual(
+        geometry.heroBottom,
+      )
+      expect(geometry.statsHeight, `${viewport.name}: statistic cards must keep their natural height`).toBeGreaterThanOrEqual(
+        geometry.statCardHeight - 1,
+      )
+      expect(geometry.rosterTop, `${viewport.name}: roster must start after statistics`).toBeGreaterThanOrEqual(
+        geometry.statsBottom,
+      )
+      expect(geometry.toolbarTop, `${viewport.name}: custom-order filters must start after the roster`).toBeGreaterThanOrEqual(
+        geometry.rosterBottom,
+      )
+      expect(geometry.emptyTop, `${viewport.name}: empty state must start after its filters`).toBeGreaterThanOrEqual(
+        geometry.toolbarBottom,
+      )
+      expect(geometry.scrollHeight, `${viewport.name}: long delivery content must remain scrollable`).toBeGreaterThan(
+        geometry.clientHeight,
       )
     })
   }

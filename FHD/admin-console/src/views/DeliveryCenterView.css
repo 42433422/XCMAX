@@ -15,6 +15,12 @@
   box-sizing: border-box;
 }
 
+/* The routed view is also a column flex container. Keep every delivery section
+   at its natural height so the page scrolls instead of stacking sections. */
+.delivery-center > * {
+  flex-shrink: 0;
+}
+
 .delivery-hero { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 20px; }
 .delivery-eyebrow { margin: 0 0 7px; color: #3d78bc; font-size: 10px; font-weight: 800; letter-spacing: .18em; }
 .delivery-hero h2 { margin: 0; font-size: 28px; letter-spacing: -.02em; }
