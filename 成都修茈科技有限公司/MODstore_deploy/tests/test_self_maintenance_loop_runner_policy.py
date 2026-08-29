@@ -2327,6 +2327,23 @@ def test_focused_test_python_cache_expires_before_reusing_dependency_probe(monke
     assert _python_supports_focused_tests(candidate) is False
 
 
+def test_focused_test_python_cache_reuses_subprocess_error(monkeypatch, tmp_path):
+    candidate = tmp_path / "python"
+    candidate.write_text("runtime", encoding="utf-8")
+    candidate.chmod(0o755)
+    calls = []
+
+    def probe(*args, **kwargs):
+        calls.append(args)
+        raise loop_runner.subprocess.TimeoutExpired("dependency-probe", 10)
+
+    monkeypatch.setattr(loop_runner.subprocess, "run", probe)
+
+    assert _python_supports_focused_tests(candidate) is False
+    assert _python_supports_focused_tests(candidate) is False
+    assert len(calls) == 1
+
+
 def test_high_risk_report_detects_standalone_qa_fail():
     steps = [
         {

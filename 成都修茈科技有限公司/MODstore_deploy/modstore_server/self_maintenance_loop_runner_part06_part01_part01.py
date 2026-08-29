@@ -281,8 +281,9 @@ def _python_supports_focused_tests(candidate: _facade().Path) -> bool:
             timeout=10,
         )
     except (OSError, _facade().subprocess.SubprocessError):
-        return False
-    result = probe.returncode == 0
+        result = False
+    else:
+        result = probe.returncode == 0
     if (
         candidate_key not in _FOCUSED_TEST_PYTHON_CACHE
         and len(_FOCUSED_TEST_PYTHON_CACHE) >= _FOCUSED_TEST_PYTHON_CACHE_MAX_SIZE

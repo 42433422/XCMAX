@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "kind": "fix",
+  "created_at": "2026-08-29T07:47:40+00:00",
+  "symptom": "After the focused-test interpreter cache was added, an unchanged executable whose dependency probe raises TimeoutExpired or OSError is still launched again on every command-resolution call, allowing each scheduler pass to repeat the full probe timeout.",
+  "root_cause": "The exception handler returned False before the shared bounded-cache write, so only subprocess probes that returned normally, including non-zero results, received the intended negative-cache behavior.",
+  "fix_diff": "diff --git a/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner_part06_part01_part01.py b/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner_part06_part01_part01.py\nindex 9461f9dcd..839f45a88 100644\n--- a/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner_part06_part01_part01.py\n+++ b/成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner_part06_part01_part01.py\n@@ -281,8 +281,9 @@ def _python_supports_focused_tests(candidate: _facade().Path) -> bool:\n             timeout=10,\n         )\n     except (OSError, _facade().subprocess.SubprocessError):\n-        return False\n-    result = probe.returncode == 0\n+        result = False\n+    else:\n+        result = probe.returncode == 0\n     if (\n         candidate_key not in _FOCUSED_TEST_PYTHON_CACHE\n         and len(_FOCUSED_TEST_PYTHON_CACHE) >= _FOCUSED_TEST_PYTHON_CACHE_MAX_SIZE\ndiff --git a/成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py b/成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py\nindex 58c30895a..7056ebc93 100644\n--- a/成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py\n+++ b/成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py\n@@ -2327,6 +2327,23 @@ def test_focused_test_python_cache_expires_before_reusing_dependency_probe(monke\n     assert _python_supports_focused_tests(candidate) is False\n \n \n+def test_focused_test_python_cache_reuses_subprocess_error(monkeypatch, tmp_path):\n+    candidate = tmp_path / \"python\"\n+    candidate.write_text(\"runtime\", encoding=\"utf-8\")\n+    candidate.chmod(0o755)\n+    calls = []\n+\n+    def probe(*args, **kwargs):\n+        calls.append(args)\n+        raise loop_runner.subprocess.TimeoutExpired(\"dependency-probe\", 10)\n+\n+    monkeypatch.setattr(loop_runner.subprocess, \"run\", probe)\n+\n+    assert _python_supports_focused_tests(candidate) is False\n+    assert _python_supports_focused_tests(candidate) is False\n+    assert len(calls) == 1\n+\n+\n def test_high_risk_report_detects_standalone_qa_fail():\n     steps = [\n         {\n",
+  "metadata": {
+    "component": "self_maintenance_loop_runner_focused_test_interpreter",
+    "files": [
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_runner_part06_part01_part01.py",
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py"
+    ]
+  },
+  "executable_template": {
+    "applicability_check": "Use an executable candidate with an unchanged stat fingerprint, make subprocess.run raise TimeoutExpired or OSError twice inside the cache TTL, and confirm whether both calls launch the dependency probe.",
+    "patch_strategy": "Convert caught probe exceptions into the same false result used for a normal non-zero probe, then let the existing fingerprint-bound, TTL-bound, size-bounded cache store and reuse that negative result.",
+    "rollback_plan": "Revert the exception-result fallthrough and its regression together; if negative caching proves too broad, keep the bounded cache for normal return codes and add a shorter dedicated exception TTL instead of restoring repeated 10-second probes.",
+    "required_tests": [
+      "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py::test_focused_test_python_cache_reuses_subprocess_error"
+    ]
+  }
+}
