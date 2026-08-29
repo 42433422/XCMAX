@@ -3,17 +3,23 @@ package com.modstore.controller;
 import com.modstore.model.Order;
 import com.modstore.model.User;
 import com.modstore.repository.UserRepository;
+import com.modstore.service.AlipayService;
 import com.modstore.service.OrderService;
+import com.modstore.service.WechatPayService;
+import com.modstore.util.MoneyUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
@@ -22,6 +28,7 @@ import java.time.ZoneOffset;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Service-to-service payment reads for CS/CRM (FHD 客服到款核对).
@@ -36,6 +43,8 @@ public class InternalPaymentController {
 
     private final UserRepository userRepository;
     private final OrderService orderService;
+    private final AlipayService alipayService;
+    private final WechatPayService wechatPayService;
 
     @Value("${modstore.internal-api-key:}")
     private String internalApiKey;
@@ -45,6 +54,107 @@ public class InternalPaymentController {
 
     @Value("${alipay.debug:false}")
     private boolean alipayDebug;
+
+    @Value("${payment.public-origin:}")
+    private String publicOrigin;
+
+    @Value("${payment.market-prefix:/market}")
+    private String marketPrefix;
+
+    /** Create a real provider order for an accepted post-delivery quote. */
+    @PostMapping("/custom-delivery-checkout")
+    public Map<String, Object> customDeliveryCheckout(
+            @RequestHeader(value = "X-Internal-Api-Key", required = false) String key,
+            @RequestBody Map<String, Object> request
+    ) {
+        requireInternalKey(key);
+        long userId;
+        try {
+            userId = Long.parseLong(String.valueOf(request.getOrDefault("user_id", "0")));
+        } catch (NumberFormatException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "user_id invalid");
+        }
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "user not found"));
+        String ticketNo = String.valueOf(request.getOrDefault("ticket_no", "")).trim();
+        if (!ticketNo.matches("CD[A-Za-z0-9_-]{8,48}")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "ticket_no invalid");
+        }
+        BigDecimal amount;
+        try {
+            amount = MoneyUtils.parse(request.get("total_amount"));
+        } catch (RuntimeException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "total_amount invalid");
+        }
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "total_amount must be positive");
+        }
+        String subject = String.valueOf(
+                request.getOrDefault("subject", "定制交付新增开发 " + ticketNo)
+        ).trim();
+        if (subject.isBlank()) {
+            subject = "定制交付新增开发 " + ticketNo;
+        }
+        if (subject.length() > 256) {
+            subject = subject.substring(0, 256);
+        }
+        String payChannel = String.valueOf(request.getOrDefault("pay_channel", "alipay"))
+                .trim().toLowerCase();
+        if (!"alipay".equals(payChannel) && !"wechat".equals(payChannel)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "pay_channel invalid");
+        }
+
+        String outTradeNo = "CDP" + System.currentTimeMillis() + userId
+                + UUID.randomUUID().toString().substring(0, 6);
+        Order order = orderService.createOrder(
+                user,
+                outTradeNo,
+                subject,
+                amount,
+                "custom_delivery",
+                null,
+                null,
+                "cdp-" + UUID.randomUUID()
+        );
+        Map<String, Object> payResult;
+        if ("wechat".equals(payChannel)) {
+            if (!wechatPayService.configured()) {
+                orderService.updateOrderStatus(outTradeNo, "failed", null, null, null);
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "wechat not configured");
+            }
+            payResult = wechatPayService.createNativePay(outTradeNo, subject, amount);
+        } else {
+            payResult = alipayService.createPagePay(
+                    outTradeNo,
+                    subject,
+                    amount,
+                    checkoutReturnUrl(outTradeNo)
+            );
+        }
+        if (!Boolean.TRUE.equals(payResult.get("ok"))) {
+            orderService.updateOrderStatus(outTradeNo, "failed", null, null, null);
+            String message = String.valueOf(payResult.getOrDefault("message", "payment provider failed"));
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, message);
+        }
+        orderService.updatePaymentMetadata(
+                order.getOutTradeNo(),
+                String.valueOf(payResult.getOrDefault("type", payChannel)),
+                payResult.get("qr_code") == null ? null : String.valueOf(payResult.get("qr_code"))
+        );
+        Map<String, Object> result = new HashMap<>();
+        result.put("ok", true);
+        result.put("source", "java_postgresql");
+        result.put("order_id", outTradeNo);
+        result.put("order_kind", "custom_delivery");
+        result.put("ticket_no", ticketNo);
+        result.put("type", String.valueOf(payResult.getOrDefault("type", payChannel)));
+        result.put("redirect_url", String.valueOf(payResult.getOrDefault("redirect_url", "")));
+        result.put("qr_code", String.valueOf(payResult.getOrDefault("qr_code", "")));
+        result.put("subject", subject);
+        result.put("total_amount", amount.toPlainString());
+        result.put("checkout_path", normalizedMarketPrefix() + "/checkout/" + outTradeNo);
+        return result;
+    }
 
     @GetMapping("/user-orders")
     public Map<String, Object> userOrders(
@@ -132,6 +242,25 @@ public class InternalPaymentController {
             return null;
         }
         return status.trim().toLowerCase();
+    }
+
+    private String checkoutReturnUrl(String outTradeNo) {
+        String origin = publicOrigin == null ? "" : publicOrigin.trim();
+        while (origin.endsWith("/")) {
+            origin = origin.substring(0, origin.length() - 1);
+        }
+        return origin + normalizedMarketPrefix() + "/checkout/" + outTradeNo;
+    }
+
+    private String normalizedMarketPrefix() {
+        String prefix = marketPrefix == null ? "/market" : marketPrefix.trim();
+        if (!prefix.startsWith("/")) {
+            prefix = "/" + prefix;
+        }
+        while (prefix.endsWith("/") && prefix.length() > 1) {
+            prefix = prefix.substring(0, prefix.length() - 1);
+        }
+        return prefix;
     }
 
     private Map<String, Object> orderToMap(Order order) {

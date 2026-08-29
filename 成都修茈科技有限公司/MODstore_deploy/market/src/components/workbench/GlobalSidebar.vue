@@ -73,6 +73,12 @@
         </svg>
         <span>钱包</span>
       </a>
+      <a href="/market/deliveries" class="wb-sidebar-mode-btn" title="我的交付">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3">
+          <path d="M2 3.5h12v9H2zM5 1.5h6v4H5zM5 9h6" />
+        </svg>
+        <span>我的交付</span>
+      </a>
       <div class="wb-sidebar-user-row">
         <a href="/market/account" class="wb-sidebar-user-link">{{ username }}</a>
         <a v-if="level" href="/market/account" class="wb-sidebar-level-badge" :title="levelTitle">Lv.{{ level }}</a>

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import types
 import uuid
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -26,6 +27,26 @@ def _make_user(username: str, *, admin: bool = False):
         return types.SimpleNamespace(
             id=user.id, username=user.username, email=user.email, is_admin=user.is_admin
         )
+
+
+def _grant_permanent_purchase(user_id: int, plan_id: str = "saas-permanent-growth") -> str:
+    from modstore_server.models import Entitlement, UserPlan, get_session_factory
+
+    order_no = f"ACCOUNT-PYTEST-{uuid.uuid4().hex[:10]}"
+    sf = get_session_factory()
+    with sf() as session:
+        session.add(UserPlan(user_id=user_id, plan_id=plan_id, is_active=True))
+        session.add(
+            Entitlement(
+                user_id=user_id,
+                entitlement_type="plan",
+                source_order_id=order_no,
+                metadata_json=f'{{"plan_id":"{plan_id}"}}',
+                is_active=True,
+            )
+        )
+        session.commit()
+    return order_no
 
 
 def _paid_order(tmp_path, monkeypatch, user_id: int) -> str:
@@ -532,7 +553,11 @@ def test_apply_customer_ticket_incident_progress_advances_lifecycle(client, monk
 
 def test_custom_delivery_requires_quality_acceptance_and_install_receipt(client, monkeypatch):
     """定制交付不能因员工报告成功提前结案；必须质量门、验收和安装回执齐全。"""
-    from modstore_server import customer_service_api, workbench_api
+    from modstore_server import (
+        customer_service_api,
+        customer_service_delivery_payment_api,
+        workbench_api,
+    )
     from modstore_server.app import app
     from modstore_server.customer_service_orchestrator import (
         apply_customer_ticket_incident_progress,
@@ -541,6 +566,7 @@ def test_custom_delivery_requires_quality_acceptance_and_install_receipt(client,
     from modstore_server.models_cs import CustomerServiceAuditLog, CustomerServiceTicket
 
     user = _make_user("custom_delivery")
+    account_order_no = _grant_permanent_purchase(user.id)
     admin = _make_user("custom_delivery_admin", admin=True)
     state = {
         "id": "wb-custom-1",
@@ -555,7 +581,7 @@ def test_custom_delivery_requires_quality_acceptance_and_install_receipt(client,
 
     async def fake_start(user_id, payload):
         assert user_id == user.id
-        assert payload["intent"] == "mod"
+        assert payload["intent"] in {"mod", "employee"}
         return {"session_id": state["id"], "status": "running"}
 
     async def fake_snapshot(session_id, user_id):
@@ -586,9 +612,33 @@ def test_custom_delivery_requires_quality_acceptance_and_install_receipt(client,
         body = created.json()
         assert body["user_id"] == user.id
         assert body["custom_delivery"]["stage"] == "production"
+        assert body["custom_delivery"]["pricing_mode"] == "initial_included"
+        assert body["custom_delivery"]["delivery_terms"]["source_order_id"] == account_order_no
+        assert body["custom_delivery"]["commerce_ready"] is True
         ticket_id = int(body["id"])
-
         sf = get_session_factory()
+
+        duplicate_initial = client.post(
+            "/api/customer-service/custom-deliveries",
+            json={
+                "kind": "module",
+                "title": "首次交付前追加要求",
+                "requirements": "在当前首次交付完成前追加一个新的审核规则。",
+                "acceptance_criteria": "追加规则与原工单一起通过验收。",
+                "suggested_id": "pre-delivery-extra-rule",
+            },
+        )
+        assert duplicate_initial.status_code == 200, duplicate_initial.text
+        assert int(duplicate_initial.json()["id"]) == ticket_id
+        assert duplicate_initial.json()["custom_delivery"]["pricing_mode"] == "initial_included"
+        assert duplicate_initial.json()["custom_delivery"]["stage"] == "production"
+        with sf() as db:
+            revised_row = db.query(CustomerServiceTicket).filter_by(id=ticket_id).first()
+            revised_evidence = customer_service_api._custom_delivery_evidence(revised_row)
+            assert len(revised_evidence["pre_delivery_changes"]) == 1
+            assert revised_evidence["pre_delivery_changes"][0]["included_in_purchase"] is True
+            assert len(revised_evidence["runs"]) == 2
+
         with sf() as db:
             progress = apply_customer_ticket_incident_progress(
                 db,
@@ -630,13 +680,25 @@ def test_custom_delivery_requires_quality_acceptance_and_install_receipt(client,
         assert current["custom_delivery"]["stage"] == "acceptance"
         assert current["custom_delivery"]["gate_ok"] is True
 
+        app.dependency_overrides[customer_service_api._get_current_user] = lambda: admin
+        internal_approved = client.post(
+            f"/api/customer-service/custom-deliveries/{ticket_id}/decision",
+            json={"action": "accept", "note": "管理端内部质量确认"},
+        )
+        assert internal_approved.status_code == 200, internal_approved.text
+        assert internal_approved.json()["custom_delivery"]["stage"] == "acceptance"
+        assert (
+            internal_approved.json()["custom_delivery"]["acceptance_status"] == "internal_approved"
+        )
+
+        app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
         accepted = client.post(
             f"/api/customer-service/custom-deliveries/{ticket_id}/decision",
             json={"action": "accept", "note": "验收通过"},
         )
         assert accepted.status_code == 200, accepted.text
-        assert accepted.json()["custom_delivery"]["stage"] == "commerce"
-        assert accepted.json()["custom_delivery"]["commerce_ready"] is False
+        assert accepted.json()["custom_delivery"]["stage"] == "delivering"
+        assert accepted.json()["custom_delivery"]["commerce_ready"] is True
         with sf() as db:
             accepted_audit = (
                 db.query(CustomerServiceAuditLog)
@@ -717,6 +779,109 @@ def test_custom_delivery_requires_quality_acceptance_and_install_receipt(client,
             },
         )
         assert replayed.status_code == 409
+
+        addon = client.post(
+            "/api/customer-service/custom-deliveries",
+            json={
+                "kind": "employee",
+                "title": "交付后新增采购复核员工",
+                "requirements": "在首次交付完成后新增采购复核和异常升级处理能力。",
+                "acceptance_criteria": "真实采购样本通过并生成可复核的处理记录。",
+                "suggested_id": "procurement-review-addon",
+            },
+        )
+        assert addon.status_code == 200, addon.text
+        addon_body = addon.json()
+        assert addon_body["custom_delivery"]["pricing_mode"] == "post_delivery_addon"
+        assert addon_body["custom_delivery"]["stage"] == "commerce"
+        assert addon_body["custom_delivery"]["commerce_ready"] is False
+        addon_ticket_id = int(addon_body["id"])
+
+        app.dependency_overrides[customer_service_api._get_current_user] = lambda: admin
+        quoted = client.post(
+            f"/api/customer-service/custom-deliveries/{addon_ticket_id}/crm",
+            json={
+                "section": "quote",
+                "status": "accepted",
+                "number": "QT-ADDON-PYTEST-001",
+                "amount": 3000,
+            },
+        )
+        assert quoted.status_code == 200, quoted.text
+        assert quoted.json()["custom_delivery"]["stage"] == "commerce"
+
+        from modstore_server import customer_service_delivery_crm_api
+
+        monkeypatch.setattr(
+            customer_service_delivery_payment_api,
+            "create_custom_delivery_payment_order",
+            AsyncMock(
+                return_value={
+                    "ok": True,
+                    "order_id": "CDP-ADDON-PYTEST-001",
+                    "type": "page",
+                    "redirect_url": "https://alipay.example/checkout",
+                    "checkout_path": "/market/checkout/CDP-ADDON-PYTEST-001",
+                }
+            ),
+        )
+        app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
+        checkout = client.post(
+            f"/api/customer-service/custom-deliveries/{addon_ticket_id}/payment-checkout",
+            json={"pay_channel": "alipay"},
+        )
+        assert checkout.status_code == 200, checkout.text
+        assert checkout.json()["order_id"] == "CDP-ADDON-PYTEST-001"
+        assert checkout.json()["redirect_url"] == "https://alipay.example/checkout"
+        app.dependency_overrides[customer_service_api._get_current_user] = lambda: admin
+
+        monkeypatch.setattr(
+            customer_service_delivery_crm_api,
+            "find_matching_paid_order",
+            lambda *_args, **_kwargs: {
+                "out_trade_no": "PAID-WRONG-KIND-PYTEST-001",
+                "status": "paid",
+                "total_amount": "3000.00",
+                "order_kind": "plan",
+                "user_id": user.id,
+            },
+        )
+        rejected_payment = client.post(
+            f"/api/customer-service/custom-deliveries/{addon_ticket_id}/crm",
+            json={
+                "section": "payment",
+                "status": "paid",
+                "amount": 3000,
+                "reference": "NOT-A-REAL-ORDER",
+            },
+        )
+        assert rejected_payment.status_code == 409
+
+        monkeypatch.setattr(
+            customer_service_delivery_payment_api,
+            "find_matching_paid_order",
+            lambda *_args, **_kwargs: {
+                "out_trade_no": "PAID-ADDON-PYTEST-001",
+                "status": "paid",
+                "total_amount": "3000.00",
+                "order_kind": "custom_delivery",
+                "user_id": user.id,
+            },
+        )
+        state.update(
+            {
+                "status": "running",
+                "steps": [{"id": "spec", "label": "理解新增需求", "status": "running"}],
+                "artifact": None,
+            }
+        )
+        app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
+        reconciled = client.get("/api/customer-service/custom-deliveries")
+        assert reconciled.status_code == 200, reconciled.text
+        paid = next(row for row in reconciled.json()["items"] if row["id"] == addon_ticket_id)
+        assert paid["custom_delivery"]["crm"]["payment"]["status"] == "paid"
+        assert paid["custom_delivery"]["commerce_ready"] is True
+        assert paid["custom_delivery"]["stage"] == "production"
     finally:
         app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 

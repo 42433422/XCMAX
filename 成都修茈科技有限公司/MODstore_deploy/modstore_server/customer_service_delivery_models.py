@@ -32,6 +32,10 @@ class CustomDeliveryInstallReceiptBody(BaseModel):
     receipt_token: str = Field(..., min_length=16, max_length=128)
 
 
+class CustomDeliveryPaymentCheckoutBody(BaseModel):
+    pay_channel: str = Field(default="alipay", pattern="^(alipay|wechat)$")
+
+
 class CustomDeliveryCrmUpdateBody(BaseModel):
     section: Literal["assignment", "quote", "contract", "payment"]
     status: str = Field(default="", max_length=32)
@@ -78,16 +82,35 @@ def custom_delivery_crm(evidence: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def custom_delivery_pricing_mode(evidence: dict[str, Any]) -> str:
+    terms = evidence.get("delivery_terms")
+    terms = terms if isinstance(terms, dict) else {}
+    value = str(terms.get("pricing_mode") or "").strip()
+    return value if value in {"initial_included", "post_delivery_addon"} else "legacy"
+
+
 def custom_delivery_commerce_blockers(evidence: dict[str, Any]) -> list[str]:
+    pricing_mode = custom_delivery_pricing_mode(evidence)
+    if pricing_mode == "initial_included":
+        return []
     crm = custom_delivery_crm(evidence)
     blockers: list[str] = []
     if crm["assignment"].get("status") != "assigned":
         blockers.append("未指派交付负责人")
-    if crm["quote"].get("status") not in {"accepted", "waived"}:
+    accepted_quote_statuses = (
+        {"accepted"} if pricing_mode == "post_delivery_addon" else {"accepted", "waived"}
+    )
+    if crm["quote"].get("status") not in accepted_quote_statuses:
         blockers.append("报价尚未确认")
-    if crm["contract"].get("status") not in {"signed", "waived"}:
+    if pricing_mode == "legacy" and crm["contract"].get("status") not in {
+        "signed",
+        "waived",
+    }:
         blockers.append("合同尚未签署")
-    if crm["payment"].get("status") not in {"paid", "waived"}:
+    accepted_payment_statuses = (
+        {"paid"} if pricing_mode == "post_delivery_addon" else {"paid", "waived"}
+    )
+    if crm["payment"].get("status") not in accepted_payment_statuses:
         blockers.append("款项尚未结清")
     return blockers
 

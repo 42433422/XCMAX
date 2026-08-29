@@ -34,6 +34,7 @@ from modstore_server.auth_service import (
     decode_refresh_token,
     get_user_by_id,
     hash_password,
+    record_successful_login,
     register_user,
     verify_password,
 )

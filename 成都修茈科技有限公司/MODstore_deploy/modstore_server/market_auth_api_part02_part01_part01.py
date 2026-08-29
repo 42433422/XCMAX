@@ -285,6 +285,7 @@ def api_login_with_code(body: LoginWithCodeDTO):
             raise _facade().HTTPException(401, "验证码无效或已过期")
         vc.used = True
         session.commit()
+    user = _facade().record_successful_login(int(user.id)) or user
     access_token = _facade().create_access_token(
         user.id, user.username, is_admin=bool(user.is_admin)
     )

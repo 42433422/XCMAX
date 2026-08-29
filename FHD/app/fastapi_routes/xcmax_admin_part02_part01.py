@@ -327,6 +327,17 @@ async def admin_review_commerce_refund(
     return out
 
 
+@_facade().router.get("/admin/customer-deliveries/standard", response_model=None)
+async def admin_list_standard_customer_deliveries(request: _facade().Request):
+    """读取购买账户 SSOT 聚合出的标准桌面交付证据。"""
+
+    return await _facade()._market_admin_proxy(
+        request,
+        "GET",
+        "/api/admin/customer-deliveries/standard?limit=500",
+    )
+
+
 @_facade().router.get("/admin/deploy/install-receipts", response_model=None)
 async def admin_list_update_install_receipts(request: _facade().Request):
     """读取客户电脑完成安装或回滚后上报的真实回执。"""

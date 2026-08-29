@@ -4,7 +4,7 @@
       <div>
         <p class="delivery-eyebrow">CUSTOMER DELIVERY CONTROL</p>
         <h2>客户交付中心</h2>
-        <p>所有企业客户统一进入交付中心；标准交付与定制生产分别闭环到安装回执。</p>
+        <p>购买账户 SSOT 驱动交付；标准软件安装并首次登录后自动完成，定制新增按交付前后分流。</p>
       </div>
       <button type="button" class="delivery-refresh" :disabled="loading" @click="loadAll">
         <i class="fa fa-refresh" :class="{ 'fa-spin': loading }" aria-hidden="true"></i>
@@ -21,8 +21,8 @@
     </section>
 
     <EnterpriseDeliveryRoster
-      v-if="!errorMessage && (!loading || enterpriseUsers.length)"
-      :users="enterpriseUsers"
+      v-if="!errorMessage && (!loading || standardDeliveries.length)"
+      :deliveries="standardDeliveries"
       :tickets="tickets"
       @open-custom="focusCustomDeliveries"
     />
@@ -50,7 +50,7 @@
       <button type="button" @click="loadAll">重试</button>
     </div>
 
-    <div v-else-if="loading && !tickets.length && !enterpriseUsers.length" class="delivery-empty">
+    <div v-else-if="loading && !tickets.length && !standardDeliveries.length" class="delivery-empty">
       <i class="fa fa-circle-o-notch fa-spin" aria-hidden="true"></i>
       <strong>正在汇总客户交付证据</strong>
       <span>会同时读取客户身份、生产运行、质量门和安装回执。</span>
@@ -59,7 +59,7 @@
     <div v-else-if="!filteredTickets.length" class="delivery-empty">
       <i class="fa fa-inbox" aria-hidden="true"></i>
       <strong>{{ tickets.length ? '没有符合筛选条件的定制工单' : '暂无定制交付工单' }}</strong>
-      <span>无需定制的企业客户仍在上方“标准企业交付”台账中，不会被漏掉。</span>
+      <span>首次定制交付前的开发免费；首次交付完成后新增需求才进入报价付款。</span>
     </div>
 
     <section v-else class="delivery-list" aria-label="客户交付列表">
@@ -71,6 +71,7 @@
               <div class="delivery-customer__line">
                 <strong>{{ customerName(ticket) }}</strong>
                 <span>{{ kindLabel(ticket.custom_delivery?.kind) }}</span>
+                <span>{{ ticket.custom_delivery?.pricing_label || '交付规则待识别' }}</span>
                 <span :class="`stage-tag is-${stageOf(ticket)}`">
                   {{ ticket.custom_delivery?.stage_label || stageLabel(stageOf(ticket)) }}
                 </span>
@@ -86,7 +87,7 @@
 
         <ol class="delivery-timeline" aria-label="交付阶段">
           <li
-            v-for="step in timelineSteps"
+            v-for="step in timelineStepsFor(ticket)"
             :key="step.key"
             :class="timelineClass(ticket, step.key)"
           >
@@ -153,7 +154,7 @@
         <footer class="delivery-actions">
           <div class="delivery-actions__note">
             <i class="fa fa-shield" aria-hidden="true"></i>
-            <span>管理员操作会写入客服审计记录；不把“已生成”冒充“已安装”。</span>
+            <span>内部确认不会冒充客户验收；不把“已生成”冒充“已安装”。</span>
           </div>
           <div v-if="stageOf(ticket) !== 'delivered'" class="delivery-actions__controls">
             <input
@@ -177,7 +178,7 @@
               :disabled="busyTicketId === ticket.id"
               @click="acceptDelivery(ticket)"
             >
-              管理员代验收
+              内部质量确认
             </button>
           </div>
           <strong v-else class="delivery-complete">
@@ -199,12 +200,12 @@ import {
   type CustomDeliveryRun,
   type CustomDeliveryTicket,
   type MarketAdminUser,
+  type StandardDeliveryRecord,
 } from '@/api/xcmaxAdmin'
-import { fetchAllEnterpriseUsers } from '../utils/deliveryEnterpriseRoster'
 import { appAlert, appConfirm } from '@/utils/appDialog'
 
 const tickets = ref<CustomDeliveryTicket[]>([])
-const enterpriseUsers = ref<MarketAdminUser[]>([])
+const standardDeliveries = ref<StandardDeliveryRecord[]>([])
 const usersById = ref(new Map<number, MarketAdminUser>())
 const query = ref('')
 const stageFilter = ref('')
@@ -223,11 +224,18 @@ const stageOptions = [
   { value: 'delivered', label: '已交付' },
 ]
 
-const timelineSteps = [
+const initialTimelineSteps = [
   { key: 'queued', label: '需求受理', hint: '客户资料入单', icon: 'fa-file-text-o' },
   { key: 'production', label: 'AI 生产', hint: '真实运行与产物', icon: 'fa-cogs' },
   { key: 'acceptance', label: '质量验收', hint: '质量门与确认', icon: 'fa-check-square-o' },
-  { key: 'commerce', label: '商务交付', hint: '报价合同收款', icon: 'fa-file-text' },
+  { key: 'delivering', label: '客户安装', hint: '下载并安装', icon: 'fa-download' },
+  { key: 'delivered', label: '回执闭环', hint: '安装证据齐全', icon: 'fa-flag-checkered' },
+]
+
+const addonTimelineSteps = [
+  { key: 'commerce', label: '新增报价', hint: '付款后开始生产', icon: 'fa-file-text' },
+  { key: 'production', label: 'AI 生产', hint: '真实运行与产物', icon: 'fa-cogs' },
+  { key: 'acceptance', label: '客户验收', hint: '本人确认产物', icon: 'fa-check-square-o' },
   { key: 'delivering', label: '客户安装', hint: '下载并安装', icon: 'fa-download' },
   { key: 'delivered', label: '回执闭环', hint: '安装证据齐全', icon: 'fa-flag-checkered' },
 ]
@@ -249,16 +257,13 @@ const filteredTickets = computed(() => {
 
 const summaryCards = computed(() => {
   const count = (stages: string[]) => tickets.value.filter((ticket) => stages.includes(stageOf(ticket))).length
-  const enterpriseIds = new Set(enterpriseUsers.value.map((user) => Number(user.id)))
-  const customEnterpriseIds = new Set(
-    tickets.value.map((ticket) => Number(ticket.user_id)).filter((userId) => enterpriseIds.has(userId)),
-  )
   return [
-    { key: 'enterprise', label: '企业客户', value: enterpriseUsers.value.length, hint: '全量进入交付中心' },
-    { key: 'standard', label: '标准企业交付', value: enterpriseUsers.value.length - customEnterpriseIds.size, hint: '无需定制生产线' },
-    { key: 'custom', label: '定制交付客户', value: customEnterpriseIds.size, hint: `${tickets.value.length} 个真实工单` },
+    { key: 'enterprise', label: '永久购买账户', value: standardDeliveries.value.length, hint: '来源：购买账户 SSOT' },
+    { key: 'standard', label: '标准交付待安装', value: standardDeliveries.value.filter((row) => row.status === 'pending_install').length, hint: 'Mac / Windows 通用安装包' },
+    { key: 'receipt', label: '待首次登录', value: standardDeliveries.value.filter((row) => row.status === 'pending_first_login').length, hint: '安装成功，等待账号登录' },
+    { key: 'done', label: '标准交付完成', value: standardDeliveries.value.filter((row) => row.status === 'completed').length, hint: '安装 + 首次登录自动完成' },
+    { key: 'custom', label: '定制交付工单', value: tickets.value.length, hint: '首次内含 / 交付后新增' },
     { key: 'production', label: '生产进行中', value: count(['queued', 'production']), hint: '等待产物与质量证据' },
-    { key: 'done', label: '闭环完成', value: count(['delivered']), hint: '安装回执已经齐全' },
   ]
 })
 
@@ -269,17 +274,26 @@ function extractTickets(raw: unknown): CustomDeliveryTicket[] {
   return rows as CustomDeliveryTicket[]
 }
 
+function extractStandardDeliveries(raw: unknown): StandardDeliveryRecord[] {
+  const body = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {}
+  const nested = body.data && typeof body.data === 'object' ? body.data as Record<string, unknown> : {}
+  const rows = Array.isArray(body.items) ? body.items : Array.isArray(nested.items) ? nested.items : []
+  return rows as StandardDeliveryRecord[]
+}
+
 async function loadAll() {
   loading.value = true
   errorMessage.value = ''
   try {
-    const [deliveryResult, users] = await Promise.all([
+    const [deliveryResult, standardResult] = await Promise.all([
       xcmaxAdminApi.listCustomDeliveries(100),
-      fetchAllEnterpriseUsers(),
+      xcmaxAdminApi.listStandardDeliveries(),
     ])
     tickets.value = extractTickets(deliveryResult)
-    enterpriseUsers.value = users
-    usersById.value = new Map(users.map((user) => [Number(user.id), user]))
+    standardDeliveries.value = extractStandardDeliveries(standardResult)
+    usersById.value = new Map(
+      standardDeliveries.value.map((row) => [Number(row.account.id), row.account]),
+    )
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : String(error)
   } finally {
@@ -326,8 +340,16 @@ function formatDate(value?: string): string {
   return date.toLocaleString('zh-CN', { hour12: false })
 }
 
-function stageRank(stage: string): number {
-  return ({ queued: 0, production: 1, rework: 1, acceptance: 2, commerce: 3, delivering: 4, delivered: 5 } as Record<string, number>)[stage] ?? 0
+function timelineStepsFor(ticket: CustomDeliveryTicket) {
+  return ticket.custom_delivery?.pricing_mode === 'post_delivery_addon'
+    ? addonTimelineSteps
+    : initialTimelineSteps
+}
+
+function stageRank(ticket: CustomDeliveryTicket, stage: string): number {
+  const normalized = stage === 'rework' ? 'production' : stage
+  const index = timelineStepsFor(ticket).findIndex((step) => step.key === normalized)
+  return index < 0 ? 0 : index
 }
 
 function updateDeliveryTicket(updated: CustomDeliveryTicket) {
@@ -337,8 +359,8 @@ function updateDeliveryTicket(updated: CustomDeliveryTicket) {
 
 function timelineClass(ticket: CustomDeliveryTicket, step: string): Record<string, boolean> {
   const stage = stageOf(ticket)
-  const rank = stageRank(stage)
-  const stepRank = stageRank(step)
+  const rank = stageRank(ticket, stage)
+  const stepRank = stageRank(ticket, step)
   return {
     done: stepRank < rank || stage === 'delivered',
     active: stepRank === rank && stage !== 'rework',
@@ -390,19 +412,22 @@ function receiptFor(ticket: CustomDeliveryTicket, kind: string, id: string) {
 }
 
 function canAccept(ticket: CustomDeliveryTicket): boolean {
-  return stageOf(ticket) === 'acceptance' && ticket.custom_delivery?.gate_ok === true
+  const acceptance = String(ticket.custom_delivery?.acceptance_status || 'pending')
+  return stageOf(ticket) === 'acceptance'
+    && ticket.custom_delivery?.gate_ok === true
+    && acceptance === 'pending'
 }
 
 async function acceptDelivery(ticket: CustomDeliveryTicket) {
   if (!canAccept(ticket)) return
   const confirmed = await appConfirm(
-    `确认代表客户“${customerName(ticket)}”验收 ${ticket.ticket_no || ticket.title || ticket.id}？\n\n此操作会写入审计记录，之后客户仍需安装并回传回执。`,
-    { title: '管理员代客户验收', confirmText: '确认验收' },
+    `确认 ${ticket.ticket_no || ticket.title || ticket.id} 已通过内部质量检查？\n\n本操作不会代替客户“${customerName(ticket)}”验收，客户仍须本人确认并安装。`,
+    { title: '内部质量确认', confirmText: '确认质量通过' },
   )
   if (!confirmed) return
   busyTicketId.value = ticket.id
   try {
-    await xcmaxAdminApi.decideCustomDelivery(ticket.id, 'accept', '管理员在客户交付中心代为验收')
+    await xcmaxAdminApi.decideCustomDelivery(ticket.id, 'accept', '管理员仅完成内部质量确认，等待客户本人验收')
     await loadAll()
   } catch (error) {
     await appAlert(`验收失败：${error instanceof Error ? error.message : String(error)}`)

@@ -317,6 +317,7 @@
   "/api/xcmax/admin/autonomy/operating-metrics",
   "/api/xcmax/admin/autonomy/overview",
   "/api/xcmax/admin/autonomy/self-maintenance/run",
+  "/api/xcmax/admin/customer-deliveries/standard",
   "/api/xcmax/admin/daily-digests",
   "/api/xcmax/admin/daily-digests/{record_id}",
   "/api/xcmax/admin/daily-digests/{record_id}/artifacts",

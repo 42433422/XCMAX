@@ -450,6 +450,14 @@ from modstore_server.customer_service_delivery_api import (  # noqa: F401
 from modstore_server.customer_service_delivery_crm_api import (
     router as custom_delivery_crm_router,
 )
+from modstore_server.customer_service_delivery_create_api import (
+    router as custom_delivery_create_router,
+)
+from modstore_server.customer_service_delivery_payment_api import (
+    router as custom_delivery_payment_router,
+)
 
 router.include_router(custom_delivery_router)
 router.include_router(custom_delivery_crm_router)
+router.include_router(custom_delivery_create_router)
+router.include_router(custom_delivery_payment_router)

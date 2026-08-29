@@ -442,6 +442,11 @@ public class OrderService {
                     walletService.recordOrderSpend(order);
                     entitlementService.createPurchase(order.getUser(), order.getItemId(), order.getTotalAmount());
                     entitlementService.grantCatalogEntitlement(order.getUser(), order.getItemId(), order.getOutTradeNo());
+                } else if ("custom_delivery".equals(order.getOrderKind())) {
+                    // Service payment: retain real money ledgers without minting
+                    // wallet credit, catalog access or plan entitlements.
+                    walletService.recordExternalPayment(order);
+                    walletService.recordOrderSpend(order);
                 } else {
                     throw new IllegalStateException("未知订单类型: " + order.getOrderKind());
                 }

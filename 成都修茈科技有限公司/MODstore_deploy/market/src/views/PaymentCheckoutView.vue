@@ -90,10 +90,12 @@
         <div v-if="order.status === 'paid'" class="success-section">
           <div class="success-icon">✓</div>
           <h2 class="success-title">支付成功</h2>
-          <p v-if="isAccountLicenseOrder" class="success-desc">你的 XCAGI 方案已生效，现在可以回到桌面端登录使用。</p>
+          <p v-if="isCustomDeliveryOrder" class="success-desc">定制交付收款已确认，生产员工将自动开始本次新增开发。</p>
+          <p v-else-if="isAccountLicenseOrder" class="success-desc">你的 XCAGI 方案已生效，现在可以回到桌面端登录使用。</p>
           <p v-else class="success-desc">你购买的内容已到账，可以开始使用。</p>
           <p v-if="isAccountLicenseOrder" class="success-desc success-desc--desktop">现在可以回到 XCAGI 桌面端，使用这个账号登录。</p>
           <div class="success-actions">
+            <router-link v-if="isCustomDeliveryOrder" to="/deliveries" class="btn btn-primary">返回我的交付</router-link>
             <router-link to="/wallet" class="btn btn-primary">查看订单与账户</router-link>
             <router-link :to="{ name: 'wallet-purchased' }" class="btn btn-ghost">查看已购内容</router-link>
             <router-link :to="planSelectionRoute" class="btn btn-ghost">继续选购</router-link>
@@ -173,7 +175,10 @@ const paidConfirmedFlash = ref(false)
 const pollingTimer = ref<ReturnType<typeof setInterval> | null>(null)
 
 const isAccountLicenseOrder = computed(() => String(order.value?.plan_id || '').startsWith('saas-'))
-const planSelectionRoute = computed(() => (isAccountLicenseOrder.value ? '/account-plans' : '/plans'))
+const isCustomDeliveryOrder = computed(() => String(order.value?.order_kind || '') === 'custom_delivery')
+const planSelectionRoute = computed(() =>
+  isCustomDeliveryOrder.value ? '/deliveries' : isAccountLicenseOrder.value ? '/account-plans' : '/plans',
+)
 
 const qrImageUrl = computed(() => {
   if (!qrCode.value) return ''
@@ -376,6 +381,10 @@ async function manualRefreshStatus() {
 async function retryPayment() {
   const o = order.value
   if (!o) return
+  if (String(o.order_kind || '') === 'custom_delivery') {
+    await router.push('/deliveries')
+    return
+  }
   stopPolling()
   try {
     if ((o.status === 'pending' || o.status === 'closed') && o.out_trade_no) {

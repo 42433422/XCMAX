@@ -167,6 +167,32 @@ def authenticate_user(username: str, password: str) -> Optional[User]:
             return None
         if not verify_password(password, user.password_hash):
             return None
+        now = datetime.now(UTC)
+        if getattr(user, "first_login_at", None) is None:
+            user.first_login_at = now
+        user.last_login_at = now
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        session.expunge(user)
+        return user
+
+
+def record_successful_login(user_id: int) -> Optional[User]:
+    """Persist the first/last successful login evidence for delivery closure."""
+
+    sf = get_session_factory()
+    with sf() as session:
+        user = session.query(User).filter(User.id == int(user_id)).first()
+        if user is None or getattr(user, "deleted_at", None) is not None:
+            return None
+        now = datetime.now(UTC)
+        if getattr(user, "first_login_at", None) is None:
+            user.first_login_at = now
+        user.last_login_at = now
+        session.add(user)
+        session.commit()
+        session.refresh(user)
         session.expunge(user)
         return user
 
@@ -226,6 +252,7 @@ def issue_market_tokens_for_sso_identity(
         _ = display_name
     if user is None:
         raise ValueError("未找到对应的市场账号")
+    user = record_successful_login(int(user.id)) or user
     is_admin = bool(getattr(user, "is_admin", False))
     from modstore_server.account_lifecycle import lifecycle_for_user_id
 

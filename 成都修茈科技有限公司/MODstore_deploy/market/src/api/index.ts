@@ -9,6 +9,7 @@ import { developer, templates, notifications } from './developer'
 import { employees } from './employees'
 import { llm } from './llm'
 import { workbench, knowledge, openApiConnectors, customerService, butler } from './workbench'
+import { delivery } from './delivery'
 
 export { setTokensFromAuthResponse } from './shared'
 export { clearAuthTokens } from '../infrastructure/storage/tokenStore'
@@ -36,4 +37,5 @@ export const api = {
   ...openApiConnectors,
   ...customerService,
   ...butler,
+  ...delivery,
 }

@@ -40,6 +40,8 @@ class User(Base):
     is_admin = Column(Boolean, default=False)
     is_enterprise = Column(Boolean, default=False, nullable=False, index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(UTC))
+    first_login_at = Column(DateTime, nullable=True, index=True)
+    last_login_at = Column(DateTime, nullable=True, index=True)
     default_llm_json = Column(Text, default="")
     experience = Column(Integer, default=0, nullable=False)
     deleted_at = Column(DateTime, nullable=True, index=True)
