@@ -1,8 +1,11 @@
 package com.modstore.controller;
 
 import com.modstore.model.Order;
+import com.modstore.model.User;
 import com.modstore.repository.UserRepository;
+import com.modstore.service.AlipayService;
 import com.modstore.service.OrderService;
+import com.modstore.service.WechatPayService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -19,20 +22,74 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class InternalPaymentControllerTest {
 
     private OrderService orderService;
     private InternalPaymentController controller;
+    private UserRepository userRepository;
+    private AlipayService alipayService;
+    private WechatPayService wechatPayService;
 
     @BeforeEach
     void setUp() {
         orderService = mock(OrderService.class);
-        controller = new InternalPaymentController(mock(UserRepository.class), orderService);
+        userRepository = mock(UserRepository.class);
+        alipayService = mock(AlipayService.class);
+        wechatPayService = mock(WechatPayService.class);
+        controller = new InternalPaymentController(
+                userRepository,
+                orderService,
+                alipayService,
+                wechatPayService
+        );
         ReflectionTestUtils.setField(controller, "internalApiKey", "test-internal-key");
         ReflectionTestUtils.setField(controller, "deployTier", "production");
         ReflectionTestUtils.setField(controller, "alipayDebug", false);
+        ReflectionTestUtils.setField(controller, "publicOrigin", "https://www.xiu-ci.com");
+        ReflectionTestUtils.setField(controller, "marketPrefix", "/market");
+    }
+
+    @Test
+    void customDeliveryCheckoutCreatesDedicatedServiceOrder() {
+        User user = new User();
+        user.setId(7L);
+        when(userRepository.findById(7L)).thenReturn(java.util.Optional.of(user));
+        when(orderService.createOrder(
+                eq(user), any(), eq("合同复核新增开发"), eq(new BigDecimal("8800.00")),
+                eq("custom_delivery"), eq(null), eq(null), any()
+        )).thenAnswer(invocation -> {
+            Order order = new Order();
+            order.setOutTradeNo(invocation.getArgument(1));
+            return order;
+        });
+        when(alipayService.createPagePay(
+                any(), eq("合同复核新增开发"), eq(new BigDecimal("8800.00")), any()
+        )).thenReturn(Map.of(
+                "ok", true,
+                "type", "page",
+                "redirect_url", "https://alipay.example/pay"
+        ));
+
+        Map<String, Object> result = controller.customDeliveryCheckout(
+                "test-internal-key",
+                Map.of(
+                        "user_id", 7,
+                        "ticket_no", "CD202608290001",
+                        "subject", "合同复核新增开发",
+                        "total_amount", "8800.00",
+                        "pay_channel", "alipay"
+                )
+        );
+
+        assertEquals(true, result.get("ok"));
+        assertEquals("custom_delivery", result.get("order_kind"));
+        assertEquals("8800.00", result.get("total_amount"));
+        assertEquals("https://alipay.example/pay", result.get("redirect_url"));
+        assertTrue(String.valueOf(result.get("checkout_path")).startsWith("/market/checkout/CDP"));
+        verify(orderService).updatePaymentMetadata(any(), eq("page"), eq(null));
     }
 
     @Test

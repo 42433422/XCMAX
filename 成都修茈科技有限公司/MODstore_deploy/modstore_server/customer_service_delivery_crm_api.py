@@ -12,15 +12,22 @@ from modstore_server.customer_service_api import _visible_ticket_or_404
 from modstore_server.customer_service_delivery_api import (
     _custom_delivery_evidence,
     _custom_delivery_payload,
+    _start_custom_delivery_run,
 )
-from modstore_server.customer_service_delivery_completion import complete_delivery_if_ready
+from modstore_server.customer_service_delivery_completion import (
+    complete_delivery_if_ready,
+)
 from modstore_server.customer_service_delivery_models import (
     CustomDeliveryCrmUpdateBody,
+    custom_delivery_commerce_blockers,
     custom_delivery_crm,
+    custom_delivery_pricing_mode,
 )
 from modstore_server.customer_service_orchestrator import audit
 from modstore_server.customer_service_tools import json_dumps
 from modstore_server.models import User
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
+from modstore_server.payment_cs_internal import find_matching_paid_order
 
 router = APIRouter()
 
@@ -89,10 +96,34 @@ async def update_custom_delivery_crm(
         if status in {"partial", "paid"} and (body.amount is None or body.amount <= 0):
             raise HTTPException(422, "到账金额必须大于 0")
         if status in {"partial", "paid"} and not body.reference.strip():
-            raise HTTPException(422, "收款状态不能只靠手工点选，请填写支付流水或线下凭证")
+            raise HTTPException(
+                422, "收款状态不能只靠手工点选，请填写支付流水或线下凭证"
+            )
         quote_amount = float(crm.get("quote", {}).get("amount") or 0)
-        if status == "paid" and quote_amount > 0 and float(body.amount or 0) < quote_amount:
+        if (
+            status == "paid"
+            and quote_amount > 0
+            and float(body.amount or 0) < quote_amount
+        ):
             raise HTTPException(409, "到账金额小于已确认报价，应记为部分收款")
+        if (
+            status == "paid"
+            and custom_delivery_pricing_mode(evidence) == "post_delivery_addon"
+        ):
+            order = find_matching_paid_order(
+                int(ticket.user_id),
+                expected_out_trade_no=body.reference.strip(),
+            )
+            if not isinstance(order, dict):
+                raise HTTPException(409, "交付后新增开发必须填写已支付的真实订单号")
+            if str(order.get("order_kind") or "") != "custom_delivery":
+                raise HTTPException(409, "该订单不是本定制交付的收款单")
+            try:
+                paid_amount = float(order.get("total_amount") or 0)
+            except (TypeError, ValueError):
+                paid_amount = 0
+            if quote_amount > 0 and paid_amount < quote_amount:
+                raise HTTPException(409, "真实支付订单金额小于已确认报价")
         crm["payment"] = {
             "status": status,
             "amount_paid": body.amount or 0,
@@ -102,7 +133,23 @@ async def update_custom_delivery_crm(
             "updated_at": now,
         }
     evidence["crm"] = crm
-    evidence["schema_version"] = max(int(evidence.get("schema_version") or 1), 2)
+    evidence["schema_version"] = max(int(evidence.get("schema_version") or 1), 3)
+    if (
+        custom_delivery_pricing_mode(evidence) == "post_delivery_addon"
+        and not custom_delivery_commerce_blockers(evidence)
+        and not [row for row in evidence.get("runs", []) if isinstance(row, dict)]
+    ):
+        try:
+            evidence["runs"] = [
+                await _start_custom_delivery_run(
+                    user_id=int(ticket.user_id),
+                    evidence=evidence,
+                    attempt=1,
+                )
+            ]
+            evidence.pop("start_error", None)
+        except RECOVERABLE_ERRORS as exc:
+            evidence["start_error"] = str(exc)[:1000]
     payload = await _custom_delivery_payload(ticket)
     artifacts = payload.get("custom_delivery", {}).get("artifacts", [])
     if artifacts:

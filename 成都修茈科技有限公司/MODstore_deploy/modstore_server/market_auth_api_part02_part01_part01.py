@@ -83,7 +83,9 @@ class InternalSsoIssueTokenDTO(_facade().BaseModel):
 
 
 @_facade().router.post("/auth/internal/sso-issue-token", include_in_schema=False)
-def api_internal_sso_issue_token(body: InternalSsoIssueTokenDTO, request: _facade().Request):
+def api_internal_sso_issue_token(
+    body: InternalSsoIssueTokenDTO, request: _facade().Request
+):
     """FHD OIDC 回调后签发 MODstore JWT（Header: X-Internal-Api-Key）。"""
     _facade()._require_internal_api_key(request)
     from modstore_server.auth_service import issue_market_tokens_for_sso_identity
@@ -103,21 +105,31 @@ def api_internal_sso_issue_token(body: InternalSsoIssueTokenDTO, request: _facad
 @_facade().router.get("/auth/me", summary="当前用户资料与等级（含 Java 侧叠加字段）")
 def api_me(
     request: _facade().Request,
-    user: _facade().Optional[_facade().User] = _facade().Depends(_facade()._optional_current_user),
+    user: _facade().Optional[_facade().User] = _facade().Depends(
+        _facade()._optional_current_user
+    ),
 ):
     if not user:
         return {"ok": False, "success": False, "error": "请先登录"}
     exp = int(getattr(user, "experience", 0) or 0)
     level_profile = _facade().account_level_service.build_level_profile(exp).to_dict()
     phone_out = (getattr(user, "phone", None) or "") or ""
-    auth_header = request.headers.get("authorization") or request.headers.get("Authorization") or ""
-    overlay = _facade().fetch_java_user_overlay(auth_header, expect_user_id=int(user.id))
+    auth_header = (
+        request.headers.get("authorization")
+        or request.headers.get("Authorization")
+        or ""
+    )
+    overlay = _facade().fetch_java_user_overlay(
+        auth_header, expect_user_id=int(user.id)
+    )
     if overlay is not None:
         exp = int(overlay.experience)
         if isinstance(overlay.level_profile, dict) and overlay.level_profile:
             level_profile = overlay.level_profile
         else:
-            level_profile = _facade().account_level_service.build_level_profile(exp).to_dict()
+            level_profile = (
+                _facade().account_level_service.build_level_profile(exp).to_dict()
+            )
         if overlay.phone:
             phone_out = overlay.phone
     return {
@@ -175,9 +187,9 @@ def api_delete_avatar(
 @_facade().router.get("/auth/avatar/file", summary="读取当前用户头像（需登录）")
 def api_avatar_file(
     user: _facade().User = _facade().Depends(_facade()._get_current_user),
-    v: _facade()
-    .Optional[int] = _facade()
-    .Query(None, description="与 avatar_url 中 v 一致，仅用于缓存校验"),
+    v: _facade().Optional[int] = _facade().Query(
+        None, description="与 avatar_url 中 v 一致，仅用于缓存校验"
+    ),
 ):
     rel = _facade().avatar_path_column(user)
     if not rel:
@@ -192,7 +204,9 @@ def api_avatar_file(
     return _facade().FileResponse(path, media_type=media, filename=f"avatar{suffix}")
 
 
-@_facade().router.post("/auth/send-code", status_code=202, summary="向已注册邮箱发送登录验证码")
+@_facade().router.post(
+    "/auth/send-code", status_code=202, summary="向已注册邮箱发送登录验证码"
+)
 def api_send_code(body: SendCodeDTO, background_tasks: _facade().BackgroundTasks):
     email_norm = _facade()._normalize_email(body.email)
     if not email_norm:
@@ -228,7 +242,9 @@ def api_send_code(body: SendCodeDTO, background_tasks: _facade().BackgroundTasks
 @_facade().router.post(
     "/auth/send-register-code", status_code=202, summary="向新邮箱发送注册验证码"
 )
-def api_send_register_code(body: SendCodeDTO, background_tasks: _facade().BackgroundTasks):
+def api_send_register_code(
+    body: SendCodeDTO, background_tasks: _facade().BackgroundTasks
+):
     email_norm = _facade()._normalize_email(body.email)
     if not email_norm:
         raise _facade().HTTPException(400, "请填写邮箱")
@@ -285,6 +301,7 @@ def api_login_with_code(body: LoginWithCodeDTO):
             raise _facade().HTTPException(401, "验证码无效或已过期")
         vc.used = True
         session.commit()
+    user = _facade().record_successful_login(int(user.id)) or user
     access_token = _facade().create_access_token(
         user.id, user.username, is_admin=bool(user.is_admin)
     )
@@ -305,7 +322,9 @@ def api_login_with_code(body: LoginWithCodeDTO):
 @_facade().router.post(
     "/auth/send-reset-password-code", status_code=202, summary="发送重置密码验证码"
 )
-def api_send_reset_password_code(body: SendCodeDTO, background_tasks: _facade().BackgroundTasks):
+def api_send_reset_password_code(
+    body: SendCodeDTO, background_tasks: _facade().BackgroundTasks
+):
     email_norm = _facade()._normalize_email(body.email)
     if not email_norm:
         raise _facade().HTTPException(400, "请填写邮箱")
@@ -401,8 +420,12 @@ def api_change_password(
     summary="管理员重置用户密码（MODSTORE_ADMIN_RECHARGE_TOKEN）",
     tags=["auth", "admin"],
 )
-def api_admin_reset_user_password(body: AdminResetUserPasswordDTO, request: _facade().Request):
-    admin_token = (_facade().os.environ.get("MODSTORE_ADMIN_RECHARGE_TOKEN") or "").strip()
+def api_admin_reset_user_password(
+    body: AdminResetUserPasswordDTO, request: _facade().Request
+):
+    admin_token = (
+        _facade().os.environ.get("MODSTORE_ADMIN_RECHARGE_TOKEN") or ""
+    ).strip()
     if not admin_token:
         raise _facade().HTTPException(
             503, "未配置 MODSTORE_ADMIN_RECHARGE_TOKEN，无法执行管理员密码重置"
@@ -415,7 +438,9 @@ def api_admin_reset_user_password(body: AdminResetUserPasswordDTO, request: _fac
         raise _facade().HTTPException(400, "请填写用户名")
     sf = _facade().get_session_factory()
     with sf() as session:
-        row = session.query(_facade().User).filter(_facade().User.username == un).first()
+        row = (
+            session.query(_facade().User).filter(_facade().User.username == un).first()
+        )
         if not row:
             raise _facade().HTTPException(404, "用户不存在")
         row.password_hash = _facade().hash_password(body.new_password)

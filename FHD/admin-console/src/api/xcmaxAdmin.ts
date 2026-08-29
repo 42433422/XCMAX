@@ -9,6 +9,43 @@ export type MarketAdminUser = {
   company?: string;
 };
 
+export type StandardDeliveryRecord = {
+  delivery_no: string;
+  delivery_type: 'standard_desktop' | string;
+  status: 'pending_install' | 'pending_first_login' | 'completed' | string;
+  status_label: string;
+  started_at?: string;
+  activated_at?: string;
+  completed_at?: string;
+  account: MarketAdminUser & {
+    account_state?: string;
+    first_login_at?: string;
+    last_login_at?: string;
+  };
+  plan: {
+    id: string;
+    title: string;
+    account_tier: 'normal' | 'pro' | 'max' | 'ultra' | string;
+    license_type: 'permanent' | string;
+    amount_cents?: number;
+  };
+  order?: {
+    order_no?: string;
+    status?: string;
+    total_amount?: string;
+    paid_at?: string;
+    entitlement_id?: number | null;
+  };
+  install: {
+    ok: boolean;
+    installed_devices: number;
+    latest_receipt?: UpdateInstallReceipt | null;
+  };
+  first_login: { ok: boolean; at?: string };
+  completion_rule: 'installed_and_first_login' | string;
+  available_installers: string[];
+};
+
 export type CustomDeliveryArtifact = {
   kind: 'module' | 'employee' | string;
   id: string;
@@ -50,6 +87,10 @@ export type CustomDeliveryTicket = {
     gate_ok?: boolean;
     gate_message?: string;
     acceptance_status?: string;
+    pricing_mode?: 'initial_included' | 'post_delivery_addon' | 'legacy' | string;
+    pricing_label?: string;
+    included_in_purchase?: boolean;
+    delivery_terms?: Record<string, unknown>;
     runs?: CustomDeliveryRun[];
     artifacts?: CustomDeliveryArtifact[];
     install_receipts?: CustomDeliveryInstallReceipt[];
@@ -211,6 +252,19 @@ export const xcmaxAdminApi = {
       '/api/xcmax/market-proxy/customer-service/custom-deliveries',
       { limit },
     );
+  },
+  listStandardDeliveries() {
+    return api.get<{
+      items?: StandardDeliveryRecord[];
+      total?: number;
+      summary?: {
+        purchased_accounts?: number;
+        pending_install?: number;
+        pending_first_login?: number;
+        completed?: number;
+      };
+      ssot?: string;
+    }>('/api/xcmax/admin/customer-deliveries/standard');
   },
   decideCustomDelivery(ticketId: number, action: 'accept' | 'rework', note = '') {
     return api.post<CustomDeliveryTicket>(

@@ -21,7 +21,9 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 _JWT_ALGORITHM = "HS256"
 _JWT_EXPIRE_HOURS = 72
-_JWT_REFRESH_EXPIRE_DAYS = int(os.environ.get("MODSTORE_JWT_REFRESH_EXPIRE_DAYS", "3650"))
+_JWT_REFRESH_EXPIRE_DAYS = int(
+    os.environ.get("MODSTORE_JWT_REFRESH_EXPIRE_DAYS", "3650")
+)
 
 
 def _jwt_secret() -> str:
@@ -39,7 +41,11 @@ def hash_password(raw: str) -> str:
 
 
 def verify_password(raw: str, hashed: str) -> bool:
-    if hashed.startswith("$2b$") or hashed.startswith("$2a$") or hashed.startswith("$2y$"):
+    if (
+        hashed.startswith("$2b$")
+        or hashed.startswith("$2a$")
+        or hashed.startswith("$2y$")
+    ):
         return bcrypt.checkpw(raw.encode("utf-8"), hashed.encode("utf-8"))
     if hashed.startswith("pbkdf2:"):
         import base64 as _b64
@@ -53,7 +59,9 @@ def verify_password(raw: str, hashed: str) -> bool:
             salt = parts[2]
             stored_hash = parts[3]
             iterations = int(algo_part.split(":")[-1])
-            dk = _hl.pbkdf2_hmac("sha256", raw.encode("utf-8"), salt.encode("utf-8"), iterations)
+            dk = _hl.pbkdf2_hmac(
+                "sha256", raw.encode("utf-8"), salt.encode("utf-8"), iterations
+            )
             computed = _b64.b64encode(dk).decode("utf-8")
             return computed == stored_hash
         except RECOVERABLE_ERRORS:
@@ -77,7 +85,9 @@ def create_access_token(
     """签发 access JWT。``roles`` 与 Java 支付网关 ``JwtAuthenticationFilter`` 对齐（``ADMIN`` → ``ROLE_ADMIN``）。"""
     roles: List[str] = ["ADMIN"] if is_admin else []
     expire = datetime.now(UTC) + (
-        expires_delta if expires_delta is not None else timedelta(hours=_JWT_EXPIRE_HOURS)
+        expires_delta
+        if expires_delta is not None
+        else timedelta(hours=_JWT_EXPIRE_HOURS)
     )
     payload = {
         "sub": str(user_id),
@@ -139,7 +149,11 @@ def register_user(username: str, password: str, email: str = "") -> User:
         if existing:
             raise ValueError("用户名已存在")
         if email_clean:
-            taken = session.query(User).filter(func.lower(User.email) == email_clean).first()
+            taken = (
+                session.query(User)
+                .filter(func.lower(User.email) == email_clean)
+                .first()
+            )
             if taken:
                 raise ValueError("该邮箱已被注册")
         user = User(
@@ -167,6 +181,32 @@ def authenticate_user(username: str, password: str) -> Optional[User]:
             return None
         if not verify_password(password, user.password_hash):
             return None
+        now = datetime.now(UTC)
+        if getattr(user, "first_login_at", None) is None:
+            user.first_login_at = now
+        user.last_login_at = now
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        session.expunge(user)
+        return user
+
+
+def record_successful_login(user_id: int) -> Optional[User]:
+    """Persist the first/last successful login evidence for delivery closure."""
+
+    sf = get_session_factory()
+    with sf() as session:
+        user = session.query(User).filter(User.id == int(user_id)).first()
+        if user is None or getattr(user, "deleted_at", None) is not None:
+            return None
+        now = datetime.now(UTC)
+        if getattr(user, "first_login_at", None) is None:
+            user.first_login_at = now
+        user.last_login_at = now
+        session.add(user)
+        session.commit()
+        session.refresh(user)
         session.expunge(user)
         return user
 
@@ -198,7 +238,11 @@ def find_user_for_sso_identity(
                 return user
         email_clean = (email or "").strip().lower()
         if email_clean:
-            user = session.query(User).filter(func.lower(User.email) == email_clean).first()
+            user = (
+                session.query(User)
+                .filter(func.lower(User.email) == email_clean)
+                .first()
+            )
             if user is not None and getattr(user, "deleted_at", None) is None:
                 session.expunge(user)
                 return user
@@ -226,6 +270,7 @@ def issue_market_tokens_for_sso_identity(
         _ = display_name
     if user is None:
         raise ValueError("未找到对应的市场账号")
+    user = record_successful_login(int(user.id)) or user
     is_admin = bool(getattr(user, "is_admin", False))
     from modstore_server.account_lifecycle import lifecycle_for_user_id
 

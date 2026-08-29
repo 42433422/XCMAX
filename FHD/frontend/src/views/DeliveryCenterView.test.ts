@@ -3,7 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import DeliveryCenterView from '../../../admin-console/src/views/DeliveryCenterView.vue'
 
 const listCustomDeliveries = vi.fn()
-const listUsers = vi.fn()
+const listStandardDeliveries = vi.fn()
 const decideCustomDelivery = vi.fn()
 const appAlert = vi.fn().mockResolvedValue(undefined)
 const appConfirm = vi.fn().mockResolvedValue(true)
@@ -11,7 +11,7 @@ const appConfirm = vi.fn().mockResolvedValue(true)
 vi.mock('@/api/xcmaxAdmin', () => ({
   xcmaxAdminApi: {
     listCustomDeliveries: (...args: unknown[]) => listCustomDeliveries(...args),
-    listUsers: (...args: unknown[]) => listUsers(...args),
+    listStandardDeliveries: (...args: unknown[]) => listStandardDeliveries(...args),
     decideCustomDelivery: (...args: unknown[]) => decideCustomDelivery(...args),
   },
 }))
@@ -38,19 +38,45 @@ const delivery = {
     runs: [{ attempt: 2, status: 'done', steps: [{ id: 'verify', status: 'done' }] }],
     artifacts: [{ kind: 'module', id: 'coating-quality-private' }],
     install_receipts: [],
+    pricing_mode: 'initial_included',
+    pricing_label: '首次交付内含，交付前开发免费',
+    commerce_ready: true,
   },
 }
+
+const standardDeliveries = [
+  {
+    delivery_no: 'STD-ORDER-001',
+    delivery_type: 'standard_desktop',
+    status: 'pending_install',
+    status_label: '账号已创建，待安装',
+    account: { id: 72, username: 'guosheng', company: '国圣化工', is_enterprise: true },
+    plan: { id: 'saas-permanent-growth', title: '企业成长版', account_tier: 'pro', license_type: 'permanent' },
+    order: { order_no: 'ORDER-001', status: 'paid' },
+    install: { ok: false, installed_devices: 0, latest_receipt: null },
+    first_login: { ok: false, at: '' },
+    completion_rule: 'installed_and_first_login',
+    available_installers: ['macOS', 'Windows'],
+  },
+  {
+    delivery_no: 'STD-ORDER-002',
+    delivery_type: 'standard_desktop',
+    status: 'completed',
+    status_label: '安装并首次登录完成',
+    account: { id: 81, username: 'standard-co', company: '标准交付企业', is_enterprise: true },
+    plan: { id: 'saas-permanent-starter', title: '企业启航版', account_tier: 'normal', license_type: 'permanent' },
+    order: { order_no: 'ORDER-002', status: 'paid' },
+    install: { ok: true, installed_devices: 1, latest_receipt: { platform: 'win32', status: 'installed' } },
+    first_login: { ok: true, at: '2026-08-27T07:00:00Z' },
+    completion_rule: 'installed_and_first_login',
+    available_installers: ['macOS', 'Windows'],
+  },
+]
 
 describe('DeliveryCenterView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    listUsers.mockResolvedValue({
-      users: [
-        { id: 72, username: 'guosheng', company: '国圣化工', is_enterprise: true },
-        { id: 81, username: 'standard-co', company: '标准交付企业', is_enterprise: true },
-      ],
-      total: 2,
-    })
+    listStandardDeliveries.mockResolvedValue({ items: structuredClone(standardDeliveries), total: 2 })
     listCustomDeliveries.mockResolvedValue({ items: [structuredClone(delivery)] })
     decideCustomDelivery.mockResolvedValue({ success: true })
     appConfirm.mockResolvedValue(true)
@@ -65,43 +91,30 @@ describe('DeliveryCenterView', () => {
     expect(wrapper.text()).toContain('coating-quality-private')
     expect(wrapper.text()).toContain('0/1 已安装')
     expect(wrapper.text()).toContain('待客户安装回执')
-    expect(wrapper.text()).toContain('企业客户交付台账')
+    expect(wrapper.text()).toContain('购买账户标准交付台账')
     expect(wrapper.text()).toContain('标准交付企业')
-    expect(wrapper.text()).toContain('标准企业交付')
-    expect(wrapper.text()).toContain('定制交付')
-    expect(listUsers).toHaveBeenCalledWith(200, 0, true)
+    expect(wrapper.text()).toContain('企业成长版')
+    expect(wrapper.text()).toContain('安装并首次登录完成')
+    expect(wrapper.text()).toContain('首次交付内含，交付前开发免费')
+    expect(listStandardDeliveries).toHaveBeenCalledTimes(1)
   })
 
-  it('loads every enterprise-user page before rendering the delivery roster', async () => {
+  it('does not treat enterprise flags without a permanent purchase as deliveries', async () => {
     listCustomDeliveries.mockResolvedValue({ items: [] })
-    listUsers.mockImplementation((_limit: number, offset: number) => {
-      if (offset === 0) {
-        return Promise.resolve({
-          users: [{ id: 101, username: 'enterprise-a', is_enterprise: true }],
-          total: 2,
-        })
-      }
-      return Promise.resolve({
-        users: [{ id: 102, username: 'enterprise-b', is_enterprise: true }],
-        total: 2,
-      })
-    })
+    listStandardDeliveries.mockResolvedValue({ items: [], total: 0, ssot: 'active_permanent_user_plan' })
 
     const wrapper = mount(DeliveryCenterView)
     await flushPromises()
 
-    expect(listUsers).toHaveBeenNthCalledWith(1, 200, 0, true)
-    expect(listUsers).toHaveBeenNthCalledWith(2, 200, 1, true)
-    expect(wrapper.text()).toContain('enterprise-a')
-    expect(wrapper.text()).toContain('enterprise-b')
+    expect(wrapper.text()).toContain('尚无有效的永久购买账户')
     expect(wrapper.text()).toContain('暂无定制交付工单')
-    expect(wrapper.text()).toContain('仍在上方“标准企业交付”台账中')
+    expect(wrapper.text()).toContain('首次定制交付前的开发免费')
   })
 
   it('writes an audited acceptance decision through the real delivery endpoint', async () => {
     const wrapper = mount(DeliveryCenterView)
     await flushPromises()
-    const accept = wrapper.findAll('button').find((button) => button.text().includes('管理员代验收'))
+    const accept = wrapper.findAll('button').find((button) => button.text().includes('内部质量确认'))
     expect(accept).toBeTruthy()
     await accept!.trigger('click')
     await flushPromises()
@@ -109,7 +122,7 @@ describe('DeliveryCenterView', () => {
     expect(decideCustomDelivery).toHaveBeenCalledWith(
       9,
       'accept',
-      '管理员在客户交付中心代为验收',
+      '管理员仅完成内部质量确认，等待客户本人验收',
     )
   })
 

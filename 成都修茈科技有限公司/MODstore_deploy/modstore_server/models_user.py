@@ -40,6 +40,8 @@ class User(Base):
     is_admin = Column(Boolean, default=False)
     is_enterprise = Column(Boolean, default=False, nullable=False, index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(UTC))
+    first_login_at = Column(DateTime, nullable=True, index=True)
+    last_login_at = Column(DateTime, nullable=True, index=True)
     default_llm_json = Column(Text, default="")
     experience = Column(Integer, default=0, nullable=False)
     deleted_at = Column(DateTime, nullable=True, index=True)
@@ -51,7 +53,9 @@ class UserLlmCredential(Base):
     """用户 BYOK：各 provider 的 API Key（Fernet 密文）与可选 base_url。"""
 
     __tablename__ = "user_llm_credentials"
-    __table_args__ = (UniqueConstraint("user_id", "provider", name="uq_user_llm_provider"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "provider", name="uq_user_llm_provider"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)

@@ -340,6 +340,21 @@ class OrderServiceTest {
         }
 
         @Test
+        void customDeliveryOrderRecordsPaymentWithoutGrantingEntitlement() {
+            Order order = buildPaidOrder("OT-CD1", "custom_delivery", new BigDecimal("8800.00"));
+            when(orderRepository.findByOutTradeNoForUpdate("OT-CD1")).thenReturn(Optional.of(order));
+            when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            orderService.fulfillOrder("OT-CD1");
+
+            verify(walletService).recordExternalPayment(order);
+            verify(walletService).recordOrderSpend(order);
+            verifyNoInteractions(entitlementService);
+            assertThat(order.isFulfilled()).isTrue();
+            verify(webhookDispatcher).publishPaymentPaid(order);
+        }
+
+        @Test
         void unknownOrderKindThrows() {
             Order order = buildPaidOrder("OT-X1", "unknown_kind", new BigDecimal("10.00"));
             when(orderRepository.findByOutTradeNoForUpdate("OT-X1")).thenReturn(Optional.of(order));

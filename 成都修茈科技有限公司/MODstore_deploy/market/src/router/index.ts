@@ -369,6 +369,12 @@ const routes: RouteRecordRaw[] = [
     meta: { auth: true },
   },
   {
+    path: '/deliveries',
+    name: 'customer-deliveries',
+    component: () => import('../views/CustomerDeliveriesView.vue'),
+    meta: { auth: true },
+  },
+  {
     path: '/knowledge',
     name: 'knowledge',
     component: () => import('../views/KnowledgeManagerView.vue'),

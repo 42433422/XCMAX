@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from datetime import UTC, datetime
@@ -13,16 +14,20 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from modstore_server.account_license_plans import account_license_plan
 from modstore_server.api.deps import get_current_user, get_db
 from modstore_server.customer_service_api import (
     _schedule_customer_ticket_incident,
     _visible_ticket_or_404,
 )
-from modstore_server.customer_service_delivery_completion import complete_delivery_if_ready
+from modstore_server.customer_service_delivery_completion import (
+    complete_delivery_if_ready,
+)
 from modstore_server.customer_service_delivery_models import (
     CustomDeliveryCreateBody,
     CustomDeliveryDecisionBody,
     CustomDeliveryInstallReceiptBody,
+    CustomDeliveryPaymentCheckoutBody,
 )
 from modstore_server.customer_service_delivery_models import (
     custom_delivery_brief as _custom_delivery_brief,
@@ -30,6 +35,7 @@ from modstore_server.customer_service_delivery_models import (
 from modstore_server.customer_service_delivery_models import (
     custom_delivery_commerce_blockers,
     custom_delivery_crm,
+    custom_delivery_pricing_mode,
 )
 from modstore_server.customer_service_delivery_models import (
     custom_delivery_evidence as _custom_delivery_evidence,
@@ -41,17 +47,81 @@ from modstore_server.customer_service_orchestrator import (
     ticket_payload,
 )
 from modstore_server.customer_service_tools import json_dumps
-from modstore_server.models import User
+from modstore_server.models import Entitlement, User, UserPlan
 from modstore_server.models_cs import (
     CustomerServiceMessage,
     CustomerServiceSession,
     CustomerServiceTicket,
 )
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
+from modstore_server.payment_cs_internal import (
+    create_custom_delivery_payment_order,
+    find_matching_paid_order,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 _get_current_user = get_current_user
+
+
+def _active_permanent_purchase(db: Session, user_id: int) -> dict[str, Any] | None:
+    plan_rows = (
+        db.query(UserPlan)
+        .filter(UserPlan.user_id == int(user_id), UserPlan.is_active.is_(True))
+        .order_by(UserPlan.id.desc())
+        .all()
+    )
+    for plan_row in plan_rows:
+        plan_id = str(plan_row.plan_id or "")
+        plan = account_license_plan(plan_id) or {}
+        if str(plan.get("license_type") or "") != "permanent":
+            continue
+        entitlements = (
+            db.query(Entitlement)
+            .filter(
+                Entitlement.user_id == int(user_id),
+                Entitlement.entitlement_type == "plan",
+                Entitlement.is_active.is_(True),
+            )
+            .order_by(Entitlement.id.desc())
+            .all()
+        )
+        entitlement = next(
+            (
+                row
+                for row in entitlements
+                if str(row.source_order_id or "").strip()
+                and _entitlement_matches_plan(row, plan_id)
+            ),
+            None,
+        )
+        purchase_key = (
+            f"entitlement:{int(entitlement.id)}"
+            if entitlement is not None
+            else f"user-plan:{int(plan_row.id)}"
+        )
+        return {
+            "purchase_key": purchase_key,
+            "user_plan_id": int(plan_row.id),
+            "entitlement_id": int(entitlement.id) if entitlement is not None else None,
+            "source_order_id": (
+                str(entitlement.source_order_id or "")
+                if entitlement is not None
+                else ""
+            ),
+            "plan_id": plan_id,
+            "plan_title": str(plan.get("title") or plan_id),
+            "account_tier": str(plan.get("account_tier") or "normal"),
+        }
+    return None
+
+
+def _entitlement_matches_plan(entitlement: Entitlement, plan_id: str) -> bool:
+    try:
+        metadata = json.loads(str(entitlement.metadata_json or "{}"))
+    except (TypeError, ValueError):
+        return False
+    return isinstance(metadata, dict) and str(metadata.get("plan_id") or "") == plan_id
 
 
 async def _start_custom_delivery_run(
@@ -94,7 +164,9 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
     for row in run_rows:
         sid = str(row.get("session_id") or "")
         snapshot = (
-            await get_workbench_session_snapshot(sid, int(ticket.user_id or 0)) if sid else None
+            await get_workbench_session_snapshot(sid, int(ticket.user_id or 0))
+            if sid
+            else None
         )
         item = dict(row)
         if snapshot:
@@ -107,16 +179,22 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
             latest_snapshot = snapshot
         runs.append(item)
 
-    accepted = str(evidence.get("acceptance_status") or "") == "accepted"
+    acceptance_status = str(evidence.get("acceptance_status") or "")
+    accepted = acceptance_status == "accepted"
+    pricing_mode = custom_delivery_pricing_mode(evidence)
     commerce_blockers = custom_delivery_commerce_blockers(evidence)
     if str(ticket.status or "") in {"resolved", "closed", "done"}:
         stage, label = "delivered", "已交付并上岗"
+    elif pricing_mode == "post_delivery_addon" and not run_rows and commerce_blockers:
+        stage, label = "commerce", "交付后新增，待报价付款"
     elif accepted and commerce_blockers:
         stage, label = "commerce", "商务条件待完成"
     elif accepted:
         stage, label = "delivering", "验收通过，待安装回执"
     elif evidence.get("start_error") and not latest_snapshot:
         stage, label = "rework", "生产未启动，待返工"
+    elif acceptance_status == "internal_approved" and latest_snapshot:
+        stage, label = "acceptance", "内部确认完成，待客户本人验收"
     elif not latest_snapshot:
         stage, label = "queued", "已受理"
     elif str(latest_snapshot.get("status") or "") == "error":
@@ -124,7 +202,9 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
     elif str(latest_snapshot.get("status") or "") == "done":
         gate_ok, _ = custom_delivery_gate(latest_snapshot)
         stage, label = (
-            ("acceptance", "质量门通过，待您验收") if gate_ok else ("rework", "质量门未通过")
+            ("acceptance", "质量门通过，待您验收")
+            if gate_ok
+            else ("rework", "质量门未通过")
         )
     else:
         stage, label = "production", "生产员工制作中"
@@ -136,7 +216,9 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
     )
     artifacts: list[dict[str, str]] = []
     artifact = (
-        latest_snapshot.get("artifact") if isinstance(latest_snapshot.get("artifact"), dict) else {}
+        latest_snapshot.get("artifact")
+        if isinstance(latest_snapshot.get("artifact"), dict)
+        else {}
     )
     if artifact.get("mod_id"):
         artifacts.append({"kind": "module", "id": str(artifact["mod_id"])})
@@ -155,6 +237,16 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
             "runs": runs,
             "artifacts": artifacts,
             "acceptance_status": str(evidence.get("acceptance_status") or "pending"),
+            "pricing_mode": pricing_mode,
+            "pricing_label": (
+                "首次交付内含，交付前开发免费"
+                if pricing_mode == "initial_included"
+                else "交付后新增，报价付款后生产"
+                if pricing_mode == "post_delivery_addon"
+                else "历史交付规则"
+            ),
+            "included_in_purchase": pricing_mode == "initial_included",
+            "delivery_terms": evidence.get("delivery_terms") or {},
             "install_receipts": evidence.get("install_receipts") or [],
             "crm": custom_delivery_crm(evidence),
             "commerce_ready": not commerce_blockers,
@@ -163,14 +255,271 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
     }
 
 
+async def _reconcile_custom_delivery_payment(
+    db: Session, ticket: CustomerServiceTicket
+) -> bool:
+    """Turn a paid dedicated order into commerce proof and start production."""
+    evidence = _custom_delivery_evidence(ticket)
+    if custom_delivery_pricing_mode(evidence) != "post_delivery_addon":
+        return False
+    crm = custom_delivery_crm(evidence)
+    payment = crm["payment"]
+    if str(payment.get("status") or "") == "paid":
+        return False
+    order_nos = [str(payment.get("reference") or "").strip()]
+    order_nos.extend(
+        str(row.get("order_no") or "").strip()
+        for row in reversed(evidence.get("payment_attempts") or [])
+        if isinstance(row, dict)
+    )
+    order_nos = list(dict.fromkeys(value for value in order_nos if value))
+    if not order_nos:
+        return False
+    order = None
+    order_no = ""
+    for candidate in order_nos:
+        matched = find_matching_paid_order(
+            int(ticket.user_id), expected_out_trade_no=candidate
+        )
+        if isinstance(matched, dict):
+            order, order_no = matched, candidate
+            break
+    if not isinstance(order, dict) or str(order.get("order_kind") or "") != "custom_delivery":
+        return False
+    try:
+        paid_amount = float(order.get("total_amount") or 0)
+        quote_amount = float(crm["quote"].get("amount") or 0)
+    except (TypeError, ValueError):
+        return False
+    if quote_amount <= 0 or paid_amount < quote_amount:
+        return False
+    now = datetime.now(UTC).isoformat()
+    crm["payment"] = {
+        **payment,
+        "status": "paid",
+        "amount_paid": paid_amount,
+        "currency": str(crm["quote"].get("currency") or "CNY"),
+        "reference": order_no,
+        "provider_trade_no": str(order.get("trade_no") or ""),
+        "verified_source": str(order.get("source") or "payment_ssot"),
+        "updated_at": now,
+    }
+    evidence["crm"] = crm
+    run_rows = [row for row in evidence.get("runs", []) if isinstance(row, dict)]
+    if not custom_delivery_commerce_blockers(evidence) and not run_rows:
+        try:
+            evidence["runs"] = [
+                await _start_custom_delivery_run(
+                    user_id=int(ticket.user_id), evidence=evidence, attempt=1
+                )
+            ]
+            evidence.pop("start_error", None)
+        except RECOVERABLE_ERRORS as exc:
+            evidence["start_error"] = str(exc)[:1000]
+    complete_delivery_if_ready(ticket, evidence)
+    audit(
+        db,
+        event_type="custom_delivery_payment_verified",
+        session_id=int(ticket.session_id),
+        ticket_id=int(ticket.id),
+        actor_type="system",
+        detail={
+            "order_no": order_no,
+            "amount": paid_amount,
+            "source": "authoritative_payment_order",
+        },
+    )
+    ticket.evidence_json = json_dumps(evidence)
+    ticket.updated_at = datetime.now(UTC)
+    return True
+
+
 @router.post("/custom-deliveries")
 async def create_custom_delivery(
     body: CustomDeliveryCreateBody,
     db: Session = Depends(get_db),
     user: User = Depends(_get_current_user),
 ):
+    purchase = _active_permanent_purchase(db, int(user.id))
+    if purchase is None:
+        raise HTTPException(403, "定制交付仅对已购买四个永久账户档位的客户开放")
+    prior_tickets = (
+        db.query(CustomerServiceTicket)
+        .filter(
+            CustomerServiceTicket.user_id == int(user.id),
+            CustomerServiceTicket.intent == "custom_delivery",
+        )
+        .order_by(CustomerServiceTicket.id.asc())
+        .all()
+    )
+    purchase_key = str(purchase["purchase_key"])
+    purchase_initial_tickets: list[CustomerServiceTicket] = []
+    legacy_delivered = False
+    for prior_ticket in prior_tickets:
+        prior_evidence = _custom_delivery_evidence(prior_ticket)
+        prior_terms = prior_evidence.get("delivery_terms")
+        prior_terms = prior_terms if isinstance(prior_terms, dict) else {}
+        if (
+            str(prior_terms.get("pricing_mode") or "") == "initial_included"
+            and str(prior_terms.get("purchase_key") or "") == purchase_key
+        ):
+            purchase_initial_tickets.append(prior_ticket)
+        if str(prior_ticket.status or "") in {"resolved", "closed", "done"} and not str(
+            prior_terms.get("purchase_key") or ""
+        ):
+            legacy_delivered = True
+
+    active_initial = next(
+        (
+            ticket
+            for ticket in purchase_initial_tickets
+            if str(ticket.status or "") not in {"resolved", "closed", "done"}
+        ),
+        None,
+    )
+    now_iso = datetime.now(UTC).isoformat()
+    if active_initial is not None:
+        evidence = _custom_delivery_evidence(active_initial)
+        previous_kind = str(evidence.get("kind") or "")
+        if previous_kind and previous_kind != body.kind:
+            evidence["kind"] = "bundle"
+        change = {
+            "title": body.title.strip(),
+            "requirements": body.requirements.strip(),
+            "acceptance_criteria": body.acceptance_criteria.strip(),
+            "suggested_id": str(body.suggested_id or "").strip(),
+            "submitted_at": now_iso,
+            "included_in_purchase": True,
+        }
+        changes = [
+            row
+            for row in evidence.get("pre_delivery_changes", [])
+            if isinstance(row, dict)
+        ]
+        changes.append(change)
+        evidence["pre_delivery_changes"] = changes[-50:]
+        evidence["requirements"] = (
+            f"{str(evidence.get('requirements') or '').strip()}\n\n"
+            f"【交付前免费追加】{change['title']}\n{change['requirements']}"
+        ).strip()
+        evidence["acceptance_criteria"] = (
+            f"{str(evidence.get('acceptance_criteria') or '').strip()}\n\n"
+            f"【追加验收标准】{change['acceptance_criteria']}"
+        ).strip()
+        evidence["acceptance_status"] = "pending"
+        for key in (
+            "accepted_at",
+            "accepted_by_user_id",
+            "acceptance_actor",
+            "internal_approved_at",
+            "delivery_artifacts",
+            "download_grants",
+        ):
+            evidence.pop(key, None)
+        runs = [row for row in evidence.get("runs", []) if isinstance(row, dict)]
+        try:
+            run = await _start_custom_delivery_run(
+                user_id=int(user.id),
+                evidence=evidence,
+                attempt=len(runs) + 1,
+                rework_note=(
+                    f"交付前免费追加需求：{change['title']}\n"
+                    f"{change['requirements']}\n追加验收：{change['acceptance_criteria']}"
+                ),
+            )
+            evidence["runs"] = [*runs, run]
+            evidence.pop("start_error", None)
+        except RECOVERABLE_ERRORS as exc:
+            logger.exception(
+                "pre-delivery included revision start failed ticket=%s",
+                active_initial.ticket_no,
+            )
+            evidence["start_error"] = str(exc)[:1000]
+        active_initial.evidence_json = json_dumps(evidence)
+        active_initial.status = "processing"
+        active_initial.decision_status = "pending"
+        active_initial.closed_at = None
+        active_initial.updated_at = datetime.now(UTC)
+        db.add(
+            CustomerServiceMessage(
+                session_id=int(active_initial.session_id),
+                ticket_id=int(active_initial.id),
+                user_id=int(user.id),
+                role="user",
+                content=(
+                    f"【交付前免费追加需求】{change['title']}\n"
+                    f"{change['requirements']}\n验收标准：{change['acceptance_criteria']}"
+                ),
+                payload_json=json_dumps(
+                    {"delivery_change": change, "included_in_purchase": True}
+                ),
+            )
+        )
+        audit(
+            db,
+            event_type="custom_delivery_pre_delivery_change_added",
+            session_id=int(active_initial.session_id),
+            ticket_id=int(active_initial.id),
+            actor=user,
+            actor_type="user",
+            detail={
+                "included_in_purchase": True,
+                "source": "desktop_private_delivery",
+                "change": change,
+            },
+        )
+        enqueue_customer_service_event(
+            db,
+            event_type="customer_service.custom_delivery_pre_delivery_change_added",
+            aggregate_id=str(active_initial.ticket_no),
+            payload={
+                "ticket_id": int(active_initial.id),
+                "ticket_no": str(active_initial.ticket_no),
+                "user_id": int(user.id),
+                "included_in_purchase": True,
+            },
+        )
+        db.commit()
+        db.refresh(active_initial)
+        return await _custom_delivery_payload(active_initial)
+    purchase_consumed = any(
+        str(ticket.status or "") in {"resolved", "closed", "done"}
+        for ticket in purchase_initial_tickets
+    )
+    pricing_mode = (
+        "post_delivery_addon"
+        if purchase_consumed or legacy_delivered
+        else "initial_included"
+    )
+    crm = custom_delivery_crm({})
+    crm["assignment"] = {
+        "status": "assigned",
+        "owner_name": "生产员工",
+        "assigned_at": now_iso,
+        "note": "按购买账户交付规则自动指派",
+    }
+    crm["contract"] = {
+        "status": "waived",
+        "note": "沿用购买账户与原项目约定",
+        "updated_at": now_iso,
+    }
+    if pricing_mode == "initial_included":
+        crm["quote"] = {
+            "status": "waived",
+            "amount": 0,
+            "currency": "CNY",
+            "note": "首次交付前开发已包含在购买账户内",
+            "updated_at": now_iso,
+        }
+        crm["payment"] = {
+            "status": "waived",
+            "amount_paid": 0,
+            "currency": "CNY",
+            "note": "首次交付沿用永久账户购买款",
+            "updated_at": now_iso,
+        }
     evidence: dict[str, Any] = {
-        "schema_version": 2,
+        "schema_version": 3,
         "delivery_managed_by": "custom_delivery",
         "kind": body.kind,
         "title": body.title.strip(),
@@ -180,7 +529,14 @@ async def create_custom_delivery(
         "acceptance_status": "pending",
         "runs": [],
         "install_receipts": [],
-        "crm": custom_delivery_crm({}),
+        "crm": crm,
+        "delivery_terms": {
+            "pricing_mode": pricing_mode,
+            "initial_development_free": pricing_mode == "initial_included",
+            "requires_new_quote_and_payment": pricing_mode == "post_delivery_addon",
+            "classified_at": now_iso,
+            **purchase,
+        },
     }
     session = CustomerServiceSession(
         user_id=int(user.id),
@@ -188,7 +544,9 @@ async def create_custom_delivery(
         status="open",
         title=body.title.strip(),
         intent="custom_delivery",
-        context_json=json_dumps({"source": "desktop_private_delivery", "kind": body.kind}),
+        context_json=json_dumps(
+            {"source": "desktop_private_delivery", "kind": body.kind}
+        ),
         last_message=body.requirements.strip()[:2000],
     )
     db.add(session)
@@ -223,7 +581,9 @@ async def create_custom_delivery(
             user_id=int(user.id),
             role="user",
             content=body.requirements.strip(),
-            payload_json=json_dumps({"acceptance_criteria": body.acceptance_criteria.strip()}),
+            payload_json=json_dumps(
+                {"acceptance_criteria": body.acceptance_criteria.strip()}
+            ),
         )
     )
     audit(
@@ -242,12 +602,17 @@ async def create_custom_delivery(
     )
     db.commit()
 
-    try:
-        run = await _start_custom_delivery_run(user_id=int(user.id), evidence=evidence, attempt=1)
-        evidence["runs"] = [run]
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("custom delivery production start failed ticket=%s", ticket.ticket_no)
-        evidence["start_error"] = str(exc)[:1000]
+    if pricing_mode == "initial_included":
+        try:
+            run = await _start_custom_delivery_run(
+                user_id=int(user.id), evidence=evidence, attempt=1
+            )
+            evidence["runs"] = [run]
+        except RECOVERABLE_ERRORS as exc:
+            logger.exception(
+                "custom delivery production start failed ticket=%s", ticket.ticket_no
+            )
+            evidence["start_error"] = str(exc)[:1000]
     ticket.evidence_json = json_dumps(evidence)
     ticket.updated_at = datetime.now(UTC)
     db.commit()
@@ -280,15 +645,118 @@ async def list_custom_deliveries(
     db: Session = Depends(get_db),
     user: User = Depends(_get_current_user),
 ):
-    q = db.query(CustomerServiceTicket).filter(CustomerServiceTicket.intent == "custom_delivery")
+    q = db.query(CustomerServiceTicket).filter(
+        CustomerServiceTicket.intent == "custom_delivery"
+    )
     if not user.is_admin:
         q = q.filter(CustomerServiceTicket.user_id == user.id)
     rows = (
-        q.order_by(CustomerServiceTicket.updated_at.desc(), CustomerServiceTicket.id.desc())
+        q.order_by(
+            CustomerServiceTicket.updated_at.desc(), CustomerServiceTicket.id.desc()
+        )
         .limit(limit)
         .all()
     )
+    changed = False
+    for row in rows:
+        if await _reconcile_custom_delivery_payment(db, row):
+            changed = True
+    if changed:
+        db.commit()
+        for row in rows:
+            db.refresh(row)
     return {"items": [await _custom_delivery_payload(row) for row in rows]}
+
+
+@router.post("/custom-deliveries/{ticket_id}/payment-checkout")
+async def create_custom_delivery_checkout(
+    ticket_id: int,
+    body: CustomDeliveryPaymentCheckoutBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(_get_current_user),
+):
+    ticket = _visible_ticket_or_404(db, user, ticket_id)
+    if ticket.intent != "custom_delivery" or int(ticket.user_id) != int(user.id):
+        raise HTTPException(404, "定制交付工单不存在")
+    evidence = _custom_delivery_evidence(ticket)
+    if custom_delivery_pricing_mode(evidence) != "post_delivery_addon":
+        raise HTTPException(409, "首次内含交付不需要重新付款")
+    crm = custom_delivery_crm(evidence)
+    quote = crm["quote"]
+    if str(quote.get("status") or "") != "accepted":
+        raise HTTPException(409, "请先确认报价后再付款")
+    try:
+        amount = float(quote.get("amount") or 0)
+    except (TypeError, ValueError):
+        amount = 0
+    if amount <= 0:
+        raise HTTPException(409, "已确认报价金额无效")
+    if str(crm["payment"].get("status") or "") == "paid":
+        raise HTTPException(409, "本定制交付已完成付款")
+    checkout = await create_custom_delivery_payment_order(
+        int(user.id),
+        ticket_no=str(ticket.ticket_no),
+        subject=f"定制交付新增开发·{str(ticket.title or ticket.ticket_no)}",
+        total_amount=f"{amount:.2f}",
+        pay_channel=body.pay_channel,
+    )
+    if not checkout.get("ok") or not str(checkout.get("order_id") or "").strip():
+        raise HTTPException(502, str(checkout.get("message") or "支付单创建失败"))
+    order_no = str(checkout["order_id"])
+    now = datetime.now(UTC).isoformat()
+    crm["payment"] = {
+        **crm["payment"],
+        "status": "unpaid",
+        "amount_paid": 0,
+        "currency": str(quote.get("currency") or "CNY"),
+        "reference": order_no,
+        "checkout_type": str(checkout.get("type") or ""),
+        "checkout_path": str(checkout.get("checkout_path") or ""),
+        "created_at": now,
+        "updated_at": now,
+    }
+    attempts = [
+        row for row in evidence.get("payment_attempts", []) if isinstance(row, dict)
+    ]
+    attempts.append(
+        {
+            "order_no": order_no,
+            "amount": amount,
+            "currency": str(quote.get("currency") or "CNY"),
+            "pay_channel": body.pay_channel,
+            "checkout_type": str(checkout.get("type") or ""),
+            "checkout_path": str(checkout.get("checkout_path") or ""),
+            "created_at": now,
+        }
+    )
+    evidence["payment_attempts"] = attempts[-20:]
+    evidence["crm"] = crm
+    ticket.evidence_json = json_dumps(evidence)
+    ticket.updated_at = datetime.now(UTC)
+    audit(
+        db,
+        event_type="custom_delivery_payment_order_created",
+        session_id=int(ticket.session_id),
+        ticket_id=int(ticket.id),
+        actor=user,
+        actor_type="user",
+        detail={
+            "order_no": order_no,
+            "amount": amount,
+            "pay_channel": body.pay_channel,
+            "source": "customer_delivery_portal",
+        },
+    )
+    db.commit()
+    return {
+        "ok": True,
+        "order_id": order_no,
+        "type": str(checkout.get("type") or ""),
+        "redirect_url": str(checkout.get("redirect_url") or ""),
+        "qr_code": str(checkout.get("qr_code") or ""),
+        "checkout_path": str(checkout.get("checkout_path") or ""),
+        "total_amount": f"{amount:.2f}",
+    }
 
 
 @router.post("/custom-deliveries/{ticket_id}/decision")
@@ -307,12 +775,22 @@ async def decide_custom_delivery(
     if body.action == "accept":
         if custom.get("stage") != "acceptance" or custom.get("gate_ok") is not True:
             raise HTTPException(409, "产物尚未通过生产质量门，不能验收")
-        evidence["acceptance_status"] = "accepted"
-        evidence["accepted_at"] = datetime.now(UTC).isoformat()
+        is_admin = bool(getattr(user, "is_admin", False))
+        evidence["acceptance_status"] = "internal_approved" if is_admin else "accepted"
+        evidence["accepted_at"] = datetime.now(UTC).isoformat() if not is_admin else ""
+        evidence["internal_approved_at"] = (
+            datetime.now(UTC).isoformat() if is_admin else ""
+        )
+        evidence["acceptance_actor"] = "admin_internal" if is_admin else "customer"
+        evidence["accepted_by_user_id"] = int(user.id)
         evidence["acceptance_note"] = body.note.strip()[:4000]
-        ticket.decision_status = "approved"
+        ticket.decision_status = "reviewed" if is_admin else "approved"
         ticket.status = "processing"
-        decision_event = "custom_delivery_accepted"
+        decision_event = (
+            "custom_delivery_internal_approved"
+            if is_admin
+            else "custom_delivery_accepted"
+        )
     else:
         note = body.note.strip()
         if len(note) < 4:
@@ -403,7 +881,9 @@ async def download_custom_delivery_artifact(
         if not manifest_path.is_file():
             raise HTTPException(404, "AI 员工产物已不在生产库")
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        raw = build_employee_pack_zip_for_library(artifact_id, manifest, pack_dir=artifact_path)
+        raw = build_employee_pack_zip_for_library(
+            artifact_id, manifest, pack_dir=artifact_path
+        )
         stream = BytesIO(raw)
         filename = f"{artifact_id}.xcemp"
     else:
@@ -450,7 +930,8 @@ async def record_custom_delivery_install(
     artifacts = payload.get("custom_delivery", {}).get("artifacts", [])
     evidence["delivery_artifacts"] = artifacts
     if not any(
-        r.get("kind") == body.artifact_kind and r.get("id") == body.artifact_id for r in artifacts
+        r.get("kind") == body.artifact_kind and r.get("id") == body.artifact_id
+        for r in artifacts
     ):
         raise HTTPException(409, "安装回执与本工单产物不匹配")
     grants = [r for r in evidence.get("download_grants", []) if isinstance(r, dict)]
@@ -472,7 +953,8 @@ async def record_custom_delivery_install(
     evidence["download_grants"] = grants
     receipts = [r for r in evidence.get("install_receipts", []) if isinstance(r, dict)]
     if not any(
-        r.get("kind") == body.artifact_kind and r.get("id") == body.artifact_id for r in receipts
+        r.get("kind") == body.artifact_kind and r.get("id") == body.artifact_id
+        for r in receipts
     ):
         receipts.append(
             {

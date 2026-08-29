@@ -113,6 +113,70 @@ def fetch_user_orders_for_cs(
     }
 
 
+async def create_custom_delivery_payment_order(
+    market_user_id: int,
+    *,
+    ticket_no: str,
+    subject: str,
+    total_amount: str,
+    pay_channel: str = "alipay",
+) -> dict[str, Any]:
+    """Create a provider order after the delivery service validates the quote."""
+    gw = PaymentGatewayService()
+    if gw.backend != "java":
+        return {
+            "ok": False,
+            "message": "定制交付收款只能由 Java + PostgreSQL 支付单一真实源创建",
+            "source": "python_json",
+        }
+    key = _internal_api_key()
+    if not key:
+        return {
+            "ok": False,
+            "message": "internal api key not configured",
+            "source": "java_postgresql",
+        }
+    url = f"{gw.target_base_url()}/api/internal/payment/custom-delivery-checkout"
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=5.0)) as client:
+            response = await client.post(
+                url,
+                json={
+                    "user_id": int(market_user_id),
+                    "ticket_no": ticket_no,
+                    "subject": subject,
+                    "total_amount": total_amount,
+                    "pay_channel": pay_channel,
+                },
+                headers={"X-Internal-Api-Key": key},
+            )
+        if response.status_code >= 400:
+            return {
+                "ok": False,
+                "message": f"java payment {response.status_code}: {response.text[:300]}",
+                "source": "java_postgresql",
+            }
+        data = response.json()
+        if not isinstance(data, dict):
+            return {
+                "ok": False,
+                "message": "invalid java payment response",
+                "source": "java_postgresql",
+            }
+        return data
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception(
+            "create_custom_delivery_payment_order failed uid=%s ticket=%s",
+            market_user_id,
+            ticket_no,
+        )
+        return {
+            "ok": False,
+            "message": str(exc)[:300],
+            "source": "java_postgresql",
+        }
+
+
 def find_matching_paid_order(
     market_user_id: int,
     *,
