@@ -80,6 +80,7 @@ def run_daily_digest_email() -> _facade().Dict[str, _facade().Any]:
             hours=ttl_hours
         )
         sf = _facade().get_session_factory()
+        _prune_zombie_pending_staged_changes()
         with sf() as session:
             pending = (
                 session.query(_facade().OpsStagedChange)
@@ -311,6 +312,53 @@ def run_daily_digest_email() -> _facade().Dict[str, _facade().Any]:
                 )
             except RECOVERABLE_ERRORS:
                 _facade().logger.exception("daily digest: stop surface audit ephemeral failed")
+
+
+def _prune_zombie_pending_staged_changes() -> int:
+    """分支已被 pr-hygiene 等机制删除的 pending 记录自动关闭，避免每日摘要反复出现无法部署的僵尸审批项。"""
+    closed = 0
+    try:
+        import subprocess
+
+        from modstore_server.integrations.ops_action_handlers import repo_root
+
+        root = str(repo_root())
+        sf = _facade().get_session_factory()
+        with sf() as session:
+            rows = (
+                session.query(_facade().OpsStagedChange)
+                .filter(_facade().OpsStagedChange.status == "pending")
+                .all()
+            )
+            for row in rows:
+                branch = str(row.branch or "")
+                if not branch:
+                    continue
+                try:
+                    proc = subprocess.run(
+                        ["git", "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"],
+                        cwd=root,
+                        capture_output=True,
+                        text=True,
+                        timeout=15,
+                        shell=False,
+                    )
+                except RECOVERABLE_ERRORS:
+                    continue
+                if proc.returncode == 0:
+                    continue
+                row.status = "rejected"
+                closed += 1
+            if closed:
+                session.commit()
+        if closed:
+            _facade().logger.info(
+                "daily digest: auto-closed %d pending staged change(s) whose branch no longer exists",
+                closed,
+            )
+    except RECOVERABLE_ERRORS:
+        _facade().logger.exception("daily digest: prune zombie pending staged changes failed")
+    return closed
 
 
 def cron_trigger_for_digest():
