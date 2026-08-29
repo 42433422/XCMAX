@@ -277,13 +277,20 @@ def _focused_test_command() -> str:
     test_python_override = (
         _facade().os.environ.get("MODSTORE_SELF_MAINTENANCE_TEST_PYTHON", "").strip()
     )
+    test_python_candidate = (
+        _facade().Path(test_python_override).expanduser() if test_python_override else None
+    )
+    if test_python_candidate and test_python_candidate.name == test_python_override:
+        resolved_override = _facade().shutil.which(test_python_override)
+        if resolved_override:
+            test_python_candidate = _facade().Path(resolved_override)
     deploy_root = _facade().Path(
         _facade().os.environ.get("MODSTORE_DEPLOY_ROOT")
         or _facade().Path(__file__).resolve().parent.parent
     )
     runtime_root = _facade().os.environ.get("MODSTORE_RUNTIME_ROOT", "").strip()
     candidates = [
-        _facade().Path(test_python_override).expanduser() if test_python_override else None,
+        test_python_candidate,
         deploy_root / ".venv" / "bin" / "python",
         (
             _facade().Path(runtime_root).expanduser()

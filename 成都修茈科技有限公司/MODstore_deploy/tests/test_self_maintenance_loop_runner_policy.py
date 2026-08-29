@@ -2262,6 +2262,23 @@ def test_focused_test_command_prefers_explicit_command(monkeypatch):
     assert _focused_test_command() == "runtime-python -m pytest focused.py -q"
 
 
+def test_focused_test_command_resolves_bare_python_override_from_path(monkeypatch):
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", raising=False)
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_TEST_PYTHON", "worker-python")
+    monkeypatch.setattr(
+        loop_runner.shutil,
+        "which",
+        lambda command: "/opt/worker/bin/python" if command == "worker-python" else None,
+    )
+    monkeypatch.setattr(
+        loop_runner,
+        "_python_supports_focused_tests",
+        lambda candidate: str(candidate) == "/opt/worker/bin/python",
+    )
+
+    assert _focused_test_command().startswith("/opt/worker/bin/python -m pytest ")
+
+
 def test_python_supports_focused_tests_requires_python_311_and_dependencies(monkeypatch, tmp_path):
     candidate = tmp_path / "python"
     candidate.write_text("#!/bin/sh\n", encoding="utf-8")
