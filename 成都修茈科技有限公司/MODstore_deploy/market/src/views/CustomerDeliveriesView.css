@@ -1,0 +1,339 @@
+.customer-deliveries {
+  min-height: 100vh;
+  padding: 42px clamp(18px, 4vw, 56px) 72px;
+  color: #21384d;
+  background: linear-gradient(145deg, #f4f8fc, #eaf2f9 55%, #f9fbfd);
+}
+.delivery-hero,
+.create-card > header,
+.ticket-card > header,
+.artifact-box > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+.delivery-hero {
+  max-width: 1180px;
+  margin: 0 auto 18px;
+}
+.delivery-hero p {
+  margin: 0;
+  color: #4b82b6;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+.delivery-hero h1 {
+  margin: 4px 0 7px;
+  font-size: clamp(27px, 4vw, 40px);
+}
+.delivery-hero span {
+  color: #647b90;
+  line-height: 1.65;
+}
+button {
+  border: 0;
+  border-radius: 9px;
+  padding: 9px 13px;
+  cursor: pointer;
+  font-weight: 700;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.delivery-hero > button,
+.toggle-button,
+.ghost {
+  border: 1px solid #bdd0e1;
+  color: #35658e;
+  background: #fff;
+}
+.primary {
+  color: #fff;
+  background: #2677bb;
+}
+.delivery-rules,
+.create-card,
+.delivery-list {
+  max-width: 1180px;
+  margin-right: auto;
+  margin-left: auto;
+}
+.delivery-rules {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.delivery-rules article {
+  display: flex;
+  gap: 11px;
+  padding: 14px;
+  border: 1px solid #d5e2ed;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.86);
+}
+.delivery-rules article > strong {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 50%;
+  color: #fff;
+  background: #347db8;
+}
+.delivery-rules b,
+.delivery-rules span {
+  display: block;
+}
+.delivery-rules b {
+  font-size: 12px;
+}
+.delivery-rules span {
+  margin-top: 4px;
+  color: #71869a;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.notice {
+  max-width: 1150px;
+  margin: 0 auto 10px;
+  padding: 10px 14px;
+  border-radius: 9px;
+  font-size: 12px;
+}
+.notice.is-ok {
+  color: #1e7257;
+  background: #e5f5ee;
+}
+.notice.is-error {
+  color: #a33e3e;
+  background: #fdeaea;
+}
+.create-card {
+  margin-bottom: 14px;
+  padding: 18px;
+  border: 1px solid #d5e2ed;
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 10px 30px rgba(46, 83, 117, 0.06);
+}
+.create-card h2,
+.ticket-card h2 {
+  margin: 0;
+  font-size: 17px;
+}
+.create-card header p {
+  margin: 5px 0 0;
+  color: #71869a;
+  font-size: 11px;
+}
+.create-card form {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 15px;
+  border-top: 1px solid #e0e9f1;
+}
+label span {
+  display: block;
+  margin-bottom: 5px;
+  color: #526b80;
+  font-size: 11px;
+  font-weight: 700;
+}
+input,
+select,
+textarea {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid #c9d8e5;
+  border-radius: 9px;
+  padding: 9px 10px;
+  color: #243d53;
+  background: #fff;
+  font: inherit;
+}
+.is-wide {
+  grid-column: 1/-1;
+}
+.create-card form > .primary {
+  align-self: end;
+}
+.delivery-list {
+  display: grid;
+  gap: 12px;
+}
+.empty {
+  padding: 40px;
+  border: 1px dashed #bfd0df;
+  border-radius: 13px;
+  color: #75899b;
+  text-align: center;
+}
+.ticket-card {
+  overflow: hidden;
+  padding: 18px;
+  border: 1px solid #d4e1ec;
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 10px 30px rgba(46, 83, 117, 0.055);
+}
+.ticket-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ticket-title span,
+.stage {
+  border-radius: 999px;
+  padding: 5px 8px;
+  font-size: 9px;
+}
+.ticket-title span {
+  color: #82652a;
+  background: #fff3d8;
+}
+.ticket-card > header p {
+  margin: 5px 0 0;
+  color: #71869a;
+  font-size: 10px;
+}
+.stage {
+  color: #315f87;
+  background: #e8f1fa;
+}
+.stage.is-delivered {
+  color: #26735a;
+  background: #e4f5ed;
+}
+.stage.is-commerce {
+  color: #9a6125;
+  background: #fff0dc;
+}
+.commerce-strip {
+  display: grid;
+  gap: 3px;
+  margin-top: 13px;
+  padding: 12px;
+  border-left: 3px solid #d58c3e;
+  border-radius: 8px;
+  color: #6f532c;
+  background: #fff8ea;
+}
+.commerce-strip span,
+.commerce-strip small {
+  font-size: 10px;
+}
+.commerce-strip small {
+  color: #8b7658;
+}
+.payment-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 7px;
+}
+.payment-actions a {
+  color: #35658e;
+  font-size: 10px;
+  font-weight: 700;
+}
+dl {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 9px;
+  margin: 14px 0 0;
+}
+dl > div {
+  padding: 11px;
+  border-radius: 9px;
+  background: #f4f7fa;
+}
+dt {
+  color: #688094;
+  font-size: 9px;
+  font-weight: 800;
+}
+dd {
+  margin: 5px 0 0;
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+.decision-box,
+.artifact-box {
+  margin-top: 14px;
+  padding: 13px;
+  border: 1px solid #cdddea;
+  border-radius: 11px;
+  background: #f8fbfd;
+}
+.decision-box > strong,
+.artifact-box strong,
+.artifact-box span {
+  display: block;
+}
+.decision-box textarea {
+  margin: 9px 0;
+}
+.decision-box > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.artifact-box header span {
+  margin-top: 3px;
+  color: #71869a;
+  font-size: 10px;
+}
+.artifact-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) auto minmax(150px, 0.6fr) auto;
+  align-items: center;
+  gap: 9px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #dbe6ee;
+}
+.artifact-row > div span {
+  margin-top: 3px;
+  color: #71869a;
+  font-size: 9px;
+}
+.ticket-card > footer {
+  margin: 14px -18px -18px;
+  padding: 12px 18px;
+  color: #237558;
+  background: #e8f7f0;
+  font-weight: 800;
+}
+@media (max-width: 820px) {
+  .delivery-rules,
+  dl {
+    grid-template-columns: 1fr;
+  }
+  .create-card form {
+    grid-template-columns: 1fr;
+  }
+  .is-wide {
+    grid-column: auto;
+  }
+  .artifact-row {
+    grid-template-columns: 1fr;
+  }
+  .delivery-hero,
+  .create-card > header,
+  .ticket-card > header {
+    flex-direction: column;
+  }
+  .stage {
+    align-self: flex-start;
+  }
+}

@@ -112,7 +112,6 @@
     </div>
 
     <nav class="acct-subnav" aria-label="快捷入口">
-      <RouterLink to="/deliveries" class="acct-subnav__link">我的交付</RouterLink>
       <RouterLink to="/wallet" class="acct-subnav__link">钱包</RouterLink>
       <RouterLink :to="{ name: 'wallet-purchased' }" class="acct-subnav__link">已购</RouterLink>
       <RouterLink to="/notifications" class="acct-subnav__link">通知</RouterLink>

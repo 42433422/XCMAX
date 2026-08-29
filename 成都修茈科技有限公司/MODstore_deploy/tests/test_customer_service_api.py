@@ -583,7 +583,7 @@ def test_custom_delivery_requires_quality_acceptance_and_install_receipt(
     """定制交付不能因员工报告成功提前结案；必须质量门、验收和安装回执齐全。"""
     from modstore_server import (
         customer_service_api,
-        customer_service_delivery_api,
+        customer_service_delivery_payment_api,
         workbench_api,
     )
     from modstore_server.app import app
@@ -855,7 +855,7 @@ def test_custom_delivery_requires_quality_acceptance_and_install_receipt(
         from modstore_server import customer_service_delivery_crm_api
 
         monkeypatch.setattr(
-            customer_service_delivery_api,
+            customer_service_delivery_payment_api,
             "create_custom_delivery_payment_order",
             AsyncMock(
                 return_value={
@@ -900,7 +900,7 @@ def test_custom_delivery_requires_quality_acceptance_and_install_receipt(
         assert rejected_payment.status_code == 409
 
         monkeypatch.setattr(
-            customer_service_delivery_api,
+            customer_service_delivery_payment_api,
             "find_matching_paid_order",
             lambda *_args, **_kwargs: {
                 "out_trade_no": "PAID-ADDON-PYTEST-001",
