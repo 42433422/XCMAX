@@ -66,6 +66,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useChatView } from '@/composables/useChatView'
+import { publicAssetUrl } from '@/utils/publicAssetUrl'
 import { sanitizeChatBubbleHtml } from '@/utils/sanitizeHtml'
 import { readAiSessionIdFromStorage, writeAiSessionIdToStorage } from '@/utils/xcagiStorageKeys'
 
@@ -81,7 +82,9 @@ const props = defineProps({
   },
 })
 
-const avatarUrl = computed(() => (props.maleAvatar ? '/ai-butler-male-avatar-v1.jpg' : '/ai-butler-female-avatar-v1.png'))
+const avatarUrl = computed(() =>
+  publicAssetUrl(props.maleAvatar ? 'ai-butler-male-avatar-v1.jpg' : 'ai-butler-female-avatar-v1.png'),
+)
 
 function generateSessionId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2)

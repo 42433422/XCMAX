@@ -358,7 +358,7 @@ onBeforeUnmount(stopPolling)
     radial-gradient(circle at 12% -10%, rgba(36, 99, 235, 0.12), transparent 34%),
     linear-gradient(180deg, #f7f9fc 0%, #eef3f9 100%);
 }
-
+.founder-view > * { flex-shrink: 0; }
 .founder-hero,
 .section-heading,
 .section-title-row {
