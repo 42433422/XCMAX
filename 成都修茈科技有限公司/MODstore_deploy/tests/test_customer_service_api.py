@@ -780,6 +780,10 @@ def test_custom_delivery_requires_quality_acceptance_and_install_receipt(client,
         )
         assert replayed.status_code == 409
 
+        # A tier/entitlement refresh still belongs to the same purchased account;
+        # it must not reset the one included initial custom delivery.
+        _grant_permanent_purchase(user.id, "saas-permanent-ultra")
+
         addon = client.post(
             "/api/customer-service/custom-deliveries",
             json={

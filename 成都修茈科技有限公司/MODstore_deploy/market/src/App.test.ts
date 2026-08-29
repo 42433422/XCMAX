@@ -58,6 +58,7 @@ function createTestRouter() {
       { path: '/ai-store', name: 'ai-store', component: Stub },
       { path: '/wallet', name: 'wallet', component: Stub },
       { path: '/customer-service', name: 'customer-service', component: Stub },
+      { path: '/deliveries', name: 'customer-deliveries', component: Stub },
       { path: '/notifications', name: 'notifications', component: Stub },
       { path: '/account', name: 'account', component: Stub },
       { path: '/login', name: 'login', component: Stub },
@@ -138,6 +139,7 @@ describe('App shell', () => {
     expect(wrapper.text()).toContain('工作台')
     expect(wrapper.text()).toContain('会员')
     expect(wrapper.text()).toContain('AI 客服')
+    expect(wrapper.text()).toContain('我的交付')
     expect(wrapper.text()).toContain('AI 测试')
     expect(wrapper.text()).toContain('¥10.00')
     expect(wrapper.find('.nav-self-credit-btn').exists()).toBe(true)

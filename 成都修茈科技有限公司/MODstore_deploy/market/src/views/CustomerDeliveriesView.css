@@ -50,6 +50,11 @@ button:disabled {
   color: #35658e;
   background: #fff;
 }
+.delivery-hero > button {
+  min-width: 92px;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
 .primary {
   color: #fff;
   background: #2677bb;
