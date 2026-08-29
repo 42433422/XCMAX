@@ -16,6 +16,7 @@
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+  flex: 0 0 auto;
   margin-bottom: 18px;
 }
 .page-header h2 {
@@ -55,6 +56,7 @@
 .btn-danger { background: #fff1f0; border-color: #ffa39e; color: #cf1322; }
 .btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .banner-error {
+  flex: 0 0 auto;
   background: #fff1f0;
   color: #cf1322;
   border: 1px solid #ffa39e;
@@ -63,6 +65,7 @@
   margin-bottom: 12px;
 }
 .banner-warning {
+  flex: 0 0 auto;
   background: #fff8e6;
   color: #a16207;
   border: 1px solid #f5d58a;
@@ -74,6 +77,7 @@
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
+  flex: 0 0 auto;
   margin-bottom: 16px;
 }
 .status-card {
@@ -93,6 +97,8 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
+  flex: 1 0 auto;
+  min-height: 420px;
 }
 @media (max-width: 960px) {
   .hub-grid { grid-template-columns: 1fr; }
