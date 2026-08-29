@@ -20,9 +20,10 @@ router = APIRouter(prefix="/api/admin/customer-deliveries", tags=["admin-deliver
 def _iso(value: Any) -> str:
     if not isinstance(value, datetime):
         return ""
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=UTC)
-    return value.astimezone(UTC).isoformat()
+    normalized: datetime = value
+    if normalized.tzinfo is None:
+        normalized = normalized.replace(tzinfo=UTC)
+    return str(normalized.astimezone(UTC).isoformat())
 
 
 def _entitlement_plan_id(row: Entitlement) -> str:
@@ -121,7 +122,7 @@ def build_standard_delivery_rows(db: Session) -> list[dict[str, Any]]:
             status = "pending_install"
             status_label = "账号已创建，待安装"
         completed_at = ""
-        if install_ok and first_login_ok:
+        if installed is not None and first_login_at is not None:
             completed_at = max(
                 _iso(installed.reported_at),
                 _iso(first_login_at),

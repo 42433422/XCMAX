@@ -147,10 +147,10 @@ async def create_custom_delivery(
     )
     now_iso = datetime.now(UTC).isoformat()
     if active_initial is not None:
-        evidence = _custom_delivery_evidence(active_initial)
-        previous_kind = str(evidence.get("kind") or "")
+        active_evidence = _custom_delivery_evidence(active_initial)
+        previous_kind = str(active_evidence.get("kind") or "")
         if previous_kind and previous_kind != body.kind:
-            evidence["kind"] = "bundle"
+            active_evidence["kind"] = "bundle"
         change = {
             "title": body.title.strip(),
             "requirements": body.requirements.strip(),
@@ -159,18 +159,20 @@ async def create_custom_delivery(
             "submitted_at": now_iso,
             "included_in_purchase": True,
         }
-        changes = [row for row in evidence.get("pre_delivery_changes", []) if isinstance(row, dict)]
+        changes = [
+            row for row in active_evidence.get("pre_delivery_changes", []) if isinstance(row, dict)
+        ]
         changes.append(change)
-        evidence["pre_delivery_changes"] = changes[-50:]
-        evidence["requirements"] = (
-            f"{str(evidence.get('requirements') or '').strip()}\n\n"
+        active_evidence["pre_delivery_changes"] = changes[-50:]
+        active_evidence["requirements"] = (
+            f"{str(active_evidence.get('requirements') or '').strip()}\n\n"
             f"【交付前免费追加】{change['title']}\n{change['requirements']}"
         ).strip()
-        evidence["acceptance_criteria"] = (
-            f"{str(evidence.get('acceptance_criteria') or '').strip()}\n\n"
+        active_evidence["acceptance_criteria"] = (
+            f"{str(active_evidence.get('acceptance_criteria') or '').strip()}\n\n"
             f"【追加验收标准】{change['acceptance_criteria']}"
         ).strip()
-        evidence["acceptance_status"] = "pending"
+        active_evidence["acceptance_status"] = "pending"
         for key in (
             "accepted_at",
             "accepted_by_user_id",
@@ -179,27 +181,27 @@ async def create_custom_delivery(
             "delivery_artifacts",
             "download_grants",
         ):
-            evidence.pop(key, None)
-        runs = [row for row in evidence.get("runs", []) if isinstance(row, dict)]
+            active_evidence.pop(key, None)
+        runs = [row for row in active_evidence.get("runs", []) if isinstance(row, dict)]
         try:
             run = await _start_custom_delivery_run(
                 user_id=int(user.id),
-                evidence=evidence,
+                evidence=active_evidence,
                 attempt=len(runs) + 1,
                 rework_note=(
                     f"交付前免费追加需求：{change['title']}\n"
                     f"{change['requirements']}\n追加验收：{change['acceptance_criteria']}"
                 ),
             )
-            evidence["runs"] = [*runs, run]
-            evidence.pop("start_error", None)
+            active_evidence["runs"] = [*runs, run]
+            active_evidence.pop("start_error", None)
         except RECOVERABLE_ERRORS as exc:
             logger.exception(
                 "pre-delivery included revision start failed ticket=%s",
                 active_initial.ticket_no,
             )
-            evidence["start_error"] = str(exc)[:1000]
-        active_initial.evidence_json = json_dumps(evidence)
+            active_evidence["start_error"] = str(exc)[:1000]
+        active_initial.evidence_json = json_dumps(active_evidence)
         active_initial.status = "processing"
         active_initial.decision_status = "pending"
         active_initial.closed_at = None
