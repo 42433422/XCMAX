@@ -23,6 +23,9 @@ RUN_SCRIPT="${SCRIPT_DIR}/run_modstore_daily_local.sh"
 SUPPORT_DIR="${HOME}/Library/Application Support/XCMAX"
 WRAPPER="${SUPPORT_DIR}/run-modstore-daily.sh"
 SCHEDULER_WRAPPER="${SUPPORT_DIR}/run-modstore-scheduler.sh"
+DIGEST_SYNC_WRAPPER="${SUPPORT_DIR}/run-digest-sync.sh"
+DIGEST_SYNC_SCRIPT_SRC="${SCRIPT_DIR}/sync_daily_digests_to_prod.py"
+DIGEST_SYNC_SCRIPT_COPY="${SUPPORT_DIR}/sync_daily_digests_to_prod.py"
 RUNNER_COPY="${SUPPORT_DIR}/run_modstore_daily_local.sh"
 ANDROID_START_COPY="${SUPPORT_DIR}/start_android_emulator.sh"
 COMMAND_FILE="${SUPPORT_DIR}/run-modstore-daily.command"
@@ -504,8 +507,18 @@ if [[ "${sched}" != "True" && "${sched}" != "true" ]]; then
 fi
 
 # 日更落在 Mac SQLite，管理端读公网 Postgres：每天 08:45 同步存档
-if [[ -f "${DIGEST_SYNC_PLIST_SRC}" ]]; then
+# Desktop 路径受 macOS TCC 保护，launchd 直接执行会 Operation not permitted；
+# 与 daily/scheduler 相同：脚本与 wrapper 均复制到 Application Support 后执行。
+if [[ -f "${DIGEST_SYNC_PLIST_SRC}" && -f "${DIGEST_SYNC_SCRIPT_SRC}" ]]; then
   mkdir -p "${LOG_DIR}"
+  cp "${DIGEST_SYNC_SCRIPT_SRC}" "${DIGEST_SYNC_SCRIPT_COPY}"
+  cat > "${DIGEST_SYNC_WRAPPER}" <<EOF
+#!/usr/bin/env bash
+# 由 install_modstore_daily_launchd.sh 生成 — 勿手改
+export PATH="/usr/bin:/bin:/usr/sbin:/sbin"
+exec /usr/bin/python3 "${DIGEST_SYNC_SCRIPT_COPY}"
+EOF
+  chmod +x "${DIGEST_SYNC_WRAPPER}"
   sed "s|/Users/a4243342|${HOME}|g" "${DIGEST_SYNC_PLIST_SRC}" > "${DIGEST_SYNC_PLIST_DST}"
   UID_NUM="$(id -u)"
   launchctl bootout "gui/${UID_NUM}/${DIGEST_SYNC_LABEL}" 2>/dev/null || true
