@@ -9,6 +9,9 @@ from modstore_server import (
     retort_clarification_gate,
 )
 from modstore_server import self_maintenance_loop_runner as loop_runner
+from modstore_server import (
+    self_maintenance_loop_runner_part06_part01_part01 as loop_runner_prompt_part,
+)
 from modstore_server import self_maintenance_retort_change_evidence as retort_change_evidence
 from modstore_server.autonomous_risk_gate import (
     _historical_rollback_rate as _historical_rollback_rate_v3,
@@ -36,6 +39,7 @@ from modstore_server.self_maintenance_loop_runner import (
     _is_transient_employee_dispatch_failure,
     _load_loop_memory,
     _matches_focused_test_command,
+    _python_supports_focused_tests,
     _qa_task_text,
     _reconcile_requested_merge_feedback,
     _reconcile_retort_scope_remediations,
@@ -2254,6 +2258,73 @@ def test_focused_test_command_prefers_explicit_command(monkeypatch):
     )
 
     assert _focused_test_command() == "runtime-python -m pytest focused.py -q"
+
+
+def test_focused_test_python_cache_rechecks_file_and_execute_permission(monkeypatch, tmp_path):
+    candidate = tmp_path / "python"
+    candidate.write_text("runtime", encoding="utf-8")
+    candidate.chmod(0o755)
+    calls = []
+
+    def probe(*args, **kwargs):
+        calls.append(args)
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(loop_runner.subprocess, "run", probe)
+
+    assert _python_supports_focused_tests(candidate) is True
+    assert _python_supports_focused_tests(candidate) is True
+    assert len(calls) == 1
+
+    candidate.chmod(0o644)
+    assert _python_supports_focused_tests(candidate) is False
+    assert len(calls) == 1
+
+    candidate.unlink()
+    assert _python_supports_focused_tests(candidate) is False
+    assert len(calls) == 1
+
+
+def test_focused_test_python_cache_reprobes_replaced_executable(monkeypatch, tmp_path):
+    candidate = tmp_path / "python"
+    candidate.write_text("runtime-v1", encoding="utf-8")
+    candidate.chmod(0o755)
+    return_codes = iter((0, 1))
+
+    def probe(*args, **kwargs):
+        return SimpleNamespace(returncode=next(return_codes))
+
+    monkeypatch.setattr(loop_runner.subprocess, "run", probe)
+
+    assert _python_supports_focused_tests(candidate) is True
+    candidate.unlink()
+    candidate.write_text("runtime-v2-with-new-identity", encoding="utf-8")
+    candidate.chmod(0o755)
+
+    assert _python_supports_focused_tests(candidate) is False
+
+
+def test_focused_test_python_cache_expires_before_reusing_dependency_probe(monkeypatch, tmp_path):
+    candidate = tmp_path / "python"
+    candidate.write_text("runtime", encoding="utf-8")
+    candidate.chmod(0o755)
+    return_codes = iter((0, 1))
+    ticks = iter((100.0, 131.0))
+
+    monkeypatch.setattr(
+        loop_runner.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=next(return_codes)),
+    )
+    monkeypatch.setattr(loop_runner.time, "monotonic", lambda: next(ticks))
+    monkeypatch.setattr(
+        loop_runner_prompt_part,
+        "_FOCUSED_TEST_PYTHON_CACHE_TTL_SEC",
+        30.0,
+    )
+
+    assert _python_supports_focused_tests(candidate) is True
+    assert _python_supports_focused_tests(candidate) is False
 
 
 def test_high_risk_report_detects_standalone_qa_fail():

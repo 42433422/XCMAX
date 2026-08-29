@@ -238,10 +238,40 @@ def _base_para_input(
     return data
 
 
+_FOCUSED_TEST_PYTHON_CACHE = {}
+_FOCUSED_TEST_PYTHON_CACHE_TTL_SEC = 30.0
+_FOCUSED_TEST_PYTHON_CACHE_MAX_SIZE = 8
+
+
+def _focused_test_python_fingerprint(candidate: _facade().Path):
+    """Return the executable identity used to invalidate dependency probes."""
+    try:
+        if not candidate.is_file() or not _facade().os.access(candidate, _facade().os.X_OK):
+            return None
+        stat = candidate.stat()
+    except OSError:
+        return None
+    return (
+        stat.st_dev,
+        stat.st_ino,
+        stat.st_mode,
+        stat.st_size,
+        stat.st_mtime_ns,
+        stat.st_ctime_ns,
+    )
+
+
 def _python_supports_focused_tests(candidate: _facade().Path) -> bool:
     """Return whether a Python executable has the loop's test dependencies."""
-    if not candidate.is_file() or not _facade().os.access(candidate, _facade().os.X_OK):
+    candidate_key = str(candidate)
+    fingerprint = _focused_test_python_fingerprint(candidate)
+    if fingerprint is None:
+        _FOCUSED_TEST_PYTHON_CACHE.pop(candidate_key, None)
         return False
+    now = _facade().time.monotonic()
+    cached = _FOCUSED_TEST_PYTHON_CACHE.get(candidate_key)
+    if cached and cached[0] == fingerprint and now - cached[1] < _FOCUSED_TEST_PYTHON_CACHE_TTL_SEC:
+        return cached[2]
     try:
         probe = _facade().subprocess.run(
             [str(candidate), "-c", "import apscheduler, pytest"],
@@ -252,7 +282,18 @@ def _python_supports_focused_tests(candidate: _facade().Path) -> bool:
         )
     except (OSError, _facade().subprocess.SubprocessError):
         return False
-    return probe.returncode == 0
+    result = probe.returncode == 0
+    if (
+        candidate_key not in _FOCUSED_TEST_PYTHON_CACHE
+        and len(_FOCUSED_TEST_PYTHON_CACHE) >= _FOCUSED_TEST_PYTHON_CACHE_MAX_SIZE
+    ):
+        oldest_key = min(
+            _FOCUSED_TEST_PYTHON_CACHE,
+            key=lambda key: _FOCUSED_TEST_PYTHON_CACHE[key][1],
+        )
+        _FOCUSED_TEST_PYTHON_CACHE.pop(oldest_key, None)
+    _FOCUSED_TEST_PYTHON_CACHE[candidate_key] = (fingerprint, now, result)
+    return result
 
 
 def _focused_test_command() -> str:
