@@ -6,12 +6,11 @@
   <string>com.xcmax.modstore-digest-sync</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/bin/env</string>
-    <string>python3</string>
-    <string>/Users/a4243342/Desktop/XCMAX/FHD/scripts/dev/sync_daily_digests_to_prod.py</string>
+    <string>/bin/bash</string>
+    <string>/Users/a4243342/Library/Application Support/XCMAX/run-digest-sync.sh</string>
   </array>
   <key>WorkingDirectory</key>
-  <string>/Users/a4243342/Desktop/XCMAX</string>
+  <string>/Users/a4243342</string>
   <key>StartCalendarInterval</key>
   <dict>
     <key>Hour</key>
