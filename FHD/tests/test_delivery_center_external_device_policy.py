@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 FHD_ROOT = Path(__file__).resolve().parents[1]
 ADMIN_CONSOLE = FHD_ROOT / "admin-console" / "src"
 
