@@ -10,6 +10,7 @@ import modstore_server.models as models
 from modstore_server.autonomy_decision_audit import (
     append_autonomy_decision,
     build_autonomy_decision_evidence,
+    record_posthoc_anomaly_evidence,
 )
 from modstore_server.autonomy_posthoc_auditor import run_autonomy_posthoc_audit
 from modstore_server.db.employee_ops import (
@@ -124,6 +125,68 @@ def test_correlates_allow_later_job_receipt_and_durable_artifact(
     posthoc = next(item for item in evidence["items"] if item["record_type"] == "posthoc_anomaly")
     assert posthoc["source"] == "autonomy-posthoc-auditor.v2"
     assert posthoc["evidence_ref"].startswith("scheduler-job:")
+
+
+def test_reaudits_when_only_conclusive_evidence_predates_window_allow(
+    session_factory,
+    tmp_path,
+):
+    cutoff = NOW + timedelta(minutes=5)
+    audit_now = cutoff + timedelta(days=30)
+    _allow_metrics(session_factory)
+    record_posthoc_anomaly_evidence(
+        action_id="autonomy-metrics:2026-07-22",
+        verdict="no_prohibited_miss",
+        evidence_ref="scheduler-job:old+metrics-sha256:old",
+        detector="autonomy-posthoc-auditor.v2",
+        occurred_at=NOW + timedelta(minutes=1),
+        session_factory=session_factory,
+    )
+    append_autonomy_decision(
+        action_id="autonomy-metrics:2026-07-22",
+        action="autonomy_metrics_snapshot",
+        decision="allow",
+        policy="autonomy_guard",
+        risk_level="low",
+        actor_class="system",
+        source="autonomy_metrics.cron",
+        occurred_at=cutoff + timedelta(minutes=1),
+        session_factory=session_factory,
+    )
+    artifact = tmp_path / "autonomy-metrics.jsonl"
+    _write_metrics(artifact)
+    with session_factory() as session:
+        session.add(
+            JobRun(
+                job_id="autonomy_metrics_snapshot",
+                status="success",
+                started_at=cutoff + timedelta(minutes=1),
+                finished_at=cutoff + timedelta(minutes=2),
+                duration_ms=60_000,
+                error="",
+            )
+        )
+        session.commit()
+
+    result = run_autonomy_posthoc_audit(
+        metrics_path=artifact,
+        now=audit_now,
+        session_factory=session_factory,
+    )
+    repeat = run_autonomy_posthoc_audit(
+        metrics_path=artifact,
+        now=audit_now + timedelta(seconds=1),
+        session_factory=session_factory,
+    )
+    evidence = build_autonomy_decision_evidence(
+        now=audit_now + timedelta(seconds=2),
+        session_factory=session_factory,
+    )
+
+    assert result["audited_count"] == 1
+    assert repeat["audited_count"] == 0
+    assert evidence["posthoc_uncovered_count"] == 0
+    assert evidence["posthoc_coverage_rate"] == 100.0
 
 
 def test_incomplete_artifact_remains_unknown(session_factory, tmp_path):
