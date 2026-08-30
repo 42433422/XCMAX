@@ -40,22 +40,12 @@ async def report_desktop_login_delivery_receipt(market_token: str) -> dict[str, 
     if not token:
         return {"reported": False, "reason": "missing_market_token"}
     installation_id = desktop_installation_id()
-    version = str(
-        os.environ.get("XCAGI_VERSION") or os.environ.get("APP_VERSION") or ""
-    ).strip()
-    build_sha = str(
-        os.environ.get("XCAGI_BUILD_SHA") or os.environ.get("GIT_SHA") or ""
-    ).strip()
+    version = str(os.environ.get("XCAGI_VERSION") or os.environ.get("APP_VERSION") or "").strip()
+    build_sha = str(os.environ.get("XCAGI_BUILD_SHA") or os.environ.get("GIT_SHA") or "").strip()
     payload = {
         "installation_id": installation_id,
-        "idempotency_key": hashlib.sha256(
-            f"desktop_login:{installation_id}".encode()
-        ).hexdigest(),
-        "channel": (
-            "staging"
-            if os.environ.get("XCAGI_UPDATE_CHANNEL") == "staging"
-            else "stable"
-        ),
+        "idempotency_key": hashlib.sha256(f"desktop_login:{installation_id}".encode()).hexdigest(),
+        "channel": ("staging" if os.environ.get("XCAGI_UPDATE_CHANNEL") == "staging" else "stable"),
         "platform": (platform.system() or platform.platform()).lower()[:32],
         "target_version": version,
         "target_build_sha": build_sha,

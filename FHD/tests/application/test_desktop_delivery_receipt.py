@@ -24,9 +24,7 @@ async def test_login_reports_idempotent_desktop_install_receipt(tmp_path, monkey
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("XCAGI_VERSION", "1.0.0.1")
     monkeypatch.setenv("XCAGI_BUILD_SHA", "build-sha")
-    (tmp_path / "installation-id").write_text(
-        "external-device-00000001\n", encoding="utf-8"
-    )
+    (tmp_path / "installation-id").write_text("external-device-00000001\n", encoding="utf-8")
     proxy = AsyncMock(return_value={"ok": True, "duplicate": False})
     monkeypatch.setattr("app.fastapi_routes.market_account._proxy_json", proxy)
 
