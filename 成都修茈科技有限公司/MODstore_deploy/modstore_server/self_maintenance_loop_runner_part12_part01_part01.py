@@ -7,6 +7,8 @@ from __future__ import annotations
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
 
+from modstore_server.self_maintenance_para_merge_remediation import retain_newest_open_items
+
 
 def _facade():
     return importlib.import_module("modstore_server.self_maintenance_loop_runner")
@@ -370,7 +372,7 @@ def _update_loop_memory(
             "last_policy_decision": decision,
             "last_resolution_record": resolution_record,
             "last_run": recent_runs[-1],
-            "open_items": memory.get("open_items", [])[-50:],
+            "open_items": retain_newest_open_items(memory.get("open_items")),
             "closed_items": memory.get("closed_items", [])[-200:],
             "recent_runs": recent_runs[-20:],
             "run_count": int(memory.get("run_count") or 0) + 1,

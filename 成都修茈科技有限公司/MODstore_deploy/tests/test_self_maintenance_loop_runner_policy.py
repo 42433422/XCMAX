@@ -54,6 +54,7 @@ from modstore_server.self_maintenance_loop_runner import (
 )
 from modstore_server.self_maintenance_para_merge_remediation import (
     classify_para_merge_review_detail,
+    retain_newest_open_items,
 )
 from modstore_server.self_maintenance_quality_gate import (
     matches_black_check_command,
@@ -79,6 +80,23 @@ QUALITY_CHECKS_JSON = (
     '"source_governance":{"command":"python3 scripts/dev/source_governance.py --top 10",'
     '"exit_code":0,"status":"passed"}},'
 )
+
+
+def _out_of_order_open_items() -> list[dict]:
+    base = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    return [
+        {
+            "created_at": (base + timedelta(days=2)).isoformat(),
+            "run_id": "newest-existing",
+        },
+        *[
+            {
+                "created_at": (base + timedelta(minutes=index)).isoformat(),
+                "run_id": f"filler-{index}",
+            }
+            for index in range(50)
+        ],
+    ]
 
 
 def test_scheduler_selected_remediation_is_resolved_exactly() -> None:
@@ -2824,6 +2842,36 @@ def test_close_loop_memory_items_moves_open_item_to_closed(monkeypatch, tmp_path
     assert memory["closed_items"][0]["original_item"]["run_id"] == "run-1"
 
 
+def test_close_loop_memory_items_caps_by_created_at_not_list_position(monkeypatch, tmp_path):
+    memory_path = tmp_path / "loop_memory.json"
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(memory_path))
+    loop_memory_path().write_text(
+        json.dumps(
+            {
+                "closed_items": [],
+                "open_items": [
+                    *_out_of_order_open_items(),
+                    {"created_at": "2026-07-01T00:00:00+00:00", "run_id": "close-me"},
+                ],
+                "recent_runs": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    close_loop_memory_items(
+        actor="test",
+        resolution_reason="resolved",
+        run_ids=["close-me"],
+    )
+    memory = _load_loop_memory()
+    retained_run_ids = {item["run_id"] for item in memory["open_items"]}
+
+    assert len(memory["open_items"]) == 50
+    assert "newest-existing" in retained_run_ids
+    assert "filler-0" not in retained_run_ids
+
+
 def test_update_loop_memory_closes_resumed_item_after_success(monkeypatch, tmp_path):
     memory_path = tmp_path / "loop_memory.json"
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(memory_path))
@@ -3040,6 +3088,40 @@ def test_reconcile_para_review_veto_preserves_exact_findings_for_next_code_task(
     )
     assert repeated["changed"] is False
     assert len(memory["open_items"]) == 1
+
+
+def test_reconcile_para_review_veto_caps_by_created_at_not_list_position():
+    memory = {
+        "closed_items": [],
+        "open_items": _out_of_order_open_items(),
+        "recent_runs": [
+            {
+                "branch": "devfleet/codex/fix-overflow",
+                "para_task_id": "task-overflow",
+                "run_id": "run-overflow",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: {
+            "status": "merge_conflict",
+            "merge_conflict": {
+                "branch_name": "devfleet/codex/fix-overflow",
+                "detail": "REJECT: overflow regression",
+                "source": "ai-review-veto",
+            },
+        },
+    )
+    retained_run_ids = {item["run_id"] for item in memory["open_items"]}
+
+    assert result["remediation_added"] == 1
+    assert len(memory["open_items"]) == 50
+    assert "newest-existing" in retained_run_ids
+    assert "filler-0" not in retained_run_ids
 
 
 def test_classify_indeterminate_merge_review_detail():
@@ -3528,6 +3610,51 @@ def test_reconcile_manual_veto_replaces_legacy_same_task_remediation():
     )
     assert repeated["changed"] is False
     assert len(memory["open_items"]) == 1
+
+
+def test_reconcile_manual_veto_caps_by_created_at_not_list_position():
+    memory = {
+        "closed_items": [],
+        "open_items": [
+            *_out_of_order_open_items(),
+            {
+                "branch": "devfleet/cursor/sub-1-manual-overflow",
+                "created_at": "2026-07-01T00:00:00+00:00",
+                "kind": "automated_remediation",
+                "para_task_id": "task-manual-overflow",
+                "reason": "para_merge_conflict",
+                "run_id": "run-manual-overflow",
+                "task_id": "task-manual-overflow",
+            },
+        ],
+        "recent_runs": [
+            {
+                "branch": "devfleet/cursor/sub-1-manual-overflow",
+                "para_task_id": "task-manual-overflow",
+                "run_id": "run-manual-overflow",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: {
+            "status": "merge_conflict",
+            "merge_conflict": {
+                "branch_name": "devfleet/cursor/sub-1-manual-overflow",
+                "detail": "manual-veto-active: PR has hold-merge label",
+                "source": "merge-worker",
+            },
+        },
+    )
+    retained_run_ids = {item["run_id"] for item in memory["open_items"]}
+
+    assert result["remediation_added"] == 1
+    assert len(memory["open_items"]) == 50
+    assert "newest-existing" in retained_run_ids
+    assert "filler-0" not in retained_run_ids
 
 
 def test_reconcile_post_dispatch_merge_failure_continues_on_rejected_branch():

@@ -5,6 +5,8 @@
 from __future__ import annotations
 import importlib
 
+from modstore_server.self_maintenance_para_merge_remediation import retain_newest_open_items
+
 
 def _facade():
     return importlib.import_module("modstore_server.self_maintenance_loop_runner")
@@ -239,7 +241,7 @@ def _close_open_items_in_memory(
             )
         else:
             kept.append(item)
-    memory["open_items"] = kept[-50:]
+    memory["open_items"] = retain_newest_open_items(kept)
     memory["closed_items"] = (closed_items + closed)[-200:]
     memory["updated_at"] = closed_at
     return {"closed_count": len(closed), "closed_items": closed}

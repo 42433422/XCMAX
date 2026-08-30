@@ -46,6 +46,28 @@ _ABSORPTION_ELIGIBLE_REASONS = frozenset(
 )
 
 
+def retain_newest_open_items(items: Any, *, limit: int = 50) -> list[Dict[str, Any]]:
+    """Retain the newest valid open items by created_at, independent of list order."""
+
+    if limit <= 0 or not isinstance(items, list):
+        return []
+    indexed_items = [(index, item) for index, item in enumerate(items) if isinstance(item, dict)]
+
+    def recency(entry: tuple[int, Dict[str, Any]]) -> tuple[int, datetime, int]:
+        index, item = entry
+        try:
+            created_at = datetime.fromisoformat(
+                str(item.get("created_at") or "").replace("Z", "+00:00")
+            )
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=UTC)
+            return 1, created_at.astimezone(UTC), index
+        except ValueError:
+            return 0, datetime.min.replace(tzinfo=UTC), index
+
+    return [item for _, item in sorted(indexed_items, key=recency)[-limit:]]
+
+
 def _strip_error_prefix(text: str) -> str:
     lowered = text.strip().lower()
     if lowered.startswith("error:"):
@@ -126,7 +148,7 @@ def reconcile_para_merge_failure_state(
     closed_items = memory.get("closed_items")
     if not isinstance(closed_items, list):
         closed_items = []
-    memory["open_items"] = kept_items[-50:]
+    memory["open_items"] = retain_newest_open_items(kept_items)
     memory["closed_items"] = (closed_items + newly_closed)[-200:]
     memory["updated_at"] = closed_at
     return reason, item_kind, memory["open_items"], True

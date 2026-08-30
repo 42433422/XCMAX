@@ -7,6 +7,8 @@ from __future__ import annotations
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
 
+from modstore_server.self_maintenance_para_merge_remediation import retain_newest_open_items
+
 
 def _facade():
     return importlib.import_module("modstore_server.self_maintenance_loop_runner")
@@ -211,7 +213,7 @@ def _reconcile_requested_merge_feedback(
             changed = True
             remediation_added += 1
     if changed:
-        memory["open_items"] = (memory.get("open_items") or [])[-50:]
+        memory["open_items"] = retain_newest_open_items(memory.get("open_items"))
         memory["updated_at"] = _facade()._iso(_facade()._utc_now())
     return {
         "changed": changed,
