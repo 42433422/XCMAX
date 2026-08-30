@@ -57,6 +57,46 @@ export type StandardDeliveryPolicy = {
   login_only_counts_as_installation?: boolean;
 };
 
+export type EntitlementFastLanePlan = {
+  id: string;
+  title: string;
+  description?: string;
+  catalog: 'account_license' | 'membership' | string;
+  license_type: 'permanent' | 'trial' | 'membership' | string;
+  account_tier?: string;
+  duration_days?: number;
+  price?: string;
+};
+
+export type EntitlementFastLaneActivePlan = {
+  user_plan_id: number;
+  plan_id: string;
+  title: string;
+  catalog: 'account_license' | 'membership' | string;
+  started_at?: string;
+  expires_at?: string;
+  auto_renew?: boolean;
+};
+
+export type EntitlementFastLaneResult = {
+  ok?: boolean;
+  duplicate?: boolean;
+  action?: 'assign' | 'revoke' | string;
+  account?: MarketAdminUser & { account_state?: string };
+  active_plans?: EntitlementFastLaneActivePlan[];
+  audit?: {
+    idempotency_key?: string;
+    actor_user_id?: number;
+    actor_username?: string;
+    aggregate_type?: string;
+  };
+  commerce?: {
+    order_generated?: boolean;
+    payment_generated?: boolean;
+    transaction_generated?: boolean;
+  };
+};
+
 export type CustomDeliveryArtifact = {
   kind: 'module' | 'employee' | string;
   id: string;
@@ -282,6 +322,30 @@ export const xcmaxAdminApi = {
       policy?: StandardDeliveryPolicy;
       ssot?: string;
     }>('/api/xcmax/admin/customer-deliveries/standard');
+  },
+  listEntitlementFastLanePlans() {
+    return api.get<{
+      items?: EntitlementFastLanePlan[];
+      ssot?: string;
+    }>('/api/xcmax/admin/market/entitlement-fast-lane/plans');
+  },
+  getEntitlementFastLaneAccount(account: string | number) {
+    return api.get<EntitlementFastLaneResult>(
+      `/api/xcmax/admin/market/entitlement-fast-lane/accounts/${encodeURIComponent(String(account))}`,
+    );
+  },
+  mutateEntitlementFastLane(payload: {
+    account: string;
+    action: 'assign' | 'revoke';
+    plan_id: string;
+    reason: string;
+    idempotency_key: string;
+    duration_days?: number;
+  }) {
+    return api.post<EntitlementFastLaneResult>(
+      '/api/xcmax/admin/market/entitlement-fast-lane/actions',
+      payload,
+    );
   },
   decideCustomDelivery(ticketId: number, action: 'accept' | 'rework', note = '') {
     return api.post<CustomDeliveryTicket>(
