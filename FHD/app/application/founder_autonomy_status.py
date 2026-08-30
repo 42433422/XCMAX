@@ -186,8 +186,6 @@ def build_founder_autonomy_snapshot(
 
     audit_total = _as_int(autonomy_audit.get("total"))
     veto_rate = _as_float(autonomy_audit.get("veto_rate"))
-    if 0 < veto_rate <= 1:
-        veto_rate *= 100.0
     prohibited_miss_raw = autonomy_audit.get("has_prohibited_miss")
     prohibited_miss = prohibited_miss_raw is True
     prohibited_clear = prohibited_miss_raw is False

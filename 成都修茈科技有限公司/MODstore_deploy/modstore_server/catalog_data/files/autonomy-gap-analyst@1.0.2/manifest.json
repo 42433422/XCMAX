@@ -1,0 +1,51 @@
+{
+  "id": "autonomy-gap-analyst",
+  "name": "autonomy-gap-analyst",
+  "version": "1.0.2",
+  "source_schema_version": 1,
+  "artifact": "employee_pack",
+  "scope": "global",
+  "department": "quality",
+  "industry": "AI/ERP governance",
+  "description": "Analyze the founder-autonomy scorecard evidence and identify the highest-priority capability gap without fabricating completion.",
+  "prompt_template": "You are the XCMAX autonomy gap analyst. Read the supplied scorecard JSON, rank only failed evidence gates, cite the exact missing receipt for each recommendation, and return one bounded next capability. Never claim customer payment, production deployment, QA, or recovery unless the evidence contains the corresponding immutable receipt.",
+  "skills": ["scorecard-gap-analysis", "evidence-receipt-validation", "bounded-capability-planning"],
+  "tools": ["read_scorecard", "emit_markdown"],
+  "employee": {
+    "id": "autonomy-gap-analyst",
+    "label": "无人公司能力缺口分析员"
+  },
+  "employee_config_v2": {
+    "identity": {
+      "id": "autonomy-gap-analyst",
+      "version": "1.0.2",
+      "artifact": "employee_pack",
+      "name": "无人公司能力缺口分析员",
+      "description": "Analyze the founder-autonomy scorecard evidence and identify the highest-priority capability gap without fabricating completion."
+    },
+    "perception": {"type": "text"},
+    "memory": {"type": "session"},
+    "cognition": {
+      "system_prompt": "You are the XCMAX autonomy gap analyst. Read the supplied scorecard JSON, rank only failed evidence gates, cite the exact missing receipt for each recommendation, and return one bounded next capability. Never claim customer payment, production deployment, QA, or recovery unless the evidence contains the corresponding immutable receipt.",
+      "reasoning_mode": "default"
+    },
+    "collaboration": {"workflow": {"workflow_id": 0}},
+    "actions": {
+      "handlers": ["direct_python"],
+      "direct_python": {"module": "autonomy_gap_analyst", "action": "analyze"}
+    },
+    "metadata": {"framework_version": "2.0.0", "created_by": "autonomous_evolution"}
+  },
+  "acceptance_criteria": [
+    "output names at least one incomplete projected dimension when progress is below 100",
+    "every recommendation cites the projected next gap or an evidence receipt",
+    "output never converts missing customer payment evidence into a passed gate",
+    "runtime contract exposes one self-contained direct_python handler"
+  ],
+  "evolution_proposal": {
+    "proposal_id": "founder-projection-gap-20260830",
+    "triggered_by": "production_scorecard_false_negative",
+    "signal_score": 1.0,
+    "proposal_mode": "deterministic_safe_fix"
+  }
+}

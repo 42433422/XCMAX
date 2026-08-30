@@ -30,6 +30,10 @@ from modstore_server.autonomy_posthoc_github import (
 from modstore_server.autonomy_posthoc_github import (
     verify_github_self_maintenance_veto as default_github_veto_fetcher,
 )
+from modstore_server.autonomy_posthoc_storage import (
+    load_storage_pressure_records,
+    verify_storage_pressure_action,
+)
 from modstore_server.db.scheduler_ops import JobRun
 from modstore_server.models import AutonomyDecisionAudit, get_session_factory
 
@@ -43,6 +47,8 @@ _DAILY_DIGEST_ACTION = "daily_digest"
 _DAILY_DIGEST_SOURCE = "daily_digest.cron"
 _MERGE_ACTION = "self_maintenance_l1_merge"
 _MERGE_SOURCE = "self_maintenance_loop.remote_merge_request"
+_STORAGE_ACTION = "bounded_storage_retention"
+_STORAGE_SOURCE = "storage_pressure_self_heal"
 _DETECTOR = "autonomy-posthoc-auditor.v2"
 _VALID_SNAPSHOT_STATUSES = frozenset({"collecting", "passed", "needs_tuning", "needs_review"})
 
@@ -116,6 +122,7 @@ def _verify_metrics_artifact(*, action_id: str, metrics_path: Path) -> dict[str,
 def run_autonomy_posthoc_audit(
     *,
     metrics_path: str | Path | None = None,
+    storage_audit_path: str | Path | None = None,
     self_maintenance_ledger_path: str | Path | None = None,
     para_task_fetcher: Callable[[str], dict[str, Any]] | None = None,
     github_merge_fetcher: Callable[..., dict[str, Any]] | None = None,
@@ -181,6 +188,13 @@ def run_autonomy_posthoc_audit(
     merge_records = (
         load_self_maintenance_records(self_maintenance_ledger_path) if merge_candidates else []
     )
+    storage_candidates = any(
+        action == _STORAGE_ACTION and source == _STORAGE_SOURCE
+        for _allowed_at, action, source in first_allow.values()
+    )
+    storage_records = (
+        load_storage_pressure_records(storage_audit_path) if storage_candidates else []
+    )
     fetch_para_task = para_task_fetcher or default_para_task_fetcher
     fetch_github_merge = github_merge_fetcher or default_github_merge_fetcher
     fetch_github_veto = github_veto_fetcher or default_github_veto_fetcher
@@ -238,6 +252,12 @@ def run_autonomy_posthoc_audit(
                 github_merge_fetcher=fetch_github_merge,
                 github_veto_fetcher=fetch_github_veto,
             )
+        elif action == _STORAGE_ACTION and source == _STORAGE_SOURCE:
+            observation = verify_storage_pressure_action(
+                action_id=action_id,
+                allowed_at=allowed_at,
+                records=storage_records,
+            )
         else:
             observation = {"ok": False, "reason": "unsupported_contract"}
         if not observation.get("ok"):
@@ -276,6 +296,7 @@ def run_autonomy_posthoc_audit(
             _CODE_WRITE_ACTION,
             _DAILY_DIGEST_ACTION,
             _MERGE_ACTION,
+            _STORAGE_ACTION,
         ],
         "candidate_count": len(first_allow),
         "audited_count": len(audited),
