@@ -99,6 +99,30 @@ def _archive_manifest(path: Path, package_id: str) -> dict[str, Any]:
     return manifest
 
 
+def _catalog_source_commit(record: Mapping[str, Any], package_sha256: str) -> str:
+    """Resolve source identity before or after public-catalog normalization."""
+
+    source_commit_sha = _text(record.get("source_commit_sha"), 64).lower()
+    if not source_commit_sha:
+        raw_provenance = record.get("automation_provenance")
+        provenance = raw_provenance if isinstance(raw_provenance, Mapping) else {}
+        provenance_sha = _text(provenance.get("source_sha"), 64).lower()
+        if provenance_sha:
+            if _text(provenance.get("package_sha256"), 64).lower() != package_sha256:
+                raise EvolutionDeploymentReceiptError(
+                    "catalog_automation_provenance_digest_mismatch"
+                )
+            if (
+                not _text(provenance.get("source_repository"), 256)
+                or not _text(provenance.get("workflow_run_id"), 128).isdigit()
+            ):
+                raise EvolutionDeploymentReceiptError("catalog_automation_provenance_incomplete")
+            source_commit_sha = provenance_sha
+    if source_commit_sha and not _COMMIT_RE.fullmatch(source_commit_sha):
+        raise EvolutionDeploymentReceiptError("catalog_source_commit_invalid")
+    return source_commit_sha
+
+
 def verify_catalog_package(
     package_id: str,
     version: str,
@@ -150,9 +174,7 @@ def verify_catalog_package(
     clean_handlers = {_text(handler, 64) for handler in handlers if _text(handler, 64)}
     if not clean_handlers or not clean_handlers.issubset(EXECUTOR_ACTION_HANDLERS):
         raise EvolutionDeploymentReceiptError("employee_pack_handler_contract_invalid")
-    source_commit_sha = _text(record.get("source_commit_sha"), 64).lower()
-    if source_commit_sha and not _COMMIT_RE.fullmatch(source_commit_sha):
-        raise EvolutionDeploymentReceiptError("catalog_source_commit_invalid")
+    source_commit_sha = _catalog_source_commit(record, digest)
 
     market = market_lookup(package_id, version)
     if not isinstance(market, Mapping) or not market:
