@@ -3051,6 +3051,15 @@ def test_classify_indeterminate_merge_review_detail():
     assert meta["actionable_code_findings"] is False
 
 
+def test_classify_diff_fetch_failed_merge_review_detail():
+    meta = classify_para_merge_review_detail(
+        "devfleet/cursor/sub-1-d2436e: diff-fetch-failed: diagnostics=REJECT: unavailable",
+    )
+    assert meta["veto_code"] == "diff-fetch-failed"
+    assert meta["branch_hint"] == "devfleet/cursor/sub-1-d2436e"
+    assert meta["actionable_code_findings"] is False
+
+
 def test_classify_diff_too_large_merge_review_detail():
     meta = classify_para_merge_review_detail(
         "devfleet/cursor/sub-1-ee8a21: diff-too-large:37810",

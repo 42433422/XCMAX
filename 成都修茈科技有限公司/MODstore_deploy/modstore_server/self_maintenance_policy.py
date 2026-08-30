@@ -11,7 +11,14 @@ from typing import Any, Dict, List, Optional
 from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 MARKER_STATUS_FILENAME = "self_maintenance_loop_status.py"
-_INDETERMINATE_MERGE_REVIEW_CODES = frozenset({"indeterminate-review", "indeterminate_review"})
+_DIFF_FETCH_FAILED_MERGE_REVIEW_CODE = "diff-fetch-failed"
+_INDETERMINATE_MERGE_REVIEW_CODES = frozenset(
+    {
+        _DIFF_FETCH_FAILED_MERGE_REVIEW_CODE,
+        "indeterminate-review",
+        "indeterminate_review",
+    }
+)
 _DIFF_TOO_LARGE_MERGE_REVIEW_CODE = "diff-too-large"
 _MODSTORE_SERVER_PREFIX = "成都修茈科技有限公司/MODstore_deploy/modstore_server/"
 _STAT_FOOTER_RE = re.compile(
@@ -39,6 +46,8 @@ def _normalize_repo_path(path: str) -> str:
 
 def normalize_merge_review_veto_code(veto: str) -> str:
     normalized = str(veto or "").strip().lower()
+    if normalized.startswith(_DIFF_FETCH_FAILED_MERGE_REVIEW_CODE):
+        return _DIFF_FETCH_FAILED_MERGE_REVIEW_CODE
     if normalized.startswith(_DIFF_TOO_LARGE_MERGE_REVIEW_CODE):
         return _DIFF_TOO_LARGE_MERGE_REVIEW_CODE
     return normalized

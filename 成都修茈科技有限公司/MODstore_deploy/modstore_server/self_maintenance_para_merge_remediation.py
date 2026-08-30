@@ -15,7 +15,9 @@ from .self_maintenance_policy import (
 )
 from .self_maintenance_remediation_lineage import normalize_automated_remediation_reason
 
-_INDETERMINATE_MERGE_REVIEW_CODES = frozenset({"indeterminate-review", "indeterminate_review"})
+_INDETERMINATE_MERGE_REVIEW_CODES = frozenset(
+    {"diff-fetch-failed", "indeterminate-review", "indeterminate_review"}
+)
 _DIFF_TOO_LARGE_MERGE_REVIEW_CODE = "diff-too-large"
 
 _OPERATIONAL_MERGE_FAILURE_PREFIXES = (
