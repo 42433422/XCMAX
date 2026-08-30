@@ -49,11 +49,17 @@ async def finalize_enterprise_login(
 
         market_token = str((market_result or {}).get("token") or "").strip()
         market_refresh = str((market_result or {}).get("refresh_token") or "").strip()
-        from app.application.surface_audit_demo_account import is_local_demo_market_token
+        from app.application.surface_audit_demo_account import (
+            is_local_demo_market_token,
+        )
 
-        local_demo_market = bool(market_token and is_local_demo_market_token(market_token))
+        local_demo_market = bool(
+            market_token and is_local_demo_market_token(market_token)
+        )
         if market_result and market_result.get("success") and market_token:
-            save_session_market_token(str(session_id), market_token, market_refresh or None)
+            save_session_market_token(
+                str(session_id), market_token, market_refresh or None
+            )
             result["market_access_token"] = market_token
             if market_refresh:
                 result["market_refresh_token"] = market_refresh
@@ -85,9 +91,13 @@ async def finalize_enterprise_login(
                         apply_paid_plan_for_user,
                     )
 
-                    if apply_paid_plan_for_user(user_id=int(user_id), plan_id=active_plan_id):
+                    if apply_paid_plan_for_user(
+                        user_id=int(user_id), plan_id=active_plan_id
+                    ):
                         result["account_license_plan_id"] = active_plan_id
-                        result["account_tier"] = str(market_result.get("account_tier") or "normal")
+                        result["account_tier"] = str(
+                            market_result.get("account_tier") or "normal"
+                        )
             market_is_admin = bool(market_result.get("is_market_admin"))
             market_is_enterprise = bool(market_result.get("is_enterprise"))
             account_kind = flow._derive_and_heal_account_kind(
@@ -135,7 +145,9 @@ async def finalize_enterprise_login(
                     account_kind=account_kind,
                     company_brand=str(result.get("company_brand") or ""),
                     tenant_id=(
-                        int(tenant_info["tenant_id"]) if tenant_info.get("tenant_id") else None
+                        int(tenant_info["tenant_id"])
+                        if tenant_info.get("tenant_id")
+                        else None
                     ),
                 )
             result["account_kind"] = account_kind
