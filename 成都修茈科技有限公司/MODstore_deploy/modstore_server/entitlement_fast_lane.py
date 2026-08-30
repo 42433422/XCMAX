@@ -71,10 +71,7 @@ def resolve_account(db: Session, account: str | int) -> User:
         needle = raw.lower()
         row = (
             db.query(User)
-            .filter(
-                (func.lower(User.username) == needle)
-                | (func.lower(User.email) == needle)
-            )
+            .filter((func.lower(User.username) == needle) | (func.lower(User.email) == needle))
             .first()
         )
     if row is None:
@@ -103,9 +100,7 @@ def list_fast_lane_plans(db: Session) -> list[dict[str, Any]]:
                 "title": str(license_meta.get("title") or row.name or row.id),
                 "description": str(license_meta.get("description") or row.description or ""),
                 "catalog": "account_license" if is_license else "membership",
-                "license_type": str(
-                    license_meta.get("license_type") or "membership"
-                ),
+                "license_type": str(license_meta.get("license_type") or "membership"),
                 "account_tier": str(license_meta.get("account_tier") or ""),
                 "duration_days": int(
                     license_meta.get("duration_days") or (0 if is_license else 30)
@@ -114,9 +109,7 @@ def list_fast_lane_plans(db: Session) -> list[dict[str, Any]]:
             }
         )
     catalog_rank = {"account_license": 0, "membership": 1}
-    license_rank = {
-        str(plan["id"]): index for index, plan in enumerate(ACCOUNT_LICENSE_PLANS)
-    }
+    license_rank = {str(plan["id"]): index for index, plan in enumerate(ACCOUNT_LICENSE_PLANS)}
     return sorted(
         result,
         key=lambda item: (
@@ -196,7 +189,7 @@ def _deactivate_plan_entitlements(db: Session, user_id: int, plan_ids: set[str])
     )
     for row in rows:
         if str(_metadata(row).get("plan_id") or "") in plan_ids:
-            row.is_active = False
+            setattr(row, "is_active", False)
             db.add(row)
 
 
@@ -231,9 +224,9 @@ def _reset_plan_quotas(
                 used=0,
             )
         else:
-            row.total = total
-            row.used = 0
-        row.reset_at = reset_at
+            setattr(row, "total", total)
+            setattr(row, "used", 0)
+        setattr(row, "reset_at", reset_at)
         db.add(row)
 
 
@@ -268,7 +261,10 @@ def _replay_or_conflict(
         "reason": reason,
         "duration_days": duration_days,
     }
-    if row.action not in {"fast_lane_assign_plan", "fast_lane_revoke_plan"} or fingerprint != expected:
+    if (
+        row.action not in {"fast_lane_assign_plan", "fast_lane_revoke_plan"}
+        or fingerprint != expected
+    ):
         raise FastLaneConflict("幂等键已被其他操作使用")
     result = dict(payload)
     result["duplicate"] = True
@@ -354,7 +350,7 @@ def apply_fast_lane_action(
             )
             for row in active_rows:
                 if is_account_license_plan_id(str(row.plan_id)) is is_license:
-                    row.is_active = False
+                    setattr(row, "is_active", False)
                     changed_plan_ids.add(str(row.plan_id))
                     db.add(row)
             _deactivate_plan_entitlements(db, int(target.id), changed_plan_ids)
@@ -390,7 +386,7 @@ def apply_fast_lane_action(
                 )
             )
             if is_license:
-                target.account_state = ACCOUNT_ACTIVE
+                setattr(target, "account_state", ACCOUNT_ACTIVE)
                 db.add(target)
             _reset_plan_quotas(
                 db,
@@ -410,7 +406,7 @@ def apply_fast_lane_action(
                 .all()
             )
             for row in rows:
-                row.is_active = False
+                setattr(row, "is_active", False)
                 db.add(row)
             changed_plan_ids.add(normalized_plan_id)
             _deactivate_plan_entitlements(db, int(target.id), changed_plan_ids)
@@ -421,7 +417,7 @@ def apply_fast_lane_action(
                     if item["plan_id"] != normalized_plan_id
                 )
                 if not other_license:
-                    target.account_state = ACCOUNT_PENDING_PLAN
+                    setattr(target, "account_state", ACCOUNT_PENDING_PLAN)
                     db.add(target)
 
         db.flush()
@@ -480,9 +476,12 @@ def apply_fast_lane_action(
             reason=normalized_reason,
             duration_days=normalized_duration_days,
         )
-    except Exception:
-        db.rollback()
-        raise
+    finally:
+        # Successful commits leave no transaction open. Every exceptional path
+        # (including failures outside SQLAlchemy's own exception hierarchy) is
+        # rolled back here without a broad ``except Exception`` handler.
+        if db.in_transaction():
+            db.rollback()
 
 
 __all__ = [
