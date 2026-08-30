@@ -256,53 +256,21 @@ def _python_supports_focused_tests(candidate: _facade().Path) -> bool:
 
 
 def _focused_test_command() -> str:
-    """Resolve one executable QA command from the running MODstore environment.
+    """Return the repository-owned, cross-worker focused QA command.
 
-    The scheduler may itself run from the lighter FHD venv, which intentionally
-    does not install pytest.  Prefer the MODstore venv used for repository tests
-    and expose explicit overrides for production or isolated runners.
+    The scheduler and report-only employees may run on different hosts.  Keep
+    explicit operator overrides, but never leak a scheduler-local Python path
+    into the default command sent to another worker.
     """
     command_override = (
         _facade().os.environ.get("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", "").strip()
     )
     if command_override:
         return command_override
-    test_python_override = (
-        _facade().os.environ.get("MODSTORE_SELF_MAINTENANCE_TEST_PYTHON", "").strip()
+    launcher = (
+        "成都修茈科技有限公司/MODstore_deploy/scripts/" "run-self-maintenance-focused-test.sh"
     )
-    deploy_root = _facade().Path(
-        _facade().os.environ.get("MODSTORE_DEPLOY_ROOT")
-        or _facade().Path(__file__).resolve().parent.parent
-    )
-    runtime_root = _facade().os.environ.get("MODSTORE_RUNTIME_ROOT", "").strip()
-    candidates = [
-        _facade().Path(test_python_override).expanduser() if test_python_override else None,
-        deploy_root / ".venv" / "bin" / "python",
-        (
-            _facade().Path(runtime_root).expanduser()
-            / "MODstore_deploy"
-            / ".venv"
-            / "bin"
-            / "python"
-            if runtime_root
-            else None
-        ),
-        _facade().Path(_facade().sys.executable),
-    ]
-    test_python = next(
-        (
-            candidate
-            for candidate in candidates
-            if candidate and _facade()._python_supports_focused_tests(candidate)
-        ),
-        _facade().Path(_facade().sys.executable),
-    )
-    test_path = (
-        "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py"
-    )
-    return (
-        f"{_facade().shlex.quote(str(test_python))} -m pytest {_facade().shlex.quote(test_path)} -q"
-    )
+    return f"sh {_facade().shlex.quote(launcher)}"
 
 
 def _code_task_text(

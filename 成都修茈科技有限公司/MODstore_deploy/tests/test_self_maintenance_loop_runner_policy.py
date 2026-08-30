@@ -1,7 +1,9 @@
 import json
+import os
 import sqlite3
 import subprocess
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -2298,13 +2300,14 @@ def test_report_only_review_and_qa_prompt_pin_target_branch(monkeypatch):
     assert "Verify both refs with `git cat-file -e`" in qa
     assert "file:///tmp/repo.git" in qa
     assert "`verified-python -m pytest focused.py -q`" in qa
-    assert "platform-equivalent local `python -m pytest` command" in qa
-    assert "same focused test file" in qa
     assert "Materialize the COMPLETE target ref" in qa
     assert "do not archive only `成都修茈科技有限公司/MODstore_deploy`" in qa
     assert "sibling `FHD/` autonomy-guard SSOT" in qa
+    assert "From that complete target tree" in qa
+    assert "selects only Python >=3.11" in qa
+    assert "Do not replace it with bare `python -m pytest`" in qa
+    assert "If the launcher reports that no compatible interpreter exists" in qa
     assert "never report PASS with no successful focused tested_commands entry" in qa
-    assert "Do not fail solely because the scheduler's absolute Python path" in qa
     assert (
         "python -m modstore_server.self_maintenance_diff_quality --tool black "
         "--base-ref origin/feat/base --target-ref origin/devfleet/codex/sub-1"
@@ -2338,6 +2341,58 @@ def test_focused_test_command_prefers_explicit_command(monkeypatch):
     )
 
     assert _focused_test_command() == "runtime-python -m pytest focused.py -q"
+
+
+def test_focused_test_command_uses_repo_launcher_not_scheduler_python(monkeypatch):
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", raising=False)
+    monkeypatch.setenv(
+        "MODSTORE_SELF_MAINTENANCE_TEST_PYTHON",
+        "/opt/xcmax/releases/scheduler-only/MODstore_deploy/.venv/bin/python",
+    )
+
+    command = _focused_test_command()
+
+    assert command == (
+        "sh '成都修茈科技有限公司/MODstore_deploy/scripts/" "run-self-maintenance-focused-test.sh'"
+    )
+    assert "/opt/xcmax/releases" not in command
+
+
+def test_focused_test_launcher_skips_incompatible_python(tmp_path):
+    launcher = (
+        Path(__file__).resolve().parents[1] / "scripts" / "run-self-maintenance-focused-test.sh"
+    )
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    invocation_log = tmp_path / "invocation.log"
+    incompatible = bin_dir / "python3.13"
+    incompatible.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+    compatible = bin_dir / "python3.11"
+    compatible.write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" = "-c" ]; then exit 0; fi\n'
+        'printf "%s\\n" "$*" > "$FOCUSED_TEST_INVOCATION_LOG"\n',
+        encoding="utf-8",
+    )
+    incompatible.chmod(0o755)
+    compatible.chmod(0o755)
+
+    result = subprocess.run(
+        ["/bin/sh", str(launcher)],
+        capture_output=True,
+        check=False,
+        env={
+            **os.environ,
+            "FOCUSED_TEST_INVOCATION_LOG": str(invocation_log),
+            "PATH": str(bin_dir),
+        },
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    invocation = invocation_log.read_text(encoding="utf-8")
+    assert invocation.startswith("-m pytest ")
+    assert invocation.endswith("test_self_maintenance_loop_runner_policy.py -q\n")
 
 
 def test_high_risk_report_detects_standalone_qa_fail():
