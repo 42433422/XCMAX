@@ -13,6 +13,8 @@ from typing import Any, Optional
 def _safe_command_tokens(command: str) -> Optional[list[str]]:
     """Tokenize a reported command without guessing past malformed quoting."""
 
+    if "\n" in command or "\r" in command:
+        return None
     try:
         lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|")
         lexer.commenters = ""

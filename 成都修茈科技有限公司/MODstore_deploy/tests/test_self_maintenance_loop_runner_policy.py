@@ -2641,6 +2641,27 @@ def test_quality_command_matchers_reject_embedded_background_operator(matcher, c
     assert matcher(command) is False
 
 
+@pytest.mark.parametrize(
+    ("matcher", "command"),
+    [
+        (
+            matches_black_check_command,
+            "python3 -m black --check modman/ modstore_server/ tests/\ntrue",
+        ),
+        (
+            matches_isort_check_command,
+            "python3 -m isort --check-only --diff modman/ modstore_server/ tests/\r\ntrue",
+        ),
+        (
+            matches_source_governance_command,
+            "python3 scripts/dev/source_governance.py --top 10\ntrue",
+        ),
+    ],
+)
+def test_quality_command_matchers_reject_multiline_command(matcher, command):
+    assert matcher(command) is False
+
+
 def test_quality_gate_accepts_worker_env_prefixes_on_real_commands():
     diff_prefix = (
         "cd /tmp/target && GIT_DIR=/tmp/repo/.git GIT_WORK_TREE=/tmp/target "
