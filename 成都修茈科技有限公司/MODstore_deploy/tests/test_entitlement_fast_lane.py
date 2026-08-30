@@ -135,9 +135,7 @@ def test_fast_lane_assign_replace_membership_revoke_and_idempotency(client):
             "payment_generated": False,
             "transaction_generated": False,
         }
-        assert [row["plan_id"] for row in starter["active_plans"]] == [
-            "saas-permanent-starter"
-        ]
+        assert [row["plan_id"] for row in starter["active_plans"]] == ["saas-permanent-starter"]
         assert starter["active_plans"][0]["expires_at"] == ""
 
         audit = db.query(CommerceAdminAction).filter_by(idempotency_key=starter_key).one()
@@ -186,9 +184,7 @@ def test_fast_lane_assign_replace_membership_revoke_and_idempotency(client):
             reason="客户升级企业成长版",
             idempotency_key=f"pytest-fast-lane-{uuid.uuid4().hex}",
         )
-        assert [row["plan_id"] for row in growth["active_plans"]] == [
-            "saas-permanent-growth"
-        ]
+        assert [row["plan_id"] for row in growth["active_plans"]] == ["saas-permanent-growth"]
         assert (
             db.query(UserPlan)
             .filter_by(
