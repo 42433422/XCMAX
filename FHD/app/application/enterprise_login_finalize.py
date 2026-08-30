@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from app.application.session_account_meta import AccountKind
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -37,6 +37,8 @@ async def finalize_enterprise_login(
     if not session_id:
         return result
     flow = _login_flow_module()
+    market_token = ""
+    local_demo_market = False
     try:
         if skip_market_sync:
             market_result = market_result or {"success": False}
@@ -47,7 +49,9 @@ async def finalize_enterprise_login(
 
         market_token = str((market_result or {}).get("token") or "").strip()
         market_refresh = str((market_result or {}).get("refresh_token") or "").strip()
-        from app.application.surface_audit_demo_account import is_local_demo_market_token
+        from app.application.surface_audit_demo_account import (
+            is_local_demo_market_token,
+        )
 
         local_demo_market = bool(market_token and is_local_demo_market_token(market_token))
         if market_result and market_result.get("success") and market_token:
@@ -217,4 +221,18 @@ async def finalize_enterprise_login(
         session_id=str(session_id) if session_id else None,
         account_kind=str(result.get("account_kind") or account_kind or ""),
     )
-    return denied if denied is not None else result
+    if denied is not None:
+        return cast(dict[str, Any], denied)
+    if (
+        market_result
+        and market_result.get("success")
+        and market_token
+        and not local_demo_market
+        and flow._is_desktop_runtime()
+    ):
+        from app.application.desktop_delivery_receipt import (
+            report_desktop_login_delivery_receipt,
+        )
+
+        result["delivery_receipt"] = await report_desktop_login_delivery_receipt(market_token)
+    return result
