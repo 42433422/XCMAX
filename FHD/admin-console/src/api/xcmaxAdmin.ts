@@ -39,11 +39,22 @@ export type StandardDeliveryRecord = {
   install: {
     ok: boolean;
     installed_devices: number;
+    customer_installed_devices?: number;
+    internal_devices_excluded?: number;
+    scope?: 'customer_external_desktop' | string;
     latest_receipt?: UpdateInstallReceipt | null;
   };
   first_login: { ok: boolean; at?: string };
   completion_rule: 'installed_and_first_login' | string;
   available_installers: string[];
+};
+
+export type StandardDeliveryPolicy = {
+  id?: 'customer_external_desktop_delivery' | string;
+  completion_rule?: 'customer_desktop_installed_and_first_login' | string;
+  internal_device_exclusion_enabled?: boolean;
+  internal_device_ids_configured?: number;
+  login_only_counts_as_installation?: boolean;
 };
 
 export type CustomDeliveryArtifact = {
@@ -149,6 +160,8 @@ export type UpdateInstallReceipt = {
   installed_version?: string;
   installed_build_sha?: string;
   status?: 'installed' | 'failed' | 'rolled_back' | string;
+  source?: string;
+  device_scope?: 'internal' | 'customer' | string;
   error?: string;
   reported_at?: string;
 };
@@ -262,7 +275,11 @@ export const xcmaxAdminApi = {
         pending_install?: number;
         pending_first_login?: number;
         completed?: number;
+        customer_installed_devices?: number;
+        internal_receipts_excluded?: number;
+        internal_device_ids_configured?: number;
       };
+      policy?: StandardDeliveryPolicy;
       ssot?: string;
     }>('/api/xcmax/admin/customer-deliveries/standard');
   },

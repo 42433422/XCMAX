@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -15,6 +17,27 @@ from modstore_server.db.delivery_commerce import UpdateInstallationReceipt
 from modstore_server.models import Entitlement, User, UserPlan
 
 router = APIRouter(prefix="/api/admin/customer-deliveries", tags=["admin-delivery"])
+
+_INSTALLATION_ID_SPLIT_RE = re.compile(r"[\s,;]+")
+
+
+def configured_internal_installation_ids() -> set[str]:
+    """Return founder/internal desktop installation IDs without exposing them.
+
+    A login on one of these installations may activate an account, but it must
+    never be treated as customer-side delivery evidence.
+    """
+
+    raw = os.environ.get("MODSTORE_INTERNAL_INSTALLATION_IDS", "")
+    return {
+        token.casefold()
+        for token in _INSTALLATION_ID_SPLIT_RE.split(raw.strip())
+        if 16 <= len(token) <= 64
+    }
+
+
+def _is_internal_installation(installation_id: str, internal_ids: set[str]) -> bool:
+    return installation_id.strip().casefold() in internal_ids
 
 
 def _iso(value: Any) -> str:
@@ -54,8 +77,10 @@ def build_standard_delivery_rows(db: Session) -> list[dict[str, Any]]:
     """Return one real standard delivery per active permanent account.
 
     Account creation starts the delivery.  It completes automatically only when
-    the same purchased account has both a successful desktop installation
-    receipt and a successful first login timestamp.
+    the same purchased account has both a successful customer-side desktop
+    installation receipt and a successful first login timestamp.  Receipts from
+    configured founder/internal installations are retained as evidence but are
+    excluded from delivery completion.
     """
 
     plan_rows = _permanent_plan_rows(db)
@@ -87,15 +112,25 @@ def build_standard_delivery_rows(db: Session) -> list[dict[str, Any]]:
         )
         .all()
     )
+    internal_ids = configured_internal_installation_ids()
     latest_receipt_by_user: dict[int, UpdateInstallationReceipt] = {}
+    latest_customer_receipt_by_user: dict[int, UpdateInstallationReceipt] = {}
     installed_receipt_by_user: dict[int, UpdateInstallationReceipt] = {}
     installed_devices_by_user: dict[int, set[str]] = {}
+    internal_devices_by_user: dict[int, set[str]] = {}
     for receipt in receipts:
         uid = int(receipt.user_id)
         latest_receipt_by_user.setdefault(uid, receipt)
+        installation_id = str(receipt.installation_id or "").strip()
+        is_internal = _is_internal_installation(installation_id, internal_ids)
+        if not is_internal:
+            latest_customer_receipt_by_user.setdefault(uid, receipt)
         if str(receipt.status or "") == "installed":
+            if is_internal:
+                internal_devices_by_user.setdefault(uid, set()).add(installation_id)
+                continue
             installed_receipt_by_user.setdefault(uid, receipt)
-            installed_devices_by_user.setdefault(uid, set()).add(str(receipt.installation_id or ""))
+            installed_devices_by_user.setdefault(uid, set()).add(installation_id)
 
     result: list[dict[str, Any]] = []
     for plan_row in plan_rows:
@@ -108,7 +143,7 @@ def build_standard_delivery_rows(db: Session) -> list[dict[str, Any]]:
         entitlement = entitlement_by_key.get((uid, plan_id))
         order_no = str(getattr(entitlement, "source_order_id", "") or "").strip()
         installed = installed_receipt_by_user.get(uid)
-        latest = latest_receipt_by_user.get(uid)
+        latest = latest_customer_receipt_by_user.get(uid) or latest_receipt_by_user.get(uid)
         first_login_at = getattr(user, "first_login_at", None)
         install_ok = installed is not None
         first_login_ok = first_login_at is not None
@@ -120,7 +155,11 @@ def build_standard_delivery_rows(db: Session) -> list[dict[str, Any]]:
             status_label = "已安装，待首次登录"
         else:
             status = "pending_install"
-            status_label = "账号已创建，待安装"
+            status_label = (
+                "内部本机已排除，待客户设备安装"
+                if internal_devices_by_user.get(uid)
+                else "账号已创建，待客户设备安装"
+            )
         completed_at = ""
         if installed is not None and first_login_at is not None:
             completed_at = max(
@@ -138,6 +177,11 @@ def build_standard_delivery_rows(db: Session) -> list[dict[str, Any]]:
                 "source": str(latest.source or ""),
                 "reported_at": _iso(latest.reported_at),
                 "error": str(latest.error or ""),
+                "device_scope": (
+                    "internal"
+                    if _is_internal_installation(str(latest.installation_id or ""), internal_ids)
+                    else "customer"
+                ),
             }
         result.append(
             {
@@ -174,10 +218,13 @@ def build_standard_delivery_rows(db: Session) -> list[dict[str, Any]]:
                 "install": {
                     "ok": install_ok,
                     "installed_devices": len(installed_devices_by_user.get(uid, set())),
+                    "customer_installed_devices": len(installed_devices_by_user.get(uid, set())),
+                    "internal_devices_excluded": len(internal_devices_by_user.get(uid, set())),
+                    "scope": "customer_external_desktop",
                     "latest_receipt": receipt_payload,
                 },
                 "first_login": {"ok": first_login_ok, "at": _iso(first_login_at)},
-                "completion_rule": "installed_and_first_login",
+                "completion_rule": "customer_desktop_installed_and_first_login",
                 "available_installers": ["macOS", "Windows"],
             }
         )
@@ -192,6 +239,7 @@ def list_standard_deliveries(
 ):
     rows = build_standard_delivery_rows(db)
     rows = rows[:limit]
+    internal_ids = configured_internal_installation_ids()
     return {
         "items": rows,
         "total": len(rows),
@@ -200,9 +248,23 @@ def list_standard_deliveries(
             "pending_install": sum(1 for row in rows if row["status"] == "pending_install"),
             "pending_first_login": sum(1 for row in rows if row["status"] == "pending_first_login"),
             "completed": sum(1 for row in rows if row["status"] == "completed"),
+            "customer_installed_devices": sum(
+                int(row["install"]["customer_installed_devices"]) for row in rows
+            ),
+            "internal_receipts_excluded": sum(
+                int(row["install"]["internal_devices_excluded"]) for row in rows
+            ),
+            "internal_device_ids_configured": len(internal_ids),
         },
         "ssot": "active_permanent_user_plan",
+        "policy": {
+            "id": "customer_external_desktop_delivery",
+            "completion_rule": "customer_desktop_installed_and_first_login",
+            "internal_device_exclusion_enabled": bool(internal_ids),
+            "internal_device_ids_configured": len(internal_ids),
+            "login_only_counts_as_installation": False,
+        },
     }
 
 
-__all__ = ["build_standard_delivery_rows", "router"]
+__all__ = ["build_standard_delivery_rows", "configured_internal_installation_ids", "router"]

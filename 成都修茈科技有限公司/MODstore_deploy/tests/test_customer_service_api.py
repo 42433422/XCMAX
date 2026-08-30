@@ -555,6 +555,7 @@ def test_custom_delivery_requires_quality_acceptance_and_install_receipt(client,
     """定制交付不能因员工报告成功提前结案；必须质量门、验收和安装回执齐全。"""
     from modstore_server import (
         customer_service_api,
+        customer_service_delivery_create_api,
         customer_service_delivery_payment_api,
         workbench_api,
     )
@@ -592,7 +593,7 @@ def test_custom_delivery_requires_quality_acceptance_and_install_receipt(client,
     monkeypatch.setattr(workbench_api, "start_workbench_session_for_user", fake_start)
     monkeypatch.setattr(workbench_api, "get_workbench_session_snapshot", fake_snapshot)
     monkeypatch.setattr(
-        customer_service_api,
+        customer_service_delivery_create_api,
         "_schedule_customer_ticket_incident",
         lambda payload: None,
     )
