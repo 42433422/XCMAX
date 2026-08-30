@@ -92,6 +92,7 @@ _FULL_OPTIONAL_MODULES = (
     "modstore_server.standard_delivery_api",
     "modstore_server.admin_commerce_api",
     "modstore_server.admin_entitlement_fast_lane_api",
+    "modstore_server.admin_diagnostic_terminal_api",
     "modstore_server.ops_api",
     "modstore_server.admin_ops_audit_api",
     "modstore_server.admin_employee_execution_api",

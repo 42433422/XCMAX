@@ -84,6 +84,7 @@ dev = [
 
 [project.scripts]
 modman = "modman.cli:main"
+xcmax-terminal = "modstore_server.diagnostic_terminal_cli:main"
 
 [build-system]
 requires = ["setuptools>=61"]
