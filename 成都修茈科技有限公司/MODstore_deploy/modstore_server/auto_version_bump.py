@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -72,6 +73,32 @@ def _auto_version_enabled() -> bool:
         "yes",
         "on",
     )
+
+
+def _pending_version_change_request_id() -> int | None:
+    """Return one unresolved release-version CR so the daily job stays idempotent."""
+    from modstore_server.db.employee_ops import EmployeeChangeRequest
+    from modstore_server.models import get_session_factory
+
+    with get_session_factory()() as session:
+        rows = (
+            session.query(EmployeeChangeRequest)
+            .filter(
+                EmployeeChangeRequest.source_employee_id == "deploy-release-officer",
+                EmployeeChangeRequest.status.in_(("pending", "approved")),
+            )
+            .order_by(EmployeeChangeRequest.id.desc())
+            .limit(100)
+            .all()
+        )
+    for row in rows:
+        try:
+            targets = json.loads(str(row.target_paths_json or "[]"))
+        except (TypeError, ValueError):
+            continue
+        if isinstance(targets, list) and "release/VERSION" in targets:
+            return int(row.id)
+    return None
 
 
 def get_current_version(project_root: str) -> str:
@@ -290,6 +317,23 @@ def auto_version_bump(project_root: str) -> Dict[str, Any]:
     """自动版本演进主入口：判断 bump 类型 → 同步锚点 → 生成 CHANGELOG → CR 提交。"""
     if not _auto_version_enabled():
         return {"ok": True, "skipped": True, "reason": "auto version disabled"}
+
+    try:
+        pending_id = _pending_version_change_request_id()
+    except RECOVERABLE_ERRORS:
+        logger.exception("failed to inspect pending version change requests")
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "version change request state unavailable",
+        }
+    if pending_id is not None:
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "pending version change request",
+            "change_request_id": pending_id,
+        }
 
     current = get_current_version(project_root)
     bump_type = determine_bump_type(project_root)
