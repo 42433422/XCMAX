@@ -106,6 +106,62 @@ def test_verify_catalog_package_rejects_missing_public_market_listing(
         )
 
 
+def test_verify_catalog_package_recovers_source_from_published_provenance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    catalog, _ = _catalog_pack(tmp_path, monkeypatch)
+    archive = catalog / "files" / "pilot-low-risk-clerk-1.0.0.xcemp"
+    digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+    catalog_path = catalog / "packages.json"
+    payload = json.loads(catalog_path.read_text(encoding="utf-8"))
+    payload["packages"][0].pop("source_commit_sha", None)
+    payload["packages"][0]["automation_provenance"] = {
+        "source_repository": "42433422/XCMAX",
+        "source_sha": MERGE_SHA,
+        "workflow_run_id": "12345",
+        "package_sha256": digest,
+    }
+    catalog_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = verify_catalog_package(
+        "pilot-low-risk-clerk",
+        "1.0.0",
+        market_lookup=lambda _package_id, _version: {
+            "catalog_item_id": 42,
+            "package_id": "pilot-low-risk-clerk",
+            "version": "1.0.0",
+            "artifact": "employee_pack",
+            "stored_filename": "pilot-low-risk-clerk-1.0.0.xcemp",
+            "package_sha256": digest,
+            "is_public": True,
+            "compliance_status": "approved",
+        },
+    )
+
+    assert result["source_commit_sha"] == MERGE_SHA
+
+
+def test_verify_catalog_package_rejects_unbound_published_provenance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    catalog, _ = _catalog_pack(tmp_path, monkeypatch)
+    catalog_path = catalog / "packages.json"
+    payload = json.loads(catalog_path.read_text(encoding="utf-8"))
+    payload["packages"][0]["automation_provenance"] = {
+        "source_repository": "42433422/XCMAX",
+        "source_sha": MERGE_SHA,
+        "workflow_run_id": "12345",
+        "package_sha256": "0" * 64,
+    }
+    catalog_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(
+        EvolutionDeploymentReceiptError,
+        match="catalog_automation_provenance_digest_mismatch",
+    ):
+        verify_catalog_package("pilot-low-risk-clerk", "1.0.0")
+
+
 def test_record_evolution_receipt_is_strong_and_idempotent(monkeypatch) -> None:
     verified = {
         "package_id": "pilot-low-risk-clerk",
