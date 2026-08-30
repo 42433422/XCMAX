@@ -11,7 +11,11 @@ from modstore_server.customer_service_delivery_models import (
 )
 from modstore_server.db.delivery_commerce import UpdateInstallationReceipt
 from modstore_server.models import Base, Entitlement, PlanTemplate, User, UserPlan
-from modstore_server.standard_delivery_api import build_standard_delivery_rows
+from modstore_server.standard_delivery_api import (
+    build_standard_delivery_rows,
+    configured_internal_installation_ids,
+    list_standard_deliveries,
+)
 
 
 def _session():
@@ -25,7 +29,8 @@ def _add_plan(db, plan_id: str) -> None:
     db.flush()
 
 
-def test_standard_delivery_requires_install_and_first_login():
+def test_standard_delivery_requires_install_and_first_login(monkeypatch):
+    monkeypatch.delenv("MODSTORE_INTERNAL_INSTALLATION_IDS", raising=False)
     db = _session()
     try:
         user = User(
@@ -87,7 +92,84 @@ def test_standard_delivery_requires_install_and_first_login():
         assert completed["status"] == "completed"
         assert completed["install"]["installed_devices"] == 1
         assert completed["first_login"]["ok"] is True
-        assert completed["completion_rule"] == "installed_and_first_login"
+        assert completed["completion_rule"] == "customer_desktop_installed_and_first_login"
+    finally:
+        db.close()
+
+
+def test_internal_founder_desktop_never_completes_customer_delivery(monkeypatch):
+    internal_id = "37793b37f088431583f1b275f844d680"
+    customer_id = "customer-installation-000000000001"
+    monkeypatch.setenv("MODSTORE_INTERNAL_INSTALLATION_IDS", f" {internal_id},ignored ")
+    assert configured_internal_installation_ids() == {internal_id}
+
+    db = _session()
+    try:
+        user = User(
+            username="permanent_external",
+            email="external@example.com",
+            password_hash="unused",
+            account_state="active",
+            first_login_at=datetime(2026, 8, 30, 9, 0, tzinfo=UTC),
+        )
+        db.add(user)
+        db.flush()
+        _add_plan(db, "saas-permanent-growth")
+        db.add(UserPlan(user_id=user.id, plan_id="saas-permanent-growth", is_active=True))
+        db.add(
+            UpdateInstallationReceipt(
+                user_id=user.id,
+                installation_id=internal_id,
+                idempotency_key="internal-receipt-0000000000000001",
+                platform="darwin",
+                installed_version="1.0.0.1",
+                installed_build_sha="internal-build",
+                status="installed",
+                source="desktop_inventory",
+                reported_at=datetime(2026, 8, 30, 9, 1, tzinfo=UTC),
+            )
+        )
+        db.commit()
+
+        internal_only = build_standard_delivery_rows(db)[0]
+        assert internal_only["status"] == "pending_install"
+        assert internal_only["status_label"] == "内部本机已排除，待客户设备安装"
+        assert internal_only["install"]["ok"] is False
+        assert internal_only["install"]["installed_devices"] == 0
+        assert internal_only["install"]["internal_devices_excluded"] == 1
+        assert internal_only["install"]["latest_receipt"]["device_scope"] == "internal"
+
+        policy = list_standard_deliveries(500, db, user)
+        assert policy["summary"]["internal_device_ids_configured"] == 1
+        assert policy["summary"]["internal_receipts_excluded"] == 1
+        assert policy["policy"] == {
+            "id": "customer_external_desktop_delivery",
+            "completion_rule": "customer_desktop_installed_and_first_login",
+            "internal_device_exclusion_enabled": True,
+            "internal_device_ids_configured": 1,
+            "login_only_counts_as_installation": False,
+        }
+
+        db.add(
+            UpdateInstallationReceipt(
+                user_id=user.id,
+                installation_id=customer_id,
+                idempotency_key="customer-receipt-0000000000000001",
+                platform="win32",
+                installed_version="1.0.0.1",
+                installed_build_sha="customer-build",
+                status="installed",
+                source="desktop_inventory",
+                reported_at=datetime(2026, 8, 30, 9, 2, tzinfo=UTC),
+            )
+        )
+        db.commit()
+
+        completed = build_standard_delivery_rows(db)[0]
+        assert completed["status"] == "completed"
+        assert completed["install"]["installed_devices"] == 1
+        assert completed["install"]["internal_devices_excluded"] == 1
+        assert completed["install"]["latest_receipt"]["device_scope"] == "customer"
     finally:
         db.close()
 

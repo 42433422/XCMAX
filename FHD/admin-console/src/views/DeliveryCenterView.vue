@@ -4,7 +4,7 @@
       <div>
         <p class="delivery-eyebrow">CUSTOMER DELIVERY CONTROL</p>
         <h2>客户交付中心</h2>
-        <p>购买账户 SSOT 驱动交付；标准软件安装并首次登录后自动完成，定制新增按交付前后分流。</p>
+        <p>购买账户 SSOT 驱动交付；内部本 Mac 永不计入，客户侧桌面安装并首次登录后自动完成。</p>
       </div>
       <button type="button" class="delivery-refresh" :disabled="loading" @click="loadAll">
         <i class="fa fa-refresh" :class="{ 'fa-spin': loading }" aria-hidden="true"></i>
@@ -24,6 +24,7 @@
       v-if="!errorMessage && (!loading || standardDeliveries.length)"
       :deliveries="standardDeliveries"
       :tickets="tickets"
+      :policy="standardPolicy"
       @open-custom="focusCustomDeliveries"
     />
 
@@ -200,12 +201,14 @@ import {
   type CustomDeliveryRun,
   type CustomDeliveryTicket,
   type MarketAdminUser,
+  type StandardDeliveryPolicy,
   type StandardDeliveryRecord,
 } from '@/api/xcmaxAdmin'
 import { appAlert, appConfirm } from '@/utils/appDialog'
 
 const tickets = ref<CustomDeliveryTicket[]>([])
 const standardDeliveries = ref<StandardDeliveryRecord[]>([])
+const standardPolicy = ref<StandardDeliveryPolicy>({})
 const usersById = ref(new Map<number, MarketAdminUser>())
 const query = ref('')
 const stageFilter = ref('')
@@ -261,7 +264,8 @@ const summaryCards = computed(() => {
     { key: 'enterprise', label: '永久购买账户', value: standardDeliveries.value.length, hint: '来源：购买账户 SSOT' },
     { key: 'standard', label: '标准交付待安装', value: standardDeliveries.value.filter((row) => row.status === 'pending_install').length, hint: 'Mac / Windows 通用安装包' },
     { key: 'receipt', label: '待首次登录', value: standardDeliveries.value.filter((row) => row.status === 'pending_first_login').length, hint: '安装成功，等待账号登录' },
-    { key: 'done', label: '标准交付完成', value: standardDeliveries.value.filter((row) => row.status === 'completed').length, hint: '安装 + 首次登录自动完成' },
+    { key: 'done', label: '标准交付完成', value: standardDeliveries.value.filter((row) => row.status === 'completed').length, hint: '客户设备安装 + 首次登录' },
+    { key: 'internal', label: '内部本机排除', value: standardPolicy.value.internal_device_ids_configured || 0, hint: standardPolicy.value.internal_device_exclusion_enabled ? '已登记，不计客户交付' : '尚未登记内部设备' },
     { key: 'custom', label: '定制交付工单', value: tickets.value.length, hint: '首次内含 / 交付后新增' },
     { key: 'production', label: '生产进行中', value: count(['queued', 'production']), hint: '等待产物与质量证据' },
   ]
@@ -281,6 +285,15 @@ function extractStandardDeliveries(raw: unknown): StandardDeliveryRecord[] {
   return rows as StandardDeliveryRecord[]
 }
 
+function extractStandardPolicy(raw: unknown): StandardDeliveryPolicy {
+  const body = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {}
+  const nested = body.data && typeof body.data === 'object' ? body.data as Record<string, unknown> : {}
+  const policy = body.policy && typeof body.policy === 'object'
+    ? body.policy
+    : nested.policy && typeof nested.policy === 'object' ? nested.policy : {}
+  return policy as StandardDeliveryPolicy
+}
+
 async function loadAll() {
   loading.value = true
   errorMessage.value = ''
@@ -291,6 +304,7 @@ async function loadAll() {
     ])
     tickets.value = extractTickets(deliveryResult)
     standardDeliveries.value = extractStandardDeliveries(standardResult)
+    standardPolicy.value = extractStandardPolicy(standardResult)
     usersById.value = new Map(
       standardDeliveries.value.map((row) => [Number(row.account.id), row.account]),
     )

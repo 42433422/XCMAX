@@ -14,6 +14,7 @@ const state = vi.hoisted(() => {
 vi.mock('electron', () => ({ app: state.app }))
 
 import {
+  loadOrCreateInstallationId,
   readPendingUpdateInstallReceipt,
   reportPendingUpdateInstallation,
   stageUpdateInstallReceipt,
@@ -30,6 +31,19 @@ describe('update installation receipts', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     fs.rmSync(root, { recursive: true, force: true })
+  })
+
+  it('migrates the existing desktop device identity into installation receipts', () => {
+    fs.mkdirSync(state.holder.userDataDir, { recursive: true })
+    fs.writeFileSync(
+      path.join(state.holder.userDataDir, 'device_id'),
+      '37793b37f088431583f1b275f844d680\n',
+    )
+
+    expect(loadOrCreateInstallationId()).toBe('37793b37f088431583f1b275f844d680')
+    expect(
+      fs.readFileSync(path.join(state.holder.userDataDir, 'installation-id'), 'utf8').trim(),
+    ).toBe('37793b37f088431583f1b275f844d680')
   })
 
   it('reports the installed build and only then removes the durable marker', async () => {
