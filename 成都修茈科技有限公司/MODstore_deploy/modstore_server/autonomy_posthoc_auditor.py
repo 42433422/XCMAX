@@ -146,9 +146,8 @@ def run_autonomy_posthoc_audit(
             .order_by(AutonomyDecisionAudit.occurred_at.asc())
             .all()
         )
-        conclusive_ids = {
-            str(row.action_id)
-            for row in session.query(AutonomyDecisionAudit)
+        conclusive_rows = (
+            session.query(AutonomyDecisionAudit)
             .filter(
                 AutonomyDecisionAudit.record_type == "posthoc_anomaly",
                 AutonomyDecisionAudit.posthoc_verdict.in_(
@@ -156,7 +155,7 @@ def run_autonomy_posthoc_audit(
                 ),
             )
             .all()
-        }
+        )
         successful_metric_runs = (
             session.query(JobRun)
             .filter(JobRun.job_id == _METRICS_JOB, JobRun.status == "success")
@@ -175,6 +174,13 @@ def run_autonomy_posthoc_audit(
                 str(row.action or ""),
                 str(row.source or ""),
             )
+
+    conclusive_ids = {
+        str(row.action_id)
+        for row in conclusive_rows
+        if str(row.action_id) in first_allow
+        and _utc(row.occurred_at) >= first_allow[str(row.action_id)][0]
+    }
 
     metric_candidates = any(
         action == _METRICS_ACTION and source == _METRICS_SOURCE
