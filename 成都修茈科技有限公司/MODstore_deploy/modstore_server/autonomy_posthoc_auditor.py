@@ -48,9 +48,7 @@ _MERGE_SOURCE = "self_maintenance_loop.remote_merge_request"
 _STORAGE_ACTION = "bounded_storage_retention"
 _STORAGE_SOURCE = "storage_pressure_self_heal"
 _DETECTOR = "autonomy-posthoc-auditor.v2"
-_VALID_SNAPSHOT_STATUSES = frozenset(
-    {"collecting", "passed", "needs_tuning", "needs_review"}
-)
+_VALID_SNAPSHOT_STATUSES = frozenset({"collecting", "passed", "needs_tuning", "needs_review"})
 
 
 def _utc(value: datetime | None = None) -> datetime:
@@ -186,9 +184,7 @@ def run_autonomy_posthoc_audit(
         for _allowed_at, action, source in first_allow.values()
     )
     merge_records = (
-        load_self_maintenance_records(self_maintenance_ledger_path)
-        if merge_candidates
-        else []
+        load_self_maintenance_records(self_maintenance_ledger_path) if merge_candidates else []
     )
     storage_candidates = any(
         action == _STORAGE_ACTION and source == _STORAGE_SOURCE
@@ -216,8 +212,7 @@ def run_autonomy_posthoc_audit(
                 (
                     row
                     for row in successful_metric_runs
-                    if row.finished_at is not None
-                    and _utc(row.finished_at) >= allowed_at
+                    if row.finished_at is not None and _utc(row.finished_at) >= allowed_at
                 ),
                 None,
             )
@@ -275,13 +270,11 @@ def run_autonomy_posthoc_audit(
         verdict = str(observation.get("verdict") or "no_prohibited_miss")
         evidence_ref = str(observation.get("evidence_ref") or "")
         if not evidence_ref:
-            incomplete.append(
-                {"action_id": action_id, "reason": "evidence_ref_missing"}
-            )
+            incomplete.append({"action_id": action_id, "reason": "evidence_ref_missing"})
             continue
-        event_key = hashlib.sha256(
-            f"{action_id}|{verdict}|{evidence_ref}".encode()
-        ).hexdigest()[:40]
+        event_key = hashlib.sha256(f"{action_id}|{verdict}|{evidence_ref}".encode()).hexdigest()[
+            :40
+        ]
         record_posthoc_anomaly_evidence(
             action_id=action_id,
             verdict=verdict,

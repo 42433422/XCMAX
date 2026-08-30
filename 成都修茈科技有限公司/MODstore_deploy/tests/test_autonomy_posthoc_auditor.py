@@ -121,9 +121,7 @@ def test_correlates_allow_later_job_receipt_and_durable_artifact(
     assert repeat["audited_count"] == 0
     assert evidence["has_prohibited_miss"] is False
     assert evidence["posthoc_coverage_rate"] == 100.0
-    posthoc = next(
-        item for item in evidence["items"] if item["record_type"] == "posthoc_anomaly"
-    )
+    posthoc = next(item for item in evidence["items"] if item["record_type"] == "posthoc_anomaly")
     assert posthoc["source"] == "autonomy-posthoc-auditor.v2"
     assert posthoc["evidence_ref"].startswith("scheduler-job:")
 
@@ -222,9 +220,7 @@ def test_daily_digest_requires_coherent_later_delivery_receipt(
     assert result["audited_count"] == 1
     assert result["incomplete_count"] == 0
     assert evidence["has_prohibited_miss"] is False
-    posthoc = next(
-        item for item in evidence["items"] if item["record_type"] == "posthoc_anomaly"
-    )
+    posthoc = next(item for item in evidence["items"] if item["record_type"] == "posthoc_anomaly")
     assert posthoc["evidence_ref"].startswith("daily-digest-record:")
     assert "owner@example.com" not in posthoc["evidence_ref"]
 
@@ -364,9 +360,7 @@ def test_code_write_narrow_ci_failure_proves_no_effect(session_factory, tmp_path
 
     assert result["audited_count"] == 1
     assert evidence["has_prohibited_miss"] is False
-    posthoc = next(
-        item for item in evidence["items"] if item["record_type"] == "posthoc_anomaly"
-    )
+    posthoc = next(item for item in evidence["items"] if item["record_type"] == "posthoc_anomaly")
     assert posthoc["evidence_ref"].startswith("employee-suggestion:")
 
 
@@ -489,9 +483,7 @@ def test_failed_merge_request_with_terminal_task_and_github_veto_proves_no_effec
 
     assert result["audited_count"] == 1
     assert result["incomplete_count"] == 0
-    posthoc = next(
-        item for item in evidence["items"] if item["record_type"] == "posthoc_anomaly"
-    )
+    posthoc = next(item for item in evidence["items"] if item["record_type"] == "posthoc_anomaly")
     assert posthoc["evidence_ref"].endswith("+github-pr:817:unmerged:veto:hold-merge")
 
 
@@ -711,9 +703,7 @@ def _allow_storage_pressure(sf, run_id: str) -> None:
     )
 
 
-def _write_storage_receipt(
-    path, run_id: str, *, decision_audit_written: bool = True
-) -> None:
+def _write_storage_receipt(path, run_id: str, *, decision_audit_written: bool = True) -> None:
     path.write_text(
         json.dumps(
             {
@@ -763,9 +753,7 @@ def test_storage_pressure_allow_requires_later_bounded_run_receipt(
     assert result["audited_action_ids"] == [f"storage-pressure:{run_id}"]
     assert result["incomplete_count"] == 0
     assert evidence["has_prohibited_miss"] is False
-    posthoc = next(
-        item for item in evidence["items"] if item["record_type"] == "posthoc_anomaly"
-    )
+    posthoc = next(item for item in evidence["items"] if item["record_type"] == "posthoc_anomaly")
     assert posthoc["evidence_ref"].startswith(f"storage-self-heal-run:{run_id}:sha256:")
 
 
