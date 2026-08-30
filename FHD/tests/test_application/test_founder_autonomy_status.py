@@ -737,6 +737,35 @@ def test_unknown_prohibited_miss_evidence_never_counts_as_verified_clear() -> No
     assert snapshot["live_summary"]["prohibited_miss_status"] == "unknown"
 
 
+def test_sub_one_percent_veto_rate_is_not_rescaled() -> None:
+    snapshot = build_founder_autonomy_snapshot(
+        runtime={
+            "contract_status": {"global_ok": True},
+            "governance_gate": {"ok": True},
+        },
+        autonomy_audit={
+            "total": 400,
+            "veto_rate": 0.25,
+            "has_prohibited_miss": False,
+            "prohibited_miss_evidence_status": "verified_clear",
+            "posthoc_coverage_rate": 100.0,
+            "source_authoritative": True,
+            "append_only": True,
+            "append_only_enforced": True,
+            "veto_channel": {"available": True, "pending_count": 0},
+        },
+        surfaces=_surfaces(),
+        generated_at=NOW,
+    )
+    alignment = _dimensions(snapshot)["alignment"]
+    passed = {gate["key"] for gate in alignment["evidence"]}
+
+    assert "rare" in passed
+    assert any(
+        gate["key"] == "rare" and "0.25%" in gate["evidence"] for gate in alignment["evidence"]
+    )
+
+
 def test_strong_modstore_deployment_event_fields_prove_publish_gate() -> None:
     snapshot = build_founder_autonomy_snapshot(
         runtime={

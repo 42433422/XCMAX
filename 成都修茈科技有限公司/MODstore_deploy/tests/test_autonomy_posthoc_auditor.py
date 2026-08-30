@@ -121,7 +121,9 @@ def test_correlates_allow_later_job_receipt_and_durable_artifact(
     assert repeat["audited_count"] == 0
     assert evidence["has_prohibited_miss"] is False
     assert evidence["posthoc_coverage_rate"] == 100.0
-    posthoc = next(item for item in evidence["items"] if item["record_type"] == "posthoc_anomaly")
+    posthoc = next(
+        item for item in evidence["items"] if item["record_type"] == "posthoc_anomaly"
+    )
     assert posthoc["source"] == "autonomy-posthoc-auditor.v2"
     assert posthoc["evidence_ref"].startswith("scheduler-job:")
 
@@ -220,7 +222,9 @@ def test_daily_digest_requires_coherent_later_delivery_receipt(
     assert result["audited_count"] == 1
     assert result["incomplete_count"] == 0
     assert evidence["has_prohibited_miss"] is False
-    posthoc = next(item for item in evidence["items"] if item["record_type"] == "posthoc_anomaly")
+    posthoc = next(
+        item for item in evidence["items"] if item["record_type"] == "posthoc_anomaly"
+    )
     assert posthoc["evidence_ref"].startswith("daily-digest-record:")
     assert "owner@example.com" not in posthoc["evidence_ref"]
 
@@ -360,7 +364,9 @@ def test_code_write_narrow_ci_failure_proves_no_effect(session_factory, tmp_path
 
     assert result["audited_count"] == 1
     assert evidence["has_prohibited_miss"] is False
-    posthoc = next(item for item in evidence["items"] if item["record_type"] == "posthoc_anomaly")
+    posthoc = next(
+        item for item in evidence["items"] if item["record_type"] == "posthoc_anomaly"
+    )
     assert posthoc["evidence_ref"].startswith("employee-suggestion:")
 
 
@@ -483,7 +489,9 @@ def test_failed_merge_request_with_terminal_task_and_github_veto_proves_no_effec
 
     assert result["audited_count"] == 1
     assert result["incomplete_count"] == 0
-    posthoc = next(item for item in evidence["items"] if item["record_type"] == "posthoc_anomaly")
+    posthoc = next(
+        item for item in evidence["items"] if item["record_type"] == "posthoc_anomaly"
+    )
     assert posthoc["evidence_ref"].endswith("+github-pr:817:unmerged:veto:hold-merge")
 
 
@@ -686,4 +694,100 @@ def test_unsupported_allow_contract_remains_unknown(session_factory):
     assert result["audited_count"] == 0
     assert result["incomplete"] == [
         {"action_id": "future-action:1", "reason": "unsupported_contract"}
+    ]
+
+
+def _allow_storage_pressure(sf, run_id: str) -> None:
+    append_autonomy_decision(
+        action_id=f"storage-pressure:{run_id}",
+        action="bounded_storage_retention",
+        decision="allow",
+        policy="storage_pressure_low_risk_retention_v1",
+        risk_level="low",
+        actor_class="system",
+        source="storage_pressure_self_heal",
+        occurred_at=NOW,
+        session_factory=sf,
+    )
+
+
+def _write_storage_receipt(
+    path, run_id: str, *, decision_audit_written: bool = True
+) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "run_id": run_id,
+                "started_at": (NOW - timedelta(seconds=1)).isoformat(),
+                "finished_at": (NOW + timedelta(seconds=1)).isoformat(),
+                "schema_version": "storage_pressure_self_heal.v1",
+                "policy": "storage_pressure_low_risk_retention_v1",
+                "action_taken": True,
+                "decision_audit_written": decision_audit_written,
+                "audit_written": True,
+                "status": "no_safe_candidates",
+                "ok": False,
+                "before": {"path": "/srv/data", "free_bytes": 10},
+                "after": {"path": "/srv/data", "free_bytes": 10},
+                "retention": {"ok": True, "removed_files": 0},
+                "postcondition": {
+                    "logical_retention_verified": True,
+                    "business_notification_scope_unchanged_by_contract": True,
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def test_storage_pressure_allow_requires_later_bounded_run_receipt(
+    session_factory,
+    tmp_path,
+):
+    run_id = "8f92885317004c31a9fd2b384163bc5d"
+    _allow_storage_pressure(session_factory, run_id)
+    ledger = tmp_path / "storage-pressure.jsonl"
+    _write_storage_receipt(ledger, run_id)
+
+    result = run_autonomy_posthoc_audit(
+        storage_audit_path=ledger,
+        now=NOW + timedelta(seconds=2),
+        session_factory=session_factory,
+    )
+    evidence = build_autonomy_decision_evidence(
+        now=NOW + timedelta(seconds=3),
+        session_factory=session_factory,
+    )
+
+    assert result["audited_action_ids"] == [f"storage-pressure:{run_id}"]
+    assert result["incomplete_count"] == 0
+    assert evidence["has_prohibited_miss"] is False
+    posthoc = next(
+        item for item in evidence["items"] if item["record_type"] == "posthoc_anomaly"
+    )
+    assert posthoc["evidence_ref"].startswith(f"storage-self-heal-run:{run_id}:sha256:")
+
+
+def test_storage_pressure_receipt_without_decision_correlation_stays_unknown(
+    session_factory,
+    tmp_path,
+):
+    run_id = "c111df187fc441cb9dc88a0b64319379"
+    _allow_storage_pressure(session_factory, run_id)
+    ledger = tmp_path / "storage-pressure.jsonl"
+    _write_storage_receipt(ledger, run_id, decision_audit_written=False)
+
+    result = run_autonomy_posthoc_audit(
+        storage_audit_path=ledger,
+        now=NOW + timedelta(seconds=2),
+        session_factory=session_factory,
+    )
+
+    assert result["audited_count"] == 0
+    assert result["incomplete"] == [
+        {
+            "action_id": f"storage-pressure:{run_id}",
+            "reason": "storage_run_contract_incomplete",
+        }
     ]
