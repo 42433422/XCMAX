@@ -338,6 +338,46 @@ async def admin_list_standard_customer_deliveries(request: _facade().Request):
     )
 
 
+@_facade().router.get("/admin/market/entitlement-fast-lane/plans", response_model=None)
+async def admin_list_entitlement_fast_lane_plans(request: _facade().Request):
+    """List every active account-license and membership plan from MODstore SSOT."""
+
+    return await _facade()._market_admin_proxy(
+        request,
+        "GET",
+        "/api/admin/entitlement-fast-lane/plans",
+    )
+
+
+@_facade().router.get("/admin/market/entitlement-fast-lane/accounts/{account}", response_model=None)
+async def admin_get_entitlement_fast_lane_account(
+    request: _facade().Request,
+    account: str,
+):
+    from urllib.parse import quote
+
+    return await _facade()._market_admin_proxy(
+        request,
+        "GET",
+        f"/api/admin/entitlement-fast-lane/accounts/{quote(account, safe='')}",
+    )
+
+
+@_facade().router.post("/admin/market/entitlement-fast-lane/actions", response_model=None)
+async def admin_mutate_entitlement_fast_lane(
+    request: _facade().Request,
+    payload: dict[str, _facade().Any] = _facade().Body(default_factory=dict),
+):
+    """Proxy one audited, idempotent plan mutation without creating commerce data."""
+
+    return await _facade()._market_admin_proxy(
+        request,
+        "POST",
+        "/api/admin/entitlement-fast-lane/actions",
+        json_body=payload,
+    )
+
+
 @_facade().router.get("/admin/deploy/install-receipts", response_model=None)
 async def admin_list_update_install_receipts(request: _facade().Request):
     """读取客户电脑完成安装或回滚后上报的真实回执。"""

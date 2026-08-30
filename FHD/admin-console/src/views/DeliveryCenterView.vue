@@ -20,6 +20,8 @@
       </article>
     </section>
 
+    <EntitlementFastLanePanel @changed="loadAll" />
+
     <EnterpriseDeliveryRoster
       v-if="!errorMessage && (!loading || standardDeliveries.length)"
       :deliveries="standardDeliveries"
@@ -194,6 +196,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import DeliveryCommercePanel from '../components/admin/DeliveryCommercePanel.vue'
+import EntitlementFastLanePanel from '../components/admin/EntitlementFastLanePanel.vue'
 import EnterpriseDeliveryRoster from '../components/admin/EnterpriseDeliveryRoster.vue'
 import {
   xcmaxAdminApi,
