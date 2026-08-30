@@ -100,6 +100,9 @@ from .self_maintenance_remediation_lineage import (
     remediation_lineage_fields as _remediation_lineage_fields,
 )
 from .self_maintenance_remediation_lineage import (
+    remote_branch_descends_from as _remote_branch_descends_from,
+)
+from .self_maintenance_remediation_lineage import (
     resume_candidate_from_context as _resume_candidate_from_remediation_context,
 )
 from .self_maintenance_remediation_lineage import (

@@ -1,5 +1,6 @@
 import json
 import sqlite3
+import subprocess
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -876,8 +877,17 @@ def test_validate_remediation_branch_delivery_requires_advanced_work_branch(
         "candidate": "a" * 40,
         "work-unchanged": "a" * 40,
         "work-advanced": "b" * 40,
+        "work-divergent": "c" * 40,
+        "work-unverified": "d" * 40,
     }
     monkeypatch.setattr(loop_runner, "_remote_branch_head", lambda _repo, branch: heads.get(branch))
+    monkeypatch.setattr(
+        loop_runner,
+        "_remote_branch_descends_from",
+        lambda _repositories, _base, delivered, _base_head, _delivered_head: (
+            None if delivered == "work-unverified" else delivered == "work-advanced"
+        ),
+    )
     monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "file:///tmp/repo.git")
 
     unchanged = loop_runner._validate_remediation_branch_delivery(
@@ -886,11 +896,85 @@ def test_validate_remediation_branch_delivery_requires_advanced_work_branch(
     advanced = loop_runner._validate_remediation_branch_delivery(
         base_branch="candidate", delivered_branch="work-advanced"
     )
+    divergent = loop_runner._validate_remediation_branch_delivery(
+        base_branch="candidate", delivered_branch="work-divergent"
+    )
+    unavailable_base = loop_runner._validate_remediation_branch_delivery(
+        base_branch="missing", delivered_branch="work-advanced"
+    )
+    unverified = loop_runner._validate_remediation_branch_delivery(
+        base_branch="candidate", delivered_branch="work-unverified"
+    )
 
     assert unchanged["ok"] is False
     assert unchanged["reason"] == "remediation_branch_not_advanced"
     assert advanced["ok"] is True
     assert advanced["reason"] == "remediation_branch_advanced"
+    assert divergent["ok"] is False
+    assert divergent["reason"] == "remediation_branch_not_descendant"
+    assert unavailable_base["ok"] is False
+    assert unavailable_base["reason"] == "base_branch_head_unavailable"
+    assert unverified["ok"] is False
+    assert unverified["reason"] == "remediation_branch_lineage_unavailable"
+
+
+def test_remote_branch_descends_from_checks_the_exact_commit_graph(tmp_path):
+    repository = tmp_path / "repository"
+
+    def git(*args: str) -> str:
+        proc = subprocess.run(
+            ["git", "-C", str(repository), *args],
+            capture_output=True,
+            check=True,
+            text=True,
+        )
+        return proc.stdout.strip()
+
+    repository.mkdir()
+    subprocess.run(
+        ["git", "init", "--quiet", "--initial-branch=seed", str(repository)],
+        check=True,
+    )
+    git("config", "user.email", "self-maintenance@example.invalid")
+    git("config", "user.name", "Self Maintenance Test")
+    tracked = repository / "lineage.txt"
+    tracked.write_text("root\n", encoding="utf-8")
+    git("add", "lineage.txt")
+    git("commit", "--quiet", "-m", "root")
+    root_head = git("rev-parse", "HEAD")
+    git("checkout", "--quiet", "-b", "candidate")
+    tracked.write_text("base\n", encoding="utf-8")
+    git("commit", "--quiet", "-am", "base")
+    base_head = git("rev-parse", "HEAD")
+    git("checkout", "--quiet", "-b", "work-descendant")
+    tracked.write_text("descendant\n", encoding="utf-8")
+    git("commit", "--quiet", "-am", "descendant")
+    descendant_head = git("rev-parse", "HEAD")
+    git("checkout", "--quiet", "-b", "work-divergent", root_head)
+    tracked.write_text("divergent\n", encoding="utf-8")
+    git("commit", "--quiet", "-am", "divergent")
+    divergent_head = git("rev-parse", "HEAD")
+
+    assert (
+        loop_runner._remote_branch_descends_from(
+            [str(repository)],
+            "candidate",
+            "work-descendant",
+            base_head,
+            descendant_head,
+        )
+        is True
+    )
+    assert (
+        loop_runner._remote_branch_descends_from(
+            [str(repository)],
+            "candidate",
+            "work-divergent",
+            base_head,
+            divergent_head,
+        )
+        is False
+    )
 
 
 def test_dynamic_low_risk_policy_blocks_marker_only_when_structured_review_hold():

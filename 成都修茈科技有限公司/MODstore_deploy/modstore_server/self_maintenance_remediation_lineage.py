@@ -3,7 +3,11 @@
 
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
 from typing import Any
+
+from .operational_errors import RECOVERABLE_ERRORS
 
 _QA_ONLY_REASONS = frozenset(
     {
@@ -55,6 +59,63 @@ _CODE_REASONS = frozenset(
         "structured_qa_verdict_not_pass",
     }
 )
+
+
+def remote_branch_descends_from(
+    repositories: list[str],
+    base_branch: str,
+    delivered_branch: str,
+    base_head: str,
+    delivered_head: str,
+) -> bool | None:
+    """Verify exact remote heads and their ancestry in an isolated object store."""
+    from .self_maintenance_para_merge_remediation import _default_run_git
+
+    if not repositories or not all((base_branch, delivered_branch, base_head, delivered_head)):
+        return None
+    for repository in repositories:
+        try:
+            with tempfile.TemporaryDirectory(prefix="modstore-remediation-lineage-") as temp_dir:
+                repo_root = Path(temp_dir)
+                initialized, _stdout, _stderr = _default_run_git(
+                    repo_root, "init", "--bare", "--quiet", "."
+                )
+                if initialized != 0:
+                    continue
+                fetched, _stdout, _stderr = _default_run_git(
+                    repo_root,
+                    "fetch",
+                    "--quiet",
+                    "--no-tags",
+                    "--filter=blob:none",
+                    repository,
+                    f"+refs/heads/{base_branch}:refs/verify/base",
+                    f"+refs/heads/{delivered_branch}:refs/verify/delivered",
+                )
+                if fetched != 0:
+                    continue
+                resolved_heads = []
+                for ref in ("refs/verify/base", "refs/verify/delivered"):
+                    resolved, stdout, _stderr = _default_run_git(
+                        repo_root, "rev-parse", "--verify", ref
+                    )
+                    if resolved != 0:
+                        break
+                    resolved_heads.append(stdout.strip().lower())
+                if resolved_heads != [base_head.lower(), delivered_head.lower()]:
+                    continue
+                lineage, _stdout, _stderr = _default_run_git(
+                    repo_root,
+                    "merge-base",
+                    "--is-ancestor",
+                    "refs/verify/base",
+                    "refs/verify/delivered",
+                )
+                if lineage in {0, 1}:
+                    return lineage == 0
+        except RECOVERABLE_ERRORS:
+            continue
+    return None
 
 
 def _is_review_protocol_retry_reason(normalized: str) -> bool:

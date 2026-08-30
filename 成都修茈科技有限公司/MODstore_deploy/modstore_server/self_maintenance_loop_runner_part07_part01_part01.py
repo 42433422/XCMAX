@@ -414,6 +414,14 @@ def _validate_remediation_branch_delivery(
     repo_url = _facade().os.environ.get("MODSTORE_PARA_REPO_URL", "").strip()
     base_head = _facade()._remote_branch_head(repo_url, base_branch)
     delivered_head = _facade()._remote_branch_head(repo_url, delivered_branch)
+    if not base_head:
+        return {
+            "ok": False,
+            "reason": "base_branch_head_unavailable",
+            "base_branch": base_branch,
+            "delivered_branch": delivered_branch,
+            "delivered_head": delivered_head,
+        }
     if not delivered_head:
         return {
             "ok": False,
@@ -422,10 +430,35 @@ def _validate_remediation_branch_delivery(
             "base_head": base_head,
             "delivered_branch": delivered_branch,
         }
-    if base_head and delivered_head == base_head:
+    if delivered_head == base_head:
         return {
             "ok": False,
             "reason": "remediation_branch_not_advanced",
+            "base_branch": base_branch,
+            "base_head": base_head,
+            "delivered_branch": delivered_branch,
+            "delivered_head": delivered_head,
+        }
+    descends_from_base = _facade()._remote_branch_descends_from(
+        _facade()._para_repository_candidates(repo_url),
+        base_branch,
+        delivered_branch,
+        base_head,
+        delivered_head,
+    )
+    if descends_from_base is None:
+        return {
+            "ok": False,
+            "reason": "remediation_branch_lineage_unavailable",
+            "base_branch": base_branch,
+            "base_head": base_head,
+            "delivered_branch": delivered_branch,
+            "delivered_head": delivered_head,
+        }
+    if not descends_from_base:
+        return {
+            "ok": False,
+            "reason": "remediation_branch_not_descendant",
             "base_branch": base_branch,
             "base_head": base_head,
             "delivered_branch": delivered_branch,
