@@ -20,17 +20,19 @@ from modstore_server.autonomy_decision_audit import (
 from modstore_server.autonomy_posthoc_contracts import (
     default_para_task_fetcher,
     load_self_maintenance_records,
-    load_storage_pressure_records,
     verify_code_write_action,
     verify_daily_digest_action,
     verify_self_maintenance_merge_action,
-    verify_storage_pressure_action,
 )
 from modstore_server.autonomy_posthoc_github import (
     verify_github_self_maintenance_merge as default_github_merge_fetcher,
 )
 from modstore_server.autonomy_posthoc_github import (
     verify_github_self_maintenance_veto as default_github_veto_fetcher,
+)
+from modstore_server.autonomy_posthoc_storage import (
+    load_storage_pressure_records,
+    verify_storage_pressure_action,
 )
 from modstore_server.db.scheduler_ops import JobRun
 from modstore_server.models import AutonomyDecisionAudit, get_session_factory
