@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from app.application.session_account_meta import AccountKind
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -222,7 +222,7 @@ async def finalize_enterprise_login(
         account_kind=str(result.get("account_kind") or account_kind or ""),
     )
     if denied is not None:
-        return denied
+        return cast(dict[str, Any], denied)
     if (
         market_result
         and market_result.get("success")
