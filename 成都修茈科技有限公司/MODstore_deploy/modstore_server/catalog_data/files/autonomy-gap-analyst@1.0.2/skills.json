@@ -1,0 +1,22 @@
+{
+  "skills": [
+    {
+      "name": "scorecard-gap-analysis",
+      "description": "Detect explicit failed gates and projected dimensions below 100.",
+      "inputs": ["founder_autonomy_scorecard_json"],
+      "outputs": ["evidence_gap_analysis"]
+    },
+    {
+      "name": "evidence-receipt-validation",
+      "description": "Keep missing evidence unknown and require an explicit next gap or receipt.",
+      "inputs": ["founder_autonomy_scorecard_json"],
+      "outputs": ["evidence_gap_analysis"]
+    },
+    {
+      "name": "bounded-capability-planning",
+      "description": "Return one bounded next capability without fabricating completion.",
+      "inputs": ["founder_autonomy_scorecard_json"],
+      "outputs": ["evidence_gap_analysis"]
+    }
+  ]
+}
