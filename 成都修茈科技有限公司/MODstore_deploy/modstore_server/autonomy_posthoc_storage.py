@@ -106,9 +106,11 @@ def verify_storage_pressure_action(
         if not str(record.get("error") or "").strip():
             return {"ok": False, "reason": "storage_failure_receipt_incomplete"}
     else:
-        retention = record.get("retention") if isinstance(record.get("retention"), dict) else {}
-        postcondition = (
-            record.get("postcondition") if isinstance(record.get("postcondition"), dict) else {}
+        raw_retention = record.get("retention")
+        retention: dict[str, Any] = raw_retention if isinstance(raw_retention, dict) else {}
+        raw_postcondition = record.get("postcondition")
+        postcondition: dict[str, Any] = (
+            raw_postcondition if isinstance(raw_postcondition, dict) else {}
         )
         if (
             not retention
