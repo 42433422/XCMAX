@@ -15,8 +15,13 @@ export type PendingUpdateInstallReceipt = {
 }
 
 const INSTALLATION_ID_FILE = 'installation-id'
+const LEGACY_DEVICE_ID_FILE = 'device_id'
 const PENDING_RECEIPT_FILE = 'pending-update-install-receipt.json'
 const REPORTED_INSTALLATION_FILE = 'reported-update-installation.json'
+
+function validInstallationId(value: string): boolean {
+  return /^[A-Za-z0-9._:-]{16,64}$/.test(value)
+}
 
 function installationIdPath(): string {
   return path.join(app.getPath('userData'), INSTALLATION_ID_FILE)
@@ -34,12 +39,21 @@ export function loadOrCreateInstallationId(): string {
   const filePath = installationIdPath()
   try {
     const existing = fs.readFileSync(filePath, 'utf8').trim()
-    if (/^[0-9a-f-]{36}$/i.test(existing)) return existing
+    if (validInstallationId(existing)) return existing
   } catch {
     /* create below */
   }
   fs.mkdirSync(path.dirname(filePath), { recursive: true })
-  const installationId = crypto.randomUUID()
+  let installationId = ''
+  try {
+    const legacyDeviceId = fs
+      .readFileSync(path.join(app.getPath('userData'), LEGACY_DEVICE_ID_FILE), 'utf8')
+      .trim()
+    if (validInstallationId(legacyDeviceId)) installationId = legacyDeviceId
+  } catch {
+    /* a fresh installation has no legacy identity */
+  }
+  if (!installationId) installationId = crypto.randomUUID()
   fs.writeFileSync(filePath, `${installationId}\n`, { encoding: 'utf8', mode: 0o600 })
   try { fs.chmodSync(filePath, 0o600) } catch {}
   return installationId

@@ -4,9 +4,16 @@
       <div>
         <p>PURCHASED ACCOUNT DELIVERY SSOT</p>
         <h3>购买账户标准交付台账</h3>
-        <span>只读取四个永久档位的有效购买账户；安装成功并首次登录后自动完成。</span>
+        <span>内部本 Mac 不计交付；仅客户侧 macOS/Windows 安装并首次登录后自动完成。</span>
       </div>
-      <strong>{{ deliveries.length }} 个永久账户</strong>
+      <div class="enterprise-roster__policy">
+        <strong>{{ deliveries.length }} 个永久账户</strong>
+        <span :class="{ 'is-enabled': policy.internal_device_exclusion_enabled }">
+          {{ policy.internal_device_exclusion_enabled
+            ? `${policy.internal_device_ids_configured || 0} 台内部本机已排除`
+            : '内部本机尚未登记' }}
+        </span>
+      </div>
     </header>
 
     <div class="enterprise-roster__toolbar">
@@ -43,7 +50,11 @@
         <div class="enterprise-roster__proof">
           <span :class="['proof-pill', delivery.install.ok ? 'is-ok' : 'is-wait']">
             <i :class="`fa ${delivery.install.ok ? 'fa-check-circle' : 'fa-download'}`" aria-hidden="true"></i>
-            {{ delivery.install.ok ? `${delivery.install.installed_devices} 台已安装` : '待安装 Mac/Windows' }}
+            {{ delivery.install.ok ? `${delivery.install.installed_devices} 台客户设备已安装` : '待客户设备安装' }}
+          </span>
+          <span v-if="delivery.install.internal_devices_excluded" class="proof-pill is-internal">
+            <i class="fa fa-shield" aria-hidden="true"></i>
+            {{ delivery.install.internal_devices_excluded }} 台内部本机已排除
           </span>
           <span :class="['proof-pill', delivery.first_login.ok ? 'is-ok' : 'is-wait']">
             <i :class="`fa ${delivery.first_login.ok ? 'fa-check-circle' : 'fa-sign-in'}`" aria-hidden="true"></i>
@@ -64,11 +75,17 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { CustomDeliveryTicket, MarketAdminUser, StandardDeliveryRecord } from '@/api/xcmaxAdmin'
+import type {
+  CustomDeliveryTicket,
+  MarketAdminUser,
+  StandardDeliveryPolicy,
+  StandardDeliveryRecord,
+} from '@/api/xcmaxAdmin'
 
 const props = defineProps<{
   deliveries: StandardDeliveryRecord[]
   tickets: CustomDeliveryTicket[]
+  policy: StandardDeliveryPolicy
 }>()
 
 const emit = defineEmits<{
@@ -127,7 +144,10 @@ function formatDate(value: string): string {
 .enterprise-roster__head p { margin: 0 0 4px; color: #3d78bc; font-size: 9px; font-weight: 800; letter-spacing: .16em; }
 .enterprise-roster__head h3 { margin: 0; color: #254663; font-size: 18px; }
 .enterprise-roster__head span { display: block; margin-top: 5px; color: #6e8097; font-size: 11px; }
-.enterprise-roster__head > strong { border-radius: 999px; background: #e7f1fd; color: #276bb7; padding: 7px 11px; white-space: nowrap; }
+.enterprise-roster__policy { display: grid; justify-items: end; gap: 6px; }
+.enterprise-roster__policy > strong { border-radius: 999px; background: #e7f1fd; color: #276bb7; padding: 7px 11px; white-space: nowrap; }
+.enterprise-roster__policy > span { border-radius: 999px; background: #fff1e8; color: #a85b25; padding: 5px 9px; font-size: 9px; font-weight: 700; white-space: nowrap; }
+.enterprise-roster__policy > span.is-enabled { background: #e9f3ef; color: #27745a; }
 .enterprise-roster__toolbar { display: flex; align-items: center; gap: 9px; margin: 14px 0; padding: 9px; border-radius: 11px; background: #f3f7fb; }
 .enterprise-roster__toolbar label { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 180px; color: #7690ac; }
 .enterprise-roster__toolbar input { width: 100%; border: 0; outline: 0; background: transparent; color: #132a46; }
@@ -146,6 +166,7 @@ function formatDate(value: string): string {
 .proof-pill { border-radius: 999px; padding: 5px 7px; font-size: 9px; white-space: nowrap; }
 .proof-pill.is-ok { background: #e7f6ef; color: #28795c; }
 .proof-pill.is-wait { background: #f2f4f7; color: #738195; }
+.proof-pill.is-internal { background: #eef1f4; color: #53677d; }
 .enterprise-roster__state { display: grid; justify-items: end; gap: 5px; text-align: right; }
 .delivery-state { font-size: 10px; }
 .delivery-state.is-completed { color: #28795c; }
