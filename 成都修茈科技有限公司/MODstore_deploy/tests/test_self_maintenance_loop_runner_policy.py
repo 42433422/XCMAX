@@ -2214,7 +2214,9 @@ def test_report_only_review_and_qa_prompt_pin_target_branch(monkeypatch):
     assert "Verify both refs with `git cat-file -e`" in qa
     assert "file:///tmp/repo.git" in qa
     assert "`verified-python -m pytest focused.py -q`" in qa
-    assert "platform-equivalent local `python -m pytest` command" in qa
+    assert "python3.13 python3.12 python3.11 python3 python" in qa
+    assert "Python >=3.11 executable that can import apscheduler, black, isort, and pytest" in qa
+    assert "do not fall back to Python 3.9 or an unverified bare `python`" in qa
     assert "same focused test file" in qa
     assert "Materialize the COMPLETE target ref" in qa
     assert "do not archive only `成都修茈科技有限公司/MODstore_deploy`" in qa
@@ -2229,7 +2231,8 @@ def test_report_only_review_and_qa_prompt_pin_target_branch(monkeypatch):
         "python -m modstore_server.self_maintenance_diff_quality --tool isort "
         "--base-ref origin/feat/base --target-ref origin/devfleet/codex/sub-1"
     ) in qa
-    assert "python scripts/dev/source_governance.py --top 10" in qa
+    assert "selected Python >=3.11 interpreter" in qa
+    assert "scripts/dev/source_governance.py --top 10" in qa
     assert '"quality_checks"' in qa
 
     code = _code_task_text("run-1", {}, {})
