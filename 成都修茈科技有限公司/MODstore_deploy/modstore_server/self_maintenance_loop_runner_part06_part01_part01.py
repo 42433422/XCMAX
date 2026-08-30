@@ -260,7 +260,8 @@ def _focused_test_command() -> str:
 
     The scheduler may itself run from the lighter FHD venv, which intentionally
     does not install pytest.  Prefer the MODstore venv used for repository tests
-    and expose explicit overrides for production or isolated runners.
+    and expose explicit overrides for production or isolated runners.  If no
+    local candidate passes, leave remote QA a portable Python 3.11 command.
     """
     command_override = (
         _facade().os.environ.get("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", "").strip()
@@ -295,13 +296,15 @@ def _focused_test_command() -> str:
             for candidate in candidates
             if candidate and _facade()._python_supports_focused_tests(candidate)
         ),
-        _facade().Path(_facade().sys.executable),
+        None,
     )
+    test_python_command = str(test_python) if test_python else "python3.11"
     test_path = (
         "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py"
     )
     return (
-        f"{_facade().shlex.quote(str(test_python))} -m pytest {_facade().shlex.quote(test_path)} -q"
+        f"{_facade().shlex.quote(test_python_command)} "
+        f"-m pytest {_facade().shlex.quote(test_path)} -q"
     )
 
 

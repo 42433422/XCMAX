@@ -2256,6 +2256,19 @@ def test_focused_test_command_prefers_explicit_command(monkeypatch):
     assert _focused_test_command() == "runtime-python -m pytest focused.py -q"
 
 
+def test_focused_test_command_does_not_reuse_rejected_scheduler_python(monkeypatch):
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", raising=False)
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_TEST_PYTHON", raising=False)
+    monkeypatch.delenv("MODSTORE_RUNTIME_ROOT", raising=False)
+    monkeypatch.setattr(loop_runner, "_python_supports_focused_tests", lambda candidate: False)
+    monkeypatch.setattr(loop_runner.sys, "executable", "/usr/bin/python3.9")
+
+    command = _focused_test_command()
+
+    assert command.startswith("python3.11 -m pytest ")
+    assert "/usr/bin/python3.9" not in command
+
+
 def test_high_risk_report_detects_standalone_qa_fail():
     steps = [
         {
