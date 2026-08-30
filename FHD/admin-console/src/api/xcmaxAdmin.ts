@@ -1,4 +1,7 @@
 import api from '@/api/core';
+import type { DiagnosticTerminalResult } from './diagnosticTerminal';
+
+export type { DiagnosticTerminalItem, DiagnosticTerminalResult } from './diagnosticTerminal';
 
 export type MarketAdminUser = {
   id: number;
@@ -345,6 +348,19 @@ export const xcmaxAdminApi = {
     return api.post<EntitlementFastLaneResult>(
       '/api/xcmax/admin/market/entitlement-fast-lane/actions',
       payload,
+    );
+  },
+  listDiagnosticTerminalCommands() {
+    return api.get<{
+      ok: boolean;
+      read_only: boolean;
+      items: Array<{ name: string; aliases: string[]; usage: string; description: string }>;
+    }>('/api/xcmax/admin/market/diagnostic-terminal/commands');
+  },
+  executeDiagnosticTerminalCommand(command: string) {
+    return api.post<DiagnosticTerminalResult>(
+      '/api/xcmax/admin/market/diagnostic-terminal/execute',
+      { command },
     );
   },
   decideCustomDelivery(ticketId: number, action: 'accept' | 'rework', note = '') {
