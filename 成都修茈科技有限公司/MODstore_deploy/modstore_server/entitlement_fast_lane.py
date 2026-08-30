@@ -189,7 +189,7 @@ def _deactivate_plan_entitlements(db: Session, user_id: int, plan_ids: set[str])
     )
     for row in rows:
         if str(_metadata(row).get("plan_id") or "") in plan_ids:
-            row.is_active = False
+            setattr(row, "is_active", False)
             db.add(row)
 
 
@@ -224,9 +224,9 @@ def _reset_plan_quotas(
                 used=0,
             )
         else:
-            row.total = total
-            row.used = 0
-        row.reset_at = reset_at
+            setattr(row, "total", total)
+            setattr(row, "used", 0)
+        setattr(row, "reset_at", reset_at)
         db.add(row)
 
 
@@ -350,7 +350,7 @@ def apply_fast_lane_action(
             )
             for row in active_rows:
                 if is_account_license_plan_id(str(row.plan_id)) is is_license:
-                    row.is_active = False
+                    setattr(row, "is_active", False)
                     changed_plan_ids.add(str(row.plan_id))
                     db.add(row)
             _deactivate_plan_entitlements(db, int(target.id), changed_plan_ids)
@@ -386,7 +386,7 @@ def apply_fast_lane_action(
                 )
             )
             if is_license:
-                target.account_state = ACCOUNT_ACTIVE
+                setattr(target, "account_state", ACCOUNT_ACTIVE)
                 db.add(target)
             _reset_plan_quotas(
                 db,
@@ -406,7 +406,7 @@ def apply_fast_lane_action(
                 .all()
             )
             for row in rows:
-                row.is_active = False
+                setattr(row, "is_active", False)
                 db.add(row)
             changed_plan_ids.add(normalized_plan_id)
             _deactivate_plan_entitlements(db, int(target.id), changed_plan_ids)
@@ -417,7 +417,7 @@ def apply_fast_lane_action(
                     if item["plan_id"] != normalized_plan_id
                 )
                 if not other_license:
-                    target.account_state = ACCOUNT_PENDING_PLAN
+                    setattr(target, "account_state", ACCOUNT_PENDING_PLAN)
                     db.add(target)
 
         db.flush()
