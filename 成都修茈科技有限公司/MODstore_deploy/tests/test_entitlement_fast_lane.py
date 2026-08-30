@@ -288,3 +288,23 @@ def test_fast_lane_rejects_non_admin_and_terminal_uses_same_service(client):
             .count()
             == 1
         )
+
+
+def test_terminal_loads_explicit_env_and_refuses_implicit_sqlite(monkeypatch, tmp_path):
+    from modstore_server.entitlement_fast_lane import FastLaneError
+    from scripts import admin_entitlement_fast_lane as terminal
+
+    env_file = tmp_path / "fast-lane.env"
+    env_file.write_text("DATABASE_URL=sqlite:////tmp/xcmax-fast-lane.db\n", encoding="utf-8")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("MODSTORE_DB_PATH", raising=False)
+    monkeypatch.delenv("MODSTORE_PYTEST_USE_SQLITE", raising=False)
+    monkeypatch.setenv("MODSTORE_FAST_LANE_ENV_FILE", str(env_file))
+    loaded = terminal._load_operator_environment()
+    assert str(env_file) in loaded
+    assert terminal._has_explicit_database_target() is True
+
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setattr(terminal, "_load_operator_environment", lambda: [])
+    with pytest.raises(FastLaneError, match="默认本地 SQLite"):
+        terminal.run(["plans"])

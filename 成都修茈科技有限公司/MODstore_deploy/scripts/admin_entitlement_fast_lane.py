@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import uuid
 from pathlib import Path
@@ -29,13 +30,39 @@ from modstore_server.entitlement_fast_lane import (  # noqa: E402
     apply_fast_lane_action,
     list_fast_lane_plans,
 )
+from modstore_server.env_loader import load_modstore_env  # noqa: E402
 from modstore_server.models import get_session_factory, init_db  # noqa: E402
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="管理员套餐/权益快速通道（不生成订单或支付）"
+def _load_operator_environment() -> list[str]:
+    """Load local dotenv plus the immutable production service environment."""
+
+    from dotenv import load_dotenv
+
+    loaded = load_modstore_env(ROOT, include_synced=False)
+    configured = (os.environ.get("MODSTORE_FAST_LANE_ENV_FILE") or "").strip()
+    candidates = (
+        [Path(configured).expanduser()]
+        if configured
+        else [Path("/etc/xcmax/modstore.env"), Path("/etc/xcmax/modstore-release.env")]
     )
+    for path in candidates:
+        if path.is_file():
+            load_dotenv(path, override=False)
+            loaded.append(str(path))
+    return list(dict.fromkeys(loaded))
+
+
+def _has_explicit_database_target() -> bool:
+    return bool(
+        (os.environ.get("DATABASE_URL") or "").strip()
+        or (os.environ.get("MODSTORE_DB_PATH") or "").strip()
+        or (os.environ.get("MODSTORE_PYTEST_USE_SQLITE") or "").strip() == "1"
+    )
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="管理员套餐/权益快速通道（不生成订单或支付）")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("plans", help="列出所有可绑定套餐")
     status = sub.add_parser("status", help="查询账号当前权益")
@@ -63,6 +90,11 @@ def run(
 ) -> dict:
     args = build_parser().parse_args(argv)
     if session_factory is None:
+        _load_operator_environment()
+        if not _has_explicit_database_target():
+            raise FastLaneError(
+                "未找到 DATABASE_URL 或 MODSTORE_DB_PATH，已拒绝访问默认本地 SQLite"
+            )
         init_db()
         session_factory = get_session_factory()
     with session_factory() as db:
@@ -78,9 +110,7 @@ def run(
         if args.command == "status":
             return account_fast_lane_status(db, args.account)
         action = "assign" if args.command in {"grant", "assign"} else "revoke"
-        key = args.idempotency_key.strip() or (
-            f"fast-lane-cli-{action}-{uuid.uuid4().hex}"
-        )
+        key = args.idempotency_key.strip() or (f"fast-lane-cli-{action}-{uuid.uuid4().hex}")
         return apply_fast_lane_action(
             db,
             actor=args.actor,
