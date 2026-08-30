@@ -3392,6 +3392,81 @@ def test_reconcile_real_para_merge_sha_closes_matching_open_item():
     assert memory["closed_items"][0]["resolution_reason"] == "para_reported_real_merge_sha"
 
 
+def test_reconcile_durable_merge_receipt_skips_para_fetch_and_closes_stale_item():
+    receipt = {
+        "merge_commit_sha": "a" * 40,
+        "reconciled_at": "2026-08-30T00:00:00+00:00",
+        "status": "merged",
+        "task_id": "task-merged",
+    }
+    memory = {
+        "closed_items": [],
+        "open_items": [
+            {
+                "branch": "devfleet/codex/merged",
+                "kind": "automated_remediation",
+                "para_task_id": "task-merged",
+                "reason": "para_merge_task_failed",
+            }
+        ],
+        "recent_runs": [
+            {
+                "branch": "devfleet/codex/merged",
+                "merge_reconciliation": receipt,
+                "para_task_id": "task-merged",
+                "run_id": "run-merged",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: pytest.fail("durable merge was refetched"),
+    )
+
+    assert result == {"changed": True, "merged": 1, "remediation_added": 0}
+    assert memory["recent_runs"][0]["merge_reconciliation"] == receipt
+    assert memory["open_items"] == []
+    assert memory["closed_items"][0]["resolution_reason"] == "para_reported_real_merge_sha"
+
+
+def test_reconcile_failure_receipt_does_not_suppress_missing_remediation():
+    task = {
+        "status": "failed",
+        "fail_reason": "required CI checks failed",
+    }
+    memory = {
+        "closed_items": [],
+        "open_items": [],
+        "recent_runs": [
+            {
+                "branch": "devfleet/codex/failed",
+                "merge_reconciliation": {
+                    "detail": "required CI checks failed",
+                    "reconciled_at": "2026-08-30T00:00:00+00:00",
+                    "source": "",
+                    "status": "failed",
+                    "task_id": "task-failed-receipt",
+                },
+                "para_task_id": "task-failed-receipt",
+                "run_id": "run-failed-receipt",
+                "status": "completed_merge_requested",
+            }
+        ],
+    }
+
+    result = _reconcile_requested_merge_feedback(
+        memory,
+        api_base="http://para.test",
+        task_fetcher=lambda _base, _task_id: task,
+    )
+
+    assert result == {"changed": True, "merged": 0, "remediation_added": 1}
+    assert memory["open_items"][0]["reason"] == "para_merge_task_failed"
+
+
 @pytest.mark.parametrize(
     ("task", "expected_reason", "expected_resume_from_clean_baseline"),
     [

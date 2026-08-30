@@ -91,6 +91,25 @@ def _reconcile_requested_merge_feedback(
         if not task_id or task_id in checked_task_ids:
             continue
         checked_task_ids.add(task_id)
+        branch = str(run.get("branch") or "").strip()
+        existing_receipt = run.get("merge_reconciliation")
+        if (
+            isinstance(existing_receipt, dict)
+            and existing_receipt.get("status") == "merged"
+            and existing_receipt.get("task_id") == task_id
+            and str(existing_receipt.get("merge_commit_sha") or "").strip()
+        ):
+            closed = _facade()._close_open_items_in_memory(
+                memory,
+                actor="para_merge_reconciler",
+                branches=[branch],
+                resolution_reason="para_reported_real_merge_sha",
+                task_ids=[task_id],
+            )
+            if closed.get("closed_count"):
+                changed = True
+            merged += 1
+            continue
         try:
             task = fetcher(base, task_id)
         except RECOVERABLE_ERRORS:
@@ -99,10 +118,8 @@ def _reconcile_requested_merge_feedback(
             )
             continue
         task_status = str(task.get("status") or "").strip().lower()
-        branch = str(run.get("branch") or "").strip()
         if task_status == "merged" and str(task.get("merge_commit_sha") or "").strip():
             merge_sha = str(task.get("merge_commit_sha") or "").strip()
-            existing_receipt = run.get("merge_reconciliation")
             receipt = {
                 "merge_commit_sha": merge_sha,
                 "reconciled_at": _facade()._iso(_facade()._utc_now()),
