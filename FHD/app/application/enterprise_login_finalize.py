@@ -37,6 +37,8 @@ async def finalize_enterprise_login(
     if not session_id:
         return result
     flow = _login_flow_module()
+    market_token = ""
+    local_demo_market = False
     try:
         if skip_market_sync:
             market_result = market_result or {"success": False}
@@ -217,4 +219,20 @@ async def finalize_enterprise_login(
         session_id=str(session_id) if session_id else None,
         account_kind=str(result.get("account_kind") or account_kind or ""),
     )
-    return denied if denied is not None else result
+    if denied is not None:
+        return denied
+    if (
+        market_result
+        and market_result.get("success")
+        and market_token
+        and not local_demo_market
+        and flow._is_desktop_runtime()
+    ):
+        from app.application.desktop_delivery_receipt import (
+            report_desktop_login_delivery_receipt,
+        )
+
+        result["delivery_receipt"] = await report_desktop_login_delivery_receipt(
+            market_token
+        )
+    return result
