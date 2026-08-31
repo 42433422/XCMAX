@@ -16,6 +16,7 @@ from modstore_server.duty_workforce_contracts import (
     workforce_event_bindings,
 )
 from modstore_server.employee_executor import _trusted_system_duty_contract_execution
+from modstore_server.employee_runtime import reviewed_duty_runtime_issues
 
 
 def test_high_risk_employee_cron_is_recorded_as_approval_deferred(monkeypatch) -> None:
@@ -34,6 +35,15 @@ def test_high_risk_employee_cron_is_recorded_as_approval_deferred(monkeypatch) -
     assert deferred is True
     assert writes[0]["status"] == "deferred"
     assert writes[0]["error"] == "employee_cron_policy_deferred:approval_required_high_risk"
+
+
+def test_all_reviewed_duty_handlers_have_concrete_runtime_entries() -> None:
+    issues = {
+        employee_id: runtime_issues
+        for employee_id in workforce_contract_map()
+        if (runtime_issues := reviewed_duty_runtime_issues(employee_id))
+    }
+    assert issues == {}
 
 
 def test_work_contracts_cover_the_roster_exactly() -> None:
@@ -172,6 +182,60 @@ def test_source_filtered_event_contract_builds_safe_system_input(monkeypatch) ->
     )
     assert reviewed["risk_level"] == "low"
     assert manifest["id"] == "employee-planner"
+
+
+def test_operational_events_supply_real_deterministic_handler_inputs(monkeypatch) -> None:
+    monkeypatch.setenv("XCMAX_MONOREPO_ROOT", "/opt/xcmax/current")
+    schedule = duty_event_execution_input(
+        "daily-orchestrator",
+        event_type="schedule.tick",
+        source="backup-event-subscriber",
+        incident={
+            "kind": "backup_completed_prewarm",
+            "at": "2026-08-31T20:00:00+00:00",
+            "hint": "digest context is ready",
+        },
+    )
+    assert schedule["work_items"] == [
+        {
+            "id": "backup_completed_prewarm:2026-08-31T20:00:00+00:00",
+            "priority": "p2",
+            "risk_level": "low",
+            "blocked_by": [],
+            "acceptance": ["digest context is ready"],
+        }
+    ]
+
+    error = duty_event_execution_input(
+        "log-monitor-incident",
+        event_type="on_error",
+        source="nginx_error_log",
+        incident={"summary": "upstream connection refused", "type": "upstream_error"},
+    )
+    assert error["events"][0] == {
+        "service": "nginx_error_log",
+        "error_type": "upstream_error",
+        "message": "upstream connection refused",
+        "observed_at": "",
+    }
+
+    sha = "a" * 40
+    update_context = {
+        "version": sha,
+        "branch": "production/immutable-release",
+        "commit_sha": sha,
+        "git_clean": True,
+        "changes": ["immutable release"],
+        "rollback": "git:" + "b" * 40,
+        "target_tier": "production",
+    }
+    push = duty_event_execution_input(
+        "push-update-context-officer",
+        event_type="git.push",
+        source="git_local_head",
+        incident={"summary": "deployed", "update_context": update_context},
+    )
+    assert push["update_context"] == update_context
 
 
 def test_employee_project_root_matches_yuangon_scope_base(monkeypatch, tmp_path) -> None:

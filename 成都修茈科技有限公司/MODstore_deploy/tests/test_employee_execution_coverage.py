@@ -92,6 +92,8 @@ def test_execution_coverage_counts_only_fresh_successful_roster_receipts(
     assert result["production_proof_ratio"] == round(1 / 55, 4)
     assert result["shell_count"] == 0
     assert result["shell_employee_ids"] == []
+    assert result["invalid_handler_count"] == 0
+    assert result["invalid_handler_employee_ids"] == []
     assert result["workforce_ready"] is False
     assert result["production_workforce_ready"] is False
     assert result["platform_llm"] == {

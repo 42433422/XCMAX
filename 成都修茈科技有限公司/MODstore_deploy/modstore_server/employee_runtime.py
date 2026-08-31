@@ -7,6 +7,7 @@ import json
 import os
 import re
 import zipfile
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from modstore_server.catalog_store import employee_pack_records_from_store, files_dir
@@ -93,18 +94,72 @@ def employee_pack_runtime_issues(pack: Dict[str, Any]) -> list[str]:
             vendor_entry = f"{root}backend/vendor/{runtime_mod}/convert.py"
             if employee_entry not in names:
                 issues.append(f"direct_python 入口缺失: backend/employees/{module}.py")
+            elif str(direct.get("implementation") or "").strip() == "employee_module":
+                if not str(direct.get("action") or "").strip():
+                    issues.append("direct_python employee_module 未声明 action")
             else:
                 source = zf.read(employee_entry).decode("utf-8", errors="replace")
                 if "_DISPATCH" in source and not (
                     "'direct_python':" in source or '"direct_python":' in source
                 ):
                     issues.append("direct_python 入口使用了不支持该 handler 的通用分发模板")
-            if vendor_entry not in names:
+            if (
+                str(direct.get("implementation") or "").strip() != "employee_module"
+                and vendor_entry not in names
+            ):
                 issues.append(
                     f"direct_python vendor 运行时缺失: backend/vendor/{runtime_mod}/convert.py"
                 )
     except (OSError, zipfile.BadZipFile):
         issues.append("员工包归档损坏或不可读取")
+    return issues
+
+
+def reviewed_duty_runtime_issues(employee_id: str) -> list[str]:
+    """Validate the reviewed source runtime used by trusted system duties.
+
+    Internal workforce execution is intentionally sourced from the reviewed FHD
+    manifest tree, not a possibly older customer/store archive.  This validator
+    checks the same handler vocabulary and the concrete employee-module entry.
+    """
+
+    from modstore_server.duty_workforce_contracts import (
+        load_reviewed_duty_manifest,
+        resolve_reviewed_duty_employee_root,
+    )
+
+    root = resolve_reviewed_duty_employee_root(employee_id)
+    manifest = load_reviewed_duty_manifest(employee_id)
+    v2 = (
+        manifest.get("employee_config_v2")
+        if isinstance(manifest.get("employee_config_v2"), dict)
+        else {}
+    )
+    actions = v2.get("actions") if isinstance(v2.get("actions"), dict) else {}
+    handlers = actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
+    clean_handlers = [str(handler).strip() for handler in handlers if str(handler).strip()]
+    issues: list[str] = []
+    if not clean_handlers:
+        return ["受审岗位未声明 actions.handlers"]
+    unknown = sorted(set(clean_handlers) - EXECUTOR_ACTION_HANDLERS)
+    if unknown:
+        issues.append("运行时不支持 handler: " + ", ".join(unknown))
+    if "direct_python" not in clean_handlers:
+        return issues
+
+    direct = actions.get("direct_python") if isinstance(actions.get("direct_python"), dict) else {}
+    pack_id = str(manifest.get("id") or employee_id).strip()
+    module = str(direct.get("module") or "").strip()
+    if not module:
+        module = re.sub(r"[^a-z0-9_]+", "_", pack_id.lower()).strip("_")
+    entry = Path(root) / "backend" / "employees" / f"{module}.py"
+    if not entry.is_file():
+        issues.append(f"direct_python 入口缺失: backend/employees/{module}.py")
+    if (
+        str(direct.get("implementation") or "").strip() == "employee_module"
+        and not str(direct.get("action") or "").strip()
+    ):
+        issues.append("direct_python employee_module 未声明 action")
     return issues
 
 

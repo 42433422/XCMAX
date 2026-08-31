@@ -97,6 +97,7 @@ def build_execution_coverage(
                 int(assignment.get("assigned_count") or 0) >= assigned_required,
                 proven_count >= proven_required,
                 int(assignment.get("shell_count") or 0) == 0,
+                int(assignment.get("invalid_handler_count") or 0) == 0,
             )
         )
 

@@ -254,6 +254,12 @@ def _load_manifest_for_employee(
 ) -> _facade().Optional[_facade().Dict[str, _facade().Any]]:
     if employee_id in manifest_cache:
         return manifest_cache[employee_id]
+    if _facade().is_planned_duty_employee_pack(employee_id, "employee_pack"):
+        try:
+            manifest_cache[employee_id] = _facade().load_reviewed_duty_manifest(employee_id)
+        except RECOVERABLE_ERRORS:
+            manifest_cache[employee_id] = None
+        return manifest_cache[employee_id]
     row = employee_index.get(employee_id) or {}
     if _facade()._as_str(row.get("source")) == "v1_catalog":
         manifest_cache[employee_id] = None
@@ -327,8 +333,12 @@ def _analyze_employee_capability(
     if llm_state.get("needs_llm") and (not llm_state.get("activated")):
         reasons.append("缺少可用 LLM 密钥（平台密钥或可解密 BYOK）")
     try:
-        loaded_pack = _facade().load_employee_pack(session, employee_id)
-        runtime_issues = _facade().employee_pack_runtime_issues(loaded_pack)
+        if _facade().is_planned_duty_employee_pack(employee_id, "employee_pack"):
+            loaded_pack = {}
+            runtime_issues = _facade().reviewed_duty_runtime_issues(employee_id)
+        else:
+            loaded_pack = _facade().load_employee_pack(session, employee_id)
+            runtime_issues = _facade().employee_pack_runtime_issues(loaded_pack)
     except RECOVERABLE_ERRORS as exc:
         loaded_pack = {}
         runtime_issues = [f"员工包运行时检查失败: {str(exc)[:300]}"]
