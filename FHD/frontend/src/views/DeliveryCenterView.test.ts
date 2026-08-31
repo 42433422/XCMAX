@@ -5,9 +5,6 @@ import DeliveryCenterView from '../../../admin-console/src/views/DeliveryCenterV
 const listCustomDeliveries = vi.fn()
 const listStandardDeliveries = vi.fn()
 const listUsers = vi.fn()
-const listEntitlementFastLanePlans = vi.fn()
-const getEntitlementFastLaneAccount = vi.fn()
-const mutateEntitlementFastLane = vi.fn()
 const listTrialDeliveries = vi.fn()
 const decideCustomDelivery = vi.fn()
 const appAlert = vi.fn().mockResolvedValue(undefined)
@@ -18,9 +15,6 @@ vi.mock('@/api/xcmaxAdmin', () => ({
     listCustomDeliveries: (...args: unknown[]) => listCustomDeliveries(...args),
     listStandardDeliveries: (...args: unknown[]) => listStandardDeliveries(...args),
     listUsers: (...args: unknown[]) => listUsers(...args),
-    listEntitlementFastLanePlans: (...args: unknown[]) => listEntitlementFastLanePlans(...args),
-    getEntitlementFastLaneAccount: (...args: unknown[]) => getEntitlementFastLaneAccount(...args),
-    mutateEntitlementFastLane: (...args: unknown[]) => mutateEntitlementFastLane(...args),
     listTrialDeliveries: (...args: unknown[]) => listTrialDeliveries(...args),
     decideCustomDelivery: (...args: unknown[]) => decideCustomDelivery(...args),
   },
@@ -83,6 +77,11 @@ const standardDeliveries = [
   },
 ]
 
+const enterpriseUsers = [
+  ...standardDeliveries.map((row) => row.account),
+  { id: 90, username: 'enterprise-without-plan', company: '无套餐企业', is_enterprise: true },
+]
+
 const trialDeliveries = [
   {
     delivery_no: 'STD-ORDER-TRIAL-001',
@@ -113,25 +112,7 @@ describe('DeliveryCenterView', () => {
     listStandardDeliveries.mockResolvedValue({ items: structuredClone(standardDeliveries), total: 2 })
     listTrialDeliveries.mockResolvedValue({ items: structuredClone(trialDeliveries), total: 1 })
     listCustomDeliveries.mockResolvedValue({ items: [structuredClone(delivery)] })
-    listUsers.mockResolvedValue({ users: standardDeliveries.map((row) => row.account) })
-    listEntitlementFastLanePlans.mockResolvedValue({
-      items: [
-        { id: 'saas-trial-30', title: '30 天全功能体验', catalog: 'account_license', license_type: 'trial', duration_days: 30 },
-        { id: 'saas-permanent-starter', title: '企业启航版', catalog: 'account_license', license_type: 'permanent', account_tier: 'normal' },
-        { id: 'saas-permanent-growth', title: '企业成长版', catalog: 'account_license', license_type: 'permanent', account_tier: 'pro' },
-        { id: 'saas-permanent-max', title: '集团协同版', catalog: 'account_license', license_type: 'permanent', account_tier: 'max' },
-        { id: 'saas-permanent-ultra', title: '企业旗舰版', catalog: 'account_license', license_type: 'permanent', account_tier: 'ultra' },
-        { id: 'plan_svip', title: 'SVIP', catalog: 'membership', license_type: 'membership', duration_days: 30 },
-      ],
-    })
-    getEntitlementFastLaneAccount.mockResolvedValue({ account: { username: 'guosheng' }, active_plans: [] })
-    mutateEntitlementFastLane.mockResolvedValue({
-      ok: true,
-      account: { username: 'guosheng' },
-      active_plans: [{ user_plan_id: 901, plan_id: 'saas-permanent-ultra', title: '企业旗舰版', catalog: 'account_license' }],
-      audit: { idempotency_key: 'fast-lane-ui-test' },
-      commerce: { order_generated: false, payment_generated: false, transaction_generated: false },
-    })
+    listUsers.mockResolvedValue({ users: structuredClone(enterpriseUsers), total: enterpriseUsers.length })
     decideCustomDelivery.mockResolvedValue({ success: true })
     appConfirm.mockResolvedValue(true)
   })
@@ -140,6 +121,12 @@ describe('DeliveryCenterView', () => {
     const wrapper = mount(DeliveryCenterView)
     await flushPromises()
     expect(wrapper.text()).toContain('客户交付中心')
+    expect(wrapper.text()).toContain('企业客户交付台账')
+    expect(wrapper.text()).toContain('无套餐企业')
+    expect(wrapper.text()).toContain('未绑定购买套餐，不冒充已购买')
+    expect(wrapper.findAll('.enterprise-customer-roster__grid article')).toHaveLength(3)
+    const enterpriseCard = wrapper.findAll('.delivery-stats article').find((card) => card.text().includes('企业用户'))
+    expect(enterpriseCard?.text()).toContain('3')
     expect(wrapper.text()).toContain('国圣化工')
     expect(wrapper.text()).toContain('生产质量门已通过')
     expect(wrapper.text()).toContain('coating-quality-private')
@@ -150,15 +137,15 @@ describe('DeliveryCenterView', () => {
     expect(wrapper.text()).toContain('企业成长版')
     expect(wrapper.text()).toContain('安装并首次登录完成')
     expect(wrapper.text()).toContain('首次交付内含，交付前开发免费')
-    expect(wrapper.text()).toContain('权益快速通道')
-    expect(wrapper.text()).toContain('企业旗舰版')
-    expect(wrapper.text()).toContain('终端同源快捷模式')
+    expect(wrapper.text()).not.toContain('权益快速通道')
+    expect(wrapper.text()).not.toContain('终端同源快捷模式')
     expect(wrapper.text()).toContain('¥99 体验账户交付台账')
     expect(wrapper.text()).toContain('体验测试用户')
     expect(wrapper.text()).toContain('30 天全功能体验')
     expect(wrapper.text()).toContain('30 天体验')
     expect(listStandardDeliveries).toHaveBeenCalledTimes(1)
     expect(listTrialDeliveries).toHaveBeenCalledTimes(1)
+    expect(listUsers).toHaveBeenCalledWith(200, 0, true)
   })
 
   it('shows the trial summary card and keeps trial accounts out of the permanent roster', async () => {
@@ -176,7 +163,7 @@ describe('DeliveryCenterView', () => {
     expect(rosters[1].text()).toContain('1 个体验账户')
   })
 
-  it('does not treat enterprise flags without a permanent purchase as deliveries', async () => {
+  it('renders enterprise cards without pretending they are permanent purchases', async () => {
     listCustomDeliveries.mockResolvedValue({ items: [] })
     listStandardDeliveries.mockResolvedValue({ items: [], total: 0, ssot: 'active_permanent_user_plan' })
     listTrialDeliveries.mockResolvedValue({ items: [], total: 0, ssot: 'active_trial_user_plan' })
@@ -184,10 +171,13 @@ describe('DeliveryCenterView', () => {
     const wrapper = mount(DeliveryCenterView)
     await flushPromises()
 
+    expect(wrapper.get('section[aria-label="企业客户交付台账"]').text()).toContain('无套餐企业')
+    expect(wrapper.get('section[aria-label="企业客户交付台账"]').text()).toContain('3 家')
+    expect(wrapper.get('section[aria-label="企业客户交付台账"]').text()).toContain('未绑定购买套餐，不冒充已购买')
     expect(wrapper.text()).toContain('尚无有效的永久购买账户')
     expect(wrapper.text()).toContain('尚无有效的体验账户')
     expect(wrapper.text()).toContain('暂无定制交付工单')
-    expect(wrapper.text()).toContain('首次定制交付前的开发免费')
+    expect(wrapper.text()).toContain('无需定制的企业用户仍在上方企业客户台账中')
   })
 
   it('writes an audited acceptance decision through the real delivery endpoint', async () => {
@@ -219,46 +209,4 @@ describe('DeliveryCenterView', () => {
     expect(decideCustomDelivery).toHaveBeenCalledWith(9, 'rework', '颜色比对用例缺失')
   })
 
-  it('binds any selected tier through the audited non-commerce fast lane', async () => {
-    const wrapper = mount(DeliveryCenterView)
-    await flushPromises()
-    const panel = wrapper.get('section[aria-label="权益快速通道"]')
-    await panel.get('input[placeholder="用户 ID、用户名或邮箱"]').setValue('guosheng')
-    await panel.get('select').setValue('saas-permanent-ultra')
-    await panel.get('input[placeholder*="创始人确认"]').setValue('创始人确认旗舰版授权')
-    const bind = panel.findAll('button').find((button) => button.text().includes('绑定 / 替换权益'))
-    await bind!.trigger('click')
-    await flushPromises()
-
-    expect(appConfirm).toHaveBeenCalled()
-    expect(mutateEntitlementFastLane).toHaveBeenCalledTimes(1)
-    const payload = mutateEntitlementFastLane.mock.calls[0][0]
-    expect(payload).toEqual(expect.objectContaining({
-      account: 'guosheng',
-      action: 'assign',
-      plan_id: 'saas-permanent-ultra',
-      reason: '创始人确认旗舰版授权',
-      idempotency_key: expect.stringMatching(/^fast-lane-ui-assign-/),
-    }))
-    expect(payload).not.toHaveProperty('order_no')
-    expect(payload).not.toHaveProperty('payment')
-    expect(payload).not.toHaveProperty('wallet')
-    expect(panel.text()).toContain('企业旗舰版')
-  })
-
-  it('does not block the fast lane when the optional account suggestions are slow', async () => {
-    let resolveUsers: (value: { users: unknown[] }) => void = () => undefined
-    listUsers.mockReturnValueOnce(new Promise((resolve) => {
-      resolveUsers = resolve
-    }))
-
-    const wrapper = mount(DeliveryCenterView)
-    await flushPromises()
-    const panel = wrapper.get('section[aria-label="权益快速通道"]')
-    expect(panel.text()).toContain('企业旗舰版')
-    expect(panel.get('select').attributes('disabled')).toBeUndefined()
-
-    resolveUsers({ users: [] })
-    await flushPromises()
-  })
 })
