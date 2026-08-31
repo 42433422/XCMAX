@@ -52,27 +52,6 @@ def _is_admin_customer_service_session(request: Request, db: Any) -> bool:
     )
 
 
-@router.get("/api/im/unread-total")
-def im_unread_total(
-    request: Request,
-    user: CurrentUser = Depends(require_identified_user),
-):
-    _ensure_schema()
-    db = HostSessionLocal()
-    try:
-        items = ImApplicationService(db).list_conversations(
-            _uid(user),
-            include_enterprise_dedicated_cs=not _is_admin_customer_service_session(request, db),
-        )
-        total = sum(int(c.get("unread_count") or 0) for c in items)
-        return {"success": True, "unread_total": total}
-    except RECOVERABLE_ERRORS:
-        logger.exception("im_unread_total")
-        return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)
-    finally:
-        db.close()
-
-
 @router.get("/api/im/cs/inbox")
 def im_cs_inbox(request: Request, user: CurrentUser = Depends(require_identified_user)):
     """List all customer conversations in the admin CS inbox."""

@@ -238,6 +238,28 @@ def im_list_contacts(
         db.close()
 
 
+@router.get("/api/im/unread-total")
+def im_unread_total(
+    request: Request,
+    user: CurrentUser = Depends(require_identified_user),
+):
+    _ensure_schema()
+    uid = _uid(user)
+    db = HostSessionLocal()
+    try:
+        items = ImApplicationService(db).list_conversations(
+            uid,
+            include_enterprise_dedicated_cs=_include_enterprise_dedicated_cs(request, db),
+        )
+        total = sum(int(c.get("unread_count") or 0) for c in items)
+        return {"success": True, "unread_total": total}
+    except RECOVERABLE_ERRORS:
+        logger.exception("im_unread_total")
+        return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)
+    finally:
+        db.close()
+
+
 @router.post("/api/im/conversations/direct")
 def im_create_direct(
     body: dict = Body(default_factory=dict),
