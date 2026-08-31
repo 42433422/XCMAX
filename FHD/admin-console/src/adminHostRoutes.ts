@@ -44,12 +44,6 @@ export const ADMIN_HOST_ROUTE_RECORDS: RouteRecordRaw[] = [
     component: () => import('./views/ServerFunctionsView.vue'),
     meta: { title: '服务器功能模块', requiresAdminAccount: true, hostAdmin: true },
   },
-  {
-    path: '/diagnostic-terminal',
-    name: 'diagnostic-terminal',
-    component: () => import('./views/DiagnosticTerminalView.vue'),
-    meta: { title: '诊断终端', requiresAdminAccount: true, hostAdmin: true },
-  },
   // 菜单 key 仍为 approval-hub；path 避开企业端 ERP /approval-hub 冲突
   {
     path: '/autonomy-approval-hub',

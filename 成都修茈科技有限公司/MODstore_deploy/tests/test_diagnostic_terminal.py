@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from types import SimpleNamespace
-
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -194,9 +192,9 @@ def test_account_find_delivery_routes_and_cli_share_the_same_service():
             "find terminal",
             route_catalog=[
                 {
-                    "path": "/api/admin/diagnostic-terminal/execute",
-                    "methods": ["POST"],
-                    "name": "execute",
+                    "path": "/api/users/terminal_customer",
+                    "methods": ["GET"],
+                    "name": "user_detail",
                 }
             ],
             runtime_provider=lambda: _runtime(),
@@ -237,43 +235,13 @@ def test_logs_only_read_controlled_paths_and_scrub_credentials(tmp_path, monkeyp
     assert "[REDACTED]" in str(result)
 
 
-def test_admin_api_is_registered_authenticated_and_returns_runtime_routes(client):
+def test_cli_only_surface_does_not_register_admin_http_routes(client):
     from modstore_server.api.app_factory import _iter_route_method_signatures
-    from modstore_server.api.deps import require_admin
 
     signatures = set(_iter_route_method_signatures(client.app.routes))
-    assert ("/api/admin/diagnostic-terminal/commands", "GET") in signatures
-    assert ("/api/admin/diagnostic-terminal/execute", "POST") in signatures
-    assert (
-        client.post(
-            "/api/admin/diagnostic-terminal/execute", json={"command": "doctor"}
-        ).status_code
-        == 401
-    )
-
-    client.app.dependency_overrides[require_admin] = lambda: SimpleNamespace(
-        id=1, username="admin", is_admin=True
-    )
-    try:
-        commands = client.get("/api/admin/diagnostic-terminal/commands")
-        assert commands.status_code == 200
-        assert len(commands.json()["items"]) >= 10
-        routes = client.post(
-            "/api/admin/diagnostic-terminal/execute",
-            json={"command": "routes diagnostic-terminal"},
-        )
-        assert routes.status_code == 200, routes.text
-        assert any(
-            row["reference"] == "/api/admin/diagnostic-terminal/execute"
-            for row in routes.json()["items"]
-        )
-        bad = client.post(
-            "/api/admin/diagnostic-terminal/execute",
-            json={"command": "shell rm"},
-        )
-        assert bad.status_code == 422
-    finally:
-        client.app.dependency_overrides.pop(require_admin, None)
+    assert ("/api/admin/diagnostic-terminal/commands", "GET") not in signatures
+    assert ("/api/admin/diagnostic-terminal/execute", "POST") not in signatures
+    assert ("/api/admin/ops-ssh-hint", "GET") not in signatures
 
 
 def test_cli_refuses_an_implicit_default_sqlite(monkeypatch):

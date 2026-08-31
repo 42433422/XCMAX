@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 公网运维终端 · AI 业务数据：部署 aibiz API 到 fhd-full (:5100) + 同步 surface-audit 缓存 + nginx 路由。
+# AI 业务数据：部署 aibiz API 到 fhd-full (:5100) + 同步 surface-audit 缓存 + nginx 路由。
 #
 # 用法:
 #   DEPLOY_SSH_PASSWORD='…' bash FHD/scripts/dev/deploy_aibiz_ops_terminal_server.sh
@@ -167,4 +167,4 @@ scp_up {${TAR_DATA}} /tmp/aibiz-surface-deploy.tar.gz
 ssh_run {${REMOTE_SCRIPT}}
 EXPECT_EOF
 
-log "完成。请硬刷新 https://xiu-ci.com/market/admin/ops-terminal"
+log "完成。验证: curl -sI https://xiu-ci.com/xcmax-dashboard/XCAGI-Full-Pipeline.html?embed=shell#aibiz"

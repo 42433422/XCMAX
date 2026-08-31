@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from modstore_server.api.market_routes_part02_part01 import (
     _facade as _facade,
-    api_admin_ops_ssh_hint as api_admin_ops_ssh_hint,
     api_wallet_balance as api_wallet_balance,
     api_wallet_recharge as api_wallet_recharge,
     _admin_self_credit_cap as _admin_self_credit_cap,

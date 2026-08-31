@@ -7030,7 +7030,6 @@ var yd = {
         method: `POST`,
         body: JSON.stringify({ code: e }),
       }),
-    adminOpsSshHint: () => Q(`/api/admin/ops-ssh-hint`),
     adminOpsAuditLogs: (e) => {
       let t = new URLSearchParams()
       ;(e?.employee_id && t.set(`employee_id`, e.employee_id), e?.limit != null && t.set(`limit`, String(e.limit)))
@@ -8248,7 +8247,6 @@ var Yd = {
     $(`/api/admin/employee-packs/${encodeURIComponent(e)}/align-llm-to-auto-single?dry_run=${t ? `true` : `false`}`, { method: `POST` }),
   adminListNoKeyEmployees: () => $(`/api/admin/duty-graph/no-key-employees`),
   verifyAdminDigestCode: (e) => $(`/api/auth/verify-admin-digest-code`, { method: `POST`, body: JSON.stringify({ code: e }) }),
-  adminOpsSshHint: () => $(`/api/admin/ops-ssh-hint`),
   adminOpsAuditLogs: (e) => {
     let t = new URLSearchParams()
     ;(e?.employee_id && t.set(`employee_id`, e.employee_id), e?.limit != null && t.set(`limit`, String(e.limit)))

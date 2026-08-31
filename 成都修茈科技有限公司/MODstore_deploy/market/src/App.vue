@@ -92,10 +92,6 @@
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h12v10H2z"/><path d="M5 7h6M5 10h4"/></svg>
             <span>运维审计</span>
           </router-link>
-          <router-link :to="{ name: 'admin-ops-terminal' }" class="wb-sidebar-mode-btn" :class="{ 'wb-sidebar-mode-btn--active': route.name === 'admin-ops-terminal' }">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><path d="M4 6l2 2-2 2M7.5 10H12"/></svg>
-            <span>运维终端</span>
-          </router-link>
           <router-link :to="{ name: 'admin-employee-autonomy' }" class="wb-sidebar-mode-btn" :class="{ 'wb-sidebar-mode-btn--active': route.name === 'admin-employee-autonomy' }">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1v2M8 13v2M1 8h2M13 8h2"/><circle cx="8" cy="8" r="3"/><path d="M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41"/></svg>
             <span>员工自主决策</span>
@@ -162,7 +158,6 @@
             :is-admin="isAdmin"
             @settings="handleSidebarSettings"
             @admin="enterAdminRoute('admin-database')"
-            @ops-terminal="enterAdminRoute('admin-ops-terminal')"
             @logout="() => void doLogout()"
           />
         </div>

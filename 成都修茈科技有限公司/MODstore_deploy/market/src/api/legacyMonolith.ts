@@ -287,7 +287,6 @@ export const legacyApi = {
       method: 'POST',
       body: JSON.stringify({ code }),
     }),
-  adminOpsSshHint: () => req('/api/admin/ops-ssh-hint'),
   /** 运维 shell_exec / ssh_exec 审计日志（只读） */
   adminOpsAuditLogs: (params?: { employee_id?: string; limit?: number }) => {
     const p = new URLSearchParams()

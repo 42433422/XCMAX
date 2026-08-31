@@ -240,7 +240,7 @@ def _dispatch_query_command(
         hints = (
             []
             if route_catalog
-            else ["当前调用方未提供运行时路由表；请从网页运维终端或在线 API 执行。"]
+            else ["当前未提供运行时路由表；请用 --openapi-url 指向本机 OpenAPI 后重试。"]
         )
         return envelope(
             parsed,

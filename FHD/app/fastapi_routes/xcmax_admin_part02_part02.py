@@ -377,29 +377,3 @@ async def admin_start_impersonate(
         "impersonating_username": target_name,
         "bridge_token": create_impersonation_bridge_token(sid),
     }
-
-
-@_facade().router.get("/admin/market/diagnostic-terminal/commands", response_model=None)
-async def admin_list_diagnostic_terminal_commands(request: _facade().Request):
-    """List the allow-listed read-only diagnostic commands from MODstore."""
-
-    return await _facade()._market_admin_proxy(
-        request,
-        "GET",
-        "/api/admin/diagnostic-terminal/commands",
-    )
-
-
-@_facade().router.post("/admin/market/diagnostic-terminal/execute", response_model=None)
-async def admin_execute_diagnostic_terminal_command(
-    request: _facade().Request,
-    payload: dict[str, _facade().Any] = _facade().Body(default_factory=dict),
-):
-    """Execute one allow-listed read-only diagnostic command."""
-
-    return await _facade()._market_admin_proxy(
-        request,
-        "POST",
-        "/api/admin/diagnostic-terminal/execute",
-        json_body=payload,
-    )

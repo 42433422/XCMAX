@@ -337,8 +337,6 @@
   "/api/xcmax/admin/market/commerce/orders/{order_no}/{action}",
   "/api/xcmax/admin/market/commerce/refunds/pending",
   "/api/xcmax/admin/market/commerce/refunds/{refund_id}/review",
-  "/api/xcmax/admin/market/diagnostic-terminal/commands",
-  "/api/xcmax/admin/market/diagnostic-terminal/execute",
   "/api/xcmax/admin/market/entitlement-fast-lane/accounts/{account}",
   "/api/xcmax/admin/market/entitlement-fast-lane/actions",
   "/api/xcmax/admin/market/entitlement-fast-lane/plans",
