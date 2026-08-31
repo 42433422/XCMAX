@@ -239,12 +239,12 @@ def _base_para_input(
 
 
 def _python_supports_focused_tests(candidate: _facade().Path) -> bool:
-    """Return whether a Python executable has the loop's test dependencies."""
+    """Return whether Python has every dependency used by focused QA."""
     if not candidate.is_file() or not _facade().os.access(candidate, _facade().os.X_OK):
         return False
     try:
         probe = _facade().subprocess.run(
-            [str(candidate), "-c", "import apscheduler, pytest"],
+            [str(candidate), "-c", "import apscheduler, black, isort, pytest"],
             check=False,
             capture_output=True,
             text=True,

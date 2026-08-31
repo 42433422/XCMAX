@@ -12,6 +12,15 @@ def _facade():
     return importlib.import_module("modstore_server.self_maintenance_loop_runner")
 
 
+def _coerce_retry_count(value: object, *, default: int) -> int:
+    if value is None or value == "":
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _close_items_resolved_by_final(
     memory: _facade().Dict[str, _facade().Any],
     final: _facade().Dict[str, _facade().Any],
@@ -67,12 +76,41 @@ def _resume_review_qa_candidate(
     open_items_raw = memory.get("open_items")
     enqueue_success_keys: set[str] = set()
     if isinstance(open_items_raw, list):
+        repaired_retry_counts = False
+        for item in open_items_raw:
+            if not isinstance(item, dict) or item.get("kind") not in {
+                "failed_steps",
+                "kb_schema_retry",
+            }:
+                continue
+            raw_retry_count = item.get("retry_count")
+            if raw_retry_count is None or raw_retry_count == "":
+                continue
+            try:
+                int(raw_retry_count)
+            except (TypeError, ValueError):
+                default = 1 if item.get("kind") == "failed_steps" else 0
+                item["retry_count"] = _coerce_retry_count(raw_retry_count, default=default)
+                repaired_retry_counts = True
+                _facade().logger.warning(
+                    "normalized malformed retry_count for open_item identity=%s",
+                    _facade()._failed_open_item_identity(item),
+                )
+        if repaired_retry_counts:
+            try:
+                _facade()._write_loop_memory(memory)
+            except RECOVERABLE_ERRORS as exc:
+                _facade().logger.warning(
+                    "failed to persist normalized loop-memory retry_count; "
+                    "continuing with in-memory repair: %s",
+                    exc,
+                )
         over_retry_items = []
         for item in open_items_raw:
             if (
                 isinstance(item, dict)
                 and item.get("kind") == "failed_steps"
-                and (int(item.get("retry_count") or 1) >= max_retries)
+                and (_coerce_retry_count(item.get("retry_count"), default=1) >= max_retries)
             ):
                 over_retry_items.append(item)
         if over_retry_items:
@@ -138,7 +176,7 @@ def _resume_review_qa_candidate(
                 if not (
                     isinstance(item, dict)
                     and item.get("kind") == "failed_steps"
-                    and (int(item.get("retry_count") or 1) >= max_retries)
+                    and (_coerce_retry_count(item.get("retry_count"), default=1) >= max_retries)
                     and ("code" not in _facade()._open_item_steps(item))
                     and (_facade()._failed_open_item_identity(item) in enqueue_success_keys)
                 )
@@ -156,7 +194,7 @@ def _resume_review_qa_candidate(
             _facade().logger.info(
                 "kb_schema_retry: resuming fresh code step for run_id=%s retry_count=%d",
                 item.get("run_id"),
-                int(item.get("retry_count") or 0),
+                _coerce_retry_count(item.get("retry_count"), default=0),
             )
             return None
     last_decision = memory.get("last_policy_decision")
@@ -175,7 +213,7 @@ def _resume_review_qa_candidate(
         steps = item.get("steps")
         if not isinstance(steps, list) or "code" not in steps:
             continue
-        retry_count = int(item.get("retry_count") or 1)
+        retry_count = _coerce_retry_count(item.get("retry_count"), default=1)
         if retry_count >= max_retries:
             continue
         if not item.get("branch") and (not item.get("para_task_id")):

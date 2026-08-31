@@ -12,6 +12,15 @@ def _facade():
     return importlib.import_module("modstore_server.self_maintenance_loop_runner")
 
 
+def _coerce_retry_count(value: object, *, default: int) -> int:
+    if value is None or value == "":
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _evict_loop_memory_items(
     memory: _facade().Dict[str, _facade().Any],
     *,
@@ -44,7 +53,7 @@ def _evict_loop_memory_items(
             continue
         created_dt = _facade()._parse_iso(item.get("created_at"))
         age_seconds = (now - created_dt).total_seconds() if created_dt else 0.0
-        retry_count = int(item.get("retry_count") or 0)
+        retry_count = _coerce_retry_count(item.get("retry_count"), default=0)
         kind = str(item.get("kind") or "")
         evict_reason = ""
         if age_seconds >= _facade().LOOP_EVICT_AGE_OUT_SECONDS:
@@ -206,7 +215,9 @@ def _update_loop_memory(
                         break
         if existing_idx is not None:
             existing = open_items[existing_idx]
-            existing["retry_count"] = int(existing.get("retry_count") or 1) + 1
+            existing["retry_count"] = (
+                _coerce_retry_count(existing.get("retry_count"), default=1) + 1
+            )
             existing["last_attempted_at"] = _facade()._iso(_facade()._utc_now())
             existing["steps"] = failed_steps
             existing["run_id"] = run_id

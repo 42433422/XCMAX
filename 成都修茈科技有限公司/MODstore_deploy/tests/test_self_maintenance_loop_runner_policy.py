@@ -1421,6 +1421,39 @@ def test_resume_review_qa_candidate_uses_failed_review_branch():
     }
 
 
+def test_resume_candidate_continues_when_retry_repair_persistence_fails(monkeypatch, caplog):
+    memory = {
+        "open_items": [
+            {
+                "branch": "devfleet/cursor/malformed-retry",
+                "kind": "failed_steps",
+                "para_task_id": "task-malformed-retry",
+                "retry_count": "malformed",
+                "run_id": "run-malformed-retry",
+                "steps": ["code"],
+            }
+        ],
+        "recent_runs": [],
+    }
+
+    def fail_write(_memory):
+        raise OSError("read-only memory directory")
+
+    monkeypatch.setattr(loop_runner, "_write_loop_memory", fail_write)
+
+    result = _resume_review_qa_candidate(memory)
+
+    assert memory["open_items"][0]["retry_count"] == 1
+    assert result == {
+        "branch": "devfleet/cursor/malformed-retry",
+        "failed_run_id": "run-malformed-retry",
+        "failed_steps": ["code"],
+        "para_task_id": "task-malformed-retry",
+        "reason": "resume_failed_code_step",
+    }
+    assert "continuing with in-memory repair" in caplog.text
+
+
 def test_resume_candidate_prefers_newer_same_task_code_hold_over_old_review_failure():
     memory = {
         "open_items": [
@@ -2256,6 +2289,52 @@ def test_focused_test_command_prefers_explicit_command(monkeypatch):
     assert _focused_test_command() == "runtime-python -m pytest focused.py -q"
 
 
+def test_python_support_probe_requires_quality_tools(monkeypatch, tmp_path):
+    candidate = tmp_path / "python"
+    candidate.write_text("#!/bin/sh\n", encoding="utf-8")
+    candidate.chmod(0o755)
+    probes = []
+
+    def run_probe(args, **kwargs):
+        probes.append((args, kwargs))
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(loop_runner.subprocess, "run", run_probe)
+
+    assert loop_runner._python_supports_focused_tests(candidate) is True
+    assert probes[0][0] == [
+        str(candidate),
+        "-c",
+        "import apscheduler, black, isort, pytest",
+    ]
+
+
+def test_focused_test_command_skips_candidate_without_quality_tools(monkeypatch, tmp_path):
+    first = tmp_path / "first-python"
+    complete = tmp_path / "deploy" / ".venv" / "bin" / "python"
+    complete.parent.mkdir(parents=True)
+    first.write_text("#!/bin/sh\n", encoding="utf-8")
+    complete.write_text("#!/bin/sh\n", encoding="utf-8")
+    first.chmod(0o755)
+    complete.chmod(0o755)
+    checked = []
+
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_TEST_PYTHON", str(first))
+    monkeypatch.setenv("MODSTORE_DEPLOY_ROOT", str(tmp_path / "deploy"))
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", raising=False)
+
+    def supports(candidate):
+        checked.append(candidate)
+        return candidate == complete
+
+    monkeypatch.setattr(loop_runner, "_python_supports_focused_tests", supports)
+
+    command = _focused_test_command()
+
+    assert command.startswith(f"{complete} -m pytest ")
+    assert checked == [first, complete]
+
+
 def test_high_risk_report_detects_standalone_qa_fail():
     steps = [
         {
@@ -2870,6 +2949,45 @@ def test_update_loop_memory_closes_resumed_item_after_success(monkeypatch, tmp_p
     assert memory["open_items"] == []
     assert memory["closed_items"][0]["original_item"]["run_id"] == "failed-run"
     assert memory["last_resolution_record"]["closed_count"] == 1
+
+
+def test_update_loop_memory_increments_malformed_persisted_retry_count(monkeypatch, tmp_path):
+    memory_path = tmp_path / "loop_memory.json"
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(memory_path))
+    loop_memory_path().write_text(
+        json.dumps(
+            {
+                "closed_items": [],
+                "open_items": [
+                    {
+                        "kind": "failed_steps",
+                        "retry_count": "malformed",
+                        "run_id": "failed-run",
+                        "steps": ["code"],
+                    }
+                ],
+                "recent_runs": [],
+                "run_count": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    _update_loop_memory(
+        {
+            "completed_at": "2026-08-31T00:00:00+00:00",
+            "policy_decision": {"action": "stop", "reason": "loop_not_completed"},
+            "resume_candidate": {"failed_run_id": "failed-run", "failed_steps": ["code"]},
+            "run_id": "new-run",
+            "status": "failed",
+            "steps": [{"ok": False, "step": "code"}],
+        },
+        {"reason": "force"},
+    )
+
+    memory = _load_loop_memory()
+    assert memory["open_items"][0]["retry_count"] == 2
+    assert memory["open_items"][0]["run_id"] == "new-run"
 
 
 def test_update_loop_memory_retires_code_remediation_after_downstream_qa_failure(

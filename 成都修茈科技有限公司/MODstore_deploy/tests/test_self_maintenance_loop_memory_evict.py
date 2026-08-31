@@ -149,6 +149,26 @@ def test_evict_keeps_fresh_failed_step_with_low_retry(monkeypatch, tmp_path):
     assert memory.get("evicted_items") == []
 
 
+def test_evict_malformed_retry_count_does_not_abort_memory_processing():
+    malformed = _stuck_failed_step(
+        "run-malformed",
+        age_seconds=LOOP_EVICT_STUCK_AGE_SECONDS + 60,
+        retry_count="malformed",
+    )
+    aged_out = _stuck_failed_step(
+        "run-aged-out",
+        age_seconds=LOOP_EVICT_AGE_OUT_SECONDS + 60,
+        retry_count=0,
+    )
+    memory = {"evicted_items": [], "open_items": [malformed, aged_out]}
+
+    result = loop_runner._evict_loop_memory_items(memory, actor="test")
+
+    assert result["evicted_count"] == 1
+    assert result["reasons"]["aged_out_7d"] == 1
+    assert memory["open_items"] == [malformed]
+
+
 def test_evict_ages_out_7d_old_item_of_any_kind(monkeypatch, tmp_path):
     """Items older than 7d are evicted regardless of kind or retry_count."""
     memory_path = tmp_path / "loop_memory.json"
