@@ -60,9 +60,7 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
     def _ensure_enterprise_dedicated_cs_user(self) -> User | None:
         row = (
             self._db.execute(
-                select(User)
-                .where(User.username == ENTERPRISE_DEDICATED_CS_USERNAME)
-                .limit(1)
+                select(User).where(User.username == ENTERPRISE_DEDICATED_CS_USERNAME).limit(1)
             )
             .scalars()
             .first()
@@ -147,18 +145,12 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
             if conv.is_direct:
                 peer_id = self._direct_peer_id(conv.id, user_id)
                 peer = self._db.get(User, int(peer_id)) if peer_id else None
-                title = (
-                    self._display_name(peer_id)
-                    if peer_id
-                    else (conv.title or f"会话 #{conv.id}")
-                )
+                title = self._display_name(peer_id) if peer_id else (conv.title or f"会话 #{conv.id}")
             else:
                 peer = None
                 title = conv.title or f"会话 #{conv.id}"
             peer_username = str(getattr(peer, "username", "") or "") if peer else ""
-            employee_id = (
-                peer_username[len("emp:") :] if peer_username.startswith("emp:") else ""
-            )
+            employee_id = peer_username[len("emp:") :] if peer_username.startswith("emp:") else ""
             item: dict[str, Any] = {
                 "id": conv.id,
                 "title": title,
@@ -171,8 +163,8 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
                 "peer_username": peer_username,
                 "employee_id": employee_id,
             }
-            is_enterprise_dedicated_cs = (
-                conv.is_direct and self._is_enterprise_dedicated_cs_user(peer)
+            is_enterprise_dedicated_cs = conv.is_direct and self._is_enterprise_dedicated_cs_user(
+                peer
             )
             if is_enterprise_dedicated_cs and not include_enterprise_dedicated_cs:
                 continue
@@ -186,15 +178,9 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
     ) -> list[dict[str, Any]]:
         me = self._db.get(User, int(user_id))
         my_tenant = getattr(me, "tenant_id", None) if me else None
-        dedicated_cs = (
-            self._ensure_enterprise_dedicated_cs_user()
-            if include_enterprise_dedicated_cs
-            else None
-        )
+        dedicated_cs = self._ensure_enterprise_dedicated_cs_user() if include_enterprise_dedicated_cs else None
         dedicated_cs_id = (
-            int(dedicated_cs.id)
-            if dedicated_cs is not None and dedicated_cs.id
-            else None
+            int(dedicated_cs.id) if dedicated_cs is not None and dedicated_cs.id else None
         )
         q = select(User).where(User.id != int(user_id), User.is_active.is_(True))
         if dedicated_cs_id is not None:
@@ -203,11 +189,7 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
             q = q.where(User.username != ENTERPRISE_DEDICATED_CS_USERNAME)
         if my_tenant is not None:
             q = q.where(User.tenant_id == my_tenant)
-        rows = (
-            self._db.execute(q.order_by(User.display_name, User.username))
-            .scalars()
-            .all()
-        )
+        rows = self._db.execute(q.order_by(User.display_name, User.username)).scalars().all()
         out: list[dict[str, Any]] = []
         if dedicated_cs is not None and dedicated_cs_id != int(user_id):
             out.append(self._contact_dict(dedicated_cs, dedicated_cs=True))

@@ -35,6 +35,7 @@ from app.application.trae_super_employee_service import (
 from app.application.workspaces import get_workspace_registry as get_workspace_registry
 from app.config import Config
 from app.db import HostSessionLocal, get_host_engine
+from app.fastapi_routes.im_cs_admin_routes import router as im_cs_admin_router
 from app.infrastructure.auth.dependencies import (
     CurrentUser,
     get_current_user,
@@ -47,6 +48,9 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["im-v0"])
+# FastAPI 0.138 wraps nested include_router calls; the route registry and golden
+# snapshot inspect one level, so keep extracted admin routes flat on this router.
+router.routes.extend(im_cs_admin_router.routes)
 
 _schema_ready = False
 _IM_UNAVAILABLE = "即时通信服务暂时不可用，请稍后重试"
@@ -241,164 +245,6 @@ def im_list_contacts(
         return {"success": True, "contacts": contacts}
     except RECOVERABLE_ERRORS:
         logger.exception("im_list_contacts")
-        return JSONResponse(
-            {"success": False, "message": _IM_UNAVAILABLE}, status_code=500
-        )
-    finally:
-        db.close()
-
-
-@router.get("/api/im/unread-total")
-def im_unread_total(
-    request: Request,
-    user: CurrentUser = Depends(require_identified_user),
-):
-    _ensure_schema()
-    uid = _uid(user)
-    db = HostSessionLocal()
-    try:
-        items = ImApplicationService(db).list_conversations(
-            uid,
-            include_enterprise_dedicated_cs=_include_enterprise_dedicated_cs(
-                request, db
-            ),
-        )
-        total = sum(int(c.get("unread_count") or 0) for c in items)
-        return {"success": True, "unread_total": total}
-    except RECOVERABLE_ERRORS:
-        logger.exception("im_unread_total")
-        return JSONResponse(
-            {"success": False, "message": _IM_UNAVAILABLE}, status_code=500
-        )
-    finally:
-        db.close()
-
-
-@router.get("/api/im/cs/inbox")
-def im_cs_inbox(request: Request, user: CurrentUser = Depends(require_identified_user)):
-    """运营者(管理端)客服收件箱:所有企业客户↔企业专属客服会话(手机端+桌面端同源)。"""
-    _ensure_schema()
-    db = HostSessionLocal()
-    try:
-        if not _is_admin_customer_service_session(request, db):
-            return JSONResponse(
-                {"success": False, "message": "需要管理端客服会话"}, status_code=403
-            )
-        items = ImApplicationService(db).list_cs_inbox()
-        return {"success": True, "conversations": items}
-    except RECOVERABLE_ERRORS:
-        logger.exception("im_cs_inbox")
-        return JSONResponse(
-            {"success": False, "message": _IM_UNAVAILABLE}, status_code=500
-        )
-    finally:
-        db.close()
-
-
-@router.get("/api/im/cs/inbox/{conversation_id}/messages")
-def im_cs_inbox_messages(
-    conversation_id: int,
-    request: Request,
-    user: CurrentUser = Depends(require_identified_user),
-):
-    """运营者读某客服会话历史。"""
-    _ensure_schema()
-    db = HostSessionLocal()
-    try:
-        if not _is_admin_customer_service_session(request, db):
-            return JSONResponse(
-                {"success": False, "message": "需要管理端客服会话"}, status_code=403
-            )
-        messages = ImApplicationService(db).cs_inbox_messages(conversation_id)
-        return {"success": True, "messages": messages}
-    except RECOVERABLE_ERRORS:
-        logger.exception("im_cs_inbox_messages")
-        return JSONResponse(
-            {"success": False, "message": _IM_UNAVAILABLE}, status_code=500
-        )
-    finally:
-        db.close()
-
-
-@router.post("/api/im/cs/inbox/{conversation_id}/reply")
-def im_cs_inbox_reply(
-    conversation_id: int,
-    request: Request,
-    body: dict = Body(default_factory=dict),
-    user: CurrentUser = Depends(require_identified_user),
-):
-    """运营者以「企业专属客服」身份回复客户(客户端轮询取回)。"""
-    _ensure_schema()
-    db = HostSessionLocal()
-    try:
-        if not _is_admin_customer_service_session(request, db):
-            return JSONResponse(
-                {"success": False, "message": "需要管理端客服会话"}, status_code=403
-            )
-        text = str(body.get("body") or "").strip()
-        if not text:
-            return JSONResponse(
-                {"success": False, "message": "消息不能为空"}, status_code=400
-            )
-        from app.application.enterprise_cs_automation import (
-            EnterpriseCsAutomationService,
-        )
-
-        operator_user_id = _uid(user)
-        EnterpriseCsAutomationService(db).note_manual_reply(
-            conversation_id, operator_user_id=operator_user_id
-        )
-        result = ImApplicationService(db).cs_reply(
-            conversation_id,
-            text,
-            origin="manual",
-            operator_user_id=operator_user_id,
-        )
-        return {"success": True, **result}
-    except (ValueError, PermissionError):
-        return JSONResponse(
-            {"success": False, "message": "消息参数无效"}, status_code=400
-        )
-    except RECOVERABLE_ERRORS:
-        logger.exception("im_cs_inbox_reply")
-        return JSONResponse(
-            {"success": False, "message": _IM_UNAVAILABLE}, status_code=500
-        )
-    finally:
-        db.close()
-
-
-@router.post("/api/im/cs/inbox/{conversation_id}/mode")
-def im_cs_inbox_mode(
-    conversation_id: int,
-    request: Request,
-    body: dict = Body(default_factory=dict),
-    user: CurrentUser = Depends(require_identified_user),
-):
-    """管理端人工接管或恢复 AI 自动接待。"""
-    _ensure_schema()
-    db = HostSessionLocal()
-    try:
-        if not _is_admin_customer_service_session(request, db):
-            return JSONResponse(
-                {"success": False, "message": "需要管理端客服会话"}, status_code=403
-            )
-        from app.application.enterprise_cs_automation import (
-            EnterpriseCsAutomationService,
-        )
-
-        mode = str(body.get("mode") or "").strip().lower()
-        state = EnterpriseCsAutomationService(db).set_mode(
-            conversation_id,
-            mode,
-            operator_user_id=_uid(user),
-            reason=str(body.get("reason") or "管理员人工接管"),
-        )
-        return {"success": True, "state": state}
-    except ValueError as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
-    except RECOVERABLE_ERRORS:
-        logger.exception("im_cs_inbox_mode")
         return JSONResponse(
             {"success": False, "message": _IM_UNAVAILABLE}, status_code=500
         )
