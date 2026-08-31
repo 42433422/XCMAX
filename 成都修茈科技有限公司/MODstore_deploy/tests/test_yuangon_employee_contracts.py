@@ -156,3 +156,41 @@ def test_runtime_validator_rejects_generic_dispatch_for_direct_python(tmp_path, 
     )
     assert any("通用分发模板" in issue for issue in issues)
     assert any("vendor 运行时缺失" in issue for issue in issues)
+
+
+def test_runtime_validator_accepts_reviewed_employee_module_without_vendor(tmp_path, monkeypatch):
+    import modstore_server.employee_runtime as runtime
+
+    monkeypatch.setattr(runtime, "files_dir", lambda: tmp_path)
+    manifest = {
+        "id": "reviewed-worker",
+        "employee_config_v2": {
+            "actions": {
+                "handlers": ["direct_python"],
+                "direct_python": {
+                    "module": "reviewed_worker",
+                    "action": "audit",
+                    "implementation": "employee_module",
+                    "execution_mode": "deterministic",
+                    "read_only": True,
+                },
+            }
+        },
+    }
+    archive = tmp_path / "reviewed-worker.xcemp"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("reviewed-worker/manifest.json", json.dumps(manifest))
+        zf.writestr(
+            "reviewed-worker/backend/employees/reviewed_worker.py",
+            "def run(payload, ctx): return {'ok': True}\n",
+        )
+    assert (
+        employee_pack_runtime_issues(
+            {
+                "pack_id": "reviewed-worker",
+                "stored_filename": archive.name,
+                "manifest": manifest,
+            }
+        )
+        == []
+    )

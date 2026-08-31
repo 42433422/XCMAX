@@ -11,6 +11,36 @@ from modstore_server import incident_bus as facade
 from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 
+def _has_reviewed_duty_binding(event_id: int) -> bool:
+    """Return whether this event has an active, unattended reviewed duty."""
+
+    from modstore_server.duty_workforce_contracts import matching_duty_event_contract
+
+    sf = facade.get_session_factory()
+    with sf() as session:
+        event = session.get(facade.IncidentEvent, event_id)
+        if event is None:
+            return False
+        bindings = (
+            session.query(facade.EmployeeTriggerBinding)
+            .filter(facade.EmployeeTriggerBinding.is_active.is_(True))
+            .all()
+        )
+        for binding in bindings:
+            base, source_filter = facade._parse_binding_event_key(str(binding.event_type or ""))
+            if base != str(event.event_type or ""):
+                continue
+            if source_filter and source_filter != str(event.source or ""):
+                continue
+            if matching_duty_event_contract(
+                str(binding.employee_id or ""),
+                str(event.event_type or ""),
+                str(event.source or ""),
+            ):
+                return True
+    return False
+
+
 def _dispatch_intake_routing_plan(
     exec_result: Any,
     *,
@@ -91,6 +121,8 @@ def _dispatch_incident_body(event_id: int) -> None:
         return
 
     binding_only = event_type_pre in _BINDING_ONLY_EVENT_TYPES
+    reviewed_duty_binding = _has_reviewed_duty_binding(event_id)
+    reviewed_bindings_only = False
 
     if not binding_only and (
         os.environ.get("MODSTORE_UNIFIED_ORCHESTRATOR_ENABLED", "1") or ""
@@ -137,8 +169,9 @@ def _dispatch_incident_body(event_id: int) -> None:
                 )
                 # 客服工单：团队抢单后仍走 binding，让 intake-dispatcher /
                 # user-customer-service-officer 按既有订阅接单（跳过 market 防双派）。
-                if event_type_pre == "ops.intake.customer_ticket":
+                if event_type_pre == "ops.intake.customer_ticket" or reviewed_duty_binding:
                     binding_only = True
+                    reviewed_bindings_only = reviewed_duty_binding
                 else:
                     return
             else:
@@ -173,7 +206,10 @@ def _dispatch_incident_body(event_id: int) -> None:
                         else None
                     ),
                 )
-                return
+                if reviewed_duty_binding:
+                    reviewed_bindings_only = True
+                else:
+                    return
             logger.info(
                 "incident_bus: market did not claim event_id=%s; fallback binding dispatch",
                 event_id,
@@ -217,6 +253,17 @@ def _dispatch_incident_body(event_id: int) -> None:
                 continue
             if filt and filt != str(ev.source or ""):
                 continue
+            if reviewed_bindings_only:
+                from modstore_server.duty_workforce_contracts import (
+                    matching_duty_event_contract,
+                )
+
+                if not matching_duty_event_contract(
+                    eid_sub,
+                    str(ev.event_type or ""),
+                    str(ev.source or ""),
+                ):
+                    continue
             binding_list.append((int(b.priority or 5), eid_sub))
         binding_ids = [eid for _, eid in sorted(binding_list)]
         catalog_ids = _catalog_employee_ids(session)
@@ -237,14 +284,28 @@ def _dispatch_incident_body(event_id: int) -> None:
         try:
             from modstore_server.duty_workforce_contracts import (
                 duty_event_execution_input,
+                matching_duty_event_contract,
             )
 
+            reviewed_contract = matching_duty_event_contract(
+                eid_emp,
+                event_type,
+                source,
+            )
             duty_input = duty_event_execution_input(
                 eid_emp,
                 event_type=event_type,
                 source=source,
                 incident=payload,
             )
+            if reviewed_contract and duty_input.get("_duty_input_ready") is False:
+                logger.info(
+                    "incident_bus: reviewed duty input unavailable event_id=%s employee_id=%s",
+                    event_id,
+                    eid_emp,
+                )
+                continue
+            duty_input.pop("_duty_input_ready", None)
             exec_result = execute_employee_task(
                 eid_emp,
                 brief,
