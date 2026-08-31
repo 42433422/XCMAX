@@ -83,9 +83,7 @@ def im_client():
         patch.object(im_routes, "ImApplicationService", return_value=mock_svc),
         patch.object(im_cs_admin_routes, "_ensure_schema"),
         patch.object(im_cs_admin_routes, "HostSessionLocal", return_value=mock_db),
-        patch.object(
-            im_cs_admin_routes, "ImApplicationService", return_value=mock_svc
-        ),
+        patch.object(im_cs_admin_routes, "ImApplicationService", return_value=mock_svc),
         patch.object(im_routes.im_ws_hub, "send_to_user", new_callable=AsyncMock),
         patch.object(im_routes, "_notify_offline_im_members", new_callable=AsyncMock),
     ):
@@ -157,9 +155,7 @@ def test_im_cs_mode_switches_to_human(im_client) -> None:
     with (
         patch.object(im_cs_admin_routes, "_ensure_schema"),
         patch.object(im_cs_admin_routes, "HostSessionLocal", return_value=MagicMock()),
-        patch.object(
-            im_cs_admin_routes, "_is_admin_customer_service_session", return_value=True
-        ),
+        patch.object(im_cs_admin_routes, "_is_admin_customer_service_session", return_value=True),
         patch(
             "app.application.enterprise_cs_automation.EnterpriseCsAutomationService",
             return_value=automation,

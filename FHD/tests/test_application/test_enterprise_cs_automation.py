@@ -43,15 +43,11 @@ def cs_db(tmp_path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(
         ImApplicationService, "_record_im_message_change", lambda *_args, **_kwargs: 1
     )
-    monkeypatch.setattr(
-        ImApplicationService, "_record_im_read_change", lambda *_args, **_kwargs: 1
-    )
+    monkeypatch.setattr(ImApplicationService, "_record_im_read_change", lambda *_args, **_kwargs: 1)
     monkeypatch.setattr(
         ImApplicationService, "_maybe_push_cs_message", lambda *_args, **_kwargs: None
     )
-    monkeypatch.setattr(
-        "app.application.enterprise_cs_automation._audit", lambda **_kwargs: None
-    )
+    monkeypatch.setattr("app.application.enterprise_cs_automation._audit", lambda **_kwargs: None)
     yield session
     session.close()
 
@@ -121,9 +117,9 @@ async def test_explicit_transfer_skips_llm_and_enters_existing_human_inbox(
     cs_db, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     svc, cs_id, conversation_id = _conversation(cs_db)
-    customer_message = svc.send_message(
-        conversation_id, 7, "请马上转人工", origin="customer"
-    )["message"]
+    customer_message = svc.send_message(conversation_id, 7, "请马上转人工", origin="customer")[
+        "message"
+    ]
 
     async def forbidden_completion(*_args, **_kwargs):
         raise AssertionError("explicit handoff must not call LLM")
@@ -166,9 +162,7 @@ async def test_high_risk_request_fails_closed_to_human(cs_db) -> None:
 
 
 @pytest.mark.asyncio
-async def test_ai_failure_fails_closed_to_human(
-    cs_db, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_ai_failure_fails_closed_to_human(cs_db, monkeypatch: pytest.MonkeyPatch) -> None:
     svc, _cs_id, conversation_id = _conversation(cs_db)
     customer_message = svc.send_message(
         conversation_id, 7, "安装后在哪里登录？", origin="customer"
@@ -228,9 +222,9 @@ async def test_two_unsolved_turns_transfer_without_third_ai_reply(
         fake_completion,
     )
     automation = EnterpriseCsAutomationService(cs_db)
-    first = svc.send_message(
-        conversation_id, 7, "还是不行，能再看看吗", origin="customer"
-    )["message"]
+    first = svc.send_message(conversation_id, 7, "还是不行，能再看看吗", origin="customer")[
+        "message"
+    ]
     first_result = await automation.handle_customer_message(
         conversation_id=conversation_id,
         customer_user_id=7,
@@ -239,9 +233,7 @@ async def test_two_unsolved_turns_transfer_without_third_ai_reply(
     )
     assert first_result["action"] == "reply"
 
-    second = svc.send_message(
-        conversation_id, 7, "还是不行，没解决", origin="customer"
-    )["message"]
+    second = svc.send_message(conversation_id, 7, "还是不行，没解决", origin="customer")["message"]
     second_result = await automation.handle_customer_message(
         conversation_id=conversation_id,
         customer_user_id=7,
@@ -261,9 +253,9 @@ async def test_manual_takeover_stops_ai_and_preserves_operator_provenance(
     svc, _cs_id, conversation_id = _conversation(cs_db)
     automation = EnterpriseCsAutomationService(cs_db)
     automation.set_mode(conversation_id, "human", operator_user_id=99)
-    customer_message = svc.send_message(
-        conversation_id, 7, "普通功能怎么用", origin="customer"
-    )["message"]
+    customer_message = svc.send_message(conversation_id, 7, "普通功能怎么用", origin="customer")[
+        "message"
+    ]
     skipped = await automation.handle_customer_message(
         conversation_id=conversation_id,
         customer_user_id=7,

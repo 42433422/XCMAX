@@ -173,8 +173,7 @@ def test_list_messages_authorization_success_and_errors() -> None:
 
 def test_post_message_relay_success_no_relay_and_errors() -> None:
     assert (
-        internal_im.im_post_message(1, BackgroundTasks(), {}, SimpleNamespace()).status_code
-        == 401
+        internal_im.im_post_message(1, BackgroundTasks(), {}, SimpleNamespace()).status_code == 401
     )
     service = MagicMock()
     service.send_message.return_value = {"message": {"id": 1}}
@@ -204,9 +203,7 @@ def test_post_message_relay_success_no_relay_and_errors() -> None:
     ):
         service.send_message.side_effect = error
         with _im_runtime(service):
-            response = internal_im.im_post_message(
-                1, BackgroundTasks(), {}, SimpleNamespace(id=7)
-            )
+            response = internal_im.im_post_message(1, BackgroundTasks(), {}, SimpleNamespace(id=7))
         assert response.status_code == status
 
 

@@ -145,7 +145,9 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
             if conv.is_direct:
                 peer_id = self._direct_peer_id(conv.id, user_id)
                 peer = self._db.get(User, int(peer_id)) if peer_id else None
-                title = self._display_name(peer_id) if peer_id else (conv.title or f"会话 #{conv.id}")
+                title = (
+                    self._display_name(peer_id) if peer_id else (conv.title or f"会话 #{conv.id}")
+                )
             else:
                 peer = None
                 title = conv.title or f"会话 #{conv.id}"
@@ -178,7 +180,9 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
     ) -> list[dict[str, Any]]:
         me = self._db.get(User, int(user_id))
         my_tenant = getattr(me, "tenant_id", None) if me else None
-        dedicated_cs = self._ensure_enterprise_dedicated_cs_user() if include_enterprise_dedicated_cs else None
+        dedicated_cs = (
+            self._ensure_enterprise_dedicated_cs_user() if include_enterprise_dedicated_cs else None
+        )
         dedicated_cs_id = (
             int(dedicated_cs.id) if dedicated_cs is not None and dedicated_cs.id else None
         )
@@ -213,9 +217,7 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
             or 0
         )
 
-    def _get_member(
-        self, conversation_id: int, user_id: int
-    ) -> ImConversationMember | None:
+    def _get_member(self, conversation_id: int, user_id: int) -> ImConversationMember | None:
         return cast(
             "ImConversationMember | None",
             self._db.execute(
@@ -277,9 +279,7 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
         if before_id:
             q = q.where(ImMessage.id < before_id)
         rows = (
-            self._db.execute(q.order_by(desc(ImMessage.id)).limit(min(limit, 100)))
-            .scalars()
-            .all()
+            self._db.execute(q.order_by(desc(ImMessage.id)).limit(min(limit, 100))).scalars().all()
         )
         rows = list(reversed(rows))
         names = self._display_name_map([m.sender_user_id for m in rows])
@@ -332,13 +332,9 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
             logger.debug("neuro_notify_im_message_sent skipped", exc_info=True)
         member_ids = self._member_user_ids(conversation_id)
         message = self._message_dict(msg, self._display_name(sender_user_id))
-        updated_at_ms = self._record_im_message_change(
-            message, actor=str(sender_user_id)
-        )
+        updated_at_ms = self._record_im_message_change(message, actor=str(sender_user_id))
         try:
-            self._maybe_push_cs_message(
-                conversation_id, sender_user_id, text, member_ids
-            )
+            self._maybe_push_cs_message(conversation_id, sender_user_id, text, member_ids)
         except RECOVERABLE_ERRORS:
             logger.debug("cs push skipped", exc_info=True)
         return {
@@ -413,9 +409,7 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
                 except RECOVERABLE_ERRORS:
                     logger.debug("cs inbox push failed", exc_info=True)
 
-    def mark_read(
-        self, conversation_id: int, user_id: int, last_message_id: int
-    ) -> dict[str, Any]:
+    def mark_read(self, conversation_id: int, user_id: int, last_message_id: int) -> dict[str, Any]:
         member = self._get_member(conversation_id, user_id)
         if not member:
             raise PermissionError("非会话成员")

@@ -62,17 +62,13 @@ def im_unread_total(
     try:
         items = ImApplicationService(db).list_conversations(
             _uid(user),
-            include_enterprise_dedicated_cs=not _is_admin_customer_service_session(
-                request, db
-            ),
+            include_enterprise_dedicated_cs=not _is_admin_customer_service_session(request, db),
         )
         total = sum(int(c.get("unread_count") or 0) for c in items)
         return {"success": True, "unread_total": total}
     except RECOVERABLE_ERRORS:
         logger.exception("im_unread_total")
-        return JSONResponse(
-            {"success": False, "message": _IM_UNAVAILABLE}, status_code=500
-        )
+        return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)
     finally:
         db.close()
 
@@ -91,9 +87,7 @@ def im_cs_inbox(request: Request, user: CurrentUser = Depends(require_identified
         return {"success": True, "conversations": items}
     except RECOVERABLE_ERRORS:
         logger.exception("im_cs_inbox")
-        return JSONResponse(
-            {"success": False, "message": _IM_UNAVAILABLE}, status_code=500
-        )
+        return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)
     finally:
         db.close()
 
@@ -116,9 +110,7 @@ def im_cs_inbox_messages(
         return {"success": True, "messages": messages}
     except RECOVERABLE_ERRORS:
         logger.exception("im_cs_inbox_messages")
-        return JSONResponse(
-            {"success": False, "message": _IM_UNAVAILABLE}, status_code=500
-        )
+        return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)
     finally:
         db.close()
 
@@ -140,9 +132,7 @@ def im_cs_inbox_reply(
             )
         text = str(body.get("body") or "").strip()
         if not text:
-            return JSONResponse(
-                {"success": False, "message": "消息不能为空"}, status_code=400
-            )
+            return JSONResponse({"success": False, "message": "消息不能为空"}, status_code=400)
         from app.application.enterprise_cs_automation import (
             EnterpriseCsAutomationService,
         )
@@ -159,14 +149,10 @@ def im_cs_inbox_reply(
         )
         return {"success": True, **result}
     except (ValueError, PermissionError):
-        return JSONResponse(
-            {"success": False, "message": "消息参数无效"}, status_code=400
-        )
+        return JSONResponse({"success": False, "message": "消息参数无效"}, status_code=400)
     except RECOVERABLE_ERRORS:
         logger.exception("im_cs_inbox_reply")
-        return JSONResponse(
-            {"success": False, "message": _IM_UNAVAILABLE}, status_code=500
-        )
+        return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)
     finally:
         db.close()
 
@@ -201,8 +187,6 @@ def im_cs_inbox_mode(
         return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
     except RECOVERABLE_ERRORS:
         logger.exception("im_cs_inbox_mode")
-        return JSONResponse(
-            {"success": False, "message": _IM_UNAVAILABLE}, status_code=500
-        )
+        return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)
     finally:
         db.close()

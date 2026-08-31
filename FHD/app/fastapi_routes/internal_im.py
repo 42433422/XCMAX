@@ -67,9 +67,7 @@ async def internal_employee_message(
     expected = _internal_api_key()
     provided = (request.headers.get("X-Internal-Api-Key") or "").strip()
     if not expected or provided != expected:
-        return JSONResponse(
-            {"success": False, "message": "unauthorized"}, status_code=401
-        )
+        return JSONResponse({"success": False, "message": "unauthorized"}, status_code=401)
     try:
         boss_user_id = int(body.get("boss_user_id") or body.get("user_id") or 0)
     except (TypeError, ValueError):
@@ -95,9 +93,7 @@ async def internal_employee_message(
         finally:
             db.close()
         if not result:
-            return JSONResponse(
-                {"success": False, "message": "post failed"}, status_code=400
-            )
+            return JSONResponse({"success": False, "message": "post failed"}, status_code=400)
         # 实时推送（best-effort，不可用也不影响：消息已落库并经 sync 投递）。
         try:
             from app.infrastructure.im.ws_hub import im_ws_hub
@@ -123,9 +119,7 @@ async def internal_employee_message(
         return {"success": True, **result}
     except RECOVERABLE_ERRORS:
         logger.exception("internal_employee_message")
-        return JSONResponse(
-            {"success": False, "message": "服务器内部错误"}, status_code=500
-        )
+        return JSONResponse({"success": False, "message": "服务器内部错误"}, status_code=500)
 
 
 # ── 手机 IM 屏所需端点（精简 router 内置，绕开 im_routes 依赖链，保证陈旧部署可用）──
@@ -145,9 +139,7 @@ def im_list_conversations(user: Any = Depends(get_mobile_user)) -> Any:
         }
     except RECOVERABLE_ERRORS:
         logger.exception("im_list_conversations")
-        return JSONResponse(
-            {"success": False, "message": "服务器内部错误"}, status_code=500
-        )
+        return JSONResponse({"success": False, "message": "服务器内部错误"}, status_code=500)
     finally:
         db.close()
 
@@ -161,9 +153,7 @@ def im_create_direct(
         return JSONResponse({"success": False, "message": "未授权"}, status_code=401)
     peer = int(body.get("peer_user_id") or 0)
     if peer <= 0:
-        return JSONResponse(
-            {"success": False, "message": "peer_user_id 无效"}, status_code=400
-        )
+        return JSONResponse({"success": False, "message": "peer_user_id 无效"}, status_code=400)
     ensure_im_tables(get_host_engine())
     db = HostSessionLocal()
     try:
@@ -172,14 +162,10 @@ def im_create_direct(
             "conversation": ImApplicationService(db).get_or_create_direct(uid, peer),
         }
     except ValueError:
-        return JSONResponse(
-            {"success": False, "message": "请求参数无效"}, status_code=400
-        )
+        return JSONResponse({"success": False, "message": "请求参数无效"}, status_code=400)
     except RECOVERABLE_ERRORS:
         logger.exception("im_create_direct")
-        return JSONResponse(
-            {"success": False, "message": "服务器内部错误"}, status_code=500
-        )
+        return JSONResponse({"success": False, "message": "服务器内部错误"}, status_code=500)
     finally:
         db.close()
 
@@ -198,19 +184,13 @@ def im_list_messages(
     try:
         return {
             "success": True,
-            "messages": ImApplicationService(db).list_messages(
-                conversation_id, uid, limit=limit
-            ),
+            "messages": ImApplicationService(db).list_messages(conversation_id, uid, limit=limit),
         }
     except PermissionError:
-        return JSONResponse(
-            {"success": False, "message": "无权访问该会话"}, status_code=403
-        )
+        return JSONResponse({"success": False, "message": "无权访问该会话"}, status_code=403)
     except RECOVERABLE_ERRORS:
         logger.exception("im_list_messages")
-        return JSONResponse(
-            {"success": False, "message": "服务器内部错误"}, status_code=500
-        )
+        return JSONResponse({"success": False, "message": "服务器内部错误"}, status_code=500)
     finally:
         db.close()
 
@@ -235,9 +215,9 @@ def im_post_message(
             process_enterprise_cs_customer_message,
         )
 
-        is_enterprise_cs = EnterpriseCsAutomationService(
-            db
-        ).is_enterprise_cs_conversation(conversation_id, uid)
+        is_enterprise_cs = EnterpriseCsAutomationService(db).is_enterprise_cs_conversation(
+            conversation_id, uid
+        )
         result = svc.send_message(
             conversation_id,
             uid,
@@ -246,18 +226,12 @@ def im_post_message(
         )
         emp_id = svc.employee_id_for_conversation(conversation_id, uid)
     except PermissionError:
-        return JSONResponse(
-            {"success": False, "message": "无权访问该会话"}, status_code=403
-        )
+        return JSONResponse({"success": False, "message": "无权访问该会话"}, status_code=403)
     except ValueError:
-        return JSONResponse(
-            {"success": False, "message": "请求参数无效"}, status_code=400
-        )
+        return JSONResponse({"success": False, "message": "请求参数无效"}, status_code=400)
     except RECOVERABLE_ERRORS:
         logger.exception("im_post_message")
-        return JSONResponse(
-            {"success": False, "message": "服务器内部错误"}, status_code=500
-        )
+        return JSONResponse({"success": False, "message": "服务器内部错误"}, status_code=500)
     finally:
         db.close()
     # 入站回流：老板在某员工聊天页回复 → 回流成该员工最新 pending 问题的答案，解阻塞员工。
@@ -298,13 +272,9 @@ def im_mark_read(
             **ImApplicationService(db).mark_read(conversation_id, uid, last_id),
         }
     except PermissionError:
-        return JSONResponse(
-            {"success": False, "message": "无权访问该会话"}, status_code=403
-        )
+        return JSONResponse({"success": False, "message": "无权访问该会话"}, status_code=403)
     except RECOVERABLE_ERRORS:
         logger.exception("im_mark_read")
-        return JSONResponse(
-            {"success": False, "message": "服务器内部错误"}, status_code=500
-        )
+        return JSONResponse({"success": False, "message": "服务器内部错误"}, status_code=500)
     finally:
         db.close()

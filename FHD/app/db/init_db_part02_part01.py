@@ -22,9 +22,7 @@ def ensure_sqlite_rbac_bootstrap(
     from app.db.base import Base
     from app.db.models.permission import Permission, Role, role_permissions
 
-    real_engine = _facade()._resolve_auth_bootstrap_engine(
-        engine, database_url=database_url
-    )
+    real_engine = _facade()._resolve_auth_bootstrap_engine(engine, database_url=database_url)
     if real_engine is None or real_engine.dialect.name != "sqlite":
         return
     try:
@@ -45,9 +43,7 @@ def ensure_sqlite_rbac_bootstrap(
         _facade()._seed_sqlite_rbac_defaults(real_engine)
     except _facade().RECOVERABLE_ERRORS as exc:
         if swallow_errors:
-            _facade().logger.warning(
-                "ensure_sqlite_rbac_bootstrap 失败: %s", exc, exc_info=True
-            )
+            _facade().logger.warning("ensure_sqlite_rbac_bootstrap 失败: %s", exc, exc_info=True)
             return
         raise
 
@@ -81,9 +77,7 @@ def ensure_sqlite_inventory_bootstrap(
     from app.db.models.shipment import ShipmentRecord
     from app.db.models.tenant import Tenant
 
-    real_engine = _facade()._resolve_auth_bootstrap_engine(
-        engine, database_url=database_url
-    )
+    real_engine = _facade()._resolve_auth_bootstrap_engine(engine, database_url=database_url)
     if real_engine is None or real_engine.dialect.name != "sqlite":
         return
     try:
@@ -109,9 +103,7 @@ def ensure_sqlite_inventory_bootstrap(
         }
         if not needed.issubset(tables):
             missing = ", ".join(sorted(needed - tables))
-            _facade().logger.info(
-                "SQLite 缺少业务汇总表，正在通过 ORM 创建: %s", missing
-            )
+            _facade().logger.info("SQLite 缺少业务汇总表，正在通过 ORM 创建: %s", missing)
             Base.metadata.create_all(
                 real_engine,
                 tables=[
@@ -158,9 +150,7 @@ def ensure_sqlite_enterprise_business_bootstrap(
     from app.db.models.purchase_unit import PurchaseUnit
     from app.db.models.tenant import Tenant
 
-    real_engine = _facade()._resolve_auth_bootstrap_engine(
-        engine, database_url=database_url
-    )
+    real_engine = _facade()._resolve_auth_bootstrap_engine(engine, database_url=database_url)
     if real_engine is None or real_engine.dialect.name != "sqlite":
         return
     try:
@@ -211,9 +201,7 @@ def ensure_user_preferences_bootstrap(
     from app.db.base import Base
     from app.db.models.ai import UserPreference
 
-    real_engine = _facade()._resolve_auth_bootstrap_engine(
-        engine, database_url=database_url
-    )
+    real_engine = _facade()._resolve_auth_bootstrap_engine(engine, database_url=database_url)
     if real_engine is None:
         return
     try:
@@ -247,9 +235,7 @@ def ensure_neuro_event_log_bootstrap(
     from app.db.base import Base
     from app.db.models.neuro_event_log import NeuroEventLog
 
-    real_engine = _facade()._resolve_auth_bootstrap_engine(
-        engine, database_url=database_url
-    )
+    real_engine = _facade()._resolve_auth_bootstrap_engine(engine, database_url=database_url)
     if real_engine is None:
         return
     try:
@@ -294,9 +280,7 @@ def ensure_sqlite_im_bootstrap(
         ImMessage,
     )
 
-    real_engine = _facade()._resolve_auth_bootstrap_engine(
-        engine, database_url=database_url
-    )
+    real_engine = _facade()._resolve_auth_bootstrap_engine(engine, database_url=database_url)
     if real_engine is None or real_engine.dialect.name != "sqlite":
         return
     try:
@@ -327,9 +311,7 @@ def ensure_sqlite_im_bootstrap(
             )
     except _facade().RECOVERABLE_ERRORS as exc:
         if swallow_errors:
-            _facade().logger.warning(
-                "ensure_sqlite_im_bootstrap 失败: %s", exc, exc_info=True
-            )
+            _facade().logger.warning("ensure_sqlite_im_bootstrap 失败: %s", exc, exc_info=True)
             return
         raise
 
@@ -352,9 +334,7 @@ def ensure_employee_run_log_bootstrap(
     from app.db.base import Base
     from app.db.models.employee_run_log import EmployeeRunLog
 
-    real_engine = _facade()._resolve_auth_bootstrap_engine(
-        engine, database_url=database_url
-    )
+    real_engine = _facade()._resolve_auth_bootstrap_engine(engine, database_url=database_url)
     if real_engine is None:
         return
     try:
@@ -393,9 +373,7 @@ def ensure_ai_conversation_bootstrap(
     from app.db.base import Base
     from app.db.models.ai import AIConversation, AIConversationSession
 
-    real_engine = _facade()._resolve_auth_bootstrap_engine(
-        engine, database_url=database_url
-    )
+    real_engine = _facade()._resolve_auth_bootstrap_engine(engine, database_url=database_url)
     if real_engine is None:
         return
     try:
@@ -403,9 +381,7 @@ def ensure_ai_conversation_bootstrap(
         needed = {"ai_conversation_sessions", "ai_conversations"}
         missing = needed - tables
         if missing:
-            _facade().logger.info(
-                "缺少 AI 会话表 %s，正在通过 ORM 创建 …", sorted(missing)
-            )
+            _facade().logger.info("缺少 AI 会话表 %s，正在通过 ORM 创建 …", sorted(missing))
             Base.metadata.create_all(
                 real_engine,
                 tables=[

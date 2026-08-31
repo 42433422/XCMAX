@@ -822,9 +822,7 @@ class TestCsReply:
             result = svc.cs_reply(99, "hello")
 
         assert result == expected
-        mock_send.assert_called_once_with(
-            99, 7, "hello", origin="manual", operator_user_id=None
-        )
+        mock_send.assert_called_once_with(99, 7, "hello", origin="manual", operator_user_id=None)
 
 
 # ---------------------------------------------------------------------------

@@ -109,9 +109,7 @@ class EnterpriseCsAutomationService:
             "cs_last_operator_user_id": row.last_operator_user_id if row else None,
         }
 
-    def is_enterprise_cs_conversation(
-        self, conversation_id: int, customer_user_id: int
-    ) -> bool:
+    def is_enterprise_cs_conversation(self, conversation_id: int, customer_user_id: int) -> bool:
         from app.application.im_app_service import ImApplicationService
 
         svc = ImApplicationService(self._db)
@@ -174,15 +172,11 @@ class EnterpriseCsAutomationService:
         )
         return {
             "customer_user_id": int(customer_user_id),
-            "display_name": str(
-                getattr(user, "display_name", "") or getattr(user, "username", "")
-            ),
+            "display_name": str(getattr(user, "display_name", "") or getattr(user, "username", "")),
             "account_tier": str(getattr(user, "account_tier", "") or ""),
             "industry_id": str(getattr(user, "industry_id", "") or ""),
             "account_kind": str(getattr(latest_session, "account_kind", "") or ""),
-            "membership_tier": str(
-                getattr(latest_session, "market_membership_tier", "") or ""
-            ),
+            "membership_tier": str(getattr(latest_session, "market_membership_tier", "") or ""),
             "company_brand": str(getattr(latest_session, "company_brand", "") or ""),
         }
 
@@ -196,9 +190,7 @@ class EnterpriseCsAutomationService:
             {
                 "id": int(item.get("id") or 0),
                 "role": (
-                    "service"
-                    if int(item.get("sender_user_id") or 0) == int(cs_id)
-                    else "customer"
+                    "service" if int(item.get("sender_user_id") or 0) == int(cs_id) else "customer"
                 ),
                 "origin": str(item.get("origin") or "user"),
                 "body": str(item.get("body") or "")[:1200],
@@ -313,9 +305,7 @@ class EnterpriseCsAutomationService:
             return {
                 "handled": True,
                 "action": "transfer",
-                **self._transfer(
-                    conversation_id, reason="客服通道不可用", notify_customer=False
-                ),
+                **self._transfer(conversation_id, reason="客服通道不可用", notify_customer=False),
             }
         system_prompt = """你是企业软件客户支持AI，只处理低风险咨询并进行多轮澄清。
 只根据给定客户资料和真实会话回答，禁止编造价格、权益、付款、合同、交期、已执行动作或公司承诺。
@@ -353,10 +343,7 @@ class EnterpriseCsAutomationService:
             }
 
         self._db.refresh(row)
-        if (
-            int(row.last_customer_message_id or 0) != int(message_id)
-            or row.mode != "ai"
-        ):
+        if int(row.last_customer_message_id or 0) != int(message_id) or row.mode != "ai":
             return {
                 "handled": False,
                 "reason": "superseded",
@@ -371,15 +358,8 @@ class EnterpriseCsAutomationService:
             confidence = float(parsed.get("confidence") or 0)
         except (TypeError, ValueError):
             confidence = 0.0
-        if (
-            action != "reply"
-            or not reply
-            or confidence < 0.72
-            or risk in {"high", "critical"}
-        ):
-            reason = str(parsed.get("transfer_reason") or "AI置信度不足或风险较高")[
-                :1000
-            ]
+        if action != "reply" or not reply or confidence < 0.72 or risk in {"high", "critical"}:
+            reason = str(parsed.get("transfer_reason") or "AI置信度不足或风险较高")[:1000]
             return {
                 "handled": True,
                 "action": "transfer",

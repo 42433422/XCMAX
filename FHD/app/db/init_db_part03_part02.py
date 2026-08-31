@@ -82,17 +82,13 @@ def init_approval_tables(engine: _facade().Engine) -> None:
     try:
         Base.metadata.create_all(real_engine, tables=target_tables, checkfirst=True)
     except _facade().RECOVERABLE_ERRORS as exc:
-        _facade().logger.warning(
-            "approval 表 create_all 失败（继续尝试 ALTER 兼容）：%s", exc
-        )
+        _facade().logger.warning("approval 表 create_all 失败（继续尝试 ALTER 兼容）：%s", exc)
     try:
         insp = inspect(real_engine)
         if "approval_flows" in set(insp.get_table_names() or []):
             cols = {c["name"] for c in insp.get_columns("approval_flows")}
             if "business_type" not in cols:
-                _facade().logger.info(
-                    "approval_flows 缺少 business_type 列，开始补列 …"
-                )
+                _facade().logger.info("approval_flows 缺少 business_type 列，开始补列 …")
                 with real_engine.begin() as conn:
                     if real_engine.dialect.name == "postgresql":
                         conn.execute(

@@ -42,9 +42,7 @@ async def get_mobile_fixed_contacts(request: Request, user=Depends(get_mobile_us
         )
     from app.application.surface_contacts import mobile_fixed_contacts
 
-    return format_mobile_response(
-        data=mobile_fixed_contacts(_parent()._mobile_group_mode(request))
-    )
+    return format_mobile_response(data=mobile_fixed_contacts(_parent()._mobile_group_mode(request)))
 
 
 # ── 专属客服接口（企业版手机端） ──
@@ -105,9 +103,7 @@ async def post_cs_message(
             cs = svc._ensure_enterprise_dedicated_cs_user()
             if cs is None or int(cs.id) == uid:
                 return JSONResponse(
-                    format_mobile_response(
-                        None, "客服通道不可用", success=False, code=500
-                    ),
+                    format_mobile_response(None, "客服通道不可用", success=False, code=500),
                     status_code=500,
                 )
             conv = svc.get_or_create_direct(uid, int(cs.id))
@@ -176,9 +172,7 @@ async def get_cs_messages(
                     {
                         "messageId": str(m.get("id") or ""),
                         # 发送者是自己=user,否则=客服(运营者以 enterprise-cs 身份回复)。
-                        "sender": (
-                            "user" if int(m.get("sender_user_id") or 0) == uid else "cs"
-                        ),
+                        "sender": ("user" if int(m.get("sender_user_id") or 0) == uid else "cs"),
                         "body": str(m.get("body") or ""),
                         "timestamp": str(m.get("created_at") or ""),
                     }

@@ -17,9 +17,7 @@ class ImConversation(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     title: Mapped[str | None] = mapped_column(String(255))
     is_direct: Mapped[bool] = mapped_column(default=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.current_timestamp()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.current_timestamp())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         server_default=func.current_timestamp(),
@@ -39,9 +37,7 @@ class ImConversation(Base):
 
 class ImConversationMember(Base):
     __tablename__ = "im_conversation_members"
-    __table_args__ = (
-        UniqueConstraint("conversation_id", "user_id", name="uq_im_conv_member"),
-    )
+    __table_args__ = (UniqueConstraint("conversation_id", "user_id", name="uq_im_conv_member"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     conversation_id: Mapped[int] = mapped_column(
@@ -49,13 +45,9 @@ class ImConversationMember(Base):
     )
     user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     last_read_message_id: Mapped[int | None] = mapped_column(Integer, default=0)
-    joined_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.current_timestamp()
-    )
+    joined_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.current_timestamp())
 
-    conversation: Mapped[ImConversation] = relationship(
-        "ImConversation", back_populates="members"
-    )
+    conversation: Mapped[ImConversation] = relationship("ImConversation", back_populates="members")
 
 
 class ImMessage(Base):
@@ -73,16 +65,12 @@ class ImMessage(Base):
     # customer / ai / manual / system。客户端可忽略，管理端用来区分真实回复来源。
     origin: Mapped[str] = mapped_column(String(32), nullable=False, default="user")
     # 人工回复仍以 enterprise-cs 虚拟用户对客展示；实际操作人单独留痕。
-    operator_user_id: Mapped[int | None] = mapped_column(
-        Integer, nullable=True, index=True
-    )
+    operator_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.current_timestamp(), index=True
     )
 
-    conversation: Mapped[ImConversation] = relationship(
-        "ImConversation", back_populates="messages"
-    )
+    conversation: Mapped[ImConversation] = relationship("ImConversation", back_populates="messages")
 
 
 class ImCustomerServiceAutomationState(Base):
@@ -99,17 +87,11 @@ class ImCustomerServiceAutomationState(Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="ai_active")
     transfer_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
     summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    consecutive_failures: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0
-    )
-    last_customer_message_id: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0
-    )
+    consecutive_failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_customer_message_id: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     last_ai_message_id: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     last_operator_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.current_timestamp()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.current_timestamp())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         server_default=func.current_timestamp(),
