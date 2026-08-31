@@ -377,3 +377,14 @@ async def admin_start_impersonate(
         "impersonating_username": target_name,
         "bridge_token": create_impersonation_bridge_token(sid),
     }
+
+
+@_facade().router.get("/admin/customer-deliveries/trial", response_model=None)
+async def admin_list_trial_customer_deliveries(request: _facade().Request):
+    """读取 ¥99 体验账户（saas-trial-30）SSOT 聚合出的体验交付证据。"""
+
+    return await _facade()._market_admin_proxy(
+        request,
+        "GET",
+        "/api/admin/customer-deliveries/trial?limit=500",
+    )

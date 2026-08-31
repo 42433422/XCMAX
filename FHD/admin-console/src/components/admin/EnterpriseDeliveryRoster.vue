@@ -2,12 +2,18 @@
   <section class="enterprise-roster" aria-label="购买账户标准交付台账">
     <header class="enterprise-roster__head">
       <div>
-        <p>PURCHASED ACCOUNT DELIVERY SSOT</p>
-        <h3>购买账户标准交付台账</h3>
-        <span>内部本 Mac 不计交付；仅客户侧 macOS/Windows 安装并首次登录后自动完成。</span>
+        <p>{{ isTrial ? 'TRIAL ACCOUNT DELIVERY SSOT' : 'PURCHASED ACCOUNT DELIVERY SSOT' }}</p>
+        <h3>{{ isTrial ? '¥99 体验账户交付台账' : '购买账户标准交付台账' }}</h3>
+        <span>
+          {{
+            isTrial
+              ? '只读取 ¥99 体验（saas-trial-30）的有效账户；内部本 Mac 不计交付，仅客户侧安装并首次登录后自动完成。'
+              : '内部本 Mac 不计交付；仅客户侧 macOS/Windows 安装并首次登录后自动完成。'
+          }}
+        </span>
       </div>
       <div class="enterprise-roster__policy">
-        <strong>{{ deliveries.length }} 个永久账户</strong>
+        <strong>{{ deliveries.length }} 个{{ isTrial ? '体验账户' : '永久账户' }}</strong>
         <span :class="{ 'is-enabled': policy.internal_device_exclusion_enabled }">
           {{ policy.internal_device_exclusion_enabled
             ? `${policy.internal_device_ids_configured || 0} 台内部本机已排除`
@@ -31,7 +37,7 @@
     </div>
 
     <div v-if="!rows.length" class="enterprise-roster__empty">
-      {{ deliveries.length ? '没有符合筛选条件的标准交付' : '尚无有效的永久购买账户' }}
+      {{ deliveries.length ? '没有符合筛选条件的标准交付' : isTrial ? '尚无有效的体验账户' : '尚无有效的永久购买账户' }}
     </div>
 
     <div v-else class="enterprise-roster__grid">
@@ -44,7 +50,8 @@
         </div>
         <div class="enterprise-roster__plan">
           <strong>{{ delivery.plan.title }}</strong>
-          <span>{{ tierLabel(delivery.plan.account_tier) }} · 永久授权</span>
+          <span>{{ tierLabel(delivery.plan.account_tier) }} · {{ isTrial ? '30 天体验' : '永久授权' }}</span>
+          <small v-if="isTrial && delivery.expires_at">到期 {{ formatDate(delivery.expires_at) }}</small>
           <small v-if="delivery.order?.order_no">订单 {{ delivery.order.order_no }}</small>
         </div>
         <div class="enterprise-roster__proof">
@@ -82,11 +89,17 @@ import type {
   StandardDeliveryRecord,
 } from '@/api/xcmaxAdmin'
 
-const props = defineProps<{
-  deliveries: StandardDeliveryRecord[]
-  tickets: CustomDeliveryTicket[]
-  policy: StandardDeliveryPolicy
-}>()
+const props = withDefaults(
+  defineProps<{
+    deliveries: StandardDeliveryRecord[]
+    tickets: CustomDeliveryTicket[]
+    policy: StandardDeliveryPolicy
+    variant?: 'permanent' | 'trial'
+  }>(),
+  { variant: 'permanent' },
+)
+
+const isTrial = computed(() => props.variant === 'trial')
 
 const emit = defineEmits<{
   (event: 'open-custom', user: MarketAdminUser): void

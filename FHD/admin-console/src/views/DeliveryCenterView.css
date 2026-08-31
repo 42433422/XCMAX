@@ -32,6 +32,7 @@
 .delivery-stats article { position: relative; overflow: hidden; min-height: 92px; padding: 14px 16px; border: 1px solid rgba(196,214,233,.9); border-radius: 14px; background: rgba(255,255,255,.9); box-shadow: 0 8px 25px rgba(26,62,100,.055); }
 .delivery-stats article::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 3px; background: #84a9d0; }
 .delivery-stats .is-enterprise::before { background: #2f7ed7; }
+.delivery-stats .is-trial::before { background: #3aa6a6; }
 .delivery-stats .is-standard::before { background: #3b9b78; }
 .delivery-stats .is-custom::before { background: #e7903f; }
 .delivery-stats .is-production::before { background: #2f7ed7; }

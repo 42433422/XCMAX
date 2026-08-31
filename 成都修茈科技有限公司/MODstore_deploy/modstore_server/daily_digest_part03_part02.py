@@ -11,7 +11,7 @@ def _facade():
 
 
 def _digest_kpi_cards_html(
-    *, met_ok: int, met_fail: int, emp_n: int, ops_n: int, inc_n: int
+    *, met_ok: int, met_fail: int, emp_n: int, ops_n: int, inc_n: int, event_n: int
 ) -> str:
     """邮件顶部 KPI 卡片区：4 个核心指标，图标 + 大数字 + 顶部强调条 + 颜色编码。"""
     cards: _facade().List[str] = []
@@ -102,13 +102,13 @@ def _digest_kpi_cards_html(
         cards.append(
             _card(
                 "0",
-                "系统事件",
+                "待处理事件",
                 icon="&#x1F514;",
                 accent="#16a34a",
                 color="#047857",
                 bg="#ecfdf5",
                 border="#a7f3d0",
-                sub="无异常",
+                sub=f"事件总量 {event_n} 条",
                 sub_color="#16a34a",
             )
         )
@@ -116,13 +116,13 @@ def _digest_kpi_cards_html(
         cards.append(
             _card(
                 str(inc_n),
-                "系统事件",
+                "待处理事件",
                 icon="&#x1F514;",
                 accent="#ea580c",
                 color="#c2410c",
                 bg="#fff7ed",
                 border="#fed7aa",
-                sub="待处理",
+                sub=f"事件总量 {event_n} 条",
                 sub_color="#ea580c",
             )
         )

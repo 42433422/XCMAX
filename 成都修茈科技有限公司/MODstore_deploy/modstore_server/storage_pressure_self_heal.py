@@ -239,6 +239,7 @@ def _publish_unresolved_incident(result: Dict[str, Any]) -> bool:
         },
         source="storage-pressure-self-heal",
         fingerprint=f"storage-pressure:{result.get('status')}",
+        dedupe_minutes=24 * 60,
     )
 
 

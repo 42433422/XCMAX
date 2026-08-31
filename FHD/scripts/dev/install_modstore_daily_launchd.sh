@@ -30,6 +30,7 @@ RUNNER_COPY="${SUPPORT_DIR}/run_modstore_daily_local.sh"
 ANDROID_START_COPY="${SUPPORT_DIR}/start_android_emulator.sh"
 COMMAND_FILE="${SUPPORT_DIR}/run-modstore-daily.command"
 ENV_SNAPSHOT="${SUPPORT_DIR}/modstore-daily.env"
+LOCAL_SECRETS_ENV="${SUPPORT_DIR}/modstore-daily.secrets.env"
 LAUNCHER_OSA="${SUPPORT_DIR}/launch-modstore-daily.applescript"
 LOGIN_APP="${SUPPORT_DIR}/${LOGIN_ITEM_NAME}.app"
 RUNTIME_ROOT="${HOME}/XCMAX-runtime/modstore-daily"
@@ -175,6 +176,15 @@ if [[ ! -f "${RUNTIME_DB_PATH}" ]]; then
   fi
 fi
 chmod 600 "${RUNTIME_DB_PATH}" 2>/dev/null || true
+if [[ -f "${RUNTIME_DB_PATH}" && -f "${RUNTIME_DEPLOY_ROOT}/scripts/upgrade_database.py" ]]; then
+  log "升级日更数据库到当前 Alembic head"
+  (
+    cd "${RUNTIME_DEPLOY_ROOT}"
+    MODSTORE_DATABASE_URL="sqlite:////${RUNTIME_DB_PATH#/}" \
+      PYTHONPATH="${RUNTIME_DEPLOY_ROOT}:${RUNTIME_PACKAGES_ROOT}" \
+      "${FHD_ROOT}/.venv/bin/python" scripts/upgrade_database.py
+  )
+fi
 : > "${ENV_SNAPSHOT}"
 for f in \
   "${MODSTORE_DEPLOY_ROOT}/.env" \
@@ -196,6 +206,26 @@ set -a
 . "${ENV_SNAPSHOT}"
 set +a
 set -u
+if [[ -z "${MODSTORE_JWT_SECRET:-}" ]]; then
+  LOCAL_JWT_READY=0
+  if [[ -f "${LOCAL_SECRETS_ENV}" ]]; then
+    while IFS= read -r secret_line || [[ -n "${secret_line}" ]]; do
+      case "${secret_line}" in
+        MODSTORE_JWT_SECRET=?*) LOCAL_JWT_READY=1; break ;;
+      esac
+    done < "${LOCAL_SECRETS_ENV}"
+  fi
+  if [[ "${LOCAL_JWT_READY}" != "1" ]]; then
+    log "生成本机持久 JWT 密钥 → ${LOCAL_SECRETS_ENV}"
+    umask 077
+    JWT_SECRET_VALUE="$(openssl rand -hex 32)"
+    printf 'MODSTORE_JWT_SECRET=%s\n' "${JWT_SECRET_VALUE}" > "${LOCAL_SECRETS_ENV}"
+    unset JWT_SECRET_VALUE
+  fi
+  unset LOCAL_JWT_READY secret_line
+  chmod 600 "${LOCAL_SECRETS_ENV}"
+  _env_snapshot_append_file "${LOCAL_SECRETS_ENV}"
+fi
 _env_snapshot_put SMTP_HOST "${SMTP_HOST:-${MODSTORE_SMTP_HOST:-}}"
 _env_snapshot_put SMTP_PORT "${SMTP_PORT:-${MODSTORE_SMTP_PORT:-}}"
 _env_snapshot_put SMTP_USER "${SMTP_USER:-${MODSTORE_SMTP_USER:-}}"

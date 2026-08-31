@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
+from modstore_server.daily_digest_metrics import summarize_digest_events
 import importlib
 
 
@@ -43,17 +44,23 @@ def build_digest_html(
             .scalar()
             or 0
         )
-        inc_n = (
-            session.query(_facade().func.count(_facade().IncidentEvent.id))
+        event_rows = (
+            session.query(
+                _facade().IncidentEvent.id,
+                _facade().IncidentEvent.event_type,
+                _facade().IncidentEvent.fingerprint,
+            )
             .filter(_facade().IncidentEvent.created_at >= since)
-            .scalar()
-            or 0
+            .all()
         )
+        event_n, inc_n = summarize_digest_events(event_rows)
+        production_metric_filter = ~_facade().EmployeeExecutionMetric.task.like("[duty-burn-in:%")
         met_ok = (
             session.query(_facade().func.count(_facade().EmployeeExecutionMetric.id))
             .filter(
                 _facade().EmployeeExecutionMetric.created_at >= since,
                 _facade().EmployeeExecutionMetric.status == "success",
+                production_metric_filter,
             )
             .scalar()
             or 0
@@ -63,6 +70,7 @@ def build_digest_html(
             .filter(
                 _facade().EmployeeExecutionMetric.created_at >= since,
                 _facade().EmployeeExecutionMetric.status != "success",
+                production_metric_filter,
             )
             .scalar()
             or 0
@@ -75,6 +83,7 @@ def build_digest_html(
         emp_n=int(emp_n),
         ops_n=int(ops_n),
         inc_n=int(inc_n),
+        event_n=int(event_n),
     )
     consistency_block = _facade()._consistency_check_html(root)
     work_summary_html = _facade()._digest_system_work_summary_html(
@@ -88,6 +97,7 @@ def build_digest_html(
         met_fail=int(met_fail),
         ops_n=int(ops_n),
         inc_n=int(inc_n),
+        event_n=int(event_n),
         cursor_hits=int(cursor_hits),
     )
     briefs_block = ""
@@ -108,6 +118,7 @@ def build_digest_html(
         met_ok=int(met_ok),
         met_fail=int(met_fail),
         inc_n=int(inc_n),
+        event_n=int(event_n),
         emp_n=int(emp_n),
         ops_n=int(ops_n),
         cursor_hits=int(cursor_hits),

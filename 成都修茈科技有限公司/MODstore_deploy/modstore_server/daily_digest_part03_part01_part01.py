@@ -36,7 +36,14 @@ def _section_title(
 
 
 def _hero_overview_html(
-    *, met_ok: int, met_fail: int, inc_n: int, emp_n: int, ops_n: int, cursor_hits: int
+    *,
+    met_ok: int,
+    met_fail: int,
+    inc_n: int,
+    event_n: int,
+    emp_n: int,
+    ops_n: int,
+    cursor_hits: int,
 ) -> str:
     """页眉下方「今日总览」横幅：一句话给出健康结论 + 关键数字，开门见山。"""
     total = met_ok + met_fail
@@ -48,7 +55,9 @@ def _hero_overview_html(
     else:
         tone, verdict, dot = ("ok", "系统健康", "#16a34a")
     fg, bg, bd = _facade()._DIGEST_TONES[tone]
-    notes = [f"任务成功率 {rate}", f"系统事件 {inc_n} 条", f"{emp_n} 名编制在岗"]
+    notes = [f"任务成功率 {rate}", f"系统事件 {event_n} 条", f"{emp_n} 名编制在岗"]
+    if inc_n:
+        notes.append(f"待处理 {inc_n} 项")
     if ops_n:
         notes.append(f"运维操作 {ops_n} 条")
     if cursor_hits > 0:
@@ -63,7 +72,7 @@ def _hero_overview_html(
     stats = (
         '<table role="presentation" style="border-collapse:collapse"><tr>'
         + _stat(rate, "成功率", rate_color)
-        + _stat(str(inc_n), "异常", inc_color)
+        + _stat(str(inc_n), "待处理", inc_color)
         + _stat(str(emp_n), "在岗")
         + "</tr></table>"
     )

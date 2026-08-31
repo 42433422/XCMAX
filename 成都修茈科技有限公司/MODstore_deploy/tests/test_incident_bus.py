@@ -68,6 +68,19 @@ def test_publish_dedupes_within_window(fresh_db, monkeypatch):
     assert publish("on_error", {"summary": "dup-test"}, source="unit") is False
 
 
+def test_publish_accepts_extended_dedupe_window(fresh_db, monkeypatch):
+    monkeypatch.setattr("modstore_server.incident_bus._publish_stream_shadow", lambda *a, **k: None)
+    monkeypatch.setattr("modstore_server.incident_bus._dispatch_incident", lambda *a, **k: None)
+
+    kwargs = {
+        "source": "storage-pressure-self-heal",
+        "fingerprint": "storage-pressure:repair_failed",
+        "dedupe_minutes": 24 * 60,
+    }
+    assert publish("log.anomaly", {"status": "repair_failed"}, **kwargs) is True
+    assert publish("log.anomaly", {"status": "repair_failed"}, **kwargs) is False
+
+
 def test_employee_lifecycle_events_do_not_dispatch_back_to_employees(fresh_db, monkeypatch):
     sf = models.get_session_factory()
     with sf() as s:

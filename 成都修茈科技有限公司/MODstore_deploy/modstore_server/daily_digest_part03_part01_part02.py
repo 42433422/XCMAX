@@ -249,6 +249,7 @@ def _digest_system_work_summary_html(
     met_fail: int,
     ops_n: int,
     inc_n: int,
+    event_n: int,
     cursor_hits: int,
 ) -> str:
     """邮件「一、系统状态」：结构化键值对展示，替代原文段落。"""
@@ -283,9 +284,10 @@ def _digest_system_work_summary_html(
                 extra_style="" if met_fail == 0 else "background:#fef2f2",
             ),
             _kv_row("运维操作记录", f"{ops_n} 条"),
+            _kv_row("系统事件总量", f"{event_n} 条"),
             _kv_row(
-                "系统事件",
-                f"{inc_n} 条",
+                "待处理事件",
+                f"{inc_n} 项",
                 extra_style="" if inc_n == 0 else "background:#fffbeb",
             ),
         ]
