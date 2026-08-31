@@ -7,6 +7,7 @@ SOURCE_ROOT="${XCMAX_SOURCE_ROOT:-/root/XCMAX}"
 RELEASE_BASE="${XCMAX_RELEASE_BASE:-/opt/xcmax}"
 RELEASES_DIR="${RELEASE_BASE%/}/releases"
 CURRENT_LINK="${XCMAX_CURRENT_LINK:-${RELEASE_BASE}/current}"
+CLI_LAUNCHER_PATH="${XCMAX_CLI_LAUNCHER_PATH:-/usr/local/bin/xcmax-terminal}"
 RUNTIME_DIR="${MODSTORE_RUNTIME_DIR:-${RELEASE_BASE}/runtime}"
 SITE_LINK="${XCMAX_SITE_LINK:-/root/成都修茈科技有限公司}"
 PUBLIC_SITE_STATE_DIR="${XCMAX_PUBLIC_SITE_STATE_DIR:-/var/lib/xcmax-public}"
@@ -67,6 +68,7 @@ resolve_java_home() {
 [[ "$RELEASE_BASE" == /opt/xcmax || "${XCMAX_ALLOW_CUSTOM_RELEASE_BASE:-0}" == 1 ]] \
   || fail "custom release base requires XCMAX_ALLOW_CUSTOM_RELEASE_BASE=1"
 [[ "$RELEASE_BASE" == /* ]] || fail "XCMAX_RELEASE_BASE must be an absolute path"
+[[ "$CLI_LAUNCHER_PATH" == /* ]] || fail "XCMAX_CLI_LAUNCHER_PATH must be an absolute path"
 [[ "$RUNTIME_DIR" == /* ]] || fail "MODSTORE_RUNTIME_DIR must be an absolute path"
 [[ "$RELEASES_TO_KEEP" =~ ^[0-9]+$ ]] && (( RELEASES_TO_KEEP >= 2 )) \
   || fail "XCMAX_RELEASES_TO_KEEP must be an integer greater than or equal to 2"
@@ -545,6 +547,40 @@ EOF
   fi
 }
 
+install_cli_launcher() {
+  local launcher_dir=""
+  local launcher_tmp=""
+  launcher_dir="$(dirname "$CLI_LAUNCHER_PATH")"
+  launcher_tmp="${CLI_LAUNCHER_PATH}.tmp.$$"
+  install -d -m 755 "$launcher_dir"
+  cat > "$launcher_tmp" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+exec "${CURRENT_LINK}/${MODSTORE_SUBDIR}/.venv/bin/python" \
+  "${CURRENT_LINK}/${MODSTORE_SUBDIR}/scripts/xcmax_terminal.py" "\$@"
+EOF
+  chmod 755 "$launcher_tmp"
+  mv -f "$launcher_tmp" "$CLI_LAUNCHER_PATH"
+}
+
+verify_cli_identity() {
+  local cli_payload=""
+  cli_payload="$("$CLI_LAUNCHER_PATH" version --json)" || return 1
+  CLI_PAYLOAD="$cli_payload" python3 - "$TARGET_SHA" "$EXPECTED_ARTIFACT_SHA" <<'PY'
+import json
+import os
+import sys
+
+expected_sha, expected_artifact = sys.argv[1:]
+payload = json.loads(os.environ["CLI_PAYLOAD"])
+metrics = payload.get("metrics") or {}
+assert payload.get("ok") is True
+assert payload.get("read_only") is True
+assert metrics.get("git_sha") == expected_sha
+assert metrics.get("artifact_sha256") == expected_artifact
+PY
+}
+
 verify_health_identity() {
   local url="$1"
   local expected_sha="$2"
@@ -647,6 +683,7 @@ ln -s "$FINAL_ROOT" "${CURRENT_LINK}.next"
 mv -Tf "${CURRENT_LINK}.next" "$CURRENT_LINK"
 ln -s "${CURRENT_LINK}/${SITE_SUBDIR}" "${SITE_LINK}.next"
 mv -Tf "${SITE_LINK}.next" "$SITE_LINK"
+install_cli_launcher
 write_service_units
 systemctl daemon-reload
 systemctl enable modstore.service modstore-scheduler.service >/dev/null
@@ -703,6 +740,11 @@ done
 if [[ "$RECONCILER_READY" != 1 ]]; then
   rollback
   fail "customer value reconciler did not prove a successful authoritative run"
+fi
+
+if ! verify_cli_identity; then
+  rollback
+  fail "xcmax-terminal exact-SHA identity verification failed"
 fi
 
 if [[ -n "$PUBLIC_HEALTH_URL" ]] \

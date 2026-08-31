@@ -4,19 +4,18 @@ XC 统一诊断终端是一条服务器 CLI 只读快速通道，用来定位账
 
 ## 服务器快捷模式
 
-在当前发布目录运行：
+生产发布会安装稳定入口 `/usr/local/bin/xcmax-terminal`，直接运行：
 
 ```bash
-cd /opt/xcmax/current/成都修茈科技有限公司/MODstore_deploy
-python3 scripts/xcmax_terminal.py doctor
-python3 scripts/xcmax_terminal.py problems
-python3 scripts/xcmax_terminal.py find 登录 --limit 20
-python3 scripts/xcmax_terminal.py account SUNBIRD --json
-python3 scripts/xcmax_terminal.py logs error --limit 20
-python3 scripts/xcmax_terminal.py --openapi-url http://127.0.0.1:8791/openapi.json routes health
+xcmax-terminal doctor
+xcmax-terminal problems
+xcmax-terminal find 登录 --limit 20
+xcmax-terminal account SUNBIRD --json
+xcmax-terminal logs error --limit 20
+xcmax-terminal --openapi-url http://127.0.0.1:8791/openapi.json routes health
 ```
 
-如果已按 Python 项目安装，也可直接运行 `xcmax-terminal`。CLI 会读取项目环境以及 `/etc/xcmax/modstore.env`、`/etc/xcmax/modstore-release.env`；也可以用 `--env-file` 指定环境。没有明确数据库配置时会拒绝落到默认 SQLite，避免查错库。
+在仓库开发环境中可以执行 `.venv/bin/python scripts/xcmax_terminal.py`；即使误用系统 `python3`，入口也会自动切换到项目 `.venv`。CLI 会读取项目环境以及 `/etc/xcmax/modstore.env`、`/etc/xcmax/modstore-release.env`；也可以用 `--env-file` 指定环境。没有明确数据库配置时会拒绝落到默认 SQLite，避免查错库。
 
 需要校验操作人时使用 `--actor <管理员账号>`。`--json` 输出机器可读结果。退出码为：`0` 正常或需关注、`1` 发现降级问题、`2` 命令或权限校验失败。
 
