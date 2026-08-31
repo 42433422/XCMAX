@@ -4,7 +4,7 @@
       <div>
         <p class="delivery-eyebrow">CUSTOMER DELIVERY CONTROL</p>
         <h2>客户交付中心</h2>
-        <p>购买账户 SSOT 驱动交付；内部本 Mac 永不计入，客户侧桌面安装并首次登录后自动完成。</p>
+        <p>所有企业用户统一进入交付台账；内部本 Mac 永不计入客户交付；购买权益、定制路径、安装与首次登录证据分别如实展示。</p>
       </div>
       <button type="button" class="delivery-refresh" :disabled="loading" @click="loadAll">
         <i class="fa fa-refresh" :class="{ 'fa-spin': loading }" aria-hidden="true"></i>
@@ -20,7 +20,14 @@
       </article>
     </section>
 
-    <EntitlementFastLanePanel @changed="loadAll" />
+    <EnterpriseCustomerRoster
+      v-if="!errorMessage && (!loading || enterpriseUsers.length)"
+      :users="enterpriseUsers"
+      :tickets="tickets"
+      :permanent-deliveries="standardDeliveries"
+      :trial-deliveries="trialDeliveries"
+      @open-custom="focusCustomDeliveries"
+    />
 
     <EnterpriseDeliveryRoster
       v-if="!errorMessage && (!loading || standardDeliveries.length)"
@@ -62,7 +69,7 @@
       <button type="button" @click="loadAll">重试</button>
     </div>
 
-    <div v-else-if="loading && !tickets.length && !standardDeliveries.length" class="delivery-empty">
+    <div v-else-if="loading && !tickets.length && !enterpriseUsers.length && !standardDeliveries.length" class="delivery-empty">
       <i class="fa fa-circle-o-notch fa-spin" aria-hidden="true"></i>
       <strong>正在汇总客户交付证据</strong>
       <span>会同时读取客户身份、生产运行、质量门和安装回执。</span>
@@ -71,7 +78,7 @@
     <div v-else-if="!filteredTickets.length" class="delivery-empty">
       <i class="fa fa-inbox" aria-hidden="true"></i>
       <strong>{{ tickets.length ? '没有符合筛选条件的定制工单' : '暂无定制交付工单' }}</strong>
-      <span>首次定制交付前的开发免费；首次交付完成后新增需求才进入报价付款。</span>
+      <span>无需定制的企业用户仍在上方企业客户台账中；首次交付后新增需求才进入报价付款。</span>
     </div>
 
     <section v-else class="delivery-list" aria-label="客户交付列表">
@@ -205,7 +212,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import DeliveryCommercePanel from '../components/admin/DeliveryCommercePanel.vue'
-import EntitlementFastLanePanel from '../components/admin/EntitlementFastLanePanel.vue'
+import EnterpriseCustomerRoster from '../components/admin/EnterpriseCustomerRoster.vue'
 import EnterpriseDeliveryRoster from '../components/admin/EnterpriseDeliveryRoster.vue'
 import {
   xcmaxAdminApi,
@@ -216,9 +223,11 @@ import {
   type StandardDeliveryPolicy,
   type StandardDeliveryRecord,
 } from '@/api/xcmaxAdmin'
+import { fetchAllEnterpriseUsers } from '../utils/deliveryEnterpriseRoster'
 import { appAlert, appConfirm } from '@/utils/appDialog'
 
 const tickets = ref<CustomDeliveryTicket[]>([])
+const enterpriseUsers = ref<MarketAdminUser[]>([])
 const standardDeliveries = ref<StandardDeliveryRecord[]>([])
 const trialDeliveries = ref<StandardDeliveryRecord[]>([])
 const standardPolicy = ref<StandardDeliveryPolicy>({})
@@ -275,11 +284,12 @@ const filteredTickets = computed(() => {
 const summaryCards = computed(() => {
   const count = (stages: string[]) => tickets.value.filter((ticket) => stages.includes(stageOf(ticket))).length
   return [
-    { key: 'enterprise', label: '永久购买账户', value: standardDeliveries.value.length, hint: '来源：购买账户 SSOT' },
+    { key: 'enterprise', label: '企业用户', value: enterpriseUsers.value.length, hint: '全部渲染企业卡片' },
+    { key: 'permanent', label: '永久购买账户', value: standardDeliveries.value.length, hint: '来源：购买账户 SSOT' },
     { key: 'trial', label: '体验账户', value: trialDeliveries.value.length, hint: '¥99 · 30 天全功能体验' },
-    { key: 'standard', label: '标准交付待安装', value: standardDeliveries.value.filter((row) => row.status === 'pending_install').length, hint: 'Mac / Windows 通用安装包' },
+    { key: 'standard', label: '永久待安装', value: standardDeliveries.value.filter((row) => row.status === 'pending_install').length, hint: 'Mac / Windows 通用安装包' },
     { key: 'receipt', label: '待首次登录', value: standardDeliveries.value.filter((row) => row.status === 'pending_first_login').length, hint: '安装成功，等待账号登录' },
-    { key: 'done', label: '标准交付完成', value: standardDeliveries.value.filter((row) => row.status === 'completed').length, hint: '客户设备安装 + 首次登录' },
+    { key: 'done', label: '永久交付完成', value: standardDeliveries.value.filter((row) => row.status === 'completed').length, hint: '客户设备安装 + 首次登录' },
     { key: 'internal', label: '内部本机排除', value: standardPolicy.value.internal_device_ids_configured || 0, hint: standardPolicy.value.internal_device_exclusion_enabled ? '已登记，不计客户交付' : '尚未登记内部设备' },
     { key: 'custom', label: '定制交付工单', value: tickets.value.length, hint: '首次内含 / 交付后新增' },
     { key: 'production', label: '生产进行中', value: count(['queued', 'production']), hint: '等待产物与质量证据' },
@@ -313,21 +323,24 @@ async function loadAll() {
   loading.value = true
   errorMessage.value = ''
   try {
-    const [deliveryResult, standardResult, trialResult] = await Promise.all([
+    const [deliveryResult, enterpriseAccounts, standardResult, trialResult] = await Promise.all([
       xcmaxAdminApi.listCustomDeliveries(100),
+      fetchAllEnterpriseUsers(),
       xcmaxAdminApi.listStandardDeliveries(),
       xcmaxAdminApi.listTrialDeliveries(),
     ])
     tickets.value = extractTickets(deliveryResult)
+    enterpriseUsers.value = enterpriseAccounts
     standardDeliveries.value = extractStandardDeliveries(standardResult)
     trialDeliveries.value = extractStandardDeliveries(trialResult)
     standardPolicy.value = extractStandardPolicy(standardResult)
     trialPolicy.value = extractStandardPolicy(trialResult)
     usersById.value = new Map(
-      [...standardDeliveries.value, ...trialDeliveries.value].map((row) => [
-        Number(row.account.id),
-        row.account,
-      ]),
+      [
+        ...enterpriseAccounts,
+        ...standardDeliveries.value.map((row) => row.account),
+        ...trialDeliveries.value.map((row) => row.account),
+      ].map((account) => [Number(account.id), account]),
     )
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : String(error)
