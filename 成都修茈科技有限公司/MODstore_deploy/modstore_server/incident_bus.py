@@ -121,8 +121,9 @@ def publish(
     *,
     source: str,
     fingerprint: str | None = None,
+    dedupe_minutes: int = 10,
 ) -> bool:
-    """发布事件；近 10 分钟内相同 fingerprint 去重。返回是否新写入并派发。
+    """发布事件；在指定分钟窗口内按 fingerprint 去重。返回是否新写入并派发。
 
     2026-05 起：未注册的 ``event_type`` 不再被静默丢弃，而是被记入
     ``incident.unknown``（并在 payload 中保留原始 ``event_type``），从而让
@@ -139,7 +140,7 @@ def publish(
     fp = fingerprint or _fingerprint(payload, source)
     sf = get_session_factory()
     with sf() as session:
-        cutoff = datetime.now(UTC) - timedelta(minutes=10)
+        cutoff = datetime.now(UTC) - timedelta(minutes=max(0, int(dedupe_minutes)))
         old = (
             session.query(IncidentEvent)
             .filter(

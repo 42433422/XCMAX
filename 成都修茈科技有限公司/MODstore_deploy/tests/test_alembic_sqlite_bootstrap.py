@@ -29,4 +29,5 @@ def test_existing_sqlite_is_never_rebased_from_metadata() -> None:
         created = bootstrap_empty_sqlite(connection, _metadata_with_target())
 
         assert created is False
+        assert connection.in_transaction() is False
         assert sa.inspect(connection).has_table("target_table") is False

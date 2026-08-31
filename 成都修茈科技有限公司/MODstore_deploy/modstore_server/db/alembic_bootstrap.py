@@ -24,6 +24,10 @@ def bootstrap_empty_sqlite(connection: Connection, metadata: sa.MetaData) -> boo
         if str(name) != "alembic_version"
     }
     if existing:
+        # SQLite inspection starts an implicit SQLAlchemy 2.x transaction.
+        # Alembic must own the following migration transaction; otherwise the
+        # revision row and DDL are rolled back when this connection closes.
+        connection.commit()
         return False
     metadata.create_all(connection)
     # ``create_all`` opens an implicit SQLAlchemy 2.x transaction.  Alembic

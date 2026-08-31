@@ -31,6 +31,19 @@ def test_count_on_duty_employees_uses_duty_roster() -> None:
     assert count_on_duty_employees() == len(all_planned_employee_ids())
 
 
+def test_digest_event_summary_distinguishes_volume_from_incidents() -> None:
+    from modstore_server.daily_digest_metrics import summarize_digest_events
+
+    rows = [
+        SimpleNamespace(id=1, event_type="employee.task.done", fingerprint="ok-1"),
+        SimpleNamespace(id=2, event_type="git.push", fingerprint="ok-2"),
+        SimpleNamespace(id=3, event_type="log.anomaly", fingerprint="disk"),
+        SimpleNamespace(id=4, event_type="log.anomaly", fingerprint="disk"),
+    ]
+
+    assert summarize_digest_events(rows) == (4, 1)
+
+
 def test_build_digest_html_contains_sections(tmp_path, monkeypatch):
     models._engine = None
     models._SessionFactory = None

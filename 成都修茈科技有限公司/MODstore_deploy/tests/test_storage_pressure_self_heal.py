@@ -260,6 +260,18 @@ def test_unresolved_result_fails_scheduler_contract() -> None:
         self_heal.require_successful_storage_self_heal({"ok": False, "status": "pressure_persists"})
 
 
+def test_unresolved_incident_uses_daily_dedupe(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict] = []
+
+    def _capture(event_type, payload, **kwargs):
+        calls.append({"event_type": event_type, "payload": payload, **kwargs})
+        return True
+
+    monkeypatch.setattr("modstore_server.incident_bus.publish", _capture)
+    assert self_heal._publish_unresolved_incident({"status": "repair_failed", "after": {}})
+    assert calls[0]["dedupe_minutes"] == 24 * 60
+
+
 def test_scheduler_registration_tracks_startup_probe(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
