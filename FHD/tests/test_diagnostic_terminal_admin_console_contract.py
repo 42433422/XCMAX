@@ -22,9 +22,7 @@ def test_diagnostic_terminal_is_cli_only_in_admin_console() -> None:
 
 
 def test_diagnostic_terminal_is_cli_only_in_modstore() -> None:
-    router = (MODSTORE_ROOT / "market" / "src" / "router" / "index.ts").read_text(
-        encoding="utf-8"
-    )
+    router = (MODSTORE_ROOT / "market" / "src" / "router" / "index.ts").read_text(encoding="utf-8")
     app = (MODSTORE_ROOT / "market" / "src" / "App.vue").read_text(encoding="utf-8")
     sidebar = (
         MODSTORE_ROOT / "market" / "src" / "components" / "workbench" / "SidebarUserMenu.vue"
