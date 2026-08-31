@@ -1,13 +1,6 @@
 # XC 统一诊断终端
 
-XC 统一诊断终端是一条只读快速通道，用来在同一个入口定位账号、客户交付、调度任务、系统事件、受控错误日志、API 路由和部署版本。它不执行 Shell，也不修改套餐、订单、付款、交付或事件数据。
-
-## 网页入口
-
-- 主管理端：`https://www.xiu-ci.com/admin/diagnostic-terminal`
-- MODstore 运维端：`https://www.xiu-ci.com/market/admin/ops-terminal`
-
-页面打开后自动执行 `doctor`。也可点击常用命令、输入命令、用方向键浏览历史，或按 `Command/Ctrl + K` 聚焦输入框。结果可以复制或导出为 JSON。
+XC 统一诊断终端是一条服务器 CLI 只读快速通道，用来定位账号、客户交付、调度任务、系统事件、受控错误日志、API 路由和部署版本。它不提供管理端页面或专用 HTTP 接口，不执行 Shell，也不修改套餐、订单、付款、交付或事件数据。
 
 ## 服务器快捷模式
 
@@ -20,7 +13,7 @@ python3 scripts/xcmax_terminal.py problems
 python3 scripts/xcmax_terminal.py find 登录 --limit 20
 python3 scripts/xcmax_terminal.py account SUNBIRD --json
 python3 scripts/xcmax_terminal.py logs error --limit 20
-python3 scripts/xcmax_terminal.py routes health
+python3 scripts/xcmax_terminal.py --openapi-url http://127.0.0.1:8791/openapi.json routes health
 ```
 
 如果已按 Python 项目安装，也可直接运行 `xcmax-terminal`。CLI 会读取项目环境以及 `/etc/xcmax/modstore.env`、`/etc/xcmax/modstore-release.env`；也可以用 `--env-file` 指定环境。没有明确数据库配置时会拒绝落到默认 SQLite，避免查错库。
@@ -39,7 +32,7 @@ python3 scripts/xcmax_terminal.py routes health
 | `scheduler [关键词]` | 查询任务并区分 failing、stale、deferred |
 | `incidents [关键词]` | 查询系统事件账本 |
 | `logs [关键词]` | 查询事件、DLQ 和配置允许的错误日志 |
-| `routes [关键词]` | 查询在线 API 路由 |
+| `routes [关键词]` | 查询 `--openapi-url` 指定的本机 API 路由 |
 | `version` | 查询 SHA、发布标识和产物哈希 |
 | `help` | 查看命令帮助 |
 
@@ -48,5 +41,5 @@ python3 scripts/xcmax_terminal.py routes health
 - 命令由白名单解析器执行，长度、结果数量和参数均有限制；`shell`、任意路径及未知选项会被拒绝。
 - 日志只读取 `OPS_NGINX_ERROR_LOG`、`MODSTORE_APP_ERROR_LOG` 配置的文件，最多读取文件尾部 256 KiB。
 - 密码、令牌、Bearer、API key 等常见密钥形态在结果返回前脱敏。
-- 网页接口仅管理员可调用；服务端 CLI 可用 `--actor` 再校验管理员账号。
+- 不注册诊断页面或专用 HTTP 接口；服务端 CLI 可用 `--actor` 校验管理员账号。
 - `deferred` 表示策略等待，不等同于执行失败；体检会与 failing/stale 分开报告。

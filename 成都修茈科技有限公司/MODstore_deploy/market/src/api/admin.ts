@@ -77,7 +77,6 @@ export const admin = {
     }),
   adminListNoKeyEmployees: () => req('/api/admin/duty-graph/no-key-employees'),
   verifyAdminDigestCode: (code: string) => req('/api/auth/verify-admin-digest-code', { method: 'POST', body: JSON.stringify({ code }) }),
-  adminOpsSshHint: () => req('/api/admin/ops-ssh-hint'),
   adminOpsAuditLogs: (params?: { employee_id?: string; limit?: number }) => {
     const p = new URLSearchParams()
     if (params?.employee_id) p.set('employee_id', params.employee_id)

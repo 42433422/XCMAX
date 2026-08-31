@@ -27,7 +27,6 @@
       <router-link :to="{ name: 'ai-test-sandbox' }" class="wb-user-menu__item" role="menuitem" @click="close">AI 测试</router-link>
       <a href="/index.html" class="wb-user-menu__item" target="_blank" rel="noopener" role="menuitem" @click="close">官网首页</a>
       <button v-if="isAdmin" type="button" class="wb-user-menu__item" role="menuitem" @click="onAdmin">管理端</button>
-      <button v-if="isAdmin" type="button" class="wb-user-menu__item" role="menuitem" @click="onOpsTerminal">运维终端</button>
       <div class="wb-user-menu__divider" role="separator" />
       <button type="button" class="wb-user-menu__item wb-user-menu__item--danger" role="menuitem" @click="onLogout">退出登录</button>
     </div>
@@ -47,7 +46,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   settings: []
   admin: []
-  opsTerminal: []
   logout: []
 }>()
 
@@ -68,11 +66,6 @@ function onSettings() {
 function onAdmin() {
   close()
   emit('admin')
-}
-
-function onOpsTerminal() {
-  close()
-  emit('opsTerminal')
 }
 
 function onLogout() {

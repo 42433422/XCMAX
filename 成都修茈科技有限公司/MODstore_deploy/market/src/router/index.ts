@@ -339,12 +339,6 @@ const routes: RouteRecordRaw[] = [
     meta: { auth: true, admin: true },
   },
   {
-    path: '/admin/ops-terminal',
-    name: 'admin-ops-terminal',
-    component: () => import('../views/AdminOpsTerminalView.vue'),
-    meta: { auth: true, admin: true },
-  },
-  {
     path: '/checkout/:orderId',
     name: 'checkout',
     component: () => import('../views/PaymentCheckoutView.vue'),

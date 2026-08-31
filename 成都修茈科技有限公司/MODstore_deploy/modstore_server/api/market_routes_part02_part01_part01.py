@@ -17,20 +17,6 @@ def _facade():
     return importlib.import_module("modstore_server.api.market_routes")
 
 
-@_facade().router.get("/admin/ops-ssh-hint")
-def api_admin_ops_ssh_hint(
-    user: _facade().User = _facade().Depends(_facade()._require_admin),
-):
-    """运维终端 SSH 连接信息（仅管理员；凭据来自环境变量，勿写入前端）。"""
-    host = (_facade().os.environ.get("MODSTORE_OPS_SSH_HOST") or "119.27.178.147").strip()
-    user_name = (_facade().os.environ.get("MODSTORE_OPS_SSH_USER") or "root").strip()
-    password = (_facade().os.environ.get("MODSTORE_OPS_SSH_PASSWORD") or "").strip()
-    command = (
-        _facade().os.environ.get("MODSTORE_OPS_SSH_COMMAND") or ""
-    ).strip() or f"ssh -o StrictHostKeyChecking=no {user_name}@{host}"
-    return {"ok": True, "command": command, "password": password}
-
-
 @_facade().router.get("/wallet/balance")
 def api_wallet_balance(
     user: _facade().User = _facade().Depends(_facade()._get_current_user),

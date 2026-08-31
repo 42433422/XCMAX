@@ -68,7 +68,6 @@ function createTestRouter() {
       { path: '/admin/butler-skills', name: 'admin-butler-skills', component: Stub },
       { path: '/admin/duty-employees', name: 'admin-duty-employees', component: Stub },
       { path: '/admin/employee-autonomy', name: 'admin-employee-autonomy', component: Stub },
-      { path: '/admin/ops-terminal', name: 'admin-ops-terminal', component: Stub },
       {
         path: '/ai-test',
         component: Stub,

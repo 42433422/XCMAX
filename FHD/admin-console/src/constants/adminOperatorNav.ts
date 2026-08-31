@@ -11,7 +11,6 @@ export const ADMIN_OPERATOR_MENU_ITEMS: CoreMenuCatalogItem[] = [
   { key: 'founder-autonomy', name: '创始人状态', iconClass: 'fa-compass' },
   { key: 'automation-policy', name: '自动化方针', iconClass: 'fa-random' },
   { key: 'server-functions', name: '服务器功能模块', iconClass: 'fa-server' },
-  { key: 'diagnostic-terminal', name: '诊断终端', iconClass: 'fa-terminal' },
   { key: 'approval-hub', name: '自治审批中心', iconClass: 'fa-check-square-o' },
   { key: 'employee-autonomy', name: '员工自治', iconClass: 'fa-users' },
 ]
