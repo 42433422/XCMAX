@@ -102,7 +102,7 @@ def test_employee_lifecycle_events_do_not_dispatch_back_to_employees(fresh_db, m
     assert calls["n"] == 0
 
 
-def test_successful_task_event_only_dispatches_explicit_subscription(fresh_db, monkeypatch):
+def test_successful_task_event_skips_deterministic_duty_without_real_input(fresh_db, monkeypatch):
     sf = models.get_session_factory()
     with sf() as s:
         s.add(
@@ -170,7 +170,7 @@ def test_successful_task_event_only_dispatches_explicit_subscription(fresh_db, m
     )
 
     assert generic_calls == {"orchestrator": 0, "team": 0, "market": 0}
-    assert employee_calls == ["employee-planner"]
+    assert employee_calls == []
 
 
 def test_successful_task_event_without_subscription_is_record_only(fresh_db, monkeypatch):
@@ -342,6 +342,85 @@ def test_binding_only_workflow_signal_skips_generic_incident_fanout(
     assert publish(event_type, payload, source="workflow-signal-test")
     assert generic_calls == {"orchestrator": 0, "team": 0, "market": 0}
     assert employee_calls == []
+
+
+def test_reviewed_duty_binding_runs_after_generic_incident_team_claim(fresh_db, monkeypatch):
+    sf = models.get_session_factory()
+    with sf() as session:
+        session.add(
+            models.User(
+                username="reviewed_duty_admin",
+                password_hash="x",
+                email="reviewed-duty@example.com",
+                is_admin=True,
+            )
+        )
+        session.add(
+            models.EmployeeTriggerBinding(
+                employee_id="log-monitor-incident",
+                event_type="on_error",
+                is_active=True,
+            )
+        )
+        session.add(
+            models.EmployeeTriggerBinding(
+                employee_id="dbops-engineer",
+                event_type="on_error",
+                is_active=True,
+            )
+        )
+        session.add(
+            models.EmployeeTriggerBinding(
+                employee_id="modstore-backend-api",
+                event_type="on_error",
+                is_active=True,
+            )
+        )
+        session.commit()
+
+    employee_calls = []
+    monkeypatch.setattr(
+        "modstore_server.unified_autonomy_orchestrator.orchestrate_incident",
+        lambda _event_id: {"should_dispatch": True},
+    )
+    monkeypatch.setattr(
+        "modstore_server.incident_team_orchestrator.dispatch_incident_team",
+        lambda _event_id: {"claimed": True, "ok": True},
+    )
+    monkeypatch.setattr(
+        "modstore_server.employee_task_market.dispatch_incident_via_market",
+        lambda _event_id: (_ for _ in ()).throw(
+            AssertionError("reviewed duty event reached generic task market")
+        ),
+    )
+    monkeypatch.setattr(
+        "modstore_server.incident_bus._catalog_employee_ids",
+        lambda _session: {
+            "dbops-engineer",
+            "log-monitor-incident",
+            "modstore-backend-api",
+        },
+    )
+
+    def execute(employee_id, task, input_data, **kwargs):
+        employee_calls.append((employee_id, task, input_data, kwargs))
+        return {"ok": True}
+
+    monkeypatch.setattr("modstore_server.incident_bus.execute_employee_task", execute)
+    monkeypatch.setattr(
+        "modstore_server.node_coordinator.claim_incident_for_node",
+        lambda _event_id: {"claimed": True},
+    )
+    monkeypatch.setattr("modstore_server.incident_bus._publish_stream_shadow", lambda *a, **k: None)
+
+    assert publish(
+        "on_error",
+        {"summary": "nginx upstream unavailable", "type": "upstream_error"},
+        source="nginx_error_log",
+    )
+    assert [call[0] for call in employee_calls] == ["log-monitor-incident"]
+    assert employee_calls[0][2]["events"][0]["message"] == "nginx upstream unavailable"
+    assert employee_calls[0][3]["user_id"] == 0
 
 
 def test_sync_employee_trigger_bindings_from_yuangon(fresh_db):

@@ -276,6 +276,79 @@ def _enrich_customer_ticket_duty_input(
         payload["summary"] = summary
 
 
+def _enrich_operational_event_duty_input(
+    employee_id: str,
+    event_type: str,
+    source: str,
+    incident: Dict[str, Any],
+    payload: Dict[str, Any],
+) -> None:
+    """Translate a real operational event into deterministic employee input.
+
+    These mappings never use a burn-in fixture.  Every field is derived from the
+    persisted incident or immutable release receipt that caused the dispatch.
+    """
+
+    eid = str(employee_id or "").strip()
+    event = str(event_type or "").strip()
+    summary = str(
+        incident.get("summary")
+        or incident.get("hint")
+        or incident.get("snippet")
+        or incident.get("kind")
+        or event
+    ).strip()
+    if eid == "daily-orchestrator" and event == "schedule.tick":
+        observed_at = str(incident.get("at") or incident.get("observed_at") or "").strip()
+        kind = str(incident.get("kind") or "schedule-tick").strip()
+        item_id = f"{kind}:{observed_at or source or 'production'}"[:160]
+        payload["work_items"] = [
+            {
+                "id": item_id,
+                "priority": str(incident.get("priority") or "p2").strip().lower(),
+                "risk_level": str(incident.get("risk_level") or "low").strip().lower(),
+                "blocked_by": [],
+                "acceptance": [summary[:300]],
+            }
+        ]
+    elif eid == "log-monitor-incident" and event in {"log.anomaly", "on_error"}:
+        payload["events"] = [
+            {
+                "service": str(incident.get("service") or source or "platform")[:160],
+                "error_type": str(incident.get("error_type") or incident.get("type") or event)[
+                    :160
+                ],
+                "message": summary[:1000],
+                "observed_at": str(incident.get("observed_at") or incident.get("at") or "")[:64],
+            }
+        ]
+    elif eid == "push-update-context-officer" and event == "git.push":
+        context = incident.get("update_context")
+        if isinstance(context, dict):
+            payload["update_context"] = dict(context)
+
+
+def _reviewed_direct_event_input_ready(employee_id: str, payload: Dict[str, Any]) -> bool:
+    """Fail closed when a deterministic handler's declared real input is absent."""
+
+    manifest = load_reviewed_duty_manifest(employee_id)
+    config = manifest.get("employee_config_v2")
+    config = config if isinstance(config, dict) else {}
+    actions = config.get("actions") if isinstance(config.get("actions"), dict) else {}
+    raw_handlers = actions.get("handlers")
+    handlers = (
+        [str(item).strip() for item in raw_handlers] if isinstance(raw_handlers, list) else []
+    )
+    if "direct_python" not in handlers:
+        return True
+    direct = actions.get("direct_python") if isinstance(actions.get("direct_python"), dict) else {}
+    if str(direct.get("implementation") or "").strip() != "employee_module":
+        return True
+    schema = direct.get("input_schema") if isinstance(direct.get("input_schema"), dict) else {}
+    required = schema.get("required") if isinstance(schema.get("required"), list) else []
+    return all(str(field).strip() and str(field).strip() in payload for field in required)
+
+
 def duty_event_execution_input(
     employee_id: str,
     *,
@@ -320,6 +393,14 @@ def duty_event_execution_input(
         "customer-service-sim",
     }:
         _enrich_customer_ticket_duty_input(employee_id, payload, incident_body)
+    _enrich_operational_event_duty_input(
+        employee_id,
+        str(event_type or "").strip(),
+        str(source or "").strip(),
+        incident_body,
+        payload,
+    )
+    payload["_duty_input_ready"] = _reviewed_direct_event_input_ready(employee_id, payload)
     return payload
 
 

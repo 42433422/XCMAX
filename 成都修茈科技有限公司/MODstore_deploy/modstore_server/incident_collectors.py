@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from datetime import UTC
@@ -137,38 +138,104 @@ _LAST_GIT_HEAD_SHA: str | None = None
 _LAST_CI_FAIL_HASH: str | None = None
 
 
-def collect_git_push_event() -> bool:
-    """检测仓库 HEAD 变化 → ``git.push`` 事件（本地 post-push 替代）。"""
-    global _LAST_GIT_HEAD_SHA
-    try:
-        import subprocess
+def _deployed_head_state_path() -> Path:
+    runtime = str(os.environ.get("MODSTORE_RUNTIME_DIR") or "").strip()
+    root = Path(runtime).expanduser() if runtime else Path.home() / ".xcmax" / "modstore-daily"
+    return root / "deployed-head-sha"
 
-        proc = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=str(repo_root()),
-            capture_output=True,
-            text=True,
-            timeout=10,
-            shell=False,
-        )
-    except RECOVERABLE_ERRORS:
+
+def _release_manifest() -> tuple[Path, dict]:
+    configured = str(os.environ.get("MODSTORE_RELEASE_MANIFEST") or "").strip()
+    path = (
+        Path(configured).expanduser()
+        if configured
+        else Path(str(os.environ.get("MODSTORE_REPO_ROOT") or repo_root())).expanduser()
+        / ".xcmax-release.json"
+    )
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return path, {}
+    return path, payload if isinstance(payload, dict) else {}
+
+
+def _previous_release_sha(manifest_path: Path, current_sha: str) -> str:
+    """Find the immediately preceding immutable release on first deployment."""
+
+    try:
+        current_release = manifest_path.resolve().parent
+        releases_root = current_release.parent
+        candidates: list[tuple[float, str]] = []
+        for path in releases_root.glob("*/.xcmax-release.json"):
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                sha = str(payload.get("git_sha") or "").strip().lower()
+                if len(sha) != 40 or sha == current_sha:
+                    continue
+                candidates.append((path.stat().st_mtime, sha))
+            except (OSError, json.JSONDecodeError):
+                continue
+        return max(candidates)[1] if candidates else ""
+    except (OSError, ValueError):
+        return ""
+
+
+def _read_previous_deployed_head(manifest_path: Path, current_sha: str) -> str:
+    path = _deployed_head_state_path()
+    try:
+        previous = path.read_text(encoding="utf-8").strip().lower()
+    except OSError:
+        previous = ""
+    if len(previous) == 40 and previous != current_sha:
+        return previous
+    return _previous_release_sha(manifest_path, current_sha) if not previous else ""
+
+
+def _remember_deployed_head(sha: str) -> None:
+    path = _deployed_head_state_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(sha + "\n", encoding="utf-8")
+    tmp.replace(path)
+
+
+def collect_git_push_event() -> bool:
+    """检测生产不可变发布 SHA 变化 → ``git.push`` 事件。
+
+    生产发布目录不包含 ``.git``，而且调度器会随发布重启。因此以签名发布
+    manifest 和持久化上次 SHA 为真相源，避免把每次真实发布当成“首次基线”吞掉。
+    """
+    global _LAST_GIT_HEAD_SHA
+    manifest_path, release = _release_manifest()
+    head = str(release.get("git_sha") or "").strip().lower()
+    if len(head) != 40 or any(char not in "0123456789abcdef" for char in head):
         return False
-    if proc.returncode != 0:
+    if head == _LAST_GIT_HEAD_SHA:
         return False
-    head = (proc.stdout or "").strip()
-    if not head or head == _LAST_GIT_HEAD_SHA:
-        return False
-    prev = _LAST_GIT_HEAD_SHA
+    prev = _LAST_GIT_HEAD_SHA or _read_previous_deployed_head(manifest_path, head)
     _LAST_GIT_HEAD_SHA = head
-    if prev is None:
-        # 首次启动只记录基准，不派发，避免每次重启刷一条事件
+    try:
+        _remember_deployed_head(head)
+    except OSError:
+        logger.exception("incident collector: persist deployed head failed")
+    if not prev or prev == head:
         return False
     return publish(
         "git.push",
         {
-            "summary": f"本地 HEAD 由 {prev[:10]} → {head[:10]}",
+            "summary": f"生产发布 SHA 由 {prev[:10]} → {head[:10]}",
             "prev_sha": prev,
             "head_sha": head,
+            "release_id": str(release.get("release_id") or head),
+            "update_context": {
+                "version": str(release.get("release_id") or head[:12]),
+                "branch": "production/immutable-release",
+                "commit_sha": head,
+                "git_clean": True,
+                "changes": [f"immutable release {prev[:10]} -> {head[:10]}"],
+                "rollback": f"git:{prev}",
+                "target_tier": "production",
+            },
         },
         source="git_local_head",
     )

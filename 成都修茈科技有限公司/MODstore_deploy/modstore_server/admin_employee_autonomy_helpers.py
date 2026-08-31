@@ -74,11 +74,15 @@ def _workforce_assignment_snapshot(planned: set[str]) -> Dict[str, Any]:
         load_reviewed_duty_manifest,
         workforce_contract_map,
     )
-    from modstore_server.employee_runtime import parse_employee_config_v2
+    from modstore_server.employee_runtime import (
+        parse_employee_config_v2,
+        reviewed_duty_runtime_issues,
+    )
 
     contracts = workforce_contract_map()
     assigned_ids: list[str] = []
     shell_ids: list[str] = []
+    invalid_handler_ids: list[str] = []
     for employee_id in sorted(planned):
         contract = (
             contracts.get(employee_id) if isinstance(contracts.get(employee_id), dict) else {}
@@ -112,10 +116,17 @@ def _workforce_assignment_snapshot(planned: set[str]) -> Dict[str, Any]:
             handlers = set()
         if not handlers or handlers.issubset(_HOLLOW_DUTY_HANDLERS):
             shell_ids.append(employee_id)
+        try:
+            if reviewed_duty_runtime_issues(employee_id):
+                invalid_handler_ids.append(employee_id)
+        except BOUNDARY_ERRORS:
+            invalid_handler_ids.append(employee_id)
 
     return {
         "assigned_count": len(assigned_ids),
         "assigned_employee_ids": assigned_ids,
         "shell_count": len(shell_ids),
         "shell_employee_ids": shell_ids,
+        "invalid_handler_count": len(invalid_handler_ids),
+        "invalid_handler_employee_ids": invalid_handler_ids,
     }
