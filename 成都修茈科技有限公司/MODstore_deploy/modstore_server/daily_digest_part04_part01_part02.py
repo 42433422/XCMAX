@@ -54,9 +54,7 @@ def build_digest_html(
             .all()
         )
         event_n, inc_n = summarize_digest_events(event_rows)
-        production_metric_filter = ~_facade().EmployeeExecutionMetric.task.like(
-            "[duty-burn-in:%"
-        )
+        production_metric_filter = ~_facade().EmployeeExecutionMetric.task.like("[duty-burn-in:%")
         met_ok = (
             session.query(_facade().func.count(_facade().EmployeeExecutionMetric.id))
             .filter(

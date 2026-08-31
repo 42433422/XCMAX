@@ -281,9 +281,7 @@ def list_standard_deliveries(
     db: Session = Depends(get_db),
     _user: User = Depends(require_admin),
 ):
-    return _delivery_response(
-        build_standard_delivery_rows(db), limit, "active_permanent_user_plan"
-    )
+    return _delivery_response(build_standard_delivery_rows(db), limit, "active_permanent_user_plan")
 
 
 @router.get("/trial")

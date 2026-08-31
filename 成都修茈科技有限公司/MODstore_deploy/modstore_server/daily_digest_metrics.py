@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
-
 # IncidentEvent is an append-only event ledger.  Only failure/escalation event
 # types are pending incidents; lifecycle signals such as git.push,
 # employee.task.done, backup.completed and schedule.tick remain useful event
