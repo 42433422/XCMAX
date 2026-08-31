@@ -125,7 +125,7 @@ def _apply_im_message(item: dict[str, Any]) -> None:
                     body=body[:4000],
                     origin=str(payload.get("origin") or "user")[:32],
                     operator_user_id=(
-                        int(payload.get("operator_user_id"))
+                        int(str(payload.get("operator_user_id")))
                         if payload.get("operator_user_id")
                         else None
                     ),
