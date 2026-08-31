@@ -229,7 +229,11 @@ class ImEmployeeMixin:
                             "im_unread_count": 0,
                         }
                 except RECOVERABLE_ERRORS:  # noqa: BLE001 - summary must tolerate one employee bootstrap failure
-                    logger.debug("get_or_create_direct failed for employee %s", eid, exc_info=True)
+                    logger.debug(
+                        "get_or_create_direct failed for employee %s",
+                        eid,
+                        exc_info=True,
+                    )
         return out
 
     def set_employee_owner(self, employee_id: str, owner_user_id: int) -> bool:
@@ -325,17 +329,24 @@ class ImEmployeeMixin:
             customer_id = self._direct_peer_id(int(conv.id), cs_id)
             if not customer_id:
                 continue
-            out.append(
-                {
-                    "id": int(conv.id),
-                    "customer_user_id": int(customer_id),
-                    "customer_name": self._display_name(int(customer_id)),
-                    "last_message_at": conv.last_message_at.isoformat()
-                    if conv.last_message_at
-                    else "",
-                    "unread_count": self._count_unread(int(conv.id), cs_id),
-                }
-            )
+            item = {
+                "id": int(conv.id),
+                "customer_user_id": int(customer_id),
+                "customer_name": self._display_name(int(customer_id)),
+                "last_message_at": (
+                    conv.last_message_at.isoformat() if conv.last_message_at else ""
+                ),
+                "unread_count": self._count_unread(int(conv.id), cs_id),
+            }
+            try:
+                from app.application.enterprise_cs_automation import (
+                    EnterpriseCsAutomationService,
+                )
+
+                item.update(EnterpriseCsAutomationService(self._db).public_state(int(conv.id)))
+            except RECOVERABLE_ERRORS:
+                logger.debug("cs automation state enrichment skipped", exc_info=True)
+            out.append(item)
         return out
 
     def cs_inbox_messages(self, conversation_id: int) -> list[dict[str, Any]]:
@@ -355,9 +366,25 @@ class ImEmployeeMixin:
             logger.debug("cs_inbox_messages mark_read skipped", exc_info=True)
         return cast("list[dict[str, Any]]", messages)
 
-    def cs_reply(self, conversation_id: int, body: str) -> dict[str, Any]:
+    def cs_reply(
+        self,
+        conversation_id: int,
+        body: str,
+        *,
+        origin: str = "manual",
+        operator_user_id: int | None = None,
+    ) -> dict[str, Any]:
         """Reply as the dedicated enterprise CS user."""
         cs_id = self.enterprise_cs_user_id()
         if cs_id is None:
             raise ValueError("客服通道不可用")
-        return cast("dict[str, Any]", self.send_message(conversation_id, cs_id, body))
+        return cast(
+            "dict[str, Any]",
+            self.send_message(
+                conversation_id,
+                cs_id,
+                body,
+                origin=origin,
+                operator_user_id=operator_user_id,
+            ),
+        )

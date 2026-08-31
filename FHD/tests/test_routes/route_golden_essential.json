@@ -128,6 +128,7 @@
   "/api/im/conversations/{conversation_id}/read",
   "/api/im/cs/inbox",
   "/api/im/cs/inbox/{conversation_id}/messages",
+  "/api/im/cs/inbox/{conversation_id}/mode",
   "/api/im/cs/inbox/{conversation_id}/reply",
   "/api/im/unread-total",
   "/api/internal/im/employee-message",

@@ -29,6 +29,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import BackgroundTasks
 
 
 @pytest.fixture(autouse=True, scope="module")
@@ -105,7 +106,10 @@ class TestPostCsMessage:
     async def test_unauthorized_returns_401(self, ext_mod):
         mock_request = MagicMock()
         result = await ext_mod.post_cs_message(
-            request=mock_request, body={"body": "hello"}, user=None
+            request=mock_request,
+            body={"body": "hello"},
+            background_tasks=BackgroundTasks(),
+            user=None,
         )
         assert result.status_code == 401
 
@@ -126,7 +130,10 @@ class TestPostCsMessage:
             patch("app.application.im_app_service.ImApplicationService", return_value=mock_svc),
         ):
             result = await ext_mod.post_cs_message(
-                request=mock_request, body={"body": "hello world"}, user=_mock_user()
+                request=mock_request,
+                body={"body": "hello world"},
+                background_tasks=BackgroundTasks(),
+                user=_mock_user(),
             )
         assert hasattr(result, "body") or isinstance(result, dict)
         if hasattr(result, "body"):
@@ -143,7 +150,12 @@ class TestPostCsMessage:
     @pytest.mark.asyncio
     async def test_authorized_empty_body(self, ext_mod):
         mock_request = MagicMock()
-        result = await ext_mod.post_cs_message(request=mock_request, body={}, user=_mock_user())
+        result = await ext_mod.post_cs_message(
+            request=mock_request,
+            body={},
+            background_tasks=BackgroundTasks(),
+            user=_mock_user(),
+        )
         # 空消息体应返回 400
         assert result.status_code == 400
 
@@ -153,6 +165,7 @@ class TestPostCsMessage:
         result = await ext_mod.post_cs_message(
             request=mock_request,
             body={"body": "msg", "extra": "ignored", "type": "text"},
+            background_tasks=BackgroundTasks(),
             user=_mock_user(),
         )
         assert hasattr(result, "body") or isinstance(result, dict)

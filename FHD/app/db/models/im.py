@@ -19,12 +19,16 @@ class ImConversation(Base):
     is_direct: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.current_timestamp())
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.current_timestamp(), onupdate=func.current_timestamp()
+        DateTime,
+        server_default=func.current_timestamp(),
+        onupdate=func.current_timestamp(),
     )
     last_message_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     members: Mapped[list[ImConversationMember]] = relationship(
-        "ImConversationMember", back_populates="conversation", cascade="all, delete-orphan"
+        "ImConversationMember",
+        back_populates="conversation",
+        cascade="all, delete-orphan",
     )
     messages: Mapped[list[ImMessage]] = relationship(
         "ImMessage", back_populates="conversation", cascade="all, delete-orphan"
@@ -51,12 +55,45 @@ class ImMessage(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     conversation_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("im_conversations.id", ondelete="CASCADE"), nullable=False, index=True
+        Integer,
+        ForeignKey("im_conversations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     sender_user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     body: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # customer / ai / manual / system。客户端可忽略，管理端用来区分真实回复来源。
+    origin: Mapped[str] = mapped_column(String(32), nullable=False, default="user")
+    # 人工回复仍以 enterprise-cs 虚拟用户对客展示；实际操作人单独留痕。
+    operator_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.current_timestamp(), index=True
     )
 
     conversation: Mapped[ImConversation] = relationship("ImConversation", back_populates="messages")
+
+
+class ImCustomerServiceAutomationState(Base):
+    """企业专属客服 AI/人工接待状态（管理端 SSOT）。"""
+
+    __tablename__ = "im_cs_automation_states"
+
+    conversation_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("im_conversations.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    mode: Mapped[str] = mapped_column(String(16), nullable=False, default="ai")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="ai_active")
+    transfer_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    consecutive_failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_customer_message_id: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_ai_message_id: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_operator_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.current_timestamp())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.current_timestamp(),
+        onupdate=func.current_timestamp(),
+    )

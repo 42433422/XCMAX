@@ -70,8 +70,11 @@
         :is-my-message="isMyMessage"
         :format-time="formatTime"
         :scroll-el="imChatDomRefs.scrollEl"
+        :cs-automation="activeCsConversation"
+        :cs-automation-busy="csAutomationBusy"
         @load-older="loadOlderMessages"
         @send="onSend"
+        @change-cs-mode="onChangeCsMode"
       />
       <main v-else class="im-chat im-chat--empty">
         <i class="fa fa-comment-o" aria-hidden="true"></i>
@@ -93,7 +96,7 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import {
   createDirectConversation,
   fetchCsInbox,
@@ -104,6 +107,7 @@ import {
   markImRead,
   replyCsInbox,
   sendImMessage,
+  updateCsInboxMode,
   type ImContact,
   type ImConversationSummary,
   type ImMessage,
@@ -159,6 +163,11 @@ const busy = ref(false)
 const hasMoreHistory = ref(false)
 const scrollEl = ref<HTMLElement | null>(null)
 const isAdminCustomerServiceConsole = ref(false)
+const csAutomationBusy = ref(false)
+const activeCsConversation = computed(() => {
+  const conv = conversations.value.find((item) => item.id === activeConversationId.value)
+  return conv?.is_cs_inbox ? conv : undefined
+})
 
 const { playIncoming, playOutgoing } = useImSounds()
 const { onImMessage, onImReadState } = useXcmaxSync()
@@ -477,6 +486,22 @@ async function onSend(): Promise<void> {
   }
 }
 
+async function onChangeCsMode(mode: 'ai' | 'human'): Promise<void> {
+  const conversation = activeCsConversation.value
+  if (!conversation || csAutomationBusy.value) return
+  csAutomationBusy.value = true
+  try {
+    const state = await updateCsInboxMode(conversation.id, mode)
+    Object.assign(conversation, state)
+    showAppToast(mode === 'human' ? '已人工接管该会话' : '已恢复 AI 自动接待', 'success')
+    await loadConversations()
+  } catch (error) {
+    showAppToast(error instanceof Error ? error.message : '切换接待模式失败', 'error')
+  } finally {
+    csAutomationBusy.value = false
+  }
+}
+
 function scheduleReconnect(): void {
   if (reconnectTimer) clearTimeout(reconnectTimer)
   const delay = Math.min(30_000, 1000 * 2 ** reconnectAttempt)
@@ -623,7 +648,6 @@ onUnmounted(() => {
   color: var(--xc-color-disabled, #9ca3af);
   line-height: 1.5;
 }
-
 </style>
 
 <style scoped src="./ImMessengerResponsive.css"></style>

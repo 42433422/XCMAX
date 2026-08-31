@@ -181,7 +181,9 @@ def ensure_sqlite_enterprise_business_bootstrap(
     except _facade().RECOVERABLE_ERRORS as exc:
         if swallow_errors:
             _facade().logger.warning(
-                "ensure_sqlite_enterprise_business_bootstrap 失败: %s", exc, exc_info=True
+                "ensure_sqlite_enterprise_business_bootstrap 失败: %s",
+                exc,
+                exc_info=True,
             )
             return
         raise
@@ -208,7 +210,9 @@ def ensure_user_preferences_bootstrap(
         if "user_preferences" not in tables:
             _facade().logger.info("缺少 user_preferences 表，正在通过 ORM 创建 …")
             Base.metadata.create_all(
-                real_engine, tables=[_facade()._orm_table(UserPreference)], checkfirst=True
+                real_engine,
+                tables=[_facade()._orm_table(UserPreference)],
+                checkfirst=True,
             )
     except _facade().RECOVERABLE_ERRORS as exc:
         if swallow_errors:
@@ -240,7 +244,9 @@ def ensure_neuro_event_log_bootstrap(
         if "neuro_event_log" not in tables:
             _facade().logger.info("缺少 neuro_event_log 表，正在通过 ORM 创建 …")
             Base.metadata.create_all(
-                real_engine, tables=[_facade()._orm_table(NeuroEventLog)], checkfirst=True
+                real_engine,
+                tables=[_facade()._orm_table(NeuroEventLog)],
+                checkfirst=True,
             )
     except _facade().RECOVERABLE_ERRORS as exc:
         if swallow_errors:
@@ -267,7 +273,12 @@ def ensure_sqlite_im_bootstrap(
 
     from app.db.base import Base
     from app.db.models.ai_employee import AiEmployeeProfile
-    from app.db.models.im import ImConversation, ImConversationMember, ImMessage
+    from app.db.models.im import (
+        ImConversation,
+        ImConversationMember,
+        ImCustomerServiceAutomationState,
+        ImMessage,
+    )
 
     real_engine = _facade()._resolve_auth_bootstrap_engine(engine, database_url=database_url)
     if real_engine is None or real_engine.dialect.name != "sqlite":
@@ -279,6 +290,7 @@ def ensure_sqlite_im_bootstrap(
             "im_conversations",
             "im_conversation_members",
             "im_messages",
+            "im_cs_automation_states",
             "ai_employee_profiles",
         }
         missing = needed - tables
@@ -292,6 +304,7 @@ def ensure_sqlite_im_bootstrap(
                     _facade()._orm_table(ImConversation),
                     _facade()._orm_table(ImConversationMember),
                     _facade()._orm_table(ImMessage),
+                    _facade()._orm_table(ImCustomerServiceAutomationState),
                     _facade()._orm_table(AiEmployeeProfile),
                 ],
                 checkfirst=True,
@@ -329,7 +342,9 @@ def ensure_employee_run_log_bootstrap(
         if "employee_run_logs" not in tables:
             _facade().logger.info("缺少 employee_run_logs 表，正在通过 ORM 创建 …")
             Base.metadata.create_all(
-                real_engine, tables=[_facade()._orm_table(EmployeeRunLog)], checkfirst=True
+                real_engine,
+                tables=[_facade()._orm_table(EmployeeRunLog)],
+                checkfirst=True,
             )
     except _facade().RECOVERABLE_ERRORS as exc:
         if swallow_errors:

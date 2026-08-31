@@ -13,7 +13,7 @@ import logging
 import os
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
 from app.application.im_app_service import ImApplicationService, ensure_im_tables
@@ -133,7 +133,10 @@ def im_list_conversations(user: Any = Depends(get_mobile_user)) -> Any:
     ensure_im_tables(get_host_engine())
     db = HostSessionLocal()
     try:
-        return {"success": True, "conversations": ImApplicationService(db).list_conversations(uid)}
+        return {
+            "success": True,
+            "conversations": ImApplicationService(db).list_conversations(uid),
+        }
     except RECOVERABLE_ERRORS:
         logger.exception("im_list_conversations")
         return JSONResponse({"success": False, "message": "服务器内部错误"}, status_code=500)
@@ -195,6 +198,7 @@ def im_list_messages(
 @router.post("/api/mobile/v1/im/conversations/{conversation_id}/messages")
 def im_post_message(
     conversation_id: int,
+    background_tasks: BackgroundTasks,
     body: dict = Body(default_factory=dict),
     user: Any = Depends(get_mobile_user),
 ) -> Any:
@@ -206,7 +210,20 @@ def im_post_message(
     db = HostSessionLocal()
     try:
         svc = ImApplicationService(db)
-        result = svc.send_message(conversation_id, uid, text)
+        from app.application.enterprise_cs_automation import (
+            EnterpriseCsAutomationService,
+            process_enterprise_cs_customer_message,
+        )
+
+        is_enterprise_cs = EnterpriseCsAutomationService(db).is_enterprise_cs_conversation(
+            conversation_id, uid
+        )
+        result = svc.send_message(
+            conversation_id,
+            uid,
+            text,
+            origin="customer" if is_enterprise_cs else "user",
+        )
         emp_id = svc.employee_id_for_conversation(conversation_id, uid)
     except PermissionError:
         return JSONResponse({"success": False, "message": "无权访问该会话"}, status_code=403)
@@ -220,6 +237,14 @@ def im_post_message(
     # 入站回流：老板在某员工聊天页回复 → 回流成该员工最新 pending 问题的答案，解阻塞员工。
     if emp_id:
         _relay_employee_answer(uid, emp_id, text)
+    if is_enterprise_cs and background_tasks is not None:
+        background_tasks.add_task(
+            process_enterprise_cs_customer_message,
+            conversation_id,
+            uid,
+            int((result.get("message") or {}).get("id") or 0),
+            text,
+        )
     return {"success": True, **result}
 
 

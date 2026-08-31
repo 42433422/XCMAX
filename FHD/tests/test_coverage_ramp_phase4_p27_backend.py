@@ -47,7 +47,7 @@ def _chat_svc() -> AIChatApplicationService:
 
 @pytest.fixture
 def im_client():
-    from app.fastapi_routes import im_routes
+    from app.fastapi_routes import im_cs_admin_routes, im_routes
 
     app = FastAPI()
     app.include_router(im_routes.router)
@@ -81,6 +81,9 @@ def im_client():
         patch.object(im_routes, "_ensure_schema"),
         patch.object(im_routes, "HostSessionLocal", return_value=mock_db),
         patch.object(im_routes, "ImApplicationService", return_value=mock_svc),
+        patch.object(im_cs_admin_routes, "_ensure_schema"),
+        patch.object(im_cs_admin_routes, "HostSessionLocal", return_value=mock_db),
+        patch.object(im_cs_admin_routes, "ImApplicationService", return_value=mock_svc),
         patch.object(im_routes.im_ws_hub, "send_to_user", new_callable=AsyncMock),
         patch.object(im_routes, "_notify_offline_im_members", new_callable=AsyncMock),
     ):
@@ -139,7 +142,38 @@ def test_im_send_message(im_client) -> None:
     resp = client.post("/api/im/conversations/10/messages", json={"body": "hello"})
     assert resp.status_code == 200
     assert resp.json()["success"] is True
-    mock_svc.send_message.assert_called_once_with(10, 1, "hello")
+    mock_svc.send_message.assert_called_once_with(10, 1, "hello", origin="user")
+
+
+def test_im_cs_mode_switches_to_human(im_client) -> None:
+    client, _mock_svc = im_client
+    from app.fastapi_routes import im_cs_admin_routes
+
+    state = {"cs_mode": "human", "cs_status": "human_active"}
+    automation = MagicMock()
+    automation.set_mode.return_value = state
+    with (
+        patch.object(im_cs_admin_routes, "_ensure_schema"),
+        patch.object(im_cs_admin_routes, "HostSessionLocal", return_value=MagicMock()),
+        patch.object(im_cs_admin_routes, "_is_admin_customer_service_session", return_value=True),
+        patch(
+            "app.application.enterprise_cs_automation.EnterpriseCsAutomationService",
+            return_value=automation,
+        ),
+    ):
+        resp = client.post(
+            "/api/im/cs/inbox/10/mode",
+            json={"mode": "human", "reason": "需要核对合同"},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["state"] == state
+    automation.set_mode.assert_called_once_with(
+        10,
+        "human",
+        operator_user_id=1,
+        reason="需要核对合同",
+    )
 
 
 def test_im_mark_read(im_client) -> None:

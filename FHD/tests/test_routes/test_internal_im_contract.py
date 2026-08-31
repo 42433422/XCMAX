@@ -7,6 +7,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import BackgroundTasks
 from fastapi.responses import JSONResponse
 from starlette.requests import Request
 
@@ -171,7 +172,9 @@ def test_list_messages_authorization_success_and_errors() -> None:
 
 
 def test_post_message_relay_success_no_relay_and_errors() -> None:
-    assert internal_im.im_post_message(1, {}, SimpleNamespace()).status_code == 401
+    assert (
+        internal_im.im_post_message(1, BackgroundTasks(), {}, SimpleNamespace()).status_code == 401
+    )
     service = MagicMock()
     service.send_message.return_value = {"message": {"id": 1}}
     service.employee_id_for_conversation.return_value = "emp-1"
@@ -179,7 +182,9 @@ def test_post_message_relay_success_no_relay_and_errors() -> None:
         _im_runtime(service),
         patch.object(internal_im, "_relay_employee_answer") as relay,
     ):
-        result = internal_im.im_post_message(1, {"body": "answer"}, SimpleNamespace(id=7))
+        result = internal_im.im_post_message(
+            1, BackgroundTasks(), {"body": "answer"}, SimpleNamespace(id=7)
+        )
     assert result["success"] is True
     relay.assert_called_once_with(7, "emp-1", "answer")
 
@@ -188,7 +193,7 @@ def test_post_message_relay_success_no_relay_and_errors() -> None:
         _im_runtime(service),
         patch.object(internal_im, "_relay_employee_answer") as relay,
     ):
-        internal_im.im_post_message(1, {}, SimpleNamespace(id=7))
+        internal_im.im_post_message(1, BackgroundTasks(), {}, SimpleNamespace(id=7))
     relay.assert_not_called()
 
     for error, status in (
@@ -198,7 +203,7 @@ def test_post_message_relay_success_no_relay_and_errors() -> None:
     ):
         service.send_message.side_effect = error
         with _im_runtime(service):
-            response = internal_im.im_post_message(1, {}, SimpleNamespace(id=7))
+            response = internal_im.im_post_message(1, BackgroundTasks(), {}, SimpleNamespace(id=7))
         assert response.status_code == status
 
 

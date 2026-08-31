@@ -5,6 +5,7 @@ import logging
 
 from fastapi import (
     APIRouter,
+    BackgroundTasks,
     Body,
     Depends,
     HTTPException,
@@ -14,7 +15,9 @@ from fastapi import (
 )
 from fastapi.responses import JSONResponse
 
-from app.application.ai_group_chat_service import AiGroupChatService as AiGroupChatService
+from app.application.ai_group_chat_service import (
+    AiGroupChatService as AiGroupChatService,
+)
 from app.application.claude_super_employee_service import (
     ClaudeSuperEmployeeService as ClaudeSuperEmployeeService,
 )
@@ -32,6 +35,7 @@ from app.application.trae_super_employee_service import (
 from app.application.workspaces import get_workspace_registry as get_workspace_registry
 from app.config import Config
 from app.db import HostSessionLocal, get_host_engine
+from app.fastapi_routes.im_cs_admin_routes import router as im_cs_admin_router
 from app.infrastructure.auth.dependencies import (
     CurrentUser,
     get_current_user,
@@ -44,6 +48,9 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["im-v0"])
+# FastAPI 0.138 wraps nested include_router calls; the route registry and golden
+# snapshot inspect one level, so keep extracted admin routes flat on this router.
+router.routes.extend(im_cs_admin_router.routes)
 
 _schema_ready = False
 _IM_UNAVAILABLE = "即时通信服务暂时不可用，请稍后重试"
@@ -253,77 +260,6 @@ def im_unread_total(
         db.close()
 
 
-@router.get("/api/im/cs/inbox")
-def im_cs_inbox(request: Request, user: CurrentUser = Depends(require_identified_user)):
-    """运营者(管理端)客服收件箱:所有企业客户↔企业专属客服会话(手机端+桌面端同源)。"""
-    _ensure_schema()
-    db = HostSessionLocal()
-    try:
-        if not _is_admin_customer_service_session(request, db):
-            return JSONResponse(
-                {"success": False, "message": "需要管理端客服会话"}, status_code=403
-            )
-        items = ImApplicationService(db).list_cs_inbox()
-        return {"success": True, "conversations": items}
-    except RECOVERABLE_ERRORS:
-        logger.exception("im_cs_inbox")
-        return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)
-    finally:
-        db.close()
-
-
-@router.get("/api/im/cs/inbox/{conversation_id}/messages")
-def im_cs_inbox_messages(
-    conversation_id: int,
-    request: Request,
-    user: CurrentUser = Depends(require_identified_user),
-):
-    """运营者读某客服会话历史。"""
-    _ensure_schema()
-    db = HostSessionLocal()
-    try:
-        if not _is_admin_customer_service_session(request, db):
-            return JSONResponse(
-                {"success": False, "message": "需要管理端客服会话"}, status_code=403
-            )
-        messages = ImApplicationService(db).cs_inbox_messages(conversation_id)
-        return {"success": True, "messages": messages}
-    except RECOVERABLE_ERRORS:
-        logger.exception("im_cs_inbox_messages")
-        return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)
-    finally:
-        db.close()
-
-
-@router.post("/api/im/cs/inbox/{conversation_id}/reply")
-def im_cs_inbox_reply(
-    conversation_id: int,
-    request: Request,
-    body: dict = Body(default_factory=dict),
-    user: CurrentUser = Depends(require_identified_user),
-):
-    """运营者以「企业专属客服」身份回复客户(客户端轮询取回)。"""
-    _ensure_schema()
-    db = HostSessionLocal()
-    try:
-        if not _is_admin_customer_service_session(request, db):
-            return JSONResponse(
-                {"success": False, "message": "需要管理端客服会话"}, status_code=403
-            )
-        text = str(body.get("body") or "").strip()
-        if not text:
-            return JSONResponse({"success": False, "message": "消息不能为空"}, status_code=400)
-        result = ImApplicationService(db).cs_reply(conversation_id, text)
-        return {"success": True, **result}
-    except (ValueError, PermissionError):
-        return JSONResponse({"success": False, "message": "消息参数无效"}, status_code=400)
-    except RECOVERABLE_ERRORS:
-        logger.exception("im_cs_inbox_reply")
-        return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)
-    finally:
-        db.close()
-
-
 @router.post("/api/im/conversations/direct")
 def im_create_direct(
     body: dict = Body(default_factory=dict),
@@ -384,6 +320,7 @@ def im_list_messages(
 async def im_send_message(
     request: Request,
     conversation_id: int,
+    background_tasks: BackgroundTasks,
     body: dict = Body(default_factory=dict),
     user: CurrentUser = Depends(get_current_user),
 ):
@@ -393,7 +330,20 @@ async def im_send_message(
     try:
         svc = ImApplicationService(db)
         text = str(body.get("body") or "")
-        result = svc.send_message(conversation_id, uid, text)
+        from app.application.enterprise_cs_automation import (
+            EnterpriseCsAutomationService,
+            process_enterprise_cs_customer_message,
+        )
+
+        is_enterprise_cs = EnterpriseCsAutomationService(db).is_enterprise_cs_conversation(
+            conversation_id, uid
+        )
+        result = svc.send_message(
+            conversation_id,
+            uid,
+            text,
+            origin="customer" if is_enterprise_cs else "user",
+        )
         emp_peer_id = svc.employee_id_for_conversation(conversation_id, uid)
         legacy_payload = {
             "type": "message",
@@ -423,6 +373,14 @@ async def im_send_message(
                 await asyncio.to_thread(relay_boss_reply_to_employee, uid, emp_peer_id, text)
             except RECOVERABLE_ERRORS:
                 logger.debug("im_send_message employee relay skipped", exc_info=True)
+        if is_enterprise_cs and background_tasks is not None:
+            background_tasks.add_task(
+                process_enterprise_cs_customer_message,
+                conversation_id,
+                uid,
+                int((result.get("message") or {}).get("id") or 0),
+                text,
+            )
         return {"success": True, **result}
     except PermissionError:
         return JSONResponse({"success": False, "message": "无权访问该会话"}, status_code=403)
@@ -464,7 +422,8 @@ async def im_mark_read(
     except RECOVERABLE_ERRORS:
         logger.exception("im_mark_read")
         return JSONResponse(
-            {"success": False, "message": "消息服务暂时不可用，请稍后重试"}, status_code=500
+            {"success": False, "message": "消息服务暂时不可用，请稍后重试"},
+            status_code=500,
         )
     finally:
         db.close()

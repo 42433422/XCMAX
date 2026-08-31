@@ -12,6 +12,11 @@ export type ImConversationSummary = {
   is_cs_inbox?: boolean
   /** CS 收件箱会话对应的企业客户 user_id(用于运营者视角判定气泡我方/对方)。 */
   customer_user_id?: number
+  cs_mode?: 'ai' | 'human'
+  cs_status?: 'ai_active' | 'ai_processing' | 'human_pending' | 'human_active'
+  cs_transfer_reason?: string
+  cs_summary?: string
+  cs_last_operator_user_id?: number | null
 }
 
 export type ImMessage = {
@@ -20,6 +25,8 @@ export type ImMessage = {
   sender_user_id: number
   sender_display_name?: string
   body: string
+  origin?: 'user' | 'customer' | 'ai' | 'manual' | 'system'
+  operator_user_id?: number | null
   created_at: string | null
 }
 
@@ -132,6 +139,11 @@ export async function fetchCsInbox(): Promise<ImConversationSummary[]> {
       customer_name: string
       unread_count: number
       last_message_at: string | null
+      cs_mode?: 'ai' | 'human'
+      cs_status?: 'ai_active' | 'ai_processing' | 'human_pending' | 'human_active'
+      cs_transfer_reason?: string
+      cs_summary?: string
+      cs_last_operator_user_id?: number | null
     }>
   }>(res)
   if (!data.success) throw new Error('加载客服收件箱失败')
@@ -144,6 +156,11 @@ export async function fetchCsInbox(): Promise<ImConversationSummary[]> {
     unread_count: c.unread_count,
     is_cs_inbox: true,
     customer_user_id: c.customer_user_id,
+    cs_mode: c.cs_mode ?? 'ai',
+    cs_status: c.cs_status ?? 'ai_active',
+    cs_transfer_reason: c.cs_transfer_reason ?? '',
+    cs_summary: c.cs_summary ?? '',
+    cs_last_operator_user_id: c.cs_last_operator_user_id ?? null,
   }))
 }
 
@@ -168,6 +185,18 @@ export async function replyCsInbox(conversationId: number, body: string): Promis
   const msg = data.message
   if (!data.success || !msg) throw new Error('回复失败')
   return msg
+}
+
+/** 管理端人工接管或恢复 AI 自动接待。 */
+export async function updateCsInboxMode(conversationId: number, mode: 'ai' | 'human'): Promise<Partial<ImConversationSummary>> {
+  const res = await apiFetch(`/api/im/cs/inbox/${conversationId}/mode`, {
+    method: 'POST',
+    headers: jsonHeaders,
+    body: JSON.stringify({ mode }),
+  })
+  const data = await readJson<{ success?: boolean; state?: Partial<ImConversationSummary>; message?: string }>(res)
+  if (!data.success || !data.state) throw new Error(data.message || '切换接待模式失败')
+  return data.state
 }
 
 export function imWebSocketUrl(): string {

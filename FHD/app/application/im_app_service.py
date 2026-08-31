@@ -266,7 +266,12 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
         return int(row[0]) if row else None
 
     def list_messages(
-        self, conversation_id: int, user_id: int, *, limit: int = 50, before_id: int | None = None
+        self,
+        conversation_id: int,
+        user_id: int,
+        *,
+        limit: int = 50,
+        before_id: int | None = None,
     ) -> list[dict[str, Any]]:
         if not self._get_member(conversation_id, user_id):
             raise PermissionError("非会话成员")
@@ -286,7 +291,15 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
             out.append(d)
         return out
 
-    def send_message(self, conversation_id: int, sender_user_id: int, body: str) -> dict[str, Any]:
+    def send_message(
+        self,
+        conversation_id: int,
+        sender_user_id: int,
+        body: str,
+        *,
+        origin: str = "user",
+        operator_user_id: int | None = None,
+    ) -> dict[str, Any]:
         if not self._get_member(conversation_id, sender_user_id):
             raise PermissionError("非会话成员")
         text = (body or "").strip()
@@ -296,6 +309,8 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
             conversation_id=conversation_id,
             sender_user_id=sender_user_id,
             body=text[:4000],
+            origin=(origin or "user")[:32],
+            operator_user_id=(int(operator_user_id) if operator_user_id else None),
         )
         self._db.add(msg)
         conv = self._db.get(ImConversation, conversation_id)
@@ -304,7 +319,9 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
         self._db.commit()
         self._db.refresh(msg)
         try:
-            from app.neuro_bus.application_neuro_bridge import neuro_notify_im_message_sent
+            from app.neuro_bus.application_neuro_bridge import (
+                neuro_notify_im_message_sent,
+            )
 
             neuro_notify_im_message_sent(
                 conversation_id=msg.conversation_id,
@@ -336,7 +353,11 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
         return [int(r[0]) for r in rows]
 
     def _maybe_push_cs_message(
-        self, conversation_id: int, sender_user_id: int, text: str, member_ids: list[int]
+        self,
+        conversation_id: int,
+        sender_user_id: int,
+        text: str,
+        member_ids: list[int],
     ) -> None:
         """专属客服会话消息推送:客户发→推所有运营者(admin);客服回→推客户。
 
@@ -464,5 +485,7 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
             "sender_user_id": m.sender_user_id,
             "sender_display_name": sender_name or f"用户{m.sender_user_id}",
             "body": m.body,
+            "origin": str(getattr(m, "origin", "user") or "user"),
+            "operator_user_id": getattr(m, "operator_user_id", None),
             "created_at": m.created_at.isoformat() if m.created_at else None,
         }

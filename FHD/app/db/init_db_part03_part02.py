@@ -29,12 +29,18 @@ def init_im_tables(
             engine = _get_engine()
     from app.db.base import Base
     from app.db.models.ai_employee import AiEmployeeProfile
-    from app.db.models.im import ImConversation, ImConversationMember, ImMessage
+    from app.db.models.im import (
+        ImConversation,
+        ImConversationMember,
+        ImCustomerServiceAutomationState,
+        ImMessage,
+    )
 
     target_tables = [
         _facade()._orm_table(ImConversation),
         _facade()._orm_table(ImConversationMember),
         _facade()._orm_table(ImMessage),
+        _facade()._orm_table(ImCustomerServiceAutomationState),
         _facade()._orm_table(AiEmployeeProfile),
     ]
     Base.metadata.create_all(engine, tables=target_tables, checkfirst=True)
@@ -162,7 +168,10 @@ def init_persona_tables(engine: _facade().Engine) -> None:
     故 persona 两张表必须在此显式 create_all，否则 PersonaRepositoryImpl 落盘会失败。
     """
     from app.db.base import Base
-    from app.infrastructure.persona.models import PersonaEventLogModel, PersonaProfileModel
+    from app.infrastructure.persona.models import (
+        PersonaEventLogModel,
+        PersonaProfileModel,
+    )
 
     target_tables = [
         _facade()._orm_table(PersonaProfileModel),

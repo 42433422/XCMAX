@@ -114,12 +114,21 @@ def _apply_im_message(item: dict[str, Any]) -> None:
                 obj.body = body[:4000]
                 if sender_user_id:
                     obj.sender_user_id = sender_user_id
+                obj.origin = str(payload.get("origin") or getattr(obj, "origin", "user"))[:32]
+                raw_operator_id = payload.get("operator_user_id")
+                obj.operator_user_id = int(raw_operator_id) if raw_operator_id else None
             else:
                 obj = ImMessage(
                     id=message_id if message_id else None,
                     conversation_id=conversation_id,
                     sender_user_id=sender_user_id,
                     body=body[:4000],
+                    origin=str(payload.get("origin") or "user")[:32],
+                    operator_user_id=(
+                        int(str(payload.get("operator_user_id")))
+                        if payload.get("operator_user_id")
+                        else None
+                    ),
                 )
                 db.add(obj)
             conv = db.get(ImConversation, conversation_id)
@@ -130,7 +139,10 @@ def _apply_im_message(item: dict[str, Any]) -> None:
             if meta_key:
                 _facade()._write_sync_meta(
                     meta_key,
-                    {"updated_at_ms": incoming_ms or _facade().utc_now_ms(), "id": int(obj.id)},
+                    {
+                        "updated_at_ms": incoming_ms or _facade().utc_now_ms(),
+                        "id": int(obj.id),
+                    },
                 )
     except _facade().RECOVERABLE_ERRORS as exc:
         _facade().logger.warning("apply_im_message failed conv=%s: %s", conversation_id, exc)
@@ -181,13 +193,16 @@ def _apply_im_read_state(item: dict[str, Any]) -> None:
         _facade()._write_sync_meta(
             meta_key,
             {
-                "updated_at_ms": max(incoming_ms, stored_ms) if incoming_ms else stored_ms,
+                "updated_at_ms": (max(incoming_ms, stored_ms) if incoming_ms else stored_ms),
                 "last_read_message_id": applied_read,
             },
         )
     except _facade().RECOVERABLE_ERRORS as exc:
         _facade().logger.warning(
-            "apply_im_read_state failed conv=%s user=%s: %s", conversation_id, user_id, exc
+            "apply_im_read_state failed conv=%s user=%s: %s",
+            conversation_id,
+            user_id,
+            exc,
         )
 
 
@@ -288,5 +303,8 @@ def _apply_account_entitlements(item: dict[str, Any]) -> None:
             db.commit()
     except _facade().RECOVERABLE_ERRORS as exc:
         _facade().logger.warning(
-            "apply_account_entitlements failed user=%s id=%s: %s", username, entity_id, exc
+            "apply_account_entitlements failed user=%s id=%s: %s",
+            username,
+            entity_id,
+            exc,
         )
