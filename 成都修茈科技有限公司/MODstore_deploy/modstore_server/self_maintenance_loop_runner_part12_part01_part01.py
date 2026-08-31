@@ -26,9 +26,8 @@ def _evict_loop_memory_items(
       - failed_steps item with created_at > 24h AND retry_count >= 3
         → evict (reason=stuck_24h_retry_3)
     Evicted items are appended to memory["evicted_items"] (capped at the last
-    LOOP_EVICT_MAX_ITEMS entries) and a ``loop_evicted`` governance audit
-    record is written so the action is visible in the governance UI.
-    Returns a summary dict; never raises.
+    LOOP_EVICT_MAX_ITEMS entries).  The returned private audit record must be
+    emitted by the caller only after the updated memory is persisted.
     """
     open_items = memory.get("open_items")
     if not isinstance(open_items, list):
@@ -98,15 +97,23 @@ def _evict_loop_memory_items(
         "source": "self_maintenance_loop_runner",
         "status": "evicted",
     }
-    try:
-        _facade()._append_governance_audit(summary_record)
-    except RECOVERABLE_ERRORS:
-        _facade().logger.exception("failed to write loop_evicted governance audit")
     return {
+        "_governance_audit_record": summary_record,
         "evicted_count": len(newly_evicted),
         "evicted_items": newly_evicted,
         "reasons": reasons,
     }
+
+
+def _append_committed_eviction_audit(
+    record: _facade().Optional[_facade().Dict[str, _facade().Any]],
+) -> None:
+    if not record:
+        return
+    try:
+        _facade()._append_governance_audit(record)
+    except RECOVERABLE_ERRORS:
+        _facade().logger.exception("failed to write loop_evicted governance audit")
 
 
 def evict_loop_memory_items(
@@ -124,8 +131,10 @@ def evict_loop_memory_items(
     result = _facade()._evict_loop_memory_items(
         memory, actor=actor, note=note, admin_user_id=admin_user_id
     )
+    audit_record = result.pop("_governance_audit_record", None)
     memory["updated_at"] = _facade()._iso(_facade()._utc_now())
     _facade()._write_loop_memory(memory)
+    _append_committed_eviction_audit(audit_record)
     return {
         **result,
         "memory_path": str(_facade().loop_memory_path()),
@@ -356,8 +365,10 @@ def _update_loop_memory(
             "kb_salvage": salvage_summary,
         }
     )
+    audit_record = None
     try:
         evict_summary = _facade()._evict_loop_memory_items(memory, actor="auto")
+        audit_record = evict_summary.pop("_governance_audit_record", None)
     except RECOVERABLE_ERRORS:
         evict_summary = {"evicted_count": 0, "error": "evict_failed"}
         _facade().logger.exception("loop memory auto-evict failed run_id=%s", final.get("run_id"))
@@ -378,3 +389,4 @@ def _update_loop_memory(
         }
     )
     _facade()._write_loop_memory(memory)
+    _append_committed_eviction_audit(audit_record)

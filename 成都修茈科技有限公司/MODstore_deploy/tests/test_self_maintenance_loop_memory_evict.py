@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 from datetime import timedelta
 
+import pytest
+
 from modstore_server import self_maintenance_loop_runner as loop_runner
 from modstore_server.self_maintenance_loop_runner import (
     LOOP_EVICT_AGE_OUT_SECONDS,
@@ -302,6 +304,85 @@ def test_evict_does_not_raise_when_audit_write_fails(monkeypatch, tmp_path):
     memory = _load_loop_memory()
     assert memory["open_items"] == []
     assert len(memory["evicted_items"]) == 1
+
+
+def test_manual_evict_audit_waits_for_memory_commit(monkeypatch, tmp_path):
+    """A failed memory commit must not leave a false or duplicate success audit."""
+    memory_path = tmp_path / "loop_memory.json"
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(memory_path))
+    item = _stuck_failed_step(
+        "run-memory-fail",
+        age_seconds=LOOP_EVICT_STUCK_AGE_SECONDS + 60,
+        retry_count=3,
+    )
+    _seed_memory_file(memory_path, open_items=[item])
+
+    real_write = loop_runner._write_loop_memory
+    write_calls = 0
+    audit_rows = []
+
+    def fail_first_write(memory):
+        nonlocal write_calls
+        write_calls += 1
+        if write_calls == 1:
+            raise OSError("simulated memory commit failure")
+        real_write(memory)
+
+    def capture_committed_audit(record):
+        persisted = json.loads(memory_path.read_text(encoding="utf-8"))
+        assert persisted["open_items"] == []
+        audit_rows.append(record)
+
+    monkeypatch.setattr(loop_runner, "_write_loop_memory", fail_first_write)
+    monkeypatch.setattr(loop_runner, "_append_governance_audit", capture_committed_audit)
+
+    with pytest.raises(OSError, match="simulated memory commit failure"):
+        evict_loop_memory_items(actor="manual")
+
+    assert audit_rows == []
+    assert json.loads(memory_path.read_text(encoding="utf-8"))["open_items"] == [item]
+
+    result = evict_loop_memory_items(actor="manual")
+
+    assert result["evicted_count"] == 1
+    assert len(audit_rows) == 1
+    assert audit_rows[0]["status"] == "evicted"
+
+
+def test_auto_evict_does_not_audit_before_memory_commit(monkeypatch, tmp_path):
+    """The automatic loop path uses the same memory-before-audit commit order."""
+    memory_path = tmp_path / "loop_memory.json"
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(memory_path))
+    item = _stuck_failed_step(
+        "run-auto-memory-fail",
+        age_seconds=LOOP_EVICT_STUCK_AGE_SECONDS + 60,
+        retry_count=3,
+    )
+    _seed_memory_file(memory_path, open_items=[item])
+    audit_rows = []
+    monkeypatch.setattr(loop_runner, "_append_governance_audit", audit_rows.append)
+    monkeypatch.setattr(
+        loop_runner,
+        "_write_loop_memory",
+        lambda memory: (_ for _ in ()).throw(OSError("simulated memory commit failure")),
+    )
+
+    with pytest.raises(OSError, match="simulated memory commit failure"):
+        _update_loop_memory(
+            final={
+                "branch": None,
+                "completed_at": _iso(_utc_now()),
+                "para_task_id": "task-auto-memory-fail",
+                "policy_decision": {"action": "hold_for_automated_remediation"},
+                "run_id": "run-auto-memory-fail",
+                "status": "completed_waiting_human_strategy",
+                "steps": [],
+            },
+            gate={"reason": "force", "should_run": True},
+        )
+
+    assert audit_rows == []
+    assert json.loads(memory_path.read_text(encoding="utf-8"))["open_items"] == [item]
 
 
 # ---------------------------------------------------------------------------
