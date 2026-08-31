@@ -4,7 +4,7 @@
       <div>
         <p class="delivery-eyebrow">CUSTOMER DELIVERY CONTROL</p>
         <h2>客户交付中心</h2>
-        <p>所有企业用户统一进入交付台账；购买权益、定制路径、安装与首次登录证据分别如实展示。</p>
+        <p>所有企业用户统一进入交付台账；内部本 Mac 永不计入客户交付；购买权益、定制路径、安装与首次登录证据分别如实展示。</p>
       </div>
       <button type="button" class="delivery-refresh" :disabled="loading" @click="loadAll">
         <i class="fa fa-refresh" :class="{ 'fa-spin': loading }" aria-hidden="true"></i>
