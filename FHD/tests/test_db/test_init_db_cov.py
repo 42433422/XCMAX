@@ -336,6 +336,38 @@ class TestEnsureSessionsEnterpriseEntitlementColumns:
 
 
 # ---------------------------------------------------------------------------
+# ensure_im_customer_service_columns
+# ---------------------------------------------------------------------------
+
+
+class TestEnsureImCustomerServiceColumns:
+    def test_skips_when_message_table_missing(self):
+        from app.db.init_db import ensure_im_customer_service_columns
+
+        eng = _make_mock_engine("sqlite")
+        with patch("sqlalchemy.inspect", return_value=_make_inspector([])):
+            ensure_im_customer_service_columns(eng)
+        eng.begin.assert_not_called()
+
+    def test_adds_columns_postgresql(self):
+        from app.db.init_db import ensure_im_customer_service_columns
+
+        eng = _make_mock_engine("postgresql")
+        with patch(
+            "sqlalchemy.inspect",
+            return_value=_make_inspector(["im_messages"], {"im_messages": ["id"]}),
+        ):
+            ensure_im_customer_service_columns(eng)
+        statements = [
+            str(item.args[0])
+            for item in eng.begin.return_value.__enter__.return_value.execute.call_args_list
+        ]
+        assert any("origin VARCHAR(32)" in sql for sql in statements)
+        assert any("operator_user_id INTEGER" in sql for sql in statements)
+        assert any("ix_im_messages_operator_user_id" in sql for sql in statements)
+
+
+# ---------------------------------------------------------------------------
 # ensure_user_profile_columns
 # ---------------------------------------------------------------------------
 
