@@ -29,12 +29,18 @@ def init_im_tables(
             engine = _get_engine()
     from app.db.base import Base
     from app.db.models.ai_employee import AiEmployeeProfile
-    from app.db.models.im import ImConversation, ImConversationMember, ImMessage
+    from app.db.models.im import (
+        ImConversation,
+        ImConversationMember,
+        ImCustomerServiceAutomationState,
+        ImMessage,
+    )
 
     target_tables = [
         _facade()._orm_table(ImConversation),
         _facade()._orm_table(ImConversationMember),
         _facade()._orm_table(ImMessage),
+        _facade()._orm_table(ImCustomerServiceAutomationState),
         _facade()._orm_table(AiEmployeeProfile),
     ]
     Base.metadata.create_all(engine, tables=target_tables, checkfirst=True)
@@ -76,13 +82,17 @@ def init_approval_tables(engine: _facade().Engine) -> None:
     try:
         Base.metadata.create_all(real_engine, tables=target_tables, checkfirst=True)
     except _facade().RECOVERABLE_ERRORS as exc:
-        _facade().logger.warning("approval 表 create_all 失败（继续尝试 ALTER 兼容）：%s", exc)
+        _facade().logger.warning(
+            "approval 表 create_all 失败（继续尝试 ALTER 兼容）：%s", exc
+        )
     try:
         insp = inspect(real_engine)
         if "approval_flows" in set(insp.get_table_names() or []):
             cols = {c["name"] for c in insp.get_columns("approval_flows")}
             if "business_type" not in cols:
-                _facade().logger.info("approval_flows 缺少 business_type 列，开始补列 …")
+                _facade().logger.info(
+                    "approval_flows 缺少 business_type 列，开始补列 …"
+                )
                 with real_engine.begin() as conn:
                     if real_engine.dialect.name == "postgresql":
                         conn.execute(
@@ -162,7 +172,10 @@ def init_persona_tables(engine: _facade().Engine) -> None:
     故 persona 两张表必须在此显式 create_all，否则 PersonaRepositoryImpl 落盘会失败。
     """
     from app.db.base import Base
-    from app.infrastructure.persona.models import PersonaEventLogModel, PersonaProfileModel
+    from app.infrastructure.persona.models import (
+        PersonaEventLogModel,
+        PersonaProfileModel,
+    )
 
     target_tables = [
         _facade()._orm_table(PersonaProfileModel),

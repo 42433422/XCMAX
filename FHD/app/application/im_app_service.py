@@ -60,7 +60,9 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
     def _ensure_enterprise_dedicated_cs_user(self) -> User | None:
         row = (
             self._db.execute(
-                select(User).where(User.username == ENTERPRISE_DEDICATED_CS_USERNAME).limit(1)
+                select(User)
+                .where(User.username == ENTERPRISE_DEDICATED_CS_USERNAME)
+                .limit(1)
             )
             .scalars()
             .first()
@@ -146,13 +148,17 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
                 peer_id = self._direct_peer_id(conv.id, user_id)
                 peer = self._db.get(User, int(peer_id)) if peer_id else None
                 title = (
-                    self._display_name(peer_id) if peer_id else (conv.title or f"会话 #{conv.id}")
+                    self._display_name(peer_id)
+                    if peer_id
+                    else (conv.title or f"会话 #{conv.id}")
                 )
             else:
                 peer = None
                 title = conv.title or f"会话 #{conv.id}"
             peer_username = str(getattr(peer, "username", "") or "") if peer else ""
-            employee_id = peer_username[len("emp:") :] if peer_username.startswith("emp:") else ""
+            employee_id = (
+                peer_username[len("emp:") :] if peer_username.startswith("emp:") else ""
+            )
             item: dict[str, Any] = {
                 "id": conv.id,
                 "title": title,
@@ -165,8 +171,8 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
                 "peer_username": peer_username,
                 "employee_id": employee_id,
             }
-            is_enterprise_dedicated_cs = conv.is_direct and self._is_enterprise_dedicated_cs_user(
-                peer
+            is_enterprise_dedicated_cs = (
+                conv.is_direct and self._is_enterprise_dedicated_cs_user(peer)
             )
             if is_enterprise_dedicated_cs and not include_enterprise_dedicated_cs:
                 continue
@@ -181,10 +187,14 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
         me = self._db.get(User, int(user_id))
         my_tenant = getattr(me, "tenant_id", None) if me else None
         dedicated_cs = (
-            self._ensure_enterprise_dedicated_cs_user() if include_enterprise_dedicated_cs else None
+            self._ensure_enterprise_dedicated_cs_user()
+            if include_enterprise_dedicated_cs
+            else None
         )
         dedicated_cs_id = (
-            int(dedicated_cs.id) if dedicated_cs is not None and dedicated_cs.id else None
+            int(dedicated_cs.id)
+            if dedicated_cs is not None and dedicated_cs.id
+            else None
         )
         q = select(User).where(User.id != int(user_id), User.is_active.is_(True))
         if dedicated_cs_id is not None:
@@ -193,7 +203,11 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
             q = q.where(User.username != ENTERPRISE_DEDICATED_CS_USERNAME)
         if my_tenant is not None:
             q = q.where(User.tenant_id == my_tenant)
-        rows = self._db.execute(q.order_by(User.display_name, User.username)).scalars().all()
+        rows = (
+            self._db.execute(q.order_by(User.display_name, User.username))
+            .scalars()
+            .all()
+        )
         out: list[dict[str, Any]] = []
         if dedicated_cs is not None and dedicated_cs_id != int(user_id):
             out.append(self._contact_dict(dedicated_cs, dedicated_cs=True))
@@ -217,7 +231,9 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
             or 0
         )
 
-    def _get_member(self, conversation_id: int, user_id: int) -> ImConversationMember | None:
+    def _get_member(
+        self, conversation_id: int, user_id: int
+    ) -> ImConversationMember | None:
         return cast(
             "ImConversationMember | None",
             self._db.execute(
@@ -266,7 +282,12 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
         return int(row[0]) if row else None
 
     def list_messages(
-        self, conversation_id: int, user_id: int, *, limit: int = 50, before_id: int | None = None
+        self,
+        conversation_id: int,
+        user_id: int,
+        *,
+        limit: int = 50,
+        before_id: int | None = None,
     ) -> list[dict[str, Any]]:
         if not self._get_member(conversation_id, user_id):
             raise PermissionError("非会话成员")
@@ -274,7 +295,9 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
         if before_id:
             q = q.where(ImMessage.id < before_id)
         rows = (
-            self._db.execute(q.order_by(desc(ImMessage.id)).limit(min(limit, 100))).scalars().all()
+            self._db.execute(q.order_by(desc(ImMessage.id)).limit(min(limit, 100)))
+            .scalars()
+            .all()
         )
         rows = list(reversed(rows))
         names = self._display_name_map([m.sender_user_id for m in rows])
@@ -286,7 +309,15 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
             out.append(d)
         return out
 
-    def send_message(self, conversation_id: int, sender_user_id: int, body: str) -> dict[str, Any]:
+    def send_message(
+        self,
+        conversation_id: int,
+        sender_user_id: int,
+        body: str,
+        *,
+        origin: str = "user",
+        operator_user_id: int | None = None,
+    ) -> dict[str, Any]:
         if not self._get_member(conversation_id, sender_user_id):
             raise PermissionError("非会话成员")
         text = (body or "").strip()
@@ -296,6 +327,8 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
             conversation_id=conversation_id,
             sender_user_id=sender_user_id,
             body=text[:4000],
+            origin=(origin or "user")[:32],
+            operator_user_id=(int(operator_user_id) if operator_user_id else None),
         )
         self._db.add(msg)
         conv = self._db.get(ImConversation, conversation_id)
@@ -304,7 +337,9 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
         self._db.commit()
         self._db.refresh(msg)
         try:
-            from app.neuro_bus.application_neuro_bridge import neuro_notify_im_message_sent
+            from app.neuro_bus.application_neuro_bridge import (
+                neuro_notify_im_message_sent,
+            )
 
             neuro_notify_im_message_sent(
                 conversation_id=msg.conversation_id,
@@ -315,9 +350,13 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
             logger.debug("neuro_notify_im_message_sent skipped", exc_info=True)
         member_ids = self._member_user_ids(conversation_id)
         message = self._message_dict(msg, self._display_name(sender_user_id))
-        updated_at_ms = self._record_im_message_change(message, actor=str(sender_user_id))
+        updated_at_ms = self._record_im_message_change(
+            message, actor=str(sender_user_id)
+        )
         try:
-            self._maybe_push_cs_message(conversation_id, sender_user_id, text, member_ids)
+            self._maybe_push_cs_message(
+                conversation_id, sender_user_id, text, member_ids
+            )
         except RECOVERABLE_ERRORS:
             logger.debug("cs push skipped", exc_info=True)
         return {
@@ -336,7 +375,11 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
         return [int(r[0]) for r in rows]
 
     def _maybe_push_cs_message(
-        self, conversation_id: int, sender_user_id: int, text: str, member_ids: list[int]
+        self,
+        conversation_id: int,
+        sender_user_id: int,
+        text: str,
+        member_ids: list[int],
     ) -> None:
         """专属客服会话消息推送:客户发→推所有运营者(admin);客服回→推客户。
 
@@ -388,7 +431,9 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
                 except RECOVERABLE_ERRORS:
                     logger.debug("cs inbox push failed", exc_info=True)
 
-    def mark_read(self, conversation_id: int, user_id: int, last_message_id: int) -> dict[str, Any]:
+    def mark_read(
+        self, conversation_id: int, user_id: int, last_message_id: int
+    ) -> dict[str, Any]:
         member = self._get_member(conversation_id, user_id)
         if not member:
             raise PermissionError("非会话成员")
@@ -464,5 +509,7 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
             "sender_user_id": m.sender_user_id,
             "sender_display_name": sender_name or f"用户{m.sender_user_id}",
             "body": m.body,
+            "origin": str(getattr(m, "origin", "user") or "user"),
+            "operator_user_id": getattr(m, "operator_user_id", None),
             "created_at": m.created_at.isoformat() if m.created_at else None,
         }

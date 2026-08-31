@@ -81,7 +81,9 @@ class ImEmployeeMixin:
 
         profile = (
             self._db.execute(
-                select(AiEmployeeProfile).where(AiEmployeeProfile.employee_id == eid).limit(1)
+                select(AiEmployeeProfile)
+                .where(AiEmployeeProfile.employee_id == eid)
+                .limit(1)
             )
             .scalars()
             .first()
@@ -137,7 +139,9 @@ class ImEmployeeMixin:
             eid = str(emp.get("id") or "").strip()
             if eid:
                 eid_to_meta[eid] = {
-                    "mod_id": str(emp.get("mod_id") or emp.get("market_pkg_id") or "").strip(),
+                    "mod_id": str(
+                        emp.get("mod_id") or emp.get("market_pkg_id") or ""
+                    ).strip(),
                     "display_name": str(
                         emp.get("name") or emp.get("label") or emp.get("title") or eid
                     ).strip(),
@@ -170,8 +174,12 @@ class ImEmployeeMixin:
                         avatar_url=meta["avatar_url"],
                     )
                     eid_to_uid[eid] = uid
-                except RECOVERABLE_ERRORS:  # noqa: BLE001 - best-effort enrichment for employee list rows
-                    logger.debug("ensure_employee_user failed for %s", eid, exc_info=True)
+                except (
+                    RECOVERABLE_ERRORS
+                ):  # noqa: BLE001 - best-effort enrichment for employee list rows
+                    logger.debug(
+                        "ensure_employee_user failed for %s", eid, exc_info=True
+                    )
         if not eid_to_uid:
             return {}
         uid_to_eid = {int(v): k for k, v in eid_to_uid.items()}
@@ -228,8 +236,14 @@ class ImEmployeeMixin:
                             "im_last_message_at": "",
                             "im_unread_count": 0,
                         }
-                except RECOVERABLE_ERRORS:  # noqa: BLE001 - summary must tolerate one employee bootstrap failure
-                    logger.debug("get_or_create_direct failed for employee %s", eid, exc_info=True)
+                except (
+                    RECOVERABLE_ERRORS
+                ):  # noqa: BLE001 - summary must tolerate one employee bootstrap failure
+                    logger.debug(
+                        "get_or_create_direct failed for employee %s",
+                        eid,
+                        exc_info=True,
+                    )
         return out
 
     def set_employee_owner(self, employee_id: str, owner_user_id: int) -> bool:
@@ -239,7 +253,9 @@ class ImEmployeeMixin:
             return False
         profile = (
             self._db.execute(
-                select(AiEmployeeProfile).where(AiEmployeeProfile.employee_id == eid).limit(1)
+                select(AiEmployeeProfile)
+                .where(AiEmployeeProfile.employee_id == eid)
+                .limit(1)
             )
             .scalars()
             .first()
@@ -248,7 +264,9 @@ class ImEmployeeMixin:
             return False
         owner_uid = int(owner_user_id)
         owner_exists = (
-            self._db.execute(select(User.id).where(User.id == owner_uid).limit(1)).scalars().first()
+            self._db.execute(select(User.id).where(User.id == owner_uid).limit(1))
+            .scalars()
+            .first()
         )
         if owner_exists is None:
             raise ValueError(f"owner_user_id={owner_uid} 不存在")
@@ -275,7 +293,9 @@ class ImEmployeeMixin:
         if boss_uid_int <= 0:
             raise ValueError("boss_user_id 非法")
         boss_exists = (
-            self._db.execute(select(User).where(User.id == boss_uid_int).limit(1)).scalars().first()
+            self._db.execute(select(User).where(User.id == boss_uid_int).limit(1))
+            .scalars()
+            .first()
         )
         if boss_exists is None:
             raise ValueError(f"boss_user_id={boss_uid_int} 不存在")
@@ -314,7 +334,9 @@ class ImEmployeeMixin:
         rows = (
             self._db.execute(
                 select(ImConversation)
-                .where(ImConversation.id.in_(conv_ids), ImConversation.is_direct.is_(True))
+                .where(
+                    ImConversation.id.in_(conv_ids), ImConversation.is_direct.is_(True)
+                )
                 .order_by(desc(ImConversation.last_message_at))
             )
             .scalars()
@@ -325,17 +347,26 @@ class ImEmployeeMixin:
             customer_id = self._direct_peer_id(int(conv.id), cs_id)
             if not customer_id:
                 continue
-            out.append(
-                {
-                    "id": int(conv.id),
-                    "customer_user_id": int(customer_id),
-                    "customer_name": self._display_name(int(customer_id)),
-                    "last_message_at": conv.last_message_at.isoformat()
-                    if conv.last_message_at
-                    else "",
-                    "unread_count": self._count_unread(int(conv.id), cs_id),
-                }
-            )
+            item = {
+                "id": int(conv.id),
+                "customer_user_id": int(customer_id),
+                "customer_name": self._display_name(int(customer_id)),
+                "last_message_at": (
+                    conv.last_message_at.isoformat() if conv.last_message_at else ""
+                ),
+                "unread_count": self._count_unread(int(conv.id), cs_id),
+            }
+            try:
+                from app.application.enterprise_cs_automation import (
+                    EnterpriseCsAutomationService,
+                )
+
+                item.update(
+                    EnterpriseCsAutomationService(self._db).public_state(int(conv.id))
+                )
+            except RECOVERABLE_ERRORS:
+                logger.debug("cs automation state enrichment skipped", exc_info=True)
+            out.append(item)
         return out
 
     def cs_inbox_messages(self, conversation_id: int) -> list[dict[str, Any]]:
@@ -355,9 +386,25 @@ class ImEmployeeMixin:
             logger.debug("cs_inbox_messages mark_read skipped", exc_info=True)
         return cast("list[dict[str, Any]]", messages)
 
-    def cs_reply(self, conversation_id: int, body: str) -> dict[str, Any]:
+    def cs_reply(
+        self,
+        conversation_id: int,
+        body: str,
+        *,
+        origin: str = "manual",
+        operator_user_id: int | None = None,
+    ) -> dict[str, Any]:
         """Reply as the dedicated enterprise CS user."""
         cs_id = self.enterprise_cs_user_id()
         if cs_id is None:
             raise ValueError("客服通道不可用")
-        return cast("dict[str, Any]", self.send_message(conversation_id, cs_id, body))
+        return cast(
+            "dict[str, Any]",
+            self.send_message(
+                conversation_id,
+                cs_id,
+                body,
+                origin=origin,
+                operator_user_id=operator_user_id,
+            ),
+        )

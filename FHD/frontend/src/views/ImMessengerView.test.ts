@@ -30,6 +30,7 @@ vi.mock('@/api/im', () => ({
   fetchCsInbox: vi.fn().mockResolvedValue([]),
   fetchCsInboxMessages: vi.fn().mockResolvedValue([]),
   replyCsInbox: vi.fn().mockResolvedValue({ success: true }),
+  updateCsInboxMode: vi.fn().mockResolvedValue({ cs_mode: 'human', cs_status: 'human_active' }),
   sendImMessage: vi.fn().mockResolvedValue({ success: true }),
   createDirectConversation: vi.fn().mockResolvedValue({ id: 1 }),
   fetchImContacts: vi.fn().mockResolvedValue([enterpriseCsContact]),

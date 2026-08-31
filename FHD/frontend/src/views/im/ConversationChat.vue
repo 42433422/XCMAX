@@ -3,12 +3,32 @@
     <header class="im-chat-head">
       <span class="im-avatar im-avatar--sm" aria-hidden="true">{{ avatarText(activeTitle) }}</span>
       <span class="im-chat-title">{{ activeTitle }}</span>
+      <div v-if="csAutomation" class="im-cs-controls">
+        <span :class="['im-cs-status', `is-${csAutomation.cs_status || 'ai_active'}`]">
+          {{ csStatusLabel(csAutomation.cs_status) }}
+        </span>
+        <button
+          type="button"
+          class="im-cs-mode-button"
+          :disabled="csAutomationBusy || busy"
+          @click="emit('change-cs-mode', csAutomation.cs_mode === 'human' ? 'ai' : 'human')"
+        >
+          {{ csAutomation.cs_mode === 'human' ? '恢复AI' : '人工接管' }}
+        </button>
+      </div>
     </header>
+    <div v-if="csAutomation?.cs_status === 'human_pending'" class="im-cs-transfer-banner">
+      <strong>AI 已转人工</strong>
+      <span>{{ csAutomation.cs_transfer_reason || '该问题需要人工处理' }}</span>
+    </div>
     <button v-if="hasMoreHistory" type="button" class="im-load-more" :disabled="busy" @click="emit('load-older')">加载更早消息</button>
     <div :ref="scrollEl" class="im-messages">
       <template v-for="m in messages" :key="m.id">
         <div :class="['im-bubble-row', isMyMessage(m) ? 'mine' : 'theirs']">
           <div class="im-bubble">
+            <span v-if="isMyMessage(m) && replyOriginLabel(m.origin)" class="im-reply-origin">
+              {{ replyOriginLabel(m.origin) }}
+            </span>
             <span v-if="!isMyMessage(m)" class="im-sender">
               {{ m.sender_display_name || '用户' + m.sender_user_id }}
             </span>
@@ -35,7 +55,7 @@
 
 <script setup lang="ts">
 import type { Ref } from 'vue'
-import { type ImMessage } from '@/api/im'
+import { type ImConversationSummary, type ImMessage } from '@/api/im'
 import { avatarText } from '@/composables/messenger/useMessengerEntries'
 
 defineProps<{
@@ -47,13 +67,30 @@ defineProps<{
   isMyMessage: (m: ImMessage) => boolean
   formatTime: (iso: string | null) => string
   scrollEl: Ref<HTMLElement | null>
+  csAutomation?: ImConversationSummary
+  csAutomationBusy?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'load-older'): void
   (e: 'update:draft', value: string): void
   (e: 'send'): void
+  (e: 'change-cs-mode', mode: 'ai' | 'human'): void
 }>()
+
+function csStatusLabel(status?: ImConversationSummary['cs_status']): string {
+  if (status === 'ai_processing') return 'AI处理中'
+  if (status === 'human_pending') return '待人工'
+  if (status === 'human_active') return '人工处理中'
+  return 'AI自动接待'
+}
+
+function replyOriginLabel(origin?: ImMessage['origin']): string {
+  if (origin === 'ai') return 'AI自动回复'
+  if (origin === 'manual') return '人工回复'
+  if (origin === 'system') return '系统转接'
+  return ''
+}
 
 function onInput(ev: Event): void {
   emit('update:draft', (ev.target as HTMLInputElement).value)
@@ -72,6 +109,50 @@ function onInput(ev: Event): void {
 }
 .im-chat-title {
   font-size: 15px;
+}
+.im-cs-controls {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.im-cs-status {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #e8f3ff;
+  color: #1769aa;
+  font-size: 12px;
+  font-weight: 600;
+}
+.im-cs-status.is-human_pending {
+  background: #fff3e8;
+  color: #b54708;
+}
+.im-cs-status.is-human_active {
+  background: #e8f7ee;
+  color: #14823d;
+}
+.im-cs-mode-button {
+  padding: 5px 10px;
+  border: 1px solid var(--xc-color-border, #e6e9ef);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--xc-color-primary, #0052d9);
+  cursor: pointer;
+}
+.im-cs-mode-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.im-cs-transfer-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  background: #fff7e8;
+  border-bottom: 1px solid #ffd8a8;
+  color: #7a4300;
+  font-size: 12px;
 }
 .im-load-more {
   margin: 10px auto 0;
@@ -113,6 +194,12 @@ function onInput(ev: Event): void {
   font-size: 12px;
   color: var(--xc-color-muted, #86909c);
   margin-bottom: 2px;
+}
+.im-reply-origin {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 11px;
+  opacity: 0.75;
 }
 .im-bubble p {
   margin: 0;

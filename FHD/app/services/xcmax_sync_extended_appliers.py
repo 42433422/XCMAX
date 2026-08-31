@@ -76,7 +76,9 @@ def _apply_im_message(item: dict[str, Any]) -> None:
                     db.delete(obj)
                     db.commit()
         except _facade().RECOVERABLE_ERRORS as exc:
-            _facade().logger.warning("apply_im_message delete failed id=%s: %s", message_id, exc)
+            _facade().logger.warning(
+                "apply_im_message delete failed id=%s: %s", message_id, exc
+            )
         return
     if not conversation_id:
         return
@@ -107,19 +109,31 @@ def _apply_im_message(item: dict[str, Any]) -> None:
             if obj:
                 if incoming_ms:
                     stored_ms = int(
-                        (_facade()._read_sync_meta(meta_key) or {}).get("updated_at_ms") or 0
+                        (_facade()._read_sync_meta(meta_key) or {}).get("updated_at_ms")
+                        or 0
                     )
                     if stored_ms and incoming_ms < stored_ms:
                         return
                 obj.body = body[:4000]
                 if sender_user_id:
                     obj.sender_user_id = sender_user_id
+                obj.origin = str(
+                    payload.get("origin") or getattr(obj, "origin", "user")
+                )[:32]
+                raw_operator_id = payload.get("operator_user_id")
+                obj.operator_user_id = int(raw_operator_id) if raw_operator_id else None
             else:
                 obj = ImMessage(
                     id=message_id if message_id else None,
                     conversation_id=conversation_id,
                     sender_user_id=sender_user_id,
                     body=body[:4000],
+                    origin=str(payload.get("origin") or "user")[:32],
+                    operator_user_id=(
+                        int(payload.get("operator_user_id"))
+                        if payload.get("operator_user_id")
+                        else None
+                    ),
                 )
                 db.add(obj)
             conv = db.get(ImConversation, conversation_id)
@@ -130,10 +144,15 @@ def _apply_im_message(item: dict[str, Any]) -> None:
             if meta_key:
                 _facade()._write_sync_meta(
                     meta_key,
-                    {"updated_at_ms": incoming_ms or _facade().utc_now_ms(), "id": int(obj.id)},
+                    {
+                        "updated_at_ms": incoming_ms or _facade().utc_now_ms(),
+                        "id": int(obj.id),
+                    },
                 )
     except _facade().RECOVERABLE_ERRORS as exc:
-        _facade().logger.warning("apply_im_message failed conv=%s: %s", conversation_id, exc)
+        _facade().logger.warning(
+            "apply_im_message failed conv=%s: %s", conversation_id, exc
+        )
 
 
 @_facade().register_entity_applier("im_read_state")
@@ -157,7 +176,12 @@ def _apply_im_read_state(item: dict[str, Any]) -> None:
     stored_read = int(stored.get("last_read_message_id") or 0)
     if incoming_ms and stored_ms and (incoming_ms < stored_ms):
         return
-    if incoming_ms and stored_ms and (incoming_ms == stored_ms) and (incoming_read <= stored_read):
+    if (
+        incoming_ms
+        and stored_ms
+        and (incoming_ms == stored_ms)
+        and (incoming_read <= stored_read)
+    ):
         return
     new_read = max(incoming_read, stored_read)
     try:
@@ -181,13 +205,18 @@ def _apply_im_read_state(item: dict[str, Any]) -> None:
         _facade()._write_sync_meta(
             meta_key,
             {
-                "updated_at_ms": max(incoming_ms, stored_ms) if incoming_ms else stored_ms,
+                "updated_at_ms": (
+                    max(incoming_ms, stored_ms) if incoming_ms else stored_ms
+                ),
                 "last_read_message_id": applied_read,
             },
         )
     except _facade().RECOVERABLE_ERRORS as exc:
         _facade().logger.warning(
-            "apply_im_read_state failed conv=%s user=%s: %s", conversation_id, user_id, exc
+            "apply_im_read_state failed conv=%s user=%s: %s",
+            conversation_id,
+            user_id,
+            exc,
         )
 
 
@@ -240,7 +269,9 @@ def _apply_account_entitlements(item: dict[str, Any]) -> None:
     payload = item.get("payload") or {}
     if not isinstance(payload, dict):
         return
-    entity_id = str(payload.get("market_user_id") or item.get("entity_id") or "").strip()
+    entity_id = str(
+        payload.get("market_user_id") or item.get("entity_id") or ""
+    ).strip()
     if not entity_id:
         return
     raw_profile = payload.get("profile")
@@ -255,7 +286,9 @@ def _apply_account_entitlements(item: dict[str, Any]) -> None:
             "mod_ids": _facade()._sync_payload_list(payload.get("mod_ids")),
         }
         _facade()._write_sync_meta(f"account_entitlements:{entity_id}", stored_payload)
-        _facade()._write_sync_meta(f"account_entitlements:username:{username}", stored_payload)
+        _facade()._write_sync_meta(
+            f"account_entitlements:username:{username}", stored_payload
+        )
         from app.db.models.user import User
         from app.db.session import get_db
 
@@ -269,7 +302,9 @@ def _apply_account_entitlements(item: dict[str, Any]) -> None:
         ).strip()
         account_tier = str(profile.get("account_tier") or "").strip() or None
         budget_range = str(profile.get("budget_range") or "").strip() or None
-        entitled_industries = _facade()._sync_payload_list(profile.get("entitled_industries"))
+        entitled_industries = _facade()._sync_payload_list(
+            profile.get("entitled_industries")
+        )
         if industry_id and industry_id not in entitled_industries:
             entitled_industries.append(industry_id)
         with get_db() as db:
@@ -288,5 +323,8 @@ def _apply_account_entitlements(item: dict[str, Any]) -> None:
             db.commit()
     except _facade().RECOVERABLE_ERRORS as exc:
         _facade().logger.warning(
-            "apply_account_entitlements failed user=%s id=%s: %s", username, entity_id, exc
+            "apply_account_entitlements failed user=%s id=%s: %s",
+            username,
+            entity_id,
+            exc,
         )

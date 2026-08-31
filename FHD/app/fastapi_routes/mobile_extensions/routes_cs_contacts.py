@@ -6,7 +6,7 @@ import importlib
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from fastapi.responses import JSONResponse
 
 from app.fastapi_routes.mobile_api import get_mobile_user
@@ -37,11 +37,14 @@ async def get_mobile_fixed_contacts(request: Request, user=Depends(get_mobile_us
     """
     if user is None:
         return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
         )
     from app.application.surface_contacts import mobile_fixed_contacts
 
-    return format_mobile_response(data=mobile_fixed_contacts(_parent()._mobile_group_mode(request)))
+    return format_mobile_response(
+        data=mobile_fixed_contacts(_parent()._mobile_group_mode(request))
+    )
 
 
 # ── 专属客服接口（企业版手机端） ──
@@ -52,7 +55,8 @@ async def get_cs_info(request: Request, user=Depends(get_mobile_user)):
     """返回当前用户的小C/智能客服信息。"""
     if user is None:
         return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
         )
     return format_mobile_response(
         data={
@@ -66,11 +70,17 @@ async def get_cs_info(request: Request, user=Depends(get_mobile_user)):
 
 
 @router.post("/cs/messages")
-async def post_cs_message(request: Request, body: dict, user=Depends(get_mobile_user)):
+async def post_cs_message(
+    request: Request,
+    body: dict,
+    background_tasks: BackgroundTasks,
+    user=Depends(get_mobile_user),
+):
     """发送消息到企业桌面端同源智能客服通道。"""
     if user is None:
         return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
         )
     msg_body = str(body.get("body", "") or "").strip()
     if not msg_body:
@@ -83,7 +93,8 @@ async def post_cs_message(request: Request, body: dict, user=Depends(get_mobile_
     uid = _mobile_request_user_id(request, user)
     if uid <= 0:
         return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
         )
     from app.application.im_app_service import ImApplicationService
     from app.db.session import get_db
@@ -94,16 +105,31 @@ async def post_cs_message(request: Request, body: dict, user=Depends(get_mobile_
             cs = svc._ensure_enterprise_dedicated_cs_user()
             if cs is None or int(cs.id) == uid:
                 return JSONResponse(
-                    format_mobile_response(None, "客服通道不可用", success=False, code=500),
+                    format_mobile_response(
+                        None, "客服通道不可用", success=False, code=500
+                    ),
                     status_code=500,
                 )
             conv = svc.get_or_create_direct(uid, int(cs.id))
-            result = svc.send_message(int(conv["id"]), uid, msg_body)
+            result = svc.send_message(int(conv["id"]), uid, msg_body, origin="customer")
+            conversation_id = int(conv["id"])
         sent = result.get("message") or {}
+        from app.application.enterprise_cs_automation import (
+            process_enterprise_cs_customer_message,
+        )
+
+        if background_tasks is not None:
+            background_tasks.add_task(
+                process_enterprise_cs_customer_message,
+                conversation_id,
+                uid,
+                int(sent.get("id") or 0),
+                msg_body,
+            )
         return format_mobile_response(
             data={
                 "message_id": str(sent.get("id") or ""),
-                # 真实客服:无 LLM 自动回复;客户端见空 reply 即 loadMessages 刷新等运营者回复。
+                # AI/人工均写回同一 IM；客户端继续按既有轮询刷新，无需打新包。
                 "reply": "",
                 "backend": "enterprise-cs",
                 "timestamp": str(sent.get("created_at") or ""),
@@ -124,7 +150,8 @@ async def get_cs_messages(
     """拉取小C/智能客服消息。"""
     if user is None:
         return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
         )
     # 从 enterprise-cs 真实 IM 会话拉取消息(客户发的 + 运营者以「企业专属客服」回复的)。
     from app.application.im_app_service import ImApplicationService
@@ -133,7 +160,8 @@ async def get_cs_messages(
     uid = _mobile_request_user_id(request, user)
     if uid <= 0:
         return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
         )
     error = ""
     messages: list[dict[str, Any]] = []
@@ -148,7 +176,9 @@ async def get_cs_messages(
                     {
                         "messageId": str(m.get("id") or ""),
                         # 发送者是自己=user,否则=客服(运营者以 enterprise-cs 身份回复)。
-                        "sender": "user" if int(m.get("sender_user_id") or 0) == uid else "cs",
+                        "sender": (
+                            "user" if int(m.get("sender_user_id") or 0) == uid else "cs"
+                        ),
                         "body": str(m.get("body") or ""),
                         "timestamp": str(m.get("created_at") or ""),
                     }

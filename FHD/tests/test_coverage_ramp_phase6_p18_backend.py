@@ -42,6 +42,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import numpy as np
 import pytest
+from fastapi import BackgroundTasks
 
 from app.application.workflow.engine import WorkflowEngine
 from app.application.workflow.types import (
@@ -2201,7 +2202,12 @@ class TestMobileExtUnauthorizedRoutes:
     @pytest.mark.asyncio
     async def test_cs_post_message_unauthorized(self, ext_mod):
         mock_request = MagicMock()
-        result = await ext_mod.post_cs_message(request=mock_request, body={}, user=None)
+        result = await ext_mod.post_cs_message(
+            request=mock_request,
+            body={},
+            background_tasks=BackgroundTasks(),
+            user=None,
+        )
         assert result.status_code == 401
 
     @pytest.mark.asyncio
@@ -2561,7 +2567,10 @@ class TestMobileExtCsRoutes:
             patch("app.application.im_app_service.ImApplicationService", return_value=mock_svc),
         ):
             result = await ext_mod.post_cs_message(
-                request=mock_request, body={"body": "hello"}, user=mock_user
+                request=mock_request,
+                body={"body": "hello"},
+                background_tasks=BackgroundTasks(),
+                user=mock_user,
             )
         if hasattr(result, "body"):
             data = json.loads(result.body)

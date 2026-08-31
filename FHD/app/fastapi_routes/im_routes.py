@@ -5,6 +5,7 @@ import logging
 
 from fastapi import (
     APIRouter,
+    BackgroundTasks,
     Body,
     Depends,
     HTTPException,
@@ -14,7 +15,9 @@ from fastapi import (
 )
 from fastapi.responses import JSONResponse
 
-from app.application.ai_group_chat_service import AiGroupChatService as AiGroupChatService
+from app.application.ai_group_chat_service import (
+    AiGroupChatService as AiGroupChatService,
+)
 from app.application.claude_super_employee_service import (
     ClaudeSuperEmployeeService as ClaudeSuperEmployeeService,
 )
@@ -108,7 +111,9 @@ def _include_enterprise_dedicated_cs(request: Request, db) -> bool:
     return not _is_admin_customer_service_session(request, db)
 
 
-def _require_admin_customer_service_session(request: Request, db) -> JSONResponse | None:
+def _require_admin_customer_service_session(
+    request: Request, db
+) -> JSONResponse | None:
     from app.application.desktop_admin_gate import forbidden_payload, is_desktop_runtime
 
     if is_desktop_runtime():
@@ -153,7 +158,11 @@ async def _notify_offline_im_members(
     source_is_mock = hasattr(source_hub, "mock_calls")
     hub = im_ws_hub if local_is_mock or not source_is_mock else source_hub
     online = set(hub.connected_user_ids())
-    offline = [int(mid) for mid in member_ids if int(mid) != sender_id and int(mid) not in online]
+    offline = [
+        int(mid)
+        for mid in member_ids
+        if int(mid) != sender_id and int(mid) not in online
+    ]
     if not offline:
         return
     try:
@@ -191,12 +200,16 @@ def im_list_conversations(
     try:
         items = ImApplicationService(db).list_conversations(
             uid,
-            include_enterprise_dedicated_cs=_include_enterprise_dedicated_cs(request, db),
+            include_enterprise_dedicated_cs=_include_enterprise_dedicated_cs(
+                request, db
+            ),
         )
         return {"success": True, "user_id": uid, "conversations": items}
     except RECOVERABLE_ERRORS:
         logger.exception("im_list_conversations")
-        return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)
+        return JSONResponse(
+            {"success": False, "message": _IM_UNAVAILABLE}, status_code=500
+        )
     finally:
         db.close()
 
@@ -213,7 +226,9 @@ def im_list_contacts(
     try:
         contacts = ImApplicationService(db).list_contacts(
             uid,
-            include_enterprise_dedicated_cs=_include_enterprise_dedicated_cs(request, db),
+            include_enterprise_dedicated_cs=_include_enterprise_dedicated_cs(
+                request, db
+            ),
         )
         keyword = (q or "").strip().lower()
         if keyword:
@@ -226,7 +241,9 @@ def im_list_contacts(
         return {"success": True, "contacts": contacts}
     except RECOVERABLE_ERRORS:
         logger.exception("im_list_contacts")
-        return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)
+        return JSONResponse(
+            {"success": False, "message": _IM_UNAVAILABLE}, status_code=500
+        )
     finally:
         db.close()
 
@@ -242,13 +259,17 @@ def im_unread_total(
     try:
         items = ImApplicationService(db).list_conversations(
             uid,
-            include_enterprise_dedicated_cs=_include_enterprise_dedicated_cs(request, db),
+            include_enterprise_dedicated_cs=_include_enterprise_dedicated_cs(
+                request, db
+            ),
         )
         total = sum(int(c.get("unread_count") or 0) for c in items)
         return {"success": True, "unread_total": total}
     except RECOVERABLE_ERRORS:
         logger.exception("im_unread_total")
-        return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)
+        return JSONResponse(
+            {"success": False, "message": _IM_UNAVAILABLE}, status_code=500
+        )
     finally:
         db.close()
 
@@ -267,7 +288,9 @@ def im_cs_inbox(request: Request, user: CurrentUser = Depends(require_identified
         return {"success": True, "conversations": items}
     except RECOVERABLE_ERRORS:
         logger.exception("im_cs_inbox")
-        return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)
+        return JSONResponse(
+            {"success": False, "message": _IM_UNAVAILABLE}, status_code=500
+        )
     finally:
         db.close()
 
@@ -290,7 +313,9 @@ def im_cs_inbox_messages(
         return {"success": True, "messages": messages}
     except RECOVERABLE_ERRORS:
         logger.exception("im_cs_inbox_messages")
-        return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)
+        return JSONResponse(
+            {"success": False, "message": _IM_UNAVAILABLE}, status_code=500
+        )
     finally:
         db.close()
 
@@ -312,14 +337,71 @@ def im_cs_inbox_reply(
             )
         text = str(body.get("body") or "").strip()
         if not text:
-            return JSONResponse({"success": False, "message": "消息不能为空"}, status_code=400)
-        result = ImApplicationService(db).cs_reply(conversation_id, text)
+            return JSONResponse(
+                {"success": False, "message": "消息不能为空"}, status_code=400
+            )
+        from app.application.enterprise_cs_automation import (
+            EnterpriseCsAutomationService,
+        )
+
+        operator_user_id = _uid(user)
+        EnterpriseCsAutomationService(db).note_manual_reply(
+            conversation_id, operator_user_id=operator_user_id
+        )
+        result = ImApplicationService(db).cs_reply(
+            conversation_id,
+            text,
+            origin="manual",
+            operator_user_id=operator_user_id,
+        )
         return {"success": True, **result}
     except (ValueError, PermissionError):
-        return JSONResponse({"success": False, "message": "消息参数无效"}, status_code=400)
+        return JSONResponse(
+            {"success": False, "message": "消息参数无效"}, status_code=400
+        )
     except RECOVERABLE_ERRORS:
         logger.exception("im_cs_inbox_reply")
-        return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)
+        return JSONResponse(
+            {"success": False, "message": _IM_UNAVAILABLE}, status_code=500
+        )
+    finally:
+        db.close()
+
+
+@router.post("/api/im/cs/inbox/{conversation_id}/mode")
+def im_cs_inbox_mode(
+    conversation_id: int,
+    request: Request,
+    body: dict = Body(default_factory=dict),
+    user: CurrentUser = Depends(require_identified_user),
+):
+    """管理端人工接管或恢复 AI 自动接待。"""
+    _ensure_schema()
+    db = HostSessionLocal()
+    try:
+        if not _is_admin_customer_service_session(request, db):
+            return JSONResponse(
+                {"success": False, "message": "需要管理端客服会话"}, status_code=403
+            )
+        from app.application.enterprise_cs_automation import (
+            EnterpriseCsAutomationService,
+        )
+
+        mode = str(body.get("mode") or "").strip().lower()
+        state = EnterpriseCsAutomationService(db).set_mode(
+            conversation_id,
+            mode,
+            operator_user_id=_uid(user),
+            reason=str(body.get("reason") or "管理员人工接管"),
+        )
+        return {"success": True, "state": state}
+    except ValueError as exc:
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
+    except RECOVERABLE_ERRORS:
+        logger.exception("im_cs_inbox_mode")
+        return JSONResponse(
+            {"success": False, "message": _IM_UNAVAILABLE}, status_code=500
+        )
     finally:
         db.close()
 
@@ -333,16 +415,22 @@ def im_create_direct(
     uid = _uid(user)
     peer = int(body.get("peer_user_id") or 0)
     if peer <= 0:
-        return JSONResponse({"success": False, "message": "peer_user_id 无效"}, status_code=400)
+        return JSONResponse(
+            {"success": False, "message": "peer_user_id 无效"}, status_code=400
+        )
     db = HostSessionLocal()
     try:
         conv = ImApplicationService(db).get_or_create_direct(uid, peer)
         return {"success": True, "conversation": conv}
     except ValueError:
-        return JSONResponse({"success": False, "message": "会话参数无效"}, status_code=400)
+        return JSONResponse(
+            {"success": False, "message": "会话参数无效"}, status_code=400
+        )
     except RECOVERABLE_ERRORS:
         logger.exception("im_create_direct")
-        return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)
+        return JSONResponse(
+            {"success": False, "message": _IM_UNAVAILABLE}, status_code=500
+        )
     finally:
         db.close()
 
@@ -355,12 +443,16 @@ def im_list_messages(
     limit: int = Query(default=50, ge=1, le=100),
     before_id: int | None = Query(default=None),
 ):
-    uid = _uid_for_request(request, user)  # 先鉴权再碰库:匿名请求必须 401,不能因 DB 不可用变 500
+    uid = _uid_for_request(
+        request, user
+    )  # 先鉴权再碰库:匿名请求必须 401,不能因 DB 不可用变 500
     _ensure_schema()
     db = HostSessionLocal()
     try:
         svc = ImApplicationService(db)
-        messages = svc.list_messages(conversation_id, uid, limit=limit, before_id=before_id)
+        messages = svc.list_messages(
+            conversation_id, uid, limit=limit, before_id=before_id
+        )
         # 打开会话(首屏,非分页上拉)即视为已读:推进当前用户的已读游标,清未读角标。
         # 安卓 FhdApi 没有独立 /read 端点,IM 会话(员工/普通)的未读全靠这里清。
         if before_id is None and messages:
@@ -372,10 +464,14 @@ def im_list_messages(
                 logger.debug("im_list_messages auto mark_read skipped", exc_info=True)
         return {"success": True, "messages": messages}
     except PermissionError:
-        return JSONResponse({"success": False, "message": "无权访问该会话"}, status_code=403)
+        return JSONResponse(
+            {"success": False, "message": "无权访问该会话"}, status_code=403
+        )
     except RECOVERABLE_ERRORS:
         logger.exception("im_list_messages")
-        return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)
+        return JSONResponse(
+            {"success": False, "message": _IM_UNAVAILABLE}, status_code=500
+        )
     finally:
         db.close()
 
@@ -384,16 +480,32 @@ def im_list_messages(
 async def im_send_message(
     request: Request,
     conversation_id: int,
+    background_tasks: BackgroundTasks,
     body: dict = Body(default_factory=dict),
     user: CurrentUser = Depends(get_current_user),
 ):
-    uid = _uid_for_request(request, user)  # 先鉴权再碰库:匿名请求必须 401,不能因 DB 不可用变 500
+    uid = _uid_for_request(
+        request, user
+    )  # 先鉴权再碰库:匿名请求必须 401,不能因 DB 不可用变 500
     _ensure_schema()
     db = HostSessionLocal()
     try:
         svc = ImApplicationService(db)
         text = str(body.get("body") or "")
-        result = svc.send_message(conversation_id, uid, text)
+        from app.application.enterprise_cs_automation import (
+            EnterpriseCsAutomationService,
+            process_enterprise_cs_customer_message,
+        )
+
+        is_enterprise_cs = EnterpriseCsAutomationService(
+            db
+        ).is_enterprise_cs_conversation(conversation_id, uid)
+        result = svc.send_message(
+            conversation_id,
+            uid,
+            text,
+            origin="customer" if is_enterprise_cs else "user",
+        )
         emp_peer_id = svc.employee_id_for_conversation(conversation_id, uid)
         legacy_payload = {
             "type": "message",
@@ -420,17 +532,33 @@ async def im_send_message(
                     relay_boss_reply_to_employee,
                 )
 
-                await asyncio.to_thread(relay_boss_reply_to_employee, uid, emp_peer_id, text)
+                await asyncio.to_thread(
+                    relay_boss_reply_to_employee, uid, emp_peer_id, text
+                )
             except RECOVERABLE_ERRORS:
                 logger.debug("im_send_message employee relay skipped", exc_info=True)
+        if is_enterprise_cs and background_tasks is not None:
+            background_tasks.add_task(
+                process_enterprise_cs_customer_message,
+                conversation_id,
+                uid,
+                int((result.get("message") or {}).get("id") or 0),
+                text,
+            )
         return {"success": True, **result}
     except PermissionError:
-        return JSONResponse({"success": False, "message": "无权访问该会话"}, status_code=403)
+        return JSONResponse(
+            {"success": False, "message": "无权访问该会话"}, status_code=403
+        )
     except ValueError:
-        return JSONResponse({"success": False, "message": "消息参数无效"}, status_code=400)
+        return JSONResponse(
+            {"success": False, "message": "消息参数无效"}, status_code=400
+        )
     except RECOVERABLE_ERRORS:
         logger.exception("im_send_message")
-        return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)
+        return JSONResponse(
+            {"success": False, "message": _IM_UNAVAILABLE}, status_code=500
+        )
     finally:
         db.close()
 
@@ -442,7 +570,9 @@ async def im_mark_read(
     body: dict = Body(default_factory=dict),
     user: CurrentUser = Depends(get_current_user),
 ):
-    uid = _uid_for_request(request, user)  # 先鉴权再碰库:匿名请求必须 401,不能因 DB 不可用变 500
+    uid = _uid_for_request(
+        request, user
+    )  # 先鉴权再碰库:匿名请求必须 401,不能因 DB 不可用变 500
     _ensure_schema()
     last_id = int(body.get("last_message_id") or 0)
     db = HostSessionLocal()
@@ -460,11 +590,14 @@ async def im_mark_read(
                 await im_ws_hub.send_to_user(int(member_id), read_payload)
         return {"success": True, **result}
     except PermissionError:
-        return JSONResponse({"success": False, "message": "无权执行该操作"}, status_code=403)
+        return JSONResponse(
+            {"success": False, "message": "无权执行该操作"}, status_code=403
+        )
     except RECOVERABLE_ERRORS:
         logger.exception("im_mark_read")
         return JSONResponse(
-            {"success": False, "message": "消息服务暂时不可用，请稍后重试"}, status_code=500
+            {"success": False, "message": "消息服务暂时不可用，请稍后重试"},
+            status_code=500,
         )
     finally:
         db.close()

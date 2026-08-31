@@ -9,7 +9,12 @@ from app.db.models.ai_employee import AiEmployeeProfile
 from app.db.models.employee_run_log import EmployeeRunLog
 from app.db.models.neuro_event_log import NeuroEventLog
 from app.db.models.butler_profile import ButlerUserProfile
-from app.db.models.im import ImConversation, ImConversationMember, ImMessage
+from app.db.models.im import (
+    ImConversation,
+    ImConversationMember,
+    ImCustomerServiceAutomationState,
+    ImMessage,
+)
 from app.db.models.ai import (
     AIConversation,
     AIConversationSession,
@@ -110,6 +115,7 @@ __all__ = [
     "EmployeeRunLog",
     "ImConversation",
     "ImConversationMember",
+    "ImCustomerServiceAutomationState",
     "ImMessage",
     "Product",
     "ShipmentRecord",

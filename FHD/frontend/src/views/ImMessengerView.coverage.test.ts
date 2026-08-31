@@ -67,6 +67,10 @@ const imMocks = vi.hoisted(() => ({
   fetchImContacts: vi.fn(async () => [enterpriseCsContact, normalContact, anotherContact]),
   imWebSocketUrl: vi.fn(() => 'ws://localhost/ws'),
   markImRead: vi.fn(async () => ({})),
+  fetchCsInbox: vi.fn(async () => []),
+  fetchCsInboxMessages: vi.fn(async () => []),
+  replyCsInbox: vi.fn(async () => ({ success: true })),
+  updateCsInboxMode: vi.fn(async () => ({ cs_mode: 'human', cs_status: 'human_active' })),
 }))
 
 vi.mock('@/api/im', () => imMocks)
@@ -162,6 +166,15 @@ function resetMocks() {
 
   imMocks.markImRead.mockReset()
   imMocks.markImRead.mockResolvedValue({})
+
+  imMocks.fetchCsInbox.mockReset()
+  imMocks.fetchCsInbox.mockResolvedValue([])
+  imMocks.fetchCsInboxMessages.mockReset()
+  imMocks.fetchCsInboxMessages.mockResolvedValue([])
+  imMocks.replyCsInbox.mockReset()
+  imMocks.replyCsInbox.mockResolvedValue({ success: true })
+  imMocks.updateCsInboxMode.mockReset()
+  imMocks.updateCsInboxMode.mockResolvedValue({ cs_mode: 'human', cs_status: 'human_active' })
 
   authMocks.getCurrentUser.mockReset()
   authMocks.getCurrentUser.mockResolvedValue({ data: { user: { id: 1 } } })

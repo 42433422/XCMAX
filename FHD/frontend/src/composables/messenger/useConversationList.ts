@@ -183,6 +183,13 @@ export function useConversationList(params: UseConversationListParams) {
   }
 
   function sidebarItemPreview(item: ImSidebarListItem): string {
+    if (item.kind === 'conversation' && item.conversation.is_cs_inbox) {
+      const conversation = item.conversation
+      if (conversation.cs_status === 'human_pending') return `待人工 · ${conversation.cs_transfer_reason || '需要人工处理'}`
+      if (conversation.cs_status === 'human_active') return '人工处理中'
+      if (conversation.cs_status === 'ai_processing') return 'AI 正在处理'
+      return conversation.cs_summary ? `AI接待 · ${conversation.cs_summary}` : 'AI自动接待中'
+    }
     return item.kind === 'pinned' ? pinnedEntryPreview(item.entry) : item.conversation.last_message_preview || '暂无消息'
   }
 

@@ -139,7 +139,37 @@ def test_im_send_message(im_client) -> None:
     resp = client.post("/api/im/conversations/10/messages", json={"body": "hello"})
     assert resp.status_code == 200
     assert resp.json()["success"] is True
-    mock_svc.send_message.assert_called_once_with(10, 1, "hello")
+    mock_svc.send_message.assert_called_once_with(10, 1, "hello", origin="user")
+
+
+def test_im_cs_mode_switches_to_human(im_client) -> None:
+    client, _mock_svc = im_client
+    state = {"cs_mode": "human", "cs_status": "human_active"}
+    automation = MagicMock()
+    automation.set_mode.return_value = state
+    with (
+        patch(
+            "app.fastapi_routes.im_routes._is_admin_customer_service_session",
+            return_value=True,
+        ),
+        patch(
+            "app.application.enterprise_cs_automation.EnterpriseCsAutomationService",
+            return_value=automation,
+        ),
+    ):
+        resp = client.post(
+            "/api/im/cs/inbox/10/mode",
+            json={"mode": "human", "reason": "需要核对合同"},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["state"] == state
+    automation.set_mode.assert_called_once_with(
+        10,
+        "human",
+        operator_user_id=1,
+        reason="需要核对合同",
+    )
 
 
 def test_im_mark_read(im_client) -> None:
