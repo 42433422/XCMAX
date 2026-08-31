@@ -151,6 +151,9 @@ from app.db.init_db_part03 import (
     ensure_business_tenant_id_columns as ensure_business_tenant_id_columns,
 )
 from app.db.init_db_part03 import (
+    ensure_im_customer_service_columns as ensure_im_customer_service_columns,
+)
+from app.db.init_db_part03 import (
     ensure_product_query_indexes as ensure_product_query_indexes,
 )
 from app.db.init_db_part03 import (

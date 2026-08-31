@@ -609,6 +609,43 @@ class TestInitImTables:
             table_names = {t[0] for t in tables}
         assert "im_conversations" in table_names
 
+    def test_upgrades_legacy_message_schema(self, sqlite_engine):
+        from app.db.init_db import init_im_tables
+
+        with sqlite_engine.begin() as conn:
+            conn.execute(
+                text(
+                    "CREATE TABLE im_conversations ("
+                    "id INTEGER PRIMARY KEY, kind VARCHAR(32) NOT NULL, "
+                    "title VARCHAR(255) NOT NULL, is_direct BOOLEAN NOT NULL, "
+                    "created_at DATETIME, updated_at DATETIME, last_message_at DATETIME)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE TABLE im_messages ("
+                    "id INTEGER PRIMARY KEY, conversation_id INTEGER NOT NULL, "
+                    "sender_user_id INTEGER NOT NULL, body TEXT NOT NULL, created_at DATETIME)"
+                )
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO im_messages "
+                    "(id, conversation_id, sender_user_id, body) "
+                    "VALUES (1, 1, 9, 'legacy')"
+                )
+            )
+
+        init_im_tables(sqlite_engine)
+
+        with sqlite_engine.connect() as conn:
+            columns = {row[1] for row in conn.execute(text("PRAGMA table_info(im_messages)"))}
+            indexes = {row[1] for row in conn.execute(text("PRAGMA index_list(im_messages)"))}
+            origin = conn.execute(text("SELECT origin FROM im_messages WHERE id = 1")).scalar_one()
+        assert {"origin", "operator_user_id"} <= columns
+        assert "ix_im_messages_operator_user_id" in indexes
+        assert origin == "user"
+
 
 # ---------------------------------------------------------------------------
 # ensure_product_query_indexes

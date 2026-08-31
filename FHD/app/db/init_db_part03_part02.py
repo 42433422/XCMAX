@@ -10,6 +10,58 @@ def _facade():
     return importlib.import_module("app.db.init_db")
 
 
+def ensure_im_customer_service_columns(engine: _facade().Engine) -> None:
+    """幂等补齐企业客服消息来源列，兼容未接入 Alembic 的生产库。"""
+    from sqlalchemy import inspect, text
+
+    try:
+        insp = inspect(engine)
+        if "im_messages" not in set(insp.get_table_names() or []):
+            return
+        columns = {str(row.get("name") or "") for row in insp.get_columns("im_messages")}
+        dialect = engine.dialect.name
+        with engine.begin() as conn:
+            if "origin" not in columns:
+                _facade().logger.info("im_messages 缺少 origin 列，正在补齐 …")
+                if dialect == "postgresql":
+                    conn.execute(
+                        text(
+                            "ALTER TABLE im_messages ADD COLUMN IF NOT EXISTS "
+                            "origin VARCHAR(32) NOT NULL DEFAULT 'user'"
+                        )
+                    )
+                else:
+                    conn.execute(
+                        text(
+                            "ALTER TABLE im_messages ADD COLUMN "
+                            "origin VARCHAR(32) NOT NULL DEFAULT 'user'"
+                        )
+                    )
+            if "operator_user_id" not in columns:
+                _facade().logger.info("im_messages 缺少 operator_user_id 列，正在补齐 …")
+                if dialect == "postgresql":
+                    conn.execute(
+                        text(
+                            "ALTER TABLE im_messages ADD COLUMN IF NOT EXISTS "
+                            "operator_user_id INTEGER"
+                        )
+                    )
+                else:
+                    conn.execute(
+                        text("ALTER TABLE im_messages ADD COLUMN operator_user_id INTEGER")
+                    )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_im_messages_operator_user_id "
+                    "ON im_messages (operator_user_id)"
+                )
+            )
+    except _facade().RECOVERABLE_ERRORS as exc:
+        _facade().logger.warning(
+            "企业客服消息来源列兼容补齐失败（可执行对应 Alembic 迁移）：%s", exc
+        )
+
+
 def init_im_tables(
     engine: _facade().Engine | None = None, *, database_url: str | None = None
 ) -> None:
@@ -44,6 +96,7 @@ def init_im_tables(
         _facade()._orm_table(AiEmployeeProfile),
     ]
     Base.metadata.create_all(engine, tables=target_tables, checkfirst=True)
+    ensure_im_customer_service_columns(engine)
 
 
 def init_approval_tables(engine: _facade().Engine) -> None:
