@@ -30,6 +30,15 @@
       @open-custom="focusCustomDeliveries"
     />
 
+    <EnterpriseDeliveryRoster
+      v-if="!errorMessage && (!loading || trialDeliveries.length)"
+      variant="trial"
+      :deliveries="trialDeliveries"
+      :tickets="tickets"
+      :policy="trialPolicy"
+      @open-custom="focusCustomDeliveries"
+    />
+
     <section id="delivery-custom-orders" class="delivery-toolbar" aria-label="定制交付工单筛选">
       <label>
         <i class="fa fa-search" aria-hidden="true"></i>
@@ -211,7 +220,9 @@ import { appAlert, appConfirm } from '@/utils/appDialog'
 
 const tickets = ref<CustomDeliveryTicket[]>([])
 const standardDeliveries = ref<StandardDeliveryRecord[]>([])
+const trialDeliveries = ref<StandardDeliveryRecord[]>([])
 const standardPolicy = ref<StandardDeliveryPolicy>({})
+const trialPolicy = ref<StandardDeliveryPolicy>({})
 const usersById = ref(new Map<number, MarketAdminUser>())
 const query = ref('')
 const stageFilter = ref('')
@@ -265,6 +276,7 @@ const summaryCards = computed(() => {
   const count = (stages: string[]) => tickets.value.filter((ticket) => stages.includes(stageOf(ticket))).length
   return [
     { key: 'enterprise', label: '永久购买账户', value: standardDeliveries.value.length, hint: '来源：购买账户 SSOT' },
+    { key: 'trial', label: '体验账户', value: trialDeliveries.value.length, hint: '¥99 · 30 天全功能体验' },
     { key: 'standard', label: '标准交付待安装', value: standardDeliveries.value.filter((row) => row.status === 'pending_install').length, hint: 'Mac / Windows 通用安装包' },
     { key: 'receipt', label: '待首次登录', value: standardDeliveries.value.filter((row) => row.status === 'pending_first_login').length, hint: '安装成功，等待账号登录' },
     { key: 'done', label: '标准交付完成', value: standardDeliveries.value.filter((row) => row.status === 'completed').length, hint: '客户设备安装 + 首次登录' },
@@ -301,15 +313,21 @@ async function loadAll() {
   loading.value = true
   errorMessage.value = ''
   try {
-    const [deliveryResult, standardResult] = await Promise.all([
+    const [deliveryResult, standardResult, trialResult] = await Promise.all([
       xcmaxAdminApi.listCustomDeliveries(100),
       xcmaxAdminApi.listStandardDeliveries(),
+      xcmaxAdminApi.listTrialDeliveries(),
     ])
     tickets.value = extractTickets(deliveryResult)
     standardDeliveries.value = extractStandardDeliveries(standardResult)
+    trialDeliveries.value = extractStandardDeliveries(trialResult)
     standardPolicy.value = extractStandardPolicy(standardResult)
+    trialPolicy.value = extractStandardPolicy(trialResult)
     usersById.value = new Map(
-      standardDeliveries.value.map((row) => [Number(row.account.id), row.account]),
+      [...standardDeliveries.value, ...trialDeliveries.value].map((row) => [
+        Number(row.account.id),
+        row.account,
+      ]),
     )
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : String(error)

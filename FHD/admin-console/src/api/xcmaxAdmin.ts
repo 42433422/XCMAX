@@ -12,6 +12,8 @@ export type MarketAdminUser = {
 export type StandardDeliveryRecord = {
   delivery_no: string;
   delivery_type: 'standard_desktop' | string;
+  license_type?: 'permanent' | 'trial' | string;
+  expires_at?: string;
   status: 'pending_install' | 'pending_first_login' | 'completed' | string;
   status_label: string;
   started_at?: string;
@@ -346,6 +348,23 @@ export const xcmaxAdminApi = {
       '/api/xcmax/admin/market/entitlement-fast-lane/actions',
       payload,
     );
+  },
+  listTrialDeliveries() {
+    return api.get<{
+      items?: StandardDeliveryRecord[];
+      total?: number;
+      summary?: {
+        purchased_accounts?: number;
+        pending_install?: number;
+        pending_first_login?: number;
+        completed?: number;
+        customer_installed_devices?: number;
+        internal_receipts_excluded?: number;
+        internal_device_ids_configured?: number;
+      };
+      policy?: StandardDeliveryPolicy;
+      ssot?: string;
+    }>('/api/xcmax/admin/customer-deliveries/trial');
   },
   decideCustomDelivery(ticketId: number, action: 'accept' | 'rework', note = '') {
     return api.post<CustomDeliveryTicket>(

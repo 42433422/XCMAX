@@ -8,6 +8,7 @@ const listUsers = vi.fn()
 const listEntitlementFastLanePlans = vi.fn()
 const getEntitlementFastLaneAccount = vi.fn()
 const mutateEntitlementFastLane = vi.fn()
+const listTrialDeliveries = vi.fn()
 const decideCustomDelivery = vi.fn()
 const appAlert = vi.fn().mockResolvedValue(undefined)
 const appConfirm = vi.fn().mockResolvedValue(true)
@@ -20,6 +21,7 @@ vi.mock('@/api/xcmaxAdmin', () => ({
     listEntitlementFastLanePlans: (...args: unknown[]) => listEntitlementFastLanePlans(...args),
     getEntitlementFastLaneAccount: (...args: unknown[]) => getEntitlementFastLaneAccount(...args),
     mutateEntitlementFastLane: (...args: unknown[]) => mutateEntitlementFastLane(...args),
+    listTrialDeliveries: (...args: unknown[]) => listTrialDeliveries(...args),
     decideCustomDelivery: (...args: unknown[]) => decideCustomDelivery(...args),
   },
 }))
@@ -81,10 +83,35 @@ const standardDeliveries = [
   },
 ]
 
+const trialDeliveries = [
+  {
+    delivery_no: 'STD-ORDER-TRIAL-001',
+    delivery_type: 'standard_desktop',
+    license_type: 'trial',
+    expires_at: '2026-09-29T09:05:00+00:00',
+    status: 'pending_install',
+    status_label: '账号已创建，待安装',
+    account: { id: 95, username: 'trial-user', company: '体验测试用户', is_enterprise: false },
+    plan: {
+      id: 'saas-trial-30',
+      title: '30 天全功能体验',
+      account_tier: 'normal',
+      license_type: 'trial',
+      amount_cents: 9900,
+    },
+    order: { order_no: 'ORDER-TRIAL-001', status: 'entitlement_granted' },
+    install: { ok: false, installed_devices: 0, latest_receipt: null },
+    first_login: { ok: false, at: '' },
+    completion_rule: 'installed_and_first_login',
+    available_installers: ['macOS', 'Windows'],
+  },
+]
+
 describe('DeliveryCenterView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     listStandardDeliveries.mockResolvedValue({ items: structuredClone(standardDeliveries), total: 2 })
+    listTrialDeliveries.mockResolvedValue({ items: structuredClone(trialDeliveries), total: 1 })
     listCustomDeliveries.mockResolvedValue({ items: [structuredClone(delivery)] })
     listUsers.mockResolvedValue({ users: standardDeliveries.map((row) => row.account) })
     listEntitlementFastLanePlans.mockResolvedValue({
@@ -126,17 +153,39 @@ describe('DeliveryCenterView', () => {
     expect(wrapper.text()).toContain('权益快速通道')
     expect(wrapper.text()).toContain('企业旗舰版')
     expect(wrapper.text()).toContain('终端同源快捷模式')
+    expect(wrapper.text()).toContain('¥99 体验账户交付台账')
+    expect(wrapper.text()).toContain('体验测试用户')
+    expect(wrapper.text()).toContain('30 天全功能体验')
+    expect(wrapper.text()).toContain('30 天体验')
     expect(listStandardDeliveries).toHaveBeenCalledTimes(1)
+    expect(listTrialDeliveries).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows the trial summary card and keeps trial accounts out of the permanent roster', async () => {
+    const wrapper = mount(DeliveryCenterView)
+    await flushPromises()
+
+    const trialCard = wrapper.findAll('.delivery-stats article').find((card) => card.text().includes('体验账户'))
+    expect(trialCard).toBeTruthy()
+    expect(trialCard!.text()).toContain('¥99 · 30 天全功能体验')
+
+    const rosters = wrapper.findAll('.enterprise-roster')
+    expect(rosters.length).toBe(2)
+    expect(rosters[0].text()).not.toContain('体验测试用户')
+    expect(rosters[1].text()).toContain('体验测试用户')
+    expect(rosters[1].text()).toContain('1 个体验账户')
   })
 
   it('does not treat enterprise flags without a permanent purchase as deliveries', async () => {
     listCustomDeliveries.mockResolvedValue({ items: [] })
     listStandardDeliveries.mockResolvedValue({ items: [], total: 0, ssot: 'active_permanent_user_plan' })
+    listTrialDeliveries.mockResolvedValue({ items: [], total: 0, ssot: 'active_trial_user_plan' })
 
     const wrapper = mount(DeliveryCenterView)
     await flushPromises()
 
     expect(wrapper.text()).toContain('尚无有效的永久购买账户')
+    expect(wrapper.text()).toContain('尚无有效的体验账户')
     expect(wrapper.text()).toContain('暂无定制交付工单')
     expect(wrapper.text()).toContain('首次定制交付前的开发免费')
   })

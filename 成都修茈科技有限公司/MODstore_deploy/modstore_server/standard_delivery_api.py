@@ -57,7 +57,7 @@ def _entitlement_plan_id(row: Entitlement) -> str:
     return str(payload.get("plan_id") or "").strip() if isinstance(payload, dict) else ""
 
 
-def _permanent_plan_rows(db: Session) -> list[UserPlan]:
+def _purchased_plan_rows(db: Session, license_type: str) -> list[UserPlan]:
     rows = (
         db.query(UserPlan)
         .filter(UserPlan.is_active.is_(True))
@@ -67,14 +67,14 @@ def _permanent_plan_rows(db: Session) -> list[UserPlan]:
     latest_by_user: dict[int, UserPlan] = {}
     for row in rows:
         plan = account_license_plan(str(row.plan_id or "")) or {}
-        if str(plan.get("license_type") or "") != "permanent":
+        if str(plan.get("license_type") or "") != license_type:
             continue
         latest_by_user.setdefault(int(row.user_id), row)
     return list(latest_by_user.values())
 
 
-def build_standard_delivery_rows(db: Session) -> list[dict[str, Any]]:
-    """Return one real standard delivery per active permanent account.
+def _build_delivery_rows(db: Session, license_type: str) -> list[dict[str, Any]]:
+    """Return one real desktop delivery per active purchased account.
 
     Account creation starts the delivery.  It completes automatically only when
     the same purchased account has both a successful customer-side desktop
@@ -83,7 +83,7 @@ def build_standard_delivery_rows(db: Session) -> list[dict[str, Any]]:
     excluded from delivery completion.
     """
 
-    plan_rows = _permanent_plan_rows(db)
+    plan_rows = _purchased_plan_rows(db, license_type)
     user_ids = [int(row.user_id) for row in plan_rows]
     if not user_ids:
         return []
@@ -187,6 +187,8 @@ def build_standard_delivery_rows(db: Session) -> list[dict[str, Any]]:
             {
                 "delivery_no": f"STD-{order_no or f'U{uid}-P{plan_row.id}'}",
                 "delivery_type": "standard_desktop",
+                "license_type": license_type,
+                "expires_at": _iso(plan_row.expires_at),
                 "status": status,
                 "status_label": status_label,
                 "started_at": _iso(getattr(user, "created_at", None)),
@@ -205,7 +207,7 @@ def build_standard_delivery_rows(db: Session) -> list[dict[str, Any]]:
                     "id": plan_id,
                     "title": str(plan.get("title") or plan_id),
                     "account_tier": str(plan.get("account_tier") or "normal"),
-                    "license_type": "permanent",
+                    "license_type": license_type,
                     "amount_cents": int(plan.get("amount_cents") or 0),
                 },
                 "order": {
@@ -231,13 +233,19 @@ def build_standard_delivery_rows(db: Session) -> list[dict[str, Any]]:
     return sorted(result, key=lambda row: (row["status"] == "completed", row["started_at"]))
 
 
-@router.get("/standard")
-def list_standard_deliveries(
-    limit: int = Query(default=500, ge=1, le=1000),
-    db: Session = Depends(get_db),
-    _user: User = Depends(require_admin),
-):
-    rows = build_standard_delivery_rows(db)
+def build_standard_delivery_rows(db: Session) -> list[dict[str, Any]]:
+    """Permanent purchased accounts projected as standard desktop deliveries."""
+
+    return _build_delivery_rows(db, "permanent")
+
+
+def build_trial_delivery_rows(db: Session) -> list[dict[str, Any]]:
+    """¥99 trial (saas-trial-30) accounts projected as trial desktop deliveries."""
+
+    return _build_delivery_rows(db, "trial")
+
+
+def _delivery_response(rows: list[dict[str, Any]], limit: int, ssot: str) -> dict[str, Any]:
     rows = rows[:limit]
     internal_ids = configured_internal_installation_ids()
     return {
@@ -256,7 +264,7 @@ def list_standard_deliveries(
             ),
             "internal_device_ids_configured": len(internal_ids),
         },
-        "ssot": "active_permanent_user_plan",
+        "ssot": ssot,
         "policy": {
             "id": "customer_external_desktop_delivery",
             "completion_rule": "customer_desktop_installed_and_first_login",
@@ -267,4 +275,29 @@ def list_standard_deliveries(
     }
 
 
-__all__ = ["build_standard_delivery_rows", "configured_internal_installation_ids", "router"]
+@router.get("/standard")
+def list_standard_deliveries(
+    limit: int = Query(default=500, ge=1, le=1000),
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_admin),
+):
+    return _delivery_response(
+        build_standard_delivery_rows(db), limit, "active_permanent_user_plan"
+    )
+
+
+@router.get("/trial")
+def list_trial_deliveries(
+    limit: int = Query(default=500, ge=1, le=1000),
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_admin),
+):
+    return _delivery_response(build_trial_delivery_rows(db), limit, "active_trial_user_plan")
+
+
+__all__ = [
+    "build_standard_delivery_rows",
+    "build_trial_delivery_rows",
+    "configured_internal_installation_ids",
+    "router",
+]

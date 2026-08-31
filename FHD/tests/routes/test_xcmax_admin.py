@@ -537,9 +537,11 @@ class TestAdminCommerceRoutes:
                 "/api/xcmax/admin/deploy/install-receipts?target_build_sha=abc123"
             )
             deliveries = client.get("/api/xcmax/admin/customer-deliveries/standard")
+            trial_deliveries = client.get("/api/xcmax/admin/customer-deliveries/trial")
         assert orders.status_code == 200
         assert receipts.status_code == 200
         assert deliveries.status_code == 200
+        assert trial_deliveries.status_code == 200
         assert (
             "/api/admin/commerce/orders?status=pending&limit=20"
             in mock_proxy.await_args_list[0].args[2]
@@ -551,6 +553,10 @@ class TestAdminCommerceRoutes:
         assert (
             "/api/admin/customer-deliveries/standard?limit=500"
             in mock_proxy.await_args_list[2].args[2]
+        )
+        assert (
+            "/api/admin/customer-deliveries/trial?limit=500"
+            in mock_proxy.await_args_list[3].args[2]
         )
 
     def test_reprice_proxies_payload_and_writes_admin_audit(self, client: TestClient) -> None:

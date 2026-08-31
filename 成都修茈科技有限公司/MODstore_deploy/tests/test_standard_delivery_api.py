@@ -13,6 +13,7 @@ from modstore_server.db.delivery_commerce import UpdateInstallationReceipt
 from modstore_server.models import Base, Entitlement, PlanTemplate, User, UserPlan
 from modstore_server.standard_delivery_api import (
     build_standard_delivery_rows,
+    build_trial_delivery_rows,
     configured_internal_installation_ids,
     list_standard_deliveries,
 )
@@ -184,6 +185,78 @@ def test_trial_accounts_are_not_standard_permanent_deliveries():
         db.add(UserPlan(user_id=user.id, plan_id="saas-trial-30", is_active=True))
         db.commit()
         assert build_standard_delivery_rows(db) == []
+    finally:
+        db.close()
+
+
+def test_trial_accounts_project_into_trial_delivery_rows():
+    db = _session()
+    try:
+        user = User(
+            username="trial_paid",
+            email="trial-paid@example.com",
+            password_hash="unused",
+            account_state="active",
+            created_at=datetime(2026, 8, 30, 9, 0, tzinfo=UTC),
+        )
+        db.add(user)
+        db.flush()
+        _add_plan(db, "saas-trial-30")
+        db.add(
+            UserPlan(
+                user_id=user.id,
+                plan_id="saas-trial-30",
+                is_active=True,
+                started_at=datetime(2026, 8, 30, 9, 5, tzinfo=UTC),
+                expires_at=datetime(2026, 9, 29, 9, 5, tzinfo=UTC),
+            )
+        )
+        db.add(
+            Entitlement(
+                user_id=user.id,
+                entitlement_type="plan",
+                source_order_id="ORDER-TRIAL-001",
+                metadata_json='{"plan_id":"saas-trial-30"}',
+                is_active=True,
+            )
+        )
+        db.commit()
+
+        assert build_standard_delivery_rows(db) == []
+        rows = build_trial_delivery_rows(db)
+        assert len(rows) == 1
+        row = rows[0]
+        assert row["license_type"] == "trial"
+        assert row["plan"]["id"] == "saas-trial-30"
+        assert row["plan"]["title"] == "30 天全功能体验"
+        assert row["plan"]["license_type"] == "trial"
+        assert row["delivery_no"] == "STD-ORDER-TRIAL-001"
+        assert row["status"] == "pending_install"
+        assert row["expires_at"].endswith("+00:00")
+
+        db.add(
+            UpdateInstallationReceipt(
+                user_id=user.id,
+                installation_id="installation-0000000000000002",
+                idempotency_key="receipt-00000000000000000002",
+                platform="darwin",
+                installed_version="1.0.0.1",
+                installed_build_sha="build-sha-2",
+                status="installed",
+                source="desktop_inventory",
+                reported_at=datetime(2026, 8, 30, 9, 20, tzinfo=UTC),
+            )
+        )
+        user.first_login_at = datetime(2026, 8, 30, 9, 25, tzinfo=UTC)
+        user.last_login_at = user.first_login_at
+        db.add(user)
+        db.commit()
+
+        completed = build_trial_delivery_rows(db)[0]
+        assert completed["status"] == "completed"
+        assert completed["install"]["ok"] is True
+        assert completed["first_login"]["ok"] is True
+        assert completed["completion_rule"] == "customer_desktop_installed_and_first_login"
     finally:
         db.close()
 

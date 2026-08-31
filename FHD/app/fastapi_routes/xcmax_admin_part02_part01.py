@@ -338,6 +338,17 @@ async def admin_list_standard_customer_deliveries(request: _facade().Request):
     )
 
 
+@_facade().router.get("/admin/customer-deliveries/trial", response_model=None)
+async def admin_list_trial_customer_deliveries(request: _facade().Request):
+    """读取 ¥99 体验账户（saas-trial-30）SSOT 聚合出的体验交付证据。"""
+
+    return await _facade()._market_admin_proxy(
+        request,
+        "GET",
+        "/api/admin/customer-deliveries/trial?limit=500",
+    )
+
+
 @_facade().router.get("/admin/market/entitlement-fast-lane/plans", response_model=None)
 async def admin_list_entitlement_fast_lane_plans(request: _facade().Request):
     """List every active account-license and membership plan from MODstore SSOT."""
