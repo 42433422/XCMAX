@@ -121,6 +121,7 @@ import { isDesktopShell } from '@/utils/desktopShell'
 import { useChatSession } from '@/composables/messenger/useChatSession'
 import { useContactPicker } from '@/composables/messenger/useContactPicker'
 import { useConversationList } from '@/composables/messenger/useConversationList'
+import { useCsInboxBridge } from '@/composables/messenger/useCsInboxBridge'
 import { useCustomerServiceAutomation } from '@/composables/messenger/useCustomerServiceAutomation'
 import { useEnterpriseCsBridge } from '@/composables/messenger/useEnterpriseCsBridge'
 import { useSuperEmployeeDispatch } from '@/composables/messenger/useSuperEmployeeDispatch'
@@ -176,6 +177,14 @@ const {
   stopEnterpriseCsPolling,
 } = useEnterpriseCsBridge({
   enabled: isDesktopShell(),
+  conversations,
+  activeConversationId,
+  messages,
+  playIncoming,
+  scrollToBottom,
+})
+const { refreshCsInbox, startCsInboxPolling, stopCsInboxPolling } = useCsInboxBridge({
+  enabled: isAdminCustomerServiceConsole,
   conversations,
   activeConversationId,
   messages,
@@ -380,6 +389,7 @@ const { activeCsConversation, csAutomationBusy, onChangeCsMode } = useCustomerSe
 async function selectConversation(id: number): Promise<void> {
   if (!localUserId.value) return
   stopEnterpriseCsPolling()
+  stopCsInboxPolling()
   restoreOverlappingAssistantFloat()
   stopCodexPolling()
   stopCodexTypewriter(true)
@@ -408,6 +418,7 @@ async function selectConversation(id: number): Promise<void> {
       }
     }
     if (isCustomerCs) startEnterpriseCsPolling()
+    else if (isCs) startCsInboxPolling()
     else await loadConversations()
   } catch (error) {
     showAppToast(error instanceof Error ? error.message : '加载消息失败', 'error')
@@ -515,6 +526,7 @@ async function onSend(): Promise<void> {
     await nextTick()
     scrollToBottom()
     if (isCustomerCs) await refreshEnterpriseCsThread()
+    else if (isCs) await refreshCsInbox()
     else await loadConversations()
   } catch (error) {
     showAppToast(error instanceof Error ? error.message : '发送失败', 'error')
@@ -610,6 +622,7 @@ onUnmounted(() => {
   stopCodexPolling()
   stopCodexTypewriter(true)
   stopEnterpriseCsPolling()
+  stopCsInboxPolling()
   offSyncMessage?.()
   offSyncMessage = null
   offSyncRead?.()
