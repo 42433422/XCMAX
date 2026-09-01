@@ -313,7 +313,14 @@ def _reject_and_retry_kb_schema_failure(
         open_items, branch=branch, para_task_id=para_task_id
     )
     if existing is not None:
-        retry_count = int(existing.get("retry_count") or 0) + 1
+        try:
+            retry_count = int(existing.get("retry_count") or 0) + 1
+        except (OverflowError, TypeError, ValueError):
+            _facade().logger.warning(
+                "kb_schema_retry: invalid persisted retry_count=%r; restarting at 1",
+                existing.get("retry_count"),
+            )
+            retry_count = 1
     else:
         retry_count = 1
     escalated = retry_count >= _facade().KB_SCHEMA_RETRY_MAX

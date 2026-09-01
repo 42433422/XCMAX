@@ -5290,6 +5290,48 @@ def test_reject_and_retry_kb_schema_second_failure_increments_retry_count(monkey
     assert kb_items[0]["escalated"] is True
 
 
+@pytest.mark.parametrize("persisted_retry_count", [float("inf"), {}, "not-a-number"])
+def test_reject_and_retry_kb_schema_recovers_from_invalid_retry_count(
+    monkeypatch, tmp_path, persisted_retry_count
+):
+    _seed_loop_memory_for_kb_retry(
+        tmp_path,
+        [
+            {
+                "branch": "devfleet/codex/kb-bad-1",
+                "created_at": "2026-07-20T12:00:00+00:00",
+                "escalated": False,
+                "kind": "kb_schema_retry",
+                "para_task_id": "task-kb-1",
+                "retry_count": persisted_retry_count,
+                "run_id": "run-kb-1",
+                "steps": ["code"],
+            }
+        ],
+    )
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "loop_memory.json"))
+    monkeypatch.setattr(loop_runner, "_find_pr_number_for_branch", lambda branch: None)
+    monkeypatch.setattr(loop_runner, "_append_governance_audit", lambda record: None)
+    monkeypatch.setattr(loop_runner, "_append_ledger", lambda record: None)
+
+    final = _reject_and_retry_kb_schema_failure(
+        run_id="run-kb-2",
+        branch="devfleet/codex/kb-bad-1",
+        para_task_id="task-kb-1",
+        kb_validation=_kb_validation_failed_payload(),
+        steps=[{"step": "code", "ok": True}],
+        gate={},
+    )
+
+    assert final["policy_decision"]["retry_count"] == 1
+    assert final["policy_decision"]["escalated"] is False
+    memory = _load_loop_memory()
+    kb_items = [i for i in memory["open_items"] if i.get("kind") == "kb_schema_retry"]
+    assert len(kb_items) == 1
+    assert kb_items[0]["retry_count"] == 1
+    assert kb_items[0]["escalated"] is False
+
+
 def test_reject_and_retry_kb_schema_escalates_after_max_retries(monkeypatch, tmp_path):
     """retry_count >= KB_SCHEMA_RETRY_MAX (2) → 升级为 human review。"""
     # 验证 KB_SCHEMA_RETRY_MAX 常量是 2
