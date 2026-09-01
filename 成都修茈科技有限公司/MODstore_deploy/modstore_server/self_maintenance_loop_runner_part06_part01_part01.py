@@ -238,10 +238,47 @@ def _base_para_input(
     return data
 
 
+_FOCUSED_TEST_CAPABILITY_CACHE = {}
+_FOCUSED_TEST_CAPABILITY_TTL_SECONDS = 60.0
+
+
+def _focused_test_environment_fingerprint(candidate: _facade().Path) -> tuple:
+    """Describe the executable and dependency locations that affect the probe."""
+    venv_root = candidate.parent.parent
+    site_packages = sorted((venv_root / "lib").glob("python*/site-packages"))
+    watched_paths = [candidate, venv_root / "pyvenv.cfg", *site_packages]
+    for site_package in site_packages:
+        for distribution in ("apscheduler", "pytest"):
+            watched_paths.extend(sorted(site_package.glob(f"{distribution}*")))
+    fingerprint = []
+    for path in watched_paths:
+        try:
+            stat = path.stat()
+            fingerprint.append(
+                (str(path), stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns)
+            )
+        except OSError:
+            fingerprint.append((str(path), None))
+    return (
+        _facade().os.environ.get("PYTHONHOME"),
+        _facade().os.environ.get("PYTHONPATH"),
+        tuple(fingerprint),
+    )
+
+
 def _python_supports_focused_tests(candidate: _facade().Path) -> bool:
     """Return whether a Python executable has the loop's test dependencies."""
     if not candidate.is_file() or not _facade().os.access(candidate, _facade().os.X_OK):
         return False
+    fingerprint = _focused_test_environment_fingerprint(candidate)
+    now = _facade().time.monotonic()
+    cached = _FOCUSED_TEST_CAPABILITY_CACHE.get(str(candidate))
+    if (
+        cached
+        and cached[0] == fingerprint
+        and now - cached[1] < _FOCUSED_TEST_CAPABILITY_TTL_SECONDS
+    ):
+        return cached[2]
     try:
         probe = _facade().subprocess.run(
             [str(candidate), "-c", "import apscheduler, pytest"],
@@ -251,8 +288,11 @@ def _python_supports_focused_tests(candidate: _facade().Path) -> bool:
             timeout=10,
         )
     except (OSError, _facade().subprocess.SubprocessError):
-        return False
-    return probe.returncode == 0
+        supported = False
+    else:
+        supported = probe.returncode == 0
+    _FOCUSED_TEST_CAPABILITY_CACHE[str(candidate)] = (fingerprint, now, supported)
+    return supported
 
 
 def _focused_test_command() -> str:

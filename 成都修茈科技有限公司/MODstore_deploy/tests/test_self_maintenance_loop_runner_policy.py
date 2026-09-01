@@ -2256,6 +2256,34 @@ def test_focused_test_command_prefers_explicit_command(monkeypatch):
     assert _focused_test_command() == "runtime-python -m pytest focused.py -q"
 
 
+def test_focused_test_capability_cache_invalidates_for_same_path_changes(monkeypatch, tmp_path):
+    candidate = tmp_path / ".venv" / "bin" / "python"
+    candidate.parent.mkdir(parents=True)
+    candidate.write_text("#!/bin/sh\n")
+    candidate.chmod(0o755)
+    probe_results = iter([1, 0, 1])
+    probe_calls = []
+
+    def fake_probe(*args, **kwargs):
+        probe_calls.append((args, kwargs))
+        return SimpleNamespace(returncode=next(probe_results))
+
+    monkeypatch.setattr(loop_runner.subprocess, "run", fake_probe)
+
+    assert loop_runner._python_supports_focused_tests(candidate) is False
+    assert loop_runner._python_supports_focused_tests(candidate) is False
+    assert len(probe_calls) == 1
+
+    (tmp_path / ".venv" / "lib" / "python3.12" / "site-packages").mkdir(parents=True)
+    assert loop_runner._python_supports_focused_tests(candidate) is True
+    assert loop_runner._python_supports_focused_tests(candidate) is True
+    assert len(probe_calls) == 2
+
+    candidate.write_text("#!/bin/sh\n# replacement interpreter\n")
+    assert loop_runner._python_supports_focused_tests(candidate) is False
+    assert len(probe_calls) == 3
+
+
 def test_high_risk_report_detects_standalone_qa_fail():
     steps = [
         {
