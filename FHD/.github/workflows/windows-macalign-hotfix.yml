@@ -90,15 +90,28 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: xcagi-windows-macalign-hotfix
+          if-no-files-found: error
+          retention-days: 7
           path: |
             FHD/release/xcagi-v*/enterprise/XCAGI-Enterprise-Setup-*-macalign.exe
             FHD/release/xcagi-v*/enterprise/XCAGI-Enterprise-Setup-*-macalign.exe.sha256
             FHD/release/xcagi-v*/enterprise/MACALIGN-HOTFIX.txt
             FHD/release/xcagi-v*/enterprise/download-windows-hotfix.json
             FHD/release/xcagi-v*/enterprise/latest.yml
+
+  publish:
+    if: ${{ github.event.inputs.publish_cvm == 'true' }}
+    needs: windows
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Download Windows interim build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: xcagi-windows-macalign-hotfix
+          path: FHD/release/windows-interim
       - name: Publish mac-align hotfix to CVM
-        if: ${{ github.event.inputs.publish_cvm == 'true' }}
-        timeout-minutes: 60
+        timeout-minutes: 300
         working-directory: .
         shell: bash
         env:
@@ -112,25 +125,48 @@ jobs:
           HOST="${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}"
           v="${{ github.event.inputs.version }}"
           v="${v#v}"; v="${v#V}"
-          src="FHD/release/xcagi-v${v}/enterprise"
-          test -f "${src}/XCAGI-Enterprise-Setup-${v}-x64-macalign.exe"
+          artifact="XCAGI-Enterprise-Setup-${v}-x64-macalign.exe"
+          artifact_path="$(find FHD/release/windows-interim -type f -name "$artifact" -print -quit)"
+          test -n "$artifact_path"
+          src="$(dirname "$artifact_path")"
+          test -f "${src}/${artifact}.sha256"
+          test -f "${src}/MACALIGN-HOTFIX.txt"
+          test -f "${src}/download-windows-hotfix.json"
           mkdir -p ~/.ssh
           printf '%s\n' "${DESKTOP_SSH_KEY}" > ~/.ssh/id_ci
           chmod 600 ~/.ssh/id_ci
           ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
-          SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15)
-          remote_stage="/var/tmp/xcagi-macalign-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          ssh "${SSH_OPTS[@]}" "root@${HOST}" "rm -rf '$remote_stage' && mkdir -p '$remote_stage'"
-          scp "${SSH_OPTS[@]}" \
-            "${src}/XCAGI-Enterprise-Setup-${v}-x64-macalign.exe" \
-            "${src}/XCAGI-Enterprise-Setup-${v}-x64-macalign.exe.sha256" \
-            "${src}/MACALIGN-HOTFIX.txt" \
-            "${src}/download-windows-hotfix.json" \
-            "root@${HOST}:${remote_stage}/"
+          SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
+          remote_stage="/var/tmp/xcagi-macalign-${GITHUB_SHA}"
+          ssh "${SSH_OPTS[@]}" "root@${HOST}" "mkdir -p '$remote_stage'"
 
-          # Upload the large installer across the network once. Validate it in
-          # a non-public staging directory, then fan out through atomic local
-          # renames so download paths never expose a partially uploaded EXE.
+          # The runner -> CVM link can remain below 100 KB/s for a 230+ MiB
+          # installer. Keep a SHA-scoped non-public partial between attempts so
+          # an interrupted transfer resumes instead of restarting from byte 0.
+          upload_hotfix_payload() {
+            local attempt=1
+            while [ "$attempt" -le 24 ]; do
+              echo "[publish] resumable upload attempt ${attempt}/24"
+              if rsync --archive --partial --append-verify --timeout=180 \
+                --include="$artifact" \
+                --include="${artifact}.sha256" \
+                --include="MACALIGN-HOTFIX.txt" \
+                --include="download-windows-hotfix.json" \
+                --exclude='*' \
+                -e "ssh ${SSH_OPTS[*]}" \
+                "${src}/" "root@${HOST}:${remote_stage}/"; then
+                return 0
+              fi
+              echo "[publish] attempt ${attempt} interrupted; partial retained for resume" >&2
+              attempt=$((attempt + 1))
+              sleep 20
+            done
+            return 1
+          }
+          upload_hotfix_payload
+
+          # Validate in the non-public staging directory, then fan out through
+          # atomic local renames so no route exposes a partially uploaded EXE.
           ssh "${SSH_OPTS[@]}" "root@${HOST}" \
             "bash -s -- '$remote_stage' '$v' '${GITHUB_SHA}'" <<'REMOTE_SCRIPT'
           set -euo pipefail
@@ -211,7 +247,6 @@ jobs:
           echo "  https://xiu-ci.com/releases/stable/enterprise/XCAGI-Enterprise-Setup-${v}-x64-macalign.exe"
           echo "  https://xiu-ci.com/download-windows-hotfix.json"
       - name: Verify public interim installer, download center, and changelog
-        if: ${{ github.event.inputs.publish_cvm == 'true' }}
         timeout-minutes: 30
         working-directory: .
         shell: bash
