@@ -36,6 +36,7 @@ from app.application.workspaces import get_workspace_registry as get_workspace_r
 from app.config import Config
 from app.db import HostSessionLocal, get_host_engine
 from app.fastapi_routes.im_cs_admin_routes import router as im_cs_admin_router
+from app.fastapi_routes.im_cs_client_routes import router as im_cs_client_router
 from app.infrastructure.auth.dependencies import (
     CurrentUser,
     get_current_user,
@@ -51,6 +52,7 @@ router = APIRouter(tags=["im-v0"])
 # FastAPI 0.138 wraps nested include_router calls; the route registry and golden
 # snapshot inspect one level, so keep extracted admin routes flat on this router.
 router.routes.extend(im_cs_admin_router.routes)
+router.routes.extend(im_cs_client_router.routes)
 
 _schema_ready = False
 _IM_UNAVAILABLE = "即时通信服务暂时不可用，请稍后重试"
@@ -303,7 +305,19 @@ def im_list_messages(
             try:
                 last_id = int(messages[-1].get("id") or 0)
                 if last_id > 0:
-                    svc.mark_read(conversation_id, uid, last_id)
+                    from app.application.enterprise_cs_automation import (
+                        EnterpriseCsAutomationService,
+                    )
+
+                    is_enterprise_cs = EnterpriseCsAutomationService(
+                        db
+                    ).is_enterprise_cs_conversation(conversation_id, uid)
+                    svc.mark_read(
+                        conversation_id,
+                        uid,
+                        last_id,
+                        record_sync=not is_enterprise_cs,
+                    )
             except RECOVERABLE_ERRORS:  # noqa: BLE001 - 标已读失败不应影响读消息本身
                 logger.debug("im_list_messages auto mark_read skipped", exc_info=True)
         return {"success": True, "messages": messages}
@@ -343,6 +357,7 @@ async def im_send_message(
             uid,
             text,
             origin="customer" if is_enterprise_cs else "user",
+            record_sync=not is_enterprise_cs,
         )
         emp_peer_id = svc.employee_id_for_conversation(conversation_id, uid)
         legacy_payload = {
@@ -405,7 +420,18 @@ async def im_mark_read(
     last_id = int(body.get("last_message_id") or 0)
     db = HostSessionLocal()
     try:
-        result = ImApplicationService(db).mark_read(conversation_id, uid, last_id)
+        svc = ImApplicationService(db)
+        from app.application.enterprise_cs_automation import EnterpriseCsAutomationService
+
+        is_enterprise_cs = EnterpriseCsAutomationService(db).is_enterprise_cs_conversation(
+            conversation_id, uid
+        )
+        result = svc.mark_read(
+            conversation_id,
+            uid,
+            last_id,
+            record_sync=not is_enterprise_cs,
+        )
         read_payload = {
             "type": "im.read",
             "conversation_id": conversation_id,

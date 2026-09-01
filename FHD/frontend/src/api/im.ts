@@ -17,6 +17,8 @@ export type ImConversationSummary = {
   cs_transfer_reason?: string
   cs_summary?: string
   cs_last_operator_user_id?: number | null
+  /** 客户端专属桥接对应的生产会话 id；本地 id 只用于固定入口。 */
+  remote_conversation_id?: number
 }
 
 export type ImMessage = {
@@ -27,7 +29,14 @@ export type ImMessage = {
   body: string
   origin?: 'user' | 'customer' | 'ai' | 'manual' | 'system'
   operator_user_id?: number | null
+  /** 由生产端按已验证市场账号计算，跨节点时优先于本地 user id。 */
+  is_self?: boolean
   created_at: string | null
+}
+
+export type EnterpriseCsThread = {
+  conversation: ImConversationSummary
+  messages: ImMessage[]
 }
 
 export type ImContact = {
@@ -116,6 +125,54 @@ export async function sendImMessage(conversationId: number, body: string): Promi
   const msg = data.message
   if (!data.success || !msg) throw new Error('发送失败')
   return msg
+}
+
+/** 客户端读取生产 SSOT 的企业专属客服会话，不使用本机 IM 主键同步。 */
+export async function fetchEnterpriseCsThread(): Promise<EnterpriseCsThread> {
+  const res = await apiFetch('/api/im/enterprise-cs/messages', {
+    headers: jsonHeaders,
+    timeoutMs: 25_000,
+  })
+  const data = await readJson<{
+    success?: boolean
+    conversation?: ImConversationSummary
+    messages?: ImMessage[]
+    message?: string
+    detail?: string
+  }>(res)
+  if (!res.ok || !data.success || !data.conversation) {
+    throw new Error(data.message || data.detail || '加载企业专属客服失败')
+  }
+  return { conversation: data.conversation, messages: data.messages ?? [] }
+}
+
+/** 客户端只提交正文；生产端从市场令牌解析真实企业账号。 */
+export async function sendEnterpriseCsMessage(body: string): Promise<{
+  conversation_id: number
+  message: ImMessage
+  state: Partial<ImConversationSummary>
+}> {
+  const res = await apiFetch('/api/im/enterprise-cs/messages', {
+    method: 'POST',
+    headers: jsonHeaders,
+    body: JSON.stringify({ body }),
+    timeoutMs: 25_000,
+  })
+  const data = await readJson<{
+    success?: boolean
+    conversation_id?: number
+    message?: ImMessage
+    state?: Partial<ImConversationSummary>
+    detail?: string
+  }>(res)
+  if (!res.ok || !data.success || !data.message || !data.conversation_id) {
+    throw new Error(data.detail || '发送失败')
+  }
+  return {
+    conversation_id: data.conversation_id,
+    message: data.message,
+    state: data.state ?? {},
+  }
 }
 
 export async function markImRead(conversationId: number, lastMessageId: number): Promise<void> {

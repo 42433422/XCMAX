@@ -62,7 +62,21 @@ const sampleMessage = {
 const imMocks = vi.hoisted(() => ({
   fetchImConversations: vi.fn(async () => [sampleConversation]),
   fetchImMessages: vi.fn(async () => []),
+  fetchEnterpriseCsThread: vi.fn(async () => ({
+    conversation: {
+      ...sampleConversation,
+      id: 12,
+      cs_mode: 'ai',
+      cs_status: 'ai_active',
+    },
+    messages: [],
+  })),
   sendImMessage: vi.fn(async () => ({ success: true })),
+  sendEnterpriseCsMessage: vi.fn(async () => ({
+    conversation_id: 12,
+    message: { ...sampleMessage, id: 101, is_self: true },
+    state: { cs_mode: 'ai', cs_status: 'ai_active' },
+  })),
   createDirectConversation: vi.fn(async () => ({ id: 1, title: null, created: true })),
   fetchImContacts: vi.fn(async () => [enterpriseCsContact, normalContact, anotherContact]),
   imWebSocketUrl: vi.fn(() => 'ws://localhost/ws'),

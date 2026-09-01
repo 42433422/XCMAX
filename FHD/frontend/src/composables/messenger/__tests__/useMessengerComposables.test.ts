@@ -48,6 +48,7 @@ describe('useChatSession', () => {
     activeConversationId.value = 5
     expect(isMyMessage({ id: 1, conversation_id: 5, sender_user_id: 1, body: 'hi', created_at: null })).toBe(true)
     expect(isMyMessage({ id: 2, conversation_id: 5, sender_user_id: 2, body: 'yo', created_at: null })).toBe(false)
+    expect(isMyMessage({ id: 3, conversation_id: 5, sender_user_id: 999, body: 'remote', is_self: true, created_at: null })).toBe(true)
   })
 
   it('CS 收件箱会话里非客户发送者即我方', () => {

@@ -372,7 +372,12 @@ class EnterpriseCsAutomationService:
         row.transfer_reason = ""
         row.last_ai_message_id = int((sent.get("message") or {}).get("id") or 0)
         try:
-            svc.mark_read(conversation_id, int(cs_id), int(message_id))
+            svc.mark_read(
+                conversation_id,
+                int(cs_id),
+                int(message_id),
+                record_sync=False,
+            )
         except RECOVERABLE_ERRORS:
             logger.debug("AI handled message mark-read failed", exc_info=True)
         self._db.commit()

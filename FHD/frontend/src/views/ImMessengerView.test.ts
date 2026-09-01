@@ -27,11 +27,37 @@ vi.mock('@/api/im', () => ({
     },
   ]),
   fetchImMessages: vi.fn().mockResolvedValue([]),
+  fetchEnterpriseCsThread: vi.fn().mockResolvedValue({
+    conversation: {
+      id: 12,
+      title: '企业专属客服',
+      is_direct: true,
+      last_message_at: null,
+      last_message_preview: '',
+      unread_count: 0,
+      is_enterprise_dedicated_cs: true,
+      cs_mode: 'ai',
+      cs_status: 'ai_active',
+    },
+    messages: [],
+  }),
   fetchCsInbox: vi.fn().mockResolvedValue([]),
   fetchCsInboxMessages: vi.fn().mockResolvedValue([]),
   replyCsInbox: vi.fn().mockResolvedValue({ success: true }),
   updateCsInboxMode: vi.fn().mockResolvedValue({ cs_mode: 'human', cs_status: 'human_active' }),
   sendImMessage: vi.fn().mockResolvedValue({ success: true }),
+  sendEnterpriseCsMessage: vi.fn().mockResolvedValue({
+    conversation_id: 12,
+    message: {
+      id: 101,
+      conversation_id: 12,
+      sender_user_id: 39,
+      body: '测试消息',
+      is_self: true,
+      created_at: '2026-09-01T00:00:00Z',
+    },
+    state: { cs_mode: 'ai', cs_status: 'ai_active' },
+  }),
   createDirectConversation: vi.fn().mockResolvedValue({ id: 1 }),
   fetchImContacts: vi.fn().mockResolvedValue([enterpriseCsContact]),
   imWebSocketUrl: vi.fn(() => 'ws://localhost/ws'),
@@ -121,11 +147,33 @@ describe('ImMessengerView.vue', () => {
     vi.clearAllMocks()
     vi.stubGlobal('WebSocket', MockWebSocket as unknown as typeof WebSocket)
     MockWebSocket.instances = []
+    ;(window as unknown as { xcagiDesktop?: unknown }).xcagiDesktop = undefined
   })
 
   afterEach(() => {
+    ;(window as unknown as { xcagiDesktop?: unknown }).xcagiDesktop = undefined
     vi.unstubAllGlobals()
     vi.unstubAllEnvs()
+  })
+
+  it('uses the authenticated production CS bridge inside the installed desktop client', async () => {
+    const { fetchEnterpriseCsThread, fetchImMessages, sendEnterpriseCsMessage } = await import('@/api/im')
+    ;(window as unknown as { xcagiDesktop?: unknown }).xcagiDesktop = {}
+    const wrapper = mount(ImMessengerView, {
+      global: { stubs: { RouterLink: true } },
+    })
+    await flushPromises()
+
+    await wrapper.find('.im-conv-item--pinned').trigger('click')
+    await flushPromises()
+    expect(fetchEnterpriseCsThread).toHaveBeenCalled()
+    expect(fetchImMessages).not.toHaveBeenCalled()
+
+    await wrapper.find('.im-compose-input').setValue('测试消息')
+    await wrapper.find('.im-compose').trigger('submit')
+    await flushPromises()
+    expect(sendEnterpriseCsMessage).toHaveBeenCalledWith('测试消息')
+    wrapper.unmount()
   })
 
   it('shows enterprise dedicated cs as pinned fixed contact', async () => {

@@ -28,6 +28,7 @@ export function useChatSession(params: UseChatSessionParams) {
 
   /** 气泡我方/对方判定:CS 收件箱会话里运营者以「企业专属客服」身份,非客户发的即我方。 */
   function isMyMessage(m: ImMessage): boolean {
+    if (typeof m.is_self === 'boolean') return m.is_self
     const conv = conversations.value.find((c) => c.id === activeConversationId.value)
     if (conv?.is_cs_inbox) {
       return m.sender_user_id !== conv.customer_user_id
