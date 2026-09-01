@@ -47,6 +47,25 @@ def _generate(tmp_path: Path, *, include_enterprise_mac: bool = True) -> tuple[d
 
     manifest_path = tmp_path / "manifest.json"
     release_path = tmp_path / "download-release.json"
+    metadata_path = tmp_path / "download-release-source.json"
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "version_lock": "1.0.0.0",
+                "download_version": "1.0.0.0",
+                "release_history": [
+                    {
+                        "version": "1.0.0.0",
+                        "date": "2026-07-13",
+                        "title": "企业版稳定发布基线",
+                        "channel": "稳定版",
+                        "notes": ["公开发布 Windows 与 macOS 企业版。"],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
     subprocess.run(
         [
             sys.executable,
@@ -63,6 +82,8 @@ def _generate(tmp_path: Path, *, include_enterprise_mac: bool = True) -> tuple[d
             "1.0.0.0",
             "--android-git-sha",
             "a" * 40,
+            "--release-metadata-source",
+            str(metadata_path),
             "--output",
             str(manifest_path),
             "--download-release-output",
@@ -91,6 +112,50 @@ def test_stable_manifest_is_enterprise_only_even_when_personal_files_exist(tmp_p
     assert public_release["win_installer_mb"] == 0
     assert public_release["android_version"] == "1.0.0.0"
     assert public_release["android_git_sha"] == "a" * 40
+    assert public_release["release_history"][0]["version"] == "1.0.0.0"
+
+
+def test_release_metadata_version_drift_fails_closed(tmp_path: Path) -> None:
+    release_root = tmp_path / "release" / "xcagi-v1.0.0.1" / "enterprise"
+    release_root.mkdir(parents=True)
+    (release_root / "XCAGI-Enterprise-Setup-1.0.0.1-x64.exe").write_bytes(b"MZ")
+    (release_root / "XCAGI-Enterprise-1.0.0.1-mac-arm64.dmg").write_bytes(b"dmg")
+    metadata_path = tmp_path / "download-release-source.json"
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "version_lock": "1.0.0.0",
+                "download_version": "1.0.0.0",
+                "release_history": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--version",
+            "1.0.0.1",
+            "--release-dir",
+            str(tmp_path / "release"),
+            "--release-subdir",
+            "xcagi-v1.0.0.1",
+            "--git-sha",
+            "b" * 40,
+            "--release-metadata-source",
+            str(metadata_path),
+            "--output",
+            str(tmp_path / "manifest.json"),
+            "--download-release-output",
+            str(tmp_path / "download-release.json"),
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "version_lock does not match requested version" in result.stderr
 
 
 def test_frozen_personal_has_no_secondary_stable_desktop_publisher() -> None:
@@ -130,6 +195,11 @@ def test_release_workflow_uses_fhd_relative_download_verifier_path() -> None:
     assert '.active_skus == ["enterprise"]' in workflow
     assert 'root_target="/root/成都修茈科技有限公司/download-release.json"' in workflow
     assert "if: ${{ inputs.verify_only != true }}" in workflow
+    assert "--release-metadata-source config/download_release.json" in workflow
+    assert "and .release_history[0].version == $manifest[0].version" in workflow
+    assert "verify-download-center:" in workflow
+    assert "https://xiu-ci.com/download/releases?release-run=${GITHUB_RUN_ID}" in workflow
+    assert "needs.verify-download-center.result == 'success'" in workflow
 
     root_workflow = ROOT_RELEASE_WORKFLOW.read_text()
     assert '-- "$remote_tmp" "$root_target"' in root_workflow

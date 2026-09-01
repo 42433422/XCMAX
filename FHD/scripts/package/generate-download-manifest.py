@@ -121,6 +121,37 @@ def win_installer_mb(release_root: Path) -> int:
     return 0
 
 
+def load_release_history(source: Path, version: str) -> list[dict]:
+    """Load the website changelog from the release SSOT and fail closed on drift."""
+    try:
+        payload = json.loads(source.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"cannot read release metadata source {source}: {exc}") from exc
+
+    for key in ("version_lock", "download_version"):
+        if str(payload.get(key) or "") != version:
+            raise ValueError(
+                f"release metadata {key} does not match requested version: "
+                f"{payload.get(key)!r} != {version!r}"
+            )
+
+    history = payload.get("release_history")
+    if not isinstance(history, list) or not history:
+        raise ValueError("release metadata must contain a non-empty release_history")
+    latest = history[0]
+    if not isinstance(latest, dict) or str(latest.get("version") or "") != version:
+        raise ValueError("release_history[0].version must match the requested version")
+    for key in ("date", "title", "channel"):
+        if not isinstance(latest.get(key), str) or not latest[key].strip():
+            raise ValueError(f"release_history[0].{key} must be a non-empty string")
+    notes = latest.get("notes")
+    if not isinstance(notes, list) or not notes or not all(
+        isinstance(note, str) and note.strip() for note in notes
+    ):
+        raise ValueError("release_history[0].notes must contain non-empty strings")
+    return history
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--version", required=True)
@@ -146,6 +177,14 @@ def main() -> int:
         "--download-release-output",
         required=True,
         help="download-release.json output path",
+    )
+    parser.add_argument(
+        "--release-metadata-source",
+        default="",
+        help=(
+            "Release SSOT containing version_lock, download_version, and release_history. "
+            "When provided, version drift or a missing current changelog entry fails closed."
+        ),
     )
     parser.add_argument(
         "--auto-update-base",
@@ -213,6 +252,14 @@ def main() -> int:
         download_release["android_version"] = args.android_version
     if args.android_git_sha:
         download_release["android_git_sha"] = args.android_git_sha
+    if args.release_metadata_source:
+        try:
+            download_release["release_history"] = load_release_history(
+                Path(args.release_metadata_source), args.version
+            )
+        except ValueError as exc:
+            print(f"[error] {exc}", file=sys.stderr)
+            return 1
 
     dr_output = Path(args.download_release_output)
     dr_output.parent.mkdir(parents=True, exist_ok=True)
