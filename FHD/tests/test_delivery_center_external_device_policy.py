@@ -16,3 +16,6 @@ def test_delivery_center_exposes_internal_mac_exclusion_policy() -> None:
     assert "仅客户侧 macOS/Windows 安装并首次登录后自动完成" in roster
     assert "台内部本机已排除" in roster
     assert "台客户设备已安装" in roster
+    assert "当前版本" in roster
+    assert "latest_installed_receipt" in roster
+    assert "安装版本" in roster

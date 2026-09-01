@@ -70,7 +70,23 @@ const standardDeliveries = [
     account: { id: 81, username: 'standard-co', company: '标准交付企业', is_enterprise: true },
     plan: { id: 'saas-permanent-starter', title: '企业启航版', account_tier: 'normal', license_type: 'permanent' },
     order: { order_no: 'ORDER-002', status: 'paid' },
-    install: { ok: true, installed_devices: 1, latest_receipt: { platform: 'win32', status: 'installed' } },
+    install: {
+      ok: true,
+      installed_devices: 1,
+      latest_receipt: {
+        platform: 'win32',
+        installed_version: '1.0.0.2',
+        status: 'failed',
+      },
+      latest_installed_receipt: {
+        platform: 'win32',
+        installed_version: '1.0.0.1',
+        installed_build_sha: 'customer-build-sha',
+        status: 'installed',
+        device_scope: 'customer',
+        reported_at: '2026-08-27T06:55:00Z',
+      },
+    },
     first_login: { ok: true, at: '2026-08-27T07:00:00Z' },
     completion_rule: 'installed_and_first_login',
     available_installers: ['macOS', 'Windows'],
@@ -136,6 +152,10 @@ describe('DeliveryCenterView', () => {
     expect(wrapper.text()).toContain('标准交付企业')
     expect(wrapper.text()).toContain('企业成长版')
     expect(wrapper.text()).toContain('安装并首次登录完成')
+    expect(wrapper.text()).toContain('当前版本 1.0.0.1')
+    expect(wrapper.text()).toContain('Windows')
+    expect(wrapper.text()).not.toContain('当前版本 1.0.0.2')
+    expect(wrapper.get('.proof-pill.is-version').attributes('title')).toContain('构建 customer-build-sha')
     expect(wrapper.text()).toContain('首次交付内含，交付前开发免费')
     expect(wrapper.text()).not.toContain('权益快速通道')
     expect(wrapper.text()).not.toContain('终端同源快捷模式')
@@ -146,6 +166,10 @@ describe('DeliveryCenterView', () => {
     expect(listStandardDeliveries).toHaveBeenCalledTimes(1)
     expect(listTrialDeliveries).toHaveBeenCalledTimes(1)
     expect(listUsers).toHaveBeenCalledWith(200, 0, true)
+
+    await wrapper.get('input[placeholder*="安装版本"]').setValue('1.0.0.1')
+    expect(wrapper.findAll('.enterprise-roster').at(0)?.findAll('article')).toHaveLength(1)
+    expect(wrapper.findAll('.enterprise-roster').at(0)?.text()).toContain('标准交付企业')
   })
 
   it('shows the trial summary card and keeps trial accounts out of the permanent roster', async () => {
