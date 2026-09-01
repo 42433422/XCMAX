@@ -13,7 +13,7 @@ import logging
 import os
 import time
 from hashlib import sha256
-from typing import Any
+from typing import Any, cast
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query, Request
@@ -154,7 +154,7 @@ def _resolve_canonical_customer(db: Any, identity: dict[str, Any]) -> User:
         user.market_user_id = market_user_id
         db.commit()
         db.refresh(user)
-    return user
+    return cast(User, user)
 
 
 def _canonical_thread(db: Any, customer: User, *, limit: int) -> dict[str, Any]:
