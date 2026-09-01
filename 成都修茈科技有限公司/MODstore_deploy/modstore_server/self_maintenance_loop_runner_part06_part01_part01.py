@@ -295,8 +295,13 @@ def _focused_test_command() -> str:
             for candidate in candidates
             if candidate and _facade()._python_supports_focused_tests(candidate)
         ),
-        _facade().Path(_facade().sys.executable),
+        None,
     )
+    if test_python is None:
+        raise RuntimeError(
+            "no Python interpreter passed the self-maintenance focused-test "
+            "dependency probe; set MODSTORE_SELF_MAINTENANCE_TEST_PYTHON"
+        )
     test_path = (
         "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py"
     )

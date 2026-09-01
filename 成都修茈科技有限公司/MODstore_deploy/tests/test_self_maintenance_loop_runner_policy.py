@@ -2256,6 +2256,39 @@ def test_focused_test_command_prefers_explicit_command(monkeypatch):
     assert _focused_test_command() == "runtime-python -m pytest focused.py -q"
 
 
+def test_focused_test_command_selects_later_verified_candidate(monkeypatch):
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", raising=False)
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_TEST_PYTHON", "/override/python")
+    monkeypatch.setenv("MODSTORE_DEPLOY_ROOT", "/deploy")
+    monkeypatch.setenv("MODSTORE_RUNTIME_ROOT", "/runtime")
+    accepted = "/runtime/MODstore_deploy/.venv/bin/python"
+    probed = []
+
+    def supports_focused_tests(candidate):
+        probed.append(str(candidate))
+        return str(candidate) == accepted
+
+    monkeypatch.setattr(loop_runner, "_python_supports_focused_tests", supports_focused_tests)
+
+    assert _focused_test_command().startswith(f"{accepted} -m pytest ")
+    assert probed == [
+        "/override/python",
+        "/deploy/.venv/bin/python",
+        accepted,
+    ]
+
+
+def test_focused_test_command_fails_closed_when_no_candidate_passes(monkeypatch):
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", raising=False)
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_TEST_PYTHON", "/override/python")
+    monkeypatch.setenv("MODSTORE_DEPLOY_ROOT", "/deploy")
+    monkeypatch.setenv("MODSTORE_RUNTIME_ROOT", "/runtime")
+    monkeypatch.setattr(loop_runner, "_python_supports_focused_tests", lambda candidate: False)
+
+    with pytest.raises(RuntimeError, match="no Python interpreter passed"):
+        _focused_test_command()
+
+
 def test_high_risk_report_detects_standalone_qa_fail():
     steps = [
         {
