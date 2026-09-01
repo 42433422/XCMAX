@@ -8,7 +8,10 @@ from typing import Any
 from app.infrastructure.llm.providers.base import LLMProvider
 from app.infrastructure.llm.providers.deepseek_legacy import DeepSeekLegacyProvider
 from app.infrastructure.llm.providers.modstore_provider import ModstoreProvider
-from app.infrastructure.llm.providers.openai_compatible_provider import OpenAICompatibleProvider
+from app.infrastructure.llm.providers.openai_compatible_provider import (
+    OpenAICompatibleProvider,
+    XiaomiMimoProvider,
+)
 from app.infrastructure.llm.providers.openai_sdk_provider import OpenAISdkProvider
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -21,6 +24,8 @@ _PROVIDER_ID_ALIASES = {
     "xiuci-account": "openai_compatible",
     "openai": "openai_compatible",
     "deepseek": "openai_compatible",
+    "mimo": "xiaomi",
+    "xiaomi-mimo": "xiaomi",
 }
 
 
@@ -44,7 +49,9 @@ def _normalize_provider_id(provider_id: str | None) -> str:
 def _routing_order() -> tuple[str, ...]:
     raw = (os.environ.get("LLM_ROUTING_ORDER") or "").strip()
     if not raw:
-        forced = (os.environ.get("LLM_PROVIDER") or "").strip().lower()
+        forced = (
+            os.environ.get("LLM_PROVIDER") or os.environ.get("XCAGI_LLM_PROVIDER") or ""
+        ).strip().lower()
         if forced:
             return (_normalize_provider_id(forced),)
         return _DEFAULT_ORDER
@@ -56,6 +63,7 @@ class LLMProviderRegistry:
         self._providers: dict[str, LLMProvider] = {
             "deepseek_legacy": DeepSeekLegacyProvider(),
             "openai_compatible": OpenAICompatibleProvider(),
+            "xiaomi": XiaomiMimoProvider(),
             "openai_sdk": OpenAISdkProvider(),
             "modstore": ModstoreProvider(),
         }

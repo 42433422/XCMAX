@@ -40,9 +40,41 @@ class TestLLMProviderRegistry:
 
     def test_default_providers_present(self) -> None:
         reg = LLMProviderRegistry()
-        # The four built-in providers are always registered.
-        for pid in ("deepseek_legacy", "openai_compatible", "openai_sdk", "modstore"):
+        # The built-in providers are always registered.
+        for pid in (
+            "deepseek_legacy",
+            "openai_compatible",
+            "openai_sdk",
+            "modstore",
+            "xiaomi",
+        ):
             assert reg.get(pid) is not None
+
+    def test_xcagi_mimo_provider_routes_to_xiaomi(self, monkeypatch) -> None:
+        monkeypatch.delenv("LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("LLM_ROUTING_ORDER", raising=False)
+        monkeypatch.setenv("XCAGI_LLM_PROVIDER", "mimo")
+        monkeypatch.setenv("MIMO_API_KEY", "mimo-test-key")
+        reg = LLMProviderRegistry()
+
+        out = reg.resolve()
+
+        assert out is not None
+        assert out.provider_id == "xiaomi"
+        assert out.is_configured is True
+
+    def test_llm_provider_takes_precedence_over_xcagi_alias(self, monkeypatch) -> None:
+        monkeypatch.delenv("LLM_ROUTING_ORDER", raising=False)
+        monkeypatch.setenv("LLM_PROVIDER", "openai")
+        monkeypatch.setenv("XCAGI_LLM_PROVIDER", "mimo")
+        reg = LLMProviderRegistry()
+        for pid in list(reg._providers):
+            reg._providers[pid] = _provider(pid, configured=True)
+
+        out = reg.resolve()
+
+        assert out is not None
+        assert out.provider_id == "openai_compatible"
 
     def test_resolve_header_override_when_configured(self) -> None:
         reg = LLMProviderRegistry()
@@ -70,6 +102,7 @@ class TestLLMProviderRegistry:
     def test_resolve_picks_first_configured_in_routing_order(self, monkeypatch) -> None:
         # Pin the routing order so the assertion is env-independent.
         monkeypatch.delenv("LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("XCAGI_LLM_PROVIDER", raising=False)
         monkeypatch.setenv(
             "LLM_ROUTING_ORDER", "modstore,openai_compatible,deepseek_legacy,openai_sdk"
         )
