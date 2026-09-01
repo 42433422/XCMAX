@@ -50,8 +50,10 @@ def _routing_order() -> tuple[str, ...]:
     raw = (os.environ.get("LLM_ROUTING_ORDER") or "").strip()
     if not raw:
         forced = (
-            os.environ.get("LLM_PROVIDER") or os.environ.get("XCAGI_LLM_PROVIDER") or ""
-        ).strip().lower()
+            (os.environ.get("LLM_PROVIDER") or os.environ.get("XCAGI_LLM_PROVIDER") or "")
+            .strip()
+            .lower()
+        )
         if forced:
             return (_normalize_provider_id(forced),)
         return _DEFAULT_ORDER
