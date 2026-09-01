@@ -3,7 +3,8 @@ name: Windows Mac-Align Hotfix
 
 # Unsigned enterprise Windows installer for Mac-parity hotfix delivery.
 # Official Release Desktop remains blocked without SSL.com signing secrets;
-# this path builds on windows-latest and publishes a distinctly named exe.
+# this path builds on windows-latest, publishes a distinctly named exe, and
+# updates a separate website pointer without touching stable auto-update metadata.
 
 on:
   workflow_dispatch:
@@ -11,7 +12,7 @@ on:
       version:
         description: "Product version (SSOT four-part)"
         required: true
-        default: "1.0.0.0"
+        default: "1.0.0.1"
       publish_cvm:
         description: "Upload exe to CVM public download paths"
         required: true
@@ -73,6 +74,19 @@ jobs:
           Authenticode: unsigned (hotfix lane; SSL.com secrets unavailable)
           Contains Mac-parity chat/desktop fixes from this ref.
           "@ | Out-File -Encoding utf8 (Join-Path $dir "MACALIGN-HOTFIX.txt")
+      - name: Generate Windows interim download pointer
+        shell: pwsh
+        run: |
+          $v = "${{ github.event.inputs.version }}".TrimStart('v','V')
+          $dir = "release/xcagi-v$v/enterprise"
+          $artifact = Join-Path $dir "XCAGI-Enterprise-Setup-$v-x64-macalign.exe"
+          python scripts/package/generate-windows-hotfix-pointer.py `
+            --version $v `
+            --git-sha "${{ github.sha }}" `
+            --artifact $artifact `
+            --public-url "https://xiu-ci.com/xcagi-v$v/enterprise/XCAGI-Enterprise-Setup-$v-x64-macalign.exe" `
+            --release-metadata-source config/download_release.json `
+            --output (Join-Path $dir "download-windows-hotfix.json")
       - uses: actions/upload-artifact@v4
         with:
           name: xcagi-windows-macalign-hotfix
@@ -80,6 +94,7 @@ jobs:
             FHD/release/xcagi-v*/enterprise/XCAGI-Enterprise-Setup-*-macalign.exe
             FHD/release/xcagi-v*/enterprise/XCAGI-Enterprise-Setup-*-macalign.exe.sha256
             FHD/release/xcagi-v*/enterprise/MACALIGN-HOTFIX.txt
+            FHD/release/xcagi-v*/enterprise/download-windows-hotfix.json
             FHD/release/xcagi-v*/enterprise/latest.yml
       - name: Publish mac-align hotfix to CVM
         if: ${{ github.event.inputs.publish_cvm == 'true' }}
@@ -110,21 +125,25 @@ jobs:
             "${src}/XCAGI-Enterprise-Setup-${v}-x64-macalign.exe" \
             "${src}/XCAGI-Enterprise-Setup-${v}-x64-macalign.exe.sha256" \
             "${src}/MACALIGN-HOTFIX.txt" \
+            "${src}/download-windows-hotfix.json" \
             "root@${HOST}:${remote_stage}/"
 
           # Upload the large installer across the network once. Validate it in
           # a non-public staging directory, then fan out through atomic local
           # renames so download paths never expose a partially uploaded EXE.
-          ssh "${SSH_OPTS[@]}" "root@${HOST}" "bash -s -- '$remote_stage' '$v'" <<'REMOTE_SCRIPT'
+          ssh "${SSH_OPTS[@]}" "root@${HOST}" \
+            "bash -s -- '$remote_stage' '$v' '${GITHUB_SHA}'" <<'REMOTE_SCRIPT'
           set -euo pipefail
           stage="$1"
           version="$2"
+          build_sha="$3"
           [[ "$stage" == /var/tmp/xcagi-macalign-* ]]
           [[ "$version" =~ ^[0-9]+(\.[0-9]+){3}$ ]]
 
           artifact="XCAGI-Enterprise-Setup-${version}-x64-macalign.exe"
           checksum_file="${artifact}.sha256"
           receipt="MACALIGN-HOTFIX.txt"
+          pointer="download-windows-hotfix.json"
           cleanup() { rm -rf -- "$stage"; }
           trap cleanup EXIT
 
@@ -132,6 +151,21 @@ jobs:
           actual="$(sha256sum "$stage/$artifact" | awk '{print $1}')"
           test -n "$expected"
           test "$actual" = "$expected"
+          python3 - "$stage/$pointer" "$version" "$artifact" "$expected" "$build_sha" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          path, version, artifact, checksum, git_sha = sys.argv[1:]
+          payload = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
+          assert payload["schema"] == "xcagi.windows_interim_release/v1"
+          assert payload["version"] == version
+          assert payload["git_sha"] == git_sha
+          assert payload["signature_status"] == "unsigned"
+          assert payload["artifact"]["filename"] == artifact
+          assert payload["artifact"]["sha256"] == checksum
+          assert payload["release"]["version"] == version
+          PY
 
           destinations=(
             "/var/www/xcagi-v${version}"
@@ -147,14 +181,81 @@ jobs:
             test "$published" = "$expected"
             chmod 0644 "$destination/$artifact$suffix"
             mv -f "$destination/$artifact$suffix" "$destination/$artifact"
-            for metadata in "$checksum_file" "$receipt"; do
+            for metadata in "$checksum_file" "$receipt" "$pointer"; do
               cp -f "$stage/$metadata" "$destination/$metadata$suffix"
               chmod 0644 "$destination/$metadata$suffix"
               mv -f "$destination/$metadata$suffix" "$destination/$metadata"
             done
+          done
+
+          root_target="/root/成都修茈科技有限公司/$pointer"
+          mkdir -p "$(dirname "$root_target")"
+          cp -f "$stage/$pointer" "${root_target}.part-$$"
+          chmod 0644 "${root_target}.part-$$"
+          mv -f "${root_target}.part-$$" "$root_target"
+          for target in \
+            "/root/成都修茈科技有限公司/MODstore_deploy/market/public/$pointer" \
+            "/root/成都修茈科技有限公司/MODstore_deploy/market/dist/$pointer" \
+            "/root/成都修茈科技有限公司/corp-butler/$pointer"
+          do
+            if [ -d "$(dirname "$target")" ]; then
+              cp -f "$root_target" "${target}.part-$$"
+              chmod 0644 "${target}.part-$$"
+              mv -f "${target}.part-$$" "$target"
+            fi
           done
           REMOTE_SCRIPT
           echo "Published:"
           echo "  https://xiu-ci.com/xcagi-v${v}/XCAGI-Enterprise-Setup-${v}-x64-macalign.exe"
           echo "  https://xiu-ci.com/xcagi-v${v}/enterprise/XCAGI-Enterprise-Setup-${v}-x64-macalign.exe"
           echo "  https://xiu-ci.com/releases/stable/enterprise/XCAGI-Enterprise-Setup-${v}-x64-macalign.exe"
+          echo "  https://xiu-ci.com/download-windows-hotfix.json"
+      - name: Verify public interim installer, download center, and changelog
+        if: ${{ github.event.inputs.publish_cvm == 'true' }}
+        timeout-minutes: 30
+        working-directory: .
+        shell: bash
+        run: |
+          set -euo pipefail
+          v="${{ github.event.inputs.version }}"
+          v="${v#v}"; v="${v#V}"
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "$tmpdir"' EXIT
+          for attempt in 1 2 3 4 5; do
+            if curl -fsSL --retry 2 --retry-all-errors --connect-timeout 15 --max-time 60 \
+              "https://xiu-ci.com/download-windows-hotfix.json?run=${GITHUB_RUN_ID}-${attempt}" \
+              -o "$tmpdir/pointer.json" && \
+              jq -e \
+                --arg version "$v" \
+                --arg sha "${GITHUB_SHA}" \
+                '.schema == "xcagi.windows_interim_release/v1"
+                 and .version == $version
+                 and .git_sha == $sha
+                 and .signature_status == "unsigned"
+                 and .download_allowed == true
+                 and .release.version == $version
+                 and (.warning | type == "string" and length > 0)' \
+                "$tmpdir/pointer.json" >/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 5 ]; then
+              echo "::error::public Windows interim pointer did not converge"
+              jq . "$tmpdir/pointer.json" 2>/dev/null || true
+              exit 1
+            fi
+            sleep 5
+          done
+          url="$(jq -er '.artifact.url' "$tmpdir/pointer.json")"
+          expected_size="$(jq -er '.artifact.size' "$tmpdir/pointer.json")"
+          expected_sha="$(jq -er '.artifact.sha256' "$tmpdir/pointer.json")"
+          curl -fsSL --retry 3 --retry-all-errors --connect-timeout 15 --max-time 1200 \
+            "$url" -o "$tmpdir/installer.exe"
+          test "$(wc -c < "$tmpdir/installer.exe" | tr -d ' ')" = "$expected_size"
+          test "$(sha256sum "$tmpdir/installer.exe" | awk '{print $1}')" = "$expected_sha"
+          curl -fsSL --connect-timeout 15 --max-time 60 \
+            "https://xiu-ci.com/download?run=${GITHUB_RUN_ID}" -o "$tmpdir/download.html"
+          curl -fsSL --connect-timeout 15 --max-time 60 \
+            "https://xiu-ci.com/download/releases?run=${GITHUB_RUN_ID}" -o "$tmpdir/releases.html"
+          grep -Fq "fetch('/download-windows-hotfix.json'" "$tmpdir/download.html"
+          grep -Fq "fetch('/download-windows-hotfix.json'" "$tmpdir/releases.html"
+          grep -Fq "Windows 临时交付" "$tmpdir/releases.html"

@@ -352,6 +352,9 @@ publish_site_static_to_live() {
   else
     log "保留发布流程管理的 download-release.json"
   fi
+  if [[ -e "$live_site/download-windows-hotfix.json" ]]; then
+    log "保留发布流程管理的 download-windows-hotfix.json"
+  fi
   if [[ -d "$git_site/partials" ]]; then
     cp -af "$git_site/partials/." "$live_site/partials/"
   fi

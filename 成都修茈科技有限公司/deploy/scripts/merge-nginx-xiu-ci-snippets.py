@@ -42,6 +42,7 @@ MANAGED_LOCATION_HEADERS = (
     "location = /site/main.js {",
     "location = /site/styles.css {",
     "location = /download-release.json {",
+    "location = /download-windows-hotfix.json {",
     "location /releases/stable/ {",
 )
 

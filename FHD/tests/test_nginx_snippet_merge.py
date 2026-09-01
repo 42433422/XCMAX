@@ -110,6 +110,10 @@ server {
         alias /root/成都修茈科技有限公司/download-release.json;
         default_type application/json;
     }
+    location = /download-windows-hotfix.json {
+        alias /root/成都修茈科技有限公司/download-windows-hotfix.json;
+        default_type application/json;
+    }
     location /releases/stable/ {
         root /var/www/update;
     }
@@ -119,6 +123,7 @@ server {
     merged = module.merge_managed_includes(source)
     assert "location ~ ^/xcagi-v" not in merged
     assert "location = /download-release.json" not in merged
+    assert "location = /download-windows-hotfix.json" not in merged
     assert "location /releases/stable/" not in merged
     assert merged.count("xcagi-cos-alias.inc.conf") == 1
 
