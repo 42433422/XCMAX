@@ -21,6 +21,7 @@ def test_versioned_public_download_routes_are_not_pinned_to_a_retired_release() 
     assert "try_files $uri =404;" in snippet
     assert "xcagi-v8.0.0" not in snippet
     assert "alias /root/成都修茈科技有限公司/download-release.json;" in snippet
+    assert "alias /root/成都修茈科技有限公司/download-windows-hotfix.json;" in snippet
 
 
 def test_standalone_vhost_uses_the_same_versioned_public_download_contract() -> None:
@@ -32,6 +33,7 @@ def test_standalone_vhost_uses_the_same_versioned_public_download_contract() -> 
     assert "{3}" not in config
     assert "location ^~ /xcagi-v1.0.0.0/" not in config
     assert "alias /root/成都修茈科技有限公司/download-release.json;" in config
+    assert "alias /root/成都修茈科技有限公司/download-windows-hotfix.json;" in config
 
 
 def test_corporate_deploy_syncs_the_versioned_download_snippet_before_nginx_reload() -> None:
@@ -63,11 +65,13 @@ def test_site_refreshes_preserve_a_verified_desktop_release_pointer() -> None:
 
     assert '[ ! -e "${LIVE_SITE}/download-release.json" ]' in workflow
     assert "preserving release-managed download-release.json" in workflow
+    assert "preserving release-managed download-windows-hotfix.json" in workflow
     assert (
         '[[ ! -e "$live_site/download-release.json" && -f "$git_site/download-release.json" ]]'
         in auto_update
     )
     assert "保留发布流程管理的 download-release.json" in auto_update
+    assert "保留发布流程管理的 download-windows-hotfix.json" in auto_update
 
 
 def test_release_page_uses_public_history_order_for_the_current_version() -> None:
@@ -75,7 +79,21 @@ def test_release_page_uses_public_history_order_for_the_current_version() -> Non
         encoding="utf-8"
     )
 
-    assert "fetch('/download-release.json', { cache: 'no-store' })" in release_page
+    assert "fetchJson('/download-release.json')" in release_page
     assert "history.forEach(function (release, releaseIndex)" in release_page
     assert "if (releaseIndex === 0) entry.className += ' is-current'" in release_page
     assert "if (releaseVersion === '1.0.0.0') entry.className += ' is-current'" not in release_page
+    assert "fetchJson('/download-windows-hotfix.json')" in release_page
+    assert "Windows 临时交付可下载" in release_page
+
+
+def test_download_page_prefers_only_a_newer_explicit_unsigned_interim_pointer() -> None:
+    download_page = (REPO_ROOT / "成都修茈科技有限公司" / "download.html").read_text(
+        encoding="utf-8"
+    )
+
+    assert "fetch('/download-windows-hotfix.json', { cache: 'no-store' })" in download_page
+    assert "hotfix.signature_status !== 'unsigned'" in download_page
+    assert "compareVersions(hotfix.version, state.version) > 0" in download_page
+    assert "下载临时包" in download_page
+    assert "不会进入稳定自动更新" in download_page

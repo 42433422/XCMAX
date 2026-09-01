@@ -4,10 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>产品下载 | XCAGI 与客来来</title>
-    <meta
-      name="description"
-      content="下载 XCAGI 企业版与客来来联合测试版。获取官方安装包、系统要求、版本与校验信息。"
-    />
+    <meta name="description" content="下载 XCAGI 企业版与客来来联合测试版。获取官方安装包、系统要求、版本与校验信息。" />
     <style>
       :root {
         color-scheme: light;
@@ -35,8 +32,7 @@
         min-width: 320px;
         color: var(--ink);
         background: #fff;
-        font-family:
-          Inter, 'SF Pro Display', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+        font-family: Inter, 'SF Pro Display', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
         -webkit-font-smoothing: antialiased;
       }
       a {
@@ -129,9 +125,7 @@
       .xcagi-hero {
         overflow: hidden;
         border-bottom: 1px solid var(--line);
-        background:
-          radial-gradient(700px 420px at 88% 10%, rgba(18, 103, 232, 0.1), transparent 68%),
-          var(--soft);
+        background: radial-gradient(700px 420px at 88% 10%, rgba(18, 103, 232, 0.1), transparent 68%), var(--soft);
       }
       .xcagi-grid {
         display: grid;
@@ -298,6 +292,10 @@
       }
       .download-note a {
         color: var(--blue);
+      }
+      .download-note.is-warning {
+        color: #8a5a0b;
+        font-weight: 650;
       }
 
       .hero-visual {
@@ -748,8 +746,6 @@
           padding: 22px 0;
         }
       }
-
-
     </style>
   </head>
   <body>
@@ -778,15 +774,10 @@
             <div class="hero-copy">
               <div class="product-lockup">
                 <img src="/corp-butler/brand-xc-logo.jpg" alt="XCAGI" />
-                <span class="product-lockup__copy"
-                  ><strong>XCAGI</strong><span>AI 员工桌面平台</span></span
-                >
+                <span class="product-lockup__copy"><strong>XCAGI</strong><span>AI 员工桌面平台</span></span>
               </div>
               <h1 id="xcagi-title">下载 XCAGI</h1>
-              <p class="hero-lead">
-                把智能对话、AI 员工协作和行业 Mod
-                装进同一个桌面。对话下达目标，交付可查看、可复核的业务结果。
-              </p>
+              <p class="hero-lead">把智能对话、AI 员工协作和行业 Mod 装进同一个桌面。对话下达目标，交付可查看、可复核的业务结果。</p>
 
               <div class="download-box" aria-label="XCAGI 安装包">
                 <div class="download-box__head">
@@ -805,41 +796,23 @@
                     >
                       桌面端
                     </button>
-                    <button
-                      class="tab"
-                      id="android-tab"
-                      type="button"
-                      role="tab"
-                      aria-controls="download-list"
-                      aria-selected="false"
-                    >
+                    <button class="tab" id="android-tab" type="button" role="tab" aria-controls="download-list" aria-selected="false">
                       Android
                     </button>
                   </div>
                 </div>
                 <p class="pending" id="pending" hidden>稳定版正在签名与验收，完成后开放下载。</p>
-                <div
-                  class="download-list"
-                  id="download-list"
-                  aria-live="polite"
-                  aria-label="XCAGI 可下载版本"
-                ></div>
+                <div class="download-list" id="download-list" aria-live="polite" aria-label="XCAGI 可下载版本"></div>
                 <p class="download-note" id="download-note">
-                  支持 Windows 10+、macOS 12+。安装后可从 <a href="/market/">AI 市场</a> 选择行业
-                  Mod。
+                  支持 Windows 10+、macOS 12+。安装后可从 <a href="/market/">AI 市场</a> 选择行业 Mod。
                 </p>
               </div>
             </div>
 
             <div class="hero-visual" aria-label="XCAGI 产品界面">
               <div class="app-window">
-                <div class="window-bar">
-                  <i></i><i></i><i></i><span class="window-title">XCAGI DESKTOP</span>
-                </div>
-                <img
-                  src="/assets/screenshots/hero-workforce.png"
-                  alt="XCAGI AI 员工工作台真实界面"
-                />
+                <div class="window-bar"><i></i><i></i><i></i><span class="window-title">XCAGI DESKTOP</span></div>
+                <img src="/assets/screenshots/hero-workforce.png" alt="XCAGI AI 员工工作台真实界面" />
               </div>
               <p class="visual-caption">真实产品界面 · AI 员工工作台</p>
             </div>
@@ -858,9 +831,7 @@
           <div class="section-head">
             <p class="section-label">More products</p>
             <h2 id="kellai-title">客来来，让每一条线索持续被跟进</h2>
-            <p>
-              把渠道消息、客户档案、销售漏斗与 AI 建议放在同一个工作台，减少来回切换和重复录入。
-            </p>
+            <p>把渠道消息、客户档案、销售漏斗与 AI 建议放在同一个工作台，减少来回切换和重复录入。</p>
           </div>
 
           <div class="kellai-grid">
@@ -906,32 +877,23 @@
             </div>
 
             <aside class="kellai-download-card" aria-label="客来来测试版安装包">
-              <div class="kellai-download-card__top">
-                <strong>下载客来来</strong><span class="release-chip">macOS 1.0.1</span>
-              </div>
+              <div class="kellai-download-card__top"><strong>下载客来来</strong><span class="release-chip">macOS 1.0.1</span></div>
               <a
                 class="kellai-download-button"
                 href="/downloads/kellai/1.0.1/kellai-1.0.1-mac-arm64.dmg"
                 download="客来来-1.0.1-mac-arm64.dmg"
               >
                 <span class="kellai-download-button__copy"
-                  ><strong>Apple Silicon 版</strong
-                  ><span>macOS 11.0+ · 28.4 MB · 已通过 Apple 公证</span></span
+                  ><strong>Apple Silicon 版</strong><span>macOS 11.0+ · 28.4 MB · 已通过 Apple 公证</span></span
                 >
                 <span>下载</span>
               </a>
               <div class="platform-pending"><span>Windows 版本</span><strong>准备中</strong></div>
-              <p class="test-note">
-                <b>测试版说明：</b
-                >渠道能力需要完成对应平台授权，建议先在非关键业务环境中试用并定期备份数据。
-              </p>
-              <p class="checksum">
-                SHA-256：bdc4a2f27b542f8c171594c6af0f3d2b63353ecb1d34b70740589b4679f32afc
-              </p>
+              <p class="test-note"><b>测试版说明：</b>渠道能力需要完成对应平台授权，建议先在非关键业务环境中试用并定期备份数据。</p>
+              <p class="checksum">SHA-256：bdc4a2f27b542f8c171594c6af0f3d2b63353ecb1d34b70740589b4679f32afc</p>
               <div class="card-actions">
                 <a href="/contact.html?product=kellai&amp;intent=trial">申请测试与合作</a>
-                <a
-                  href="mailto:970882904@qq.com?subject=%E5%AE%A2%E6%9D%A5%E6%9D%A5%E6%B5%8B%E8%AF%95%E7%89%88%E5%92%A8%E8%AF%A2"
+                <a href="mailto:970882904@qq.com?subject=%E5%AE%A2%E6%9D%A5%E6%9D%A5%E6%B5%8B%E8%AF%95%E7%89%88%E5%92%A8%E8%AF%A2"
                   >联系团队</a
                 >
               </div>
@@ -953,17 +915,14 @@
           </details>
         </div>
       </section>
-
-
     </main>
 
     <footer class="footer">
       <div class="container footer-inner">
         <span>© 2026 成都修茈科技有限公司 · 官方产品下载</span>
         <nav class="footer-links" aria-label="页脚导航">
-          <a href="/index.html">公司官网</a><a href="#breakpoints">断点清单</a
-          ><a href="/download/goals">工作目标</a><a href="/market/">AI 市场</a
-          ><a href="/download/releases">更新日志</a><a href="/contact.html">联系支持</a>
+          <a href="/index.html">公司官网</a><a href="#breakpoints">断点清单</a><a href="/download/goals">工作目标</a
+          ><a href="/market/">AI 市场</a><a href="/download/releases">更新日志</a><a href="/contact.html">联系支持</a>
         </nav>
       </div>
     </footer>
@@ -986,6 +945,7 @@
           winMb: '',
           releaseReady: true,
           manifest: null,
+          windowsHotfix: null,
           tab: 'desktop',
           macArch: 'arm64',
           preferredPlatform: 'win',
@@ -1010,11 +970,33 @@
           return 'arm64'
         }
 
+        function compareVersions(left, right) {
+          var a = String(left || '')
+            .split('.')
+            .map(Number)
+          var b = String(right || '')
+            .split('.')
+            .map(Number)
+          for (var i = 0; i < Math.max(a.length, b.length); i += 1) {
+            var difference = (a[i] || 0) - (b[i] || 0)
+            if (difference !== 0) return difference
+          }
+          return 0
+        }
+
+        function activeWindowsHotfix() {
+          var hotfix = state.windowsHotfix
+          if (!hotfix || hotfix.schema !== 'xcagi.windows_interim_release/v1') return null
+          if (!hotfix.download_allowed || hotfix.signature_status !== 'unsigned') return null
+          if (!hotfix.artifact || !hotfix.artifact.url || !hotfix.artifact.filename) return null
+          return compareVersions(hotfix.version, state.version) > 0 ? hotfix : null
+        }
+
         function fileName(platform) {
-          if (platform === 'android')
-            return 'XCAGI-Enterprise-Android-' + state.androidVersion + '.apk'
-          if (platform === 'mac')
-            return 'XCAGI-Enterprise-' + state.version + '-mac-' + state.macArch + '.dmg'
+          if (platform === 'android') return 'XCAGI-Enterprise-Android-' + state.androidVersion + '.apk'
+          if (platform === 'mac') return 'XCAGI-Enterprise-' + state.version + '-mac-' + state.macArch + '.dmg'
+          var hotfix = activeWindowsHotfix()
+          if (hotfix) return hotfix.artifact.filename
           return 'XCAGI-Enterprise-Setup-' + state.version + '-x64.exe'
         }
 
@@ -1031,19 +1013,32 @@
           if (platform === 'android') return sku.android || null
           if (platform === 'mac') {
             var macs = sku.mac || []
-            for (var i = 0; i < macs.length; i += 1)
-              if (macs[i].arch === state.macArch) return macs[i]
+            for (var i = 0; i < macs.length; i += 1) if (macs[i].arch === state.macArch) return macs[i]
             return macs[0] || null
           }
           return null
         }
 
         function downloadUrl(platform) {
+          var hotfix = platform === 'win' ? activeWindowsHotfix() : null
+          if (hotfix) return hotfix.artifact.url
           var entry = manifestEntry(platform)
           return entry && entry.url ? entry.url : staticUrl(platform)
         }
 
         function metaText(platform) {
+          var hotfix = platform === 'win' ? activeWindowsHotfix() : null
+          if (hotfix) {
+            return (
+              'v' +
+              hotfix.version +
+              ' · 未签名临时交付 · 约 ' +
+              Math.round(hotfix.artifact.size / 1048576) +
+              ' MB · SHA256 ' +
+              String(hotfix.artifact.sha256).slice(0, 12) +
+              '…'
+            )
+          }
           var entry = manifestEntry(platform)
           var bits = []
           if (entry && entry.size) bits.push('约 ' + Math.round(entry.size / 1048576) + ' MB')
@@ -1061,14 +1056,11 @@
             .then(function (data) {
               if (!data) return
               if (typeof data.download_version === 'string') state.version = data.download_version
-              if (typeof data.android_version === 'string')
-                state.androidVersion = data.android_version
+              if (typeof data.android_version === 'string') state.androidVersion = data.android_version
               if (data.win_installer_mb != null) state.winMb = String(data.win_installer_mb)
               if (typeof data.release_ready === 'boolean') state.releaseReady = data.release_ready
-              if (typeof data.release_root === 'string')
-                state.base = data.release_root.replace(/\/$/, '')
-              else if (typeof data.cos_base_url === 'string')
-                state.base = data.cos_base_url.replace(/\/$/, '')
+              if (typeof data.release_root === 'string') state.base = data.release_root.replace(/\/$/, '')
+              else if (typeof data.cos_base_url === 'string') state.base = data.cos_base_url.replace(/\/$/, '')
             })
             .catch(function () {})
         }
@@ -1084,6 +1076,18 @@
             .catch(function () {})
         }
 
+        function loadWindowsHotfix() {
+          return fetch('/download-windows-hotfix.json', { cache: 'no-store' })
+            .then(function (response) {
+              var type = response.headers.get('content-type') || ''
+              return response.ok && type.includes('json') ? response.json() : null
+            })
+            .then(function (data) {
+              if (data && data.schema === 'xcagi.windows_interim_release/v1') state.windowsHotfix = data
+            })
+            .catch(function () {})
+        }
+
         var listEl = document.getElementById('download-list')
         var versionEl = document.getElementById('version')
         var pendingEl = document.getElementById('pending')
@@ -1093,8 +1097,12 @@
 
         function rows() {
           if (state.tab === 'android') return [{ platform: 'android', name: 'Android 企业版' }]
+          var hotfix = activeWindowsHotfix()
           var desktopRows = [
-            { platform: 'win', name: 'Windows 64 位' },
+            {
+              platform: 'win',
+              name: hotfix ? 'Windows 64 位 · 临时交付 v' + hotfix.version : 'Windows 64 位',
+            },
             {
               platform: 'mac',
               name: 'macOS · ' + (state.macArch === 'arm64' ? 'Apple Silicon' : 'Intel'),
@@ -1105,24 +1113,32 @@
         }
 
         function render() {
+          var hotfix = activeWindowsHotfix()
           versionEl.innerHTML =
             state.tab === 'android'
               ? '当前版本 <b>' + state.androidVersion + '</b>'
-              : '当前版本 <b>' + state.version + '</b>'
+              : hotfix
+                ? '稳定版 <b>' + state.version + '</b> · Windows 临时交付 <b>' + hotfix.version + '</b>'
+                : '当前版本 <b>' + state.version + '</b>'
           pendingEl.hidden = state.releaseReady
+          noteEl.classList.toggle('is-warning', Boolean(hotfix) && state.tab === 'desktop')
           noteEl.innerHTML =
             state.tab === 'android'
               ? 'Android 安装后请在系统设置中允许“安装未知应用”。'
-              : '支持 Windows 10+、macOS 12+。安装后可从 <a href="/market/">AI 市场</a> 选择行业 Mod。'
+              : hotfix
+                ? 'Windows 临时交付包尚未完成 Authenticode 签名，仅供管理员核对来源与 SHA-256 后安装；不会进入稳定自动更新。macOS 仍使用稳定版。'
+                : '支持 Windows 10+、macOS 12+。安装后可从 <a href="/market/">AI 市场</a> 选择行业 Mod。'
           listEl.innerHTML = ''
 
           rows().forEach(function (row, index) {
+            var rowHotfix = row.platform === 'win' ? activeWindowsHotfix() : null
+            var available = state.releaseReady || Boolean(rowHotfix)
             var link = document.createElement('a')
             link.className = 'download-item' + (index === 0 ? ' is-primary' : '')
             link.href = downloadUrl(row.platform)
             link.setAttribute('download', fileName(row.platform))
             link.setAttribute('rel', 'noopener')
-            if (!state.releaseReady) link.setAttribute('aria-disabled', 'true')
+            if (!available) link.setAttribute('aria-disabled', 'true')
             var meta = metaText(row.platform)
             link.innerHTML =
               '<span class="download-item__copy"><strong>' +
@@ -1130,9 +1146,9 @@
               '</strong>' +
               (meta ? '<span>' + meta + '</span>' : '') +
               '</span><span class="download-item__action">' +
-              (state.releaseReady ? '下载' : '待开放') +
+              (rowHotfix ? '下载临时包' : available ? '下载' : '待开放') +
               '</span>'
-            if (!state.releaseReady)
+            if (!available)
               link.addEventListener('click', function (event) {
                 event.preventDefault()
               })
@@ -1160,14 +1176,13 @@
         state.macArch = detectMacArch()
         if (state.preferredPlatform === 'android') state.tab = 'android'
         setTab(state.tab)
-        loadReleaseInfo().then(loadManifest).then(render)
-
+        loadReleaseInfo().then(loadManifest).then(loadWindowsHotfix).then(render)
       })()
     </script>
 
     <div id="xc-corp-butler-root"></div>
     <link rel="stylesheet" href="/corp-butler/corp-butler.css?v=20260725a" data-xc-corp-butler-css="1" />
     <script type="module" src="/corp-butler/corp-butler.js?v=20260725a" data-xc-corp-butler-js="1"></script>
-      <script src="/main.js?v=20260723h"></script>
-</body>
+    <script src="/main.js?v=20260723h"></script>
+  </body>
 </html>

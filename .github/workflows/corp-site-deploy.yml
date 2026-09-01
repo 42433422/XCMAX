@@ -134,6 +134,9 @@ jobs:
               else
                 echo "[info] preserving release-managed download-release.json"
               fi
+              if [ -e "${LIVE_SITE}/download-windows-hotfix.json" ]; then
+                echo "[info] preserving release-managed download-windows-hotfix.json"
+              fi
               if [ -d "${GIT_SITE}/partials" ]; then
                 cp -af "${GIT_SITE}/partials/." "${LIVE_SITE}/partials/"
               fi
