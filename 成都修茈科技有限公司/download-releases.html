@@ -660,23 +660,23 @@
               <a href="/download">返回下载首页</a>
             </div>
             <div class="hero-proof" aria-label="版本演进概览">
-              <div><strong>11</strong><span>关键版本</span></div>
+              <div><strong>12</strong><span>关键版本</span></div>
               <div><strong>4</strong><span>能力阶段</span></div>
               <div><strong>3 端</strong><span>稳定交付</span></div>
             </div>
           </div>
           <aside class="version-summary" aria-label="当前稳定版本">
             <span class="summary-label">Current stable release</span>
-            <p class="summary-version" id="summary-version">v1.0.0.0</p>
+            <p class="summary-version" id="summary-version">v1.0.0.1</p>
             <div class="summary-status">稳定版可下载</div>
             <div class="summary-meta">
-              <span>发布日期<b id="summary-date">2026-07-13</b></span>
+              <span>发布日期<b id="summary-date">2026-09-01</b></span>
               <span>发布渠道<b>Enterprise</b></span>
             </div>
             <ul class="summary-changes" aria-label="当前版本重点">
-              <li>企业版稳定发布基线</li>
-              <li>Windows、macOS、Android 三端交付</li>
-              <li>stable 自动更新与公开校验</li>
+              <li>客户交付中心显示已安装版本与平台</li>
+              <li>Windows、macOS 同版本稳定交付</li>
+              <li>下载中心与更新日志发布后自动校验</li>
             </ul>
           </aside>
         </div>
@@ -741,20 +741,20 @@
                 <div class="release-entry__head">
                   <div>
                     <div class="release-version-line">
-                      <h3>v1.0.0.0</h3><span class="release-channel">稳定版</span>
+                      <h3>v1.0.0.1</h3><span class="release-channel">稳定版</span>
                     </div>
-                    <p class="release-title">企业版稳定发布基线</p>
+                    <p class="release-title">企业交付版本可见与稳定发布闭环</p>
                   </div>
-                  <time class="release-date" datetime="2026-07-13">2026-07-13</time>
+                  <time class="release-date" datetime="2026-09-01">2026-09-01</time>
                 </div>
                 <ul class="release-notes">
-                  <li>在历史 v1–v10 产品演进之后重新建立稳定发布基线；对外产品版本统一为 1.0.0.0。</li>
-                  <li>企业版进入公开稳定渠道，个人版冻结；统一 AI 员工工作台、智能对话与行业 Mod 装载入口。</li>
-                  <li>Windows、macOS Apple Silicon 与 Android 企业版安装包均公开文件大小及 SHA-256 校验信息。</li>
-                  <li>桌面端接入 stable 自动更新通道，产品四段版本与 Electron/Apple 三段工具链版本分开管理。</li>
+                  <li>客户交付中心展示最近一次成功安装回执中的产品版本与平台，缺失版本时明确显示未上报。</li>
+                  <li>首次登录和 OTA 安装成功后上报版本、构建 SHA 与平台，失败升级不覆盖已安装版本。</li>
+                  <li>Windows 64 位与 macOS 企业版保持同一产品版本，经签名、公证和安装启动检查后进入稳定渠道。</li>
+                  <li>发布流程同步下载中心与更新日志，并校验安装包、公开指针、版本和最终 SHA 一致。</li>
                 </ul>
                 <div class="release-platforms" aria-label="公开平台">
-                  <span>Windows 64 位</span><span>macOS Apple Silicon</span><span>Android</span>
+                  <span>Windows 64 位</span><span>macOS</span>
                 </div>
               </article>
               </div>
@@ -779,6 +779,19 @@
         'use strict'
 
         var fallbackHistory = [
+          {
+            version: '1.0.0.1',
+            date: '2026-09-01',
+            title: '企业交付版本可见与稳定发布闭环',
+            channel: '稳定版',
+            notes: [
+              '客户交付中心新增客户设备当前安装版本与平台展示；历史回执未携带版本时明确显示未上报，不再把未知值当作有效版本。',
+              '安装与首次登录成功后上报版本、构建 SHA 和平台；展示只采用最近一次成功安装回执，失败升级不会覆盖客户已安装版本。',
+              'Windows 64 位企业版安装包与 macOS 企业版保持同一产品版本，经签名、公证、安装启动检查及公开下载校验后进入稳定渠道。',
+              '下载中心与更新日志改由发布 SSOT 同步生成；发布流程会校验版本、SHA、安装包、公开指针和当前更新日志一致后才完成。',
+            ],
+            platforms: ['Windows 64 位', 'macOS'],
+          },
           {
             version: '1.0.0.0',
             date: '2026-07-13',
@@ -905,6 +918,11 @@
         ]
 
         var presentationByVersion = {
+          '1.0.0.1': {
+            era: 'stable',
+            shift: '安装完成 → 客户版本可见且可持续追踪',
+            tags: ['交付可见', '回执 SSOT', '发布闭环'],
+          },
           '1.0.0.0': {
             era: 'stable',
             shift: '研发版本线 → 企业稳定发布线',
@@ -969,7 +987,7 @@
         function render(history) {
           if (!Array.isArray(history) || !history.length) history = fallbackHistory
           listEl.innerHTML = ''
-          history.forEach(function (release) {
+          history.forEach(function (release, releaseIndex) {
             var releaseVersion = String(release.version || '')
             var presentation = presentationByVersion[releaseVersion] || {
               era: 'foundation',
@@ -980,7 +998,7 @@
             var entry = document.createElement('article')
             entry.className = 'release-entry'
             entry.setAttribute('data-era', presentation.era)
-            if (releaseVersion === '1.0.0.0') entry.className += ' is-current'
+            if (releaseIndex === 0) entry.className += ' is-current'
             if (releaseChannel.indexOf('里程碑') !== -1) entry.className += ' is-milestone'
             var head = document.createElement('div')
             head.className = 'release-entry__head'

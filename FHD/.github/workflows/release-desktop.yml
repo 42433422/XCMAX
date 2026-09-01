@@ -437,6 +437,7 @@ jobs:
             --git-sha "${{ github.sha }}" \
             --android-version "$android_version" \
             --android-git-sha "$android_git_sha" \
+            --release-metadata-source config/download_release.json \
             --output "${RUNNER_TEMP}/manifest.json" \
             --download-release-output "${RUNNER_TEMP}/download-release.json"
       - name: Upload manifest artifacts
@@ -676,6 +677,10 @@ jobs:
             and .primary_sku == "enterprise"
             and (.android_version | type == "string" and length > 0)
             and (.android_git_sha | test("^[0-9a-fA-F]{40}([0-9a-fA-F]{24})?$"))
+            and .release_history[0].version == $manifest[0].version
+            and (.release_history[0].date | type == "string" and length > 0)
+            and (.release_history[0].title | type == "string" and length > 0)
+            and (.release_history[0].notes | type == "array" and length > 0)
           ' "$pointer" >/dev/null
 
           HOST="${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}"
@@ -707,8 +712,74 @@ jobs:
           done
           REMOTE
 
+  verify-download-center:
+    needs: [generate-manifest, verify-download, publish-website-pointer]
+    if: >-
+      always() &&
+      needs.verify-download.result == 'success' &&
+      (inputs.verify_only == true || needs.publish-website-pointer.result == 'success')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - name: Verify public download center and changelog
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${{ github.event.inputs.version || github.ref_name }}"
+          raw="${raw#FHD/}"; raw="${raw#v}"; raw="${raw#V}"
+          version="${raw:-1.0.0.0}"
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "$tmpdir"' EXIT
+
+          curl -fsSL --retry 4 --retry-all-errors --connect-timeout 15 --max-time 90 \
+            "https://xiu-ci.com/xcagi-v${version}/manifest.json?release-run=${GITHUB_RUN_ID}" \
+            -o "$tmpdir/manifest.json"
+          expected_sha="$(jq -er '.git_sha' "$tmpdir/manifest.json")"
+
+          pointer_ok=0
+          for attempt in $(seq 1 12); do
+            curl -fsSL --retry 3 --retry-all-errors --connect-timeout 15 --max-time 60 \
+              "https://xiu-ci.com/download-release.json?release-run=${GITHUB_RUN_ID}-${attempt}" \
+              -o "$tmpdir/download-release.json"
+            if jq -e --arg version "$version" --arg sha "$expected_sha" '
+              .schema == "xcagi.download_release.public/v1"
+              and .release_ready == true
+              and .version_lock == $version
+              and .download_version == $version
+              and .git_sha == $sha
+              and .manifest_url == ("https://xiu-ci.com/xcagi-v" + $version + "/manifest.json")
+              and .release_history[0].version == $version
+              and (.release_history[0].date | type == "string" and length > 0)
+              and (.release_history[0].title | type == "string" and length > 0)
+              and (.release_history[0].notes | type == "array" and length > 0)
+            ' "$tmpdir/download-release.json" >/dev/null; then
+              pointer_ok=1
+              break
+            fi
+            sleep 5
+          done
+          if [ "$pointer_ok" -ne 1 ]; then
+            echo "::error::Public download pointer or changelog did not converge to ${version} @ ${expected_sha}."
+            jq . "$tmpdir/download-release.json" || true
+            exit 1
+          fi
+
+          curl -fsSL --retry 3 --retry-all-errors --connect-timeout 15 --max-time 60 \
+            "https://xiu-ci.com/download?release-run=${GITHUB_RUN_ID}" \
+            -o "$tmpdir/download.html"
+          curl -fsSL --retry 3 --retry-all-errors --connect-timeout 15 --max-time 60 \
+            "https://xiu-ci.com/download/releases?release-run=${GITHUB_RUN_ID}" \
+            -o "$tmpdir/download-releases.html"
+          grep -Fq "fetch('/download-release.json'" "$tmpdir/download.html"
+          grep -Fq 'id="version"' "$tmpdir/download.html"
+          grep -Fq "fetch('/download-release.json'" "$tmpdir/download-releases.html"
+          grep -Fq 'id="release-list"' "$tmpdir/download-releases.html"
+          echo "Download center and changelog verified for ${version} @ ${expected_sha}."
+
   github-release:
-    needs: [release-preflight, windows, macos, verify-download, verify-public-windows-signature]
+    needs: [release-preflight, windows, macos, verify-download, verify-public-windows-signature, verify-download-center]
     runs-on: ubuntu-latest
     if: >-
       always() &&
@@ -717,7 +788,8 @@ jobs:
       needs.windows.result == 'success' &&
       needs.macos.result == 'success' &&
       needs.verify-download.result == 'success' &&
-      needs.verify-public-windows-signature.result == 'success'
+      needs.verify-public-windows-signature.result == 'success' &&
+      needs.verify-download-center.result == 'success'
     steps:
       - uses: actions/download-artifact@v4
         with:
