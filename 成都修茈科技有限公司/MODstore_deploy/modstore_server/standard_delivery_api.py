@@ -64,9 +64,7 @@ def _receipt_payload(
         "reported_at": _iso(receipt.reported_at),
         "error": str(receipt.error or ""),
         "device_scope": (
-            "internal"
-            if _is_internal_installation(installation_id, internal_ids)
-            else "customer"
+            "internal" if _is_internal_installation(installation_id, internal_ids) else "customer"
         ),
     }
 
