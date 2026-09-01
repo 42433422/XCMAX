@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from typing import Any, cast
 
@@ -71,3 +72,30 @@ class OpenAICompatibleProvider:
         except RECOVERABLE_ERRORS:
             record_ai_call(self.provider_id, "chat", "error", time.perf_counter() - t0)
             raise
+
+
+class XiaomiMimoProvider(OpenAICompatibleProvider):
+    """OpenAI-compatible provider backed by the configured Xiaomi MiMo account."""
+
+    provider_id = "xiaomi"
+
+    @property
+    def is_configured(self) -> bool:
+        if self._adapter is not None:
+            return bool(getattr(self._adapter, "is_configured", False))
+        return any(
+            (os.environ.get(name) or "").strip()
+            for name in ("XIAOMI_API_KEY", "MIMO_API_KEY", "XIAOMI_MIMO_API_KEY")
+        )
+
+    def _ensure_adapter(self) -> Any | None:
+        if self._adapter is not None:
+            return self._adapter
+
+        from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
+
+        adapter = OpenAICompatibleAdapter(provider="xiaomi")
+        if not adapter.is_configured:
+            return None
+        self._adapter = adapter
+        return self._adapter
