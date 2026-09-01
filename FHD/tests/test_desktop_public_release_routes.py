@@ -71,9 +71,9 @@ def test_site_refreshes_preserve_a_verified_desktop_release_pointer() -> None:
 
 
 def test_release_page_uses_public_history_order_for_the_current_version() -> None:
-    release_page = (
-        REPO_ROOT / "成都修茈科技有限公司" / "download-releases.html"
-    ).read_text(encoding="utf-8")
+    release_page = (REPO_ROOT / "成都修茈科技有限公司" / "download-releases.html").read_text(
+        encoding="utf-8"
+    )
 
     assert "fetch('/download-release.json', { cache: 'no-store' })" in release_page
     assert "history.forEach(function (release, releaseIndex)" in release_page

@@ -196,9 +196,9 @@ def test_release_workflow_uses_fhd_relative_download_verifier_path() -> None:
     assert 'root_target="/root/成都修茈科技有限公司/download-release.json"' in workflow
     assert "if: ${{ inputs.verify_only != true }}" in workflow
     assert "--release-metadata-source config/download_release.json" in workflow
-    assert 'and .release_history[0].version == $manifest[0].version' in workflow
+    assert "and .release_history[0].version == $manifest[0].version" in workflow
     assert "verify-download-center:" in workflow
-    assert 'https://xiu-ci.com/download/releases?release-run=${GITHUB_RUN_ID}' in workflow
+    assert "https://xiu-ci.com/download/releases?release-run=${GITHUB_RUN_ID}" in workflow
     assert "needs.verify-download-center.result == 'success'" in workflow
 
     root_workflow = ROOT_RELEASE_WORKFLOW.read_text()
