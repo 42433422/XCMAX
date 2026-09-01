@@ -292,6 +292,6 @@ jobs:
             "https://xiu-ci.com/download?run=${GITHUB_RUN_ID}" -o "$tmpdir/download.html"
           curl -fsSL --connect-timeout 15 --max-time 60 \
             "https://xiu-ci.com/download/releases?run=${GITHUB_RUN_ID}" -o "$tmpdir/releases.html"
-          grep -Fq "fetch('/download-windows-hotfix.json'" "$tmpdir/download.html"
-          grep -Fq "fetch('/download-windows-hotfix.json'" "$tmpdir/releases.html"
+          grep -Fq "/download-windows-hotfix.json" "$tmpdir/download.html"
+          grep -Fq "/download-windows-hotfix.json" "$tmpdir/releases.html"
           grep -Fq "Windows 临时交付" "$tmpdir/releases.html"

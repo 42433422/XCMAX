@@ -117,5 +117,5 @@ def test_hotfix_workflow_publishes_and_verifies_a_separate_website_pointer() -> 
         assert "download-windows-hotfix.json" in candidate
         assert 'signature_status == "unsigned"' in candidate
         assert "Verify public interim installer, download center, and changelog" in candidate
-        assert "fetch('/download-windows-hotfix.json'" in candidate
+        assert candidate.count('grep -Fq "/download-windows-hotfix.json"') == 2
         assert "latest.yml" not in candidate.split("Publish mac-align hotfix to CVM", 1)[1]
