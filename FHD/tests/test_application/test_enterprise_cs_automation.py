@@ -69,7 +69,11 @@ async def test_low_risk_message_gets_ai_reply_in_same_conversation(
         conversation_id, 7, "安装后怎么首次登录？", origin="customer"
     )["message"]
 
-    async def fake_completion(*_args, **_kwargs):
+    observed: dict[str, object] = {}
+
+    async def fake_completion(messages, **kwargs):
+        observed["messages"] = messages
+        observed["kwargs"] = kwargs
         return {
             "model": "test-model",
             "choices": [
@@ -110,6 +114,20 @@ async def test_low_risk_message_gets_ai_reply_in_same_conversation(
     assert state.mode == "ai"
     assert state.status == "ai_active"
     assert state.summary == "客户咨询首次登录"
+    llm_messages = observed["messages"]
+    assert isinstance(llm_messages, list)
+    assert "只针对 latest_customer_message" in llm_messages[0]["content"]
+    prompt = json.loads(llm_messages[1]["content"])
+    assert prompt["latest_customer_message"] == {
+        "id": int(customer_message["id"]),
+        "body": "安装后怎么首次登录？",
+    }
+    assert observed["kwargs"] == {
+        "temperature": 0.2,
+        "max_tokens": 700,
+        "profile": "customer_copilot",
+        "reasoning_enabled": False,
+    }
 
 
 @pytest.mark.asyncio

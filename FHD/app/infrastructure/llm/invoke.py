@@ -17,6 +17,7 @@ async def chat_completion_openai_format(
     max_tokens: int = 2000,
     profile: str = "default",
     request: Any | None = None,
+    reasoning_enabled: bool | None = None,
     **kwargs: Any,
 ) -> dict[str, Any] | None:
     """按 LLM_ROUTING_ORDER / LLM_PROVIDER 解析 Provider 并调用 chat/completions。"""
@@ -24,6 +25,13 @@ async def chat_completion_openai_format(
     if provider is None:
         logger.error("No configured LLM provider (profile=%s)", profile)
         return None
+    # MiMo V2.5 is a reasoning model.  For short structured-output flows its
+    # reasoning can consume the entire completion budget before any JSON body
+    # is emitted.  Keep this provider-specific compatibility parameter at the
+    # shared invocation boundary so other OpenAI-compatible providers never
+    # receive an unsupported ``thinking`` field.
+    if reasoning_enabled is False and provider.provider_id == "xiaomi":
+        kwargs.setdefault("thinking", {"type": "disabled"})
     return await provider.chat_completion(
         messages,
         temperature=temperature,
