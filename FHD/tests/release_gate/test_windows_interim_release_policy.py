@@ -4,9 +4,9 @@ FHD_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _workflow() -> str:
-    return (
-        FHD_ROOT / ".github" / "workflows" / "windows-macalign-hotfix.yml"
-    ).read_text(encoding="utf-8")
+    return (FHD_ROOT / ".github" / "workflows" / "windows-macalign-hotfix.yml").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_windows_interim_build_and_publish_are_split_across_native_runners() -> None:
@@ -28,7 +28,7 @@ def test_windows_interim_upload_is_resumable_and_never_clears_partial_first() ->
     assert "rsync --archive --partial --append-verify --timeout=180" in workflow
     assert 'while [ "$attempt" -le 24 ]' in workflow
     assert "partial retained for resume" in workflow
-    assert 'rm -rf \'$remote_stage\' && mkdir' not in workflow
+    assert "rm -rf '$remote_stage' && mkdir" not in workflow
 
 
 def test_windows_interim_publish_remains_checksum_gated_and_atomic() -> None:
