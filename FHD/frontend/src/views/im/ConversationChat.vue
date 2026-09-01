@@ -16,10 +16,16 @@
           {{ csAutomation.cs_mode === 'human' ? '恢复AI' : '人工接管' }}
         </button>
       </div>
+      <span
+        v-else-if="csCustomerState"
+        :class="['im-cs-status', `is-${csCustomerState.cs_status || 'ai_active'}`]"
+      >
+        {{ csStatusLabel(csCustomerState.cs_status) }}
+      </span>
     </header>
-    <div v-if="csAutomation?.cs_status === 'human_pending'" class="im-cs-transfer-banner">
+    <div v-if="(csAutomation || csCustomerState)?.cs_status === 'human_pending'" class="im-cs-transfer-banner">
       <strong>AI 已转人工</strong>
-      <span>{{ csAutomation.cs_transfer_reason || '该问题需要人工处理' }}</span>
+      <span>{{ (csAutomation || csCustomerState)?.cs_transfer_reason || '该问题需要人工处理' }}</span>
     </div>
     <button v-if="hasMoreHistory" type="button" class="im-load-more" :disabled="busy" @click="emit('load-older')">加载更早消息</button>
     <div :ref="scrollEl" class="im-messages">
@@ -68,6 +74,7 @@ defineProps<{
   formatTime: (iso: string | null) => string
   scrollEl: Ref<HTMLElement | null>
   csAutomation?: ImConversationSummary
+  csCustomerState?: ImConversationSummary
   csAutomationBusy?: boolean
 }>()
 

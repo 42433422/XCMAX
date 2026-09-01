@@ -361,7 +361,7 @@ class ImEmployeeMixin:
         try:
             last_id = int(messages[-1].get("id") or 0) if messages else 0
             if last_id > 0:
-                self.mark_read(conversation_id, int(cs_id), last_id)
+                self.mark_read(conversation_id, int(cs_id), last_id, record_sync=False)
         except RECOVERABLE_ERRORS:  # noqa: BLE001 - 标已读失败不应影响读消息本身
             logger.debug("cs_inbox_messages mark_read skipped", exc_info=True)
         return cast("list[dict[str, Any]]", messages)
@@ -386,5 +386,6 @@ class ImEmployeeMixin:
                 body,
                 origin=origin,
                 operator_user_id=operator_user_id,
+                record_sync=False,
             ),
         )

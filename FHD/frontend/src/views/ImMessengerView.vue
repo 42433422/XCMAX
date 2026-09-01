@@ -71,6 +71,7 @@
         :format-time="formatTime"
         :scroll-el="imChatDomRefs.scrollEl"
         :cs-automation="activeCsConversation"
+        :cs-customer-state="activeCustomerCsConversation"
         :cs-automation-busy="csAutomationBusy"
         @load-older="loadOlderMessages"
         @send="onSend"
@@ -106,6 +107,7 @@ import {
   imWebSocketUrl,
   markImRead,
   replyCsInbox,
+  sendEnterpriseCsMessage,
   sendImMessage,
   type ImContact,
   type ImConversationSummary,
@@ -120,6 +122,7 @@ import { useChatSession } from '@/composables/messenger/useChatSession'
 import { useContactPicker } from '@/composables/messenger/useContactPicker'
 import { useConversationList } from '@/composables/messenger/useConversationList'
 import { useCustomerServiceAutomation } from '@/composables/messenger/useCustomerServiceAutomation'
+import { useEnterpriseCsBridge } from '@/composables/messenger/useEnterpriseCsBridge'
 import { useSuperEmployeeDispatch } from '@/composables/messenger/useSuperEmployeeDispatch'
 import {
   CODEX_SUPER_EMPLOYEE_ENTRY,
@@ -165,6 +168,20 @@ const scrollEl = ref<HTMLElement | null>(null)
 const isAdminCustomerServiceConsole = ref(false)
 
 const { playIncoming, playOutgoing } = useImSounds()
+const {
+  activeCustomerCsConversation,
+  isCustomerEnterpriseCs,
+  refreshEnterpriseCsThread,
+  startEnterpriseCsPolling,
+  stopEnterpriseCsPolling,
+} = useEnterpriseCsBridge({
+  enabled: isDesktopShell(),
+  conversations,
+  activeConversationId,
+  messages,
+  playIncoming,
+  scrollToBottom,
+})
 const { onImMessage, onImReadState } = useXcmaxSync()
 
 function closeOverlappingAssistantFloat(): void {
@@ -362,6 +379,7 @@ const { activeCsConversation, csAutomationBusy, onChangeCsMode } = useCustomerSe
 
 async function selectConversation(id: number): Promise<void> {
   if (!localUserId.value) return
+  stopEnterpriseCsPolling()
   restoreOverlappingAssistantFloat()
   stopCodexPolling()
   stopCodexTypewriter(true)
@@ -374,17 +392,23 @@ async function selectConversation(id: number): Promise<void> {
   try {
     const conv = conversations.value.find((c) => c.id === id)
     const isCs = Boolean(conv?.is_cs_inbox)
-    messages.value = isCs ? await fetchCsInboxMessages(id) : await fetchImMessages(id, { limit: 50 })
-    hasMoreHistory.value = !isCs && messages.value.length >= 50
+    const isCustomerCs = isCustomerEnterpriseCs(id)
+    if (isCustomerCs) {
+      await refreshEnterpriseCsThread(false)
+    } else {
+      messages.value = isCs ? await fetchCsInboxMessages(id) : await fetchImMessages(id, { limit: 50 })
+    }
+    hasMoreHistory.value = !isCs && !isCustomerCs && messages.value.length >= 50
     await nextTick()
     scrollToBottom()
-    if (!isCs) {
+    if (!isCs && !isCustomerCs) {
       const last = messages.value[messages.value.length - 1]
       if (last) {
         await markImRead(id, last.id)
       }
     }
-    await loadConversations()
+    if (isCustomerCs) startEnterpriseCsPolling()
+    else await loadConversations()
   } catch (error) {
     showAppToast(error instanceof Error ? error.message : '加载消息失败', 'error')
   } finally {
@@ -394,7 +418,7 @@ async function selectConversation(id: number): Promise<void> {
 
 async function loadOlderMessages(): Promise<void> {
   const id = activeConversationId.value
-  if (!id || !localUserId.value || !messages.value.length) return
+  if (!id || !localUserId.value || !messages.value.length || isCustomerEnterpriseCs(id)) return
   busy.value = true
   try {
     const beforeId = messages.value[0]?.id
@@ -416,6 +440,7 @@ function scrollToBottom(): void {
 }
 
 function applyIncomingMessage(msg: ImMessage, cid: number): void {
+  if (isCustomerEnterpriseCs(cid)) return
   if (cid === activeConversationId.value) {
     if (!messages.value.some((m) => m.id === msg.id)) {
       messages.value.push(msg)
@@ -471,15 +496,26 @@ async function onSend(): Promise<void> {
   if (!id || !text || !localUserId.value) return
   const conv = conversations.value.find((c) => c.id === id)
   const isCs = Boolean(conv?.is_cs_inbox)
+  const isCustomerCs = isCustomerEnterpriseCs(id)
   busy.value = true
   try {
-    const msg = isCs ? await replyCsInbox(id, text) : await sendImMessage(id, text)
+    let msg: ImMessage
+    if (isCustomerCs) {
+      const sent = await sendEnterpriseCsMessage(text)
+      msg = sent.message
+      if (conv) {
+        Object.assign(conv, sent.state, { remote_conversation_id: sent.conversation_id })
+      }
+    } else {
+      msg = isCs ? await replyCsInbox(id, text) : await sendImMessage(id, text)
+    }
     messages.value.push(msg)
     draft.value = ''
     playOutgoing()
     await nextTick()
     scrollToBottom()
-    await loadConversations()
+    if (isCustomerCs) await refreshEnterpriseCsThread()
+    else await loadConversations()
   } catch (error) {
     showAppToast(error instanceof Error ? error.message : '发送失败', 'error')
   } finally {
@@ -573,6 +609,7 @@ onUnmounted(() => {
   restoreOverlappingAssistantFloat()
   stopCodexPolling()
   stopCodexTypewriter(true)
+  stopEnterpriseCsPolling()
   offSyncMessage?.()
   offSyncMessage = null
   offSyncRead?.()
@@ -580,58 +617,5 @@ onUnmounted(() => {
   disconnectWs()
 })
 </script>
-
-<style scoped>
-.im-messenger {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  height: 100%;
-  max-height: none;
-  min-height: 0;
-  padding: 16px;
-  box-sizing: border-box;
-}
-.im-body {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  border: 1px solid var(--xc-color-border, #e6e9ef);
-  border-radius: var(--xc-radius-md, 8px);
-  overflow: hidden;
-  background: var(--xc-color-surface, #fff);
-}
-
-.im-chat {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-.im-chat--empty {
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  color: var(--xc-color-muted, #86909c);
-}
-.im-chat--empty .fa {
-  font-size: 42px;
-  opacity: 0.35;
-}
-.im-chat--group-chat {
-  overflow: hidden;
-}
-.im-chat--group-chat > :deep(*) {
-  height: 100%;
-}
-
-.im-empty-hint {
-  max-width: 260px;
-  margin-top: 4px !important;
-  font-size: 12px !important;
-  color: var(--xc-color-disabled, #9ca3af);
-  line-height: 1.5;
-}
-</style>
 
 <style scoped src="./ImMessengerResponsive.css"></style>

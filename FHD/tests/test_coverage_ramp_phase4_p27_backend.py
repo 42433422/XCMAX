@@ -76,6 +76,8 @@ def im_client():
         "member_user_ids": [1, 2],
         "updated_at_ms": 124,
     }
+    automation = MagicMock()
+    automation.is_enterprise_cs_conversation.return_value = False
 
     with (
         patch.object(im_routes, "_ensure_schema"),
@@ -86,6 +88,10 @@ def im_client():
         patch.object(im_cs_admin_routes, "ImApplicationService", return_value=mock_svc),
         patch.object(im_routes.im_ws_hub, "send_to_user", new_callable=AsyncMock),
         patch.object(im_routes, "_notify_offline_im_members", new_callable=AsyncMock),
+        patch(
+            "app.application.enterprise_cs_automation.EnterpriseCsAutomationService",
+            return_value=automation,
+        ),
     ):
         yield TestClient(app), mock_svc
 
@@ -142,7 +148,7 @@ def test_im_send_message(im_client) -> None:
     resp = client.post("/api/im/conversations/10/messages", json={"body": "hello"})
     assert resp.status_code == 200
     assert resp.json()["success"] is True
-    mock_svc.send_message.assert_called_once_with(10, 1, "hello", origin="user")
+    mock_svc.send_message.assert_called_once_with(10, 1, "hello", origin="user", record_sync=True)
 
 
 def test_im_cs_mode_switches_to_human(im_client) -> None:
@@ -180,7 +186,7 @@ def test_im_mark_read(im_client) -> None:
     client, mock_svc = im_client
     resp = client.post("/api/im/conversations/10/read", json={"last_message_id": 2})
     assert resp.status_code == 200
-    mock_svc.mark_read.assert_called_once_with(10, 1, 2)
+    mock_svc.mark_read.assert_called_once_with(10, 1, 2, record_sync=True)
 
 
 def test_resolve_ws_user_id_from_header(monkeypatch: pytest.MonkeyPatch) -> None:

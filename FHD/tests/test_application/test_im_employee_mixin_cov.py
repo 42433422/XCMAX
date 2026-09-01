@@ -739,7 +739,7 @@ class TestCsInboxMessages:
 
         assert result == messages
         mock_list.assert_called_once_with(123, 8, limit=100)
-        mock_mark.assert_called_once_with(123, 8, 5)
+        mock_mark.assert_called_once_with(123, 8, 5, record_sync=False)
 
     def test_returns_empty_messages_without_mark_read(self) -> None:
         db = MagicMock()
@@ -822,7 +822,14 @@ class TestCsReply:
             result = svc.cs_reply(99, "hello")
 
         assert result == expected
-        mock_send.assert_called_once_with(99, 7, "hello", origin="manual", operator_user_id=None)
+        mock_send.assert_called_once_with(
+            99,
+            7,
+            "hello",
+            origin="manual",
+            operator_user_id=None,
+            record_sync=False,
+        )
 
 
 # ---------------------------------------------------------------------------

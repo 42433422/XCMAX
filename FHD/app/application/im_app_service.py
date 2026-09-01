@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.application.im_employee_mixin import ImEmployeeMixin
 from app.application.im_employee_peer import EmployeePeerMixin
+from app.application.im_read_state_mixin import ImReadStateMixin
 from app.db.models.im import ImConversation, ImConversationMember, ImMessage
 from app.db.models.user import User
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -27,7 +28,7 @@ def ensure_im_tables(engine) -> None:
     init_im_tables(engine)
 
 
-class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
+class ImApplicationService(ImReadStateMixin, ImEmployeeMixin, EmployeePeerMixin):
     def __init__(self, db: Session):
         self._db = db
 
@@ -299,6 +300,7 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
         *,
         origin: str = "user",
         operator_user_id: int | None = None,
+        record_sync: bool = True,
     ) -> dict[str, Any]:
         if not self._get_member(conversation_id, sender_user_id):
             raise PermissionError("非会话成员")
@@ -332,7 +334,11 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
             logger.debug("neuro_notify_im_message_sent skipped", exc_info=True)
         member_ids = self._member_user_ids(conversation_id)
         message = self._message_dict(msg, self._display_name(sender_user_id))
-        updated_at_ms = self._record_im_message_change(message, actor=str(sender_user_id))
+        updated_at_ms = (
+            self._record_im_message_change(message, actor=str(sender_user_id))
+            if record_sync
+            else None
+        )
         try:
             self._maybe_push_cs_message(conversation_id, sender_user_id, text, member_ids)
         except RECOVERABLE_ERRORS:
@@ -408,27 +414,6 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
                     )
                 except RECOVERABLE_ERRORS:
                     logger.debug("cs inbox push failed", exc_info=True)
-
-    def mark_read(self, conversation_id: int, user_id: int, last_message_id: int) -> dict[str, Any]:
-        member = self._get_member(conversation_id, user_id)
-        if not member:
-            raise PermissionError("非会话成员")
-        applied_read = max(int(member.last_read_message_id or 0), last_message_id)
-        member.last_read_message_id = applied_read
-        self._db.commit()
-        updated_at_ms = self._record_im_read_change(
-            conversation_id,
-            user_id,
-            applied_read,
-            actor=str(user_id),
-        )
-        return {
-            "conversation_id": conversation_id,
-            "user_id": user_id,
-            "last_read_message_id": applied_read,
-            "member_user_ids": self._member_user_ids(conversation_id),
-            "updated_at_ms": updated_at_ms,
-        }
 
     @staticmethod
     def _record_im_message_change(message: dict[str, Any], *, actor: str) -> int:
