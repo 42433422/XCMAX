@@ -311,12 +311,18 @@ class EnterpriseCsAutomationService:
 只根据给定客户资料和真实会话回答，禁止编造价格、权益、付款、合同、交期、已执行动作或公司承诺。
 若问题涉及退款、支付、合同、报价、投诉、法律、隐私、安全、数据删除、账号或权益变更、定制承诺，必须 transfer。
 信息不足时可以只问一个最关键的澄清问题。若无法可靠回答、客户明确不满或需要后台执行，也必须 transfer。
+本轮风险判断和回复必须只针对 latest_customer_message；conversation 仅用于理解上下文。
+历史中已经结束或已转人工的高风险话题，不得单独导致本轮普通问题转人工；只有本轮消息继续、追问或依赖该高风险事项时才 transfer。
 输出严格JSON：
 {"action":"reply|transfer","reply":"给客户的中文回复，transfer时留空","summary":"不超过120字的问题摘要","confidence":0到1,"risk_level":"low|medium|high|critical","transfer_reason":"转人工原因"}
 不得输出JSON以外内容。"""
         user_prompt = json.dumps(
             {
                 "customer": self._customer_context(customer_user_id),
+                "latest_customer_message": {
+                    "id": int(message_id),
+                    "body": text,
+                },
                 "conversation": self._transcript(conversation_id, cs_id),
             },
             ensure_ascii=False,
@@ -332,6 +338,7 @@ class EnterpriseCsAutomationService:
                 temperature=0.2,
                 max_tokens=700,
                 profile="customer_copilot",
+                reasoning_enabled=False,
             )
             parsed = parse_json_content(content_from_completion(completion))
         except RECOVERABLE_ERRORS:
