@@ -503,7 +503,9 @@ async function onSend(): Promise<void> {
     if (isCustomerCs) {
       const sent = await sendEnterpriseCsMessage(text)
       msg = sent.message
-      Object.assign(conv, sent.state, { remote_conversation_id: sent.conversation_id })
+      if (conv) {
+        Object.assign(conv, sent.state, { remote_conversation_id: sent.conversation_id })
+      }
     } else {
       msg = isCs ? await replyCsInbox(id, text) : await sendImMessage(id, text)
     }
