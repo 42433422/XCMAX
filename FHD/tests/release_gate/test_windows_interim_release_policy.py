@@ -40,3 +40,5 @@ def test_windows_interim_publish_remains_checksum_gated_and_atomic() -> None:
     assert 'mv -f "$destination/$artifact$suffix" "$destination/$artifact"' in workflow
     assert "Verify public interim installer, download center, and changelog" in workflow
     assert 'test "$(sha256sum "$tmpdir/installer.exe"' in workflow
+    assert workflow.count('grep -Fq "/download-windows-hotfix.json"') == 2
+    assert 'grep -Fq "fetch(\'/download-windows-hotfix.json\'"' not in workflow
