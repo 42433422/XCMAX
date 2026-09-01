@@ -4,10 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>更新日志 | XCAGI 产品下载</title>
-    <meta
-      name="description"
-      content="查看 XCAGI 稳定版更新日志、发布日期、公开平台与重要版本变化。"
-    />
+    <meta name="description" content="查看 XCAGI 稳定版更新日志、发布日期、公开平台与重要版本变化。" />
     <link rel="canonical" href="https://xiu-ci.com/download/releases" />
     <style>
       :root {
@@ -30,8 +27,12 @@
         --shadow: 0 24px 70px rgba(25, 38, 58, 0.11);
       }
 
-      * { box-sizing: border-box; }
-      html { scroll-behavior: smooth; }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
       body {
         margin: 0;
         min-width: 320px;
@@ -40,8 +41,13 @@
         font-family: Inter, 'SF Pro Display', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
         -webkit-font-smoothing: antialiased;
       }
-      a { color: inherit; }
-      .container { width: min(1180px, calc(100% - 40px)); margin: 0 auto; }
+      a {
+        color: inherit;
+      }
+      .container {
+        width: min(1180px, calc(100% - 40px));
+        margin: 0 auto;
+      }
 
       .site-header {
         position: sticky;
@@ -59,7 +65,12 @@
         justify-content: space-between;
         gap: 20px;
       }
-      .brand { display: inline-flex; align-items: center; gap: 11px; text-decoration: none; }
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 11px;
+        text-decoration: none;
+      }
       .brand img {
         width: 38px;
         height: 38px;
@@ -69,8 +80,14 @@
         background: #fff;
         object-fit: contain;
       }
-      .brand-copy { display: grid; gap: 1px; }
-      .brand-copy strong { font-size: 14px; letter-spacing: -0.01em; }
+      .brand-copy {
+        display: grid;
+        gap: 1px;
+      }
+      .brand-copy strong {
+        font-size: 14px;
+        letter-spacing: -0.01em;
+      }
       .brand-copy span {
         color: #8b94a0;
         font-size: 9px;
@@ -78,7 +95,11 @@
         letter-spacing: 0.13em;
         text-transform: uppercase;
       }
-      .header-nav { display: flex; align-items: center; gap: 3px; }
+      .header-nav {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+      }
       .header-nav a {
         padding: 8px 12px;
         border-radius: 9px;
@@ -87,8 +108,14 @@
         font-weight: 650;
         text-decoration: none;
       }
-      .header-nav a:hover { color: var(--ink); background: var(--soft); }
-      .header-nav .is-current { color: var(--blue); background: var(--blue-soft); }
+      .header-nav a:hover {
+        color: var(--ink);
+        background: var(--soft);
+      }
+      .header-nav .is-current {
+        color: var(--blue);
+        background: var(--blue-soft);
+      }
       .header-nav .market-link {
         margin-left: 5px;
         border: 1px solid var(--line-dark);
@@ -103,9 +130,13 @@
           linear-gradient(rgba(18, 103, 232, 0.035) 1px, transparent 1px),
           linear-gradient(90deg, rgba(18, 103, 232, 0.035) 1px, transparent 1px),
           radial-gradient(720px 420px at 84% 0%, rgba(18, 103, 232, 0.18), transparent 68%),
-          radial-gradient(560px 360px at 8% 100%, rgba(114, 87, 232, 0.1), transparent 70%),
-          #f7f9fc;
-        background-size: 32px 32px, 32px 32px, auto, auto, auto;
+          radial-gradient(560px 360px at 8% 100%, rgba(114, 87, 232, 0.1), transparent 70%), #f7f9fc;
+        background-size:
+          32px 32px,
+          32px 32px,
+          auto,
+          auto,
+          auto;
       }
       .hero-grid {
         min-height: 420px;
@@ -136,7 +167,12 @@
         font-size: 17px;
         line-height: 1.75;
       }
-      .hero-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
+      .hero-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 28px;
+      }
       .hero-actions a {
         display: inline-flex;
         align-items: center;
@@ -151,8 +187,14 @@
         font-weight: 750;
         text-decoration: none;
       }
-      .hero-actions a:first-child { border-color: var(--blue); color: #fff; background: var(--blue); }
-      .hero-actions a:first-child:hover { background: #0757ca; }
+      .hero-actions a:first-child {
+        border-color: var(--blue);
+        color: #fff;
+        background: var(--blue);
+      }
+      .hero-actions a:first-child:hover {
+        background: #0757ca;
+      }
       .hero-proof {
         display: flex;
         flex-wrap: wrap;
@@ -167,9 +209,18 @@
         margin-right: 24px;
         border-right: 1px solid var(--line-dark);
       }
-      .hero-proof div:last-child { border-right: 0; }
-      .hero-proof strong { font-size: 19px; letter-spacing: -0.03em; }
-      .hero-proof span { color: #7b8490; font-size: 10px; font-weight: 700; }
+      .hero-proof div:last-child {
+        border-right: 0;
+      }
+      .hero-proof strong {
+        font-size: 19px;
+        letter-spacing: -0.03em;
+      }
+      .hero-proof span {
+        color: #7b8490;
+        font-size: 10px;
+        font-weight: 700;
+      }
 
       .version-summary {
         position: relative;
@@ -197,7 +248,12 @@
         letter-spacing: 0.08em;
         text-transform: uppercase;
       }
-      .summary-version { margin: 9px 0 0; font-size: 36px; font-weight: 780; letter-spacing: -0.04em; }
+      .summary-version {
+        margin: 9px 0 0;
+        font-size: 36px;
+        font-weight: 780;
+        letter-spacing: -0.04em;
+      }
       .summary-status {
         display: flex;
         align-items: center;
@@ -207,7 +263,13 @@
         font-size: 12px;
         font-weight: 700;
       }
-      .summary-status::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
+      .summary-status::before {
+        content: '';
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--green);
+      }
       .summary-meta {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -216,8 +278,16 @@
         padding-top: 20px;
         border-top: 1px solid var(--line);
       }
-      .summary-meta span { display: grid; gap: 4px; color: #89929d; font-size: 10px; }
-      .summary-meta b { color: #4e5864; font-size: 12px; }
+      .summary-meta span {
+        display: grid;
+        gap: 4px;
+        color: #89929d;
+        font-size: 10px;
+      }
+      .summary-meta b {
+        color: #4e5864;
+        font-size: 12px;
+      }
       .summary-changes {
         display: grid;
         gap: 9px;
@@ -248,9 +318,7 @@
 
       .release-main {
         padding: 82px 0 108px;
-        background:
-          radial-gradient(520px 420px at 100% 12%, rgba(114, 87, 232, 0.055), transparent 75%),
-          #fbfcfe;
+        background: radial-gradient(520px 420px at 100% 12%, rgba(114, 87, 232, 0.055), transparent 75%), #fbfcfe;
       }
       .evolution-intro {
         display: flex;
@@ -259,7 +327,9 @@
         gap: 36px;
         margin-bottom: 28px;
       }
-      .evolution-intro__copy { max-width: 680px; }
+      .evolution-intro__copy {
+        max-width: 680px;
+      }
       .section-kicker {
         margin: 0 0 10px;
         color: var(--blue);
@@ -290,9 +360,10 @@
         color: #172231;
         background:
           radial-gradient(420px 210px at 100% 0%, rgba(18, 103, 232, 0.12), transparent 74%),
-          radial-gradient(360px 220px at 0% 100%, rgba(114, 87, 232, 0.08), transparent 74%),
-          linear-gradient(145deg, #fbfdff, #f2f7fd);
-        box-shadow: 0 24px 64px rgba(30, 61, 99, 0.1), inset 0 1px #fff;
+          radial-gradient(360px 220px at 0% 100%, rgba(114, 87, 232, 0.08), transparent 74%), linear-gradient(145deg, #fbfdff, #f2f7fd);
+        box-shadow:
+          0 24px 64px rgba(30, 61, 99, 0.1),
+          inset 0 1px #fff;
       }
       .evolution-phase {
         position: relative;
@@ -300,7 +371,9 @@
         padding: 24px 23px 22px;
         border-right: 1px solid #dfe7f0;
       }
-      .evolution-phase:last-child { border-right: 0; }
+      .evolution-phase:last-child {
+        border-right: 0;
+      }
       .evolution-phase::before {
         content: '';
         position: absolute;
@@ -310,10 +383,19 @@
         height: 4px;
         background: var(--phase-color, var(--blue));
       }
-      .evolution-phase:nth-child(1) { --phase-color: var(--blue); }
-      .evolution-phase:nth-child(2) { --phase-color: var(--violet); }
-      .evolution-phase:nth-child(3) { --phase-color: var(--cyan); }
-      .evolution-phase:nth-child(4) { --phase-color: var(--green); background: linear-gradient(145deg, rgba(17, 136, 102, 0.08), rgba(255, 255, 255, 0.55)); }
+      .evolution-phase:nth-child(1) {
+        --phase-color: var(--blue);
+      }
+      .evolution-phase:nth-child(2) {
+        --phase-color: var(--violet);
+      }
+      .evolution-phase:nth-child(3) {
+        --phase-color: var(--cyan);
+      }
+      .evolution-phase:nth-child(4) {
+        --phase-color: var(--green);
+        background: linear-gradient(145deg, rgba(17, 136, 102, 0.08), rgba(255, 255, 255, 0.55));
+      }
       .phase-range {
         display: inline-flex;
         min-height: 24px;
@@ -325,8 +407,17 @@
         font-size: 9px;
         font-weight: 850;
       }
-      .evolution-phase h3 { margin: 16px 0 7px; font-size: 17px; letter-spacing: -0.025em; }
-      .evolution-phase p { margin: 0; color: #6f7a88; font-size: 11px; line-height: 1.65; }
+      .evolution-phase h3 {
+        margin: 16px 0 7px;
+        font-size: 17px;
+        letter-spacing: -0.025em;
+      }
+      .evolution-phase p {
+        margin: 0;
+        color: #6f7a88;
+        font-size: 11px;
+        line-height: 1.65;
+      }
       .phase-arrow {
         position: absolute;
         top: 77px;
@@ -352,9 +443,12 @@
         background:
           linear-gradient(rgba(18, 103, 232, 0.025) 1px, transparent 1px),
           linear-gradient(90deg, rgba(18, 103, 232, 0.025) 1px, transparent 1px),
-          radial-gradient(620px 520px at 50% 0%, rgba(18, 103, 232, 0.1), transparent 73%),
-          linear-gradient(145deg, #f8fbff, #edf4fb);
-        background-size: 32px 32px, 32px 32px, auto, auto;
+          radial-gradient(620px 520px at 50% 0%, rgba(18, 103, 232, 0.1), transparent 73%), linear-gradient(145deg, #f8fbff, #edf4fb);
+        background-size:
+          32px 32px,
+          32px 32px,
+          auto,
+          auto;
         box-shadow: 0 34px 90px rgba(24, 58, 98, 0.11);
       }
       .release-aside {
@@ -369,10 +463,26 @@
         border-radius: 0;
         background: transparent;
       }
-      .release-aside__intro { max-width: 560px; }
-      .release-aside__actions { display: grid; justify-items: end; gap: 18px; }
-      .release-aside h2 { margin: 0; color: #172231; font-size: 29px; letter-spacing: -0.035em; }
-      .release-aside p { margin: 12px 0 0; color: #677485; font-size: 12px; line-height: 1.7; }
+      .release-aside__intro {
+        max-width: 560px;
+      }
+      .release-aside__actions {
+        display: grid;
+        justify-items: end;
+        gap: 18px;
+      }
+      .release-aside h2 {
+        margin: 0;
+        color: #172231;
+        font-size: 29px;
+        letter-spacing: -0.035em;
+      }
+      .release-aside p {
+        margin: 12px 0 0;
+        color: #677485;
+        font-size: 12px;
+        line-height: 1.7;
+      }
       .release-aside a {
         display: inline-block;
         margin: 0;
@@ -385,11 +495,38 @@
         font-weight: 750;
         text-decoration: none;
       }
-      .release-aside a:hover { border-color: rgba(18, 103, 232, 0.42); background: rgba(18, 103, 232, 0.09); }
-      .release-legend { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px 13px; margin: 0; padding: 0; border: 0; }
-      .release-legend span { display: flex; align-items: center; gap: 7px; color: #697789; font-size: 9.5px; }
-      .release-legend i { width: 7px; height: 7px; border-radius: 50%; background: var(--legend-color); box-shadow: 0 0 9px color-mix(in srgb, var(--legend-color) 55%, transparent); }
-      .release-list { position: relative; display: flow-root; padding-top: 42px; }
+      .release-aside a:hover {
+        border-color: rgba(18, 103, 232, 0.42);
+        background: rgba(18, 103, 232, 0.09);
+      }
+      .release-legend {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 8px 13px;
+        margin: 0;
+        padding: 0;
+        border: 0;
+      }
+      .release-legend span {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        color: #697789;
+        font-size: 9.5px;
+      }
+      .release-legend i {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--legend-color);
+        box-shadow: 0 0 9px color-mix(in srgb, var(--legend-color) 55%, transparent);
+      }
+      .release-list {
+        position: relative;
+        display: flow-root;
+        padding-top: 42px;
+      }
       .release-list::before {
         content: '';
         position: absolute;
@@ -399,7 +536,13 @@
         width: 2px;
         transform: translateX(-50%);
         border-radius: 999px;
-        background: linear-gradient(180deg, rgba(17, 136, 102, 0.95), rgba(8, 127, 154, 0.68) 48%, rgba(114, 87, 232, 0.58) 78%, rgba(18, 103, 232, 0.16));
+        background: linear-gradient(
+          180deg,
+          rgba(17, 136, 102, 0.95),
+          rgba(8, 127, 154, 0.68) 48%,
+          rgba(114, 87, 232, 0.58) 78%,
+          rgba(18, 103, 232, 0.16)
+        );
         box-shadow: 0 0 20px rgba(18, 103, 232, 0.14);
       }
       .release-entry {
@@ -414,15 +557,39 @@
         border-radius: 22px;
         background: rgba(255, 255, 255, 0.98);
         box-shadow: 0 18px 46px rgba(28, 62, 101, 0.11);
-        transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+        transition:
+          transform 220ms ease,
+          box-shadow 220ms ease,
+          border-color 220ms ease;
       }
-      .release-entry:nth-child(even) { margin-left: calc(50% + 36px); }
-      .release-entry:hover { transform: translateY(-4px); box-shadow: 0 25px 58px rgba(28, 62, 101, 0.18); }
-      .release-entry:last-child { margin-bottom: 0; }
-      .release-entry[data-era='stable'] { --entry-accent: var(--green); --entry-soft: var(--green-soft); border-color: rgba(57, 217, 173, 0.34); box-shadow: 0 20px 54px rgba(17, 136, 102, 0.18); }
-      .release-entry[data-era='hardening'] { --entry-accent: var(--amber); --entry-soft: var(--amber-soft); }
-      .release-entry[data-era='ecosystem'] { --entry-accent: var(--cyan); --entry-soft: var(--cyan-soft); }
-      .release-entry[data-era='platform'] { --entry-accent: var(--violet); --entry-soft: var(--violet-soft); }
+      .release-entry:nth-child(even) {
+        margin-left: calc(50% + 36px);
+      }
+      .release-entry:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 25px 58px rgba(28, 62, 101, 0.18);
+      }
+      .release-entry:last-child {
+        margin-bottom: 0;
+      }
+      .release-entry[data-era='stable'] {
+        --entry-accent: var(--green);
+        --entry-soft: var(--green-soft);
+        border-color: rgba(57, 217, 173, 0.34);
+        box-shadow: 0 20px 54px rgba(17, 136, 102, 0.18);
+      }
+      .release-entry[data-era='hardening'] {
+        --entry-accent: var(--amber);
+        --entry-soft: var(--amber-soft);
+      }
+      .release-entry[data-era='ecosystem'] {
+        --entry-accent: var(--cyan);
+        --entry-soft: var(--cyan-soft);
+      }
+      .release-entry[data-era='platform'] {
+        --entry-accent: var(--violet);
+        --entry-soft: var(--violet-soft);
+      }
       .release-entry::before {
         content: '';
         position: absolute;
@@ -434,7 +601,9 @@
         border: 3px solid #f1f6fb;
         border-radius: 50%;
         background: var(--entry-accent);
-        box-shadow: 0 0 0 1px color-mix(in srgb, var(--entry-accent) 62%, transparent), 0 0 16px color-mix(in srgb, var(--entry-accent) 45%, transparent);
+        box-shadow:
+          0 0 0 1px color-mix(in srgb, var(--entry-accent) 62%, transparent),
+          0 0 16px color-mix(in srgb, var(--entry-accent) 45%, transparent);
       }
       .release-entry::after {
         content: '';
@@ -443,15 +612,40 @@
         right: -36px;
         width: 36px;
         height: 1px;
-        background: linear-gradient(90deg, color-mix(in srgb, var(--entry-accent) 65%, transparent), color-mix(in srgb, var(--entry-accent) 16%, transparent));
+        background: linear-gradient(
+          90deg,
+          color-mix(in srgb, var(--entry-accent) 65%, transparent),
+          color-mix(in srgb, var(--entry-accent) 16%, transparent)
+        );
       }
-      .release-entry:nth-child(even)::before { right: auto; left: -44px; }
-      .release-entry:nth-child(even)::after { right: auto; left: -36px; transform: rotate(180deg); }
-      .release-entry.is-current::before { animation: release-pulse 2.2s ease-in-out infinite; }
-      .release-entry.is-milestone::before { border-radius: 4px; transform: rotate(45deg); }
+      .release-entry:nth-child(even)::before {
+        right: auto;
+        left: -44px;
+      }
+      .release-entry:nth-child(even)::after {
+        right: auto;
+        left: -36px;
+        transform: rotate(180deg);
+      }
+      .release-entry.is-current::before {
+        animation: release-pulse 2.2s ease-in-out infinite;
+      }
+      .release-entry.is-milestone::before {
+        border-radius: 4px;
+        transform: rotate(45deg);
+      }
       @keyframes release-pulse {
-        0%, 100% { box-shadow: 0 0 0 1px rgba(57, 217, 173, 0.65), 0 0 15px rgba(57, 217, 173, 0.45); }
-        50% { box-shadow: 0 0 0 4px rgba(57, 217, 173, 0.12), 0 0 28px rgba(57, 217, 173, 0.78); }
+        0%,
+        100% {
+          box-shadow:
+            0 0 0 1px rgba(57, 217, 173, 0.65),
+            0 0 15px rgba(57, 217, 173, 0.45);
+        }
+        50% {
+          box-shadow:
+            0 0 0 4px rgba(57, 217, 173, 0.12),
+            0 0 28px rgba(57, 217, 173, 0.78);
+        }
       }
       .release-entry__head {
         display: flex;
@@ -462,8 +656,17 @@
         padding-bottom: 22px;
         border-bottom: 1px solid var(--line);
       }
-      .release-version-line { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; }
-      .release-version-line h3 { margin: 0; font-size: 27px; letter-spacing: -0.04em; }
+      .release-version-line {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 9px;
+      }
+      .release-version-line h3 {
+        margin: 0;
+        font-size: 27px;
+        letter-spacing: -0.04em;
+      }
       .release-channel {
         display: inline-flex;
         align-items: center;
@@ -475,9 +678,24 @@
         font-size: 9px;
         font-weight: 800;
       }
-      .release-title { margin: 8px 0 0; color: #586370; font-size: 13px; font-weight: 650; }
-      .release-date { flex: 0 0 auto; color: #8b94a0; font-size: 11px; line-height: 24px; }
-      .release-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 13px; }
+      .release-title {
+        margin: 8px 0 0;
+        color: #586370;
+        font-size: 13px;
+        font-weight: 650;
+      }
+      .release-date {
+        flex: 0 0 auto;
+        color: #8b94a0;
+        font-size: 11px;
+        line-height: 24px;
+      }
+      .release-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 13px;
+      }
       .release-tags span {
         padding: 4px 7px;
         border: 1px solid color-mix(in srgb, var(--entry-accent) 18%, white);
@@ -498,8 +716,18 @@
         border-radius: 13px;
         background: linear-gradient(120deg, var(--entry-soft), #fff 72%);
       }
-      .release-shift span { color: var(--entry-accent); font-size: 9px; font-weight: 850; letter-spacing: 0.09em; }
-      .release-shift strong { color: #283340; font-size: 15px; line-height: 1.45; letter-spacing: -0.015em; }
+      .release-shift span {
+        color: var(--entry-accent);
+        font-size: 9px;
+        font-weight: 850;
+        letter-spacing: 0.09em;
+      }
+      .release-shift strong {
+        color: #283340;
+        font-size: 15px;
+        line-height: 1.45;
+        letter-spacing: -0.015em;
+      }
       .release-notes-label {
         margin: 24px 34px 0;
         color: #8a939e;
@@ -508,7 +736,13 @@
         letter-spacing: 0.1em;
         text-transform: uppercase;
       }
-      .release-notes { display: grid; gap: 10px; margin: 12px 34px 0; padding: 0; list-style: none; }
+      .release-notes {
+        display: grid;
+        gap: 10px;
+        margin: 12px 34px 0;
+        padding: 0;
+        list-style: none;
+      }
       .release-notes li {
         display: grid;
         grid-template-columns: 27px minmax(0, 1fr);
@@ -518,7 +752,9 @@
         font-size: 13px;
         line-height: 1.7;
       }
-      .release-entry--no-platforms .release-notes { margin-bottom: 29px; }
+      .release-entry--no-platforms .release-notes {
+        margin-bottom: 29px;
+      }
       .note-index {
         display: grid;
         place-items: center;
@@ -531,7 +767,14 @@
         font-size: 9px;
         font-weight: 850;
       }
-      .release-platforms { display: flex; flex-wrap: wrap; gap: 7px; margin: 25px 34px 0; padding: 20px 0 27px; border-top: 1px solid var(--line); }
+      .release-platforms {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+        margin: 25px 34px 0;
+        padding: 20px 0 27px;
+        border-top: 1px solid var(--line);
+      }
       .release-platforms span {
         padding: 6px 9px;
         border: 1px solid var(--line);
@@ -541,14 +784,26 @@
         font-size: 10px;
         font-weight: 700;
       }
-      .release-source-note { margin: 24px 2px 0; color: #728398; font-size: 10.5px; line-height: 1.65; text-align: center; }
+      .release-source-note {
+        margin: 24px 2px 0;
+        color: #728398;
+        font-size: 10.5px;
+        line-height: 1.65;
+        text-align: center;
+      }
 
       @media (prefers-reduced-motion: reduce) {
         .release-entry,
-        .release-entry.is-current::before { transition: none; animation: none; }
+        .release-entry.is-current::before {
+          transition: none;
+          animation: none;
+        }
       }
 
-      .footer { border-top: 1px solid var(--line); background: var(--soft); }
+      .footer {
+        border-top: 1px solid var(--line);
+        background: var(--soft);
+      }
       .footer-inner {
         min-height: 88px;
         display: flex;
@@ -558,74 +813,220 @@
         color: #828b96;
         font-size: 11px;
       }
-      .footer-links { display: flex; gap: 18px; }
-      .footer-links a { color: #626b77; text-decoration: none; }
-      a:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+      .footer-links {
+        display: flex;
+        gap: 18px;
+      }
+      .footer-links a {
+        color: #626b77;
+        text-decoration: none;
+      }
+      a:focus-visible {
+        outline: 2px solid var(--blue);
+        outline-offset: 3px;
+      }
 
       @media (max-width: 840px) {
-        .hero-grid { grid-template-columns: 1fr; min-height: 0; padding: 64px 0; }
-        .version-summary { max-width: 520px; }
-        .evolution-intro { align-items: flex-start; flex-direction: column; gap: 15px; }
-        .evolution-strip { grid-template-columns: repeat(2, 1fr); }
-        .evolution-phase:nth-child(2) { border-right: 0; }
-        .evolution-phase:nth-child(-n + 2) { border-bottom: 1px solid #dfe7f0; }
-        .phase-arrow { display: none; }
-        .release-layout { padding: 32px 24px 42px; }
-        .release-aside { align-items: flex-start; flex-direction: column; }
-        .release-aside__actions { justify-items: start; }
-        .release-legend { justify-content: flex-start; }
-        .release-list::before { left: 18px; transform: none; }
+        .hero-grid {
+          grid-template-columns: 1fr;
+          min-height: 0;
+          padding: 64px 0;
+        }
+        .version-summary {
+          max-width: 520px;
+        }
+        .evolution-intro {
+          align-items: flex-start;
+          flex-direction: column;
+          gap: 15px;
+        }
+        .evolution-strip {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        .evolution-phase:nth-child(2) {
+          border-right: 0;
+        }
+        .evolution-phase:nth-child(-n + 2) {
+          border-bottom: 1px solid #dfe7f0;
+        }
+        .phase-arrow {
+          display: none;
+        }
+        .release-layout {
+          padding: 32px 24px 42px;
+        }
+        .release-aside {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+        .release-aside__actions {
+          justify-items: start;
+        }
+        .release-legend {
+          justify-content: flex-start;
+        }
+        .release-list::before {
+          left: 18px;
+          transform: none;
+        }
         .release-entry,
-        .release-entry:nth-child(even) { width: calc(100% - 54px); margin-left: 54px; }
+        .release-entry:nth-child(even) {
+          width: calc(100% - 54px);
+          margin-left: 54px;
+        }
         .release-entry::before,
-        .release-entry:nth-child(even)::before { right: auto; left: -43px; }
+        .release-entry:nth-child(even)::before {
+          right: auto;
+          left: -43px;
+        }
         .release-entry::after,
-        .release-entry:nth-child(even)::after { right: auto; left: -35px; transform: rotate(180deg); }
-        .release-source-note { margin-left: 54px; }
+        .release-entry:nth-child(even)::after {
+          right: auto;
+          left: -35px;
+          transform: rotate(180deg);
+        }
+        .release-source-note {
+          margin-left: 54px;
+        }
       }
 
       @media (max-width: 640px) {
-        .container { width: min(100% - 28px, 1180px); }
-        .header-inner { min-height: 60px; }
-        .brand-copy strong { font-size: 12px; }
-        .brand-copy span { display: none; }
-        .header-nav a { padding: 7px 8px; font-size: 11px; }
+        .container {
+          width: min(100% - 28px, 1180px);
+        }
+        .header-inner {
+          min-height: 60px;
+        }
+        .brand-copy strong {
+          font-size: 12px;
+        }
+        .brand-copy span {
+          display: none;
+        }
+        .header-nav a {
+          padding: 7px 8px;
+          font-size: 11px;
+        }
         .header-nav .nav-home,
-        .header-nav .nav-kellai { display: none; }
-        .hero-grid { gap: 34px; padding: 52px 0; }
-        h1 { font-size: clamp(44px, 13vw, 58px); }
-        .hero-lead { font-size: 14px; }
-        .hero-proof { row-gap: 18px; }
-        .hero-proof div { min-width: 96px; padding-right: 15px; margin-right: 15px; }
-        .release-main { padding: 68px 0 76px; }
-        .evolution-strip { grid-template-columns: 1fr; }
-        .evolution-phase { min-height: 0; border-right: 0; border-bottom: 1px solid #dfe7f0; }
-        .evolution-phase:last-child { border-bottom: 0; }
-        .release-layout { margin-top: 52px; padding: 27px 14px 34px; border-radius: 22px; }
-        .release-aside { padding-bottom: 26px; }
-        .release-aside h2 { font-size: 25px; }
-        .release-list { padding-top: 30px; }
-        .release-list::before { left: 10px; }
+        .header-nav .nav-kellai {
+          display: none;
+        }
+        .hero-grid {
+          gap: 34px;
+          padding: 52px 0;
+        }
+        h1 {
+          font-size: clamp(44px, 13vw, 58px);
+        }
+        .hero-lead {
+          font-size: 14px;
+        }
+        .hero-proof {
+          row-gap: 18px;
+        }
+        .hero-proof div {
+          min-width: 96px;
+          padding-right: 15px;
+          margin-right: 15px;
+        }
+        .release-main {
+          padding: 68px 0 76px;
+        }
+        .evolution-strip {
+          grid-template-columns: 1fr;
+        }
+        .evolution-phase {
+          min-height: 0;
+          border-right: 0;
+          border-bottom: 1px solid #dfe7f0;
+        }
+        .evolution-phase:last-child {
+          border-bottom: 0;
+        }
+        .release-layout {
+          margin-top: 52px;
+          padding: 27px 14px 34px;
+          border-radius: 22px;
+        }
+        .release-aside {
+          padding-bottom: 26px;
+        }
+        .release-aside h2 {
+          font-size: 25px;
+        }
+        .release-list {
+          padding-top: 30px;
+        }
+        .release-list::before {
+          left: 10px;
+        }
         .release-entry,
-        .release-entry:nth-child(even) { width: calc(100% - 36px); margin-left: 36px; margin-bottom: 24px; }
+        .release-entry:nth-child(even) {
+          width: calc(100% - 36px);
+          margin-left: 36px;
+          margin-bottom: 24px;
+        }
         .release-entry::before,
-        .release-entry:nth-child(even)::before { left: -33px; }
+        .release-entry:nth-child(even)::before {
+          left: -33px;
+        }
         .release-entry::after,
-        .release-entry:nth-child(even)::after { left: -25px; width: 25px; }
-        .release-entry { border-radius: 16px; }
-        .release-entry__head { padding: 23px 20px 20px 24px; }
-        .release-entry__head { gap: 14px; }
-        .release-version-line h3 { font-size: 23px; }
-        .release-date { font-size: 10px; }
-        .release-shift { grid-template-columns: 1fr; gap: 6px; margin: 20px 18px 0 23px; padding: 15px; }
-        .release-shift strong { font-size: 13px; }
-        .release-notes-label { margin: 21px 23px 0; }
-        .release-notes { margin: 11px 20px 0 23px; }
-        .release-notes li { grid-template-columns: 24px minmax(0, 1fr); gap: 9px; font-size: 12px; }
-        .note-index { width: 24px; height: 24px; }
-        .release-platforms { margin: 21px 20px 0 23px; padding-bottom: 22px; }
-        .release-source-note { margin-left: 36px; text-align: left; }
-        .footer-inner { align-items: flex-start; flex-direction: column; padding: 22px 0; }
+        .release-entry:nth-child(even)::after {
+          left: -25px;
+          width: 25px;
+        }
+        .release-entry {
+          border-radius: 16px;
+        }
+        .release-entry__head {
+          padding: 23px 20px 20px 24px;
+        }
+        .release-entry__head {
+          gap: 14px;
+        }
+        .release-version-line h3 {
+          font-size: 23px;
+        }
+        .release-date {
+          font-size: 10px;
+        }
+        .release-shift {
+          grid-template-columns: 1fr;
+          gap: 6px;
+          margin: 20px 18px 0 23px;
+          padding: 15px;
+        }
+        .release-shift strong {
+          font-size: 13px;
+        }
+        .release-notes-label {
+          margin: 21px 23px 0;
+        }
+        .release-notes {
+          margin: 11px 20px 0 23px;
+        }
+        .release-notes li {
+          grid-template-columns: 24px minmax(0, 1fr);
+          gap: 9px;
+          font-size: 12px;
+        }
+        .note-index {
+          width: 24px;
+          height: 24px;
+        }
+        .release-platforms {
+          margin: 21px 20px 0 23px;
+          padding-bottom: 22px;
+        }
+        .release-source-note {
+          margin-left: 36px;
+          text-align: left;
+        }
+        .footer-inner {
+          align-items: flex-start;
+          flex-direction: column;
+          padding: 22px 0;
+        }
       }
     </style>
   </head>
@@ -665,18 +1066,18 @@
               <div><strong>3 端</strong><span>稳定交付</span></div>
             </div>
           </div>
-          <aside class="version-summary" aria-label="当前稳定版本">
-            <span class="summary-label">Current stable release</span>
+          <aside class="version-summary" aria-label="当前交付版本">
+            <span class="summary-label">Current delivery release</span>
             <p class="summary-version" id="summary-version">v1.0.0.1</p>
-            <div class="summary-status">稳定版可下载</div>
+            <div class="summary-status" id="summary-status">Windows 临时交付可下载</div>
             <div class="summary-meta">
               <span>发布日期<b id="summary-date">2026-09-01</b></span>
-              <span>发布渠道<b>Enterprise</b></span>
+              <span>发布渠道<b id="summary-channel">Enterprise interim</b></span>
             </div>
             <ul class="summary-changes" aria-label="当前版本重点">
               <li>客户交付中心显示已安装版本与平台</li>
-              <li>Windows、macOS 同版本稳定交付</li>
-              <li>下载中心与更新日志发布后自动校验</li>
+              <li>Windows 1.0.0.1 临时包公开下载与 SHA-256</li>
+              <li>稳定签名门禁保持关闭，未混入自动更新</li>
             </ul>
           </aside>
         </div>
@@ -722,11 +1123,13 @@
               <div class="release-aside__intro">
                 <p class="section-kicker">All releases</p>
                 <h2 id="history-title">逐版看变化 · 沿时间轨展开</h2>
-                <p>按版本演进从新到旧排列。当前稳定版提供公开下载；v1–v10 为历史产品里程碑，不代表仍提供旧安装包。</p>
+                <p>
+                  按版本演进从新到旧排列。当前 Windows 交付候选版提供带风险说明的临时下载；v1–v10 为历史产品里程碑，不代表仍提供旧安装包。
+                </p>
               </div>
               <div class="release-aside__actions">
                 <div class="release-legend" aria-label="版本阶段颜色图例">
-                  <span><i style="--legend-color: var(--green)"></i>当前稳定发布</span>
+                  <span><i style="--legend-color: var(--green)"></i>当前交付版本</span>
                   <span><i style="--legend-color: var(--amber)"></i>工程硬化与收敛</span>
                   <span><i style="--legend-color: var(--cyan)"></i>生态与多端交付</span>
                   <span><i style="--legend-color: var(--violet)"></i>AI 平台化</span>
@@ -737,26 +1140,32 @@
             </aside>
             <div>
               <div class="release-list" id="release-list" aria-live="polite" aria-label="XCAGI 版本时间线">
-              <article class="release-entry">
-                <div class="release-entry__head">
-                  <div>
-                    <div class="release-version-line">
-                      <h3>v1.0.0.1</h3><span class="release-channel">稳定版</span>
+                <article class="release-entry">
+                  <div class="release-entry__head">
+                    <div>
+                      <div class="release-version-line">
+                        <h3>v1.0.0.1</h3>
+                        <span class="release-channel">交付候选版</span>
+                      </div>
+                      <p class="release-title">企业交付版本可见与 Windows 临时交付</p>
                     </div>
-                    <p class="release-title">企业交付版本可见与稳定发布闭环</p>
+                    <time class="release-date" datetime="2026-09-01">2026-09-01</time>
                   </div>
-                  <time class="release-date" datetime="2026-09-01">2026-09-01</time>
-                </div>
-                <ul class="release-notes">
-                  <li>客户交付中心展示最近一次成功安装回执中的产品版本与平台，缺失版本时明确显示未上报。</li>
-                  <li>首次登录和 OTA 安装成功后上报版本、构建 SHA 与平台，失败升级不覆盖已安装版本。</li>
-                  <li>Windows 64 位与 macOS 企业版保持同一产品版本，经签名、公证和安装启动检查后进入稳定渠道。</li>
-                  <li>发布流程同步下载中心与更新日志，并校验安装包、公开指针、版本和最终 SHA 一致。</li>
-                </ul>
-                <div class="release-platforms" aria-label="公开平台">
-                  <span>Windows 64 位</span><span>macOS</span>
-                </div>
-              </article>
+                  <ul class="release-notes">
+                    <li>客户交付中心展示最近一次成功安装回执中的产品版本与平台，缺失版本时明确显示未上报。</li>
+                    <li>首次登录和 OTA 安装成功后上报版本、构建 SHA 与平台，失败升级不覆盖已安装版本。</li>
+                    <li>
+                      Windows 64 位企业临时交付包尚未完成 Authenticode 签名，仅供管理员核对来源与 SHA-256 后安装，不进入稳定自动更新。
+                    </li>
+                    <li>
+                      临时交付流程原子发布安装包与独立指针，并校验下载中心、更新日志、版本、构建 SHA、大小和
+                      SHA-256；正式稳定版继续执行签名硬门禁。
+                    </li>
+                  </ul>
+                  <div class="release-platforms" aria-label="公开平台">
+                    <span>Windows 64 位临时交付</span><span>macOS 稳定版仍为 1.0.0.0</span>
+                  </div>
+                </article>
               </div>
               <p class="release-source-note">历史演进来自 XCAGI 版本演进轨与更新日志；当前下载状态、文件大小和校验值以制品发布清单为准。</p>
             </div>
@@ -769,7 +1178,8 @@
       <div class="container footer-inner">
         <span>© 2026 成都修茈科技有限公司 · XCAGI 更新日志</span>
         <nav class="footer-links" aria-label="页脚导航">
-          <a href="/download">产品下载</a><a href="/download/breakpoints">断点清单</a><a href="/download/goals">工作目标</a><a href="/market/">AI 市场</a><a href="/contact.html">联系支持</a>
+          <a href="/download">产品下载</a><a href="/download/breakpoints">断点清单</a><a href="/download/goals">工作目标</a
+          ><a href="/market/">AI 市场</a><a href="/contact.html">联系支持</a>
         </nav>
       </div>
     </footer>
@@ -782,15 +1192,15 @@
           {
             version: '1.0.0.1',
             date: '2026-09-01',
-            title: '企业交付版本可见与稳定发布闭环',
-            channel: '稳定版',
+            title: '企业交付版本可见与 Windows 临时交付',
+            channel: '交付候选版',
             notes: [
               '客户交付中心新增客户设备当前安装版本与平台展示；历史回执未携带版本时明确显示未上报，不再把未知值当作有效版本。',
               '安装与首次登录成功后上报版本、构建 SHA 和平台；展示只采用最近一次成功安装回执，失败升级不会覆盖客户已安装版本。',
-              'Windows 64 位企业版安装包与 macOS 企业版保持同一产品版本，经签名、公证、安装启动检查及公开下载校验后进入稳定渠道。',
-              '下载中心与更新日志改由发布 SSOT 同步生成；发布流程会校验版本、SHA、安装包、公开指针和当前更新日志一致后才完成。',
+              'Windows 64 位企业临时交付包已构建并公开 SHA-256，但尚未完成 Authenticode 代码签名；仅供管理员确认来源后安装，不进入稳定自动更新通道。',
+              '临时交付流程会原子发布安装包与独立指针，并同步校验下载中心、更新日志、版本、构建 SHA、文件大小和 SHA-256；正式稳定版继续执行 Windows 签名与 macOS 公证硬门禁。',
             ],
-            platforms: ['Windows 64 位', 'macOS'],
+            platforms: ['Windows 64 位临时交付', 'macOS（稳定版仍为 1.0.0.0）'],
           },
           {
             version: '1.0.0.0',
@@ -983,8 +1393,35 @@
         var listEl = document.getElementById('release-list')
         var summaryVersionEl = document.getElementById('summary-version')
         var summaryDateEl = document.getElementById('summary-date')
+        var summaryStatusEl = document.getElementById('summary-status')
+        var summaryChannelEl = document.getElementById('summary-channel')
 
-        function render(history) {
+        function compareVersions(left, right) {
+          var a = String(left || '')
+            .split('.')
+            .map(Number)
+          var b = String(right || '')
+            .split('.')
+            .map(Number)
+          for (var i = 0; i < Math.max(a.length, b.length); i += 1) {
+            var difference = (a[i] || 0) - (b[i] || 0)
+            if (difference !== 0) return difference
+          }
+          return 0
+        }
+
+        function fetchJson(url) {
+          return fetch(url, { cache: 'no-store' })
+            .then(function (response) {
+              var type = response.headers.get('content-type') || ''
+              return response.ok && type.includes('json') ? response.json() : null
+            })
+            .catch(function () {
+              return null
+            })
+        }
+
+        function render(history, interimActive) {
           if (!Array.isArray(history) || !history.length) history = fallbackHistory
           listEl.innerHTML = ''
           history.forEach(function (release, releaseIndex) {
@@ -1078,24 +1515,35 @@
           })
           summaryVersionEl.textContent = 'v' + String(history[0].version || '')
           summaryDateEl.textContent = String(history[0].date || '')
+          summaryStatusEl.textContent = interimActive ? 'Windows 临时交付可下载' : '稳定版可下载'
+          summaryChannelEl.textContent = interimActive ? 'Enterprise interim' : 'Enterprise'
         }
 
-        render(fallbackHistory)
-        fetch('/download-release.json', { cache: 'no-store' })
-          .then(function (response) {
-            var type = response.headers.get('content-type') || ''
-            return response.ok && type.includes('json') ? response.json() : null
-          })
-          .then(function (data) {
-            if (data && Array.isArray(data.release_history)) render(data.release_history)
-          })
-          .catch(function () {})
+        render(fallbackHistory, true)
+        Promise.all([fetchJson('/download-release.json'), fetchJson('/download-windows-hotfix.json')]).then(function (results) {
+          var stable = results[0]
+          var hotfix = results[1]
+          var hasStableHistory = stable && Array.isArray(stable.release_history)
+          var history = hasStableHistory ? stable.release_history.slice() : fallbackHistory.slice()
+          var interimActive =
+            hotfix &&
+            hotfix.schema === 'xcagi.windows_interim_release/v1' &&
+            hotfix.download_allowed === true &&
+            hotfix.signature_status === 'unsigned' &&
+            hotfix.release &&
+            (!hasStableHistory || compareVersions(hotfix.version, history[0].version) > 0)
+          if (interimActive) {
+            if (compareVersions(hotfix.version, history[0].version) === 0) history[0] = hotfix.release
+            else history.unshift(hotfix.release)
+          }
+          render(history, Boolean(interimActive))
+        })
       })()
     </script>
 
     <div id="xc-corp-butler-root"></div>
     <link rel="stylesheet" href="/corp-butler/corp-butler.css?v=20260725a" data-xc-corp-butler-css="1" />
     <script type="module" src="/corp-butler/corp-butler.js?v=20260725a" data-xc-corp-butler-js="1"></script>
-      <script src="/main.js?v=20260723h"></script>
-</body>
+    <script src="/main.js?v=20260723h"></script>
+  </body>
 </html>
