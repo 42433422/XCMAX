@@ -25,7 +25,7 @@
     <div class="enterprise-roster__toolbar">
       <label>
         <i class="fa fa-search" aria-hidden="true"></i>
-        <input v-model.trim="query" type="search" placeholder="搜索账户、交付单、订单或永久档位" />
+        <input v-model.trim="query" type="search" placeholder="搜索账户、交付单、订单、档位或安装版本" />
       </label>
       <select v-model="status" aria-label="按标准交付状态筛选">
         <option value="">全部状态</option>
@@ -59,6 +59,15 @@
             <i :class="`fa ${delivery.install.ok ? 'fa-check-circle' : 'fa-download'}`" aria-hidden="true"></i>
             {{ delivery.install.ok ? `${delivery.install.installed_devices} 台客户设备已安装` : '待客户设备安装' }}
           </span>
+          <span
+            v-if="delivery.install.ok"
+            :class="['proof-pill', installedVersion(delivery) ? 'is-version' : 'is-version-unknown']"
+            :title="installedVersionDetail(delivery)"
+          >
+            <i class="fa fa-code-fork" aria-hidden="true"></i>
+            {{ installedVersion(delivery) ? `当前版本 ${installedVersion(delivery)}` : '当前版本未上报' }}
+            <small v-if="installedPlatform(delivery)">· {{ installedPlatform(delivery) }}</small>
+          </span>
           <span v-if="delivery.install.internal_devices_excluded" class="proof-pill is-internal">
             <i class="fa fa-shield" aria-hidden="true"></i>
             {{ delivery.install.internal_devices_excluded }} 台内部本机已排除
@@ -87,6 +96,7 @@ import type {
   MarketAdminUser,
   StandardDeliveryPolicy,
   StandardDeliveryRecord,
+  UpdateInstallReceipt,
 } from '@/api/xcmaxAdmin'
 
 const props = withDefaults(
@@ -129,6 +139,8 @@ const rows = computed(() => {
       delivery.order?.order_no,
       delivery.plan.title,
       delivery.plan.account_tier,
+      installedVersion(delivery),
+      installedPlatform(delivery),
     ].some((value) => String(value || '').toLowerCase().includes(needle))
   })
 })
@@ -143,6 +155,35 @@ function tierLabel(tier: string): string {
 
 function ticketCount(delivery: StandardDeliveryRecord): number {
   return ticketCounts.value.get(Number(delivery.account.id)) || 0
+}
+
+function installedReceipt(delivery: StandardDeliveryRecord): UpdateInstallReceipt | null {
+  if (delivery.install.latest_installed_receipt) return delivery.install.latest_installed_receipt
+  const latest = delivery.install.latest_receipt
+  return latest?.status === 'installed' && latest.device_scope !== 'internal' ? latest : null
+}
+
+function installedVersion(delivery: StandardDeliveryRecord): string {
+  return String(installedReceipt(delivery)?.installed_version || '').trim()
+}
+
+function installedPlatform(delivery: StandardDeliveryRecord): string {
+  const platform = String(installedReceipt(delivery)?.platform || '').trim().toLowerCase()
+  if (platform === 'darwin' || platform === 'macos') return 'macOS'
+  if (platform === 'win32' || platform === 'windows') return 'Windows'
+  return platform
+}
+
+function installedVersionDetail(delivery: StandardDeliveryRecord): string {
+  const receipt = installedReceipt(delivery)
+  if (!receipt) return '客户设备已安装，但该安装回执未包含版本信息'
+  const parts = [
+    installedVersion(delivery) ? `安装版本 ${installedVersion(delivery)}` : '安装版本未上报',
+    installedPlatform(delivery),
+    receipt.installed_build_sha ? `构建 ${receipt.installed_build_sha}` : '',
+    receipt.reported_at ? `上报 ${formatDate(receipt.reported_at)}` : '',
+  ]
+  return parts.filter(Boolean).join(' · ')
 }
 
 function formatDate(value: string): string {
@@ -180,6 +221,9 @@ function formatDate(value: string): string {
 .proof-pill.is-ok { background: #e7f6ef; color: #28795c; }
 .proof-pill.is-wait { background: #f2f4f7; color: #738195; }
 .proof-pill.is-internal { background: #eef1f4; color: #53677d; }
+.proof-pill.is-version { background: #e8f1fd; color: #2869aa; }
+.proof-pill.is-version-unknown { background: #fff2df; color: #9a641d; }
+.proof-pill small { font-size: inherit; }
 .enterprise-roster__state { display: grid; justify-items: end; gap: 5px; text-align: right; }
 .delivery-state { font-size: 10px; }
 .delivery-state.is-completed { color: #28795c; }

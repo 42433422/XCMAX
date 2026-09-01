@@ -45,6 +45,7 @@ export type StandardDeliveryRecord = {
     internal_devices_excluded?: number;
     scope?: 'customer_external_desktop' | string;
     latest_receipt?: UpdateInstallReceipt | null;
+    latest_installed_receipt?: UpdateInstallReceipt | null;
   };
   first_login: { ok: boolean; at?: string };
   completion_rule: 'installed_and_first_login' | string;
