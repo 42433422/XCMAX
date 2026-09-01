@@ -92,8 +92,41 @@ def test_standard_delivery_requires_install_and_first_login(monkeypatch):
         completed = build_standard_delivery_rows(db)[0]
         assert completed["status"] == "completed"
         assert completed["install"]["installed_devices"] == 1
+        assert completed["install"]["latest_installed_receipt"] == {
+            "installation_id": "installation-0000000000000001",
+            "platform": "darwin",
+            "installed_version": "1.0.0.1",
+            "installed_build_sha": "build-sha-1",
+            "status": "installed",
+            "source": "desktop_inventory",
+            "reported_at": "2026-08-29T10:10:00+00:00",
+            "error": "",
+            "device_scope": "customer",
+        }
         assert completed["first_login"]["ok"] is True
         assert completed["completion_rule"] == "customer_desktop_installed_and_first_login"
+
+        db.add(
+            UpdateInstallationReceipt(
+                user_id=user.id,
+                installation_id="installation-0000000000000001",
+                idempotency_key="receipt-00000000000000000003",
+                platform="darwin",
+                installed_version="1.0.0.2",
+                installed_build_sha="failed-build-sha",
+                status="failed",
+                source="desktop_updater",
+                error="update failed",
+                reported_at=datetime(2026, 8, 29, 10, 15, tzinfo=UTC),
+            )
+        )
+        db.commit()
+        after_failed_update = build_standard_delivery_rows(db)[0]
+        assert after_failed_update["install"]["latest_receipt"]["status"] == "failed"
+        assert (
+            after_failed_update["install"]["latest_installed_receipt"]["installed_version"]
+            == "1.0.0.1"
+        )
     finally:
         db.close()
 
@@ -171,6 +204,8 @@ def test_internal_founder_desktop_never_completes_customer_delivery(monkeypatch)
         assert completed["install"]["installed_devices"] == 1
         assert completed["install"]["internal_devices_excluded"] == 1
         assert completed["install"]["latest_receipt"]["device_scope"] == "customer"
+        assert completed["install"]["latest_installed_receipt"]["installed_version"] == "1.0.0.1"
+        assert completed["install"]["latest_installed_receipt"]["device_scope"] == "customer"
     finally:
         db.close()
 

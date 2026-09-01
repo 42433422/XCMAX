@@ -49,6 +49,28 @@ def _iso(value: Any) -> str:
     return str(normalized.astimezone(UTC).isoformat())
 
 
+def _receipt_payload(
+    receipt: UpdateInstallationReceipt,
+    internal_ids: set[str],
+) -> dict[str, Any]:
+    installation_id = str(receipt.installation_id or "")
+    return {
+        "installation_id": installation_id,
+        "platform": str(receipt.platform or ""),
+        "installed_version": str(receipt.installed_version or ""),
+        "installed_build_sha": str(receipt.installed_build_sha or ""),
+        "status": str(receipt.status or ""),
+        "source": str(receipt.source or ""),
+        "reported_at": _iso(receipt.reported_at),
+        "error": str(receipt.error or ""),
+        "device_scope": (
+            "internal"
+            if _is_internal_installation(installation_id, internal_ids)
+            else "customer"
+        ),
+    }
+
+
 def _entitlement_plan_id(row: Entitlement) -> str:
     try:
         payload = json.loads(str(row.metadata_json or "{}"))
@@ -166,23 +188,10 @@ def _build_delivery_rows(db: Session, license_type: str) -> list[dict[str, Any]]
                 _iso(installed.reported_at),
                 _iso(first_login_at),
             )
-        receipt_payload = None
-        if latest is not None:
-            receipt_payload = {
-                "installation_id": str(latest.installation_id or ""),
-                "platform": str(latest.platform or ""),
-                "installed_version": str(latest.installed_version or ""),
-                "installed_build_sha": str(latest.installed_build_sha or ""),
-                "status": str(latest.status or ""),
-                "source": str(latest.source or ""),
-                "reported_at": _iso(latest.reported_at),
-                "error": str(latest.error or ""),
-                "device_scope": (
-                    "internal"
-                    if _is_internal_installation(str(latest.installation_id or ""), internal_ids)
-                    else "customer"
-                ),
-            }
+        receipt_payload = _receipt_payload(latest, internal_ids) if latest is not None else None
+        installed_receipt_payload = (
+            _receipt_payload(installed, internal_ids) if installed is not None else None
+        )
         result.append(
             {
                 "delivery_no": f"STD-{order_no or f'U{uid}-P{plan_row.id}'}",
@@ -224,6 +233,7 @@ def _build_delivery_rows(db: Session, license_type: str) -> list[dict[str, Any]]
                     "internal_devices_excluded": len(internal_devices_by_user.get(uid, set())),
                     "scope": "customer_external_desktop",
                     "latest_receipt": receipt_payload,
+                    "latest_installed_receipt": installed_receipt_payload,
                 },
                 "first_login": {"ok": first_login_ok, "at": _iso(first_login_at)},
                 "completion_rule": "customer_desktop_installed_and_first_login",
