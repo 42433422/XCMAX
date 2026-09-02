@@ -9,6 +9,7 @@ import os
 import time
 from typing import Any
 
+from app.mod_sdk.industry_mod_aliases import is_retired_runtime_mod_id
 from app.mod_sdk.platform_shell import PROTECTED_CLIENT_MOD_IDS
 from app.mod_sdk.product_skus import bundled_mod_ids_for_sku, resolve_product_sku
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -136,13 +137,8 @@ def is_mod_visible_for_enterprise(mod_id: str) -> bool:
         return True
     if not is_client_mod_id(mid):
         return True
-    try:
-        from app.mod_sdk.industry_mod_aliases import is_retired_runtime_mod_id
-
-        if is_retired_runtime_mod_id(mid):
-            return False
-    except RECOVERABLE_ERRORS:
-        logger.debug("retired runtime mod visibility check skipped", exc_info=True)
+    if is_retired_runtime_mod_id(mid):
+        return False
     # 开放引导行业包(coating-industry / attendance-industry 等随产品分发的中性行业 Mod)
     # 属于 onboarding 开放目录，企业版下始终可见，不与"已购客户 Mod 权益"挂钩。
     try:

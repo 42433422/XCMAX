@@ -53,7 +53,7 @@
 | 维度 | 真相源字段 | 取值 | 写入点 | 派生消费点 |
 |------|-----------|------|-------|-----------|
 | 1 账号身份 | `User.tier` | personal / enterprise / admin | 注册（按 SKU）/ 管理端 / 登录时按市场身份提升 | `Session.account_kind`（登录派生） |
-| 2 行业 | `User.industry_id` + `User.entitled_industries` | 通用/涂料/考勤/批发/电商/餐饮/物流/管理端 | 注册 / 管理端 | `request.state.industry_id` → Persona 身份 |
+| 2 行业 | `User.industry_id` + `User.entitled_industries` | 通用/饰品包装/涂料/考勤/批发/电商/餐饮/物流/管理端 | 注册 / 管理端 | `request.state.industry_id` → Persona 身份 |
 | 3 会员体系 | 修茈市场会员等级（外部，`user_plans`） | free/vip/vip_plus/svip/svip2..svip8 | 市场侧月计划购买 | `Session.market_membership_tier`（登录同步） |
 | 4 账号等级 | `User.account_tier`（派生来源 `User.budget_range`） | normal / pro / max / ultra | 注册时按预算派生 / 管理端 | `/api/auth/me` 返回；仅 enterprise 有意义 |
 
@@ -121,7 +121,7 @@
 `request.state.industry_id ← User.industry_id`（admin → 管理端，兜底 通用），再派生 Persona 身份。
 - 实现：[app/middleware/industry_context.py](../app/middleware/industry_context.py)、[app/application/planner_compat_service.py](../app/application/planner_compat_service.py)。
 
-行业体系的当前可注册范围为 7 选 1：通用、涂料、考勤、批发、电商、餐饮、物流；管理端为 admin 专用行业，不出现在企业注册选择中。后续新增行业只能先进入 [config/industry_presets.json](../config/industry_presets.json)，再绑定对应 Mod、字段词表、导航标签、示例数据与权限策略。
+行业体系的当前可注册范围为 8 选 1：通用、饰品包装、涂料、考勤、批发、电商、餐饮、物流；管理端为 admin 专用行业，不出现在企业注册选择中。后续新增行业只能先进入 [config/industry_presets.json](../config/industry_presets.json)，再绑定对应 Mod、字段词表、导航标签、示例数据与权限策略。
 
 Persona 不作为用户可随意填写的字段持久化，统一运行时派生：
 
@@ -176,11 +176,11 @@ Persona 不作为用户可随意填写的字段持久化，统一运行时派生
 | 类型 | 行业 | 状态 | 说明 |
 |------|------|------|------|
 | 基础行业 | 通用 | ga | 所有账号兜底行业；不绑定专属行业包 |
-| 首批行业包 | 涂料、考勤 | pilot/ga 优先 | 已在 `industry_baseline.json` 明确 `industry_packages`，可作为首批真实交付行业 |
+| 首批行业包 | 饰品包装、涂料、考勤 | pilot/ga 优先 | 已在 `industry_baseline.json` 明确 `industry_packages`，可作为首批真实交付行业；考勤包保留历史行业选择兼容，新交付可作为跨行业通用模块组合使用 |
 | 预置方向 | 批发、电商、餐饮、物流 | draft/pilot | 已有 UI 词表与基础 Mod 组合，正式开放前必须补行业包、测试数据和闭环验证 |
-| 平台行业 | 管理端 | admin-only | 平台运维专用，不进入企业注册 7 选 1 |
+| 平台行业 | 管理端 | admin-only | 平台运维专用，不进入企业注册 8 选 1 |
 
-企业注册当前展示 7 选 1：通用、涂料、考勤、批发、电商、餐饮、物流。开放策略不能只看展示列表，还要看 `industry_baseline.json.onboarding_open_industry_ids`：只有进入该列表的行业才允许作为首批自助开通行业；其余行业可以保留为销售/实施选择，但不能声称已完整交付。
+企业注册当前展示 8 选 1：通用、饰品包装、涂料、考勤、批发、电商、餐饮、物流。开放策略不能只看展示列表，还要看 `industry_baseline.json.onboarding_open_industry_ids`：只有进入该列表的行业才允许作为首批自助开通行业；其余行业可以保留为销售/实施选择，但不能声称已完整交付。
 
 行业包必须包含：
 
@@ -223,7 +223,7 @@ Persona 由六层合成，后层只能收窄或特化，不能突破前层权限
 |----|------|------|----------|
 | 产品层 | 产品线 | XCMAX/FHD 企业助手 | 总体语气、安全边界、默认协作方式 |
 | 账号层 | `account_kind` + RBAC | personal、enterprise_owner、enterprise_operator、admin | 可见数据、可执行动作、是否能管理他人 |
-| 行业层 | `industry_id` | 涂料、考勤、物流、管理端 | 术语、菜单、业务对象、快捷问题 |
+| 行业层 | `industry_id` | 饰品包装、涂料、考勤、物流、管理端 | 术语、菜单、业务对象、快捷问题 |
 | 档位层 | `account_tier` + VIP | normal/pro/max/ultra、vip/svip | 模型/工具上限、自动化深度、并发与额度策略 |
 | 端层 | surface | web、desktop、mobile | 交互密度、本地文件/打印、移动审批、扫码绑定 |
 | 任务层 | 当前任务上下文 | 查价、开单、审批、导入 Excel、打印标签 | 临时工具选择、输出格式、确认策略 |
