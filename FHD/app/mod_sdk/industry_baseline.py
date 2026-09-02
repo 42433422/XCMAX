@@ -97,12 +97,18 @@ def _industry_capability_mod_ids_for(row: dict[str, Any]) -> list[str]:
 
 
 def _industry_mod_ids_for(industry_key: str, row: dict[str, Any]) -> list[str]:
-    """兼容字段：行业包与可组合业务模块的并集。"""
-    return _dedupe(
-        _industry_package_mod_ids_for(industry_key)
-        + _industry_capability_mod_ids_for(row)
-        + [str(x) for x in (row.get("industry_mod_ids") or []) if x]
+    """兼容字段：规范行业包、通用业务模块与旧清单的并集。
+
+    旧 ``industry_mod_ids`` 在已有规范行业包时只是一份历史镜像，不能再
+    追加成第二个行业包；没有规范行业包时则继续作为兼容回退。
+    """
+    package_mod_ids = _industry_package_mod_ids_for(industry_key)
+    legacy_mod_ids = (
+        []
+        if package_mod_ids
+        else _dedupe([str(x) for x in (row.get("industry_mod_ids") or []) if x])
     )
+    return _dedupe(package_mod_ids + legacy_mod_ids + _industry_capability_mod_ids_for(row))
 
 
 def _label_for_mod(mod_id: str, industry_key: str, labels: dict[str, str]) -> str:

@@ -95,6 +95,14 @@ def build_industry_baseline_plan(
     )
     industry_package_mod_ids = facade._industry_package_mod_ids_for(industry_key)
     capability_mod_ids = facade._industry_capability_mod_ids_for(row)
+    legacy_industry_mod_ids = (
+        []
+        if industry_package_mod_ids
+        else facade._dedupe([str(value) for value in (row.get("industry_mod_ids") or []) if value])
+    )
+    industry_package_group_mod_ids = facade._dedupe(
+        industry_package_mod_ids + legacy_industry_mod_ids
+    )
     industry_mod_ids = facade._industry_mod_ids_for(industry_key, row)
     installed = set(facade._installed_mod_ids() if installed_mod_ids is None else installed_mod_ids)
 
@@ -131,7 +139,7 @@ def build_industry_baseline_plan(
         }
 
     custom_hint, _ = facade._custom_line_spec(
-        industry_package_mod_ids[0] if industry_package_mod_ids else ""
+        industry_package_group_mod_ids[0] if industry_package_group_mod_ids else ""
     )
     from app.mod_sdk.customer_delivery import account_custom_mod_ids_for_industry
 
@@ -159,7 +167,7 @@ def build_industry_baseline_plan(
             ],
         },
     ]
-    if industry_package_mod_ids:
+    if industry_package_group_mod_ids:
         groups.append(
             {
                 "id": "industry_package",
@@ -167,7 +175,7 @@ def build_industry_baseline_plan(
                 "hint": custom_hint or "行业通用 Mod：侧栏与业务门面（不含账号定制员工）",
                 "items": [
                     item(mod_id, "industry_package", False, show_mod_id=False)
-                    for mod_id in industry_package_mod_ids
+                    for mod_id in industry_package_group_mod_ids
                 ],
             }
         )
