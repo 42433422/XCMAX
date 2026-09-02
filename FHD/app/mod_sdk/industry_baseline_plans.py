@@ -69,6 +69,7 @@ def build_industry_baseline_plan(
     *,
     entitled_mod_ids: set[str] | None = None,
     skip_account_custom_gate: bool = False,
+    account_username: str = "",
 ) -> dict[str, Any]:
     """Assemble installation readiness for one industry and account."""
     from app.mod_sdk import industry_baseline as facade
@@ -91,6 +92,16 @@ def build_industry_baseline_plan(
             for value in (row.get("optional_host_mod_ids") or [])
             if str(value or "").strip() and str(value).strip() not in required_ids
         ]
+    )
+    industry_package_mod_ids = facade._industry_package_mod_ids_for(industry_key)
+    capability_mod_ids = facade._industry_capability_mod_ids_for(row)
+    legacy_industry_mod_ids = (
+        []
+        if industry_package_mod_ids
+        else facade._dedupe([str(value) for value in (row.get("industry_mod_ids") or []) if value])
+    )
+    industry_package_group_mod_ids = facade._dedupe(
+        industry_package_mod_ids + legacy_industry_mod_ids
     )
     industry_mod_ids = facade._industry_mod_ids_for(industry_key, row)
     installed = set(facade._installed_mod_ids() if installed_mod_ids is None else installed_mod_ids)
@@ -127,7 +138,9 @@ def build_industry_baseline_plan(
             "show_mod_id": visible_id,
         }
 
-    custom_hint, _ = facade._custom_line_spec(industry_mod_ids[0] if industry_mod_ids else "")
+    custom_hint, _ = facade._custom_line_spec(
+        industry_package_group_mod_ids[0] if industry_package_group_mod_ids else ""
+    )
     from app.mod_sdk.customer_delivery import account_custom_mod_ids_for_industry
 
     account_custom_base = account_custom_mod_ids_for_industry(industry_key, entitled_mod_ids)
@@ -154,7 +167,7 @@ def build_industry_baseline_plan(
             ],
         },
     ]
-    if industry_mod_ids:
+    if industry_package_group_mod_ids:
         groups.append(
             {
                 "id": "industry_package",
@@ -162,7 +175,19 @@ def build_industry_baseline_plan(
                 "hint": custom_hint or "行业通用 Mod：侧栏与业务门面（不含账号定制员工）",
                 "items": [
                     item(mod_id, "industry_package", False, show_mod_id=False)
-                    for mod_id in industry_mod_ids
+                    for mod_id in industry_package_group_mod_ids
+                ],
+            }
+        )
+    if capability_mod_ids:
+        groups.append(
+            {
+                "id": "business_modules",
+                "title": "通用业务模块",
+                "hint": "与所属行业组合使用的通用模块；模块能力不会改写客户行业。",
+                "items": [
+                    item(mod_id, "business_module", False, show_mod_id=False)
+                    for mod_id in capability_mod_ids
                 ],
             }
         )
@@ -197,7 +222,8 @@ def build_industry_baseline_plan(
     missing_industry = [
         entry["mod_id"]
         for entry in flat_items
-        if entry["tier"] in ("industry_package", "custom") and not entry["installed"]
+        if entry["tier"] in ("industry_package", "business_module", "custom")
+        and not entry["installed"]
     ]
     missing_account_custom = [
         entry["mod_id"]
@@ -205,17 +231,20 @@ def build_industry_baseline_plan(
         if entry["tier"] == "account_custom" and entry["required"] and not entry["installed"]
     ]
     seed_packages: list[dict[str, Any]] = []
-    if account_custom_ids:
-        from app.mod_sdk.customer_delivery import delivery_seed_package_for_mod
+    from app.mod_sdk.customer_delivery import delivery_seed_package_for_mod
 
-        for mod_id in account_custom_ids:
-            package = delivery_seed_package_for_mod(mod_id, industry_key)
-            if not package:
-                continue
-            seed_packages.append({"mod_id": mod_id, **package})
-            for entry in flat_items:
-                if entry.get("mod_id") == mod_id:
-                    entry["delivery_seed_package"] = dict(package)
+    for mod_id in facade._dedupe(industry_mod_ids + account_custom_ids):
+        package = delivery_seed_package_for_mod(
+            mod_id,
+            industry_key,
+            account_username=account_username,
+        )
+        if not package:
+            continue
+        seed_packages.append({"mod_id": mod_id, **package})
+        for entry in flat_items:
+            if entry.get("mod_id") == mod_id:
+                entry["delivery_seed_package"] = dict(package)
 
     host_ready = not missing_required
     industry_ready = not missing_industry
@@ -236,6 +265,8 @@ def build_industry_baseline_plan(
         "required_mod_ids": required_ids,
         "optional_mod_ids": optional_ids,
         "industry_mod_ids": industry_mod_ids,
+        "industry_package_mod_ids": industry_package_mod_ids,
+        "capability_mod_ids": capability_mod_ids,
         "custom_mod_ids": custom_mod_ids,
         "missing_required_mod_ids": missing_required,
         "missing_optional_mod_ids": missing_optional,

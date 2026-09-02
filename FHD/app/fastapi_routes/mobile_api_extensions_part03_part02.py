@@ -69,6 +69,7 @@ async def mobile_install_customer_delivery_seed(
                 or body.get("token")
                 or ""
             ),
+            account_username=str(getattr(user, "username", "") or "").strip(),
         )
         return _facade().format_mobile_response(
             data=data,

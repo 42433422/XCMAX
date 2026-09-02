@@ -7,6 +7,12 @@ import {
 import { removeTenantScopedStorageItem } from '@/utils/tenantStorageScope'
 import { XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY } from '@/utils/xcagiStorageKeys'
 
+const INDUSTRY_PROFILE_MOD_IDS = new Set(['accessories-packaging-industry'])
+
+function hasInstalledIndustryProfileMod(installedModIds: Iterable<string>): boolean {
+  return Array.from(installedModIds).some((id) => INDUSTRY_PROFILE_MOD_IDS.has(String(id || '').trim()))
+}
+
 /**
  * 通用化宿主壳模式（里程碑 A/D）：默认只展示壳菜单 + Mod 入口，隐藏内置 ERP 业务页。
  *
@@ -84,7 +90,8 @@ export const INDUSTRY_DELIVERY_ROUTE_NAMES = new Set<string>([
   'workflow-visualization',
   'workflow-employee-space',
   'other-tools',
-  'taiyangniao-pro-home',
+  'attendance-industry-home',
+  'attendance-industry-settings',
   'qsm-pro-home',
   'sz-qsm-pro-home',
 ])
@@ -93,12 +100,14 @@ export const INDUSTRY_DELIVERY_ROUTE_NAMES = new Set<string>([
  * 平台壳模式下是否放开行业业务侧栏（主导航长出行业菜单）。
  * 触发任一：
  * - 引导第三步「补基础线」已确认（host_pack_acknowledged）—— 用户走完引导即长出；
- * - 已安装账号定制 Mod（太阳鸟/奇士美等 entitlement 直发场景）。
+ * - 已安装账号定制 Mod（奇士美等 entitlement 直发场景）；
+ * - 已安装行业画像包（太阳鸟现使用饰品包装行业包 + 统一考勤能力）。
  * 未走引导且无定制时保持初始化的 5 项核心壳菜单。
  */
 export function shouldExposeIndustrySidebar(installedModIds: Iterable<string>, hostPackAcknowledged = false): boolean {
   if (hostPackAcknowledged) return true
-  return hasInstalledAccountCustomMod(installedModIds)
+  const ids = Array.from(installedModIds)
+  return hasInstalledAccountCustomMod(ids) || hasInstalledIndustryProfileMod(ids)
 }
 
 export function resolvePlatformShellMenuKeys(installedModIds: Iterable<string>, hostPackAcknowledged = false): Set<string> {

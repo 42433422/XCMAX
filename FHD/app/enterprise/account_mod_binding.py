@@ -9,7 +9,7 @@ from __future__ import annotations
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 # 历史常量保留给旧测试/脚本导入；不再参与账号权限兜底。
-SUNBIRD_CLIENT_MOD_ID = "taiyangniao-pro"
+SUNBIRD_CLIENT_MOD_ID = "attendance-industry"
 SUNBIRD_INDUSTRY_MOD_ID = "attendance-industry"
 
 # P-S 企业版本地演示号（见 config/surface_audit_demo_account.json）

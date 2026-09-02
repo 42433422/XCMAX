@@ -3,8 +3,9 @@
 真相源：``config/customer_delivery.json``（``docs/SSOT_INDEX.md`` · customer-delivery）。
 
 字段分工：
-- ``industry_mod_id``：通用行业包（如 attendance-industry）——不进生产员工私有交付
-- ``legacy_mod_id``：客户定制包（如 taiyangniao-pro）——生产员工入口
+- ``industry_id`` / ``industry_mod_id``：客户所属行业及行业包——不进生产员工私有交付
+- ``legacy_mod_id``：历史客户包 id；``delivery_mode=unified_industry`` 时只作进度兼容
+- ``runtime_mod_id``：当前实际运行包（太阳鸟为 attendance-industry）
 - ``tracks.modules[]`` / ``tracks.employees[]``：双轨节点；节点各自有制作进度
   （例：太阳鸟「考勤表转化」= 模块轨节点）
 """
@@ -47,6 +48,10 @@ def delivery_model() -> dict[str, Any]:
     """双轨模型元数据（轨道定义 / 规则 / 阶段）。"""
     raw = load_customer_delivery_document().get("delivery_model")
     return dict(raw) if isinstance(raw, dict) else {}
+
+
+def _is_unified_industry_delivery(row: dict[str, Any]) -> bool:
+    return str(row.get("delivery_mode") or "").strip() == "unified_industry"
 
 
 def normalize_track_id(track: str) -> str:
@@ -112,13 +117,33 @@ def list_customer_deliveries() -> list[dict[str, Any]]:
     return out
 
 
+def delivery_for_account(account_username: str) -> dict[str, Any] | None:
+    """按企业账号查客户交付 SSOT；匹配不区分大小写。"""
+    username = str(account_username or "").strip().casefold()
+    if not username:
+        return None
+    for row in list_customer_deliveries():
+        account = str(row.get("customer_account") or "").strip().casefold()
+        if account and account == username:
+            return row
+    return None
+
+
+def industry_id_for_account(account_username: str) -> str:
+    """返回交付 SSOT 固定的客户行业，覆盖旧库里错误/过时的行业值。"""
+    row = delivery_for_account(account_username)
+    return str(row.get("industry_id") or "").strip() if row else ""
+
+
 def delivery_for_industry_mod(industry_mod_id: str) -> dict[str, Any] | None:
-    """按 canonical ``industry_mod_id``（如 ``attendance-industry``）查单条交付清单。"""
+    """按行业包或归并后的运行模块查单条交付清单。"""
     mid = str(industry_mod_id or "").strip()
     if not mid:
         return None
     for row in list_customer_deliveries():
-        if str(row.get("industry_mod_id") or "").strip() == mid:
+        configured = str(row.get("industry_mod_id") or "").strip()
+        runtime = str(row.get("runtime_mod_id") or "").strip()
+        if mid in {configured, runtime}:
             return row
     return None
 
@@ -151,12 +176,39 @@ def delivery_for_account_custom_mod(
     return None
 
 
+def delivery_for_runtime_mod(
+    mod_id: str,
+    *,
+    account_username: str = "",
+) -> dict[str, Any] | None:
+    """按当前运行 Mod 查账号交付；账号专属行必须同时匹配用户名。"""
+    mid = str(mod_id or "").strip()
+    username = str(account_username or "").strip().casefold()
+    if not mid:
+        return None
+    for row in list_customer_deliveries():
+        runtime_mod_id = str(row.get("runtime_mod_id") or row.get("industry_mod_id") or "").strip()
+        if runtime_mod_id != mid:
+            continue
+        customer_account = str(row.get("customer_account") or "").strip().casefold()
+        if customer_account and customer_account != username:
+            continue
+        return row
+    return None
+
+
 def delivery_seed_package_for_mod(
     mod_id: str,
     industry_id: str | None = None,
+    *,
+    account_username: str = "",
 ) -> dict[str, Any] | None:
-    """返回账号定制 Mod 绑定的客户交付种子包元数据。"""
+    """返回当前运行 Mod 绑定的账号交付种子包元数据。"""
     row = delivery_for_account_custom_mod(mod_id, industry_id)
+    if row and _is_unified_industry_delivery(row):
+        row = None
+    if row is None:
+        row = delivery_for_runtime_mod(mod_id, account_username=account_username)
     if not row:
         return None
     pkg = row.get("delivery_seed_package")
@@ -167,6 +219,8 @@ def list_account_custom_mod_ids() -> set[str]:
     """客户交付清单中的账号定制 Mod（``legacy_mod_id``），不含通用行业包。"""
     out: set[str] = set()
     for row in list_customer_deliveries():
+        if _is_unified_industry_delivery(row):
+            continue
         legacy = str(row.get("legacy_mod_id") or "").strip()
         if legacy:
             out.add(legacy)
@@ -174,12 +228,15 @@ def list_account_custom_mod_ids() -> set[str]:
 
 
 def list_industry_mod_ids_from_delivery() -> set[str]:
-    """客户交付清单里关联的通用行业包 id（``industry_mod_id``）。"""
+    """客户交付清单里的行业包与归并后运行模块 id。"""
     out: set[str] = set()
     for row in list_customer_deliveries():
         mid = str(row.get("industry_mod_id") or "").strip()
         if mid:
             out.add(mid)
+        runtime_mid = str(row.get("runtime_mod_id") or "").strip()
+        if runtime_mid:
+            out.add(runtime_mid)
     return out
 
 
@@ -202,6 +259,8 @@ def account_custom_mod_ids_for_industry(
     seen: set[str] = set()
     out: list[str] = []
     for row in deliveries_for_industry(industry_id):
+        if _is_unified_industry_delivery(row):
+            continue
         legacy = str(row.get("legacy_mod_id") or "").strip()
         if not legacy or legacy in seen:
             continue
@@ -230,11 +289,14 @@ __all__ = [
     "TRACK_MODULES_LEGACY",
     "account_custom_mod_ids_for_industry",
     "delivery_for_account_custom_mod",
+    "delivery_for_account",
     "delivery_model",
     "deliveries_for_industry",
     "delivery_for_industry_mod",
+    "delivery_for_runtime_mod",
     "delivery_seed_package_for_mod",
     "label_for_account_custom_mod",
+    "industry_id_for_account",
     "list_account_custom_mod_ids",
     "list_customer_deliveries",
     "list_industry_mod_ids_from_delivery",

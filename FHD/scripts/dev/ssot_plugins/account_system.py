@@ -71,7 +71,17 @@ PROHIBITED_PUBLIC_COPY = (
     "注册只完成账号开立",
     "永久授权 ·",
 )
-EXPECTED_PRESET_IDS = ("通用", "涂料", "考勤", "批发", "电商", "餐饮", "物流", "管理端")
+EXPECTED_PRESET_IDS = (
+    "通用",
+    "饰品包装",
+    "涂料",
+    "考勤",
+    "批发",
+    "电商",
+    "餐饮",
+    "物流",
+    "管理端",
+)
 REGISTERABLE_INDUSTRIES = tuple(i for i in EXPECTED_PRESET_IDS if i != "管理端")
 REQUIRED_DOC_SNIPPETS = (
     "## 零、产品端与分发矩阵",

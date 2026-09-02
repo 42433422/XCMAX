@@ -56,6 +56,24 @@ async def test_authenticated_user_injects_industry_id():
     assert req.state.industry_id == "涂料"
 
 
+async def test_sunbird_delivery_ssot_overrides_stale_attendance_industry():
+    """太阳鸟是饰品包装行业；旧库的考勤值只能代表历史模块绑定。"""
+    mw = _middleware()
+    req = _make_request()
+    fake_user = SimpleNamespace(
+        id=11,
+        username="SUNBIRD",
+        tier="enterprise",
+        industry_id="考勤",
+    )
+
+    with patch("app.middleware.industry_context.get_current_user", return_value=fake_user):
+        resp = await mw.dispatch(req, _call_next)
+
+    assert resp.status_code == 200
+    assert req.state.industry_id == "饰品包装"
+
+
 async def test_unauthenticated_user_defaults_to_general():
     """未认证用户：request.state.industry_id 应为默认值 "通用"。"""
     mw = _middleware()

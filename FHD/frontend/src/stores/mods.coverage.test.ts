@@ -136,7 +136,7 @@ vi.mock('@/constants/platformShellMode', () => ({
 }))
 
 vi.mock('@/constants/genericModPack', () => ({
-  ACCOUNT_CUSTOM_MOD_IDS: ['taiyangniao-pro', 'sz-qsm-pro'],
+  ACCOUNT_CUSTOM_MOD_IDS: ['sz-qsm-pro'],
   CLIENT_PRIMARY_ERP_MOD_ID: 'attendance-industry',
   isAuxEmployeePackModId: (id: string) => mockIsAuxEmployeePackModId(id),
   isClientErpSidebarContext: (ids: string[], active: string) => mockIsClientErpSidebarContext(ids, active),
@@ -797,7 +797,7 @@ describe('mods store – coverage 补齐', () => {
       expect(modIds).toContain('attendance-industry')
     })
 
-    it('getModMenu：active 为行业包时仍并入同线账号定制菜单（不互斥）', () => {
+    it('getModMenu：统一考勤不再叠入已退役的太阳鸟菜单', () => {
       const store = useModsStore()
       store.mods = [
         {
@@ -828,8 +828,7 @@ describe('mods store – coverage 补齐', () => {
       store.setActiveModId('attendance-industry')
 
       const menu = store.getModMenu()
-      expect(menu.map((m) => m.id)).toContain('taiyangniao-pro-home')
-      expect(menu.find((m) => m.id === 'taiyangniao-pro-home')?.modId).toBe('taiyangniao-pro')
+      expect(menu.map((m) => m.id)).not.toContain('taiyangniao-pro-home')
     })
 
     it('getModMenu 在 fromUi 为空时回退到 fromFull 并包含 aux pack', () => {
@@ -1093,7 +1092,7 @@ describe('mods store – coverage 补齐', () => {
   // 4. 权益匹配函数覆盖
   // ═══════════════════════════════════════════════════════════
   describe('权益匹配', () => {
-    it('pickModIdFromEntitled 优先选择账户自定义 Mod', async () => {
+    it('pickModIdFromEntitled 将太阳鸟旧权益收敛到统一考勤 Mod', async () => {
       const store = useModsStore()
       store.mods = sampleMods as never[]
       mockApiFetch.mockResolvedValue(makeResponse({ success: true, data: sampleMods }))
@@ -1101,8 +1100,7 @@ describe('mods store – coverage 补齐', () => {
       await store.applyEntitledActiveMod(['attendance-industry', 'taiyangniao-pro'], {
         force: true,
       })
-      // taiyangniao-pro 是账户自定义 Mod，优先选中
-      expect(store.activeModId).toBe('taiyangniao-pro')
+      expect(store.activeModId).toBe('attendance-industry')
     })
 
     it('pickModIdFromEntitled 选择主 ERP Mod', async () => {
@@ -1576,13 +1574,13 @@ describe('mods store – coverage 补齐', () => {
       expect(ui.map((m) => m.id)).toEqual(['taiyangniao-pro'])
     })
 
-    it('active 为行业包时叠入同线账号定制', () => {
+    it('active 为统一考勤时不再叠入已退役的太阳鸟 Mod', () => {
       const store = useModsStore()
       store.mods = sampleMods as never[]
       store.setActiveModId('attendance-industry')
       const ids = store.modsForUi.map((m) => m.id)
       expect(ids[0]).toBe('attendance-industry')
-      expect(ids).toContain('taiyangniao-pro')
+      expect(ids).not.toContain('taiyangniao-pro')
     })
   })
 

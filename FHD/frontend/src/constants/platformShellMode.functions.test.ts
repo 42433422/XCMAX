@@ -138,7 +138,12 @@ describe('shouldExposeIndustrySidebar', () => {
 
   it('returns true when no acknowledgement but custom mod installed', () => {
     mockHasInstalledAccountCustomMod.mockReturnValue(true)
-    expect(shouldExposeIndustrySidebar(['taiyangniao-pro'], false)).toBe(true)
+    expect(shouldExposeIndustrySidebar(['sz-qsm-pro'], false)).toBe(true)
+  })
+
+  it('returns true when the accessories packaging industry profile is installed', () => {
+    mockHasInstalledAccountCustomMod.mockReturnValue(false)
+    expect(shouldExposeIndustrySidebar(['accessories-packaging-industry'], false)).toBe(true)
   })
 
   it('defaults hostPackAcknowledged to false', () => {
@@ -171,7 +176,7 @@ describe('resolvePlatformShellMenuKeys', () => {
 
   it('returns core + industry keys when custom mod installed', () => {
     mockHasInstalledAccountCustomMod.mockReturnValue(true)
-    const keys = resolvePlatformShellMenuKeys(['taiyangniao-pro'], false)
+    const keys = resolvePlatformShellMenuKeys(['sz-qsm-pro'], false)
     expect(keys.has('products')).toBe(true)
   })
 
@@ -213,7 +218,12 @@ describe('isIndustryDeliveryRouteName', () => {
 
   it('returns true when route is industry and custom mod installed', () => {
     mockHasInstalledAccountCustomMod.mockReturnValue(true)
-    expect(isIndustryDeliveryRouteName('inventory', ['taiyangniao-pro'], false)).toBe(true)
+    expect(isIndustryDeliveryRouteName('inventory', ['sz-qsm-pro'], false)).toBe(true)
+  })
+
+  it('returns true when route is industry and accessories packaging profile is installed', () => {
+    mockHasInstalledAccountCustomMod.mockReturnValue(false)
+    expect(isIndustryDeliveryRouteName('inventory', ['accessories-packaging-industry'], false)).toBe(true)
   })
 
   it('trims route name before checking', () => {

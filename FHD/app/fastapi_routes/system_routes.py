@@ -144,9 +144,19 @@ async def get_current_industry_endpoint(request: Request):
 
             user = resolve_session_user(request)
             if user is not None:
+                from app.mod_sdk.customer_delivery import industry_id_for_account
+
+                username = (
+                    str(user.get("username") or "").strip()
+                    if isinstance(user, dict)
+                    else str(getattr(user, "username", "") or "").strip()
+                )
+                delivery_industry = industry_id_for_account(username)
                 owner_id = resolve_workspace_owner_id(request, user)
                 saved = get_selected_industry_id(owner_id)
-                if saved:
+                if delivery_industry:
+                    current_id = delivery_industry
+                elif saved:
                     current_id = saved
         except RECOVERABLE_ERRORS:
             logger.debug("workspace industry prefs lookup skipped", exc_info=True)

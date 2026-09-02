@@ -1,9 +1,9 @@
 {
   "id": "attendance-industry",
-  "name": "考勤行业包",
+  "name": "通用考勤模块",
   "version": "1.0.0",
   "author": "XCAGI",
-  "description": "考勤行业通用包：排班、出勤统计与行业词汇；部门/人员菜单与 AI 员工见账号定制 Mod。",
+  "description": "跨行业通用考勤模块：部门与人员、排班、出勤统计、考勤表转换及考勤 AI 助手。",
   "primary": true,
   "legacy_mod_ids": ["taiyangniao-pro"],
   "dependencies": {
@@ -16,17 +16,29 @@
   "frontend": {
     "routes": "frontend/routes",
     "pro_entry_path": "/attendance-industry",
-    "menu": []
+    "menu": [
+      {
+        "id": "attendance-industry-home",
+        "label": "考勤表转换",
+        "icon": "fa-file-excel-o",
+        "path": "/attendance-industry"
+      },
+      {
+        "id": "attendance-industry-settings",
+        "label": "考勤设置",
+        "icon": "fa-cog",
+        "path": "/attendance-industry/settings"
+      }
+    ]
   },
   "onboarding": {
-    "custom_line_hint": "考勤转换、排班菜单与定制 AI 员工",
-    "custom_mod_ids": ["taiyangniao-pro"]
+    "custom_line_hint": "统一提供考勤转换、部门人员、排班菜单与考勤 AI 助手"
   },
   "hooks": {},
   "industry": {
     "id": "考勤",
-    "name": "考勤/人事行业",
-    "description": "适用于企业考勤、排班、出勤统计等人事场景",
+    "name": "通用考勤能力",
+    "description": "可与任意客户所属行业组合使用的考勤、排班与出勤统计能力",
     "units": {
       "primary": "天",
       "secondary": "小时",
@@ -73,8 +85,20 @@
         "entity": "人员",
         "fields": [
           { "key": "model_number", "label": "工号", "type": "text", "semantic": "model" },
-          { "key": "name", "label": "姓名", "type": "text", "required": true, "semantic": "entity_name" },
-          { "key": "specification", "label": "班次", "type": "enum", "semantic": "spec", "validators": [{ "type": "oneOf", "params": ["早", "中", "晚"] }] },
+          {
+            "key": "name",
+            "label": "姓名",
+            "type": "text",
+            "required": true,
+            "semantic": "entity_name"
+          },
+          {
+            "key": "specification",
+            "label": "班次",
+            "type": "enum",
+            "semantic": "spec",
+            "validators": [{ "type": "oneOf", "params": ["早", "中", "晚"] }]
+          },
           { "key": "price", "label": "时薪", "type": "number", "unit": "元", "semantic": "price" },
           { "key": "unit", "label": "单位", "type": "text" }
         ]
@@ -83,7 +107,13 @@
         "label": "部门管理",
         "entity": "部门",
         "fields": [
-          { "key": "customer_name", "label": "部门名称", "type": "text", "required": true, "semantic": "entity_name" },
+          {
+            "key": "customer_name",
+            "label": "部门名称",
+            "type": "text",
+            "required": true,
+            "semantic": "entity_name"
+          },
           { "key": "contact_person", "label": "主管", "type": "text" },
           { "key": "contact_phone", "label": "联系电话", "type": "text" },
           { "key": "address", "label": "上级部门", "type": "text" }
@@ -96,11 +126,35 @@
           { "key": "purchase_unit", "label": "部门", "type": "text", "semantic": "foreign_ref" },
           { "key": "product_name", "label": "事项说明", "type": "text", "semantic": "entity_name" },
           { "key": "model_number", "label": "关联编号", "type": "text", "semantic": "model" },
-          { "key": "quantity_tins", "label": "数量 (天/次)", "type": "number", "unit": "天", "semantic": "primary_qty" },
+          {
+            "key": "quantity_tins",
+            "label": "数量 (天/次)",
+            "type": "number",
+            "unit": "天",
+            "semantic": "primary_qty"
+          },
           { "key": "tin_spec", "label": "班次", "type": "text", "semantic": "spec" },
-          { "key": "quantity_kg", "label": "工时 (小时)", "type": "number", "unit": "小时", "semantic": "secondary_qty" },
-          { "key": "unit_price", "label": "时薪", "type": "number", "unit": "元", "semantic": "price" },
-          { "key": "amount", "label": "金额", "type": "number", "unit": "元", "semantic": "derived" }
+          {
+            "key": "quantity_kg",
+            "label": "工时 (小时)",
+            "type": "number",
+            "unit": "小时",
+            "semantic": "secondary_qty"
+          },
+          {
+            "key": "unit_price",
+            "label": "时薪",
+            "type": "number",
+            "unit": "元",
+            "semantic": "price"
+          },
+          {
+            "key": "amount",
+            "label": "金额",
+            "type": "number",
+            "unit": "元",
+            "semantic": "derived"
+          }
         ]
       },
       "shipment-records": {
@@ -110,8 +164,20 @@
           { "key": "purchase_unit", "label": "部门", "type": "text", "semantic": "foreign_ref" },
           { "key": "product_name", "label": "事项说明", "type": "text", "semantic": "entity_name" },
           { "key": "model_number", "label": "关联编号", "type": "text", "semantic": "model" },
-          { "key": "quantity_kg", "label": "工时 (小时)", "type": "number", "unit": "小时", "semantic": "secondary_qty" },
-          { "key": "quantity_tins", "label": "数量 (天/次)", "type": "number", "unit": "天", "semantic": "primary_qty" },
+          {
+            "key": "quantity_kg",
+            "label": "工时 (小时)",
+            "type": "number",
+            "unit": "小时",
+            "semantic": "secondary_qty"
+          },
+          {
+            "key": "quantity_tins",
+            "label": "数量 (天/次)",
+            "type": "number",
+            "unit": "天",
+            "semantic": "primary_qty"
+          },
           { "key": "tin_spec", "label": "班次", "type": "text", "semantic": "spec" },
           { "key": "unit_price", "label": "时薪", "type": "number", "semantic": "price" },
           { "key": "amount", "label": "金额", "type": "number", "semantic": "derived" }
@@ -153,6 +219,15 @@
       "label": "排班任务",
       "hint": "快速创建排班安排",
       "text": "给客服部生成明天早班排班单"
+    }
+  ],
+  "workflow_employees": [
+    {
+      "id": "attendance_ai",
+      "label": "考勤 AI 助手",
+      "panel_title": "工作流 · 考勤 AI 助手",
+      "panel_summary": "协助处理出勤记录、异常说明与排班相关问答。",
+      "workflow_placeholder": true
     }
   ],
   "comms": {

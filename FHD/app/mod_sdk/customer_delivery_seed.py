@@ -13,6 +13,7 @@ from app.application.mod_store_catalog_app import catalog_download_to, catalog_g
 from app.desktop_runtime.paths import get_desktop_data_dir
 from app.mod_sdk.customer_delivery import (
     delivery_for_account_custom_mod,
+    delivery_for_runtime_mod,
     delivery_seed_package_for_mod,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -75,6 +76,7 @@ async def install_customer_delivery_seed_package(
     mod_id: str,
     industry_id: str = "",
     market_token: str = "",
+    account_username: str = "",
 ) -> dict[str, Any]:
     """按账号定制 Mod 下载并应用客户交付种子包。"""
     mid = str(mod_id or "").strip()
@@ -83,7 +85,13 @@ async def install_customer_delivery_seed_package(
         return {"success": False, "message": "缺少 mod_id"}
 
     delivery = delivery_for_account_custom_mod(mid, iid)
-    pkg = delivery_seed_package_for_mod(mid, iid)
+    if delivery is None:
+        delivery = delivery_for_runtime_mod(mid, account_username=account_username)
+    pkg = delivery_seed_package_for_mod(
+        mid,
+        iid,
+        account_username=account_username,
+    )
     if not delivery or not pkg:
         return {
             "success": True,

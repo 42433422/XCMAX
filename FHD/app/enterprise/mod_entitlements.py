@@ -9,6 +9,7 @@ import os
 import time
 from typing import Any
 
+from app.mod_sdk.industry_mod_aliases import is_retired_runtime_mod_id
 from app.mod_sdk.platform_shell import PROTECTED_CLIENT_MOD_IDS
 from app.mod_sdk.product_skus import bundled_mod_ids_for_sku, resolve_product_sku
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -136,6 +137,8 @@ def is_mod_visible_for_enterprise(mod_id: str) -> bool:
         return True
     if not is_client_mod_id(mid):
         return True
+    if is_retired_runtime_mod_id(mid):
+        return False
     # 开放引导行业包(coating-industry / attendance-industry 等随产品分发的中性行业 Mod)
     # 属于 onboarding 开放目录，企业版下始终可见，不与"已购客户 Mod 权益"挂钩。
     try:
@@ -154,9 +157,6 @@ def is_mod_visible_for_enterprise(mod_id: str) -> bool:
             return True
     except RECOVERABLE_ERRORS:
         logger.debug("client primary mod disk visibility check skipped", exc_info=True)
-    local_name = _cached_market_username.strip().lower()
-    if mid == "taiyangniao-pro" and local_name in {"sunbird", "taiyangniao", "太阳鸟"}:
-        return True
     entitled = get_cached_entitled_client_mod_ids()
     if entitled is None:
         return False

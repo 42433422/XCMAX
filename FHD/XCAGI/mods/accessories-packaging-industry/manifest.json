@@ -1,0 +1,153 @@
+{
+  "id": "accessories-packaging-industry",
+  "name": "饰品包装行业包",
+  "version": "1.0.0",
+  "author": "成都修茈科技有限公司",
+  "description": "饰品与包装制品行业壳：提供产品、订单、库存、客户与标签业务语义；考勤由通用 attendance-industry 模块提供。",
+  "primary": false,
+  "dependencies": {
+    "xcagi": ">=1.0.0"
+  },
+  "backend": {
+    "entry": "blueprints",
+    "init": "mod_init"
+  },
+  "frontend": {
+    "routes": "frontend/routes",
+    "pro_entry_path": "/products",
+    "menu": []
+  },
+  "hooks": {},
+  "comms": {
+    "exports": []
+  },
+  "industry": {
+    "id": "饰品包装",
+    "name": "饰品包装行业",
+    "description": "适用于饰品、展示包装与包装制品的产品、订单、库存和标签管理",
+    "units": {
+      "primary": "件",
+      "secondary": "箱",
+      "primary_label": "件数",
+      "secondary_label": "箱数",
+      "spec_label": "包装规格"
+    },
+    "quantity_fields": {
+      "primary_field": "pieces",
+      "secondary_field": "cartons",
+      "spec_field": "package_spec",
+      "primary_label": "件数",
+      "secondary_label": "箱数",
+      "spec_label": "包装规格"
+    },
+    "product_fields": {
+      "name": "产品名称",
+      "model": "货号",
+      "category": "产品类别",
+      "price": "单价",
+      "unit": "单位"
+    },
+    "order_types": {
+      "shipment": "订单",
+      "receipt": "入库单",
+      "return": "退货单"
+    },
+    "intent_keywords": {
+      "create_order": ["创建订单", "开订单", "开单", "出货"],
+      "quantity_unit": "件",
+      "print_label": ["包装标签", "产品标签", "打印标签"],
+      "product": ["饰品", "包装", "产品", "货号"],
+      "customer": ["客户", "采购单位", "联系人"]
+    },
+    "print_config": {
+      "printer_type": "PDF",
+      "label_width": 80,
+      "label_height": 50
+    },
+    "subsystems": {
+      "products": {
+        "label": "饰品包装品管理",
+        "entity": "饰品包装品",
+        "fields": [
+          { "key": "model_number", "label": "货号", "type": "text", "semantic": "model" },
+          { "key": "name", "label": "产品名称", "type": "text", "required": true, "semantic": "entity_name" },
+          { "key": "specification", "label": "包装规格", "type": "text", "semantic": "spec" },
+          { "key": "price", "label": "单价", "type": "number", "unit": "元", "semantic": "price" },
+          { "key": "unit", "label": "单位", "type": "text" }
+        ]
+      },
+      "customers": {
+        "label": "客户管理",
+        "entity": "客户",
+        "fields": [
+          { "key": "customer_name", "label": "客户名称", "type": "text", "required": true, "semantic": "entity_name" },
+          { "key": "contact_person", "label": "联系人", "type": "text" },
+          { "key": "contact_phone", "label": "联系电话", "type": "text" },
+          { "key": "address", "label": "地址", "type": "text" }
+        ]
+      },
+      "orders": {
+        "label": "订单管理",
+        "entity": "订单",
+        "fields": [
+          { "key": "purchase_unit", "label": "客户", "type": "text", "semantic": "foreign_ref" },
+          { "key": "product_name", "label": "产品名称", "type": "text", "semantic": "entity_name" },
+          { "key": "model_number", "label": "货号", "type": "text", "semantic": "model" },
+          { "key": "quantity_tins", "label": "数量 (件)", "type": "number", "unit": "件", "semantic": "primary_qty" },
+          { "key": "tin_spec", "label": "包装规格", "type": "text", "semantic": "spec" },
+          { "key": "quantity_kg", "label": "箱数", "type": "number", "unit": "箱", "semantic": "secondary_qty" },
+          { "key": "unit_price", "label": "单价", "type": "number", "unit": "元", "semantic": "price" },
+          { "key": "amount", "label": "金额", "type": "number", "unit": "元", "semantic": "derived" }
+        ],
+        "rules": {
+          "amount": { "op": "mul", "args": ["quantity_tins", "unit_price"] }
+        }
+      },
+      "shipment-records": {
+        "label": "出货记录",
+        "entity": "出货记录",
+        "fields": [
+          { "key": "purchase_unit", "label": "客户", "type": "text", "semantic": "foreign_ref" },
+          { "key": "product_name", "label": "产品名称", "type": "text", "semantic": "entity_name" },
+          { "key": "model_number", "label": "货号", "type": "text", "semantic": "model" },
+          { "key": "quantity_tins", "label": "数量 (件)", "type": "number", "unit": "件", "semantic": "primary_qty" },
+          { "key": "tin_spec", "label": "包装规格", "type": "text", "semantic": "spec" },
+          { "key": "quantity_kg", "label": "箱数", "type": "number", "unit": "箱", "semantic": "secondary_qty" },
+          { "key": "unit_price", "label": "单价", "type": "number", "semantic": "price" },
+          { "key": "amount", "label": "金额", "type": "number", "semantic": "derived" }
+        ]
+      }
+    }
+  },
+  "ui_labels": {
+    "entity": "饰品包装品",
+    "entity_plural": "饰品包装品",
+    "query_title": "饰品包装品查询",
+    "query_description": "查询饰品、包装产品与货号",
+    "query_placeholder": "输入货号或产品名称",
+    "records": "出货记录",
+    "entity_list": "饰品包装品管理"
+  },
+  "ui_starter_pack": [
+    {
+      "label": "查产品",
+      "hint": "按货号或名称查询饰品包装品",
+      "text": "查看饰品和包装产品"
+    },
+    {
+      "label": "查订单",
+      "hint": "查看当天或指定客户的订单",
+      "text": "今天有哪些订单"
+    },
+    {
+      "label": "库存预警",
+      "hint": "查看库存不足的产品和包材",
+      "text": "查看库存预警"
+    },
+    {
+      "label": "打印标签",
+      "hint": "生成产品包装标签",
+      "text": "打印产品包装标签"
+    }
+  ]
+}

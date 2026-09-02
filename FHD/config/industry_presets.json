@@ -2,6 +2,7 @@
   "schema_version": 1,
   "preset_ids": [
     "通用",
+    "饰品包装",
     "涂料",
     "考勤",
     "批发",
@@ -51,50 +52,55 @@
         "records": "业务记录"
       }
     },
-    "管理端": {
-      "id": "管理端",
-      "name": "平台运维",
-      "scenario": "XCMAX 服务器后台运维。",
-      "welcomeIntro": "你好，平台运维助手。",
+    "饰品包装": {
+      "id": "饰品包装",
+      "name": "饰品包装",
+      "scenario": "饰品与包装制品的产品、订单、库存和标签管理。",
+      "welcomeIntro": "你好，我是饰品包装助手。",
       "welcomeBullets": [
-        "查看运维总览",
-        "管理服务器功能"
+        "查产品与订单",
+        "管库存与标签"
       ],
       "quickButtons": [
         {
-          "text": "打开服务器后台总览",
-          "label": "运维总览"
+          "text": "查看饰品和包装产品",
+          "label": "查产品"
         },
         {
-          "text": "查看自动化方针",
-          "label": "自动化方针"
+          "text": "今天有哪些订单",
+          "label": "订单"
         },
         {
-          "text": "服务器功能模块",
-          "label": "功能模块"
+          "text": "查看库存预警",
+          "label": "库存预警"
         },
         {
-          "text": "员工可视化图谱",
-          "label": "员工图谱"
+          "text": "打印产品包装标签",
+          "label": "打印标签"
+        },
+        {
+          "text": "打开通用考勤模块",
+          "label": "考勤"
         }
       ],
-      "placeholderNormal": "输入运维指令",
+      "placeholderNormal": "查饰品、包装产品或订单",
       "menuLabels": {
-        "chat": "运维对话",
-        "im": "信息",
-        "ai-ecosystem": "智能生态",
-        "mod-store": "能力库",
-        "employee-workflow": "编制工作台",
-        "workflow-visualization": "流程可视化",
-        "duty-roster-graph": "员工图谱",
-        "data-sources": "运维数据源",
-        "tools": "运维工具"
+        "materials": "原材料仓库",
+        "products": "饰品包装品管理",
+        "materials-list": "包材列表",
+        "orders": "订单管理",
+        "shipment-records": "出货记录",
+        "customers": "客户管理",
+        "data-sources": "数据来源",
+        "print": "包装标签打印",
+        "printer-list": "打印机列表",
+        "template-preview": "标签模板库"
       },
       "uiLabels": {
-        "entity": "对象",
-        "model_label": "编号",
-        "shipment_order": "任务",
-        "records": "运维记录"
+        "entity": "饰品包装品",
+        "model_label": "货号",
+        "shipment_order": "订单",
+        "records": "出货记录"
       }
     },
     "涂料": {
@@ -192,7 +198,10 @@
         "orders": "考勤单管理",
         "shipment-records": "考勤记录",
         "customers": "部门管理",
-        "print": "考勤表打印"
+        "data-sources": "考勤数据源",
+        "print": "考勤表打印",
+        "printer-list": "考勤打印机",
+        "template-preview": "考勤模板库"
       },
       "uiLabels": {
         "entity": "员工",
@@ -251,7 +260,7 @@
       "scenario": "电商零售。",
       "welcomeIntro": "你好，电商助手。",
       "welcomeBullets": [
-        "查SKU",
+        "查 SKU",
         "待发货"
       ],
       "quickButtons": [
@@ -350,6 +359,56 @@
       "uiLabels": {
         "entity": "货物",
         "shipment_order": "运单"
+      }
+    },
+    "管理端": {
+      "id": "管理端",
+      "name": "平台运维",
+      "scenario": "XCMAX 服务器后台运维。",
+      "welcomeIntro": "你好，平台运维助手。",
+      "welcomeBullets": [
+        "查看运维总览",
+        "管理服务器功能"
+      ],
+      "quickButtons": [
+        {
+          "text": "打开服务器后台总览",
+          "label": "运维总览"
+        },
+        {
+          "text": "查看自动化方针",
+          "label": "自动化方针"
+        },
+        {
+          "text": "服务器功能模块",
+          "label": "功能模块"
+        },
+        {
+          "text": "员工可视化图谱",
+          "label": "员工图谱"
+        },
+        {
+          "text": "测试预览",
+          "label": "测试预览"
+        }
+      ],
+      "placeholderNormal": "输入运维指令",
+      "menuLabels": {
+        "chat": "运维对话",
+        "im": "信息",
+        "ai-ecosystem": "智能生态",
+        "mod-store": "能力库",
+        "employee-workflow": "编制工作台",
+        "workflow-visualization": "流程可视化",
+        "duty-roster-graph": "员工图谱",
+        "data-sources": "运维数据源",
+        "tools": "运维工具"
+      },
+      "uiLabels": {
+        "entity": "对象",
+        "model_label": "编号",
+        "shipment_order": "任务",
+        "records": "运维记录"
       }
     }
   }

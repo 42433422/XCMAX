@@ -115,7 +115,7 @@ describe('platformShellMode', () => {
     const { resolvePlatformShellMenuKeys, INDUSTRY_DELIVERY_ERP_MENU_KEYS } = await import('./platformShellMode')
     const bare = resolvePlatformShellMenuKeys([])
     expect(bare.has('products')).toBe(false)
-    const withCustom = resolvePlatformShellMenuKeys(['taiyangniao-pro', 'attendance-industry'])
+    const withCustom = resolvePlatformShellMenuKeys(['sz-qsm-pro', 'coating-industry'])
     expect(withCustom.has('products')).toBe(true)
     expect(withCustom.has('customers')).toBe(true)
     for (const k of INDUSTRY_DELIVERY_ERP_MENU_KEYS) {
@@ -137,7 +137,8 @@ describe('platformShellMode', () => {
     const { isIndustryDeliveryRouteName } = await import('./platformShellMode')
     expect(isIndustryDeliveryRouteName('products', [], false)).toBe(false)
     expect(isIndustryDeliveryRouteName('products', [], true)).toBe(true)
-    expect(isIndustryDeliveryRouteName('products', ['taiyangniao-pro'], false)).toBe(true)
+    expect(isIndustryDeliveryRouteName('products', ['taiyangniao-pro'], false)).toBe(false)
+    expect(isIndustryDeliveryRouteName('products', ['accessories-packaging-industry'], false)).toBe(true)
     // 非交付路由始终不放行
     expect(isIndustryDeliveryRouteName('not-a-route', [], true)).toBe(false)
   })

@@ -46,12 +46,12 @@ describe('genericModPack', () => {
     expect(isHostMountedModMenuPath('/mod/foo/bar', '/wechat-contacts')).toBe(false)
   })
 
-  it('hides attendance industry sidebar in enterprise/admin but keeps account custom menus', () => {
+  it('shows unified attendance sidebar in enterprise and hides it in admin', () => {
     vi.stubEnv('VITE_XCMAX_SUNBIRD_CONSOLE', '')
     vi.stubEnv('VITE_XCMAX_ADMIN_CONSOLE', '')
     vi.stubEnv('VITE_XCAGI_PRODUCT_SKU', 'enterprise')
-    expect(shouldHideAttendanceModSidebarMenu('mod-attendance-industry-home')).toBe(true)
-    expect(shouldHideAttendanceModSidebarMenu('mod-taiyangniao-pro-home')).toBe(false)
+    expect(shouldHideAttendanceModSidebarMenu('mod-attendance-industry-home')).toBe(false)
+    expect(shouldHideAttendanceModSidebarMenu('mod-taiyangniao-pro-home')).toBe(true)
     expect(shouldHideAttendanceModSidebarMenu('mod-qsm-pro-home')).toBe(false)
     vi.stubEnv('VITE_XCAGI_PRODUCT_SKU', '')
     vi.stubEnv('VITE_XCMAX_ADMIN_CONSOLE', '1')

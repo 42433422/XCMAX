@@ -8,6 +8,7 @@ import pytest
 from app.mod_sdk.industry_seed import (
     deactivate_other_open_industry_mods,
     industry_mod_id_for,
+    industry_seed_mod_ids_for,
     open_industry_seed_mod_ids,
     other_open_industry_mod_ids,
     resolve_industry_or_mod_id,
@@ -19,6 +20,7 @@ def test_open_industry_seed_mod_ids_matches_baseline():
     ids = open_industry_seed_mod_ids()
     assert "coating-industry" in ids
     assert "attendance-industry" in ids
+    assert "accessories-packaging-industry" in ids
     assert "sz-qsm-pro" not in ids
     assert "taiyangniao-pro" not in ids
 
@@ -26,6 +28,14 @@ def test_open_industry_seed_mod_ids_matches_baseline():
 def test_industry_mod_id_for_coating():
     assert industry_mod_id_for("涂料") == "coating-industry"
     assert industry_mod_id_for("考勤") == "attendance-industry"
+    assert industry_mod_id_for("饰品包装") == "accessories-packaging-industry"
+
+
+def test_accessories_packaging_seed_bundle_includes_unified_attendance():
+    assert industry_seed_mod_ids_for("饰品包装") == [
+        "accessories-packaging-industry",
+        "attendance-industry",
+    ]
 
 
 def test_resolve_industry_or_mod_id():

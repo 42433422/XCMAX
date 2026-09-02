@@ -328,26 +328,43 @@ async def mod_store_install_customer_delivery_seed(
         if enterprise_mod_filter_active():
             await sync_entitlements_from_request(request)
             entitled = get_cached_entitled_client_mod_ids() or set()
-            if mod_id not in entitled:
+            from app.mod_sdk.industry_mod_aliases import canonical_mod_id
+
+            entitled_canonical = {canonical_mod_id(value) for value in entitled}
+            if canonical_mod_id(mod_id) not in entitled_canonical:
                 raise _facade().HTTPException(status_code=403, detail="当前账号未授权该客户交付包")
     except _facade().HTTPException:
         raise
     except _facade().RECOVERABLE_ERRORS:
         _facade().logger.warning("customer delivery seed entitlement check skipped", exc_info=True)
     market_token = ""
+    account_username = ""
     try:
         from app.fastapi_routes.market_account import resolve_valid_market_access_token
-        from app.infrastructure.auth.dependencies import session_id_from_request
+        from app.infrastructure.auth.dependencies import (
+            resolve_session_user,
+            session_id_from_request,
+        )
 
         sid = session_id_from_request(request)
         if sid:
             market_token = await resolve_valid_market_access_token(sid) or ""
+        user = resolve_session_user(request)
+        if user is not None:
+            account_username = (
+                str(user.get("username") or "").strip()
+                if isinstance(user, dict)
+                else str(getattr(user, "username", "") or "").strip()
+            )
     except _facade().RECOVERABLE_ERRORS:
         _facade().logger.warning("customer delivery seed token resolve skipped", exc_info=True)
     from app.mod_sdk.customer_delivery_seed import install_customer_delivery_seed_package
 
     data = await install_customer_delivery_seed_package(
-        mod_id=mod_id, industry_id=industry_id, market_token=market_token
+        mod_id=mod_id,
+        industry_id=industry_id,
+        market_token=market_token,
+        account_username=account_username,
     )
     return _facade().ModStoreInstallResult(
         success=bool(data.get("success")), message=str(data.get("message") or ""), data=data

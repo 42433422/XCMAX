@@ -88,12 +88,12 @@ describe('sunbirdClientMod constants and functions', () => {
   })
 
   describe('buildSunbirdClientModStub', () => {
-    it('returns a ModInfo with taiyangniao-pro id', () => {
-      expect(buildSunbirdClientModStub().id).toBe('taiyangniao-pro')
+    it('returns the unified attendance fallback', () => {
+      expect(buildSunbirdClientModStub().id).toBe('attendance-industry')
     })
 
-    it('has name 太阳鸟 PRO', () => {
-      expect(buildSunbirdClientModStub().name).toBe('太阳鸟 PRO')
+    it('has the neutral attendance name', () => {
+      expect(buildSunbirdClientModStub().name).toBe('通用考勤模块')
     })
 
     it('has primary set to true', () => {
@@ -104,17 +104,16 @@ describe('sunbirdClientMod constants and functions', () => {
       expect(buildSunbirdClientModStub().industry?.id).toBe('考勤')
     })
 
-    it('has menu with taiyangniao-pro-home', () => {
-      expect(buildSunbirdClientModStub().menu?.[0]?.id).toBe('taiyangniao-pro-home')
+    it('has menu with attendance-industry-home', () => {
+      expect(buildSunbirdClientModStub().menu?.[0]?.id).toBe('attendance-industry-home')
     })
 
-    it('has frontend pro_entry_path /taiyangniao-pro', () => {
-      expect(buildSunbirdClientModStub().frontend?.pro_entry_path).toBe('/taiyangniao-pro')
+    it('has frontend pro_entry_path /attendance-industry', () => {
+      expect(buildSunbirdClientModStub().frontend?.pro_entry_path).toBe('/attendance-industry')
     })
 
-    it('has menu_overrides with products', () => {
-      const overrides = buildSunbirdClientModStub().menu_overrides
-      expect(overrides?.find((o) => o.key === 'products')?.label).toBe('人员管理')
+    it('does not override the customer industry shell', () => {
+      expect(buildSunbirdClientModStub().menu_overrides).toEqual([])
     })
   })
 

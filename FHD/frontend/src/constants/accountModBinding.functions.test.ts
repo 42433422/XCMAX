@@ -9,8 +9,8 @@ import {
 
 describe('accountModBinding constants and functions', () => {
   describe('SUNBIRD_CLIENT_MOD_ID', () => {
-    it('is the taiyangniao-pro mod id', () => {
-      expect(SUNBIRD_CLIENT_MOD_ID).toBe('taiyangniao-pro')
+    it('uses the unified attendance mod id', () => {
+      expect(SUNBIRD_CLIENT_MOD_ID).toBe('attendance-industry')
     })
   })
 

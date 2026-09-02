@@ -3,7 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import ProductOnboardingView from './ProductOnboardingView.vue'
-import { fetchOnboardingIndustryCatalog } from '@/utils/platformShellApi'
+import { fetchIndustryBaseline, fetchOnboardingIndustryCatalog } from '@/utils/platformShellApi'
 
 vi.mock('@/api/modStore', () => ({
   installHostFoundation: vi.fn().mockResolvedValue({ success: true }),
@@ -54,6 +54,7 @@ describe('ProductOnboardingView.vue', () => {
       preview_packages: [],
       open_industry_ids: [],
     } as any)
+    vi.mocked(fetchIndustryBaseline).mockResolvedValue({} as any)
   })
 
   it('mounts welcome hero', async () => {
@@ -70,28 +71,28 @@ describe('ProductOnboardingView.vue', () => {
     expect(wrapper.text()).toContain('认识 XC')
   })
 
-  it('keeps enterprise-filtered SUNBIRD industries to attendance only', async () => {
+  it('keeps enterprise-filtered SUNBIRD industry as accessories packaging', async () => {
     vi.mocked(fetchOnboardingIndustryCatalog).mockResolvedValue({
       enterprise_filter_applied: true,
-      open_industry_ids: ['考勤'],
-      selected_industry_id: '涂料',
+      open_industry_ids: ['饰品包装'],
+      selected_industry_id: '饰品包装',
       open_packages: [
         {
-          industry_id: '考勤',
-          name: '考勤/排班',
-          scenario: '考勤排班',
-          product_name: '考勤/排班行业包',
-          mod_id: 'attendance-industry',
+          industry_id: '饰品包装',
+          name: '饰品包装',
+          scenario: '饰品与包装制品的产品、订单、库存和标签管理',
+          product_name: '饰品包装行业包',
+          mod_id: 'accessories-packaging-industry',
           selectable: true,
         },
       ],
       preview_packages: [
         {
-          industry_id: '涂料',
-          name: '涂料/油漆',
-          scenario: '涂料化工批发',
-          product_name: '涂料/油漆行业包',
-          mod_id: 'coating-industry',
+          industry_id: '考勤',
+          name: '考勤/排班',
+          scenario: '考勤排班',
+          product_name: '通用考勤模块',
+          mod_id: 'attendance-industry',
           selectable: false,
         },
       ],
@@ -109,9 +110,9 @@ describe('ProductOnboardingView.vue', () => {
 
     const openChips = wrapper.findAll('.industry-pick--open .industry-chip')
     expect(openChips).toHaveLength(1)
-    expect(openChips[0].text()).toContain('考勤/排班')
+    expect(openChips[0].text()).toContain('饰品包装')
     expect(openChips[0].classes()).toContain('active')
-    expect(wrapper.find('.industry-pick--preview').text()).toContain('涂料/油漆')
+    expect(wrapper.find('.industry-pick--preview').text()).toContain('考勤/排班')
     expect(wrapper.text()).not.toContain('两套行业方向')
   })
 
@@ -125,7 +126,7 @@ describe('ProductOnboardingView.vue', () => {
           industry_id: '考勤',
           name: '考勤/排班',
           scenario: '考勤排班',
-          product_name: '考勤行业包',
+          product_name: '通用考勤模块',
           mod_id: 'attendance-industry',
           selectable: true,
         },
@@ -148,5 +149,42 @@ describe('ProductOnboardingView.vue', () => {
     expect(wrapper.text()).toContain('人员管理')
     expect(wrapper.text()).toContain('考勤数据源')
     expect(wrapper.text()).toContain('考勤模板库')
+  })
+
+  it('keeps packaging shell labels while showing unified attendance capability', async () => {
+    vi.mocked(fetchOnboardingIndustryCatalog).mockResolvedValue({
+      enterprise_filter_applied: true,
+      open_industry_ids: ['饰品包装'],
+      selected_industry_id: '饰品包装',
+      open_packages: [
+        {
+          industry_id: '饰品包装',
+          name: '饰品包装',
+          scenario: '饰品包装',
+          product_name: '饰品包装行业包',
+          mod_id: 'accessories-packaging-industry',
+          selectable: true,
+        },
+      ],
+      preview_packages: [],
+    } as any)
+    vi.mocked(fetchIndustryBaseline).mockResolvedValue({
+      capability_mod_ids: ['attendance-industry'],
+      groups: [],
+    } as any)
+    const router = makeRouter()
+    await router.push({ path: '/onboarding', query: { step: 'host-pack' } })
+    await router.isReady()
+    const wrapper = mount(ProductOnboardingView, {
+      global: {
+        plugins: [router],
+        stubs: { RouterLink: true },
+      },
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('饰品包装品管理')
+    expect(wrapper.text()).toContain('包装标签打印')
+    expect(wrapper.text()).toContain('考勤表转换')
   })
 })

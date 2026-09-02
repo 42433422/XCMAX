@@ -1,5 +1,4 @@
-"""太阳鸟 PRO 考勤转换内部实现（mod 私有）。
+"""跨行业通用考勤模块的表格转换实现。
 
-只在 ``mods/taiyangniao-pro/backend/blueprints.py`` 与 mod 自带的脚本内引用；
-宿主其他 Mod 不应直接 import 此包，如需共享能力请提到 ``app.mod_sdk``。
+包名保留历史拼写仅为兼容已有 Python 导入；运行时归属 ``attendance-industry``。
 """

@@ -1,5 +1,5 @@
-/** 历史太阳鸟客户 Mod id；仅供旧数据/文案兼容，权限以服务端 entitlement 为准。 */
-export const SUNBIRD_CLIENT_MOD_ID = 'taiyangniao-pro'
+/** 太阳鸟已归并到统一考勤行业包；旧 id 只在 entitlement 兼容层做别名解析。 */
+export const SUNBIRD_CLIENT_MOD_ID = 'attendance-industry'
 
 const SUNBIRD_USERNAMES = new Set(['sunbird', 'SUNBIRD'])
 

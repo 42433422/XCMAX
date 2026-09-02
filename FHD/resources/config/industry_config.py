@@ -368,6 +368,13 @@ def _disk_scan_industries_dict() -> Dict[str, Dict[str, Any]]:
             continue
         if not isinstance(manifest, dict):
             continue
+        try:
+            from app.mod_sdk.industry_mod_aliases import is_retired_runtime_mod_id
+
+            if is_retired_runtime_mod_id(str(manifest.get("id") or "")):
+                continue
+        except BOUNDARY_ERRORS:
+            pass
         ind = manifest.get("industry")
         if not isinstance(ind, dict):
             continue

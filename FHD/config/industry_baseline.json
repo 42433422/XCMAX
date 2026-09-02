@@ -1,24 +1,35 @@
 {
   "schema_version": 2,
-  "core_mod_ids": [
-    "xcagi-planner-bridge",
-    "xcagi-neuro-bus-bridge"
-  ],
+  "core_mod_ids": ["xcagi-planner-bridge", "xcagi-neuro-bus-bridge"],
   "custom_employee_extension_mod_ids": [
     "xcagi-core-workflow-employees",
     "xcagi-office-employee-pack-bridge"
   ],
-  "onboarding_open_industry_ids": ["通用", "考勤", "涂料", "批发", "电商", "餐饮", "物流"],
+  "onboarding_open_industry_ids": [
+    "通用",
+    "饰品包装",
+    "考勤",
+    "涂料",
+    "批发",
+    "电商",
+    "餐饮",
+    "物流"
+  ],
   "industry_packages": {
     "通用": {
       "mod_id": "xcagi-planner-bridge",
       "product_name": "通用基础行业包",
       "note": "开放行业基础种子；通用账号以对话与智能生态底座起步"
     },
+    "饰品包装": {
+      "mod_id": "accessories-packaging-industry",
+      "product_name": "饰品包装行业包",
+      "note": "饰品包装行业壳；太阳鸟考勤能力由通用 attendance-industry 模块提供"
+    },
     "考勤": {
       "mod_id": "attendance-industry",
-      "product_name": "考勤行业包",
-      "note": "客户品牌见 config/customer_delivery.json"
+      "product_name": "通用考勤模块",
+      "note": "兼容历史考勤行业选择；新客户应在所属行业下组合该通用模块"
     },
     "涂料": {
       "mod_id": "coating-industry",
@@ -49,6 +60,8 @@
   "mod_labels": {
     "xcagi-planner-bridge": "智能对话 / Planner 底座",
     "xcagi-neuro-bus-bridge": "智能生态事件总线",
+    "accessories-packaging-industry": "饰品包装行业包",
+    "attendance-industry": "通用考勤模块",
     "xcagi-erp-domain-bridge": "ERP 业务菜单与 API 门面",
     "xcagi-core-workflow-employees": "工作流员工侧栏桥接",
     "xcagi-planner-excel-tools": "Planner 表格与文档工具",
@@ -63,23 +76,24 @@
     "通用": {
       "summary": "保持干净页面：对话与智能生态即可起步，其它能力按需再补。",
       "host_mod_ids": [],
-      "optional_host_mod_ids": [
+      "optional_host_mod_ids": ["xcagi-planner-excel-tools", "xcagi-erp-domain-bridge"]
+    },
+    "饰品包装": {
+      "summary": "饰品包装：以产品、订单、库存与标签为行业主线，考勤作为通用业务模块独立加载。",
+      "host_mod_ids": [
+        "xcagi-erp-domain-bridge",
         "xcagi-planner-excel-tools",
-        "xcagi-erp-domain-bridge"
-      ]
+        "xcagi-approval-bridge"
+      ],
+      "optional_host_mod_ids": ["xcagi-customer-service-bridge"],
+      "capability_mod_ids": ["attendance-industry"],
+      "custom_employee_extension_mod_ids": ["wechat-contacts-ai-employee"]
     },
     "考勤": {
       "summary": "考勤排班：先补 ERP 门面与表格工具侧栏，再装行业包；部门/人员与 AI 员工在账号定制 Mod。",
-      "host_mod_ids": [
-        "xcagi-erp-domain-bridge",
-        "xcagi-planner-excel-tools"
-      ],
-      "optional_host_mod_ids": [
-        "xcagi-approval-bridge"
-      ],
-      "custom_employee_extension_mod_ids": [
-        "wechat-contacts-ai-employee"
-      ]
+      "host_mod_ids": ["xcagi-erp-domain-bridge", "xcagi-planner-excel-tools"],
+      "optional_host_mod_ids": ["xcagi-approval-bridge"],
+      "custom_employee_extension_mod_ids": ["wechat-contacts-ai-employee"]
     },
     "涂料": {
       "summary": "涂料化工：先补 ERP、审批与表格工具侧栏，再装行业包；AI 员工在账号定制 Mod。",
@@ -90,16 +104,11 @@
         "xcagi-customer-service-bridge"
       ],
       "optional_host_mod_ids": [],
-      "custom_employee_extension_mod_ids": [
-        "wechat-contacts-ai-employee"
-      ]
+      "custom_employee_extension_mod_ids": ["wechat-contacts-ai-employee"]
     },
     "批发": {
       "summary": "批发分销：侧栏基础线装齐后，可从扩展市场按需选行业 Mod。",
-      "host_mod_ids": [
-        "xcagi-erp-domain-bridge",
-        "xcagi-planner-excel-tools"
-      ],
+      "host_mod_ids": ["xcagi-erp-domain-bridge", "xcagi-planner-excel-tools"],
       "optional_host_mod_ids": ["xcagi-approval-bridge", "xcagi-customer-service-bridge"],
       "custom_employee_extension_mod_ids": ["wechat-contacts-ai-employee"]
     },
@@ -115,19 +124,13 @@
     },
     "餐饮": {
       "summary": "餐饮门店：侧栏基础线装齐后，食材订货 Mod 可按需安装。",
-      "host_mod_ids": [
-        "xcagi-erp-domain-bridge",
-        "xcagi-planner-excel-tools"
-      ],
+      "host_mod_ids": ["xcagi-erp-domain-bridge", "xcagi-planner-excel-tools"],
       "optional_host_mod_ids": ["xcagi-customer-service-bridge"],
       "custom_employee_extension_mod_ids": ["wechat-contacts-ai-employee"]
     },
     "物流": {
       "summary": "物流运单：侧栏基础线装齐后，运单类 Mod 可按需安装。",
-      "host_mod_ids": [
-        "xcagi-erp-domain-bridge",
-        "xcagi-planner-excel-tools"
-      ],
+      "host_mod_ids": ["xcagi-erp-domain-bridge", "xcagi-planner-excel-tools"],
       "optional_host_mod_ids": ["xcagi-approval-bridge"],
       "custom_employee_extension_mod_ids": ["wechat-contacts-ai-employee"]
     }

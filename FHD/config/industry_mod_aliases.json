@@ -4,8 +4,10 @@
     "taiyangniao-pro": "attendance-industry",
     "sz-qsm-pro": "coating-industry"
   },
+  "retired_runtime_mod_ids": ["taiyangniao-pro"],
   "industry_to_canonical_mod_id": {
     "通用": "xcagi-planner-bridge",
+    "饰品包装": "accessories-packaging-industry",
     "考勤": "attendance-industry",
     "涂料": "coating-industry",
     "批发": "xcagi-erp-domain-bridge",

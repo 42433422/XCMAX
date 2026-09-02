@@ -103,7 +103,7 @@ vi.mock('@/constants/platformShellMode', () => ({
 }))
 
 vi.mock('@/constants/genericModPack', () => ({
-  ACCOUNT_CUSTOM_MOD_IDS: ['taiyangniao-pro', 'sz-qsm-pro'],
+  ACCOUNT_CUSTOM_MOD_IDS: ['sz-qsm-pro'],
   CLIENT_PRIMARY_ERP_MOD_ID: 'attendance-industry',
   hasInstalledClientPrimaryErpMod: () => false,
   isAuxEmployeePackModId: (id: string) => id.startsWith('xcagi-aux-'),
@@ -433,14 +433,14 @@ describe('mods store – modsForUi', () => {
     expect(store.modsForUi).toHaveLength(sampleMods.length)
   })
 
-  it('returns active mod plus same-line account custom overlay when activeModId is set', () => {
+  it('does not overlay the retired Sunbird mod on unified attendance', () => {
     const store = useModsStore()
     store.mods = sampleMods as never[]
     store.setActiveModId('attendance-industry')
     const ui = store.modsForUi
     const ids = ui.map((m) => m.id)
     expect(ids[0]).toBe('attendance-industry')
-    expect(ids).toContain('taiyangniao-pro')
+    expect(ids).not.toContain('taiyangniao-pro')
   })
 
   it('returns all mods when activeModId is set but not found in mods list', () => {
@@ -450,7 +450,7 @@ describe('mods store – modsForUi', () => {
     expect(store.modsForUi).toHaveLength(sampleMods.length)
   })
 
-  it('returns attendance stub plus same-line account custom when active ERP id missing from list', () => {
+  it('returns only the attendance stub when the retired Sunbird mod is still listed', () => {
     const store = useModsStore()
     const modsNoAttendance = sampleMods.filter((m) => m.id !== 'attendance-industry')
     store.mods = modsNoAttendance as never[]
@@ -458,7 +458,7 @@ describe('mods store – modsForUi', () => {
     const ui = store.modsForUi
     const ids = ui.map((m) => m.id)
     expect(ids[0]).toBe('attendance-industry')
-    expect(ids).toContain('taiyangniao-pro')
+    expect(ids).not.toContain('taiyangniao-pro')
   })
 })
 
@@ -920,7 +920,7 @@ describe('mods store – applyEntitledActiveMod', () => {
     expect(store.activeModId).toBe('attendance-industry')
   })
 
-  it('prefers account custom mod when its explicit entitlement is present', async () => {
+  it('maps the retired Sunbird entitlement to unified attendance', async () => {
     const store = useModsStore()
     store.mods = sampleMods as never[]
     mockApiFetch.mockResolvedValue(makeModsResponse(sampleMods))
@@ -930,7 +930,7 @@ describe('mods store – applyEntitledActiveMod', () => {
       accountUsername: 'SUNBIRD',
     })
 
-    expect(store.activeModId).toBe('taiyangniao-pro')
+    expect(store.activeModId).toBe('attendance-industry')
   })
 })
 

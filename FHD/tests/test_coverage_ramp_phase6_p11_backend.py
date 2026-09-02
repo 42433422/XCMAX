@@ -278,10 +278,10 @@ def test_is_mod_visible_admin_session_bypass(
         account_kind="admin",
         market_is_admin=True,
     )
-    assert is_mod_visible_for_enterprise("taiyangniao-pro") is True
+    assert is_mod_visible_for_enterprise("customer-private-mod") is True
 
 
-def test_is_mod_visible_sunbird_local_username(
+def test_is_mod_visible_sunbird_retired_runtime_stays_hidden(
     enterprise_active: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
@@ -298,7 +298,7 @@ def test_is_mod_visible_sunbird_local_username(
         market_username="sunbird",
         entitled_client_mod_ids=set(),
     )
-    assert is_mod_visible_for_enterprise("taiyangniao-pro") is True
+    assert is_mod_visible_for_enterprise("taiyangniao-pro") is False
 
 
 def test_is_mod_visible_client_primary_mod_on_disk_visible(
@@ -317,7 +317,7 @@ def test_is_mod_visible_client_primary_mod_on_disk_visible(
         market_username="other",
         entitled_client_mod_ids=set(),
     )
-    assert is_mod_visible_for_enterprise("taiyangniao-pro") is True
+    assert is_mod_visible_for_enterprise("customer-private-mod") is True
 
 
 def test_is_mod_visible_client_primary_mod_on_disk_visible_raises_recoverable(
@@ -338,10 +338,10 @@ def test_is_mod_visible_client_primary_mod_on_disk_visible_raises_recoverable(
     set_session_entitlements(
         market_user_id=1,
         market_username="other",
-        entitled_client_mod_ids={"taiyangniao-pro"},
+        entitled_client_mod_ids={"customer-private-mod"},
     )
     # 异常被吞 → 走 entitled 集合判断
-    assert is_mod_visible_for_enterprise("taiyangniao-pro") is True
+    assert is_mod_visible_for_enterprise("customer-private-mod") is True
 
 
 def test_is_mod_visible_entitled_is_none_returns_false(

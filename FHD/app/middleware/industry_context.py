@@ -66,10 +66,21 @@ def _resolve_industry_id(user: Any | None) -> str:
     if user is None:
         return DEFAULT_INDUSTRY
     try:
-        tier = str(getattr(user, "tier", "") or "").strip()
+        if isinstance(user, dict):
+            tier = str(user.get("tier") or "").strip()
+            username = str(user.get("username") or "").strip()
+            industry_id = str(user.get("industry_id") or "").strip()
+        else:
+            tier = str(getattr(user, "tier", "") or "").strip()
+            username = str(getattr(user, "username", "") or "").strip()
+            industry_id = str(getattr(user, "industry_id", "") or "").strip()
         if tier == "admin":
             return ADMIN_INDUSTRY
-        industry_id = str(getattr(user, "industry_id", "") or "").strip()
+        from app.mod_sdk.customer_delivery import industry_id_for_account
+
+        delivery_industry = industry_id_for_account(username)
+        if delivery_industry:
+            return delivery_industry
         return industry_id or DEFAULT_INDUSTRY
     except RECOVERABLE_ERRORS:
         return DEFAULT_INDUSTRY

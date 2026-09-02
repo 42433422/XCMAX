@@ -379,7 +379,8 @@ const SIDEBAR_PREVIEW_MENU_KEYS = [
 const industrySidebarPreviewLabels = computed(() => {
   const id = String(pickedIndustryId.value || '').trim()
   const labels = SIDEBAR_PREVIEW_MENU_KEYS.map((key) => resolveCoreNavLabel(key, id, null)).filter(Boolean)
-  if (id === '考勤') {
+  const capabilityIds = new Set((baselinePlan.value?.capability_mod_ids || []).map((value) => String(value || '').trim()))
+  if (id === '考勤' || capabilityIds.has('attendance-industry')) {
     labels.unshift('考勤表转换')
   }
   return [...new Set(labels)]
