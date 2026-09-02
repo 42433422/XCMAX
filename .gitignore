@@ -209,3 +209,6 @@ FHD/coverage_*.json
 # onnxruntime 本地二进制缓存（e2e 依赖，npm 安装时重建）
 FHD/frontend/.nm-e2e/
 FHD/admin-console/.vite-bak/
+
+# codex 多代理 worktree（本地工作区，不入库）
+.codex-worktrees/
