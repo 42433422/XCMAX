@@ -221,8 +221,8 @@ export function normalizeModSidebarNavKey(key: string): string {
   return k.replace(/^mod-mod-/, 'mod-')
 }
 
-/** 账号定制 Mod（侧栏菜单应在企业端展示） */
-export const ACCOUNT_CUSTOM_MOD_IDS = ['taiyangniao-pro', 'sz-qsm-pro'] as const
+/** 账号定制 Mod（侧栏菜单应在企业端展示）。太阳鸟已归并到 attendance-industry。 */
+export const ACCOUNT_CUSTOM_MOD_IDS = ['sz-qsm-pro'] as const
 
 export function hasInstalledAccountCustomMod(installedModIds: Iterable<string>): boolean {
   const ids = installedSet(Array.from(installedModIds))
@@ -230,16 +230,7 @@ export function hasInstalledAccountCustomMod(installedModIds: Iterable<string>):
 }
 
 /** 账号定制 Mod 侧栏入口（企业端须保留，与行业包占位菜单区分） */
-export const ACCOUNT_CUSTOM_SIDEBAR_MENU_KEYS = new Set([
-  'taiyangniao-pro-home',
-  'mod-taiyangniao-pro-home',
-  'taiyangniao-pro-settings',
-  'mod-taiyangniao-pro-settings',
-  'qsm-pro-home',
-  'mod-qsm-pro-home',
-  'sz-qsm-pro-home',
-  'mod-sz-qsm-pro-home',
-])
+export const ACCOUNT_CUSTOM_SIDEBAR_MENU_KEYS = new Set(['qsm-pro-home', 'mod-qsm-pro-home', 'sz-qsm-pro-home', 'mod-sz-qsm-pro-home'])
 
 /** 考勤 Mod 侧栏入口（manifest.menu.id 与 mod- 前缀 key 两种形态） */
 export const ATTENDANCE_MOD_SIDEBAR_MENU_KEYS = new Set([
@@ -249,16 +240,24 @@ export const ATTENDANCE_MOD_SIDEBAR_MENU_KEYS = new Set([
   'mod-attendance-industry-settings',
 ])
 
-/** 企业端 / 管理端不展示行业包占位「考勤表转换」；账号定制 Mod 菜单保留 */
+const RETIRED_SUNBIRD_SIDEBAR_MENU_KEYS = new Set([
+  'taiyangniao-pro-home',
+  'mod-taiyangniao-pro-home',
+  'taiyangniao-pro-settings',
+  'mod-taiyangniao-pro-settings',
+])
+
+/** 企业端展示统一考勤入口；仅管理端隐藏业务行业菜单。 */
 export function shouldHideAttendanceModSidebarMenu(menuKey: string): boolean {
-  if (String(import.meta.env.VITE_XCMAX_SUNBIRD_CONSOLE || '').trim() === '1') return false
   const key = normalizeModSidebarNavKey(String(menuKey || '').trim())
+  if (RETIRED_SUNBIRD_SIDEBAR_MENU_KEYS.has(key)) return true
+  if (String(import.meta.env.VITE_XCMAX_SUNBIRD_CONSOLE || '').trim() === '1') return false
   if (ACCOUNT_CUSTOM_SIDEBAR_MENU_KEYS.has(key)) return false
   if (!ATTENDANCE_MOD_SIDEBAR_MENU_KEYS.has(key)) return false
   const sku = String(import.meta.env.VITE_XCAGI_PRODUCT_SKU || '')
     .trim()
     .toLowerCase()
-  if (sku === 'enterprise') return true
+  if (sku === 'enterprise') return false
   if (String(import.meta.env.VITE_XCMAX_ADMIN_CONSOLE || '').trim() === '1') return true
   return false
 }

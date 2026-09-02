@@ -497,8 +497,8 @@ describe('tutorialSamples', () => {
 })
 
 describe('sunbirdClientMod', () => {
-  it('ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU has one entry', () => {
-    expect(ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU).toHaveLength(1)
+  it('ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU has conversion and settings entries', () => {
+    expect(ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU).toHaveLength(2)
     expect(ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU[0].id).toBe('attendance-industry-home')
     expect(ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU[0].path).toBe('/attendance-industry')
   })
@@ -522,11 +522,11 @@ describe('sunbirdClientMod', () => {
     it('returns a ModInfo stub for attendance industry', () => {
       const stub = buildAttendanceIndustryModStub()
       expect(stub.id).toBe('attendance-industry')
-      expect(stub.name).toBe('考勤行业包')
+      expect(stub.name).toBe('通用考勤模块')
       expect(stub.version).toBe('1.0.0')
       expect(stub.primary).toBe(true)
       expect(stub.frontend?.pro_entry_path).toBe('/attendance-industry')
-      expect(stub.menu).toHaveLength(1)
+      expect(stub.menu).toHaveLength(2)
       expect(stub.menu_overrides).toEqual([])
       expect(stub.industry?.id).toBe('考勤')
     })
@@ -539,16 +539,16 @@ describe('sunbirdClientMod', () => {
   })
 
   describe('buildSunbirdClientModStub', () => {
-    it('returns a ModInfo stub for sunbird (taiyangniao-pro)', () => {
+    it('returns the unified attendance Mod stub for legacy callers', () => {
       const stub = buildSunbirdClientModStub()
-      expect(stub.id).toBe('taiyangniao-pro')
-      expect(stub.name).toBe('太阳鸟 PRO')
+      expect(stub.id).toBe('attendance-industry')
+      expect(stub.name).toBe('通用考勤模块')
       expect(stub.version).toBe('1.0.0')
       expect(stub.primary).toBe(true)
-      expect(stub.frontend?.pro_entry_path).toBe('/taiyangniao-pro')
-      expect(stub.menu).toHaveLength(1)
-      expect(stub.menu[0].id).toBe('taiyangniao-pro-home')
-      expect(stub.menu_overrides).toHaveLength(2)
+      expect(stub.frontend?.pro_entry_path).toBe('/attendance-industry')
+      expect(stub.menu).toHaveLength(2)
+      expect(stub.menu[0].id).toBe('attendance-industry-home')
+      expect(stub.menu_overrides).toHaveLength(0)
       expect(stub.industry?.id).toBe('考勤')
     })
   })

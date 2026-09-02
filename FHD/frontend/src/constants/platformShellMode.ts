@@ -84,7 +84,8 @@ export const INDUSTRY_DELIVERY_ROUTE_NAMES = new Set<string>([
   'workflow-visualization',
   'workflow-employee-space',
   'other-tools',
-  'taiyangniao-pro-home',
+  'attendance-industry-home',
+  'attendance-industry-settings',
   'qsm-pro-home',
   'sz-qsm-pro-home',
 ])

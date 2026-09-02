@@ -2,10 +2,8 @@
   <div class="mod-home page-view">
     <div class="page-grid">
       <div class="page-content page-main">
-        <h2>考勤行业包</h2>
-        <p class="muted">
-          Mod ID: <code>attendance-industry</code> — 在库项目中编辑后执行 <code>modman push</code> 部署到 XCAGI。
-        </p>
+        <h2>通用考勤</h2>
+        <p class="muted">考勤能力独立于客户所属行业，可统一处理人员名单、排班、出勤统计与考勤表转换。</p>
         <p class="muted small">
           <router-link :to="{ name: 'attendance-industry-settings' }">考勤转换设置</router-link>
           （钉钉 → 明细裁窗、加班规则；原在「审批中心 → 流程规则」中，已迁于此）
@@ -14,9 +12,9 @@
         <section class="card-block" aria-labelledby="upload-convert-title">
           <h3 id="upload-convert-title">上传转化</h3>
           <p class="muted small">
-            将钉钉导出的考勤 xlsx 上传后，由宿主
-            <code>app/shell/taiyangniao_attendance/</code>
-            按列别名解析「每日统计」等表。默认<strong>按侧栏「人员管理」</strong>（主库产品表：姓名、部门对应「单位」、性质对应「规格」）重排「明细」每人 6 行，再按姓名把钉钉数据一一填入；<strong>无钉钉记录则打卡区留空</strong>。取消勾选下方选项时，改为仅使用固定模板「明细」里原有姓名名单。路径相对
+            将钉钉导出的考勤 xlsx 上传后，由通用考勤转换引擎
+            按列别名解析「每日统计」等表。默认<strong>按侧栏「人员管理」</strong>（主库产品表：姓名、部门对应「单位」、性质对应「规格」）重排「明细」（每人 6
+            行），再按姓名把钉钉数据一一填入；<strong>无钉钉记录则打卡区留空</strong>。取消勾选下方选项时，改为仅使用固定模板「明细」里原有姓名名单。路径相对
             <code>WORKSPACE_ROOT</code>（默认写入 <code>424/</code>）。成功后会自动下载，也可点「再次下载」。
           </p>
 
@@ -48,9 +46,7 @@
               readonly
               autocomplete="off"
             />
-            <p class="hint">
-              按你指定的固定模板回填：424/考勤-2026-3月份考勤统计表.xlsx
-            </p>
+            <p class="hint">按你指定的固定模板回填：424/考勤-2026-3月份考勤统计表.xlsx</p>
           </div>
 
           <div class="form-row inline">
@@ -87,13 +83,7 @@
             <button type="button" class="btn primary" :disabled="!file || loading" @click="doUploadConvert">
               {{ loading ? '转换中…' : '上传并转换' }}
             </button>
-            <button
-              v-if="lastOutputRelpath"
-              type="button"
-              class="btn"
-              :disabled="loadingDl"
-              @click="downloadOutput(lastOutputRelpath)"
-            >
+            <button v-if="lastOutputRelpath" type="button" class="btn" :disabled="loadingDl" @click="downloadOutput(lastOutputRelpath)">
               {{ loadingDl ? '下载中…' : '再次下载' }}
             </button>
           </div>
@@ -106,9 +96,7 @@
       <aside class="rules-sidebar" aria-labelledby="rules-title">
         <div class="rules-card">
           <h3 id="rules-title" class="rules-title">考勤规则</h3>
-          <p class="rules-sub muted small">
-            与宿主 <code>app/shell/taiyangniao_attendance/rules.py</code> 默认配置一致；转换时使用同一套逻辑。
-          </p>
+          <p class="rules-sub muted small">与通用考勤转换规则保持一致；转换时使用同一套逻辑。</p>
           <p v-if="rulesLoading" class="rules-muted">加载中…</p>
           <p v-else-if="rulesErr" class="rules-err">{{ rulesErr }}</p>
           <template v-else-if="rulesLines.length">
@@ -119,26 +107,18 @@
               <li v-for="(ln, i) in rulesLines" :key="i">{{ ln }}</li>
             </ul>
 
-            <section
-              v-if="scheduleGroups.length"
-              class="schedule-groups"
-              aria-labelledby="sched-ref-title"
-            >
+            <section v-if="scheduleGroups.length" class="schedule-groups" aria-labelledby="sched-ref-title">
               <h4 id="sched-ref-title" class="schedule-groups__title">钉钉考勤组（参考）</h4>
               <p class="schedule-groups__hint muted small">
                 与钉钉后台「固定班制」排班文案一致，便于对照；转换时按导出表中的考勤组/部门列名匹配规则。
               </p>
-              <div
-                v-for="(g, gi) in scheduleGroups"
-                :key="gi"
-                class="schedule-group-card"
-              >
+              <div v-for="(g, gi) in scheduleGroups" :key="gi" class="schedule-group-card">
                 <div class="schedule-group-card__head">
                   <span class="schedule-group-card__name">{{ g.name }}</span>
                   <span class="schedule-group-card__meta">{{ g.headcount }} · {{ g.shift_type }}</span>
                 </div>
                 <ul class="schedule-group-card__lines">
-                  <li v-for="(sl, si) in (g.lines || [])" :key="si">{{ sl }}</li>
+                  <li v-for="(sl, si) in g.lines || []" :key="si">{{ sl }}</li>
                 </ul>
               </div>
             </section>
@@ -300,10 +280,10 @@ async function doUploadConvert() {
   if (outPath.includes('考勤统计表') && !tplPath) {
     const confirmed = confirm(
       `你填写的输出路径 "${outPath}" 看起来像是一个现有模板文件。\\n\\n` +
-      `建议填写方式：\\n` +
-      `• 输出相对路径：填一个新文件名，如 "424/考勤转换结果.xlsx"\\n` +
-      `• 模板相对路径（可选）：填现有模板文件，如 "${outPath}"\\n\\n` +
-      `是否继续当前填写方式？`
+        `建议填写方式：\\n` +
+        `• 输出相对路径：填一个新文件名，如 "424/考勤转换结果.xlsx"\\n` +
+        `• 模板相对路径（可选）：填现有模板文件，如 "${outPath}"\\n\\n` +
+        `是否继续当前填写方式？`,
     )
     if (!confirmed) {
       return
@@ -336,7 +316,7 @@ async function doUploadConvert() {
     // 旧版后端仍可能在「成功」里返回 0 行；新版应返回 422。此处兜底避免误导性绿字。
     if (rowsIn === 0 && rowsStats === 0) {
       err.value =
-        '未解析到任何考勤数据行（源表 0 行）。请确认：① 已重新部署/重启并加载当前仓库里的太阳鸟 pro（含智能表头识别）；' +
+        '未解析到任何考勤数据行（源表 0 行）。请确认：① 已重新部署/重启并加载当前通用考勤模块（含智能表头识别）；' +
         '② 或填写「表头所在行」、勾选「LLM 识别表头」后重试。若成功提示里应出现 [表头识别:…] 片段。'
       okMsg.value = ''
       return
@@ -347,10 +327,7 @@ async function doUploadConvert() {
     const tag = hi.source ? `[表头识别:${hi.source}@行${hi.header_row}]` : ''
     const llmTag = d.used_llm ? '（LLM 参与）' : ''
     const ru = d.rows_used_for_template
-    const ruTxt =
-      ru != null && ru !== '' && Number(ru) !== Number(d.rows_in)
-        ? `；与名单姓名匹配 ${ru} 条日记录用于回填`
-        : ''
+    const ruTxt = ru != null && ru !== '' && Number(ru) !== Number(d.rows_in) ? `；与名单姓名匹配 ${ru} 条日记录用于回填` : ''
     const prc = Number(d.personnel_roster_count ?? 0)
     const prTxt = prc > 0 ? `；人员管理 ${prc} 人` : ''
     okMsg.value = `完成：输出 ${outRel}；钉钉源表 ${d.rows_in ?? '?'} 行，统计 ${d.rows_stats ?? '?'} 行${prTxt}${ruTxt}${tag}${llmTag}。`

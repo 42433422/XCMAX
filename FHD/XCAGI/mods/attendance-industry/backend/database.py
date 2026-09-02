@@ -1,6 +1,4 @@
-"""
-太阳鸟pro - 数据库连接和会话管理（Mod 私有 SQLite，与主库拆分并存）。
-"""
+"""跨行业通用考勤模块数据库连接（Mod 私有 SQLite，与主库拆分并存）。"""
 
 from __future__ import annotations
 
@@ -21,6 +19,8 @@ except ImportError:
     except ImportError:
         Base = None  # type: ignore[misc,assignment]
 
+# 存储文件名暂时保留历史值，确保已交付太阳鸟数据原地升级而不复制/分叉。
+# 这是数据兼容名，不代表运行 Mod；运行时唯一归属为 attendance-industry。
 DEFAULT_DB_NAME = "taiyangniao_pro.db"
 
 _engine_lock = threading.Lock()
@@ -52,7 +52,7 @@ def init_database():
     """初始化数据库，创建所有表"""
     if Base is None:
         raise RuntimeError(
-            "taiyangniao-pro: 缺少 backend/models.py（或无法导入 Base），无法 init_database。"
+            "attendance-industry: 缺少 backend/models.py（或无法导入 Base），无法 init_database。"
         )
     engine = get_engine()
     Base.metadata.create_all(bind=engine)

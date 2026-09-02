@@ -73,6 +73,21 @@ def industry_mod_id_for(industry_id: str) -> str | None:
     return mid or None
 
 
+def industry_seed_mod_ids_for(industry_id: str) -> list[str]:
+    """行业壳与该行业组合使用的通用业务模块。"""
+    iid = str(industry_id or "").strip()
+    if not iid:
+        return []
+    doc = load_industry_baseline_document()
+    industries = doc.get("industries") if isinstance(doc.get("industries"), dict) else {}
+    row = industries.get(iid) if isinstance(industries, dict) else {}
+    if not isinstance(row, dict):
+        row = {}
+    package_id = industry_mod_id_for(iid)
+    capabilities = [str(x) for x in (row.get("capability_mod_ids") or []) if x]
+    return _dedupe(([package_id] if package_id else []) + capabilities)
+
+
 def resolve_industry_or_mod_id(raw: str) -> tuple[str | None, str | None]:
     """
     解析请求中的 industry_id 或 mod_id。
@@ -174,14 +189,22 @@ def other_open_industry_mod_ids(keep_mod_id: str) -> list[str]:
 
 
 def deactivate_other_open_industry_mods(
-    keep_mod_id: str, *, remove_files: bool = True
+    keep_mod_id: str = "",
+    *,
+    keep_mod_ids: set[str] | None = None,
+    remove_files: bool = True,
 ) -> list[dict[str, Any]]:
     """卸载并可选删除其它 open 行业中性 Mod（不触碰 L3 legacy 定制 id）。"""
     from app.infrastructure.mods.mod_manager import get_mod_manager
 
     mm = get_mod_manager()
+    keep = {str(x).strip() for x in (keep_mod_ids or set()) if str(x).strip()}
+    if str(keep_mod_id or "").strip():
+        keep.add(str(keep_mod_id).strip())
     results: list[dict[str, Any]] = []
-    for mod_id in other_open_industry_mod_ids(keep_mod_id):
+    for mod_id in open_industry_seed_mod_ids():
+        if mod_id in keep:
+            continue
         try:
             mm.unload_mod(mod_id)
         except RECOVERABLE_ERRORS as exc:
@@ -199,7 +222,12 @@ def deactivate_other_open_industry_mods(
     return results
 
 
-def seed_industry_mod(industry_id: str) -> dict[str, Any]:
+def seed_industry_mod(
+    industry_id: str,
+    *,
+    deactivate_others: bool = True,
+    keep_mod_ids: set[str] | None = None,
+) -> dict[str, Any]:
     """
     从 industry-seeds 池复制单个行业 Mod 到 userData/mods 并 load_mod。
     industry_id 可为行业名或 mod_id。
@@ -241,7 +269,11 @@ def seed_industry_mod(industry_id: str) -> dict[str, Any]:
             "message": "行业 Mod 已存在",
             "loaded": loaded,
         }
-        payload["deactivated"] = deactivate_other_open_industry_mods(mod_id)
+        payload["deactivated"] = (
+            deactivate_other_open_industry_mods(mod_id, keep_mod_ids=keep_mod_ids)
+            if deactivate_others
+            else []
+        )
         return payload
 
     if pool is None:
@@ -293,17 +325,32 @@ def seed_industry_mod(industry_id: str) -> dict[str, Any]:
         "source": str(src),
         "message": "行业 Mod 已从种子池安装" if loaded else "已复制但加载失败",
         "loaded": loaded,
-        "deactivated": deactivate_other_open_industry_mods(mod_id) if loaded else [],
+        "deactivated": (
+            deactivate_other_open_industry_mods(mod_id, keep_mod_ids=keep_mod_ids)
+            if loaded and deactivate_others
+            else []
+        ),
     }
 
 
-async def install_industry_seed_with_fallback(industry_id: str) -> dict[str, Any]:
-    """池内 seed 优先；失败则 Catalog 安装。"""
-    result = seed_industry_mod(industry_id)
+async def _install_one_industry_seed_with_fallback(
+    industry_or_mod_id: str,
+    *,
+    deactivate_others: bool,
+    keep_mod_ids: set[str] | None = None,
+) -> dict[str, Any]:
+    # Preserve the original single-argument call shape for the common path.
+    # Besides keeping older integrations compatible, this lets existing callers
+    # replace ``seed_industry_mod`` with a minimal callable in tests/tools.
+    if deactivate_others and not keep_mod_ids:
+        result = seed_industry_mod(industry_or_mod_id)
+    else:
+        result = seed_industry_mod(
+            industry_or_mod_id,
+            deactivate_others=deactivate_others,
+            keep_mod_ids=keep_mod_ids,
+        )
     if result.get("success"):
-        keep = str(result.get("mod_id") or "")
-        if keep:
-            result["deactivated"] = deactivate_other_open_industry_mods(keep)
         return result
 
     mod_id = str(result.get("mod_id") or "").strip()
@@ -316,7 +363,11 @@ async def install_industry_seed_with_fallback(industry_id: str) -> dict[str, Any
 
         catalog = await _install_from_catalog(mod_id, "", activate=True)
         if catalog.success:
-            deactivate_other_open_industry_mods(mod_id)
+            deactivated = (
+                deactivate_other_open_industry_mods(mod_id, keep_mod_ids=keep_mod_ids)
+                if deactivate_others
+                else []
+            )
             return {
                 "success": True,
                 "status": "catalog",
@@ -325,6 +376,7 @@ async def install_industry_seed_with_fallback(industry_id: str) -> dict[str, Any
                 "source": "catalog",
                 "message": catalog.message or "已从扩展市场安装行业 Mod",
                 "catalog": True,
+                "deactivated": deactivated,
             }
         return {
             **result,
@@ -341,9 +393,55 @@ async def install_industry_seed_with_fallback(industry_id: str) -> dict[str, Any
         }
 
 
+async def install_industry_seed_with_fallback(industry_id: str) -> dict[str, Any]:
+    """安装行业壳及其通用业务模块；池内 seed 优先，Catalog 兜底。"""
+    iid = str(industry_id or "").strip()
+    bundle_ids = industry_seed_mod_ids_for(iid)
+    if len(bundle_ids) <= 1:
+        return await _install_one_industry_seed_with_fallback(
+            iid,
+            deactivate_others=True,
+        )
+
+    keep_ids = set(bundle_ids)
+    results: list[dict[str, Any]] = []
+    for mod_id in bundle_ids:
+        result = await _install_one_industry_seed_with_fallback(
+            mod_id,
+            deactivate_others=False,
+            keep_mod_ids=keep_ids,
+        )
+        results.append(result)
+        if not result.get("success"):
+            return {
+                **result,
+                "success": False,
+                "status": "bundle_failed",
+                "industry_id": iid,
+                "mod_id": bundle_ids[0],
+                "installed_mod_ids": [
+                    str(row.get("mod_id") or "") for row in results if row.get("success")
+                ],
+                "results": results,
+            }
+
+    deactivated = deactivate_other_open_industry_mods(keep_mod_ids=keep_ids)
+    return {
+        "success": True,
+        "status": "bundle",
+        "industry_id": iid,
+        "mod_id": bundle_ids[0],
+        "installed_mod_ids": bundle_ids,
+        "results": results,
+        "deactivated": deactivated,
+        "message": "行业包与通用业务模块已安装",
+    }
+
+
 __all__ = [
     "open_industry_seed_mod_ids",
     "industry_mod_id_for",
+    "industry_seed_mod_ids_for",
     "resolve_industry_or_mod_id",
     "bundled_industry_seeds_dir",
     "other_open_industry_mod_ids",

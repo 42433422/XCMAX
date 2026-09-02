@@ -16,7 +16,7 @@ def test_industry_baseline_attendance_plan():
         installed_mod_ids=["xcagi-planner-bridge"],
     )
     assert data["industry_id"] == "考勤"
-    assert data["industry_package"]["product_name"] == "考勤行业包"
+    assert data["industry_package"]["product_name"] == "通用考勤模块"
     assert data["industry_package"]["mod_id"] == "attendance-industry"
     assert "customer_brand" not in (data.get("industry_package") or {})
     assert "xcagi-planner-bridge" in data["required_mod_ids"]
@@ -29,12 +29,12 @@ def test_industry_baseline_attendance_plan():
     assert data["industry_mod_ready"] is False
     pkg_group = next(g for g in data["groups"] if g["id"] == "industry_package")
     assert pkg_group["title"] == "行业包"
-    assert pkg_group["items"][0]["label"] == "考勤行业包"
+    assert pkg_group["items"][0]["label"] == "通用考勤模块"
     assert pkg_group["items"][0]["show_mod_id"] is False
     assert not any(g["id"] == "account_custom" for g in data["groups"])
 
 
-def test_industry_baseline_attendance_with_entitled_custom():
+def test_industry_baseline_attendance_legacy_entitlement_is_canonical_only():
     data = build_industry_baseline_plan(
         "考勤",
         installed_mod_ids=[
@@ -45,17 +45,10 @@ def test_industry_baseline_attendance_with_entitled_custom():
         ],
         entitled_mod_ids={"taiyangniao-pro"},
     )
-    custom_group = next(g for g in data["groups"] if g["id"] == "account_custom")
-    custom_mod_ids = {it["mod_id"] for it in custom_group["items"]}
-    assert "taiyangniao-pro" in custom_mod_ids
-    assert "xcagi-core-workflow-employees" in custom_mod_ids
-    assert custom_group["items"][0]["mod_id"] == "taiyangniao-pro"
-    assert custom_group["items"][0]["label"] == "太阳鸟 PRO"
-    assert custom_group["items"][0]["required"] is True
-    assert data["account_custom_ready"] is False
-    assert data["baseline_ready"] is False
-    assert "taiyangniao-pro" in data["missing_account_custom_mod_ids"]
-    assert "xcagi-core-workflow-employees" in data["missing_account_custom_mod_ids"]
+    assert data["account_custom_mod_ids"] == []
+    assert data["missing_account_custom_mod_ids"] == []
+    assert not any(g["id"] == "account_custom" for g in data["groups"])
+    assert data["account_custom_ready"] is True
 
 
 def test_industry_baseline_attendance_custom_installed():
@@ -116,7 +109,8 @@ def test_onboarding_industry_catalog_neutral_names():
         p["industry_id"]: p["product_name"]
         for p in [*cat["open_packages"], *cat["preview_packages"]]
     }
-    assert all_names["考勤"] == "考勤行业包"
+    assert all_names["考勤"] == "通用考勤模块"
+    assert all_names["饰品包装"] == "饰品包装行业包"
     # 开放引导行业全部可选(含通用清爽起步)；仅非引导项(如管理端)保留为预览不可选
     general = next(p for p in cat["open_packages"] if p["industry_id"] == "通用")
     assert general["selectable"] is True
@@ -159,15 +153,45 @@ def test_industry_baseline_canonical_industry_does_not_grant_account_custom():
     assert all(g["id"] != "account_custom" for g in data["groups"])
 
 
-def test_industry_baseline_legacy_custom_entitlement_adds_account_custom():
+def test_industry_baseline_legacy_sunbird_entitlement_does_not_restore_retired_mod():
     data = build_industry_baseline_plan(
         "考勤",
         installed_mod_ids=["attendance-industry"],
         entitled_mod_ids={"taiyangniao-pro"},
     )
 
-    assert "taiyangniao-pro" in data["account_custom_mod_ids"]
-    assert any(g["id"] == "account_custom" for g in data["groups"])
+    assert data["account_custom_mod_ids"] == []
+    assert not any(g["id"] == "account_custom" for g in data["groups"])
+
+
+def test_sunbird_packaging_industry_composes_unified_attendance_module():
+    data = build_industry_baseline_plan(
+        "饰品包装",
+        installed_mod_ids=[
+            "xcagi-planner-bridge",
+            "xcagi-neuro-bus-bridge",
+            "xcagi-erp-domain-bridge",
+            "xcagi-planner-excel-tools",
+            "xcagi-approval-bridge",
+            "accessories-packaging-industry",
+            "attendance-industry",
+        ],
+        entitled_mod_ids={"taiyangniao-pro"},
+        account_username="SUNBIRD",
+    )
+
+    assert data["industry_id"] == "饰品包装"
+    assert data["industry_package"] == {
+        "mod_id": "accessories-packaging-industry",
+        "product_name": "饰品包装行业包",
+    }
+    assert data["industry_package_mod_ids"] == ["accessories-packaging-industry"]
+    assert data["capability_mod_ids"] == ["attendance-industry"]
+    module_group = next(g for g in data["groups"] if g["id"] == "business_modules")
+    assert module_group["items"][0]["label"] == "通用考勤模块"
+    assert all(g["id"] != "account_custom" for g in data["groups"])
+    assert data["account_delivery_seed_packages"][0]["mod_id"] == "attendance-industry"
+    assert data["full_stack_ready"] is True
 
 
 def test_onboarding_catalog_open_industries_stay_selectable_unrelated_entitlement():
@@ -300,4 +324,4 @@ def test_account_custom_skip_gate_for_admin():
         skip_account_custom_gate=True,
     )
     assert data["account_custom_ready"] is True
-    assert "taiyangniao-pro" in data["missing_account_custom_mod_ids"]
+    assert data["missing_account_custom_mod_ids"] == []

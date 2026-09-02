@@ -30,6 +30,45 @@ industries:
       receipt: "入库单"
       return: "退货单"
 
+  # 饰品包装行业包尚未复制到 userData/mods 的首启过渡期兜底；
+  # 安装后以 accessories-packaging-industry/manifest.json 为准。
+  饰品包装:
+    name: "饰品包装行业"
+    description: "适用于饰品、展示包装与包装制品的产品、订单、库存和标签管理"
+    units:
+      primary: "件"
+      secondary: "箱"
+      primary_label: "件数"
+      secondary_label: "箱数"
+      spec_label: "包装规格"
+    quantity_fields:
+      primary_field: "pieces"
+      secondary_field: "cartons"
+      spec_field: "package_spec"
+      primary_label: "件数"
+      secondary_label: "箱数"
+      spec_label: "包装规格"
+    product_fields:
+      name: "产品名称"
+      model: "货号"
+      category: "产品类别"
+      price: "单价"
+      unit: "单位"
+    order_types:
+      shipment: "订单"
+      receipt: "入库单"
+      return: "退货单"
+    intent_keywords:
+      create_order: ["创建订单", "开订单", "开单", "出货"]
+      quantity_unit: "件"
+      print_label: ["包装标签", "产品标签", "打印标签"]
+      product: ["饰品", "包装", "产品", "货号"]
+      customer: ["客户", "采购单位", "联系人"]
+    print_config:
+      printer_type: "PDF"
+      label_width: 80
+      label_height: 50
+
   考勤:
     name: "考勤/排班"
     description: "适用于考勤、排班、请假与加班管理"

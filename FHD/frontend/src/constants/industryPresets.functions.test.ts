@@ -20,8 +20,8 @@ describe('industryPresets constants and functions', () => {
   })
 
   describe('INDUSTRY_PRESET_IDS', () => {
-    it('contains 8 preset ids', () => {
-      expect(INDUSTRY_PRESET_IDS).toHaveLength(8)
+    it('contains 9 preset ids', () => {
+      expect(INDUSTRY_PRESET_IDS).toHaveLength(9)
     })
 
     it('contains 通用', () => {
@@ -30,6 +30,10 @@ describe('industryPresets constants and functions', () => {
 
     it('contains 涂料', () => {
       expect(INDUSTRY_PRESET_IDS).toContain('涂料')
+    })
+
+    it('contains 饰品包装', () => {
+      expect(INDUSTRY_PRESET_IDS).toContain('饰品包装')
     })
 
     it('contains 管理端', () => {
@@ -48,6 +52,11 @@ describe('industryPresets constants and functions', () => {
 
     it('涂料 preset has menuLabels', () => {
       expect(Object.keys(INDUSTRY_PRESETS['涂料'].menuLabels).length).toBeGreaterThan(0)
+    })
+
+    it('饰品包装 preset keeps packaging labels separate from attendance', () => {
+      expect(INDUSTRY_PRESETS['饰品包装'].welcomeIntro).toContain('饰品包装助手')
+      expect(INDUSTRY_PRESETS['饰品包装'].menuLabels.products).toBe('饰品包装品管理')
     })
   })
 

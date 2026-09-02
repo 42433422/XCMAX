@@ -10,6 +10,12 @@ export const ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU: NonNullable<ModInfo['menu']>
     icon: 'fa-file-excel-o',
     path: '/attendance-industry',
   },
+  {
+    id: 'attendance-industry-settings',
+    label: '考勤设置',
+    icon: 'fa-cog',
+    path: '/attendance-industry/settings',
+  },
 ]
 
 export const ATTENDANCE_INDUSTRY_MOD_FALLBACK_OVERRIDES: NonNullable<ModInfo['menu_overrides']> = []
@@ -28,52 +34,29 @@ export const COATING_CUSTOM_MOD_FALLBACK_OVERRIDES: NonNullable<ModInfo['menu_ov
 export const SUNBIRD_CLIENT_MOD_FALLBACK_MENU = ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU
 export const SUNBIRD_CLIENT_MOD_FALLBACK_OVERRIDES = ATTENDANCE_INDUSTRY_MOD_FALLBACK_OVERRIDES
 
-/** API 尚未返回考勤行业包时，侧栏/设置页仍可展示考勤转换入口 */
+/** API 尚未返回通用考勤模块时，侧栏/设置页仍可展示考勤转换入口 */
 export function buildAttendanceIndustryModStub(): ModInfo {
   return {
     id: CLIENT_PRIMARY_ERP_MOD_ID,
-    name: '考勤行业包',
+    name: '通用考勤模块',
     version: '1.0.0',
     author: 'XCAGI',
-    description: '考勤行业通用包',
+    description: '跨行业通用考勤、排班与出勤统计模块',
     primary: true,
     frontend: { pro_entry_path: '/attendance-industry' },
     menu: ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU.map((row) => ({ ...row })),
     menu_overrides: [],
     industry: {
       id: '考勤',
-      name: '考勤/人事行业',
+      name: '通用考勤能力',
     },
   }
 }
 
-/** SUNBIRD 账号专属 fallback：真实定制页是 taiyangniao-pro。 */
+/** @deprecated SUNBIRD 已归并到通用考勤模块。 */
 export function buildSunbirdClientModStub(): ModInfo {
-  return {
-    id: SUNBIRD_CLIENT_MOD_ID,
-    name: '太阳鸟 PRO',
-    version: '1.0.0',
-    author: 'XCAGI',
-    description: '太阳鸟客户定制：部门/人员管理、考勤表转换、排班数据处理与考勤 AI 员工。',
-    primary: true,
-    frontend: { pro_entry_path: '/taiyangniao-pro' },
-    menu: [
-      {
-        id: 'taiyangniao-pro-home',
-        label: '考勤表转换',
-        icon: 'fa-file-excel-o',
-        path: '/taiyangniao-pro',
-      },
-    ],
-    menu_overrides: [
-      { key: 'products', label: '人员管理' },
-      { key: 'customers', label: '部门管理' },
-    ],
-    industry: {
-      id: '考勤',
-      name: '考勤/人事行业',
-    },
-  }
+  void SUNBIRD_CLIENT_MOD_ID
+  return buildAttendanceIndustryModStub()
 }
 
 /** API 尚未返回奇士美定制 Mod 时，侧栏仍可展示涂料业务菜单覆盖 */

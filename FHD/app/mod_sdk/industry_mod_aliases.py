@@ -31,7 +31,9 @@ def load_industry_mod_aliases_document() -> dict[str, Any]:
             "taiyangniao-pro": "attendance-industry",
             "sz-qsm-pro": "coating-industry",
         },
+        "retired_runtime_mod_ids": ["taiyangniao-pro"],
         "industry_to_canonical_mod_id": {
+            "饰品包装": "accessories-packaging-industry",
             "考勤": "attendance-industry",
             "涂料": "coating-industry",
         },
@@ -55,6 +57,13 @@ def legacy_mod_ids_for(canonical_mod_id: str) -> tuple[str, ...]:
     return tuple(out)
 
 
+def is_retired_runtime_mod_id(mod_id: str) -> bool:
+    """旧客户包可继续作为历史别名，但不得再作为桌面运行包加载。"""
+    mid = str(mod_id or "").strip()
+    retired = load_industry_mod_aliases_document().get("retired_runtime_mod_ids") or []
+    return bool(mid and mid in {str(value).strip() for value in retired})
+
+
 def canonical_mod_id_for_industry(industry_id: str) -> str:
     iid = str(industry_id or "").strip()
     mapping = load_industry_mod_aliases_document().get("industry_to_canonical_mod_id") or {}
@@ -65,5 +74,6 @@ __all__ = [
     "canonical_mod_id",
     "canonical_mod_id_for_industry",
     "legacy_mod_ids_for",
+    "is_retired_runtime_mod_id",
     "load_industry_mod_aliases_document",
 ]

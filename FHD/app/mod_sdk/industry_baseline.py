@@ -85,12 +85,24 @@ def _industry_package(industry_id: str) -> dict[str, Any]:
     return row if isinstance(row, dict) else {}
 
 
-def _industry_mod_ids_for(industry_key: str, row: dict[str, Any]) -> list[str]:
+def _industry_package_mod_ids_for(industry_key: str) -> list[str]:
     pkg = _industry_package(industry_key)
     mid = str(pkg.get("mod_id") or "").strip()
-    if mid:
-        return [mid]
-    return _dedupe([str(x) for x in (row.get("industry_mod_ids") or []) if x])
+    return [mid] if mid else []
+
+
+def _industry_capability_mod_ids_for(row: dict[str, Any]) -> list[str]:
+    """行业可组合的通用业务模块；不改变客户所属行业。"""
+    return _dedupe([str(x) for x in (row.get("capability_mod_ids") or []) if x])
+
+
+def _industry_mod_ids_for(industry_key: str, row: dict[str, Any]) -> list[str]:
+    """兼容字段：行业包与可组合业务模块的并集。"""
+    return _dedupe(
+        _industry_package_mod_ids_for(industry_key)
+        + _industry_capability_mod_ids_for(row)
+        + [str(x) for x in (row.get("industry_mod_ids") or []) if x]
+    )
 
 
 def _label_for_mod(mod_id: str, industry_key: str, labels: dict[str, str]) -> str:
@@ -312,6 +324,14 @@ def _user_industry_id(user: Any) -> str:
     return str(getattr(user, "industry_id", "") or "").strip()
 
 
+def _user_username(user: Any) -> str:
+    if user is None:
+        return ""
+    if isinstance(user, dict):
+        return str(user.get("username") or "").strip()
+    return str(getattr(user, "username", "") or "").strip()
+
+
 async def build_onboarding_industry_catalog_for_request(request) -> dict[str, Any]:
     """按会话感知：企业 entitlement 二级筛选 + 租户已选行业。"""
     from app.application.tenant_workspace_prefs import (
@@ -336,14 +356,17 @@ async def build_onboarding_industry_catalog_for_request(request) -> dict[str, An
     forced_ids: set[str] = set()
     user = resolve_session_user(request)
     if user is not None:
-        uid_industry = _user_industry_id(user)
+        from app.mod_sdk.customer_delivery import industry_id_for_account
+
+        delivery_industry = industry_id_for_account(_user_username(user))
+        uid_industry = delivery_industry or _user_industry_id(user)
         if uid_industry:
             forced_ids.add(uid_industry)
         owner_id = resolve_workspace_owner_id(request, user)
         if owner_id:
             meta["owner_id"] = owner_id
             prefs = get_workspace_prefs(owner_id)
-            selected = str(prefs.get("selected_industry_id") or "").strip()
+            selected = delivery_industry or str(prefs.get("selected_industry_id") or "").strip()
             if selected:
                 meta["selected_industry_id"] = selected
                 forced_ids.add(selected)
@@ -418,10 +441,18 @@ async def build_industry_baseline_plan_for_request(
         is_admin_account_session,
         sync_entitlements_from_request,
     )
-    from app.infrastructure.auth.dependencies import session_id_from_request
+    from app.infrastructure.auth.dependencies import resolve_session_user, session_id_from_request
 
     entitled: set[str] | None = None
     skip_account_custom = False
+    account_username = ""
+
+    user = resolve_session_user(request)
+    if user is not None:
+        if isinstance(user, dict):
+            account_username = str(user.get("username") or "").strip()
+        else:
+            account_username = str(getattr(user, "username", "") or "").strip()
 
     if enterprise_mod_filter_active():
         sid = session_id_from_request(request)
@@ -435,6 +466,7 @@ async def build_industry_baseline_plan_for_request(
         industry_id,
         entitled_mod_ids=entitled,
         skip_account_custom_gate=skip_account_custom,
+        account_username=account_username,
     )
 
 

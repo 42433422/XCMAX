@@ -19,7 +19,7 @@ export type IndustryPreset = {
   uiLabels: Record<string, string>
 }
 
-export const INDUSTRY_PRESET_IDS = ['通用', '涂料', '考勤', '批发', '电商', '餐饮', '物流', '管理端'] as const
+export const INDUSTRY_PRESET_IDS = ['通用', '饰品包装', '涂料', '考勤', '批发', '电商', '餐饮', '物流', '管理端'] as const
 
 export const INDUSTRY_PRESETS: Record<string, IndustryPreset> = {
   通用: {
@@ -42,6 +42,39 @@ export const INDUSTRY_PRESETS: Record<string, IndustryPreset> = {
       model_label: '编号',
       shipment_order: '业务单',
       records: '业务记录',
+    },
+  },
+  饰品包装: {
+    id: '饰品包装',
+    name: '饰品包装',
+    scenario: '饰品与包装制品的产品、订单、库存和标签管理。',
+    welcomeIntro: '你好，我是饰品包装助手。',
+    welcomeBullets: ['查产品与订单', '管库存与标签'],
+    quickButtons: [
+      { text: '查看饰品和包装产品', label: '查产品' },
+      { text: '今天有哪些订单', label: '订单' },
+      { text: '查看库存预警', label: '库存预警' },
+      { text: '打印产品包装标签', label: '打印标签' },
+      { text: '打开通用考勤模块', label: '考勤' },
+    ],
+    placeholderNormal: '查饰品、包装产品或订单',
+    menuLabels: {
+      materials: '原材料仓库',
+      products: '饰品包装品管理',
+      'materials-list': '包材列表',
+      orders: '订单管理',
+      'shipment-records': '出货记录',
+      customers: '客户管理',
+      'data-sources': '数据来源',
+      print: '包装标签打印',
+      'printer-list': '打印机列表',
+      'template-preview': '标签模板库',
+    },
+    uiLabels: {
+      entity: '饰品包装品',
+      model_label: '货号',
+      shipment_order: '订单',
+      records: '出货记录',
     },
   },
   涂料: {

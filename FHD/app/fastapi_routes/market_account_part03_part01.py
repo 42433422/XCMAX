@@ -192,6 +192,9 @@ def enterprise_mod_ids_for_industry(industry_id: str) -> list[str]:
             mid = str(row.get("industry_mod_id") or "").strip()
             if mid:
                 mod_ids.append(mid)
+            runtime_mid = str(row.get("runtime_mod_id") or "").strip()
+            if runtime_mid:
+                mod_ids.append(runtime_mid)
     except _facade().RECOVERABLE_ERRORS:
         _facade().logger.exception(
             "enterprise_mod_ids_for_industry: delivery failed industry=%s", iid

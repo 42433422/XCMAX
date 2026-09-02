@@ -145,7 +145,11 @@ class __ModManagerPart01MixinPart01Mixin:
 
     def resolve_mod_directory(self, mod_id: str) -> str | None:
         """在全部 mods 根目录中定位 Mod 目录（主根优先）；支持 legacy → 中性 id 别名。"""
-        from app.mod_sdk.industry_mod_aliases import canonical_mod_id, legacy_mod_ids_for
+        from app.mod_sdk.industry_mod_aliases import (
+            canonical_mod_id,
+            is_retired_runtime_mod_id,
+            legacy_mod_ids_for,
+        )
 
         mid = (mod_id or "").strip()
         if not mid:
@@ -163,10 +167,12 @@ class __ModManagerPart01MixinPart01Mixin:
                     return mod_path
             return None
 
+        canonical = canonical_mod_id(mid)
+        if is_retired_runtime_mod_id(mid) and canonical != mid:
+            return _direct(canonical)
         hit = _direct(mid)
         if hit:
             return hit
-        canonical = canonical_mod_id(mid)
         if canonical != mid:
             hit = _direct(canonical)
             if hit:
@@ -205,6 +211,11 @@ class __ModManagerPart01MixinPart01Mixin:
                 ):
                     continue
                 metadata = _facade().parse_manifest(mod_path)
+                if metadata:
+                    from app.mod_sdk.industry_mod_aliases import is_retired_runtime_mod_id
+
+                    if is_retired_runtime_mod_id(metadata.id):
+                        continue
                 if metadata and metadata.id not in seen:
                     seen.add(metadata.id)
                     mods.append(metadata)
@@ -250,6 +261,13 @@ class __ModManagerPart01MixinPart01Mixin:
                 )
                 metadata = _facade().parse_manifest(mod_path)
                 if metadata:
+                    from app.mod_sdk.industry_mod_aliases import is_retired_runtime_mod_id
+
+                    if is_retired_runtime_mod_id(metadata.id):
+                        _facade().logger.info(
+                            "[ModManager] Skip retired runtime mod: %s", metadata.id
+                        )
+                        continue
                     if metadata.id in seen_ids:
                         continue
                     seen_ids.add(metadata.id)
@@ -280,6 +298,16 @@ class __ModManagerPart01MixinPart01Mixin:
         return mods
 
     def load_mod(self, mod_id: str) -> bool:
+        from app.mod_sdk.industry_mod_aliases import canonical_mod_id, is_retired_runtime_mod_id
+
+        requested_mod_id = str(mod_id or "").strip()
+        if is_retired_runtime_mod_id(requested_mod_id):
+            mod_id = canonical_mod_id(requested_mod_id)
+            _facade().logger.info(
+                "[ModManager] Redirect retired runtime mod %s -> %s",
+                requested_mod_id,
+                mod_id,
+            )
         try:
             from app.mod_sdk.product_skus import assert_mod_allowed_for_sku
 
