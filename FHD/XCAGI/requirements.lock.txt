@@ -254,7 +254,7 @@ propcache==0.4.1
     #   yarl
 prophet==1.3.0
     # via -r XCAGI/requirements.txt
-protobuf==7.34.1
+protobuf==7.36.0
     # via
     #   -r XCAGI/requirements.txt
     #   onnxruntime
