@@ -179,7 +179,7 @@ jobs:
                    --exclude='*' \
                    -e "ssh ${SSH_OPTS[*]}" "$src_dir/" "root@${HOST}:$dest/"; then
                 if ssh "${SSH_OPTS[@]}" "root@${HOST}" \
-                    "test -f '$dest/latest-mac.yml' && test -s '$dest/${dmg_name}' && test -s '$dest/${zip_name}'"; then
+                    "test -f '$dest/latest-mac.yml' && test -s '$dest/${dmg_name}' && test -s '$dest/${zip_name}' && chmod a+rx '$dest'"; then
                   echo "[publish] verified: ${dest}"
                   return 0
                 fi

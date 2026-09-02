@@ -128,5 +128,6 @@ def test_macos_release_flow_publishes_download_center_metadata_and_has_recovery_
     assert "publish-macos-download-center.sh" in recovery_workflow
     assert "release_ready == false" in publish_script
     assert 'contains("太阳鸟")' in publish_script
+    assert "chmod a+rx" in publish_script
     assert "download-release.json" in publish_script
     assert "download/releases?release-run=" in publish_script

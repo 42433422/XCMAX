@@ -109,6 +109,8 @@ publish_json_atomically() {
 }
 
 official_root="/var/www/xcagi-v${version}"
+ssh "${ssh_opts[@]}" "root@${host}" \
+  "chmod a+rx '${official_root}' '${official_root}/enterprise' '/var/www/update/releases/stable/enterprise'"
 publish_json_atomically "${tmpdir}/manifest.json" "${official_root}/manifest.json"
 publish_json_atomically "${tmpdir}/download-release.json" "${official_root}/download-release.json"
 
