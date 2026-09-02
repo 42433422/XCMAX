@@ -5,6 +5,8 @@ export const modRouteGlob = {
   ...import.meta.glob('../../../mods/taiyangniao-pro/frontend/routes.js'),
   ...import.meta.glob('../../../mods/sz-qsm-pro/frontend/routes.js'),
   ...import.meta.glob('../../../mods/coating-industry/frontend/routes.js'),
+  // attendance-industry 是当前仅存在于 XCAGI/mods 的兼容交付模块。
+  ...import.meta.glob('../../../XCAGI/mods/attendance-industry/frontend/routes.js'),
   ...import.meta.glob('../../../mods/xcagi-planner-bridge/frontend/routes.js'),
   ...import.meta.glob('../../../mods/xcagi-erp-domain-bridge/frontend/routes.js'),
   ...import.meta.glob('../../../mods/xcagi-workflow-visualization-bridge/frontend/routes.js'),
