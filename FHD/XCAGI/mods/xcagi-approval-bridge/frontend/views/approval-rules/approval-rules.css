@@ -1,0 +1,306 @@
+/* 拆分自 ApprovalRulesView.vue（原 <style scoped> 块逐字迁移，行为不变）；
+   入口与各子组件均以 <style scoped src="./approval-rules.css"> 引用。 */
+.approval-rules-view {
+  padding: 20px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.view-header h2 {
+  margin: 0 0 5px 0;
+  color: #333;
+}
+
+.subtitle {
+  margin: 0 0 20px 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.subtitle.hint {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.subtitle.hint code {
+  font-size: 12px;
+  background: #f5f5f5;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.rules-container {
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.rules-header {
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #eee;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+}
+
+.toggle-switch {
+  width: 50px;
+  height: 26px;
+  background: #ccc;
+  border-radius: 13px;
+  position: relative;
+  transition: background 0.3s;
+}
+
+.toggle-switch.active {
+  background: #4CAF50;
+}
+
+.toggle-slider {
+  width: 22px;
+  height: 22px;
+  background: #fff;
+  border-radius: 50%;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.3s;
+}
+
+.toggle-switch.active .toggle-slider {
+  transform: translateX(24px);
+}
+
+.rule-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+  background: #f9f9f9;
+  border-radius: 6px;
+  margin-bottom: 10px;
+}
+
+.rule-info {
+  flex: 1;
+}
+
+.rule-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 5px;
+}
+
+.rule-action {
+  font-weight: 600;
+  color: #333;
+}
+
+.rule-trigger {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.rule-trigger.always {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.rule-trigger.conditional {
+  background: #fff3e0;
+  color: #ef6c00;
+}
+
+.rule-trigger.never {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.rule-description {
+  color: #666;
+  font-size: 14px;
+  margin-bottom: 3px;
+}
+
+.rule-path {
+  color: #999;
+  font-size: 12px;
+  font-family: monospace;
+}
+
+.rule-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.rule-actions button {
+  padding: 6px 10px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.btn-edit {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+
+.btn-delete {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.add-rule-section {
+  margin-top: 25px;
+  padding-top: 20px;
+  border-top: 1px dashed #ddd;
+}
+
+.add-rule-section h3 {
+  margin: 0 0 15px 0;
+  font-size: 16px;
+}
+
+.add-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 15px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group.full-width {
+  grid-column: 1 / -1;
+}
+
+.form-group label {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 5px;
+}
+
+.form-group select,
+.form-group input {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.btn-add {
+  grid-column: 1 / -1;
+  padding: 10px;
+  background: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.btn-add:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.no-rules {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+}
+
+.no-rules i {
+  font-size: 48px;
+  color: #4CAF50;
+  margin-bottom: 15px;
+}
+
+.pending-approvals {
+  margin-top: 25px;
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.pending-approvals h3 {
+  margin: 0 0 15px 0;
+  color: #333;
+}
+
+.pending-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 15px;
+  background: #fff3e0;
+  border-radius: 6px;
+  margin-bottom: 10px;
+}
+
+.pending-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pending-action {
+  font-weight: 600;
+  color: #e65100;
+}
+
+.pending-time {
+  font-size: 12px;
+  color: #999;
+}
+
+.pending-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.pending-actions button {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.btn-approve {
+  background: #4CAF50;
+  color: white;
+}
+
+.btn-reject {
+  background: #f44336;
+  color: white;
+}
+
+.btn-cancel {
+  padding: 8px 16px;
+  background: #eee;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.btn-save {
+  padding: 8px 16px;
+  background: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}

@@ -1,0 +1,315 @@
+.oac-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+  color: rgba(230, 240, 255, 0.92);
+  min-height: 0;
+}
+
+.oac-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.oac-title {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.oac-tip {
+  margin: 0;
+  color: rgba(180, 200, 220, 0.65);
+  font-size: 0.85rem;
+}
+
+.oac-section-title {
+  font-size: 0.95rem;
+  margin: 0 0 0.4rem;
+}
+
+.oac-import-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.oac-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.oac-field--span {
+  grid-column: span 2;
+}
+
+.oac-field-label {
+  font-size: 0.78rem;
+  color: rgba(180, 200, 220, 0.7);
+}
+
+.oac-input,
+.oac-textarea,
+select.oac-input {
+  background: rgba(10, 14, 22, 0.85);
+  color: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 0.4rem 0.55rem;
+  font-size: 0.85rem;
+  font-family: inherit;
+}
+
+.oac-textarea {
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  font-size: 0.8rem;
+}
+
+.oac-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.oac-btn {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  padding: 0.4rem 0.85rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.oac-btn--primary {
+  background: linear-gradient(180deg, #2ba8ff, #0f7be8);
+  border-color: #1f8ce0;
+  color: #fff;
+}
+
+.oac-btn--primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.oac-btn--ghost {
+  background: transparent;
+}
+
+.oac-btn--danger {
+  background: rgba(255, 80, 80, 0.12);
+  border-color: rgba(255, 80, 80, 0.4);
+  color: #ffb3b3;
+}
+
+.oac-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.6rem;
+}
+
+.oac-card {
+  background: rgba(8, 10, 16, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 0.6rem;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.oac-card--selected {
+  border-color: #2ba8ff;
+  box-shadow: 0 0 0 1px rgba(43, 168, 255, 0.3) inset;
+}
+
+.oac-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+
+.oac-card-status {
+  font-size: 0.7rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.oac-card-meta {
+  display: flex;
+  gap: 0.6rem;
+  font-size: 0.78rem;
+  color: rgba(180, 200, 220, 0.65);
+}
+
+.oac-card-base {
+  font-size: 0.75rem;
+  color: rgba(180, 200, 220, 0.5);
+  word-break: break-all;
+}
+
+.oac-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
+}
+
+.oac-detail-head .oac-section-title {
+  flex: 1 1 auto;
+}
+
+.oac-detail-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+}
+
+@media (max-width: 1100px) {
+  .oac-detail-grid {
+    grid-template-columns: 1fr;
+  }
+  .oac-import-grid {
+    grid-template-columns: 1fr;
+  }
+  .oac-field--span {
+    grid-column: span 1;
+  }
+}
+
+.oac-credential,
+.oac-operations,
+.oac-test {
+  background: rgba(8, 10, 16, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 0.7rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.oac-test {
+  grid-column: 1 / -1;
+}
+
+.oac-op-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.oac-op {
+  display: grid;
+  grid-template-columns: 60px 1fr auto auto;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.oac-op--active {
+  border-color: rgba(43, 168, 255, 0.6);
+  background: rgba(43, 168, 255, 0.08);
+}
+
+.oac-op-method {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-align: center;
+  border-radius: 4px;
+  padding: 0.1rem 0.3rem;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.oac-op-method--get {
+  background: rgba(60, 200, 120, 0.15);
+  color: #6cf;
+}
+
+.oac-op-method--post {
+  background: rgba(43, 168, 255, 0.18);
+}
+
+.oac-op-method--delete {
+  background: rgba(255, 100, 100, 0.18);
+  color: #fbb;
+}
+
+.oac-op-method--put,
+.oac-op-method--patch {
+  background: rgba(255, 200, 50, 0.18);
+  color: #ffd66e;
+}
+
+.oac-op-path {
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.oac-op-id {
+  font-size: 0.72rem;
+  color: rgba(180, 200, 220, 0.65);
+}
+
+.oac-op-toggle {
+  font-size: 0.72rem;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.oac-preview {
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 6px;
+  padding: 0.5rem;
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.oac-preview--error {
+  border: 1px solid rgba(255, 80, 80, 0.4);
+}
+
+.oac-publish-title {
+  margin-top: 0.6rem;
+  font-size: 0.85rem;
+}
+
+.oac-publish-row {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 0.6rem;
+}
+
+.oac-error {
+  color: #ff8c8c;
+  font-size: 0.8rem;
+}
+
+.oac-success {
+  color: #95e8a4;
+  font-size: 0.8rem;
+}

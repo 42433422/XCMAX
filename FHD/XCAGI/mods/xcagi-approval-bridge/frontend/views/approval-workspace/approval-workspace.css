@@ -1,0 +1,627 @@
+/* 拆分自 ApprovalWorkspaceView.vue（原 <style scoped> 块逐字迁移，行为不变）；
+   入口与各子组件均以 <style scoped src="./approval-workspace.css"> 引用。 */
+.approval-workspace-view {
+  padding: 24px;
+  background: #f5f7fa;
+  min-height: 100vh;
+}
+
+.view-header {
+  margin-bottom: 24px;
+}
+
+.view-header h2 {
+  font-size: 24px;
+  color: #1f2937;
+  margin: 0 0 8px 0;
+}
+
+.view-header .subtitle {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0;
+}
+
+/* 统计卡片 */
+.stats-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.stat-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+}
+
+.stat-card.pending .stat-icon {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.stat-card.initiated .stat-icon {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.stat-card.approved .stat-icon {
+  background: #d1fae5;
+  color: #059669;
+}
+
+.stat-card.rejected .stat-icon {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.stat-info {
+  flex: 1;
+}
+
+.stat-value {
+  font-size: 28px;
+  font-weight: bold;
+  color: #1f2937;
+}
+
+.stat-label {
+  font-size: 14px;
+  color: #6b7280;
+  margin-top: 4px;
+}
+
+/* 区块 */
+.section {
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.section-header h3 {
+  font-size: 18px;
+  color: #1f2937;
+  margin: 0;
+}
+
+.section-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  color: #2563eb;
+  cursor: pointer;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.btn-link:hover:not(:disabled) {
+  background: #eff6ff;
+}
+
+.btn-link:disabled {
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+
+.btn-link.btn-cleanup {
+  color: #dc2626;
+}
+
+.btn-link.btn-cleanup:hover:not(:disabled) {
+  background: #fef2f2;
+}
+
+.btn-link.btn-cleanup:disabled {
+  color: #9ca3af;
+}
+
+.count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  margin-left: 2px;
+  background: #fee2e2;
+  color: #dc2626;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.btn-link.btn-cleanup:disabled .count-badge {
+  background: #f3f4f6;
+  color: #9ca3af;
+}
+
+/* 请求列表 */
+.request-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.request-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.request-item:hover {
+  border-color: #2563eb;
+  background: #f9fafb;
+}
+
+.request-left {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex: 1;
+}
+
+.request-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f3f4f6;
+  color: #6b7280;
+  font-size: 18px;
+}
+
+.request-info {
+  flex: 1;
+}
+
+.request-title {
+  font-size: 16px;
+  color: #1f2937;
+  margin-bottom: 4px;
+}
+
+.request-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.request-no {
+  font-family: monospace;
+}
+
+.request-status {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.request-status.pending {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.request-status.in_progress {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.request-status.approved {
+  background: #d1fae5;
+  color: #059669;
+}
+
+.request-status.rejected {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.request-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-approve, .btn-reject {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.btn-approve {
+  background: #d1fae5;
+  color: #059669;
+}
+
+.btn-approve:hover {
+  background: #059669;
+  color: white;
+}
+
+.btn-reject {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.btn-reject:hover {
+  background: #dc2626;
+  color: white;
+}
+
+.request-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.request-current-node {
+  font-size: 13px;
+  color: #6b7280;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-delete {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #9ca3af;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: all 0.15s;
+}
+
+.btn-delete:hover {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+/* 空状态 */
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: #9ca3af;
+}
+
+.empty-state i {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+/* 弹窗（结构由宿主 Modal.vue 提供，此处仅保留详情内容样式） */
+
+.detail-section {
+  margin-bottom: 24px;
+}
+
+.detail-section h4 {
+  font-size: 16px;
+  color: #1f2937;
+  margin: 0 0 12px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detail-item.full-width {
+  grid-column: 1 / -1;
+}
+
+.detail-item label {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.detail-item span, .detail-item p {
+  font-size: 14px;
+  color: #1f2937;
+}
+
+.status-tag {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.status-tag.pending {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.status-tag.in_progress {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.status-tag.approved {
+  background: #d1fae5;
+  color: #059669;
+}
+
+.status-tag.rejected {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+/* 时间轴 */
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.timeline-item {
+  display: flex;
+  gap: 12px;
+}
+
+.timeline-dot {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 14px;
+}
+
+.timeline-dot.approve {
+  background: #d1fae5;
+  color: #059669;
+}
+
+.timeline-dot.reject {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.timeline-dot.transfer {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.timeline-content {
+  flex: 1;
+  background: #f9fafb;
+  padding: 12px;
+  border-radius: 8px;
+}
+
+.timeline-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.node-name {
+  font-weight: 500;
+  color: #1f2937;
+}
+
+.time {
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.timeline-body {
+  font-size: 14px;
+  color: #4b5563;
+}
+
+.opinion {
+  margin-top: 4px;
+  padding: 8px;
+  background: white;
+  border-radius: 4px;
+  font-style: italic;
+}
+
+.workflow-execution-panel {
+  border: 1px solid #d1fae5;
+  border-radius: 8px;
+  background: #f0fdf4;
+  padding: 14px;
+  color: #064e3b;
+}
+
+.workflow-execution-panel.failed {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #7f1d1d;
+}
+
+.workflow-execution-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.workflow-execution-status {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.workflow-execution-plan {
+  min-width: 0;
+  max-width: 55%;
+  overflow-wrap: anywhere;
+  font-family: monospace;
+  font-size: 12px;
+  color: #4b5563;
+}
+
+.workflow-execution-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  font-size: 13px;
+  color: #374151;
+}
+
+.workflow-execution-message {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.7);
+  color: #1f2937;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.workflow-execution-nodes {
+  list-style: none;
+  margin: 12px 0 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.workflow-execution-nodes li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 8px;
+  align-items: start;
+  padding: 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.workflow-node-status {
+  grid-row: span 4;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.workflow-node-status.ok {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.workflow-node-status.fail {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.workflow-node-main,
+.workflow-node-error,
+.workflow-node-hint {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.workflow-node-main {
+  font-family: monospace;
+  font-size: 13px;
+  color: #111827;
+}
+
+.workflow-node-meta {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.workflow-node-error {
+  font-size: 12px;
+  color: #b91c1c;
+}
+
+.workflow-node-hint {
+  font-size: 12px;
+  color: #92400e;
+}
+
+.btn {
+  padding: 10px 20px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-approve {
+  background: #059669;
+  color: white;
+}
+
+.btn-reject {
+  background: #dc2626;
+  color: white;
+}

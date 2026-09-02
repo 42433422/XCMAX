@@ -1,0 +1,107 @@
+.tutorial-overlay-root {
+  position: fixed;
+  inset: 0;
+  z-index: 3800;
+  pointer-events: none;
+}
+
+.tutorial-exit-wrap {
+  position: absolute;
+  right: 16px;
+  top: 16px;
+  pointer-events: auto;
+}
+
+.tutorial-exit-btn {
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: #374151;
+  border-radius: 999px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.18);
+}
+
+.tutorial-exit-btn:hover {
+  background: #f9fafb;
+  border-color: #9ca3af;
+}
+
+.tutorial-spotlight {
+  position: absolute;
+  box-sizing: border-box;
+  /* 洞口必须与下层可点元素穿透，否则会挡住「确认执行」「开始打印」等，教程里任务看似无法执行 */
+  pointer-events: none;
+  /* 用 outline 画环，避免 border 占用内容盒导致透明洞口比量到的 rect 更小 */
+  border: none;
+  outline: 2px solid #60a5fa;
+  outline-offset: 0;
+  border-radius: 10px;
+  background: transparent;
+  box-shadow: 0 0 0 9999px rgba(2, 6, 23, 0.55);
+  transition: all 0.2s ease;
+}
+
+.tutorial-card {
+  position: absolute;
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.24);
+  padding: 12px;
+  pointer-events: auto;
+}
+
+.tutorial-progress {
+  font-size: 11px;
+  color: #2563eb;
+  font-weight: 600;
+}
+
+.tutorial-title {
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.tutorial-desc {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #374151;
+  line-height: 1.5;
+}
+
+.tutorial-tip {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #b91c1c;
+}
+
+.tutorial-fallback-notice {
+  color: #92400e;
+  background: rgba(251, 191, 36, 0.15);
+  padding: 8px 10px;
+  border-radius: 6px;
+  line-height: 1.45;
+}
+
+.tutorial-test {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #065f46;
+}
+
+.tutorial-actions {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.tutorial-primary-next {
+  pointer-events: auto;
+  cursor: pointer;
+}

@@ -1,0 +1,89 @@
+/* 全屏揭晓层（Teleport 到 body，非 scoped 保证全屏蒙层与动效） */
+.svip-reveal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse 80% 60% at 50% 40%, rgba(120, 60, 180, 0.45), rgba(0, 0, 0, 0.92));
+  animation: svip-reveal-fade 0.45s ease;
+}
+.svip-reveal-shimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.06) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: svip-reveal-sweep 2.2s ease-in-out;
+  pointer-events: none;
+}
+.svip-reveal-content {
+  position: relative;
+  text-align: center;
+  padding: 0 24px;
+  max-width: 24rem;
+}
+.svip-reveal-star {
+  margin: 0 0 8px;
+  font-size: 2rem;
+  color: #e9d5ff;
+  animation: svip-reveal-twinkle 1.2s ease-in-out infinite alternate;
+}
+.svip-reveal-h2 {
+  margin: 0 0 12px;
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: 0.02em;
+}
+.svip-reveal-p {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.6);
+}
+@keyframes svip-reveal-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes svip-reveal-sweep {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+@keyframes svip-reveal-twinkle {
+  from {
+    filter: drop-shadow(0 0 6px rgba(192, 132, 252, 0.4));
+  }
+  to {
+    filter: drop-shadow(0 0 14px rgba(244, 114, 182, 0.55));
+  }
+}
+
+html[data-workbench-theme='light'] .svip-reveal-overlay {
+  background: radial-gradient(ellipse 80% 60% at 50% 40%, rgba(120, 60, 180, 0.2), rgba(255, 255, 255, 0.95));
+}
+
+html[data-workbench-theme='light'] .svip-reveal-h2 {
+  color: #1d1d1f;
+}
+
+html[data-workbench-theme='light'] .svip-reveal-p {
+  color: #86868b;
+}
+
+html[data-workbench-theme='light'] .svip-reveal-star {
+  color: #7c3aed;
+}
+
+html[data-workbench-theme='light'] .svip-reveal-shimmer {
+  background: linear-gradient(120deg, transparent 0%, rgba(0, 0, 0, 0.03) 50%, transparent 100%);
+}

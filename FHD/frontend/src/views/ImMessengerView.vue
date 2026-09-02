@@ -104,7 +104,6 @@ import {
   fetchCsInboxMessages,
   fetchImConversations,
   fetchImMessages,
-  imWebSocketUrl,
   markImRead,
   replyCsInbox,
   sendEnterpriseCsMessage,
@@ -125,6 +124,7 @@ import { useCsInboxBridge } from '@/composables/messenger/useCsInboxBridge'
 import { useCustomerServiceAutomation } from '@/composables/messenger/useCustomerServiceAutomation'
 import { useEnterpriseCsBridge } from '@/composables/messenger/useEnterpriseCsBridge'
 import { useSuperEmployeeDispatch } from '@/composables/messenger/useSuperEmployeeDispatch'
+import { useImRealtime } from './im-messenger/useImRealtime'
 import {
   CODEX_SUPER_EMPLOYEE_ENTRY,
   formatTime,
@@ -312,11 +312,21 @@ const imChatDomRefs = {
   codexInputEl,
 }
 
-let ws: WebSocket | null = null
+// WebSocket / 实时消息处理拆分至 ./im-messenger/useImRealtime.ts（行为与拆分前一致）
+const { applyIncomingMessage, applyReadState, connectWs, disconnectWs } = useImRealtime({
+  localUserId,
+  conversations,
+  activeConversationId,
+  messages,
+  wsConnected,
+  wsConnecting,
+  scrollToBottom,
+  loadConversations,
+  playIncoming,
+})
+
 let offSyncMessage: (() => void) | null = null
 let offSyncRead: (() => void) | null = null
-let reconnectTimer: ReturnType<typeof setTimeout> | null = null
-let reconnectAttempt = 0
 
 async function startChatWith(contact: ImContact): Promise<void> {
   const existing = contact.is_enterprise_dedicated_cs ? existingDedicatedConversation(contact) : undefined
@@ -450,57 +460,6 @@ function scrollToBottom(): void {
   if (el) el.scrollTop = el.scrollHeight
 }
 
-function applyIncomingMessage(msg: ImMessage, cid: number): void {
-  if (isCustomerEnterpriseCs(cid)) return
-  if (cid === activeConversationId.value) {
-    if (!messages.value.some((m) => m.id === msg.id)) {
-      messages.value.push(msg)
-      void nextTick().then(scrollToBottom)
-      void markImRead(cid, msg.id)
-    }
-  }
-  if (msg.sender_user_id !== localUserId.value) {
-    void playIncoming(msg.body)
-  }
-  void loadConversations()
-}
-
-function applyReadState(conversationId: number, userId: number, lastMessageId: number): void {
-  if (userId !== localUserId.value) return
-  const conv = conversations.value.find((c) => c.id === conversationId)
-  if (conv) {
-    conv.unread_count = 0
-  }
-  if (conversationId === activeConversationId.value && lastMessageId > 0) {
-    void markImRead(conversationId, lastMessageId).then(() => loadConversations())
-  } else {
-    void loadConversations()
-  }
-}
-
-function handleWsPayload(payload: {
-  type?: string
-  conversation_id?: number
-  user_id?: number
-  last_message_id?: number
-  message?: ImMessage
-}): void {
-  if (payload.type === 'pong') return
-  if ((payload.type === 'im.message' || payload.type === 'message') && payload.message) {
-    const cid = payload.conversation_id ?? payload.message.conversation_id
-    applyIncomingMessage(payload.message, cid)
-    return
-  }
-  if (payload.type === 'im.read') {
-    const cid = Number(payload.conversation_id)
-    const uid = Number(payload.user_id)
-    const lastId = Number(payload.last_message_id)
-    if (Number.isFinite(cid) && Number.isFinite(uid) && Number.isFinite(lastId)) {
-      applyReadState(cid, uid, lastId)
-    }
-  }
-}
-
 async function onSend(): Promise<void> {
   const id = activeConversationId.value
   const text = draft.value.trim()
@@ -533,66 +492,6 @@ async function onSend(): Promise<void> {
   } finally {
     busy.value = false
   }
-}
-
-function scheduleReconnect(): void {
-  if (reconnectTimer) clearTimeout(reconnectTimer)
-  const delay = Math.min(30_000, 1000 * 2 ** reconnectAttempt)
-  reconnectTimer = setTimeout(() => {
-    reconnectAttempt += 1
-    connectWs()
-  }, delay)
-}
-
-function connectWs(): void {
-  if (!localUserId.value) return
-  disconnectWs(false)
-  try {
-    wsConnecting.value = true
-    ws = new WebSocket(imWebSocketUrl())
-    ws.onopen = () => {
-      wsConnected.value = true
-      wsConnecting.value = false
-      reconnectAttempt = 0
-    }
-    ws.onclose = () => {
-      wsConnected.value = false
-      wsConnecting.value = false
-      scheduleReconnect()
-    }
-    ws.onerror = () => {
-      wsConnected.value = false
-      wsConnecting.value = false
-    }
-    ws.onmessage = (ev) => {
-      try {
-        handleWsPayload(JSON.parse(String(ev.data)))
-      } catch {
-        /* ignore */
-      }
-    }
-  } catch {
-    wsConnected.value = false
-    wsConnecting.value = false
-    scheduleReconnect()
-  }
-}
-
-function disconnectWs(clearTimer = true): void {
-  if (clearTimer && reconnectTimer) {
-    clearTimeout(reconnectTimer)
-    reconnectTimer = null
-  }
-  if (ws) {
-    ws.onopen = null
-    ws.onclose = null
-    ws.onerror = null
-    ws.onmessage = null
-    ws.close()
-    ws = null
-  }
-  wsConnected.value = false
-  wsConnecting.value = false
 }
 
 onMounted(async () => {
@@ -631,4 +530,5 @@ onUnmounted(() => {
 })
 </script>
 
+<style scoped src="./im-messenger/im-messenger.css"></style>
 <style scoped src="./ImMessengerResponsive.css"></style>

@@ -513,6 +513,114 @@ jobs:
           publish_json_atomically "${RUNNER_TEMP}/manifest.json" "${stable_root}/manifest.json"
           echo "Unified Windows + macOS release published to official and stable paths."
 
+  cross-platform-parity:
+    needs: [generate-manifest]
+    if: >-
+      always() &&
+      (inputs.verify_only == true || needs.generate-manifest.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/download-artifact@v4
+        if: ${{ inputs.verify_only != true }}
+        with:
+          name: xcagi-download-manifest
+          path: ${{ runner.temp }}/manifest
+      - name: Fetch published manifest (verify-only)
+        if: ${{ inputs.verify_only == true }}
+        run: |
+          set -euo pipefail
+          version="${{ inputs.version }}"
+          mkdir -p "${RUNNER_TEMP}/manifest"
+          curl -fsSL \
+            --retry 3 \
+            --retry-all-errors \
+            --retry-delay 2 \
+            --connect-timeout 15 \
+            --max-time 60 \
+            "https://xiu-ci.com/xcagi-v${version}/manifest.json" \
+            -o "${RUNNER_TEMP}/manifest/manifest.json"
+      - name: Verify manifest parity between Windows and macOS artifacts
+        run: |
+          set -euo pipefail
+          manifest="${RUNNER_TEMP}/manifest/manifest.json"
+          test -f "$manifest"
+          top_version="$(jq -er '.version' "$manifest")"
+          top_git_sha="$(jq -er '.git_sha' "$manifest")"
+          # Manifest structure (scripts/package/generate-download-manifest.py):
+          # enterprise.win is a single object and enterprise.mac is an array
+          # (multi-arch dmg/pkg, platform key is exactly "mac"); entries carry
+          # url/sha256/size/filename only — version/git_sha live at the manifest
+          # top level and are embedded in the artifact filenames.
+          jq -e '
+            .release_ready == true and
+            (.channels.official_download.enterprise | type == "object" and has("win") and has("mac")) and
+            (.channels.official_download.enterprise.win | type == "object" and
+              (.url | type == "string" and length > 0) and
+              (.sha256 | type == "string" and length > 0) and
+              (.size | type == "number" and . > 0) and
+              (.filename | type == "string" and length > 0)) and
+            (.channels.official_download.enterprise.mac | type == "array" and length > 0) and
+            (all(.channels.official_download.enterprise.mac[];
+              (.url | type == "string" and length > 0) and
+              (.sha256 | type == "string" and length > 0) and
+              (.size | type == "number" and . > 0) and
+              (.filename | type == "string" and length > 0)))
+          ' "$manifest" >/dev/null || {
+            echo "::error::Manifest cross-platform structure invalid: expected .channels.official_download.enterprise.win object plus non-empty .mac array (platform key must be mac) with url/sha256/size/filename, and release_ready=true."
+            exit 1
+          }
+          jq -e --arg v "$top_version" '
+            ([.channels.official_download.enterprise.win.filename] +
+             [.channels.official_download.enterprise.mac[].filename]) | all(contains($v))
+          ' "$manifest" >/dev/null || {
+            echo "::error::Cross-platform parity mismatch: manifest top-level version=${top_version} is not embedded in every win/mac artifact filename."
+            exit 1
+          }
+          echo "Manifest parity OK: version=${top_version} git_sha=${top_git_sha} covers win + mac artifact entries."
+      - name: Verify latest.yml vs latest-mac.yml identity parity
+        run: |
+          set -euo pipefail
+          manifest="${RUNNER_TEMP}/manifest/manifest.json"
+          expected_version="$(jq -er '.version' "$manifest")"
+          expected_sha="$(jq -er '.git_sha' "$manifest")"
+          if [ "${{ inputs.verify_only }}" = "true" ]; then
+            base="https://xiu-ci.com/releases/stable"
+          else
+            base="https://xiu-ci.com/xcagi-v${expected_version}"
+          fi
+          echo "Fetching per-platform update metadata from ${base}/enterprise"
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "$tmpdir"' EXIT
+          curl -fsSL --retry 3 --retry-all-errors --retry-delay 2 --connect-timeout 15 --max-time 60 \
+            "${base}/enterprise/latest.yml" -o "$tmpdir/latest.yml"
+          curl -fsSL --retry 3 --retry-all-errors --retry-delay 2 --connect-timeout 15 --max-time 60 \
+            "${base}/enterprise/latest-mac.yml" -o "$tmpdir/latest-mac.yml"
+          win_version="$(sed -n 's/^productVersion:[[:space:]]*//p' "$tmpdir/latest.yml" | head -n 1)"
+          win_sha="$(sed -n 's/^buildSha:[[:space:]]*//p' "$tmpdir/latest.yml" | head -n 1)"
+          mac_version="$(sed -n 's/^productVersion:[[:space:]]*//p' "$tmpdir/latest-mac.yml" | head -n 1)"
+          mac_sha="$(sed -n 's/^buildSha:[[:space:]]*//p' "$tmpdir/latest-mac.yml" | head -n 1)"
+          missing=()
+          [ -n "$win_version" ] || missing+=("latest.yml productVersion")
+          [ -n "$win_sha" ] || missing+=("latest.yml buildSha")
+          [ -n "$mac_version" ] || missing+=("latest-mac.yml productVersion")
+          [ -n "$mac_sha" ] || missing+=("latest-mac.yml buildSha")
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf '::error::Update metadata is missing identity lines: %s\n' "${missing[*]}"
+            exit 1
+          fi
+          if [ "$win_version" != "$mac_version" ] || [ "$win_sha" != "$mac_sha" ] ||
+             [ "$win_version" != "$expected_version" ] || [ "$win_sha" != "$expected_sha" ] ||
+             [ "$mac_version" != "$expected_version" ] || [ "$mac_sha" != "$expected_sha" ]; then
+            printf '::error::Cross-platform parity mismatch: win version=%s git_sha=%s / mac version=%s git_sha=%s\n' \
+              "$win_version" "$win_sha" "$mac_version" "$mac_sha"
+            echo "Manifest top-level identity: version=${expected_version} git_sha=${expected_sha}"
+            exit 1
+          fi
+          echo "Windows + macOS parity OK: ${expected_version} @ ${expected_sha}"
+
   verify-download:
     needs: [generate-manifest]
     if: >-
@@ -577,7 +685,7 @@ jobs:
           done
 
   verify-public-windows-signature:
-    needs: [verify-download]
+    needs: [verify-download, cross-platform-parity]
     if: >-
       always() &&
       needs.verify-download.result == 'success'
@@ -641,11 +749,12 @@ jobs:
             -ExpectedPublisher $env:XCAGI_WINDOWS_PUBLISHER_NAME
 
   publish-website-pointer:
-    needs: [generate-manifest, verify-download, verify-public-windows-signature]
+    needs: [generate-manifest, cross-platform-parity, verify-download, verify-public-windows-signature]
     if: >-
       always() &&
       inputs.verify_only != true &&
       needs.generate-manifest.result == 'success' &&
+      needs.cross-platform-parity.result == 'success' &&
       needs.verify-download.result == 'success' &&
       needs.verify-public-windows-signature.result == 'success'
     runs-on: ubuntu-latest
@@ -779,7 +888,7 @@ jobs:
           echo "Download center and changelog verified for ${version} @ ${expected_sha}."
 
   github-release:
-    needs: [release-preflight, windows, macos, verify-download, verify-public-windows-signature, verify-download-center]
+    needs: [release-preflight, windows, macos, cross-platform-parity, verify-download, verify-public-windows-signature, verify-download-center]
     runs-on: ubuntu-latest
     if: >-
       always() &&
@@ -787,6 +896,7 @@ jobs:
       needs.release-preflight.result == 'success' &&
       needs.windows.result == 'success' &&
       needs.macos.result == 'success' &&
+      needs.cross-platform-parity.result == 'success' &&
       needs.verify-download.result == 'success' &&
       needs.verify-public-windows-signature.result == 'success' &&
       needs.verify-download-center.result == 'success'

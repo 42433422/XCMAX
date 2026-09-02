@@ -1,6 +1,5 @@
 import { createI18n } from 'vue-i18n'
-import zhCN from './locales/zh-CN'
-import enUS from './locales/en-US'
+import { enUSMessages, zhCNMessages } from './locales/messages'
 
 const LOCALE_KEY = 'xcagi_locale'
 
@@ -19,8 +18,8 @@ export const i18n = createI18n({
   locale: detectLocale(),
   fallbackLocale: 'zh-CN',
   messages: {
-    'zh-CN': zhCN,
-    'en-US': enUS,
+    'zh-CN': zhCNMessages,
+    'en-US': enUSMessages,
   },
 })
 

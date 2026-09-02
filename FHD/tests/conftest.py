@@ -151,10 +151,15 @@ def _workspace_root_for_excel_reload_tests(request, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _compat_db_coverage_ramp_tenant_scope(request, monkeypatch):
-    """Root-level coverage-ramp compat DB tests use narrow legacy mock schemas."""
+    """Compat DB tests migrated from coverage-ramp use narrow legacy mock schemas.
+
+    原文件名 ``test_coverage_ramp_phase3_p1_deep_backend.py`` /
+    ``test_coverage_ramp_phase6_p17_backend.py`` 已于 2026-09-01 去
+    ``coverage_ramp_`` 前缀迁出为契约测试（D2-5），fixture 引用同步更新。
+    """
     if request.node.fspath.basename not in {
-        "test_coverage_ramp_phase3_p1_deep_backend.py",
-        "test_coverage_ramp_phase6_p17_backend.py",
+        "test_phase3_p1_deep_backend.py",
+        "test_phase6_p17_backend.py",
     }:
         yield
         return

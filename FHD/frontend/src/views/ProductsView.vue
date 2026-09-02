@@ -146,14 +146,13 @@ import { ref, computed, onMounted } from 'vue';
 import { useProductsStore } from '@/stores/products';
 import { storeToRefs } from 'pinia';
 import customersApi from '@/api/customers';
-import productsApi from '@/api/products';
-import templatePreviewApi from '@/api/templatePreview';
 import { api } from '@/api/index';
 import DataTable from '@/components/DataTable.vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import { appAlert } from '@/utils/appDialog';
 import { useCoreNavLabel } from '@/composables/useCoreNavLabel';
 import { useIndustryFieldSchema } from '@/composables/useIndustryFieldSchema';
+import { useProductsPriceListExport } from '@/composables/useProductsPriceListExport';
 const pageNavTitle = useCoreNavLabel('products');
 // 行业感知：products 子系统的实体名与字段表头随行业变（产品/人员、型号/工号、规格/班次、单价/时薪）
 const productsSchema = useIndustryFieldSchema('products');
@@ -186,9 +185,15 @@ const selectedUnit = ref('');
 const currentPage = ref(1);
 const perPage = ref(1000);
 const hasMore = ref(false);
-/** Word 价目表模板 slug，传给 /api/products/export.docx?template_id= */
-const selectedWordTemplateSlug = ref('');
-const wordTemplateOptions = ref([]);
+// 价目表导出与 Word 模板选择逻辑抽至 composable，此处解构保留同名顶层绑定（测试兼容面）
+const {
+  selectedWordTemplateSlug,
+  wordTemplateOptions,
+  docxSlugFromListTemplate,
+  loadWordTemplateOptions,
+  exportPriceList,
+  exportPriceListExcel,
+} = useProductsPriceListExport({ selectedUnit, searchQuery });
 const formData = ref({
   id: null,
   model_number: '',
@@ -331,123 +336,6 @@ const confirmBatchDelete = async () => {
   }
 };
 
-function docxSlugFromListTemplate(tpl) {
-  const fn = String(tpl?.filename || '').trim();
-  if (fn.toLowerCase().endsWith('.docx')) {
-    return fn.replace(/\.docx$/i, '');
-  }
-  const raw = String(tpl?.id || '').replace(/^fs:/i, '').trim();
-  if (raw.toLowerCase().endsWith('.docx')) {
-    return raw.replace(/\.docx$/i, '');
-  }
-  return String(tpl?.slug || '').trim();
-}
-
-const exportPriceList = async () => {
-  try {
-    const params = {};
-    if (selectedUnit.value) params.unit = selectedUnit.value;
-    if (searchQuery.value) params.keyword = searchQuery.value;
-    if (selectedWordTemplateSlug.value) params.template_id = selectedWordTemplateSlug.value;
-    const response = await productsApi.exportUnitProductsDocx(params);
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    const contentDisposition = response.headers?.get('content-disposition') || '';
-    let filename = '产品价格表.docx';
-    const utf8NameMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
-    const plainNameMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
-    if (utf8NameMatch?.[1]) {
-      try {
-        filename = decodeURIComponent(utf8NameMatch[1]);
-      } catch (_) {
-        filename = utf8NameMatch[1];
-      }
-    } else if (plainNameMatch?.[1]) {
-      filename = plainNameMatch[1];
-    }
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-  } catch (e) {
-    console.error('导出失败:', e);
-    await appAlert('导出失败: ' + (e.message || '未知错误'));
-  }
-};
-
-const exportPriceListExcel = async () => {
-  try {
-    const params = {};
-    if (selectedUnit.value) params.unit = selectedUnit.value;
-    if (searchQuery.value) params.keyword = searchQuery.value;
-    const response = await productsApi.exportUnitProductsXlsx(params);
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    const contentDisposition = response.headers?.get('content-disposition') || '';
-    let filename = '产品价格表.xlsx';
-    const utf8NameMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
-    const plainNameMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
-    if (utf8NameMatch?.[1]) {
-      try {
-        filename = decodeURIComponent(utf8NameMatch[1]);
-      } catch (_) {
-        filename = utf8NameMatch[1];
-      }
-    } else if (plainNameMatch?.[1]) {
-      filename = plainNameMatch[1];
-    }
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-  } catch (e) {
-    console.error('Excel 导出失败:', e);
-    await appAlert('Excel 导出失败: ' + (e.message || '未知错误'));
-  }
-};
-
-const loadWordTemplateOptions = async () => {
-  try {
-    const res = await templatePreviewApi.listTemplates();
-    if (!res?.success) return;
-    const templates = Array.isArray(res.templates) ? res.templates : [];
-    const slugSeen = new Set();
-    const rows = [];
-    for (const tpl of templates) {
-      if (!tpl || tpl.virtual || tpl.category !== 'word') continue;
-      const fn = String(tpl.filename || '').toLowerCase();
-      const nm = String(tpl.name || '').toLowerCase();
-      const id = String(tpl.id || '').toLowerCase();
-      const isPriceLike =
-        fn.includes('price_list') ||
-        fn.includes('价目') ||
-        fn.includes('价格表') ||
-        nm.includes('价目') ||
-        nm.includes('价格表') ||
-        id.includes('price_list');
-      if (!isPriceLike) continue;
-      const slug = docxSlugFromListTemplate(tpl);
-      if (!slug || slugSeen.has(slug)) continue;
-      slugSeen.add(slug);
-      rows.push({
-        id: slug,
-        name: `${tpl.name || slug}（Word）`,
-      });
-    }
-    if (!rows.length) {
-      rows.push({ id: 'price_list_default', name: '产品价格表（Word 价目，默认）' });
-    }
-    wordTemplateOptions.value = rows;
-    if (!rows.find((r) => String(r.id) === String(selectedWordTemplateSlug.value))) {
-      selectedWordTemplateSlug.value = '';
-    }
-  } catch (e) {
-    console.error('加载 Word 价目模板失败:', e);
-  }
-};
-
 const triggerImportExcel = () => {
   importExcelInput.value?.click();
 };
@@ -524,13 +412,4 @@ onMounted(() => {
 });
 </script>
 
-<style scoped>
-.lbl-inline {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: #334155;
-  white-space: nowrap;
-}
-</style>
+<style scoped src="./ProductsView.css"></style>

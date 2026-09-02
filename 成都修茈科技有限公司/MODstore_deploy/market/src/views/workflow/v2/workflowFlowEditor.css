@@ -1,0 +1,332 @@
+/* ===== 工作流编辑器深色主题变量 ===== */
+.wf2 {
+  --wf-canvas-bg: #0b1120;
+  --wf-panel-bg: rgba(15, 23, 42, 0.88);
+  --wf-panel-border: rgba(148, 163, 184, 0.1);
+  --wf-text-primary: #f1f5f9;
+  --wf-text-secondary: #94a3b8;
+  --wf-text-muted: #64748b;
+  --wf-accent: #6366f1;
+  --wf-accent-glow: rgba(99, 102, 241, 0.35);
+
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  background: var(--wf-canvas-bg);
+}
+
+/* Flash 提示 */
+.wf2-flash {
+  position: absolute;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  z-index: 30;
+  backdrop-filter: blur(12px);
+  animation: wf2-flash-slide 0.3s ease;
+}
+
+@keyframes wf2-flash-slide {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.wf2-flash--ok {
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  color: #4ade80;
+  box-shadow: 0 0 20px rgba(34, 197, 94, 0.15);
+}
+
+.wf2-flash--err {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: #f87171;
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.15);
+}
+
+.wf2-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.wf2-canvas-wrap {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+  background: var(--wf-canvas-bg);
+}
+
+/* 覆盖 Vue Flow 默认背景与连线 */
+:deep(.vue-flow__container) {
+  background: var(--wf-canvas-bg) !important;
+}
+
+:deep(.vue-flow__edge path) {
+  stroke: rgba(148, 163, 184, 0.35);
+  stroke-width: 2;
+  transition: stroke 0.2s ease;
+}
+
+:deep(.vue-flow__edge.selected path),
+:deep(.vue-flow__edge:hover path) {
+  stroke: rgba(99, 102, 241, 0.7);
+  stroke-width: 2.5;
+  filter: drop-shadow(0 0 4px rgba(99, 102, 241, 0.4));
+}
+
+:deep(.vue-flow__edge-text) {
+  fill: #94a3b8;
+  font-size: 11px;
+}
+
+:deep(.vue-flow__controls) {
+  background: rgba(15, 23, 42, 0.8) !important;
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(148, 163, 184, 0.12) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.4) !important;
+}
+
+:deep(.vue-flow__controls-button) {
+  background: transparent !important;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.08) !important;
+  color: #94a3b8 !important;
+}
+
+:deep(.vue-flow__controls-button:hover) {
+  background: rgba(148, 163, 184, 0.1) !important;
+  color: #f1f5f9 !important;
+}
+
+:deep(.vue-flow__controls-button svg) {
+  fill: currentColor;
+}
+
+:deep(.vue-flow__minimap) {
+  background: rgba(15, 23, 42, 0.7) !important;
+  border: 1px solid rgba(148, 163, 184, 0.1) !important;
+  border-radius: 10px !important;
+}
+
+.wf2-canvas-overlay,
+.wf2-canvas-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  color: var(--wf-text-muted);
+}
+
+.wf2-canvas-empty__inner {
+  background: rgba(30, 41, 59, 0.7);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  padding: 32px 40px;
+  border-radius: 16px;
+  text-align: center;
+  pointer-events: auto;
+  box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.5);
+}
+
+.wf2-canvas-empty__inner h3 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  color: var(--wf-text-primary);
+  font-weight: 600;
+}
+
+.wf2-canvas-empty__inner p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--wf-text-secondary);
+}
+
+/* 沙盒结果面板 */
+.wf2-sandbox-panel {
+  position: absolute;
+  right: 16px;
+  top: 100px;
+  width: 380px;
+  max-height: calc(100vh - 140px);
+  background: var(--wf-panel-bg);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--wf-panel-border);
+  border-radius: 14px;
+  box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  z-index: 20;
+}
+
+.wf2-sandbox-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--wf-panel-border);
+}
+
+.wf2-sandbox-panel__head h4 {
+  margin: 0;
+  font-size: 14px;
+  color: var(--wf-text-primary);
+  font-weight: 600;
+}
+
+.wf2-tb-btn {
+  font-size: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(30, 41, 59, 0.6);
+  color: var(--wf-text-secondary);
+  padding: 5px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.wf2-tb-btn:hover {
+  background: rgba(148, 163, 184, 0.15);
+  color: var(--wf-text-primary);
+}
+
+.wf2-sandbox-panel__pre {
+  margin: 0;
+  padding: 12px 16px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--wf-text-primary);
+  background: rgba(15, 23, 42, 0.5);
+  white-space: pre-wrap;
+  overflow: auto;
+  border-radius: 0 0 14px 14px;
+}
+
+/* 模板弹窗 */
+.wf2-tplmask {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+  padding: 16px;
+}
+
+.wf2-tplcard {
+  width: min(520px, 100%);
+  background: rgba(30, 41, 59, 0.95);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 16px;
+  box-shadow: 0 32px 64px -16px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+}
+
+.wf2-tplcard__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.wf2-tplcard__head h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--wf-text-primary);
+  font-weight: 600;
+}
+
+.wf2-tplcard__body {
+  padding: 16px 20px;
+}
+
+.wf2-tplcard__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.wf2-tplfield {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.wf2-tplfield span {
+  font-size: 13px;
+  color: var(--wf-text-secondary);
+  font-weight: 500;
+}
+
+.wf2-tplfield input,
+.wf2-tplfield textarea,
+.wf2-tplfield select {
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--wf-text-primary);
+  background: rgba(15, 23, 42, 0.6);
+  transition: all 0.2s ease;
+}
+
+.wf2-tplfield input::placeholder,
+.wf2-tplfield textarea::placeholder {
+  color: var(--wf-text-muted);
+}
+
+.wf2-tplfield input:focus,
+.wf2-tplfield textarea:focus,
+.wf2-tplfield select:focus {
+  outline: none;
+  border-color: var(--wf-accent);
+  box-shadow: 0 0 0 3px var(--wf-accent-glow);
+  background: rgba(15, 23, 42, 0.8);
+}
+
+.wf2-tplfield--inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+.wf2-tplrow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.wf2-fade-enter-active,
+.wf2-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.wf2-fade-enter-from,
+.wf2-fade-leave-to {
+  opacity: 0;
+}

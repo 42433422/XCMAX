@@ -1,0 +1,3001 @@
+// ===== [后端(app)] auth_decorators.py =====
+from __future__ import annotations
+from collections.abc import Callable
+from contextvars import ContextVar, Token
+from functools import wraps
+from typing import Any
+from app.config import Config
+from app.db.models import User
+from app.http.json_response import json_response
+from app.services import get_auth_service, get_session_service
+_current_user_ctx: ContextVar[User | None] = ContextVar("current_user", default=None)
+_session_id_ctx: ContextVar[str | None] = ContextVar("session_id", default=None)
+def get_current_user() -> User | None:
+    return _current_user_ctx.get()
+def get_current_session_id() -> str | None:
+    return _session_id_ctx.get()
+def _extract_session_id() -> str | None:
+    from app.http.request_context import get_current_http_request
+    req = get_current_http_request()
+    if req is None:
+        return None
+    auth_header = req.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        return auth_header[7:]
+    cookie_name = getattr(Config, "SESSION_COOKIE_NAME", "session_id")
+    return req.cookies.get(cookie_name)
+def login_required(f: Callable) -> Callable:
+    @wraps(f)
+    def decorated_function(*args: Any, **kwargs: Any):
+        session_id = _extract_session_id()
+        if not session_id:
+            return (
+                json_response(
+                    {
+                        "success": False,
+                        "message": {"code": "UNAUTHORIZED", "message": "请先登录"},
+                    },
+                    401,
+                ),
+                401,
+            )
+        session_service = get_session_service()
+        user = session_service.validate_session(session_id)
+        if not user:
+            return (
+                json_response(
+                    {
+                        "success": False,
+                        "message": {"code": "SESSION_EXPIRED", "message": "会话已过期，请重新登录"},
+                    },
+                    401,
+                ),
+                401,
+            )
+        if not user.is_active:
+            return (
+                json_response(
+                    {
+                        "success": False,
+                        "message": {"code": "ACCOUNT_DISABLED", "message": "账户已被禁用"},
+                    },
+                    403,
+                ),
+                403,
+            )
+        t_user: Token[User | None] = _current_user_ctx.set(user)
+        t_sid: Token[str | None] = _session_id_ctx.set(session_id)
+        try:
+            return f(*args, **kwargs)
+        finally:
+            _current_user_ctx.reset(t_user)
+            _session_id_ctx.reset(t_sid)
+    return decorated_function
+def role_required(roles: list[str]) -> Callable:
+    def decorator(f: Callable) -> Callable:
+        @wraps(f)
+        def decorated_function(*args: Any, **kwargs: Any):
+            user = get_current_user()
+            if not user:
+                return (
+                    json_response(
+                        {
+                            "success": False,
+                            "message": {"code": "UNAUTHORIZED", "message": "请先登录"},
+                        },
+                        401,
+                    ),
+                    401,
+                )
+            if user.role not in roles and user.role != "admin":
+                return (
+                    json_response(
+                        {
+                            "success": False,
+                            "message": {"code": "FORBIDDEN", "message": "权限不足"},
+                        },
+                        403,
+                    ),
+                    403,
+                )
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+def permission_required(permission_code: str) -> Callable:
+    def decorator(f: Callable) -> Callable:
+        @wraps(f)
+        def decorated_function(*args: Any, **kwargs: Any):
+            user = get_current_user()
+            if not user:
+                return (
+                    json_response(
+                        {
+                            "success": False,
+                            "message": {"code": "UNAUTHORIZED", "message": "请先登录"},
+                        },
+                        401,
+                    ),
+                    401,
+                )
+            auth_service = get_auth_service()
+            if not auth_service.has_permission(user, permission_code):
+                return (
+                    json_response(
+                        {
+                            "success": False,
+                            "message": {"code": "FORBIDDEN", "message": "权限不足"},
+                        },
+                        403,
+                    ),
+                    403,
+                )
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+// ===== [后端(app)] bootstrap.py =====
+from __future__ import annotations
+from typing import TYPE_CHECKING
+from app.contexts.flags import is_event_primary_enabled
+from app.di.registry import get_service_registry
+if TYPE_CHECKING:
+    from app.application.ai_chat_app_service import AIChatApplicationService
+    from app.application.customer_app_service import CustomerApplicationService
+    from app.application.facades.shipment_event_primary import (
+        ShipmentApplicationServiceEventPrimary,
+    )
+    from app.application.file_analysis_app_service import FileAnalysisService
+    from app.application.shipment_app_service import ShipmentApplicationService
+    from app.application.template_app_service import TemplateApplicationService
+    from app.application.unit_products_import_app_service import UnitProductsImportService
+    from app.application.workflow.ports.checkpoint import CheckpointStore
+    from app.application.workflow.ports.runtime import WorkflowRuntime
+    from app.services.extract_log_service import ExtractLogService
+    from app.services.materials_service import MaterialsService
+    from app.services.product_import_service import ProductImportService
+    from app.services.products_service import ProductsService
+def get_shipment_application_service_core() -> ShipmentApplicationService:
+    return get_service_registry().shipment_application_service_core
+def _get_shipment_app_service_event_primary() -> ShipmentApplicationServiceEventPrimary:
+    return get_service_registry().shipment_event_primary_facade
+def get_shipment_app_service() -> (
+    ShipmentApplicationService | ShipmentApplicationServiceEventPrimary
+):
+    if is_event_primary_enabled("shipment"):
+        return _get_shipment_app_service_event_primary()
+    return get_shipment_application_service_core()
+def get_template_app_service() -> TemplateApplicationService:
+    return get_service_registry().template_application_service
+def get_materials_service() -> MaterialsService:
+    return get_service_registry().materials_service
+def get_products_service() -> ProductsService:
+    return get_service_registry().products_service
+def get_customer_app_service() -> CustomerApplicationService:
+    return get_service_registry().customer_application_service
+def get_extract_log_service() -> ExtractLogService:
+    return get_service_registry().extract_log_service
+def get_product_import_service() -> ProductImportService:
+    return get_service_registry().product_import_service
+def get_ai_chat_app_service() -> AIChatApplicationService:
+    return get_service_registry().ai_chat_application_service
+def get_file_analysis_service() -> FileAnalysisService:
+    return get_service_registry().file_analysis_application_service
+def get_unit_products_import_service() -> UnitProductsImportService:
+    return get_service_registry().unit_products_import_application_service
+def get_workflow_runtime() -> "WorkflowRuntime":
+    return get_service_registry().workflow_runtime
+def get_workflow_checkpointer() -> "CheckpointStore":
+    return get_service_registry().workflow_checkpointer
+def reload_workflow_runtime() -> "WorkflowRuntime":
+    return get_service_registry().reload_workflow_runtime()
+def close_workflow_resources() -> None:
+    get_service_registry().close_workflow_resources()
+    return None
+// ===== [后端(app)] build_identity.py =====
+from __future__ import annotations
+import json
+import os
+import subprocess
+from pathlib import Path
+from typing import Any
+def _release_root() -> Path:
+    configured = (os.environ.get("FHD_DEPLOY_ROOT") or "").strip()
+    if configured:
+        return Path(configured)
+    return Path(__file__).resolve().parents[1]
+def _identity_file() -> dict[str, Any]:
+    path = _release_root() / ".build-identity.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+def _local_git_sha() -> str:
+    root = _release_root()
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return result.stdout.strip() if result.returncode == 0 else ""
+def _stamp(name: str) -> str:
+    try:
+        return (_release_root() / name).read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+def _admin_console_identity() -> dict[str, Any]:
+    path = _release_root() / "templates" / "admin-vue-dist" / ".release-identity.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+def build_identity() -> dict[str, str]:
+    packaged = _identity_file()
+    admin_console = _admin_console_identity()
+    git_sha = str(
+        os.environ.get("XCAGI_GIT_SHA")
+        or os.environ.get("FHD_GIT_SHA")
+        or os.environ.get("GIT_SHA")
+        or packaged.get("git_sha")
+        or _local_git_sha()
+        or ""
+    ).strip()
+    image_digest = str(
+        os.environ.get("XCAGI_IMAGE_DIGEST")
+        or os.environ.get("FHD_API_IMAGE_DIGEST")
+        or packaged.get("image_digest")
+        or _stamp(".deploy-image-digest")
+        or ""
+    ).strip()
+    artifact_sha256 = str(
+        os.environ.get("XCAGI_ARTIFACT_SHA256")
+        or packaged.get("artifact_sha256")
+        or _stamp(".deploy-sha256")
+        or ""
+    ).strip()
+    admin_console_sha256 = str(
+        os.environ.get("XCAGI_ADMIN_CONSOLE_SHA256")
+        or os.environ.get("FHD_ADMIN_CONSOLE_SHA256")
+        or packaged.get("admin_console_sha256")
+        or admin_console.get("sha256")
+        or ""
+    ).strip()
+    return {
+        "admin_console_sha256": admin_console_sha256,
+        "admin_console_git_sha": str(admin_console.get("git_sha") or "").strip(),
+        "artifact_sha256": artifact_sha256,
+        "built_at": str(packaged.get("built_at") or ""),
+        "git_sha": git_sha,
+        "image_digest": image_digest,
+    }
+__all__ = ["build_identity"]
+// ===== [后端(app)] config.py =====
+import logging
+import os
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+logger = logging.getLogger(__name__)
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(BASE_DIR, ".env"))
+    _xcagi_env = os.path.join(BASE_DIR, "XCAGI", ".env")
+    if os.path.isfile(_xcagi_env):
+        load_dotenv(_xcagi_env, override=False)
+except ImportError:
+    pass
+try:
+    from app.desktop_runtime import configure_desktop_environment, is_desktop_mode
+    if is_desktop_mode():
+        configure_desktop_environment(os.environ.get("XCAGI_DATA_DIR"))
+except RECOVERABLE_ERRORS:
+    pass
+class Config:
+    SECRET_KEY = os.environ.get("SECRET_KEY")
+    DEBUG = os.environ.get("XCAGI_DEBUG", "1") == "1"
+    DESKTOP_MODE = os.environ.get("XCAGI_DESKTOP_MODE", "0").lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    CACHE_REDIS_URL = os.environ.get(
+        "CACHE_REDIS_URL",
+        "" if DESKTOP_MODE else "redis://localhost:6379/0",
+    )
+    CELERY = {
+        "broker_url": os.environ.get(
+            "CELERY_BROKER_URL",
+            "memory://" if DESKTOP_MODE else "redis://localhost:6379/1",
+        ),
+        "result_backend": os.environ.get(
+            "CELERY_RESULT_BACKEND",
+            "cache+memory://" if DESKTOP_MODE else "redis://localhost:6379/2",
+        ),
+        "task_serializer": "json",
+        "result_serializer": "json",
+        "accept_content": ["json"],
+        "timezone": "Asia/Shanghai",
+        "enable_utc": False,
+    }
+    _desktop_data = (os.environ.get("XCAGI_DATA_DIR") or "").strip()
+    _default_db = (
+        f"sqlite:///{os.path.join(_desktop_data, 'data', 'xcagi.db')}"
+        if DESKTOP_MODE and _desktop_data
+        else (
+            f"sqlite:///{os.path.join(BASE_DIR, 'data', 'xcagi.db')}"
+            if DESKTOP_MODE
+            else "postgresql+psycopg://xcagi:xcagi@localhost:5432/xcagi"
+        )
+    )
+    DATABASE_URL = os.environ.get("DATABASE_URL", _default_db)
+    VECTOR_DB_URL = os.environ.get("VECTOR_DB_URL", DATABASE_URL)
+    DATABASE_PATH = os.environ.get("DATABASE_PATH", os.path.join(BASE_DIR, "data"))
+    UPLOAD_FOLDER = os.environ.get("UPLOAD_FOLDER", os.path.join(BASE_DIR, "uploads"))
+    MAX_CONTENT_LENGTH = 16 * 1024 * 1024
+    EXCEL_VECTOR_DB_PATH = os.environ.get(
+        "EXCEL_VECTOR_DB_PATH",
+        os.path.join(BASE_DIR, "data", "excel_vectors.db"),
+    )
+    EXCEL_VECTOR_TOP_K = int(os.environ.get("EXCEL_VECTOR_TOP_K", "5"))
+    EXCEL_VECTOR_CHUNK_WINDOW = int(os.environ.get("EXCEL_VECTOR_CHUNK_WINDOW", "20"))
+    SESSION_COOKIE_NAME = os.environ.get("SESSION_COOKIE_NAME", "session_id")
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "0") == "1"
+    SESSION_COOKIE_SAMESITE = os.environ.get("SESSION_COOKIE_SAMESITE", "Lax")
+    SESSION_COOKIE_MAX_AGE = int(os.environ.get("SESSION_COOKIE_MAX_AGE", "315360000"))
+    CORS_ORIGINS = os.environ.get(
+        "CORS_ORIGINS",
+        "http://localhost:5000,http://127.0.0.1:5000,"
+        "http://localhost:5001,http://127.0.0.1:5001,"
+        "http://localhost:5173,http://127.0.0.1:5173,"
+        "https://*.qq.com,https://*.wechat.com",
+    )
+    LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
+    LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+class DevelopmentConfig(Config):
+    DEBUG = True
+    SECRET_KEY = os.environ.get("SECRET_KEY") or os.urandom(32).hex()
+    CACHE_REDIS_URL = os.environ.get(
+        "CACHE_REDIS_URL",
+        "" if Config.DESKTOP_MODE else "redis://localhost:6379/1",
+    )
+    CELERY = {
+        **Config.CELERY,
+        "broker_url": os.environ.get(
+            "CELERY_BROKER_URL",
+            "memory://" if Config.DESKTOP_MODE else "redis://localhost:6379/3",
+        ),
+        "result_backend": os.environ.get(
+            "CELERY_RESULT_BACKEND",
+            "cache+memory://" if Config.DESKTOP_MODE else "redis://localhost:6379/4",
+        ),
+    }
+def _validate_production_secrets():
+    secret_key = os.environ.get("SECRET_KEY", "")
+    if not secret_key:
+        if not Config.DEBUG:
+            raise RuntimeError("SECRET_KEY is not set. Set the SECRET_KEY environment variable.")
+        logger.warning("SECRET_KEY is not set. This is insecure for production.")
+    elif len(secret_key) < 32:
+        if not Config.DEBUG:
+            raise RuntimeError(
+                "SECRET_KEY is too short (minimum 32 characters). Use a strong, randomly generated key."
+            )
+        logger.warning("SECRET_KEY is shorter than 32 characters. This is insecure for production.")
+class ProductionConfig(Config):
+    DEBUG = False
+    @classmethod
+    def init_app(cls):
+        _validate_production_secrets()
+        secret_key = os.environ.get("SECRET_KEY")
+        if not secret_key:
+            raise ValueError("生产环境必须设置 SECRET_KEY 环境变量")
+        cls.SECRET_KEY = secret_key
+class TestingConfig(Config):
+    DEBUG = True
+    TESTING = True
+    CACHE_TYPE = "SimpleCache"
+    CACHE_DEFAULT_TIMEOUT = 300
+config_map = {
+    "development": DevelopmentConfig,
+    "production": ProductionConfig,
+    "testing": TestingConfig,
+    "default": DevelopmentConfig,
+}
+def get_config(config_name: str = "default"):
+    return config_map.get(config_name, DevelopmentConfig)
+// ===== [后端(app)] errors.py =====
+from __future__ import annotations
+from enum import Enum
+class ErrorCode(str, Enum):
+    AUTH_TOKEN_EXPIRED = "AUTH_TOKEN_EXPIRED"
+    AUTH_TOKEN_INVALID = "AUTH_TOKEN_INVALID"
+    AUTH_PERMISSION_DENIED = "AUTH_PERMISSION_DENIED"
+    PAYMENT_ORDER_NOT_FOUND = "PAYMENT_ORDER_NOT_FOUND"
+    PAYMENT_AMOUNT_MISMATCH = "PAYMENT_AMOUNT_MISMATCH"
+    PAYMENT_WALLET_INSUFFICIENT_BALANCE = "PAYMENT_WALLET_INSUFFICIENT_BALANCE"
+    PAYMENT_WALLET_RECHARGE_BLOCKED = "PAYMENT_WALLET_RECHARGE_BLOCKED"
+    PAYMENT_ORDER_ALREADY_REFUNDED = "PAYMENT_ORDER_ALREADY_REFUNDED"
+    DB_CONNECTION_FAILED = "DB_CONNECTION_FAILED"
+    DB_QUERY_FAILED = "DB_QUERY_FAILED"
+    DB_TABLE_NOT_FOUND = "DB_TABLE_NOT_FOUND"
+    DB_LOCK_ERROR = "DB_LOCK_ERROR"
+    DB_FOREIGN_KEY_VIOLATION = "DB_FOREIGN_KEY_VIOLATION"
+    LLM_SERVICE_UNAVAILABLE = "LLM_SERVICE_UNAVAILABLE"
+    LLM_RATE_LIMITED = "LLM_RATE_LIMITED"
+    FILE_NOT_FOUND = "FILE_NOT_FOUND"
+    FILE_READ_ERROR = "FILE_READ_ERROR"
+    FILE_WRITE_ERROR = "FILE_WRITE_ERROR"
+    MOD_NOT_FOUND = "MOD_NOT_FOUND"
+    MOD_INSTALL_FAILED = "MOD_INSTALL_FAILED"
+    MOD_SIGNATURE_ERROR = "MOD_SIGNATURE_ERROR"
+    MOD_ACCESS_DENIED = "MOD_ACCESS_DENIED"
+    WORKFLOW_ERROR = "WORKFLOW_ERROR"
+    TOOL_EXECUTION_ERROR = "TOOL_EXECUTION_ERROR"
+    CACHE_UNAVAILABLE = "CACHE_UNAVAILABLE"
+    EXTERNAL_SERVICE_UNAVAILABLE = "EXTERNAL_SERVICE_UNAVAILABLE"
+    FEATURE_DISABLED = "FEATURE_DISABLED"
+    VALIDATION_ERROR = "VALIDATION_ERROR"
+    INTERNAL_ERROR = "INTERNAL_ERROR"
+class AppError(Exception):
+    def __init__(
+        self,
+        code: ErrorCode,
+        message: str = "",
+        status_code: int = 500,
+        detail: dict | None = None,
+    ):
+        self.code = code
+        self.message = message or code.value
+        self.status_code = status_code
+        self.detail = detail or {}
+        super().__init__(self.message)
+    def to_dict(self, *, request_id: str = "") -> dict:
+        return {
+            "success": False,
+            "error_code": self.code.value,
+            "message": self.message,
+            "request_id": request_id,
+            **self.detail,
+        }
+class AuthError(AppError):
+    def __init__(
+        self,
+        code: ErrorCode = ErrorCode.AUTH_TOKEN_INVALID,
+        message: str = "",
+        detail: dict | None = None,
+    ):
+        super().__init__(code, message, status_code=401, detail=detail)
+class AuthPermissionError(AppError):
+    def __init__(
+        self,
+        code: ErrorCode = ErrorCode.AUTH_PERMISSION_DENIED,
+        message: str = "",
+        detail: dict | None = None,
+    ):
+        super().__init__(code, message, status_code=403, detail=detail)
+PermissionError = AuthPermissionError
+class PaymentError(AppError):
+    def __init__(
+        self, code: ErrorCode, message: str = "", status_code: int = 400, detail: dict | None = None
+    ):
+        super().__init__(code, message, status_code=status_code, detail=detail)
+class DatabaseError(AppError):
+    def __init__(
+        self,
+        code: ErrorCode = ErrorCode.DB_QUERY_FAILED,
+        message: str = "",
+        detail: dict | None = None,
+    ):
+        super().__init__(code, message, status_code=503, detail=detail)
+class DatabaseLockError(DatabaseError):
+    def __init__(self, message: str = "", detail: dict | None = None):
+        super().__init__(ErrorCode.DB_LOCK_ERROR, message or "Database is busy", detail=detail)
+class ForeignKeyViolationError(DatabaseError):
+    def __init__(self, message: str = "", detail: dict | None = None):
+        super().__init__(
+            ErrorCode.DB_FOREIGN_KEY_VIOLATION,
+            message or "Data integrity error",
+            detail=detail,
+        )
+class LLMError(AppError):
+    def __init__(
+        self,
+        code: ErrorCode = ErrorCode.LLM_SERVICE_UNAVAILABLE,
+        message: str = "",
+        detail: dict | None = None,
+    ):
+        super().__init__(code, message, status_code=503, detail=detail)
+class ModError(AppError):
+    def __init__(
+        self,
+        code: ErrorCode = ErrorCode.MOD_NOT_FOUND,
+        message: str = "",
+        status_code: int = 404,
+        detail: dict | None = None,
+    ):
+        super().__init__(code, message, status_code=status_code, detail=detail)
+class ModNotFoundError(ModError):
+    def __init__(self, message: str = "", detail: dict | None = None):
+        super().__init__(ErrorCode.MOD_NOT_FOUND, message or "Mod not found", detail=detail)
+class ModInstallFailedError(ModError):
+    def __init__(self, message: str = "", detail: dict | None = None):
+        super().__init__(
+            ErrorCode.MOD_INSTALL_FAILED,
+            message or "Mod install failed",
+            status_code=400,
+            detail=detail,
+        )
+class ModSignatureError(ModError):
+    def __init__(self, message: str = "", detail: dict | None = None):
+        super().__init__(
+            ErrorCode.MOD_SIGNATURE_ERROR,
+            message or "Mod signature invalid",
+            status_code=400,
+            detail=detail,
+        )
+class ModAccessDeniedError(ModError):
+    def __init__(self, message: str = "", detail: dict | None = None):
+        super().__init__(
+            ErrorCode.MOD_ACCESS_DENIED,
+            message or "Mod access denied",
+            status_code=403,
+            detail=detail,
+        )
+class WorkflowError(AppError):
+    def __init__(
+        self,
+        code: ErrorCode = ErrorCode.WORKFLOW_ERROR,
+        message: str = "",
+        status_code: int = 400,
+        detail: dict | None = None,
+    ):
+        super().__init__(code, message, status_code=status_code, detail=detail)
+class ToolExecutionError(WorkflowError):
+    def __init__(self, message: str = "", detail: dict | None = None):
+        super().__init__(
+            ErrorCode.TOOL_EXECUTION_ERROR,
+            message or "Tool execution failed",
+            detail=detail,
+        )
+class DataValidationError(WorkflowError):
+    def __init__(self, message: str = "", detail: dict | None = None):
+        super().__init__(
+            ErrorCode.VALIDATION_ERROR,
+            message or "Validation error",
+            detail=detail,
+        )
+class ServiceUnavailableError(AppError):
+    def __init__(
+        self,
+        code: ErrorCode = ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
+        message: str = "",
+        detail: dict | None = None,
+    ):
+        super().__init__(code, message, status_code=503, detail=detail)
+class ExternalServiceError(AppError):
+    def __init__(
+        self,
+        code: ErrorCode = ErrorCode.EXTERNAL_SERVICE_UNAVAILABLE,
+        message: str = "",
+        status_code: int = 503,
+        detail: dict | None = None,
+    ):
+        super().__init__(code, message, status_code=status_code, detail=detail)
+class ValidationError(AppError):
+    def __init__(
+        self,
+        message: str = "",
+        detail: dict | None = None,
+    ):
+        super().__init__(ErrorCode.VALIDATION_ERROR, message, status_code=422, detail=detail)
+class CacheError(AppError):
+    def __init__(
+        self,
+        message: str = "",
+        detail: dict | None = None,
+    ):
+        super().__init__(ErrorCode.CACHE_UNAVAILABLE, message, status_code=503, detail=detail)
+// ===== [后端(app)] exceptions.py =====
+from __future__ import annotations
+from app.errors import (
+    AppError,
+    AuthError,
+    AuthPermissionError,
+    ErrorCode,
+    ValidationError,
+)
+class AuthenticationError(AuthError):
+    def __init__(self, message: str = "", detail: dict | None = None):
+        super().__init__(ErrorCode.AUTH_TOKEN_INVALID, message, detail)
+class PermissionDeniedError(AuthPermissionError):
+    def __init__(self, message: str = "", detail: dict | None = None):
+        super().__init__(ErrorCode.AUTH_PERMISSION_DENIED, message, detail)
+class NotFoundError(AppError):
+    def __init__(self, message: str = "Resource not found", detail: dict | None = None):
+        super().__init__(ErrorCode.FILE_NOT_FOUND, message, status_code=404, detail=detail)
+__all__ = [
+    "AuthenticationError",
+    "NotFoundError",
+    "PermissionDeniedError",
+    "ValidationError",
+]
+// ===== [后端(app)] extensions.py =====
+from __future__ import annotations
+import functools
+import logging
+import os
+from typing import Any, Callable, TypeVar, cast
+logger = logging.getLogger(__name__)
+FuncT = TypeVar("FuncT", bound=Callable[..., Any])
+def _build_celery_stub() -> Any:
+    class _RetryableSelf:
+        class MaxRetriesExceededError(Exception):
+            pass
+        def retry(self, exc: BaseException | None = None, countdown: int = 0) -> None:
+            raise self.MaxRetriesExceededError()
+    class _CeleryStub:
+        def task(
+            self,
+            *_args: Any,
+            bind: bool = False,
+            max_retries: int = 0,
+            **kwargs: Any,
+        ) -> Callable[[FuncT], FuncT]:
+            def decorator(fn: FuncT) -> FuncT:
+                @functools.wraps(fn)
+                def wrapper(*a: Any, **kw: Any) -> Any:
+                    if bind:
+                        return fn(_RetryableSelf(), *a, **kw)
+                    return fn(*a, **kw)
+                task_fn = cast(Any, wrapper)
+                task_fn.delay = lambda *a2, **k2: wrapper(*a2, **k2)
+                task_fn.apply_async = lambda *a2, **k2: wrapper(*a2, **k2)
+                return cast(FuncT, task_fn)
+            return decorator
+    return _CeleryStub()
+try:
+    from celery import Celery
+    _broker = (os.environ.get("CELERY_BROKER_URL") or "memory://").strip()
+    _backend = (os.environ.get("CELERY_RESULT_BACKEND") or "cache+memory://").strip()
+    celery_app = Celery("xcagi", broker=_broker, backend=_backend)
+except ImportError:
+    logger.warning("celery 未安装，使用内存任务桩")
+    celery_app = _build_celery_stub()
+// ===== [后端(app)] neuro_async_bridge.py =====
+from __future__ import annotations
+import asyncio
+import concurrent.futures
+import logging
+from collections.abc import Coroutine
+from typing import Any, TypeVar
+logger = logging.getLogger(__name__)
+T = TypeVar("T")
+_neuro_main_loop: asyncio.AbstractEventLoop | None = None
+def set_neuro_main_loop(loop: asyncio.AbstractEventLoop | None = None) -> None:
+    global _neuro_main_loop
+    _neuro_main_loop = loop or asyncio.get_running_loop()
+def get_neuro_main_loop() -> asyncio.AbstractEventLoop | None:
+    return _neuro_main_loop
+def run_coroutine_on_neuro_loop(coro: Coroutine[Any, Any, T], timeout: float = 120.0) -> T:
+    loop = _neuro_main_loop
+    if loop is None:
+        return asyncio.run(coro)
+    if loop.is_running():
+        fut = asyncio.run_coroutine_threadsafe(coro, loop)
+        try:
+            return fut.result(timeout=timeout)
+        except concurrent.futures.TimeoutError as e:
+            fut.cancel()
+            raise TimeoutError("neuro loop coroutine timed out") from e
+    return loop.run_until_complete(coro)
+// ===== [后端(app)] request_active_mod_ctx.py =====
+from __future__ import annotations
+import contextvars
+import re
+from collections.abc import Mapping
+_active_mod_id_ctx: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "xcagi_request_active_mod_id",
+    default="",
+)
+_MOD_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+def normalize_active_mod_id(raw: str | None) -> str:
+    v = str(raw or "").strip()
+    if not v:
+        return ""
+    if not _MOD_ID_RE.match(v):
+        return ""
+    return v
+def parse_active_mod_header(headers: Mapping[str, str]) -> str:
+    for k in ("x-xcagi-active-mod-id", "X-XCAGI-Active-Mod-Id"):
+        if k in headers:
+            return normalize_active_mod_id(headers.get(k))
+    return ""
+def set_request_active_mod_id(active_mod_id: str | None):
+    return _active_mod_id_ctx.set(normalize_active_mod_id(active_mod_id))
+def reset_request_active_mod_id(token) -> None:
+    _active_mod_id_ctx.reset(token)
+def get_request_active_mod_id() -> str:
+    return normalize_active_mod_id(_active_mod_id_ctx.get())
+def has_request_active_mod_id() -> bool:
+    return bool(get_request_active_mod_id())
+// ===== [后端(app)] runtime_integrity.py =====
+from __future__ import annotations
+import threading
+import time
+from typing import Any
+from fastapi import FastAPI
+_ISSUE_LOCK = threading.Lock()
+_PROCESS_ISSUES: dict[str, dict[str, Any]] = {}
+def record_runtime_component(
+    app: FastAPI,
+    name: str,
+    *,
+    ok: bool,
+    required: bool = False,
+    detail: str = "",
+) -> None:
+    components = dict(getattr(app.state, "runtime_components", {}) or {})
+    components[name] = {
+        "ok": bool(ok),
+        "required": bool(required),
+        "detail": str(detail or "").strip(),
+    }
+    app.state.runtime_components = components
+def record_runtime_issue(
+    key: str,
+    detail: str,
+    *,
+    required: bool = False,
+    ttl_seconds: float = 300.0,
+) -> None:
+    with _ISSUE_LOCK:
+        _PROCESS_ISSUES[key] = {
+            "ok": False,
+            "required": bool(required),
+            "detail": str(detail or key).strip(),
+            "expires_at": time.monotonic() + max(float(ttl_seconds), 1.0),
+        }
+def clear_runtime_issue(key: str) -> None:
+    with _ISSUE_LOCK:
+        _PROCESS_ISSUES.pop(key, None)
+def _active_process_issues() -> dict[str, dict[str, Any]]:
+    now = time.monotonic()
+    with _ISSUE_LOCK:
+        expired = [key for key, value in _PROCESS_ISSUES.items() if value["expires_at"] <= now]
+        for key in expired:
+            _PROCESS_ISSUES.pop(key, None)
+        return {
+            key: {k: v for k, v in value.items() if k != "expires_at"}
+            for key, value in _PROCESS_ISSUES.items()
+        }
+def runtime_integrity_snapshot(app: FastAPI | None = None) -> dict[str, Any]:
+    components: dict[str, dict[str, Any]] = {}
+    if app is not None:
+        components.update(dict(getattr(app.state, "runtime_components", {}) or {}))
+    components.update(_active_process_issues())
+    failures = [
+        {"component": name, **value}
+        for name, value in sorted(components.items())
+        if not bool(value.get("ok"))
+    ]
+    blockers = [failure for failure in failures if bool(failure.get("required"))]
+    status = "unhealthy" if blockers else "degraded" if failures else "healthy"
+    return {
+        "status": status,
+        "components": components,
+        "failures": failures,
+        "blockers": blockers,
+        "degraded_reasons": [
+            str(failure.get("detail") or failure["component"]) for failure in failures
+        ],
+    }
+def neuro_degraded_reasons(neuro: object) -> list[str]:
+    if not isinstance(neuro, dict) or neuro.get("enabled") is False:
+        return []
+    reasons: list[str] = []
+    if neuro.get("error"):
+        reasons.append("NEURO_HEALTH_UNAVAILABLE")
+    if neuro.get("status") not in (None, "healthy"):
+        reasons.append("NEURO_BUS_UNHEALTHY")
+    if neuro.get("running") is False:
+        reasons.append("NEURO_BUS_NOT_RUNNING")
+    cognition = neuro.get("cognition")
+    if isinstance(cognition, dict):
+        cognition_state = cognition.get("cognition")
+        if isinstance(cognition_state, dict) and cognition_state.get("llm_port_available") is False:
+            reasons.append("LLM_RUNTIME_UNAVAILABLE")
+        evolution = cognition.get("evolution")
+        if isinstance(evolution, dict) and evolution.get("error"):
+            reasons.append("NEURO_EVOLUTION_UNAVAILABLE")
+    return list(dict.fromkeys(reasons))
+__all__ = [
+    "clear_runtime_issue",
+    "neuro_degraded_reasons",
+    "record_runtime_component",
+    "record_runtime_issue",
+    "runtime_integrity_snapshot",
+]
+// ===== [后端(app)] template_analysis_progress.py =====
+from __future__ import annotations
+import threading
+from typing import Any
+_lock = threading.Lock()
+_analysis_progress: dict[str, dict[str, Any]] = {}
+def get_template_analysis_progress(task_id: str) -> dict[str, Any]:
+    with _lock:
+        p = _analysis_progress.get(task_id, {})
+    return {
+        "success": True,
+        "task_id": task_id,
+        "progress": p.get("percent", 0),
+        "step": p.get("step", 1),
+        "message": p.get("message", "准备中..."),
+        "completed": p.get("completed", False),
+    }
+def set_template_analysis_progress(task_id: str, **fields: Any) -> None:
+    with _lock:
+        cur = _analysis_progress.setdefault(task_id, {})
+        cur.update(fields)
+def clear_template_analysis_progress(task_id: str) -> None:
+    with _lock:
+        _analysis_progress.pop(task_id, None)
+// ===== [后端(app)] traditional_mode_fs.py =====
+from __future__ import annotations
+import base64
+import json
+import logging
+import os
+import queue
+import shutil
+import threading
+from collections.abc import Iterator
+from datetime import UTC, datetime
+from typing import Any
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.path_io.path_utils import get_base_dir
+logger = logging.getLogger(__name__)
+def _resolve_root_dir() -> str:
+    raw = (os.environ.get("TRADITIONAL_MODE_ROOT") or "").strip()
+    root = raw if raw else os.path.join(get_base_dir(), "bang")
+    root = os.path.abspath(os.path.expanduser(os.path.expandvars(root)))
+    try:
+        os.makedirs(root, exist_ok=True)
+    except PermissionError:
+        fallback_base = os.environ.get("TMPDIR") or "/tmp"
+        root = os.path.abspath(os.path.join(fallback_base, os.path.basename(root)))
+        os.makedirs(root, exist_ok=True)
+    return root
+ROOT_DIR = _resolve_root_dir()
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".ico", ".tiff", ".svg"}
+EXCEL_EXTENSIONS = {".xlsx", ".xls"}
+_watch_clients: list[queue.Queue[str]] = []
+_watch_clients_lock = threading.Lock()
+_last_snapshot: dict[str, str] = {}
+_snapshot_lock = threading.Lock()
+_watchdog_running = False
+_watchdog_thread: threading.Thread | None = None
+_watchdog_prev: dict[str, float] = {}
+def resolve_path_under_root(root: str, relative_path: str = "") -> str | None:
+    fragment = str(relative_path or "")
+    if os.path.isabs(fragment):
+        return None
+    root_path = os.path.realpath(os.path.abspath(os.path.expanduser(root)))
+    candidate = os.path.realpath(os.path.abspath(os.path.join(root_path, fragment)))
+    try:
+        common = os.path.commonpath((root_path, candidate))
+    except ValueError:
+        return None
+    return candidate if common == root_path else None
+def resolve_safe_path(relative_path: str = "") -> str | None:
+    return resolve_path_under_root(ROOT_DIR, relative_path)
+def root_info_response() -> dict[str, Any]:
+    return {
+        "success": True,
+        "data": {
+            "root": ROOT_DIR,
+            "logical_root": "bang",
+            "capabilities": [
+                "list",
+                "read",
+                "download",
+                "upload",
+                "write_excel",
+                "write_text",
+                "write_base64",
+                "append_text",
+                "mkdir",
+                "rename",
+                "delete",
+                "move",
+                "copy",
+            ],
+        },
+    }
+def _rel_from_root(path: str) -> str:
+    return os.path.relpath(path, ROOT_DIR).replace(os.sep, "/")
+def stat_response(rel_path: str = "") -> tuple[dict[str, Any], int]:
+    target = resolve_safe_path(rel_path)
+    if target is None:
+        return {"success": False, "error": "路径越权访问被拒绝"}, 403
+    if not os.path.exists(target):
+        return {"success": False, "error": "路径不存在"}, 404
+    st = os.stat(target)
+    is_dir = os.path.isdir(target)
+    return {
+        "success": True,
+        "data": {
+            "path": _rel_from_root(target) if target != ROOT_DIR else "",
+            "name": os.path.basename(target) or "bang",
+            "is_dir": is_dir,
+            "size": 0 if is_dir else st.st_size,
+            "modified_time": _format_time(st.st_mtime),
+            "type": "文件夹" if is_dir else _get_file_type(os.path.basename(target)),
+        },
+    }, 200
+def write_text_response(
+    rel_file: str, content: str, append: bool = False
+) -> tuple[dict[str, Any], int]:
+    target = resolve_safe_path(rel_file)
+    if target is None:
+        return {"success": False, "error": "路径越权访问被拒绝"}, 403
+    if os.path.isdir(target):
+        return {"success": False, "error": "目标路径是目录"}, 400
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    mode = "a" if append else "w"
+    with open(target, mode, encoding="utf-8", newline="") as f:
+        f.write(content)
+    return {
+        "success": True,
+        "data": {"path": _rel_from_root(target), "bytes": os.path.getsize(target)},
+    }, 200
+def write_base64_response(rel_file: str, content_base64: str) -> tuple[dict[str, Any], int]:
+    target = resolve_safe_path(rel_file)
+    if target is None:
+        return {"success": False, "error": "路径越权访问被拒绝"}, 403
+    if os.path.isdir(target):
+        return {"success": False, "error": "目标路径是目录"}, 400
+    try:
+        data = base64.b64decode(content_base64, validate=True)
+    except RECOVERABLE_ERRORS:
+        return {"success": False, "error": "base64 内容无效"}, 400
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    with open(target, "wb") as f:
+        f.write(data)
+    return {"success": True, "data": {"path": _rel_from_root(target), "bytes": len(data)}}, 200
+def move_response(
+    src_rel: str, dst_rel: str, overwrite: bool = False
+) -> tuple[dict[str, Any], int]:
+    src = resolve_safe_path(src_rel)
+    dst = resolve_safe_path(dst_rel)
+    if src is None or dst is None:
+        return {"success": False, "error": "路径越权访问被拒绝"}, 403
+    if not os.path.exists(src):
+        return {"success": False, "error": "源路径不存在"}, 404
+    if os.path.exists(dst):
+        if not overwrite:
+            return {"success": False, "error": "目标路径已存在"}, 409
+        if os.path.isdir(dst):
+            shutil.rmtree(dst)
+        else:
+            os.remove(dst)
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    shutil.move(src, dst)
+    return {"success": True, "data": {"path": _rel_from_root(dst)}}, 200
+def copy_response(
+    src_rel: str, dst_rel: str, overwrite: bool = False
+) -> tuple[dict[str, Any], int]:
+    src = resolve_safe_path(src_rel)
+    dst = resolve_safe_path(dst_rel)
+    if src is None or dst is None:
+        return {"success": False, "error": "路径越权访问被拒绝"}, 403
+    if not os.path.exists(src):
+        return {"success": False, "error": "源路径不存在"}, 404
+    if os.path.exists(dst):
+        if not overwrite:
+            return {"success": False, "error": "目标路径已存在"}, 409
+        if os.path.isdir(dst):
+            shutil.rmtree(dst)
+        else:
+            os.remove(dst)
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    if os.path.isdir(src):
+        shutil.copytree(src, dst)
+    else:
+        shutil.copy2(src, dst)
+    return {"success": True, "data": {"path": _rel_from_root(dst)}}, 200
+def _get_file_type(filename: str) -> str:
+    name_lower = filename.lower()
+    ext = os.path.splitext(name_lower)[1]
+    if ext in EXCEL_EXTENSIONS:
+        return ext[1:]
+    if ext in IMAGE_EXTENSIONS:
+        return ext[1:]
+    return ext[1:] if "." in name_lower else "文件"
+def _format_time(ts: float) -> str:
+    return datetime.fromtimestamp(ts, tz=UTC).isoformat()
+def list_files_response(rel_path: str = "") -> tuple[dict[str, Any], int]:
+    try:
+        full_path = resolve_safe_path(rel_path)
+        if full_path is None:
+            return {"success": False, "error": "路径越权访问被拒绝"}, 403
+        if not os.path.exists(full_path):
+            return {"success": True, "data": {"path": rel_path, "files": []}}, 200
+        if not os.path.isdir(full_path):
+            return {"success": False, "error": "指定路径不是目录"}, 400
+        dirs: list[dict[str, Any]] = []
+        files: list[dict[str, Any]] = []
+        for name in sorted(os.listdir(full_path)):
+            entry_path = os.path.join(full_path, name)
+            try:
+                stat_info = os.stat(entry_path)
+                is_dir = os.path.isdir(entry_path)
+                entry = {
+                    "name": name,
+                    "is_dir": is_dir,
+                    "size": 0 if is_dir else stat_info.st_size,
+                    "modified_time": _format_time(stat_info.st_mtime),
+                    "type": "文件夹" if is_dir else _get_file_type(name),
+                }
+                if is_dir:
+                    dirs.append(entry)
+                else:
+                    files.append(entry)
+            except OSError:
+                logger.warning("无法获取文件信息", exc_info=True)
+                continue
+        entries = dirs + files
+        return {"success": True, "data": {"path": rel_path, "files": entries}}, 200
+    except RECOVERABLE_ERRORS:
+        logger.exception("列出目录失败")
+        return {"success": False, "error": "文件服务暂时不可用，请稍后重试"}, 500
+def read_file_response(rel_file: str) -> tuple[dict[str, Any], int]:
+    try:
+        full_path = resolve_safe_path(rel_file)
+        if full_path is None:
+            return {"success": False, "error": "路径越权访问被拒绝"}, 403
+        if not os.path.exists(full_path):
+            return {"success": False, "error": "文件不存在"}, 404
+        if os.path.isdir(full_path):
+            return {"success": False, "error": "指定路径是目录而非文件"}, 400
+        ext = os.path.splitext(full_path)[1].lower()
+        if ext in EXCEL_EXTENSIONS:
+            try:
+                import openpyxl
+                wb = openpyxl.load_workbook(full_path, data_only=True)
+                sheet_names = list(wb.sheetnames)
+                sheets_data: dict[str, Any] = {}
+                for sheet_name in sheet_names:
+                    sheet = wb[sheet_name]
+                    rows_data: list[list[Any]] = []
+                    for row in sheet.iter_rows(values_only=True):
+                        row_list: list[Any] = []
+                        for cell in row:
+                            if cell is None:
+                                row_list.append(None)
+                            elif isinstance(cell, datetime):
+                                row_list.append(cell.isoformat())
+                            else:
+                                row_list.append(cell)
+                        rows_data.append(row_list)
+                    sheets_data[sheet_name] = {
+                        "rows": rows_data,
+                        "max_row": sheet.max_row,
+                        "max_column": sheet.max_column,
+                    }
+                wb.close()
+                return {
+                    "success": True,
+                    "data": {"type": "excel", "sheets": sheet_names, "content": sheets_data},
+                }, 200
+            except ImportError:
+                return {"success": False, "error": "openpyxl 未安装，无法读取 Excel 文件"}, 500
+            except RECOVERABLE_ERRORS:
+                logger.exception("读取 Excel 文件失败")
+                return {"success": False, "error": "Excel 读取服务暂时不可用，请稍后重试"}, 500
+        if ext in IMAGE_EXTENSIONS:
+            with open(full_path, "rb") as f:
+                img_base64 = base64.b64encode(f.read()).decode("utf-8")
+            mime_map = {
+                ".png": "image/png",
+                ".jpg": "image/jpeg",
+                ".jpeg": "image/jpeg",
+                ".gif": "image/gif",
+                ".webp": "image/webp",
+                ".bmp": "image/bmp",
+                ".ico": "image/x-icon",
+                ".tiff": "image/tiff",
+                ".svg": "image/svg+xml",
+            }
+            return {
+                "success": True,
+                "data": {
+                    "type": "image",
+                    "mime": mime_map.get(ext, "application/octet-stream"),
+                    "content": img_base64,
+                },
+            }, 200
+        try:
+            with open(full_path, encoding="utf-8") as f:
+                content = f.read()
+            return {"success": True, "data": {"type": "text", "content": content}}, 200
+        except UnicodeDecodeError:
+            with open(full_path, "rb") as f:
+                content = base64.b64encode(f.read()).decode("utf-8")
+            return {"success": True, "data": {"type": "binary", "content": content}}, 200
+    except RECOVERABLE_ERRORS:
+        logger.exception("读取文件失败")
+        return {"success": False, "error": "文件服务暂时不可用，请稍后重试"}, 500
+def _build_snapshot() -> dict[str, float]:
+    snap: dict[str, float] = {}
+    if os.path.exists(ROOT_DIR) and os.path.isdir(ROOT_DIR):
+        try:
+            for dirpath, _dirnames, filenames in os.walk(ROOT_DIR):
+                try:
+                    rel = os.path.relpath(dirpath, ROOT_DIR)
+                    prefix = "" if rel == "." else rel.replace(os.sep, "/") + "/"
+                    for fname in filenames:
+                        fpath = os.path.join(dirpath, fname)
+                        try:
+                            snap[prefix + fname] = os.stat(fpath).st_mtime
+                        except OSError:
+                            continue
+                except OSError:
+                    continue
+        except OSError:
+            pass
+    return snap
+def _format_snapshot(mtime_map: dict[str, float]) -> dict[str, str]:
+    return {name: _format_time(ts) for name, ts in mtime_map.items()}
+def _watchdog_loop() -> None:
+    global _watchdog_running, _watchdog_prev, _last_snapshot
+    _watchdog_running = True
+    try:
+        _watchdog_prev = _build_snapshot()
+        while _watchdog_running:
+            threading.Event().wait(3.0)
+            if not _watchdog_running:
+                break
+            curr = _build_snapshot()
+            changed: list[str] = []
+            for fname, mtime in curr.items():
+                if _watchdog_prev.get(fname) != mtime:
+                    changed.append(fname)
+            for fname in list(_watchdog_prev.keys()):
+                if fname not in curr:
+                    changed.append(f"__deleted__:{fname}")
+            _watchdog_prev = curr
+            if changed:
+                snap_str = _format_snapshot(curr)
+                with _snapshot_lock:
+                    _last_snapshot = snap_str
+                payload = json.dumps({"changed": changed}, ensure_ascii=False)
+                dead: list[queue.Queue[str]] = []
+                with _watch_clients_lock:
+                    for q in _watch_clients:
+                        try:
+                            q.put_nowait(payload)
+                        except queue.Full:
+                            dead.append(q)
+                    for q in dead:
+                        if q in _watch_clients:
+                            _watch_clients.remove(q)
+    except RECOVERABLE_ERRORS:
+        logger.exception("Watchdog 线程异常")
+    finally:
+        _watchdog_running = False
+def _ensure_watchdog() -> None:
+    global _watchdog_thread, _watchdog_running
+    if not _watchdog_running or (_watchdog_thread and not _watchdog_thread.is_alive()):
+        _watchdog_thread = threading.Thread(target=_watchdog_loop, daemon=True, name="fs-watchdog")
+        _watchdog_thread.start()
+def sse_watch_events(rel_path: str) -> Iterator[str]:
+    full_path = resolve_safe_path(rel_path)
+    if full_path is None:
+        yield f"data: {json.dumps({'success': False, 'error': '路径越权访问被拒绝'}, ensure_ascii=False)}\n\n"
+        return
+    _ensure_watchdog()
+    client_q: queue.Queue[str] = queue.Queue(maxsize=20)
+    with _watch_clients_lock:
+        _watch_clients.append(client_q)
+    try:
+        with _snapshot_lock:
+            initial = json.dumps(
+                {"changed": [], "snapshot": dict(_last_snapshot)}, ensure_ascii=False
+            )
+        yield f"data: {initial}\n\n"
+        while True:
+            try:
+                msg = client_q.get(timeout=55)
+                yield f"data: {msg}\n\n"
+            except queue.Empty:
+                yield ": heartbeat\n\n"
+    finally:
+        with _watch_clients_lock:
+            if client_q in _watch_clients:
+                _watch_clients.remove(client_q)
+// ===== [后端(app)] ai_engines/__init__.py =====
+from app.ai_engines import bert as _bert
+BertIntentClassifier = getattr(_bert, "BertIntentClassifier", None)
+__all__ = [
+    "BertIntentClassifier",
+]
+// ===== [后端(app)] ai_engines/bert/__init__.py =====
+from typing import Any
+BertIntentClassifier: Any
+try:
+    from app.ai_engines.bert.intent_service import BertIntentClassifier as _RealBertClassifier
+    BertIntentClassifier = _RealBertClassifier
+except ModuleNotFoundError as exc:
+    if (exc.name or "").split(".", 1)[0] not in {"torch", "transformers"}:
+        raise
+    class _FallbackBertClassifier:
+        def __init__(self, *args, **kwargs):
+            self.available = False
+        def is_available(self) -> bool:
+            return False
+        def classify(self, *args, **kwargs):
+            return []
+        def predict(self, *args, **kwargs):
+            return []
+    BertIntentClassifier = _FallbackBertClassifier
+__all__ = ["BertIntentClassifier"]
+// ===== [后端(app)] ai_engines/bert/intent_service.py =====
+import logging
+import os
+from typing import Any
+import torch
+from transformers import (
+    AutoConfig,
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+    BertTokenizer,
+)
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+logger = logging.getLogger(__name__)
+INTENT_LABELS = [
+    "shipment_generate",
+    "customers",
+    "products",
+    "shipments",
+    "wechat_send",
+    "print_label",
+    "upload_file",
+    "materials",
+    "shipment_template",
+    "template_extract",
+    "business_docking",
+    "template_preview",
+    "shipment_records",
+    "wechat",
+    "printer_list",
+    "settings",
+    "tools_table",
+    "other_tools",
+    "ai_ecosystem",
+    "excel_decompose",
+    "show_images",
+    "show_videos",
+    "greet",
+    "goodbye",
+    "help",
+    "negation",
+    "customer_export",
+    "customer_edit",
+    "customer_supplement",
+    "unk",
+]
+LABEL_TO_ID = {label: idx for idx, label in enumerate(INTENT_LABELS)}
+ID_TO_LABEL = {idx: label for idx, label in enumerate(INTENT_LABELS)}
+class BertIntentClassifier:
+    DEFAULT_MODELS = {
+        "bert-base-chinese": "bert-base-chinese",
+        "chinese-bert-wwm": "hfl/chinese-bert-wwm-ext",
+        "chinese-roberta": "hfl/chinese-roberta-wwm-ext",
+    }
+    def __init__(
+        self,
+        model_path: str | None = None,
+        model_name: str = "bert-base-chinese",
+        max_length: int = 64,
+        confidence_threshold: float = 0.7,
+        device: str | None = None,
+        use_fp16: bool = False,
+        local_files_only: bool = False,
+    ):
+        self.model_path = model_path
+        self.model_name = model_name
+        self.max_length = max_length
+        self.confidence_threshold = confidence_threshold
+        self.use_fp16 = use_fp16
+        self.local_files_only = local_files_only
+        if device is None:
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        else:
+            self.device = device
+        self.model: Any = None
+        self.tokenizer: Any = None
+        self._initialized = False
+    def load_model(self) -> bool:
+        if self._initialized:
+            return True
+        try:
+            if self.model_path and os.path.exists(self.model_path):
+                logger.info("加载 BERT 模型：%s, 设备：%s", self.model_path, self.device)
+                config = AutoConfig.from_pretrained(
+                    self.model_path,
+                    num_labels=len(INTENT_LABELS),
+                    local_files_only=self.local_files_only,
+                )
+                self.model = AutoModelForSequenceClassification.from_pretrained(
+                    self.model_path,
+                    config=config,
+                    local_files_only=self.local_files_only,
+                )
+                self.tokenizer = AutoTokenizer.from_pretrained(
+                    self.model_path,
+                    local_files_only=self.local_files_only,
+                )
+            else:
+                default_model = self.DEFAULT_MODELS.get(self.model_name, self.model_name)
+                logger.info("加载默认 BERT 模型：%s, 设备：%s", default_model, self.device)
+                self.model = AutoModelForSequenceClassification.from_pretrained(
+                    default_model,
+                    num_labels=len(INTENT_LABELS),
+                    local_files_only=self.local_files_only,
+                )
+                self.tokenizer = BertTokenizer.from_pretrained(
+                    default_model,
+                    local_files_only=self.local_files_only,
+                )
+            self.model.to(self.device)
+            self.model.eval()
+            if self.use_fp16:
+                self.model.half()
+            self._initialized = True
+            logger.info("BERT 模型加载成功")
+            return True
+        except RECOVERABLE_ERRORS as e:
+            logger.error("BERT 模型加载失败：%s", e)
+            return False
+    def predict(self, text: str) -> dict[str, Any]:
+        if not self._initialized and not self.load_model():
+            return {
+                "intent": "unk",
+                "confidence": 0.0,
+                "probabilities": {},
+                "error": "BERT 模型不可用",
+            }
+        if not text or not text.strip():
+            return {"intent": "unk", "confidence": 0.0, "probabilities": {}}
+        try:
+            inputs = self.tokenizer(
+                text,
+                return_tensors="pt",
+                max_length=self.max_length,
+                truncation=True,
+                padding="max_length",
+            )
+            inputs = {k: v.to(self.device) for k, v in inputs.items()}
+            with torch.no_grad():
+                outputs = self.model(**inputs)
+                logits = outputs.logits
+            probs = torch.softmax(logits, dim=-1)[0]
+            confidence, predicted_idx = torch.max(probs, dim=-1)
+            predicted_idx = predicted_idx.item()
+            confidence = confidence.item()
+            predicted_label = ID_TO_LABEL.get(predicted_idx, "unk")
+            if confidence < self.confidence_threshold:
+                predicted_label = "unk"
+            result = {
+                "intent": predicted_label,
+                "confidence": round(confidence, 4),
+                "predicted_idx": predicted_idx,
+                "text": text,
+            }
+            return result
+        except RECOVERABLE_ERRORS as e:
+            logger.error("BERT 预测失败：%s", e)
+            return {"intent": "unk", "confidence": 0.0, "message": str(e)}
+    def predict_batch(self, texts: list[str]) -> list[dict[str, Any]]:
+        if not self._initialized:
+            self.load_model()
+        return [self.predict(text) for text in texts]
+// ===== [后端(app)] ai_engines/deepseek/__init__.py =====
+from app.ai_engines.deepseek.intent_service import DeepseekIntentClassifier
+__all__ = ["DeepseekIntentClassifier"]
+// ===== [后端(app)] ai_engines/deepseek/intent_service.py =====
+import hashlib
+import logging
+import os
+import time
+from collections import OrderedDict
+from typing import Any, cast
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.performance.cache_manager import get_intent_deepseek_cache
+logger = logging.getLogger(__name__)
+class _IntentRecognitionCache:
+    def __init__(self, max_size: int = 500, ttl_seconds: int = 300):
+        self._cache: OrderedDict = OrderedDict()
+        self._timestamps: dict[str, float] = {}
+        self._max_size = max_size
+        self._ttl = ttl_seconds
+    def _make_key(self, message: str) -> str:
+        return hashlib.md5(message.strip().lower().encode()).hexdigest()
+    def get(self, message: str) -> dict[str, Any] | None:
+        key = self._make_key(message)
+        if key not in self._cache:
+            return None
+        if time.time() - self._timestamps.get(key, 0) > self._ttl:
+            del self._cache[key]
+            del self._timestamps[key]
+            return None
+        self._cache.move_to_end(key)
+        return cast("dict[str, Any] | None", self._cache[key])
+    def set(self, message: str, result: dict[str, Any]) -> None:
+        key = self._make_key(message)
+        if key in self._cache:
+            self._cache.move_to_end(key)
+        else:
+            if len(self._cache) >= self._max_size:
+                oldest_key = next(iter(self._cache))
+                del self._cache[oldest_key]
+                del self._timestamps[oldest_key]
+        self._cache[key] = result
+        self._timestamps[key] = time.time()
+    def clear(self) -> None:
+        self._cache.clear()
+        self._timestamps.clear()
+_intent_recognition_cache = get_intent_deepseek_cache()
+INTENT_DESCRIPTIONS = {
+    "shipment_generate": "生成发货单、开单、打单、做出货单",
+    "customers": "查看客户列表、购买单位、客户管理",
+    "products": "查看产品列表、产品规格、产品库",
+    "shipments": "查看发货记录、订单列表、出货记录",
+    "wechat_send": "发微信、发消息给客户",
+    "print_label": "打印标签、标签导出、商标打印、商标",
+    "upload_file": "上传文件、导入数据、解析Excel",
+    "materials": "原材料库存、材料库查询",
+    "shipment_template": "发货单模板、模板设置",
+    "template_extract": "提取模板、导出模板、提取Excel模板结构",
+    "business_docking": "业务对接、上传Excel、模板提取",
+    "template_preview": "模板预览、模板列表、模板管理",
+    "shipment_records": "出货记录、出货记录查询、出货记录导出",
+    "wechat": "微信联系人、联系人列表、联系人缓存",
+    "printer_list": "打印机列表、默认打印机",
+    "settings": "系统设置、系统信息、开机启动",
+    "tools_table": "工具表、工具能力列表",
+    "other_tools": "其他工具",
+    "ai_ecosystem": "AI生态、AI能力页",
+    "excel_decompose": "分解Excel、提取词条、表头提取",
+    "show_images": "查看图片、产品图片",
+    "show_videos": "查看视频",
+    "greet": "问候、打招呼",
+    "goodbye": "告别、再见",
+    "help": "请求帮助、功能介绍",
+    "negation": "否定指令、不要做某事",
+    "customer_export": "导出客户列表、导出Excel",
+    "customer_edit": "修改客户信息、修改设置",
+    "customer_supplement": "补充客户信息、添加联系人",
+}
+SLOT_DEFINITIONS = {
+    "unit_name": "购买单位、销售客户（如：七彩乐园、侯雪梅）",
+    "model_number": "产品编号、型号（如：9803、2025）",
+    "tin_spec": "产品规格、桶规格（如：28、20）",
+    "quantity_tins": "产品数量、桶数（如：1桶、3桶、5桶）",
+    "contact_person": "联系人姓名（如：向总、张经理）",
+    "contact_phone": "联系电话、手机号",
+    "contact_address": "联系地址",
+    "order_no": "订单编号",
+    "keyword": "搜索关键词",
+}
+class DeepseekIntentClassifier:
+    def __init__(
+        self,
+        api_key: str | None = None,
+// ……（中间源代码省略 341067 行，全文见《程序鉴别材料-完整源代码》）……
+export function showMainWindow(): void {
+  const mainWindow = desktopRuntime.mainWindow
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    void createWindow()
+    return
+  }
+  mainWindow.show()
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.focus()
+}
+function ensureMacWindowInWorkArea(win: BrowserWindow): void {
+  if (process.platform !== 'darwin') return
+  const bounds = win.getBounds()
+  const work = screen.getDisplayMatching(bounds).workArea
+  const minW = 1180
+  const minH = 760
+  let { x, y, width, height } = bounds
+  if (width < minW) width = Math.min(minW, work.width)
+  if (height < minH) height = Math.min(minH, work.height)
+  if (y < work.y || height < minH) {
+    y = work.y + 8
+    height = Math.min(Math.max(height, minH), work.height - 16)
+  }
+  if (x + width > work.x + work.width) {
+    x = work.x + Math.max(0, work.width - width)
+  }
+  if (x < work.x) x = work.x
+  if (width !== bounds.width || height !== bounds.height || x !== bounds.x || y !== bounds.y) {
+    win.setBounds({ x, y, width, height })
+  }
+}
+function tagDesktopWebContents(win: BrowserWindow): void {
+  const classes = ['xcagi-electron']
+  if (process.platform === 'darwin') classes.push('xcagi-electron-mac')
+  if (process.platform === 'win32') classes.push('xcagi-electron-win')
+  void win.webContents
+    .executeJavaScript(
+      classes.map(c => `document.documentElement.classList.add('${c}');`).join('')
+    )
+    .catch(() => { })
+}
+export async function createWindow(): Promise<void> {
+  const icon = shellIconPath()
+  const statePath = path.join(app.getPath('userData'), 'window-state.json')
+  const savedBounds = readWindowState(statePath)
+  const display = savedBounds
+    ? screen.getDisplayMatching(savedBounds)
+    : screen.getPrimaryDisplay()
+  const initialBounds = clampWindowBounds(savedBounds, display.workArea)
+  const winOpts: Electron.BrowserWindowConstructorOptions = {
+    ...initialBounds,
+    minWidth: 1180,
+    minHeight: 760,
+    title: APP_NAME,
+    autoHideMenuBar: process.platform !== 'darwin',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  }
+  if (fs.existsSync(icon)) {
+    winOpts.icon = icon
+  }
+  if (process.platform === 'darwin') {
+    winOpts.frame = true
+    winOpts.titleBarStyle = 'default'
+  }
+  winOpts.show = true
+  winOpts.backgroundColor = '#f4f7fb'
+  const mainWindow = new BrowserWindow(winOpts)
+  desktopRuntime.mainWindow = mainWindow
+  desktopRuntime.rendererFailedDuringStartup = false
+  const createdWindow = mainWindow
+  let stateWriteTimer: NodeJS.Timeout | null = null
+  const persistWindowState = () => {
+    if (createdWindow.isDestroyed() || createdWindow.isMinimized() || createdWindow.isFullScreen()) return
+    writeWindowState(statePath, createdWindow.getNormalBounds())
+  }
+  const scheduleWindowStateWrite = () => {
+    if (stateWriteTimer) clearTimeout(stateWriteTimer)
+    stateWriteTimer = setTimeout(() => {
+      stateWriteTimer = null
+      persistWindowState()
+    }, 250)
+  }
+  createdWindow.on('move', scheduleWindowStateWrite)
+  createdWindow.on('resize', scheduleWindowStateWrite)
+  createdWindow.on('close', (event) => {
+    persistWindowState()
+    if (!app.isQuitting) {
+      event.preventDefault()
+      createdWindow.hide()
+    }
+  })
+  if (process.platform !== 'darwin') {
+    mainWindow.setAutoHideMenuBar(true)
+    mainWindow.setMenuBarVisibility(false)
+  }
+  mainWindow.on('closed', () => {
+    if (stateWriteTimer) clearTimeout(stateWriteTimer)
+    desktopRuntime.mainWindow = null
+    desktopRuntime.mainApplicationReady = null
+  })
+  if (process.platform === 'darwin') {
+    mainWindow.on('leave-full-screen', () => {
+      if (desktopRuntime.mainWindow) ensureMacWindowInWorkArea(desktopRuntime.mainWindow)
+    })
+    mainWindow.on('restore', () => {
+      if (desktopRuntime.mainWindow) ensureMacWindowInWorkArea(desktopRuntime.mainWindow)
+    })
+  }
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!isTrustedDesktopOrigin(url, DEFAULT_PORT) && !url.startsWith('file://') && !url.startsWith('data:')) {
+      event.preventDefault()
+      console.warn(`[xcagi-desktop] blocked will-navigate to ${url}`)
+    }
+  })
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    return { action: handleDesktopWindowOpen(url, DEFAULT_PORT, target => shell.openExternal(target), message => console.warn(message)) }
+  })
+  mainWindow.webContents.on('unresponsive', () => {
+    writeBackendLog('[crash] renderer unresponsive\n')
+  })
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    writeBackendLog(`[crash] renderer gone reason=${details.reason} exitCode=${details.exitCode}\n`)
+    if (checkPendingRollback()) {
+      desktopRuntime.rendererFailedDuringStartup = true
+      return
+    }
+    if (!app.isQuitting && details.reason !== 'clean-exit') {
+      void dialog.showMessageBox(createdWindow, {
+        type: 'error',
+        title: APP_NAME,
+        message: '界面进程意外退出',
+        detail: '崩溃信息已保存在数据目录。可以重新加载界面继续工作，后端与本地数据不会被清除。',
+        buttons: ['重新加载', '退出'],
+        defaultId: 0,
+        cancelId: 1,
+      }).then(({ response }) => {
+        if (response === 0 && !createdWindow.isDestroyed()) createdWindow.reload()
+        else app.quit()
+      })
+    }
+  })
+  void mainWindow.loadURL(resolveDesktopSplashUrl())
+  mainWindow.show()
+  mainWindow.focus()
+  updateSplashProgress(8, '正在启动本地服务…')
+  if (shouldClearFrontendCache()) {
+    void mainWindow.webContents.session
+      .clearCache()
+      .then(() => markFrontendCacheCleared())
+      .catch(() => undefined)
+  }
+  const loadMainApplication = async (): Promise<void> => {
+    if (!desktopRuntime.mainWindow) {
+      throw new Error('主窗口在应用加载前已关闭')
+    }
+    try {
+      updateSplashProgress(92, '正在打开主界面…')
+      await desktopRuntime.mainWindow.loadURL(desktopInitialUrl(), {
+        extraHeaders: 'Cache-Control: no-cache\r\n'
+      })
+      tagDesktopWebContents(desktopRuntime.mainWindow)
+      if (process.platform === 'darwin') {
+        ensureMacWindowInWorkArea(desktopRuntime.mainWindow)
+      }
+      desktopRuntime.mainWindow.focus()
+    } catch (error) {
+      const currentUrl = desktopRuntime.mainWindow?.webContents.getURL()
+      if (isBenignDesktopLoadAbort(error, currentUrl, DEFAULT_PORT)) {
+        console.warn('[xcagi-desktop] ignored transient local-page navigation abort', error)
+        return
+      }
+      console.error('[xcagi-desktop] load main application failed', error)
+      throw error
+    }
+  }
+  const splashStarted = Date.now()
+  const splashBudgetMs = packagedBackendHealthTimeoutMs()
+  let splashPhase: 'boot' | 'routes' | 'done' = 'boot'
+  let phaseStarted = splashStarted
+  const splashTicker = setInterval(() => {
+    if (!desktopRuntime.mainWindow || desktopRuntime.mainWindow.isDestroyed() || splashPhase === 'done') {
+      clearInterval(splashTicker)
+      return
+    }
+    const elapsed = Date.now() - phaseStarted
+    if (splashPhase === 'boot') {
+      const creep = 8 + Math.min(47, (elapsed / splashBudgetMs) * 47)
+      updateSplashProgress(creep, '正在启动本地服务…')
+      return
+    }
+    const creep = 58 + Math.min(27, (elapsed / Math.max(15_000, splashBudgetMs * 0.35)) * 27)
+    updateSplashProgress(creep, '正在加载业务模块…')
+  }, 400)
+  const pingReady = waitForBackendPing(DEFAULT_PORT)
+    .then(() => {
+      splashPhase = 'routes'
+      phaseStarted = Date.now()
+      updateSplashProgress(58, '本地服务已就绪，正在打开工作台…')
+    })
+  const mainUiReady = pingReady.then(() => {
+      splashPhase = 'done'
+      updateSplashProgress(88, '正在加载应用…')
+      return loadMainApplication()
+    })
+  const backendApplicationReady = pingReady.then(() =>
+    waitForBackendApplicationReady(DEFAULT_PORT, undefined, { skipPing: true }),
+  )
+  const ready = Promise.all([mainUiReady, backendApplicationReady]).then(() => undefined)
+  desktopRuntime.mainApplicationReady = ready
+  void mainUiReady.then(
+    () => clearInterval(splashTicker),
+    () => clearInterval(splashTicker),
+  )
+  void ready
+    .catch(error => {
+      console.error('[xcagi-desktop] backend readiness wait failed', error)
+      splashPhase = 'done'
+      updateSplashProgress(100, '启动失败，请查看日志', { error: true })
+      if (!checkPendingRollback()) {
+        void dialog.showErrorBox(APP_NAME, error instanceof Error ? error.message : String(error))
+      }
+    })
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (desktopRuntime.mainWindow) tagDesktopWebContents(desktopRuntime.mainWindow)
+  })
+  void waitForBackendStatus(DEFAULT_PORT).then(status => {
+    console.info(
+      '[xcagi-desktop] startup',
+      JSON.stringify({
+        ...desktopRuntime.startupMarks,
+        desktopStatusOk: status !== null
+      })
+    )
+    void showDbRecoveryDialogIfNeeded(status)
+  })
+  if (process.env.XCAGI_DESKTOP_E2E !== '1') {
+    configureUpdater(mainWindow, { onForceUpgradeRequired: checkForceUpgrade })
+  }
+}
+export async function waitForMainApplicationReady(): Promise<void> {
+  if (!desktopRuntime.mainApplicationReady) {
+    throw new Error('主界面就绪任务未初始化')
+  }
+  await desktopRuntime.mainApplicationReady
+}
+// ===== [桌面端(desktop)] window-state.ts =====
+import fs from 'node:fs'
+export type WindowBounds = { x: number; y: number; width: number; height: number }
+export const DEFAULT_WINDOW_BOUNDS: WindowBounds = {
+  x: 80,
+  y: 60,
+  width: 1440,
+  height: 920,
+}
+function finiteInteger(value: unknown): number | null {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? Math.round(parsed) : null
+}
+export function readWindowState(filePath: string): WindowBounds | null {
+  try {
+    const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as Partial<WindowBounds>
+    const x = finiteInteger(raw.x)
+    const y = finiteInteger(raw.y)
+    const width = finiteInteger(raw.width)
+    const height = finiteInteger(raw.height)
+    if (x === null || y === null || width === null || height === null) return null
+    if (width < 320 || height < 240) return null
+    return { x, y, width, height }
+  } catch {
+    return null
+  }
+}
+export function clampWindowBounds(
+  saved: WindowBounds | null,
+  workArea: WindowBounds,
+  minimum = { width: 1180, height: 760 },
+): WindowBounds {
+  const source = saved || DEFAULT_WINDOW_BOUNDS
+  const width = Math.min(Math.max(source.width, minimum.width), workArea.width)
+  const height = Math.min(Math.max(source.height, minimum.height), workArea.height)
+  const maxX = workArea.x + workArea.width - width
+  const maxY = workArea.y + workArea.height - height
+  const x = Math.min(Math.max(source.x, workArea.x), maxX)
+  const y = Math.min(Math.max(source.y, workArea.y), maxY)
+  return { x, y, width, height }
+}
+export function writeWindowState(filePath: string, bounds: WindowBounds): void {
+  const tempPath = `${filePath}.tmp`
+  try {
+    fs.writeFileSync(tempPath, `${JSON.stringify(bounds)}\n`, 'utf8')
+    fs.renameSync(tempPath, filePath)
+  } catch {
+    try { fs.rmSync(tempPath, { force: true }) } catch {  }
+  }
+}
+// ===== [桌面端(desktop)] autonomy/adaptive-thresholds.ts =====
+export interface AdaptiveThreshold {
+  name: string
+  value: number
+  floor: number
+  ceiling: number
+  unit?: string
+  source?: string
+}
+const DEFAULTS: Record<string, AdaptiveThreshold> = {
+  crash_threshold: {
+    name: 'crash_threshold',
+    value: 3,
+    floor: 2,
+    ceiling: 5,
+    unit: 'count_per_window',
+    source: 'default',
+  },
+  crash_window_ms: {
+    name: 'crash_window_ms',
+    value: 5 * 60 * 1000,
+    floor: 60_000,
+    ceiling: 30 * 60 * 1000,
+    unit: 'ms',
+    source: 'default',
+  },
+  disk_clean_threshold: {
+    name: 'disk_clean_threshold',
+    value: 70,
+    floor: 60,
+    ceiling: 90,
+    unit: 'percent',
+    source: 'default',
+  },
+  restart_count_cap: {
+    name: 'restart_count_cap',
+    value: 3,
+    floor: 2,
+    ceiling: 6,
+    unit: 'count',
+    source: 'default',
+  },
+}
+function clamp(t: AdaptiveThreshold): AdaptiveThreshold {
+  const value = Math.min(t.ceiling, Math.max(t.floor, t.value))
+  return { ...t, value }
+}
+export function loadAdaptiveThresholds(
+  overrideJson?: string | null,
+): Record<string, AdaptiveThreshold> {
+  const out: Record<string, AdaptiveThreshold> = { ...DEFAULTS }
+  const raw = (overrideJson ?? process.env.XCAGI_ADAPTIVE_THRESHOLDS_JSON ?? '').trim()
+  if (!raw) return out
+  try {
+    const parsed = JSON.parse(raw) as { thresholds?: Record<string, Partial<AdaptiveThreshold>> }
+    const items = parsed.thresholds ?? (parsed as Record<string, Partial<AdaptiveThreshold>>)
+    for (const [name, base] of Object.entries(DEFAULTS)) {
+      const item = items[name]
+      if (!item || typeof item !== 'object') continue
+      out[name] = clamp({
+        name,
+        value: Number(item.value ?? base.value),
+        floor: Number(item.floor ?? base.floor),
+        ceiling: Number(item.ceiling ?? base.ceiling),
+        unit: String(item.unit ?? base.unit ?? ''),
+        source: String(item.source ?? 'env'),
+      })
+    }
+  } catch {
+  }
+  return out
+}
+export function getThreshold(name: string, overrideJson?: string | null): AdaptiveThreshold {
+  const all = loadAdaptiveThresholds(overrideJson)
+  return all[name] ?? {
+    name,
+    value: 0,
+    floor: 0,
+    ceiling: 0,
+    source: 'missing',
+  }
+}
+// ===== [桌面端(desktop)] autonomy/controller.ts =====
+import type {
+  Action,
+  AuditEntry,
+  AutonomyAdapter,
+  ControllerOptions,
+  Diagnosis,
+  Plan,
+  Policy,
+  RuntimeTruthSnapshot,
+  Signal,
+} from './types.js'
+import { deriveSignalsFromTruth } from './runtime-truth.js'
+import { predict } from './impact-predictor.js'
+import { checkBeforeAction, isEnabled as crossTierGateEnabled } from './cross-tier-gate.js'
+const DEFAULTS = {
+  enabled: true,
+  pollIntervalMs: 5_000,
+  signalRetentionMs: 30 * 60 * 1000,
+  defaultCooldownMs: 5 * 60 * 1000,
+} as const
+interface ActionTracker {
+  idempotency_key: string
+  attempts: number
+  lastAttemptTs: number
+  escalated: boolean
+}
+export class AutonomyController {
+  private adapter: AutonomyAdapter
+  private policies: Policy[]
+  private opts: Required<ControllerOptions>
+  private signals: Signal[] = []
+  private trackers = new Map<string, ActionTracker>()
+  private latestTruth: RuntimeTruthSnapshot | null = null
+  private timer: NodeJS.Timeout | null = null
+  private started = false
+  private processedSignalKeys = new Set<string>()
+  constructor(adapter: AutonomyAdapter, policies: Policy[], opts: ControllerOptions = {}) {
+    this.adapter = adapter
+    this.policies = policies
+    this.opts = {
+      enabled: opts.enabled ?? DEFAULTS.enabled,
+      pollIntervalMs: opts.pollIntervalMs ?? DEFAULTS.pollIntervalMs,
+      signalRetentionMs: opts.signalRetentionMs ?? DEFAULTS.signalRetentionMs,
+      defaultCooldownMs: opts.defaultCooldownMs ?? DEFAULTS.defaultCooldownMs,
+    }
+  }
+  start(): void {
+    if (this.started || !this.opts.enabled) return
+    this.started = true
+    this.adapter.subscribeSignals((sig) => this.ingest(sig))
+    this.timer = setInterval(() => { void this.tick() }, this.opts.pollIntervalMs)
+  }
+  stop(): void {
+    this.started = false
+    if (this.timer) {
+      clearInterval(this.timer)
+      this.timer = null
+    }
+  }
+  ingest(signal: Signal): void {
+    this.signals.push(signal)
+    this.pruneSignals()
+  }
+  async tick(): Promise<void> {
+    try {
+      this.latestTruth = await this.adapter.collectTruth()
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e)
+      this.adapter.audit({
+        ts: new Date().toISOString(),
+        source_signal: null,
+        diagnosis: { root_cause: 'truth_collect_failed', confidence: 1, detail, evidence: [] },
+        action: null,
+        result: null,
+      })
+      return
+    }
+    const derived = deriveSignalsFromTruth(this.latestTruth)
+    for (const sig of derived) {
+      if (!this.signals.some(s => s.kind === sig.kind && s.ts === sig.ts)) {
+        this.ingest(sig)
+      }
+    }
+    await this.process()
+  }
+  private async process(): Promise<void> {
+    if (this.signals.length === 0) return
+    for (const policy of this.policies) {
+      const matched = this.signals.filter(s => policy.matches.includes(s.kind))
+      if (matched.length === 0) continue
+      const newOnes = matched.filter(s => !this.processedSignalKeys.has(`${s.kind}:${s.ts}`))
+      if (newOnes.length === 0) continue
+      for (const s of newOnes) {
+        this.processedSignalKeys.add(`${s.kind}:${s.ts}`)
+      }
+      const plan: Plan = policy.plan(matched)
+      for (const action of plan.actions) {
+        const sourceSignal = newOnes.sort((a, b) => b.ts - a.ts)[0]
+        await this.tryExecute(action, plan.diagnosis, sourceSignal)
+      }
+    }
+    this.pruneSignals()
+    const cutoff = Date.now() - this.opts.signalRetentionMs
+    for (const key of Array.from(this.processedSignalKeys)) {
+      const tsStr = key.split(':').pop()
+      const ts = Number(tsStr)
+      if (Number.isFinite(ts) && ts < cutoff) {
+        this.processedSignalKeys.delete(key)
+      }
+    }
+  }
+  private async tryExecute(action: Action, diagnosis: Diagnosis, sourceSignal: Signal): Promise<void> {
+    const tracker = this.getTracker(action.idempotency_key)
+    if (tracker.attempts >= action.max_attempts) {
+      if (!tracker.escalated) {
+        tracker.escalated = true
+        await this.escalate(action, diagnosis, sourceSignal, 'max_attempts exhausted')
+      }
+      return
+    }
+    const now = Date.now()
+    const cooldownMs = this.opts.defaultCooldownMs
+    if (tracker.attempts > 0 && now - tracker.lastAttemptTs < cooldownMs) {
+      return
+    }
+    const truth = this.latestTruth
+    if (truth) {
+      const prediction = predict(action, truth)
+      if (!prediction.allow) {
+        this.adapter.audit({
+          ts: new Date().toISOString(),
+          source_signal: sourceSignal,
+          diagnosis,
+          action: { type: 'skipped', reasons: prediction.reasons },
+          result: null,
+          truth_snapshot: truth,
+        })
+        return
+      }
+    }
+    if (crossTierGateEnabled()) {
+      let remoteState: Record<string, unknown> | null = null
+      try {
+        remoteState = (await this.adapter.getRemoteState?.()) ?? null
+      } catch (e) {
+        const detail = e instanceof Error ? e.message : String(e)
+        this.adapter.audit({
+          ts: new Date().toISOString(),
+          source_signal: sourceSignal,
+          diagnosis,
+          action: { type: 'skipped', reasons: [`cross_tier_query_failed: ${detail}`] },
+          result: null,
+          truth_snapshot: truth ?? undefined,
+        })
+        remoteState = null
+      }
+      const gateResult = checkBeforeAction('desktop', action.type, remoteState)
+      if (!gateResult.allow) {
+        this.adapter.audit({
+          ts: new Date().toISOString(),
+          source_signal: sourceSignal,
+          diagnosis,
+          action: { type: 'skipped', reasons: gateResult.reasons },
+          result: null,
+          truth_snapshot: truth ?? undefined,
+        })
+        return
+      }
+    }
+    tracker.attempts += 1
+    tracker.lastAttemptTs = now
+    let result
+    try {
+      result = await this.adapter.executeAction(action)
+    } catch (e) {
+      result = {
+        action,
+        ok: false,
+        detail: `execute_threw: ${e instanceof Error ? e.message : String(e)}`,
+        ts: Date.now(),
+      }
+    }
+    const entry: AuditEntry = {
+      ts: new Date().toISOString(),
+      source_signal: sourceSignal,
+      diagnosis,
+      action,
+      result,
+      truth_snapshot: truth ?? undefined,
+    }
+    this.adapter.audit(entry)
+    if (!result.ok && tracker.attempts >= action.max_attempts && !tracker.escalated) {
+      tracker.escalated = true
+      await this.escalate(action, diagnosis, sourceSignal, result.detail)
+    }
+  }
+  private async escalate(action: Action, diagnosis: Diagnosis, sourceSignal: Signal, reason: string): Promise<void> {
+    const escalateAction: Action = {
+      type: 'escalate',
+      params: { original_action: action.type, reason, diagnosis_root_cause: diagnosis.root_cause },
+      idempotency_key: `escalate:${action.idempotency_key}`,
+      max_attempts: 1,
+      risk: 'high',
+    }
+    try {
+      const result = await this.adapter.executeAction(escalateAction)
+      this.adapter.audit({
+        ts: new Date().toISOString(),
+        source_signal: sourceSignal,
+        diagnosis,
+        action: escalateAction,
+        result,
+        truth_snapshot: this.latestTruth ?? undefined,
+      })
+    } catch (e) {
+      this.adapter.audit({
+        ts: new Date().toISOString(),
+        source_signal: sourceSignal,
+        diagnosis,
+        action: escalateAction,
+        result: {
+          action: escalateAction,
+          ok: false,
+          detail: `escalate_threw: ${e instanceof Error ? e.message : String(e)}`,
+          ts: Date.now(),
+        },
+      })
+    }
+  }
+  private getTracker(idempotencyKey: string): ActionTracker {
+    let tracker = this.trackers.get(idempotencyKey)
+    if (!tracker) {
+      tracker = { idempotency_key: idempotencyKey, attempts: 0, lastAttemptTs: 0, escalated: false }
+      this.trackers.set(idempotencyKey, tracker)
+    }
+    return tracker
+  }
+  private pruneSignals(): void {
+    const cutoff = Date.now() - this.opts.signalRetentionMs
+    this.signals = this.signals.filter(s => s.ts >= cutoff)
+  }
+  _signalsForTest(): readonly Signal[] {
+    return this.signals
+  }
+  _truthForTest(): RuntimeTruthSnapshot | null {
+    return this.latestTruth
+  }
+}
+// ===== [桌面端(desktop)] autonomy/cross-tier-gate.ts =====
+export type Tier = 'desktop' | 'server' | 'ci'
+export interface GateResult {
+  allow: boolean
+  reasons: string[]
+}
+export function checkBeforeAction(
+  tier: Tier,
+  actionType: string,
+  remoteState: Record<string, unknown> | null,
+): GateResult {
+  if (remoteState === null) {
+    return { allow: false, reasons: ['remote_state unavailable, fail-closed'] }
+  }
+  if (tier === 'desktop' && actionType === 'rollback_version') {
+    const serverManifestFrozen = Boolean(remoteState.server_manifest_frozen ?? false)
+    if (serverManifestFrozen) {
+      return {
+        allow: false,
+        reasons: [
+          '服务器端 manifest 已冻结（.hold），回滚可能冲突；请联系运维解除冻结或确认回滚目标版本',
+        ],
+      }
+    }
+  }
+  if (tier === 'server' && actionType === 'rollback_to_last_tarball') {
+    const desktopPendingMarker = Boolean(remoteState.desktop_pending_rollback_marker ?? false)
+    if (desktopPendingMarker) {
+      return {
+        allow: false,
+        reasons: [
+          '桌面端存在 pending rollback marker，嵌套回滚风险；请先等待桌面端回滚完成或清除 marker',
+        ],
+      }
+    }
+  }
+  if (tier === 'ci' && actionType === 'cvm-push-release') {
+    const serverManifestFrozen = Boolean(remoteState.server_manifest_frozen ?? false)
+    if (serverManifestFrozen) {
+      return {
+        allow: false,
+        reasons: [
+          '服务器端 manifest 已冻结，推送新版本会覆盖冻结状态；请联系运维解除冻结后再推送',
+        ],
+      }
+    }
+  }
+  return { allow: true, reasons: [] }
+}
+export function isEnabled(): boolean {
+  const v = (process.env.XCAGI_CROSS_TIER_GATE ?? '').trim().toLowerCase()
+  if (v === '' || v === '1' || v === 'true' || v === 'yes') return true
+  return false
+}
+// ===== [桌面端(desktop)] autonomy/desktop-adapter.ts =====
+import { app } from 'electron'
+import fs from 'node:fs'
+import net from 'node:net'
+import path from 'node:path'
+import type {
+  Action,
+  ActionResult,
+  AuditEntry,
+  AutonomyAdapter,
+  RuntimeTruthSnapshot,
+  Signal,
+} from './types.js'
+import {
+  computeRuntimeTruth,
+  appendTruthLog,
+  computeConfigFingerprint,
+} from './runtime-truth.js'
+export interface DesktopAdapterContext {
+  backendProcessRef: () => { pid: number | null; running: boolean; startedAt: number | null } | null
+  restartCountRef: () => number
+  port: number
+  appVersion: string
+  buildSha: string
+  configPath: string | null
+  knownGoodFingerprint?: string | null
+  restartBackend?: () => Promise<void>
+  triggerRollback?: () => Promise<void>
+  knownGoodConfigContent?: string | null
+}
+export class DesktopAutonomyAdapter implements AutonomyAdapter {
+  private ctx: DesktopAdapterContext
+  private userDataDir: string
+  private auditPath: string
+  private knownGoodFingerprint: string | null
+  constructor(ctx: DesktopAdapterContext) {
+    this.ctx = ctx
+    this.userDataDir = app.getPath('userData')
+    const autonomyDir = path.join(this.userDataDir, 'autonomy')
+    fs.mkdirSync(autonomyDir, { recursive: true })
+    this.auditPath = path.join(autonomyDir, 'audit.jsonl')
+    this.knownGoodFingerprint = ctx.knownGoodFingerprint ?? null
+  }
+  static forTest(ctx: DesktopAdapterContext, userDataDir: string): DesktopAutonomyAdapter {
+    const inst = Object.create(DesktopAutonomyAdapter.prototype) as DesktopAutonomyAdapter
+    inst.ctx = ctx
+    inst.userDataDir = userDataDir
+    const autonomyDir = path.join(userDataDir, 'autonomy')
+    fs.mkdirSync(autonomyDir, { recursive: true })
+    inst.auditPath = path.join(autonomyDir, 'audit.jsonl')
+    inst.knownGoodFingerprint = ctx.knownGoodFingerprint ?? null
+    return inst
+  }
+  async collectTruth(): Promise<RuntimeTruthSnapshot> {
+    const backendInfo = this.ctx.backendProcessRef() ?? { pid: null, running: false, startedAt: null }
+    const portInUse = await isPortInUse(this.ctx.port)
+    let desktopStatus: unknown = undefined
+    try {
+      const resp = await fetch(`http://127.0.0.1:${this.ctx.port}/api/desktop/status`, {
+        signal: AbortSignal.timeout(2000),
+      })
+      if (resp.ok) desktopStatus = await resp.json()
+    } catch {
+    }
+    const truth = computeRuntimeTruth({
+      userDataDir: this.userDataDir,
+      backend: backendInfo,
+      portInUse,
+      configPath: this.ctx.configPath,
+      knownGoodFingerprint: this.knownGoodFingerprint,
+      appVersion: this.ctx.appVersion,
+      buildSha: this.ctx.buildSha,
+      restartCount: this.ctx.restartCountRef(),
+      desktopStatus,
+    })
+    appendTruthLog(this.userDataDir, truth)
+    return truth
+  }
+  subscribeSignals(_emit: (signal: Signal) => void): void {
+  }
+  async executeAction(action: Action): Promise<ActionResult> {
+    const ts = Date.now()
+    try {
+      switch (action.type) {
+        case 'restart_backend': {
+          if (!this.ctx.restartBackend) {
+            return { action, ok: false, detail: 'restartBackend callback not injected', ts }
+          }
+          await this.ctx.restartBackend()
+          return { action, ok: true, detail: 'backend restart triggered', ts }
+        }
+        case 'rollback_version': {
+          if (!this.ctx.triggerRollback) {
+            return { action, ok: false, detail: 'triggerRollback callback not injected', ts }
+          }
+          if (this.knownGoodFingerprint === null) {
+            return { action, ok: false, detail: 'no known-good fingerprint, refuse rollback', ts }
+          }
+          await this.ctx.triggerRollback()
+          return { action, ok: true, detail: 'rollback triggered', ts }
+        }
+        case 'clear_cache': {
+          const cacheDir = path.join(this.userDataDir, 'cache')
+          const neurobusDir = path.join(this.userDataDir, 'neurobus_cache')
+          let cleared = 0
+          for (const d of [cacheDir, neurobusDir]) {
+            if (fs.existsSync(d)) {
+              fs.rmSync(d, { recursive: true, force: true })
+              cleared += 1
+            }
+          }
+          return { action, ok: true, detail: `cleared ${cleared} cache dirs`, ts }
+        }
+        case 'repair_config': {
+          if (!this.ctx.configPath) {
+            return { action, ok: false, detail: 'no configPath configured', ts }
+          }
+          if (!this.ctx.knownGoodConfigContent) {
+            return { action, ok: false, detail: 'no known-good config content to restore', ts }
+          }
+          const backupPath = `${this.ctx.configPath}.autonomy-bak-${Date.now()}`
+          fs.copyFileSync(this.ctx.configPath, backupPath)
+          fs.writeFileSync(this.ctx.configPath, this.ctx.knownGoodConfigContent, 'utf8')
+          return { action, ok: true, detail: `config restored (backup: ${backupPath})`, ts }
+        }
+        case 'escalate':
+        case 'noop':
+          return { action, ok: true, detail: `${action.type} acknowledged`, ts }
+        default:
+          return { action, ok: false, detail: `not-implemented:${action.type}`, ts }
+      }
+    } catch (e) {
+      return {
+        action,
+        ok: false,
+        detail: `execute_threw: ${e instanceof Error ? e.message : String(e)}`,
+        ts,
+      }
+    }
+  }
+  audit(entry: AuditEntry): void {
+    try {
+      fs.appendFileSync(this.auditPath, `${JSON.stringify(entry)}\n`, 'utf8')
+    } catch {
+    }
+  }
+  setKnownGoodFingerprint(fp: string): void {
+    this.knownGoodFingerprint = fp
+  }
+  computeCurrentFingerprint(): string {
+    return computeConfigFingerprint(this.ctx.configPath)
+  }
+}
+function isPortInUse(port: number): Promise<boolean> {
+  return new Promise(resolve => {
+    const tester = net.createServer()
+    tester.once('error', () => resolve(true))
+    tester.once('listening', () => {
+      tester.close(() => resolve(false))
+    })
+    tester.listen(port, '127.0.0.1')
+  })
+}
+// ===== [桌面端(desktop)] autonomy/impact-predictor.ts =====
+import type { Action, RuntimeTruthSnapshot } from './types.js'
+import { getThreshold } from './adaptive-thresholds.js'
+export interface Prediction {
+  allow: boolean
+  reasons: string[]
+  suggestions?: string[]
+  meta?: {
+    disk_clean_threshold?: number
+    restart_count_cap?: number
+    mode?: 'rules' | 'rules+advisory'
+  }
+}
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
+const BACKEND_INIT_GUARD_MS = 10_000
+export function predict(action: Action, truth: RuntimeTruthSnapshot): Prediction {
+  const reasons: string[] = []
+  const suggestions: string[] = []
+  const now = Date.now()
+  const diskCleanThreshold = getThreshold('disk_clean_threshold').value
+  const restartCap = Math.round(getThreshold('restart_count_cap').value)
+  switch (action.type) {
+    case 'restart_backend': {
+      if (truth.backend?.running && truth.backend.startedAt && now - truth.backend.startedAt < BACKEND_INIT_GUARD_MS) {
+        reasons.push(`backend 启动不足 ${BACKEND_INIT_GUARD_MS / 1000}s（${Math.round((now - truth.backend.startedAt) / 1000)}s），可能正在初始化，避免误重启`)
+      }
+      if (!truth.port_in_use) {
+        reasons.push('端口未占用，backend 可能已退出，应直接 spawn 而非 restart')
+      }
+      if (truth.restart_count >= restartCap) {
+        reasons.push(`restart_count=${truth.restart_count} 已达自适应上限 ${restartCap}，继续重启可能徒劳`)
+        suggestions.push('考虑 rollback_version 或 escalate')
+      }
+      break
+    }
+    case 'rollback_version': {
+      if (truth.pending_rollback_marker) {
+        reasons.push('已存在 rollback marker，禁止嵌套回滚')
+      }
+      if (truth.last_backup_ts !== null && now - truth.last_backup_ts > SEVEN_DAYS_MS) {
+        reasons.push(`最近备份超过 7 天（${Math.round((now - truth.last_backup_ts) / (24 * 3600 * 1000))} 天前），回滚后数据可能丢失`)
+        suggestions.push('先执行手动备份再回滚')
+      }
+      if (truth.last_backup_ts === null) {
+        reasons.push('无已知备份，回滚后无数据可恢复')
+      }
+      break
+    }
+    case 'clear_cache': {
+      if (truth.disk_usage_percent <= diskCleanThreshold) {
+        reasons.push(`磁盘占用 ${truth.disk_usage_percent}% <= 自适应阈值 ${diskCleanThreshold}%，无需清理`)
+      }
+      break
+    }
+    case 'repair_config': {
+      if (!truth.config_fingerprint_changed) {
+        reasons.push('配置未漂移，无需修复')
+      }
+      break
+    }
+    case 'restart_service':
+    case 'rollback_to_last_tarball':
+    case 'freeze_manifest':
+    case 'clear_logs':
+    case 'escalate':
+    case 'noop':
+      break
+  }
+  return {
+    allow: reasons.length === 0,
+    reasons,
+    ...(suggestions.length > 0 ? { suggestions } : {}),
+    meta: {
+      disk_clean_threshold: diskCleanThreshold,
+      restart_count_cap: restartCap,
+      mode: 'rules',
+    },
+  }
+}
+// ===== [桌面端(desktop)] autonomy/rca-rules.ts =====
+import type { Diagnosis, Signal } from './types.js'
+export const RCA_MAP: Record<string, string> = {
+  backend_exit: 'backend_crash',
+  disk_full: 'disk_pressure',
+  config_fingerprint_changed: 'config_drift',
+  port_in_use: 'port_conflict',
+  LLM_RUNTIME_UNAVAILABLE: 'llm_runtime_down',
+  NEURO_BUS_CIRCUIT_OPEN: 'neurobus_circuit_open',
+  NEURO_BUS_DLQ_FULL: 'neurobus_dlq_saturated',
+  NEURO_BUS_RATE_LIMIT: 'neurobus_rate_limited',
+  ota_install_failed: 'ota_install_corrupted',
+}
+export const DEFAULT_ROOT_CAUSE = 'unknown'
+export function diagnoseRootCause(signals: Signal[]): Diagnosis {
+  if (signals.length === 0) {
+    return {
+      root_cause: DEFAULT_ROOT_CAUSE,
+      confidence: 0,
+      detail: '无信号输入',
+      evidence: [],
+    }
+  }
+  const sorted = [...signals].sort((a, b) => b.ts - a.ts)
+  const latest = sorted[0]
+  const root_cause = RCA_MAP[latest.kind] ?? DEFAULT_ROOT_CAUSE
+  const evidence = sorted.slice(0, 5).map(s => `[${s.kind}] ${s.detail}`)
+  return {
+    root_cause,
+    confidence: root_cause === DEFAULT_ROOT_CAUSE ? 0.3 : 0.8,
+    detail: `最近信号: ${latest.kind} - ${latest.detail}`,
+    evidence,
+  }
+}
+// ===== [桌面端(desktop)] autonomy/runtime-truth.ts =====
+import fs from 'node:fs'
+import path from 'node:path'
+import type { RuntimeTruthSnapshot, Signal, BackendRuntimeInfo } from './types.js'
+export function diskUsagePercent(dirPath: string): number {
+  try {
+    const stat = fs.statfsSync(dirPath)
+    const total = stat.blocks * stat.bsize
+    const free = stat.bavail * stat.bsize
+    if (total === 0) return 0
+    return Math.round(((total - free) / total) * 100)
+  } catch {
+    return 0
+  }
+}
+export function computeConfigFingerprint(configPath: string | null): string {
+  if (!configPath) return ''
+  try {
+    if (!fs.existsSync(configPath)) return ''
+    const content = fs.readFileSync(configPath, 'utf8')
+    const head = content.slice(0, 64)
+    const tail = content.slice(-64)
+    let sum = content.length
+    for (let i = 0; i < head.length; i += 1) sum += head.charCodeAt(i)
+    for (let i = 0; i < tail.length; i += 1) sum += tail.charCodeAt(i)
+    return sum.toString(16).padStart(12, '0').slice(-12)
+  } catch {
+    return ''
+  }
+}
+export function resolveNeurobus(status: unknown): RuntimeTruthSnapshot['neurobus'] {
+  if (!status || typeof status !== 'object') return undefined
+  const s = status as Record<string, unknown>
+  return {
+    available: Boolean(s.available ?? false),
+    circuit_open: Boolean(s.circuit_open ?? false),
+    dlq_size: Number(s.dlq_size ?? 0),
+  }
+}
+export function resolveLastBackup(backupsDir: string): number | null {
+  try {
+    if (!fs.existsSync(backupsDir)) return null
+    const entries = fs.readdirSync(backupsDir, { withFileTypes: true })
+      .filter(e => e.isFile())
+      .map(e => {
+        const full = path.join(backupsDir, e.name)
+        try {
+          return { name: e.name, mtime: fs.statSync(full).mtimeMs }
+        } catch {
+          return { name: e.name, mtime: 0 }
+        }
+      })
+      .sort((a, b) => b.mtime - a.mtime)
+    return entries[0]?.mtime ?? null
+  } catch {
+    return null
+  }
+}
+export function hasPendingRollbackMarker(userDataDir: string): boolean {
+  try {
+    return fs.existsSync(path.join(userDataDir, 'rollback-marker.json'))
+  } catch {
+    return false
+  }
+}
+export function computeRuntimeTruth(ctx: {
+  userDataDir: string
+  backend: BackendRuntimeInfo
+  portInUse: boolean
+  configPath: string | null
+  knownGoodFingerprint: string | null
+  appVersion: string
+  buildSha: string
+  restartCount: number
+  desktopStatus?: unknown
+  diskFreeMb?: number
+  dbIntegrity?: 'ok' | 'warn' | 'fail' | 'unknown'
+  lastNetworkOkTs?: number | null
+}): RuntimeTruthSnapshot {
+  const backupsDir = path.join(ctx.userDataDir, 'backups')
+  const currentFingerprint = computeConfigFingerprint(ctx.configPath)
+  const fingerprintChanged = Boolean(
+    ctx.knownGoodFingerprint &&
+    currentFingerprint &&
+    currentFingerprint !== ctx.knownGoodFingerprint,
+  )
+  const truth: RuntimeTruthSnapshot = {
+    ts: Date.now(),
+    backend: ctx.backend,
+    port_in_use: ctx.portInUse,
+    disk_usage_percent: diskUsagePercent(ctx.userDataDir),
+    config_fingerprint_changed: fingerprintChanged,
+    pending_rollback_marker: hasPendingRollbackMarker(ctx.userDataDir),
+    last_backup_ts: resolveLastBackup(backupsDir),
+    app_version: ctx.appVersion,
+    build_sha: ctx.buildSha,
+    restart_count: ctx.restartCount,
+    neurobus: resolveNeurobus(ctx.desktopStatus),
+  }
+  if (ctx.diskFreeMb !== undefined) truth.disk_free_mb = ctx.diskFreeMb
+  if (ctx.dbIntegrity !== undefined) truth.db_integrity = ctx.dbIntegrity
+  if (ctx.lastNetworkOkTs !== undefined) truth.last_network_ok_ts = ctx.lastNetworkOkTs
+  return truth
+}
+const NETWORK_DOWN_THRESHOLD_MS = 5 * 60 * 1000
+const DISK_LOW_THRESHOLD_MB = 500
+export function deriveSignalsFromTruth(truth: RuntimeTruthSnapshot): Signal[] {
+  const signals: Signal[] = []
+  const now = truth.ts
+  if (truth.disk_usage_percent >= 90) {
+    signals.push({
+      source: 'runtime_truth',
+      kind: 'disk_full',
+      severity: 'crit',
+      detail: `磁盘占用 ${truth.disk_usage_percent}%`,
+      ts: now,
+      payload: { percent: truth.disk_usage_percent },
+    })
+  }
+  if (truth.config_fingerprint_changed) {
+    signals.push({
+      source: 'runtime_truth',
+      kind: 'config_fingerprint_changed',
+      severity: 'warn',
+      detail: '配置文件指纹与已知良好快照不一致',
+      ts: now,
+    })
+  }
+  if (truth.neurobus?.circuit_open) {
+    signals.push({
+      source: 'runtime_truth',
+      kind: 'NEURO_BUS_CIRCUIT_OPEN',
+      severity: 'crit',
+      detail: 'NeuroBus 熔断器已打开',
+      ts: now,
+      payload: { dlq_size: truth.neurobus.dlq_size },
+    })
+  }
+  if (truth.neurobus && truth.neurobus.dlq_size > 1000) {
+    signals.push({
+      source: 'runtime_truth',
+      kind: 'NEURO_BUS_DLQ_FULL',
+      severity: 'crit',
+      detail: `NeuroBus DLQ 堆积 ${truth.neurobus.dlq_size} 条`,
+      ts: now,
+      payload: { dlq_size: truth.neurobus.dlq_size },
+    })
+  }
+  if (truth.disk_free_mb !== undefined && truth.disk_free_mb < DISK_LOW_THRESHOLD_MB) {
+    signals.push({
+      source: 'runtime_truth',
+      kind: 'disk_low',
+      severity: 'crit',
+      detail: `磁盘剩余 ${truth.disk_free_mb}MB 低于 ${DISK_LOW_THRESHOLD_MB}MB 阈值`,
+      ts: now,
+      payload: { disk_free_mb: truth.disk_free_mb },
+    })
+  }
+  if (truth.db_integrity === 'fail') {
+    signals.push({
+      source: 'runtime_truth',
+      kind: 'db_corrupt',
+      severity: 'fatal',
+      detail: '数据库完整性检查失败',
+      ts: now,
+      payload: { db_integrity: truth.db_integrity },
+    })
+  }
+  if (truth.last_network_ok_ts !== undefined && truth.last_network_ok_ts !== null) {
+    if (now - truth.last_network_ok_ts > NETWORK_DOWN_THRESHOLD_MS) {
+      signals.push({
+        source: 'runtime_truth',
+        kind: 'network_down',
+        severity: 'warn',
+        detail: `网络断线超过 ${NETWORK_DOWN_THRESHOLD_MS / 60000} 分钟`,
+        ts: now,
+        payload: { last_network_ok_ts: truth.last_network_ok_ts },
+      })
+    }
+  }
+  return signals
+}
+export function appendTruthLog(userDataDir: string, truth: RuntimeTruthSnapshot): void {
+  try {
+    const logDir = path.join(userDataDir, 'autonomy')
+    fs.mkdirSync(logDir, { recursive: true })
+    const logPath = path.join(logDir, 'truth.jsonl')
+    fs.appendFileSync(logPath, `${JSON.stringify(truth)}\n`, 'utf8')
+  } catch {
+  }
+}
+// ===== [桌面端(desktop)] autonomy/strategic-planner.ts =====
+export interface FeatureBet {
+  title: string
+  why: string
+  success_metric: string
+  horizon_weeks: number
+  dependencies: string[]
+  risk: 'low' | 'medium' | 'high' | string
+}
+export interface QuarterlyPlan {
+  quarter: string
+  goal: string
+  features: FeatureBet[]
+  rationale: string
+  revisions: Array<Record<string, unknown>>
+  source: string
+  generated_at?: string
+}
+function currentQuarter(d = new Date()): string {
+  const q = Math.floor(d.getUTCMonth() / 3) + 1
+  return `${d.getUTCFullYear()}-Q${q}`
+}
+export function heuristicQuarterlyPlan(goal: string, quarter?: string): QuarterlyPlan {
+  return {
+    quarter: quarter || currentQuarter(),
+    goal: goal.trim() || '本季度推进 LLM 战略规划与自治软约束化',
+    features: [
+      {
+        title: 'LLM 季度规划闭环上生产',
+        why: '把战略从阈值机升级为可拆解目标',
+        success_metric: '每季度自动产出 3 个功能赌注并经反思修订',
+        horizon_weeks: 4,
+        dependencies: [],
+        risk: 'medium',
+      },
+      {
+        title: '运维自治软约束化',
+        why: 'CRASH_THRESHOLD 等硬阈值改为带 floor 的自适应',
+        success_metric: '崩溃回滚阈值可影子学习且不低于安全下限',
+        horizon_weeks: 3,
+        dependencies: [],
+        risk: 'high',
+      },
+      {
+        title: 'ImpactPredictor 规则+LLM 双轨',
+        why: 'switch-case 只做安全轨，复杂副作用走 LLM 顾问',
+        success_metric: '高风险动作有 advisory 记录且误拦可审计',
+        horizon_weeks: 5,
+        dependencies: [],
+        risk: 'medium',
+      },
+    ],
+    rationale: 'desktop_heuristic_fallback',
+    revisions: [],
+    source: 'heuristic_fallback',
+    generated_at: new Date().toISOString(),
+  }
+}
+export async function planQuarterViaApi(opts: {
+  baseUrl: string
+  token?: string
+  goal?: string
+  critique?: string
+  quarter?: string
+}): Promise<QuarterlyPlan> {
+  const url = `${opts.baseUrl.replace(/\/$/, '')}/api/xcmax/ops/strategic-plan`
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(opts.token ? { Authorization: `Bearer ${opts.token}` } : {}),
+      },
+      body: JSON.stringify({
+        goal: opts.goal,
+        critique: opts.critique,
+        quarter: opts.quarter,
+        use_llm: true,
+        persist: true,
+      }),
+    })
+    if (!res.ok) {
+      return heuristicQuarterlyPlan(opts.goal || '', opts.quarter)
+    }
+    const body = (await res.json()) as { success?: boolean; data?: QuarterlyPlan }
+    if (body?.data?.features?.length) return body.data
+  } catch {
+  }
+  return heuristicQuarterlyPlan(opts.goal || '', opts.quarter)
+}
+// ===== [桌面端(desktop)] autonomy/types.ts =====
+export interface Signal {
+  source: string
+  kind: string
+  severity: 'info' | 'warn' | 'crit' | 'fatal'
+  detail: string
+  ts: number
+  payload?: Record<string, unknown>
+}
+export interface Diagnosis {
+  root_cause: string
+  confidence: number
+  detail: string
+  evidence: string[]
+}
+export type ActionType =
+  | 'restart_backend'
+  | 'rollback_version'
+  | 'clear_cache'
+  | 'repair_config'
+  | 'restart_service'
+  | 'rollback_to_last_tarball'
+  | 'freeze_manifest'
+  | 'clear_logs'
+  | 'escalate'
+  | 'noop'
+export type RiskLevel = 'low' | 'medium' | 'high'
+export interface Action {
+  type: ActionType
+  params: Record<string, unknown>
+  idempotency_key: string
+  max_attempts: number
+  risk: RiskLevel
+}
+export interface ActionResult {
+  action: Action
+  ok: boolean
+  detail: string
+  ts: number
+}
+export interface Plan {
+  diagnosis: Diagnosis
+  actions: Action[]
+}
+export interface Policy {
+  id: string
+  matches: string[]
+  gate: 'auto' | 'approve' | 'manual'
+  plan: (signals: Signal[]) => Plan
+}
+export interface BackendRuntimeInfo {
+  pid: number | null
+  running: boolean
+  startedAt: number | null
+}
+export interface RuntimeTruthSnapshot {
+  ts: number
+  backend: BackendRuntimeInfo
+  port_in_use: boolean
+  disk_usage_percent: number
+  config_fingerprint_changed: boolean
+  pending_rollback_marker: boolean
+  last_backup_ts: number | null
+  app_version: string
+  build_sha: string
+  restart_count: number
+  neurobus?: {
+    available: boolean
+    circuit_open: boolean
+    dlq_size: number
+  }
+  disk_free_mb?: number
+  db_integrity?: 'ok' | 'warn' | 'fail' | 'unknown'
+  last_network_ok_ts?: number | null
+  extra?: Record<string, unknown>
+}
+export interface AuditEntry {
+  ts: string
+  source_signal: Signal | null
+  diagnosis: Diagnosis | null
+  action: Action | { type: 'skipped'; reasons: string[] } | null
+  result: ActionResult | null
+  truth_snapshot?: Partial<RuntimeTruthSnapshot>
+}
+export interface AutonomyAdapter {
+  collectTruth(): Promise<RuntimeTruthSnapshot>
+  subscribeSignals(emit: (signal: Signal) => void): void
+  executeAction(action: Action): Promise<ActionResult>
+  audit(entry: AuditEntry): void
+  getRemoteState?(): Promise<Record<string, unknown> | null>
+}
+export interface ControllerOptions {
+  enabled?: boolean
+  pollIntervalMs?: number
+  signalRetentionMs?: number
+  defaultCooldownMs?: number
+}
+// ===== [桌面端(desktop)] autonomy/policies/backend-crash.policy.ts =====
+import type { Policy, Signal, Action, Diagnosis } from '../types.js'
+import { diagnoseRootCause } from '../rca-rules.js'
+import { getThreshold } from '../adaptive-thresholds.js'
+export const backendCrashPolicy: Policy = {
+  id: 'backend-crash',
+  matches: ['backend_exit'],
+  gate: 'auto',
+  plan(signals: Signal[]): { diagnosis: Diagnosis; actions: Action[] } {
+    const diagnosis = diagnoseRootCause(signals)
+    const exits = signals
+      .filter(s => s.kind === 'backend_exit')
+      .sort((a, b) => a.ts - b.ts)
+    if (exits.length === 0) return { diagnosis, actions: [] }
+    const crashThreshold = Math.round(getThreshold('crash_threshold').value)
+    const windowMs = Math.round(getThreshold('crash_window_ms').value)
+    const now = exits[exits.length - 1].ts
+    const recent = exits.filter(s => s.ts >= now - windowMs)
+    if (recent.length < crashThreshold) {
+      return { diagnosis, actions: [] }
+    }
+    const reason =
+      `backend ${Math.round(windowMs / 60000)}min 内崩溃 ${recent.length} 次，` +
+      `超过自适应阈值 ${crashThreshold}（floor/ceiling 受控）`
+    return {
+      diagnosis,
+      actions: [
+        {
+          type: 'rollback_version',
+          params: {
+            reason,
+            crash_count: recent.length,
+            window_ms: windowMs,
+            crash_threshold: crashThreshold,
+            threshold_source: 'adaptive',
+          },
+          idempotency_key: 'rollback:backend-crash',
+          max_attempts: 1,
+          risk: 'high',
+        },
+      ],
+    }
+  },
+}
+// ===== [桌面端(desktop)] autonomy/policies/degraded-remediation.policy.ts =====
+import type { Policy, Signal, Action, Diagnosis } from '../types.js'
+import { diagnoseRootCause } from '../rca-rules.js'
+const KIND_TO_ACTION: Record<string, { type: Action['type']; risk: Action['risk']; max_attempts: number; idempotency_key: string }> = {
+  disk_full: {
+    type: 'clear_cache',
+    risk: 'low',
+    max_attempts: 2,
+    idempotency_key: 'clear_cache:disk_full',
+  },
+  config_fingerprint_changed: {
+    type: 'repair_config',
+    risk: 'medium',
+    max_attempts: 1,
+    idempotency_key: 'repair_config:fingerprint_changed',
+  },
+  port_in_use: {
+    type: 'escalate',
+    risk: 'high',
+    max_attempts: 1,
+    idempotency_key: 'escalate:port_in_use',
+  },
+  LLM_RUNTIME_UNAVAILABLE: {
+    type: 'escalate',
+    risk: 'high',
+    max_attempts: 1,
+    idempotency_key: 'escalate:llm_unavailable',
+  },
+  NEURO_BUS_CIRCUIT_OPEN: {
+    type: 'escalate',
+    risk: 'high',
+    max_attempts: 1,
+    idempotency_key: 'escalate:neurobus_circuit',
+  },
+  NEURO_BUS_DLQ_FULL: {
+    type: 'escalate',
+    risk: 'high',
+    max_attempts: 1,
+    idempotency_key: 'escalate:neurobus_dlq',
+  },
+  NEURO_BUS_RATE_LIMIT: {
+    type: 'escalate',
+    risk: 'high',
+    max_attempts: 1,
+    idempotency_key: 'escalate:neurobus_rate_limit',
+  },
+  disk_low: {
+    type: 'escalate',
+    risk: 'high',
+    max_attempts: 1,
+    idempotency_key: 'escalate:disk_low',
+  },
+  db_corrupt: {
+    type: 'escalate',
+    risk: 'high',
+    max_attempts: 1,
+    idempotency_key: 'escalate:db_corrupt',
+  },
+  network_down: {
+    type: 'escalate',
+    risk: 'high',
+    max_attempts: 1,
+    idempotency_key: 'escalate:network_down',
+  },
+}
+export const degradedRemediationPolicy: Policy = {
+  id: 'degraded-remediation',
+  matches: Object.keys(KIND_TO_ACTION),
+  gate: 'auto',
+  plan(signals: Signal[]): { diagnosis: Diagnosis; actions: Action[] } {
+    const diagnosis = diagnoseRootCause(signals)
+    const seenKinds = new Set<string>()
+    const actions: Action[] = []
+    const sorted = [...signals].sort((a, b) => b.ts - a.ts)
+    for (const sig of sorted) {
+      if (seenKinds.has(sig.kind)) continue
+      seenKinds.add(sig.kind)
+      const mapping = KIND_TO_ACTION[sig.kind]
+      if (!mapping) continue
+      actions.push({
+        type: mapping.type,
+        params: { reason: sig.detail, source_kind: sig.kind, ts: sig.ts },
+        idempotency_key: mapping.idempotency_key,
+        max_attempts: mapping.max_attempts,
+        risk: mapping.risk,
+      })
+    }
+    return { diagnosis, actions }
+  },
+}
+// ===== [桌面端(desktop)] autonomy/policies/update-rollback.policy.ts =====
+import type { Policy, Signal, Action, Diagnosis } from '../types.js'
+import { diagnoseRootCause } from '../rca-rules.js'
+export const updateRollbackPolicy: Policy = {
+  id: 'update-rollback',
+  matches: ['ota_install_failed'],
+  gate: 'auto',
+  plan(signals: Signal[]): { diagnosis: Diagnosis; actions: Action[] } {
+    const diagnosis = diagnoseRootCause(signals)
+    const fails = signals.filter(s => s.kind === 'ota_install_failed')
+    if (fails.length === 0) return { diagnosis, actions: [] }
+    const latest = fails.sort((a, b) => b.ts - a.ts)[0]
+    const reason = String(latest.payload?.reason || latest.detail || 'OTA 安装失败')
+    return {
+      diagnosis,
+      actions: [
+        {
+          type: 'rollback_version',
+          params: { reason, source: 'ota_install_failed', signal_ts: latest.ts },
+          idempotency_key: 'rollback:ota-install-failed',
+          max_attempts: 1,
+          risk: 'high',
+        },
+      ],
+    }
+  },
+}

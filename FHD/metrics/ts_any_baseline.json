@@ -1,0 +1,5 @@
+{
+  "_note": "前端显式 any 棘轮基线（只减不增）。统计口径：类型注解/断言中的显式 any，排除测试文件与生成目录。由 scripts/dev/count_ts_any.py --bump 维护（只降方向）。2026-09-01 首轮实测 292（跨 FHD/frontend、admin-console、sunbird-console、mods、desktop、market、desktop-shell 全栈）。",
+  "updated": "2026-09-02",
+  "any_count": 158
+}

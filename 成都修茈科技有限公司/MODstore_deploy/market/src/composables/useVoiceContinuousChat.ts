@@ -1,110 +1,26 @@
-import { ref, onMounted, onBeforeUnmount, type Ref } from 'vue'
+// 兼容 façade：useVoiceContinuousChat 已按关注点拆分（端点配置/推测式判定/ASR 恢复），
+// 本文件保留原导出面（常量、类型与组合函数），内部编排与原单体行为完全一致。
+import { ref } from 'vue'
 import type { ASRResult } from './asr/types'
-import type { useSpeechRecognition } from './useSpeechRecognition'
 import { mergeAsrLiveText } from './mergeAsrLiveText'
 import { normalizeVoiceAsrText } from './normalizeVoiceAsrText'
 import { shouldFlushVoiceUtterance, type VoiceCaptureSnapshot } from './voiceEndpointLogic'
 import { speculativeTextsMatch } from './voiceSpeculativeMatch'
 import { takeMicPreflight } from './asr/micPreflight'
-import { wakeSharedMicCapture } from './asr/sharedMicCapture'
-import { isIOSVoiceDevice, isMobileVoiceDevice } from './voiceDevice'
+import {
+  createVoiceEndpointResolver,
+  refreshVoiceEndpoint,
+  VOICE_ENDPOINT,
+  type VoiceContinuousChatDeps,
+} from './voiceContinuousChatConfig'
+import { createVoiceSpeculation } from './voiceSpeculation'
+import { createVoiceAsrRecovery } from './voiceAsrRecovery'
 
-export const VOICE_ENDPOINT = {
-  /** 说完后的静音窗口：桌面约 700ms；过短易切碎句 */
-  silenceMs: 700,
-  speechLevel: 0.012,
-  /** 推测式 LLM 需 partial 稳定更久，避免半句就「嗯，你说」 */
-  partialStableMs: 1100,
-  /** S2S：partial 稳定后发 utterance_start（早于 speculative） */
-  partialStableS2sMs: 500,
-  /** 中文短句常 <10 字；过低易半句误发，6 字可覆盖「听得到吗」类问句 */
-  partialMinChars: 6,
-  /** FunASR offline 段确认后的提交防抖 */
-  serverFinalDebounceMs: 280,
-} as const
-
-/** unified / s2s 电话式：更短判停、更早开答（对标豆包动态判停） */
-export const VOICE_PHONE_ENDPOINT = {
-  silenceMs: 520,
-  speechLevel: 0.011,
-  partialStableMs: 950,
-  partialStableS2sMs: 380,
-  partialMinChars: 4,
-  serverFinalDebounceMs: 220,
-} as const
-
-export function voiceEndpointForDevice() {
-  if (!isMobileVoiceDevice()) return VOICE_ENDPOINT
-  const ios = isIOSVoiceDevice()
-  return {
-    silenceMs: ios ? 900 : 1000,
-    speechLevel: ios ? 0.028 : 0.024,
-    partialStableMs: ios ? 1200 : 1300,
-    partialStableS2sMs: ios ? 550 : 600,
-    partialMinChars: VOICE_ENDPOINT.partialMinChars,
-    serverFinalDebounceMs: VOICE_ENDPOINT.serverFinalDebounceMs,
-  } as const
-}
-
-let activeEndpoint = voiceEndpointForDevice()
-
-export function refreshVoiceEndpoint() {
-  activeEndpoint = voiceEndpointForDevice()
-}
-
-export interface VoiceContinuousChatDeps {
-  asr: ReturnType<typeof useSpeechRecognition>
-  isAsrReady?: () => boolean
-  autoSend: Ref<boolean>
-  voiceState: Ref<string>
-  voiceChatPhase: Ref<string>
-  isVoiceTargetActive: () => boolean
-  setVoiceTarget: () => void
-  clearVoiceTarget: () => void
-  beforeStartListening?: () => void
-  onUtteranceReady: (text: string, ctx: { speculativePartial: string | null }) => Promise<void>
-  onSpeculativeStart: (partialText: string) => void
-  onSpeculativeCancel: () => void
-  onBargeIn: () => void
-  /** TTS 正在合成/播放时为 true */
-  isTtsPlaying?: () => boolean
-  /** TTS 播放中检测到用户说话；返回 true 表示已触发打断 */
-  onAsrDuringTts?: (level: number) => boolean
-  canSpeculate: (partialText: string) => boolean
-  isChatBusy: () => boolean
-  getAsrBackendId?: () => string
-  /** FunASR：用户停说时立即通知服务端（is_speaking:false） */
-  signalAsrEndOfSpeech?: () => void
-  /** unified/s2s：partial 稳定后提前开 LLM（不等 offline） */
-  onS2SPartialStable?: (text: string, turnId: string) => void
-  /** unified/s2s：offline 到达后 finalize / 纠错 */
-  onS2SUtteranceFinalize?: (text: string, turnId: string) => void
-  /** unified 或 s2s 电话式管线 */
-  voiceUsePhonePipeline?: () => boolean
-  /** @deprecated 使用 voiceUsePhonePipeline */
-  voiceUseS2S?: () => boolean
-  /** 电话式：更短判停与更早 provisional */
-  usePhoneLatency?: () => boolean
-}
+export { VOICE_ENDPOINT, VOICE_PHONE_ENDPOINT, voiceEndpointForDevice, refreshVoiceEndpoint } from './voiceContinuousChatConfig'
+export type { VoiceContinuousChatDeps } from './voiceContinuousChatConfig'
 
 export function useVoiceContinuousChat(deps: VoiceContinuousChatDeps) {
-  function endpoint() {
-    if (deps.usePhoneLatency?.()) {
-      const base = activeEndpoint
-      return {
-        ...base,
-        silenceMs: Math.min(base.silenceMs, VOICE_PHONE_ENDPOINT.silenceMs),
-        partialStableS2sMs: Math.min(base.partialStableS2sMs ?? VOICE_ENDPOINT.partialStableS2sMs, VOICE_PHONE_ENDPOINT.partialStableS2sMs),
-        partialMinChars: Math.min(base.partialMinChars, VOICE_PHONE_ENDPOINT.partialMinChars),
-        serverFinalDebounceMs: Math.min(
-          base.serverFinalDebounceMs ?? VOICE_ENDPOINT.serverFinalDebounceMs,
-          VOICE_PHONE_ENDPOINT.serverFinalDebounceMs,
-        ),
-        speechLevel: Math.min(base.speechLevel, VOICE_PHONE_ENDPOINT.speechLevel),
-      }
-    }
-    return activeEndpoint
-  }
+  const endpoint = createVoiceEndpointResolver(deps)
 
   const voiceDraft = ref('')
   const voiceTranscript = ref('')
@@ -112,8 +28,6 @@ export function useVoiceContinuousChat(deps: VoiceContinuousChatDeps) {
   const voiceListening = ref(false)
   const voiceAudioLevel = ref(0)
   const micPausedByUser = ref(false)
-  const isSpeculating = ref(false)
-  const partialStable = ref(false)
 
   let continuousSilenceTimer: ReturnType<typeof setTimeout> | null = null
   let silenceWatchdog: ReturnType<typeof setInterval> | null = null
@@ -126,19 +40,49 @@ export function useVoiceContinuousChat(deps: VoiceContinuousChatDeps) {
   let lastSubmittedText = ''
   let lastSubmittedAt = 0
   let listenPartial = ''
-  let speculativePartialText: string | null = null
-  let partialStableTimer: ReturnType<typeof setTimeout> | null = null
-  let partialStableSince = 0
-  let webSpeechStallTimer: ReturnType<typeof setTimeout> | null = null
-  let lastWebSpeechRetryAt = 0
   let _starting = false
   let micPeakLevel = 0
   let micWatchdog: ReturnType<typeof setTimeout> | null = null
   let serverFinalTimer: ReturnType<typeof setTimeout> | null = null
-  let s2sPartialTimer: ReturnType<typeof setTimeout> | null = null
-  let s2sPartialStableSince = 0
-  let activeS2sTurnId = ''
-  let s2sTurnSeq = 0
+
+  const spec = createVoiceSpeculation({
+    d: deps,
+    endpoint,
+    micPausedByUser,
+    voiceTranscript,
+    voiceLivePreview,
+    voiceListening,
+    getSubmitLock: () => submitLock,
+    shouldFlushUtterance,
+    finishUtterance,
+  })
+  const {
+    isSpeculating,
+    partialStable,
+    cancelSpeculativeState,
+    clearPartialStableTimer,
+    clearS2sPartialTimer,
+    scheduleS2sPartialStart,
+    scheduleSpeculativeCheck,
+  } = spec
+
+  const asrRecovery = createVoiceAsrRecovery({
+    d: deps,
+    voiceTranscript,
+    voiceDraft,
+    voiceLivePreview,
+    voiceListening,
+    voiceAudioLevel,
+    micPausedByUser,
+    finishUtterance,
+    stopAsr,
+    stopSilenceWatchdog,
+    clearContinuousSilenceTimer,
+    resetCaptureUi,
+    cancelSpeculativeState,
+    startListening,
+  })
+  const { clearWebSpeechStallTimer, scheduleWebSpeechStallCheck, onAsrError } = asrRecovery
 
   function clearContinuousSilenceTimer() {
     if (continuousSilenceTimer) {
@@ -147,79 +91,11 @@ export function useVoiceContinuousChat(deps: VoiceContinuousChatDeps) {
     }
   }
 
-  function clearWebSpeechStallTimer() {
-    if (webSpeechStallTimer) {
-      clearTimeout(webSpeechStallTimer)
-      webSpeechStallTimer = null
-    }
-  }
-
-  function scheduleWebSpeechStallCheck() {
-    clearWebSpeechStallTimer()
-    if (!voiceListening.value || micPausedByUser.value) return
-    if (deps.getAsrBackendId?.() !== 'funasr') return
-    webSpeechStallTimer = setTimeout(() => {
-      webSpeechStallTimer = null
-      if (!voiceListening.value || micPausedByUser.value) return
-      if (deps.getAsrBackendId?.() !== 'funasr') return
-      if (voiceTranscript.value.trim() || voiceLivePreview.value.trim()) return
-      const now = Date.now()
-      if (now - lastWebSpeechRetryAt < 8000) return
-      lastWebSpeechRetryAt = now
-      reconnectAsrKeepUi()
-      void startListening({ fresh: false, reconnect: true })
-    }, 12000)
-  }
-
   function clearServerFinalTimer() {
     if (serverFinalTimer) {
       clearTimeout(serverFinalTimer)
       serverFinalTimer = null
     }
-  }
-
-  function clearS2sPartialTimer() {
-    if (s2sPartialTimer) {
-      clearTimeout(s2sPartialTimer)
-      s2sPartialTimer = null
-    }
-    s2sPartialStableSince = 0
-  }
-
-  function nextS2sTurnId(): string {
-    s2sTurnSeq += 1
-    return `v${Date.now()}-${s2sTurnSeq}`
-  }
-
-  function scheduleS2sPartialStart(partialText: string) {
-    clearS2sPartialTimer()
-    const phone = deps.voiceUsePhonePipeline?.() ?? deps.voiceUseS2S?.()
-    if (!phone || !deps.onS2SPartialStable) return
-    if (!deps.autoSend.value || submitLock || micPausedByUser.value) return
-    if (partialText.length < endpoint().partialMinChars) return
-    if (deps.isChatBusy?.() && !isSpeculating.value) return
-
-    const turnId = nextS2sTurnId()
-    activeS2sTurnId = turnId
-    s2sPartialStableSince = Date.now()
-    const stableMs = endpoint().partialStableS2sMs ?? VOICE_ENDPOINT.partialStableS2sMs
-    s2sPartialTimer = setTimeout(() => {
-      s2sPartialTimer = null
-      const current = voiceTranscript.value.trim() || voiceLivePreview.value.trim()
-      if (current !== partialText) return
-      if (Date.now() - s2sPartialStableSince < stableMs - 40) return
-      if (activeS2sTurnId !== turnId) return
-      deps.onS2SPartialStable?.(current, turnId)
-    }, stableMs)
-  }
-
-  function clearPartialStableTimer() {
-    if (partialStableTimer) {
-      clearTimeout(partialStableTimer)
-      partialStableTimer = null
-    }
-    partialStable.value = false
-    partialStableSince = 0
   }
 
   function resetCaptureState() {
@@ -232,7 +108,7 @@ export function useVoiceContinuousChat(deps: VoiceContinuousChatDeps) {
     clearPartialStableTimer()
     clearServerFinalTimer()
     clearS2sPartialTimer()
-    activeS2sTurnId = ''
+    spec.clearActiveS2sTurn()
   }
 
   function captureSnapshot(): VoiceCaptureSnapshot {
@@ -305,15 +181,6 @@ export function useVoiceContinuousChat(deps: VoiceContinuousChatDeps) {
     cancelSpeculativeState()
   }
 
-  function cancelSpeculativeState() {
-    clearPartialStableTimer()
-    if (isSpeculating.value || speculativePartialText) {
-      isSpeculating.value = false
-      speculativePartialText = null
-      deps.onSpeculativeCancel()
-    }
-  }
-
   function stopSilenceWatchdog() {
     if (silenceWatchdog) {
       clearInterval(silenceWatchdog)
@@ -355,33 +222,6 @@ export function useVoiceContinuousChat(deps: VoiceContinuousChatDeps) {
     hadSpeech = true
   }
 
-  function scheduleSpeculativeCheck(partialText: string) {
-    clearPartialStableTimer()
-    if (!deps.canSpeculate(partialText)) return
-    if (deps.isChatBusy() && !isSpeculating.value) return
-    if (partialText.length < endpoint().partialMinChars) return
-
-    partialStableSince = Date.now()
-    partialStableTimer = setTimeout(() => {
-      partialStableTimer = null
-      const current = voiceTranscript.value.trim() || voiceLivePreview.value.trim()
-      if (current !== partialText) return
-      if (Date.now() - partialStableSince < endpoint().partialStableMs - 50) return
-      if (deps.autoSend.value && !submitLock && voiceListening.value && shouldFlushUtterance()) {
-        void finishUtterance()
-        return
-      }
-      if (deps.isChatBusy() && !isSpeculating.value) return
-      if (!deps.canSpeculate(current)) return
-      if (isSpeculating.value && speculativePartialText === current) return
-
-      partialStable.value = true
-      isSpeculating.value = true
-      speculativePartialText = current
-      deps.onSpeculativeStart(current)
-    }, endpoint().partialStableMs)
-  }
-
   function handleAsrResult(r: ASRResult) {
     if (micPausedByUser.value) return
     if (r.text?.trim()) clearWebSpeechStallTimer()
@@ -417,8 +257,8 @@ export function useVoiceContinuousChat(deps: VoiceContinuousChatDeps) {
       if (deps.getAsrBackendId?.() === 'funasr') {
         const finalText = normalizeVoiceAsrText(trimmed)
         const phone = deps.voiceUsePhonePipeline?.() ?? deps.voiceUseS2S?.()
-        if (phone && deps.onS2SUtteranceFinalize && activeS2sTurnId) {
-          deps.onS2SUtteranceFinalize(finalText, activeS2sTurnId)
+        if (phone && deps.onS2SUtteranceFinalize && spec.getActiveS2sTurn()) {
+          deps.onS2SUtteranceFinalize(finalText, spec.getActiveS2sTurn())
         }
         scheduleServerFinalFlush()
       } else {
@@ -496,12 +336,12 @@ export function useVoiceContinuousChat(deps: VoiceContinuousChatDeps) {
       if (!text) return
       if (shouldSkipAutoSubmit(text)) return
 
-      const specPartial = speculativePartialText
+      const specPartial = spec.getSpeculativePartialText()
       const specActive = isSpeculating.value && specPartial
 
       if (specActive && speculativeTextsMatch(text, specPartial)) {
         isSpeculating.value = false
-        speculativePartialText = null
+        spec.setSpeculativePartialText(null)
         partialStable.value = false
         lastSubmittedText = text.trim()
         lastSubmittedAt = Date.now()
@@ -648,69 +488,6 @@ export function useVoiceContinuousChat(deps: VoiceContinuousChatDeps) {
     const trimmed = text.trim()
     if (trimmed) voiceTranscript.value = trimmed
     return text
-  }
-
-  function onAsrError(msg: string) {
-    const hasText = Boolean(voiceTranscript.value.trim() || voiceDraft.value.trim())
-    if (hasText && voiceListening.value && deps.autoSend.value) {
-      void finishUtterance()
-      return
-    }
-    if (hasText && voiceListening.value) {
-      voiceListening.value = false
-      stopSilenceWatchdog()
-      deps.voiceState.value = 'idle'
-      void stopAsr()
-      return { msg, retry: false }
-    }
-    const whisperOnly = msg.includes('Whisper') || msg.includes('模型')
-    const noRetry = msg.includes('不支持') || msg.includes('权限') || msg.includes('未找到') || msg.includes('请先登录')
-    const retry = deps.autoSend.value && !noRetry && !whisperOnly
-
-    if (deps.autoSend.value && whisperOnly) {
-      reconnectAsrKeepUi()
-      return { msg: '', retry: true, delayMs: 400, fresh: true }
-    }
-    if (retry) {
-      reconnectAsrKeepUi()
-      return { msg, retry: true, delayMs: 400, fresh: !hasText }
-    }
-    resetCaptureUi()
-    return { msg, retry: false }
-  }
-
-  /** ASR 降级/重连：保持场景状态，但不假装已在收音（避免声纹死线） */
-  function reconnectAsrKeepUi() {
-    clearContinuousSilenceTimer()
-    stopSilenceWatchdog()
-    cancelSpeculativeState()
-    voiceAudioLevel.value = 0
-    if (deps.isVoiceTargetActive()) {
-      deps.asr.abort({ keepMic: true })
-    }
-    voiceListening.value = false
-    if (deps.voiceState.value === 'idle') deps.voiceState.value = 'listening'
-    if (deps.voiceChatPhase.value === 'idle') deps.voiceChatPhase.value = 'listening'
-  }
-
-  function wakeMicIfListening() {
-    if (voiceListening.value || deps.isVoiceTargetActive()) {
-      wakeSharedMicCapture()
-    }
-  }
-
-  onMounted(() => {
-    document.addEventListener('visibilitychange', onMicVisibility)
-    document.addEventListener('pointerdown', wakeMicIfListening, true)
-  })
-
-  onBeforeUnmount(() => {
-    document.removeEventListener('visibilitychange', onMicVisibility)
-    document.removeEventListener('pointerdown', wakeMicIfListening, true)
-  })
-
-  function onMicVisibility() {
-    if (document.visibilityState === 'visible') wakeMicIfListening()
   }
 
   function ensureListening() {

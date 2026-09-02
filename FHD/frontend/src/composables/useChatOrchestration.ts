@@ -1,12 +1,14 @@
+/**
+ * useChatOrchestration：聊天编排 Façade。
+ * 实现按关注点拆分至 chat-orchestration/ 子模块（自动动作 / 任务执行 / 打印链路 / Excel 分析任务 / 远程对话轮次），
+ * 对外入口签名与返回对象字段与拆分前保持完全一致（行为零变更）。
+ */
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useTutorialStore } from '@/stores/tutorial'
 import { useModsStore } from '@/stores/mods'
 import {
   readPersistedExcelAnalysisContext,
   persistExcelAnalysisContext,
-  resolveExcelFilePathFromAnalysis,
-  resolveExcelSheetOptionsFromContext,
-  extractLikelyProductQueryKeyword,
   clearPersistedTaskPanelState,
   useChatTaskPanelPersistence,
 } from './useChatPersistence'
@@ -14,21 +16,12 @@ import { useChatTaskList } from './useChatTaskList'
 import { useChatMessages } from './useChatMessages'
 import { useShipmentTask, type ShipmentTask } from './useShipmentTask'
 import { usePrintService } from './usePrintService'
-import { useExcelAnalysis } from './useExcelAnalysis'
-import { isStartPrintMessage } from '../utils/textParser'
-import chatApi, { parseChatStreamErrorResponse } from '../api/chat'
-import productsApi from '../api/products'
-import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
-import { readPlannerSseResponse, isChatStreamEnabled, type PlannerSseEvent } from '@/utils/chatSseStream'
-import { fetchShipmentRecordsForUnit, summarizeShipmentRecordsForAudit } from '@/utils/shipmentMgmtPostPrint'
-import { isCoreWorkflowModInstalled } from '@/constants/coreWorkflowMod'
-import { dispatchCoreWorkflowModRun } from '@/workflow/coreWorkflowDispatcher'
 import { FHD_DB_WRITE_UNLOCKED_EVENT } from '@/fhd/dbTokenHeaders'
 import { useChatWorkflowPanel } from './useChatWorkflowPanel'
 import { useChatDbTokenGate } from './useChatDbTokenGate'
 import { useChatExcelContext } from './useChatExcelContext'
-import { useChatRequest, type ChatRequestScope } from './useChatRequest'
-import { persistDetachedPlannerResult, recordProductFastPathTask, useChatSessionActivity } from './useChatSessionActivity'
+import { useChatRequest } from './useChatRequest'
+import { useChatSessionActivity } from './useChatSessionActivity'
 import { useChatResponseAttach } from './useChatResponseAttach'
 import { useChatSessionHistory } from './useChatSessionHistory'
 import { useAgentRunEventSync } from './useAgentRunEvents'
@@ -36,34 +29,14 @@ import { useChatTaskRuntimeBridge } from './useChatTaskRuntimeBridge'
 import { useApprovalMode } from './useApprovalMode'
 import { useCanonicalChatTaskBridge } from './useCanonicalChatTaskBridge'
 import type { UseChatViewOptions } from './useChatView'
-import type { ChatAutoAction, ChatPlannerPayload, ChatRequest } from '@/types/chat'
-import { collapseExactDuplicateReply } from '@/utils/chatReplyNormalization'
-import { asArray, asRecord, asString } from '@/utils/typeGuards'
 import { createBusinessHarnessId } from '@/utils/businessHarnessIds'
-type XcagiChatWindow = Window & {
-  __VUE_CHAT_FILL__?: (value: string) => boolean
-  legacyAutoActionHandler?: (action: ChatAutoAction, userMessage: string) => void
-}
-type DynamicShipmentTask = ShipmentTask & Record<string, unknown>
-function getXcagiWindow(): XcagiChatWindow {
-  return window as XcagiChatWindow
-}
-function asShipmentTask(value: unknown): DynamicShipmentTask {
-  const row = asRecord(value)
-  return {
-    ...row,
-    type: asString(row.type),
-  } as DynamicShipmentTask
-}
-function asPlannerPayload(value: unknown): ChatPlannerPayload {
-  return asRecord(value) as ChatPlannerPayload
-}
-function asAutoAction(value: unknown): ChatAutoAction {
-  return asRecord(value) as ChatAutoAction
-}
-function errorMessage(err: unknown, fallback: string): string {
-  return err instanceof Error ? err.message : asString(err, fallback)
-}
+import { isStartPrintMessage } from '../utils/textParser'
+import { generateSessionId, normalizeServerContentToHtml } from './chat-orchestration/chatOrchestrationShared'
+import { useChatOrchestrationAutoActions } from './chat-orchestration/useChatOrchestrationAutoActions'
+import { useChatOrchestrationTaskExecution } from './chat-orchestration/useChatOrchestrationTaskExecution'
+import { useChatOrchestrationPrintFlow } from './chat-orchestration/useChatOrchestrationPrintFlow'
+import { useChatOrchestrationExcelTasks } from './chat-orchestration/useChatOrchestrationExcelTasks'
+import { useChatOrchestrationRemoteRound } from './chat-orchestration/useChatOrchestrationRemoteRound'
 
 export function useChatOrchestration(options: UseChatViewOptions) {
   const tutorialStore = useTutorialStore()
@@ -151,7 +124,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   const pendingDbWriteChatRetryMessages = ref<string[] | null>(null)
   const plannerWriteUnlockResumeDraft = ref('')
   const lastRequestContextSummary = ref('')
-  const pushCopied = ref(false)
   const executeRemoteChatRoundRef: {
     fn: (msgs: string[], opts?: { fromWriteUnlock?: boolean }) => Promise<void>
   } = { fn: async () => {} }
@@ -218,19 +190,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   const {
     loadingProgressText,
     enqueueChatBatchMessage,
-    buildPlannerChatRequestPayload,
     getChatBatchDebounceMs,
-    setLoadingProgress,
-    startWaitProgressTimer,
-    stopLoadingProgress,
-    requestChatByModeWithTimeout,
-    requestChatByModeBatchWithTimeout,
-    resolveChatTimeoutMs,
   } = chatRequest
-
-  function generateSessionId(): string {
-    return Date.now().toString(36) + Math.random().toString(36).substr(2)
-  }
 
   function scrollToBottom() {
     if (chatMessagesRef.value) {
@@ -238,13 +199,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     }
   }
 
-  function normalizeServerContentToHtml(raw: unknown): string {
-    const text = String(raw || '')
-    if (/<[a-z][\s\S]*>/i.test(text)) return text
-    const div = document.createElement('div')
-    div.textContent = text
-    return div.innerHTML.replace(/\n/g, '<br>')
-  }
   const sessionHistory = useChatSessionHistory({
     sessionId,
     taskList,
@@ -306,339 +260,44 @@ export function useChatOrchestration(options: UseChatViewOptions) {
 
   const { isPrinting, executePrintTask, buildPrintSummaryMessage } = usePrintService()
 
-  const { excelAnalyzeUploading, excelAnalyzeInputRef, triggerUpload, onExcelAnalyzeFileChange, setOnMultimodalFileChangeCallback } =
-    useExcelAnalysis(
-      { addMessage, saveMessage },
-      {
-        onAnalyzed: ({ fileName, summary, result }) => {
-          const persistedPath = resolveExcelFilePathFromAnalysis(result)
-          const payload = {
-            file_name: fileName,
-            ...(persistedPath ? { file_path: persistedPath } : {}),
-            summary,
-            fields: Array.isArray(result?.fields) ? result.fields : [],
-            preview_data: result?.preview_data || {},
-            sheets: Array.isArray(result?.sheets) ? result.sheets : [],
-          }
-          lastExcelAnalysisContext.value = payload
-          linkedExcelAllSheets.value = false
-          const sheetOptions = resolveExcelSheetOptionsFromContext(payload)
-          linkedExcelSheet.value = sheetOptions[0] || null
-          window.dispatchEvent(
-            new CustomEvent('xcagi:excel-sheet-context', {
-              detail: {
-                select_all_sheets: false,
-                selected_sheet: linkedExcelSheet.value,
-                excel_analysis: payload,
-              },
-            }),
-          )
-          const sid = String(sessionId.value || '').trim() || 'default'
-          persistExcelAnalysisContext(sid, payload)
-          window.requestAnimationFrame(() => {
-            const displayFileName =
-              String(fileName || '').trim() ||
-              String(persistedPath || '')
-                .split(/[\\/]/)
-                .pop() ||
-              'excel.xlsx'
-            const prefix = `@uploads/${displayFileName} `
-            const fillInput = getXcagiWindow().__VUE_CHAT_FILL__
-            if (typeof fillInput === 'function' && fillInput(prefix)) return
+  // ── 拆分模块装配（保持与拆分前相同的创建依赖与调用时序） ──
 
-            // 兜底：当宿主未注入 __VUE_CHAT_FILL__ 时，仍尝试直接写 DOM。
-            const msgInput = document.querySelector('#view-chat #messageInput') as HTMLTextAreaElement | null
-            if (msgInput) {
-              msgInput.value = prefix
-              msgInput.dispatchEvent(new Event('input', { bubbles: true }))
-              msgInput.focus()
-            }
-          })
-          const task = taskList.value.find((t) => t.type === 'excel_analyze' && t.status === 'running')
-          if (task) {
-            upsertTask({
-              id: task.id,
-              title: task.title,
-              type: task.type,
-              source: task.source,
-              status: 'success',
-              progress: 100,
-              stage: '分析完成',
-              summary,
-              error: '',
-              messageRef: getLastAiMessageRef(),
-            })
-          }
-        },
-        onAnalyzeStart: ({ fileName }) => {
-          upsertTask({
-            id: createTaskId('excel'),
-            title: `分析Excel：${fileName}`,
-            type: 'excel_analyze',
-            source: 'excel',
-            status: 'running',
-            progress: 5,
-          })
-        },
-        onAnalyzeProgress: ({ step, progress }) => {
-          const task = taskList.value.find((t) => t.type === 'excel_analyze' && t.status === 'running')
-          if (!task) return
-          upsertTask({
-            id: task.id,
-            title: task.title,
-            type: task.type,
-            source: task.source,
-            status: 'running',
-            progress: progress ?? task.progress,
-            stage: step,
-          })
-        },
-        onAnalyzeDone: ({ success, message }) => {
-          const task = taskList.value.find((t) => t.type === 'excel_analyze' && t.status === 'running')
-          if (!task) return
-          if (success) {
-            finishTask(task.id, task.summary || 'Excel 分析完成')
-          } else {
-            failTask(task.id, message || 'Excel 分析失败')
-          }
-        },
-      },
-    )
+  // 副窗推送 / AutoAction
+  const autoActions = useChatOrchestrationAutoActions({ latestAssistantPush, tutorialStore })
+  const {
+    pushCopied,
+    emitAssistantPush,
+    maybeCloseAssistantFloatForShipmentTask,
+    handleAutoAction,
+    copyAssistantPushContent,
+    openAssistantFloatFromTaskPanel,
+  } = autoActions
 
-  setOnMultimodalFileChangeCallback(onMultimodalFileChange)
-  const taskTableColumns = computed(() => (currentTask.value ? getTaskTableColumns(currentTask.value) : []))
-  const taskTableItems = computed(() => (currentTask.value ? getTaskTableItems(currentTask.value) : []))
-  const taskOrderNumber = computed(() => getTaskOrderNumber(currentTask.value))
-  /** 出货管理 AI 员工：打印成功后拉取出货记录、统计与审计，并提示保存（导出）/推送 */
-  async function runShipmentMgmtAfterPrintSuccess(ctx: {
-    purchaseUnit: string
-    orderId: number | null
-    filePath: string
-    labelCount: number
-  }): Promise<void> {
-    const enabled = readWorkflowEmployeeEnabledMap()
-    if (!enabled.shipment_mgmt) return
-    const unit = String(ctx.purchaseUnit || '').trim()
-    if (!unit) return
-
-    const rows = await fetchShipmentRecordsForUnit(unit)
-    const summary = summarizeShipmentRecordsForAudit(rows, unit, ctx.orderId)
-    dispatchCoreWorkflowModRun(isCoreWorkflowModInstalled(modsStore.modsForUi), 'shipment_mgmt', {
-      action: 'audit_summary',
-      purchaseUnit: unit,
-      orderId: ctx.orderId,
-      headline: summary.headline,
-    })
-    const fullText = summary.detailLines.join('\n')
-    const at = Date.now()
-
-    await addAndSaveMessage(`【出货管理 · 打印后审计】\n${fullText}`, 'ai')
-    const auditMsgRef = getLastAiMessageRef()
-
-    try {
-      window.dispatchEvent(new CustomEvent('xcagi:shipment-record-updated'))
-    } catch {
-      /* ignore */
-    }
-
-    if (taskList.value.some((t) => t.id === 'workflow_emp_shipment_mgmt')) {
-      upsertWorkflowEmployeeTask('shipment_mgmt', {
-        lastShipmentAudit: {
-          at,
-          line: summary.headline,
-          detail: fullText,
-        },
-      })
-    }
-
-    emitAssistantPush({
-      title: '出货管理 · 打印后审计',
-      description: `${summary.headline}。建议打开出货记录核对，按需导出 Excel 再推送同事。`,
-      feature: 'shipment',
-    })
-
-    upsertTask({
-      id: createTaskId('shipment_audit'),
-      type: 'shipment_audit_hint',
-      source: 'system',
-      title: '出货记录 · 打印后审计建议',
-      status: 'success',
-      progress: 100,
-      summary: fullText,
-      messageRef: auditMsgRef,
-      payload: {
-        purchaseUnit: unit,
-        suggestView: 'shipment-records',
-        labelCount: ctx.labelCount,
-        filePath: ctx.filePath,
-      },
-    })
-  }
-
-  async function handleStartPrintCommand(message: string): Promise<boolean> {
-    if (!isStartPrintMessage(message)) return false
-    const printTaskId = createTaskId('print')
-    upsertTask({
-      id: printTaskId,
-      type: 'print',
-      source: 'print',
-      title: '打印任务',
-      status: 'running',
-      progress: 20,
-    })
-
-    const context = lastShipmentExecution.value
-    if (!context) {
-      await addAndSaveMessage('暂无可打印任务。请先生成发货单，再发送"开始打印"。', 'ai')
-      return true
-    }
-
-    const labelPaths = Array.isArray(context.labelPaths) ? context.labelPaths : []
-    const filePath = context.filePath || ''
-    const purchaseUnit = String(context.purchaseUnit || '').trim()
-    const orderId = context.orderId
-
-    if (!labelPaths.length && !filePath) {
-      await addAndSaveMessage('最近一次任务未包含可打印文件。请重新生成发货单后再试。', 'ai')
-      return true
-    }
-
-    const summary = await executePrintTask(labelPaths, filePath, orderId ?? undefined, purchaseUnit)
-    const resultText = buildPrintSummaryMessage(summary, labelPaths.length, filePath, purchaseUnit)
-    await addAndSaveMessage(resultText, 'ai')
-    upsertTask({
-      id: printTaskId,
-      type: 'print',
-      source: 'print',
-      title: '打印任务',
-      status: summary.success ? 'success' : 'failed',
-      progress: 100,
-      summary: resultText,
-      error: summary.success ? '' : summary.message || '打印失败',
-      messageRef: getLastAiMessageRef(),
-    })
-    const shipmentListId = String(context?.taskListId || '').trim()
-    if (shipmentListId) {
-      if (summary.success) {
-        upsertTask({
-          id: shipmentListId,
-          type: 'shipment',
-          source: 'shipment',
-          title: '发货单生成任务',
-          status: 'success',
-          progress: 100,
-          stage: '',
-          summary: `已生成并打印。${resultText.replace(/\s+/g, ' ').slice(0, 240)}`,
-          messageRef: getLastAiMessageRef(),
-        })
-      } else {
-        upsertTask({
-          id: shipmentListId,
-          type: 'shipment',
-          source: 'shipment',
-          title: '发货单生成任务',
-          status: 'failed',
-          stage: '打印失败',
-          error: summary.message || '打印失败',
-          summary: '发货单文档已生成，打印未成功。可重试「开始打印」。',
-        })
-      }
-    }
-    if (summary.success) {
-      await runShipmentMgmtAfterPrintSuccess({
-        purchaseUnit,
-        orderId,
-        filePath,
-        labelCount: labelPaths.length,
-      })
-    }
-    return true
-  }
-
-  async function refetchTaskOrderNumber() {
-    const t = currentTask.value
-    if (!t || t.type !== 'shipment_generate' || t.completed) return
-    orderNumberFetching.value = true
-    try {
-      await hydrateTaskOrderNumber(t, { force: true })
-    } finally {
-      orderNumberFetching.value = false
-    }
-  }
-
-  function setCustomOrderNumber(value: string) {
-    const t = currentTask.value
-    if (!t) return
-    canonicalTaskBridge.invalidateStagedTask(t, value)
-    t.customOrderNumber = value
-  }
-
-  function showTaskConfirm(task: unknown) {
-    const nextTask = asShipmentTask(task)
-    currentTask.value = nextTask
-
-    if (nextTask.completed) return
-    if (nextTask.type !== 'shipment_generate') {
-      void canonicalTaskBridge.stageCanonicalTask(nextTask).catch(() => {
-        /* execution stays blocked */
-      })
-      return
-    }
-
-    const existingOrderNo = String(
-      nextTask.customOrderNumber || nextTask.order_number || nextTask.data?.order_number || nextTask.document?.order_number || '',
-    ).trim()
-
-    if (existingOrderNo) {
-      nextTask.customOrderNumber = existingOrderNo
-      void canonicalTaskBridge.stageCanonicalTask(nextTask).catch(() => {
-        /* execution stays blocked */
-      })
-      return
-    }
-
-    nextTask.customOrderNumber = ''
-    Promise.allSettled([hydrateTaskOrderNumber(nextTask), enrichShipmentPreviewProducts(nextTask)]).then(() => {
-      if (currentTask.value === nextTask) {
-        void canonicalTaskBridge.stageCanonicalTask(nextTask).catch(() => {
-          /* execution stays blocked */
-        })
-      }
-    })
-  }
-
-  function emitAssistantPush(payload: unknown = {}) {
-    const row = asRecord(payload)
-    const detail = {
-      title: String(row.title || '任务推送').trim(),
-      description: String(row.description || '').trim(),
-      feature: row.feature || '',
-      query: row.query || '',
-    }
-    latestAssistantPush.value = detail
-    window.dispatchEvent(new CustomEvent('xcagi:assistant-push', { detail }))
-  }
-
-  /** 待确认的发货单生成任务出现时收起顶部副窗，突出右侧「当前任务」面板；若同时需打开产品副窗则不收起 */
-  function maybeCloseAssistantFloatForShipmentTask(task: unknown, autoAction: unknown) {
-    // 教程步骤若声明了 assistantTab，需要副窗保持打开以定位高亮；否则发货任务触发的「收起副窗」会与教程打开副窗竞态，导致点空气。
-    if (tutorialStore.isActive && tutorialStore.currentStep?.assistantTab) {
-      return
-    }
-    const row = asShipmentTask(task)
-    const action = asAutoAction(autoAction)
-    if (!row || row.completed) return
-    const toolId = String(row.payload?.tool_id || row.payload?.params?.tool_id || '').trim()
-    const isShipment = row.type === 'shipment_generate' || toolId === 'shipment_generate'
-    if (!isShipment) return
-    const at = String(action.type || '').trim()
-    if (at === 'show_products' || at === 'show_products_float') return
-    window.dispatchEvent(
-      new CustomEvent('xcagi:close-assistant-float', {
-        detail: { reason: 'shipment_task_confirm' },
-      }),
-    )
-  }
+  // 任务确认 / 执行
+  const taskExecution = useChatOrchestrationTaskExecution({
+    currentTask,
+    isExecuting,
+    orderNumberFetching,
+    canonicalTaskBridge,
+    hydrateTaskOrderNumber,
+    enrichShipmentPreviewProducts,
+    lastShipmentExecution,
+    addAndSaveMessage,
+    createTaskId,
+    upsertTask,
+    failTask,
+    getLastAiMessageRef,
+    handleChatRequiresToken,
+    persistTaskPanelStateForSession,
+    handleAutoAction,
+  })
+  const {
+    showTaskConfirm,
+    setCustomOrderNumber,
+    refetchTaskOrderNumber,
+    confirmTask,
+    cancelTask,
+  } = taskExecution
 
   const workflowPanel = useChatWorkflowPanel({
     taskList,
@@ -656,717 +315,87 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   })
   const { readWorkflowEmployeeEnabledMap, upsertWorkflowEmployeeTask } = workflowPanel
 
-  /** 出货管理 AI 员工：打印成功后拉取出货记录、统计与审计，并提示保存（导出）/推送 */
-  function buildTaskCompletedDescription(successMsg: string, data: unknown): string {
-    const row = asRecord(data)
-    const nestedData = asRecord(row.data)
-    const document = asRecord(row.document || nestedData.document)
-    const parts = [successMsg || '任务执行成功']
-    const docName = row.doc_name || nestedData.doc_name || document.filename
-    const orderNo = row.order_number || nestedData.order_number || document.order_number
-    const filePath = row.file_path || nestedData.file_path || document.filepath
-    const labels = asArray(row.labels).length ? asArray(row.labels) : asArray(nestedData.labels)
-    if (docName) parts.push(`文档：${docName}`)
-    if (orderNo) parts.push(`单号：${orderNo}`)
-    if (typeof row.record_id !== 'undefined' && row.record_id !== null) parts.push(`记录ID：${row.record_id}`)
-    if (typeof row.order_id !== 'undefined' && row.order_id !== null) parts.push(`订单ID：${row.order_id}`)
-    if (labels.length) parts.push(`标签：${labels.length} 张`)
-    if (filePath) parts.push(`路径：${filePath}`)
-    return parts.join('；')
-  }
+  // 打印链路
+  const printFlow = useChatOrchestrationPrintFlow({
+    modsStore,
+    addAndSaveMessage,
+    taskList,
+    createTaskId,
+    upsertTask,
+    getLastAiMessageRef,
+    emitAssistantPush,
+    readWorkflowEmployeeEnabledMap,
+    upsertWorkflowEmployeeTask,
+    lastShipmentExecution,
+    executePrintTask,
+    buildPrintSummaryMessage,
+  })
+  const {
+    handleStartPrintCommand,
+    handleShipmentDownloadClick,
+    startPrintFromTaskCard,
+  } = printFlow
 
-  function buildShipmentDownloadUrl(data: unknown): string {
-    const row = asRecord(data)
-    const nestedData = asRecord(row.data)
-    const document = asRecord(row.document || nestedData.document)
-    const directUrl = row.download_url || nestedData.download_url
-    if (directUrl && typeof directUrl === 'string') return directUrl
+  // Excel 分析任务回调
+  const excelTasks = useChatOrchestrationExcelTasks({
+    sessionId,
+    addMessage,
+    saveMessage,
+    lastExcelAnalysisContext,
+    linkedExcelAllSheets,
+    linkedExcelSheet,
+    onMultimodalFileChange,
+    taskList,
+    createTaskId,
+    upsertTask,
+    finishTask,
+    failTask,
+    getLastAiMessageRef,
+  })
+  const {
+    excelAnalyzeUploading,
+    excelAnalyzeInputRef,
+    triggerUpload,
+    onExcelAnalyzeFileChange,
+  } = excelTasks
 
-    const docName = row.doc_name || nestedData.doc_name || document.filename
-    if (!docName || typeof docName !== 'string') return ''
+  // 远程对话轮次（快路径 / SSE 流式 / JSON 与批量）
+  const remoteRound = useChatOrchestrationRemoteRound({
+    sessionId,
+    messages,
+    addMessage,
+    saveMessage,
+    queueVoice,
+    pushStreamingAiShell,
+    applyPlainTextToMessageIndex,
+    ttsEnabled,
+    chatSessionActivity,
+    pendingDbWriteChatRetryMessages,
+    plannerWriteUnlockResumeDraft,
+    chatRequest,
+    handleChatRequiresToken,
+    resolveExcelAnalysisContextForRequest,
+    multimodalPendingCount,
+    stateSteps,
+    currentTask,
+    syncTaskFromChatResponse,
+    attachThinkingStepsToLastAiMessage,
+    attachTodoStepsToLastAiMessage,
+    attachWorkflowTraceToLastAiMessage,
+    attachApprovalCardToLastAiMessage,
+    attachAgentRunTraceToLastAiMessage,
+    attachContextSummaryToLastAiMessage,
+    syncAgentRunFromPayload,
+    showTaskConfirm,
+    maybeCloseAssistantFloatForShipmentTask,
+    emitAssistantPush,
+    handleAutoAction,
+  })
+  const { executeRemoteChatRound } = remoteRound
 
-    return `/api/shipment/download/${encodeURIComponent(docName)}`
-  }
-
-  function normalizeRecordId(value: unknown): number | null {
-    if (value === null || value === undefined || value === '') return null
-    const n = Number(value)
-    if (!Number.isFinite(n)) return null
-    const normalized = Math.trunc(n)
-    return normalized > 0 ? normalized : null
-  }
-
-  function extractShipmentExecutionContext(data: unknown) {
-    const row = asRecord(data)
-    const nestedData = asRecord(row.data)
-    const document = asRecord(row.document || nestedData.document)
-    const filePath = asString(row.file_path || nestedData.file_path || document.filepath)
-    const purchaseUnit = String(row.purchase_unit ?? nestedData.purchase_unit ?? document.purchase_unit ?? '').trim()
-    const orderId = normalizeRecordId(
-      row.order_id ?? row.record_id ?? nestedData.order_id ?? nestedData.record_id ?? document.order_id ?? document.record_id,
-    )
-    const labelsRaw = asArray(row.labels).length ? asArray(row.labels) : asArray(nestedData.labels)
-
-    const labelPaths: string[] = []
-    labelsRaw.forEach((label: unknown) => {
-      if (typeof label === 'string' && label.trim()) {
-        labelPaths.push(label.trim())
-        return
-      }
-      if (label && typeof label === 'object') {
-        const labelRow = asRecord(label)
-        const p = labelRow.file_path || labelRow.path || labelRow.filePath || labelRow.filepath || ''
-        if (typeof p === 'string' && p.trim()) {
-          labelPaths.push(p.trim())
-        }
-      }
-    })
-
-    return {
-      filePath,
-      purchaseUnit,
-      orderId,
-      labelPaths: Array.from(new Set(labelPaths)),
-    }
-  }
-
-  async function confirmTask(): Promise<void> {
-    if (!currentTask.value || isExecuting.value) return
-
-    const task = currentTask.value
-    const apiUrl = task.api_url
-    const method = (task.method || 'POST').toUpperCase()
-    const payload = { ...(task.payload || {}) }
-
-    if (task?.type === 'shipment_generate') {
-      if (!String(task?.customOrderNumber || '').trim()) {
-        await hydrateTaskOrderNumber(task)
-      }
-      const customOrderNumber = String(task?.customOrderNumber || '').trim()
-      payload.params = { ...(payload.params || {}) }
-      if (customOrderNumber) {
-        payload.params.order_number = customOrderNumber
-      } else if (Object.prototype.hasOwnProperty.call(payload.params, 'order_number')) {
-        delete payload.params.order_number
-      }
-    }
-
-    if (!apiUrl) {
-      await addAndSaveMessage('任务执行失败：缺少 API 地址', 'ai')
-      currentTask.value = null
-      return
-    }
-
-    isExecuting.value = true
-    let keepTaskCard = false
-    let shipmentTaskId = ''
-    if (task?.type === 'shipment_generate') {
-      shipmentTaskId = createTaskId('shipment')
-      upsertTask({
-        id: shipmentTaskId,
-        type: 'shipment',
-        source: 'shipment',
-        title: '发货单生成任务',
-        status: 'running',
-        progress: 20,
-      })
-    }
-
-    try {
-      let result
-      const canonicalResult = await canonicalTaskBridge.executeCanonicalTask(task, asRecord(payload.params))
-
-      if (canonicalResult) {
-        result = canonicalResult
-      } else if (method === 'GET') {
-        result = await fetch(apiUrl)
-      } else {
-        result = await fetch(apiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        })
-      }
-
-      const data = asRecord(await result.json().catch(() => ({})))
-
-      if (data?.requires_token) {
-        handleChatRequiresToken(asString(data.token_name), asString(data.token_description || data.message), [])
-        const tokenMsg = String(data.message || data.token_description || '当前操作需要二级数据库写入令牌').trim()
-        await addAndSaveMessage('[提示] ' + tokenMsg, 'ai')
-        keepTaskCard = true
-        currentTask.value = {
-          ...task,
-          description: `${tokenMsg}（已弹出令牌输入框，输入后请再次点击确认执行）`,
-        }
-        return
-      }
-
-      if (result.ok) {
-        const successMsg = String(data.message || data.msg || '任务执行成功')
-        const shipmentDocUrl = task?.type === 'shipment_generate' ? buildShipmentDownloadUrl(data) : ''
-        await addAndSaveMessage('[成功] ' + successMsg, 'ai', {
-          ...(shipmentDocUrl ? { shipmentDownloadUrl: shipmentDocUrl } : {}),
-        })
-        if (task?.type === 'shipment_generate') {
-          lastShipmentExecution.value = {
-            ...extractShipmentExecutionContext(data),
-            ...(shipmentTaskId ? { taskListId: shipmentTaskId } : {}),
-          }
-          if (shipmentTaskId) {
-            upsertTask({
-              id: shipmentTaskId,
-              type: 'shipment',
-              source: 'shipment',
-              title: '发货单生成任务',
-              status: 'running',
-              progress: 70,
-              stage: '发货单已生成，待打印',
-              summary: buildTaskCompletedDescription(successMsg, data),
-              messageRef: getLastAiMessageRef(),
-            })
-          }
-        }
-        currentTask.value = {
-          ...task,
-          title: `${task.title || '任务'}（已完成）`,
-          description: buildTaskCompletedDescription(successMsg, data),
-          order_number:
-            asString(data.order_number) || asString(asRecord(data.data).order_number) || asString(asRecord(data.document).order_number),
-          downloadUrl: task?.type === 'shipment_generate' ? buildShipmentDownloadUrl(data) : '',
-          completed: true,
-        }
-        keepTaskCard = true
-
-        if (task.switch_view) {
-          handleAutoAction({ type: task.switch_view })
-        }
-      } else {
-        const errMsg = String(data.message || data.msg || data.error || `执行失败 (HTTP ${result.status})`)
-        await addAndSaveMessage('[失败] 任务执行失败：' + errMsg, 'ai')
-        if (shipmentTaskId) {
-          failTask(shipmentTaskId, errMsg)
-        }
-      }
-    } catch (e: unknown) {
-      const msg = errorMessage(e, '网络错误')
-      await addAndSaveMessage('[失败] 任务执行失败：' + msg, 'ai')
-      if (shipmentTaskId) {
-        failTask(shipmentTaskId, msg)
-      }
-    } finally {
-      isExecuting.value = false
-      if (!keepTaskCard) {
-        currentTask.value = null
-      }
-    }
-  }
-
-  function cancelTask() {
-    canonicalTaskBridge.cancelCanonicalTask(currentTask.value)
-    currentTask.value = null
-    persistTaskPanelStateForSession()
-  }
-
-  function handleAutoAction(action: unknown, userMessage: string = '') {
-    const autoAction = asAutoAction(action)
-    console.log('[AutoAction] 触发:', autoAction, '| 用户消息:', userMessage)
-    const type = String(autoAction.type || '')
-    const actionQuery = String(
-      Object.prototype.hasOwnProperty.call(autoAction, 'query') ? (autoAction.query ?? '') : autoAction.keyword || userMessage || '',
-    ).trim()
-
-    // 产品副窗打开（工作流会下发 show_products_float）
-    if (type === 'show_products' || type === 'show_products_float') {
-      emitAssistantPush({
-        title: '产品查询',
-        description: '已在副窗打开产品卡片编辑窗口，可直接查询并修改。',
-        feature: 'products',
-        query: actionQuery,
-      })
-      const floatDetail: Record<string, unknown> = {
-        feature: 'products',
-        query: actionQuery,
-        forceOpen: true,
-      }
-      const hyd = autoAction.hydrateProductSearch
-      if (hyd && Array.isArray(hyd.rows)) {
-        floatDetail.hydrateProductSearch = { rows: hyd.rows, total: hyd.total }
-      }
-      window.dispatchEvent(new CustomEvent('xcagi:open-assistant-float', { detail: floatDetail }))
-      return
-    }
-
-    const viewMap: Record<string, string> = {
-      show_chat: 'chat',
-      show_products: 'products',
-      show_materials: 'materials',
-      show_orders: 'orders',
-      show_print: 'print',
-      show_customers: 'customers',
-      show_labels_export: 'print',
-    }
-
-    console.log('[AutoAction] 视图映射 type:', type, '-> 目标视图:', viewMap[type] || '未匹配')
-    if (viewMap[type]) {
-      console.log('[AutoAction] 派发 xcagi:switch-view 事件, detail:', { view: viewMap[type] })
-      window.dispatchEvent(new CustomEvent('xcagi:switch-view', { detail: { view: viewMap[type] } }))
-      if (viewMap[type] === 'products') {
-        emitAssistantPush({
-          title: '产品查询',
-          description: '可在顶部副窗中直接查询并修改产品信息。',
-          feature: 'products',
-          query: userMessage || '',
-        })
-        window.dispatchEvent(
-          new CustomEvent('xcagi:open-assistant-float', {
-            detail: { feature: 'products', query: userMessage || '' },
-          }),
-        )
-      }
-    }
-    const event = new CustomEvent('auto-action', { detail: { action: autoAction, userMessage } })
-    window.dispatchEvent(event)
-
-    const legacyAutoActionHandler = getXcagiWindow().legacyAutoActionHandler
-    if (typeof legacyAutoActionHandler === 'function') {
-      legacyAutoActionHandler(autoAction, userMessage)
-    }
-  }
-
-  /** 消费后端 state.update 事件（payload.data.data.state_updates），维护「步骤进度」UI 状态 */
-  function consumeStateUpdates(payload: ChatPlannerPayload): void {
-    const row = asRecord(payload)
-    const data = asRecord(row.data)
-    const inner = asRecord(data.data ?? data)
-    const updates = asArray<Record<string, unknown>>(inner.state_updates ?? row.state_updates)
-    if (!updates.length) return
-    for (const u of updates) {
-      if (String(u.type || '') !== 'state.update') continue
-      const nodeId = String(u.node_id || '')
-      if (!nodeId) continue
-      const entry = {
-        node_id: nodeId,
-        status: String(u.status || 'succeeded') === 'failed' ? ('failed' as const) : ('succeeded' as const),
-        output_summary: String(u.output_summary || ''),
-      }
-      const idx = stateSteps.value.findIndex((s) => s.node_id === nodeId)
-      if (idx >= 0) {
-        stateSteps.value[idx] = entry
-      } else {
-        stateSteps.value.push(entry)
-      }
-    }
-  }
-
-  function maybePrefetchProductAssistantFloat(userText: string) {
-    // 教程进行中也需要与聊天请求并行预开产品副窗；否则会出现「不开教程立刻出副窗、走了教程反而要等 AI」的体验差。
-    // 副窗切到「协助/产品查询」若与某步高亮冲突，用户仍可用教程卡片「下一步」或退出教程。
-    const kw = extractLikelyProductQueryKeyword(userText)
-    if (!kw) return
-    window.dispatchEvent(
-      new CustomEvent('xcagi:open-assistant-float', {
-        detail: { feature: 'products', query: kw, forceOpen: true },
-      }),
-    )
-  }
-
-  async function executeRemoteChatRound(remoteMessages: string[], opts?: { fromWriteUnlock?: boolean }, scope?: ChatRequestScope) {
-    if (!remoteMessages.length) return
-    const requestScope = scope || { sessionId: sessionId.value, messages: [...messages.value] }
-    const round = chatSessionActivity.forSession(requestScope.sessionId)
-    const addRoundMessage = async (text: string) => {
-      if (round.isActive()) addMessage(text, 'ai', undefined, { speak: ttsEnabled.value })
-    }
-    if (!opts?.fromWriteUnlock) {
-      pendingDbWriteChatRetryMessages.value = null
-      plannerWriteUnlockResumeDraft.value = ''
-    }
-    const primaryText = remoteMessages[0] || ''
-
-    /** 查产品类话术可不必等 /ai/chat 或连通性探测，直接走产品列表接口 */
-    /** 管理端（admin-console）无产品库业务，不走产品快路径，避免「查询…」话术被误判为产品检索 */
-    const kwFast =
-      remoteMessages.length === 1 && !isAdminConsoleSpa() && !resolveExcelAnalysisContextForRequest() && multimodalPendingCount.value === 0
-        ? extractLikelyProductQueryKeyword(primaryText)
-        : null
-
-    // 快路径会自己拉产品列表并注水副窗；再 prefetch 会多打一遍相同接口，徒增等待
-    if (!kwFast) {
-      maybePrefetchProductAssistantFloat(primaryText)
-    }
-
-    if (kwFast) {
-      round.setLoading(true)
-      setLoadingProgress('正在查询产品库…', requestScope.sessionId)
-      startWaitProgressTimer(requestScope.sessionId)
-      try {
-        const resp = await productsApi.searchProducts(kwFast)
-        const respRow = asRecord(resp)
-        if (resp && resp.success === false) {
-          throw new Error(String(resp.message || '产品库查询失败'))
-        }
-        const raw = resp.data ?? respRow.products ?? respRow.items
-        const rows = asArray<Record<string, unknown>>(raw)
-        const lines = rows.slice(0, 3).map((row) => {
-          const m = String(row.model_number || '').trim()
-          const n = String(row.name || row.product_name || '-').trim()
-          const p = Number(row.price || 0)
-          const pf = Number.isFinite(p) ? p.toFixed(2) : '0.00'
-          return `- ${m || '-'} / ${n} / ￥${pf}`
-        })
-        const previewSuffix = lines.length ? `\n预览命中 ${rows.length} 条：\n${lines.join('\n')}` : ''
-        const hasResults = lines.length > 0
-        const responseText = hasResults
-          ? `已帮你打开产品副窗并带入「${kwFast}」。可在卡片中查看与修改。${previewSuffix}`
-          : `未在产品库中找到「${kwFast}」，请确认型号或关键词后重试。`
-        const payload: ChatPlannerPayload = {
-          success: true,
-          response: responseText,
-          ...(hasResults ? { autoAction: { type: 'show_products_float', query: kwFast } } : {}),
-        }
-        const mappedRows = rows.slice(0, 20).map((r) => ({
-          id: r.id,
-          model_number: r.model_number || '',
-          name: r.name || r.product_name || '',
-          price: Number(r.price || 0),
-          unit: r.unit || '',
-        }))
-        const totalFromApi = typeof respRow.total === 'number' ? respRow.total : rows.length
-        await recordProductFastPathTask(requestScope.sessionId, primaryText, kwFast, mappedRows, totalFromApi, responseText)
-        await addRoundMessage(payload.response || '')
-        await Promise.all([
-          saveMessage('user', primaryText, requestScope.sessionId),
-          saveMessage('ai', payload.response || '', requestScope.sessionId),
-        ])
-        if (!round.isActive()) return
-        syncTaskFromChatResponse(payload, primaryText)
-        attachContextSummaryToLastAiMessage()
-        attachThinkingStepsToLastAiMessage(payload)
-        attachTodoStepsToLastAiMessage(payload)
-        attachWorkflowTraceToLastAiMessage(payload)
-        attachApprovalCardToLastAiMessage(payload)
-        if (!payload.task && (payload.autoAction?.type === 'show_products_float' || payload.autoAction?.type === 'show_products')) {
-          currentTask.value = null
-        }
-        if (payload.autoAction) {
-          handleAutoAction(
-            {
-              ...payload.autoAction,
-              hydrateProductSearch: { rows: mappedRows, total: totalFromApi },
-            },
-            primaryText,
-          )
-        }
-        return
-      } catch {
-        /* 回退到下方 unified / chat 全链路 */
-      } finally {
-        round.setLoading(false)
-        stopLoadingProgress(requestScope.sessionId)
-      }
-    }
-
-    /** ChatView 主路径：单条消息走 Planner SSE，token 逐字写入气泡；批量仍用 JSON。可用 ``VITE_CHAT_STREAM=0`` 关闭。 */
-    if (remoteMessages.length === 1 && isChatStreamEnabled()) {
-      const primaryForStream = remoteMessages[0] || ''
-      round.setStreaming(true)
-      round.setLoading(true)
-      setLoadingProgress('正在流式生成回复…', requestScope.sessionId)
-      startWaitProgressTimer(requestScope.sessionId)
-      const baseS = resolveChatTimeoutMs(primaryForStream)
-      const timeoutMsS = Math.min(120000, baseS)
-      const controller = new AbortController()
-      const killTimer = window.setTimeout(() => controller.abort(), timeoutMsS)
-      const msgIndex = pushStreamingAiShell()
-      let streamPlain = ''
-      let doneResult: unknown = null
-      let sseError: string | null = null
-      // TTS 增量朗读：以句末标点为界把已稳定的前缀丢给语音队列，避免边生成边合成后半句卡顿或被重复打断
-      let ttsSpokenOffset = 0
-      const ttsShouldSpeakThisMessage = ttsEnabled.value
-      const SPEAK_SENTENCE_BOUNDARY = /[。！？!?；;\n]/g
-      const flushTtsFromStream = (text: string, force: boolean) => {
-        if (!round.isActive()) return
-        // 开关状态可能在流式过程中被改掉；每次检查当前值，关闭后立即停止追加
-        if (!ttsShouldSpeakThisMessage || !ttsEnabled.value) return
-        const pending = text.slice(ttsSpokenOffset)
-        if (!pending) return
-        if (force) {
-          queueVoice(pending)
-          ttsSpokenOffset = text.length
-          return
-        }
-        // 找到最后一个句末标点的位置；若没有就暂不朗读，等后续 token 到达再重新判
-        SPEAK_SENTENCE_BOUNDARY.lastIndex = 0
-        let lastBoundary = -1
-        let match: RegExpExecArray | null
-        while ((match = SPEAK_SENTENCE_BOUNDARY.exec(pending)) !== null) {
-          lastBoundary = match.index + match[0].length
-        }
-        if (lastBoundary < 0) return
-        const chunk = pending.slice(0, lastBoundary).trim()
-        if (chunk) queueVoice(chunk)
-        ttsSpokenOffset += lastBoundary
-      }
-      try {
-        const { body } = buildPlannerChatRequestPayload(
-          primaryForStream,
-          {
-            fromWriteUnlock: !!opts?.fromWriteUnlock,
-          },
-          requestScope,
-        )
-        const res = await chatApi.sendChatStream(
-          { ...body, message: String(body.message || primaryForStream) } as ChatRequest & Record<string, unknown>,
-          { signal: controller.signal },
-        )
-        if (!res.ok) {
-          throw new Error(await parseChatStreamErrorResponse(res))
-        }
-        await readPlannerSseResponse(res, (ev: PlannerSseEvent) => {
-          if (ev.type === 'token') {
-            streamPlain += ev.text || ''
-            if (round.isActive()) applyPlainTextToMessageIndex(msgIndex, streamPlain)
-            flushTtsFromStream(streamPlain, false)
-            setLoadingProgress('正在生成回复…', requestScope.sessionId)
-          } else if (ev.type === 'done') {
-            doneResult = ev.result
-          } else if (ev.type === 'error') {
-            sseError = String(ev.message || '流式接口错误')
-          } else if (ev.type === 'requires_token') {
-            const tokenName = ev.token_name || ''
-            const tokenDesc = ev.token_description || ''
-            handleChatRequiresToken(tokenName, tokenDesc, remoteMessages)
-            streamPlain += `\n[需要授权：${tokenDesc || tokenName || '授权信息'}]\n`
-            if (round.isActive()) applyPlainTextToMessageIndex(msgIndex, streamPlain)
-            flushTtsFromStream(streamPlain, false)
-            const upTok = String(tokenName || '').toUpperCase()
-            if (upTok.includes('WRITE') || /写入|导入|入库|二级|数据库写入|DB_WRITE/i.test(String(tokenDesc || ''))) {
-              plannerWriteUnlockResumeDraft.value = streamPlain
-            }
-          }
-        })
-        if (sseError) {
-          throw new Error(sseError)
-        }
-        const donePayload = asPlannerPayload(doneResult)
-        const finalText = collapseExactDuplicateReply(String(donePayload.response ?? streamPlain).trim() || streamPlain || '（无内容）')
-        if (round.isActive()) applyPlainTextToMessageIndex(msgIndex, finalText)
-        // 后端 done 事件可能带一段非 token 的尾部文本（比如总结段），统一再做一次兜底朗读
-        if (ttsShouldSpeakThisMessage && ttsEnabled.value) {
-          if (finalText.length >= ttsSpokenOffset) {
-            // 用 finalText 做最终来源，确保 done 额外补的那段也能被念到
-            const tail = finalText.slice(ttsSpokenOffset).trim()
-            if (tail) queueVoice(tail)
-            ttsSpokenOffset = finalText.length
-          } else {
-            flushTtsFromStream(streamPlain, true)
-          }
-        }
-        if (!round.isActive()) return
-        const wrap: ChatPlannerPayload = doneResult && typeof doneResult === 'object' ? donePayload : { success: true, response: finalText }
-        syncTaskFromChatResponse(wrap, primaryText)
-        await syncAgentRunFromPayload(wrap, primaryText)
-        attachAgentRunTraceToLastAiMessage()
-        consumeStateUpdates(wrap)
-        attachContextSummaryToLastAiMessage()
-        attachThinkingStepsToLastAiMessage(wrap)
-        attachTodoStepsToLastAiMessage(wrap)
-        attachWorkflowTraceToLastAiMessage(wrap)
-        attachApprovalCardToLastAiMessage(wrap)
-        if (wrap.task) {
-          showTaskConfirm(wrap.task)
-          emitAssistantPush({
-            title: asString(asRecord(wrap.task).title || '新任务'),
-            description: asString(asRecord(wrap.task).description || '收到一条任务，请处理'),
-          })
-        }
-        if (!wrap.task && (wrap?.autoAction?.type === 'show_products_float' || wrap?.autoAction?.type === 'show_products')) {
-          currentTask.value = null
-        }
-        if (wrap.autoAction) {
-          handleAutoAction(wrap.autoAction, primaryText)
-        }
-        if (wrap.task) {
-          maybeCloseAssistantFloatForShipmentTask(wrap.task, wrap.autoAction)
-        }
-      } catch (err: unknown) {
-        const errText =
-          err instanceof Error && err.name === 'AbortError'
-            ? `请求超时（>${Math.floor(timeoutMsS / 1000)}s）或已中断`
-            : errorMessage(err, '流式对话失败')
-        if (round.isActive()) applyPlainTextToMessageIndex(msgIndex, `处理失败：${errText}`)
-      } finally {
-        round.setStreaming(false)
-        window.clearTimeout(killTimer)
-        round.setLoading(false)
-        stopLoadingProgress(requestScope.sessionId)
-      }
-      return
-    }
-
-    round.setLoading(true)
-    round.setStreaming(false)
-    setLoadingProgress('正在理解你的问题...', requestScope.sessionId)
-    let data: ChatPlannerPayload = {}
-    try {
-      // 不再在发聊天前阻塞等待 /api/ai/test（最多 3s），否则「慢」往往来自这里而非 AI
-      setLoadingProgress(
-        remoteMessages.length > 1 ? `正在批量处理 ${remoteMessages.length} 条消息...` : '正在整理上下文...',
-        requestScope.sessionId,
-      )
-      startWaitProgressTimer(requestScope.sessionId)
-      const base = resolveChatTimeoutMs(primaryText)
-      const timeoutMs = Math.min(120000, remoteMessages.length <= 1 ? base : base * remoteMessages.length)
-      let rawData: unknown
-      if (remoteMessages.length === 1) {
-        rawData = await requestChatByModeWithTimeout(
-          remoteMessages[0],
-          timeoutMs,
-          {
-            fromWriteUnlock: !!opts?.fromWriteUnlock,
-          },
-          requestScope,
-        )
-      } else {
-        rawData = await requestChatByModeBatchWithTimeout(remoteMessages, timeoutMs, requestScope)
-      }
-      data = asPlannerPayload(rawData)
-      const head = remoteMessages.length === 1 ? data : asPlannerPayload(data.results?.[0])
-      const headData = asRecord(head.data)
-      setLoadingProgress('已收到响应，正在解析执行计划...', requestScope.sessionId)
-      if (headData.action === 'workflow_confirmation_required') {
-        setLoadingProgress('已生成计划，等待你确认执行...', requestScope.sessionId)
-      } else if (headData.action === 'workflow_done') {
-        setLoadingProgress('执行完成，正在整理结果...', requestScope.sessionId)
-      } else if (headData.action === 'workflow_failed') {
-        setLoadingProgress('执行失败，正在整理错误信息...', requestScope.sessionId)
-      }
-    } catch (err: unknown) {
-      data = {
-        success: false,
-        message: errorMessage(err, '请求失败'),
-      }
-    } finally {
-      round.setStreaming(false)
-      round.setLoading(false)
-      stopLoadingProgress(requestScope.sessionId)
-    }
-
-    if (!round.isActive()) return persistDetachedPlannerResult(data, requestScope.sessionId, saveMessage)
-    if (data.batch && Array.isArray(data.results)) {
-      const results = data.results.map((part) => asPlannerPayload(part))
-      if (data.success) {
-        for (const part of results) {
-          if (part && part.success) {
-            if (part.requires_token) {
-              handleChatRequiresToken(part.token_name || '', part.token_description || '', remoteMessages)
-            }
-            await addRoundMessage(part.response || '')
-            syncTaskFromChatResponse(part, primaryText)
-            await syncAgentRunFromPayload(part, primaryText)
-            attachAgentRunTraceToLastAiMessage()
-          } else {
-            await addRoundMessage('处理失败: ' + (part.message || '未知错误'))
-          }
-        }
-        attachContextSummaryToLastAiMessage()
-        const lastOk = [...results].reverse().find((p) => p && p.success)
-        if (lastOk) {
-          consumeStateUpdates(lastOk)
-          attachThinkingStepsToLastAiMessage(lastOk)
-          attachTodoStepsToLastAiMessage(lastOk)
-          attachWorkflowTraceToLastAiMessage(lastOk)
-          attachApprovalCardToLastAiMessage(lastOk)
-        }
-        const lastTask = [...results].reverse().find((p) => p.task)
-        if (lastTask?.task) {
-          showTaskConfirm(lastTask.task)
-          const taskRow = asRecord(lastTask.task)
-          emitAssistantPush({
-            title: taskRow.title || '新任务',
-            description: taskRow.description || '收到一条任务，请处理',
-          })
-        }
-        const lastFloat = [...results]
-          .reverse()
-          .find((p) => p.autoAction?.type === 'show_products_float' || p.autoAction?.type === 'show_products')
-        if (!lastTask?.task && lastFloat?.autoAction) {
-          currentTask.value = null
-        }
-        const lastAction = [...results].reverse().find((p) => p.autoAction)
-        if (lastAction?.autoAction) {
-          handleAutoAction(lastAction.autoAction, remoteMessages[remoteMessages.length - 1] || '')
-        }
-        if (lastTask?.task) {
-          maybeCloseAssistantFloatForShipmentTask(lastTask.task, lastAction?.autoAction)
-        }
-      } else {
-        await addRoundMessage('处理失败: ' + (data.message || '批量请求失败'))
-      }
-      return
-    }
-
-    if (data.success) {
-      if (data?.requires_token) {
-        handleChatRequiresToken(data.token_name || '', data.token_description || '', remoteMessages)
-      }
-      await addRoundMessage(data.response || '')
-      syncTaskFromChatResponse(data, primaryText)
-      await syncAgentRunFromPayload(data, primaryText)
-      attachAgentRunTraceToLastAiMessage()
-      consumeStateUpdates(data)
-      attachContextSummaryToLastAiMessage()
-      attachThinkingStepsToLastAiMessage(data)
-      attachTodoStepsToLastAiMessage(data)
-      attachWorkflowTraceToLastAiMessage(data)
-      attachApprovalCardToLastAiMessage(data)
-
-      if (data.task) {
-        showTaskConfirm(data.task)
-        const taskRow = asRecord(data.task)
-        emitAssistantPush({
-          title: taskRow.title || '新任务',
-          description: taskRow.description || '收到一条任务，请处理',
-        })
-      }
-      if (!data.task && (data?.autoAction?.type === 'show_products_float' || data?.autoAction?.type === 'show_products')) {
-        currentTask.value = null
-      }
-
-      if (data.autoAction) {
-        handleAutoAction(data.autoAction, primaryText)
-      }
-      if (data.task) {
-        maybeCloseAssistantFloatForShipmentTask(data.task, data.autoAction)
-      }
-    } else {
-      await addRoundMessage('处理失败: ' + (data.message || '未知错误'))
-    }
-  }
-
-  async function confirmWorkflowFromCard() {
-    for (let i = messages.value.length - 1; i >= 0; i -= 1) {
-      const msg = messages.value[i]
-      if (msg?.role === 'ai' && msg.approvalCard?.status === 'pending') {
-        msg.approvalCard = { ...msg.approvalCard, status: 'confirmed' }
-        break
-      }
-    }
-    await sendMessage('确认')
-  }
-
-  async function cancelWorkflowFromCard() {
-    for (let i = messages.value.length - 1; i >= 0; i -= 1) {
-      const msg = messages.value[i]
-      if (msg?.role === 'ai' && msg.approvalCard?.status === 'pending') {
-        msg.approvalCard = { ...msg.approvalCard, status: 'cancelled' }
-        break
-      }
-    }
-    await sendMessage('取消')
-  }
+  const taskTableColumns = computed(() => (currentTask.value ? getTaskTableColumns(currentTask.value) : []))
+  const taskTableItems = computed(() => (currentTask.value ? getTaskTableItems(currentTask.value) : []))
+  const taskOrderNumber = computed(() => getTaskOrderNumber(currentTask.value))
 
   // 审批模式：自动档时，出现待审批卡片即自动确认（审批工作台仍由后端留记录）。
   const { state: approvalModeState } = useApprovalMode()
@@ -1416,32 +445,27 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       void executeRemoteChatRound(msgs, undefined, requestScope).finally(() => refreshHistorySessions())
     })
   }
-  function handleShipmentDownloadClick() {
-    addAndSaveMessage('发货单已开始下载。是否现在执行打印？可点击"开始打印"按钮或直接发送"开始打印"。', 'ai')
-  }
 
-  async function startPrintFromTaskCard() {
-    await handleStartPrintCommand('开始打印')
-  }
-
-  async function copyAssistantPushContent() {
-    const title = String(latestAssistantPush.value?.title || '').trim()
-    const desc = String(latestAssistantPush.value?.description || '').trim()
-    const text = [title, desc].filter(Boolean).join('\n')
-    if (!text) return
-    try {
-      pushCopied.value = true
-      window.setTimeout(() => {
-        pushCopied.value = false
-      }, 1200)
-    } catch (_e) {
-      pushCopied.value = false
+  async function confirmWorkflowFromCard() {
+    for (let i = messages.value.length - 1; i >= 0; i -= 1) {
+      const msg = messages.value[i]
+      if (msg?.role === 'ai' && msg.approvalCard?.status === 'pending') {
+        msg.approvalCard = { ...msg.approvalCard, status: 'confirmed' }
+        break
+      }
     }
+    await sendMessage('确认')
   }
 
-  function openAssistantFloatFromTaskPanel() {
-    const detail = latestAssistantPush.value || {}
-    window.dispatchEvent(new CustomEvent('xcagi:open-assistant-float', { detail }))
+  async function cancelWorkflowFromCard() {
+    for (let i = messages.value.length - 1; i >= 0; i -= 1) {
+      const msg = messages.value[i]
+      if (msg?.role === 'ai' && msg.approvalCard?.status === 'pending') {
+        msg.approvalCard = { ...msg.approvalCard, status: 'cancelled' }
+        break
+      }
+    }
+    await sendMessage('取消')
   }
 
   async function syncSessionMessages(): Promise<void> {
