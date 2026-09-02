@@ -209,6 +209,24 @@ def _isolate_edition_and_product_sku_env(monkeypatch):
     )
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _create_schema_before_any_test():
+    """首个用例运行前一次性建全表（时序不变量，D2-5 stub 迁出回归修复）。
+
+    历史上建表只发生在 session 级 ``app`` fixture 首次被使用时；原
+    ``test_coverage_ramp_routes``（test_c 排序位置）恰好使用共享 ``client``，
+    使建表先于绝大多数用例。该文件去前缀更名为 ``test_routes`` 后首次使用
+    大幅后移，早于此的 mini-app 用例可能踩到已在其他 DATABASE_URL 窗口完成
+    ``_ensure_schema`` 的共享 SQL 仓储单例（agent orchestrator 等），在测试库
+    上缺表（no such table: agent_runs）。这里把建表提前到会话第一个用例之前，
+    ``checkfirst=True`` 幂等，与 ``app`` fixture 内的建表共存。
+    """
+    from app.db import engine
+    from app.db.base import Base
+
+    Base.metadata.create_all(engine, checkfirst=True)
+
+
 @pytest.fixture(scope="session")
 def app():
     """FastAPI 应用实例（整机装配，走 ``get_test_fastapi_app()``）。"""
