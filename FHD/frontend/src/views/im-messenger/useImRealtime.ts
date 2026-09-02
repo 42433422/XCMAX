@@ -1,7 +1,6 @@
 import { nextTick } from 'vue'
 import type { Ref } from 'vue'
 import { imWebSocketUrl, markImRead, type ImConversationSummary, type ImMessage } from '@/api/im'
-import { isCustomerEnterpriseCs } from '@/composables/messenger/useEnterpriseCsBridge'
 
 /** ImMessengerView 实时通道依赖（与拆分前闭包引用一一对应） */
 export interface ImRealtimeDeps {
@@ -14,6 +13,7 @@ export interface ImRealtimeDeps {
   scrollToBottom: () => void
   loadConversations: () => Promise<void>
   playIncoming: (body: string) => unknown
+  isCustomerEnterpriseCs: (id?: number) => boolean
 }
 
 /** ImMessengerView 的 WebSocket / 实时消息处理逻辑（与拆分前逐字一致） */
@@ -28,6 +28,7 @@ export function useImRealtime(deps: ImRealtimeDeps) {
     scrollToBottom,
     loadConversations,
     playIncoming,
+    isCustomerEnterpriseCs,
   } = deps
 
   let ws: WebSocket | null = null
