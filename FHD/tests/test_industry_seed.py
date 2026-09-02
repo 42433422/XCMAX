@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 
 from app.mod_sdk.industry_seed import (
     deactivate_other_open_industry_mods,
+    ensure_delivery_industry_bundle_for_account,
     industry_mod_id_for,
     industry_seed_mod_ids_for,
+    install_industry_seed_with_fallback,
     open_industry_seed_mod_ids,
     other_open_industry_mod_ids,
     resolve_industry_or_mod_id,
@@ -124,3 +127,154 @@ def test_deactivate_other_open_industry_mods(tmp_path, monkeypatch):
     assert other in unloaded
     assert not (mods_root / other).exists()
     assert any(r.get("mod_id") == other for r in rows)
+
+
+@pytest.mark.asyncio
+async def test_accessories_packaging_install_copies_shell_and_attendance(tmp_path, monkeypatch):
+    pool = tmp_path / "industry-seeds"
+    for mod_id in ("accessories-packaging-industry", "attendance-industry"):
+        source = pool / mod_id
+        source.mkdir(parents=True)
+        (source / "manifest.json").write_text(
+            f'{{"id":"{mod_id}","name":"{mod_id}"}}',
+            encoding="utf-8",
+        )
+    mods_root = tmp_path / "mods"
+    (mods_root / "coating-industry").mkdir(parents=True)
+    loaded: list[str] = []
+    unloaded: list[str] = []
+
+    class FakeMM:
+        def __init__(self) -> None:
+            self.mods_root = str(mods_root)
+
+        def invalidate_scan_cache(self) -> None:
+            return None
+
+        def load_mod(self, mod_id: str) -> bool:
+            loaded.append(mod_id)
+            return True
+
+        def unload_mod(self, mod_id: str) -> bool:
+            unloaded.append(mod_id)
+            return True
+
+    manager = FakeMM()
+    monkeypatch.setenv("XCAGI_INDUSTRY_SEEDS_DIR", str(pool))
+    monkeypatch.setattr(
+        "app.infrastructure.mods.mod_manager.get_mod_manager",
+        lambda: manager,
+    )
+
+    result = await install_industry_seed_with_fallback("饰品包装")
+
+    assert result["success"] is True
+    assert result["installed_mod_ids"] == [
+        "accessories-packaging-industry",
+        "attendance-industry",
+    ]
+    assert loaded == result["installed_mod_ids"]
+    assert (mods_root / "accessories-packaging-industry" / "manifest.json").is_file()
+    assert (mods_root / "attendance-industry" / "manifest.json").is_file()
+    assert not (mods_root / "coating-industry").exists()
+    assert "coating-industry" in unloaded
+
+
+@pytest.mark.asyncio
+async def test_delivery_account_runtime_self_heal_installs_bundle_and_mounts_routes(monkeypatch):
+    install = AsyncMock(
+        return_value={
+            "success": True,
+            "status": "bundle",
+            "industry_id": "饰品包装",
+            "installed_mod_ids": [
+                "accessories-packaging-industry",
+                "attendance-industry",
+            ],
+        }
+    )
+    route_calls: list[str] = []
+
+    class FakeMM:
+        def scan_mods(self, *, use_cache: bool = True):
+            assert use_cache is False
+            return []
+
+    def ensure_route(mod_id: str) -> bool:
+        route_calls.append(mod_id)
+        return True
+
+    monkeypatch.setattr(
+        "app.mod_sdk.customer_delivery.industry_id_for_account",
+        lambda username: "饰品包装" if username.casefold() == "sunbird" else "",
+    )
+    monkeypatch.setattr(
+        "app.mod_sdk.industry_seed.install_industry_seed_with_fallback",
+        install,
+    )
+    monkeypatch.setattr(
+        "app.infrastructure.mods.mod_manager.get_mod_manager",
+        lambda: FakeMM(),
+    )
+    monkeypatch.setattr(
+        "app.infrastructure.mods.mod_manager.ensure_mod_api_ready",
+        ensure_route,
+    )
+
+    result = await ensure_delivery_industry_bundle_for_account("SUNBIRD")
+
+    install.assert_awaited_once_with("饰品包装")
+    assert result["success"] is True
+    assert result["installed_mod_ids"] == [
+        "accessories-packaging-industry",
+        "attendance-industry",
+    ]
+    assert result["route_ready_mod_ids"] == result["installed_mod_ids"]
+    assert result["runtime_ready"] is True
+    assert route_calls == result["installed_mod_ids"]
+
+
+@pytest.mark.asyncio
+async def test_delivery_account_runtime_self_heal_skips_unknown_account(monkeypatch):
+    install = AsyncMock()
+    monkeypatch.setattr(
+        "app.mod_sdk.customer_delivery.industry_id_for_account",
+        lambda _username: "",
+    )
+    monkeypatch.setattr(
+        "app.mod_sdk.industry_seed.install_industry_seed_with_fallback",
+        install,
+    )
+
+    result = await ensure_delivery_industry_bundle_for_account("ordinary-user")
+
+    assert result["success"] is True
+    assert result["status"] == "not_customer_delivery_account"
+    install.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_delivery_account_runtime_self_heal_skips_empty_username():
+    result = await ensure_delivery_industry_bundle_for_account("  ")
+
+    assert result["success"] is True
+    assert result["status"] == "skipped"
+    assert result["installed_mod_ids"] == []
+
+
+@pytest.mark.asyncio
+async def test_delivery_account_runtime_self_heal_reports_install_failure(monkeypatch):
+    monkeypatch.setattr(
+        "app.mod_sdk.customer_delivery.industry_id_for_account",
+        lambda _username: "饰品包装",
+    )
+    monkeypatch.setattr(
+        "app.mod_sdk.industry_seed.install_industry_seed_with_fallback",
+        AsyncMock(return_value={"success": False, "status": "pool_missing"}),
+    )
+
+    result = await ensure_delivery_industry_bundle_for_account("SUNBIRD")
+
+    assert result["success"] is False
+    assert result["industry_id"] == "饰品包装"
+    assert result["route_ready_mod_ids"] == []

@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import json
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -1961,9 +1961,15 @@ async def test_sync_enterprise_entitlements_helper_happy_path() -> None:
     async def _sync(req: Any) -> None:
         called["n"] += 1
 
-    with patch(
-        "app.enterprise.mod_entitlements.sync_entitlements_from_request",
-        _sync,
+    with (
+        patch(
+            "app.enterprise.mod_entitlements.sync_entitlements_from_request",
+            _sync,
+        ),
+        patch(
+            "app.infrastructure.auth.dependencies.resolve_session_user",
+            return_value=None,
+        ),
     ):
         await mods_routes._sync_enterprise_entitlements_from_request(request)
     assert called["n"] == 1
@@ -1978,9 +1984,40 @@ async def test_sync_enterprise_entitlements_helper_recoverable_error() -> None:
     async def _sync(req: Any) -> None:
         raise RuntimeError("sync boom")
 
-    with patch(
-        "app.enterprise.mod_entitlements.sync_entitlements_from_request",
-        _sync,
+    with (
+        patch(
+            "app.enterprise.mod_entitlements.sync_entitlements_from_request",
+            _sync,
+        ),
+        patch(
+            "app.infrastructure.auth.dependencies.resolve_session_user",
+            return_value=None,
+        ),
     ):
         # 不应抛出
         await mods_routes._sync_enterprise_entitlements_from_request(request)
+
+
+@pytest.mark.asyncio
+async def test_sync_enterprise_entitlements_self_heals_delivery_account_bundle() -> None:
+    from app.fastapi_routes import mods_routes
+
+    request = MagicMock()
+    ensure = AsyncMock(return_value={"success": True, "industry_id": "饰品包装"})
+    with (
+        patch(
+            "app.enterprise.mod_entitlements.sync_entitlements_from_request",
+            new=AsyncMock(),
+        ),
+        patch(
+            "app.infrastructure.auth.dependencies.resolve_session_user",
+            return_value={"username": "SUNBIRD"},
+        ),
+        patch(
+            "app.mod_sdk.industry_seed.ensure_delivery_industry_bundle_for_account",
+            ensure,
+        ),
+    ):
+        await mods_routes._sync_enterprise_entitlements_from_request(request)
+
+    ensure.assert_awaited_once_with("SUNBIRD")
