@@ -117,7 +117,7 @@ greenlet==3.5.0
     # via
     #   gevent
     #   sqlalchemy
-gunicorn==23.0.0
+gunicorn==26.2.0
     # via -r XCAGI/requirements.txt
 h11==0.16.0
     # via
