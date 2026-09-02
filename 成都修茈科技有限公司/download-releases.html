@@ -1536,8 +1536,7 @@
             hotfix.release &&
             (!hasStableHistory || compareVersions(hotfix.version, history[0].version) >= 0)
           if (interimActive) {
-            if (compareVersions(hotfix.version, history[0].version) === 0) history[0] = hotfix.release
-            else history.unshift(hotfix.release)
+            if (compareVersions(hotfix.version, history[0].version) > 0) history.unshift(hotfix.release)
           }
           render(history, Boolean(interimActive))
         })

@@ -107,6 +107,8 @@ def test_release_page_keeps_same_version_windows_interim_visible() -> None:
     )
 
     assert "compareVersions(hotfix.version, history[0].version) >= 0" in release_page
+    assert "history[0] = hotfix.release" not in release_page
+    assert "compareVersions(hotfix.version, history[0].version) > 0" in release_page
     assert "太阳鸟行业考勤归并与企业交付可见" in release_page
 
 
