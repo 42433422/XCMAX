@@ -255,6 +255,29 @@ def _python_supports_focused_tests(candidate: _facade().Path) -> bool:
     return probe.returncode == 0
 
 
+def _versioned_path_python_candidates() -> _facade().List[_facade().Path]:
+    """Discover Python 3.11+ executables without capping future minor versions."""
+    discovered = []
+    seen = set()
+    for directory in _facade().os.environ.get("PATH", "").split(_facade().os.pathsep):
+        if not directory:
+            continue
+        try:
+            entries = _facade().Path(directory).expanduser().iterdir()
+            for candidate in entries:
+                match = _facade().re.fullmatch(r"python3\.(\d+)", candidate.name)
+                if not match or int(match.group(1)) < 11:
+                    continue
+                candidate_key = str(candidate)
+                if candidate_key in seen:
+                    continue
+                seen.add(candidate_key)
+                discovered.append((int(match.group(1)), candidate_key, candidate))
+        except OSError:
+            continue
+    return [item[2] for item in sorted(discovered, key=lambda item: (-item[0], item[1]))]
+
+
 def _focused_test_command() -> str:
     """Resolve one executable QA command from the running MODstore environment.
 
@@ -287,6 +310,7 @@ def _focused_test_command() -> str:
             if runtime_root
             else None
         ),
+        *_versioned_path_python_candidates(),
         _facade().Path(_facade().sys.executable),
     ]
     test_python = next(

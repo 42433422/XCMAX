@@ -2256,6 +2256,23 @@ def test_focused_test_command_prefers_explicit_command(monkeypatch):
     assert _focused_test_command() == "runtime-python -m pytest focused.py -q"
 
 
+def test_focused_test_command_discovers_python_314_from_path(monkeypatch, tmp_path):
+    python_314 = tmp_path / "python3.14"
+    python_314.touch(mode=0o755)
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", raising=False)
+    monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_TEST_PYTHON", raising=False)
+    monkeypatch.delenv("MODSTORE_RUNTIME_ROOT", raising=False)
+    monkeypatch.setenv("MODSTORE_DEPLOY_ROOT", str(tmp_path / "deploy"))
+    monkeypatch.setenv("PATH", str(tmp_path))
+    monkeypatch.setattr(
+        loop_runner,
+        "_python_supports_focused_tests",
+        lambda candidate: candidate == python_314,
+    )
+
+    assert _focused_test_command().startswith(f"{python_314} -m pytest ")
+
+
 def test_high_risk_report_detects_standalone_qa_fail():
     steps = [
         {
