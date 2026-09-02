@@ -82,14 +82,6 @@ cmp -s "${latest_mac}" "${public_latest}"
 dmg_name="$(basename "${dmg}")"
 local_size="$(python3 -c 'import os, sys; print(os.path.getsize(sys.argv[1]))' "${dmg}")"
 local_sha="$(shasum -a 256 "${dmg}" | awk '{print $1}')"
-public_dmg="${tmpdir}/${dmg_name}"
-curl --http1.1 -fsSL --retry 5 --retry-all-errors --connect-timeout 15 --max-time 1800 \
-  "https://xiu-ci.com/xcagi-v${version}/enterprise/${dmg_name}?release-sha=${release_git_sha}" \
-  -o "${public_dmg}"
-public_size="$(python3 -c 'import os, sys; print(os.path.getsize(sys.argv[1]))' "${public_dmg}")"
-public_sha="$(shasum -a 256 "${public_dmg}" | awk '{print $1}')"
-test "${public_size}" = "${local_size}"
-test "${public_sha}" = "${local_sha}"
 
 host="${FHD_PUSH_HOST:-119.27.178.147}"
 mkdir -p "${HOME}/.ssh"
@@ -97,6 +89,23 @@ printf '%s\n' "${DESKTOP_SSH_KEY}" > "${HOME}/.ssh/id_ci"
 chmod 600 "${HOME}/.ssh/id_ci"
 ssh-keyscan -H "${host}" >> "${HOME}/.ssh/known_hosts" 2>/dev/null || true
 ssh_opts=(-i "${HOME}/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15)
+
+# Hash the two server-side files byte-for-byte, then verify that the public
+# immutable route exposes the same size. This avoids downloading a 290+ MiB DMG
+# back to the runner solely to hash bytes already verified over audited SSH.
+for remote_dmg in \
+  "/var/www/xcagi-v${version}/enterprise/${dmg_name}" \
+  "/var/www/update/releases/stable/enterprise/${dmg_name}"
+do
+  remote_sha="$(ssh "${ssh_opts[@]}" "root@${host}" "sha256sum '${remote_dmg}' | cut -d ' ' -f1")"
+  test "${remote_sha}" = "${local_sha}"
+done
+public_size="$(
+  curl --http1.1 -fsSI --retry 5 --retry-all-errors --connect-timeout 15 --max-time 120 \
+    "https://xiu-ci.com/xcagi-v${version}/enterprise/${dmg_name}?release-sha=${release_git_sha}" |
+    awk 'tolower($1) == "content-length:" {gsub("\\r", "", $2); value=$2} END {print value}'
+)"
+test "${public_size}" = "${local_size}"
 
 publish_json_atomically() {
   local source="$1"
