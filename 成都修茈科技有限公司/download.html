@@ -989,7 +989,7 @@
           if (!hotfix || hotfix.schema !== 'xcagi.windows_interim_release/v1') return null
           if (!hotfix.download_allowed || hotfix.signature_status !== 'unsigned') return null
           if (!hotfix.artifact || !hotfix.artifact.url || !hotfix.artifact.filename) return null
-          return compareVersions(hotfix.version, state.version) > 0 ? hotfix : null
+          return compareVersions(hotfix.version, state.version) >= 0 ? hotfix : null
         }
 
         function fileName(platform) {
@@ -1118,9 +1118,14 @@
             state.tab === 'android'
               ? '当前版本 <b>' + state.androidVersion + '</b>'
               : hotfix
-                ? '稳定版 <b>' + state.version + '</b> · Windows 临时交付 <b>' + hotfix.version + '</b>'
+                ? 'macOS 稳定版 <b>' + state.version + '</b> · Windows 临时交付 <b>' + hotfix.version + '</b>'
                 : '当前版本 <b>' + state.version + '</b>'
-          pendingEl.hidden = state.releaseReady
+          pendingEl.hidden = rows().every(function (row) {
+            if (row.platform === 'win' && activeWindowsHotfix()) return true
+            if (manifestEntry(row.platform)) return true
+            if (row.platform === 'android' && state.androidVersion) return true
+            return state.releaseReady
+          })
           noteEl.classList.toggle('is-warning', Boolean(hotfix) && state.tab === 'desktop')
           noteEl.innerHTML =
             state.tab === 'android'
@@ -1132,7 +1137,11 @@
 
           rows().forEach(function (row, index) {
             var rowHotfix = row.platform === 'win' ? activeWindowsHotfix() : null
-            var available = state.releaseReady || Boolean(rowHotfix)
+            var available =
+              Boolean(rowHotfix) ||
+              Boolean(manifestEntry(row.platform)) ||
+              (row.platform === 'android' && Boolean(state.androidVersion)) ||
+              state.releaseReady
             var link = document.createElement('a')
             link.className = 'download-item' + (index === 0 ? ' is-primary' : '')
             link.href = downloadUrl(row.platform)

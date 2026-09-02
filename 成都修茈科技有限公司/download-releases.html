@@ -1145,25 +1145,26 @@
                     <div>
                       <div class="release-version-line">
                         <h3>v1.0.0.1</h3>
-                        <span class="release-channel">交付候选版</span>
+                        <span class="release-channel">平台分阶段发布</span>
                       </div>
-                      <p class="release-title">企业交付版本可见与 Windows 临时交付</p>
+                      <p class="release-title">太阳鸟行业考勤归并与企业交付可见</p>
                     </div>
-                    <time class="release-date" datetime="2026-09-01">2026-09-01</time>
+                    <time class="release-date" datetime="2026-09-02">2026-09-02</time>
                   </div>
                   <ul class="release-notes">
+                    <li>太阳鸟归入饰品包装行业，旧的单独考勤入口归并为行业通用考勤；既有登录会话升级后自动补齐能力。</li>
                     <li>客户交付中心展示最近一次成功安装回执中的产品版本与平台，缺失版本时明确显示未上报。</li>
                     <li>首次登录和 OTA 安装成功后上报版本、构建 SHA 与平台，失败升级不覆盖已安装版本。</li>
                     <li>
                       Windows 64 位企业临时交付包尚未完成 Authenticode 签名，仅供管理员核对来源与 SHA-256 后安装，不进入稳定自动更新。
                     </li>
                     <li>
-                      临时交付流程原子发布安装包与独立指针，并校验下载中心、更新日志、版本、构建 SHA、大小和
-                      SHA-256；正式稳定版继续执行签名硬门禁。
+                      macOS 1.0.0.1 通过签名、公证和稳定更新源校验；发布流程同时更新下载中心、更新日志并校验构建 SHA、大小和 SHA-256。
                     </li>
                   </ul>
                   <div class="release-platforms" aria-label="公开平台">
-                    <span>Windows 64 位临时交付</span><span>macOS 稳定版仍为 1.0.0.0</span>
+                    <span>Windows 64 位临时交付</span><span>macOS Apple Silicon 1.0.0.1 稳定版</span
+                    ><span>Android 1.0.0.0 稳定版</span>
                   </div>
                 </article>
               </div>
@@ -1191,16 +1192,18 @@
         var fallbackHistory = [
           {
             version: '1.0.0.1',
-            date: '2026-09-01',
-            title: '企业交付版本可见与 Windows 临时交付',
-            channel: '交付候选版',
+            date: '2026-09-02',
+            title: '太阳鸟行业考勤归并与企业交付可见',
+            channel: '平台分阶段发布',
             notes: [
+              '太阳鸟账号按饰品包装行业归类，原有单独考勤入口归并到行业通用考勤；既有登录会话在升级后自动补齐行业能力。',
               '客户交付中心新增客户设备当前安装版本与平台展示；历史回执未携带版本时明确显示未上报，不再把未知值当作有效版本。',
               '安装与首次登录成功后上报版本、构建 SHA 和平台；展示只采用最近一次成功安装回执，失败升级不会覆盖客户已安装版本。',
+              'macOS Apple Silicon 1.0.0.1 通过 Developer ID 签名、公证与稳定更新源校验后发布；Android 继续使用已验收的 1.0.0.0。',
               'Windows 64 位企业临时交付包已构建并公开 SHA-256，但尚未完成 Authenticode 代码签名；仅供管理员确认来源后安装，不进入稳定自动更新通道。',
-              '临时交付流程会原子发布安装包与独立指针，并同步校验下载中心、更新日志、版本、构建 SHA、文件大小和 SHA-256；正式稳定版继续执行 Windows 签名与 macOS 公证硬门禁。',
+              '桌面发布流程会原子更新安装包、下载中心与更新日志，并核验版本、构建 SHA、文件大小和 SHA-256；正式 Windows 稳定版继续执行代码签名硬门禁。',
             ],
-            platforms: ['Windows 64 位临时交付', 'macOS（稳定版仍为 1.0.0.0）'],
+            platforms: ['Windows 64 位临时交付', 'macOS Apple Silicon 1.0.0.1 稳定版', 'Android 1.0.0.0 稳定版'],
           },
           {
             version: '1.0.0.0',
@@ -1531,7 +1534,7 @@
             hotfix.download_allowed === true &&
             hotfix.signature_status === 'unsigned' &&
             hotfix.release &&
-            (!hasStableHistory || compareVersions(hotfix.version, history[0].version) > 0)
+            (!hasStableHistory || compareVersions(hotfix.version, history[0].version) >= 0)
           if (interimActive) {
             if (compareVersions(hotfix.version, history[0].version) === 0) history[0] = hotfix.release
             else history.unshift(hotfix.release)

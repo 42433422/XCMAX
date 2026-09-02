@@ -87,13 +87,50 @@ def test_release_page_uses_public_history_order_for_the_current_version() -> Non
     assert "Windows 临时交付可下载" in release_page
 
 
-def test_download_page_prefers_only_a_newer_explicit_unsigned_interim_pointer() -> None:
+def test_download_page_prefers_a_same_or_newer_explicit_unsigned_interim_pointer() -> None:
     download_page = (REPO_ROOT / "成都修茈科技有限公司" / "download.html").read_text(
         encoding="utf-8"
     )
 
     assert "fetch('/download-windows-hotfix.json', { cache: 'no-store' })" in download_page
     assert "hotfix.signature_status !== 'unsigned'" in download_page
-    assert "compareVersions(hotfix.version, state.version) > 0" in download_page
+    assert "compareVersions(hotfix.version, state.version) >= 0" in download_page
+    assert "Boolean(manifestEntry(row.platform))" in download_page
+    assert "row.platform === 'android' && Boolean(state.androidVersion)" in download_page
     assert "下载临时包" in download_page
     assert "不会进入稳定自动更新" in download_page
+
+
+def test_release_page_keeps_same_version_windows_interim_visible() -> None:
+    release_page = (REPO_ROOT / "成都修茈科技有限公司" / "download-releases.html").read_text(
+        encoding="utf-8"
+    )
+
+    assert "compareVersions(hotfix.version, history[0].version) >= 0" in release_page
+    assert "太阳鸟行业考勤归并与企业交付可见" in release_page
+
+
+def test_macos_release_flow_publishes_download_center_metadata_and_has_recovery_path() -> None:
+    mac_workflow = (
+        REPO_ROOT / "FHD" / ".github" / "workflows" / "release-desktop-mac-ota.yml"
+    ).read_text(encoding="utf-8")
+    recovery_workflow = (
+        REPO_ROOT
+        / "FHD"
+        / ".github"
+        / "workflows"
+        / "publish-macos-download-center.yml"
+    ).read_text(encoding="utf-8")
+    publish_script = (
+        REPO_ROOT / "FHD" / "scripts" / "package" / "publish-macos-download-center.sh"
+    ).read_text(encoding="utf-8")
+
+    assert "Publish download center metadata and changelog" in mac_workflow
+    assert "publish-macos-download-center.sh" in mac_workflow
+    assert "source_run_id:" in recovery_workflow
+    assert "gh run download" in recovery_workflow
+    assert "publish-macos-download-center.sh" in recovery_workflow
+    assert 'release_ready == false' in publish_script
+    assert 'contains("太阳鸟")' in publish_script
+    assert 'download-release.json' in publish_script
+    assert 'download/releases?release-run=' in publish_script
