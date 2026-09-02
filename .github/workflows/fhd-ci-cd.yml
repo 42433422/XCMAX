@@ -382,7 +382,7 @@ jobs:
         run: docker build --target production -f docker/Dockerfile.fhd-api -t xcagi-ci-scan:local .
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: xcagi-ci-scan:local
           format: table
