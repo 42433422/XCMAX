@@ -92,7 +92,7 @@ jobs:
           VITE_PUBLIC_BASE: '/'
 
       - name: Cache Playwright browsers
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         id: pw-cache-root
         with:
           path: ~/.cache/ms-playwright

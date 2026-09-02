@@ -64,7 +64,7 @@ jobs:
           VITE_PUBLIC_BASE: '/market/'
 
       - name: Cache Playwright browsers
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         id: pw-cache-market
         with:
           path: ~/.cache/ms-playwright
