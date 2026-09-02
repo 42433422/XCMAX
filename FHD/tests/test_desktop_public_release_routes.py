@@ -133,5 +133,7 @@ def test_macos_release_flow_publishes_download_center_metadata_and_has_recovery_
     assert "chmod a+rx" in publish_script
     assert "sha256sum '${remote_dmg}'" in publish_script
     assert "curl --http1.1 -fsSI" in publish_script
+    assert 'release_subdir="xcagi-v${version}"' in publish_script
+    assert 'ln -s "$(cd "${sku_dir}" && pwd)"' in publish_script
     assert "download-release.json" in publish_script
     assert "download/releases?release-run=" in publish_script

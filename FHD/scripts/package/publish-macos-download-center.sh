@@ -38,10 +38,15 @@ grep -Fxq "productVersion: ${version}" "${latest_mac}"
 grep -Fxq "buildSha: ${release_git_sha}" "${latest_mac}"
 grep -Eq '^signature: ed25519:[A-Za-z0-9+/=]+$' "${latest_mac}"
 
-release_dir="$(dirname "$(dirname "${sku_dir}")")"
-release_subdir="$(basename "$(dirname "${sku_dir}")")"
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "${tmpdir}"' EXIT
+release_dir="${tmpdir}/release"
+release_subdir="xcagi-v${version}"
+mkdir -p "${release_dir}/${release_subdir}"
+# Recovery artifacts downloaded by `gh run download` are flat, whereas the
+# normal build uses release/xcagi-vX/enterprise. Normalize both inputs through
+# one temporary release tree before invoking the shared manifest generator.
+ln -s "$(cd "${sku_dir}" && pwd)" "${release_dir}/${release_subdir}/enterprise"
 
 python3 "${script_root}/scripts/package/generate-download-manifest.py" \
   --version "${version}" \
