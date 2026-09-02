@@ -353,7 +353,6 @@ const { applyIncomingMessage, applyReadState, connectWs, disconnectWs } = useImR
   scrollToBottom,
   loadConversations,
   playIncoming,
-  isCustomerEnterpriseCs,
 })
 
 let offSyncMessage: (() => void) | null = null
