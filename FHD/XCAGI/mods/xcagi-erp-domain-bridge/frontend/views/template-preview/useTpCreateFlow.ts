@@ -3,6 +3,7 @@ import templatePreviewApi from '@/api/templatePreview'
 import { stripGridPreviewData, stripSampleRowsKeepTemplateShape } from '@/shared/templatePreviewSanitize.js'
 import { appAlert, appConfirm } from '@/utils/appDialog'
 import { extractTemplateTermSet } from './tpTemplateMeta'
+import type { TplField, TplPreviewData } from './tpTemplateMeta'
 import { getRequiredTermsByScope, getScopeMeta, hasEquivalentTerm } from './tpScopeRules'
 import type { TemplateScopeMeta } from './tpScopeRules'
 
@@ -10,20 +11,56 @@ export interface TpCreateFlowDeps {
   refreshTemplates: () => void | Promise<void>
 }
 
+/** FileUploadStep file-selected 事件载荷 */
+interface TpFileSelectedData {
+  selectedFile: File | null
+  templateName: string
+  recognizedType: unknown
+}
+
+/** 模板分析接口返回（宽松契约） */
+interface AnalyzeTemplateResponse {
+  success?: boolean
+  message?: string
+  template_type?: string
+  task_id?: string | number
+  fields?: TplField[]
+  preview_data?: TplPreviewData | null
+  missing_terms?: unknown[]
+  [key: string]: unknown
+}
+
+/** 分析进度轮询返回（宽松契约） */
+interface AnalysisProgressResponse {
+  success?: boolean
+  progress?: number
+  step?: number
+  message?: string
+  completed?: boolean
+  [key: string]: unknown
+}
+
+/** 保存模板接口返回（宽松契约） */
+interface TemplateMutationResponse {
+  success?: boolean
+  message?: string
+  [key: string]: unknown
+}
+
 /** 创建模板弹窗全流程：选择文件 → 分析 → 编辑字段 → 保存（对应原视图创建相关状态与方法） */
 export function useTpCreateFlow(deps: TpCreateFlowDeps) {
   const showCreateModal = ref(false)
   const createStep = ref(1)
-  const selectedFile = ref<any>(null)
+  const selectedFile = ref<File | null>(null)
   const templateName = ref('')
   const templateScope = ref('orders')
   const customScopeLabel = ref('')
   const customTemplateType = ref('')
-  const recognizedType = ref<any>(null)
-  const editorFields = ref<any[]>([])
+  const recognizedType = ref<unknown>(null)
+  const editorFields = ref<TplField[]>([])
   const editorTemplateType = ref('excel')
   /** 分析接口返回的完整 preview_data（保存时做脱敏后写入） */
-  const analyzedPreviewData = ref<Record<string, any> | null>(null)
+  const analyzedPreviewData = ref<TplPreviewData | null>(null)
   const analyzedFilePath = ref('')
   const analyzedOriginalFilename = ref('')
   const uploadValidationResult = ref<{ valid: boolean; missing: string[] } | null>(null)
@@ -45,7 +82,7 @@ export function useTpCreateFlow(deps: TpCreateFlowDeps) {
     }
   }
 
-  function onFileSelected(data: any) {
+  function onFileSelected(data: TpFileSelectedData) {
     selectedFile.value = data.selectedFile
     templateName.value = data.templateName
     recognizedType.value = data.recognizedType
@@ -115,7 +152,7 @@ export function useTpCreateFlow(deps: TpCreateFlowDeps) {
       formData.append('template_name', templateName.value)
       formData.append('template_scope', templateScope.value)
 
-      const res = (await templatePreviewApi.analyzeTemplate(formData)) as any
+      const res = (await templatePreviewApi.analyzeTemplate(formData)) as AnalyzeTemplateResponse
 
       if (res && res.success) {
         const kind = String(res.template_type || '').toLowerCase()
@@ -179,13 +216,21 @@ export function useTpCreateFlow(deps: TpCreateFlowDeps) {
       }
       await appAlert((res && res.message) || '分析失败')
       return false
-    } catch (err: any) {
+    } catch (err) {
       analyzing.value = false
-      const data = err?.data || err?.response?.data || {}
+      const errRec = (err && typeof err === 'object' ? err : {}) as {
+        data?: unknown
+        response?: { data?: unknown } | null
+        message?: unknown
+      }
+      const data = (errRec.data || errRec.response?.data || {}) as {
+        missing_terms?: unknown
+        message?: unknown
+      }
       const missing = Array.isArray(data?.missing_terms) ? data.missing_terms.filter(Boolean) : []
       if (missing.length && !isCustomScope.value) {
         const switchCustom = await appConfirm(
-          `${data?.message || err?.message || '模板缺少必备词条'}：${missing.join('、')}。\n\n是否改为「自定义（不限业务）」后继续创建？`
+          `${data?.message || errRec.message || '模板缺少必备词条'}：${missing.join('、')}。\n\n是否改为「自定义（不限业务）」后继续创建？`
         )
         if (switchCustom) {
           templateScope.value = 'custom'
@@ -196,21 +241,21 @@ export function useTpCreateFlow(deps: TpCreateFlowDeps) {
         }
         return false
       }
-      await appAlert('分析失败：' + (err && err.message ? err.message : String(err)))
+      await appAlert('分析失败：' + (err instanceof Error ? err.message : String(err)))
       return false
     }
   }
 
-  function pollProgress(taskId: any) {
+  function pollProgress(taskId: string | number) {
     stopProgressTimer()
     return new Promise<void>((resolve) => {
       const pollInterval = setInterval(async () => {
         try {
-          const data = (await templatePreviewApi.getAnalysisProgress(taskId)) as any
+          const data = (await templatePreviewApi.getAnalysisProgress(taskId)) as AnalysisProgressResponse
 
           if (data.success) {
-            progressPercent.value = data.progress
-            progressStep.value = data.step
+            progressPercent.value = data.progress as number
+            progressStep.value = data.step as number
             progressMessage.value = data.message || '分析中...'
 
             if (data.completed) {
@@ -229,7 +274,7 @@ export function useTpCreateFlow(deps: TpCreateFlowDeps) {
     })
   }
 
-  function onUpdateField(index: number, field: any) {
+  function onUpdateField(index: number, field: TplField) {
     editorFields.value.splice(index, 1, field)
   }
 
@@ -237,17 +282,17 @@ export function useTpCreateFlow(deps: TpCreateFlowDeps) {
     editorFields.value.splice(index, 1)
   }
 
-  function onAddField(field: any) {
+  function onAddField(field: TplField) {
     editorFields.value.push(field)
   }
 
-  function onFieldsChange(fields: any[]) {
+  function onFieldsChange(fields: TplField[]) {
     editorFields.value = [...fields]
   }
 
   function onFieldChange() {}
 
-  function onFieldsUpdate(fields: any[]) {
+  function onFieldsUpdate(fields: TplField[]) {
     editorFields.value = fields
   }
 
@@ -269,7 +314,7 @@ export function useTpCreateFlow(deps: TpCreateFlowDeps) {
           ? { ...analyzedPreviewData.value }
           : {}
 
-      let preview_data: Record<string, any>
+      let preview_data: Record<string, unknown>
       if (isWord) {
         preview_data = {
           ...basePreview,
@@ -309,7 +354,7 @@ export function useTpCreateFlow(deps: TpCreateFlowDeps) {
         source: 'generated'
       }
 
-      const res = (await templatePreviewApi.createTemplate(saveData)) as any
+      const res = (await templatePreviewApi.createTemplate(saveData)) as TemplateMutationResponse
 
       if (res && res.success) {
         await appAlert('模板保存成功！')
@@ -319,8 +364,8 @@ export function useTpCreateFlow(deps: TpCreateFlowDeps) {
       } else {
         throw new Error((res && res.message) || '保存失败')
       }
-    } catch (err: any) {
-      await appAlert('保存失败：' + (err.message || '未知错误'))
+    } catch (err) {
+      await appAlert('保存失败：' + (err instanceof Error ? (err.message || '未知错误') : String(err)))
     }
   }
 
@@ -329,7 +374,7 @@ export function useTpCreateFlow(deps: TpCreateFlowDeps) {
     showCreateModal.value = true
   }
 
-  function startCreateForScope(scopeKey: string) {
+  function startCreateForScope(scopeKey?: string) {
     const meta = getScopeMeta(scopeKey)
     resetCreateState()
     templateScope.value = scopeKey || 'orders'
@@ -339,7 +384,7 @@ export function useTpCreateFlow(deps: TpCreateFlowDeps) {
     showCreateModal.value = true
   }
 
-  function validateUploadedTemplate(analyzeResult: any) {
+  function validateUploadedTemplate(analyzeResult: AnalyzeTemplateResponse) {
     const kind = String(analyzeResult?.template_type || '').toLowerCase()
     if (kind !== 'excel' && kind !== 'word') {
       return { valid: false, missing: ['仅支持 Excel 或 Word 模板'] }

@@ -8,9 +8,6 @@ import type { Deref } from './adminDutyTypes'
 import type { AdminDutyGap } from './useAdminDutyGap'
 import type { AdminDutyState } from './useAdminDutyState'
 
-defineEmits<{
-}>()
-
 defineProps<{
   showGapPanel: Deref<AdminDutyState['showGapPanel']>
   gapFocusHint: Deref<AdminDutyState['gapFocusHint']>

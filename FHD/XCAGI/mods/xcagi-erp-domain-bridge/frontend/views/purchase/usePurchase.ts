@@ -2,13 +2,95 @@ import { ref, onMounted } from 'vue'
 import { get, post } from '@/api'
 import { appAlert, appConfirm } from '@/utils/appDialog'
 
+// 实体类型（字段以 PurchaseView 模板与表单赋值实际访问项为准）
+interface OrderItem {
+  product_id: number | string
+  quantity: number
+  unit_price: number
+  amount: number
+}
+
+interface PurchaseOrder {
+  id: number
+  order_no: string
+  supplier_id: number | string
+  supplier_name: string
+  order_date: string
+  delivery_date: string
+  remark: string
+  items: OrderItem[]
+  total_amount: number
+  status: string
+}
+
+interface InboundRecord {
+  id: number
+  inbound_no: string
+  supplier_name: string
+  inbound_date: string
+  total_amount: number
+  status: string
+}
+
+interface Supplier {
+  id: number
+  code: string
+  name: string
+  contact_person: string
+  contact_phone: string
+  contact_email: string
+  address: string
+  rating: number
+  status: string
+  remark: string
+}
+
+interface Product {
+  id: number
+  name: string
+  price: number
+}
+
+interface OrderForm {
+  id: number | null
+  supplier_id: number | string
+  order_date: string
+  delivery_date: string
+  remark: string
+  items: OrderItem[]
+  total_amount: number
+}
+
+interface SupplierForm {
+  id: number | null
+  code: string
+  name: string
+  contact_person: string
+  contact_phone: string
+  contact_email: string
+  address: string
+  rating: number
+  remark: string
+}
+
+interface ApiListResponse<T> {
+  success: boolean
+  message?: string
+  data?: T[]
+}
+
+interface ApiWriteResponse {
+  success: boolean
+  message?: string
+}
+
 // 拆分自 PurchaseView.vue script（原第 262–540 行）；逻辑逐字迁移，行为不变。
 export function usePurchase() {
     const activeTab = ref('orders')
-    const orders = ref<any[]>([])
-    const inbounds = ref<any[]>([])
-    const suppliers = ref<any[]>([])
-    const products = ref<any[]>([])
+    const orders = ref<PurchaseOrder[]>([])
+    const inbounds = ref<InboundRecord[]>([])
+    const suppliers = ref<Supplier[]>([])
+    const products = ref<Product[]>([])
     const filterStatus = ref('')
     const selectedSupplier = ref('')
     const showOrderModalFlag = ref(false)
@@ -16,7 +98,7 @@ export function usePurchase() {
     const isEditOrder = ref(false)
     const isEditSupplier = ref(false)
 
-    const orderForm = ref<Record<string, any>>({
+    const orderForm = ref<OrderForm>({
       id: null,
       supplier_id: '',
       order_date: new Date().toISOString().split('T')[0],
@@ -26,7 +108,7 @@ export function usePurchase() {
       total_amount: 0
     })
 
-    const supplierForm = ref<Record<string, any>>({
+    const supplierForm = ref<SupplierForm>({
       id: null,
       code: '',
       name: '',
@@ -43,7 +125,7 @@ export function usePurchase() {
         const params: Record<string, unknown> = {}
         if (filterStatus.value) params.status = filterStatus.value
         if (selectedSupplier.value) params.supplier_id = selectedSupplier.value
-        const res: any = await get('/api/purchase/orders', params)
+        const res = await get<ApiListResponse<PurchaseOrder>>('/api/purchase/orders', params)
         if (res.success) {
           orders.value = res.data || []
         }
@@ -54,7 +136,7 @@ export function usePurchase() {
 
     const loadInbounds = async () => {
       try {
-        const res: any = await get('/api/purchase/inbounds')
+        const res = await get<ApiListResponse<InboundRecord>>('/api/purchase/inbounds')
         if (res.success) {
           inbounds.value = res.data || []
         }
@@ -65,7 +147,7 @@ export function usePurchase() {
 
     const loadSuppliers = async () => {
       try {
-        const res: any = await get('/api/purchase/suppliers')
+        const res = await get<ApiListResponse<Supplier>>('/api/purchase/suppliers')
         if (res.success) {
           suppliers.value = res.data || []
         }
@@ -76,7 +158,7 @@ export function usePurchase() {
 
     const loadProducts = async () => {
       try {
-        const res: any = await get('/api/products')
+        const res = await get<ApiListResponse<Product>>('/api/products')
         if (res.success) {
           products.value = res.data || []
         }
@@ -110,7 +192,7 @@ export function usePurchase() {
       showOrderModalFlag.value = true
     }
 
-    const editOrder = (order: any) => {
+    const editOrder = (order: PurchaseOrder) => {
       isEditOrder.value = true
       orderForm.value = {
         id: order.id,
@@ -124,7 +206,7 @@ export function usePurchase() {
       showOrderModalFlag.value = true
     }
 
-    const viewOrder = (order: any) => {
+    const viewOrder = (order: PurchaseOrder) => {
       isEditOrder.value = true
       orderForm.value = { ...order }
       showOrderModalFlag.value = true
@@ -159,7 +241,7 @@ export function usePurchase() {
     }
 
     const calcTotalAmount = () => {
-      orderForm.value.total_amount = orderForm.value.items.reduce((sum: number, item: any) => {
+      orderForm.value.total_amount = orderForm.value.items.reduce((sum: number, item: OrderItem) => {
         return sum + (item.amount || 0)
       }, 0)
     }
@@ -174,9 +256,9 @@ export function usePurchase() {
         return
       }
       try {
-        const res: any = isEditOrder.value
-          ? await post(`/api/purchase/orders/${orderForm.value.id}`, orderForm.value)
-          : await post('/api/purchase/orders', orderForm.value)
+        const res = isEditOrder.value
+          ? await post<ApiWriteResponse>(`/api/purchase/orders/${orderForm.value.id}`, orderForm.value)
+          : await post<ApiWriteResponse>('/api/purchase/orders', orderForm.value)
         if (res.success) {
           await appAlert('保存成功')
           showOrderModalFlag.value = false
@@ -189,10 +271,10 @@ export function usePurchase() {
       }
     }
 
-    const approveOrder = async (order: any) => {
+    const approveOrder = async (order: PurchaseOrder) => {
       if (!(await appConfirm('确认审核该订单？'))) return
       try {
-        const res: any = await post(`/api/purchase/orders/${order.id}/approve`)
+        const res = await post<ApiWriteResponse>(`/api/purchase/orders/${order.id}/approve`)
         if (res.success) {
           await appAlert('审核成功')
           loadOrders()
@@ -220,7 +302,7 @@ export function usePurchase() {
       showSupplierModalFlag.value = true
     }
 
-    const editSupplier = (supplier: any) => {
+    const editSupplier = (supplier: Supplier) => {
       isEditSupplier.value = true
       supplierForm.value = { ...supplier }
       showSupplierModalFlag.value = true
@@ -232,9 +314,9 @@ export function usePurchase() {
         return
       }
       try {
-        const res: any = isEditSupplier.value
-          ? await post(`/api/purchase/suppliers/${supplierForm.value.id}`, supplierForm.value)
-          : await post('/api/purchase/suppliers', supplierForm.value)
+        const res = isEditSupplier.value
+          ? await post<ApiWriteResponse>(`/api/purchase/suppliers/${supplierForm.value.id}`, supplierForm.value)
+          : await post<ApiWriteResponse>('/api/purchase/suppliers', supplierForm.value)
         if (res.success) {
           await appAlert('保存成功')
           showSupplierModalFlag.value = false

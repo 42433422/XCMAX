@@ -186,7 +186,7 @@ const {
         <div v-else-if="excelPanel.error" class="excel-panel-state excel-panel-error">{{ excelPanel.error }}</div>
         <div v-else-if="excelPanel.extractResult" class="excel-editor-body traditional-excel-body">
           <div v-if="(excelPanel.extractResult.fields || []).length" class="traditional-field-strip">
-            <div class="traditional-field-title">识别字段（{{ excelPanel.extractResult.fields.length }}）</div>
+            <div class="traditional-field-title">识别字段（{{ (excelPanel.extractResult.fields || []).length }}）</div>
             <ul class="traditional-field-list">
               <li v-for="(field, idx) in excelPanel.extractResult.fields" :key="(field.label || field.name || '') + '-' + idx">
                 <span class="field-idx">{{ idx + 1 }}.</span>
@@ -198,7 +198,7 @@ const {
             :fields="excelPanel.extractResult.fields || []"
             :sample-rows="excelPanel.extractResult?.preview_data?.sample_rows || []"
             :title="traditionalExtractTitle + ' 真实网格'"
-            :grid-data="excelPanel.extractResult?.preview_data?.grid_preview || null"
+            :grid-data="excelPanel.extractResult?.preview_data?.grid_preview || undefined"
             :rows="12"
             :columns="10"
           />

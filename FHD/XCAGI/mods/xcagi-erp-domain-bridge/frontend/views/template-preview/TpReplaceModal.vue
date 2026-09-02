@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { TemplatePreviewCtx } from './assemble'
+import type { TplRecord } from './tpTemplateMeta'
 
 // 拆分自 TemplatePreviewView.vue 模板（原第 359–387 行）；模板逐字迁移，行为不变。
 const props = defineProps<{ tp: TemplatePreviewCtx }>()
@@ -11,7 +12,7 @@ const {
 
 // 原 Options API 组件并未定义 replaceCandidates（模板 v-for 引用恒为 undefined，选项列表渲染为空）。
 // 为保持行为零变更，这里保留同名 undefined 绑定，不"顺手修复"。
-const replaceCandidates: any = undefined
+const replaceCandidates = undefined as unknown as TplRecord[]
 </script>
 
 <template>

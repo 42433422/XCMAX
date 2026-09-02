@@ -11,9 +11,6 @@ import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
 import { MiniMap } from '@vue-flow/minimap'
 
-defineEmits<{
-}>()
-
 defineProps<{
   flowNodes: Node[]
   flowEdges: Edge[]

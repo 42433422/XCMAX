@@ -4,6 +4,89 @@ import api from '@/api/index'
 import { appAlert } from '@/utils/appDialog'
 import { pushErpPage } from '@/utils/erpPagePaths'
 
+// AI 填单事件（xcagi:ai-fill-order / window.__VUE_FILL_ORDER__）载荷
+interface AIProductPayload {
+  nameId?: string | number
+  name?: string
+  model?: string
+  quantityBox?: number
+  specification?: number
+  quantityKg?: number
+  unitPrice?: number
+  amount?: number
+}
+
+interface AIFillOrderPayload {
+  purchaseUnit?: string
+  contactPerson?: string
+  date?: string
+  autoPrint?: boolean
+  products?: AIProductPayload[]
+}
+
+// 模板下拉项（/templates?action=api，模板仅访问 name）
+interface TemplateOption {
+  name: string
+}
+
+// 购买单位（/api/purchase_units）
+interface PurchaseUnit {
+  unit_name: string
+  contact_person?: string
+}
+
+// 产品名称库（/api/product_names）
+interface ProductName {
+  id: number
+  name: string
+  model_number?: string
+  specification?: number
+  price?: number
+  purchase_unit_name?: string
+}
+
+// 订单产品编辑行（本地状态）
+interface OrderProductRow {
+  id: number
+  nameId: string | number
+  name: string
+  model: string
+  quantityBox: number
+  specification: number
+  quantityKg: number
+  unitPrice: number
+  amount: number
+}
+
+// /documents 生成结果（模板访问 output_filename）
+interface ShipmentResult {
+  success: boolean
+  output_filename?: string
+  message?: string
+}
+
+// 发货单可编辑数据结构（提交给 /documents 的 editable_data）
+interface ShipmentHeaderCell {
+  purchase_unit: string
+  contact_person: string
+  purchase_date: string
+  order_number: string
+}
+
+type ShipmentRowCells = Record<number, string | number>
+
+interface ShipmentEditableData {
+  header_row: Record<number, ShipmentHeaderCell>
+  product_rows: ShipmentRowCells[]
+  price_row: Record<number, string | number>
+}
+
+declare global {
+  interface Window {
+    __VUE_FILL_ORDER__?: (data: AIFillOrderPayload | null) => void
+  }
+}
+
 // 拆分自 CreateOrderView.vue script（原第 179–563 行）；逻辑逐字迁移，行为不变。
 export function useCreateOrder() {
   const router = useRouter()
@@ -16,7 +99,7 @@ export function useCreateOrder() {
     pushErpPage(router, { path: '/template-preview', query: { scope: 'orders' } })
   }
 
-  function handleAIFillOrder(data: any) {
+  function handleAIFillOrder(data: AIFillOrderPayload | null) {
     if (!data) return
 
     if (data.purchaseUnit) {
@@ -45,7 +128,7 @@ export function useCreateOrder() {
 
     if (data.products && Array.isArray(data.products) && data.products.length > 0) {
       products.value = []
-      data.products.forEach((p: any) => {
+      data.products.forEach((p: AIProductPayload) => {
         const nameId = p.nameId || ''
         const matchedProduct = nameId ? allProducts.value.find(ap => ap.id == nameId) : null
 
@@ -79,7 +162,7 @@ export function useCreateOrder() {
       handleAIFillOrder((event as CustomEvent).detail)
     })
 
-    ;(window as any).__VUE_FILL_ORDER__ = handleAIFillOrder
+    window.__VUE_FILL_ORDER__ = handleAIFillOrder
   }
 
   onMounted(() => {
@@ -91,16 +174,16 @@ export function useCreateOrder() {
   })
 
   onUnmounted(() => {
-    window.removeEventListener('xcagi:ai-fill-order', handleAIFillOrder)
-    if ((window as any).__VUE_FILL_ORDER__ === handleAIFillOrder) {
-      delete (window as any).__VUE_FILL_ORDER__
+    window.removeEventListener('xcagi:ai-fill-order', handleAIFillOrder as EventListener)
+    if (window.__VUE_FILL_ORDER__ === handleAIFillOrder) {
+      delete window.__VUE_FILL_ORDER__
     }
   })
 
-  const templates = ref<any[]>([])
-  const purchaseUnits = ref<any[]>([])
-  const allProducts = ref<any[]>([])
-  const products = ref<any[]>([])
+  const templates = ref<TemplateOption[]>([])
+  const purchaseUnits = ref<PurchaseUnit[]>([])
+  const allProducts = ref<ProductName[]>([])
+  const products = ref<OrderProductRow[]>([])
   let productIdCounter = 0
 
   const status = reactive({
@@ -117,7 +200,7 @@ export function useCreateOrder() {
     autoPrint: false
   })
 
-  const result = ref<any>(null)
+  const result = ref<ShipmentResult | null>(null)
   const showProductSelector = ref(false)
   const productSearchQuery = ref('')
   const searchingProducts = ref(false)
@@ -148,7 +231,7 @@ export function useCreateOrder() {
           'X-Requested-With': 'XMLHttpRequest'
         }
       })
-      const data = await response.json()
+      const data: { success: boolean; templates: TemplateOption[] } = await response.json()
       if (data.success) {
         templates.value = data.templates
         if (data.templates.length > 0 && !form.templateName) {
@@ -167,7 +250,7 @@ export function useCreateOrder() {
   async function loadPurchaseUnits() {
     try {
       const response = await fetch('/api/purchase_units')
-      const data = await response.json()
+      const data: { success: boolean; data: PurchaseUnit[] } = await response.json()
       if (data.success) {
         purchaseUnits.value = data.data
       }
@@ -180,7 +263,7 @@ export function useCreateOrder() {
     if (form.purchaseUnit) {
       try {
         const response = await fetch(`/api/purchase_units/by_name/${encodeURIComponent(form.purchaseUnit)}`)
-        const data = await response.json()
+        const data: { success: boolean; data: PurchaseUnit } = await response.json()
         if (data.success) {
           form.contactPerson = data.data.contact_person || ''
         }
@@ -193,7 +276,7 @@ export function useCreateOrder() {
   async function loadAllProducts() {
     try {
       const response = await fetch('/api/product_names')
-      const data = await response.json()
+      const data: { success: boolean; data: ProductName[] } = await response.json()
       if (data.success) {
         allProducts.value = data.data
       }
@@ -205,7 +288,7 @@ export function useCreateOrder() {
   async function generateOrderNumber() {
     try {
       const response = await fetch('/orders/next_number?suffix=A')
-      const data = await response.json()
+      const data: { success: boolean; data: { order_number: string } } = await response.json()
       if (data.success) {
         form.orderNumber = data.data.order_number
       }
@@ -247,7 +330,7 @@ export function useCreateOrder() {
     product.amount = (product.quantityKg || 0) * (product.unitPrice || 0)
   }
 
-  function onProductNameSelect(product: any, index: number) {
+  function onProductNameSelect(product: OrderProductRow, index: number) {
     const selected = allProducts.value.find(p => p.id == product.nameId)
     if (selected) {
       product.name = selected.name || ''
@@ -265,7 +348,7 @@ export function useCreateOrder() {
     }
   }
 
-  function onProductModelChange(_product: any, _index: number) {
+  function onProductModelChange(_product: OrderProductRow, _index: number) {
     // Auto-fill name when model changes
   }
 
@@ -276,7 +359,7 @@ export function useCreateOrder() {
     }, 300)
   }
 
-  function selectProductForAdd(product: any) {
+  function selectProductForAdd(product: ProductName) {
     addProductRow()
     const newProduct = products.value[products.value.length - 1]
     newProduct.nameId = product.id
@@ -313,7 +396,7 @@ export function useCreateOrder() {
 
     showStatus('正在生成发货单...', 'processing')
 
-    const editableData: any = {
+    const editableData: ShipmentEditableData = {
       header_row: {},
       product_rows: [],
       price_row: {}
@@ -329,7 +412,7 @@ export function useCreateOrder() {
 
     products.value.forEach((product, index) => {
       const rowNum = index + 4
-      const productData: any = {}
+      const productData: ShipmentRowCells = {}
       productData[1] = product.model || ''
       productData[4] = product.name || ''
       productData[5] = product.quantityBox || ''
@@ -353,7 +436,7 @@ export function useCreateOrder() {
         })
       })
 
-      const data = await response.json()
+      const data: ShipmentResult = await response.json()
       if (data.success) {
         showStatus('发货单生成成功！', 'success')
         result.value = data

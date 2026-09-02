@@ -85,11 +85,11 @@ const {
                 <template v-if="getTemplateCoverage(tpl)">
                   <br>
                 <span>
-                  词条完整度：{{ getTemplateCoverage(tpl).matchedCount }}/{{ getTemplateCoverage(tpl).requiredCount }}
+                  词条完整度：{{ getTemplateCoverage(tpl)!.matchedCount }}/{{ getTemplateCoverage(tpl)!.requiredCount }}
                 </span>
-                <br v-if="getTemplateCoverage(tpl).missing.length">
-                <span v-if="getTemplateCoverage(tpl).missing.length">
-                  缺失：{{ getTemplateCoverage(tpl).missing.join('、') }}
+                <br v-if="getTemplateCoverage(tpl)!.missing.length">
+                <span v-if="getTemplateCoverage(tpl)!.missing.length">
+                  缺失：{{ getTemplateCoverage(tpl)!.missing.join('、') }}
                 </span>
                 </template>
               </template>

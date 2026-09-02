@@ -23,6 +23,9 @@ interface TmInductDeps {
   showToast: (message: string, type?: 'success' | 'error') => void
 }
 
+/** manualInduct preview 接口返回（沿用 @/api/manualInduct 声明） */
+type TmInductPreviewResponse = Awaited<ReturnType<typeof manualInductApi.preview>>
+
 /** 手动归纳：全表行解析 → 主数据校验 → 缺失确认 → 入库 */
 export function useTmInduct(deps: TmInductDeps) {
   const { excelPanel, runTraditionalGridExtract } = deps.excel
@@ -31,13 +34,13 @@ export function useTmInduct(deps: TmInductDeps) {
   const inductPurchaseUnit = ref('')
   const inductPurchaseUnitOptions = ref<string[]>([])
   const inductTargetScope = ref('products')
-  const inductRows = ref<Record<string, any>[]>([])
+  const inductRows = ref<Record<string, unknown>[]>([])
   const inductRowsLoading = ref(false)
   const inductRowsError = ref('')
   const inductRowsLoadedKey = ref('')
   const inductPreviewLoading = ref(false)
   const inductCommitLoading = ref(false)
-  const inductLastPreview = ref<Record<string, any> | null>(null)
+  const inductLastPreview = ref<TmInductPreviewResponse | null>(null)
   const inductMissingModal = ref(false)
   const inductCreateSelected = ref<Record<string, boolean>>({})
 
@@ -144,10 +147,10 @@ export function useTmInduct(deps: TmInductDeps) {
       const rows = Array.isArray(res.rows) ? res.rows : []
       inductRows.value = rows
       inductRowsLoadedKey.value = key
-    } catch (e: any) {
+    } catch (e) {
       inductRows.value = []
       inductRowsLoadedKey.value = ''
-      inductRowsError.value = e?.message || String(e)
+      inductRowsError.value = e instanceof Error ? e.message : String(e)
       deps.showToast(inductRowsError.value, 'error')
     } finally {
       inductRowsLoading.value = false
@@ -189,7 +192,7 @@ export function useTmInduct(deps: TmInductDeps) {
         purchase_unit: inductPurchaseUnit.value.trim() || undefined,
         rows: inductRows.value
       })
-      inductLastPreview.value = res as Record<string, any>
+      inductLastPreview.value = res
       if (!res?.success) {
         deps.showToast(res?.message || '校验失败', 'error')
         return
@@ -199,8 +202,8 @@ export function useTmInduct(deps: TmInductDeps) {
       } else {
         deps.showToast('校验通过', 'success')
       }
-    } catch (e: any) {
-      deps.showToast(e?.message || '校验失败', 'error')
+    } catch (e) {
+      deps.showToast(e instanceof Error ? (e.message || '校验失败') : String(e), 'error')
     } finally {
       inductPreviewLoading.value = false
     }
@@ -243,8 +246,8 @@ export function useTmInduct(deps: TmInductDeps) {
       inductMissingModal.value = false
       inductLastPreview.value = null
       await loadInductPurchaseUnits()
-    } catch (e: any) {
-      deps.showToast(e?.message || '入库失败', 'error')
+    } catch (e) {
+      deps.showToast(e instanceof Error ? (e.message || '入库失败') : String(e), 'error')
     } finally {
       inductCommitLoading.value = false
     }

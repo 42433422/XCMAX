@@ -69,6 +69,8 @@ const autoRefresh = computed({
   set: (v) => emit('update:autoRefresh', v),
 })
 
+const routerState = computed(() => props.router)
+
 </script>
 
 <template>
@@ -173,7 +175,7 @@ const autoRefresh = computed({
                 type="button"
                 class="dg-close dg-close--text"
                 aria-label="返回数据库管理"
-                @click="router.push({ name: 'admin-database' })"
+                @click="routerState.push({ name: 'admin-database' })"
               >
                 ← 返回
               </button>

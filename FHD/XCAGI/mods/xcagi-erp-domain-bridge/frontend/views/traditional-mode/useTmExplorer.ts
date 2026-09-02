@@ -128,8 +128,8 @@ export function useTmExplorer(deps: TmExplorerDeps) {
       } else {
         deps.showToast(res.error || '加载目录失败', 'error')
       }
-    } catch (e: any) {
-      deps.showToast('网络错误: ' + (e.message || ''), 'error')
+    } catch (e) {
+      deps.showToast('网络错误: ' + (e instanceof Error ? (e.message || '') : String(e)), 'error')
     } finally {
       loading.value = false
     }

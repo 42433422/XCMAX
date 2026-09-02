@@ -4,6 +4,7 @@ import { useLeCanvasDraw } from './useLeCanvasDraw'
 import { useLeFieldInteraction } from './useLeFieldInteraction'
 import { useLeAnalyzeUpload } from './useLeAnalyzeUpload'
 import { useLeSave } from './useLeSave'
+import type { LeField, LeGrid } from './leTypes'
 
 // 组装 LabelEditorView 的全部状态与动作（拆分自原 Options API script，逻辑逐字迁移，行为不变）。
 export function assembleLabelEditor() {
@@ -11,17 +12,17 @@ export function assembleLabelEditor() {
   const router = useRouter()
 
   // 原组件 data 中的共享状态
-  const fields = ref<any[]>([])
-  const grid = ref<any>(null)
+  const fields = ref<LeField[]>([])
+  const grid = ref<LeGrid | null>(null)
   const imageSize = ref({ width: 900, height: 600 })
-  const selectedField = ref<any>(null)
-  const selectedFieldId = ref<any>(null)
-  const hoverFieldId = ref<any>(null)
+  const selectedField = ref<LeField | null>(null)
+  const selectedFieldId = ref<number | null>(null)
+  const hoverFieldId = ref<number | null>(null)
   const scale = ref(1)
   const zoom = ref(1)
   const showGrid = ref(true)
   const showMerge = ref(true)
-  const uploadedImage = ref<any>(null)
+  const uploadedImage = ref<string | null>(null)
   const templateName = ref('标签模板')
 
   const draw = useLeCanvasDraw({
@@ -70,7 +71,8 @@ export function assembleLabelEditor() {
     }
 
     if (imageData) {
-      uploadedImage.value = imageData
+      // 原 Options API 实现直接将 query 值赋给图片源（假定 string）
+      uploadedImage.value = imageData as string | null
     }
 
     const autoUpload = route.query.autoUpload === '1'

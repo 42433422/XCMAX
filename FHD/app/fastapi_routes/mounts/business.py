@@ -38,7 +38,11 @@ def _mod_taiyangniao_pro_exposes_attendance_api() -> bool:
 
 
 def _bundled_taiyangniao_pro_exposes_attendance_api() -> bool:
-    """Detect the bundled taiyangniao-pro blueprint before Mod routes are mounted."""
+    """Detect the bundled taiyangniao-pro blueprint before Mod routes are mounted.
+
+    blueprints.py 拆分后，attendance 标记可能位于同一 backend 目录内的其他模块（如 attendance_routes.py），
+    故按该目录下全部 *.py 的拼接文本判定，四个标记齐全才算命中。
+    """
     fhd_root = Path(__file__).resolve().parents[3]
     candidates = (
         fhd_root / "mods" / "taiyangniao-pro" / "backend" / "blueprints.py",
@@ -48,7 +52,11 @@ def _bundled_taiyangniao_pro_exposes_attendance_api() -> bool:
         try:
             if not file_path.is_file():
                 continue
-            text = file_path.read_text(encoding="utf-8", errors="ignore")
+            backend_dir = file_path.parent
+            text = "\n".join(
+                py_file.read_text(encoding="utf-8", errors="ignore")
+                for py_file in sorted(backend_dir.glob("*.py"))
+            )
         except OSError:
             continue
         if (

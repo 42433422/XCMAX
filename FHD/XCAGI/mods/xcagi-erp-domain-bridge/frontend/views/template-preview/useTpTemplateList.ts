@@ -3,6 +3,12 @@ import templatePreviewApi from '@/api/templatePreview'
 import { TEMPLATE_SCOPE_CONFIG } from './tpScopeRules'
 import { createVirtualTemplate, getTemplateScopeKey, isExportTemplate } from './tpTemplateMeta'
 import type { TplRecord } from './tpTemplateMeta'
+import type { TplDecomposeResponse, TplDetailResponse, TplListResponse } from './tpApiContracts'
+
+/** 兼容旧 lib.dom：AbortSignal.timeout 为较新 API，运行时探测可用性 */
+type AbortSignalConstructorWithTimeout = typeof AbortSignal & {
+  timeout?: (ms: number) => AbortSignal
+}
 
 /** 模板列表加载 + 业务范围过滤（对应原视图 data 的 templates/loading/error/activeScopeTab 与相关方法） */
 export function useTpTemplateList() {
@@ -58,11 +64,11 @@ export function useTpTemplateList() {
     error.value = null
     const refreshGen = ++templateListRefreshGen
     const listSignal =
-      typeof AbortSignal !== 'undefined' && typeof (AbortSignal as any).timeout === 'function'
-        ? (AbortSignal as any).timeout(120000)
+      typeof AbortSignal !== 'undefined' && typeof (AbortSignal as AbortSignalConstructorWithTimeout).timeout === 'function'
+        ? (AbortSignal as AbortSignalConstructorWithTimeout).timeout(120000)
         : undefined
     try {
-      const res = (await templatePreviewApi.listTemplates(listSignal ? { signal: listSignal } : undefined)) as any
+      const res = (await templatePreviewApi.listTemplates(listSignal ? { signal: listSignal } : undefined)) as TplListResponse
       if (refreshGen !== templateListRefreshGen) return
       if (res && res.success) {
         const list = (res.templates || []).filter((t: TplRecord) => {
@@ -77,9 +83,12 @@ export function useTpTemplateList() {
       } else {
         error.value = (res && res.message) || '加载失败'
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('加载模板列表失败:', err)
-      const msg = err && err.name === 'TimeoutError' ? '请求超时，请检查网络或后端服务' : (err.message || '未知错误')
+      const errRec = (err && typeof err === 'object' ? err : {}) as { name?: unknown; message?: unknown }
+      const msg = errRec.name === 'TimeoutError'
+        ? '请求超时，请检查网络或后端服务'
+        : (typeof errRec.message === 'string' && errRec.message) || '未知错误'
       error.value = '加载模板列表失败：' + msg
     } finally {
       loading.value = false
@@ -106,7 +115,7 @@ export function useTpTemplateList() {
     }
     let hydratedByDetail = false
     try {
-      const detailRes = (await templatePreviewApi.getTemplateDetail(tpl.id)) as any
+      const detailRes = (await templatePreviewApi.getTemplateDetail(tpl.id)) as TplDetailResponse
       if (detailRes && detailRes.success && detailRes.template) {
         Object.assign(tpl, detailRes.template)
         hydratedByDetail = true
@@ -133,28 +142,28 @@ export function useTpTemplateList() {
         decomposePayload.filename = fileName
       }
 
-      const decomposeRes = (await templatePreviewApi.decomposeTemplate(decomposePayload)) as any
+      const decomposeRes = (await templatePreviewApi.decomposeTemplate(decomposePayload)) as TplDecomposeResponse
       if (!decomposeRes?.success) return
 
-      const entries = Array.isArray(decomposeRes?.decomposition?.editable_entries)
-        ? decomposeRes.decomposition.editable_entries
-        : []
-      const sampleRows = Array.isArray(decomposeRes?.decomposition?.sample_rows)
-        ? decomposeRes.decomposition.sample_rows
-        : []
+      const decomposition = decomposeRes?.decomposition
+      const entries = Array.isArray(decomposition?.editable_entries) ? decomposition.editable_entries : []
+      const sampleRows = Array.isArray(decomposition?.sample_rows) ? decomposition.sample_rows : []
 
       let fields = entries
-        .map((item: any) => ({
-          label: String(item?.name || '').trim(),
-          value: '',
-          type: 'dynamic'
-        }))
-        .filter((item: any) => item.label)
+        .map((item) => {
+          const rec = (item && typeof item === 'object' ? item : {}) as { name?: unknown }
+          return {
+            label: String(rec.name || '').trim(),
+            value: '',
+            type: 'dynamic'
+          }
+        })
+        .filter((item) => item.label)
 
       if (!fields.length && sampleRows.length) {
         const keys = Array.from(
           new Set(
-            sampleRows.flatMap((row: any) => Object.keys(row || {}))
+            sampleRows.flatMap((row) => Object.keys(row || {}))
           )
         )
         fields = keys.map(k => ({ label: String(k || '').trim(), value: '', type: 'dynamic' })).filter(f => f.label)

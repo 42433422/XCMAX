@@ -2,11 +2,37 @@ import { ref } from 'vue'
 import type { SheetGroup } from '@/stores/batchAnalyze'
 import { appAlert } from '@/utils/appDialog'
 
+// 预览弹窗数据（字段以 BaPreviewModal.vue 模板实际访问项为准）
+interface PreviewField {
+  label: string
+  name: string
+  type: string
+}
+
+interface PreviewData {
+  fields: PreviewField[]
+  preview_data: {
+    sample_rows: Record<string, unknown>[]
+    grid_preview: { rows: unknown[][] }
+    sheet_name: string
+    file_name: string
+  }
+  groupInfo: {
+    name: string
+    templateType: string
+    matchScore: number
+    sheetCount: number
+    commonFieldsCount: number
+    differenceFieldsCount: number
+    diffGridRows: unknown[][]
+  }
+}
+
 // 拆分自 BatchAnalyzeView.vue script（原第 518–521、600–676 行）；逻辑逐字迁移，行为不变。
 export function useBaPreview() {
   const showPreviewModal = ref(false)
   const previewGroupName = ref('')
-  const previewData = ref<any>(null)
+  const previewData = ref<PreviewData | null>(null)
   const previewLoading = ref(false)
 
   async function previewGroup(group: SheetGroup) {
@@ -30,7 +56,7 @@ export function useBaPreview() {
 
       const sampleRows = firstSheet?.sampleRows || []
 
-      const gridRows: any[][] = []
+      const gridRows: unknown[][] = []
       if (sampleRows.length > 0) {
         const headers = Object.keys(sampleRows[0])
         gridRows.push(headers)
@@ -39,12 +65,12 @@ export function useBaPreview() {
         }
       }
 
-      const diffGridRows: any[][] = []
+      const diffGridRows: unknown[][] = []
       if (group.differenceFields.length > 0 && firstSheet?.sampleRows) {
         const diffHeaders = group.differenceFields
         const firstSheetFields = new Set(firstSheet.fields.map(f => f.toLowerCase()))
-        const diffDataRows = firstSheet.sampleRows.slice(0, 5).map((row: Record<string, any>) => {
-          const result: any[] = []
+        const diffDataRows = firstSheet.sampleRows.slice(0, 5).map((row: Record<string, unknown>) => {
+          const result: unknown[] = []
           for (const field of group.differenceFields) {
             const fieldLower = field.toLowerCase()
             if (firstSheetFields.has(fieldLower)) {

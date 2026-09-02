@@ -1,16 +1,30 @@
 import { ref, type Ref } from 'vue'
+import type { LeField, LeGrid } from './leTypes'
+
+/** /api/templates/analyze 返回（宽松契约） */
+interface LeAnalyzeResponse {
+  success?: boolean
+  message?: string
+  fields?: unknown
+  preview_data?: {
+    grid?: unknown
+    image_size?: { width?: number | string; height?: number | string; [key: string]: unknown }
+    [key: string]: unknown
+  } | null
+  [key: string]: unknown
+}
 
 // 拆分自 LabelEditorView.vue script（原 data 中识别状态 + methods 中 triggerFileInput/onFileSelected）；
 // 逻辑逐字迁移，行为不变。
 export function useLeAnalyzeUpload(deps: {
-  fields: Ref<any[]>
-  grid: Ref<any>
-  uploadedImage: Ref<any>
+  fields: Ref<LeField[]>
+  grid: Ref<LeGrid | null>
+  uploadedImage: Ref<string | null>
   canvasWidth: Ref<number>
   canvasHeight: Ref<number>
   templateName: Ref<string>
   drawCanvas: () => void
-  getDefaultFields: () => any[]
+  getDefaultFields: () => LeField[]
 }) {
   const { fields, grid, uploadedImage, canvasWidth, canvasHeight, templateName, drawCanvas, getDefaultFields } = deps
 
@@ -42,7 +56,8 @@ export function useLeAnalyzeUpload(deps: {
 
     const reader = new FileReader()
     reader.onload = async (event) => {
-      uploadedImage.value = (event.target as FileReader | null)?.result
+      // FileReader.result 兼容 string | ArrayBuffer | null；原实现假定 dataURL 字符串
+      uploadedImage.value = (event.target as FileReader | null)?.result as string | null
       drawCanvas()
 
       // 进入独立页面后，直接调用后端识别流程（OCR + 网格）
@@ -57,23 +72,32 @@ export function useLeAnalyzeUpload(deps: {
           body: formData
         })
         analyzeStage.value = '正在解析识别结果...'
-        const res = await response.json()
+        const res = (await response.json()) as LeAnalyzeResponse
 
         if (res?.success) {
           const incomingFields = Array.isArray(res.fields) ? res.fields : []
-          fields.value = incomingFields.map((field: any, idx: number) => ({
-            id: field.id || idx + 1,
-            label: field.label || `字段${idx + 1}`,
-            value: field.value || '',
-            type: field.type || 'dynamic',
-            position: {
-              left: Number(field?.position?.left ?? 20),
-              top: Number(field?.position?.top ?? 20 + idx * 36),
-              width: Number(field?.position?.width ?? 180),
-              height: Number(field?.position?.height ?? 30)
+          fields.value = incomingFields.map((raw, idx): LeField => {
+            const field = (raw && typeof raw === 'object' ? raw : {}) as {
+              id?: unknown
+              label?: unknown
+              value?: unknown
+              type?: unknown
+              position?: { left?: unknown; top?: unknown; width?: unknown; height?: unknown } | null
             }
-          }))
-          grid.value = res?.preview_data?.grid || null
+            return {
+              id: (field.id as number) || idx + 1,
+              label: (field.label as string) || `字段${idx + 1}`,
+              value: (field.value as string) || '',
+              type: (field.type as string) || 'dynamic',
+              position: {
+                left: Number(field.position?.left ?? 20),
+                top: Number(field.position?.top ?? 20 + idx * 36),
+                width: Number(field.position?.width ?? 180),
+                height: Number(field.position?.height ?? 30)
+              }
+            }
+          })
+          grid.value = (res?.preview_data?.grid as LeGrid | null) || null
 
           if (res?.preview_data?.image_size) {
             const width = Number(res.preview_data.image_size.width || canvasWidth.value)
@@ -93,8 +117,8 @@ export function useLeAnalyzeUpload(deps: {
           fields.value = getDefaultFields()
           drawCanvas()
         }
-      } catch (err: any) {
-        analyzeError.value = `识别失败：${err?.message || '未知错误'}`
+      } catch (err) {
+        analyzeError.value = `识别失败：${err instanceof Error ? (err.message || '未知错误') : String(err)}`
         analyzeStage.value = '识别失败'
         fields.value = getDefaultFields()
         drawCanvas()

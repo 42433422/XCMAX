@@ -201,10 +201,17 @@ def _check_budgets(errors: list[str]) -> None:
                 errors.append(f"saas-trial-30.{key}={trial.get(key)!r}，应为 {expected!r}")
 
     budget_pattern = re.compile("|".join(re.escape(b) for b in EXPECTED_BUDGETS))
+    admin_split_dir = ADMIN_VIEW.parent / "admin-entitlements"
     for path in BUDGET_FRONT_FILES:
-        text = _read_text(path, errors)
-        if not text:
+        texts = [_read_text(path, errors)]
+        if path == ADMIN_VIEW:
+            # AdminEntitlementsView.vue 已按源码棘轮拆分，BUDGET_RANGE_OPTIONS 移入
+            # admin-entitlements/types.ts；档位检查需覆盖视图 + 拆分目录全部 .ts/.vue。
+            split_paths = sorted(admin_split_dir.glob("*.ts")) + sorted(admin_split_dir.glob("*.vue"))
+            texts.extend(_read_text(extra, errors) for extra in split_paths)
+        if any(not t for t in texts):
             continue
+        text = "\n".join(texts)
         found = set(budget_pattern.findall(text))
         missing = set(EXPECTED_BUDGETS) - found
         if missing:

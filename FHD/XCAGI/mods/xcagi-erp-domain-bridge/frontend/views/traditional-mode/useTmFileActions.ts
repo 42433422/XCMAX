@@ -61,8 +61,8 @@ export function useTmFileActions(deps: TmFileActionsDeps) {
       } else {
         deps.showToast(res.error || '重命名失败', 'error')
       }
-    } catch (e: any) {
-      deps.showToast('操作失败: ' + (e.message || ''), 'error')
+    } catch (e) {
+      deps.showToast('操作失败: ' + (e instanceof Error ? (e.message || '') : String(e)), 'error')
     }
   }
 
@@ -89,8 +89,8 @@ export function useTmFileActions(deps: TmFileActionsDeps) {
       } else {
         deps.showToast(res.error || '删除失败', 'error')
       }
-    } catch (e: any) {
-      deps.showToast('删除失败: ' + (e.message || ''), 'error')
+    } catch (e) {
+      deps.showToast('删除失败: ' + (e instanceof Error ? (e.message || '') : String(e)), 'error')
     }
   }
 
@@ -111,8 +111,8 @@ export function useTmFileActions(deps: TmFileActionsDeps) {
       } else {
         deps.showToast(res.error || '创建失败', 'error')
       }
-    } catch (e: any) {
-      deps.showToast('创建失败: ' + (e.message || ''), 'error')
+    } catch (e) {
+      deps.showToast('创建失败: ' + (e instanceof Error ? (e.message || '') : String(e)), 'error')
     }
   }
 
@@ -135,9 +135,9 @@ export function useTmFileActions(deps: TmFileActionsDeps) {
           failedCount++
           deps.showToast(`${file.name} 上传失败: ${res.error || '未知错误'}`, 'error')
         }
-      } catch (e: any) {
+      } catch (e) {
         failedCount++
-        deps.showToast(`${file.name} 上传失败: ${e.message || ''}`, 'error')
+        deps.showToast(`${file.name} 上传失败: ${e instanceof Error ? (e.message || '') : String(e)}`, 'error')
       }
     }
 
@@ -249,8 +249,8 @@ export function useTmFileActions(deps: TmFileActionsDeps) {
       a.remove()
       URL.revokeObjectURL(url)
       deps.showToast('已开始下载，完成后可在「下载」中点击「打开」或用资源管理器双击', 'success')
-    } catch (e: any) {
-      deps.showToast(e?.message || '下载失败', 'error')
+    } catch (e) {
+      deps.showToast(e instanceof Error ? (e.message || '下载失败') : String(e), 'error')
     }
   }
 

@@ -12,18 +12,26 @@ interface TmSseWatchDeps {
   onPageHidden: () => void
 }
 
+/** SSE watch 消息（宽松契约） */
+interface TmWatchSseMessage {
+  changed?: string[]
+  snapshot?: Record<string, string>
+  [key: string]: unknown
+}
+
 /** 目录监听：fetch 流式读取 SSE，断线指数退避重连，仅页面可见时保持连接 */
 export function useTmSseWatch(deps: TmSseWatchDeps) {
   const changedFiles = ref(new Set<string>())
 
   let watchTimer: number | null = null
   let lastWatchData: Record<string, string> = {}
-  let eventSource: AbortController | null = null
+  /** 连接标记（原实现仅以对象存在性表示「连接中」，不复用 AbortController） */
+  let eventSource: { _url: string } | null = null
   let sseRetryCount = 0
   let sseStopped = false
   const SSE_MAX_RETRIES = 10
 
-  function handleSSEMessage(data: any) {
+  function handleSSEMessage(data: TmWatchSseMessage) {
     if (!data) return
     const changed = data.changed || []
     const snapshot = data.snapshot
@@ -49,7 +57,7 @@ export function useTmSseWatch(deps: TmSseWatchDeps) {
     sseRetryCount = 0
     sseStopped = false
     const url = buildFullApiUrl(`/api/traditional-mode/watch?path=${encodeURIComponent(deps.getWatchPath())}`)
-    eventSource = { _url: url } as any
+    eventSource = { _url: url }
     ;(async () => {
       try {
         const res = await fetch(url, { credentials: 'include' })
@@ -73,7 +81,7 @@ export function useTmSseWatch(deps: TmSseWatchDeps) {
           }
         }
         if (!sseStopped) reader.releaseLock()
-      } catch (err: any) {
+      } catch {
         if (sseStopped) return
       }
       if (!sseStopped && document.visibilityState === 'visible' && sseRetryCount < SSE_MAX_RETRIES) {

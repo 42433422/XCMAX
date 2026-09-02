@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 import { storeToRefs } from 'pinia'
-import { useBatchAnalyzeStore, type SheetGroup } from '@/stores/batchAnalyze'
+import { useBatchAnalyzeStore, type SheetGroup, type SheetInfo } from '@/stores/batchAnalyze'
 import { appPrompt } from '@/utils/appDialog'
 
 // 拆分自 BatchAnalyzeView.vue script（原第 526–537、793–891 行）；逻辑逐字迁移，行为不变。
@@ -9,16 +9,16 @@ export function useBaMoveSheet() {
   const { groups } = storeToRefs(store)
 
   const showMoveModal = ref(false)
-  const moveSourceSheet = ref<any>(null)
-  const moveSourceGroup = ref<any>(null)
+  const moveSourceSheet = ref<SheetInfo | null>(null)
+  const moveSourceGroup = ref<SheetGroup | null>(null)
   const moveSourceIndex = ref(-1)
 
   const moveTargetGroups = computed(() => {
     if (!moveSourceGroup.value) return groups.value
-    return groups.value.filter(g => g.id !== moveSourceGroup.value.id)
+    return groups.value.filter(g => g.id !== moveSourceGroup.value?.id)
   })
 
-  function showMoveSheetDialog(group: SheetGroup, sheet: any, index: number) {
+  function showMoveSheetDialog(group: SheetGroup, sheet: SheetInfo, index: number) {
     moveSourceGroup.value = group
     moveSourceSheet.value = sheet
     moveSourceIndex.value = index
@@ -35,7 +35,7 @@ export function useBaMoveSheet() {
   function moveSheetToGroup(targetGroupId: string) {
     if (!moveSourceSheet.value || !moveSourceGroup.value) return
 
-    const sourceGroupIndex = groups.value.findIndex(g => g.id === moveSourceGroup.value.id)
+    const sourceGroupIndex = groups.value.findIndex(g => g.id === moveSourceGroup.value?.id)
     const targetGroupIndex = groups.value.findIndex(g => g.id === targetGroupId)
     if (sourceGroupIndex === -1 || targetGroupIndex === -1) return
 
@@ -44,7 +44,7 @@ export function useBaMoveSheet() {
 
     updatedGroups[sourceGroupIndex] = recalculateGroupFields({
       ...updatedGroups[sourceGroupIndex],
-      matchedSheets: updatedGroups[sourceGroupIndex].matchedSheets.filter((_: any, i: number) => i !== moveSourceIndex.value)
+      matchedSheets: updatedGroups[sourceGroupIndex].matchedSheets.filter((_: SheetInfo, i: number) => i !== moveSourceIndex.value)
     })
 
     updatedGroups[targetGroupIndex] = recalculateGroupFields({
@@ -82,7 +82,7 @@ export function useBaMoveSheet() {
     if (sourceGroupIndex !== -1) {
       updatedGroups[sourceGroupIndex] = recalculateGroupFields({
         ...updatedGroups[sourceGroupIndex],
-        matchedSheets: updatedGroups[sourceGroupIndex].matchedSheets.filter((_: any, i: number) => i !== moveSourceIndex.value)
+        matchedSheets: updatedGroups[sourceGroupIndex].matchedSheets.filter((_: SheetInfo, i: number) => i !== moveSourceIndex.value)
       })
     }
 
@@ -105,9 +105,9 @@ export function useBaMoveSheet() {
     const differenceFields: string[] = []
 
     for (const field of allFields) {
-      const appearsInAll = group.matchedSheets.every((sheet: any) =>
-        sheet.fields.includes(field)
-      )
+      const appearsInAll = group.matchedSheets.every((sheet: SheetInfo) =>
+      sheet.fields.includes(field)
+    )
       if (appearsInAll) {
         commonFields.push(field)
       } else {

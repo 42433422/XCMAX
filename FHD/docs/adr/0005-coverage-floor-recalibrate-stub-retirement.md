@@ -28,8 +28,8 @@ D2-5 决定将 82 个 stub 全部处置：审计确认它们并非纯占位（�
 1. stub 配额基线收口至 0：`count_coverage_ramp_stubs.py --bump`（82 → 0），
    `--check` 门禁保留（新增 stub 即违规）。
 2. 总口径 floor 下调至真实行为口径起点：
-   - `fail_under`（行 floor SSOT）：88 → 78
-   - `backend_branch_floor` / dual-summary `branch_floor`（分支 floor SSOT）：81 → 69
+   - `fail_under`（行 floor 门禁值）：88 → 78
+   - `backend_branch_floor` / dual-summary `branch_floor`（分支 floor 门禁值）：81 → 69
 3. `behavior_floors`（78/69）保持不变——stub 清零后迁出的用例进入行为口径，
    行为实测只会上升，floor 无需变动。
 4. `last_measured` 历史实测快照（88.19/81.5 与 79.26/70.87，2026-07-25）保留不动，

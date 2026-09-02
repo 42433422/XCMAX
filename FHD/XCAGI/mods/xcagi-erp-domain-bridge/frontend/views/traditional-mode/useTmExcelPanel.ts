@@ -5,6 +5,48 @@ import templatePreviewApi from '@/api/templatePreview'
 import { traditionalApi, FileInfo } from '@/api/traditional'
 import { buildFileFingerprint } from './tmFileUtils'
 
+/** extract-grid 识别字段（后端宽松结构） */
+interface TmExtractGridField {
+  label?: string
+  name?: string
+  [key: string]: unknown
+}
+
+/** extract-grid 最终结果（宽松契约） */
+interface TmExtractGridResult {
+  success?: boolean
+  message?: unknown
+  fields?: TmExtractGridField[]
+  preview_data?: {
+    sheet_name?: string
+    selected_sheet_name?: string
+    sheet_names?: string[]
+    sample_rows?: Record<string, unknown>[]
+    grid_preview?: { rows?: unknown[]; [key: string]: unknown }
+    [key: string]: unknown
+  }
+  [key: string]: unknown
+}
+
+/** extract-grid 异步任务启动返回（宽松契约） */
+interface TmExtractGridStart {
+  success?: boolean
+  task_id?: string | number
+  message?: unknown
+  [key: string]: unknown
+}
+
+/** extract-grid 异步任务轮询返回（宽松契约） */
+interface TmExtractGridStatus {
+  success?: boolean
+  status?: string
+  percent?: number
+  step?: unknown
+  message?: unknown
+  result?: TmExtractGridResult | null
+  [key: string]: unknown
+}
+
 interface TmExcelPanelDeps {
   showToast: (message: string, type?: 'success' | 'error') => void
   /** 保存成功后刷新目录列表 */
@@ -29,13 +71,13 @@ export function useTmExcelPanel(deps: TmExcelPanelDeps) {
     /** 异步 extract-grid 进度（0–100） */
     extractProgressPercent: 0,
     extractProgressStep: '',
-    extractResult: null as Record<string, any> | null,
+    extractResult: null as TmExtractGridResult | null,
     sheetNames: [] as string[],
     selectedSheetName: '',
     error: '',
     /** 与当前 filePath 一致时表示提取结果仍有效；直接编辑保存后清空以强制刷新 */
     extractLoadedPath: '',
-    editContent: null as Record<string, { rows: any[][] }> | null,
+    editContent: null as Record<string, { rows: unknown[][] }> | null,
     editActiveSheet: '',
     editLoading: false,
     editSaving: false,
@@ -53,15 +95,15 @@ export function useTmExcelPanel(deps: TmExcelPanelDeps) {
   /** 防止多次并发 extract-grid 结束时错误清除 loading */
   let traditionalExtractGeneration = 0
 
-  function cloneSheetRowsForEdit(rows: any[][]): any[][] {
+  function cloneSheetRowsForEdit(rows: unknown[][]): unknown[][] {
     if (typeof structuredClone === 'function') {
       try {
-        return structuredClone(rows) as any[][]
+        return structuredClone(rows) as unknown[][]
       } catch {
         /* 含不可克隆类型时回退 */
       }
     }
-    return JSON.parse(JSON.stringify(rows)) as any[][]
+    return JSON.parse(JSON.stringify(rows)) as unknown[][]
   }
 
   const traditionalExtractTitle = computed(() => {
@@ -195,8 +237,8 @@ export function useTmExcelPanel(deps: TmExcelPanelDeps) {
       if (!res.success || !res.data || res.data.type !== 'excel' || !res.data.content) {
         throw new Error((res as { error?: string }).error || '无法读取 Excel（仅支持 .xlsx / .xlsm 等，旧版 .xls 可能不支持）')
       }
-      const content = res.data.content as Record<string, { rows?: any[][] }>
-      const out: Record<string, { rows: any[][] }> = {}
+      const content = res.data.content as Record<string, { rows?: unknown[][] }>
+      const out: Record<string, { rows: unknown[][] }> = {}
       await nextTick()
       for (const [name, sheet] of Object.entries(content)) {
         const rows = Array.isArray(sheet?.rows) ? sheet.rows : []
@@ -214,16 +256,17 @@ export function useTmExcelPanel(deps: TmExcelPanelDeps) {
       const d = res.data as { edit_truncated?: boolean; edit_truncated_hint?: string }
       excelPanel.editTruncated = !!d.edit_truncated
       excelPanel.editTruncatedHint = String(d.edit_truncated_hint || '').trim()
-    } catch (e: any) {
+    } catch (e) {
       if (myGen !== excelEditLoadGeneration) {
         return
       }
+      const errRec = (e && typeof e === 'object' ? e : {}) as { name?: unknown; message?: unknown }
       const aborted =
-        e?.name === 'AbortError' ||
-        (typeof e?.message === 'string' && /aborted|AbortError|abort/i.test(e.message))
+        errRec.name === 'AbortError' ||
+        (typeof errRec.message === 'string' && /aborted|AbortError|abort/i.test(errRec.message))
       const msg = aborted
         ? `读取 Excel 超时或已取消（${Math.round(READ_TIMEOUT_MS / 1000)}s 内无完整响应）。请确认本机已启动后端 run.py（5000）、文件不要过大，或改用「下载」后用 Excel 打开。`
-        : (e?.message || String(e))
+        : (typeof errRec.message === 'string' && errRec.message) || String(e)
       excelPanel.editError = msg
       deps.showToast(msg, 'error')
     } finally {
@@ -277,7 +320,7 @@ export function useTmExcelPanel(deps: TmExcelPanelDeps) {
       excelPanel.extractProgressPercent = 2
       const start = (await templatePreviewApi.startExtractGridAsync(formData, {
         signal: ac.signal,
-      })) as Record<string, any>
+      })) as TmExtractGridStart
       if (myGen !== traditionalExtractGeneration) {
         return
       }
@@ -286,14 +329,14 @@ export function useTmExcelPanel(deps: TmExcelPanelDeps) {
       }
       const taskId = String(start.task_id)
       const pollMs = 280
-      let res: Record<string, any> | null = null
+      let res: TmExtractGridResult | null = null
       while (res === null) {
         if (myGen !== traditionalExtractGeneration) {
           return
         }
         const st = (await templatePreviewApi.getExtractGridStatus(taskId, {
           signal: ac.signal,
-        })) as Record<string, any>
+        })) as TmExtractGridStatus
         if (myGen !== traditionalExtractGeneration) {
           return
         }
@@ -302,7 +345,7 @@ export function useTmExcelPanel(deps: TmExcelPanelDeps) {
         }
         excelPanel.extractProgressStep = String(st.step || '')
         if (st.status === 'done' && st.result) {
-          res = st.result as Record<string, any>
+          res = st.result as TmExtractGridResult
           break
         }
         if (st.status === 'error') {
@@ -328,16 +371,17 @@ export function useTmExcelPanel(deps: TmExcelPanelDeps) {
         res?.preview_data?.sheet_name ||
         (excelPanel.sheetNames[0] || '')
       excelPanel.extractLoadedPath = excelPanel.filePath
-    } catch (e: any) {
+    } catch (e) {
       if (myGen !== traditionalExtractGeneration) {
         return
       }
+      const errRec = (e && typeof e === 'object' ? e : {}) as { name?: unknown; message?: unknown }
       const aborted =
-        e?.name === 'AbortError' ||
-        (typeof e?.message === 'string' && /aborted|AbortError|abort/i.test(e.message))
+        errRec.name === 'AbortError' ||
+        (typeof errRec.message === 'string' && /aborted|AbortError|abort/i.test(errRec.message))
       const msg = aborted
         ? `提取网格超时（${Math.round(EXTRACT_TIMEOUT_MS / 1000)}s）。文件可能过大、工作表过多，或接口繁忙；可切换工作表重试或仅用「直接编辑」。`
-        : (e?.message || String(e))
+        : (typeof errRec.message === 'string' && errRec.message) || String(e)
       excelPanel.error = msg
       deps.showToast(msg, 'error')
     } finally {
@@ -369,7 +413,7 @@ export function useTmExcelPanel(deps: TmExcelPanelDeps) {
     }
     excelPanel.editSaving = true
     try {
-      const content: Record<string, { rows: any[][] }> = {}
+      const content: Record<string, { rows: unknown[][] }> = {}
       for (const [k, v] of Object.entries(excelPanel.editContent)) {
         content[k] = { rows: v.rows }
       }
@@ -391,8 +435,8 @@ export function useTmExcelPanel(deps: TmExcelPanelDeps) {
       } else {
         deps.showToast(res.error || '保存失败', 'error')
       }
-    } catch (e: any) {
-      deps.showToast('保存错误: ' + (e.message || ''), 'error')
+    } catch (e) {
+      deps.showToast('保存错误: ' + (e instanceof Error ? (e.message || '') : String(e)), 'error')
     } finally {
       excelPanel.editSaving = false
     }

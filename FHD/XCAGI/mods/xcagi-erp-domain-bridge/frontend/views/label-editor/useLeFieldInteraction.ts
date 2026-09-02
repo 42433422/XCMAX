@@ -1,12 +1,13 @@
 import { ref, type Ref } from 'vue'
+import type { LeField } from './leTypes'
 
 // 拆分自 LabelEditorView.vue script（原 data 中拖拽相关状态 + methods 中鼠标交互与字段增删方法）；
 // 逻辑逐字迁移，行为不变。
 export function useLeFieldInteraction(deps: {
-  fields: Ref<any[]>
-  selectedField: Ref<any>
-  selectedFieldId: Ref<any>
-  hoverFieldId: Ref<any>
+  fields: Ref<LeField[]>
+  selectedField: Ref<LeField | null>
+  selectedFieldId: Ref<number | null>
+  hoverFieldId: Ref<number | null>
   labelCanvas: Ref<HTMLCanvasElement | null>
   drawCanvas: () => void
 }) {
@@ -107,14 +108,14 @@ export function useLeFieldInteraction(deps: {
     drawCanvas()
   }
 
-  function selectField(field: any) {
+  function selectField(field: LeField) {
     selectedField.value = field
     selectedFieldId.value = field.id
     drawCanvas()
   }
 
   function addField() {
-    const newId = Math.max(0, ...fields.value.map((f: any) => f.id)) + 1
+    const newId = Math.max(0, ...fields.value.map((f) => f.id)) + 1
     fields.value.push({
       id: newId,
       label: '新字段',

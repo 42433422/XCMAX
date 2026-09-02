@@ -1,19 +1,20 @@
 import type { Router } from 'vue-router'
 import type { Ref } from 'vue'
+import type { LeField } from './leTypes'
 import { appAlert } from '@/utils/appDialog'
 import { pushErpPage } from '@/utils/erpPagePaths'
 
 // 拆分自 LabelEditorView.vue script（原 methods 中 normalizeFieldsForSave/saveTemplate/goBack）；
 // 逻辑逐字迁移，行为不变。
 export function useLeSave(deps: {
-  fields: Ref<any[]>
+  fields: Ref<LeField[]>
   templateName: Ref<string>
   router: Router
 }) {
   const { fields, templateName, router } = deps
 
   function normalizeFieldsForSave() {
-    return (fields.value || []).map((field: any, idx: number) => ({
+    return (fields.value || []).map((field, idx) => ({
       id: field.id || idx + 1,
       label: field.label || `字段${idx + 1}`,
       value: field.value || '',
@@ -39,15 +40,15 @@ export function useLeSave(deps: {
         },
         body: JSON.stringify(templateData)
       })
-      const res = await response.json()
+      const res = (await response.json()) as { success?: boolean; message?: string }
       if (!res?.success) {
         throw new Error(res?.message || '保存失败')
       }
       await appAlert('模板保存成功！')
       window.dispatchEvent(new CustomEvent('xcagi:templates-updated', { detail: { source: 'label-editor' } }))
       pushErpPage(router, { name: 'template-preview' })
-    } catch (err: any) {
-      await appAlert(`模板保存失败：${err?.message || '未知错误'}`)
+    } catch (err) {
+      await appAlert(`模板保存失败：${err instanceof Error ? (err.message || '未知错误') : String(err)}`)
     }
   }
 

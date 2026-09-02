@@ -23,7 +23,7 @@ const {
             :fields="gridToolResult.fields || []"
             :sample-rows="gridToolResult?.preview_data?.sample_rows || []"
             :title="(gridToolResult?.preview_data?.sheet_name || 'Sheet') + ' 真实网格'"
-            :grid-data="gridToolResult?.preview_data?.grid_preview || null"
+            :grid-data="gridToolResult?.preview_data?.grid_preview || undefined"
             :rows="10"
             :columns="8"
           />

@@ -1,11 +1,12 @@
 import { ref } from 'vue'
 import templatePreviewApi from '@/api/templatePreview'
 import { appAlert } from '@/utils/appDialog'
+import type { ExtractGridResponse } from './tpApiContracts'
 
 /** Excel 网格映射工具（对应原视图 gridTool 相关状态与方法） */
 export function useTpGridTool() {
-  const gridToolFile = ref<any>(null)
-  const gridToolResult = ref<any>(null)
+  const gridToolFile = ref<File | null>(null)
+  const gridToolResult = ref<ExtractGridResponse | null>(null)
   const extractingGrid = ref(false)
   const showGridToolModal = ref(false)
 
@@ -23,14 +24,14 @@ export function useTpGridTool() {
     try {
       const formData = new FormData()
       formData.append('file', gridToolFile.value)
-      const res = (await templatePreviewApi.extractGrid(formData)) as any
+      const res = (await templatePreviewApi.extractGrid(formData)) as ExtractGridResponse
       if (!res?.success) {
         throw new Error(res?.message || '提取失败')
       }
       gridToolResult.value = res
       showGridToolModal.value = true
-    } catch (err: any) {
-      await appAlert('网格提取失败：' + (err?.message || '未知错误'))
+    } catch (err) {
+      await appAlert('网格提取失败：' + (err instanceof Error ? (err.message || '未知错误') : String(err)))
     } finally {
       extractingGrid.value = false
     }

@@ -7,8 +7,62 @@ import {
   normalizeTerm,
 } from './tpScopeRules'
 
+/** 模板字段（与后端模板 fields 结构对应的宽松契约） */
+export interface TplField {
+  id?: number | string
+  label?: string
+  name?: string
+  value?: string
+  type?: string
+  position?: { left?: number; top?: number; width?: number; height?: number }
+}
+
+/** Excel 网格预览结构（rows 为二维单元格，单元格可为文本或带样式对象） */
+export interface GridPreview {
+  rows?: unknown[]
+  [key: string]: unknown
+}
+
+/** 模板 preview_data 宽松契约（后端历史字段较杂，未列举键以 unknown 兜底） */
+export interface TplPreviewData {
+  sample_rows?: Record<string, unknown>[]
+  sheet_name?: string
+  selected_sheet_name?: string
+  sheet_names?: string[]
+  grid_preview?: GridPreview | null
+  cells?: Record<string, { value?: unknown } | undefined>
+  placeholders?: unknown[]
+  custom_scope_label?: string
+  file_path?: string
+  original_filename?: string
+  [key: string]: unknown
+}
+
+/** 模板词条覆盖率结果 */
+export interface TemplateCoverage {
+  scope: string
+  requiredCount: number
+  missing: string[]
+  matchedCount: number
+}
+
 /** 与原视图一致的松散模板记录类型（原为无类型 JS 对象） */
-export type TplRecord = Record<string, any>
+export interface TplRecord {
+  id: string
+  name?: string
+  category?: string
+  template_type?: string
+  business_scope?: string
+  source?: string
+  virtual?: boolean
+  filename?: string
+  file_path?: string
+  path?: string
+  fields?: TplField[]
+  preview_data?: TplPreviewData | null
+  is_active?: number | boolean
+  [key: string]: unknown
+}
 
 const EXPORT_TEMPLATE_SOURCES = new Set([
   'db',
@@ -19,7 +73,7 @@ const EXPORT_TEMPLATE_SOURCES = new Set([
   'fs_scan'
 ])
 
-export function isExportTemplate(tpl: any): boolean {
+export function isExportTemplate(tpl: TplRecord | null): boolean {
   if (!tpl || tpl.virtual) return false
   if (tpl.category !== 'excel' && tpl.category !== 'word') return false
   const source = String(tpl.source || '').trim()
@@ -28,7 +82,7 @@ export function isExportTemplate(tpl: any): boolean {
   return false
 }
 
-export function getTemplateSourceLabel(tpl: any): string {
+export function getTemplateSourceLabel(tpl: TplRecord | null): string {
   const source = String(tpl?.source || 'db').trim()
   const sourceLabelMap: Record<string, string> = {
     db: '数据库',
@@ -41,8 +95,8 @@ export function getTemplateSourceLabel(tpl: any): string {
   return sourceLabelMap[source] || source
 }
 
-export function getTemplateFields(tpl: any, type: string): any[] {
-  if (tpl.fields && tpl.fields.length > 0) {
+export function getTemplateFields(tpl: TplRecord | null, type: string): TplField[] {
+  if (tpl?.fields && tpl.fields.length > 0) {
     return tpl.fields
   }
 
@@ -66,37 +120,37 @@ export function getTemplateFields(tpl: any, type: string): any[] {
   ]
 }
 
-export function getTemplateSampleRows(tpl: any): any[] {
-  if (tpl.preview_data && tpl.preview_data.sample_rows) {
+export function getTemplateSampleRows(tpl: TplRecord | null): Record<string, unknown>[] {
+  if (tpl?.preview_data && tpl.preview_data.sample_rows) {
     return tpl.preview_data.sample_rows
   }
   return []
 }
 
-export function getTemplateGridData(tpl: any): any {
-  return tpl?.preview_data?.grid_preview || null
+export function getTemplateGridData(tpl: TplRecord | null): GridPreview | undefined {
+  return tpl?.preview_data?.grid_preview || undefined
 }
 
-export function getExcelPreviewTitle(tpl: any): string {
+export function getExcelPreviewTitle(tpl: TplRecord | null): string {
   if (!tpl) return 'Excel 模板预览'
   const text = tpl.template_type || tpl.name || 'Excel 模板'
   return `${text}预览`
 }
 
-export function canDeleteTemplate(tpl: any): boolean {
+export function canDeleteTemplate(tpl: TplRecord | null): boolean {
   if (!tpl || tpl.virtual) return false
   const id = String(tpl.id || '').trim()
   return id.startsWith('db:') || id.startsWith('fs:')
 }
 
-export function canPreviewVirtualTemplate(tpl: any): boolean {
+export function canPreviewVirtualTemplate(tpl: TplRecord | null): boolean {
   if (!tpl || tpl.category !== 'excel') return false
   const fields = getTemplateFields(tpl, 'excel')
   const sampleRows = getTemplateSampleRows(tpl)
   const gridData = getTemplateGridData(tpl)
   return (Array.isArray(fields) && fields.length > 0) && (
     (Array.isArray(sampleRows) && sampleRows.length > 0) ||
-    (gridData && Array.isArray(gridData.rows) && gridData.rows.length > 0)
+    (gridData != null && Array.isArray(gridData.rows) && gridData.rows.length > 0)
   )
 }
 
@@ -123,7 +177,7 @@ export function createVirtualTemplate(scopeKey: string): TplRecord {
   }
 }
 
-export function inferWordTemplateScopeKey(tpl: any): string {
+export function inferWordTemplateScopeKey(tpl: TplRecord | null): string {
   const id = String(tpl?.id || '').toLowerCase()
   const name = String(tpl?.name || '').toLowerCase()
   const fn = String(tpl?.filename || '').toLowerCase()
@@ -138,7 +192,7 @@ export function inferWordTemplateScopeKey(tpl: any): string {
   return ''
 }
 
-export function getTemplateScopeKey(tpl: any): string {
+export function getTemplateScopeKey(tpl: TplRecord | null): string {
   if (tpl?.category === 'word') {
     const explicitScope = String(tpl?.business_scope || '').trim()
     if (isKnownScopeKey(explicitScope)) {
@@ -158,7 +212,7 @@ export function getTemplateScopeKey(tpl: any): string {
   return matched[0] || ''
 }
 
-export function getTemplateScopeLabel(tpl: any): string {
+export function getTemplateScopeLabel(tpl: TplRecord | null): string {
   const scopeKey = getTemplateScopeKey(tpl)
   if (scopeKey === 'custom') {
     const customLabel = String(tpl?.preview_data?.custom_scope_label || '').trim()
@@ -169,7 +223,10 @@ export function getTemplateScopeLabel(tpl: any): string {
   return (meta?.label || scopeKey || '未分类')
 }
 
-export function extractTemplateTermSet(fields: any, previewData: any): Set<string> {
+export function extractTemplateTermSet(
+  fields?: TplField[] | null,
+  previewData?: TplPreviewData | null
+): Set<string> {
   const terms = new Set<string>()
   for (const field of fields || []) {
     terms.add(normalizeTerm(field?.label))
@@ -197,9 +254,12 @@ export function extractTemplateTermSet(fields: any, previewData: any): Set<strin
   return terms
 }
 
-export function extractTemplateDisplayTerms(fields: any, previewData: any): string[] {
+export function extractTemplateDisplayTerms(
+  fields?: TplField[] | null,
+  previewData?: TplPreviewData | null
+): string[] {
   const displayTerms: string[] = []
-  const pushTerm = (v: any) => {
+  const pushTerm = (v: unknown) => {
     const text = String(v || '').trim()
     if (!text) return
     if (!displayTerms.includes(text)) {
@@ -229,7 +289,7 @@ export function extractTemplateDisplayTerms(fields: any, previewData: any): stri
   return displayTerms
 }
 
-export function getTemplateDisplayTermsText(tpl: any): string {
+export function getTemplateDisplayTermsText(tpl: TplRecord | null): string {
   const terms = extractTemplateDisplayTerms(tpl?.fields, tpl?.preview_data)
   if (!terms.length) return '无'
   const maxShow = 8
@@ -237,7 +297,7 @@ export function getTemplateDisplayTermsText(tpl: any): string {
   return `${terms.slice(0, maxShow).join('、')} 等 ${terms.length} 项`
 }
 
-export function getTemplateTypeLabel(tpl: any): string {
+export function getTemplateTypeLabel(tpl: TplRecord | null): string {
   if (tpl?.category === 'word') {
     const scopeKey = getTemplateScopeKey(tpl)
     const meta = getScopeMeta(scopeKey)
@@ -262,7 +322,7 @@ export function getTemplateTypeLabel(tpl: any): string {
   return scopeMeta?.templateType || scopeMeta?.label || originalType || 'Excel'
 }
 
-export function getMatchedScopeKeys(tpl: any): string[] {
+export function getMatchedScopeKeys(tpl: TplRecord | null): string[] {
   if (tpl?.virtual) return []
   const explicitScope = String(tpl?.business_scope || '').trim()
   if (isKnownScopeKey(explicitScope)) {
@@ -281,13 +341,13 @@ export function getMatchedScopeKeys(tpl: any): string[] {
   return matched
 }
 
-export function getMatchedScopeLabels(tpl: any): string[] {
+export function getMatchedScopeLabels(tpl: TplRecord | null): string[] {
   return getMatchedScopeKeys(tpl)
     .map(scopeKey => getScopeMeta(scopeKey)?.label)
     .filter((label): label is string => Boolean(label))
 }
 
-export function getTemplateCoverage(tpl: any): any {
+export function getTemplateCoverage(tpl: TplRecord | null): TemplateCoverage | null {
   if (tpl?.category !== 'excel' && tpl?.category !== 'word') return null
   const matchedScopeKeys = getMatchedScopeKeys(tpl)
   if (!matchedScopeKeys.length) return null

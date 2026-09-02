@@ -72,11 +72,24 @@ EXPECTED_RADIUS = {
 }
 
 
+def _read_with_dart_parts(path: Path) -> str:
+    """Dart part 化拆分后，契约口径为整个 library（主文件 + 全部 part）。"""
+    text = path.read_text(encoding="utf-8")
+    if path.suffix != ".dart":
+        return text
+    chunks = [text]
+    for decl in re.findall(r"part\s+'([^']+)'\s*;", text):
+        part_path = path.parent / decl
+        if part_path.is_file():
+            chunks.append(part_path.read_text(encoding="utf-8"))
+    return "\n".join(chunks)
+
+
 def _read_text(path: Path, errors: list[str]) -> str:
     if not path.is_file():
         errors.append(f"缺少文件: {path.relative_to(ROOT)}")
         return ""
-    return path.read_text(encoding="utf-8")
+    return _read_with_dart_parts(path)
 
 
 def _load_json(path: Path, errors: list[str]) -> dict[str, Any]:

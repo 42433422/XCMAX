@@ -338,7 +338,7 @@ async function openPlanDiagramPreview(idx: string | number): Promise<void> {
   const svg = host?.querySelector('svg')
   const target = planDiagramPreviewMountRef.value
   if (!target) return
-  target.innerHTML = ''
+  target.replaceChildren()
   if (svg) {
     const clone = svg.cloneNode(true) as SVGElement
     clone.style.maxWidth = 'none'
@@ -398,7 +398,7 @@ async function flushPlanMermaidDiagrams() {
     const { diagram, hasDiagram } = parsePlanAssistantContent(m.content)
     const host = document.getElementById(`wb-plan-mer-${idx}`)
     if (!host) continue
-    host.innerHTML = ''
+    host.replaceChildren()
     if (!hasDiagram) continue
     const cleaned = sanitizeMermaidSource(diagram)
     const graphEl = document.createElement('div')
@@ -409,7 +409,7 @@ async function flushPlanMermaidDiagrams() {
       await mer.run({ nodes: [graphEl] })
     } catch (e) {
       if (cleaned !== diagram) {
-        host.innerHTML = ''
+        host.replaceChildren()
         const retryEl = document.createElement('div')
         retryEl.className = 'mermaid'
         retryEl.textContent = diagram
@@ -418,10 +418,10 @@ async function flushPlanMermaidDiagrams() {
           await mer.run({ nodes: [retryEl] })
           continue
         } catch {
-          host.innerHTML = ''
+          host.replaceChildren()
         }
       } else {
-        host.innerHTML = ''
+        host.replaceChildren()
       }
       nextErr[idx] = friendlyMermaidRenderError(e)
     }

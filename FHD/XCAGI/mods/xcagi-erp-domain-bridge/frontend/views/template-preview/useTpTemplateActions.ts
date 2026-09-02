@@ -7,6 +7,7 @@ import { pushErpPage } from '@/utils/erpPagePaths'
 import { buildTemplatePayloadFromExcelAnalysis, buildTemplatePayloadFromSourceTemplate } from './tpAnalysisPayload'
 import { canDeleteTemplate, getMatchedScopeKeys, getTemplateFields, getTemplateTypeLabel } from './tpTemplateMeta'
 import type { TplRecord } from './tpTemplateMeta'
+import type { TplApiResponse } from './tpApiContracts'
 
 export interface TpTemplateActionsDeps {
   refreshTemplates: () => void | Promise<void>
@@ -19,11 +20,11 @@ export function useTpTemplateActions(deps: TpTemplateActionsDeps) {
   const router = useRouter()
 
   const showPreviewModal = ref(false)
-  const previewingTemplate = ref<any>(null)
+  const previewingTemplate = ref<TplRecord | null>(null)
   const showEditModal = ref(false)
-  const editingTemplate = ref<any>(null)
+  const editingTemplate = ref<TplRecord | null>(null)
   const showReplaceModal = ref(false)
-  const replaceSourceTemplate = ref<any>(null)
+  const replaceSourceTemplate = ref<TplRecord | null>(null)
   const replaceTargetTemplateId = ref('')
   const replacingTemplate = ref(false)
 
@@ -117,7 +118,7 @@ export function useTpTemplateActions(deps: TpTemplateActionsDeps) {
         enforce_scope_match: true,
         replace_mode: true
       }
-      const res = (await templatePreviewApi.replaceTemplateById(payload)) as any
+      const res = (await templatePreviewApi.replaceTemplateById(payload)) as TplApiResponse
       if (!res?.success) {
         throw new Error(res?.message || '替代失败')
       }
@@ -129,8 +130,8 @@ export function useTpTemplateActions(deps: TpTemplateActionsDeps) {
       closeReplaceModal()
       deps.refreshTemplates()
       window.dispatchEvent(new CustomEvent('xcagi:templates-updated', { detail: { source: 'template-replace' } }))
-    } catch (err: any) {
-      await appAlert('模板替代失败：' + (err?.message || '未知错误'))
+    } catch (err) {
+      await appAlert('模板替代失败：' + (err instanceof Error ? (err.message || '未知错误') : String(err)))
     } finally {
       replacingTemplate.value = false
     }
@@ -144,7 +145,7 @@ export function useTpTemplateActions(deps: TpTemplateActionsDeps) {
         id: editingTemplate.value.id,
         name: editingTemplate.value.name,
         category: editingTemplate.value.category
-      })) as any
+      })) as TplApiResponse
 
       if (res && res.success) {
         await appAlert('更新成功！')
@@ -154,8 +155,8 @@ export function useTpTemplateActions(deps: TpTemplateActionsDeps) {
       } else {
         throw new Error((res && res.message) || '更新失败')
       }
-    } catch (err: any) {
-      await appAlert('更新失败：' + (err.message || '未知错误'))
+    } catch (err) {
+      await appAlert('更新失败：' + (err instanceof Error ? (err.message || '未知错误') : String(err)))
     }
   }
 
@@ -181,7 +182,7 @@ export function useTpTemplateActions(deps: TpTemplateActionsDeps) {
 
   async function deleteTemplate(tpl: TplRecord) {
     try {
-      const res = (await templatePreviewApi.deleteTemplate({ id: tpl.id })) as any
+      const res = (await templatePreviewApi.deleteTemplate({ id: tpl.id })) as TplApiResponse
 
       if (res && res.success) {
         deps.templates.value = (deps.templates.value || []).filter(item => String(item?.id || '') !== String(tpl?.id || ''))
@@ -190,8 +191,8 @@ export function useTpTemplateActions(deps: TpTemplateActionsDeps) {
       } else {
         throw new Error((res && res.message) || '删除失败')
       }
-    } catch (err: any) {
-      await appAlert('删除失败：' + (err.message || '未知错误'))
+    } catch (err) {
+      await appAlert('删除失败：' + (err instanceof Error ? (err.message || '未知错误') : String(err)))
     }
   }
 

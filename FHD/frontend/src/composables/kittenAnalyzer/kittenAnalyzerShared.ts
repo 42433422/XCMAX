@@ -199,9 +199,8 @@ export function formatKittenSnapshotStatsHint(stats: Record<string, unknown> | n
 export function htmlToPlainText(html: string): string {
   if (!html) return ''
   const normalized = String(html).replace(/<br\s*\/?>/gi, '\n')
-  const el = document.createElement('div')
-  el.innerHTML = normalized
-  return (el.textContent || '').trim()
+  const doc = new DOMParser().parseFromString(normalized, 'text/html')
+  return (doc.body.textContent || '').trim()
 }
 
 /** 从气泡 HTML / 纯文本 / 内嵌 JSON 中解析小猫文档取件链接（绝对或 /api 相对路径） */

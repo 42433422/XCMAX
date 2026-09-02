@@ -10,7 +10,7 @@ const {
 </script>
 
 <template>
-    <div v-if="showEditModal" class="modal-overlay" @click.self="closeEditModal">
+    <div v-if="showEditModal && editingTemplate" class="modal-overlay" @click.self="closeEditModal">
       <div class="modal-content">
         <div class="modal-header">
           <h3>编辑模板</h3>
