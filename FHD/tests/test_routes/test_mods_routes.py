@@ -25,6 +25,10 @@ def test_list_mods_accepts_no_trailing_slash(monkeypatch):
         "app.infrastructure.mods.mod_manager.get_mod_manager",
         lambda: _FakeModManager(),
     )
+    monkeypatch.setattr(
+        "app.infrastructure.auth.dependencies.resolve_session_user",
+        lambda _request: None,
+    )
 
     with _client() as client:
         response = client.get("/api/mods")
@@ -40,6 +44,10 @@ def test_list_mods_keeps_trailing_slash_route(monkeypatch):
     monkeypatch.setattr(
         "app.infrastructure.mods.mod_manager.get_mod_manager",
         lambda: _FakeModManager(),
+    )
+    monkeypatch.setattr(
+        "app.infrastructure.auth.dependencies.resolve_session_user",
+        lambda _request: None,
     )
 
     with _client() as client:

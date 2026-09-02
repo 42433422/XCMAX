@@ -139,6 +139,8 @@ describe('modRouteGlob variants', () => {
     const keys = Object.keys(modRouteGlobEnterprise)
     // glob 结果取决于磁盘上实际存在的 mods；至少应包含 planner-bridge
     expect(keys.some((k) => k.includes('xcagi-planner-bridge'))).toBe(true)
+    // 统一考勤是企业交付能力；必须进入企业桌面构建，运行时安装后路由才能打开。
+    expect(keys.some((k) => k.includes('attendance-industry'))).toBe(true)
     // 所有 key 都应指向 mods 目录下的 routes.js
     for (const k of keys) {
       expect(k).toContain('/mods/')

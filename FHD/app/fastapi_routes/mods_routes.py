@@ -44,13 +44,38 @@ def get_mods_router() -> Any:
 
 
 async def _sync_enterprise_entitlements_from_request(request: Request) -> None:
-    """已登录会话拉 Mod 列表前同步服务端 entitlement。"""
+    """已登录会话拉 Mod 列表前同步 entitlement，并自愈账号交付行业组合包。"""
     try:
         from app.enterprise.mod_entitlements import sync_entitlements_from_request
 
         await sync_entitlements_from_request(request)
     except RECOVERABLE_ERRORS:
         logger.exception("sync entitlements before list_mods failed")
+
+    try:
+        from app.infrastructure.auth.dependencies import resolve_session_user
+        from app.mod_sdk.delivery_industry_runtime import (
+            ensure_delivery_industry_bundle_for_account,
+        )
+
+        user = resolve_session_user(request)
+        username = (
+            str(user.get("username") or "").strip()
+            if isinstance(user, dict)
+            else str(getattr(user, "username", "") or "").strip()
+        )
+        if username:
+            result = await ensure_delivery_industry_bundle_for_account(username)
+            if not result.get("success") or result.get("runtime_ready") is False:
+                logger.warning(
+                    "customer delivery industry bundle self-heal failed account=%s industry=%s: %s",
+                    username,
+                    result.get("industry_id") or "",
+                    result.get("message") or result.get("status") or "unknown",
+                )
+    except RECOVERABLE_ERRORS:
+        # Mod 列表仍需可用；失败会写日志并由下一次请求重试自愈。
+        logger.exception("customer delivery industry bundle self-heal before list_mods failed")
 
 
 def _register_mods_endpoints(router) -> None:
