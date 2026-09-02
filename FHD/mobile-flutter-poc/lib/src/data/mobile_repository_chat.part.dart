@@ -1,6 +1,11 @@
 part of 'mobile_repository.dart';
 
 abstract class _RepoChatBase extends _RepoRelayBase {
+  _RepoChatBase({
+    MobileApiClient? client,
+    ImWebSocketClient? imWebSocket,
+  }) : super(client: client, imWebSocket: imWebSocket);
+
   Future<List<ChatMessage>> loadInitialMessages(
     ConversationItem conversation,
   ) async {

@@ -181,6 +181,8 @@ abstract class _ScanQrStateCamera extends State<ScanQrScreen>
     await _bootstrapScanner(requestPermission: true);
   }
 
+  void _handleScanResult(String raw);
+
   Future<void> _processCameraFrame(CameraImage image) async {
     if (_scanned || _pairing || _processingFrame) return;
     final controller = _cameraController;

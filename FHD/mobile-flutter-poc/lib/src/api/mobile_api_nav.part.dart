@@ -1,6 +1,18 @@
 part of 'mobile_api.dart';
 
 abstract class _ApiNavBase extends _ApiSessionPersistBase {
+  _ApiNavBase({
+    MobileApiConfig config = const MobileApiConfig(),
+    MobileSessionStore? sessionStore,
+    HttpClient? httpClient,
+    PlatformCredentialCipher? credentialCipher,
+  }) : super(
+          config: config,
+          sessionStore: sessionStore,
+          httpClient: httpClient,
+          credentialCipher: credentialCipher,
+        );
+
   Future<MobileEnvelope<AdminMobileHomeData>> adminHome() async {
     final json = await getJson(XcagiMobileEndpoints.adminHome);
     return MobileEnvelope.fromJson(

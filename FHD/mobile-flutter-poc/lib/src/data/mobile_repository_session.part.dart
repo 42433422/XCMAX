@@ -1,6 +1,11 @@
 part of 'mobile_repository.dart';
 
 abstract class _RepoSessionBase extends _RepoRootBase {
+  _RepoSessionBase({
+    MobileApiClient? client,
+    ImWebSocketClient? imWebSocket,
+  }) : super(client: client, imWebSocket: imWebSocket);
+
   Future<MobileMeData> loadMe() async {
     final response = await _client.me();
     if (!response.success) {

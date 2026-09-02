@@ -1,6 +1,11 @@
 part of 'mobile_repository.dart';
 
 abstract class _RepoServicesBase extends _RepoChatBase {
+  _RepoServicesBase({
+    MobileApiClient? client,
+    ImWebSocketClient? imWebSocket,
+  }) : super(client: client, imWebSocket: imWebSocket);
+
   Future<CsInfo> loadCsInfo() async {
     final response = await _client.csInfo();
     if (!response.success) {

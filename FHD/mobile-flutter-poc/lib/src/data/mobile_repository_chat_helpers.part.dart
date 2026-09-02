@@ -1,6 +1,11 @@
 part of 'mobile_repository.dart';
 
 abstract class _RepoHelpersBase extends _RepoPairingAuthBase {
+  _RepoHelpersBase({
+    MobileApiClient? client,
+    ImWebSocketClient? imWebSocket,
+  }) : super(client: client, imWebSocket: imWebSocket);
+
   Future<int> _loadCurrentUserId() async {
     try {
       return (await loadMe()).user?.id ?? 0;

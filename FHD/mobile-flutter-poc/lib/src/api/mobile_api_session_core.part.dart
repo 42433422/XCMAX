@@ -1,6 +1,18 @@
 part of 'mobile_api.dart';
 
 abstract class _ApiSessionCoreBase extends _ApiRootBase {
+  _ApiSessionCoreBase({
+    MobileApiConfig config = const MobileApiConfig(),
+    MobileSessionStore? sessionStore,
+    HttpClient? httpClient,
+    PlatformCredentialCipher? credentialCipher,
+  }) : super(
+          config: config,
+          sessionStore: sessionStore,
+          httpClient: httpClient,
+          credentialCipher: credentialCipher,
+        );
+
   Future<MobileSessionData> loadSession({bool forceReload = false}) async {
     if (!forceReload &&
         (_lastSession.hasAuth ||

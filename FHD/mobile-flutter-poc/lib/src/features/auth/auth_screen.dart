@@ -10,6 +10,10 @@ import '../../theme/app_theme.dart';
 import '../scan/scan_qr_screen.dart';
 import 'register_screen.dart';
 
+part 'auth_screen_state.part.dart';
+part 'auth_screen_login_widgets.part.dart';
+part 'auth_screen_agreement_widgets.part.dart';
+
 enum AuthLoginMode { password, phone }
 
 class AuthScreen extends StatefulWidget {
@@ -27,7 +31,3 @@ class AuthScreen extends StatefulWidget {
   @override
   State<AuthScreen> createState() => _AuthScreenState();
 }
-
-part 'auth_screen_state.part.dart';
-part 'auth_screen_login_widgets.part.dart';
-part 'auth_screen_agreement_widgets.part.dart';

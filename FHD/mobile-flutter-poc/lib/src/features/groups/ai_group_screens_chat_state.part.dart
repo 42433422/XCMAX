@@ -265,12 +265,6 @@ class _AiGroupChatScreenState extends _AiGroupChatStateBase {
     });
   }
 
-  void _showSnack(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
-    );
-  }
-
   void _insertVoiceText(String text) {
     final recognized = text.trim();
     if (recognized.isEmpty) return;

@@ -5,6 +5,8 @@ import 'package:speech_to_text/speech_to_text.dart';
 
 import '../../theme/app_theme.dart';
 
+part 'voice_input_sheet_widgets.part.dart';
+
 enum _SpeechUiState { idle, listening, processing, error }
 
 class VoiceInputDesign {
@@ -332,5 +334,3 @@ class _VoiceInputSheetState extends State<VoiceInputSheet> {
     );
   }
 }
-
-part 'voice_input_sheet_widgets.part.dart';

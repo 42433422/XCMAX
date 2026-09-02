@@ -280,4 +280,10 @@ abstract class _AiGroupChatStateBase extends State<AiGroupChatScreen> {
       _showSnack(error.toString());
     }
   }
+
+  void _showSnack(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+    );
+  }
 }

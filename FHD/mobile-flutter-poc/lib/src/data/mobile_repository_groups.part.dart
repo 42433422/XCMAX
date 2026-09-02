@@ -1,6 +1,11 @@
 part of 'mobile_repository.dart';
 
 abstract class _RepoGroupsBase extends _RepoSessionBase {
+  _RepoGroupsBase({
+    MobileApiClient? client,
+    ImWebSocketClient? imWebSocket,
+  }) : super(client: client, imWebSocket: imWebSocket);
+
   Future<List<AiGroupConversation>> loadAiGroups() async {
     final response = await _client.aiGroups();
     if (!response.success) {

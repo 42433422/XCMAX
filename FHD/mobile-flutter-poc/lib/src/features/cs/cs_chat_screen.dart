@@ -12,6 +12,9 @@ import '../../widgets/app_avatar.dart';
 import '../../widgets/we_ui.dart';
 import '../voice/voice_input_sheet.dart';
 
+part 'cs_chat_screen_widgets.part.dart';
+part 'cs_chat_screen_input.part.dart';
+
 class CsChatScreen extends StatefulWidget {
   const CsChatScreen({super.key, this.repository});
 
@@ -298,6 +301,3 @@ class _CsChatScreenState extends State<CsChatScreen> {
     );
   }
 }
-
-part 'cs_chat_screen_widgets.part.dart';
-part 'cs_chat_screen_input.part.dart';

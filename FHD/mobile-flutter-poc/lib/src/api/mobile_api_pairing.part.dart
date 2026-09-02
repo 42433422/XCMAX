@@ -1,6 +1,18 @@
 part of 'mobile_api.dart';
 
 abstract class _ApiPairingBase extends _ApiCsAuthBase {
+  _ApiPairingBase({
+    MobileApiConfig config = const MobileApiConfig(),
+    MobileSessionStore? sessionStore,
+    HttpClient? httpClient,
+    PlatformCredentialCipher? credentialCipher,
+  }) : super(
+          config: config,
+          sessionStore: sessionStore,
+          httpClient: httpClient,
+          credentialCipher: credentialCipher,
+        );
+
   Future<MobileEnvelope<Map<String, Object?>>> exchangePairing({
     String nonce = '',
     String code = '',

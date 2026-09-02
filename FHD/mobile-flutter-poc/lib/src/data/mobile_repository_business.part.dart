@@ -1,6 +1,11 @@
 part of 'mobile_repository.dart';
 
 abstract class _RepoBusinessBase extends _RepoServicesBase {
+  _RepoBusinessBase({
+    MobileApiClient? client,
+    ImWebSocketClient? imWebSocket,
+  }) : super(client: client, imWebSocket: imWebSocket);
+
   Future<List<BusinessListItem>> loadCustomers() async {
     final response = await _client.customers();
     if (!response.success) {

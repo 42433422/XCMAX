@@ -46,6 +46,9 @@ import '../theme/app_assets.dart';
 import '../theme/app_theme.dart';
 import '../widgets/we_ui.dart';
 
+part 'mobile_startup_shell_state.part.dart';
+part 'mobile_startup_shell_screens.part.dart';
+
 enum MobileStartupRoute { legal, authAutoLogin, auth, onboarding, home }
 
 @visibleForTesting
@@ -106,9 +109,6 @@ class MobileStartupApp extends StatefulWidget {
   @override
   State<MobileStartupApp> createState() => _MobileStartupAppState();
 }
-
-part 'mobile_startup_shell_state.part.dart';
-part 'mobile_startup_shell_screens.part.dart';
 
 class _MobileStartupAppState extends _MobileStartupStateBase {
   @override

@@ -15,6 +15,10 @@ import '../../policy/mobile_error_policy.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
 
+part 'scan_qr_screen_state_camera.part.dart';
+part 'scan_qr_screen_state_scan.part.dart';
+part 'scan_qr_screen_overlays.part.dart';
+
 class ScanQrScreen extends StatefulWidget {
   const ScanQrScreen({super.key, this.repository, this.enableCamera = true});
 
@@ -24,10 +28,6 @@ class ScanQrScreen extends StatefulWidget {
   @override
   State<ScanQrScreen> createState() => _ScanQrScreenState();
 }
-
-part 'scan_qr_screen_state_camera.part.dart';
-part 'scan_qr_screen_state_scan.part.dart';
-part 'scan_qr_screen_overlays.part.dart';
 
 class _ScanQrScreenState extends _ScanQrStateScan {
 

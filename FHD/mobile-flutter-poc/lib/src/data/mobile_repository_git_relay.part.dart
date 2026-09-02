@@ -1,6 +1,11 @@
 part of 'mobile_repository.dart';
 
 abstract class _RepoRelayBase extends _RepoHelpersBase {
+  _RepoRelayBase({
+    MobileApiClient? client,
+    ImWebSocketClient? imWebSocket,
+  }) : super(client: client, imWebSocket: imWebSocket);
+
   Future<String> runGitOperation({
     required String branch,
     required String op,

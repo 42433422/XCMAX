@@ -1,6 +1,18 @@
 part of 'mobile_api.dart';
 
 abstract class _ApiSessionPersistBase extends _ApiTransportBase {
+  _ApiSessionPersistBase({
+    MobileApiConfig config = const MobileApiConfig(),
+    MobileSessionStore? sessionStore,
+    HttpClient? httpClient,
+    PlatformCredentialCipher? credentialCipher,
+  }) : super(
+          config: config,
+          sessionStore: sessionStore,
+          httpClient: httpClient,
+          credentialCipher: credentialCipher,
+        );
+
   Future<void> persistLoginSession(
     Map<String, Object?>? data, {
     required String fallbackUsername,

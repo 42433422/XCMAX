@@ -9,6 +9,9 @@ import '../../theme/message_avatar_layout.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/we_ui.dart';
 
+part 'admin_cs_console_conversation.part.dart';
+part 'admin_cs_console_widgets.part.dart';
+
 class AdminCsConsoleScreen extends StatefulWidget {
   const AdminCsConsoleScreen({super.key, this.repository, this.initialInbox});
 
@@ -240,6 +243,3 @@ class _AdminCsEmptyInbox extends StatelessWidget {
     );
   }
 }
-
-part 'admin_cs_console_conversation.part.dart';
-part 'admin_cs_console_widgets.part.dart';

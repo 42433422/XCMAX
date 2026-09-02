@@ -1,6 +1,18 @@
 part of 'mobile_api.dart';
 
 abstract class _ApiTransportBase extends _ApiSessionCoreBase {
+  _ApiTransportBase({
+    MobileApiConfig config = const MobileApiConfig(),
+    MobileSessionStore? sessionStore,
+    HttpClient? httpClient,
+    PlatformCredentialCipher? credentialCipher,
+  }) : super(
+          config: config,
+          sessionStore: sessionStore,
+          httpClient: httpClient,
+          credentialCipher: credentialCipher,
+        );
+
   Future<MobileEnvelope<Map<String, Object?>>> mobileHealth() async {
     final json = await getJson(XcagiMobileEndpoints.health);
     return MobileEnvelope.fromJson(json, _asObjectMap);

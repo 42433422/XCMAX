@@ -1,6 +1,11 @@
 part of 'mobile_repository.dart';
 
 abstract class _RepoPairingAuthBase extends _RepoGroupsBase {
+  _RepoPairingAuthBase({
+    MobileApiClient? client,
+    ImWebSocketClient? imWebSocket,
+  }) : super(client: client, imWebSocket: imWebSocket);
+
   Future<void> exchangePairingCode(String raw) async {
     final text = raw.trim();
     if (text.isEmpty) {

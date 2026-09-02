@@ -11,6 +11,9 @@ import '../../widgets/app_avatar.dart';
 import '../../widgets/we_ui.dart';
 import '../contacts/employee_profile_screen.dart';
 
+part 'ai_circle_screen_widgets.part.dart';
+part 'ai_circle_screen_comments.part.dart';
+
 class AiCircleScreen extends StatefulWidget {
   const AiCircleScreen({super.key, this.repository});
 
@@ -198,6 +201,3 @@ class _AiCircleScreenState extends State<AiCircleScreen> {
     return null;
   }
 }
-
-part 'ai_circle_screen_widgets.part.dart';
-part 'ai_circle_screen_comments.part.dart';
