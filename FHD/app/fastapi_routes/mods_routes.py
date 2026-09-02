@@ -54,7 +54,9 @@ async def _sync_enterprise_entitlements_from_request(request: Request) -> None:
 
     try:
         from app.infrastructure.auth.dependencies import resolve_session_user
-        from app.mod_sdk.industry_seed import ensure_delivery_industry_bundle_for_account
+        from app.mod_sdk.delivery_industry_runtime import (
+            ensure_delivery_industry_bundle_for_account,
+        )
 
         user = resolve_session_user(request)
         username = (

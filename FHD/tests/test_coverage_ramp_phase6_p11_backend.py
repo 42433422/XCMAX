@@ -2014,7 +2014,7 @@ async def test_sync_enterprise_entitlements_self_heals_delivery_account_bundle()
             return_value={"username": "SUNBIRD"},
         ),
         patch(
-            "app.mod_sdk.industry_seed.ensure_delivery_industry_bundle_for_account",
+            "app.mod_sdk.delivery_industry_runtime.ensure_delivery_industry_bundle_for_account",
             ensure,
         ),
     ):

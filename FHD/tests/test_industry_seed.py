@@ -6,9 +6,9 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from app.mod_sdk.delivery_industry_runtime import ensure_delivery_industry_bundle_for_account
 from app.mod_sdk.industry_seed import (
     deactivate_other_open_industry_mods,
-    ensure_delivery_industry_bundle_for_account,
     industry_mod_id_for,
     industry_seed_mod_ids_for,
     install_industry_seed_with_fallback,
@@ -205,11 +205,11 @@ async def test_delivery_account_runtime_self_heal_installs_bundle_and_mounts_rou
         return True
 
     monkeypatch.setattr(
-        "app.mod_sdk.customer_delivery.industry_id_for_account",
+        "app.mod_sdk.delivery_industry_runtime.industry_id_for_account",
         lambda username: "饰品包装" if username.casefold() == "sunbird" else "",
     )
     monkeypatch.setattr(
-        "app.mod_sdk.industry_seed.install_industry_seed_with_fallback",
+        "app.mod_sdk.delivery_industry_runtime.install_industry_seed_with_fallback",
         install,
     )
     monkeypatch.setattr(
@@ -238,11 +238,11 @@ async def test_delivery_account_runtime_self_heal_installs_bundle_and_mounts_rou
 async def test_delivery_account_runtime_self_heal_skips_unknown_account(monkeypatch):
     install = AsyncMock()
     monkeypatch.setattr(
-        "app.mod_sdk.customer_delivery.industry_id_for_account",
+        "app.mod_sdk.delivery_industry_runtime.industry_id_for_account",
         lambda _username: "",
     )
     monkeypatch.setattr(
-        "app.mod_sdk.industry_seed.install_industry_seed_with_fallback",
+        "app.mod_sdk.delivery_industry_runtime.install_industry_seed_with_fallback",
         install,
     )
 
@@ -265,11 +265,11 @@ async def test_delivery_account_runtime_self_heal_skips_empty_username():
 @pytest.mark.asyncio
 async def test_delivery_account_runtime_self_heal_reports_install_failure(monkeypatch):
     monkeypatch.setattr(
-        "app.mod_sdk.customer_delivery.industry_id_for_account",
+        "app.mod_sdk.delivery_industry_runtime.industry_id_for_account",
         lambda _username: "饰品包装",
     )
     monkeypatch.setattr(
-        "app.mod_sdk.industry_seed.install_industry_seed_with_fallback",
+        "app.mod_sdk.delivery_industry_runtime.install_industry_seed_with_fallback",
         AsyncMock(return_value={"success": False, "status": "pool_missing"}),
     )
 
