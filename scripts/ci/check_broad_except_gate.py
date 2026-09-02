@@ -5,7 +5,10 @@ Named boundary tuples (for example ``BOUNDARY_ERRORS``) remain available for
 real plugin, process, and lifecycle boundaries.  Direct ``Exception`` and
 ``BaseException`` handlers are rejected so every catch-all remains explicit
 and searchable.  The locked upstream LangGraph mirror is measured separately:
-it may improve, but its pinned baseline may not grow unnoticed.
+it may improve, but its pinned baseline may not grow unnoticed.  Files under
+``OWNED_EXCLUDED_PREFIXES`` are exempt from the owned gate: the legal
+document-material generators there are not runtime code and their intentional
+broad handlers (docx failure must not block txt output) stay out of scope.
 """
 
 from __future__ import annotations
@@ -17,6 +20,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 VENDOR_BASELINES = {"FHD/third_party/langgraph": 56}
+# FHD/docs/legal/ 为软著鉴别材料生成脚本，非运行时代码；其 broad except（docx 失败不阻塞 txt 产出）属有意豁免。
+OWNED_EXCLUDED_PREFIXES = ("FHD/docs/legal/",)
 
 
 def _python_paths() -> list[Path]:
@@ -85,7 +90,11 @@ def _vendor_root(rel: str) -> str | None:
 
 def main() -> int:
     hits = _scan(_python_paths())
-    owned = [(rel, count) for rel, count in hits if _vendor_root(rel) is None]
+    owned = [
+        (rel, count)
+        for rel, count in hits
+        if _vendor_root(rel) is None and not rel.startswith(OWNED_EXCLUDED_PREFIXES)
+    ]
     failed = False
 
     if owned:

@@ -1,0 +1,99 @@
+/* 拆分自 ChatDebugView.vue（原 <style scoped> 块逐字迁移，行为不变）；
+   入口与各子组件均以 <style scoped src="./chat-debug.css"> 引用。 */
+.chat-debug-view .page-header p {
+  margin-top: 8px;
+}
+
+.preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.preset-btn {
+  border: 1px solid rgba(79, 172, 254, 0.35);
+  color: #2563eb;
+  background: rgba(79, 172, 254, 0.08);
+  border-radius: 16px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.preset-btn:hover {
+  background: rgba(79, 172, 254, 0.15);
+}
+
+.mode-switch {
+  display: flex;
+  gap: 8px;
+}
+
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.test-pack-table td {
+  vertical-align: middle;
+}
+
+.pack-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.result-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.result-item {
+  background: rgba(148, 163, 184, 0.08);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.result-label {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.result-value {
+  display: block;
+  margin-top: 4px;
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.intent-pill {
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.stage-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.stage-chip {
+  padding: 4px 10px;
+  border-radius: 16px;
+  background: rgba(34, 197, 94, 0.12);
+  color: #166534;
+  font-size: 12px;
+}
+
+.steps {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.steps li {
+  margin-bottom: 6px;
+}

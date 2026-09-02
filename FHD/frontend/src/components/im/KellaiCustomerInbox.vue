@@ -242,37 +242,58 @@
 </template>
 
 <script setup lang="ts">
+/**
+ * Facade：客来来客户收件箱装配入口（实现拆分至 kellaiInbox/ 子模块与独立 CSS，行为与拆分前一致）。
+ */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import kellaiBindingApi, {
   type KellaiBindingStatus,
-  type KellaiCopilotDraft,
   type KellaiConversationMessage,
   type KellaiCustomer,
   type KellaiDataStatus,
-  type KellaiFollowUpTask,
-  type KellaiFollowUpMetrics,
 } from '@/api/kellaiBinding'
+import { useKellaiCopilot } from './kellaiInbox/useKellaiCopilot'
 import {
-  isKellaiImagePlaceholder,
-  resolveKellaiMessageImageSrc,
-} from '@/utils/kellaiMessageMedia'
+  avatarText,
+  channelLabel,
+  draftStatusLabel,
+  formatRate,
+  formatTime,
+  isImagePlaceholder,
+  messageImageSrc,
+  outcomeLabel,
+  priorityLabel,
+  riskLabel,
+  taskStatusLabel,
+} from './kellaiInbox/kellaiInboxShared'
 
 const binding = ref<KellaiBindingStatus>({ state: 'not_connected' })
 const dataStatus = ref<KellaiDataStatus | null>(null)
 const customers = ref<KellaiCustomer[]>([])
 const messages = ref<KellaiConversationMessage[]>([])
 const activeCustomerId = ref<number | null>(null)
-const copilotDraft = ref<KellaiCopilotDraft | null>(null)
-const followUpTasks = ref<KellaiFollowUpTask[]>([])
-const followUpMetrics = ref<KellaiFollowUpMetrics | null>(null)
 const busy = ref(false)
-const copilotBusy = ref(false)
-const taskBusy = ref(false)
-const copiedDraft = ref(false)
 const customersLoading = ref(false)
 const messagesLoading = ref(false)
 const error = ref('')
 let statusTimer: ReturnType<typeof setInterval> | null = null
+
+const {
+  copilotDraft,
+  followUpTasks,
+  followUpMetrics,
+  copilotBusy,
+  taskBusy,
+  copiedDraft,
+  currentDraftTask,
+  applyConversationData,
+  resetConversationState,
+  createFollowUpTask,
+  decideFollowUpTask,
+  generateCopilotDraft,
+  decideCopilotDraft,
+  copyApprovedDraft,
+} = useKellaiCopilot({ activeCustomerId, messages, error })
 
 const statusLabel = computed(() => {
   if (binding.value.state === 'connected') return '已连接'
@@ -290,91 +311,6 @@ const orderedMessages = computed(() =>
     String(left.created_at || '').localeCompare(String(right.created_at || '')),
   ),
 )
-
-const currentDraftTask = computed(() => {
-  const draftId = copilotDraft.value?.draft_id
-  if (!draftId) return null
-  return followUpTasks.value.find((task) => task.source_draft_id === draftId) || null
-})
-
-function avatarText(name: string): string {
-  const value = String(name || '').trim()
-  return value ? value.slice(0, 1).toUpperCase() : '客'
-}
-
-function channelLabel(channels?: string[]): string {
-  if (!channels?.length) return '客户渠道'
-  const labels: Record<string, string> = {
-    wecom: '企业微信',
-    wechat: '微信',
-    douyin: '抖音',
-    pdd: '拼多多',
-    jd: '京东',
-    whatsapp: 'WhatsApp',
-  }
-  return channels.map((channel) => labels[channel] || channel).join('、')
-}
-
-function formatTime(value?: string): string {
-  if (!value) return ''
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return value
-  return parsed.toLocaleString('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
-function messageImageSrc(message: KellaiConversationMessage): string {
-  return resolveKellaiMessageImageSrc(message)
-}
-
-function isImagePlaceholder(content?: string): boolean {
-  return isKellaiImagePlaceholder(String(content || ''))
-}
-
-function riskLabel(value: string): string {
-  const labels: Record<string, string> = {
-    low: '低风险',
-    medium: '中风险',
-    high: '高风险',
-    critical: '关键风险',
-  }
-  return labels[value] || '待核验风险'
-}
-
-function draftStatusLabel(value: string): string {
-  if (value === 'approved_for_manual_send') return '已批准 · 仅手动发送'
-  if (value === 'rejected') return '已拒绝'
-  return '等待人工批准'
-}
-
-function taskStatusLabel(value: string): string {
-  if (value === 'completed') return '已完成'
-  if (value === 'failed') return '执行失败'
-  if (value === 'cancelled') return '已取消'
-  return '待跟进'
-}
-
-function outcomeLabel(value: string): string {
-  if (value === 'success') return '有效'
-  if (value === 'no_result') return '暂无结果'
-  if (value === 'failed') return '失败'
-  return '未记录'
-}
-
-function formatRate(value: number | null): string {
-  if (value === null || !Number.isFinite(value)) return '—'
-  return `${Math.round(value * 100)}%`
-}
-
-function priorityLabel(value: string): string {
-  if (value === 'urgent') return '紧急'
-  if (value === 'high') return '高优先级'
-  return '普通'
-}
 
 async function openKellai(): Promise<void> {
   const desktop = (window as Window & {
@@ -407,9 +343,7 @@ async function loadCustomers(): Promise<void> {
     if (activeCustomerId.value) await loadMessages(activeCustomerId.value)
     else {
       messages.value = []
-      copilotDraft.value = null
-      followUpTasks.value = []
-      followUpMetrics.value = null
+      resetConversationState()
     }
   } finally {
     customersLoading.value = false
@@ -425,107 +359,9 @@ async function loadMessages(customerId: number): Promise<void> {
       kellaiBindingApi.followUpOverview(customerId),
     ])
     messages.value = nextMessages
-    copilotDraft.value = nextDraft
-    followUpTasks.value = nextTaskOverview.tasks || []
-    followUpMetrics.value = nextTaskOverview.metrics
-    copiedDraft.value = false
+    applyConversationData(nextDraft, nextTaskOverview.tasks || [], nextTaskOverview.metrics)
   } finally {
     messagesLoading.value = false
-  }
-}
-
-function upsertFollowUpTask(task: KellaiFollowUpTask): void {
-  const index = followUpTasks.value.findIndex((item) => item.task_id === task.task_id)
-  if (index >= 0) followUpTasks.value.splice(index, 1, task)
-  else followUpTasks.value.unshift(task)
-  followUpMetrics.value = calculateFollowUpMetrics(followUpTasks.value)
-}
-
-function calculateFollowUpMetrics(tasks: KellaiFollowUpTask[]): KellaiFollowUpMetrics {
-  const success = tasks.filter((task) => task.outcome_result === 'success').length
-  const noResult = tasks.filter((task) => task.outcome_result === 'no_result').length
-  const failedOutcomes = tasks.filter((task) => task.outcome_result === 'failed').length
-  const evaluated = success + noResult + failedOutcomes
-  return {
-    total: tasks.length,
-    open: tasks.filter((task) => task.status === 'open').length,
-    completed: tasks.filter((task) => task.status === 'completed').length,
-    failed: tasks.filter((task) => task.status === 'failed').length,
-    cancelled: tasks.filter((task) => task.status === 'cancelled').length,
-    outcomes: { success, no_result: noResult, failed: failedOutcomes },
-    success_rate: evaluated ? success / evaluated : null,
-  }
-}
-
-async function createFollowUpTask(): Promise<void> {
-  if (!copilotDraft.value?.draft_id || currentDraftTask.value) return
-  taskBusy.value = true
-  error.value = ''
-  try {
-    const task = await kellaiBindingApi.createFollowUpTask(copilotDraft.value.draft_id)
-    upsertFollowUpTask(task)
-  } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '跟进任务创建失败'
-  } finally {
-    taskBusy.value = false
-  }
-}
-
-async function decideFollowUpTask(
-  task: KellaiFollowUpTask,
-  decision: 'complete' | 'cancel',
-  outcomeResult: 'success' | 'no_result' | 'failed' | '',
-): Promise<void> {
-  taskBusy.value = true
-  error.value = ''
-  try {
-    const updated = await kellaiBindingApi.decideFollowUpTask(
-      task.task_id,
-      decision,
-      outcomeResult,
-    )
-    upsertFollowUpTask(updated)
-  } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '跟进任务更新失败'
-  } finally {
-    taskBusy.value = false
-  }
-}
-
-async function generateCopilotDraft(): Promise<void> {
-  if (!activeCustomerId.value || !messages.value.length) return
-  copilotBusy.value = true
-  copiedDraft.value = false
-  error.value = ''
-  try {
-    copilotDraft.value = await kellaiBindingApi.generateDraft(activeCustomerId.value)
-  } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : 'AI 摘要与回复草稿生成失败'
-  } finally {
-    copilotBusy.value = false
-  }
-}
-
-async function decideCopilotDraft(decision: 'approve' | 'reject'): Promise<void> {
-  if (!copilotDraft.value?.draft_id) return
-  copilotBusy.value = true
-  error.value = ''
-  try {
-    copilotDraft.value = await kellaiBindingApi.decideDraft(copilotDraft.value.draft_id, decision)
-  } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '草稿审批失败'
-  } finally {
-    copilotBusy.value = false
-  }
-}
-
-async function copyApprovedDraft(): Promise<void> {
-  if (!copilotDraft.value?.reply_draft || copilotDraft.value.status !== 'approved_for_manual_send') return
-  try {
-    await navigator.clipboard.writeText(copilotDraft.value.reply_draft)
-    copiedDraft.value = true
-  } catch {
-    error.value = '无法复制草稿，请手动选择文本复制'
   }
 }
 
@@ -544,9 +380,7 @@ async function refreshAll(): Promise<void> {
       dataStatus.value = null
       customers.value = []
       messages.value = []
-      copilotDraft.value = null
-      followUpTasks.value = []
-      followUpMetrics.value = null
+      resetConversationState()
       activeCustomerId.value = null
     }
   } catch (cause) {
@@ -608,107 +442,4 @@ onBeforeUnmount(() => {
 })
 </script>
 
-<style scoped>
-.kellai-inbox { display: flex; flex: 1; min-height: 0; flex-direction: column; background: #f7f9fc; }
-.kellai-inbox__head { display: flex; align-items: center; gap: 10px; padding: 12px 18px; border-bottom: 1px solid #e6e9ef; background: #fff; }
-.kellai-inbox__avatar, .kellai-inbox__customer-avatar { display: inline-flex; flex: none; align-items: center; justify-content: center; border-radius: 10px; background: #e6f6f2; color: #0f766e; font-weight: 700; }
-.kellai-inbox__avatar { width: 32px; height: 32px; }
-.kellai-inbox__heading { min-width: 0; flex: 1; }
-.kellai-inbox__heading h2, .kellai-inbox__conversation-head h3 { margin: 0; color: #1f2329; font-size: 15px; }
-.kellai-inbox__heading p, .kellai-inbox__conversation-head p { margin: 3px 0 0; color: #86909c; font-size: 12px; }
-.kellai-inbox__status, .kellai-inbox__readonly { padding: 3px 8px; border-radius: 999px; background: #f2f3f5; color: #667085; font-size: 12px; }
-.kellai-inbox__status.is-connected { background: #e8f7ee; color: #14823d; }
-.kellai-inbox__status.is-pending { background: #fff7e8; color: #ad6800; }
-.kellai-inbox__button { padding: 7px 12px; border: 1px solid #d9dfe8; border-radius: 7px; background: #fff; color: #344054; cursor: pointer; }
-.kellai-inbox__button.is-primary { border-color: #0052d9; background: #0052d9; color: #fff; }
-.kellai-inbox__button.is-quiet { padding: 5px 10px; }
-.kellai-inbox__button:disabled, .kellai-inbox__link:disabled { cursor: not-allowed; opacity: .55; }
-.kellai-inbox__error { margin: 12px 18px 0; padding: 10px 12px; border-radius: 7px; background: #fff1f0; color: #b42318; font-size: 13px; }
-.kellai-inbox__connect { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; margin: auto; width: min(760px, calc(100% - 36px)); padding: 28px; border: 1px solid #e6e9ef; border-radius: 12px; background: #fff; }
-.kellai-inbox__connect h3 { margin: 0 0 8px; color: #1f2329; }
-.kellai-inbox__connect p { margin: 0; color: #667085; line-height: 1.65; }
-.kellai-inbox__connect ul { display: grid; gap: 8px; margin: 18px 0 0; padding: 0; list-style: none; }
-.kellai-inbox__connect li { display: grid; gap: 2px; padding: 10px 12px; border-radius: 8px; background: #f7f9fc; }
-.kellai-inbox__connect li span { color: #667085; font-size: 12px; }
-.kellai-inbox__connect-actions { display: flex; align-items: flex-start; gap: 8px; flex-direction: column; }
-.kellai-inbox__summary { display: flex; flex-wrap: wrap; gap: 8px; padding: 9px 18px; border-bottom: 1px solid #e6e9ef; background: #fff; color: #667085; font-size: 12px; }
-.kellai-inbox__summary > span { padding: 3px 8px; border-radius: 999px; background: #f2f4f7; }
-.kellai-inbox__link { margin-left: auto; border: 0; background: none; color: #b42318; cursor: pointer; }
-.kellai-inbox__workspace { display: grid; grid-template-columns: minmax(220px, 30%) minmax(0, 1fr); flex: 1; min-height: 0; }
-.kellai-inbox__customers { min-height: 0; overflow-y: auto; border-right: 1px solid #e6e9ef; background: #fff; }
-.kellai-inbox__customer { display: flex; width: 100%; gap: 10px; padding: 12px 14px; border: 0; border-bottom: 1px solid #f0f2f5; background: #fff; text-align: left; cursor: pointer; }
-.kellai-inbox__customer:hover, .kellai-inbox__customer.active { background: #eef5ff; }
-.kellai-inbox__customer-avatar { width: 36px; height: 36px; }
-.kellai-inbox__customer-main { display: grid; min-width: 0; flex: 1; gap: 2px; }
-.kellai-inbox__customer-main strong { color: #1f2329; font-size: 14px; }
-.kellai-inbox__customer-main small { color: #667085; }
-.kellai-inbox__customer-main em { overflow: hidden; color: #86909c; font-size: 12px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
-.kellai-inbox__conversation { display: flex; min-width: 0; min-height: 0; flex-direction: column; }
-.kellai-inbox__conversation-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; border-bottom: 1px solid #e6e9ef; background: #fff; }
-.kellai-inbox__readonly { background: #e8f7ee; color: #14823d; }
-.kellai-inbox__messages { flex: 1; min-height: 0; overflow-y: auto; padding: 18px; }
-.kellai-inbox__message-row { display: flex; margin-bottom: 12px; }
-.kellai-inbox__message-row.mine { justify-content: flex-end; }
-.kellai-inbox__message { max-width: min(72%, 620px); padding: 10px 12px; border: 1px solid #e6e9ef; border-radius: 10px; background: #fff; }
-.kellai-inbox__message-row.mine .kellai-inbox__message { border-color: #cfe1ff; background: #eaf2ff; }
-.kellai-inbox__message > span { color: #667085; font-size: 11px; }
-.kellai-inbox__message-image { display: block; margin: 6px 0; max-width: min(100%, 320px); max-height: 360px; border-radius: 8px; object-fit: contain; background: #f2f4f7; }
-.kellai-inbox__image-fallback { margin: 5px 0; color: #667085; font-size: 13px; }
-.kellai-inbox__message p { margin: 5px 0; color: #1f2329; line-height: 1.55; white-space: pre-wrap; }
-.kellai-inbox__message footer { display: flex; justify-content: space-between; gap: 16px; color: #98a2b3; font-size: 11px; }
-.kellai-inbox__ai-note { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; padding-top: 7px; border-top: 1px dashed #d9dfe8; color: #475467; font-size: 11px; }
-.kellai-inbox__copilot { max-height: 44%; overflow-y: auto; padding: 12px 18px; border-top: 1px solid #dce6f5; background: #f8fbff; }
-.kellai-inbox__copilot-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.kellai-inbox__copilot-head > div { display: grid; gap: 3px; }
-.kellai-inbox__copilot-head strong { color: #1f2329; font-size: 13px; }
-.kellai-inbox__copilot-head span, .kellai-inbox__copilot-placeholder { color: #667085; font-size: 12px; }
-.kellai-inbox__copilot-result { display: grid; gap: 8px; margin-top: 10px; }
-.kellai-inbox__copilot-result > p { margin: 0; color: #344054; font-size: 12px; line-height: 1.6; }
-.kellai-inbox__copilot-meta { display: flex; flex-wrap: wrap; gap: 6px; color: #667085; font-size: 11px; }
-.kellai-inbox__copilot-meta > span { padding: 3px 7px; border-radius: 999px; background: #eef2f7; }
-.kellai-inbox__copilot-meta .is-risk.is-low { background: #e8f7ee; color: #14823d; }
-.kellai-inbox__copilot-meta .is-risk.is-medium { background: #fff7e8; color: #ad6800; }
-.kellai-inbox__copilot-meta .is-risk.is-high,
-.kellai-inbox__copilot-meta .is-risk.is-critical { background: #fff1f0; color: #b42318; }
-.kellai-inbox__task-proposal { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 11px; border: 1px solid #cfe1ff; border-radius: 8px; background: #eef5ff; }
-.kellai-inbox__task-proposal > div { display: grid; gap: 2px; }
-.kellai-inbox__task-proposal strong { color: #1f2329; font-size: 12px; }
-.kellai-inbox__task-proposal span { color: #667085; font-size: 11px; }
-.kellai-inbox__task-created { color: #14823d !important; white-space: nowrap; }
-.kellai-inbox__draft-copy { padding: 10px 12px; border: 1px solid #dce6f5; border-radius: 8px; background: #fff; }
-.kellai-inbox__draft-copy > strong { color: #344054; font-size: 12px; }
-.kellai-inbox__draft-copy > p { margin: 6px 0 0; color: #1f2329; font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
-.kellai-inbox__copilot-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.kellai-inbox__approved { color: #14823d; font-size: 12px; }
-.kellai-inbox__rejected { color: #b42318; font-size: 12px; }
-.kellai-inbox__copilot-placeholder { margin: 10px 0 0; }
-.kellai-inbox__task-list { display: grid; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid #dce6f5; }
-.kellai-inbox__task-list-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.kellai-inbox__task-list-head strong { color: #1f2329; font-size: 13px; }
-.kellai-inbox__task-list-head span { color: #667085; font-size: 11px; }
-.kellai-inbox__task-item { display: grid; gap: 7px; padding: 10px 12px; border: 1px solid #dce6f5; border-radius: 8px; background: #fff; }
-.kellai-inbox__task-item > div { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; color: #667085; font-size: 11px; }
-.kellai-inbox__task-item > div strong { color: #1f2329; font-size: 12px; }
-.kellai-inbox__task-item > p { margin: 0; color: #475467; font-size: 12px; line-height: 1.55; }
-.kellai-inbox__task-item > footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #86909c; font-size: 11px; }
-.kellai-inbox__task-actions { display: flex; gap: 6px; }
-.kellai-inbox__task-actions .kellai-inbox__button { padding: 4px 8px; font-size: 11px; }
-.kellai-inbox__task-item .is-priority { padding: 2px 6px; border-radius: 999px; background: #f2f4f7; }
-.kellai-inbox__task-item .is-priority.is-high { background: #fff7e8; color: #ad6800; }
-.kellai-inbox__task-item .is-priority.is-urgent { background: #fff1f0; color: #b42318; }
-.kellai-inbox__guardrail { display: flex; align-items: center; gap: 8px; padding: 10px 18px; border-top: 1px solid #e6e9ef; background: #fff; color: #667085; font-size: 12px; }
-.kellai-inbox__guardrail .fa { color: #14823d; }
-.kellai-inbox__empty { padding: 24px 14px; color: #86909c; font-size: 13px; text-align: center; }
-.kellai-inbox__empty.is-center { display: grid; flex: 1; place-items: center; }
-
-@media (max-width: 760px) {
-  .kellai-inbox__head { align-items: flex-start; flex-wrap: wrap; }
-  .kellai-inbox__status { margin-left: 42px; }
-  .kellai-inbox__connect { grid-template-columns: 1fr; }
-  .kellai-inbox__connect-actions { align-items: stretch; }
-  .kellai-inbox__workspace { grid-template-columns: 1fr; }
-  .kellai-inbox__customers { max-height: 230px; border-right: 0; border-bottom: 1px solid #e6e9ef; }
-  .kellai-inbox__message { max-width: 88%; }
-  .kellai-inbox__task-proposal, .kellai-inbox__task-item > footer { align-items: stretch; flex-direction: column; }
-}
-</style>
+<style scoped src="./KellaiCustomerInbox.css"></style>

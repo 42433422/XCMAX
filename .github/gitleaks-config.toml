@@ -33,6 +33,8 @@ paths = [
     # .env.example 模板
     '''\.env\.example''',
     '''\.env\.local\.example''',
+    # admin-console 本地构建备份目录（vendor 打包产物误报，目录已移出 git 跟踪）
+    '''admin-console/\.vite-bak/''',
 ]
 
 # 项目特定的密钥模式（XCMAX 自定义）

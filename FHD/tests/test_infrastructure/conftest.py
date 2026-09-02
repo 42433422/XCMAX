@@ -52,8 +52,10 @@ def compat_db_writes_test_tenant_scope(
         "test_compat_db_writes_ext.py",
         "test_compat_db_writes_ext2.py",
         "test_compat_db_writes_cov.py",
-        "test_coverage_ramp_phase3_p1_deep_backend.py",
-        "test_coverage_ramp_phase6_p17_backend.py",
+        # 原 test_coverage_ramp_phase{3_p1_deep,6_p17}_backend.py，2026-09-01 去
+        # coverage_ramp_ 前缀迁出（D2-5），fixture 引用同步更新。
+        "test_phase3_p1_deep_backend.py",
+        "test_phase6_p17_backend.py",
     }
     if request.node.fspath.basename not in compat_mock_files:
         yield

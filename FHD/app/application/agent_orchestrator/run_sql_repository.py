@@ -42,6 +42,7 @@ class SQLAlchemyAgentRunRepository:
         self._session_factory = session_factory
         self._auto_create = auto_create
         self._schema_ready = False
+        self._schema_bind: object | None = None
         self._schema_lock = threading.RLock()
 
     def save(self, run: AgentRun) -> AgentRun:
@@ -341,11 +342,13 @@ class SQLAlchemyAgentRunRepository:
             db.close()
 
     def _ensure_schema(self) -> None:
-        if not self._auto_create or self._schema_ready:
+        # 就绪状态按 bind（引擎实例）键控：引擎缓存按 URL 解析，测试/多库环境下
+        # DATABASE_URL 可能被切换（如桌面 runtime 直接改写 env），裸布尔会把
+        # "A 库已建表"错误外推到 B 库（no such table: agent_runs）。
+        # 与 task_execution_sql_repository._ensure_schema 的 bind-identity 模式一致。
+        if not self._auto_create:
             return
         with self._schema_lock:
-            if self._schema_ready:
-                return
             with self._session_scope(read_only=True) as db:
                 from app.db.base import Base
                 from app.db.models.agent import (
@@ -354,8 +357,11 @@ class SQLAlchemyAgentRunRepository:
                     AgentTaskRecord,
                 )
 
+                bind = db.get_bind()
+                if self._schema_ready and self._schema_bind is bind:
+                    return
                 Base.metadata.create_all(
-                    bind=db.get_bind(),
+                    bind=bind,
                     tables=[
                         cast(Table, AgentRunRecord.__table__),
                         cast(Table, AgentTaskRecord.__table__),
@@ -363,6 +369,7 @@ class SQLAlchemyAgentRunRepository:
                     ],
                     checkfirst=True,
                 )
+                self._schema_bind = bind
             self._schema_ready = True
 
     @staticmethod

@@ -175,7 +175,8 @@ def test_desktop_release_preflights_both_platforms_and_publishes_as_one_unit() -
     assert "Publish unified Windows + macOS release to CVM" in workflow
     assert "publish-website-pointer:" in workflow
     assert (
-        "needs: [generate-manifest, verify-download, verify-public-windows-signature]" in workflow
+        "needs: [generate-manifest, cross-platform-parity, verify-download, "
+        "verify-public-windows-signature]" in workflow
     )
     assert "needs.verify-public-windows-signature.result == 'success'" in workflow
     assert "--delay-updates" in workflow

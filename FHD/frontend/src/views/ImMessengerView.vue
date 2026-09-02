@@ -104,7 +104,6 @@ import {
   fetchCsInboxMessages,
   fetchImConversations,
   fetchImMessages,
-  imWebSocketUrl,
   markImRead,
   replyCsInbox,
   sendEnterpriseCsMessage,
@@ -125,6 +124,8 @@ import { useCsInboxBridge } from '@/composables/messenger/useCsInboxBridge'
 import { useCustomerServiceAutomation } from '@/composables/messenger/useCustomerServiceAutomation'
 import { useEnterpriseCsBridge } from '@/composables/messenger/useEnterpriseCsBridge'
 import { useSuperEmployeeDispatch } from '@/composables/messenger/useSuperEmployeeDispatch'
+import { useImRealtime } from './im-messenger/useImRealtime'
+import { useImConversationActions } from './im-messenger/useImConversationActions'
 import {
   CODEX_SUPER_EMPLOYEE_ENTRY,
   formatTime,
@@ -274,6 +275,34 @@ const {
   restoreOverlappingAssistantFloat,
 })
 
+// 会话选择与发送动作拆分至 ./im-messenger/useImConversationActions.ts（行为与拆分前一致）
+const { selectConversation, onSend } = useImConversationActions({
+  localUserId,
+  conversations,
+  activeConversationId,
+  activeSystemEntry,
+  activeExternalEntry,
+  activeGroupChat,
+  messages,
+  draft,
+  busy,
+  hasMoreHistory,
+  dutyEmployeeDraft,
+  isCustomerEnterpriseCs,
+  refreshEnterpriseCsThread,
+  startEnterpriseCsPolling,
+  stopEnterpriseCsPolling,
+  refreshCsInbox,
+  startCsInboxPolling,
+  stopCsInboxPolling,
+  restoreOverlappingAssistantFloat,
+  stopCodexPolling,
+  stopCodexTypewriter,
+  scrollToBottom,
+  loadConversations,
+  playOutgoing,
+})
+
 const {
   existingDedicatedConversation,
   externalChannelEntries,
@@ -312,11 +341,22 @@ const imChatDomRefs = {
   codexInputEl,
 }
 
-let ws: WebSocket | null = null
+// WebSocket / 实时消息处理拆分至 ./im-messenger/useImRealtime.ts（行为与拆分前一致）
+const { applyIncomingMessage, applyReadState, connectWs, disconnectWs } = useImRealtime({
+  isCustomerEnterpriseCs,
+  localUserId,
+  conversations,
+  activeConversationId,
+  messages,
+  wsConnected,
+  wsConnecting,
+  scrollToBottom,
+  loadConversations,
+  playIncoming,
+})
+
 let offSyncMessage: (() => void) | null = null
 let offSyncRead: (() => void) | null = null
-let reconnectTimer: ReturnType<typeof setTimeout> | null = null
-let reconnectAttempt = 0
 
 async function startChatWith(contact: ImContact): Promise<void> {
   const existing = contact.is_enterprise_dedicated_cs ? existingDedicatedConversation(contact) : undefined
@@ -386,46 +426,6 @@ const { activeCsConversation, csAutomationBusy, onChangeCsMode } = useCustomerSe
   reloadConversations: loadConversations,
 })
 
-async function selectConversation(id: number): Promise<void> {
-  if (!localUserId.value) return
-  stopEnterpriseCsPolling()
-  stopCsInboxPolling()
-  restoreOverlappingAssistantFloat()
-  stopCodexPolling()
-  stopCodexTypewriter(true)
-  dutyEmployeeDraft.value = ''
-  activeExternalEntry.value = null
-  activeSystemEntry.value = null
-  activeGroupChat.value = false
-  activeConversationId.value = id
-  busy.value = true
-  try {
-    const conv = conversations.value.find((c) => c.id === id)
-    const isCs = Boolean(conv?.is_cs_inbox)
-    const isCustomerCs = isCustomerEnterpriseCs(id)
-    if (isCustomerCs) {
-      await refreshEnterpriseCsThread(false)
-    } else {
-      messages.value = isCs ? await fetchCsInboxMessages(id) : await fetchImMessages(id, { limit: 50 })
-    }
-    hasMoreHistory.value = !isCs && !isCustomerCs && messages.value.length >= 50
-    await nextTick()
-    scrollToBottom()
-    if (!isCs && !isCustomerCs) {
-      const last = messages.value[messages.value.length - 1]
-      if (last) {
-        await markImRead(id, last.id)
-      }
-    }
-    if (isCustomerCs) startEnterpriseCsPolling()
-    else if (isCs) startCsInboxPolling()
-    else await loadConversations()
-  } catch (error) {
-    showAppToast(error instanceof Error ? error.message : '加载消息失败', 'error')
-  } finally {
-    busy.value = false
-  }
-}
 
 async function loadOlderMessages(): Promise<void> {
   const id = activeConversationId.value
@@ -448,151 +448,6 @@ async function loadOlderMessages(): Promise<void> {
 function scrollToBottom(): void {
   const el = scrollEl.value
   if (el) el.scrollTop = el.scrollHeight
-}
-
-function applyIncomingMessage(msg: ImMessage, cid: number): void {
-  if (isCustomerEnterpriseCs(cid)) return
-  if (cid === activeConversationId.value) {
-    if (!messages.value.some((m) => m.id === msg.id)) {
-      messages.value.push(msg)
-      void nextTick().then(scrollToBottom)
-      void markImRead(cid, msg.id)
-    }
-  }
-  if (msg.sender_user_id !== localUserId.value) {
-    void playIncoming(msg.body)
-  }
-  void loadConversations()
-}
-
-function applyReadState(conversationId: number, userId: number, lastMessageId: number): void {
-  if (userId !== localUserId.value) return
-  const conv = conversations.value.find((c) => c.id === conversationId)
-  if (conv) {
-    conv.unread_count = 0
-  }
-  if (conversationId === activeConversationId.value && lastMessageId > 0) {
-    void markImRead(conversationId, lastMessageId).then(() => loadConversations())
-  } else {
-    void loadConversations()
-  }
-}
-
-function handleWsPayload(payload: {
-  type?: string
-  conversation_id?: number
-  user_id?: number
-  last_message_id?: number
-  message?: ImMessage
-}): void {
-  if (payload.type === 'pong') return
-  if ((payload.type === 'im.message' || payload.type === 'message') && payload.message) {
-    const cid = payload.conversation_id ?? payload.message.conversation_id
-    applyIncomingMessage(payload.message, cid)
-    return
-  }
-  if (payload.type === 'im.read') {
-    const cid = Number(payload.conversation_id)
-    const uid = Number(payload.user_id)
-    const lastId = Number(payload.last_message_id)
-    if (Number.isFinite(cid) && Number.isFinite(uid) && Number.isFinite(lastId)) {
-      applyReadState(cid, uid, lastId)
-    }
-  }
-}
-
-async function onSend(): Promise<void> {
-  const id = activeConversationId.value
-  const text = draft.value.trim()
-  if (!id || !text || !localUserId.value) return
-  const conv = conversations.value.find((c) => c.id === id)
-  const isCs = Boolean(conv?.is_cs_inbox)
-  const isCustomerCs = isCustomerEnterpriseCs(id)
-  busy.value = true
-  try {
-    let msg: ImMessage
-    if (isCustomerCs) {
-      const sent = await sendEnterpriseCsMessage(text)
-      msg = sent.message
-      if (conv) {
-        Object.assign(conv, sent.state, { remote_conversation_id: sent.conversation_id })
-      }
-    } else {
-      msg = isCs ? await replyCsInbox(id, text) : await sendImMessage(id, text)
-    }
-    messages.value.push(msg)
-    draft.value = ''
-    playOutgoing()
-    await nextTick()
-    scrollToBottom()
-    if (isCustomerCs) await refreshEnterpriseCsThread()
-    else if (isCs) await refreshCsInbox()
-    else await loadConversations()
-  } catch (error) {
-    showAppToast(error instanceof Error ? error.message : '发送失败', 'error')
-  } finally {
-    busy.value = false
-  }
-}
-
-function scheduleReconnect(): void {
-  if (reconnectTimer) clearTimeout(reconnectTimer)
-  const delay = Math.min(30_000, 1000 * 2 ** reconnectAttempt)
-  reconnectTimer = setTimeout(() => {
-    reconnectAttempt += 1
-    connectWs()
-  }, delay)
-}
-
-function connectWs(): void {
-  if (!localUserId.value) return
-  disconnectWs(false)
-  try {
-    wsConnecting.value = true
-    ws = new WebSocket(imWebSocketUrl())
-    ws.onopen = () => {
-      wsConnected.value = true
-      wsConnecting.value = false
-      reconnectAttempt = 0
-    }
-    ws.onclose = () => {
-      wsConnected.value = false
-      wsConnecting.value = false
-      scheduleReconnect()
-    }
-    ws.onerror = () => {
-      wsConnected.value = false
-      wsConnecting.value = false
-    }
-    ws.onmessage = (ev) => {
-      try {
-        handleWsPayload(JSON.parse(String(ev.data)))
-      } catch {
-        /* ignore */
-      }
-    }
-  } catch {
-    wsConnected.value = false
-    wsConnecting.value = false
-    scheduleReconnect()
-  }
-}
-
-function disconnectWs(clearTimer = true): void {
-  if (clearTimer && reconnectTimer) {
-    clearTimeout(reconnectTimer)
-    reconnectTimer = null
-  }
-  if (ws) {
-    ws.onopen = null
-    ws.onclose = null
-    ws.onerror = null
-    ws.onmessage = null
-    ws.close()
-    ws = null
-  }
-  wsConnected.value = false
-  wsConnecting.value = false
 }
 
 onMounted(async () => {
@@ -631,4 +486,5 @@ onUnmounted(() => {
 })
 </script>
 
+<style scoped src="./im-messenger/im-messenger.css"></style>
 <style scoped src="./ImMessengerResponsive.css"></style>

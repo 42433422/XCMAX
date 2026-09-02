@@ -17,7 +17,7 @@ import argparse
 import json
 import os
 import sys
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 FHD_ROOT = Path(__file__).resolve().parents[2]
@@ -57,7 +57,7 @@ def collect() -> dict:
     stub_lines = sum(_line_count(p) for p in stub_files)
     ratio = round(test_lines / src_lines, 3) if src_lines else 0.0
     return {
-        "timestamp": datetime.now(UTC).isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "test_files": len(test_files),
         "test_lines": test_lines,
         "src_files": len(src_files),

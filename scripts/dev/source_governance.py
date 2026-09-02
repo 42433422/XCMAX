@@ -23,7 +23,7 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 REPO_ROOT_DEFAULT = Path(__file__).resolve().parents[2]
@@ -53,11 +53,38 @@ TEST_NAME_MARKERS = (".test.", ".spec.", "_test.")
 GENERATED_NAME_MARKERS = (".generated.", ".freezed.", ".g.dart")
 
 # These are materialized build/export trees, not independent editing sources.
+#
+# Exact-file entries below are known byte-identical pairs exempted by D2-3
+# (change-id: converge-desktop-acceptance-tech-debt). Each pair must keep both
+# copies; do not add new copies under these prefixes.
 DUPLICATE_EXCLUDED_PREFIXES = (
     "FHD/XCAGI/mods/",
     "FHD/packages/xcagi_langgraph_",
     "FHD/templates/",
     "FHD/third_party/langgraph/",
+    # Generated dual-target pair: scripts/dev/sync_duty_roster.py renders
+    # FHD/config/duty_roster.json (SSOT) into two independently deployed Vue
+    # apps; both copies are generator outputs and live import targets.
+    "FHD/frontend/src/domain/yuangonDutyRoster.ts",
+    "成都修茈科技有限公司/MODstore_deploy/market/src/domain/yuangonDutyRoster.ts",
+    # Shared-origin modules duplicated across two separate npm build roots:
+    # FHD frontend stack (admin-console resolves '@' into FHD/frontend/src)
+    # and MODstore market, which builds/deploys standalone with zero imports
+    # from the FHD tree. Both sides are imported by production code and kept
+    # aligned by unit tests on each side; neither copy can be deleted without
+    # breaking one app, and cross-root imports would break standalone deploys.
+    "FHD/frontend/src/domain/butlerEmployeeProfile.ts",
+    "成都修茈科技有限公司/MODstore_deploy/market/src/domain/butlerEmployeeProfile.ts",
+    "FHD/frontend/src/domain/llm/types.ts",
+    "成都修茈科技有限公司/MODstore_deploy/market/src/domain/llm/types.ts",
+    "FHD/frontend/src/domain/llm/providerCredential.ts",
+    "成都修茈科技有限公司/MODstore_deploy/market/src/domain/llm/providerCredential.ts",
+    "FHD/frontend/src/utils/mermaidSanitize.ts",
+    "成都修茈科技有限公司/MODstore_deploy/market/src/utils/mermaidSanitize.ts",
+    # Published employee-pack payloads: catalog_data/files/<mod>@<version>/ are
+    # unpacked copies of released .xcemp artifacts, registered per-version in
+    # packages.json. Each published version must keep its own payload.
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/catalog_data/",
 )
 
 # These retired recovery/runtime trees are not editing sources. Keep the
@@ -307,7 +334,7 @@ def baseline_payload(current: dict) -> dict:
             "debt may only shrink; generated/derived roots are excluded."
         ),
         "schema_version": 1,
-        "updated_at": datetime.now(UTC).date().isoformat(),
+        "updated_at": datetime.now(timezone.utc).date().isoformat(),
         "oversized_files": {
             item["file"]: {
                 "stack": item["stack"],

@@ -1,0 +1,510 @@
+/** 官网静态页：链接、页面知识、路径解析与访问器（原 siteKnowledge 单体拆分） */
+import type { PageKnowledge, QuickAction } from './types'
+
+export const CORP_LINKS = {
+  home: '/index.html',
+  about: '/about.html',
+  services: '/services.html',
+  solutions: '/solutions.html',
+  cases: '/cases.html',
+  caseManufacture: '/case-manufacture.html',
+  casePark: '/case-park.html',
+  caseEdu: '/case-edu.html',
+  news: '/news.html',
+  honors: '/honors.html',
+  contact: '/contact.html',
+  excelToAi: '/excel-to-ai.html',
+  developer: '/developer.html',
+  download: '/download.html',
+  downloadReleases: '/download-releases.html',
+  worldWill: '/world-will.html',
+  visualization: '/visualization.html',
+  privacy: '/privacy.html',
+  market: '/market/',
+} as const
+
+const CORP_DEFAULT_WELCOME_TITLE = 'Hi，我是小C'
+
+const CORP_CONTACT_NAV: QuickAction = {
+  label: '预约方案沟通',
+  task: 'navigate',
+  payload: { href: CORP_LINKS.contact },
+}
+
+const CORP_MARKET_NAV: QuickAction = {
+  label: '进入 AI 市场',
+  task: 'navigate',
+  payload: { href: CORP_LINKS.market },
+}
+
+const CORP_PAGES: Record<string, PageKnowledge & { paths: string[] }> = {
+  home: {
+    pageId: 'home',
+    paths: ['/', '/index.html', '/index'],
+    title: '成都修茈科技有限公司 | XCAGI 企业 AI 自动化',
+    description:
+      '成都修茈科技有限公司专注 AI 单据智能处理、Excel 识别、标签打印、出货收货管理和企业流程自动化，帮助中小企业把业务数据真正跑起来。',
+    welcomeTitle: 'Hi，想了解 XCAGI 能帮您做什么？',
+    welcomeDesc: '我可以介绍 XCAGI 桌面、行业 Mod，并引导您下载试用、查看方案或预约沟通。',
+    summary: '首页主推 XCAGI AI 员工桌面：安装行业 Mod，用对话下达目标，AI 员工自动拆解协作，交付可复核的业务成果。',
+    highlights: ['行业 Mod 即装即用', '任务过程全程留痕', '结果可人工复核', '下载 XCAGI'],
+    quickActions: [
+      { label: '介绍 XCAGI', message: 'XCAGI 是什么？能做什么？' },
+      { label: '如何下载', message: '怎么下载 XCAGI？' },
+      { label: '看看客户案例', message: '有哪些客户案例？' },
+      CORP_CONTACT_NAV,
+      CORP_MARKET_NAV,
+    ],
+  },
+  about: {
+    pageId: 'about',
+    paths: ['/about.html', '/about'],
+    title: '关于修茈 | 成都修茈科技有限公司',
+    description: '了解成都修茈科技有限公司：专注 AI 单据处理、企业流程自动化与 XCAGI 工作台，为中小企业提供可落地的数字化方案。',
+    welcomeTitle: 'Hi，想了解修茈科技是谁？',
+    welcomeDesc: '本页介绍公司定位、XCAGI 工作台与 MODstore 的关系，可问我如何开始试用。',
+    summary: '成都修茈科技（XCAGI）专注中小企业 AI 自动化：从单据识别到工作台与智能体市场，强调可落地实施与持续迭代。',
+    highlights: ['公司定位与团队方向', 'XCAGI 工作台能力', '与 MODstore 智能体市场衔接'],
+    quickActions: [
+      { label: '公司是做什么的', message: '修茈科技是做什么的？' },
+      { label: '有哪些产品能力', message: '你们有哪些产品？' },
+      { label: '如何开始试用', message: '怎么注册或试用 AI 市场？' },
+      CORP_CONTACT_NAV,
+      CORP_MARKET_NAV,
+    ],
+  },
+  services: {
+    pageId: 'services',
+    paths: ['/services.html', '/services'],
+    title: '产品中心 | 成都修茈科技有限公司',
+    description: '修茈科技产品中心：AI Excel Helper、标签打印、出货收货管理、微信消息自动化、知识库与 AI 工作流。',
+    welcomeTitle: 'Hi，想了解哪类产品？',
+    welcomeDesc: '可问我各产品线适用场景，或带您看行业方案与预约沟通。',
+    summary: '产品中心涵盖 AI Excel 单据识别、标签打印与库存、出货收货、微信自动化、知识库与 MODstore 智能体市场等可组合能力。',
+    highlights: ['AI Excel Helper', '标签打印与库存', 'MODstore 市场', '微信与知识库自动化'],
+    quickActions: [
+      { label: 'AI Excel 单据识别', message: 'AI Excel 单据识别能做什么？' },
+      { label: '标签打印与库存', message: '标签打印和库存记录怎么用？' },
+      { label: '看行业解决方案', message: '有哪些行业解决方案？' },
+      CORP_CONTACT_NAV,
+      CORP_MARKET_NAV,
+    ],
+  },
+  solutions: {
+    pageId: 'solutions',
+    paths: ['/solutions.html', '/solutions'],
+    title: '解决方案 | 成都修茈科技有限公司',
+    description: '修茈科技解决方案覆盖制造贸易单据处理、园区服务协同、教育移动服务和企业 AI 工作流。',
+    welcomeTitle: 'Hi，您的行业是哪种场景？',
+    welcomeDesc: '可按制造贸易、园区、教育等方向了解方案，并查看对应案例。',
+    summary: '解决方案覆盖制造贸易单据与库存协同、园区企业服务、教育移动服务，以及企业级 AI 工作流编排。',
+    highlights: ['制造与贸易', '园区综合服务', '教育协同', 'AI 工作流'],
+    quickActions: [
+      { label: '制造贸易怎么落地', message: '制造贸易场景怎么落地？' },
+      { label: '园区综合服务', message: '园区企业服务平台案例' },
+      { label: '校园移动服务', message: '校园移动服务案例' },
+      { label: '了解产品能力', message: '你们有哪些产品？' },
+      CORP_CONTACT_NAV,
+    ],
+  },
+  cases: {
+    pageId: 'cases',
+    paths: ['/cases.html', '/cases'],
+    title: '客户案例 | 成都修茈科技有限公司',
+    description: '修茈科技案例中心：制造企业生产协同、园区企业服务平台、校园移动服务与业务协同。',
+    welcomeTitle: 'Hi，想看看哪类客户实践？',
+    welcomeDesc: '案例中心汇总制造、园区、教育等方向，可指定行业让我推荐详情。',
+    summary: '案例中心展示制造生产协同、园区企业服务平台、校园移动服务等方向的实践摘要与详情链接。',
+    highlights: ['制造生产协同', '园区服务平台', '校园移动服务'],
+    quickActions: [
+      { label: '制造生产协同案例', message: '制造企业案例详情' },
+      { label: '园区服务平台案例', message: '园区企业服务平台案例' },
+      { label: '校园移动服务案例', message: '校园移动服务案例' },
+      { label: '了解产品与方案', message: '你们有哪些产品？' },
+      CORP_CONTACT_NAV,
+    ],
+  },
+  'case-manufacture': {
+    pageId: 'case-manufacture',
+    paths: ['/case-manufacture.html', '/case-manufacture'],
+    title: '案例详情 - 生产协同与库存管理 | 成都修茈科技有限公司',
+    description: '制造企业生产协同与库存管理案例，围绕生产计划、库存数据、报表分析和跨部门协同进行系统化建设。',
+    welcomeTitle: 'Hi，想了解制造协同案例？',
+    welcomeDesc: '本页介绍生产计划、库存、报表与跨部门协同，可问挑战、方案或如何复用到您企业。',
+    summary: '制造案例：围绕生产计划、仓储库存、报表分析与跨部门协同建设一体化系统，降低重复录入与错漏。',
+    highlights: ['生产计划协同', '库存数据统一', '报表分析', '跨部门流程'],
+    quickActions: [
+      { label: '案例解决了什么问题', message: '这个制造案例解决了什么问题？' },
+      { label: '方案怎么落地', message: '制造贸易场景怎么落地？' },
+      { label: '更多客户案例', message: '有哪些客户案例？' },
+      CORP_CONTACT_NAV,
+      { label: '了解产品能力', message: '你们有哪些产品？' },
+    ],
+  },
+  'case-park': {
+    pageId: 'case-park',
+    paths: ['/case-park.html', '/case-park'],
+    title: '案例详情 - 园区企业综合服务平台 | 成都修茈科技有限公司',
+    description: '园区企业综合服务平台案例，建设企业服务、事项办理、统计分析和领导驾驶舱等能力。',
+    welcomeTitle: 'Hi，想了解园区服务案例？',
+    welcomeDesc: '本页介绍企业服务、事项办理、统计与领导驾驶舱，可问实施路径或预约交流。',
+    summary: '园区案例：整合企业服务、事项办理、数据统计与领导驾驶舱，提升园区数字化管理效率。',
+    highlights: ['企业服务入口', '事项办理', '统计分析', '领导驾驶舱'],
+    quickActions: [
+      { label: '案例亮点是什么', message: '园区企业服务平台案例' },
+      { label: '如何在我们园区复用', message: '园区方案怎么在我们园区落地？' },
+      { label: '更多客户案例', message: '有哪些客户案例？' },
+      CORP_CONTACT_NAV,
+      { label: '了解产品能力', message: '你们有哪些产品？' },
+    ],
+  },
+  'case-edu': {
+    pageId: 'case-edu',
+    paths: ['/case-edu.html', '/case-edu'],
+    title: '案例详情 - 校园移动服务与业务协同 | 成都修茈科技有限公司',
+    description: '校园移动服务与业务协同案例，整合通知、审批、服务申请和统计分析，提升师生服务体验。',
+    welcomeTitle: 'Hi，想了解校园服务案例？',
+    welcomeDesc: '本页介绍通知、审批、服务申请与统计，可问适用学校类型或对接方式。',
+    summary: '教育案例：统一通知、审批、服务申请与数据统计，改善师生服务体验与管理效率。',
+    highlights: ['移动服务入口', '审批流程', '服务申请', '数据统计'],
+    quickActions: [
+      { label: '案例适用哪些学校', message: '校园移动服务案例' },
+      { label: '教育场景怎么落地', message: '教育场景怎么落地？' },
+      { label: '更多客户案例', message: '有哪些客户案例？' },
+      CORP_CONTACT_NAV,
+      { label: '了解产品能力', message: '你们有哪些产品？' },
+    ],
+  },
+  news: {
+    pageId: 'news',
+    paths: ['/news.html', '/news'],
+    title: '新闻资讯 | 成都修茈科技有限公司',
+    description: '修茈科技新闻资讯与行业观察：企业 AI 自动化、单据处理、Agent 趋势与中小企业数字化。',
+    welcomeTitle: 'Hi，想了解最新动态？',
+    welcomeDesc: '可问公司新闻、行业观察，或带您看产品与预约沟通。',
+    summary: '新闻资讯栏目提供公司动态、产品更新与行业观察，帮助了解 AI 自动化与单据处理趋势。',
+    highlights: ['公司动态', '行业观察', '产品更新'],
+    quickActions: [
+      { label: '最新公司动态', message: '修茈科技最近有什么动态？' },
+      { label: '行业与 AI 趋势', message: '企业 AI 自动化有什么趋势？' },
+      { label: '了解产品', message: '你们有哪些产品？' },
+      CORP_CONTACT_NAV,
+      CORP_MARKET_NAV,
+    ],
+  },
+  honors: {
+    pageId: 'honors',
+    paths: ['/honors.html', '/honors'],
+    title: '资质与能力 | 成都修茈科技有限公司',
+    description: '成都修茈科技有限公司能力说明：软件开发、项目实施、信息安全、服务机制和持续迭代能力。',
+    welcomeTitle: 'Hi，想了解合作保障？',
+    welcomeDesc: '本页说明研发、交付、安全与服务机制（以实际公示为准），可问资质或预约沟通。',
+    summary: '能力说明涵盖软件开发、项目实施、信息安全、服务机制与持续迭代；具体资质证照以实际公示为准。',
+    highlights: ['软件开发能力', '项目实施', '信息安全', '服务与迭代机制'],
+    quickActions: [
+      { label: '交付与服务机制', message: '修茈科技的服务和交付机制是怎样的？' },
+      { label: '信息安全能力', message: '你们的信息安全能力如何？' },
+      { label: '有哪些产品', message: '你们有哪些产品？' },
+      CORP_CONTACT_NAV,
+      CORP_MARKET_NAV,
+    ],
+  },
+  contact: {
+    pageId: 'contact',
+    paths: ['/contact.html', '/contact'],
+    title: '联系我们 | 成都修茈科技有限公司',
+    description: '联系成都修茈科技有限公司，咨询 AI 单据处理、企业自动化、MODstore 智能体市场和数字化解决方案。',
+    welcomeTitle: 'Hi，我来帮您填需求问卷',
+    welcomeDesc: '告诉我公司与系统类型，我可一键预填右侧问卷，您简单改改就能提交。',
+    summary: '联系我们页提供预约方案沟通表单，可说明单据识别、标签打印、AI 工作台等需求，我们会尽快回复。',
+    highlights: ['预约方案沟通', '场景需求说明', '销售与技术支持入口'],
+    quickActions: [
+      {
+        label: 'AI 一键填好问卷',
+        task: 'intake_fill',
+        message: '请根据公司与系统类型帮我预填问卷',
+      },
+      {
+        label: '贸易公司 + Excel 跟单示例',
+        task: 'intake_fill',
+        payload: {
+          prompt:
+            '公司：示例贸易有限公司\n主要系统/业务：Excel 跟单\n\n请根据该公司与系统类型的典型业务场景，完整预填联系页需求问卷。draft 中 company 填「示例贸易有限公司」。不要编造手机、邮箱、姓名。',
+        },
+      },
+      { label: '跳到联系方式', task: 'intake_step', payload: { stepId: 'contact' } },
+      { label: '提交前帮我核对', task: 'intake_review' },
+    ],
+  },
+  'excel-to-ai': {
+    pageId: 'excel-to-ai',
+    paths: ['/excel-to-ai.html', '/excel-to-ai'],
+    title: 'Excel → AI 上传工具 | 成都修茈科技有限公司',
+    description: '在线体验 AI Excel 单据识别：上传出货单、收货单等表格，自动提取关键字段，了解修茈科技单据处理能力。',
+    welcomeTitle: 'Hi，想体验 Excel 识别？',
+    welcomeDesc: '本页可上传表格试识别；完整流程与打印联动见产品中心，也可预约方案沟通。',
+    summary: 'Excel → AI 工具页用于快速体验表格单据识别，提取产品、数量、价格等字段，完整能力见 AI Excel Helper 与产品中心。',
+    highlights: ['上传 Excel 体验', '字段自动提取', '对接完整产品线'],
+    quickActions: [
+      { label: '上传工具怎么用', message: 'Excel 上传工具怎么用？' },
+      { label: '完整单据识别能力', message: 'AI Excel 单据识别能做什么？' },
+      {
+        label: '查看产品中心',
+        task: 'navigate',
+        payload: { href: CORP_LINKS.services },
+      },
+      CORP_CONTACT_NAV,
+      CORP_MARKET_NAV,
+    ],
+  },
+  developer: {
+    pageId: 'developer',
+    paths: ['/developer.html', '/developer'],
+    title: '开发者中心 | 成都修茈科技有限公司',
+    description: '开发者中心提供 API、集成与 Mod 扩展入口，便于对接 XCAGI / MODstore 能力。',
+    welcomeTitle: 'Hi，想对接开发能力？',
+    welcomeDesc: '可问 API、集成方式或预约技术沟通；也可进入 AI 市场试用。',
+    summary: '开发者中心汇总开放接口、集成指引与扩展入口，便于二次开发与系统对接。',
+    highlights: ['API 与集成', 'Mod 扩展', '技术沟通'],
+    quickActions: [
+      { label: '有哪些开放能力', message: '开发者中心提供哪些能力？' },
+      { label: '如何开始集成', message: '怎么对接修茈的 API 或 Mod？' },
+      CORP_CONTACT_NAV,
+      CORP_MARKET_NAV,
+    ],
+  },
+  download: {
+    pageId: 'download',
+    paths: ['/download.html', '/download', '/download/'],
+    title: '产品下载 | 成都修茈科技有限公司',
+    description: '下载 XCAGI 桌面端与相关产品包，查看版本与系统要求。',
+    welcomeTitle: 'Hi，需要下载 XCAGI？',
+    welcomeDesc: '可问 macOS、Windows、Android 安装包、系统要求或授权购买。',
+    summary: '这里是 XCAGI 产品下载页，可选 macOS、Windows 或 Android 安装包，并查看版本与系统要求。',
+    highlights: ['macOS / Windows / Android', '版本与系统要求', '授权与试用'],
+    quickActions: [
+      { label: '怎么下载', message: '怎么下载 XCAGI？' },
+      { label: '支持哪些系统', message: 'XCAGI 支持哪些操作系统？' },
+      { label: '购买与授权', message: '怎么购买或获取授权？' },
+      CORP_CONTACT_NAV,
+      CORP_MARKET_NAV,
+    ],
+  },
+  'download-releases': {
+    pageId: 'download-releases',
+    paths: ['/download-releases.html', '/download/releases'],
+    title: '更新日志 | 成都修茈科技有限公司',
+    description: '查看 XCAGI 与相关产品的版本更新记录。',
+    welcomeTitle: 'Hi，想看更新内容？',
+    welcomeDesc: '可问最近版本变化，或引导下载最新包与预约沟通。',
+    summary: '更新日志页列出公开发布版本与变更摘要。',
+    highlights: ['版本记录', '变更摘要', '下载最新版'],
+    quickActions: [
+      { label: '最近更新了什么', message: '最近版本有哪些更新？' },
+      {
+        label: '去下载页',
+        task: 'navigate',
+        payload: { href: CORP_LINKS.download },
+      },
+      CORP_CONTACT_NAV,
+    ],
+  },
+  'download-breakpoints': {
+    pageId: 'download-breakpoints',
+    paths: ['/download-breakpoints.html', '/download/breakpoints'],
+    title: '断点清单 | 成都修茈科技有限公司',
+    description: '公开查看下载相关断点与进度清单。',
+    welcomeTitle: 'Hi，想看断点清单？',
+    welcomeDesc: '可问清单含义，或引导去下载页与预约沟通。',
+    summary: '断点清单页公开列出当前下载相关断点与进度项。',
+    highlights: ['断点列表', '进度查阅', '下载入口'],
+    quickActions: [
+      { label: '这页是做什么的', message: '断点清单是做什么的？' },
+      {
+        label: '去下载页',
+        task: 'navigate',
+        payload: { href: CORP_LINKS.download },
+      },
+      CORP_CONTACT_NAV,
+    ],
+  },
+  'download-goals': {
+    pageId: 'download-goals',
+    paths: ['/download-goals.html', '/download/goals'],
+    title: '目标看板 | 成都修茈科技有限公司',
+    description: '公开查阅下载相关目标进度。',
+    welcomeTitle: 'Hi，想看目标进度？',
+    welcomeDesc: '可问看板含义，或引导去下载页与预约沟通。',
+    summary: '目标看板页公开展示下载相关目标与进度。',
+    highlights: ['目标进度', '公开查阅', '下载入口'],
+    quickActions: [
+      { label: '这页是做什么的', message: '目标看板是做什么的？' },
+      {
+        label: '去下载页',
+        task: 'navigate',
+        payload: { href: CORP_LINKS.download },
+      },
+      CORP_CONTACT_NAV,
+    ],
+  },
+  'world-will': {
+    pageId: 'world-will',
+    paths: ['/world-will.html', '/world-will'],
+    title: '世界意志 · AI 公司大厅 | 成都修茈科技有限公司',
+    description: '公开只读展示 XCMAX 六线 AI 员工编制、状态与公司动态。',
+    welcomeTitle: 'Hi，想了解 AI 公司大厅？',
+    welcomeDesc: '可问编制、动态来源或引导查看产品与预约沟通。',
+    summary: '世界意志公司大厅公开展示编制员工、真实工作状态与行动轨迹投影。',
+    highlights: ['六线编制', '公司动态', '只读公开投影'],
+    quickActions: [
+      { label: '这是什么页面', message: '世界意志公司大厅是做什么的？' },
+      { label: '数据从哪来', message: '公司动态的数据来源是什么？' },
+      CORP_CONTACT_NAV,
+      CORP_MARKET_NAV,
+    ],
+  },
+  visualization: {
+    pageId: 'visualization',
+    paths: ['/visualization.html', '/visualization'],
+    title: '可视化展示 | 成都修茈科技有限公司',
+    description: '可视化展示修茈科技产品与场景能力。',
+    welcomeTitle: 'Hi，想看可视化展示？',
+    welcomeDesc: '可问展示内容、产品能力，或预约方案沟通。',
+    summary: '可视化展示页用图示与案例入口呈现产品与场景能力。',
+    highlights: ['产品可视化', '场景入口', '能力总览'],
+    quickActions: [
+      { label: '本页展示什么', message: '可视化展示页主要看什么？' },
+      { label: '有哪些产品', message: '你们有哪些产品？' },
+      CORP_CONTACT_NAV,
+      CORP_MARKET_NAV,
+    ],
+  },
+  privacy: {
+    pageId: 'privacy',
+    paths: ['/privacy.html', '/privacy'],
+    title: '隐私与服务协议 | 成都修茈科技有限公司',
+    description: '修茈科技服务协议与隐私说明。',
+    welcomeTitle: 'Hi，想了解隐私与协议？',
+    welcomeDesc: '可问数据处理、账号与联系方式；具体条款以页面正文为准。',
+    summary: '本页说明服务协议、隐私保护与联系方式。',
+    highlights: ['隐私保护', '服务协议', '联系方式'],
+    quickActions: [{ label: '如何联系', message: '怎么联系你们？' }, CORP_CONTACT_NAV],
+  },
+  'market-about': {
+    pageId: 'market-about',
+    paths: [],
+    title: 'XC AGI 市场 | 智能员工与 AI 工作台',
+    description: '修茈科技 AI 市场：组合 Mod 与 AI 员工，处理单据、流程与报表；支持注册试用与进入工作台。',
+    welcomeDesc: '这是 AI 市场公开介绍页。可了解智能员工能力，或引导您注册、查看会员方案。',
+    summary: 'AI 市场落地页介绍可复制的智能员工团队：单据识别、自动化处理、7×24 运行与多行业场景，可注册进入工作台。',
+    highlights: ['智能单据识别', '自动化处理', '7×24 AI 员工', '免费注册试用'],
+    quickActions: [
+      { label: '有哪些能力', message: 'AI 市场有什么功能？' },
+      { label: '会员方案', message: '会员和价格怎么样？' },
+      { label: '免费注册', message: '怎么注册账号？' },
+      { label: '官网产品', message: '你们有哪些产品？' },
+      { label: '联系咨询', message: '怎么联系你们？' },
+      { label: '本页介绍', message: '这个页面有什么功能？' },
+    ],
+  },
+}
+
+export function isContactPagePath(pathname: string): boolean {
+  return /\/contact(?:\.html)?\/?$/i.test(pathname || '')
+}
+
+export function resolveCorpPageId(pathname: string): string {
+  const p = pathname.replace(/\/$/, '') || '/'
+  for (const page of Object.values(CORP_PAGES)) {
+    if (
+      page.paths.some(
+        (path) =>
+          path === p ||
+          (path === '/' && (p === '/' || p.endsWith('/index.html'))) ||
+          (path.endsWith('/') && (p === path.slice(0, -1) || p + '/' === path)),
+      )
+    ) {
+      return page.pageId
+    }
+  }
+  if (p === '' || p === '/' || /index\.html$/i.test(p)) return 'home'
+  // 未登记页按路径生成独立 id，避免全部落到 home 导致「本会话已介绍」而跳过
+  const slug = p
+    .replace(/^\//, '')
+    .replace(/\.html$/i, '')
+    .replace(/[^\w\u4e00-\u9fff/-]+/g, '-')
+    .replace(/\/+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return slug ? `page:${slug}` : 'home'
+}
+
+function synthesizeCorpPageKnowledge(pageId: string): PageKnowledge {
+  const slug = pageId.startsWith('page:') ? pageId.slice(5) : pageId
+  const label = slug.replace(/-/g, ' ').trim() || '官网页面'
+  return {
+    pageId,
+    title: `${label} | 成都修茈科技有限公司`,
+    description: '修茈科技官网相关页面。',
+    welcomeTitle: CORP_DEFAULT_WELCOME_TITLE,
+    welcomeDesc: '想了解产品、案例或预约沟通，直接问我，或点快捷问题。',
+    summary: '本页为官网相关页面，可问产品能力、下载试用或预约方案沟通。',
+    highlights: ['产品与方案', '下载试用', '预约沟通'],
+    quickActions: [{ label: '介绍 XCAGI', message: 'XCAGI 是什么？能做什么？' }, CORP_CONTACT_NAV, CORP_MARKET_NAV],
+  }
+}
+
+export function getCorpPageKnowledge(pageId?: string, pathname?: string): PageKnowledge {
+  const id = pageId || (pathname ? resolveCorpPageId(pathname) : 'home')
+  const raw = CORP_PAGES[id]
+  if (raw) {
+    const { paths: _paths, ...rest } = raw
+    return rest
+  }
+  if (id.startsWith('page:')) return synthesizeCorpPageKnowledge(id)
+  const { paths: _paths, ...home } = CORP_PAGES.home
+  return home
+}
+
+export function getCorpWelcomeDesc(pathname: string): string {
+  const page = getCorpPageKnowledge(undefined, pathname)
+  return page.welcomeDesc || page.summary
+}
+
+export function getCorpWelcomeTitle(pathname: string): string {
+  const page = getCorpPageKnowledge(undefined, pathname)
+  return page.welcomeTitle || CORP_DEFAULT_WELCOME_TITLE
+}
+
+export function getCorpQuickActions(pathname: string): QuickAction[] {
+  return getCorpPageKnowledge(undefined, pathname).quickActions
+}
+
+export function linkForCorpPage(pageId: string): string {
+  const map: Record<string, string> = {
+    home: CORP_LINKS.home,
+    about: CORP_LINKS.about,
+    services: CORP_LINKS.services,
+    solutions: CORP_LINKS.solutions,
+    cases: CORP_LINKS.cases,
+    'case-manufacture': CORP_LINKS.caseManufacture,
+    'case-park': CORP_LINKS.casePark,
+    'case-edu': CORP_LINKS.caseEdu,
+    news: CORP_LINKS.news,
+    honors: CORP_LINKS.honors,
+    contact: CORP_LINKS.contact,
+    'excel-to-ai': CORP_LINKS.excelToAi,
+    developer: CORP_LINKS.developer,
+    download: CORP_LINKS.download,
+    'download-releases': CORP_LINKS.downloadReleases,
+    'world-will': CORP_LINKS.worldWill,
+    visualization: CORP_LINKS.visualization,
+    privacy: CORP_LINKS.privacy,
+    'market-about': CORP_LINKS.market,
+  }
+  if (map[pageId]) return map[pageId]
+  if (pageId.startsWith('page:')) {
+    const slug = pageId.slice(5)
+    return slug.includes('/') ? `/${slug}` : `/${slug}.html`
+  }
+  return CORP_LINKS.home
+}

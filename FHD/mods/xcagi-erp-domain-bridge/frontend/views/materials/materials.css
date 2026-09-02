@@ -1,0 +1,11 @@
+.text-red { color: #dc3545; }
+.text-green { color: #28a745; }
+.text-center { text-align: center; }
+.tabs { display: flex; gap: 5px; margin: 15px 0; }
+.tabs button { padding: 8px 20px; border: 1px solid #ddd; background: #f8f9fa; cursor: pointer; }
+.tabs button.active { background: #007bff; color: white; border-color: #007bff; }
+.form-group { margin-bottom: 10px; }
+.form-group label { display: block; margin-bottom: 3px; font-weight: 500; }
+.form-group input, .form-group select { width: 100%; padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; }
+.page-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 10px; border-bottom: 1px solid #eee; margin-bottom: 15px; }
+.page-header h2, .page-header h4 { margin: 0; }

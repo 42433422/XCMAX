@@ -1,0 +1,289 @@
+.message {
+  position: relative;
+  padding: 12px 16px;
+  margin: 8px 0;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.message.user {
+  background: #e3f2fd;
+  margin-left: 20%;
+}
+
+.message.ai {
+  background: #f5f5f5;
+  margin-right: 20%;
+}
+
+.message.is-measuring {
+  opacity: 0.7;
+}
+
+/* 骨架屏样式 */
+.message-skeleton {
+  padding: 8px 0;
+}
+
+.skeleton-line {
+  height: 14px;
+  background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%);
+  background-size: 200% 100%;
+  border-radius: 4px;
+  margin: 8px 0;
+  animation: skeleton-loading 1.5s infinite;
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* 折叠消息样式 — 见 CollapsedMessagePreview.vue */
+
+.message-html {
+  font-size: 14px;
+  line-height: 1.5;
+  word-wrap: break-word;
+}
+
+.message-html :deep(p) {
+  margin: 8px 0;
+}
+
+.message-html :deep(ul),
+.message-html :deep(ol) {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.message-html :deep(li) {
+  margin: 4px 0;
+}
+
+.message-html :deep(code) {
+  background: #f0f0f0;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 13px;
+}
+
+.message-html :deep(pre) {
+  background: #f5f5f5;
+  padding: 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 13px;
+}
+
+/* 操作按钮 */
+.message-shipment-actions {
+  margin-top: 12px;
+}
+
+/* 元信息样式 */
+.context-summary {
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 6px;
+  font-size: 12px;
+  color: #666;
+}
+
+.thinking-panel {
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 6px;
+}
+
+.thinking-panel summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: #666;
+}
+
+.thinking-panel pre {
+  margin-top: 8px;
+  padding: 8px;
+  background: #f5f5f5;
+  border-radius: 4px;
+  font-size: 12px;
+  overflow-x: auto;
+}
+
+.todo-panel {
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: #e8f5e9;
+  border-radius: 6px;
+}
+
+.todo-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #2e7d32;
+  margin-bottom: 4px;
+}
+
+.todo-panel ul {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12px;
+}
+
+.todo-panel li {
+  margin: 2px 0;
+  color: #555;
+}
+
+.trace-panel {
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: #e3f2fd;
+  border-radius: 6px;
+}
+
+.trace-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1976d2;
+  margin-bottom: 4px;
+}
+
+.trace-stages {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.trace-chip {
+  padding: 2px 8px;
+  background: #1976d2;
+  color: white;
+  border-radius: 12px;
+  font-size: 11px;
+}
+
+.trace-action {
+  font-size: 12px;
+  color: #555;
+  margin: 4px 0;
+}
+
+.trace-list {
+  margin: 8px 0 0 0;
+  padding-left: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.trace-list li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+.trace-status {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.trace-status.ok {
+  background: #4caf50;
+  color: white;
+}
+
+.trace-status.fail {
+  background: #f44336;
+  color: white;
+}
+
+.trace-node-meta,
+.trace-node-error,
+.trace-node-hint {
+  flex-basis: 100%;
+  margin-left: 56px;
+  line-height: 1.4;
+}
+
+.trace-node-meta {
+  color: #555;
+}
+
+.trace-node-error {
+  color: #b91c1c;
+}
+
+.trace-node-hint {
+  color: #0d47a1;
+}
+
+/* 时间戳 */
+.time {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #999;
+  text-align: right;
+}
+
+/* TTS 按钮 */
+.message-tts-btn {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #dbe3f0;
+  background: #fff;
+  color: #5b6b88;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  transition: all 0.2s;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.message-tts-btn .fa {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.message-tts-btn .fa-stop {
+  font-size: 10px;
+}
+
+.message-tts-btn:hover {
+  background: #f0f6ff;
+  border-color: #4a90e2;
+  color: #2d7bd6;
+}
+
+.message-tts-btn.is-playing {
+  background: #1976d2;
+  color: white;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}

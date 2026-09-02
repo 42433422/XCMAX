@@ -151,10 +151,15 @@ def _workspace_root_for_excel_reload_tests(request, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _compat_db_coverage_ramp_tenant_scope(request, monkeypatch):
-    """Root-level coverage-ramp compat DB tests use narrow legacy mock schemas."""
+    """Compat DB tests migrated from coverage-ramp use narrow legacy mock schemas.
+
+    原文件名 ``test_coverage_ramp_phase3_p1_deep_backend.py`` /
+    ``test_coverage_ramp_phase6_p17_backend.py`` 已于 2026-09-01 去
+    ``coverage_ramp_`` 前缀迁出为契约测试（D2-5），fixture 引用同步更新。
+    """
     if request.node.fspath.basename not in {
-        "test_coverage_ramp_phase3_p1_deep_backend.py",
-        "test_coverage_ramp_phase6_p17_backend.py",
+        "test_phase3_p1_deep_backend.py",
+        "test_phase6_p17_backend.py",
     }:
         yield
         return
@@ -202,6 +207,24 @@ def _isolate_edition_and_product_sku_env(monkeypatch):
         "XCAGI_PRODUCT_SKU_FILE",
         os.path.join(PROJECT_ROOT, "tests", "_fixtures", "no-product-sku.json"),
     )
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _create_schema_before_any_test():
+    """首个用例运行前一次性建全表（时序不变量，D2-5 stub 迁出回归修复）。
+
+    历史上建表只发生在 session 级 ``app`` fixture 首次被使用时；原
+    ``test_coverage_ramp_routes``（test_c 排序位置）恰好使用共享 ``client``，
+    使建表先于绝大多数用例。该文件去前缀更名为 ``test_routes`` 后首次使用
+    大幅后移，早于此的 mini-app 用例可能踩到已在其他 DATABASE_URL 窗口完成
+    ``_ensure_schema`` 的共享 SQL 仓储单例（agent orchestrator 等），在测试库
+    上缺表（no such table: agent_runs）。这里把建表提前到会话第一个用例之前，
+    ``checkfirst=True`` 幂等，与 ``app`` fixture 内的建表共存。
+    """
+    from app.db import engine
+    from app.db.base import Base
+
+    Base.metadata.create_all(engine, checkfirst=True)
 
 
 @pytest.fixture(scope="session")

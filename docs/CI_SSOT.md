@@ -142,7 +142,7 @@ bash /opt/fhd-staging/scripts/deploy/fhd-auto-update.sh
 
 ## Branch protection（main）
 
-已通过 API 配置（2026-06-13，2026-07 发版红线扩展，2026-08-05 校正为 GitHub 实配 11 项）：required status checks 含 `guard-temp-scripts`、`arch-fitness`、`security-scan`、`gitleaks`、`analyze (python)`、`analyze (javascript-typescript)`、`SSOT Drift Gate`、`Release gate (hard block)`、`backend-test`、`frontend-test`、**`mutation-smoke`**（变异测试 kill rate ≥80%，作用域 app/di + app/contexts，2026-08-05 实测 **93.02%**，80/86）；`vue-tsc` / `mypy` / `build:strict` 已在 `frontend-test` / `backend-test` 内硬失败。**覆盖率门禁**（2026-08-05 诚实化）：`backend-test` 内以 `coverage_ratchet.py --check --behavior --require-backend` 为唯一硬 gate（排除 `coverage_ramp` stub 的行为口径）；`frontend-test` 内以 `coverage_ratchet.py --check --require-frontend` 硬阻断前端覆盖率回退。本地等价：`bash FHD/scripts/dev/release_verify.sh`。
+已通过 API 配置（2026-06-13，2026-07 发版红线扩展，2026-08-05 校正为 GitHub 实配 11 项）：required status checks 含 `guard-temp-scripts`、`arch-fitness`、`security-scan`、`gitleaks`、`analyze (python)`、`analyze (javascript-typescript)`、`SSOT Drift Gate`、`Release gate (hard block)`、`backend-test`、`frontend-test`、**`mutation-smoke`**（变异测试 kill rate ≥80%，作用域 app/di + app/contexts，2026-08-05 实测 **93.02%**，80/86）；`vue-tsc` / `mypy` / `build:strict` 已在 `frontend-test` / `backend-test` 内硬失败。**覆盖率门禁**（2026-08-05 诚实化；2026-09-01 D2-5 起 `coverage_ramp` stub 82 个已全部去前缀迁出为契约测试，总口径=真实行为口径，floor **78% 行 / 69% 分支**，只升不降）：`backend-test` 内以 `coverage_ratchet.py --check --behavior --require-backend` 为唯一硬 gate（行为口径，stub 清零后 `-m 'not coverage_ramp'` 等价于全量）；`frontend-test` 内以 `coverage_ratchet.py --check --require-frontend` 硬阻断前端覆盖率回退。本地等价：`bash FHD/scripts/dev/release_verify.sh`。
 
 > **Public 仓库**：`42433422/XCMAX` 已为 **PUBLIC**；Actions 对 public repo 有免费额度。若 job 仍报 `payments have failed or spending limit`，在 [Payment information](https://github.com/settings/billing/payment_information) 添加有效支付方式。
 
@@ -263,9 +263,9 @@ bash /opt/fhd-full/scripts/deploy/fhd-apply-release-compose.sh
 
 `fhd-ci-cd.yml` → job `backend-test` 上传 `coverage.xml` 至 Codecov。**可选**：需在 GitHub **Settings → Secrets → Actions** 配置 `CODECOV_TOKEN`；无 token 时步骤 `continue-on-error`（不阻断 CI）。本地 `coverage.xml` / `htmlcov/` 仍为 SSOT。
 
-**覆盖率门槛 SSOT**：唯一真值 = `FHD/pyproject.toml` → `[tool.coverage.report] fail_under`（当前 `88`，对应 `source=[app]` 全量行覆盖 floor，2026-07-25 bump 收录）。分支 floor（81）与前端 floor 见 `FHD/metrics/coverage_ratchet_baseline.json`；对外现状口径见 `FHD/metrics/coverage-dual-summary.json`。
+**覆盖率门槛 SSOT**：唯一真值 = `FHD/pyproject.toml` → `[tool.coverage.report] fail_under`（当前 `78`，对应 `source=[app]` 真实行为口径行覆盖 floor——2026-09-01 D2-5：`coverage_ramp` stub 82 个清零迁出后总口径=行为口径，floor 自 78 行 / 69 分支起步只升不降，决策记录见 `FHD/docs/adr/0005-coverage-floor-recalibrate-stub-retirement.md`；历史宣称 88/81 含 stub 注水已废止）。分支 floor（69）与前端 floor 见 `FHD/metrics/coverage_ratchet_baseline.json`；对外现状口径见 `FHD/metrics/coverage-dual-summary.json`。
 
-**后端覆盖率门禁唯一硬 gate = 行为口径（Delta A，2026-08-05）**：`backend-test` 的 `Behavior coverage gate` 步骤用 `coverage_ratchet.py --check --behavior --require-backend --record` 排除 `coverage_ramp` 注水 stub（`-m 'not coverage_ramp'`）后做硬阻断，floor 见 `coverage_ratchet_baseline.json` 的 `behavior_floors {lines, branches}`。全量 `coverage.json` + `fail_under` 保留为参考/趋势口径，不再作为唯一硬 gate。`backend-test` **不再**用 CLI `--cov-fail-under` 硬编码阈值；标准命令传 `--cov-fail-under=0`。
+**后端覆盖率门禁唯一硬 gate = 行为口径（Delta A，2026-08-05；2026-09-01 D2-5 起与总口径合一）**：`backend-test` 的 `Behavior coverage gate` 步骤用 `coverage_ratchet.py --check --behavior --require-backend --record` 做硬阻断，floor 见 `coverage_ratchet_baseline.json` 的 `behavior_floors {lines, branches}`（78/69）。历史机制为排除 `coverage_ramp` 注水 stub（`-m 'not coverage_ramp'`）；2026-09-01 stub 82 个已全部去前缀迁出为契约测试（行为口径真实实测 79.26% 行 / 70.87% 分支为 2026-07-25 快照；清零后迁出用例计入行为口径），`tests/conftest.py` 打标逻辑与 marker 保留防复活（`count_coverage_ramp_stubs.py --check` 基线 0）。全量 `coverage.json` + `fail_under`（现 78/69）与行为口径数值一致，不再是独立宣称口径。`backend-test` **不再**用 CLI `--cov-fail-under` 硬编码阈值；标准命令传 `--cov-fail-under=0`。
 
 `FHD/scripts/ci/check_coverage_ssot.py` 在 smoke/full CI 中校验上述三个文件互相一致，并禁止 `pyproject.toml` 复制动态 pytest passed/failed 快照；动态实测只允许出现在 `coverage-dual-summary.json`。
 

@@ -235,6 +235,11 @@ jobs:
         working-directory: FHD/frontend
         run: python ../scripts/dev/coverage_ratchet.py --check --require-frontend
 
+      # 前端显式 any 棘轮门禁（D2-4）：超过基线即阻断，只降方向收口。
+      # count_ts_any.py 在根仓 scripts/dev/（FHD/scripts/dev 无此脚本），需 ../ 前缀。
+      - name: Frontend ts-any ratchet gate
+        run: python ../scripts/dev/count_ts_any.py --check
+
       - name: Run vue-tsc
         working-directory: FHD/frontend
         run: |

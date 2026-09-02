@@ -99,6 +99,19 @@ def _expected_versions() -> dict[str, str]:
     }
 
 
+def _read_with_dart_parts(path: Path) -> str:
+    """Dart part 化拆分后，契约口径为整个 library（主文件 + 全部 part，与 android_runner_test.dart 同口径）。"""
+    text = path.read_text(encoding="utf-8")
+    if path.suffix != ".dart":
+        return text
+    chunks = [text]
+    for decl in re.findall(r"part\s+'([^']+)'\s*;", text):
+        part_path = path.parent / decl
+        if part_path.is_file():
+            chunks.append(part_path.read_text(encoding="utf-8"))
+    return "\n".join(chunks)
+
+
 def verify() -> list[str]:
     expected_versions = _expected_versions()
     errors: list[str] = []
@@ -107,7 +120,7 @@ def verify() -> list[str]:
         if not full_path.is_file():
             errors.append(f"{rel_path}: file not found")
             continue
-        match = re.search(pattern, full_path.read_text(encoding="utf-8"))
+        match = re.search(pattern, _read_with_dart_parts(full_path))
         if not match:
             errors.append(f"{rel_path}: version pattern not found")
             continue

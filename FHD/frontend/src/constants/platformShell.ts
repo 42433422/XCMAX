@@ -104,6 +104,8 @@ export interface IndustryBaselinePlan {
   required_mod_ids: string[]
   optional_mod_ids: string[]
   industry_mod_ids: string[]
+  /** 统一考勤能力等平台级 capability 标记（如 attendance-industry） */
+  capability_mod_ids?: string[]
   custom_mod_ids?: string[]
   missing_required_mod_ids: string[]
   missing_optional_mod_ids: string[]

@@ -1,0 +1,164 @@
+.visual-editor {
+  width: 100%;
+  height: 100%;
+}
+
+.editor-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+  min-height: 600px;
+  --label-editor-preview-height: 420px;
+}
+
+.preview-section {
+  position: relative;
+  flex: 0 0 var(--label-editor-preview-height);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.section-title {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+.canvas-container {
+  flex: 1;
+  min-height: 350px;
+  border: 2px solid #dee2e6;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #fafafa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.canvas-container canvas {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.canvas-instructions {
+  margin-top: 8px;
+  padding: 6px 12px;
+  background: #e7f3ff;
+  border-radius: 4px;
+  text-align: center;
+  font-size: 12px;
+  color: #007bff;
+}
+
+.properties-section {
+  flex: 1 1 auto;
+  min-height: 0;
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.property-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.property-group {
+  flex: 1;
+}
+
+.property-group.half {
+  flex: 1;
+}
+
+.property-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #555;
+}
+
+.form-control {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.form-control:focus {
+  outline: none;
+  border-color: #007bff;
+}
+
+.type-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.type-btn {
+  flex: 1;
+  padding: 8px 16px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.type-btn.active {
+  background: #007bff;
+  color: white;
+  border-color: #007bff;
+}
+
+.btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.btn-danger {
+  background: #dc3545;
+  color: white;
+}
+
+.btn-danger:hover {
+  background: #c82333;
+}
+
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 150px;
+}
+
+.empty-message {
+  text-align: center;
+  color: #6c757d;
+}
+
+.empty-icon {
+  font-size: 48px;
+  display: block;
+  margin-bottom: 12px;
+}
+
+.empty-message p {
+  margin: 0;
+  font-size: 14px;
+}
