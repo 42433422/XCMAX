@@ -115,11 +115,7 @@ def test_macos_release_flow_publishes_download_center_metadata_and_has_recovery_
         REPO_ROOT / "FHD" / ".github" / "workflows" / "release-desktop-mac-ota.yml"
     ).read_text(encoding="utf-8")
     recovery_workflow = (
-        REPO_ROOT
-        / "FHD"
-        / ".github"
-        / "workflows"
-        / "publish-macos-download-center.yml"
+        REPO_ROOT / "FHD" / ".github" / "workflows" / "publish-macos-download-center.yml"
     ).read_text(encoding="utf-8")
     publish_script = (
         REPO_ROOT / "FHD" / "scripts" / "package" / "publish-macos-download-center.sh"
@@ -130,7 +126,7 @@ def test_macos_release_flow_publishes_download_center_metadata_and_has_recovery_
     assert "source_run_id:" in recovery_workflow
     assert "gh run download" in recovery_workflow
     assert "publish-macos-download-center.sh" in recovery_workflow
-    assert 'release_ready == false' in publish_script
+    assert "release_ready == false" in publish_script
     assert 'contains("太阳鸟")' in publish_script
-    assert 'download-release.json' in publish_script
-    assert 'download/releases?release-run=' in publish_script
+    assert "download-release.json" in publish_script
+    assert "download/releases?release-run=" in publish_script
