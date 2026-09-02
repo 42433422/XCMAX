@@ -21,9 +21,12 @@ void main() {
     ).readAsStringSync();
     final gradle = File('android/app/build.gradle.kts').readAsStringSync();
     final mainDart = File('lib/main.dart').readAsStringSync();
-    final startupShell = File(
+    // part 化拆分后，契约口径为整个 library（主文件 + 全部 part）。
+    final startupShell = [
       'lib/src/app/mobile_startup_shell.dart',
-    ).readAsStringSync();
+      'lib/src/app/mobile_startup_shell_state.part.dart',
+      'lib/src/app/mobile_startup_shell_screens.part.dart',
+    ].map((p) => File(p).readAsStringSync()).join();
     final backgroundWork = File(
       'android/app/src/main/kotlin/com/xiuci/xcagi/xcagi_flutter_poc/XcagiBackgroundWork.kt',
     ).readAsStringSync();
