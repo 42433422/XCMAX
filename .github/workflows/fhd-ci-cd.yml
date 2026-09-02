@@ -533,7 +533,7 @@ jobs:
 
       - name: Generate SLSA build provenance attestation
         if: steps.build_fhd.outputs.digest != ''
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-name: ${{ steps.imgref.outputs.name }}
           subject-digest: ${{ steps.build_fhd.outputs.digest }}
