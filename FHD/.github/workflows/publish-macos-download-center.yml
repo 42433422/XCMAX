@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       source_run_id:
-        description: "Successful Release Desktop macOS OTA run id"
+        description: "macOS OTA run id with a successfully uploaded signed recovery artifact"
         required: true
         type: string
       version:
@@ -46,11 +46,15 @@ jobs:
           test -n "${DESKTOP_SSH_KEY:-}"
           [[ "${{ inputs.source_run_id }}" =~ ^[0-9]+$ ]]
           [[ "${{ inputs.release_git_sha }}" =~ ^[0-9a-f]{40}$ ]]
-          run_json="$(gh run view '${{ inputs.source_run_id }}' --repo '${{ github.repository }}' --json conclusion,headSha,workflowName)"
+          run_json="$(gh run view '${{ inputs.source_run_id }}' --repo '${{ github.repository }}' --json headSha,jobs,workflowName)"
           jq -e --arg sha '${{ inputs.release_git_sha }}' '
-            .conclusion == "success"
-            and .headSha == $sha
+            def step_ok($name): any(.jobs[].steps[]; .name == $name and .conclusion == "success");
+            .headSha == $sha
             and .workflowName == "Release Desktop macOS OTA"
+            and step_ok("Build macOS enterprise installer")
+            and step_ok("Notarize and staple macOS enterprise DMG")
+            and step_ok("Verify packaged identity and ZIP feed")
+            and step_ok("Upload macOS OTA artifacts for recovery")
           ' <<<"${run_json}" >/dev/null
 
       - name: Download signed and notarized recovery artifact
