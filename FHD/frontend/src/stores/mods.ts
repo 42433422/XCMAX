@@ -211,7 +211,7 @@ function normalizeEntitledModIds(raw: string[] | undefined): string[] {
   const seen = new Set<string>()
   const out: string[] = []
   for (const item of raw) {
-    const id = canonicalEntitlementId(String(item || '').trim())
+    const id = String(item || '').trim()
     if (!id || seen.has(id)) continue
     seen.add(id)
     out.push(id)

@@ -82,7 +82,8 @@ describe('genericModPack predicate branches', () => {
     expect(hasInstalledClientPrimaryErpMod(['nothing'])).toBe(false)
     expect(hasInstalledSelectableExtensionMod(['attendance-industry'])).toBe(true)
     expect(hasInstalledSelectableExtensionMod(['xcagi-erp-domain-bridge'])).toBe(false)
-    expect(hasInstalledAccountCustomMod(['taiyangniao-pro'])).toBe(true)
+    expect(hasInstalledAccountCustomMod(['taiyangniao-pro'])).toBe(false)
+    expect(hasInstalledAccountCustomMod(['sz-qsm-pro'])).toBe(true)
     expect(hasInstalledAccountCustomMod(['x'])).toBe(false)
   })
 

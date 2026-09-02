@@ -50,8 +50,8 @@ describe('mods store smoke', () => {
           success: true,
           data: [
             {
-              id: 'taiyangniao-pro',
-              name: '太阳鸟pro',
+              id: CLIENT_PRIMARY_ERP_MOD_ID,
+              name: '统一考勤',
               version: '1.0.0',
               author: '',
               description: '',
@@ -63,7 +63,7 @@ describe('mods store smoke', () => {
         ok: true,
         json: async () => ({
           success: true,
-          data: [{ mod_id: 'taiyangniao-pro', routes_path: 'mods/taiyangniao-pro/frontend/routes' }],
+          data: [{ mod_id: CLIENT_PRIMARY_ERP_MOD_ID, routes_path: 'mods/attendance-industry/frontend/routes' }],
         }),
       })
 
@@ -72,7 +72,7 @@ describe('mods store smoke', () => {
 
     expect(store.isLoaded).toBe(true)
     expect(store.mods.length).toBe(1)
-    expect(store.mods[0].id).toBe('taiyangniao-pro')
+    expect(store.mods[0].id).toBe(CLIENT_PRIMARY_ERP_MOD_ID)
     expect(global.fetch).toHaveBeenNthCalledWith(1, '/api/mods/', expect.objectContaining({ credentials: 'include' }))
   })
 
@@ -85,20 +85,13 @@ describe('mods store smoke', () => {
           success: true,
           data: [
             {
-              id: 'taiyangniao-pro',
-              name: '太阳鸟pro',
+              id: CLIENT_PRIMARY_ERP_MOD_ID,
+              name: '统一考勤',
               version: '1.0.0',
               author: '',
               description: '',
               primary: true,
               industry: { id: '考勤', name: '考勤' },
-            },
-            {
-              id: 'sz-qsm-pro',
-              name: '全塑美pro',
-              version: '1.0.0',
-              author: '',
-              description: '',
             },
           ],
         }),
@@ -110,15 +103,15 @@ describe('mods store smoke', () => {
 
     const store = useModsStore()
     await store.initialize(true, {
-      entitledModIds: ['taiyangniao-pro', 'sz-qsm-pro'],
+      entitledModIds: ['taiyangniao-pro'],
       forceFromEntitlements: true,
     })
 
-    expect(store.activeModId).toBe('taiyangniao-pro')
-    expect(localStorage.getItem(activeModStorageKey())).toBe('taiyangniao-pro')
+    expect(store.activeModId).toBe(CLIENT_PRIMARY_ERP_MOD_ID)
+    expect(localStorage.getItem(activeModStorageKey())).toBe(CLIENT_PRIMARY_ERP_MOD_ID)
   })
 
-  it('SUNBIRD 账号无 entitled 时仍强制太阳鸟 Mod', async () => {
+  it('SUNBIRD 账号无 entitled 时仍强制统一考勤 Mod', async () => {
     writeActiveExtensionModIdToStorage('xcagi-erp-domain-bridge', TEST_SCOPE)
     const modListPayload = {
       ok: true,
@@ -128,15 +121,6 @@ describe('mods store smoke', () => {
           {
             id: CLIENT_PRIMARY_ERP_MOD_ID,
             name: '考勤行业',
-            version: '1.0.0',
-            author: '',
-            description: '',
-            primary: true,
-            industry: { id: '考勤', name: '考勤' },
-          },
-          {
-            id: 'taiyangniao-pro',
-            name: '太阳鸟pro',
             version: '1.0.0',
             author: '',
             description: '',
