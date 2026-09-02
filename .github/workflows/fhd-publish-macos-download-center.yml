@@ -1,0 +1,85 @@
+# CI SSOT: generated from FHD/.github/workflows/publish-macos-download-center.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+# Recovery/republish path for a completed macOS OTA run. The normal macOS OTA
+# workflow calls the same script directly; this workflow closes metadata drift
+# without rebuilding or re-notarizing an already verified artifact.
+name: Publish macOS Download Center Metadata
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: "macOS OTA run id with a successfully uploaded signed recovery artifact"
+        required: true
+        type: string
+      version:
+        description: "Published product version"
+        required: true
+        default: "1.0.0.1"
+        type: string
+      release_git_sha:
+        description: "Exact 40-character build SHA recorded in latest-mac.yml"
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  publish-download-center:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
+      FHD_PUSH_HOST: ${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate source run and inputs
+        working-directory: .
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${DESKTOP_SSH_KEY:-}"
+          [[ "${{ inputs.source_run_id }}" =~ ^[0-9]+$ ]]
+          [[ "${{ inputs.release_git_sha }}" =~ ^[0-9a-f]{40}$ ]]
+          run_json="$(gh run view '${{ inputs.source_run_id }}' --repo '${{ github.repository }}' --json headSha,jobs,workflowName)"
+          jq -e --arg sha '${{ inputs.release_git_sha }}' '
+            def step_ok($name): any(.jobs[].steps[]; .name == $name and .conclusion == "success");
+            .headSha == $sha
+            and .workflowName == "Release Desktop macOS OTA"
+            and step_ok("Build macOS enterprise installer")
+            and step_ok("Notarize and staple macOS enterprise DMG")
+            and step_ok("Verify packaged identity and ZIP feed")
+            and step_ok("Upload macOS OTA artifacts for recovery")
+          ' <<<"${run_json}" >/dev/null
+
+      - name: Download signed and notarized recovery artifact
+        working-directory: .
+        shell: bash
+        run: |
+          set -euo pipefail
+          dest="${RUNNER_TEMP}/mac-ota-recovery"
+          mkdir -p "${dest}"
+          gh run download '${{ inputs.source_run_id }}' \
+            --repo '${{ github.repository }}' \
+            --name 'mac-ota-enterprise-${{ inputs.version }}' \
+            --dir "${dest}"
+          latest="$(find "${dest}" -type f -name latest-mac.yml -print -quit)"
+          test -n "${latest}"
+          echo "XCAGI_MAC_ARTIFACT_DIR=$(dirname "${latest}")" >> "${GITHUB_ENV}"
+
+      - name: Publish and verify download center metadata plus changelog
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x scripts/package/publish-macos-download-center.sh
+          scripts/package/publish-macos-download-center.sh \
+            '${{ inputs.version }}' \
+            '${{ inputs.release_git_sha }}' \
+            "${XCAGI_MAC_ARTIFACT_DIR}"

@@ -181,7 +181,7 @@ jobs:
                    --exclude='*' \
                    -e "ssh ${SSH_OPTS[*]}" "$src_dir/" "root@${HOST}:$dest/"; then
                 if ssh "${SSH_OPTS[@]}" "root@${HOST}" \
-                    "test -f '$dest/latest-mac.yml' && test -s '$dest/${dmg_name}' && test -s '$dest/${zip_name}'"; then
+                    "test -f '$dest/latest-mac.yml' && test -s '$dest/${dmg_name}' && test -s '$dest/${zip_name}' && chmod a+rx '$dest'"; then
                   echo "[publish] verified: ${dest}"
                   return 0
                 fi
@@ -215,3 +215,18 @@ jobs:
           grep -Eq "^releaseDate: ['\"]?[0-9]{4}-[0-9]{2}-[0-9]{2}T" "$tmp"
           grep -Eq '^signature: ed25519:[A-Za-z0-9+/=]+$' "$tmp"
           echo "Public macOS OTA feed verified for ${GITHUB_SHA}"
+
+      - name: Publish download center metadata and changelog
+        working-directory: FHD
+        shell: bash
+        env:
+          DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
+          FHD_PUSH_HOST: ${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}
+        run: |
+          set -euo pipefail
+          v="${{ github.event.inputs.version }}"
+          chmod +x scripts/package/publish-macos-download-center.sh
+          scripts/package/publish-macos-download-center.sh \
+            "$v" \
+            "${GITHUB_SHA}" \
+            "${GITHUB_WORKSPACE}/FHD/release/xcagi-v${v}/enterprise"
