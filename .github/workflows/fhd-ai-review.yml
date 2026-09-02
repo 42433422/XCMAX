@@ -49,7 +49,7 @@ jobs:
       XCAGI_LLM_ENDPOINT: ${{ secrets.XCAGI_LLM_ENDPOINT }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # 审查脚本通过 GitHub API 获取 PR diff，不需要下载整个大仓历史。
           fetch-depth: 1

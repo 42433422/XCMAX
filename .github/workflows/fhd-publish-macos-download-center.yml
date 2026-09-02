@@ -38,7 +38,7 @@ jobs:
       DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
       FHD_PUSH_HOST: ${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Validate source run and inputs
         working-directory: .

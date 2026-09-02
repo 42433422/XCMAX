@@ -24,7 +24,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # 当前树检查不需要下载全部历史；PR 的 base 提交在下方按 SHA 精确拉取。
           # 仓库历史较大时 fetch-depth: 0 会耗尽本任务的 5 分钟限额。

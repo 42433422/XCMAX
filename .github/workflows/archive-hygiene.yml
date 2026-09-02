@@ -36,7 +36,7 @@ jobs:
     name: Forbid _archive in workspace
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Verify _archive not in tree
         run: bash scripts/verify_no_archive_in_tree.sh
 
@@ -48,7 +48,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # 完整历史，方便审计"是哪次 commit 引入的敏感文件"
           fetch-depth: 0

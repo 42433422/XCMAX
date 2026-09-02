@@ -94,7 +94,7 @@ jobs:
       XCAGI_WINDOWS_SIGNING_PROVIDER: sslcom
       XCAGI_WINDOWS_PUBLISHER_NAME: ${{ vars.XCAGI_WINDOWS_PUBLISHER_NAME }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Download shared vue-dist (single frontend build)
         if: ${{ inputs.frontend_run_id != '' }}
         uses: actions/download-artifact@v4
@@ -218,7 +218,7 @@ jobs:
       CSC_LINK: ${{ secrets.CSC_LINK }}
       CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Download shared vue-dist (single frontend build)
         if: ${{ inputs.frontend_run_id != '' }}
         uses: actions/download-artifact@v4
@@ -369,7 +369,7 @@ jobs:
       needs.macos.result == 'success'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v4
         with:
           pattern: xcagi-desktop-*
@@ -522,7 +522,7 @@ jobs:
       (inputs.verify_only == true || needs.generate-manifest.result == 'success')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
       - uses: actions/download-artifact@v4
@@ -630,7 +630,7 @@ jobs:
       (inputs.verify_only == true || needs.generate-manifest.result == 'success')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v4
         if: ${{ inputs.verify_only != true }}
         with:
@@ -695,7 +695,7 @@ jobs:
     env:
       XCAGI_WINDOWS_PUBLISHER_NAME: ${{ vars.XCAGI_WINDOWS_PUBLISHER_NAME }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Verify published Windows Authenticode signature
         shell: pwsh
         run: |

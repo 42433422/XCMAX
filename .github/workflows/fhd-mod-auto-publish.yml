@@ -44,7 +44,7 @@ jobs:
       MODSTORE_AUTO_PUBLISH_TOKEN: ${{ secrets.MODSTORE_AUTO_PUBLISH_TOKEN }}
       MODSTORE_BASE_URL: ${{ vars.MODSTORE_BASE_URL || 'https://xiu-ci.com' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v5

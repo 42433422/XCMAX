@@ -76,7 +76,7 @@ jobs:
       MODSTORE_SLO_REPORT_PATH: ${{ github.workspace }}/FHD/metrics/slo-latest.json
       EVOLUTION_PROPOSAL_PATH: ${{ github.workspace }}/.evolution-proposal.json
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 2
           token: ${{ secrets.CI_COMMIT_TOKEN || secrets.GITHUB_TOKEN }}
@@ -239,7 +239,7 @@ jobs:
       MODSTORE_CATALOG_PACKAGES_PATH: 成都修茈科技有限公司/MODstore_deploy/modstore_server/catalog_data/packages.json
       MODSTORE_CATALOG_FILES_ROOT: 成都修茈科技有限公司/MODstore_deploy/modstore_server/catalog_data/files
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           token: ${{ secrets.CI_COMMIT_TOKEN || secrets.GITHUB_TOKEN }}

@@ -97,7 +97,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Checkout exact deployed source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ steps.source.outputs.merge_sha }}
           fetch-depth: 0
