@@ -13,7 +13,8 @@ export interface ImRealtimeDeps {
   scrollToBottom: () => void
   loadConversations: () => Promise<void>
   playIncoming: (body: string) => unknown
-  isCustomerEnterpriseCs: (id?: number) => boolean
+  /** 企业客服会话判定（来自 useEnterpriseCsBridge 返回值，拆分前为闭包引用） */
+  isCustomerEnterpriseCs: (id?: number | null) => boolean
 }
 
 /** ImMessengerView 的 WebSocket / 实时消息处理逻辑（与拆分前逐字一致） */

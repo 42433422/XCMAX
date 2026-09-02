@@ -125,7 +125,6 @@ import { useCustomerServiceAutomation } from '@/composables/messenger/useCustome
 import { useEnterpriseCsBridge } from '@/composables/messenger/useEnterpriseCsBridge'
 import { useSuperEmployeeDispatch } from '@/composables/messenger/useSuperEmployeeDispatch'
 import { useImRealtime } from './im-messenger/useImRealtime'
-import { useImConversationActions } from './im-messenger/useImConversationActions'
 import {
   CODEX_SUPER_EMPLOYEE_ENTRY,
   formatTime,
@@ -275,34 +274,6 @@ const {
   restoreOverlappingAssistantFloat,
 })
 
-// 会话选择与发送动作拆分至 ./im-messenger/useImConversationActions.ts（行为与拆分前一致）
-const { selectConversation, onSend } = useImConversationActions({
-  localUserId,
-  conversations,
-  activeConversationId,
-  activeSystemEntry,
-  activeExternalEntry,
-  activeGroupChat,
-  messages,
-  draft,
-  busy,
-  hasMoreHistory,
-  dutyEmployeeDraft,
-  isCustomerEnterpriseCs,
-  refreshEnterpriseCsThread,
-  startEnterpriseCsPolling,
-  stopEnterpriseCsPolling,
-  refreshCsInbox,
-  startCsInboxPolling,
-  stopCsInboxPolling,
-  restoreOverlappingAssistantFloat,
-  stopCodexPolling,
-  stopCodexTypewriter,
-  scrollToBottom,
-  loadConversations,
-  playOutgoing,
-})
-
 const {
   existingDedicatedConversation,
   externalChannelEntries,
@@ -343,7 +314,6 @@ const imChatDomRefs = {
 
 // WebSocket / 实时消息处理拆分至 ./im-messenger/useImRealtime.ts（行为与拆分前一致）
 const { applyIncomingMessage, applyReadState, connectWs, disconnectWs } = useImRealtime({
-  isCustomerEnterpriseCs,
   localUserId,
   conversations,
   activeConversationId,
@@ -353,6 +323,7 @@ const { applyIncomingMessage, applyReadState, connectWs, disconnectWs } = useImR
   scrollToBottom,
   loadConversations,
   playIncoming,
+  isCustomerEnterpriseCs,
 })
 
 let offSyncMessage: (() => void) | null = null
@@ -426,6 +397,46 @@ const { activeCsConversation, csAutomationBusy, onChangeCsMode } = useCustomerSe
   reloadConversations: loadConversations,
 })
 
+async function selectConversation(id: number): Promise<void> {
+  if (!localUserId.value) return
+  stopEnterpriseCsPolling()
+  stopCsInboxPolling()
+  restoreOverlappingAssistantFloat()
+  stopCodexPolling()
+  stopCodexTypewriter(true)
+  dutyEmployeeDraft.value = ''
+  activeExternalEntry.value = null
+  activeSystemEntry.value = null
+  activeGroupChat.value = false
+  activeConversationId.value = id
+  busy.value = true
+  try {
+    const conv = conversations.value.find((c) => c.id === id)
+    const isCs = Boolean(conv?.is_cs_inbox)
+    const isCustomerCs = isCustomerEnterpriseCs(id)
+    if (isCustomerCs) {
+      await refreshEnterpriseCsThread(false)
+    } else {
+      messages.value = isCs ? await fetchCsInboxMessages(id) : await fetchImMessages(id, { limit: 50 })
+    }
+    hasMoreHistory.value = !isCs && !isCustomerCs && messages.value.length >= 50
+    await nextTick()
+    scrollToBottom()
+    if (!isCs && !isCustomerCs) {
+      const last = messages.value[messages.value.length - 1]
+      if (last) {
+        await markImRead(id, last.id)
+      }
+    }
+    if (isCustomerCs) startEnterpriseCsPolling()
+    else if (isCs) startCsInboxPolling()
+    else await loadConversations()
+  } catch (error) {
+    showAppToast(error instanceof Error ? error.message : '加载消息失败', 'error')
+  } finally {
+    busy.value = false
+  }
+}
 
 async function loadOlderMessages(): Promise<void> {
   const id = activeConversationId.value
@@ -448,6 +459,40 @@ async function loadOlderMessages(): Promise<void> {
 function scrollToBottom(): void {
   const el = scrollEl.value
   if (el) el.scrollTop = el.scrollHeight
+}
+
+async function onSend(): Promise<void> {
+  const id = activeConversationId.value
+  const text = draft.value.trim()
+  if (!id || !text || !localUserId.value) return
+  const conv = conversations.value.find((c) => c.id === id)
+  const isCs = Boolean(conv?.is_cs_inbox)
+  const isCustomerCs = isCustomerEnterpriseCs(id)
+  busy.value = true
+  try {
+    let msg: ImMessage
+    if (isCustomerCs) {
+      const sent = await sendEnterpriseCsMessage(text)
+      msg = sent.message
+      if (conv) {
+        Object.assign(conv, sent.state, { remote_conversation_id: sent.conversation_id })
+      }
+    } else {
+      msg = isCs ? await replyCsInbox(id, text) : await sendImMessage(id, text)
+    }
+    messages.value.push(msg)
+    draft.value = ''
+    playOutgoing()
+    await nextTick()
+    scrollToBottom()
+    if (isCustomerCs) await refreshEnterpriseCsThread()
+    else if (isCs) await refreshCsInbox()
+    else await loadConversations()
+  } catch (error) {
+    showAppToast(error instanceof Error ? error.message : '发送失败', 'error')
+  } finally {
+    busy.value = false
+  }
 }
 
 onMounted(async () => {
