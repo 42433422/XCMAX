@@ -17,6 +17,8 @@ jobs:
           python-version: "3.11"
       - name: Alembic single-head / no-dangling check
         run: python3 scripts/guard_alembic_single_head.py
+      - name: Alembic released-revision ratchet (shipped revisions are immutable)
+        run: python3 scripts/guard_alembic_released_revisions.py
 
   ssot-parity-sqlite:
     runs-on: ubuntu-latest
