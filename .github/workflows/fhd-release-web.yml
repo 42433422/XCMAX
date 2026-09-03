@@ -20,6 +20,8 @@ on:
 permissions:
   contents: read
   packages: write
+  # 跨 run 下载 xcagi-vue-dist artifact（run-id + download-artifact@v4）必需 actions: read
+  actions: read
 
 env:
   REGISTRY: ghcr.io
@@ -90,8 +92,10 @@ jobs:
       - name: Build and push backend
         uses: docker/build-push-action@v6
         with:
-          context: FHD/XCAGI
-          file: FHD/XCAGI/Dockerfile
+          # 生产镜像统一走 FHD/Dockerfile（server-api 锁定依赖）。此前 context=FHD/XCAGI
+          # 会把含 `-e ..` 本地 editable 引用的 XCAGI/requirements.txt 带进构建并失败。
+          context: FHD
+          file: FHD/Dockerfile
           push: true
           tags: |
             ${{ env.IMAGE_PREFIX }}/backend:${{ github.event.inputs.version || github.ref_name }}

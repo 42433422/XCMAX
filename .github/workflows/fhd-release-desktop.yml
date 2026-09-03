@@ -29,6 +29,8 @@ on:
 
 permissions:
   contents: write
+  # 跨 run 下载 xcagi-vue-dist artifact（run-id + download-artifact@v4）必需 actions: read
+  actions: read
 
 defaults:
   run:
