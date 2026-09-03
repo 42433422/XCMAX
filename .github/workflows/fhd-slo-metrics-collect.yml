@@ -43,6 +43,7 @@ jobs:
       - name: Collect SLO from Prometheus
         env:
           PROMETHEUS_URL: ${{ secrets.STAGING_PROMETHEUS_URL || 'http://127.0.0.1:9091' }}
+          PROMETHEUS_TOKEN: ${{ secrets.STAGING_PROMETHEUS_TOKEN || '' }}
         run: |
           WINDOW="${{ github.event.inputs.window || '30d' }}"
           python3 scripts/observability/collect_slo_metrics.py --window "$WINDOW" || {
