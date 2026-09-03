@@ -92,4 +92,35 @@ describe('updater install rollback contract', () => {
     )
     expect(cleanup).toHaveBeenCalledOnce()
   })
+
+  it('stops the backend via prepareQuit before quitAndInstall', async () => {
+    const updater = await markDownloaded('1.0.0.1')
+    const callOrder: string[] = []
+    const prepareQuit = vi.fn(async () => {
+      callOrder.push('prepareQuit')
+    })
+    mocks.autoUpdater.quitAndInstall.mockImplementationOnce(() => {
+      callOrder.push('quitAndInstall')
+    })
+
+    await updater.installUpdate(undefined, undefined, prepareQuit)
+
+    // 原生 quitAndInstall 的 terminate 路径下 will-quit 异步关闭后端不可靠，
+    // 必须在交出退出控制权前完成后端停止。
+    expect(callOrder).toEqual(['prepareQuit', 'quitAndInstall'])
+  })
+
+  it('blocks quitAndInstall when prepareQuit fails and runs cleanup', async () => {
+    const updater = await markDownloaded('1.0.0.1')
+    const cleanup = vi.fn(async () => undefined)
+    const prepareQuit = vi.fn(async () => {
+      throw new Error('backend stop failed')
+    })
+
+    await expect(
+      updater.installUpdate(undefined, cleanup, prepareQuit),
+    ).rejects.toThrow('backend stop failed')
+    expect(cleanup).toHaveBeenCalledOnce()
+    expect(mocks.autoUpdater.quitAndInstall).not.toHaveBeenCalled()
+  })
 })

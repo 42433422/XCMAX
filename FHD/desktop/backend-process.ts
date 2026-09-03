@@ -94,6 +94,7 @@ export const checkForceUpgrade = createForceUpgradeHandler({
   writeLog: writeBackendLog,
   beforeInstall: runBackendMigrationWithRollback,
   onInstallFailed: cancelPreparedRollback,
+  prepareQuit: stopBackend,
 })
 
 export function packagedBackendHealthTimeoutMs(): number {
