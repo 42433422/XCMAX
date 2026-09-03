@@ -1,0 +1,67 @@
+{
+  "generated_at": "2026-09-03T06:06:02Z",
+  "prometheus_url": "https://xiu-ci.com/prom-metrics",
+  "window": "30d",
+  "readings": {
+    "SLO-API-01": {
+      "promql": "1 - ((sum(rate(api_requests_total{status=~\"5..\"}[30d])) or vector(0)) / clamp_min(sum(rate(api_requests_total[30d])),1))",
+      "reading": "1",
+      "reading_numeric": 1.0,
+      "meets_target": true
+    },
+    "SLO-API-02": {
+      "promql": "histogram_quantile(0.95, sum by (le) (rate(api_request_duration_seconds_bucket{endpoint=\"/api/auth/login\"}[30d]))) * 1000",
+      "reading": null,
+      "reading_numeric": null,
+      "meets_target": null
+    },
+    "SLO-API-03": {
+      "promql": "(sum(rate(api_requests_total{status=~\"5..\"}[30d])) or vector(0)) / sum(rate(api_requests_total[30d]))",
+      "reading": "0",
+      "reading_numeric": 0.0,
+      "meets_target": true
+    },
+    "SLO-AI-01": {
+      "promql": "histogram_quantile(0.95, sum by (le) (rate(chat_stream_first_byte_seconds_bucket[30d]))) * 1000",
+      "reading": null,
+      "reading_numeric": null,
+      "meets_target": null
+    },
+    "SLO-BUS-01": {
+      "promql": "1 - (sum(rate(neurobus_events_dead_lettered_total[30d])) + sum(rate(neurobus_events_lost_total[30d]))) / clamp_min(sum(rate(neurobus_events_published_total[30d])),1)",
+      "reading": "1",
+      "reading_numeric": 1.0,
+      "meets_target": true
+    },
+    "SLO-BIZ-01": {
+      "promql": "histogram_quantile(0.95, sum by (le) (rate(customer_op_duration_seconds_bucket[30d]))) * 1000",
+      "reading": null,
+      "reading_numeric": null,
+      "meets_target": null
+    },
+    "SLO-BIZ-02": {
+      "promql": "(sum(rate(customer_op_total{status=\"error\"}[30d])) or vector(0)) / clamp_min(sum(rate(customer_op_total[30d])),1)",
+      "reading": null,
+      "reading_numeric": null,
+      "meets_target": null
+    },
+    "SLO-BIZ-03": {
+      "promql": "histogram_quantile(0.95, sum by (le) (rate(doc_recognition_duration_seconds_bucket[30d]))) * 1000",
+      "reading": null,
+      "reading_numeric": null,
+      "meets_target": null
+    },
+    "SLO-BIZ-04": {
+      "promql": "histogram_quantile(0.95, sum by (le) (rate(export_task_duration_seconds_bucket[30d]))) * 1000",
+      "reading": null,
+      "reading_numeric": null,
+      "meets_target": null
+    },
+    "SLO-BIZ-05": {
+      "promql": "1 - (sum(rate(mod_install_total{status=\"error\"}[30d])) or vector(0)) / clamp_min(sum(rate(mod_install_total[30d])),1)",
+      "reading": null,
+      "reading_numeric": null,
+      "meets_target": null
+    }
+  }
+}
