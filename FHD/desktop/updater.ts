@@ -526,6 +526,7 @@ export async function verifyLatestMetadataSignature(): Promise<void> {
 export async function installUpdate(
   beforeInstall?: (toVersion: string) => Promise<void>,
   onInstallFailed?: () => Promise<void> | void,
+  prepareQuit?: () => Promise<void> | void,
 ): Promise<void> {
   if (!updateDownloaded) {
     throw new Error('尚未下载更新包，请先在更新面板确认下载')
@@ -538,6 +539,13 @@ export async function installUpdate(
     }
     stageUpdateInstallReceipt({ targetVersion: downloadedVersion || 'unknown', targetBuildSha: downloadedBuildSha, channel: process.env.XCAGI_UPDATE_CHANNEL })
     appendUpdaterEvent('install_start', {})
+    // macOS 原生 quitAndInstall 经 [NSApp terminate] 触发退出，will-quit 中的
+    // 异步后端优雅关闭（preventDefault + await stopBackend）在该路径下不可靠，
+    // 会致 ShipIt 无限等待应用退出（2026-09-03 实测：install_start 后进程残留一整夜，
+    // 更新永远无法完成）。先在 JS 层同步等待后端停止，再交出退出控制权。
+    if (prepareQuit) {
+      await prepareQuit()
+    }
     autoUpdater.quitAndInstall(false, true)
   } catch (error) {
     discardPendingUpdateInstallReceipt()

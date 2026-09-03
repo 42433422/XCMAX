@@ -5,7 +5,7 @@ import { networkInterfaces } from 'node:os'
 import { APP_NAME, DEFAULT_PORT, readPackagedAppVersion } from './desktop-config'
 import { desktopRuntime } from './runtime-state'
 import { broadcastToRenderer } from './window-manager'
-import { runBackendMigrationWithRollback, writeBackendLog } from './backend-process'
+import { runBackendMigrationWithRollback, stopBackend, writeBackendLog } from './backend-process'
 import {
   captureFullScreenScreenshot,
   consumeReleaseNotes,
@@ -88,7 +88,8 @@ export function registerDesktopIpcHandlers(): void {
   })
   ipcMain.handle('xcagi:install-update', () => {
     assertSelfUpdateInstallSupported()
-    return installUpdate(runBackendMigrationWithRollback, cancelPreparedRollback)
+    // prepareQuit：quitAndInstall 前先同步停掉后端，确保 macOS 原生 terminate 路径下应用能真正退出
+    return installUpdate(runBackendMigrationWithRollback, cancelPreparedRollback, stopBackend)
   })
   ipcMain.handle('xcagi:set-badge', (_event, count: number) => {
     const n = Math.max(0, Math.floor(Number(count) || 0))
