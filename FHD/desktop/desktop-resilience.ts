@@ -11,6 +11,7 @@ import {
 type WriteLog = (line: string) => void
 type BeforeInstall = NonNullable<Parameters<typeof installUpdate>[0]>
 type OnInstallFailed = NonNullable<Parameters<typeof installUpdate>[1]>
+type PrepareQuit = NonNullable<Parameters<typeof installUpdate>[2]>
 
 interface CrashReportingOptions {
   port: number
@@ -22,6 +23,7 @@ interface ForceUpgradeOptions {
   writeLog: WriteLog
   beforeInstall: BeforeInstall
   onInstallFailed: OnInstallFailed
+  prepareQuit: PrepareQuit
 }
 
 async function uploadCrashReports(options: CrashReportingOptions): Promise<void> {
@@ -152,7 +154,7 @@ export function createForceUpgradeHandler(options: ForceUpgradeOptions): () => P
       options.writeLog('[force-upgrade] 用户确认强制升级，开始下载…\n')
       await downloadUpdate()
       options.writeLog('[force-upgrade] 下载完成，准备安装…\n')
-      await installUpdate(options.beforeInstall, options.onInstallFailed)
+      await installUpdate(options.beforeInstall, options.onInstallFailed, options.prepareQuit)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       options.writeLog(`[force-upgrade] 强制升级失败: ${message}\n`)

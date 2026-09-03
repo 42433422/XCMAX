@@ -39,6 +39,7 @@ describe('desktop resilience force-upgrade handler', () => {
       writeLog: vi.fn(),
       beforeInstall: vi.fn(),
       onInstallFailed: vi.fn(),
+      prepareQuit: vi.fn(),
     })
 
     await handler()
@@ -50,17 +51,19 @@ describe('desktop resilience force-upgrade handler', () => {
   it('downloads and installs after explicit confirmation', async () => {
     const beforeInstall = vi.fn()
     const onInstallFailed = vi.fn()
+    const prepareQuit = vi.fn()
     const handler = createForceUpgradeHandler({
       appName: 'XCAGI',
       writeLog: vi.fn(),
       beforeInstall,
       onInstallFailed,
+      prepareQuit,
     })
 
     await handler()
 
     expect(mocks.downloadUpdate).toHaveBeenCalledOnce()
-    expect(mocks.installUpdate).toHaveBeenCalledWith(beforeInstall, onInstallFailed)
+    expect(mocks.installUpdate).toHaveBeenCalledWith(beforeInstall, onInstallFailed, prepareQuit)
   })
 
   it('quits without downloading when the user rejects the blocking upgrade', async () => {
@@ -70,6 +73,7 @@ describe('desktop resilience force-upgrade handler', () => {
       writeLog: vi.fn(),
       beforeInstall: vi.fn(),
       onInstallFailed: vi.fn(),
+      prepareQuit: vi.fn(),
     })
 
     await handler()
