@@ -142,6 +142,32 @@ def _resolve_fallback_overrides(exclude_provider: str = "") -> list[dict[str, An
     return out
 
 
+def _meter_direct_completion(raw: dict[str, Any], *, cand: dict[str, Any]) -> None:
+    """统一 Agent Runtime 计量接缝：mod 直连通道 LLM 用量入账（best-effort）。
+
+    直连 httpx 请求绕过宿主 ``chat_completion``，必须在此显式计量；
+    宿主通道（``call_llm_api`` 别名）内部已计量，无需重复。
+    """
+    try:
+        from app.application.agent_runtime.pipeline import completion_usage, meter_llm_call
+
+        usage = completion_usage(raw)
+        if not usage.get("total_tokens"):
+            return
+        meter_llm_call(
+            source="employee_mod_llm",
+            model=str(cand.get("model") or ""),
+            usage=usage,
+            provider=str(cand.get("provider") or ""),
+            metadata={
+                "channel": "mod_direct",
+                "vlm_preferred": bool(cand.get("vlm_preferred")),
+            },
+        )
+    except RECOVERABLE_ERRORS:
+        logger.debug("mod direct LLM metering skipped", exc_info=True)
+
+
 async def _call_openai_compatible_chat(
     messages: list[dict[str, Any]],
     *,
@@ -292,6 +318,7 @@ async def mod_employee_complete(
         if raw:
             parsed = _parse_chat_completions_response(raw)
             if parsed.get("success"):
+                _meter_direct_completion(raw, cand=cand)
                 if str(cand.get("provider") or "") != primary_provider or cand.get("vlm_preferred"):
                     # 不从含 api_key 的 dict 取值写日志，避免 clear-text-logging
                     logger.warning(

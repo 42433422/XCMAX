@@ -71,7 +71,10 @@ class __LLMWorkflowPlannerPart01MixinPart01Mixin:
                 summary = rag.format_for_prompt(
                     user_id=user_id, query_text=message, hits=hits, max_hits=4
                 )
-                context["user_memory_rag"] = {"summary": summary}
+                context["user_memory_rag"] = {
+                    "summary": summary,
+                    "hits": [hit for hit in hits if isinstance(hit, dict)],
+                }
         except ImportError:
             _facade().logger.debug("用户记忆 RAG 服务不可用（不阻断主流程）")
         except _facade().RECOVERABLE_ERRORS as e:
@@ -102,6 +105,18 @@ class __LLMWorkflowPlannerPart01MixinPart01Mixin:
             planned = self._plan_with_react_multiagent(
                 plan_id, user_id, message, registry_for_plan, context
             )
+        # 统一 Agent Runtime 接缝：把 pre-plan 记忆召回落上计划元数据，
+        # 供编排器转成 run.memory_references（主链路可观测闭合）。
+        recall_meta = {
+            key: dict(context[key])
+            for key in ("user_memory_rag", "memory_v2")
+            if isinstance(context.get(key), dict)
+        }
+        if recall_meta and planned is not None:
+            try:
+                planned.metadata["memory_recall"] = recall_meta
+            except (AttributeError, TypeError):
+                _facade().logger.debug("plan metadata 不支持 memory_recall 附加", exc_info=True)
         return _facade().cast(
             "PlanGraph",
             finalize_planned_graph(

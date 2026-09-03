@@ -183,6 +183,7 @@ class __AgentOrchestratorPart01MixinPart01Mixin:
         self._repo.save(run)
         context = dict(runtime_context or {})
         context.setdefault("message", run.message)
+        self._recall_knowledge_for_run(run, context=context)
         multimodal_plan = build_multimodal_autonomous_plan(
             user_id=run.user_id, message=run.message, runtime_context=context
         )
@@ -208,14 +209,138 @@ class __AgentOrchestratorPart01MixinPart01Mixin:
         )
         return plan
 
+    def _recall_knowledge_for_run(
+        self, run: _facade().AgentRun, *, context: dict[str, _facade().Any]
+    ) -> None:
+        """统一 Agent Runtime 接缝：pre-plan 知识库 RAG 召回（best-effort，开关控制）。
+
+        召回结果以 RetrievalCall 上 run 账本，并注入 planner context（``knowledge_rag``）。
+        dataset_id 取自 runtime_context / context（当前无全局知识索引，按需指定）。
+        """
+        try:
+            from app.application.agent_runtime.pipeline import (
+                agent_runtime_hooks_enabled,
+                recall_knowledge_context,
+            )
+
+            if not agent_runtime_hooks_enabled():
+                return
+            dataset_id = str(
+                (run.metadata.get("runtime_context") or {}).get("dataset_id")
+                or context.get("dataset_id")
+                or ""
+            ).strip()
+            call = recall_knowledge_context(query=run.message, dataset_id=dataset_id)
+            if str(call.get("status") or "") == "skipped":
+                return
+            from app.application.agent_orchestrator.run_models import retrieval_call_from_dict
+
+            retrieval_call = retrieval_call_from_dict(call)
+            if not retrieval_call.query:
+                retrieval_call.query = run.message
+            run.retrieval_calls.append(retrieval_call)
+            context["knowledge_rag"] = {
+                "dataset_id": dataset_id,
+                "chunks": call.get("chunks") or [],
+                "citations": call.get("citations") or [],
+            }
+            run.add_event(
+                "runtime.knowledge_recalled",
+                "知识库 RAG 召回完成",
+                {
+                    "call_id": retrieval_call.call_id,
+                    "status": retrieval_call.status,
+                    "chunk_count": len(retrieval_call.chunks),
+                },
+            )
+        except _facade().RECOVERABLE_ERRORS:
+            _facade().logger.debug("knowledge recall hook skipped", exc_info=True)
+
+    @staticmethod
+    def _attach_memory_recall(run: _facade().AgentRun, recall_meta: _facade().Any) -> None:
+        """统一 Agent Runtime 接缝：planner pre-plan 记忆召回落 run.memory_references。"""
+        if not isinstance(recall_meta, dict) or not recall_meta:
+            return
+        from app.application.agent_orchestrator.run_models import memory_reference_from_dict
+
+        for key in ("user_memory_rag", "memory_v2"):
+            payload = recall_meta.get(key)
+            if not isinstance(payload, dict):
+                continue
+            run.memory_references.append(
+                memory_reference_from_dict(
+                    {
+                        "query": run.message,
+                        "memory_type": "user_memory" if key == "user_memory_rag" else "memory_v2",
+                        "source": key,
+                        "hits": payload.get("hits") or [],
+                        "summary": str(payload.get("summary") or "")[:2000],
+                        "status": "completed",
+                        "metadata": {"origin": "planner.pre_plan_recall"},
+                    }
+                )
+            )
+        run.add_event(
+            "runtime.memory_recalled",
+            "pre-plan 用户记忆召回已上账",
+            {"reference_count": len(run.memory_references)},
+        )
+
+    def _remember_run_outcome_for(self, run: _facade().AgentRun) -> None:
+        """统一 Agent Runtime 接缝：run 终态记忆回写（best-effort，开关控制）。"""
+        try:
+            from app.application.agent_runtime.pipeline import (
+                agent_runtime_hooks_enabled,
+                remember_run_outcome,
+            )
+
+            if not agent_runtime_hooks_enabled():
+                return
+            ctx = dict(run.metadata.get("runtime_context") or {})
+            summary = self._run_outcome_summary(run)
+            remembered = remember_run_outcome(
+                user_id=run.user_id,
+                task=run.message,
+                summary=summary,
+                success=str(run.status) == "completed",
+                session_id=str(ctx.get("session_id") or ctx.get("conversation_id") or ""),
+                metadata={"run_id": run.run_id, "intent": run.intent, "status": str(run.status)},
+            )
+            run.add_event(
+                "runtime.memory_writeback",
+                "run 终态记忆回写完成" if remembered else "run 终态记忆回写跳过",
+                {"remembered": bool(remembered), "status": str(run.status)},
+            )
+        except _facade().RECOVERABLE_ERRORS:
+            _facade().logger.debug("memory writeback hook skipped", exc_info=True)
+
+    @staticmethod
+    def _run_outcome_summary(run: _facade().AgentRun) -> str:
+        """终态摘要：优先取工具输出的可读字段，退化为错误/状态描述。"""
+        outputs = (
+            run.final_output.get("node_outputs") if isinstance(run.final_output, dict) else None
+        )
+        if isinstance(outputs, dict):
+            for value in outputs.values():
+                if isinstance(value, dict):
+                    for key in ("summary", "message", "output", "result", "preview"):
+                        text = str(value.get(key) or "").strip()
+                        if text:
+                            return text[:600]
+                elif isinstance(value, str) and value.strip():
+                    return value.strip()[:600]
+        return str(run.error or run.status or "")[:600]
+
     def _apply_plan(self, run: _facade().AgentRun, plan: _facade().PlanGraph) -> None:
         run.plan_id = plan.plan_id
         run.intent = plan.intent
+        plan_metadata = dict(plan.metadata or {})
         run.metadata["plan"] = {
             "todo_steps": list(plan.todo_steps or []),
             "risk_level": plan.risk_level,
-            "metadata": dict(plan.metadata or {}),
+            "metadata": plan_metadata,
         }
+        self._attach_memory_recall(run, plan_metadata.get("memory_recall"))
         run.steps = [self._step_from_node(node) for node in plan.nodes]
         self._apply_repair_policy(run, dict(plan.metadata or {}))
         self._attach_artifacts_from_payload(
@@ -334,6 +459,7 @@ class __AgentOrchestratorPart01MixinPart01Mixin:
                     "repair_count": run.metadata.get("repair_count", 0),
                 }
                 self._append_llm_summary_to_final_output(run)
+                self._remember_run_outcome_for(run)
                 return
             completed_node_ids.add(step.node_id)
         run.status = "completed"
@@ -348,6 +474,7 @@ class __AgentOrchestratorPart01MixinPart01Mixin:
             "repair_count": run.metadata.get("repair_count", 0),
         }
         self._append_llm_summary_to_final_output(run)
+        self._remember_run_outcome_for(run)
         run.add_event("run.completed", "Agent run 执行完成", run.final_output)
 
     @staticmethod

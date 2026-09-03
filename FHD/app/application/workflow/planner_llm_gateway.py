@@ -11,6 +11,34 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
+def _meter_planner_completion(payload: dict[str, Any] | None, *, model: str) -> None:
+    """统一 Agent Runtime 计量接缝：planner LLM 用量入账（best-effort，不受 hooks 开关限制）。"""
+    if not isinstance(payload, dict):
+        return
+    try:
+        from app.application.agent_runtime.pipeline import completion_usage, meter_llm_call
+
+        usage = completion_usage(payload)
+        if not usage.get("total_tokens"):
+            return
+        meta = payload.get("_xcagi_billing")
+        provider = ""
+        provider_id = ""
+        if isinstance(meta, dict):
+            provider = str(meta.get("provider") or "")
+            provider_id = str(meta.get("provider_id") or "")
+        meter_llm_call(
+            source="agent_planner",
+            model=str(payload.get("model") or model),
+            usage=usage,
+            provider=provider,
+            provider_id=provider_id,
+            metadata={"channel": "planner_llm_gateway"},
+        )
+    except RECOVERABLE_ERRORS:
+        logger.debug("planner LLM metering skipped", exc_info=True)
+
+
 def request_planner_completion(
     *,
     ai_service: Any,
@@ -35,7 +63,11 @@ def request_planner_completion(
                 "max_tokens": max_tokens,
             },
         )
-        return None if response.status_code >= 400 else cast("dict[str, Any]", response.json())
+        if response.status_code >= 400:
+            return None
+        payload = cast("dict[str, Any]", response.json())
+        _meter_planner_completion(payload, model=model)
+        return payload
 
     session_id = str(
         (context or {}).get("session_id") or (context or {}).get("conversation_id") or ""
@@ -44,7 +76,7 @@ def request_planner_completion(
         try:
             session_adapter = ModstorePlatformAdapter.from_session(session_id=session_id)
             if session_adapter.is_configured:
-                return cast(
+                result = cast(
                     "dict[str, Any] | None",
                     session_adapter.chat_completion_sync(
                         messages=messages,
@@ -52,6 +84,8 @@ def request_planner_completion(
                         max_tokens=max_tokens,
                     ),
                 )
+                _meter_planner_completion(result, model="")
+                return result
         except RECOVERABLE_ERRORS as exc:
             logger.warning("从 Session 构建规划市场适配器失败: %s", exc)
 
@@ -59,7 +93,7 @@ def request_planner_completion(
     if configured_adapter is None or not getattr(configured_adapter, "is_configured", False):
         return None
     logger.info("LLM 规划走修茈市场平台通道 (modstore_adapter)")
-    return cast(
+    result = cast(
         "dict[str, Any]",
         configured_adapter.chat_completion_sync(
             messages=messages,
@@ -67,3 +101,5 @@ def request_planner_completion(
             max_tokens=max_tokens,
         ),
     )
+    _meter_planner_completion(result, model="")
+    return result
