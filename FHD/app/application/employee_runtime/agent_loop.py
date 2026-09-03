@@ -245,6 +245,19 @@ def run_employee_agent_loop(
             }
 
         msg = completion.choices[0].message
+        try:
+            # 统一 Agent Runtime 计量接缝：员工多轮循环每轮 LLM 用量入账
+            # （best-effort；计费不受 XCAGI_AGENT_RUNTIME_HOOKS 开关限制）。
+            from app.application.agent_runtime.pipeline import completion_usage, meter_llm_call
+
+            meter_llm_call(
+                source="employee_agent_loop",
+                model=mdl,
+                usage=completion_usage(completion),
+                metadata={"employee_id": employee_id, "round": rounds},
+            )
+        except RECOVERABLE_ERRORS:
+            logger.debug("employee agent loop metering skipped", exc_info=True)
         tcs = getattr(msg, "tool_calls", None) or []
         messages.append(
             {
