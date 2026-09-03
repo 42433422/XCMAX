@@ -16,8 +16,10 @@ ROOT = Path(__file__).resolve().parents[2]
 METRICS_DIR = ROOT / "metrics"
 
 QUERIES = {
+    # 错误率类查询的分子统一 `or vector(0)`：零 5xx（健康态）时 sum(rate(...)) 是空向量，
+    # 否则可用率/错误率会读成 None 而不是 1.0 / 0.0。
     "SLO-API-01": (
-        '1 - (sum(rate(api_requests_total{{status=~"5.."}}[{w}])) '
+        '1 - ((sum(rate(api_requests_total{{status=~"5.."}}[{w}])) or vector(0)) '
         "/ clamp_min(sum(rate(api_requests_total[{w}])),1))"
     ),
     "SLO-API-02": (
@@ -25,7 +27,8 @@ QUERIES = {
         '(rate(api_request_duration_seconds_bucket{{endpoint="/api/auth/login"}}[{w}]))) * 1000'
     ),
     "SLO-API-03": (
-        'sum(rate(api_requests_total{{status=~"5.."}}[{w}])) / sum(rate(api_requests_total[{w}]))'
+        '(sum(rate(api_requests_total{{status=~"5.."}}[{w}])) or vector(0)) '
+        "/ sum(rate(api_requests_total[{w}]))"
     ),
     "SLO-AI-01": (
         "histogram_quantile(0.95, sum by (le) "
@@ -43,7 +46,7 @@ QUERIES = {
         "(rate(customer_op_duration_seconds_bucket[{w}]))) * 1000"
     ),
     "SLO-BIZ-02": (
-        'sum(rate(customer_op_total{{status="error"}}[{w}])) '
+        '(sum(rate(customer_op_total{{status="error"}}[{w}])) or vector(0)) '
         "/ clamp_min(sum(rate(customer_op_total[{w}])),1)"
     ),
     "SLO-BIZ-03": (
@@ -55,7 +58,7 @@ QUERIES = {
         "(rate(export_task_duration_seconds_bucket[{w}]))) * 1000"
     ),
     "SLO-BIZ-05": (
-        '1 - sum(rate(mod_install_total{{status="error"}}[{w}])) '
+        '1 - (sum(rate(mod_install_total{{status="error"}}[{w}])) or vector(0)) '
         "/ clamp_min(sum(rate(mod_install_total[{w}])),1)"
     ),
 }
@@ -75,9 +78,13 @@ TARGETS = {
 }
 
 
-def prom_query(base_url: str, expr: str) -> str | None:
+def prom_query(base_url: str, expr: str, bearer_token: str = "") -> str | None:
     url = f"{base_url.rstrip('/')}/api/v1/query?{urllib.parse.urlencode({'query': expr})}"
-    with urllib.request.urlopen(url, timeout=30) as resp:
+    headers = {}
+    if bearer_token:
+        headers["Authorization"] = f"Bearer {bearer_token}"
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=30) as resp:
         data = json.loads(resp.read().decode())
     results = data.get("data", {}).get("result", [])
     if not results:
@@ -99,6 +106,11 @@ def main() -> int:
     parser.add_argument(
         "--prom-url", default=os.environ.get("PROMETHEUS_URL", "http://127.0.0.1:9091")
     )
+    parser.add_argument(
+        "--prom-token",
+        default=os.environ.get("PROMETHEUS_TOKEN", ""),
+        help="Bearer token for Prometheus 端点（nginx 侧防护）",
+    )
     parser.add_argument("--window", default="30d", choices=["7d", "30d", "15m", "1h"])
     parser.add_argument("--out", default="")
     args = parser.parse_args()
@@ -109,7 +121,7 @@ def main() -> int:
     readings: dict[str, dict] = {}
     for slo_id, template in QUERIES.items():
         expr = template.format(w=args.window)
-        raw = prom_query(args.prom_url, expr)
+        raw = prom_query(args.prom_url, expr, bearer_token=args.prom_token)
         val = float(raw) if raw not in (None, "NaN", "nan") else None
         readings[slo_id] = {
             "promql": expr,
