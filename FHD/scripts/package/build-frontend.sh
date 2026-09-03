@@ -47,4 +47,5 @@ esac
 }
 HASH="$(grep -oE 'index-[A-Za-z0-9_-]+\.js' "$VUE_DIST/index.html" | head -1 || echo 'unknown')"
 echo "[ok] templates/vue-dist ready (${HASH}) -> 桌面端 PyInstaller 内嵌 + Web 端推送共用"
+mkdir -p "$ROOT/build"
 printf '{"sku":"%s","edition":"%s","index":"%s"}\n' "${SKU}" "${EDITION}" "${HASH}" > "$ROOT/build/vue-dist-identity.json"
