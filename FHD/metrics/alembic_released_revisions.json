@@ -1,0 +1,34 @@
+{
+  "FHD/alembic/versions": [
+    "2026_06_22_baseline",
+    "2026_06_25_mobile_outbox",
+    "2026_07_05_employee_run_logs",
+    "2026_07_21_workflow_persistence",
+    "2026_07_24_shipment_etl_fingerprints",
+    "2026_07_26_general_etl_v1",
+    "2026_07_27_etl_folder_batches",
+    "2026_08_10_erp_absorb_orthogonal",
+    "2026_08_12_agent_task_execution",
+    "2026_08_12_agent_task_ssot",
+    "2026_08_13_tutorial_v2",
+    "2026_08_20_repair_products_uom",
+    "2026_08_31_enterprise_cs_ai"
+  ],
+  "成都修茈科技有限公司/MODstore_deploy/alembic/versions": [
+    "20260502_money",
+    "20260505_new_columns",
+    "20260505_new_tables",
+    "20260508_ai_employee_account",
+    "20260512_consolidate_init_db_columns",
+    "20260512_user_studio_assets",
+    "20260526_users_deleted_at",
+    "20260601_llm_billing_settings",
+    "20260601_llm_official_prices",
+    "20260722_autonomy_decision_audit",
+    "20260722_customer_value_receipts",
+    "20260722_outbox_dlq_resolution",
+    "20260723_knowledge_chunk_config",
+    "20260815_account_lifecycle",
+    "20260829_user_login_evidence"
+  ]
+}

@@ -272,6 +272,8 @@ export async function startBackend(): Promise<void> {
       ...sanitizeBackendProxyEnv(process.env),
       XCAGI_DESKTOP_MODE: '1',
       XCAGI_DATA_DIR: app.getPath('userData'),
+      // 备份文件名携带应用版本（xcagi-<version>-<ts>.db）；缺失时 run_fastapi 退回 "unknown"。
+      XCAGI_VERSION: app.getVersion(),
       XCAGI_API_HOST: DESKTOP_BACKEND_BIND_HOST,
       XCAGI_UVICORN_RELOAD: '0',
       XCAGI_GLOBAL_RATE_LIMIT: '0',
