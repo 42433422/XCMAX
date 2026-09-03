@@ -293,7 +293,13 @@ markers = [
 ]
 # Warnings are release-gate failures: resource leaks, stale dependency APIs and
 # un-awaited coroutines must not disappear behind a global ignore policy.
-filterwarnings = ["error"]
+# Targeted third-party ignore: anyio 弃用了自家 anyio.abc.BlockingPortal 别名 shim，
+# 经 fastapi TestClient 导入链在收集期触发（filterwarnings=error 下阻断全部收集）。
+# fastapi/starlette 停用该别名后可移除。
+filterwarnings = [
+    "error",
+    'ignore:The anyio\.abc\.BlockingPortal alias is deprecated',
+]
 
 [tool.coverage.run]
 # 全量 app/ 口径（2026-06-13 技术债清偿）；禁止再用窄 include 凑门禁
