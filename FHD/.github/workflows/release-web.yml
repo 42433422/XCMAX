@@ -41,11 +41,12 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Assert shared vue-dist present (fail closed)
         run: |
-          test -f FHD/templates/vue-dist/index.html || {
+          # defaults.run.working-directory=FHD：相对路径相对 FHD/，artifact 落在 workspace/FHD/templates/vue-dist
+          test -f templates/vue-dist/index.html || {
             echo "::error::Shared vue-dist missing from artifact (frontend_run_id=${{ inputs.frontend_run_id }})."
             exit 1
           }
-          echo "index=$(grep -oE 'index-[A-Za-z0-9_-]+\.js' FHD/templates/vue-dist/index.html | head -1)"
+          echo "index=$(grep -oE 'index-[A-Za-z0-9_-]+\.js' templates/vue-dist/index.html | head -1)"
       - name: Publish shared vue-dist to update 站
         shell: bash
         env:
@@ -60,7 +61,7 @@ jobs:
             echo "::warning::FHD_PUSH_SSH_KEY/SERVER_SSH_KEY missing; skipping vue-dist publish (web keeps current served version)."
             exit 0
           fi
-          bash FHD/scripts/deploy/fhd-push-frontend-dist.sh
+          bash scripts/deploy/fhd-push-frontend-dist.sh
 
   docker:
     runs-on: ubuntu-latest
@@ -76,6 +77,10 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Compute lowercase image prefix
         run: echo "IMAGE_PREFIX=ghcr.io/$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+      - name: Compute lowercase release tag
+        run: |
+          # docker tag 不允许大写；version/tag 形如 FHD/v1.0.0.1 → fhd/v1.0.0.1
+          echo "RELEASE_TAG=$(echo '${{ github.event.inputs.version || github.ref_name }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -91,7 +96,7 @@ jobs:
           file: FHD/Dockerfile
           push: true
           tags: |
-            ${{ env.IMAGE_PREFIX }}/backend:${{ github.event.inputs.version || github.ref_name }}
+            ${{ env.IMAGE_PREFIX }}/backend:${{ env.RELEASE_TAG }}
             ${{ env.IMAGE_PREFIX }}/backend:latest
       - name: Build and push frontend
         uses: docker/build-push-action@v6
@@ -102,5 +107,5 @@ jobs:
           file: FHD/frontend/Dockerfile
           push: true
           tags: |
-            ${{ env.IMAGE_PREFIX }}/frontend:${{ github.event.inputs.version || github.ref_name }}
+            ${{ env.IMAGE_PREFIX }}/frontend:${{ env.RELEASE_TAG }}
             ${{ env.IMAGE_PREFIX }}/frontend:latest

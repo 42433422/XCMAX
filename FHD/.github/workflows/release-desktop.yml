@@ -107,7 +107,8 @@ jobs:
         if: ${{ inputs.frontend_run_id != '' }}
         shell: pwsh
         run: |
-          if (-not (Test-Path "FHD/templates/vue-dist/index.html")) {
+          # defaults.run.working-directory=FHD：相对路径相对 FHD/
+          if (-not (Test-Path "templates/vue-dist/index.html")) {
             Write-Error "::error::Shared vue-dist missing from artifact (frontend_run_id=${{ inputs.frontend_run_id }}). Refusing to build a frontend-less desktop."
             exit 1
           }
@@ -231,7 +232,7 @@ jobs:
         if: ${{ inputs.frontend_run_id != '' }}
         shell: bash
         run: |
-          test -f FHD/templates/vue-dist/index.html || {
+          test -f templates/vue-dist/index.html || {
             echo "::error::Shared vue-dist missing from artifact (frontend_run_id=${{ inputs.frontend_run_id }}). Refusing to build a frontend-less desktop."
             exit 1
           }
