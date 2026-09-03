@@ -51,3 +51,119 @@ def test_missing_open_industry_mod_is_restored_from_bundled_seed_before_mount() 
     mm.load_mod.assert_not_called()
     clear_missing.assert_called_with("coating-industry")
     register.assert_called_once_with("app", mm, "coating-industry")
+
+
+def test_pick_recovery_revision_prefers_latest_known_revision_on_or_before_stamp_date() -> None:
+    from app.desktop_runtime.migrate import _pick_recovery_revision
+
+    known = {
+        "2026_06_22_baseline_squashed_schema",
+        "2026_08_10_erp_absorb_orthogonal",
+        "2026_08_20_repair_products_uom",
+        "2026_08_31_enterprise_cs_ai",
+    }
+    # 事故复现：2026_08_24_erp_hr_attendance 已从链中删除，恢复点应落在 08_20。
+    assert (
+        _pick_recovery_revision("2026_08_24_erp_hr_attendance", known)
+        == "2026_08_20_repair_products_uom"
+    )
+    # 时间早于链中所有节点 → 回退到链上最早的日期节点。
+    assert (
+        _pick_recovery_revision("2026_01_01_something", known)
+        == "2026_06_22_baseline_squashed_schema"
+    )
+    # 戳本身不带日期前缀 → 同样回退到最早节点。
+    assert (
+        _pick_recovery_revision("legacy_plain_stamp", known)
+        == "2026_06_22_baseline_squashed_schema"
+    )
+
+
+def test_repair_unknown_stamped_revision_snapshots_and_restamps(tmp_path) -> None:
+    import sqlite3
+
+    from app.desktop_runtime import migrate
+
+    data_dir = tmp_path / "xcagi-root"
+    db_dir = data_dir / "data"
+    db_dir.mkdir(parents=True)
+    db = db_dir / "xcagi.db"
+    with sqlite3.connect(str(db)) as conn:
+        conn.execute("create table alembic_version (version_num varchar(32) not null)")
+        conn.execute("insert into alembic_version values ('2026_08_24_erp_hr_attendance')")
+
+    with (
+        patch.object(
+            migrate,
+            "_known_alembic_revisions",
+            return_value={"2026_08_20_repair_products_uom", "2026_08_31_enterprise_cs_ai"},
+        ),
+        patch.object(migrate, "_run_alembic_cli") as cli,
+    ):
+        result = migrate.repair_unknown_stamped_revision(data_dir)
+
+    assert result == {
+        "from": "2026_08_24_erp_hr_attendance",
+        "to": "2026_08_20_repair_products_uom",
+    }
+    # 恢复点写入 alembic_version（直接覆写，不走 alembic CLI）。
+    with sqlite3.connect(str(db)) as conn:
+        assert (
+            conn.execute("select version_num from alembic_version").fetchone()[0]
+            == "2026_08_20_repair_products_uom"
+        )
+    # 修复路径不得再调用 alembic CLI（在线 stamp 会先解析链外旧戳并失败）。
+    cli.assert_not_called()
+    # 先留热备份快照再动版本表。
+    backups = list((data_dir / "backups").glob("xcagi-pre-revfix-*.db"))
+    assert len(backups) == 1
+
+
+def test_repair_skips_when_stamp_is_in_chain(tmp_path) -> None:
+    import sqlite3
+
+    from app.desktop_runtime import migrate
+
+    data_dir = tmp_path / "xcagi-root"
+    db_dir = data_dir / "data"
+    db_dir.mkdir(parents=True)
+    db = db_dir / "xcagi.db"
+    with sqlite3.connect(str(db)) as conn:
+        conn.execute("create table alembic_version (version_num varchar(32) not null)")
+        conn.execute("insert into alembic_version values ('2026_08_31_enterprise_cs_ai')")
+
+    with (
+        patch.object(
+            migrate,
+            "_known_alembic_revisions",
+            return_value={"2026_08_31_enterprise_cs_ai"},
+        ),
+        patch.object(migrate, "_run_alembic_cli") as cli,
+        patch.object(migrate, "backup_database") as backup,
+    ):
+        assert migrate.repair_unknown_stamped_revision(data_dir) is None
+
+    cli.assert_not_called()
+    backup.assert_not_called()
+
+
+def test_repair_skips_without_alembic_version_table(tmp_path) -> None:
+    import sqlite3
+
+    from app.desktop_runtime import migrate
+
+    data_dir = tmp_path / "xcagi-root"
+    db_dir = data_dir / "data"
+    db_dir.mkdir(parents=True)
+    db = db_dir / "xcagi.db"
+    with sqlite3.connect(str(db)) as conn:
+        conn.execute("create table some_business_table (id integer)")
+
+    with (
+        patch.object(migrate, "_run_alembic_cli") as cli,
+        patch.object(migrate, "backup_database") as backup,
+    ):
+        assert migrate.repair_unknown_stamped_revision(data_dir) is None
+
+    cli.assert_not_called()
+    backup.assert_not_called()

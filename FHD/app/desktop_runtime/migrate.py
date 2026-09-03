@@ -6,6 +6,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -199,15 +200,20 @@ def _alembic_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def _run_alembic_cli(*args: str) -> None:
+def _resolve_alembic_ini() -> Path:
     root = _alembic_root()
     ini = root / "alembic.ini"
     # Older/broken PyInstaller trees nested the file as alembic.ini/alembic.ini.
     if not ini.is_file() and (root / "alembic.ini" / "alembic.ini").is_file():
         ini = root / "alembic.ini" / "alembic.ini"
-        root = ini.parent
+    return ini
+
+
+def _run_alembic_cli(*args: str) -> None:
+    ini = _resolve_alembic_ini()
     if not ini.is_file():
         raise FileNotFoundError(f"alembic.ini not found: {ini}")
+    root = ini.parent
     # PyInstaller 入口不支持 ``exe -m alembic``（参数会进 run_fastapi argparse），须走 API。
     if getattr(sys, "frozen", False):
         from alembic.config import Config
@@ -228,6 +234,121 @@ def _run_alembic_cli(*args: str) -> None:
     subprocess.run(cmd, check=True, cwd=str(root))
 
 
+# 仓库迁移脚本命名规范：YYYY_MM_DD_<slug>（见 alembic/versions/）。
+_REVISION_DATE_RE = re.compile(r"^(\d{4}_\d{2}_\d{2})_")
+
+
+def _read_stamped_revision(db_path: Path) -> str | None:
+    """读取 alembic_version 中的当前版本戳；表缺失或为空返回 None。"""
+    conn = None
+    try:
+        conn = sqlite3.connect(str(db_path))
+        row = conn.execute("select version_num from alembic_version").fetchone()
+    except sqlite3.Error:
+        return None
+    finally:
+        if conn is not None:
+            conn.close()
+    return row[0] if row and row[0] else None
+
+
+def _known_alembic_revisions() -> set[str]:
+    """当前包迁移链中的全部 revision id（ScriptDirectory 解析，不依赖数据库）。"""
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    ini = _resolve_alembic_ini()
+    if not ini.is_file():
+        raise FileNotFoundError(f"alembic.ini not found: {ini}")
+    script = ScriptDirectory.from_config(Config(str(ini)))
+    return {rev.revision for rev in script.walk_revisions()}
+
+
+def _pick_recovery_revision(stamped: str, known: frozenset[str] | set[str]) -> str:
+    """为链外版本戳选择恢复点。
+
+    启发式：revision id 前缀是日期（YYYY_MM_DD）。取已知链中日期 <= 丢失戳
+    日期的最近一个，尽量少重放迁移；解析不出日期或没有更早节点时退回链中
+    最早的日期节点（迁移普遍用 if_not_exists / add_column_if_missing 写法，
+    重放幂等）。
+    """
+    dated: list[tuple[str, str]] = []
+    for rev in known:
+        match = _REVISION_DATE_RE.match(rev)
+        if match:
+            dated.append((match.group(1), rev))
+    if not dated:
+        raise RuntimeError(
+            f"cannot recover unknown alembic revision {stamped!r}: "
+            "packaged chain has no date-prefixed revisions"
+        )
+    dated.sort()
+    stamped_match = _REVISION_DATE_RE.match(stamped)
+    if stamped_match:
+        candidates = [rev for key, rev in dated if key <= stamped_match.group(1)]
+        if candidates:
+            return candidates[-1]
+    return dated[0][1]
+
+
+def _restamp_direct(db_path: Path, target: str) -> None:
+    """直接覆写 alembic_version 表。
+
+    不能走 ``alembic stamp``：该命令在线模式下会先解析当前版本戳，
+    当前戳本身就是链外未知 revision 时同样抛 ``Can't locate revision``
+    （2026-09-03 E2E 实测）。桌面端是单行线性链，覆写等价于 stamp。
+    """
+    conn = None
+    try:
+        conn = sqlite3.connect(str(db_path))
+        with conn:
+            conn.execute("delete from alembic_version")
+            conn.execute("insert into alembic_version (version_num) values (?)", (target,))
+    finally:
+        if conn is not None:
+            conn.close()
+    logger.warning("alembic version table rewritten to %s", target)
+
+
+def repair_unknown_stamped_revision(
+    data_dir: str | os.PathLike[str] | None = None,
+) -> dict[str, str] | None:
+    """升级前兜底：库内版本戳不在当前包迁移链中时自动修复。
+
+    背景：桌面端已发布迁移是不可变契约；历史上 squash/删迁移导致已装用户库
+    的 alembic_version 指向链外 revision，upgrade 直接抛
+    ``Can't locate revision`` 中断自动更新（2026-09-03 实测事故，
+    丢失节点 2026_08_24_erp_hr_attendance）。
+    处理：先做在线热备份留恢复点，再按日期启发式把戳重打到链内最近祖先。
+    库内戳合法（或无 alembic_version）时不做任何操作，返回 None。
+    """
+    dirs = ensure_desktop_dirs(data_dir)
+    db = dirs["data"] / "xcagi.db"
+    if not db.exists():
+        return None
+    stamped = _read_stamped_revision(db)
+    if not stamped:
+        return None
+    known = _known_alembic_revisions()
+    if stamped in known:
+        return None
+    target = _pick_recovery_revision(stamped, known)
+    logger.warning(
+        "alembic revision %s missing from packaged chain; "
+        "snapshotting database and restamping to %s before upgrade",
+        stamped,
+        target,
+    )
+    backup_database(data_dir, version="pre-revfix")
+    _restamp_direct(db, target)
+    logger.warning(
+        "alembic version restamped %s -> %s; upgrade will replay migrations from there",
+        stamped,
+        target,
+    )
+    return {"from": stamped, "to": target}
+
+
 def run_alembic_upgrade(
     data_dir: str | os.PathLike[str] | None = None, version: str = "head"
 ) -> None:
@@ -236,6 +357,7 @@ def run_alembic_upgrade(
         bootstrap_sqlite_schema(data_dir)
         _run_alembic_cli("stamp", "head")
         return
+    repair_unknown_stamped_revision(data_dir)
     _run_alembic_cli("upgrade", version)
 
 
