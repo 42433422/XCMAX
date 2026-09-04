@@ -6,7 +6,6 @@ XCAGI 前端兼容 API — AI 聊天路由（统一对话 / 流式 / 批量）�
 from __future__ import annotations
 
 import logging
-import time
 
 from fastapi import APIRouter, Body, Query, Request
 from fastapi.responses import StreamingResponse
@@ -21,26 +20,18 @@ from app.fastapi_routes.xcagi_compat_chat_helpers import (
     XcagiCompatChatBatchBody,
     XcagiCompatChatBody,
 )
-from app.utils.metrics import chat_stream_first_byte_seconds
 
 router = APIRouter(tags=["xcagi-compat"])
 logger = logging.getLogger(__name__)
 
 
-async def _chat_stream_with_first_byte_metric(
+async def _chat_stream_with_slot_release(
     request: Request, body: XcagiCompatChatBody, *, ai_tier: str
 ):
     from app.middleware.chat_stream_limit import release_chat_stream_slot
 
-    start = time.perf_counter()
-    first_byte = True
     try:
         async for chunk in compat_chat_stream_async(request, body, ai_tier=ai_tier):
-            if first_byte:
-                chat_stream_first_byte_seconds.labels(model="compat", tenant_id="default").observe(
-                    time.perf_counter() - start
-                )
-                first_byte = False
             yield chunk
     finally:
         release_chat_stream_slot()
@@ -65,7 +56,7 @@ async def ai_unified_chat_stream(request: Request, body: XcagiCompatChatBody):
     assert_p2_elevated_claim_or_raise(request)
     tier = resolve_ai_tier(request)
     return StreamingResponse(
-        _chat_stream_with_first_byte_metric(request, body, ai_tier=tier),
+        _chat_stream_with_slot_release(request, body, ai_tier=tier),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

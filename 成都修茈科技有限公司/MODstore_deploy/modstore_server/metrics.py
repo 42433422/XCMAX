@@ -45,6 +45,12 @@ REALTIME_WS_EVENTS = Counter(
     ("event",),
 )
 
+MOD_INSTALL_TOTAL = Counter(
+    "mod_install_total",
+    "Authenticated desktop installation outcomes reported to MODstore.",
+    ("operation", "status", "device_scope"),
+)
+
 
 def observe_csp_violation() -> None:
     CSP_REPORT_ONLY_VIOLATIONS.inc()
@@ -53,6 +59,12 @@ def observe_csp_violation() -> None:
 def observe_realtime_ws_event(event: str) -> None:
     """event: accepted | auth_fail | ready | ready_send_fail | unregister | ping | idle_timeout."""
     REALTIME_WS_EVENTS.labels(event).inc()
+
+
+def observe_mod_install(operation: str, status: str, device_scope: str) -> None:
+    """Record one non-replayed desktop install or rollback receipt."""
+
+    MOD_INSTALL_TOTAL.labels(operation, status, device_scope).inc()
 
 
 def _route_path(request: Request) -> str:
