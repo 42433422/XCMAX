@@ -5,6 +5,8 @@ from typing import Any
 from app.application.agent_orchestrator.run_models import AgentStep
 from app.application.agent_orchestrator.tool_spec import validate_tool_call, validate_tool_result
 
+_SQL_TENANT_SCOPED_TOOL_IDS = frozenset({"business_db"})
+
 
 class AgentToolExecutor:
     def execute(
@@ -29,7 +31,7 @@ class AgentToolExecutor:
         action = validation.action or step.action
         runtime_tenant_raw = params["_runtime_context"].get("tenant_id")
         runtime_tenant_id: int | None = None
-        if runtime_tenant_raw not in (None, ""):
+        if step.tool_id in _SQL_TENANT_SCOPED_TOOL_IDS and runtime_tenant_raw not in (None, ""):
             try:
                 if isinstance(runtime_tenant_raw, bool):
                     raise ValueError
@@ -49,8 +51,10 @@ class AgentToolExecutor:
             result = execute_registered_workflow_tool(step.tool_id, action, params)
         else:
             # Durable/background Agent runs execute outside the originating HTTP
-            # request. Restore the authenticated tenant recorded in runtime_context
-            # so every repository/raw-SQL boundary keeps its fail-closed isolation.
+            # request. Restore the authenticated integer tenant recorded in
+            # runtime_context so repository/raw-SQL boundaries keep their fail-closed
+            # isolation. Dataset/document tools deliberately keep their own opaque
+            # string tenant keys and must not be coerced here.
             from app.infrastructure.tenant_scope import tenant_scope
 
             with tenant_scope(runtime_tenant_id):
