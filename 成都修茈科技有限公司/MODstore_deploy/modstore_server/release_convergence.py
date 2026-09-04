@@ -17,8 +17,8 @@ from typing import Any, Callable
 import httpx
 from sqlalchemy.orm import Session
 
-from modstore_server.deploy_context import health_payload
 from modstore_server.db.delivery_commerce import UpdateInstallationReceipt
+from modstore_server.deploy_context import health_payload
 from modstore_server.models import UserPlan
 from modstore_server.standard_delivery_api import _purchased_plan_rows
 
@@ -42,9 +42,7 @@ def _fetch_json(url: str) -> dict[str, Any]:
         token = os.environ.get("XCMAX_GITHUB_TOKEN", "").strip()
         if token:
             headers["Authorization"] = f"Bearer {token}"
-    with httpx.Client(
-        timeout=httpx.Timeout(10.0, connect=5.0), trust_env=False
-    ) as client:
+    with httpx.Client(timeout=httpx.Timeout(10.0, connect=5.0), trust_env=False) as client:
         response = client.get(url, headers=headers)
         response.raise_for_status()
         payload = response.json()
@@ -54,9 +52,7 @@ def _fetch_json(url: str) -> dict[str, Any]:
 
 
 def _fetch_text(url: str) -> str:
-    with httpx.Client(
-        timeout=httpx.Timeout(10.0, connect=5.0), trust_env=False
-    ) as client:
+    with httpx.Client(timeout=httpx.Timeout(10.0, connect=5.0), trust_env=False) as client:
         response = client.get(url, headers={"Accept": "text/yaml,text/plain"})
         response.raise_for_status()
         return response.text
@@ -75,24 +71,12 @@ def _feed_identity(text: str) -> dict[str, str]:
     }
 
 
-def _source(
-    name: str, reported_sha: Any, expected_sha: str, **details: Any
-) -> dict[str, Any]:
+def _source(name: str, reported_sha: Any, expected_sha: str, **details: Any) -> dict[str, Any]:
     git_sha = _sha(reported_sha)
-    status = (
-        "matched"
-        if git_sha == expected_sha
-        else "unavailable"
-        if not git_sha
-        else "drifted"
-    )
+    status = "matched" if git_sha == expected_sha else "unavailable" if not git_sha else "drifted"
     expected_release_id = str(details.pop("expected_release_id", "") or "")
     release_id = str(details.get("release_id") or "")
-    if (
-        status == "matched"
-        and expected_release_id
-        and release_id != expected_release_id
-    ):
+    if status == "matched" and expected_release_id and release_id != expected_release_id:
         status = "drifted" if release_id else "unavailable"
     return {"name": name, "status": status, "git_sha": git_sha, **details}
 
@@ -118,24 +102,18 @@ def _remote_sources(
     result: list[dict[str, Any]] = []
     for name, url in configured.items():
         if not url:
-            result.append(
-                _source(name, "", expected_sha, reason="endpoint_not_configured")
-            )
+            result.append(_source(name, "", expected_sha, reason="endpoint_not_configured"))
             continue
         try:
             payload = json_fetcher(url)
-            reported = (
-                payload.get("sha") if name == "origin_main" else payload.get("git_sha")
-            )
+            reported = payload.get("sha") if name == "origin_main" else payload.get("git_sha")
             result.append(
                 _source(
                     name,
                     reported,
                     expected_sha,
                     release_id=str(payload.get("release_id") or ""),
-                    expected_release_id=(
-                        "" if name == "origin_main" else expected_release_id
-                    ),
+                    expected_release_id=("" if name == "origin_main" else expected_release_id),
                 )
             )
         except (httpx.HTTPError, OSError, TypeError, ValueError) as exc:
@@ -179,9 +157,7 @@ def _installation_sources(
     user_ids = {int(row.user_id) for row in plans}
     required_ids = {
         value.strip()
-        for value in re.split(
-            r"[\s,;]+", os.environ.get("XCMAX_REQUIRED_INSTALLATION_IDS", "")
-        )
+        for value in re.split(r"[\s,;]+", os.environ.get("XCMAX_REQUIRED_INSTALLATION_IDS", ""))
         if value.strip()
     }
     if not user_ids and not required_ids:
@@ -207,27 +183,23 @@ def _installation_sources(
 
     sources: list[dict[str, Any]] = []
     devices_by_user: dict[int, int] = {}
-    max_age_hours = max(
-        1, int(os.environ.get("XCMAX_INSTALLATION_RECEIPT_MAX_AGE_HOURS", "24"))
-    )
+    max_age_hours = max(1, int(os.environ.get("XCMAX_INSTALLATION_RECEIPT_MAX_AGE_HOURS", "24")))
     for (user_id, installation_id), row in latest_by_device.items():
         required = installation_id in required_ids
         if row.status == "revoked" and not required:
             continue
         devices_by_user[user_id] = devices_by_user.get(user_id, 0) + 1
         reported_at = row.reported_at.replace(tzinfo=UTC) if row.reported_at else None
-        fresh = bool(
-            reported_at and now - timedelta(hours=max_age_hours) <= reported_at <= now
-        )
-        installed_sha = (
-            row.installed_build_sha if row.status == "installed" and fresh else ""
-        )
+        fresh = bool(reported_at and now - timedelta(hours=max_age_hours) <= reported_at <= now)
+        installed_sha = row.installed_build_sha if row.status == "installed" and fresh else ""
         reason = (
             ""
             if row.status == "installed" and fresh
-            else "installation_receipt_stale_or_device_offline"
-            if row.status == "installed"
-            else f"latest_receipt_{row.status}"
+            else (
+                "installation_receipt_stale_or_device_offline"
+                if row.status == "installed"
+                else f"latest_receipt_{row.status}"
+            )
         )
         sources.append(
             _source(
@@ -317,11 +289,7 @@ def build_release_convergence(
     current = (now or datetime.now(UTC)).astimezone(UTC)
     installations, account_count = _installation_sources(db, release_sha, now=current)
     sources.extend(installations)
-    blockers = [
-        f"{row['name']}:{row['status']}"
-        for row in sources
-        if row["status"] != "matched"
-    ]
+    blockers = [f"{row['name']}:{row['status']}" for row in sources if row["status"] != "matched"]
     converged = bool(sources) and not blockers
     return {
         "schema": SCHEMA,
@@ -335,8 +303,7 @@ def build_release_convergence(
         "reported_installations": sum(
             1
             for row in installations
-            if str(row.get("name") or "").startswith("device-")
-            and row.get("reported_at")
+            if str(row.get("name") or "").startswith("device-") and row.get("reported_at")
         ),
     }
 

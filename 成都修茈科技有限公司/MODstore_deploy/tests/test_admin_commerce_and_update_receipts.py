@@ -84,18 +84,14 @@ def test_update_install_receipt_is_idempotent_and_summarizes_latest_device(clien
 
 
 @pytest.mark.asyncio
-async def test_admin_order_actions_are_safe_idempotent_and_audited(
-    client, tmp_path, monkeypatch
-):
+async def test_admin_order_actions_are_safe_idempotent_and_audited(client, tmp_path, monkeypatch):
     from modstore_server import admin_commerce_api, payment_orders
     from modstore_server.db.delivery_commerce import CommerceAdminAction
     from modstore_server.models import RefundRequest, get_session_factory
 
     monkeypatch.setenv("PAYMENT_BACKEND", "python")
     monkeypatch.setenv("MODSTORE_PAYMENT_ORDERS_DIR", str(tmp_path / "orders"))
-    monkeypatch.setattr(
-        admin_commerce_api.alipay_service, "close_order", lambda **_: {"ok": True}
-    )
+    monkeypatch.setattr(admin_commerce_api.alipay_service, "close_order", lambda **_: {"ok": True})
     sf = get_session_factory()
     with sf() as db:
         admin = _user(db, admin=True)
@@ -177,6 +173,4 @@ async def test_admin_order_actions_are_safe_idempotent_and_audited(
             paid_no, refund_body, _request(), db, admin
         )
         assert refund["status"] == "pending"
-        assert (
-            db.query(RefundRequest).filter_by(order_no=paid_no, status="pending").one()
-        )
+        assert db.query(RefundRequest).filter_by(order_no=paid_no, status="pending").one()

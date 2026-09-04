@@ -157,18 +157,13 @@ def get_session_factory(db_path: Optional[Path] = None) -> sessionmaker[Session]
         and getattr(models_sf, "kw", {}).get("bind") is engine
     ):
         _SessionFactory = models_sf
-    if (
-        _SessionFactory is None
-        or getattr(_SessionFactory, "kw", {}).get("bind") is not engine
-    ):
+    if _SessionFactory is None or getattr(_SessionFactory, "kw", {}).get("bind") is not engine:
         _SessionFactory = sessionmaker(bind=engine)
     _publish_database_state()
     return _SessionFactory
 
 
-def _sqlite_add_column_if_missing(
-    engine: Engine, table: str, column: str, ddl_type: str
-) -> None:
+def _sqlite_add_column_if_missing(engine: Engine, table: str, column: str, ddl_type: str) -> None:
     """SQLite 表结构演进：缺列时 ALTER ADD（幂等）。"""
     with engine.begin() as conn:
         rows = conn.execute(text(f"PRAGMA table_info({table})")).fetchall()
@@ -187,9 +182,7 @@ def _ddl_type_for_dialect(dialect: str, ddl_type: str) -> str:
     return normalized
 
 
-def _add_column_if_missing(
-    engine: Engine, table: str, column: str, ddl_type: str
-) -> None:
+def _add_column_if_missing(engine: Engine, table: str, column: str, ddl_type: str) -> None:
     """通用表结构演进：同时支持 SQLite 与 PostgreSQL，缺列时 ALTER ADD（幂等）。"""
     if engine.dialect.name == "sqlite":
         _sqlite_add_column_if_missing(engine, table, column, ddl_type)
@@ -416,9 +409,7 @@ def init_default_plan_templates() -> None:
     sf = get_session_factory()
     with sf() as session:
         for row in defaults:
-            exists = (
-                session.query(PlanTemplate).filter(PlanTemplate.id == row["id"]).first()
-            )
+            exists = session.query(PlanTemplate).filter(PlanTemplate.id == row["id"]).first()
             if exists:
                 exists.name = row["name"]
                 exists.description = row["description"]

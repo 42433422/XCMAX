@@ -24,15 +24,11 @@ from modstore_server.customer_value_classification import amount_cents as _amoun
 from modstore_server.customer_value_classification import (
     classify_payment_order,
 )
-from modstore_server.customer_value_classification import (
-    parse_datetime as _parse_datetime,
-)
+from modstore_server.customer_value_classification import parse_datetime as _parse_datetime
 from modstore_server.customer_value_classification import (
     payment_amount_cents,
 )
-from modstore_server.customer_value_classification import (
-    sanitize_evidence as _sanitize_evidence,
-)
+from modstore_server.customer_value_classification import sanitize_evidence as _sanitize_evidence
 from modstore_server.customer_value_classification import text as _text
 from modstore_server.customer_value_lifecycle import build_customer_lifecycle
 from modstore_server.customer_value_payment_source import (
@@ -41,7 +37,9 @@ from modstore_server.customer_value_payment_source import (
 from modstore_server.customer_value_payment_source import (
     load_java_payment_orders as _load_java_payment_orders,
 )
-from modstore_server.customer_value_payment_source import payment_evidence_marker
+from modstore_server.customer_value_payment_source import (
+    payment_evidence_marker,
+)
 from modstore_server.models import (
     CustomerValueReceipt,
     UpdateInstallationReceipt,
@@ -63,9 +61,7 @@ def _canonical_json(value: Any) -> str:
 
 
 def load_authoritative_payment_orders(window_days: int) -> dict[str, Any]:
-    return _load_authoritative_payment_orders(
-        window_days, java_loader=_load_java_payment_orders
-    )
+    return _load_authoritative_payment_orders(window_days, java_loader=_load_java_payment_orders)
 
 
 def append_customer_value_receipt(
@@ -84,9 +80,7 @@ def append_customer_value_receipt(
 
     data = dict(payload or {})
     receipt_kind = _text(data.get("receipt_kind"), 32).lower()
-    verification_status = _text(
-        data.get("verification_status") or "pending_evidence", 32
-    ).lower()
+    verification_status = _text(data.get("verification_status") or "pending_evidence", 32).lower()
     if receipt_kind not in RECEIPT_KINDS:
         raise ValueError(f"unsupported receipt_kind: {receipt_kind or '<empty>'}")
     if verification_status not in VERIFICATION_STATUSES:
@@ -111,9 +105,7 @@ def append_customer_value_receipt(
         if missing:
             raise ValueError("verified receipt missing: " + ", ".join(missing))
         if receipt_kind in {"delivery", "first_use", "outcome", "acceptance", "reuse"}:
-            evidence = (
-                data.get("evidence") if isinstance(data.get("evidence"), dict) else {}
-            )
+            evidence = data.get("evidence") if isinstance(data.get("evidence"), dict) else {}
             artifact_sha256 = _text(evidence.get("artifact_sha256"), 64).lower()
             if not _SHA256.fullmatch(artifact_sha256):
                 raise ValueError("verified delivery requires evidence.artifact_sha256")
@@ -146,25 +138,17 @@ def append_customer_value_receipt(
                     )
                 if _text(evidence.get("comparison"), 8).lower() not in {"ge", "le"}:
                     raise ValueError("verified outcome comparison must be ge or le")
-                if not _SHA256.fullmatch(
-                    _text(evidence.get("source_material_sha256"), 64).lower()
-                ):
-                    raise ValueError(
-                        "verified outcome requires evidence.source_material_sha256"
-                    )
+                if not _SHA256.fullmatch(_text(evidence.get("source_material_sha256"), 64).lower()):
+                    raise ValueError("verified outcome requires evidence.source_material_sha256")
             if receipt_kind == "acceptance" and data.get("lifecycle_v2") is True:
                 customer_confirmed = evidence.get("customer_confirmed") is True
-                signed_digest = _text(
-                    evidence.get("signed_document_sha256"), 64
-                ).lower()
+                signed_digest = _text(evidence.get("signed_document_sha256"), 64).lower()
                 if not customer_confirmed and not _SHA256.fullmatch(signed_digest):
                     raise ValueError(
                         "customer acceptance requires account confirmation or signed document"
                     )
         if receipt_kind == "goal" and data.get("lifecycle_v2") is True:
-            evidence = (
-                data.get("evidence") if isinstance(data.get("evidence"), dict) else {}
-            )
+            evidence = data.get("evidence") if isinstance(data.get("evidence"), dict) else {}
             goal_keys = (
                 "baseline",
                 "target",
@@ -188,9 +172,7 @@ def append_customer_value_receipt(
                 payment_order = payment_orders.find(order_no)
             eligible, reason = classify_payment_order(dict(payment_order or {}))
             if not eligible:
-                raise ValueError(
-                    f"order is not verified production payment evidence: {reason}"
-                )
+                raise ValueError(f"order is not verified production payment evidence: {reason}")
 
     occurred_at = _parse_datetime(data.get("occurred_at")) or (now or datetime.now(UTC))
     occurred_at = occurred_at.astimezone(UTC)
@@ -206,10 +188,7 @@ def append_customer_value_receipt(
         "acceptance_id": acceptance_id,
         "evidence_digest": evidence_digest,
     }
-    receipt_id = (
-        "cvr_"
-        + hashlib.sha256(_canonical_json(identity).encode("utf-8")).hexdigest()[:48]
-    )
+    receipt_id = "cvr_" + hashlib.sha256(_canonical_json(identity).encode("utf-8")).hexdigest()[:48]
 
     sf = session_factory or get_session_factory()
     with sf() as session:
@@ -226,8 +205,7 @@ def append_customer_value_receipt(
                     CustomerValueReceipt.customer_goal_id == goal_id,
                     CustomerValueReceipt.verification_status == "verified",
                     CustomerValueReceipt.receipt_kind == "goal",
-                    CustomerValueReceipt.occurred_at
-                    <= occurred_at.replace(tzinfo=None),
+                    CustomerValueReceipt.occurred_at <= occurred_at.replace(tzinfo=None),
                 )
                 .order_by(CustomerValueReceipt.occurred_at.desc())
                 .all()
@@ -245,13 +223,8 @@ def append_customer_value_receipt(
                 "unit",
                 "measurement_window",
             )
-            if any(
-                sanitized_evidence.get(key) != goal_evidence.get(key)
-                for key in comparable
-            ):
-                raise ValueError(
-                    "outcome KPI does not match the prior customer agreement"
-                )
+            if any(sanitized_evidence.get(key) != goal_evidence.get(key) for key in comparable):
+                raise ValueError("outcome KPI does not match the prior customer agreement")
         if verification_status == "verified" and receipt_kind == "reuse":
             prior = (
                 session.query(CustomerValueReceipt)
@@ -261,8 +234,7 @@ def append_customer_value_receipt(
                     CustomerValueReceipt.customer_goal_id == goal_id,
                     CustomerValueReceipt.verification_status == "verified",
                     CustomerValueReceipt.receipt_kind.in_(["first_use", "acceptance"]),
-                    CustomerValueReceipt.occurred_at
-                    <= occurred_at.replace(tzinfo=None),
+                    CustomerValueReceipt.occurred_at <= occurred_at.replace(tzinfo=None),
                 )
                 .all()
             )
@@ -271,9 +243,7 @@ def append_customer_value_receipt(
             acceptance = max(acceptances, key=lambda row: row.occurred_at, default=None)
             first_use = min(first_uses, key=lambda row: row.occurred_at, default=None)
             if acceptance is None or first_use is None:
-                raise ValueError(
-                    "reuse requires verified first_use and acceptance receipts"
-                )
+                raise ValueError("reuse requires verified first_use and acceptance receipts")
             accepted_at = acceptance.occurred_at.replace(tzinfo=UTC)
             if occurred_at < accepted_at + timedelta(hours=24):
                 raise ValueError("reuse must occur at least 24 hours after acceptance")
@@ -338,9 +308,7 @@ def build_customer_value_evidence(
         source_available = payment_source.get("source_available") is True
         source_authoritative = payment_source.get("source_authoritative") is True
         raw_orders = [
-            dict(item)
-            for item in payment_source.get("orders") or []
-            if isinstance(item, dict)
+            dict(item) for item in payment_source.get("orders") or [] if isinstance(item, dict)
         ]
     else:
         source_owner = "injected"
@@ -373,9 +341,7 @@ def build_customer_value_evidence(
             )
             installation_receipts = (
                 session.query(UpdateInstallationReceipt)
-                .filter(
-                    UpdateInstallationReceipt.reported_at >= cutoff.replace(tzinfo=None)
-                )
+                .filter(UpdateInstallationReceipt.reported_at >= cutoff.replace(tzinfo=None))
                 .order_by(
                     UpdateInstallationReceipt.reported_at.desc(),
                     UpdateInstallationReceipt.id.desc(),
@@ -386,13 +352,9 @@ def build_customer_value_evidence(
         append_only_store_available = False
         receipts = []
 
-    verified_receipts = [
-        row for row in receipts if row.verification_status == "verified"
-    ]
+    verified_receipts = [row for row in receipts if row.verification_status == "verified"]
     refunded_order_nos = {
-        row.order_no
-        for row in verified_receipts
-        if row.receipt_kind == "refund" and row.order_no
+        row.order_no for row in verified_receipts if row.receipt_kind == "refund" and row.order_no
     }
     for order_no in list(eligible_orders):
         if order_no in refunded_order_nos:
@@ -403,13 +365,10 @@ def build_customer_value_evidence(
     customer_goal_ids = {
         row.customer_goal_id
         for row in verified_receipts
-        if row.receipt_kind in {"goal", "delivery", "acceptance"}
-        and row.customer_goal_id
+        if row.receipt_kind in {"goal", "delivery", "acceptance"} and row.customer_goal_id
     }
     raw_delivered_receipts = [
-        row
-        for row in verified_receipts
-        if row.receipt_kind in {"delivery", "acceptance"}
+        row for row in verified_receipts if row.receipt_kind in {"delivery", "acceptance"}
     ]
     delivered_receipts: list[CustomerValueReceipt] = []
     for row in raw_delivered_receipts:
@@ -418,9 +377,7 @@ def build_customer_value_evidence(
         except (TypeError, ValueError, json.JSONDecodeError):
             evidence = {}
         artifact_sha256 = (
-            _text(evidence.get("artifact_sha256"), 64).lower()
-            if isinstance(evidence, dict)
-            else ""
+            _text(evidence.get("artifact_sha256"), 64).lower() if isinstance(evidence, dict) else ""
         )
         if row.artifact_id and _SHA256.fullmatch(artifact_sha256):
             delivered_receipts.append(row)
@@ -432,9 +389,7 @@ def build_customer_value_evidence(
     paid_acceptance_orders = {
         row.order_no
         for row in delivered_receipts
-        if row.receipt_kind == "acceptance"
-        and row.order_no
-        and row.order_no in eligible_orders
+        if row.receipt_kind == "acceptance" and row.order_no and row.order_no in eligible_orders
     }
 
     lifecycle = build_customer_lifecycle(
@@ -468,8 +423,7 @@ def build_customer_value_evidence(
         "verified_paid_amount_cents": paid_amount_cents,
         "customer_goal_count": len(customer_goal_ids),
         "delivered_count": len(delivered_receipts),
-        "unproven_delivery_count": len(raw_delivered_receipts)
-        - len(delivered_receipts),
+        "unproven_delivery_count": len(raw_delivered_receipts) - len(delivered_receipts),
         "paid_delivery_count": len(paid_delivery_orders),
         "paid_acceptance_count": len(paid_acceptance_orders),
         "production_value_verified": bool(eligible_orders),

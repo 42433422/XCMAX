@@ -29,12 +29,7 @@ def api_admin_list_users(
         elif is_enterprise is False:
             q = q.filter(_facade().User.is_enterprise.is_(False))
         total = q.count()
-        rows = (
-            q.order_by(_facade().User.created_at.desc())
-            .offset(offset)
-            .limit(limit)
-            .all()
-        )
+        rows = q.order_by(_facade().User.created_at.desc()).offset(offset).limit(limit).all()
         uid_list = [int(r.id) for r in rows]
         mod_map = _facade()._user_mod_ids_map(uid_list)
         return {
@@ -62,9 +57,7 @@ def api_admin_set_admin_status(
 ):
     sf = _facade().get_session_factory()
     with sf() as session:
-        target = (
-            session.query(_facade().User).filter(_facade().User.id == user_id).first()
-        )
+        target = session.query(_facade().User).filter(_facade().User.id == user_id).first()
         if not target:
             raise _facade().HTTPException(404, "用户不存在")
         target.is_admin = is_admin
@@ -80,16 +73,12 @@ def api_admin_set_enterprise_status(
 ):
     sf = _facade().get_session_factory()
     with sf() as session:
-        target = (
-            session.query(_facade().User).filter(_facade().User.id == user_id).first()
-        )
+        target = session.query(_facade().User).filter(_facade().User.id == user_id).first()
         if not target:
             raise _facade().HTTPException(404, "用户不存在")
         target.is_enterprise = is_enterprise
         target.account_state = (
-            _facade().ACCOUNT_ACTIVE
-            if is_enterprise
-            else _facade().ACCOUNT_PENDING_PLAN
+            _facade().ACCOUNT_ACTIVE if is_enterprise else _facade().ACCOUNT_PENDING_PLAN
         )
         session.commit()
         return {
@@ -120,9 +109,7 @@ def api_admin_list_user_mods(
 
     sf = _facade().get_session_factory()
     with sf() as session:
-        target = (
-            session.query(_facade().User).filter(_facade().User.id == user_id).first()
-        )
+        target = session.query(_facade().User).filter(_facade().User.id == user_id).first()
         if not target:
             raise _facade().HTTPException(404, "用户不存在")
     mod_ids = sorted(get_user_mod_ids(user_id))
@@ -147,10 +134,7 @@ def api_admin_bind_user_mod(
     mid = _facade()._assert_enterprise_assignable_mod_id(mod_id)
     sf = _facade().get_session_factory()
     with sf() as session:
-        if (
-            session.query(_facade().User).filter(_facade().User.id == user_id).first()
-            is None
-        ):
+        if session.query(_facade().User).filter(_facade().User.id == user_id).first() is None:
             raise _facade().HTTPException(404, "用户不存在")
     add_user_mod(user_id, mid)
     return {"ok": True, "user_id": user_id, "mod_id": mid}
@@ -167,10 +151,7 @@ def api_admin_unbind_user_mod(
     mid = _facade()._assert_enterprise_assignable_mod_id(mod_id)
     sf = _facade().get_session_factory()
     with sf() as session:
-        if (
-            session.query(_facade().User).filter(_facade().User.id == user_id).first()
-            is None
-        ):
+        if session.query(_facade().User).filter(_facade().User.id == user_id).first() is None:
             raise _facade().HTTPException(404, "用户不存在")
     remove_user_mod(user_id, mid)
     return {"ok": True, "user_id": user_id, "mod_id": mid}
@@ -316,12 +297,8 @@ def api_admin_list_orders(
     """
     from modstore_server import payment_orders
 
-    rows, total = payment_orders.list_orders(
-        user_id=0, status=status, limit=limit, offset=offset
-    )
-    all_rows, _ = payment_orders.list_orders(
-        user_id=0, status=None, limit=100000, offset=0
-    )
+    rows, total = payment_orders.list_orders(user_id=0, status=status, limit=limit, offset=offset)
+    all_rows, _ = payment_orders.list_orders(user_id=0, status=None, limit=100000, offset=0)
     summary: dict[str, _facade().Any] = {
         "total_orders": len(all_rows),
         "paid_orders": 0,
@@ -335,9 +312,7 @@ def api_admin_list_orders(
         if st == "paid":
             summary["paid_orders"] += 1
             try:
-                summary["paid_revenue"] += _facade().Decimal(
-                    str(o.get("total_amount") or "0")
-                )
+                summary["paid_revenue"] += _facade().Decimal(str(o.get("total_amount") or "0"))
             except RECOVERABLE_ERRORS:
                 pass
         elif st == "pending":
@@ -347,9 +322,7 @@ def api_admin_list_orders(
         "items": rows,
         "total": total,
         "summary": summary,
-        "source": "python_json"
-        if payment_orders.is_local_source_of_truth()
-        else "java",
+        "source": "python_json" if payment_orders.is_local_source_of_truth() else "java",
     }
 
 
@@ -362,15 +335,9 @@ def api_wallet_overview(
     """钱包概览：余额 + 最近交易流水（前端 walletOverview 消费此接口）。"""
     sf = _facade().get_session_factory()
     with sf() as session:
-        wallet = (
-            session.query(_facade().Wallet)
-            .filter(_facade().Wallet.user_id == user.id)
-            .first()
-        )
+        wallet = session.query(_facade().Wallet).filter(_facade().Wallet.user_id == user.id).first()
         balance = wallet.balance if wallet else 0.0
-        updated_at = (
-            wallet.updated_at.isoformat() if wallet and wallet.updated_at else ""
-        )
+        updated_at = wallet.updated_at.isoformat() if wallet and wallet.updated_at else ""
         total = (
             session.query(_facade().Transaction)
             .filter(_facade().Transaction.user_id == user.id)

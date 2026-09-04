@@ -62,9 +62,7 @@ def _append(sf, order, kind, occurred_at, **extra):
     )
 
 
-def test_complete_six_stage_chain_requires_post_acceptance_reuse(
-    tmp_path, monkeypatch
-) -> None:
+def test_complete_six_stage_chain_requires_post_acceptance_reuse(tmp_path, monkeypatch) -> None:
     sf = _init_db(tmp_path, monkeypatch)
     sha = "a" * 40
     monkeypatch.setenv("XCMAX_RELEASE_SHA", sha)
@@ -154,9 +152,7 @@ def test_complete_six_stage_chain_requires_post_acceptance_reuse(
         },
     )
 
-    result = build_customer_value_evidence(
-        orders=[order], session_factory=sf, now=reuse_at
-    )
+    result = build_customer_value_evidence(orders=[order], session_factory=sf, now=reuse_at)
 
     assert result["six_stage_counts"] == {
         "payment": 1,
@@ -373,12 +369,10 @@ def test_enterprise_identity_is_single_assignment(tmp_path, monkeypatch) -> None
     models._SessionFactory = None
 
 
-def test_java_payment_identity_is_frozen_before_local_commit(
-    tmp_path, monkeypatch
-) -> None:
+def test_java_payment_identity_is_frozen_before_local_commit(tmp_path, monkeypatch) -> None:
     sf = _init_db(tmp_path, monkeypatch)
-    import modstore_server.api.market_routes as market_routes
     import modstore_server.api.market_enterprise_identity as routes
+    import modstore_server.api.market_routes as market_routes
 
     with sf() as session:
         session.add_all(

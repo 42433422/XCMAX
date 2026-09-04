@@ -16,9 +16,7 @@ def _init_db(tmp_path, monkeypatch):
     return models.get_session_factory()
 
 
-def test_release_convergence_requires_every_source_and_device(
-    tmp_path, monkeypatch
-) -> None:
+def test_release_convergence_requires_every_source_and_device(tmp_path, monkeypatch) -> None:
     sf = _init_db(tmp_path, monkeypatch)
     sha = "a" * 40
     release_id = f"xcagi-1.0.0.1-{sha}"
@@ -95,18 +93,13 @@ def test_unreported_active_account_is_a_blocker(tmp_path, monkeypatch) -> None:
             session,
             now=datetime(2026, 9, 4, 8, tzinfo=UTC),
             json_fetcher=lambda url: (
-                {"sha": sha}
-                if "github" in url
-                else {"git_sha": sha, "release_id": release_id}
+                {"sha": sha} if "github" in url else {"git_sha": sha, "release_id": release_id}
             ),
             text_fetcher=lambda _url: feed,
         )
 
     assert result["converged"] is False
-    assert any(
-        "account-" in blocker and "unavailable" in blocker
-        for blocker in result["blockers"]
-    )
+    assert any("account-" in blocker and "unavailable" in blocker for blocker in result["blockers"])
     models._engine = None
     models._SessionFactory = None
 
@@ -151,17 +144,13 @@ def test_stale_or_revoked_device_cannot_disappear_from_required_denominator(
             session,
             now=datetime(2026, 9, 4, 8, tzinfo=UTC),
             json_fetcher=lambda url: (
-                {"sha": sha}
-                if "github" in url
-                else {"git_sha": sha, "release_id": release_id}
+                {"sha": sha} if "github" in url else {"git_sha": sha, "release_id": release_id}
             ),
             text_fetcher=lambda _url: feed,
         )
 
     assert result["converged"] is False
-    required = next(
-        row for row in result["sources"] if row["name"].startswith("device-")
-    )
+    required = next(row for row in result["sources"] if row["name"].startswith("device-"))
     assert required["status"] == "unavailable"
     assert required["reason"] == "latest_receipt_revoked"
     models._engine = None

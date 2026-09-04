@@ -10,9 +10,7 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from modstore_server.customer_value_classification import (
-    parse_datetime as _parse_datetime,
-)
+from modstore_server.customer_value_classification import parse_datetime as _parse_datetime
 from modstore_server.customer_value_classification import text as _text
 from modstore_server.models import CustomerValueReceipt, UpdateInstallationReceipt
 from modstore_server.standard_delivery_api import configured_internal_installation_ids
@@ -73,9 +71,7 @@ def build_customer_lifecycle(
             256,
         )
         customer_alias = (
-            "customer-" + hashlib.sha256(entity_ref.encode()).hexdigest()[:12]
-            if entity_ref
-            else ""
+            "customer-" + hashlib.sha256(entity_ref.encode()).hexdigest()[:12] if entity_ref else ""
         )
         order_receipts = receipts_by_order.get(order_no, [])
         receipts_by_goal: dict[str, list[CustomerValueReceipt]] = {}
@@ -109,9 +105,7 @@ def build_customer_lifecycle(
                 and accepted
                 and reused
                 and achieved
-                and first.occurred_at
-                <= measured_outcome.occurred_at
-                <= accepted.occurred_at
+                and first.occurred_at <= measured_outcome.occurred_at <= accepted.occurred_at
                 and accepted.occurred_at + timedelta(hours=24) <= reused.occurred_at
             )
             latest = max(
@@ -120,9 +114,7 @@ def build_customer_lifecycle(
             )
             return sequence_valid, len(kinds), latest
 
-        selected_rows = (
-            max(receipts_by_goal.values(), key=goal_rank) if receipts_by_goal else []
-        )
+        selected_rows = max(receipts_by_goal.values(), key=goal_rank) if receipts_by_goal else []
         by_kind: dict[str, CustomerValueReceipt] = {}
         for row in sorted(selected_rows, key=lambda item: item.occurred_at):
             by_kind.setdefault(str(row.receipt_kind), row)
@@ -154,10 +146,7 @@ def build_customer_lifecycle(
         except (TypeError, ValueError):
             measured = target = float("nan")
         outcome_achieved = (
-            comparison == "ge"
-            and measured >= target
-            or comparison == "le"
-            and measured <= target
+            comparison == "ge" and measured >= target or comparison == "le" and measured <= target
         )
 
         stages = {
@@ -193,9 +182,7 @@ def build_customer_lifecycle(
                 and (
                     acceptance_evidence.get("customer_confirmed") is True
                     or _SHA256.fullmatch(
-                        _text(
-                            acceptance_evidence.get("signed_document_sha256"), 64
-                        ).lower()
+                        _text(acceptance_evidence.get("signed_document_sha256"), 64).lower()
                     )
                 )
             ),
@@ -221,9 +208,7 @@ def build_customer_lifecycle(
                 lifecycle_gaps[stage] += 1
         paid_at = _parse_datetime(order.get("paid_at"))
         install_times = [
-            row.reported_at.replace(tzinfo=UTC)
-            for row in matching_installs
-            if row.reported_at
+            row.reported_at.replace(tzinfo=UTC) for row in matching_installs if row.reported_at
         ]
         same_goal = bool(
             first_use
@@ -277,9 +262,7 @@ def build_customer_lifecycle(
     return {
         "lifecycle_schema": "customer_value_lifecycle/v2",
         "release_sha": release_sha,
-        "six_stage_counts": {
-            stage: int(stage_counts.get(stage, 0)) for stage in _STAGES
-        },
+        "six_stage_counts": {stage: int(stage_counts.get(stage, 0)) for stage in _STAGES},
         "complete_customer_count": len(complete_entities),
         "complete_customer_target": 3,
         "three_customer_loop_verified": len(complete_entities) >= 3,

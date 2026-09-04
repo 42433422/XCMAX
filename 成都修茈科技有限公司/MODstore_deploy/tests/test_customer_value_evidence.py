@@ -69,9 +69,7 @@ def test_payment_classifier_rejects_non_customer_evidence(overrides, reason) -> 
     assert actual_reason == reason
 
 
-def test_customer_value_ledger_is_append_only_and_links_paid_delivery(
-    tmp_path, monkeypatch
-):
+def test_customer_value_ledger_is_append_only_and_links_paid_delivery(tmp_path, monkeypatch):
     sf = _init_db(tmp_path, monkeypatch)
     order = _verified_payment()
     common = {
@@ -164,9 +162,7 @@ def test_customer_value_ledger_is_append_only_and_links_paid_delivery(
     models._SessionFactory = None
 
 
-def test_verified_delivery_rejects_mutable_or_unidentified_artifact(
-    tmp_path, monkeypatch
-):
+def test_verified_delivery_rejects_mutable_or_unidentified_artifact(tmp_path, monkeypatch):
     sf = _init_db(tmp_path, monkeypatch)
     order = _verified_payment()
 
@@ -191,9 +187,7 @@ def test_verified_delivery_rejects_mutable_or_unidentified_artifact(
     models._SessionFactory = None
 
 
-def test_evidence_excludes_test_internal_refund_and_unproved_orders(
-    tmp_path, monkeypatch
-):
+def test_evidence_excludes_test_internal_refund_and_unproved_orders(tmp_path, monkeypatch):
     sf = _init_db(tmp_path, monkeypatch)
     orders = [
         _verified_payment("customer_order_001"),
@@ -354,18 +348,13 @@ def test_java_payment_loader_validates_source_and_paginates(monkeypatch) -> None
 
     monkeypatch.setenv("MODSTORE_INTERNAL_API_KEY", "unit-test-internal-key")
     monkeypatch.setenv("JAVA_PAYMENT_SERVICE_URL", "http://payment.internal:8080")
-    monkeypatch.setattr(
-        "modstore_server.customer_value_payment_source.httpx.Client", _Client
-    )
+    monkeypatch.setattr("modstore_server.customer_value_payment_source.httpx.Client", _Client)
 
     orders = _load_java_payment_orders(90)
 
     assert len(orders) == 1001
     assert [call["params"]["offset"] for call in calls] == [0, 1000]
-    assert all(
-        call["headers"]["X-Internal-Api-Key"] == "unit-test-internal-key"
-        for call in calls
-    )
+    assert all(call["headers"]["X-Internal-Api-Key"] == "unit-test-internal-key" for call in calls)
 
 
 def test_fulfilled_payment_reconciliation_creates_idempotent_value_loop(
@@ -481,9 +470,7 @@ def test_verified_plan_activation_and_real_usage_close_customer_value_loop(
 
     first = reconcile_paid_customer_value(orders=[order], session_factory=sf, now=NOW)
     second = reconcile_paid_customer_value(orders=[order], session_factory=sf, now=NOW)
-    evidence = build_customer_value_evidence(
-        orders=[order], session_factory=sf, now=NOW
-    )
+    evidence = build_customer_value_evidence(orders=[order], session_factory=sf, now=NOW)
 
     assert first["created"] == 3
     assert first["existing"] == 0
@@ -518,9 +505,7 @@ def test_plan_delivery_rejects_non_activation_artifact(tmp_path, monkeypatch) ->
     models._SessionFactory = None
 
 
-def test_plan_usage_acceptance_requires_verified_usage_reason(
-    tmp_path, monkeypatch
-) -> None:
+def test_plan_usage_acceptance_requires_verified_usage_reason(tmp_path, monkeypatch) -> None:
     sf = _init_db(tmp_path, monkeypatch)
     order = _verified_payment(
         "customer_plan_bad_acceptance_001",
@@ -536,9 +521,7 @@ def test_plan_usage_acceptance_requires_verified_usage_reason(
     )
 
     result = reconcile_paid_customer_value(orders=[order], session_factory=sf, now=NOW)
-    evidence = build_customer_value_evidence(
-        orders=[order], session_factory=sf, now=NOW
-    )
+    evidence = build_customer_value_evidence(orders=[order], session_factory=sf, now=NOW)
 
     assert result["created"] == 2
     assert result["skipped"] == {"acceptance_evidence_invalid": 1}

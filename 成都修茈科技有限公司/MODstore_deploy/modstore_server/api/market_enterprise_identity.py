@@ -38,9 +38,7 @@ def _freeze_java_enterprise_identity(
     ).strip()
     if not key:
         raise _facade().HTTPException(503, "Java 支付身份同步密钥未配置")
-    base = (
-        os.environ.get("JAVA_PAYMENT_SERVICE_URL") or "http://127.0.0.1:8080"
-    ).rstrip("/")
+    base = (os.environ.get("JAVA_PAYMENT_SERVICE_URL") or "http://127.0.0.1:8080").rstrip("/")
     try:
         response = httpx.post(
             f"{base}/api/internal/payment/enterprise-identities",
@@ -85,9 +83,7 @@ def api_admin_verify_enterprise_identity(
     digest = body.verification_sha256.lower()
     sf = _facade().get_session_factory()
     with sf() as session:
-        target = (
-            session.query(_facade().User).filter(_facade().User.id == user_id).first()
-        )
+        target = session.query(_facade().User).filter(_facade().User.id == user_id).first()
         if not target:
             raise _facade().HTTPException(404, "用户不存在")
         if target.is_admin:
