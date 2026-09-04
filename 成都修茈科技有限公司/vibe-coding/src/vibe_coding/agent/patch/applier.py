@@ -136,9 +136,7 @@ class PatchApplier:
                 result.completed_at = time.time()
                 return result
 
-            backup_path = self.backup_dir / (
-                f"{self._backup_key(patch.patch_id)}-{time.time_ns()}-{uuid4().hex[:6]}"
-            )
+            backup_path = self.backup_dir / (f"{self._backup_key(patch.patch_id)}-{time.time_ns()}-{uuid4().hex[:6]}")
             try:
                 self._commit(
                     staged,
@@ -192,9 +190,7 @@ class PatchApplier:
             if edit.new_path:
                 self._reject_unsafe(edit.new_path)
             if edit.path in seen_paths:
-                raise PatchConflict(
-                    file=edit.path, reason="duplicate edit for path within one patch"
-                )
+                raise PatchConflict(file=edit.path, reason="duplicate edit for path within one patch")
             seen_paths.add(edit.path)
 
             if edit.operation == "create":
@@ -255,9 +251,7 @@ class PatchApplier:
         if not target.exists():
             raise PatchConflict(file=edit.path, reason="delete target does not exist")
         if target.is_dir():
-            raise PatchConflict(
-                file=edit.path, reason="delete target is a directory; not supported"
-            )
+            raise PatchConflict(file=edit.path, reason="delete target is a directory; not supported")
         original = target.read_bytes()
         return _StagedFile(
             edit=edit,
@@ -281,14 +275,10 @@ class PatchApplier:
         if not target.is_file():
             raise PatchConflict(file=edit.path, reason="rename source does not exist")
         if new_target.exists() and new_target.resolve() != target.resolve():
-            raise PatchConflict(
-                file=edit.new_path, reason="rename destination already exists"
-            )
+            raise PatchConflict(file=edit.new_path, reason="rename destination already exists")
         original = target.read_text(encoding="utf-8")
         if edit.hunks:
-            new_text, applied, fuzzy = self._apply_hunks(
-                edit.path, original, edit.hunks
-            )
+            new_text, applied, fuzzy = self._apply_hunks(edit.path, original, edit.hunks)
         else:
             new_text, applied, fuzzy = original, 0, 0
         return _StagedFile(
@@ -399,14 +389,10 @@ class PatchApplier:
     def _restore_from_manifest(self, backup_path: Path, data: dict[str, Any]) -> None:
         entries = data.get("entries")
         if not isinstance(entries, list):
-            raise PatchConflict(
-                file="manifest.json", reason="backup entries must be a list"
-            )
+            raise PatchConflict(file="manifest.json", reason="backup entries must be a list")
         for entry in reversed(entries):
             if not isinstance(entry, dict):
-                raise PatchConflict(
-                    file="manifest.json", reason="backup entry must be an object"
-                )
+                raise PatchConflict(file="manifest.json", reason="backup entry must be an object")
             self._restore_entry(backup_path, entry)
 
     def _restore_entry(self, backup_path: Path, entry: dict[str, Any]) -> None:
@@ -415,23 +401,15 @@ class PatchApplier:
             raise PatchConflict(file="manifest.json", reason="unknown backup operation")
         path = entry.get("path")
         if not isinstance(path, str) or not path:
-            raise PatchConflict(
-                file="manifest.json", reason="backup path must be a string"
-            )
+            raise PatchConflict(file="manifest.json", reason="backup path must be a string")
         new_path = entry.get("new_path")
         if new_path is not None and not isinstance(new_path, str):
-            raise PatchConflict(
-                file="manifest.json", reason="backup new_path must be a string"
-            )
+            raise PatchConflict(file="manifest.json", reason="backup new_path must be a string")
         existed = bool(entry.get("existed", False))
         target = self._abs(path)
         backup_file = entry.get("backup_file")
-        if backup_file is not None and (
-            not isinstance(backup_file, str) or not backup_file
-        ):
-            raise PatchConflict(
-                file="manifest.json", reason="backup_file must be a string"
-            )
+        if backup_file is not None and (not isinstance(backup_file, str) or not backup_file):
+            raise PatchConflict(file="manifest.json", reason="backup_file must be a string")
 
         if op == "create":
             if target.exists():
@@ -487,23 +465,15 @@ class PatchApplier:
     def _validated_backup_dir(self, candidate: Path) -> Path:
         """Return a real backup directory contained by ``self.backup_dir``."""
         if candidate.is_symlink():
-            raise PatchConflict(
-                file=str(candidate), reason="backup directory cannot be a symlink"
-            )
+            raise PatchConflict(file=str(candidate), reason="backup directory cannot be a symlink")
         try:
             relative = candidate.relative_to(self.backup_dir)
             resolved = resolve_within_root(self.backup_dir, relative)
         except (PathSafetyError, ValueError) as exc:
-            reason = (
-                exc.reason
-                if isinstance(exc, PathSafetyError)
-                else "backup escapes backup root"
-            )
+            reason = exc.reason if isinstance(exc, PathSafetyError) else "backup escapes backup root"
             raise PatchConflict(file=str(candidate), reason=reason) from exc
         if not resolved.is_dir():
-            raise PatchConflict(
-                file=str(candidate), reason="backup directory does not exist"
-            )
+            raise PatchConflict(file=str(candidate), reason="backup directory does not exist")
         return resolved
 
     @staticmethod
@@ -511,9 +481,7 @@ class PatchApplier:
         try:
             return resolve_within_root(backup_path, rel)
         except PathSafetyError as exc:
-            raise PatchConflict(
-                file=rel, reason=f"unsafe backup path: {exc.reason}"
-            ) from exc
+            raise PatchConflict(file=rel, reason=f"unsafe backup path: {exc.reason}") from exc
 
     def _backup_source(self, backup_path: Path, rel: str) -> Path:
         backup_path = self._validated_backup_dir(backup_path)
@@ -522,9 +490,7 @@ class PatchApplier:
             raise PatchConflict(file=rel, reason="backup source is not a regular file")
         return source
 
-    def _apply_hunks(
-        self, path: str, source: str, hunks: list[Hunk]
-    ) -> tuple[str, int, int]:
+    def _apply_hunks(self, path: str, source: str, hunks: list[Hunk]) -> tuple[str, int, int]:
         """Return ``(new_source, hunks_applied, fuzzy_hunks)``."""
         if not hunks:
             return source, 0, 0
@@ -538,9 +504,7 @@ class PatchApplier:
                 fuzzy += 1
         return text, applied, fuzzy
 
-    def _apply_one(
-        self, path: str, source: str, hunk: Hunk, idx: int
-    ) -> tuple[str, bool]:
+    def _apply_one(self, path: str, source: str, hunk: Hunk, idx: int) -> tuple[str, bool]:
         """Apply one hunk via the shared cascade in :mod:`.repair`.
 
         The cascade tries (in order): strict anchor match → anchors-only

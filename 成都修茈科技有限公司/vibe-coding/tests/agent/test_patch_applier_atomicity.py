@@ -48,9 +48,7 @@ def test_create_delete_rename_applied(tmp_path: Path) -> None:
         edits=[
             FileEdit(path="pkg/new.py", operation="create", contents="X = 1\n"),
             FileEdit(path="pkg/delete_me.py", operation="delete"),
-            FileEdit(
-                path="pkg/__init__.py", operation="rename", new_path="pkg/_init.py"
-            ),
+            FileEdit(path="pkg/__init__.py", operation="rename", new_path="pkg/_init.py"),
         ]
     )
     applier = PatchApplier(tmp_path)
@@ -64,9 +62,7 @@ def test_create_delete_rename_applied(tmp_path: Path) -> None:
 
 def test_create_rejects_existing(tmp_path: Path) -> None:
     _make_project(tmp_path)
-    patch = ProjectPatch(
-        edits=[FileEdit(path="pkg/__init__.py", operation="create", contents="x")]
-    )
+    patch = ProjectPatch(edits=[FileEdit(path="pkg/__init__.py", operation="create", contents="x")])
     applier = PatchApplier(tmp_path)
     result = applier.apply(patch)
     assert not result.applied
@@ -84,9 +80,7 @@ def test_dry_run_does_not_touch_disk(tmp_path: Path) -> None:
     )
     applier = PatchApplier(tmp_path)
     result = applier.apply(
-        ProjectPatch(
-            edits=[FileEdit(path="pkg/math.py", operation="modify", hunks=[hunk])]
-        ),
+        ProjectPatch(edits=[FileEdit(path="pkg/math.py", operation="modify", hunks=[hunk])]),
         dry_run=True,
     )
     assert result.applied is True
@@ -117,9 +111,7 @@ def test_atomic_rollback_when_one_hunk_misses(tmp_path: Path) -> None:
     applier = PatchApplier(tmp_path)
     result = applier.apply(patch)
     assert not result.applied
-    assert (tmp_path / "pkg" / "math.py").read_text(encoding="utf-8").count(
-        "return a + b"
-    ) == 1
+    assert (tmp_path / "pkg" / "math.py").read_text(encoding="utf-8").count("return a + b") == 1
 
 
 def test_rollback_after_apply(tmp_path: Path) -> None:
@@ -130,9 +122,7 @@ def test_rollback_after_apply(tmp_path: Path) -> None:
         new_text="    return 99\n",
         anchor_after="\n\ndef sub(a, b):\n",
     )
-    patch = ProjectPatch(
-        edits=[FileEdit(path="pkg/math.py", operation="modify", hunks=[hunk])]
-    )
+    patch = ProjectPatch(edits=[FileEdit(path="pkg/math.py", operation="modify", hunks=[hunk])])
     applier = PatchApplier(tmp_path)
     res = applier.apply(patch)
     assert res.applied
@@ -179,9 +169,7 @@ def test_fuzzy_anchor_within_tolerance(tmp_path: Path) -> None:
         new_text="    return 100\n",
         anchor_after="# tail\n",
     )
-    patch = ProjectPatch(
-        edits=[FileEdit(path="x.py", operation="modify", hunks=[hunk])]
-    )
+    patch = ProjectPatch(edits=[FileEdit(path="x.py", operation="modify", hunks=[hunk])])
     applier = PatchApplier(tmp_path)
     result = applier.apply(patch)
     assert result.applied
@@ -193,9 +181,7 @@ def test_untrusted_patch_id_never_becomes_a_backup_path(tmp_path: Path) -> None:
     _make_project(tmp_path)
     patch = ProjectPatch(
         patch_id="../../*-attacker-controlled",
-        edits=[
-            FileEdit(path="pkg/new.py", operation="create", contents="SAFE = True\n")
-        ],
+        edits=[FileEdit(path="pkg/new.py", operation="create", contents="SAFE = True\n")],
     )
     applier = PatchApplier(tmp_path)
 
