@@ -126,6 +126,12 @@ def resolve_within_root(
     safe_rel = safe_relative_path(rel)
     candidate = (root_p / safe_rel).resolve()
     root_resolved = root_p.resolve()
+    candidate_text = candidate.as_posix()
+    root_prefix = root_resolved.as_posix().rstrip("/") + "/"
+    if candidate != root_resolved and not candidate_text.startswith(root_prefix):
+        raise PathSafetyError(
+            str(rel), f"resolved path escapes root: {candidate} not under {root_resolved}"
+        )
     try:
         candidate.relative_to(root_resolved)
     except ValueError as exc:

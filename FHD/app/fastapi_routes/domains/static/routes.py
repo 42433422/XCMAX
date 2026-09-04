@@ -37,10 +37,10 @@ router = APIRouter(tags=["legacy-static"], deprecated=True)
 def _resolved_child(parent: str, name: str) -> str | None:
     root = os.path.realpath(os.path.abspath(parent))
     candidate = os.path.realpath(os.path.abspath(os.path.join(parent, name)))
-    try:
-        return candidate if os.path.commonpath((root, candidate)) == root else None
-    except ValueError:
+    root_prefix = root.rstrip(os.sep) + os.sep
+    if candidate != root and not candidate.startswith(root_prefix):
         return None
+    return candidate
 
 
 @router.get("/")
