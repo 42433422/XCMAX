@@ -225,9 +225,7 @@ class ShipmentTemplateServiceMixin:
             raise EtlError("ETL_SHIPMENT_TEMPLATE_DIGEST_INVALID", "发货单版式来源摘要无效")
         template_root = os.path.realpath(os.path.abspath(template_dir))
         destination_text = os.path.realpath(
-            os.path.abspath(
-                os.path.join(template_root, f"{base_name}-{digest_prefix}.xlsx")
-            )
+            os.path.abspath(os.path.join(template_root, f"{base_name}-{digest_prefix}.xlsx"))
         )
         template_prefix = template_root.rstrip(os.sep) + os.sep
         if not destination_text.startswith(template_prefix):
