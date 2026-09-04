@@ -15,7 +15,11 @@ def create_mod(mod_id: str, mod_name: str, library: Path) -> Path:
     td = template_dir()
     if not td.is_dir():
         raise FileNotFoundError(f"缺少模板目录: {td}")
-    dest = library / mod_id
+    library = library.resolve()
+    dest = (library / mod_id).resolve()
+    library_prefix = library.as_posix().rstrip("/") + "/"
+    if dest != library and not dest.as_posix().startswith(library_prefix):
+        raise ValueError("mod_id 路径越界")
     if dest.exists():
         raise FileExistsError(f"已存在: {dest}")
     library.mkdir(parents=True, exist_ok=True)

@@ -77,10 +77,23 @@ def _safe_name(name: str) -> str:
     return s.strip("._")[:120] or "file"
 
 
+def _contained_child(root: Path, name: str) -> Path:
+    resolved_root = root.resolve()
+    candidate = (resolved_root / name).resolve()
+    root_prefix = resolved_root.as_posix().rstrip("/") + "/"
+    if candidate != resolved_root and not candidate.as_posix().startswith(root_prefix):
+        raise ValueError("sandbox path escapes run directory")
+    return candidate
+
+
 def _prepare_work_dir(session_id: str, *, script_root: Path) -> Path:
+    script_root = script_root.resolve()
     script_root.mkdir(parents=True, exist_ok=True)
     safe_id = _safe_name(session_id)
-    work = Path(tempfile.mkdtemp(prefix=f"{safe_id}_", dir=str(script_root)))
+    work = Path(tempfile.mkdtemp(prefix=f"{safe_id}_", dir=str(script_root))).resolve()
+    root_prefix = script_root.as_posix().rstrip("/") + "/"
+    if work != script_root and not work.as_posix().startswith(root_prefix):
+        raise ValueError("sandbox work directory escaped script root")
     (work / "inputs").mkdir()
     (work / "outputs").mkdir()
     runtime_pkg = work / "modstore_runtime"
@@ -205,7 +218,7 @@ async def run_in_sandbox(
     input_dir = work_dir / "inputs"
     for item in files or []:
         name = _safe_name(str(item.get("filename") or "upload.bin"))
-        (input_dir / name).write_bytes(item.get("content") or b"")
+        _contained_child(input_dir, name).write_bytes(item.get("content") or b"")
 
     # 在用户脚本前注入 preamble，把 open / os.* / socket 锁到 work_dir 内并禁网。
     # preamble 自包含、读取 MODSTORE_SANDBOX_WORK_DIR 决定边界。

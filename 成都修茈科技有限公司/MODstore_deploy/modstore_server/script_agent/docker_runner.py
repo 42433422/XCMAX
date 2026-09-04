@@ -47,6 +47,7 @@ from modstore_server.script_agent.sandbox_runner import (
     STDOUT_TAIL_BYTES,
     SandboxResult,
     _collect_outputs,
+    _contained_child,
     _drain,
     _prepare_work_dir,
     _safe_name,
@@ -105,7 +106,7 @@ async def run_in_docker(
     input_dir = work_dir / "inputs"
     for item in files or []:
         name = _safe_name(str(item.get("filename") or "upload.bin"))
-        (input_dir / name).write_bytes(item.get("content") or b"")
+        _contained_child(input_dir, name).write_bytes(item.get("content") or b"")
 
     script_path = work_dir / "script.py"
     script_path.write_text(PREAMBLE_SOURCE + script_text, encoding="utf-8")
