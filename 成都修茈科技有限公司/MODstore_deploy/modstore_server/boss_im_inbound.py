@@ -47,7 +47,9 @@ def _jloads(text: str, default: Any) -> Any:
 def _ack_enabled() -> bool:
     import os
 
-    return (os.environ.get("MODSTORE_BOSS_IM_ACK_ENABLED") or "1").strip().lower() not in (
+    return (
+        os.environ.get("MODSTORE_BOSS_IM_ACK_ENABLED") or "1"
+    ).strip().lower() not in (
         "0",
         "false",
         "no",
@@ -69,14 +71,20 @@ def _employee_display_name(employee_id: str) -> str:
         with sf() as session:
             pack = load_employee_pack_resolved(session, employee_id)
         manifest = pack.get("manifest") or {}
-        ident = manifest.get("identity") if isinstance(manifest.get("identity"), dict) else {}
+        ident = (
+            manifest.get("identity")
+            if isinstance(manifest.get("identity"), dict)
+            else {}
+        )
         return str(ident.get("name") or manifest.get("name") or "").strip()
     except RECOVERABLE_ERRORS:
-        logger.debug("boss_im display name lookup failed employee=%s", employee_id, exc_info=True)
+        logger.debug("boss_im display name lookup failed")
         return ""
 
 
-def enqueue_boss_im_task(*, boss_user_id: int, employee_id: str, text: str) -> Dict[str, Any]:
+def enqueue_boss_im_task(
+    *, boss_user_id: int, employee_id: str, text: str
+) -> Dict[str, Any]:
     """把老板的一条 IM 指令入队为 ``PendingBriefTask(source_kind="boss_im")``。
 
     与 daily_brief 的去重指纹不同：聊天指令允许重复文本（老板可以连说两次「继续」），
@@ -91,9 +99,9 @@ def enqueue_boss_im_task(*, boss_user_id: int, employee_id: str, text: str) -> D
     from modstore_server.models import PendingBriefTask, get_session_factory
 
     now = datetime.now(UTC)
-    fp = hashlib.sha256(f"boss_im|{uid}|{eid}|{body}|{now.timestamp():.6f}".encode()).hexdigest()[
-        :64
-    ]
+    fp = hashlib.sha256(
+        f"boss_im|{uid}|{eid}|{body}|{now.timestamp():.6f}".encode()
+    ).hexdigest()[:64]
     sf = get_session_factory()
     with sf() as session:
         row = PendingBriefTask(
@@ -111,11 +119,13 @@ def enqueue_boss_im_task(*, boss_user_id: int, employee_id: str, text: str) -> D
         session.add(row)
         session.commit()
         task_id = int(row.id)
-    logger.info("boss_im task enqueued id=%s employee=%s boss=%s", task_id, eid, uid)
+    logger.info("boss_im task enqueued id=%s", task_id)
     return {"ok": True, "task_id": task_id}
 
 
-def handle_boss_im_message(*, user_id: int, employee_id: str, text: str) -> Dict[str, Any]:
+def handle_boss_im_message(
+    *, user_id: int, employee_id: str, text: str
+) -> Dict[str, Any]:
     """老板 IM 消息统一入口：先当答案，不成再当新指令。
 
     返回：
@@ -133,7 +143,9 @@ def handle_boss_im_message(*, user_id: int, employee_id: str, text: str) -> Dict
         answer_latest_pending_for_employee,
     )
 
-    answered = answer_latest_pending_for_employee(user_id=uid, employee_id=eid, answer=body)
+    answered = answer_latest_pending_for_employee(
+        user_id=uid, employee_id=eid, answer=body
+    )
     if answered.get("ok"):
         return {"ok": True, "mode": "question_answered", **answered}
     if str(answered.get("reason") or "") not in ("", "no_pending"):
@@ -160,7 +172,7 @@ def handle_boss_im_message(*, user_id: int, employee_id: str, text: str) -> Dict
                 owner_user_id=uid,
             )
         except RECOVERABLE_ERRORS:
-            logger.debug("boss_im ack skipped employee=%s", eid, exc_info=True)
+            logger.debug("boss_im ack skipped")
     return {
         "ok": True,
         "mode": "task_enqueued",
@@ -195,7 +207,9 @@ def _extract_reply_text(raw: Dict[str, Any]) -> str:
         for out in outputs:
             if not isinstance(out, dict):
                 continue
-            cand = str(out.get("answer") or out.get("summary") or out.get("output") or "").strip()
+            cand = str(
+                out.get("answer") or out.get("summary") or out.get("output") or ""
+            ).strip()
             if not cand:
                 continue
             # agent 的 summary 有时是 {"thought":..,"answer":..} JSON，抽出 answer 当人话
@@ -263,7 +277,11 @@ def dispatch_boss_im_task(task_id: int, *, actor_user_id: int = 0) -> Dict[str, 
             ok = True
             reply = "✅ 已处理完，不过这次没有可展示的文本结果。"
     except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - 员工执行失败必须转成 IM 回音，不能抛死调度循环
-        logger.exception("boss_im dispatch failed task_id=%s employee=%s", task_id, eid)
+        logger.warning(
+            "boss_im dispatch failed task_id=%s error_type=%s",
+            task_id,
+            type(exc).__name__,
+        )
         error = str(exc)[:2000]
         reply = f"❌ 这条我执行失败了：{str(exc)[:300]}\n可以换个说法再发我一次。"
 

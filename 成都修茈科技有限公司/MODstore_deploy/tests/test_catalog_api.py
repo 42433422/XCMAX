@@ -90,7 +90,9 @@ def test_catalog_upload_with_token(monkeypatch, tmp_path: Path):
         "/v1/packages",
         headers={"Authorization": "Bearer secret-test"},
         data={"metadata": meta},
-        files={"file": ("catalog-test-mod-0.0.1.xcmod", buf.getvalue(), "application/zip")},
+        files={
+            "file": ("catalog-test-mod-0.0.1.xcmod", buf.getvalue(), "application/zip")
+        },
     )
     assert r.status_code == 200, r.text
     idx = c.get("/v1/index.json").json()
@@ -117,12 +119,38 @@ def test_remove_package_deletes_json_and_file(monkeypatch, tmp_path: Path):
     assert len(data["packages"]) == 1
     fn = data["packages"][0].get("stored_filename")
     assert fn
+    assert "emp-del-test" not in str(fn)
+    assert str(fn).startswith("package_")
     assert (tmp_path / "files" / str(fn)).is_file()
 
     n = remove_package("emp-del-test", version=None)
     assert n == 1
     assert load_store()["packages"] == []
     assert not (tmp_path / "files" / str(fn)).is_file()
+
+
+def test_append_package_uses_safe_extension_and_opaque_filename(
+    monkeypatch, tmp_path: Path
+):
+    monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path / "catalog"))
+    from modstore_server.catalog_store import append_package
+
+    source = tmp_path / "customer supplied.secret"
+    source.write_bytes(b"package")
+    saved = append_package(
+        {
+            "id": "../../private-customer",
+            "version": "1.0.0/../../escape",
+            "name": "Test",
+        },
+        source,
+    )
+
+    stored = str(saved["stored_filename"])
+    assert stored.startswith("package_")
+    assert stored.endswith(".xcmod")
+    assert "private-customer" not in stored
+    assert (tmp_path / "catalog" / "files" / stored).is_file()
 
 
 def test_remove_package_matches_int_id_in_json(monkeypatch, tmp_path: Path):

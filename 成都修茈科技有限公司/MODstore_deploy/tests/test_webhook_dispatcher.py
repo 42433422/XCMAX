@@ -19,6 +19,7 @@ def _isolated_events_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("MODSTORE_WEBHOOK_EVENTS_DIR", str(tmp_path / "events"))
     monkeypatch.delenv("MODSTORE_WEBHOOK_URL", raising=False)
     monkeypatch.delenv("MODSTORE_WEBHOOK_SECRET", raising=False)
+    monkeypatch.delenv("MODSTORE_WEBHOOK_EVENT_KEY", raising=False)
     monkeypatch.delenv("MODSTORE_WEBHOOK_TIMEOUT_SECONDS", raising=False)
     monkeypatch.delenv("MODSTORE_WEBHOOK_RETRIES", raising=False)
     yield
@@ -43,7 +44,9 @@ def test_stable_event_id_falls_back_when_aggregate_missing():
 
 
 def test_build_event_canonicalises_legacy_alias():
-    event = webhook_dispatcher.build_event("payment.order_paid", "MOD42", {"out_trade_no": "MOD42"})
+    event = webhook_dispatcher.build_event(
+        "payment.order_paid", "MOD42", {"out_trade_no": "MOD42"}
+    )
     assert event["type"] == "payment.paid"
     assert event["version"] == 1
     assert event["aggregate_id"] == "MOD42"
@@ -87,7 +90,9 @@ def test_dispatch_event_signs_with_hmac(monkeypatch):
 
     monkeypatch.setattr(webhook_dispatcher.httpx, "Client", _FakeClient)
 
-    event = webhook_dispatcher.build_event("payment.paid", "MOD1", {"out_trade_no": "MOD1"})
+    event = webhook_dispatcher.build_event(
+        "payment.paid", "MOD1", {"out_trade_no": "MOD1"}
+    )
     result = webhook_dispatcher.dispatch_event(event)
 
     assert result["ok"] is True
@@ -172,8 +177,13 @@ def test_replay_event_returns_not_found_when_missing():
 
 
 def test_replay_event_loads_persisted_envelope(monkeypatch, tmp_path):
+    monkeypatch.setenv("MODSTORE_WEBHOOK_EVENT_KEY", "test-replay-encryption-key")
     event = webhook_dispatcher.build_event("payment.paid", "MODR", {"x": 1})
     webhook_dispatcher._store_event(event, {"ok": False})
+
+    stored = webhook_dispatcher._event_path(event["id"]).read_text(encoding="utf-8")
+    assert event["id"] not in stored
+    assert '"event"' not in stored
 
     captured: dict = {}
 
@@ -186,6 +196,15 @@ def test_replay_event_loads_persisted_envelope(monkeypatch, tmp_path):
     result = webhook_dispatcher.replay_event(event["id"])
     assert result == {"ok": True, "echoed": True}
     assert captured["event"]["id"] == event["id"]
+
+
+def test_event_persistence_fails_closed_without_encryption_key():
+    event = webhook_dispatcher.build_event(
+        "payment.paid", "NO-KEY", {"secret": "value"}
+    )
+
+    assert webhook_dispatcher._store_event(event, {"ok": False}) is False
+    assert not webhook_dispatcher._event_path(event["id"]).exists()
 
 
 def test_publish_event_dispatches_and_emits_to_neuro_bus(monkeypatch):
@@ -233,5 +252,7 @@ def test_publish_event_logs_missing_required_fields(monkeypatch, caplog):
     monkeypatch.setattr(webhook_dispatcher, "neuro_bus", _Bus())
 
     with caplog.at_level("WARNING", logger="modstore_server.webhook_dispatcher"):
-        webhook_dispatcher.publish_event("payment.paid", "MODX", {"out_trade_no": "MODX"})
+        webhook_dispatcher.publish_event(
+            "payment.paid", "MODX", {"out_trade_no": "MODX"}
+        )
     assert any("event payload missing" in r.message for r in caplog.records)
