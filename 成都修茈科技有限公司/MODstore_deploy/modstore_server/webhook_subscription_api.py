@@ -107,14 +107,14 @@ def _serialize_delivery(row: WebhookDelivery) -> Dict[str, Any]:
     }
 
 
-def _encrypt_secret_or_warn(secret: str) -> str:
+def _encrypt_secret_or_reject(secret: str) -> str:
     if not secret:
         return ""
     if not fernet_configured():
-        logger.warning(
-            "MODSTORE_FERNET_KEY 未配置，webhook secret 将以非加密方式保存（仅开发期可接受）"
+        raise HTTPException(
+            503,
+            "webhook secret encryption is unavailable; configure MODSTORE_LLM_MASTER_KEY",
         )
-        return secret
     return encrypt_secret(secret)
 
 
@@ -147,7 +147,7 @@ async def create_subscription(
         name=body.name.strip(),
         description=(body.description or "").strip(),
         target_url=body.target_url.strip(),
-        secret_encrypted=_encrypt_secret_or_warn((body.secret or "").strip()),
+        secret_encrypted=_encrypt_secret_or_reject((body.secret or "").strip()),
         enabled_events_json=json.dumps(enabled, ensure_ascii=False),
         is_active=bool(body.is_active),
     )
@@ -217,7 +217,7 @@ async def update_subscription(
             raise HTTPException(400, "target_url 必须是 http(s) 链接")
         row.target_url = body.target_url.strip()
     if body.secret is not None:
-        row.secret_encrypted = _encrypt_secret_or_warn(body.secret.strip())
+        row.secret_encrypted = _encrypt_secret_or_reject(body.secret.strip())
     if body.enabled_events is not None:
         row.enabled_events_json = json.dumps(body.enabled_events or ["*"], ensure_ascii=False)
     if body.is_active is not None:
