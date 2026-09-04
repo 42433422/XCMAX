@@ -87,7 +87,9 @@ DAILY_BRIEF_TASK_STRICT = f"""你是 MODstore 在岗 AI 员工。请阅读 input
 
 
 def _daily_brief_strict_grounding() -> bool:
-    return (os.environ.get("MODSTORE_DAILY_BRIEF_STRICT_GROUNDING", "0") or "").strip().lower() in (
+    return (
+        os.environ.get("MODSTORE_DAILY_BRIEF_STRICT_GROUNDING", "0") or ""
+    ).strip().lower() in (
         "1",
         "true",
         "yes",
@@ -145,7 +147,9 @@ def daily_brief_enabled() -> bool:
 
 
 def _daily_brief_todo_dispatch_immediate() -> bool:
-    return os.environ.get("MODSTORE_DAILY_BRIEF_TODO_DISPATCH_IMMEDIATE", "1").strip().lower() in (
+    return os.environ.get(
+        "MODSTORE_DAILY_BRIEF_TODO_DISPATCH_IMMEDIATE", "1"
+    ).strip().lower() in (
         "1",
         "true",
         "yes",
@@ -185,7 +189,9 @@ def resolve_daily_brief_research_brief(pkg_id: str, display_name: str) -> str:
             pack = load_employee_pack(session, pkg_id)
         man = pack.get("manifest") if isinstance(pack.get("manifest"), dict) else {}
         v2 = (
-            man.get("employee_config_v2") if isinstance(man.get("employee_config_v2"), dict) else {}
+            man.get("employee_config_v2")
+            if isinstance(man.get("employee_config_v2"), dict)
+            else {}
         )
         meta = v2.get("metadata") if isinstance(v2.get("metadata"), dict) else {}
         for key in ("daily_brief_seed", "daily_brief_research_focus"):
@@ -193,7 +199,7 @@ def resolve_daily_brief_research_brief(pkg_id: str, display_name: str) -> str:
             if v and str(v).strip():
                 return str(v).strip()
     except RECOVERABLE_ERRORS:
-        logger.debug("daily brief: no manifest seed for %s", pkg_id, exc_info=True)
+        logger.debug("daily brief: manifest seed unavailable")
     return f"{display_name}（{pkg_id}）MODstore 运维、质量、发布与近期行业公开动态"
 
 
@@ -325,11 +331,15 @@ async def _one_brief_html(pkg_id: str, display_name: str, prov: str, mdl: str) -
                         todo_sync_note = (
                             '<p style="margin:6px 0 0;color:#0f766e;font-size:11px">'
                             f"待办已入队：{created} 条"
-                            + (f"，已触发调度完成 {dispatched} 条" if dispatched > 0 else "")
+                            + (
+                                f"，已触发调度完成 {dispatched} 条"
+                                if dispatched > 0
+                                else ""
+                            )
                             + "</p>"
                         )
                 except RECOVERABLE_ERRORS:
-                    logger.exception("daily brief todo enqueue failed employee=%s", pkg_id)
+                    logger.error("daily brief todo enqueue failed")
             inner = (
                 warn_html
                 + f'<pre style="white-space:pre-wrap;font-size:13px">{html.escape(main_md)}</pre>'
@@ -338,9 +348,9 @@ async def _one_brief_html(pkg_id: str, display_name: str, prov: str, mdl: str) -
             )
         else:
             inner = warn_html + '<p style="color:#888;font-size:13px">（无输出）</p>'
-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
-        logger.exception("daily brief failed employee=%s", pkg_id)
-        inner = f'<p style="color:#b91c1c;font-size:13px">{html.escape(str(exc)[:500])}</p>'
+    except BOUNDARY_ERRORS:  # noqa: BLE001
+        logger.error("daily brief failed")
+        inner = '<p style="color:#b91c1c;font-size:13px">生成简报失败</p>'
 
     title_esc = html.escape(display_name)
     pid_esc = html.escape(pkg_id)

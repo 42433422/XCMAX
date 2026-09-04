@@ -66,7 +66,8 @@ def _scan_scope_files(
                     continue
                 # 跳过常见噪音目录
                 if any(
-                    seg in {"node_modules", ".venv", ".git", "__pycache__", "dist", "build"}
+                    seg
+                    in {"node_modules", ".venv", ".git", "__pycache__", "dist", "build"}
                     for seg in p.parts
                 ):
                     continue
@@ -79,7 +80,9 @@ def _scan_scope_files(
                         {
                             "path": rel,
                             "size_bytes": int(st.st_size),
-                            "mtime_iso": datetime.fromtimestamp(st.st_mtime, tz=UTC).isoformat(),
+                            "mtime_iso": datetime.fromtimestamp(
+                                st.st_mtime, tz=UTC
+                            ).isoformat(),
                             "mtime_age_hours": round(
                                 (datetime.now(UTC).timestamp() - st.st_mtime) / 3600.0,
                                 1,
@@ -113,8 +116,8 @@ def _recent_runs_from_db(
             .limit(limit)
             .all()
         )
-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
-        logger.debug("recent_runs query failed employee_id=%s err=%s", employee_id, exc)
+    except BOUNDARY_ERRORS:  # noqa: BLE001
+        logger.debug("recent runs query failed")
         return []
     out: List[Dict[str, Any]] = []
     for r in rows:
@@ -154,8 +157,8 @@ def _recent_failures_from_db(
             .limit(limit)
             .all()
         )
-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
-        logger.debug("recent_failures query failed employee_id=%s err=%s", employee_id, exc)
+    except BOUNDARY_ERRORS:  # noqa: BLE001
+        logger.debug("recent failures query failed")
         return []
     out: List[Dict[str, Any]] = []
     for r in rows:
@@ -200,7 +203,9 @@ def enrich_perception(
     if not isinstance(wp, dict):
         wp = {}
     scope_globs = [str(x) for x in (wp.get("scope_globs") or []) if str(x).strip()]
-    forbidden_globs = [str(x) for x in (wp.get("forbidden_globs") or []) if str(x).strip()]
+    forbidden_globs = [
+        str(x) for x in (wp.get("forbidden_globs") or []) if str(x).strip()
+    ]
     if not scope_globs and not forbidden_globs and manifest:
         try:
             from modstore_server.employee_scope_policy import (
@@ -210,12 +215,8 @@ def enrich_perception(
             _sg, _fg, _ag = workspace_policy_from_manifest(manifest)
             scope_globs = _sg or []
             forbidden_globs = _fg or []
-        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
-            logger.debug(
-                "workspace_policy_from_manifest failed employee_id=%s err=%s",
-                employee_id,
-                exc,
-            )
+        except BOUNDARY_ERRORS:  # noqa: BLE001
+            logger.debug("workspace policy resolution failed")
 
     ni["_scope_summary"] = {
         "scope_globs": scope_globs,
@@ -226,16 +227,20 @@ def enrich_perception(
     # 扫描自己负责的代码文件
     if scope_globs and project_root:
         try:
-            files = _scan_scope_files(Path(project_root), scope_globs, limit=_MAX_FILES_SIGNAL)
+            files = _scan_scope_files(
+                Path(project_root), scope_globs, limit=_MAX_FILES_SIGNAL
+            )
             ni["_workspace_signals"] = {
                 "files_recent_modified": files,
                 "scope_root": str(project_root),
                 "note": f"你负责的代码（scope_globs 匹配）最近修改的 {len(files)} 个文件",
             }
-        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
-            ni["_workspace_signals"] = {"error": str(exc)[:200]}
+        except BOUNDARY_ERRORS:  # noqa: BLE001
+            ni["_workspace_signals"] = {"error": "workspace_scan_failed"}
     else:
-        ni["_workspace_signals"] = {"note": "未配置 scope_globs 或 project_root，无法扫描代码文件"}
+        ni["_workspace_signals"] = {
+            "note": "未配置 scope_globs 或 project_root，无法扫描代码文件"
+        }
 
     # 最近执行摘要（成功/失败都要）
     try:
@@ -244,18 +249,20 @@ def enrich_perception(
             "runs": runs,
             "note": f"你最近 {len(runs)} 次执行记录（含成功/失败）",
         }
-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
-        ni["_recent_runs"] = {"error": str(exc)[:200]}
+    except BOUNDARY_ERRORS:  # noqa: BLE001
+        ni["_recent_runs"] = {"error": "recent_runs_unavailable"}
 
     # 最近失败（重点看失败原因）
     try:
-        failures = _recent_failures_from_db(session, employee_id, limit=_MAX_RECENT_FAILURES)
+        failures = _recent_failures_from_db(
+            session, employee_id, limit=_MAX_RECENT_FAILURES
+        )
         ni["_recent_failures"] = {
             "failures": failures,
             "note": f"你最近 {len(failures)} 次失败任务的失败原因（如果有的话）",
         }
-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
-        ni["_recent_failures"] = {"error": str(exc)[:200]}
+    except BOUNDARY_ERRORS:  # noqa: BLE001
+        ni["_recent_failures"] = {"error": "recent_failures_unavailable"}
 
     return perceived
 

@@ -27,7 +27,9 @@ from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRO
 
 logger = logging.getLogger(__name__)
 
-MAX_HANDOFF_DEPTH = max(1, int(os.environ.get("MODSTORE_HANDOFF_MAX_DEPTH", "4") or "4"))
+MAX_HANDOFF_DEPTH = max(
+    1, int(os.environ.get("MODSTORE_HANDOFF_MAX_DEPTH", "4") or "4")
+)
 """每条原始任务最多链式 handoff N 次（默认 4）。"""
 
 
@@ -40,7 +42,9 @@ class HandoffDirective:
     priority: int = 5
 
 
-def _coerce_directive(raw: Any, *, fallback_brief: str = "") -> Optional[HandoffDirective]:
+def _coerce_directive(
+    raw: Any, *, fallback_brief: str = ""
+) -> Optional[HandoffDirective]:
     if not raw:
         return None
     if isinstance(raw, str):
@@ -49,7 +53,10 @@ def _coerce_directive(raw: Any, *, fallback_brief: str = "") -> Optional[Handoff
     if not isinstance(raw, dict):
         return None
     eid = str(
-        raw.get("to_employee_id") or raw.get("handoff_to") or raw.get("employee_id") or ""
+        raw.get("to_employee_id")
+        or raw.get("handoff_to")
+        or raw.get("employee_id")
+        or ""
     ).strip()
     if not eid:
         return None
@@ -135,24 +142,25 @@ def build_followup_subtasks(
     from modstore_server.task_router import SubTask
 
     if depth >= MAX_HANDOFF_DEPTH:
-        logger.info("handoff: depth limit reached (%s), skipping further handoffs", depth)
+        logger.info(
+            "handoff: depth limit reached (%s), skipping further handoffs", depth
+        )
         return []
 
     new_subtasks: List[SubTask] = []
     for result in layer_results:
         if not result or not result.get("ok", False):
             continue
-        outcome = result.get("result") if isinstance(result.get("result"), dict) else result
+        outcome = (
+            result.get("result") if isinstance(result.get("result"), dict) else result
+        )
         directives = extract_handoff_directives(outcome, fallback_brief=fallback_brief)
         if not directives:
             continue
         from_employee_id = str(result.get("employee_id") or "")
         for directive in directives:
             if not directive.to_employee_id or directive.to_employee_id in visited:
-                logger.info(
-                    "handoff: skip target=%s (visited or empty)",
-                    directive.to_employee_id,
-                )
+                logger.info("handoff: skip visited or empty target")
                 continue
             input_data = dict(directive.input_data or {})
             input_data.setdefault("_handoff_chain", []).append(
@@ -219,8 +227,8 @@ def _target_exists(employee_id: str) -> bool:
                 .first()
             )
             return row2 is not None
-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
-        logger.debug("handoff target_exists check failed employee_id=%s err=%s", employee_id, exc)
+    except BOUNDARY_ERRORS:  # noqa: BLE001
+        logger.debug("handoff target existence check failed")
         return False
 
 
@@ -382,8 +390,8 @@ def perform_handoff(
                 auto_dispatch=False,
             )
             suggestion_id = int(sg_out.get("suggestion_id") or 0)
-        except BOUNDARY_ERRORS as _sg_exc:  # noqa: BLE001
-            logger.debug("create suggestion for handoff failed: %s", _sg_exc)
+        except BOUNDARY_ERRORS:  # noqa: BLE001
+            logger.debug("create suggestion for handoff failed")
 
         return {
             "ok": True,
@@ -395,12 +403,12 @@ def perform_handoff(
             "reason": reason_s,
             "suggestion_id": suggestion_id or None,
         }
-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
-        logger.exception("perform_handoff failed src=%s tgt=%s", src, tgt)
+    except BOUNDARY_ERRORS:  # noqa: BLE001
+        logger.error("perform_handoff failed")
         return {
             "ok": False,
             "skipped": True,
-            "skip_reason": f"执行异常: {exc}"[:300],
+            "skip_reason": "执行异常",
             "from": src,
             "to": tgt,
         }

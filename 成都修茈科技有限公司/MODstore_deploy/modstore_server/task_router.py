@@ -31,7 +31,11 @@ def _load_all_employee_profiles() -> List[Dict[str, Any]]:
         sf = get_session_factory()
         profiles: List[Dict[str, Any]] = []
         with sf() as session:
-            rows = session.query(CatalogItem).filter(CatalogItem.artifact == "employee_pack").all()
+            rows = (
+                session.query(CatalogItem)
+                .filter(CatalogItem.artifact == "employee_pack")
+                .all()
+            )
             for row in rows:
                 profile: Dict[str, Any] = {
                     "id": str(row.pkg_id or ""),
@@ -47,17 +51,24 @@ def _load_all_employee_profiles() -> List[Dict[str, Any]]:
                         if p.exists():
                             with zipfile.ZipFile(p, "r") as z:
                                 if "manifest.json" in z.namelist():
-                                    mf = json.loads(z.read("manifest.json").decode("utf-8"))
+                                    mf = json.loads(
+                                        z.read("manifest.json").decode("utf-8")
+                                    )
                                     identity = mf.get("identity") or mf
                                     profile["domain"] = str(
-                                        identity.get("domain") or identity.get("industry") or ""
+                                        identity.get("domain")
+                                        or identity.get("industry")
+                                        or ""
                                     )
                                     profile["skills"] = [
-                                        str(s.get("name") or s) if isinstance(s, dict) else str(s)
+                                        str(s.get("name") or s)
+                                        if isinstance(s, dict)
+                                        else str(s)
                                         for s in (identity.get("skills") or [])
                                     ]
                                     profile["scope_globs"] = list(
-                                        (mf.get("workspace") or {}).get("scope_globs") or []
+                                        (mf.get("workspace") or {}).get("scope_globs")
+                                        or []
                                     )
                     except RECOVERABLE_ERRORS:
                         pass
@@ -142,7 +153,7 @@ def decompose_task(
         for item in items[:max_subtasks]:
             eid = str(item.get("employee_id") or "").strip()
             if not eid or eid not in valid_ids:
-                logger.warning("task_router: unknown employee_id=%s, skipping", eid)
+                logger.warning("task_router: unknown employee, skipping")
                 continue
             subtasks.append(
                 SubTask(
@@ -150,13 +161,15 @@ def decompose_task(
                     task_brief=str(item.get("task_brief") or task_description)[:500],
                     input_data=item.get("input_data") or {},
                     depends_on=[
-                        str(d) for d in (item.get("depends_on") or []) if str(d) in valid_ids
+                        str(d)
+                        for d in (item.get("depends_on") or [])
+                        if str(d) in valid_ids
                     ],
                     priority=int(item.get("priority") or 5),
                 )
             )
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning("task_router: LLM output parse failed: %s\nraw=%s", exc, raw_json[:500])
+    except RECOVERABLE_ERRORS:
+        logger.warning("task_router: LLM output parse failed")
 
     if not subtasks:
         subtasks = [
@@ -192,11 +205,7 @@ def _call_llm(prompt: str, *, llm_provider: str, llm_model: str) -> str:
             provider = bench_provider or provider
             model = bench_model or model
         if not provider or provider == "auto" or not model or model == "auto":
-            logger.warning(
-                "task_router: 未配置平台 LLM（provider=%s model=%s），跳过拆解",
-                provider or "",
-                model or "",
-            )
+            logger.warning("task_router: 未配置平台 LLM，跳过拆解")
             return "[]"
 
         messages = [{"role": "user", "content": prompt}]
@@ -214,16 +223,13 @@ def _call_llm(prompt: str, *, llm_provider: str, llm_model: str) -> str:
             if not isinstance(result, dict):
                 return ""
             if not result.get("ok"):
-                logger.warning(
-                    "task_router: LLM 调用未成功：%s",
-                    str(result.get("error") or "")[:200],
-                )
+                logger.warning("task_router: LLM 调用未成功")
                 return ""
             return str(result.get("content") or "")
 
         raw = run_coro_sync(_inner())
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning("task_router LLM call failed: %s", exc)
+    except RECOVERABLE_ERRORS:
+        logger.warning("task_router LLM call failed")
         return "[]"
 
     # 提取 JSON 片段（模型可能输出 markdown 代码块）
