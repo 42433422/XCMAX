@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -61,11 +62,15 @@ def mount_vue_static(app: FastAPI, vue_dist_dir: Path) -> None:
 
         @app.get("/assets/css/{filename:path}", include_in_schema=False)
         async def sandbox_css(filename: str):
-            css_root = css_dir.resolve()
-            fp = (css_root / filename).resolve()
-            css_prefix = css_root.as_posix().rstrip("/") + "/"
-            if fp != css_root and not fp.as_posix().startswith(css_prefix):
+            css_root_text = os.path.realpath(os.path.abspath(css_dir))
+            file_text = os.path.realpath(
+                os.path.abspath(os.path.join(css_root_text, filename))
+            )
+            css_prefix = css_root_text.rstrip(os.sep) + os.sep
+            if file_text != css_root_text and not file_text.startswith(css_prefix):
                 return JSONResponse({"success": False, "message": "资源路径非法"}, status_code=400)
+            css_root = Path(css_root_text)
+            fp = Path(file_text)
             try:
                 fp.relative_to(css_root)
             except ValueError:

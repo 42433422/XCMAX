@@ -142,12 +142,12 @@ def resolve_etl_output_path(
         parents=True, exist_ok=True
     )  # lgtm[py/path-injection] -- parent passed _safe_under_roots
     # 文件名只用 basename；归一化后再次验证最终路径仍在已批准父目录内。
-    parent = parent.resolve()
-    candidate = (parent / name).resolve()
-    parent_prefix = parent.as_posix().rstrip("/") + "/"
-    if candidate != parent and not candidate.as_posix().startswith(parent_prefix):
+    parent_text = os.path.realpath(os.path.abspath(parent))
+    candidate_text = os.path.realpath(os.path.abspath(os.path.join(parent_text, name)))
+    parent_prefix = parent_text.rstrip(os.sep) + os.sep
+    if candidate_text != parent_text and not candidate_text.startswith(parent_prefix):
         raise ShipmentEtlPathError("output path not under allowed dirs")
-    return candidate
+    return Path(candidate_text)
 
 
 def tenant_key_for_etl() -> str:

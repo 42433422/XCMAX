@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -97,11 +98,13 @@ def save_state(updates: Dict[str, Any]) -> None:
 
 
 def assert_path_inside_fhd_repo(fhd: Path, target: Path) -> None:
-    fhd_r = fhd.resolve()
-    tgt_r = target.resolve()
-    fhd_prefix = fhd_r.as_posix().rstrip("/") + "/"
-    if tgt_r != fhd_r and not tgt_r.as_posix().startswith(fhd_prefix):
+    fhd_text = os.path.realpath(os.path.abspath(fhd))
+    target_text = os.path.realpath(os.path.abspath(target))
+    fhd_prefix = fhd_text.rstrip(os.sep) + os.sep
+    if target_text != fhd_text and not target_text.startswith(fhd_prefix):
         raise ValueError("output_path 必须位于 FHD 仓库根目录内")
+    fhd_r = Path(fhd_text)
+    tgt_r = Path(target_text)
     if not tgt_r.is_relative_to(fhd_r):
         raise ValueError("output_path 必须位于 FHD 仓库根目录内")
 

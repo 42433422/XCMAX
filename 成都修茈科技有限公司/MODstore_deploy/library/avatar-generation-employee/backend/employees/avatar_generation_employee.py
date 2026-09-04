@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import sys
@@ -94,11 +95,14 @@ def _resolve_output(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
     requested = Path(rel)
     if requested.is_absolute() or ".." in requested.parts:
         raise ValueError("output_relpath must stay inside the employee workspace")
-    root = _workspace_root(ctx)
-    p = (root / requested).resolve()
-    root_prefix = root.as_posix().rstrip("/") + "/"
-    if p != root and not p.as_posix().startswith(root_prefix):
+    root_text = os.path.realpath(os.path.abspath(_workspace_root(ctx)))
+    output_text = os.path.realpath(
+        os.path.abspath(os.path.join(root_text, str(requested)))
+    )
+    root_prefix = root_text.rstrip(os.sep) + os.sep
+    if output_text != root_text and not output_text.startswith(root_prefix):
         raise ValueError("output_relpath must stay inside the employee workspace")
+    p = Path(output_text)
     p.parent.mkdir(parents=True, exist_ok=True)
     return p
 
