@@ -161,8 +161,11 @@ jobs:
           ssh "${ssh_opts[@]}" "root@${HOST}" \
             'set -euo pipefail
              paths=()
-             for path in etc/os-release usr/lib/os-release var/lib/dpkg/status var/lib/dpkg/status-old; do
-               [ -f "/${path}" ] && paths+=("${path}")
+             for path in \
+               etc/os-release usr/lib/os-release etc/redhat-release \
+               var/lib/dpkg/status var/lib/dpkg/status-old \
+               var/lib/rpm usr/lib/sysimage/rpm; do
+               [ -e "/${path}" ] && paths+=("${path}")
              done
              [ "${#paths[@]}" -ge 2 ]
              tar -C / -czf - "${paths[@]}"' \

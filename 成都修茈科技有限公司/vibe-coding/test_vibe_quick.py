@@ -1,5 +1,6 @@
 """Quick test for vibe-coding - 4 key test cases to verify optimization."""
 
+import os
 import sys
 import time
 
@@ -10,7 +11,9 @@ sys.path.insert(0, r"e:\成都修茈科技有限公司\vibe-coding\src")
 from vibe_coding import OpenAILLM, VibeCoder
 
 if __name__ == "__main__":
-    API_KEY = "tp-cum1pkvt1sda673mc22tmbyv5cyqyx52y8nd4us9r799w3vr"
+    API_KEY = os.environ.get("MIMO_API_KEY", "").strip()
+    if not API_KEY:
+        raise SystemExit("MIMO_API_KEY is required for this live API test")
     BASE_URL = "https://token-plan-cn.xiaomimimo.com/v1"
     MODEL = "mimo-v2.5-pro"
 
