@@ -7,6 +7,9 @@ import {
   isDutyEmployeeEntry,
   isCodexSuperEmployeeEntry,
   avatarText,
+  curatedDutyEmployees,
+  fallbackDutyEmployees,
+  pinnedAvatarText,
   normalizeDutyEmployee,
 } from '@/composables/messenger/useMessengerEntries'
 
@@ -199,5 +202,16 @@ describe('useMessengerEntries 纯函数', () => {
     expect(entry!.display_name).toBe('运维')
     expect(entry!.is_duty_employee_entry).toBe(true)
     expect(normalizeDutyEmployee({})).toBeNull()
+  })
+
+  it('客户侧精选 7 名可切换员工并保留独立头像与职责', () => {
+    const entries = curatedDutyEmployees(fallbackDutyEmployees())
+    const unavailable = curatedDutyEmployees([])
+    expect(entries).toHaveLength(7)
+    expect(new Set(entries.map((entry) => pinnedAvatarText(entry))).size).toBe(7)
+    expect(entries.every((entry) => Boolean(entry.description))).toBe(true)
+    expect(entries.map((entry) => entry.id)).toContain('workflow-automator')
+    expect(unavailable).toHaveLength(7)
+    expect(unavailable.every((entry) => entry.status === 'planned')).toBe(true)
   })
 })

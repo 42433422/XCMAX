@@ -38,6 +38,42 @@ class UpdateInstallationReceipt(Base):
     )
 
 
+class AssetInstallCommand(Base):
+    """Durable paid-asset delivery command consumed by an authenticated desktop.
+
+    ``installation_id='*'`` means the first desktop for the owning account may
+    claim the command.  Once claimed, the command is bound to that installation
+    so a second device cannot install it by replaying the command id.
+    """
+
+    __tablename__ = "asset_install_commands"
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_asset_install_command_idempotency"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    purchase_id = Column(Integer, ForeignKey("purchases.id"), nullable=False, index=True)
+    catalog_id = Column(Integer, ForeignKey("catalog_items.id"), nullable=False, index=True)
+    installation_id = Column(String(64), default="*", nullable=False, index=True)
+    idempotency_key = Column(String(192), nullable=False, index=True)
+    source = Column(String(32), default="user_click", nullable=False, index=True)
+    source_event_id = Column(String(192), default="", nullable=False, index=True)
+    status = Column(String(32), default="pending", nullable=False, index=True)
+    attempt_count = Column(Integer, default=0, nullable=False)
+    result_json = Column(Text, default="{}", nullable=False)
+    error = Column(Text, default="", nullable=False)
+    claimed_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), nullable=False, index=True)
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+
 class CommerceAdminAction(Base):
     __tablename__ = "commerce_admin_actions"
     __table_args__ = (

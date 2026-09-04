@@ -1,7 +1,7 @@
 <template>
   <div class="store-page">
     <h1 class="page-title">已购资产</h1>
-    <p class="page-sub">您在市场中购买的 MOD、AI 员工、提示词、Skill、TTS 模型与设计素材等，可在此下载；自制上架请前往工作台。</p>
+    <p class="page-sub">您购买的 MOD 与 AI 员工可直接发送到已登录的 XCMAX；设备离线时会排队，重新上线后自动安装。</p>
     <div v-if="loading" class="loading">加载中...</div>
     <div v-else-if="err" class="flash flash-err">{{ err }}</div>
     <div v-else>
@@ -29,7 +29,20 @@
           <h3 class="mod-name">{{ p.name }}</h3>
           <p class="mod-meta">{{ p.pkg_id }} · v{{ p.version }}</p>
           <p class="mod-purchase-info">购买于 {{ formatDate(p.purchased_at) }} · ¥{{ Number(p.price_paid ?? 0).toFixed(2) }}</p>
-          <button class="btn btn-success" @click="doDownload(p.catalog_id ?? p.purchase_id)">下载</button>
+          <div class="asset-actions">
+            <button
+              v-if="canInstallToXcmax(p)"
+              class="btn btn-primary-solid"
+              :disabled="installingId === String(p.catalog_id ?? '')"
+              @click="installToXcmax(p)"
+            >
+              {{ installingId === String(p.catalog_id ?? '') ? '正在发送…' : '一键安装到我的 XCMAX' }}
+            </button>
+            <button class="btn btn-success" @click="doDownload(p.catalog_id ?? p.purchase_id)">下载备用包</button>
+          </div>
+          <p v-if="installStatus[String(p.catalog_id ?? '')]" class="install-status" role="status">
+            {{ installStatus[String(p.catalog_id ?? '')] }}
+          </p>
         </div>
       </div>
     </div>
@@ -37,7 +50,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onBeforeUnmount, onMounted } from 'vue'
 import { api } from '../api'
 
 interface PurchasedItem {
@@ -67,6 +80,9 @@ const loading = ref(true)
 const err = ref('')
 const myPlan = ref<PlanInfo | null>(null)
 const quotas = ref<QuotaRow[]>([])
+const installingId = ref('')
+const installStatus = ref<Record<string, string>>({})
+let disposed = false
 
 function artifactLabel(a: string | undefined): string {
   const x = (a || 'mod').toLowerCase()
@@ -75,7 +91,14 @@ function artifactLabel(a: string | undefined): string {
   return 'Mod'
 }
 
+function canInstallToXcmax(item: PurchasedItem): boolean {
+  return ['mod', 'employee_pack', 'bundle'].includes(String(item.artifact || 'mod').trim().toLowerCase())
+}
+
 onMounted(() => loadStore())
+onBeforeUnmount(() => {
+  disposed = true
+})
 
 async function loadStore() {
   loading.value = true
@@ -106,6 +129,60 @@ async function doDownload(id: number | string) {
     await api.downloadItem(id)
   } catch (e) {
     alert((e as Error)?.message || String(e))
+  }
+}
+
+async function installToXcmax(item: PurchasedItem) {
+  const catalogId = String(item.catalog_id ?? '').trim()
+  if (!catalogId) {
+    alert('该资产缺少目录标识，请使用备用包下载。')
+    return
+  }
+  installingId.value = catalogId
+  try {
+    const result = await api.installPurchasedItem(catalogId, `my-store:${item.purchase_id}:${catalogId}`)
+    installStatus.value = {
+      ...installStatus.value,
+      [catalogId]: result.duplicate
+        ? '安装任务已经在队列中；XCMAX 上线后会继续。'
+        : '已发送到您的 XCMAX；设备在线时会自动安装并回传结果。',
+    }
+    const commandId = Number(result.command?.id || 0)
+    if (commandId > 0) void watchInstallCommand(commandId, catalogId)
+  } catch (e) {
+    installStatus.value = { ...installStatus.value, [catalogId]: (e as Error)?.message || String(e) }
+  } finally {
+    installingId.value = ''
+  }
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
+}
+
+async function watchInstallCommand(commandId: number, catalogId: string) {
+  for (let round = 0; round < 40; round += 1) {
+    await wait(3000)
+    if (disposed) return
+    try {
+      const result = await api.getAssetInstallCommand(commandId)
+      const status = String(result.command?.status || '')
+      const labels: Record<string, string> = {
+        pending: '等待已登录的 XCMAX 设备上线…',
+        claimed: 'XCMAX 已领取，正在校验并安装…',
+        failed: '本次安装失败，设备会自动重试。',
+        installed: '已安装并启用，XCMAX 已回传成功回执。',
+        revoked: '购买权益已退款或撤销，安装已停止。',
+      }
+      installStatus.value = { ...installStatus.value, [catalogId]: labels[status] || `安装状态：${status || '未知'}` }
+      if (status === 'installed' || status === 'revoked') return
+    } catch {
+      // 临时网络错误不改变服务端任务；下一轮继续查询。
+    }
+  }
+  installStatus.value = {
+    ...installStatus.value,
+    [catalogId]: '设备暂未回传结果；安装任务仍保留，XCMAX 下次上线会继续。',
   }
 }
 
@@ -212,6 +289,17 @@ function formatDateTime(iso: string | null | undefined): string {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.5);
   margin-bottom: 12px;
+}
+.asset-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.install-status {
+  margin: 10px 0 0;
+  color: #93c5fd;
+  font-size: 12px;
+  line-height: 1.5;
 }
 .grid {
   display: grid;

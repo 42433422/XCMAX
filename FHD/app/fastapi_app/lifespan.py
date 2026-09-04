@@ -26,6 +26,10 @@ from app.db.init_db import (
 )
 from app.db.init_tutorial import init_tutorial_v2_tables
 from app.di.registry import get_service_registry
+from app.fastapi_app.asset_install_lifecycle import (
+    start_paid_asset_installs,
+    stop_paid_asset_installs,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .node_role import passive_node_enabled
@@ -82,6 +86,8 @@ async def lifespan(app: FastAPI):
 
     _wire_workflow_runtime(app)
     _start_agent_tasks(app)
+
+    start_paid_asset_installs()
 
     try:
         from app.application.desktop_admin_gate import purge_admin_sessions_on_desktop
@@ -146,6 +152,7 @@ async def lifespan(app: FastAPI):
 
         await asyncio.to_thread(wait_for_background_mod_load, app)
         _stop_agent_tasks(app)
+        await stop_paid_asset_installs()
         _close_workflow_resources(app)
         from app.fastapi_app.resource_cleanup import close_llm_http_clients
 

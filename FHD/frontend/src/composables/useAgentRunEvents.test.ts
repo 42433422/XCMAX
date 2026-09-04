@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 
 const agentRunsApiMock = vi.hoisted(() => ({
   listEvents: vi.fn(),
+  getRun: vi.fn(),
 }))
 
 vi.mock('@/api/agentRuns', () => ({
@@ -9,10 +10,13 @@ vi.mock('@/api/agentRuns', () => ({
 }))
 
 import { buildAgentRunTaskUpdate, extractAgentRunId, useAgentRunEventSync } from './useAgentRunEvents'
+import { isFirstAiTaskPending, queueFirstAiTaskPrompt, readProductFlowCompleted } from '@/constants/productFlow'
 
 describe('useAgentRunEvents', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.clear()
+    agentRunsApiMock.getRun.mockRejectedValue(new Error('not configured'))
   })
 
   it('extracts run id from common response shapes', () => {
@@ -193,5 +197,61 @@ describe('useAgentRunEvents', () => {
     const sync = useAgentRunEventSync({ upsertTask })
     await sync.syncAgentRunFromPayload({ data: { run_id: 'run_c' } }, '查客户')
     expect(upsertTask).not.toHaveBeenCalled()
+  })
+
+  it('closes the seeded onboarding only after the bound run returns all three completed tools', async () => {
+    queueFirstAiTaskPrompt('这是我的新手第一单，请创建演示出货单')
+    agentRunsApiMock.listEvents.mockResolvedValueOnce({
+      success: true,
+      data: [{ event_id: 'evt_done', run_id: 'run_first', event_type: 'run.completed' }],
+    })
+    agentRunsApiMock.getRun.mockResolvedValueOnce({
+      success: true,
+      data: {
+        run_id: 'run_first',
+        user_id: '7',
+        message: '新手第一单',
+        status: 'completed',
+        intent: 'onboarding_first_order',
+        steps: [
+          {
+            step_id: 's1',
+            node_id: 'n1',
+            tool_id: 'business_db',
+            action: 'read',
+            status: 'completed',
+            params: { entity: 'customers' },
+            output: { success: true },
+          },
+          {
+            step_id: 's2',
+            node_id: 'n2',
+            tool_id: 'business_db',
+            action: 'read',
+            status: 'completed',
+            params: { entity: 'products' },
+            output: { success: true },
+          },
+          {
+            step_id: 's3',
+            node_id: 'n3',
+            tool_id: 'business_db',
+            action: 'write',
+            status: 'completed',
+            params: { entity: 'shipment_records' },
+            output: { success: true },
+          },
+        ],
+      },
+    })
+    const sync = useAgentRunEventSync({ upsertTask: vi.fn() })
+
+    await sync.syncAgentRunFromPayload(
+      { data: { run_id: 'run_first' } },
+      '这是我的新手第一单，请创建演示出货单',
+    )
+
+    expect(readProductFlowCompleted()).toBe(true)
+    expect(isFirstAiTaskPending()).toBe(false)
   })
 })

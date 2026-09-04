@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses as dataclasses
+import hashlib as hashlib
 import logging
 import os as os
 import tempfile as tempfile
@@ -114,6 +115,10 @@ class ModStoreSimpleResponse(BaseModel):
     success: bool
     message: str | None = None
     data: dict[str, Any] | None = None
+
+
+class AiModDeliveryStartBody(BaseModel):
+    brief: str = Field(..., min_length=3, max_length=4000)
 
 
 class ModStoreUpdatesResponse(BaseModel):
@@ -428,6 +433,9 @@ _ROUTE_HANDLER_EXPORTS = frozenset(
         "mod_store_rebuild_index",
         "mod_store_recent",
         "mod_store_reload_employees",
+        "ai_mod_delivery_start",
+        "ai_mod_delivery_status",
+        "ai_mod_delivery_install",
         "mod_store_search",
         "mod_store_sync_modstore_library",
         "mod_store_uninstall",

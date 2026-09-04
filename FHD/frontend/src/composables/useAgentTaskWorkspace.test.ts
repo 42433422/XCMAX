@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 import type { AgentRun } from '@/api/agentRuns'
 import type { TaskItem } from './useChatPersistence'
+import { bindPendingFirstAiTaskRun, isFirstAiTaskPending, queueFirstAiTaskPrompt, readProductFlowCompleted } from '@/constants/productFlow'
 
 const apiMock = vi.hoisted(() => ({
   listTasks: vi.fn(),
@@ -152,6 +153,51 @@ describe('useAgentTaskWorkspace', () => {
       approval_grant: 'bound-grant',
     })
     expect(apiMock.listTasks).toHaveBeenCalledTimes(2)
+  })
+
+  it('uses the refreshed durable task snapshot to close the bound first-order onboarding', async () => {
+    queueFirstAiTaskPrompt('这是我的新手第一单，请创建演示出货单')
+    bindPendingFirstAiTaskRun('run-1', '这是我的新手第一单，请创建演示出货单')
+    const completedRun = serverRun('completed')
+    completedRun.intent = 'onboarding_first_order'
+    completedRun.steps = [
+      {
+        step_id: 's1',
+        node_id: 'n1',
+        tool_id: 'business_db',
+        action: 'read',
+        status: 'completed',
+        params: { entity: 'customers' },
+        output: { success: true },
+      },
+      {
+        step_id: 's2',
+        node_id: 'n2',
+        tool_id: 'business_db',
+        action: 'read',
+        status: 'completed',
+        params: { entity: 'products' },
+        output: { success: true },
+      },
+      {
+        step_id: 's3',
+        node_id: 'n3',
+        tool_id: 'business_db',
+        action: 'write',
+        status: 'completed',
+        params: { entity: 'shipment_records' },
+        output: { success: true },
+      },
+    ]
+    const task = serverTask('completed')
+    task.runs = [completedRun]
+    task.active_run = completedRun
+    apiMock.listTasks.mockResolvedValue({ success: true, data: [task] })
+
+    await setup().workspace.refreshTasks()
+
+    expect(readProductFlowCompleted()).toBe(true)
+    expect(isFirstAiTaskPending()).toBe(false)
   })
 
   it('uses task snapshots as the live clock and keeps polling as a slow fallback', async () => {

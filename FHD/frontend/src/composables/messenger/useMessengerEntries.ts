@@ -21,6 +21,7 @@ export type CodexSuperEmployeeEntry = {
   display_name: '超级员工-Codex'
   username: 'codex-super-employee'
   subtitle: '全设备协同调度'
+  description?: string
   is_codex_super_employee: true
 }
 
@@ -29,6 +30,7 @@ export type ClaudeSuperEmployeeEntry = {
   display_name: '超级员工-Claude'
   username: 'claude-super-employee'
   subtitle: '全设备协同 · 排比派工'
+  description?: string
   is_claude_super_employee: true
 }
 
@@ -37,6 +39,7 @@ export type CursorSuperEmployeeEntry = {
   display_name: '超级员工-Cursor'
   username: 'cursor-super-employee'
   subtitle: '全设备协同 · Agent 派工'
+  description?: string
   is_cursor_super_employee: true
 }
 
@@ -50,6 +53,7 @@ export type DutyEmployeeEntry = {
   status: string
   api_base_path: string
   phone_channel: string
+  avatar_text?: string
   is_duty_employee_entry: true
 }
 
@@ -163,6 +167,27 @@ export const AI_GROUP_CHAT_ENTRY: AiGroupChatEntry = {
 
 export const SUPER_CLI_TOOLS: SystemEmployeeEntry[] = [CODEX_SUPER_EMPLOYEE_ENTRY, CURSOR_SUPER_EMPLOYEE_ENTRY, CLAUDE_SUPER_EMPLOYEE_ENTRY]
 
+/** 面向企业用户的精选员工；完整 55 岗编制仍保留在管理端。 */
+export const CURATED_DUTY_EMPLOYEE_IDS = [
+  'user-customer-service-officer',
+  'intake-dispatcher',
+  'intent-analyst',
+  'workflow-automator',
+  'artifact-generator',
+  'quality-validator',
+  'enterprise-adoption-officer',
+] as const
+
+const CURATED_DUTY_EMPLOYEE_AVATARS: Record<string, string> = {
+  'user-customer-service-officer': '💬',
+  'intake-dispatcher': '🧭',
+  'intent-analyst': '🔎',
+  'workflow-automator': '⚙️',
+  'artifact-generator': '🧩',
+  'quality-validator': '🛡️',
+  'enterprise-adoption-officer': '📈',
+}
+
 // ── 条目类型守卫 ──────────────────────────────────────────────────────
 
 export function isCodexSuperEmployeeEntry(entry: PinnedImEntry): entry is CodexSuperEmployeeEntry {
@@ -236,7 +261,7 @@ export function pinnedAvatarText(entry: PinnedImEntry): string {
   if (isCursorSuperEmployeeEntry(entry)) return 'Cursor'
   if (isExternalAppEntry(entry)) return '客'
   if (isAiGroupChatEntry(entry)) return '群'
-  if (isDutyEmployeeEntry(entry)) return avatarText(entry.display_name)
+  if (isDutyEmployeeEntry(entry)) return entry.avatar_text || avatarText(entry.display_name)
   return avatarText(entry.display_name)
 }
 
@@ -373,6 +398,7 @@ export function normalizeDutyEmployee(raw: AdminEmployeeApiItem): DutyEmployeeEn
     status: String(raw.status || 'on_duty').trim(),
     api_base_path: String(raw.api_base_path || `/api/admin/employees/${id}`).trim(),
     phone_channel: String(raw.phone_channel || 'admin-duty').trim(),
+    avatar_text: CURATED_DUTY_EMPLOYEE_AVATARS[id] || avatarText(name || id),
     is_duty_employee_entry: true,
   }
 }
@@ -402,6 +428,23 @@ export function uniqueDutyEmployees(items: DutyEmployeeEntry[]): DutyEmployeeEnt
     seen.add(item.id)
     return true
   })
+}
+
+export function curatedDutyEmployees(items: DutyEmployeeEntry[]): DutyEmployeeEntry[] {
+  const byId = new Map(uniqueDutyEmployees(items).map((item) => [item.id, item]))
+  const fallbacks = new Map(fallbackDutyEmployees().map((item) => [item.id, item]))
+  const selected: DutyEmployeeEntry[] = []
+  for (const id of CURATED_DUTY_EMPLOYEE_IDS) {
+    const current = byId.get(id)
+    const item = current || fallbacks.get(id)
+    if (!item) continue
+    selected.push({
+      ...item,
+      ...(current ? {} : { status: 'planned', subtitle: '编制员工 · 未安装' }),
+      avatar_text: CURATED_DUTY_EMPLOYEE_AVATARS[id] || item.avatar_text,
+    })
+  }
+  return selected
 }
 
 export function asRecord(value: unknown): Record<string, unknown> | null {

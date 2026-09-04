@@ -219,6 +219,33 @@ def _on_payment_paid_invoice(event: DomainEvent) -> None:
         EVENT_PUBLISHED_TOTAL.labels(event.event_name, "subscriber_error").inc()
 
 
+def _on_payment_paid_asset_install(event: DomainEvent) -> None:
+    """Turn an item payment into a durable desktop install command."""
+    if canonical_event_name(event.event_name) != "payment.paid":
+        return
+    payload = event.payload or {}
+    try:
+        user_id = int(payload.get("user_id") or 0)
+        item_id = int(payload.get("item_id") or 0)
+    except (TypeError, ValueError):
+        return
+    if user_id <= 0 or item_id <= 0:
+        return
+    try:
+        from modstore_server.asset_installation_api import queue_paid_asset_installation
+
+        result = queue_paid_asset_installation(
+            user_id=user_id,
+            catalog_id=item_id,
+            event_id=f"payment.paid:{str(payload.get('out_trade_no') or event.subject_id or '').strip()}",
+        )
+        outcome = "asset_install_queued" if int(result.get("queued") or 0) else "asset_install_duplicate"
+        EVENT_PUBLISHED_TOTAL.labels(event.event_name, outcome).inc()
+    except RECOVERABLE_ERRORS:
+        logger.exception("payment.paid asset install queue failed for item=%s", item_id)
+        EVENT_PUBLISHED_TOTAL.labels(event.event_name, "subscriber_error").inc()
+
+
 def _on_wallet_balance_changed(event: DomainEvent) -> None:
     """Analytics aggregation stub for wallet.balance_changed events."""
     if canonical_event_name(event.event_name) != WALLET_BALANCE_CHANGED:
@@ -288,6 +315,13 @@ def _on_refund_outcome(event: DomainEvent) -> None:
     amount = _safe_amount(payload.get("amount"))
     order_no = str(payload.get("order_no") or event.subject_id)
     if name == "refund.approved":
+        try:
+            from modstore_server.asset_installation_api import revoke_asset_install_commands_for_order
+
+            revoke_asset_install_commands_for_order(user_id=user_id, order_no=order_no)
+        except RECOVERABLE_ERRORS:
+            logger.exception("refund command revocation failed for order=%s", order_no)
+            EVENT_PUBLISHED_TOTAL.labels(event.event_name, "subscriber_error").inc()
         title, content = (
             "退款成功",
             f"订单 {order_no} 的退款 ¥{amount:.2f} 已完成。",
@@ -338,6 +372,7 @@ def install_default_subscribers(bus=None) -> None:
     target_bus.subscribe("payment.paid", _on_payment_paid)
     target_bus.subscribe("payment.paid", _on_payment_paid_entitlement)
     target_bus.subscribe("payment.paid", _on_payment_paid_invoice)
+    target_bus.subscribe("payment.paid", _on_payment_paid_asset_install)
     target_bus.subscribe(WALLET_BALANCE_CHANGED, _on_wallet_balance_changed)
     target_bus.subscribe("refund.approved", _on_refund_outcome)
     target_bus.subscribe("refund.rejected", _on_refund_outcome)

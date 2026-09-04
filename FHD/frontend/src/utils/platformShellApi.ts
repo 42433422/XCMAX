@@ -82,6 +82,25 @@ export async function fetchOnboardingIndustryCatalog(force = false): Promise<Onb
   return data
 }
 
+export interface OnboardingDemoSeedResult {
+  industry_id?: string
+  customer?: { id?: number; name?: string; existing?: boolean }
+  product?: { id?: number; name?: string; existing?: boolean }
+  demo_queries?: { ai_prompt?: string }
+}
+
+export async function seedOnboardingDemo(industryId: string): Promise<OnboardingDemoSeedResult> {
+  const r = await apiFetch('/api/platform-shell/onboarding/seed-demo', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ industry_id: String(industryId || '').trim() || '通用' }),
+    timeoutMs: DEFAULT_MOD_API_TIMEOUT_MS,
+  })
+  if (!r.ok) throw new Error(`onboarding/seed-demo HTTP ${r.status}`)
+  const body = await r.json()
+  return (body?.data || body) as OnboardingDemoSeedResult
+}
+
 export async function fetchIndustryBaseline(industryId: string, force = false): Promise<IndustryBaselinePlan> {
   const key = String(industryId || '').trim() || '通用'
   if (!force && baselineCache.has(key)) {

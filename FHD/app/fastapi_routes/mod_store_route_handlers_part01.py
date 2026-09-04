@@ -11,7 +11,14 @@ def _facade():
 
 
 async def _install_from_catalog(
-    pkg_id: str, version: str, activate: bool = True
+    pkg_id: str,
+    version: str,
+    activate: bool = True,
+    *,
+    authorization: str = "",
+    download_path: str = "",
+    expected_sha256: str = "",
+    verify_signature: bool = True,
 ) -> _facade().ModStoreInstallResult:
     from app.mod_sdk.host_foundation import (
         install_aux_employee_pack_from_repo_seed,
@@ -32,9 +39,10 @@ async def _install_from_catalog(
         )
     if not pkg_id:
         raise _facade().HTTPException(status_code=400, detail="缺少 pkg_id")
-    if not version:
+    if not version and not download_path:
+        headers = {"Authorization": authorization} if authorization else None
         versions = await _facade().catalog_get_json(
-            f"/packages/by-id/{_facade().quote(pkg_id, safe='')}/versions"
+            f"/packages/by-id/{_facade().quote(pkg_id, safe='')}/versions", headers=headers
         )
         rows = versions.get("versions") or []
         if isinstance(rows, list) and rows:
@@ -43,17 +51,27 @@ async def _install_from_catalog(
                 version = _facade()._safe_text(first.get("version"))
             else:
                 version = _facade()._safe_text(first)
-    if not version:
+    if not version and not download_path:
         raise _facade().HTTPException(status_code=400, detail="缺少 version")
     tmp = _facade().tempfile.NamedTemporaryFile(prefix="xcagi-mod-", suffix=".zip", delete=False)
     tmp_path = tmp.name
     tmp.close()
     normalized_path = tmp_path
     try:
-        await _facade().catalog_download_to(
-            f"/packages/{_facade().quote(pkg_id, safe='')}/{_facade().quote(version, safe='')}/download",
-            _facade().Path(tmp_path),
+        headers = {"Authorization": authorization} if authorization else None
+        path = download_path or (
+            f"/packages/{_facade().quote(pkg_id, safe='')}/"
+            f"{_facade().quote(version, safe='')}/download"
         )
+        await _facade().catalog_download_to(path, _facade().Path(tmp_path), headers=headers)
+        expected = str(expected_sha256 or "").strip().lower()
+        if expected:
+            actual = _facade().hashlib.sha256(_facade().Path(tmp_path).read_bytes()).hexdigest()
+            if actual != expected:
+                raise _facade().HTTPException(
+                    status_code=502,
+                    detail=f"远端 Mod 包摘要不一致：expected={expected} actual={actual}",
+                )
         normalized_path = _facade()._normalize_package_zip(tmp_path)
         from app.infrastructure.mods.artifact_constants import ARTIFACT_EMPLOYEE_PACK
         from app.infrastructure.mods.artifact_package import peek_artifact
@@ -62,13 +80,13 @@ async def _install_from_catalog(
             from app.infrastructure.mods.employee_registry import get_employee_registry
 
             ok, message = get_employee_registry().install_from_package(
-                normalized_path, verify_signature=True
+                normalized_path, verify_signature=verify_signature
             )
             return _facade().ModStoreInstallResult(success=bool(ok), message=message, data=None)
         from app.infrastructure.mods.mod_manager import get_mod_manager
 
         ok, message, metadata = get_mod_manager().install_mod_package(
-            normalized_path, verify_signature=True, activate=activate
+            normalized_path, verify_signature=verify_signature, activate=activate
         )
         data = (
             _facade().dataclasses.asdict(metadata)

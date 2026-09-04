@@ -20,6 +20,8 @@ import { asArray, asRecord, asString } from '@/utils/typeGuards'
 import { extractLikelyProductQueryKeyword } from '../useChatPersistence'
 import { persistDetachedPlannerResult, recordProductFastPathTask } from '../useChatSessionActivity'
 import { asPlannerPayload, errorMessage } from './chatOrchestrationShared'
+import { aiModBriefFromChat, generateAndInstallAiMod } from '@/utils/aiModDeliveryApi'
+import type { UiChatMessageExtras } from '@/types/chat-ui'
 
 type ChatMessagesApi = ReturnType<typeof useChatMessages>
 
@@ -97,6 +99,13 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
     resolveChatTimeoutMs,
   } = chatRequest
 
+  function responseCameFromCache(payload: unknown): boolean {
+    const row = asRecord(payload)
+    const data = asRecord(row.data)
+    const inner = asRecord(data.data)
+    return row.cached === true || data.cached === true || inner.cached === true
+  }
+
   /** 消费后端 state.update 事件（payload.data.data.state_updates），维护「步骤进度」UI 状态 */
   function consumeStateUpdates(payload: ChatPlannerPayload): void {
     const row = asRecord(payload)
@@ -138,14 +147,51 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
     if (!remoteMessages.length) return
     const requestScope = scope || { sessionId: sessionId.value, messages: [...messages.value] }
     const round = chatSessionActivity.forSession(requestScope.sessionId)
-    const addRoundMessage = async (text: string) => {
-      if (round.isActive()) addMessage(text, 'ai', undefined, { speak: ttsEnabled.value })
+    const addRoundMessage = async (text: string, extras?: UiChatMessageExtras) => {
+      if (round.isActive()) addMessage(text, 'ai', extras, { speak: ttsEnabled.value })
     }
     if (!opts?.fromWriteUnlock) {
       pendingDbWriteChatRetryMessages.value = null
       plannerWriteUnlockResumeDraft.value = ''
     }
     const primaryText = remoteMessages[0] || ''
+    const aiModBrief = remoteMessages.length === 1 && !isAdminConsoleSpa() ? aiModBriefFromChat(primaryText) : ''
+
+    if (aiModBrief) {
+      round.setLoading(true)
+      setLoadingProgress('正在创建自用 MOD…', requestScope.sessionId)
+      startWaitProgressTimer(requestScope.sessionId)
+      try {
+        const result = await generateAndInstallAiMod(aiModBrief, {
+          onProgress: (progress) => setLoadingProgress(progress.label, requestScope.sessionId),
+        })
+        const responseText = `已生成并安装自用 MOD「${result.modId}」。${result.installMessage}`
+        const extras: UiChatMessageExtras = {
+          workflowAction: 'mod_generated_and_installed',
+          nodeResults: [
+            { node_id: 'generate', tool_id: 'workbench', action: 'generate_mod', success: true },
+            { node_id: 'validate', tool_id: 'workbench', action: 'validate_mod', success: true },
+            { node_id: 'install', tool_id: 'mod_store', action: 'install_self_use', success: true },
+          ],
+        }
+        await addRoundMessage(responseText, extras)
+        await Promise.all([
+          saveMessage('user', primaryText, requestScope.sessionId),
+          saveMessage('ai', responseText, requestScope.sessionId, extras),
+        ])
+      } catch (err) {
+        const responseText = `MOD 生成或安装失败：${errorMessage(err, '未知错误')}`
+        await addRoundMessage(responseText)
+        await Promise.all([
+          saveMessage('user', primaryText, requestScope.sessionId),
+          saveMessage('ai', responseText, requestScope.sessionId),
+        ])
+      } finally {
+        round.setLoading(false)
+        stopLoadingProgress(requestScope.sessionId)
+      }
+      return
+    }
 
     /** 查产品类话术可不必等 /ai/chat 或连通性探测，直接走产品列表接口 */
     /** 管理端（admin-console）无产品库业务，不走产品快路径，避免「查询…」话术被误判为产品检索 */
@@ -315,7 +361,13 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         }
         const donePayload = asPlannerPayload(doneResult)
         const finalText = collapseExactDuplicateReply(String(donePayload.response ?? streamPlain).trim() || streamPlain || '（无内容）')
-        if (round.isActive()) applyPlainTextToMessageIndex(msgIndex, finalText)
+        if (round.isActive()) {
+          if (responseCameFromCache(donePayload)) {
+            applyPlainTextToMessageIndex(msgIndex, finalText, { sameAsPrevious: true })
+          } else {
+            applyPlainTextToMessageIndex(msgIndex, finalText)
+          }
+        }
         // 后端 done 事件可能带一段非 token 的尾部文本（比如总结段），统一再做一次兜底朗读
         if (ttsShouldSpeakThisMessage && ttsEnabled.value) {
           if (finalText.length >= ttsSpokenOffset) {
@@ -426,7 +478,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
             if (part.requires_token) {
               handleChatRequiresToken(part.token_name || '', part.token_description || '', remoteMessages)
             }
-            await addRoundMessage(part.response || '')
+            await addRoundMessage(part.response || '', responseCameFromCache(part) ? { sameAsPrevious: true } : undefined)
             syncTaskFromChatResponse(part, primaryText)
             await syncAgentRunFromPayload(part, primaryText)
             attachAgentRunTraceToLastAiMessage()
@@ -475,7 +527,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       if (data?.requires_token) {
         handleChatRequiresToken(data.token_name || '', data.token_description || '', remoteMessages)
       }
-      await addRoundMessage(data.response || '')
+      await addRoundMessage(data.response || '', responseCameFromCache(data) ? { sameAsPrevious: true } : undefined)
       syncTaskFromChatResponse(data, primaryText)
       await syncAgentRunFromPayload(data, primaryText)
       attachAgentRunTraceToLastAiMessage()

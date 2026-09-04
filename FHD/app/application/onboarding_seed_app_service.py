@@ -10,8 +10,8 @@ from app.application.onboarding_seed_mapper import (
     build_product_row,
     resolve_onboarding_seed_profile,
 )
-from app.db.models.customer import Customer
 from app.db.models.product import Product
+from app.db.models.purchase_unit import PurchaseUnit
 from app.db.session import get_db
 
 logger = logging.getLogger(__name__)
@@ -42,32 +42,33 @@ def seed_onboarding_demo_data(*, tenant_id: int, industry_id: str = "通用") ->
 
     with get_db() as db:
         existing_customer = (
-            db.query(Customer)
-            .filter(Customer.tenant_id == tid, Customer.customer_name == demo_customer_name)
+            db.query(PurchaseUnit)
+            .filter(PurchaseUnit.tenant_id == tid, PurchaseUnit.unit_name == demo_customer_name)
             .first()
         )
         if existing_customer:
             created["customer"] = {
                 "id": existing_customer.id,
-                "name": existing_customer.customer_name,
+                "name": existing_customer.unit_name,
                 "entity": profile.customer_entity,
                 "existing": True,
             }
         else:
-            row = Customer(
+            row = PurchaseUnit(
                 tenant_id=tid,
-                customer_name=demo_customer_name,
+                unit_name=demo_customer_name,
                 contact_person=str(customer_spec.get("contact_person") or "演示联系人"),
                 contact_phone=str(customer_spec.get("contact_phone") or "13800000000"),
-                contact_address=str(
+                address=str(
                     customer_spec.get("contact_address") or f"{profile.industry_id} · 首启演示地址"
                 ),
+                is_active=True,
             )
             db.add(row)
             db.flush()
             created["customer"] = {
                 "id": row.id,
-                "name": row.customer_name,
+                "name": row.unit_name,
                 "entity": profile.customer_entity,
                 "existing": False,
             }

@@ -406,7 +406,7 @@ class ApiMixin(ConversationLlmMixin, NeuroEventPublisherMixin):
                 },
             }
         else:
-            fallback_reply = '抱歉，我暂时无法理解您的需求。您可以：\n• 重新描述您的问题\n• 使用更简单的语句\n• 联系人工客服获取帮助\n\n如果需要帮助，请说"帮助"或"功能介绍"。'
+            fallback_reply = '我暂时没有理解这项需求。请换一种说法，或者直接告诉我要处理的业务对象和期望结果。\n\n需要查看可用能力时，可以说“功能介绍”。'
 
             self.add_to_history(context.user_id, "user", message)
             self.add_to_history(context.user_id, "assistant", fallback_reply)

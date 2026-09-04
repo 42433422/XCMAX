@@ -62,6 +62,8 @@ export interface UiChatMessage {
   attachments?: Record<string, unknown>[]
   /** XCAGI Business Harness 终态业务结果。 */
   businessResult?: Record<string, unknown>
+  /** 后端命中语义缓存；对用户明确标注，避免把重复回答误解为新执行结果。 */
+  sameAsPrevious?: boolean
 }
 
 export type UiChatMessageExtras = Partial<UiChatMessage>

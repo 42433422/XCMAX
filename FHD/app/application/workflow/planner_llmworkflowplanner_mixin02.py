@@ -4,10 +4,25 @@
 from __future__ import annotations
 
 import importlib
+import re
 
 
 def _facade():
     return importlib.import_module("app.application.workflow.planner")
+
+
+def _onboarding_first_order_slots(message: str) -> tuple[str, str] | None:
+    """Extract the two seeded records from the deterministic onboarding prompt."""
+    text = str(message or "")
+    if "新手第一单" not in text or "演示出货单" not in text:
+        return None
+    customer_match = re.search(r"查询客户\s*[「“\"']([^」”\"']+)[」”\"']", text)
+    product_match = re.search(r"查询(?:商品|产品)\s*[「“\"']([^」”\"']+)[」”\"']", text)
+    if not customer_match or not product_match:
+        return None
+    customer = customer_match.group(1).strip()
+    product = product_match.group(1).strip()
+    return (customer, product) if customer and product else None
 
 
 class _LLMWorkflowPlannerPart02Mixin:
@@ -20,8 +35,60 @@ class _LLMWorkflowPlannerPart02Mixin:
         nodes: list[_facade().WorkflowNode] = []
         todo = ["理解用户目标", "执行可用工具", "输出执行结果"]
         intent = "generic_workflow"
+        first_order_slots = _onboarding_first_order_slots(message)
+        if first_order_slots and "business_db" in tool_registry:
+            customer, product = first_order_slots
+            intent = "onboarding_first_order"
+            todo = ["查询演示客户", "查询演示商品", "确认后创建演示出货单"]
+            nodes.extend(
+                [
+                    _facade().WorkflowNode(
+                        node_id="find_onboarding_customer",
+                        tool_id="business_db",
+                        action="read",
+                        params={"entity": "customers", "keyword": customer},
+                        risk="low",
+                        description=f"查询客户 {customer}",
+                        idempotent=True,
+                    ),
+                    _facade().WorkflowNode(
+                        node_id="find_onboarding_product",
+                        tool_id="business_db",
+                        action="read",
+                        params={"entity": "products", "keyword": product},
+                        risk="low",
+                        description=f"查询商品 {product}",
+                        idempotent=True,
+                        depends_on=["find_onboarding_customer"],
+                    ),
+                    _facade().WorkflowNode(
+                        node_id="create_onboarding_first_order",
+                        tool_id="business_db",
+                        action="write",
+                        params={
+                            "entity": "shipment_records",
+                            "operation": "create",
+                            "payload": {
+                                "unit_name": customer,
+                                "products": [
+                                    {
+                                        "product_name": product,
+                                        "name": product,
+                                        "quantity_tins": 1,
+                                    }
+                                ],
+                            },
+                        },
+                        risk="medium",
+                        description=f"为 {customer} 创建首张演示出货单",
+                        idempotent=False,
+                        depends_on=["find_onboarding_product"],
+                    ),
+                ]
+            )
         if (
-            any(k in message for k in ("员工", "employee", "调用", "交给"))
+            not nodes
+            and any(k in message for k in ("员工", "employee", "调用", "交给"))
             and "employee" in tool_registry
         ):
             intent = "employee_dispatch"

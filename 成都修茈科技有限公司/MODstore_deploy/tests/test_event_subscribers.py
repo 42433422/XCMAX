@@ -108,6 +108,29 @@ def test_payment_paid_skips_when_user_id_missing(fresh_bus, monkeypatch):
     assert captured == []
 
 
+def test_item_payment_callback_queues_durable_desktop_install(monkeypatch):
+    captured: list[dict] = []
+    from modstore_server import asset_installation_api
+
+    monkeypatch.setattr(
+        asset_installation_api,
+        "queue_paid_asset_installation",
+        lambda **kwargs: captured.append(kwargs) or {"queued": 1, "command_id": 9},
+    )
+    event = new_event(
+        "payment.paid",
+        producer="payment-callback-test",
+        subject_id="ORDER-ASSET-1",
+        payload={"user_id": 42, "item_id": 7, "out_trade_no": "ORDER-ASSET-1"},
+    )
+
+    subscribers._on_payment_paid_asset_install(event)
+
+    assert captured == [
+        {"user_id": 42, "catalog_id": 7, "event_id": "payment.paid:ORDER-ASSET-1"}
+    ]
+
+
 def test_refund_outcome_dispatches_distinct_messages(fresh_bus, monkeypatch):
     captured: list[dict] = []
 

@@ -136,4 +136,10 @@ describe('catalog api', () => {
     await catalog.myStore()
     expect(req).toHaveBeenCalledWith('/api/my-store?limit=50&offset=0')
   })
+
+  it('reads a durable asset installation receipt', async () => {
+    vi.mocked(req).mockResolvedValue({})
+    await catalog.getAssetInstallCommand(12)
+    expect(req).toHaveBeenCalledWith('/api/asset-installations/commands/12')
+  })
 })

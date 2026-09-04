@@ -19,6 +19,14 @@ import {
   parseFlowStepQuery,
   LS_PRODUCT_FLOW_COMPLETED,
   LS_PRODUCT_FLOW_HOST_ACK,
+  LS_PRODUCT_FLOW_PENDING_PROMPT,
+  LS_PRODUCT_FLOW_FIRST_TASK_PENDING,
+  LS_PRODUCT_FLOW_FIRST_TASK_RUN_ID,
+  queueFirstAiTaskPrompt,
+  consumeFirstAiTaskPrompt,
+  isFirstAiTaskPending,
+  bindPendingFirstAiTaskRun,
+  completeFirstAiTaskFromRun,
 } from './productFlow'
 import { buildTenantScopedStorageKey, invalidateTenantStorageScopeCache, setTenantStorageScopeCache } from '@/utils/tenantStorageScope'
 
@@ -49,23 +57,23 @@ describe('productFlow', () => {
     expect(readOnboardingReturnPath('')).toBe('/')
   })
 
-  it('PRODUCT_FLOW_STEPS is host onboarding 1-2-3 + done', () => {
-    expect(PRODUCT_FLOW_STEPS).toHaveLength(4)
+  it('PRODUCT_FLOW_STEPS includes demo data and the first AI task', () => {
+    expect(PRODUCT_FLOW_STEPS).toHaveLength(6)
   })
 
   it('PRODUCT_FLOW_STEPS has correct step ids', () => {
     const ids = PRODUCT_FLOW_STEPS.map((s) => s.id)
-    expect(ids).toEqual(['welcome', 'industry', 'host-pack', 'done'])
+    expect(ids).toEqual(['welcome', 'industry', 'host-pack', 'seed-demo', 'first-ai-task', 'done'])
     expect(ids).toContain('welcome')
     expect(ids).toContain('industry')
     expect(ids).toContain('host-pack')
     expect(ids).toContain('done')
   })
 
-  it('parseFlowStepQuery maps legacy seed/ai steps to host-pack', () => {
-    expect(parseFlowStepQuery('seed-demo')).toBe('host-pack')
-    expect(parseFlowStepQuery('first-ai-task')).toBe('host-pack')
-    expect(parseFlowStepQuery('ai-demo')).toBe('host-pack')
+  it('parseFlowStepQuery preserves demo and first task steps', () => {
+    expect(parseFlowStepQuery('seed-demo')).toBe('seed-demo')
+    expect(parseFlowStepQuery('first-ai-task')).toBe('first-ai-task')
+    expect(parseFlowStepQuery('ai-demo')).toBe('first-ai-task')
   })
 
   it('ONBOARDING_OPEN_INDUSTRY_IDS contains 涂料 and 考勤', () => {
@@ -167,9 +175,87 @@ describe('productFlow', () => {
   it('resetProductFlowState clears both localStorage keys', () => {
     markProductFlowCompleted()
     markHostPackAcknowledged()
+    queueFirstAiTaskPrompt('test prompt')
     resetProductFlowState()
     expect(localStorage.getItem(LS_PRODUCT_FLOW_COMPLETED)).toBeNull()
     expect(localStorage.getItem(LS_PRODUCT_FLOW_HOST_ACK)).toBeNull()
+    expect(localStorage.getItem(LS_PRODUCT_FLOW_PENDING_PROMPT)).toBeNull()
+    expect(localStorage.getItem(LS_PRODUCT_FLOW_FIRST_TASK_PENDING)).toBeNull()
+    expect(localStorage.getItem(LS_PRODUCT_FLOW_FIRST_TASK_RUN_ID)).toBeNull()
+  })
+
+  it('queues the first task once in tenant-scoped storage', () => {
+    setTenantStorageScopeCache('tenant:10')
+    queueFirstAiTaskPrompt('创建第一单')
+    expect(localStorage.getItem(buildTenantScopedStorageKey(LS_PRODUCT_FLOW_PENDING_PROMPT, 'tenant:10'))).toBe('创建第一单')
+    expect(localStorage.getItem(buildTenantScopedStorageKey(LS_PRODUCT_FLOW_FIRST_TASK_PENDING, 'tenant:10'))).toBe('1')
+    expect(consumeFirstAiTaskPrompt()).toBe('创建第一单')
+    expect(consumeFirstAiTaskPrompt()).toBe('')
+    expect(isFirstAiTaskPending()).toBe(true)
+  })
+
+  it('completes onboarding only from the bound three-tool first-order run', () => {
+    queueFirstAiTaskPrompt('这是我的新手第一单，请创建演示出货单')
+    expect(bindPendingFirstAiTaskRun('run-first', '这是我的新手第一单，请创建演示出货单')).toBe(true)
+    expect(
+      completeFirstAiTaskFromRun({
+        run_id: 'run-other',
+        status: 'completed',
+        intent: 'onboarding_first_order',
+        steps: [],
+      }),
+    ).toBe(false)
+    expect(readProductFlowCompleted()).toBe(false)
+
+    const completed = completeFirstAiTaskFromRun({
+      run_id: 'run-first',
+      status: 'completed',
+      intent: 'onboarding_first_order',
+      steps: [
+        {
+          tool_id: 'business_db',
+          action: 'read',
+          status: 'completed',
+          params: { entity: 'customers' },
+          output: { success: true },
+        },
+        {
+          tool_id: 'business_db',
+          action: 'read',
+          status: 'completed',
+          params: { entity: 'products' },
+          output: { success: true },
+        },
+        {
+          tool_id: 'business_db',
+          action: 'write',
+          status: 'completed',
+          params: { entity: 'shipment_records' },
+          output: { success: true, data: { shipment_id: 30 } },
+        },
+      ],
+    })
+
+    expect(completed).toBe(true)
+    expect(readProductFlowCompleted()).toBe(true)
+    expect(isFirstAiTaskPending()).toBe(false)
+    expect(localStorage.getItem(LS_PRODUCT_FLOW_FIRST_TASK_RUN_ID)).toBeNull()
+  })
+
+  it('does not close onboarding for a bound run that is waiting or missing a write', () => {
+    queueFirstAiTaskPrompt('这是我的新手第一单，请创建演示出货单')
+    bindPendingFirstAiTaskRun('run-first', '这是我的新手第一单，请创建演示出货单')
+
+    expect(
+      completeFirstAiTaskFromRun({
+        run_id: 'run-first',
+        status: 'waiting_user',
+        intent: 'onboarding_first_order',
+        steps: [],
+      }),
+    ).toBe(false)
+    expect(isFirstAiTaskPending()).toBe(true)
+    expect(readProductFlowCompleted()).toBe(false)
   })
 
   it('parseFlowStepQuery returns host-pack for host', () => {

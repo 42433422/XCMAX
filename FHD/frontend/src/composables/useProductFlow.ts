@@ -3,6 +3,7 @@ import { readBuildEdition, type HostEdition } from '@/constants/genericModPack'
 import {
   markHostPackAcknowledged,
   markProductFlowCompleted,
+  isFirstAiTaskPending,
   resolveProductFlowEntryStep,
   readProductFlowCompleted,
   type ProductFlowStepId,
@@ -82,5 +83,8 @@ export function shouldRouteToProductOnboarding(toName: string | symbol | null | 
 
 function needsProductFlowStatic(): boolean {
   if (!isShellEditionBuild()) return false
+  // The first-order prompt must be allowed to enter chat before its bound run can
+  // produce completion evidence. Pending is not the same as completed.
+  if (isFirstAiTaskPending()) return false
   return !readProductFlowCompleted()
 }

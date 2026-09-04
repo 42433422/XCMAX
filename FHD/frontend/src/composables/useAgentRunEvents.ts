@@ -5,6 +5,7 @@ import { asArray, asRecord, asString } from '@/utils/typeGuards'
 import { normalizeTaskDisplayText } from '@/utils/chatTaskLabels'
 import { hasAgentRunExecutionEvidence, hasConfirmedAgentRunExecution } from '@/utils/agentRunExecution'
 import { groupAgentRunsIntoTasks } from '@/utils/agentTaskWorkspaceModel'
+import { bindPendingFirstAiTaskRun, completeFirstAiTaskFromRun } from '@/constants/productFlow'
 
 type UpsertTask = (item: Partial<TaskItem> & { id: string; title: string; source: TaskItem['source']; type: string }) => void
 
@@ -178,6 +179,7 @@ export function useAgentRunEventSync(options: UseAgentRunEventSyncOptions) {
         // Older/offline runtimes may expose the event feed before the run detail route.
       }
       const durableTask = run ? groupAgentRunsIntoTasks([{ ...run, events }])[0] : null
+      if (run) completeFirstAiTaskFromRun(run)
       if (durableTask) {
         options.removeTask?.(`agent_${normalizedRunId}`)
         options.upsertTask(durableTask)
@@ -192,6 +194,7 @@ export function useAgentRunEventSync(options: UseAgentRunEventSyncOptions) {
   async function syncAgentRunFromPayload(payload: unknown, userText = ''): Promise<void> {
     const runId = extractAgentRunId(payload)
     if (!runId) return
+    bindPendingFirstAiTaskRun(runId, userText)
     await syncAgentRunEvents(runId, userText)
   }
 

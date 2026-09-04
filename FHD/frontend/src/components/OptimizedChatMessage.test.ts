@@ -232,6 +232,14 @@ describe('OptimizedChatMessage', () => {
     expect(wrapper.text()).toContain('10:00')
   })
 
+  it('labels cached AI replies as the same as before', async () => {
+    const wrapper = mountComponent({ message: { ...baseMessage, sameAsPrevious: true } })
+    const vm = wrapper.vm as any
+    vm.measureResult = { height: 60, width: 400 }
+    await wrapper.vm.$nextTick()
+    expect(wrapper.get('.same-answer-badge').text()).toBe('与之前相同')
+  })
+
   it('shows TTS playing state', async () => {
     const wrapper = mountComponent({ canSpeak: true, isPlaying: true })
     const vm = wrapper.vm as any

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref, nextTick } from 'vue'
 import { setActivePinia, createPinia } from 'pinia'
-import { useChatMessages, queueVoice, clearVoiceQueue } from './useChatMessages'
+import { chatMessageExtrasFromServerRow, useChatMessages, queueVoice, clearVoiceQueue } from './useChatMessages'
 
 vi.mock('@/api/chat', () => ({
   default: {
@@ -185,6 +185,13 @@ describe('useChatMessages', () => {
     messages.applyPlainTextToMessageIndex(idx, 'streaming text')
     expect(messages.messages.value[idx].content).toContain('streaming text')
     expect(messages.messages.value[idx].streamingShell).toBeUndefined()
+  })
+
+  it('marks and restores semantic-cache replies as the same as before', () => {
+    const idx = messages.pushStreamingAiShell()
+    messages.applyPlainTextToMessageIndex(idx, '重复答案', { sameAsPrevious: true })
+    expect(messages.messages.value[idx].sameAsPrevious).toBe(true)
+    expect(chatMessageExtrasFromServerRow({ data: { cached: true } }).sameAsPrevious).toBe(true)
   })
 
   it('applyPlainTextToMessageIndex handles invalid index', () => {

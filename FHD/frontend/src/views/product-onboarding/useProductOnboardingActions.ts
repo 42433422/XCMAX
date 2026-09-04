@@ -6,13 +6,12 @@ import { deliverySeedModIds } from '@/utils/deliverySeedPackages'
 import { patchWorkspacePrefs, queueWorkspacePrefsSync } from '@/utils/workspacePrefsApi'
 import { useModsStore } from '@/stores/mods'
 import { readBuildEdition } from '@/constants/genericModPack'
-import { readProductFlowCompleted, setRuntimeOnboardingOpenIndustryIds } from '@/constants/productFlow'
+import { queueFirstAiTaskPrompt, setRuntimeOnboardingOpenIndustryIds } from '@/constants/productFlow'
 import { appAlert } from '@/utils/appDialog'
 import { productErrorMessage } from '@/utils/productErrorMessage'
-import { clearDeliverableStatusCache, fetchIndustryBaseline, fetchOnboardingIndustryCatalog } from '@/utils/platformShellApi'
+import { clearDeliverableStatusCache, fetchIndustryBaseline, fetchOnboardingIndustryCatalog, seedOnboardingDemo } from '@/utils/platformShellApi'
 import { invalidateHostPackCompletionCache } from '@/utils/hostPackOnboardingGate'
 import type { WorkspacePrefs } from '@/utils/workspacePrefsApi'
-import { promptAdvancedTutorialAfterInstall } from '@/tutorial/promptAdvancedTutorial'
 import type { TutorialBuildContext } from '@/tutorial/types'
 import type { useProductFlow } from '@/composables/useProductFlow'
 import type { useIndustryStore } from '@/stores/industry'
@@ -40,13 +39,15 @@ export function useProductOnboardingActions(
     loading,
     bootstrapBusy,
     finishing,
+    seedBusy,
+    demoSeedResult,
     baselinePlan,
     baselineOk,
     normalizePickedIndustryId,
     isIndustrySelectable,
     industryPackageModId,
   } = state
-  const { router, flow, industryStore, nav, tutorialBuildContext } = options
+  const { flow, industryStore, nav } = options
 
   async function refreshBaseline(force = false) {
     baselinePlan.value = await fetchIndustryBaseline(pickedIndustryId.value, force)
@@ -121,18 +122,8 @@ export function useProductOnboardingActions(
       if (baselineOk.value) {
         invalidateHostPackCompletionCache()
         flow.markHostPackAcknowledged()
-        if (!readProductFlowCompleted()) {
-          flow.markProductFlowCompleted()
-        }
-        const promptResult = await promptAdvancedTutorialAfterInstall({
-          router,
-          buildContext: tutorialBuildContext.value,
-          message: '本行业推荐侧栏基础线已装齐，可以开始使用了。\n\n是否现在观看进阶教程，快速熟悉菜单与智能对话？',
-          returnContext: { routeName: 'chat' },
-        })
-        if (promptResult === 'already_completed') {
-          await appAlert('本行业推荐侧栏基础线已装齐，可以开始使用了。')
-        }
+        await appAlert('本行业推荐菜单已装齐。下一步准备首次使用的演示数据。')
+        nav.goStep('seed-demo')
         return
       }
 
@@ -153,6 +144,30 @@ export function useProductOnboardingActions(
     } finally {
       bootstrapBusy.value = false
     }
+  }
+
+  async function ensureDemoData(): Promise<boolean> {
+    if (demoSeedResult.value) return true
+    if (seedBusy.value) return false
+    seedBusy.value = true
+    try {
+      demoSeedResult.value = await seedOnboardingDemo(pickedIndustryId.value)
+      queueWorkspacePrefsSync({ onboarding_seed_done: true } as WorkspacePrefs)
+      return true
+    } catch (err) {
+      console.warn('[ProductOnboarding] demo seed preload failed:', err)
+      return false
+    } finally {
+      seedBusy.value = false
+    }
+  }
+
+  async function prepareDemoData() {
+    if (await ensureDemoData()) {
+      nav.goStep('first-ai-task')
+      return
+    }
+    await appAlert('演示数据准备失败，请重试')
   }
 
   function pickIndustry(id: string) {
@@ -184,6 +199,8 @@ export function useProductOnboardingActions(
       } catch {
         /* 绑定已完成，目录刷新失败不阻断下一步 */
       }
+      // 首次选择行业后即幂等预置，避免用户进入业务页先看到空数据。
+      await ensureDemoData()
     } catch (err) {
       await appAlert(productErrorMessage(err, '行业绑定失败，请稍后重试'))
       return
@@ -196,21 +213,24 @@ export function useProductOnboardingActions(
   async function finishOnboardingComplete() {
     if (finishing.value) return
     finishing.value = true
-    // onboarding_completed_at 为服务端兼容的额外字段，暂不在 WorkspacePrefs 类型内（断言豁免，运行时 payload 不变）
-    queueWorkspacePrefsSync({
-      product_flow_completed: true,
-      onboarding_completed_at: new Date().toISOString(),
-    } as WorkspacePrefs)
-    flow.markProductFlowCompleted()
+    // A reload on the first-task step loses the in-memory names. Re-read the
+    // idempotent seed result before constructing the exact business prompt.
+    if (!(await ensureDemoData())) {
+      finishing.value = false
+      await appAlert('演示数据尚未准备完成，请重试后再做第一单')
+      return
+    }
+    queueFirstAiTaskPrompt(state.firstOrderPrompt.value)
     flow.markHostPackAcknowledged()
     await nextTick()
-    nav.finishHostPackFlow()
+    nav.launchFirstAiTask()
   }
 
   return {
     refreshBaseline,
     refreshStatus,
     runBootstrap,
+    prepareDemoData,
     pickIndustry,
     confirmIndustryAndNext,
     finishOnboardingComplete,

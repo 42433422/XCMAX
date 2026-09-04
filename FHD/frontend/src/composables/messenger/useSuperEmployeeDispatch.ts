@@ -31,6 +31,7 @@ import { fetchCursorSuperEmployeeMessages, sendCursorSuperEmployeeMessage } from
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import {
   CODEX_STREAM_PLACEHOLDER_ID,
+  curatedDutyEmployees,
   dutyEmployeeReplyFromExecution,
   fallbackDutyEmployees,
   isAiGroupChatEntry,
@@ -217,6 +218,7 @@ export function useSuperEmployeeDispatch(params: UseSuperEmployeeDispatchParams)
     if (isSuperEmployeeEntry(entry)) {
       return codexBusy.value ? '提交中' : codexStreamActive.value ? '回复中' : '可派工'
     }
+    if (isDutyEmployeeEntry(entry) && entry.status === 'planned') return '未安装'
     return dutyEmployeeBusy.value && activeSystemEntry.value?.id === entry.id ? '执行中' : '可对话'
   }
 
@@ -357,8 +359,9 @@ export function useSuperEmployeeDispatch(params: UseSuperEmployeeDispatchParams)
 
   async function loadDutyEmployees(): Promise<void> {
     if (!isAdminCustomerServiceConsole.value) {
-      dutyEmployees.value = []
-      return
+      // The local roster is descriptive metadata, not proof that an employee is
+      // installed. Until SSOT answers, expose the curated roles as planned.
+      dutyEmployees.value = curatedDutyEmployees([])
     }
     if (!dutyEmployees.value.length) {
       dutyEmployees.value = uniqueDutyEmployees(fallbackDutyEmployees())
@@ -367,7 +370,8 @@ export function useSuperEmployeeDispatch(params: UseSuperEmployeeDispatchParams)
       const ssot = (await fetchEmployeeSsot()) as EmployeeSsotPayload
       const fromSsot = dutyEmployeesFromEmployeeSsot(ssot)
       if (fromSsot.length) {
-        dutyEmployees.value = uniqueDutyEmployees(fromSsot as DutyEmployeeEntry[])
+        const normalized = uniqueDutyEmployees(fromSsot as DutyEmployeeEntry[])
+        dutyEmployees.value = isAdminCustomerServiceConsole.value ? normalized : curatedDutyEmployees(normalized)
         imApiReachable.value = true
         return
       }
@@ -375,6 +379,7 @@ export function useSuperEmployeeDispatch(params: UseSuperEmployeeDispatchParams)
       /* fallback to mobile admin employees */
     }
     try {
+      if (!isAdminCustomerServiceConsole.value) return
       const response = await api.get<MobileApiResponse<AdminEmployeesPayload>>('/api/mobile/v1/admin/employees')
       imApiReachable.value = true
       const payload = response.data || {}
@@ -450,6 +455,10 @@ export function useSuperEmployeeDispatch(params: UseSuperEmployeeDispatchParams)
   async function onDutyEmployeeSend(): Promise<void> {
     const entry = activeSystemEntry.value
     if (!entry || !isDutyEmployeeEntry(entry)) return
+    if (entry.status === 'planned') {
+      showAppToast('该 AI 员工尚未安装，安装后才能执行任务', 'warning')
+      return
+    }
     if (dutyEmployeeBusy.value) return
     const text = dutyEmployeeDraft.value.trim()
     if (!text) return
@@ -469,8 +478,8 @@ export function useSuperEmployeeDispatch(params: UseSuperEmployeeDispatchParams)
         task: text,
         user_id: localUserId.value || 0,
         input_data: {
-          source: 'admin_im',
-          client_surface: 'admin_console',
+          source: isAdminCustomerServiceConsole.value ? 'admin_im' : 'enterprise_im',
+          client_surface: isAdminCustomerServiceConsole.value ? 'admin_console' : 'enterprise_client',
           invoke_mode: 'interactive_chat',
           allow_medium_risk: true,
           employee_id: entry.id,

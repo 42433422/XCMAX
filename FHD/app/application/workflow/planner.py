@@ -160,6 +160,7 @@ from app.application.workflow.planner_llmworkflowplanner_mixin01 import (
 )
 from app.application.workflow.planner_llmworkflowplanner_mixin02 import (
     _LLMWorkflowPlannerPart02Mixin,
+    _onboarding_first_order_slots,
 )
 from app.application.workflow.planner_part03 import (
     _filter_tool_registry_for_profile as _filter_tool_registry_for_profile,

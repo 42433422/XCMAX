@@ -94,7 +94,11 @@ class __LLMWorkflowPlannerPart01MixinPart01Mixin:
         from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
 
         planned = None
-        if (
+        if _facade()._onboarding_first_order_slots(message) and "business_db" in registry_for_plan:
+            deterministic = self._fallback_plan(plan_id, message, registry_for_plan)
+            if deterministic.intent == "onboarding_first_order" and len(deterministic.nodes) == 3:
+                planned = deterministic
+        elif (
             _facade()._looks_like_business_db_write(message, message.lower())
             and "business_db" in registry_for_plan
         ):

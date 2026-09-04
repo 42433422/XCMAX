@@ -53,6 +53,15 @@ from app.fastapi_routes.mod_store_route_handlers_part02 import (
     _install_host_foundation_internal as _install_host_foundation_internal,
 )
 from app.fastapi_routes.mod_store_route_handlers_part02 import (
+    ai_mod_delivery_install as ai_mod_delivery_install,
+)
+from app.fastapi_routes.mod_store_route_handlers_part02 import (
+    ai_mod_delivery_start as ai_mod_delivery_start,
+)
+from app.fastapi_routes.mod_store_route_handlers_part02 import (
+    ai_mod_delivery_status as ai_mod_delivery_status,
+)
+from app.fastapi_routes.mod_store_route_handlers_part02 import (
     mod_store_bootstrap_edition_pack as mod_store_bootstrap_edition_pack,
 )
 from app.fastapi_routes.mod_store_route_handlers_part02 import (

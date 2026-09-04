@@ -52,6 +52,9 @@
           </div>
           <h3>{{ activeSystemEntry.display_name }}</h3>
           <p>{{ activeSystemEntry.subtitle }}</p>
+          <p v-if="isDutyEmployeeEntry(activeSystemEntry)" class="im-system-employee-responsibility">
+            职责：{{ activeSystemEntry.description }}
+          </p>
         </section>
         <dl class="im-system-status-grid im-system-status-grid--identity">
           <div>
@@ -150,12 +153,16 @@
         :value="dutyEmployeeDraft"
         type="text"
         class="im-compose-input"
-        :placeholder="`向${activeSystemEntry.display_name}发送任务`"
+        :placeholder="isPlannedDutyEmployee(activeSystemEntry) ? '该员工尚未安装' : `向${activeSystemEntry.display_name}发送任务`"
         maxlength="4000"
-        :disabled="dutyEmployeeBusy"
+        :disabled="dutyEmployeeBusy || isPlannedDutyEmployee(activeSystemEntry)"
         @input="onDutyEmployeeDraftInput"
       />
-      <button type="submit" class="im-btn im-btn--primary" :disabled="dutyEmployeeBusy || !dutyEmployeeDraft.trim()">
+      <button
+        type="submit"
+        class="im-btn im-btn--primary"
+        :disabled="dutyEmployeeBusy || isPlannedDutyEmployee(activeSystemEntry) || !dutyEmployeeDraft.trim()"
+      >
         {{ dutyEmployeeBusy ? '执行中' : '发送' }}
       </button>
     </form>
@@ -213,5 +220,9 @@ function onCodexDraftInput(ev: Event): void {
 
 function onDutyEmployeeDraftInput(ev: Event): void {
   emit('update:dutyEmployeeDraft', (ev.target as HTMLInputElement).value)
+}
+
+function isPlannedDutyEmployee(entry: SystemEmployeeEntry): boolean {
+  return 'is_duty_employee_entry' in entry && entry.status === 'planned'
 }
 </script>
