@@ -155,6 +155,8 @@ def _latest_chain_hash(directory: Path) -> str:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError, TypeError):
             continue
+        if not isinstance(payload, dict):
+            continue
         value = str(payload.get("chain_hash") or "")
         if len(value) == 64:
             return value
@@ -165,7 +167,9 @@ def _write_immutable(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists():
         raise FileExistsError(f"refusing to overwrite SLO evidence: {path}")
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
 
 
 def collect(
@@ -187,7 +191,9 @@ def collect(
     if is_backfill:
         age = recorded_at - current
         if age < timedelta(0) or age > timedelta(hours=24):
-            raise ValueError("SLO backfill evidence_at must be within the preceding 24 hours")
+            raise ValueError(
+                "SLO backfill evidence_at must be within the preceding 24 hours"
+            )
         if not backfill_reason.strip():
             raise ValueError("SLO backfill requires a non-empty reason")
     errors: list[str] = []
@@ -205,7 +211,9 @@ def collect(
         sample_raw: str | None = None
         if credentials_available:
             try:
-                raw = prom_query(prom_url, expr, bearer_token=prom_token, query_at=current)
+                raw = prom_query(
+                    prom_url, expr, bearer_token=prom_token, query_at=current
+                )
                 sample_raw = prom_query(
                     prom_url, sample_expr, bearer_token=prom_token, query_at=current
                 )
@@ -233,9 +241,9 @@ def collect(
             errors.append(f"{slo_id}:empty_sample_count")
 
     source_status = "available" if not errors else "source_unavailable"
-    coverage = sum(1 for item in readings.values() if item["reading_numeric"] is not None) / len(
-        readings
-    )
+    coverage = sum(
+        1 for item in readings.values() if item["reading_numeric"] is not None
+    ) / len(readings)
     day0_eligible = bool(
         source_status == "available"
         and coverage >= 0.99
@@ -264,7 +272,9 @@ def collect(
     }
     previous_hash = _latest_chain_hash(out_path.parent)
     payload["previous_chain_hash"] = previous_hash
-    payload["evidence_hash"] = hashlib.sha256(_canonical_json(payload).encode()).hexdigest()
+    payload["evidence_hash"] = hashlib.sha256(
+        _canonical_json(payload).encode()
+    ).hexdigest()
     payload["chain_hash"] = hashlib.sha256(
         f"{previous_hash}:{payload['evidence_hash']}".encode()
     ).hexdigest()
@@ -280,9 +290,15 @@ def collect(
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--prom-url", default=os.environ.get("PRODUCTION_PROMETHEUS_URL", ""))
-    parser.add_argument("--prom-token", default=os.environ.get("PRODUCTION_PROMETHEUS_TOKEN", ""))
-    parser.add_argument("--window", default="30d", choices=["1d", "7d", "30d", "90d", "15m", "1h"])
+    parser.add_argument(
+        "--prom-url", default=os.environ.get("PRODUCTION_PROMETHEUS_URL", "")
+    )
+    parser.add_argument(
+        "--prom-token", default=os.environ.get("PRODUCTION_PROMETHEUS_TOKEN", "")
+    )
+    parser.add_argument(
+        "--window", default="30d", choices=["1d", "7d", "30d", "90d", "15m", "1h"]
+    )
     parser.add_argument("--mode", choices=["preflight", "formal"], default="preflight")
     parser.add_argument("--release-id", default="")
     parser.add_argument("--evidence-at", default="")
@@ -301,7 +317,9 @@ def main() -> int:
     evidence_at = None
     if args.evidence_at:
         try:
-            evidence_at = datetime.fromisoformat(args.evidence_at.replace("Z", "+00:00"))
+            evidence_at = datetime.fromisoformat(
+                args.evidence_at.replace("Z", "+00:00")
+            )
         except ValueError as exc:
             parser.error(f"--evidence-at is invalid: {exc}")
         if evidence_at.tzinfo is None:
@@ -309,7 +327,10 @@ def main() -> int:
     stamp = recorded_at.strftime("%Y%m%dT%H%M%SZ")
     suffix = "-".join(
         value
-        for value in (os.environ.get("GITHUB_RUN_ID", ""), os.environ.get("GITHUB_RUN_ATTEMPT", ""))
+        for value in (
+            os.environ.get("GITHUB_RUN_ID", ""),
+            os.environ.get("GITHUB_RUN_ATTEMPT", ""),
+        )
         if value
     )
     filename = f"{stamp}{('-' + suffix) if suffix else ''}.json"
@@ -326,7 +347,9 @@ def main() -> int:
         evidence_at=evidence_at,
         backfill_reason=args.backfill_reason,
     )
-    print(f"Wrote {out_path} source_status={payload['source_status']} all_pass={all_pass}")
+    print(
+        f"Wrote {out_path} source_status={payload['source_status']} all_pass={all_pass}"
+    )
     if payload["source_status"] != "available":
         return 2
     return 0 if args.mode == "preflight" or all_pass else 3

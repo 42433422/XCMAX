@@ -46,6 +46,7 @@ def test_daily_workflow_uses_private_authenticated_prometheus_tunnel() -> None:
     assert "-L 127.0.0.1:19091:127.0.0.1:9091" in workflow
     assert 'test "$PRODUCTION_PROMETHEUS_URL" = "http://127.0.0.1:19091"' in workflow
     assert "PRODUCTION_PROMETHEUS_TOKEN" in workflow
+    assert "NO_PROXY: 127.0.0.1,localhost" in workflow
     assert "Close production Prometheus SSH tunnel" in workflow
     assert "seed" not in workflow.lower()
 
@@ -150,6 +151,19 @@ def test_slo_evidence_never_overwrites_existing_record(tmp_path: Path) -> None:
         assert "refusing to overwrite" in str(exc)
     else:
         raise AssertionError("existing evidence was overwritten")
+
+
+def test_hash_chain_ignores_unrelated_json_values(tmp_path: Path) -> None:
+    mod = _module()
+    evidence_dir = tmp_path / "evidence"
+    evidence_dir.mkdir()
+    (evidence_dir / "newer-unrelated.json").write_text('["not", "evidence"]\n')
+    expected_hash = "a" * 64
+    (evidence_dir / "older-evidence.json").write_text(
+        json.dumps({"chain_hash": expected_hash}) + "\n"
+    )
+
+    assert mod._latest_chain_hash(evidence_dir) == expected_hash
 
 
 def test_backfill_requires_reason_and_stays_within_24_hours(tmp_path: Path) -> None:
