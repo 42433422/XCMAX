@@ -31,11 +31,21 @@ async def test_desktop_claims_installs_and_reports_paid_asset_command() -> None:
         assert kwargs["json_body"]["status"] == "installed"
         return {"ok": True}
 
-    install = AsyncMock(return_value=ModStoreInstallResult(success=True, message="installed", data={"id": "paid-mod"}))
+    install = AsyncMock(
+        return_value=ModStoreInstallResult(
+            success=True, message="installed", data={"id": "paid-mod"}
+        )
+    )
     with (
         patch("app.desktop_runtime.paths.is_desktop_mode", return_value=True),
-        patch("app.application.desktop_delivery_receipt.desktop_installation_id", return_value="desktop-installation-1"),
-        patch("app.fastapi_routes.market_account.latest_session_market_token", return_value="market-token"),
+        patch(
+            "app.application.desktop_delivery_receipt.desktop_installation_id",
+            return_value="desktop-installation-1",
+        ),
+        patch(
+            "app.fastapi_routes.market_account.latest_session_market_token",
+            return_value="market-token",
+        ),
         patch("app.fastapi_routes.market_account._proxy_json", new=proxy),
         patch("app.fastapi_routes.mod_store_routes._install_from_catalog", new=install),
     ):
@@ -49,8 +59,7 @@ async def test_desktop_claims_installs_and_reports_paid_asset_command() -> None:
         activate=True,
         authorization="Bearer market-token",
         download_path=(
-            "/api/asset-installations/commands/12/download"
-            "?installation_id=desktop-installation-1"
+            "/api/asset-installations/commands/12/download?installation_id=desktop-installation-1"
         ),
         expected_sha256="b" * 64,
     )

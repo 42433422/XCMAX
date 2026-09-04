@@ -61,7 +61,9 @@ async def ai_mod_delivery_start(
     )
 
 
-@_facade().router.get("/ai-delivery/sessions/{session_id}", response_model=_facade().ModStoreSimpleResponse)
+@_facade().router.get(
+    "/ai-delivery/sessions/{session_id}", response_model=_facade().ModStoreSimpleResponse
+)
 async def ai_mod_delivery_status(
     request: _facade().Request,
     session_id: str,
@@ -85,7 +87,9 @@ async def ai_mod_delivery_status(
     )
 
 
-@_facade().router.post("/ai-delivery/sessions/{session_id}/install", response_model=_facade().ModStoreInstallResult)
+@_facade().router.post(
+    "/ai-delivery/sessions/{session_id}/install", response_model=_facade().ModStoreInstallResult
+)
 async def ai_mod_delivery_install(
     request: _facade().Request,
     session_id: str,
@@ -109,7 +113,11 @@ async def ai_mod_delivery_install(
     if not isinstance(payload, dict) or str(payload.get("status") or "") != "done":
         raise _facade().HTTPException(status_code=409, detail="MOD 尚未生成完成")
     artifact = payload.get("artifact") if isinstance(payload.get("artifact"), dict) else {}
-    validation = artifact.get("validation_summary") if isinstance(artifact.get("validation_summary"), dict) else {}
+    validation = (
+        artifact.get("validation_summary")
+        if isinstance(artifact.get("validation_summary"), dict)
+        else {}
+    )
     if validation.get("ok") is not True:
         raise _facade().HTTPException(status_code=409, detail="MOD 质量校验未通过，已阻止安装")
     mod_id = str(artifact.get("mod_id") or "").strip()

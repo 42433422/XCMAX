@@ -87,9 +87,7 @@ def test_seeded_first_order_runs_three_real_business_tools_and_persists_shipment
             "3. 根据查询结果创建一张数量为 1 的演示出货单。"
         )
         planner = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
-        plan = planner._fallback_plan(
-            f"onboarding-{uuid4().hex}", prompt, get_tool_registry()
-        )
+        plan = planner._fallback_plan(f"onboarding-{uuid4().hex}", prompt, get_tool_registry())
         assert plan.intent == "onboarding_first_order"
 
         repository = InMemoryAgentRunRepository()
@@ -103,18 +101,14 @@ def test_seeded_first_order_runs_three_real_business_tools_and_persists_shipment
         assert waiting.status == "waiting_user"
         assert [call.status for call in waiting.tool_calls] == ["completed", "completed"]
 
-        completed = orchestrator.continue_run(
-            waiting.run_id, approved_by="onboarding-acceptance"
-        )
+        completed = orchestrator.continue_run(waiting.run_id, approved_by="onboarding-acceptance")
         assert completed is not None
         assert completed.status == "completed", completed.error
         assert len(completed.tool_calls) == 3
 
         with get_db() as db:
             shipment = (
-                db.query(ShipmentRecord)
-                .filter(ShipmentRecord.purchase_unit == customer)
-                .one()
+                db.query(ShipmentRecord).filter(ShipmentRecord.purchase_unit == customer).one()
             )
             assert shipment.product_name == product
             assert shipment.quantity_tins == 1

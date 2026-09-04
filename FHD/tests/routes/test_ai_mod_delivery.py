@@ -17,7 +17,10 @@ def _request() -> MagicMock:
 async def test_ai_mod_delivery_starts_existing_authenticated_workbench() -> None:
     with (
         patch("app.fastapi_routes.market_account.session_id_from_request", return_value="sid-1"),
-        patch("app.fastapi_routes.market_account._authorization_from_request", return_value="Bearer market-token"),
+        patch(
+            "app.fastapi_routes.market_account._authorization_from_request",
+            return_value="Bearer market-token",
+        ),
         patch(
             "app.fastapi_routes.market_account._proxy_json",
             new=AsyncMock(return_value={"session_id": "wb-1", "status": "running"}),
@@ -42,12 +45,21 @@ async def test_ai_mod_delivery_installs_only_completed_valid_owned_export() -> N
         "status": "done",
         "artifact": {"mod_id": "leave-approval", "validation_summary": {"ok": True}},
     }
-    installed = routes.ModStoreInstallResult(success=True, message="installed", data={"id": "leave-approval"})
+    installed = routes.ModStoreInstallResult(
+        success=True, message="installed", data={"id": "leave-approval"}
+    )
     with (
         patch("app.fastapi_routes.market_account.session_id_from_request", return_value="sid-1"),
-        patch("app.fastapi_routes.market_account._authorization_from_request", return_value="Bearer market-token"),
-        patch("app.fastapi_routes.market_account._proxy_json", new=AsyncMock(return_value=snapshot)),
-        patch.object(routes, "_install_from_catalog", new=AsyncMock(return_value=installed)) as install,
+        patch(
+            "app.fastapi_routes.market_account._authorization_from_request",
+            return_value="Bearer market-token",
+        ),
+        patch(
+            "app.fastapi_routes.market_account._proxy_json", new=AsyncMock(return_value=snapshot)
+        ),
+        patch.object(
+            routes, "_install_from_catalog", new=AsyncMock(return_value=installed)
+        ) as install,
     ):
         result = await routes.ai_mod_delivery_install(_request(), "wb-1")
 
@@ -70,8 +82,13 @@ async def test_ai_mod_delivery_blocks_failed_validation() -> None:
     }
     with (
         patch("app.fastapi_routes.market_account.session_id_from_request", return_value="sid-1"),
-        patch("app.fastapi_routes.market_account._authorization_from_request", return_value="Bearer market-token"),
-        patch("app.fastapi_routes.market_account._proxy_json", new=AsyncMock(return_value=snapshot)),
+        patch(
+            "app.fastapi_routes.market_account._authorization_from_request",
+            return_value="Bearer market-token",
+        ),
+        patch(
+            "app.fastapi_routes.market_account._proxy_json", new=AsyncMock(return_value=snapshot)
+        ),
     ):
         with pytest.raises(routes.HTTPException, match="质量校验未通过"):
             await routes.ai_mod_delivery_install(_request(), "wb-2")
@@ -82,8 +99,13 @@ async def test_ai_mod_delivery_blocks_missing_validation_evidence() -> None:
     snapshot = {"status": "done", "artifact": {"mod_id": "unverified"}}
     with (
         patch("app.fastapi_routes.market_account.session_id_from_request", return_value="sid-1"),
-        patch("app.fastapi_routes.market_account._authorization_from_request", return_value="Bearer market-token"),
-        patch("app.fastapi_routes.market_account._proxy_json", new=AsyncMock(return_value=snapshot)),
+        patch(
+            "app.fastapi_routes.market_account._authorization_from_request",
+            return_value="Bearer market-token",
+        ),
+        patch(
+            "app.fastapi_routes.market_account._proxy_json", new=AsyncMock(return_value=snapshot)
+        ),
     ):
         with pytest.raises(routes.HTTPException, match="质量校验未通过"):
             await routes.ai_mod_delivery_install(_request(), "wb-3")
