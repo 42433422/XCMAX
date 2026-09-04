@@ -88,6 +88,7 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
         self._published_count = 0
         self._processed_count = 0
         self._error_count = 0
+
         self._dropped_count = 0
         # Event to signal new items in the queue; created when start() runs on the event loop.
         self._event_available: asyncio.Event | None = None
@@ -173,6 +174,25 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
             logger.info("NeuroBus transport: redis_pubsub")
 
         logger.info("NeuroBus initialized")
+
+    def _record_delivery_metric(self, outcome: str) -> None:
+        if not self._enable_metrics:
+            return
+        try:
+            from app.utils.metrics import (
+                record_neurobus_dead_lettered,
+                record_neurobus_lost,
+                record_neurobus_published,
+            )
+
+            if outcome == "published":
+                record_neurobus_published()
+            elif outcome == "dead_lettered":
+                record_neurobus_dead_lettered()
+            elif outcome == "lost":
+                record_neurobus_lost()
+        except RECOVERABLE_ERRORS:
+            pass
 
     @property
     def is_running(self) -> bool:
@@ -376,8 +396,10 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
                         retry_count=retry_count,
                         handler_name=getattr(subscription.handler, "__name__", None),
                     )
+                    self._record_delivery_metric("dead_lettered")
                 except RECOVERABLE_ERRORS as dlq_exc:
                     logger.exception("NeuroBus DLQ enqueue failed: %s", dlq_exc)
+                    self._record_delivery_metric("lost")
             return False
         return True
 
@@ -407,9 +429,11 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
         """
         if not self._running or self._shutdown:
             logger.warning("Cannot publish: NeuroBus not running")
+            self._record_delivery_metric("lost")
             return False
 
         if not self._preflight_publish(event):
+            self._record_delivery_metric("lost")
             return False
 
         # 持久化（如果启用）
@@ -431,6 +455,7 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
         success = self._event_queue.put(event)
         if success:
             self._published_count += 1
+            self._record_delivery_metric("published")
             if self._redis_bridge is not None and not event.payload.get("_neuro_remote_ingest"):
                 self._redis_bridge.publish_remote(event)
             # wake processing loop if it's waiting
@@ -442,6 +467,7 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
                     # ignore any loop-related errors
                     pass
         else:
+            self._record_delivery_metric("lost")
             if self._rel_dedup is not None:
                 self._rel_dedup.remove(event)
             if span_id is not None and self._rel_tracer is not None:
@@ -455,18 +481,23 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
     def ingest_remote_event(self, event: NeuroEvent) -> bool:
         """跨进程 Redis 订阅 ingest — 不再向外广播。"""
         if not self._running or self._shutdown:
+            self._record_delivery_metric("lost")
             return False
         if not self._preflight_publish(event):
+            self._record_delivery_metric("lost")
             return False
         success = self._event_queue.put(event)
         if success:
             self._published_count += 1
+            self._record_delivery_metric("published")
             ev = getattr(self, "_event_available", None)
             if ev is not None:
                 try:
                     ev.set()
                 except RECOVERABLE_ERRORS:
                     pass
+        else:
+            self._record_delivery_metric("lost")
         return success
 
 

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import AsyncIterator
+from typing import Any
 
 from fastapi import FastAPI, Request
 
@@ -16,6 +18,37 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
+_AI_STREAM_MARKERS = ("/ai/", "/agent/", "/chat", "/employee", "/tutorial")
+
+
+def _is_ai_event_stream(path: str, content_type: str) -> bool:
+    normalized = path.lower()
+    return content_type.lower().startswith("text/event-stream") and any(
+        marker in normalized for marker in _AI_STREAM_MARKERS
+    )
+
+
+def _instrument_first_byte(response: Any, *, path: str, started: float) -> None:
+    content_type = str(response.headers.get("content-type") or "")
+    iterator = getattr(response, "body_iterator", None)
+    if not _is_ai_event_stream(path, content_type) or iterator is None:
+        return
+
+    async def measured_iterator() -> AsyncIterator[Any]:
+        recorded = False
+        async for chunk in iterator:
+            if not recorded and chunk:
+                try:
+                    from app.utils.metrics import record_chat_stream_first_byte
+
+                    record_chat_stream_first_byte(time.perf_counter() - started)
+                except RECOVERABLE_ERRORS:
+                    pass
+                recorded = True
+            yield chunk
+
+    response.body_iterator = measured_iterator()
+
 
 def register_http_sli_middleware(app: FastAPI) -> None:
     @app.middleware("http")
@@ -26,11 +59,14 @@ def register_http_sli_middleware(app: FastAPI) -> None:
         started = time.perf_counter()
         response = await call_next(request)
         try:
-            from app.utils.metrics import record_http_request
+            from app.utils.metrics import record_business_http_request, record_http_request
 
+            duration = time.perf_counter() - started
             record_http_request(
-                request.method, path, response.status_code, time.perf_counter() - started
+                request.method, path, response.status_code, duration
             )
+            record_business_http_request(request.method, path, response.status_code, duration)
+            _instrument_first_byte(response, path=path, started=started)
         except RECOVERABLE_ERRORS:
             pass
         return response

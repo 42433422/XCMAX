@@ -216,7 +216,7 @@ export_task_duration_seconds = Histogram(
 mod_install_total = Counter(
     "mod_install_total",
     "Total mod install/uninstall operations",
-    ["operation", "status"],
+    ["operation", "status", "device_scope"],
 )
 
 
@@ -242,6 +242,92 @@ def record_http_request(method: str, path: str, status_code: int, duration_secon
         )
     except RECOVERABLE_ERRORS:
         pass
+
+
+def record_chat_stream_first_byte(duration_seconds: float) -> None:
+    """Record the first non-empty byte of a real AI SSE response.
+
+    Tenant identifiers are deliberately not exported as Prometheus labels.  The
+    fixed label values keep cardinality bounded and prevent customer identity
+    from leaking into the production metrics store.
+    """
+
+    try:
+        chat_stream_first_byte_seconds.labels(model="stream", tenant_id="redacted").observe(
+            duration_seconds
+        )
+    except RECOVERABLE_ERRORS:
+        pass
+
+
+def _customer_operation(method: str, path: str) -> str | None:
+    normalized = path.rstrip("/").lower()
+    if not normalized.startswith("/api/customers"):
+        return None
+    if normalized.endswith("/batch-delete") or method.upper() == "DELETE":
+        return "delete"
+    if method.upper() in {"PUT", "PATCH"}:
+        return "update"
+    if method.upper() == "POST":
+        return "create"
+    return "query"
+
+
+def _document_type(path: str) -> str | None:
+    normalized = path.lower()
+    if "/ocr" in normalized:
+        return "ocr"
+    if "/etl" in normalized or "/import/" in normalized or normalized.endswith("/import"):
+        return "excel"
+    if "/documents/upload" in normalized:
+        return "document"
+    return None
+
+
+def _export_type(path: str) -> str | None:
+    normalized = path.lower()
+    if "/export" not in normalized and not normalized.endswith((".xlsx", ".docx", ".pdf")):
+        return None
+    if ".pdf" in normalized:
+        return "pdf"
+    if ".docx" in normalized:
+        return "docx"
+    if ".csv" in normalized:
+        return "csv"
+    return "excel"
+
+
+def _mod_operation(path: str) -> str | None:
+    normalized = path.rstrip("/").lower()
+    if "/mod-store/" not in normalized:
+        return None
+    for operation in ("uninstall", "deactivate", "activate", "install", "update"):
+        if normalized.endswith(f"/{operation}"):
+            return "install" if operation == "update" else operation
+    return None
+
+
+def record_business_http_request(
+    method: str,
+    path: str,
+    status_code: int,
+    duration_seconds: float,
+) -> None:
+    """Wire real production HTTP paths into the five business SLI families."""
+
+    status = "error" if status_code >= 400 else "success"
+    customer_operation = _customer_operation(method, path)
+    if customer_operation:
+        record_customer_op(customer_operation, status, duration_seconds)
+    document_type = _document_type(path)
+    if document_type:
+        record_doc_recognition(document_type, status, duration_seconds)
+    export_type = _export_type(path)
+    if export_type:
+        record_export_task(export_type, status, duration_seconds)
+    mod_operation = _mod_operation(path)
+    if mod_operation:
+        record_mod_install(mod_operation, status, device_scope="server_runtime")
 
 
 def record_api_request(method: str, endpoint: str, status: int | str) -> None:
@@ -322,14 +408,23 @@ def record_export_task(export_type: str, status: str, duration_seconds: float) -
         pass
 
 
-def record_mod_install(operation: str, status: str) -> None:
+def record_mod_install(
+    operation: str,
+    status: str,
+    *,
+    device_scope: str = "server_runtime",
+) -> None:
     """MOD 安装/卸载埋点（SLO-BIZ-05）。
 
     operation: install / uninstall / activate / deactivate
     status: success / error
     """
     try:
-        mod_install_total.labels(operation=operation, status=status).inc()
+        mod_install_total.labels(
+            operation=operation,
+            status=status,
+            device_scope=device_scope,
+        ).inc()
     except RECOVERABLE_ERRORS:
         pass
 

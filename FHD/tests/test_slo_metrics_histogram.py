@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 from unittest.mock import patch
 
 import pytest
@@ -60,6 +61,7 @@ def test_chat_stream_first_byte_metric_on_stream(client: TestClient):
     # chat/stream 非 CSRF 豁免；先 GET 拿 token 再 POST。
     client.get("/api/health")
     csrf = client.cookies.get("csrf_token") or ""
+    before = _metrics_text(client)
 
     with patch(
         "app.legacy.routes.conversation.compat_routes.compat_chat_stream_async",
@@ -77,3 +79,10 @@ def test_chat_stream_first_byte_metric_on_stream(client: TestClient):
     assert r.status_code == 200
     text = _metrics_text(client)
     assert "chat_stream_first_byte_seconds" in text
+    pattern = re.compile(
+        r'chat_stream_first_byte_seconds_count\{model="stream",tenant_id="redacted"\} ([0-9.]+)'
+    )
+    before_match = pattern.search(before)
+    after_match = pattern.search(text)
+    assert after_match is not None
+    assert float(after_match.group(1)) == float(before_match.group(1) if before_match else 0) + 1
