@@ -15,6 +15,22 @@ from threading import Lock
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 
+def encrypt_employee_policy(payload: str) -> str:
+    """Encrypt an employee-domain policy through the service boundary."""
+
+    from modstore_server.llm_crypto import encrypt_secret
+
+    return encrypt_secret(payload)
+
+
+def decrypt_employee_policy(ciphertext: str) -> str:
+    """Decrypt an employee-domain policy through the service boundary."""
+
+    from modstore_server.llm_crypto import decrypt_secret
+
+    return decrypt_secret(ciphertext)
+
+
 class EmployeeRuntimeClient(ABC):
     """Public surface other domains may rely on."""
 
@@ -94,6 +110,8 @@ def set_default_employee_client(client: Optional[EmployeeRuntimeClient]) -> None
 __all__ = [
     "EmployeeRuntimeClient",
     "InProcessEmployeeRuntimeClient",
+    "decrypt_employee_policy",
+    "encrypt_employee_policy",
     "get_default_employee_client",
     "set_default_employee_client",
 ]
