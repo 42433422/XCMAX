@@ -31,11 +31,7 @@ def _load_all_employee_profiles() -> List[Dict[str, Any]]:
         sf = get_session_factory()
         profiles: List[Dict[str, Any]] = []
         with sf() as session:
-            rows = (
-                session.query(CatalogItem)
-                .filter(CatalogItem.artifact == "employee_pack")
-                .all()
-            )
+            rows = session.query(CatalogItem).filter(CatalogItem.artifact == "employee_pack").all()
             for row in rows:
                 profile: Dict[str, Any] = {
                     "id": str(row.pkg_id or ""),
@@ -51,24 +47,17 @@ def _load_all_employee_profiles() -> List[Dict[str, Any]]:
                         if p.exists():
                             with zipfile.ZipFile(p, "r") as z:
                                 if "manifest.json" in z.namelist():
-                                    mf = json.loads(
-                                        z.read("manifest.json").decode("utf-8")
-                                    )
+                                    mf = json.loads(z.read("manifest.json").decode("utf-8"))
                                     identity = mf.get("identity") or mf
                                     profile["domain"] = str(
-                                        identity.get("domain")
-                                        or identity.get("industry")
-                                        or ""
+                                        identity.get("domain") or identity.get("industry") or ""
                                     )
                                     profile["skills"] = [
-                                        str(s.get("name") or s)
-                                        if isinstance(s, dict)
-                                        else str(s)
+                                        str(s.get("name") or s) if isinstance(s, dict) else str(s)
                                         for s in (identity.get("skills") or [])
                                     ]
                                     profile["scope_globs"] = list(
-                                        (mf.get("workspace") or {}).get("scope_globs")
-                                        or []
+                                        (mf.get("workspace") or {}).get("scope_globs") or []
                                     )
                     except RECOVERABLE_ERRORS:
                         pass
@@ -161,9 +150,7 @@ def decompose_task(
                     task_brief=str(item.get("task_brief") or task_description)[:500],
                     input_data=item.get("input_data") or {},
                     depends_on=[
-                        str(d)
-                        for d in (item.get("depends_on") or [])
-                        if str(d) in valid_ids
+                        str(d) for d in (item.get("depends_on") or []) if str(d) in valid_ids
                     ],
                     priority=int(item.get("priority") or 5),
                 )

@@ -27,9 +27,7 @@ def _has_reviewed_duty_binding(event_id: int) -> bool:
             .all()
         )
         for binding in bindings:
-            base, source_filter = facade._parse_binding_event_key(
-                str(binding.event_type or "")
-            )
+            base, source_filter = facade._parse_binding_event_key(str(binding.event_type or ""))
             if base != str(event.event_type or ""):
                 continue
             if source_filter and source_filter != str(event.source or ""):
@@ -75,9 +73,9 @@ def _dispatch_intake_routing_plan(
                 source=source,
                 incident=incident_payload,
             )
-            owner_brief = (
-                f"{brief} | route={owner} request_id={row.get('request_id') or ''}"
-            )[:500]
+            owner_brief = (f"{brief} | route={owner} request_id={row.get('request_id') or ''}")[
+                :500
+            ]
             execute_employee_task(
                 owner,
                 owner_brief,
@@ -141,9 +139,7 @@ def _dispatch_incident_body(event_id: int) -> None:
 
             orchestration = orchestrate_incident(event_id)
             if not orchestration.get("should_dispatch", True):
-                logger.info(
-                    "incident_bus: unified orchestrator parked event_id=%s", event_id
-                )
+                logger.info("incident_bus: unified orchestrator parked event_id=%s", event_id)
                 return
         except RECOVERABLE_ERRORS:
             logger.warning(
@@ -173,10 +169,7 @@ def _dispatch_incident_body(event_id: int) -> None:
                 )
                 # 客服工单：团队抢单后仍走 binding，让 intake-dispatcher /
                 # user-customer-service-officer 按既有订阅接单（跳过 market 防双派）。
-                if (
-                    event_type_pre == "ops.intake.customer_ticket"
-                    or reviewed_duty_binding
-                ):
+                if event_type_pre == "ops.intake.customer_ticket" or reviewed_duty_binding:
                     binding_only = True
                     reviewed_bindings_only = reviewed_duty_binding
                 else:
@@ -187,9 +180,7 @@ def _dispatch_incident_body(event_id: int) -> None:
                     event_id,
                 )
         except RECOVERABLE_ERRORS:
-            logger.warning(
-                "incident team failed event_id=%s; fallback market", event_id
-            )
+            logger.warning("incident team failed event_id=%s; fallback market", event_id)
 
     if not binding_only and (
         os.environ.get("MODSTORE_EMPLOYEE_TASK_MARKET_ENABLED", "1") or ""
@@ -232,9 +223,7 @@ def _dispatch_incident_body(event_id: int) -> None:
     sf = get_session_factory()
     admin_id = _admin_user_id()
     if admin_id <= 0:
-        logger.warning(
-            "incident_bus: no user in DB, skip dispatch event_id=%s", event_id
-        )
+        logger.warning("incident_bus: no user in DB, skip dispatch event_id=%s", event_id)
         return
 
     binding_ids: List[str] = []
@@ -253,9 +242,7 @@ def _dispatch_incident_body(event_id: int) -> None:
         for b in (
             session.query(EmployeeTriggerBinding)
             .filter(EmployeeTriggerBinding.is_active.is_(True))
-            .order_by(
-                EmployeeTriggerBinding.priority.asc(), EmployeeTriggerBinding.id.asc()
-            )
+            .order_by(EmployeeTriggerBinding.priority.asc(), EmployeeTriggerBinding.id.asc())
             .all()
         ):
             eid_sub = str(b.employee_id or "").strip()

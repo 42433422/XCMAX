@@ -33,9 +33,7 @@ def cache_key(user_id: int, provider: str, api_key: str) -> str:
     # A process-random, memory-hard KDF prevents an exposed cache key from
     # becoming an offline oracle for provider credentials. The short result is
     # only an in-process cache identifier, never an authentication verifier.
-    digest = hashlib.scrypt(
-        payload, salt=_CACHE_KEY_SALT, n=2**14, r=8, p=1, dklen=16
-    ).hex()
+    digest = hashlib.scrypt(payload, salt=_CACHE_KEY_SALT, n=2**14, r=8, p=1, dklen=16).hex()
     return f"{provider}:{digest}"
 
 

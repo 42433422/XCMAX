@@ -56,9 +56,7 @@ def _list_row_disk_folder(row: dict) -> str:
 
 
 @router.get("/api/mods")
-def api_list_mods(
-    response: Response, user: Optional[User] = Depends(get_optional_user)
-):
+def api_list_mods(response: Response, user: Optional[User] = Depends(get_optional_user)):
     lib = library_paths.lib()
     if user is None:
         rows = []
@@ -117,9 +115,7 @@ def api_get_mod(mod_id: str, user: User = Depends(require_user)):
 
 
 @router.put("/api/mods/{mod_id}/manifest")
-def api_put_manifest(
-    mod_id: str, body: ManifestPutDTO, user: User = Depends(require_user)
-):
+def api_put_manifest(mod_id: str, body: ManifestPutDTO, user: User = Depends(require_user)):
     assert_user_owns_mod(user, mod_id)
     try:
         d = library_paths.mod_dir(mod_id)
@@ -153,9 +149,7 @@ def api_get_mod_file(mod_id: str, path: str, user: User = Depends(require_user))
 
 
 @router.put("/api/mods/{mod_id}/file")
-def api_put_mod_file(
-    mod_id: str, body: ModFilePutDTO, user: User = Depends(require_user)
-):
+def api_put_mod_file(mod_id: str, body: ModFilePutDTO, user: User = Depends(require_user)):
     assert_user_owns_mod(user, mod_id)
     try:
         d = library_paths.mod_dir(mod_id)
@@ -220,9 +214,7 @@ async def api_import_mod(
     if not file.filename or not file.filename.lower().endswith(".zip"):
         raise HTTPException(400, "请上传 .zip")
     raw = await file.read()
-    max_bytes = int(
-        os.environ.get("MODSTORE_CATALOG_UPLOAD_MAX_BYTES", str(80 * 1024 * 1024))
-    )
+    max_bytes = int(os.environ.get("MODSTORE_CATALOG_UPLOAD_MAX_BYTES", str(80 * 1024 * 1024)))
     if len(raw) > max_bytes:
         raise HTTPException(400, f"文件过大（>{max_bytes // 1024 // 1024}MB）")
     import tempfile

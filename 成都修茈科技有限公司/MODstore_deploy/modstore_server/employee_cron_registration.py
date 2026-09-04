@@ -43,9 +43,7 @@ def build_employee_cron_candidates(
                 if isinstance(pack.get("manifest"), dict):
                     manifest = pack["manifest"]
             except RECOVERABLE_ERRORS:
-                logger.warning(
-                    "catalog manifest unavailable; trying reviewed duty SSOT"
-                )
+                logger.warning("catalog manifest unavailable; trying reviewed duty SSOT")
         if not manifest and contract:
             try:
                 manifest = load_reviewed_duty_manifest(employee_id)

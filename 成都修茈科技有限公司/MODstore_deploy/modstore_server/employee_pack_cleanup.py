@@ -23,9 +23,7 @@ _EXPERIMENTAL_SUFFIXES = (
 _EXPERIMENTAL_PATTERN = re.compile(r"-llm-lab(-\d+)?$")
 
 
-def is_experimental_pack_id(
-    pack_id: str, metadata: Optional[Dict[str, Any]] = None
-) -> bool:
+def is_experimental_pack_id(pack_id: str, metadata: Optional[Dict[str, Any]] = None) -> bool:
     pid = str(pack_id or "").strip()
     if not pid:
         return False

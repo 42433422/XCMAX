@@ -25,9 +25,7 @@ def api_export_workflow_employee_pack(
         raise _facade().HTTPException(400, err or "manifest 无效")
     rows = data.get("workflow_employees")
     if not isinstance(rows, list) or workflow_index < 0 or workflow_index >= len(rows):
-        raise _facade().HTTPException(
-            400, "workflow_index 越界或 workflow_employees 非数组"
-        )
+        raise _facade().HTTPException(400, "workflow_index 越界或 workflow_employees 非数组")
     raw, build_err, pack_id = _facade().build_employee_pack_zip_from_workflow(
         mod_id,
         data,
@@ -60,9 +58,7 @@ async def api_register_workflow_employee_catalog(
     rows = data.get("workflow_employees")
     idx = int(body.workflow_index)
     if not isinstance(rows, list) or idx < 0 or idx >= len(rows):
-        raise _facade().HTTPException(
-            400, "workflow_index 越界或 workflow_employees 非数组"
-        )
+        raise _facade().HTTPException(400, "workflow_index 越界或 workflow_employees 非数组")
     entry = rows[idx] if isinstance(rows[idx], dict) else {}
     raw, build_err, pack_id = _facade().build_employee_pack_zip_from_workflow(
         mod_id, data, entry, workflow_index=idx, mod_dir=d
@@ -92,9 +88,7 @@ async def api_register_workflow_employee_catalog(
         mod_id, data, entry, workflow_index=idx
     )
     if manifest_build_err or not manifest:
-        raise _facade().HTTPException(
-            400, manifest_build_err or "生成员工包 manifest 失败"
-        )
+        raise _facade().HTTPException(400, manifest_build_err or "生成员工包 manifest 失败")
     rec: _facade().Dict[str, _facade().Any] = {
         "id": pack_id,
         "name": str(manifest.get("name") or pack_id),
@@ -149,9 +143,7 @@ async def api_register_workflow_employee_catalog(
         except RECOVERABLE_ERRORS:
             import logging
 
-            logging.getLogger(__name__).exception(
-                "EmployeeApplicationService.register_pack failed"
-            )
+            logging.getLogger(__name__).exception("EmployeeApplicationService.register_pack failed")
         readiness = _facade().analyze_mod_employee_readiness(db, user, d)
     return {
         "ok": True,
@@ -161,9 +153,7 @@ async def api_register_workflow_employee_catalog(
     }
 
 
-@_facade().api_router.post(
-    "/api/mods/{mod_id}/patch-workflow-employee-nodes", tags=["authoring"]
-)
+@_facade().api_router.post("/api/mods/{mod_id}/patch-workflow-employee-nodes", tags=["authoring"])
 def api_patch_workflow_employee_nodes(
     mod_id: str, user: _facade().User = _facade().Depends(_facade()._require_user)
 ):

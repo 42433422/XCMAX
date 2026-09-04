@@ -230,9 +230,7 @@ def get_pending_signals_for_doc_curator() -> List[Dict[str, Any]]:
                         "id": int(ev.id),
                         "source": str(ev.source or ""),
                         "payload": payload,
-                        "created_at": ev.created_at.isoformat()
-                        if ev.created_at
-                        else None,
+                        "created_at": ev.created_at.isoformat() if ev.created_at else None,
                         "dispatched_count": int(ev.dispatched_count or 0),
                     }
                 )

@@ -51,15 +51,11 @@ router = APIRouter(prefix="/api/admin/ai-accounts", tags=["admin-ai-accounts"])
 class CreateAccountDTO(BaseModel):
     platform: str = Field(..., description="qq / wechat / email / ...")
     external_id: str = Field(..., description="该平台上的对外 id，如 QQ 号")
-    employee_id: str = Field(
-        ..., description="挂到哪位 AI 员工名下，如 xc-digital-butler"
-    )
+    employee_id: str = Field(..., description="挂到哪位 AI 员工名下，如 xc-digital-butler")
     display_name: str = ""
     sandbox: bool = False
     notes: str = ""
-    secret: Dict[str, Any] = Field(
-        ..., description="平台凭证（明文，仅在创建时一次性传入）"
-    )
+    secret: Dict[str, Any] = Field(..., description="平台凭证（明文，仅在创建时一次性传入）")
 
 
 class UpdateAccountDTO(BaseModel):
@@ -118,9 +114,7 @@ def _channel_paths(platform: str, employee_id: str) -> Dict[str, Any]:
     return {"platform": plat, "paths": paths}
 
 
-def _to_view(
-    row: AIEmployeeAccount, *, has_secret: Optional[bool] = None
-) -> Dict[str, Any]:
+def _to_view(row: AIEmployeeAccount, *, has_secret: Optional[bool] = None) -> Dict[str, Any]:
     """把 ORM 行转成对外字典；不带明文密钥。"""
     if has_secret is None:
         # 没显式传，按 secrets_path 是否落地来判断
@@ -309,11 +303,7 @@ def get_account(
 ) -> Dict[str, Any]:
     sf = get_session_factory()
     with sf() as session:
-        row = (
-            session.query(AIEmployeeAccount)
-            .filter(AIEmployeeAccount.id == account_id)
-            .first()
-        )
+        row = session.query(AIEmployeeAccount).filter(AIEmployeeAccount.id == account_id).first()
         if not row:
             raise HTTPException(404, "账号不存在")
         return _to_view(row)
@@ -327,11 +317,7 @@ def update_account(
 ) -> Dict[str, Any]:
     sf = get_session_factory()
     with sf() as session:
-        row = (
-            session.query(AIEmployeeAccount)
-            .filter(AIEmployeeAccount.id == account_id)
-            .first()
-        )
+        row = session.query(AIEmployeeAccount).filter(AIEmployeeAccount.id == account_id).first()
         if not row:
             raise HTTPException(404, "账号不存在")
         if body.employee_id is not None:
@@ -366,11 +352,7 @@ def rotate_secret(
 ) -> Dict[str, Any]:
     sf = get_session_factory()
     with sf() as session:
-        row = (
-            session.query(AIEmployeeAccount)
-            .filter(AIEmployeeAccount.id == account_id)
-            .first()
-        )
+        row = session.query(AIEmployeeAccount).filter(AIEmployeeAccount.id == account_id).first()
         if not row:
             raise HTTPException(404, "账号不存在")
         _validate_secret_for_platform(row.platform, body.secret)
@@ -399,11 +381,7 @@ def delete_account(
 ) -> Dict[str, Any]:
     sf = get_session_factory()
     with sf() as session:
-        row = (
-            session.query(AIEmployeeAccount)
-            .filter(AIEmployeeAccount.id == account_id)
-            .first()
-        )
+        row = session.query(AIEmployeeAccount).filter(AIEmployeeAccount.id == account_id).first()
         if not row:
             raise HTTPException(404, "账号不存在")
         platform = row.platform
@@ -425,11 +403,7 @@ def get_secret_path(
     """仅返回密钥文件应当落在哪里 + 是否存在；不读出内容。"""
     sf = get_session_factory()
     with sf() as session:
-        row = (
-            session.query(AIEmployeeAccount)
-            .filter(AIEmployeeAccount.id == account_id)
-            .first()
-        )
+        row = session.query(AIEmployeeAccount).filter(AIEmployeeAccount.id == account_id).first()
         if not row:
             raise HTTPException(404, "账号不存在")
         target = secret_path_for(row.platform, int(row.id))

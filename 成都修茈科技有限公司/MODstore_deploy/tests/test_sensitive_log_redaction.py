@@ -11,9 +11,7 @@ from modstore_server import (
 )
 
 
-def test_task_router_parse_failure_does_not_log_model_output(
-    monkeypatch, caplog
-) -> None:
+def test_task_router_parse_failure_does_not_log_model_output(monkeypatch, caplog) -> None:
     secret = "customer-order-secret"
     monkeypatch.setattr(
         task_router,
@@ -29,9 +27,7 @@ def test_task_router_parse_failure_does_not_log_model_output(
     assert secret not in caplog.text
 
 
-def test_daily_brief_failure_does_not_log_or_render_exception(
-    monkeypatch, caplog
-) -> None:
+def test_daily_brief_failure_does_not_log_or_render_exception(monkeypatch, caplog) -> None:
     secret = "provider-token-secret"
 
     async def _fail_research(**_kwargs):
@@ -42,9 +38,7 @@ def test_daily_brief_failure_does_not_log_or_render_exception(
     caplog.set_level(logging.ERROR)
 
     rendered = asyncio.run(
-        daily_employee_briefs._one_brief_html(
-            "employee", "Employee", "provider", "model"
-        )
+        daily_employee_briefs._one_brief_html("employee", "Employee", "provider", "model")
     )
 
     assert "生成简报失败" in rendered
@@ -65,15 +59,11 @@ def test_recent_run_query_failure_does_not_log_exception(monkeypatch, caplog) ->
 
     caplog.set_level(logging.DEBUG)
 
-    assert (
-        employee_perception_enricher._recent_runs_from_db(_Session(), "employee") == []
-    )
+    assert employee_perception_enricher._recent_runs_from_db(_Session(), "employee") == []
     assert secret not in caplog.text
 
 
-def test_insecure_defaults_are_rejected_without_printing_secret(
-    monkeypatch, capsys
-) -> None:
+def test_insecure_defaults_are_rejected_without_printing_secret(monkeypatch, capsys) -> None:
     insecure_values = {
         "MODSTORE_JWT_SECRET": "modstore-dev-secret-change-in-prod",
         "MODSTORE_ADMIN_RECHARGE_TOKEN": "dev-admin-token",

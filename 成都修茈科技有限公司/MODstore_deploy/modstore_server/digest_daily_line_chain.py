@@ -13,16 +13,12 @@ from datetime import UTC, datetime
 from typing import Any, Dict, List, Sequence, Tuple
 
 from modstore_server.digest_daily_phase_chain import PHASE_A_LINES as PHASE_A_LINES
-from modstore_server.digest_daily_phase_chain import (
-    PHASE_B_LINES_NO_APP as PHASE_B_LINES_NO_APP,
-)
+from modstore_server.digest_daily_phase_chain import PHASE_B_LINES_NO_APP as PHASE_B_LINES_NO_APP
 from modstore_server.digest_daily_phase_chain import (
     PHASE_B_LINES_WITH_APP as PHASE_B_LINES_WITH_APP,
 )
 from modstore_server.digest_daily_phase_chain import _env_bool as _env_bool
-from modstore_server.digest_daily_phase_chain import (
-    _merge_phase_block as _merge_phase_block,
-)
+from modstore_server.digest_daily_phase_chain import _merge_phase_block as _merge_phase_block
 from modstore_server.digest_daily_phase_chain import (
     execute_phase_a_line_chain as execute_phase_a_line_chain,
 )
@@ -32,9 +28,7 @@ from modstore_server.digest_daily_phase_chain import (
 from modstore_server.digest_daily_phase_chain import (
     trigger_strategic_layer_dispatch as trigger_strategic_layer_dispatch,
 )
-from modstore_server.digest_daily_phase_chain import (
-    wait_for_phase_a as wait_for_phase_a,
-)
+from modstore_server.digest_daily_phase_chain import wait_for_phase_a as wait_for_phase_a
 from modstore_server.digest_line_executor import (
     _load_digest_execute_context,
     _read_execute_meta,
@@ -116,9 +110,7 @@ def _ci_correlation(kind: str, step_ids: Sequence[str]) -> Dict[str, Any]:
     }
 
 
-def _build_chain_context(
-    record_id: int, release_train: str, release_kind: str
-) -> Dict[str, Any]:
+def _build_chain_context(record_id: int, release_train: str, release_kind: str) -> Dict[str, Any]:
     try:
         from modstore_server.integrations.ops_action_handlers import repo_root
 
@@ -152,9 +144,7 @@ def _dispatch_employee_chain(
     all_ok = True
 
     for step_id, employee_id, brief in steps:
-        full_brief = (
-            f"[{step_id} · release_train {release_train} · {release_kind}]\n{brief}"
-        )
+        full_brief = f"[{step_id} · release_train {release_train} · {release_kind}]\n{brief}"
         if shadow:
             step_results.append(
                 {
@@ -175,9 +165,7 @@ def _dispatch_employee_chain(
                 target_employee_id=employee_id,
                 created_by_user_id=0,
                 include_dependencies=True,
-                allow_high_risk_real_run=_env_bool(
-                    "MODSTORE_INSTALLER_PUSH_ALLOW_HIGH_RISK", "0"
-                ),
+                allow_high_risk_real_run=_env_bool("MODSTORE_INSTALLER_PUSH_ALLOW_HIGH_RISK", "0"),
             )
             step_ok = bool(out.get("ok"))
             step_results.append(

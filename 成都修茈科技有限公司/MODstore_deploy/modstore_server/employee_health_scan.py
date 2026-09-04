@@ -112,20 +112,14 @@ def _notification_cooldown_hours() -> int:
     return max(1, min(_int_env("MODSTORE_HEALTH_SCAN_NOTIFY_COOLDOWN_HOURS", 24), 168))
 
 
-def _notify_admins(
-    title: str, content: str, *, kind: str, payload: Dict[str, Any]
-) -> None:
+def _notify_admins(title: str, content: str, *, kind: str, payload: Dict[str, Any]) -> None:
     try:
         from modstore_server.notification_service import (
             NotificationType,
             create_notification,
         )
 
-        notif_type = (
-            NotificationType.SYSTEM
-            if kind != "deactivated"
-            else NotificationType.SYSTEM
-        )
+        notif_type = NotificationType.SYSTEM if kind != "deactivated" else NotificationType.SYSTEM
         admin_ids = _get_admin_user_ids()
         if not admin_ids:
             return
@@ -229,9 +223,7 @@ def _record_evolution(
     try:
         sf = get_session_factory()
         with sf() as session:
-            cooldown_min = max(
-                5, _int_env("MODSTORE_HEALTH_SCAN_EVOLUTION_COOLDOWN_MIN", 360)
-            )
+            cooldown_min = max(5, _int_env("MODSTORE_HEALTH_SCAN_EVOLUTION_COOLDOWN_MIN", 360))
             cutoff = datetime.now(UTC) - timedelta(minutes=cooldown_min)
             existing = (
                 session.query(EmployeeEvolutionRecord.id)
@@ -291,9 +283,7 @@ def run_health_scan(
         else _int_env("MODSTORE_HEALTH_SCAN_LOOKBACK_HOURS", 24)
     )
     warn_threshold = (
-        warn_threshold
-        if warn_threshold > 0
-        else _int_env("MODSTORE_HEALTH_SCAN_WARN_THRESHOLD", 3)
+        warn_threshold if warn_threshold > 0 else _int_env("MODSTORE_HEALTH_SCAN_WARN_THRESHOLD", 3)
     )
     deactivate_threshold = (
         deactivate_threshold
