@@ -53,7 +53,11 @@ def test_clean_ci_llm_client_parses_openai_json(monkeypatch):
         def json(self):
             return {
                 "choices": [
-                    {"message": {"content": 'proposal follows: {"proposal_id":"clean-ci"}'}}
+                    {
+                        "message": {
+                            "content": 'proposal follows: {"proposal_id":"clean-ci"}'
+                        }
+                    }
                 ]
             }
 
@@ -82,13 +86,17 @@ def test_scaffold_is_exactly_three_installable_source_files(tmp_path):
     manifest = json.loads(files["manifest.json"])
     assert manifest["artifact"] == "employee_pack"
     assert manifest["employee_config_v2"]["actions"]["handlers"] == ["direct_python"]
-    assert manifest["employee_config_v2"]["collaboration"]["workflow"]["workflow_id"] == 0
+    assert (
+        manifest["employee_config_v2"]["collaboration"]["workflow"]["workflow_id"] == 0
+    )
 
     result = materialize_proposal(proposal, repo_root=tmp_path)
     source_dir = tmp_path / result["source_dir"]
     assert result["file_count"] == 5
     assert sorted(
-        path.relative_to(source_dir).as_posix() for path in source_dir.rglob("*") if path.is_file()
+        path.relative_to(source_dir).as_posix()
+        for path in source_dir.rglob("*")
+        if path.is_file()
     ) == [
         "backend/employees/autonomy_gap_analyst.py",
         "backend/vendor/autonomy_gap_analyst/convert.py",
@@ -122,7 +130,9 @@ def test_scaffold_is_exactly_three_installable_source_files(tmp_path):
             "path": "customer_value",
             "status": "failed",
             "missing_receipt": "paid_invoice",
-            "recommendation": ("Close gate customer_value with immutable evidence: paid_invoice"),
+            "recommendation": (
+                "Close gate customer_value with immutable evidence: paid_invoice"
+            ),
         }
     ]
     with pytest.raises(ProposalScaffoldError, match="already exists"):
@@ -162,3 +172,33 @@ def test_malformed_llm_catalog_proposal_uses_safe_fallback():
     )
     assert proposal["proposal_mode"] == "deterministic_safe_fallback"
     assert proposal["employee_pack"]["name"] == "autonomy-gap-analyst"
+
+
+def test_llm_private_text_never_materializes_as_source(tmp_path):
+    private_marker = "customer-secret-do-not-persist"
+    proposal = propose_employee_pack(
+        _signals(),
+        llm_call=lambda _prompt: {
+            "proposal_id": "llm-private-proposal",
+            "department": "quality",
+            "employee_pack": {
+                "name": "redirected-by-normalizer",
+                "responsibility": private_marker,
+                "prompt_template": private_marker,
+                "skills": [private_marker],
+                "tools": ["shell"],
+                "acceptance_criteria": [private_marker],
+            },
+            "estimated_files": 5,
+            "estimated_tokens": 1000,
+        },
+    )
+
+    result = materialize_proposal(proposal, repo_root=tmp_path)
+
+    source_dir = tmp_path / result["source_dir"]
+    assert all(
+        private_marker not in path.read_text(encoding="utf-8")
+        for path in source_dir.rglob("*")
+        if path.is_file()
+    )

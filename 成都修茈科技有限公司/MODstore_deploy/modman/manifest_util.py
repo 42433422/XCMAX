@@ -13,6 +13,17 @@ from modman.artifact_constants import (
     normalize_artifact,
 )
 
+_PRIVATE_KEY_RE = re.compile(
+    r"(?:^|[_-])(?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|"
+    r"secret|private[_-]?key|client[_-]?secret|authorization|cookie)(?:$|[_-])",
+    re.IGNORECASE,
+)
+_PRIVATE_VALUE_RES = (
+    re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
+    re.compile(r"\bBearer\s+[A-Za-z0-9._~-]{12,}", re.IGNORECASE),
+    re.compile(r"\bsk-[A-Za-z0-9]{20,}\b"),
+)
+
 
 def read_manifest(mod_dir: Path) -> Tuple[Dict[str, Any] | None, str | None]:
     p = mod_dir / "manifest.json"
@@ -29,6 +40,7 @@ def read_manifest(mod_dir: Path) -> Tuple[Dict[str, Any] | None, str | None]:
 
 def validate_manifest_dict(data: Dict[str, Any]) -> List[str]:
     errors: List[str] = []
+    errors.extend(_private_manifest_errors(data))
     mid = data.get("id")
     if not mid or not isinstance(mid, str) or not mid.strip():
         errors.append("缺少非空字符串字段 id")
@@ -109,6 +121,29 @@ def validate_manifest_dict(data: Dict[str, Any]) -> List[str]:
     return errors
 
 
+def _private_manifest_errors(value: Any, path: tuple[str, ...] = ()) -> List[str]:
+    """Reject credentials from manifest.json, an intentionally public artifact."""
+
+    errors: List[str] = []
+    if isinstance(value, dict):
+        for raw_key, child in value.items():
+            key = str(raw_key)
+            child_path = (*path, key)
+            dotted = ".".join(child_path)
+            if _PRIVATE_KEY_RE.search(key):
+                errors.append(f"manifest 公共元数据禁止凭据字段: {dotted}")
+                continue
+            errors.extend(_private_manifest_errors(child, child_path))
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            errors.extend(_private_manifest_errors(child, (*path, str(index))))
+    elif isinstance(value, str) and any(
+        pattern.search(value) for pattern in _PRIVATE_VALUE_RES
+    ):
+        errors.append(f"manifest 公共元数据疑似包含凭据值: {'.'.join(path)}")
+    return errors
+
+
 def folder_name_must_match_id(mod_dir: Path, data: Dict[str, Any]) -> str | None:
     mid = (data.get("id") or "").strip()
     if not mid:
@@ -119,6 +154,9 @@ def folder_name_must_match_id(mod_dir: Path, data: Dict[str, Any]) -> str | None
 
 
 def write_manifest(mod_dir: Path, data: Dict[str, Any]) -> None:
+    private_errors = _private_manifest_errors(data)
+    if private_errors:
+        raise ValueError("; ".join(private_errors))
     text = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
     (mod_dir / "manifest.json").write_text(text, encoding="utf-8")
 
@@ -130,7 +168,9 @@ def save_manifest_validated(mod_dir: Path, data: Dict[str, Any]) -> List[str]:
     """
     mid = (data.get("id") or "").strip()
     if mid != mod_dir.name:
-        raise ValueError(f"manifest.id 必须为 {mod_dir.name!r}（与目录名一致），当前为 {mid!r}")
+        raise ValueError(
+            f"manifest.id 必须为 {mod_dir.name!r}（与目录名一致），当前为 {mid!r}"
+        )
     ve = validate_manifest_dict(data)
     write_manifest(mod_dir, data)
     return ve

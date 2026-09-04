@@ -13,6 +13,28 @@ from modstore_server.employee_pack_proposal import validate_proposal
 
 _PACK_NAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$")
 _PACK_VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
+_SAFE_RESPONSIBILITY = (
+    "Analyze founder-autonomy scorecard evidence and identify the highest-priority "
+    "capability gap without fabricating completion."
+)
+_SAFE_PROMPT = (
+    "You are the XCMAX autonomy gap analyst. Read the supplied scorecard JSON, "
+    "rank only failed evidence gates, cite the exact missing receipt for each "
+    "recommendation, and return one bounded next capability. Never claim customer "
+    "payment, production deployment, QA, or recovery unless the evidence contains "
+    "the corresponding immutable receipt."
+)
+_SAFE_SKILLS = [
+    "scorecard-gap-analysis",
+    "evidence-receipt-validation",
+    "bounded-capability-planning",
+]
+_SAFE_CRITERIA = [
+    "output names at least one failed scorecard gate when a failed gate exists",
+    "every recommendation cites an evidence receipt or explicitly says missing",
+    "output never converts missing customer payment evidence into a passed gate",
+    "runtime contract exposes one self-contained direct_python handler",
+]
 
 
 class ProposalScaffoldError(ValueError):
@@ -24,10 +46,14 @@ def _bounded_text(value: Any, *, limit: int) -> str:
 
 
 def build_source_files(proposal: Dict[str, Any]) -> Dict[str, str]:
-    """Return exactly five validated, self-contained files without touching disk."""
+    """Compile one allowlisted pack; LLM prose never becomes executable source."""
 
     validate_proposal(proposal)
     pack = proposal["employee_pack"]
+    if proposal.get("triggered_by") != "catalog_capability_gap":
+        raise ProposalScaffoldError(
+            "only allowlisted catalog gap proposals are materializable"
+        )
     package_id = _bounded_text(pack.get("name"), limit=128)
     version = _bounded_text(proposal.get("target_version") or "1.0.0", limit=32)
     if not _PACK_NAME_RE.fullmatch(package_id):
@@ -35,12 +61,10 @@ def build_source_files(proposal: Dict[str, Any]) -> Dict[str, str]:
     if not _PACK_VERSION_RE.fullmatch(version):
         raise ProposalScaffoldError("unsafe package version")
 
-    skills = [_bounded_text(item, limit=96) for item in pack["skills"][:12]]
-    criteria = [_bounded_text(item, limit=400) for item in pack["acceptance_criteria"][:12]]
-    prompt = _bounded_text(pack.get("prompt_template"), limit=12000)
-    responsibility = _bounded_text(pack.get("responsibility"), limit=600)
-    if not prompt or not criteria:
-        raise ProposalScaffoldError("prompt and acceptance criteria are required")
+    skills = list(_SAFE_SKILLS)
+    criteria = list(_SAFE_CRITERIA)
+    prompt = _SAFE_PROMPT
+    responsibility = _SAFE_RESPONSIBILITY
 
     module_name = re.sub(r"[^a-z0-9_]+", "_", package_id.lower()).strip("_")
     runtime_module = module_name
@@ -54,7 +78,7 @@ def build_source_files(proposal: Dict[str, Any]) -> Dict[str, str]:
         "source_schema_version": 1,
         "artifact": "employee_pack",
         "scope": "global",
-        "department": proposal["department"],
+        "department": "quality",
         "industry": "AI/ERP governance",
         "description": responsibility,
         "prompt_template": prompt,
@@ -233,7 +257,9 @@ def analyze_scorecard(payload: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def materialize_proposal(proposal: Dict[str, Any], *, repo_root: Path) -> Dict[str, Any]:
+def materialize_proposal(
+    proposal: Dict[str, Any], *, repo_root: Path
+) -> Dict[str, Any]:
     """Create a new source directory, refusing overwrite or path escape."""
 
     files = build_source_files(proposal)
