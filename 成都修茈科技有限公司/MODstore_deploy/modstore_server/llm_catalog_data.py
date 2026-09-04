@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import hmac
 import json
 import secrets
 from pathlib import Path
@@ -31,10 +30,9 @@ def load_fallback() -> Dict[str, List[Any]]:
 
 def cache_key(user_id: int, provider: str, api_key: str) -> str:
     payload = f"{user_id}:{provider}:{api_key}".encode("utf-8")
-    # Keyed HMAC with a process-random 256-bit salt; this is a cache identity,
-    # not password verification. SHA-256 is appropriate for HMAC here.
-    # lgtm[py/weak-sensitive-data-hashing]
-    digest = hmac.new(_CACHE_KEY_SALT, payload, hashlib.sha256).hexdigest()[:20]
+    # A process-random keyed digest prevents an exposed cache key from being
+    # used as an offline oracle for provider credentials.
+    digest = hashlib.blake2b(payload, key=_CACHE_KEY_SALT, digest_size=16).hexdigest()
     return f"{provider}:{digest}"
 
 
