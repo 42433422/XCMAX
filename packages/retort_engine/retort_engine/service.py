@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
+from pathlib import Path
 from typing import Any
 
 from retort_engine.absorption import run_absorption
@@ -84,6 +86,65 @@ from retort_engine.self_bootstrap import (
 from retort_engine.task_dispatch_plan import build_task_dispatch_plan
 from retort_engine.task_prioritization import build_task_prioritization_report
 from retort_engine.upstream_pr_ci_probe import build_upstream_pr_ci_probe
+
+
+_HTTP_PATH_FIELDS = frozenset(
+    {
+        "project",
+        "project_path",
+        "own_project",
+        "external_path",
+        "cache_dir",
+        "employee_queue",
+        "history_store",
+        "target",
+        "result_file",
+        "review_file",
+        "review_report",
+        "dry_run_file",
+        "publish_dry_run",
+        "competitor_root",
+        "comparison_path",
+        "blind_path",
+        "behavior_path",
+    }
+)
+
+
+def _trusted_path_registry(paths: Iterable[str | Path]) -> dict[str, str]:
+    registry: dict[str, str] = {}
+    for index, configured in enumerate(paths):
+        resolved = Path(configured).expanduser().resolve()
+        if not resolved.exists():
+            raise ValueError(f"trusted path does not exist: {configured!s}")
+        canonical = resolved.as_posix()
+        registry[str(index)] = canonical
+        registry[canonical] = canonical
+        if index == 0 and resolved.is_dir():
+            registry["."] = canonical
+            registry["default"] = canonical
+    if not registry:
+        raise ValueError("at least one trusted workspace path is required")
+    return registry
+
+
+def _authorize_http_payload(
+    payload: dict[str, Any], trusted_paths: dict[str, str]
+) -> dict[str, Any]:
+    authorized = dict(payload)
+    for key in _HTTP_PATH_FIELDS:
+        if key not in authorized:
+            continue
+        raw = authorized[key]
+        if raw is None or raw == "":
+            continue
+        if not isinstance(raw, str) or not raw.strip():
+            raise ValueError(f"{key} must identify a configured path")
+        selected = trusted_paths.get(raw.strip())
+        if selected is None:
+            raise ValueError(f"{key} is not an allowed server path")
+        authorized[key] = selected
+    return authorized
 
 
 class RetortService:
@@ -528,13 +589,28 @@ class RetortService:
         )
 
 
-def create_app() -> Any:
+def create_app(
+    *,
+    workspace_roots: Iterable[str | Path] | None = None,
+    workspace_paths: Iterable[str | Path] | None = None,
+) -> Any:
     service = RetortService()
     try:
         from fastapi import FastAPI
     except ImportError:
         return service
     app = FastAPI(title="Retort Engine")
+    trusted_paths = _trusted_path_registry(
+        tuple(workspace_roots or (Path.cwd(),)) + tuple(workspace_paths or ())
+    )
+
+    def _authorized(payload: dict[str, Any]) -> dict[str, Any]:
+        from fastapi import HTTPException
+
+        try:
+            return _authorize_http_payload(payload, trusted_paths)
+        except ValueError as exc:
+            raise HTTPException(status_code=403, detail="path_not_allowed") from exc
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -542,230 +618,230 @@ def create_app() -> Any:
 
     @app.post("/assess")
     def assess(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.assess(payload)
+        return service.assess(_authorized(payload))
 
     @app.post("/self-evolve")
     def self_evolve(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.self_evolve(payload)
+        return service.self_evolve(_authorized(payload))
 
     @app.post("/absorb")
     def absorb(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.absorb(payload)
+        return service.absorb(_authorized(payload))
 
     @app.post("/self-bootstrap-plan")
     def self_bootstrap_plan_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.self_bootstrap_plan(payload)
+        return service.self_bootstrap_plan(_authorized(payload))
 
     @app.post("/self-depth-report")
     def self_depth_report_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.self_depth_report(payload)
+        return service.self_depth_report(_authorized(payload))
 
     @app.post("/external-improvement-gate")
     def external_improvement_gate_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.external_improvement_gate(payload)
+        return service.external_improvement_gate(_authorized(payload))
 
     @app.post("/review-diff")
     def review_diff_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.review_diff(payload)
+        return service.review_diff(_authorized(payload))
 
     @app.post("/review-pr")
     def review_pr_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.review_pr(payload)
+        return service.review_pr(_authorized(payload))
 
     @app.post("/publish-pr-dry-run")
     def publish_pr_dry_run_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.publish_pr_dry_run(payload)
+        return service.publish_pr_dry_run(_authorized(payload))
 
     @app.post("/publish-pr-sandbox")
     def publish_pr_sandbox_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.publish_pr_sandbox(payload)
+        return service.publish_pr_sandbox(_authorized(payload))
 
     @app.post("/publish-pr-live-probe")
     def publish_pr_live_probe_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.publish_pr_live_probe(payload)
+        return service.publish_pr_live_probe(_authorized(payload))
 
     @app.post("/publish-pr-readonly-probe")
     def publish_pr_readonly_probe_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.publish_pr_readonly_probe(payload)
+        return service.publish_pr_readonly_probe(_authorized(payload))
 
     @app.post("/publish-pr-low-permission-probe")
     def publish_pr_low_permission_probe_route(
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        return service.publish_pr_low_permission_probe(payload)
+        return service.publish_pr_low_permission_probe(_authorized(payload))
 
     @app.post("/pr-long-run-review")
     def pr_long_run_review_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.pr_long_run_review(payload)
+        return service.pr_long_run_review(_authorized(payload))
 
     @app.post("/pr-holdout-blind-eval")
     def pr_holdout_blind_eval_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.pr_holdout_blind_eval(payload)
+        return service.pr_holdout_blind_eval(_authorized(payload))
 
     @app.post("/pr-failure-rollback-replay")
     def pr_failure_rollback_replay_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.pr_failure_rollback_replay(payload)
+        return service.pr_failure_rollback_replay(_authorized(payload))
 
     @app.post("/cross-project-replay")
     def cross_project_replay_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.cross_project_replay(payload)
+        return service.cross_project_replay(_authorized(payload))
 
     @app.post("/multi-project-absorption-replay")
     def multi_project_absorption_replay_route(
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        return service.multi_project_absorption_replay(payload)
+        return service.multi_project_absorption_replay(_authorized(payload))
 
     @app.post("/absorption-continuity-probe")
     def absorption_continuity_probe_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.absorption_continuity_probe(payload)
+        return service.absorption_continuity_probe(_authorized(payload))
 
     @app.post("/record-hardening-run")
     def record_hardening_run_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.record_hardening_run(payload)
+        return service.record_hardening_run(_authorized(payload))
 
     @app.post("/complex-pr-replay")
     def complex_pr_replay_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.complex_pr_replay(payload)
+        return service.complex_pr_replay(_authorized(payload))
 
     @app.post("/task-prioritization-report")
     def task_prioritization_report_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.task_prioritization_report(payload)
+        return service.task_prioritization_report(_authorized(payload))
 
     @app.post("/task-dispatch-plan")
     def task_dispatch_plan_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.task_dispatch_plan(payload)
+        return service.task_dispatch_plan(_authorized(payload))
 
     @app.post("/quality-benchmark-report")
     def review_quality_benchmark_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.review_quality_benchmark(payload)
+        return service.review_quality_benchmark(_authorized(payload))
 
     @app.post("/external-advantage-matrix")
     def external_advantage_matrix_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.external_advantage_matrix(payload)
+        return service.external_advantage_matrix(_authorized(payload))
 
     @app.post("/external-advantage-ci-regression")
     def external_advantage_ci_regression_route(
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        return service.external_advantage_ci_regression(payload)
+        return service.external_advantage_ci_regression(_authorized(payload))
 
     @app.post("/external-process-adjudication")
     def external_process_adjudication_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.external_process_adjudication(payload)
+        return service.external_process_adjudication(_authorized(payload))
 
     @app.post("/external-advantage-repeat")
     def external_advantage_repeat_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.external_advantage_repeat(payload)
+        return service.external_advantage_repeat(_authorized(payload))
 
     @app.post("/upstream-pr-ci-probe")
     def upstream_pr_ci_probe_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.upstream_pr_ci_probe(payload)
+        return service.upstream_pr_ci_probe(_authorized(payload))
 
     @app.post("/competitor-runtime-comparison")
     def competitor_runtime_comparison_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.competitor_runtime_comparison(payload)
+        return service.competitor_runtime_comparison(_authorized(payload))
 
     @app.post("/competitor-blind-adjudication")
     def competitor_blind_adjudication_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.competitor_blind_adjudication(payload)
+        return service.competitor_blind_adjudication(_authorized(payload))
 
     @app.post("/competitor-behavior-regression")
     def competitor_behavior_regression_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.competitor_behavior_regression(payload)
+        return service.competitor_behavior_regression(_authorized(payload))
 
     @app.post("/paibi-cli-cross-adjudication")
     def paibi_cli_cross_adjudication_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.paibi_cli_cross_adjudication(payload)
+        return service.paibi_cli_cross_adjudication(_authorized(payload))
 
     @app.post("/heterogeneous-absorption-replay")
     def heterogeneous_absorption_replay_route(
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        return service.heterogeneous_absorption_replay(payload)
+        return service.heterogeneous_absorption_replay(_authorized(payload))
 
     @app.post("/cross-domain-absorption-replay")
     def cross_domain_absorption_replay_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.cross_domain_absorption_replay(payload)
+        return service.cross_domain_absorption_replay(_authorized(payload))
 
     @app.post("/cross-domain-end-to-end")
     def cross_domain_end_to_end_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.cross_domain_end_to_end(payload)
+        return service.cross_domain_end_to_end(_authorized(payload))
 
     @app.post("/cross-domain-ci-regression")
     def cross_domain_ci_regression_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.cross_domain_ci_regression(payload)
+        return service.cross_domain_ci_regression(_authorized(payload))
 
     @app.post("/contract-runtime-rehearsal")
     def contract_runtime_rehearsal_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.contract_runtime_rehearsal(payload)
+        return service.contract_runtime_rehearsal(_authorized(payload))
 
     @app.post("/contract-stability-stress")
     def contract_stability_stress_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.contract_stability_stress(payload)
+        return service.contract_stability_stress(_authorized(payload))
 
     @app.post("/review-family-behavior-replay")
     def review_family_behavior_replay_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.review_family_behavior_replay(payload)
+        return service.review_family_behavior_replay(_authorized(payload))
 
     @app.post("/external-merge-landing")
     def external_merge_landing_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.external_merge_landing(payload)
+        return service.external_merge_landing(_authorized(payload))
 
     @app.post("/review-adjudication-calibration")
     def review_adjudication_calibration_route(
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        return service.review_adjudication_calibration(payload)
+        return service.review_adjudication_calibration(_authorized(payload))
 
     @app.post("/employee-scheduler-stress")
     def employee_scheduler_stress_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.employee_scheduler_stress(payload)
+        return service.employee_scheduler_stress(_authorized(payload))
 
     @app.post("/employee-patch-closure")
     def employee_patch_closure_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.employee_patch_closure(payload)
+        return service.employee_patch_closure(_authorized(payload))
 
     @app.post("/employee-patch-stress")
     def employee_patch_stress_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.employee_patch_stress(payload)
+        return service.employee_patch_stress(_authorized(payload))
 
     @app.post("/production-recovery-drill")
     def production_recovery_drill_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.production_recovery_drill(payload)
+        return service.production_recovery_drill(_authorized(payload))
 
     @app.post("/product-mainline-absorption-proof")
     def product_mainline_absorption_proof_route(
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        return service.product_mainline_absorption_proof(payload)
+        return service.product_mainline_absorption_proof(_authorized(payload))
 
     @app.post("/absorption-release-decision")
     def absorption_release_decision_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.absorption_release_decision(payload)
+        return service.absorption_release_decision(_authorized(payload))
 
     @app.post("/operator-journey-replay")
     def operator_journey_replay_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.operator_journey_replay(payload)
+        return service.operator_journey_replay(_authorized(payload))
 
     @app.post("/quality-gates")
     def quality_gate_bundle_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.quality_gate_bundle(payload)
+        return service.quality_gate_bundle(_authorized(payload))
 
     @app.post("/codebase-graph-report")
     def codebase_graph_report_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.codebase_graph_report(payload)
+        return service.codebase_graph_report(_authorized(payload))
 
     @app.post("/context-pack-report")
     def context_pack_report_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.context_pack_report(payload)
+        return service.context_pack_report(_authorized(payload))
 
     @app.post("/evolution-map")
     def evolution_map_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.evolution_map(payload)
+        return service.evolution_map(_authorized(payload))
 
     @app.post("/architecture-contract-report")
     def architecture_contract_report_route(payload: dict[str, Any]) -> dict[str, Any]:
-        return service.architecture_contract_report(payload)
+        return service.architecture_contract_report(_authorized(payload))
 
     return app
