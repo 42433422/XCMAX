@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import secrets
 from pathlib import Path
@@ -32,7 +33,7 @@ def cache_key(user_id: int, provider: str, api_key: str) -> str:
     payload = f"{user_id}:{provider}:{api_key}".encode("utf-8")
     # A process-random keyed digest prevents an exposed cache key from being
     # used as an offline oracle for provider credentials.
-    digest = hashlib.blake2b(payload, key=_CACHE_KEY_SALT, digest_size=16).hexdigest()
+    digest = hmac.new(_CACHE_KEY_SALT, payload, hashlib.sha256).hexdigest()[:32]
     return f"{provider}:{digest}"
 
 

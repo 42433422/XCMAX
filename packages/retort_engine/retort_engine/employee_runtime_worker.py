@@ -295,11 +295,18 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="retort-employee-runtime-worker")
     parser.add_argument("--payload-file", required=True)
     args = parser.parse_args(argv)
+    result = write_employee_runtime_results(args.payload_file)
+    # The durable result file is the subprocess contract.  Stdout is limited
+    # to a non-sensitive completion envelope so task payloads, paths and
+    # generated evidence are not copied into CI or service logs.
     print(
         json.dumps(
-            write_employee_runtime_results(args.payload_file),
+            {
+                "status": "completed",
+                "execution_mode": "employee_runtime_worker",
+                "task_result_count": len(result.get("results") or []),
+            },
             ensure_ascii=False,
-            indent=2,
             sort_keys=True,
         )
     )

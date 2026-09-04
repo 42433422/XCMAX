@@ -36,7 +36,7 @@ from .typescript import TypeScriptLanguageAdapter
 
 # ``re.DOTALL`` so the script body's newlines are captured.
 _SCRIPT_BLOCK_RE = re.compile(
-    r"<script\b(?P<attrs>[^>]*)>(?P<body>.*?)</script\s*>",
+    r"<script\b(?P<attrs>[^>]*)>(?P<body>.*?)</script(?:\s[^>]*)?>",
     re.IGNORECASE | re.DOTALL,
 )
 _TEMPLATE_BLOCK_RE = re.compile(
