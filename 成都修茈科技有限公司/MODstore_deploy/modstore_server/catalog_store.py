@@ -109,7 +109,9 @@ def save_store(data: Dict[str, Any]) -> None:
     p = packages_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    tmp.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
     tmp.replace(p)
 
 
@@ -130,8 +132,12 @@ def read_package_manifest_from_zip(path: Path) -> Dict[str, Any] | None:
     """
     try:
         with zipfile.ZipFile(path) as zf:
-            manifest_names = (["manifest.json"] if "manifest.json" in zf.namelist() else []) + [
-                n for n in zf.namelist() if n.count("/") == 1 and n.endswith("/manifest.json")
+            manifest_names = (
+                ["manifest.json"] if "manifest.json" in zf.namelist() else []
+            ) + [
+                n
+                for n in zf.namelist()
+                if n.count("/") == 1 and n.endswith("/manifest.json")
             ]
             if not manifest_names:
                 return None
@@ -141,7 +147,9 @@ def read_package_manifest_from_zip(path: Path) -> Dict[str, Any] | None:
         return None
 
 
-def package_manifest_alignment_errors(record: Dict[str, Any], archive_path: Path) -> List[str]:
+def package_manifest_alignment_errors(
+    record: Dict[str, Any], archive_path: Path
+) -> List[str]:
     """Validate catalog metadata against the manifest embedded in the archive.
 
     If employee.id or workflow_employees[].id differ from the expected pack id,
@@ -151,16 +159,10 @@ def package_manifest_alignment_errors(record: Dict[str, Any], archive_path: Path
     """
     import logging as _logging
     import shutil as _shutil
-    import traceback as _tb
     import zipfile as _zipfile
 
     _LOG_ALIGN = _logging.getLogger(__name__)
-    _LOG_ALIGN.warning(
-        "package_manifest_alignment_errors called: record.id=%s archive=%s caller=%s",
-        record.get("id"),
-        archive_path,
-        "".join(_tb.format_stack(limit=6)[-4:-1]).replace("\n", " | ")[:500],
-    )
+    _LOG_ALIGN.info("package manifest alignment check started")
     if not archive_path.is_file():
         return ["包文件不存在，无法校验 manifest 对齐"]
     inner = read_package_manifest_from_zip(archive_path)
@@ -176,19 +178,16 @@ def package_manifest_alignment_errors(record: Dict[str, Any], archive_path: Path
     expected_ver = norm_version(record.get("version"))
     inner_ver = norm_version(inner.get("version"))
     if expected_ver and inner_ver and expected_ver != inner_ver:
-        errors.append(f"metadata.version={expected_ver} 与包内 manifest.version={inner_ver} 不一致")
+        errors.append(
+            f"metadata.version={expected_ver} 与包内 manifest.version={inner_ver} 不一致"
+        )
 
     if str(record.get("artifact") or "").strip().lower() == "employee_pack":
         _needs_repair = False
         if isinstance(inner.get("employee"), dict):
             emp_id = norm_pkg_id(inner["employee"].get("id"))
             if expected_id and emp_id and expected_id != emp_id:
-                _LOG_ALIGN.warning(
-                    "AUTO-REPAIR: fixing employee.id %s -> %s in zip %s",
-                    emp_id,
-                    expected_id,
-                    archive_path,
-                )
+                _LOG_ALIGN.warning("AUTO-REPAIR: employee id mismatch repaired")
                 inner["employee"]["id"] = expected_id
                 _needs_repair = True
         wf_rows = inner.get("workflow_employees")
@@ -199,11 +198,8 @@ def package_manifest_alignment_errors(record: Dict[str, Any], archive_path: Path
                 wf_id = norm_pkg_id(row.get("id"))
                 if expected_id and wf_id and expected_id != wf_id:
                     _LOG_ALIGN.warning(
-                        "AUTO-REPAIR: fixing workflow_employees[%d].id %s -> %s in zip %s",
+                        "AUTO-REPAIR: workflow employee id mismatch repaired at index %d",
                         idx,
-                        wf_id,
-                        expected_id,
-                        archive_path,
                     )
                     row["id"] = expected_id
                     _needs_repair = True
@@ -222,7 +218,9 @@ def package_manifest_alignment_errors(record: Dict[str, Any], archive_path: Path
                 if _top_dir:
                     _mf_key = _top_dir + "/manifest.json"
                     _tmp_path = archive_path.with_suffix(".xcemp.tmp")
-                    with _zipfile.ZipFile(_tmp_path, "w", compression=_zipfile.ZIP_DEFLATED) as _zw:
+                    with _zipfile.ZipFile(
+                        _tmp_path, "w", compression=_zipfile.ZIP_DEFLATED
+                    ) as _zw:
                         _zw.writestr(
                             _mf_key,
                             json.dumps(inner, ensure_ascii=False, indent=2) + "\n",
@@ -231,9 +229,11 @@ def package_manifest_alignment_errors(record: Dict[str, Any], archive_path: Path
                             for _n in _other_entries:
                                 _zw.writestr(_n, _zr.read(_n))
                     _shutil.move(str(_tmp_path), str(archive_path))
-                    _LOG_ALIGN.info("AUTO-REPAIR: zip rewritten successfully %s", archive_path)
+                    _LOG_ALIGN.info(
+                        "AUTO-REPAIR: package archive rewritten successfully"
+                    )
             except RECOVERABLE_ERRORS as _repair_exc:
-                _LOG_ALIGN.error("AUTO-REPAIR failed for %s: %s", archive_path, _repair_exc)
+                _LOG_ALIGN.error("AUTO-REPAIR failed (%s)", type(_repair_exc).__name__)
 
     return errors
 
@@ -279,7 +279,11 @@ def list_versions(id_: str) -> List[Dict[str, Any]]:
     if not pid:
         return []
     with _lock:
-        rows = [dict(r) for r in load_store().get("packages") or [] if str(r.get("id")) == pid]
+        rows = [
+            dict(r)
+            for r in load_store().get("packages") or []
+            if str(r.get("id")) == pid
+        ]
     rows.sort(
         key=lambda r: (str(r.get("created_at") or ""), str(r.get("version") or "")),
         reverse=True,
@@ -341,7 +345,10 @@ def append_package(record: Dict[str, Any], src_file: Path | None) -> Dict[str, A
     if src_file is not None and src_file.is_file():
         fd = files_dir()
         ext = src_file.suffix.lower() or ".xcmod"
-        dest = fd / f"{pid}-{ver}{ext}"
+        if ext not in {".xcemp", ".xcmod", ".zip"}:
+            ext = ".xcmod"
+        storage_id = hashlib.sha256(f"{pid}\0{ver}".encode("utf-8")).hexdigest()
+        dest = fd / f"package_{storage_id}{ext}"
         shutil.copy2(src_file, dest)
         rec["sha256"] = sha256_file(dest)
         rec["file_size"] = dest.stat().st_size
