@@ -554,9 +554,22 @@ async def convert_avatar_profile(
     output_path: Path,
     rule_spec: Dict[str, Any],
 ) -> Dict[str, Any]:
-    del ctx, rule_spec
+    del rule_spec
     payload = dict(payload or {})
-    output_path = Path(output_path)
+    workspace_text = os.path.realpath(
+        os.path.abspath(str(ctx.get("workspace_root") or Path.cwd()))
+    )
+    output_text = os.path.realpath(
+        os.path.abspath(
+            str(output_path)
+            if Path(output_path).is_absolute()
+            else os.path.join(workspace_text, str(output_path))
+        )
+    )
+    workspace_prefix = workspace_text.rstrip(os.sep) + os.sep
+    if output_text != workspace_text and not output_text.startswith(workspace_prefix):
+        raise ValueError("output path must stay inside the employee workspace")
+    output_path = Path(output_text)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     profile = build_avatar_profile(payload)
     warnings: List[str] = []
