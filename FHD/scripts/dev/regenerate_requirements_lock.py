@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""从本机已安装的 server-api 依赖重新生成 deploy/requirements-server-api.lock.txt。"""
+"""从本机已安装的 server-api 依赖重新生成 deploy/requirements-server.lock.txt。"""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 REQ = ROOT / "deploy" / "requirements-server-api.txt"
-LOCK = ROOT / "deploy" / "requirements-server-api.lock.txt"
+LOCK = ROOT / "deploy" / "requirements-server.lock.txt"
 
 PKG_RE = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)")
 

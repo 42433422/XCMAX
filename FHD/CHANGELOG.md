@@ -365,7 +365,7 @@
 - **test(frontend)**：修复 `plannerPagePaths` 租户隔离 mock；Vitest gate ≥50% 绿
 - **docs(v2)**：`*_v2` 24 模块为受控双入口 SSOT（非 tech debt）；allowlist guard 零漂移
 - **fix(except)**：`chat_stream_limit` / `agent_runner` / `inference_tasks` / 流式 bridge 缩窄为 `OPERATIONAL_ERRORS`
-- **deps**：生产 lock SSOT 为 `deploy/requirements-server-api.lock.txt`（见 `scripts/dev/check_requirements_lock.py`）
+- **deps**：生产 lock SSOT 为 `deploy/requirements-server.lock.txt`（见 `scripts/dev/check_requirements_lock.py`）
 - **release 制品核对（2026-06-12）**：Win Enterprise `XCAGI-Enterprise-Setup-10.0.0-x64.exe`（CDN）；macOS dmg 见 `config/download_release.json`；Docker `docker/Dockerfile.fhd-api`；Android `./gradlew assemble*Release` + CI `fhd-release-android.yml`
 
 ### 四阶段架构与可靠性闭环（2026-06-12 · v10 线内迭代）
@@ -718,7 +718,7 @@
 - **K8s**：`FHD/k8s/deployment.yaml` 与 `Dockerfile` 监听端口统一为 **5000**，与 Service `targetPort`、gunicorn 一致，修复探针与流量错位导致的 NotReady。
 - **前端**：`App.vue` 拆分为 `useAppBoot` / `useStartupSplash` / `useStartupAuth` / `useAppProMode` / `useAppShellBridge`，`window` 桥接集中管理；补 `startupRedirect`、`useStartupSplash`、`useAppProMode` 单测。
 - **CI/CD**：`ci-cd.yml` 增加 Ruff、前端 ESLint、Trivy 镜像扫描、requirements lock 校验；安全扫描改为阻塞；tag 发版串联 `deploy.yml`。
-- **依赖**：`pyproject.toml` 声明 `server-api` / `ml` / `dev` extras；新增 `deploy/requirements-server-api.lock.txt`、`deploy/requirements-dev.txt`。
+- **依赖**：`pyproject.toml` 声明 `server-api` / `ml` / `dev` extras；生产锁现位于 `deploy/requirements-server.lock.txt`，开发锁为 `deploy/requirements-dev.txt`。
 
 ### 管理端路由（v10 线内迭代）
 
