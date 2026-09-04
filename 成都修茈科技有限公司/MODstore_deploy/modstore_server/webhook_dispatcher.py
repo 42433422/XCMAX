@@ -18,11 +18,14 @@ import json
 import logging
 import os
 import time
+from base64 import b64decode, b64encode
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import httpx
+from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from modstore_server.eventing import new_event
 from modstore_server.eventing.contracts import (
@@ -133,12 +136,39 @@ def _event_path(event_id: str) -> Path:
     return _events_dir() / f"{safe}.json"
 
 
-def _store_event(event: dict[str, Any], result: dict[str, Any] | None = None) -> None:
+def _event_cipher() -> AESGCM | None:
+    raw = (os.environ.get("MODSTORE_WEBHOOK_EVENT_KEY") or "").strip()
+    if not raw:
+        raw = _webhook_secret()
+    if not raw:
+        return None
+    return AESGCM(hashlib.sha256(raw.encode("utf-8")).digest())
+
+
+def _store_event(event: dict[str, Any], result: dict[str, Any] | None = None) -> bool:
+    cipher = _event_cipher()
+    if cipher is None:
+        logger.warning("webhook replay persistence skipped: encryption key unavailable")
+        return False
+    event_id = str(event.get("id") or "")
     doc = {"event": event, "result": result or {}, "updated_at": int(time.time())}
-    _event_path(str(event.get("id") or "")).write_text(
-        json.dumps(doc, ensure_ascii=False, indent=2),
+    nonce = os.urandom(12)
+    ciphertext = cipher.encrypt(
+        nonce,
+        json.dumps(doc, ensure_ascii=False).encode("utf-8"),
+        event_id.encode("utf-8"),
+    )
+    envelope = {
+        "schema": "modstore.webhook-replay-encrypted/v1",
+        "nonce": b64encode(nonce).decode("ascii"),
+        "ciphertext": b64encode(ciphertext).decode("ascii"),
+        "updated_at": int(time.time()),
+    }
+    _event_path(event_id).write_text(
+        json.dumps(envelope, ensure_ascii=True, indent=2),
         encoding="utf-8",
     )
+    return True
 
 
 def _load_event(event_id: str) -> dict[str, Any] | None:
@@ -149,8 +179,30 @@ def _load_event(event_id: str) -> dict[str, Any] | None:
         doc = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
+    cipher = _event_cipher()
+    if cipher is None:
+        return None
+    if doc.get("schema") == "modstore.webhook-replay-encrypted/v1":
+        try:
+            plaintext = cipher.decrypt(
+                b64decode(str(doc.get("nonce") or ""), validate=True),
+                b64decode(str(doc.get("ciphertext") or ""), validate=True),
+                event_id.encode("utf-8"),
+            )
+            payload = json.loads(plaintext.decode("utf-8"))
+        except (InvalidTag, ValueError, UnicodeDecodeError, json.JSONDecodeError):
+            return None
+        event = payload.get("event") if isinstance(payload, dict) else None
+        return event if isinstance(event, dict) else None
+    # One-time migration for legacy clear-text replay files.  Only a configured
+    # key permits reading them, and the successful read immediately replaces
+    # the file with an encrypted envelope.
     event = doc.get("event")
-    return event if isinstance(event, dict) else None
+    if not isinstance(event, dict):
+        return None
+    result = doc.get("result") if isinstance(doc.get("result"), dict) else {}
+    _store_event(event, result)
+    return event
 
 
 def _signature(secret: str, timestamp: str, event_id: str, body: bytes) -> str:
@@ -175,9 +227,9 @@ def dispatch_event(event: dict[str, Any]) -> dict[str, Any]:
         _store_event(event, result)
         return result
 
-    body = json.dumps(event, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode(
-        "utf-8"
-    )
+    body = json.dumps(
+        event, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+    ).encode("utf-8")
     timestamp = str(int(time.time()))
     secret = _webhook_secret()
     headers = {
@@ -209,12 +261,11 @@ def dispatch_event(event: dict[str, Any]) -> dict[str, Any]:
                 return result
             last_error = f"HTTP {response.status_code}"
         except httpx.HTTPError as exc:
-            last_error = str(exc)
+            last_error = type(exc).__name__
             logger.warning(
-                "business webhook delivery failed event=%s attempt=%s error=%s",
-                event_id,
+                "business webhook delivery failed attempt=%s error_type=%s",
                 attempt,
-                exc,
+                type(exc).__name__,
             )
         if attempt < attempts:
             time.sleep(min(2.0, 0.25 * attempt))
@@ -242,9 +293,9 @@ def _deliver_event_to_subscription(
 
     event_id = str(event.get("id") or "")
     event_type = str(event.get("type") or "")
-    body = json.dumps(event, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode(
-        "utf-8"
-    )
+    body = json.dumps(
+        event, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+    ).encode("utf-8")
     timestamp = str(int(time.time()))
     secret_plain = ""
     try:
@@ -286,7 +337,9 @@ def _deliver_event_to_subscription(
         delivery.attempts = attempt
         try:
             with httpx.Client(timeout=_timeout_seconds()) as client:
-                response = client.post(subscription.target_url, content=body, headers=headers)
+                response = client.post(
+                    subscription.target_url, content=body, headers=headers
+                )
             last_status_code = response.status_code
             last_response_body = (response.text or "")[:1000]
             if 200 <= response.status_code < 300:
@@ -359,10 +412,9 @@ def dispatch_event_to_subscriptions(event: dict[str, Any]) -> int:
                 delivered += 1
             except RECOVERABLE_ERRORS as exc:
                 logger.warning(
-                    "subscription %s dispatch error event=%s: %s",
+                    "subscription dispatch failed id=%s error_type=%s",
                     sub.id,
-                    event_type,
-                    exc,
+                    type(exc).__name__,
                 )
         try:
             session.commit()
@@ -383,11 +435,7 @@ def publish_event(
     event_type = canonical_event_name(event_type)
     missing = validate_payload(event_type, data)
     if missing:
-        logger.warning(
-            "event payload missing recommended fields event=%s fields=%s",
-            event_type,
-            ",".join(missing),
-        )
+        logger.warning("event payload missing %d recommended field(s)", len(missing))
     neuro_bus.publish(
         new_event(
             event_type,
@@ -402,7 +450,7 @@ def publish_event(
     try:
         delivered = dispatch_event_to_subscriptions(event)
     except RECOVERABLE_ERRORS as exc:
-        logger.warning("subscription fanout failed event=%s: %s", event_type, exc)
+        logger.warning("subscription fanout failed (%s)", type(exc).__name__)
         delivered = 0
     if isinstance(result, dict):
         result.setdefault("subscriptions_delivered", delivered)

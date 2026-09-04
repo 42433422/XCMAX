@@ -108,12 +108,19 @@ def mod_dir(mod_id: str) -> Path:
     if normalized in {".", ".."} or _MOD_ID_RE.fullmatch(normalized) is None:
         raise ValueError("非法 mod id")
     root = lib().resolve()
-    d = (root / normalized).resolve()
-    if not d.is_relative_to(root):
-        raise ValueError("非法 mod id")
-    if not d.is_dir():
-        raise FileNotFoundError(f"Mod 不存在: {normalized}")
-    return d
+    # Select from already-enumerated children instead of constructing a path
+    # from caller input.  This makes the allow-list boundary explicit and also
+    # prevents a symlinked mod directory from escaping the configured library.
+    for candidate in root.iterdir():
+        if candidate.name != normalized:
+            continue
+        resolved = candidate.resolve()
+        if candidate.is_symlink() or not resolved.is_relative_to(root):
+            raise ValueError("非法 mod id")
+        if resolved.is_dir():
+            return resolved
+        break
+    raise FileNotFoundError(f"Mod 不存在: {normalized}")
 
 
 __all__ = [

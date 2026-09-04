@@ -36,3 +36,13 @@ def test_mod_dir_accepts_valid_directory(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(library_paths, "lib", lambda: library)
 
     assert library_paths.mod_dir("valid.mod-1") == expected.resolve()
+
+
+def test_mod_dir_rejects_regular_file(monkeypatch, tmp_path: Path) -> None:
+    library = tmp_path / "library"
+    library.mkdir()
+    (library / "not-a-mod").write_text("x", encoding="utf-8")
+    monkeypatch.setattr(library_paths, "lib", lambda: library)
+
+    with pytest.raises(FileNotFoundError, match="Mod 不存在"):
+        library_paths.mod_dir("not-a-mod")

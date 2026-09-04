@@ -55,9 +55,11 @@ def _assert_path_inside_fhd_repo(fhd: Path, target: Path) -> None:
 
 
 def _mod_dir(mod_id: str) -> Path:
-    if not mod_id or "/" in mod_id or "\\" in mod_id:
-        raise HTTPException(400, "非法 mod id")
-    d = _lib() / mod_id
-    if not d.is_dir():
-        raise HTTPException(404, f"Mod 不存在: {mod_id}")
-    return d
+    from modstore_server.infrastructure import library_paths
+
+    try:
+        return library_paths.mod_dir(mod_id)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
