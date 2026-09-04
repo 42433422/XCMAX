@@ -237,14 +237,9 @@ def test_production_workflow_requires_manually_orchestrated_exact_sha() -> None:
         trigger = workflow[True]
         assert "workflow_run" not in trigger
         assert trigger["workflow_dispatch"]["inputs"]["git_sha"]["required"] is True
+        assert trigger["workflow_dispatch"]["inputs"]["security_scan_run_id"]["required"] is True
         assert (
-            trigger["workflow_dispatch"]["inputs"]["security_scan_run_id"]["required"]
-            is True
-        )
-        assert (
-            trigger["workflow_dispatch"]["inputs"]["previous_security_scan_run_id"][
-                "required"
-            ]
+            trigger["workflow_dispatch"]["inputs"]["previous_security_scan_run_id"]["required"]
             is True
         )
         deploy = workflow["jobs"]["deploy"]
