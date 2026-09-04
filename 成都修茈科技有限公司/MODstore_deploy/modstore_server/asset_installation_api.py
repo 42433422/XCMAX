@@ -8,13 +8,13 @@ import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
-from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from modstore_server.asset_installation_presenter import serialize_install_command
 from modstore_server.api.deps import get_current_user, get_db
 from modstore_server.db.catalog import CatalogItem, Purchase
 from modstore_server.db.billing import Entitlement
@@ -44,35 +44,6 @@ class CompleteAssetInstallBody(BaseModel):
     installed_version: str = Field(default="", max_length=64)
     error: str = Field(default="", max_length=4000)
     result: dict = Field(default_factory=dict)
-
-
-def _serialize(row: AssetInstallCommand, item: CatalogItem | None = None) -> dict:
-    payload = {
-        "id": int(row.id),
-        "purchase_id": int(row.purchase_id),
-        "catalog_id": int(row.catalog_id),
-        "installation_id": str(row.installation_id or ""),
-        "source": str(row.source or ""),
-        "status": str(row.status or ""),
-        "attempt_count": int(row.attempt_count or 0),
-        "error": str(row.error or ""),
-        "created_at": row.created_at.isoformat() if row.created_at else "",
-        "claimed_at": row.claimed_at.isoformat() if row.claimed_at else "",
-        "completed_at": row.completed_at.isoformat() if row.completed_at else "",
-    }
-    if item is not None:
-        payload["asset"] = {
-            "pkg_id": str(item.pkg_id or ""),
-            "version": str(item.version or ""),
-            "name": str(item.name or ""),
-            "artifact": str(item.artifact or "mod"),
-            "sha256": str(item.sha256 or ""),
-            "download_path": (
-                f"/api/asset-installations/commands/{int(row.id)}/download"
-                f"?installation_id={quote(str(row.installation_id or ''), safe='')}"
-            ),
-        }
-    return payload
 
 
 def _latest_owned_installation_ids(session: Session, user_id: int) -> set[str]:
@@ -278,7 +249,7 @@ def create_asset_install_command(
         "ok": True,
         "queued": created,
         "duplicate": not created,
-        "command": _serialize(row, item),
+        "command": serialize_install_command(row, item),
     }
 
 
@@ -311,7 +282,7 @@ def list_asset_install_commands(
         else {}
     )
     return {
-        "items": [_serialize(row, items.get(int(row.catalog_id))) for row in rows],
+        "items": [serialize_install_command(row, items.get(int(row.catalog_id))) for row in rows],
         "total": len(rows),
     }
 
@@ -332,7 +303,7 @@ def get_asset_install_command(
     if row is None:
         raise HTTPException(404, "安装命令不存在")
     item = db.query(CatalogItem).filter(CatalogItem.id == int(row.catalog_id)).first()
-    return {"ok": True, "command": _serialize(row, item)}
+    return {"ok": True, "command": serialize_install_command(row, item)}
 
 
 @router.post("/commands/{command_id}/claim")
@@ -371,7 +342,7 @@ def claim_asset_install_command(
     if row.installation_id not in {"*", installation_id}:
         raise HTTPException(409, "安装命令已由其他设备领取")
     if row.status == "installed":
-        return {"ok": True, "duplicate": True, "command": _serialize(row, item)}
+        return {"ok": True, "duplicate": True, "command": serialize_install_command(row, item)}
     if row.status not in {"pending", "failed", "claimed"}:
         raise HTTPException(409, f"安装命令当前状态不可领取：{row.status}")
     row.installation_id = installation_id
@@ -382,7 +353,7 @@ def claim_asset_install_command(
     db.add(row)
     db.commit()
     db.refresh(row)
-    return {"ok": True, "duplicate": False, "command": _serialize(row, item)}
+    return {"ok": True, "duplicate": False, "command": serialize_install_command(row, item)}
 
 
 @router.get("/commands/{command_id}/download")
@@ -466,7 +437,7 @@ def complete_asset_install_command(
     if str(row.installation_id) != body.installation_id.strip():
         raise HTTPException(409, "安装结果设备与领取设备不一致")
     if row.status == "installed":
-        return {"ok": True, "duplicate": True, "command": _serialize(row)}
+        return {"ok": True, "duplicate": True, "command": serialize_install_command(row)}
     if row.status != "claimed":
         raise HTTPException(409, "安装命令尚未由当前设备领取")
     if not _purchase_is_current(db, int(user.id), int(row.catalog_id)):
@@ -498,7 +469,7 @@ def complete_asset_install_command(
     db.add(row)
     db.commit()
     db.refresh(row)
-    return {"ok": True, "duplicate": False, "command": _serialize(row)}
+    return {"ok": True, "duplicate": False, "command": serialize_install_command(row)}
 
 
 __all__ = [
