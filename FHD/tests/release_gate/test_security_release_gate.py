@@ -37,7 +37,13 @@ def _write_reports(directory: Path, mod, now: datetime) -> None:
     directory.mkdir(exist_ok=True)
     for scanner in mod.REQUIRED_SCANNERS:
         (directory / f"{scanner}.json").write_text(
-            json.dumps({"available": True, "scanned_at": now.isoformat(), "findings": []})
+            json.dumps(
+                {
+                    "available": True,
+                    "scanned_at": now.isoformat(),
+                    "findings": [],
+                }
+            )
         )
 
 
@@ -174,3 +180,84 @@ def test_sarif_numeric_and_error_severity_cannot_evade_high_gate() -> None:
     )
 
     assert [row["severity"] for row in findings] == ["high", "critical"]
+
+
+def test_codeql_provenance_requires_fresh_exact_sha_for_each_language() -> None:
+    normalizer = _normalizer_module()
+    now = datetime(2026, 9, 5, tzinfo=UTC)
+    sha = "a" * 40
+    analyses = [
+        {
+            "category": "/language:python",
+            "commit_sha": sha,
+            "created_at": (now - timedelta(hours=1)).isoformat(),
+        },
+        {
+            "category": "/language:javascript-typescript",
+            "commit_sha": sha,
+            "created_at": (now - timedelta(hours=1)).isoformat(),
+        },
+    ]
+
+    assert (
+        normalizer._validate_codeql_provenance(
+            analyses,
+            release_sha=sha,
+            required_categories=[
+                "/language:python",
+                "/language:javascript-typescript",
+            ],
+            now=now,
+        )
+        == sha
+    )
+
+    analyses[1]["commit_sha"] = "b" * 40
+    with pytest.raises(ValueError, match="SHA mismatch"):
+        normalizer._validate_codeql_provenance(
+            analyses,
+            release_sha=sha,
+            required_categories=[
+                "/language:python",
+                "/language:javascript-typescript",
+            ],
+            now=now,
+        )
+
+
+def test_release_gate_rejects_relabelled_scanner_evidence(tmp_path: Path) -> None:
+    mod = _module()
+    now = datetime(2026, 9, 5, tzinfo=UTC)
+    release_sha = "a" * 40
+    _write_reports(tmp_path, mod, now)
+    for scanner in mod.REQUIRED_SCANNERS:
+        path = tmp_path / f"{scanner}.json"
+        payload = json.loads(path.read_text())
+        payload["release_sha"] = release_sha
+        payload["source_sha"] = release_sha
+        path.write_text(json.dumps(payload))
+
+    assert mod.evaluate(tmp_path, now=now, release_sha=release_sha)["passed"] is True
+    payload = json.loads((tmp_path / "codeql.json").read_text())
+    payload["source_sha"] = "b" * 40
+    (tmp_path / "codeql.json").write_text(json.dumps(payload))
+    failed = mod.evaluate(tmp_path, now=now, release_sha=release_sha)
+    assert failed["passed"] is False
+    assert "codeql:source_sha_mismatch" in failed["blockers"]
+
+
+def test_full_scan_collects_and_uploads_evidence_after_individual_scanner_failure() -> None:
+    workflow = (
+        Path(__file__).resolve().parents[2] / ".github" / "workflows" / "security-full-scan.yml"
+    ).read_text()
+
+    assert "Build and scan final FHD production image\n        continue-on-error: true" in workflow
+    assert (
+        "continue-on-error: true\n        working-directory: .\n        run: docker build"
+        in workflow
+    )
+    assert "Normalize all scanner reports\n        if: always()" in workflow
+    assert "Enforce all-source zero critical/high gate\n        if: always()" in workflow
+    assert (
+        "Upload auditable security evidence even when gate fails\n        if: always()" in workflow
+    )

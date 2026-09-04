@@ -125,6 +125,11 @@ def test_macos_release_flow_publishes_download_center_metadata_and_has_recovery_
 
     assert "Publish download center metadata and changelog" in mac_workflow
     assert "publish-macos-download-center.sh" in mac_workflow
+    assert "release_sha:" in mac_workflow
+    assert "security_scan_run_id:" in mac_workflow
+    assert "previous_security_scan_run_id:" in mac_workflow
+    assert "verify_security_scan_pair.py" in mac_workflow
+    assert "ref: ${{ inputs.release_sha }}" in mac_workflow
     assert "source_run_id:" in recovery_workflow
     assert "gh run download" in recovery_workflow
     assert "publish-macos-download-center.sh" in recovery_workflow

@@ -78,6 +78,9 @@ const BACKEND_CI_WORKFLOW = String(
 const PRODUCTION_DEPLOY_WORKFLOW = String(
   process.env.MERGE_WORKER_PRODUCTION_DEPLOY_WORKFLOW || 'modstore-prod-deploy.yml',
 ).trim();
+const PRODUCTION_DEPLOY_ENABLED = (
+  process.env.MERGE_WORKER_PRODUCTION_DEPLOY_ENABLED === '1'
+);
 const MAX_RETRY_ATTEMPTS = Math.max(1, Number.parseInt(process.env.MERGE_WORKER_MAX_RETRIES || '5', 10));
 const RETRY_BASE_MS = Math.max(1_000, Number.parseInt(process.env.MERGE_WORKER_RETRY_BASE_MS || '30000', 10));
 const RETRY_MAX_MS = Math.max(RETRY_BASE_MS, Number.parseInt(process.env.MERGE_WORKER_RETRY_MAX_MS || '900000', 10));
@@ -624,6 +627,14 @@ export async function runTaskQueueFairly(
   return results;
 }
 
+export function automaticProductionDeploymentDecision(
+  enabled = PRODUCTION_DEPLOY_ENABLED,
+) {
+  return enabled
+    ? { allowed: true, reason: 'explicitly_enabled' }
+    : { allowed: false, reason: 'release_orchestrator_security_evidence_required' };
+}
+
 async function listWorkflowRuns(workspace, repoFull, workflow, mergeSha) {
   const args = [
     'run', 'list',
@@ -740,6 +751,16 @@ async function reconcileMergedDeployments(token, state) {
     if (record?.status !== 'ai_reviewed_merged') continue;
     if (['dispatched', 'not_applicable', 'stale'].includes(record?.deployment?.status)) continue;
     try {
+      const deploymentPolicy = automaticProductionDeploymentDecision();
+      if (!deploymentPolicy.allowed) {
+        record.deployment = {
+          status: 'not_applicable',
+          reason: deploymentPolicy.reason,
+          at: new Date().toISOString(),
+        };
+        saveProcessed(state);
+        continue;
+      }
       const task = await fetchTask(token, taskId);
       const runId = extractSelfMaintenanceRunId(task);
       if (!runId) {

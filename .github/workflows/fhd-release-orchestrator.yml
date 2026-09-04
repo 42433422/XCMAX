@@ -205,6 +205,8 @@ jobs:
           "$helper" modstore-prod-deploy.yml "Deploy MODstore ${RELEASE_SHA}" \
             -f "git_sha=${RELEASE_SHA}" \
             -f "product_version=${PRODUCT_VERSION}" \
+            -f "security_scan_run_id=${{ inputs.security_scan_run_id }}" \
+            -f "previous_security_scan_run_id=${{ inputs.previous_security_scan_run_id }}" \
             -f require_platform_key=true
 
           # 3. Upload the same FHD build to stable without applying it.
@@ -212,7 +214,9 @@ jobs:
             -f "release_sha=${RELEASE_SHA}" \
             -f release_channel=stable \
             -f push_to_cvm=true \
-            -f push_image_tar=false
+            -f push_image_tar=false \
+            -f "security_scan_run_id=${{ inputs.security_scan_run_id }}" \
+            -f "previous_security_scan_run_id=${{ inputs.previous_security_scan_run_id }}"
 
           # 4. The production environment gate pauses for its required human
           # reviewer before consuming stable manifest release:<SHA>.
