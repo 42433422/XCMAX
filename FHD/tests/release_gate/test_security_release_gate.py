@@ -302,6 +302,8 @@ def test_full_scan_collects_and_uploads_evidence_after_individual_scanner_failur
     assert "var/lib/dpkg/status" in workflow
     assert "var/lib/rpm" in workflow
     assert "usr/lib/sysimage/rpm" in workflow
+    assert "PLATFORM_ID=" in workflow
+    assert "distro_args=(--distro redhat/8)" in workflow
     assert "--skip-db-update" in workflow
     assert "scp " not in workflow
     assert "docker run --rm -v /:/host:ro aquasec/trivy:latest" not in workflow
