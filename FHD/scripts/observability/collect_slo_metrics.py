@@ -197,10 +197,12 @@ def collect(
         if not backfill_reason.strip():
             raise ValueError("SLO backfill requires a non-empty reason")
     errors: list[str] = []
+    source_errors: list[str] = []
     readings: dict[str, dict[str, Any]] = {}
     credentials_available = bool(prom_url.strip() and prom_token.strip())
     if not credentials_available:
-        errors.append("production_prometheus_credentials_unavailable")
+        source_errors.append("production_prometheus_credentials_unavailable")
+        errors.extend(source_errors)
     if raw_retention_days < 120:
         errors.append(f"raw_metric_retention_below_120_days:{raw_retention_days}")
 
@@ -218,7 +220,9 @@ def collect(
                     prom_url, sample_expr, bearer_token=prom_token, query_at=current
                 )
             except (OSError, ValueError, TypeError, RuntimeError) as exc:
-                errors.append(f"{slo_id}:source_unavailable:{type(exc).__name__}")
+                source_error = f"{slo_id}:source_unavailable:{type(exc).__name__}"
+                source_errors.append(source_error)
+                errors.append(source_error)
         value = _numeric(raw)
         sample_count = _numeric(sample_raw)
         sample_minimum = SAMPLE_MINIMUMS[slo_id]
@@ -240,12 +244,13 @@ def collect(
         if sample_count is None:
             errors.append(f"{slo_id}:empty_sample_count")
 
-    source_status = "available" if not errors else "source_unavailable"
+    source_status = "source_unavailable" if source_errors else "available"
     coverage = sum(
         1 for item in readings.values() if item["reading_numeric"] is not None
     ) / len(readings)
     day0_eligible = bool(
         source_status == "available"
+        and not errors
         and coverage >= 0.99
         and all(
             item["sample_count"] is not None and item["sample_count"] > 0
@@ -265,6 +270,7 @@ def collect(
         "window": window,
         "raw_metric_retention_days": raw_retention_days,
         "source_status": source_status,
+        "source_errors": sorted(set(source_errors)),
         "coverage": coverage,
         "day0_eligible": day0_eligible,
         "errors": sorted(set(errors)),
@@ -280,6 +286,7 @@ def collect(
     ).hexdigest()
     all_pass = (
         source_status == "available"
+        and not errors
         and coverage == 1.0
         and all(item["passes"] is True for item in readings.values())
     )

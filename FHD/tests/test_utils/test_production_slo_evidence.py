@@ -74,6 +74,31 @@ def test_missing_production_source_writes_fail_closed_evidence(tmp_path: Path) -
     assert json.loads(output.read_text())["all_pass"] is False
 
 
+def test_reachable_source_with_empty_metrics_is_available_but_not_eligible(
+    tmp_path: Path, monkeypatch
+) -> None:
+    mod = _module()
+    monkeypatch.setattr(mod, "prom_query", lambda *_args, **_kwargs: None)
+
+    payload, passed = mod.collect(
+        prom_url="https://prometheus.example.invalid",
+        prom_token="prod-token",
+        window="1d",
+        mode="preflight",
+        release_id="",
+        raw_retention_days=120,
+        out_path=tmp_path / "empty.json",
+        now=datetime(2026, 9, 4, tzinfo=UTC),
+    )
+
+    assert passed is False
+    assert payload["source_status"] == "available"
+    assert payload["source_errors"] == []
+    assert payload["coverage"] == 0
+    assert payload["day0_eligible"] is False
+    assert "SLO-AI-01:empty_reading" in payload["errors"]
+
+
 def test_real_samples_are_required_and_evidence_is_hash_chained(
     tmp_path: Path, monkeypatch
 ) -> None:
