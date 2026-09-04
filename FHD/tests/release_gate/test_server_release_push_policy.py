@@ -365,6 +365,9 @@ def test_production_deploy_requires_human_environment_approval() -> None:
     assert "fhd-deploy-bootstrap" in deploy
     assert 'tar -xzf "\\$TARBALL"' in deploy
     assert 'AUTO="\\$BOOTSTRAP/scripts/deploy/fhd-auto-update.sh"' in deploy
+    assert 'export FHD_AUTO_UPDATE_LOCK_WAIT_SECONDS="360"' in deploy
+    assert 'DEPLOYED_SHA="\\$(cat "${DEPLOY_ROOT}/.deploy-git-sha"' in deploy
+    assert "Health SHA not converged" in deploy
 
 
 def test_forced_self_maintenance_survives_its_own_service_restart() -> None:

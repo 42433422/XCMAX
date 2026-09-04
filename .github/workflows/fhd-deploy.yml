@@ -176,6 +176,7 @@ jobs:
           FHD_PUSH_SSH_KEY_RAW: ${{ secrets.FHD_PUSH_SSH_KEY }}
           TARGET_ENV: ${{ inputs.environment }}
           ACTION: ${{ inputs.action }}
+          ACTION_ID: ${{ inputs.action_id }}
         run: |
           set -euo pipefail
           HOST="${FHD_PUSH_HOST:-119.27.178.147}"
@@ -244,6 +245,7 @@ jobs:
           export FHD_HEALTH_PORT="${HEALTH_PORT}"
           export FHD_ENV_FILE="${ENV_FILE}"
           export FHD_AUTO_UPDATE_LOCK="${AUTO_LOCK}"
+          export FHD_AUTO_UPDATE_LOCK_WAIT_SECONDS="360"
           if [ "${ACTION}" = "freeze-manifest" ]; then
             touch "${MANIFEST}.frozen"
           elif [ "${ACTION}" = "unfreeze-manifest" ]; then
@@ -261,6 +263,7 @@ jobs:
               exit 1
             fi
           else
+            EXPECTED_SHA="\$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["git_sha"])' "${MANIFEST}")"
             ARTIFACT="\$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["artifact"])' "${MANIFEST}")"
             TARBALL="\$(dirname "${MANIFEST}")/\$ARTIFACT"
             test -f "\$TARBALL"
@@ -272,6 +275,11 @@ jobs:
             # Force re-apply even if digest matches: clear local digest stamp when present
             rm -f "${DEPLOY_ROOT}/.deploy-image-digest" "${DEPLOY_ROOT}/.deploy-sha256" 2>/dev/null || true
             bash "\$AUTO"
+            DEPLOYED_SHA="\$(cat "${DEPLOY_ROOT}/.deploy-git-sha" 2>/dev/null || true)"
+            if [ "\$DEPLOYED_SHA" != "\$EXPECTED_SHA" ]; then
+              echo "Deployed SHA mismatch: expected=\$EXPECTED_SHA actual=\${DEPLOYED_SHA:-missing}" >&2
+              exit 1
+            fi
           fi
           EOF
           )
@@ -283,16 +291,36 @@ jobs:
             "bash -s" <<< "$REMOTE_CMD"
 
           echo "Remote action done. Checking ${HEALTH_URL}${HEALTH_URL_ALT:+ (alt ${HEALTH_URL_ALT})}"
+          EXPECTED_SHA=""
+          if [[ "$ACTION" = "apply-latest" && "$ACTION_ID" =~ ^release:([0-9a-f]{40})$ ]]; then
+            EXPECTED_SHA="${BASH_REMATCH[1]}"
+          fi
+          health_matches_target() {
+            if [ -z "$EXPECTED_SHA" ]; then
+              return 0
+            fi
+            local actual_sha
+            actual_sha="$(jq -r '.git_sha // .data.git_sha // empty' /tmp/health.json)"
+            if [ "$actual_sha" = "$EXPECTED_SHA" ]; then
+              return 0
+            fi
+            echo "Health SHA not converged: expected=$EXPECTED_SHA actual=${actual_sha:-missing}"
+            return 1
+          }
           for i in 1 2 3 4 5 6 7 8 9 10; do
             if curl -sf "${HEALTH_URL}" > /tmp/health.json 2>/dev/null; then
-              echo "Health check passed on attempt ${i} via ${HEALTH_URL}"
-              cat /tmp/health.json
-              exit 0
+              if health_matches_target; then
+                echo "Health check passed on attempt ${i} via ${HEALTH_URL}"
+                cat /tmp/health.json
+                exit 0
+              fi
             fi
             if [ -n "${HEALTH_URL_ALT}" ] && curl -sf "${HEALTH_URL_ALT}" > /tmp/health.json 2>/dev/null; then
-              echo "Health check passed on attempt ${i} via ${HEALTH_URL_ALT}"
-              cat /tmp/health.json
-              exit 0
+              if health_matches_target; then
+                echo "Health check passed on attempt ${i} via ${HEALTH_URL_ALT}"
+                cat /tmp/health.json
+                exit 0
+              fi
             fi
             # Break-glass fallback: SSH local port (covers DNS/cert lag).
             if ssh -i "$KEY_FILE" \
@@ -301,9 +329,11 @@ jobs:
               "${USER}@${HOST}" \
               "curl -sf --noproxy '*' --max-time 5 http://127.0.0.1:${HEALTH_PORT}/api/health" \
               > /tmp/health.json 2>/dev/null; then
-              echo "Health check passed on attempt ${i} via SSH localhost:${HEALTH_PORT}"
-              cat /tmp/health.json
-              exit 0
+              if health_matches_target; then
+                echo "Health check passed on attempt ${i} via SSH localhost:${HEALTH_PORT}"
+                cat /tmp/health.json
+                exit 0
+              fi
             fi
             echo "Attempt ${i} failed, retrying in 15s..."
             sleep 15
