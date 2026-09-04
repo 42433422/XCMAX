@@ -19,6 +19,25 @@ const LEGACY_DEVICE_ID_FILE = 'device_id'
 const PENDING_RECEIPT_FILE = 'pending-update-install-receipt.json'
 const REPORTED_INSTALLATION_FILE = 'reported-update-installation.json'
 
+function updaterLogPath(): string {
+  return path.join(app.getPath('userData'), 'logs', 'updater-events.jsonl')
+}
+
+/** 追加更新流程事件日志（install_start / install_failed 等），失败静默。 */
+export function appendUpdaterEvent(type: string, data?: unknown): void {
+  try {
+    const dir = path.dirname(updaterLogPath())
+    fs.mkdirSync(dir, { recursive: true })
+    fs.appendFileSync(
+      updaterLogPath(),
+      `${JSON.stringify({ ts: new Date().toISOString(), type, data })}\n`,
+      'utf8',
+    )
+  } catch {
+    /* ignore log failures */
+  }
+}
+
 function validInstallationId(value: string): boolean {
   return /^[A-Za-z0-9._:-]{16,64}$/.test(value)
 }

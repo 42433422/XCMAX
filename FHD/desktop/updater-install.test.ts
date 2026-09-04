@@ -55,7 +55,10 @@ describe('updater install rollback contract', () => {
     const handler = mocks.handlers.get('update-downloaded')
     expect(handler).toBeTypeOf('function')
     handler?.({ version, buildSha, files: [] })
-    return updater
+    // installUpdate 已拆至 desktop-install-update.ts（源治理 600 行上限），
+    // 它通过 getDownloadedUpdateState() 读取本模块状态，两个真实模块联动。
+    const { installUpdate } = await import('./desktop-install-update.js')
+    return { ...updater, installUpdate }
   }
 
   it('passes the downloaded version to rollback preparation', async () => {
