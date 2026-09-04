@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -169,12 +168,12 @@ def _seed_repo(repo: Path) -> None:
     )
     _write_policy(repo, [])
     _write_policy_test(repo, [])
-    _run(["git", "init"], repo)
-    _run(["git", "checkout", "-b", "main"], repo)
-    _run(["git", "config", "user.email", "retort@example.test"], repo)
-    _run(["git", "config", "user.name", "Retort Merge Proof"], repo)
-    _run(["git", "add", "."], repo)
-    _run(["git", "commit", "-m", "seed retort merge landing proof"], repo)
+    _run("git_init", repo)
+    _run("git_create_main", repo)
+    _run("git_config_email", repo)
+    _run("git_config_name", repo)
+    _run("git_add_all", repo)
+    _run("git_commit_seed", repo)
 
 
 def _land_case(
@@ -187,7 +186,7 @@ def _land_case(
     source = str(case.get("source") or f"source-{index}")
     family = str(case.get("family") or "external_project")
     source_path = root / str(case.get("source_path") or "")
-    branch = f"absorb/{_slug(source)}-{index}"
+    branch = _case_branch(index)
     rule = {
         "source": source,
         "family": family,
@@ -204,31 +203,26 @@ def _land_case(
             "blocker": "cached_external_source_missing",
         }
     commands: list[dict[str, Any]] = []
-    commands.append(_run(["git", "checkout", "main"], repo))
-    commands.append(_run(["git", "checkout", "-b", branch], repo))
+    commands.append(_run("git_checkout_main", repo))
+    commands.append(_run("git_create_case", repo, case_index=index))
     next_rules = [*previous_rules, rule]
     _write_policy(repo, next_rules)
     _write_policy_test(repo, next_rules)
     _remove_runtime_caches(repo)
-    commands.append(_run(["git", "add", "."], repo))
-    commands.append(_run(["git", "commit", "-m", f"absorb {source} review rule"], repo))
-    branch_commit = _run(["git", "rev-parse", "HEAD"], repo)
-    diff_files_result = _run(["git", "diff", "--name-only", "main...HEAD"], repo)
+    commands.append(_run("git_add_all", repo))
+    commands.append(_run("git_commit_case", repo))
+    branch_commit = _run("git_rev_parse", repo)
+    diff_files_result = _run("git_diff_main", repo)
     diff_files = [
         line.strip()
         for line in diff_files_result.get("stdout", "").splitlines()
         if line.strip()
     ]
-    commands.append(_run(["git", "checkout", "main"], repo))
-    commands.append(
-        _run(
-            ["git", "merge", "--no-ff", branch, "-m", f"merge absorbed {source} rule"],
-            repo,
-        )
-    )
-    merge_commit = _run(["git", "rev-parse", "HEAD"], repo)
+    commands.append(_run("git_checkout_main", repo))
+    commands.append(_run("git_merge_case", repo, case_index=index))
+    merge_commit = _run("git_rev_parse", repo)
     post_tests = _run(
-        [sys.executable, "-m", "pytest", "tests", "-q"],
+        "pytest",
         repo,
         env={**os.environ, "PYTHONPATH": str(repo)},
     )
@@ -310,24 +304,45 @@ def _remove_runtime_caches(repo: Path) -> None:
         shutil.rmtree(pytest_cache)
 
 
-def _slug(value: str) -> str:
-    return (
-        "".join(char if char.isalnum() else "-" for char in value.lower()).strip("-")[
-            :48
-        ]
-        or "external"
-    )
-
-
 def _run(
-    command: list[str], cwd: Path, env: dict[str, str] | None = None
+    action: str,
+    cwd: Path,
+    env: dict[str, str] | None = None,
+    *,
+    case_index: int = 0,
 ) -> dict[str, Any]:
-    _validate_command(command)
-    # Security boundary: _validate_command accepts only the literal git/pytest
-    # shapes used by this isolated proof repository. Dynamic branch names are
-    # slugged to a strict alphabet and commit messages are single arguments;
-    # no shell is involved. CodeQL cannot infer that closed command language.
-    # lgtm[py/command-line-injection]
+    """Run one member of a closed command language.
+
+    Callers cannot supply an executable, argument, branch name, or commit
+    message.  The only variable component is a range-checked integer rendered
+    locally into a branch name.
+    """
+
+    fixed: dict[str, list[str]] = {
+        "git_init": ["git", "init"],
+        "git_create_main": ["git", "checkout", "-b", "main"],
+        "git_config_email": ["git", "config", "user.email", "retort@example.test"],
+        "git_config_name": ["git", "config", "user.name", "Retort Merge Proof"],
+        "git_add_all": ["git", "add", "."],
+        "git_commit_seed": ["git", "commit", "-m", "seed retort merge landing proof"],
+        "git_checkout_main": ["git", "checkout", "main"],
+        "git_commit_case": ["git", "commit", "-m", "absorb external review rule"],
+        "git_rev_parse": ["git", "rev-parse", "HEAD"],
+        "git_diff_main": ["git", "diff", "--name-only", "main...HEAD"],
+        "pytest": [sys.executable, "-m", "pytest", "tests", "-q"],
+    }
+    command: list[str] | None
+    if action in {"git_create_case", "git_merge_case"}:
+        branch = _case_branch(case_index)
+        command = (
+            ["git", "checkout", "-b", branch]
+            if action == "git_create_case"
+            else ["git", "merge", "--no-ff", branch, "-m", "merge external review rule"]
+        )
+    else:
+        command = fixed.get(action)
+    if command is None:
+        raise ValueError("unapproved command action")
     completed = subprocess.run(
         command,
         cwd=cwd,
@@ -347,63 +362,7 @@ def _run(
     }
 
 
-def _validate_command(command: list[str]) -> None:
-    """Allow only the exact git/pytest command shapes used by this proof runner."""
-
-    if not command or any(
-        not isinstance(part, str)
-        or not part
-        or len(part) > 4_096
-        or "\x00" in part
-        or "\n" in part
-        or "\r" in part
-        for part in command
-    ):
-        raise ValueError("invalid external command")
-    executable, *arguments = command
-    if executable == sys.executable:
-        if arguments != ["-m", "pytest", "tests", "-q"]:
-            raise ValueError("unapproved Python command")
-        return
-    if executable != "git" or not arguments:
-        raise ValueError("unapproved executable")
-
-    subcommand, *values = arguments
-    fixed_shapes = {
-        ("init",),
-        ("checkout", "main"),
-        ("checkout", "-b", "main"),
-        ("config", "user.email", "retort@example.test"),
-        ("config", "user.name", "Retort Merge Proof"),
-        ("add", "."),
-        ("commit", "-m", "seed retort merge landing proof"),
-        ("rev-parse", "HEAD"),
-        ("diff", "--name-only", "main...HEAD"),
-    }
-    if tuple(arguments) in fixed_shapes:
-        return
-    branch_pattern = re.compile(r"absorb/[a-z0-9-]{1,48}-[1-9]\d*")
-    if (
-        subcommand == "checkout"
-        and len(values) == 2
-        and values[0] == "-b"
-        and branch_pattern.fullmatch(values[1])
-    ):
-        return
-    if (
-        subcommand == "commit"
-        and len(values) == 2
-        and values[0] == "-m"
-        and re.fullmatch(r"absorb [^\x00\r\n]{1,512} review rule", values[1])
-    ):
-        return
-    if (
-        subcommand == "merge"
-        and len(values) == 4
-        and values[0] == "--no-ff"
-        and branch_pattern.fullmatch(values[1])
-        and values[2] == "-m"
-        and re.fullmatch(r"merge absorbed [^\x00\r\n]{1,512} rule", values[3])
-    ):
-        return
-    raise ValueError("unapproved git command")
+def _case_branch(index: int) -> str:
+    if not isinstance(index, int) or isinstance(index, bool) or not 1 <= index <= 9_999:
+        raise ValueError("case index must be an integer from 1 through 9999")
+    return f"absorb/case-{index:04d}"

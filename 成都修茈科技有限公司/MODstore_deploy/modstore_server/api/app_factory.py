@@ -98,6 +98,8 @@ _FULL_OPTIONAL_MODULES = (
     "modstore_server.admin_employee_autonomy_api",
     "modstore_server.autonomy_decision_evidence_api",
     "modstore_server.customer_value_evidence_api",
+    "modstore_server.customer_value_lifecycle_api",
+    "modstore_server.release_convergence_api",
     "modstore_server.admin_duty_graph_api",
     "modstore_server.production_line_api",
     "modstore_server.release_train_api",

@@ -11,6 +11,29 @@ on:
         description: "Prometheus window"
         required: false
         default: "30d"
+        type: choice
+        options: ["1d", "7d", "30d", "90d"]
+      mode:
+        description: "preflight before SHA convergence; formal only after Day 0 approval"
+        required: true
+        default: "preflight"
+        type: choice
+        options: ["preflight", "formal"]
+      release_id:
+        description: "Required in formal mode: xcagi-<version>-<40sha>"
+        required: false
+        default: ""
+        type: string
+      evidence_at:
+        description: "Optional ISO UTC evidence time for a <=24h raw-telemetry backfill"
+        required: false
+        default: ""
+        type: string
+      backfill_reason:
+        description: "Required when evidence_at is supplied"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: write
@@ -20,6 +43,11 @@ permissions:
 concurrency:
   group: slo-metrics-collect
   cancel-in-progress: false
+
+env:
+  SLO_MODE: ${{ inputs.mode || (vars.SLO_FORMAL_RELEASE_ID != '' && 'formal' || 'preflight') }}
+  SLO_RELEASE_ID: ${{ inputs.release_id || vars.SLO_FORMAL_RELEASE_ID || '' }}
+  SLO_WINDOW: ${{ inputs.window || ((inputs.mode == 'formal' || (inputs.mode == '' && vars.SLO_FORMAL_RELEASE_ID != '')) && '90d' || '30d') }}
 
 
 defaults:
@@ -40,31 +68,50 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Collect SLO from Prometheus
+      - name: Authorize formal Day 0 from live release convergence
+        if: ${{ env.SLO_MODE == 'formal' }}
         env:
-          PROMETHEUS_URL: ${{ secrets.STAGING_PROMETHEUS_URL || 'http://127.0.0.1:9091' }}
-          PROMETHEUS_TOKEN: ${{ secrets.STAGING_PROMETHEUS_TOKEN || '' }}
+          MODSTORE_ADMIN_API_BASE: ${{ secrets.MODSTORE_ADMIN_API_BASE }}
+          MODSTORE_ADMIN_BEARER_TOKEN: ${{ secrets.MODSTORE_ADMIN_BEARER_TOKEN }}
+          EXPECTED_RELEASE_ID: ${{ env.SLO_RELEASE_ID }}
         run: |
-          WINDOW="${{ github.event.inputs.window || '30d' }}"
-          python3 scripts/observability/collect_slo_metrics.py --window "$WINDOW" || {
-            echo "Prometheus unreachable; writing seed slo-measured from sla-snapshot"
-            python3 - <<'PY'
-          import json
-          from datetime import datetime, timezone
-          from pathlib import Path
-          snap = json.loads(Path("metrics/sla-snapshot.json").read_text())
-          out = {
-              "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-              "prometheus_url": "unavailable",
-              "window": "seed",
-              "readings": {s["id"]: {"reading": s.get("baseline"), "meets_target": None} for s in snap.get("slos", [])},
-              "note": "Prometheus unreachable; bootstrap from sla-snapshot.json",
+          set -euo pipefail
+          test -n "${MODSTORE_ADMIN_API_BASE:-}"
+          test -n "${MODSTORE_ADMIN_BEARER_TOKEN:-}"
+          test -n "${EXPECTED_RELEASE_ID:-}"
+          response="${RUNNER_TEMP}/release-convergence.json"
+          curl -fsSL --retry 3 --connect-timeout 10 --max-time 45 \
+            -H "Authorization: Bearer ${MODSTORE_ADMIN_BEARER_TOKEN}" \
+            "${MODSTORE_ADMIN_API_BASE%/}/api/admin/release-convergence" -o "$response"
+          jq -e --arg release_id "$EXPECTED_RELEASE_ID" '
+            .ok == true and .data.converged == true and .data.release_id == $release_id
+          ' "$response" >/dev/null || {
+            echo "::error::Formal Day 0 is forbidden until the live convergence endpoint matches release_id."
+            jq '.data | {state, release_id, blockers}' "$response" || true
+            exit 1
           }
-          Path(f"metrics/slo-measured-{datetime.now(timezone.utc):%Y%m%d}.json").write_text(
-              json.dumps(out, indent=2) + "\n"
+
+      - name: Collect SLO from Prometheus
+        id: slo_collect
+        continue-on-error: true
+        env:
+          PRODUCTION_PROMETHEUS_URL: ${{ secrets.PRODUCTION_PROMETHEUS_URL }}
+          PRODUCTION_PROMETHEUS_TOKEN: ${{ secrets.PRODUCTION_PROMETHEUS_TOKEN }}
+          PRODUCTION_PROMETHEUS_RETENTION_DAYS: ${{ vars.PRODUCTION_PROMETHEUS_RETENTION_DAYS }}
+        run: |
+          set -uo pipefail
+          args=(
+            --window "$SLO_WINDOW"
+            --mode "$SLO_MODE"
+            --release-id "$SLO_RELEASE_ID"
           )
-          PY
-          }
+          if [ -n "${{ inputs.evidence_at || '' }}" ]; then
+            args+=(
+              --evidence-at "${{ inputs.evidence_at }}"
+              --backfill-reason "${{ inputs.backfill_reason || '' }}"
+            )
+          fi
+          python3 scripts/observability/collect_slo_metrics.py "${args[@]}"
 
       - name: Fetch authoritative production deploy events
         id: dora_source
@@ -130,7 +177,7 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add metrics/slo-measured-*.json metrics/sla-snapshot.json metrics/deploy_events.jsonl metrics/dora-*.json
+          git add metrics/slo-production/*.json metrics/deploy_events.jsonl metrics/dora-*.json
           if git diff --staged --quiet; then
             exit 0
           fi
@@ -147,3 +194,9 @@ jobs:
             --title "$title" \
             --body "Daily SLO and authoritative production DORA snapshot generated by workflow run ${GITHUB_RUN_ID}. Protected main remains gated by the required CI checks.")"
           gh pr merge "$pr_url" --auto --squash --delete-branch
+
+      - name: Fail closed when production SLO evidence is not admissible
+        if: steps.slo_collect.outcome != 'success'
+        run: |
+          echo "::error::Production SLO evidence is unavailable or formal targets/sample floors failed; no PASS was emitted."
+          exit 1

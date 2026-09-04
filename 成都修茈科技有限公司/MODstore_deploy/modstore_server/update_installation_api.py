@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -23,10 +23,10 @@ class UpdateInstallationReceiptBody(BaseModel):
     channel: str = Field(default="stable", pattern="^(stable|staging)$")
     platform: str = Field(default="", max_length=32)
     target_version: str = Field(default="", max_length=64)
-    target_build_sha: str = Field(default="", max_length=128)
+    target_build_sha: str = Field(default="", pattern="^$|^[0-9a-fA-F]{40}$")
     installed_version: str = Field(default="", max_length=64)
-    installed_build_sha: str = Field(default="", max_length=128)
-    status: Literal["installed", "failed", "rolled_back"]
+    installed_build_sha: str = Field(default="", pattern="^$|^[0-9a-fA-F]{40}$")
+    status: Literal["installed", "failed", "rolled_back", "revoked"]
     error: str = Field(default="", max_length=4000)
     source: str = Field(default="desktop_ota", max_length=32)
     reported_at: datetime | None = None
@@ -56,6 +56,14 @@ def record_update_installation_receipt(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    if body.status == "installed" and not body.installed_build_sha:
+        raise HTTPException(422, "成功安装回执必须包含完整 installed_build_sha")
+    if (
+        body.status == "installed"
+        and body.target_build_sha
+        and body.target_build_sha.lower() != body.installed_build_sha.lower()
+    ):
+        raise HTTPException(422, "成功安装回执的目标 SHA 与实际 SHA 不一致")
     existing = (
         db.query(UpdateInstallationReceipt)
         .filter(UpdateInstallationReceipt.idempotency_key == body.idempotency_key)
@@ -65,9 +73,14 @@ def record_update_installation_receipt(
         if int(existing.user_id) != int(user.id):
             raise HTTPException(409, "安装回执幂等键已被其他账号使用")
         return {"ok": True, "duplicate": True, "receipt": _serialize(existing)}
-    reported_at = body.reported_at or datetime.now(UTC)
-    if reported_at.tzinfo is not None:
-        reported_at = reported_at.astimezone(UTC).replace(tzinfo=None)
+    received_at = datetime.now(UTC)
+    if body.reported_at is not None:
+        client_time = body.reported_at
+        if client_time.tzinfo is None:
+            raise HTTPException(422, "客户端回执时间必须包含时区")
+        if abs(received_at - client_time.astimezone(UTC)) > timedelta(minutes=15):
+            raise HTTPException(422, "客户端回执时间与服务端相差超过 15 分钟")
+    reported_at = received_at.replace(tzinfo=None)
     row = UpdateInstallationReceipt(
         user_id=int(user.id),
         installation_id=body.installation_id.strip(),
@@ -75,9 +88,9 @@ def record_update_installation_receipt(
         channel=body.channel,
         platform=body.platform.strip(),
         target_version=body.target_version.strip(),
-        target_build_sha=body.target_build_sha.strip(),
+        target_build_sha=body.target_build_sha.strip().lower(),
         installed_version=body.installed_version.strip(),
-        installed_build_sha=body.installed_build_sha.strip(),
+        installed_build_sha=body.installed_build_sha.strip().lower(),
         status=body.status,
         error=body.error.strip(),
         source=body.source.strip() or "desktop_ota",
@@ -103,7 +116,8 @@ def list_update_installation_receipts(
         query = query.filter(UpdateInstallationReceipt.target_build_sha == target_build_sha.strip())
     rows = (
         query.order_by(
-            UpdateInstallationReceipt.reported_at.desc(), UpdateInstallationReceipt.id.desc()
+            UpdateInstallationReceipt.reported_at.desc(),
+            UpdateInstallationReceipt.id.desc(),
         )
         .limit(limit)
         .all()

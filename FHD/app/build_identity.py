@@ -82,6 +82,17 @@ def build_identity() -> dict[str, str]:
         or _stamp(".deploy-sha256")
         or ""
     ).strip()
+    product_version = str(
+        os.environ.get("XCMAX_PRODUCT_VERSION")
+        or packaged.get("product_version")
+        or packaged.get("version")
+        or ""
+    ).strip()
+    release_id = str(
+        os.environ.get("XCAGI_RELEASE_ID")
+        or packaged.get("release_id")
+        or (f"xcagi-{product_version}-{git_sha}" if product_version and git_sha else "")
+    ).strip()
     admin_console_sha256 = str(
         os.environ.get("XCAGI_ADMIN_CONSOLE_SHA256")
         or os.environ.get("FHD_ADMIN_CONSOLE_SHA256")
@@ -96,6 +107,8 @@ def build_identity() -> dict[str, str]:
         "built_at": str(packaged.get("built_at") or ""),
         "git_sha": git_sha,
         "image_digest": image_digest,
+        "product_version": product_version,
+        "release_id": release_id,
     }
 
 

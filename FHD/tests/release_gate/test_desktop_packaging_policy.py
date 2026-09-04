@@ -149,7 +149,7 @@ def test_windows_release_requires_sslcom_signing_and_system_authenticode() -> No
     assert "Published Windows installer is not Authenticode-valid" in workflow
     assert "verify-windows-signature.ps1 `" in workflow
     assert "-ExpectedPublisher $env:XCAGI_WINDOWS_PUBLISHER_NAME" in workflow
-    assert '-ExpectedBuildSha "${{ github.sha }}"' in workflow
+    assert '-ExpectedBuildSha "${{ inputs.release_sha }}"' in workflow
     assert "-ExpectedProductVersion $v" in workflow
     assert "verify-windows-signature.ps1" in installed_runtime
     assert "smoke-installed-windows.ps1" in installed_runtime

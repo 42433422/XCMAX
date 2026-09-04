@@ -31,6 +31,7 @@ import argparse
 import datetime
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -39,6 +40,7 @@ from pathlib import Path
 # never enter the current stable release manifest.
 ACTIVE_RELEASE_SKUS = ("enterprise",)
 FROZEN_RELEASE_SKUS = ("personal",)
+_GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 
 
 def compute_sha256(path: Path) -> str:
@@ -121,6 +123,20 @@ def win_installer_mb(release_root: Path) -> int:
     return 0
 
 
+def update_metadata_signatures(release_root: Path) -> dict[str, str]:
+    signatures: dict[str, str] = {}
+    for platform, name in (("win", "latest.yml"), ("mac", "latest-mac.yml")):
+        for sku in ACTIVE_RELEASE_SKUS:
+            path = release_root / sku / name
+            if not path.is_file():
+                continue
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if line.startswith("signature:"):
+                    signatures[platform] = line.partition(":")[2].strip()
+                    break
+    return signatures
+
+
 def load_release_history(source: Path, version: str) -> list[dict]:
     """Load the website changelog from the release SSOT and fail closed on drift."""
     try:
@@ -145,8 +161,10 @@ def load_release_history(source: Path, version: str) -> list[dict]:
         if not isinstance(latest.get(key), str) or not latest[key].strip():
             raise ValueError(f"release_history[0].{key} must be a non-empty string")
     notes = latest.get("notes")
-    if not isinstance(notes, list) or not notes or not all(
-        isinstance(note, str) and note.strip() for note in notes
+    if (
+        not isinstance(notes, list)
+        or not notes
+        or not all(isinstance(note, str) and note.strip() for note in notes)
     ):
         raise ValueError("release_history[0].notes must contain non-empty strings")
     return history
@@ -162,6 +180,13 @@ def main() -> int:
         "--release-subdir", required=True, help="Subdirectory name like xcagi-v1.0.0.0"
     )
     parser.add_argument("--git-sha", required=True)
+    parser.add_argument("--build-workflow-run-id", default="")
+    parser.add_argument("--frontend-workflow-run-id", default="")
+    parser.add_argument(
+        "--release-id",
+        default="",
+        help="Immutable identity; defaults to xcagi-<version>-<40-char git sha>.",
+    )
     parser.add_argument(
         "--android-version",
         default="",
@@ -197,6 +222,19 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    git_sha = str(args.git_sha or "").strip().lower()
+    if not _GIT_SHA.fullmatch(git_sha):
+        print("[error] --git-sha must be a full lowercase 40-character SHA", file=sys.stderr)
+        return 1
+    release_id = str(args.release_id or f"xcagi-{args.version}-{git_sha}").strip()
+    expected_release_id = f"xcagi-{args.version}-{git_sha}"
+    if release_id != expected_release_id:
+        print(
+            f"[error] release identity mismatch: {release_id!r} != {expected_release_id!r}",
+            file=sys.stderr,
+        )
+        return 1
+
     official_base = args.official_download_base or f"https://xiu-ci.com/xcagi-v{args.version}"
     release_root = Path(args.release_dir) / args.release_subdir
     if not release_root.is_dir():
@@ -217,7 +255,11 @@ def main() -> int:
         "active_skus": list(ACTIVE_RELEASE_SKUS),
         "frozen_skus": list(FROZEN_RELEASE_SKUS),
         "primary_sku": "enterprise",
-        "git_sha": args.git_sha,
+        "git_sha": git_sha,
+        "release_id": release_id,
+        "build_workflow_run_id": str(args.build_workflow_run_id or ""),
+        "frontend_workflow_run_id": str(args.frontend_workflow_run_id or ""),
+        "update_metadata_signatures": update_metadata_signatures(release_root),
         "generated_at": datetime.datetime.now(datetime.UTC).isoformat(),
         "channels": {
             "auto_update": auto_update,
@@ -240,7 +282,10 @@ def main() -> int:
         "active_skus": list(ACTIVE_RELEASE_SKUS),
         "frozen_skus": list(FROZEN_RELEASE_SKUS),
         "primary_sku": "enterprise",
-        "git_sha": args.git_sha,
+        "git_sha": git_sha,
+        "release_id": release_id,
+        "build_workflow_run_id": manifest["build_workflow_run_id"],
+        "frontend_workflow_run_id": manifest["frontend_workflow_run_id"],
         "generated_at": manifest["generated_at"],
         "win_installer_mb": win_installer_mb(release_root),
         "cos_base_url": official_base,

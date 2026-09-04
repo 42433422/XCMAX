@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import io
 import json
+import socket
 import threading
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -129,6 +130,24 @@ def test_client_private_network_requires_explicit_opt_in() -> None:
     )
 
     assert client.base_url == "http://127.0.0.1:9999"
+
+
+def test_client_re_resolves_and_pins_the_checked_address(monkeypatch) -> None:
+    answers = iter(
+        [
+            [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))],
+            [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.35", 0))],
+        ]
+    )
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *_args, **_kwargs: next(answers))
+    client = MODstoreClient(base_url="https://marketplace.unit", access_token="token")
+
+    def handler(req):
+        assert req._xcagi_pinned_ip == "93.184.216.35"
+        return _FakeResponse('{"items": []}')
+
+    with _patched_urlopen(handler):
+        client.list_catalog()
 
 
 def test_client_does_not_follow_cross_origin_redirects() -> None:

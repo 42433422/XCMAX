@@ -11,6 +11,9 @@ web = [
     "uvicorn[standard]>=0.27",
     "python-multipart>=0.0.6",
     "httpx[socks]>=0.27",
+    # Starlette 1.6 still imports anyio.abc.BlockingPortal; AnyIO 4.15 turns
+    # that compatibility alias into a deprecation failure under our strict tests.
+    "anyio>=4.4,<4.15",
     "socksio>=1.0",
     "sqlalchemy>=2.0",
     "alembic>=1.16,<2",

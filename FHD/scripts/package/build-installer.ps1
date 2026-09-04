@@ -99,7 +99,10 @@ Assert-FileExists $backendExe "Windows backend executable"
 
 $desktopSku = Join-Path $Root "desktop\resources\product-sku.json"
 Write-SkuJson -Path $desktopSku -Sku $ProductSku
-$buildSha = $env:GITHUB_SHA
+$buildSha = $env:XCAGI_BUILD_SHA
+if (-not $buildSha) {
+  $buildSha = $env:GITHUB_SHA
+}
 if (-not $buildSha) {
   try {
     $buildSha = (git -C $Root rev-parse HEAD).Trim()
@@ -107,8 +110,18 @@ if (-not $buildSha) {
     $buildSha = ''
   }
 }
+if ($buildSha -notmatch '^[0-9a-fA-F]{40}$') {
+  throw "Windows installer requires an exact 40-character Git SHA, got '$buildSha'"
+}
+$buildSha = $buildSha.ToLowerInvariant()
+$releaseId = "xcagi-$Version-$buildSha"
 $buildInfoPath = Join-Path $Root "desktop\resources\build-info.json"
-$buildInfo = @{ schema_version = 1; gitSha = $buildSha; version = $Version }
+$buildInfo = @{
+  schema_version = 1
+  gitSha = $buildSha
+  version = $Version
+  releaseId = $releaseId
+}
 $buildInfo | ConvertTo-Json -Compress | Set-Content -Path $buildInfoPath -Encoding UTF8
 $backendSku = Join-Path $Root "dist\xcagi-backend\_internal\product-sku.json"
 $backendSkuDir = Split-Path $backendSku -Parent

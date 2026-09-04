@@ -199,6 +199,11 @@ from modstore_server.api.market_routes_part04 import (
     api_package_audit as api_package_audit,
 )
 
+from modstore_server.api.market_enterprise_identity import (
+    EnterpriseIdentityDTO as EnterpriseIdentityDTO,
+    api_admin_verify_enterprise_identity as api_admin_verify_enterprise_identity,
+)
+
 # ── Init on import ──────────────────────────────────────────
 
 init_db()

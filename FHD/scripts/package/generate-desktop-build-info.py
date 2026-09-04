@@ -8,25 +8,19 @@ import json
 import os
 import re
 import subprocess
-
-try:
-    from datetime import UTC, datetime
-except ImportError:  # Python < 3.11
-    from datetime import datetime
-
-    UTC = UTC
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUTPUT = ROOT / "desktop" / "resources" / "build-info.json"
-GIT_SHA_PATTERN = re.compile(r"^[0-9a-fA-F]{40}(?:[0-9a-fA-F]{24})?$")
+GIT_SHA_PATTERN = re.compile(r"^[0-9a-fA-F]{40}$")
 
 
 def resolve_git_sha(explicit: str | None = None) -> str:
     candidates = (
         explicit,
-        os.environ.get("GITHUB_SHA"),
         os.environ.get("XCAGI_BUILD_SHA"),
+        os.environ.get("GITHUB_SHA"),
     )
     git_sha = next((str(value).strip() for value in candidates if str(value or "").strip()), "")
     if not git_sha:
@@ -44,6 +38,7 @@ def write_build_info(*, version: str, git_sha: str, output: Path) -> None:
         "schema_version": 1,
         "gitSha": git_sha,
         "version": version,
+        "releaseId": f"xcagi-{version}-{git_sha}",
         "builtAt": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
     }
     output.write_text(json.dumps(payload, separators=(",", ":")) + "\n", encoding="utf-8")

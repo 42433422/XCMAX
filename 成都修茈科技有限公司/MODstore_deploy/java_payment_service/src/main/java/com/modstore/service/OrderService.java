@@ -73,6 +73,14 @@ public class OrderService {
         }
         Order order = new Order();
         order.setUser(user);
+        if (hasVerifiedEnterpriseIdentity(user)) {
+            order.setEnterpriseSubjectId(user.getEnterpriseSubjectId().trim());
+            order.setEnterpriseLegalName(user.getEnterpriseLegalName().trim());
+            order.setEnterpriseVerificationSha256(
+                    user.getEnterpriseVerificationSha256().trim().toLowerCase()
+            );
+            order.setEnterpriseVerifiedAt(user.getEnterpriseVerifiedAt());
+        }
         order.setOutTradeNo(outTradeNo);
         order.setSubject(subject);
         order.setTotalAmount(totalAmount);
@@ -84,6 +92,18 @@ public class OrderService {
         order.setRequestId(requestId);
         
         return orderRepository.save(order);
+    }
+
+    private static boolean hasVerifiedEnterpriseIdentity(User user) {
+        return user != null
+                && user.isEnterprise()
+                && user.getEnterpriseSubjectId() != null
+                && !user.getEnterpriseSubjectId().isBlank()
+                && user.getEnterpriseLegalName() != null
+                && !user.getEnterpriseLegalName().isBlank()
+                && user.getEnterpriseVerificationSha256() != null
+                && user.getEnterpriseVerificationSha256().trim().matches("[0-9a-fA-F]{64}")
+                && user.getEnterpriseVerifiedAt() != null;
     }
 
     @Transactional(readOnly = true)

@@ -44,6 +44,8 @@ jobs:
   cvm-rolling:
     name: CVM rolling (${{ inputs.environment }})
     runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment }}
     steps:
       - name: Require CVM SSH secrets
         env:

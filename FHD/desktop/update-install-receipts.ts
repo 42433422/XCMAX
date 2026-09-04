@@ -11,7 +11,7 @@ export type PendingUpdateInstallReceipt = {
   targetVersion: string
   targetBuildSha: string
   preparedAt: string
-  source?: 'desktop_ota' | 'desktop_inventory'
+  source?: 'desktop_ota' | 'desktop_inventory' | 'desktop_heartbeat'
 }
 
 const INSTALLATION_ID_FILE = 'installation-id'
@@ -131,17 +131,31 @@ function stageCurrentInstallationReceipt(input: {
   if (!installedVersion || !installedBuildSha) return null
 
   const installationId = loadOrCreateInstallationId()
+  const preparedAt = new Date()
+  let source: PendingUpdateInstallReceipt['source'] = 'desktop_inventory'
   try {
     const reported = JSON.parse(fs.readFileSync(reportedInstallationPath(), 'utf8')) as {
       installationId?: string
       installedVersion?: string
       installedBuildSha?: string
+      reportedAt?: string
     }
     if (
       reported.installationId === installationId
       && reported.installedVersion === installedVersion
       && reported.installedBuildSha === installedBuildSha
-    ) return null
+    ) {
+      const lastReportedAt = Date.parse(String(reported.reportedAt || ''))
+      const configuredHours = Number(process.env.XCAGI_INSTALLATION_HEARTBEAT_HOURS || 12)
+      const heartbeatHours = Number.isFinite(configuredHours) && configuredHours > 0
+        ? Math.min(configuredHours, 24)
+        : 12
+      if (
+        Number.isFinite(lastReportedAt)
+        && preparedAt.getTime() - lastReportedAt < heartbeatHours * 60 * 60 * 1000
+      ) return null
+      source = 'desktop_heartbeat'
+    }
   } catch {
     /* first report or unreadable marker; create a durable outbox below */
   }
@@ -150,14 +164,17 @@ function stageCurrentInstallationReceipt(input: {
     installationId,
     idempotencyKey: crypto
       .createHash('sha256')
-      .update(`desktop_inventory:${installationId}:${installedVersion}:${installedBuildSha}`)
+      .update(
+        `${source}:${installationId}:${installedVersion}:${installedBuildSha}:`
+        + `${preparedAt.toISOString().slice(0, 13)}`,
+      )
       .digest('hex'),
     channel: process.env.XCAGI_UPDATE_CHANNEL === 'staging' ? 'staging' : 'stable',
     platform: process.platform,
     targetVersion: installedVersion,
     targetBuildSha: installedBuildSha,
-    preparedAt: new Date().toISOString(),
-    source: 'desktop_inventory',
+    preparedAt: preparedAt.toISOString(),
+    source,
   }
   fs.writeFileSync(pendingReceiptPath(), JSON.stringify(receipt, null, 2), {
     encoding: 'utf8',

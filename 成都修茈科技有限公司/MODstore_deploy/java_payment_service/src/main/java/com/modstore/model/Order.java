@@ -30,6 +30,19 @@ public class Order {
     @ManyToOne
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
+
+    /** Immutable verified enterprise identity captured when the order is made. */
+    @Column(name = "enterprise_subject_id", length = 128, updatable = false)
+    private String enterpriseSubjectId;
+
+    @Column(name = "enterprise_legal_name", length = 256, updatable = false)
+    private String enterpriseLegalName;
+
+    @Column(name = "enterprise_verification_sha256", length = 64, updatable = false)
+    private String enterpriseVerificationSha256;
+
+    @Column(name = "enterprise_verified_at", updatable = false)
+    private LocalDateTime enterpriseVerifiedAt;
     
     @Column(name = "subject", nullable = false, length = 256)
     private String subject;

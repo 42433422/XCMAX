@@ -348,7 +348,7 @@ def test_java_payment_loader_validates_source_and_paginates(monkeypatch) -> None
 
     monkeypatch.setenv("MODSTORE_INTERNAL_API_KEY", "unit-test-internal-key")
     monkeypatch.setenv("JAVA_PAYMENT_SERVICE_URL", "http://payment.internal:8080")
-    monkeypatch.setattr("modstore_server.customer_value_evidence.httpx.Client", _Client)
+    monkeypatch.setattr("modstore_server.customer_value_payment_source.httpx.Client", _Client)
 
     orders = _load_java_payment_orders(90)
 

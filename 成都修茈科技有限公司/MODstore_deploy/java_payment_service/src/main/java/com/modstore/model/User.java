@@ -30,6 +30,25 @@ public class User {
     @Column(name = "is_enterprise", nullable = false, columnDefinition = "BOOLEAN DEFAULT false")
     private boolean enterprise;
 
+    /**
+     * Internal, verified legal-entity identity.  This is deliberately separate
+     * from username/company display text and is never returned by public APIs.
+     */
+    @Column(name = "enterprise_subject_id", length = 128)
+    private String enterpriseSubjectId;
+
+    @Column(name = "enterprise_legal_name", length = 256)
+    private String enterpriseLegalName;
+
+    @Column(name = "enterprise_verification_sha256", length = 64)
+    private String enterpriseVerificationSha256;
+
+    @Column(name = "enterprise_verified_at")
+    private LocalDateTime enterpriseVerifiedAt;
+
+    @Column(name = "enterprise_verified_by_user_id")
+    private Long enterpriseVerifiedByUserId;
+
     @Column(name = "account_state", nullable = false, length = 32,
             columnDefinition = "VARCHAR(32) DEFAULT 'pending_plan'")
     private String accountState = "pending_plan";

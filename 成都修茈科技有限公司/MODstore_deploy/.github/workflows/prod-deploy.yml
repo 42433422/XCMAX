@@ -1,16 +1,14 @@
 name: Deploy MODstore Production
+run-name: >-
+  Deploy MODstore ${{ inputs.git_sha }}
 
 on:
-  workflow_run:
-    workflows: ["CI - Backend Python"]
-    types: [completed]
   workflow_dispatch:
     inputs:
       git_sha:
-        description: Exact 40-character main commit; blank resolves current origin/main
-        required: false
+        description: Exact 40-character main commit frozen by the release gate
+        required: true
         type: string
-        default: ""
       require_platform_key:
         description: Fail when platform LLM key is missing
         required: false
@@ -22,6 +20,11 @@ on:
         required: false
         type: string
         default: ""
+      product_version:
+        description: Visible product version associated with the immutable SHA
+        required: false
+        type: string
+        default: "1.0.0.1"
 
 concurrency:
   group: modstore-prod-deploy
@@ -32,24 +35,15 @@ permissions:
 
 jobs:
   deploy:
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     steps:
       - name: Resolve exact tested SHA
         id: target
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          WORKFLOW_SHA: ${{ github.event.workflow_run.head_sha }}
           REQUESTED_SHA: ${{ inputs.git_sha }}
         run: |
           set -euo pipefail
-          target="${WORKFLOW_SHA:-${REQUESTED_SHA:-}}"
-          if [ -z "$target" ]; then
-            target="$(git ls-remote https://github.com/${GITHUB_REPOSITORY}.git refs/heads/main | awk '{print $1}')"
-          fi
+          target="${REQUESTED_SHA:-}"
           [[ "$target" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::invalid exact SHA: $target"; exit 1; }
           echo "sha=$target" >> "$GITHUB_OUTPUT"
 
@@ -79,12 +73,13 @@ jobs:
           TARGET_SHA: ${{ steps.target.outputs.sha }}
           STRICT_KEY: ${{ github.event_name == 'workflow_dispatch' && inputs.require_platform_key == 'false' && '0' || '1' }}
           REPOSITORY_SLUG: ${{ github.repository }}
+          PRODUCT_VERSION: ${{ inputs.product_version || '1.0.0.1' }}
         with:
           host: ${{ secrets.FHD_PUSH_HOST }}
           username: root
           key: ${{ secrets.FHD_PUSH_SSH_KEY }}
           command_timeout: 45m
-          envs: TARGET_SHA,STRICT_KEY,REPOSITORY_SLUG
+          envs: TARGET_SHA,STRICT_KEY,REPOSITORY_SLUG,PRODUCT_VERSION
           script: |
             set -euo pipefail
             SOURCE_ROOT="${XCMAX_REMOTE_ROOT:-/root/XCMAX}"
@@ -95,6 +90,7 @@ jobs:
             git -C "$SOURCE_ROOT" show "${TARGET_SHA}:成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-immutable-release.sh" > "$BOOTSTRAP"
             chmod 700 "$BOOTSTRAP"
             XCMAX_SOURCE_ROOT="$SOURCE_ROOT" XCMAX_TARGET_SHA="$TARGET_SHA" \
+              XCMAX_PRODUCT_VERSION="$PRODUCT_VERSION" \
               XCMAX_GITHUB_REPOSITORY="$REPOSITORY_SLUG" bash "$BOOTSTRAP"
             CURRENT_DEPLOY="/opt/xcmax/current/成都修茈科技有限公司/MODstore_deploy"
             STRICT_PLATFORM_KEY="$STRICT_KEY" MODSTORE_DEPLOY_DIR="$CURRENT_DEPLOY" \

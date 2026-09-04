@@ -28,6 +28,7 @@ def test_build_identity_uses_packaged_file_without_git(monkeypatch, tmp_path) ->
                 "git_sha": "c" * 40,
                 "artifact_sha256": "d" * 64,
                 "built_at": "2026-07-21T00:00:00Z",
+                "version": "1.0.0.1",
             }
         ),
         encoding="utf-8",
@@ -40,6 +41,7 @@ def test_build_identity_uses_packaged_file_without_git(monkeypatch, tmp_path) ->
 
     assert identity["git_sha"] == "c" * 40
     assert identity["artifact_sha256"] == "d" * 64
+    assert identity["release_id"] == "xcagi-1.0.0.1-" + "c" * 40
 
 
 def test_build_identity_reads_deploy_stamps(monkeypatch, tmp_path) -> None:

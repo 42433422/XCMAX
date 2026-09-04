@@ -12,13 +12,11 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
-import httpx
 from sqlalchemy.exc import SQLAlchemyError
 
 from modstore_server import payment_orders
@@ -32,118 +30,38 @@ from modstore_server.customer_value_classification import (
 )
 from modstore_server.customer_value_classification import sanitize_evidence as _sanitize_evidence
 from modstore_server.customer_value_classification import text as _text
-from modstore_server.customer_value_classification import truthy as _truthy
-from modstore_server.models import CustomerValueReceipt, get_session_factory
+from modstore_server.customer_value_lifecycle import build_customer_lifecycle
+from modstore_server.customer_value_payment_source import (
+    load_authoritative_payment_orders as _load_authoritative_payment_orders,
+)
+from modstore_server.customer_value_payment_source import (
+    load_java_payment_orders as _load_java_payment_orders,
+)
+from modstore_server.customer_value_payment_source import (
+    payment_evidence_marker,
+)
+from modstore_server.models import (
+    CustomerValueReceipt,
+    UpdateInstallationReceipt,
+    get_session_factory,
+)
 
 UTC = timezone.utc  # noqa: UP017 - MODstore CI and production still support Python 3.10
 
 EVIDENCE_SCHEMA = "customer_value_evidence.v1"
-RECEIPT_KINDS = frozenset({"goal", "delivery", "acceptance", "refund"})
+RECEIPT_KINDS = frozenset(
+    {"goal", "delivery", "first_use", "outcome", "acceptance", "reuse", "refund"}
+)
 VERIFICATION_STATUSES = frozenset({"pending_evidence", "verified", "reversed"})
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
-_JAVA_PAGE_SIZE = 1000
-_JAVA_MAX_ORDERS = 100_000
 
 
 def _canonical_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
-def _internal_api_key() -> str:
-    return _text(
-        os.environ.get("MODSTORE_INTERNAL_API_KEY")
-        or os.environ.get("XCAGI_MARKET_INTERNAL_API_KEY"),
-        4096,
-    )
-
-
-def _load_java_payment_orders(window_days: int) -> list[dict[str, Any]]:
-    """Read minimal payment proof from the Java/PostgreSQL source of truth."""
-
-    key = _internal_api_key()
-    if not key:
-        raise RuntimeError("java_payment_internal_key_unavailable")
-    base_url = _text(
-        os.environ.get("JAVA_PAYMENT_SERVICE_URL") or "http://127.0.0.1:8080",
-        2048,
-    ).rstrip("/")
-    if not base_url:
-        raise RuntimeError("java_payment_service_url_unavailable")
-
-    orders: list[dict[str, Any]] = []
-    offset = 0
-    max_pages = (_JAVA_MAX_ORDERS // _JAVA_PAGE_SIZE) + 1
-    with httpx.Client(timeout=httpx.Timeout(10.0, connect=5.0)) as client:
-        for _page_number in range(max_pages):
-            response = client.get(
-                f"{base_url}/api/internal/payment/value-evidence",
-                params={
-                    "window_days": window_days,
-                    "limit": _JAVA_PAGE_SIZE,
-                    "offset": offset,
-                },
-                headers={"X-Internal-Api-Key": key},
-            )
-            response.raise_for_status()
-            payload = response.json()
-            if not isinstance(payload, dict):
-                raise RuntimeError("java_payment_evidence_payload_invalid")
-            if payload.get("ok") is not True or payload.get("source") != "java_postgresql":
-                raise RuntimeError("java_payment_evidence_source_untrusted")
-            page = payload.get("orders")
-            if not isinstance(page, list) or any(not isinstance(item, dict) for item in page):
-                raise RuntimeError("java_payment_evidence_orders_invalid")
-            total = int(payload.get("total") or 0)
-            if total < 0 or total > _JAVA_MAX_ORDERS:
-                raise RuntimeError("java_payment_evidence_total_out_of_bounds")
-            orders.extend(dict(item) for item in page)
-            if len(orders) >= total:
-                break
-            if not page or len(orders) > _JAVA_MAX_ORDERS:
-                raise RuntimeError("java_payment_evidence_pagination_incomplete")
-            offset += _JAVA_PAGE_SIZE
-        else:
-            raise RuntimeError("java_payment_evidence_pagination_incomplete")
-    return orders
-
-
 def load_authoritative_payment_orders(window_days: int) -> dict[str, Any]:
-    """Return payment rows plus explicit source availability and ownership."""
-
-    days = max(1, min(int(window_days), 3650))
-    if payment_orders.is_local_source_of_truth():
-        try:
-            found, _ = payment_orders.list_orders(status="paid", limit=_JAVA_MAX_ORDERS)
-            rows = [dict(item) for item in found if isinstance(item, dict)]
-        except (OSError, ValueError, TypeError):
-            return {
-                "orders": [],
-                "source_owner": "python_payment_orders",
-                "source_available": False,
-                "source_authoritative": False,
-            }
-        return {
-            "orders": rows,
-            "source_owner": "python_payment_orders",
-            "source_available": True,
-            "source_authoritative": True,
-        }
-
-    try:
-        rows = _load_java_payment_orders(days)
-    except (httpx.HTTPError, RuntimeError, TypeError, ValueError):
-        return {
-            "orders": [],
-            "source_owner": "java_postgresql_internal_api",
-            "source_available": False,
-            "source_authoritative": False,
-        }
-    return {
-        "orders": rows,
-        "source_owner": "java_postgresql_internal_api",
-        "source_available": True,
-        "source_authoritative": True,
-    }
+    return _load_authoritative_payment_orders(window_days, java_loader=_load_java_payment_orders)
 
 
 def append_customer_value_receipt(
@@ -179,18 +97,76 @@ def append_customer_value_receipt(
     acceptance_id = _text(data.get("acceptance_id"), 128)
     if verification_status == "verified":
         required = {"customer_ref": customer_ref, "customer_goal_id": goal_id}
-        if receipt_kind in {"delivery", "acceptance"}:
+        if receipt_kind in {"delivery", "first_use", "outcome", "acceptance", "reuse"}:
             required["artifact_id"] = artifact_id
         if receipt_kind == "acceptance":
             required["acceptance_id"] = acceptance_id
         missing = [key for key, value in required.items() if not value]
         if missing:
             raise ValueError("verified receipt missing: " + ", ".join(missing))
-        if receipt_kind in {"delivery", "acceptance"}:
+        if receipt_kind in {"delivery", "first_use", "outcome", "acceptance", "reuse"}:
             evidence = data.get("evidence") if isinstance(data.get("evidence"), dict) else {}
             artifact_sha256 = _text(evidence.get("artifact_sha256"), 64).lower()
             if not _SHA256.fullmatch(artifact_sha256):
                 raise ValueError("verified delivery requires evidence.artifact_sha256")
+            if receipt_kind in {"first_use", "reuse"}:
+                task_type = _text(evidence.get("task_type"), 128).lower()
+                if (
+                    not _text(evidence.get("run_id"), 192)
+                    or evidence.get("success") is not True
+                    or evidence.get("business_output") is not True
+                    or not task_type
+                    or task_type in {"login", "auth", "authentication", "session"}
+                ):
+                    raise ValueError(
+                        f"verified {receipt_kind} requires a successful business output and run_id"
+                    )
+            if receipt_kind == "outcome":
+                outcome_keys = (
+                    "baseline",
+                    "target",
+                    "measured_value",
+                    "comparison",
+                    "unit",
+                    "measurement_window",
+                    "source_material_summary",
+                    "source_material_sha256",
+                )
+                if any(evidence.get(key) in (None, "") for key in outcome_keys):
+                    raise ValueError(
+                        "verified outcome requires baseline, target, measured value, unit, window and source material"
+                    )
+                if _text(evidence.get("comparison"), 8).lower() not in {"ge", "le"}:
+                    raise ValueError("verified outcome comparison must be ge or le")
+                if not _SHA256.fullmatch(_text(evidence.get("source_material_sha256"), 64).lower()):
+                    raise ValueError("verified outcome requires evidence.source_material_sha256")
+            if receipt_kind == "acceptance" and data.get("lifecycle_v2") is True:
+                customer_confirmed = evidence.get("customer_confirmed") is True
+                signed_digest = _text(evidence.get("signed_document_sha256"), 64).lower()
+                if not customer_confirmed and not _SHA256.fullmatch(signed_digest):
+                    raise ValueError(
+                        "customer acceptance requires account confirmation or signed document"
+                    )
+        if receipt_kind == "goal" and data.get("lifecycle_v2") is True:
+            evidence = data.get("evidence") if isinstance(data.get("evidence"), dict) else {}
+            goal_keys = (
+                "baseline",
+                "target",
+                "comparison",
+                "unit",
+                "measurement_window",
+                "agreement_sha256",
+            )
+            if any(evidence.get(key) in (None, "") for key in goal_keys):
+                raise ValueError("verified goal requires a complete agreed KPI")
+            if _text(evidence.get("comparison"), 8).lower() not in {"ge", "le"}:
+                raise ValueError("verified goal comparison must be ge or le")
+            if evidence.get("customer_confirmed") is not True or not _SHA256.fullmatch(
+                _text(evidence.get("agreement_sha256"), 64).lower()
+            ):
+                raise ValueError(
+                    "verified goal requires customer confirmation and agreement digest"
+                )
         if order_no:
             if payment_order is None:
                 payment_order = payment_orders.find(order_no)
@@ -216,6 +192,69 @@ def append_customer_value_receipt(
 
     sf = session_factory or get_session_factory()
     with sf() as session:
+        if (
+            verification_status == "verified"
+            and receipt_kind == "outcome"
+            and data.get("lifecycle_v2") is True
+        ):
+            goals = (
+                session.query(CustomerValueReceipt)
+                .filter(
+                    CustomerValueReceipt.order_no == order_no,
+                    CustomerValueReceipt.customer_ref == customer_ref,
+                    CustomerValueReceipt.customer_goal_id == goal_id,
+                    CustomerValueReceipt.verification_status == "verified",
+                    CustomerValueReceipt.receipt_kind == "goal",
+                    CustomerValueReceipt.occurred_at <= occurred_at.replace(tzinfo=None),
+                )
+                .order_by(CustomerValueReceipt.occurred_at.desc())
+                .all()
+            )
+            if not goals:
+                raise ValueError("outcome requires a prior customer-confirmed KPI goal")
+            try:
+                goal_evidence = json.loads(goals[0].evidence_json or "{}")
+            except (TypeError, ValueError, json.JSONDecodeError):
+                goal_evidence = {}
+            comparable = (
+                "baseline",
+                "target",
+                "comparison",
+                "unit",
+                "measurement_window",
+            )
+            if any(sanitized_evidence.get(key) != goal_evidence.get(key) for key in comparable):
+                raise ValueError("outcome KPI does not match the prior customer agreement")
+        if verification_status == "verified" and receipt_kind == "reuse":
+            prior = (
+                session.query(CustomerValueReceipt)
+                .filter(
+                    CustomerValueReceipt.order_no == order_no,
+                    CustomerValueReceipt.customer_ref == customer_ref,
+                    CustomerValueReceipt.customer_goal_id == goal_id,
+                    CustomerValueReceipt.verification_status == "verified",
+                    CustomerValueReceipt.receipt_kind.in_(["first_use", "acceptance"]),
+                    CustomerValueReceipt.occurred_at <= occurred_at.replace(tzinfo=None),
+                )
+                .all()
+            )
+            acceptances = [row for row in prior if row.receipt_kind == "acceptance"]
+            first_uses = [row for row in prior if row.receipt_kind == "first_use"]
+            acceptance = max(acceptances, key=lambda row: row.occurred_at, default=None)
+            first_use = min(first_uses, key=lambda row: row.occurred_at, default=None)
+            if acceptance is None or first_use is None:
+                raise ValueError("reuse requires verified first_use and acceptance receipts")
+            accepted_at = acceptance.occurred_at.replace(tzinfo=UTC)
+            if occurred_at < accepted_at + timedelta(hours=24):
+                raise ValueError("reuse must occur at least 24 hours after acceptance")
+            try:
+                first_evidence = json.loads(first_use.evidence_json or "{}")
+            except (TypeError, ValueError, json.JSONDecodeError):
+                first_evidence = {}
+            first_run_id = _text(first_evidence.get("run_id"), 192)
+            reuse_run_id = _text(sanitized_evidence.get("run_id"), 192)
+            if not first_run_id or first_run_id == reuse_run_id:
+                raise ValueError("reuse requires a different run_id from first_use")
         existing = (
             session.query(CustomerValueReceipt)
             .filter(CustomerValueReceipt.receipt_id == receipt_id)
@@ -292,11 +331,21 @@ def build_customer_value_evidence(
     sf = session_factory or get_session_factory()
     append_only_store_available = True
     receipts: list[CustomerValueReceipt] = []
+    installation_receipts: list[UpdateInstallationReceipt] = []
     try:
         with sf() as session:
             receipts = (
                 session.query(CustomerValueReceipt)
                 .filter(CustomerValueReceipt.occurred_at >= cutoff.replace(tzinfo=None))
+                .all()
+            )
+            installation_receipts = (
+                session.query(UpdateInstallationReceipt)
+                .filter(UpdateInstallationReceipt.reported_at >= cutoff.replace(tzinfo=None))
+                .order_by(
+                    UpdateInstallationReceipt.reported_at.desc(),
+                    UpdateInstallationReceipt.id.desc(),
+                )
                 .all()
             )
     except SQLAlchemyError:
@@ -343,6 +392,12 @@ def build_customer_value_evidence(
         if row.receipt_kind == "acceptance" and row.order_no and row.order_no in eligible_orders
     }
 
+    lifecycle = build_customer_lifecycle(
+        eligible_orders=eligible_orders,
+        verified_receipts=verified_receipts,
+        installation_receipts=installation_receipts,
+    )
+
     excluded_keys = (
         "test_record",
         "internal_order",
@@ -374,26 +429,10 @@ def build_customer_value_evidence(
         "production_value_verified": bool(eligible_orders),
         "outcome_verified": bool(paid_delivery_orders),
         "customer_acceptance_verified": bool(paid_acceptance_orders),
+        **lifecycle,
         "excluded": {key: int(excluded.get(key, 0)) for key in excluded_keys},
     }
     return result
-
-
-def payment_evidence_marker(*, provider: str, verification: str, trade_no: str) -> dict[str, Any]:
-    """Canonical fields written only after a gateway verification succeeds."""
-
-    deploy_tier = _text(os.environ.get("MODSTORE_DEPLOY_TIER") or "local", 32).lower()
-    test_mode = _truthy(os.environ.get("ALIPAY_DEBUG")) or _truthy(
-        os.environ.get("MODSTORE_PAYMENT_TEST_MODE")
-    )
-    return {
-        "payment_provider": _text(provider, 32).lower(),
-        "provider_trade_no": _text(trade_no, 128),
-        "provider_verification": _text(verification, 64).lower(),
-        "provider_verified_at": datetime.now(UTC).isoformat(),
-        "provider_test_mode": test_mode,
-        "payment_environment": deploy_tier,
-    }
 
 
 __all__ = [

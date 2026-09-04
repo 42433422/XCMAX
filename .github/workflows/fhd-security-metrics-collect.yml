@@ -71,15 +71,17 @@ jobs:
 
       # Trivy: 容器/依赖漏洞扫描（JSON 格式）
       - name: Run Trivy dependency scan
+        id: trivy
         uses: aquasecurity/trivy-action@0.35.0
+        continue-on-error: true
         with:
           scan-type: fs
           scan-ref: .
           format: json
           output: FHD/metrics/trivy-${{ steps.metrics-date.outputs.date }}.json
           severity: CRITICAL,HIGH,MEDIUM
-          ignore-unfixed: true
-          exit-code: "0"
+          ignore-unfixed: false
+          exit-code: "1"
 
       - name: Verify metrics files
         run: |
@@ -111,10 +113,10 @@ jobs:
               print(f'trivy CRITICAL/HIGH: {crit_high}')
           " || true
 
-      - name: Prune old metrics files (keep 30 days)
+      - name: Prune old metrics files (keep 120 days)
         run: |
-          find metrics/ -name "gitleaks-*.json" -mtime +30 -delete 2>/dev/null || true
-          find metrics/ -name "trivy-*.json" -mtime +30 -delete 2>/dev/null || true
+          find metrics/ -name "gitleaks-*.json" -mtime +120 -delete 2>/dev/null || true
+          find metrics/ -name "trivy-*.json" -mtime +120 -delete 2>/dev/null || true
 
       - name: Commit metrics
         run: |
@@ -123,3 +125,7 @@ jobs:
           git add metrics/gitleaks-*.json metrics/trivy-*.json
           git diff --staged --quiet || git commit -m "chore(metrics): security scan $(date -u +%Y%m%d)"
           git push || true
+
+      - name: Fail after preserving evidence when Trivy found blockers or failed
+        if: steps.trivy.outcome != 'success'
+        run: exit 1

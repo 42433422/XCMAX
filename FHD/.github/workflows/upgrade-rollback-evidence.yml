@@ -1,0 +1,51 @@
+name: Upgrade and rollback evidence
+run-name: Upgrade rollback evidence ${{ inputs.release_sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Exact 40-character release SHA exercised in production and on controlled real devices
+        required: true
+        type: string
+      evidence_json:
+        description: JSON evidence for production server rollback plus macOS, Windows 10 and Windows 11 real-machine exercises
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate real rollback and OTA evidence
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          EVIDENCE_JSON: ${{ inputs.evidence_json }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$RELEASE_SHA" | grep -Eq '^[0-9a-f]{40}$'
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          printf '%s\n' "$EVIDENCE_JSON" > "${RUNNER_TEMP}/upgrade-rollback-raw.json"
+          python FHD/scripts/release/verify_upgrade_rollback_evidence.py \
+            --evidence "${RUNNER_TEMP}/upgrade-rollback-raw.json" \
+            --release-sha "$RELEASE_SHA" \
+            --output "${RUNNER_TEMP}/upgrade-rollback-verification.json"
+      - name: Upload verification and restricted raw evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcagi-upgrade-rollback-evidence
+          path: |
+            ${{ runner.temp }}/upgrade-rollback-raw.json
+            ${{ runner.temp }}/upgrade-rollback-verification.json
+          retention-days: 120
+          if-no-files-found: error

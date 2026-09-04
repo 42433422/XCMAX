@@ -5,7 +5,7 @@
 #   bash scripts/security-scan.sh --gate-severity medium
 #   bash scripts/security-scan.sh --no-build      # 跳过 tsc(若 dist/ 已是最新)
 #
-# 依赖: Node 20+, npm。脚本会自动本地安装 electronegativity 到临时目录(不污染 node_modules)。
+# 依赖: Node 22.12+, npm。脚本会自动本地安装 electronegativity 到临时目录(不污染 node_modules)。
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -50,9 +50,9 @@ case "${GATE_SEVERITY}" in
   *) echo "[err] invalid gate severity: ${GATE_SEVERITY}" >&2; exit 2 ;;
 esac
 
-NODE_MAJOR="$(node -p 'Number(process.versions.node.split(".")[0])' 2>/dev/null || true)"
-if ! [[ "${NODE_MAJOR}" =~ ^[0-9]+$ ]] || [ "${NODE_MAJOR}" -lt 20 ]; then
-  echo "[err] Node.js 20+ is required; found: $(node --version 2>/dev/null || echo unavailable)" >&2
+NODE_SUPPORTED="$(node -p 'const [a,b]=process.versions.node.split(".").map(Number); Number(a>22 || (a===22 && b>=12))' 2>/dev/null || true)"
+if [ "${NODE_SUPPORTED}" != "1" ]; then
+  echo "[err] Node.js 22.12+ is required; found: $(node --version 2>/dev/null || echo unavailable)" >&2
   exit 2
 fi
 

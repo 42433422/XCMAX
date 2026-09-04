@@ -120,6 +120,26 @@ if [[ -z "$ARTIFACT" || ! -f "$TARBALL" ]]; then
   deploy_emit push failed "missing_tarball"
   exit 1
 fi
+[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || {
+  echo "[err] manifest version 无效: $VERSION" >&2
+  deploy_emit push failed "invalid_version"
+  exit 1
+}
+[[ "$GIT_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+  echo "[err] manifest git_sha 必须是完整 40 位小写 SHA" >&2
+  deploy_emit push failed "invalid_git_sha"
+  exit 1
+}
+[[ "$ARTIFACT" =~ ^[A-Za-z0-9._-]+$ ]] || {
+  echo "[err] manifest artifact 文件名无效" >&2
+  deploy_emit push failed "invalid_artifact_name"
+  exit 1
+}
+[[ "$REMOTE_DIR" == /* && "$REMOTE_DIR" != *$'\n'* ]] || {
+  echo "[err] FHD_PUSH_REMOTE_DIR 必须是绝对路径" >&2
+  deploy_emit push failed "invalid_remote_dir"
+  exit 1
+}
 
 LOCAL_SHA="$(python3 - <<'PY' "$TARBALL"
 import hashlib, sys
@@ -142,9 +162,16 @@ fi
   exit 1
 }
 
-deploy_emit push started "artifact=$ARTIFACT version=$VERSION sha=$GIT_SHA"
+IMMUTABLE_REMOTE_DIR="${FHD_IMMUTABLE_REMOTE_DIR:-/var/www/update/releases/builds/${VERSION}/${GIT_SHA}/server}"
+[[ "$IMMUTABLE_REMOTE_DIR" == /* && "$IMMUTABLE_REMOTE_DIR" != *$'\n'* ]] || {
+  echo "[err] FHD_IMMUTABLE_REMOTE_DIR 必须是绝对路径" >&2
+  deploy_emit push failed "invalid_immutable_remote_dir"
+  exit 1
+}
 
-"${SSH[@]}" "$REMOTE" "mkdir -p '$REMOTE_DIR'"
+deploy_emit push started "artifact=$ARTIFACT version=$VERSION sha=$GIT_SHA immutable_dir=$IMMUTABLE_REMOTE_DIR"
+
+"${SSH[@]}" "$REMOTE" "mkdir -p '$REMOTE_DIR' '$IMMUTABLE_REMOTE_DIR'"
 
 atomic_upload() {
   local src="$1"
@@ -195,8 +222,7 @@ atomic_upload() {
   return 1
 }
 
-atomic_upload "$TARBALL" "${REMOTE_DIR}/${ARTIFACT}"
-atomic_upload "$MANIFEST" "${REMOTE_DIR}/fhd-manifest.json"
+atomic_upload "$TARBALL" "${IMMUTABLE_REMOTE_DIR}/${ARTIFACT}"
 
 IMAGE_TAR="$OUT_DIR/fhd-api-image.tar.gz"
 PUSH_IMAGE_TAR="${FHD_PUSH_IMAGE_TAR:-auto}"
@@ -218,12 +244,40 @@ esac
 
 if [[ -f "$IMAGE_TAR" && "$PUSH_IMAGE_TAR" == "1" ]]; then
   deploy_emit push started "artifact=fhd-api-image.tar.gz"
-  atomic_upload "$IMAGE_TAR" "${REMOTE_DIR}/fhd-api-image.tar.gz"
+  atomic_upload "$IMAGE_TAR" "${IMMUTABLE_REMOTE_DIR}/fhd-api-image.tar.gz"
   echo "[ok] image_tar=fhd-api-image.tar.gz"
 elif [[ -f "$IMAGE_TAR" ]]; then
   deploy_emit push skipped "artifact=fhd-api-image.tar.gz reason=optional"
   echo "[notice] 跳过可选镜像归档；设置 FHD_PUSH_IMAGE_TAR=1 可显式上传"
 fi
+
+# The version/SHA directory is immutable evidence. Only after every payload is
+# present do we atomically promote the channel manifest; the previous SHA stays
+# available for an exact rollback without rebuilding.
+atomic_upload "$MANIFEST" "${IMMUTABLE_REMOTE_DIR}/fhd-manifest.json"
+"${SSH[@]}" "$REMOTE" "bash -s" -- \
+  "$IMMUTABLE_REMOTE_DIR" "$REMOTE_DIR" "$ARTIFACT" "$PUSH_IMAGE_TAR" <<'REMOTE_PROMOTE'
+set -euo pipefail
+immutable_dir="$1"
+channel_dir="$2"
+artifact="$3"
+include_image="$4"
+mkdir -p "$channel_dir"
+promote() {
+  source="$1"
+  target="$2"
+  test -f "$source"
+  tmp="${target}.tmp.$$"
+  cp -p "$source" "$tmp"
+  mv -f "$tmp" "$target"
+}
+promote "$immutable_dir/$artifact" "$channel_dir/$artifact"
+if [ "$include_image" = "1" ]; then
+  promote "$immutable_dir/fhd-api-image.tar.gz" "$channel_dir/fhd-api-image.tar.gz"
+fi
+# Manifest is the channel pointer and therefore moves last.
+promote "$immutable_dir/fhd-manifest.json" "$channel_dir/fhd-manifest.json"
+REMOTE_PROMOTE
 
 if [[ "$APPLY_NOW" == "1" ]]; then
   REMOTE_DEPLOY_ROOT="${FHD_PUSH_REMOTE_DEPLOY_ROOT:-/opt/fhd-full}"
