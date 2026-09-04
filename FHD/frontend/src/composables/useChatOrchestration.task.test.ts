@@ -9,6 +9,7 @@ const buildPrintSummaryMessage = vi.fn(() => '打印完成')
 const upsertTask = vi.fn()
 const handleChatRequiresToken = vi.fn()
 const agentRunsApiMock = vi.hoisted(() => ({
+  createRun: vi.fn(),
   createTask: vi.fn(),
   continueRun: vi.fn(),
   listTasks: vi.fn(),
@@ -221,6 +222,7 @@ describe('useChatOrchestration task/print', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+    localStorage.clear()
     lastShipmentExecution.value = null
     executePrintTask.mockResolvedValue({ success: true, message: 'ok' })
     agentRunsApiMock.listRuns.mockResolvedValue({ success: true, data: [] })
@@ -236,6 +238,62 @@ describe('useChatOrchestration task/print', () => {
     await api.sendMessage('开始打印')
     expect(addAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('暂无可打印'), 'ai', undefined, expect.any(Object))
     expect(executePrintTask).not.toHaveBeenCalled()
+  })
+
+  it('routes the seeded first AI order through a bound durable AgentRun', async () => {
+    const { queueFirstAiTaskPrompt, readPendingFirstAiTaskRunId } = await import('@/constants/productFlow')
+    const prompt = '这是我的新手第一单：先查询“XC 演示客户”，再查询“XC 演示饰品包装品”，最后创建数量 1 的演示出货单。'
+    queueFirstAiTaskPrompt(prompt)
+    agentRunsApiMock.createRun.mockResolvedValue({
+      success: true,
+      data: {
+        run_id: 'run-onboarding-1',
+        user_id: 'u1',
+        message: prompt,
+        status: 'queued',
+        intent: 'onboarding_first_order',
+      },
+    })
+
+    const api = useChatOrchestration({ sessionId: ref('s') })
+    await api.sendMessage(prompt)
+
+    expect(agentRunsApiMock.createRun).toHaveBeenCalledWith({
+      message: prompt,
+      auto_execute: true,
+      runtime_context: {
+        conversation_id: 's',
+        source: 'product_onboarding_first_order',
+      },
+    })
+    expect(readPendingFirstAiTaskRunId()).toBe('run-onboarding-1')
+    expect(addAndSaveMessage).toHaveBeenCalledWith(
+      expect.stringContaining('任务工作区'),
+      'ai',
+      undefined,
+      { sessionId: 's', speak: true },
+    )
+  })
+
+  it('keeps the first AI order pending when durable creation fails', async () => {
+    const { isFirstAiTaskPending, queueFirstAiTaskPrompt, readPendingFirstAiTaskRunId } = await import(
+      '@/constants/productFlow'
+    )
+    const prompt = '这是我的新手第一单，请创建演示出货单'
+    queueFirstAiTaskPrompt(prompt)
+    agentRunsApiMock.createRun.mockRejectedValue(new Error('runtime offline'))
+
+    const api = useChatOrchestration({ sessionId: ref('s') })
+    await api.sendMessage(prompt)
+
+    expect(isFirstAiTaskPending()).toBe(true)
+    expect(readPendingFirstAiTaskRunId()).toBe('')
+    expect(addAndSaveMessage).toHaveBeenCalledWith(
+      expect.stringContaining('runtime offline'),
+      'ai',
+      undefined,
+      { sessionId: 's', speak: true },
+    )
   })
 
   it('sendMessage start print runs executePrintTask when context exists', async () => {
