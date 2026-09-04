@@ -13,7 +13,7 @@ from fastapi import HTTPException
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-INSTALL_ERRORS = (HTTPException, ValueError, *RECOVERABLE_ERRORS)
+INSTALL_ERRORS: tuple[type[Exception], ...] = (HTTPException, ValueError, *RECOVERABLE_ERRORS)
 
 _INITIAL_DELAY_SECONDS = 8
 _DEFAULT_INTERVAL_SECONDS = 30
@@ -63,7 +63,8 @@ async def poll_asset_install_commands_once() -> dict[str, Any]:
     )
     if not isinstance(payload, dict) or payload.get("__proxy_error__"):
         return {"processed": 0, "reason": "market_unavailable"}
-    rows = payload.get("items") if isinstance(payload.get("items"), list) else []
+    items_value = payload.get("items")
+    rows: list[Any] = items_value if isinstance(items_value, list) else []
     outcomes: list[dict[str, Any]] = []
     for raw in rows:
         if not isinstance(raw, dict):
@@ -82,8 +83,10 @@ async def poll_asset_install_commands_once() -> dict[str, Any]:
         )
         if not isinstance(claimed, dict) or claimed.get("__proxy_error__"):
             continue
-        command = claimed.get("command") if isinstance(claimed.get("command"), dict) else {}
-        asset = command.get("asset") if isinstance(command.get("asset"), dict) else {}
+        command_value = claimed.get("command")
+        command: dict[str, Any] = command_value if isinstance(command_value, dict) else {}
+        asset_value = command.get("asset")
+        asset: dict[str, Any] = asset_value if isinstance(asset_value, dict) else {}
         pkg_id = str(asset.get("pkg_id") or "").strip()
         version = str(asset.get("version") or "").strip()
         result_body: dict[str, Any]

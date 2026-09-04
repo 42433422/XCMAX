@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib
+from typing import Any
 
 
 def _facade():
@@ -112,12 +113,10 @@ async def ai_mod_delivery_install(
     )
     if not isinstance(payload, dict) or str(payload.get("status") or "") != "done":
         raise _facade().HTTPException(status_code=409, detail="MOD 尚未生成完成")
-    artifact = payload.get("artifact") if isinstance(payload.get("artifact"), dict) else {}
-    validation = (
-        artifact.get("validation_summary")
-        if isinstance(artifact.get("validation_summary"), dict)
-        else {}
-    )
+    artifact_value = payload.get("artifact")
+    artifact: dict[str, Any] = artifact_value if isinstance(artifact_value, dict) else {}
+    validation_value = artifact.get("validation_summary")
+    validation: dict[str, Any] = validation_value if isinstance(validation_value, dict) else {}
     if validation.get("ok") is not True:
         raise _facade().HTTPException(status_code=409, detail="MOD 质量校验未通过，已阻止安装")
     mod_id = str(artifact.get("mod_id") or "").strip()
