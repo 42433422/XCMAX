@@ -27,7 +27,34 @@ class AgentToolExecutor:
             }
         params["_runtime_context"] = dict(runtime_context or {})
         action = validation.action or step.action
-        result = execute_registered_workflow_tool(step.tool_id, action, params)
+        runtime_tenant_raw = params["_runtime_context"].get("tenant_id")
+        runtime_tenant_id: int | None = None
+        if runtime_tenant_raw not in (None, ""):
+            try:
+                if isinstance(runtime_tenant_raw, bool):
+                    raise ValueError
+                runtime_tenant_id = int(runtime_tenant_raw)
+                if runtime_tenant_id <= 0:
+                    raise ValueError
+            except (TypeError, ValueError):
+                return {
+                    "success": False,
+                    "error_code": "invalid_tenant_context",
+                    "message": "任务租户上下文无效，已拒绝执行工具",
+                    "tool_id": validation.tool_id,
+                    "action": action,
+                }
+
+        if runtime_tenant_id is None:
+            result = execute_registered_workflow_tool(step.tool_id, action, params)
+        else:
+            # Durable/background Agent runs execute outside the originating HTTP
+            # request. Restore the authenticated tenant recorded in runtime_context
+            # so every repository/raw-SQL boundary keeps its fail-closed isolation.
+            from app.infrastructure.tenant_scope import tenant_scope
+
+            with tenant_scope(runtime_tenant_id):
+                result = execute_registered_workflow_tool(step.tool_id, action, params)
         if not isinstance(result, dict):
             return {
                 "success": False,
