@@ -212,7 +212,9 @@ def test_desktop_update_rollback_is_fail_closed_and_windows_full_app() -> None:
     windows = (REPO_ROOT / "desktop" / "rollback-windows.ts").read_text(encoding="utf-8")
     # installUpdate 已从 updater.ts 拆至 desktop-install-update.ts（source-governance
     # electron 600 行上限）；buildSha 身份截断的 fail-closed 断言跟随新位置。
-    install_update = (REPO_ROOT / "desktop" / "desktop-install-update.ts").read_text(encoding="utf-8")
+    install_update = (REPO_ROOT / "desktop" / "desktop-install-update.ts").read_text(
+        encoding="utf-8"
+    )
     entrypoint = (REPO_ROOT / "XCAGI" / "run_fastapi.py").read_text(encoding="utf-8")
 
     assert "继续更新但不支持回滚" not in runtime
