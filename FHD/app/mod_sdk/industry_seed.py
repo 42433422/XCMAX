@@ -182,6 +182,55 @@ def _existing_mod_directory(root: str, mod_id: str) -> Path | None:
     return None
 
 
+def refresh_installed_industry_mods_from_bundle(
+    *,
+    mods_root: str | Path | None = None,
+) -> list[dict[str, str]]:
+    """Atomically refresh installed official industry Mods from the desktop bundle.
+
+    Only an already-installed open industry Mod is refreshed. Unselected industry
+    packages are left in the read-only seed pool, and every replaced copy is
+    archived outside the active Mods directory for recovery.
+    """
+    from app.infrastructure.mods.mod_manager import get_mod_manager
+    from app.mod_sdk.edition_policy import refresh_bundled_mod
+
+    mm = get_mod_manager()
+    root = Path(mods_root or mm.mods_root)
+    pool = bundled_industry_seeds_dir()
+    if pool is None or not root.is_dir():
+        return []
+
+    results: list[dict[str, str]] = []
+    cache_changed = False
+    for mod_id in open_industry_seed_mod_ids():
+        dst = _existing_mod_directory(str(root), mod_id)
+        if dst is None:
+            continue
+        src = _resolve_seed_source(mod_id, pool)
+        if src is None:
+            results.append(
+                {
+                    "mod_id": mod_id,
+                    "status": "missing",
+                    "message": f"not in industry seed pool: {pool / mod_id}",
+                }
+            )
+            continue
+        try:
+            status, message = refresh_bundled_mod(src, dst, root)
+            cache_changed = cache_changed or status == "refreshed"
+            results.append({"mod_id": mod_id, "status": status, "message": message})
+        except OSError:
+            logger.exception("refresh installed industry seed %s failed", mod_id)
+            results.append(
+                {"mod_id": mod_id, "status": "error", "message": "industry seed refresh failed"}
+            )
+    if cache_changed:
+        mm.invalidate_scan_cache()
+    return results
+
+
 def other_open_industry_mod_ids(keep_mod_id: str) -> list[str]:
     """除 keep 外，open 行业池中的其它中性 mod_id（换行业清理用）。"""
     keep = str(keep_mod_id or "").strip()
@@ -445,6 +494,7 @@ __all__ = [
     "resolve_industry_or_mod_id",
     "bundled_industry_seeds_dir",
     "other_open_industry_mod_ids",
+    "refresh_installed_industry_mods_from_bundle",
     "deactivate_other_open_industry_mods",
     "seed_industry_mod",
     "install_industry_seed_with_fallback",

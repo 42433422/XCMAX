@@ -14,6 +14,7 @@ from app.mod_sdk.industry_seed import (
     install_industry_seed_with_fallback,
     open_industry_seed_mod_ids,
     other_open_industry_mod_ids,
+    refresh_installed_industry_mods_from_bundle,
     resolve_industry_or_mod_id,
     seed_industry_mod,
 )
@@ -100,6 +101,74 @@ def test_seed_industry_mod_pool_missing(tmp_path, monkeypatch):
     result = seed_industry_mod("涂料")
     assert result["success"] is False
     assert result["status"] == "pool_missing"
+
+
+def test_refresh_installed_industry_mod_from_bundle_archives_stale_copy(tmp_path, monkeypatch):
+    pool = tmp_path / "industry-seeds"
+    source = pool / "attendance-industry"
+    source.mkdir(parents=True)
+    (source / "manifest.json").write_text('{"id":"attendance-industry","version":"2"}')
+    (source / "dashboard.js").write_text("new dashboard")
+
+    mods_root = tmp_path / "mods"
+    installed = mods_root / "attendance-industry"
+    installed.mkdir(parents=True)
+    (installed / "manifest.json").write_text('{"id":"attendance-industry","version":"1"}')
+    (installed / "local-only.txt").write_text("stale")
+
+    invalidations: list[bool] = []
+
+    class FakeMM:
+        def __init__(self) -> None:
+            self.mods_root = str(mods_root)
+
+        def invalidate_scan_cache(self) -> None:
+            invalidations.append(True)
+
+    monkeypatch.setenv("XCAGI_INDUSTRY_SEEDS_DIR", str(pool))
+    monkeypatch.setattr(
+        "app.infrastructure.mods.mod_manager.get_mod_manager",
+        lambda: FakeMM(),
+    )
+    monkeypatch.setattr(
+        "app.mod_sdk.industry_seed.open_industry_seed_mod_ids",
+        lambda: ["attendance-industry", "coating-industry"],
+    )
+
+    result = refresh_installed_industry_mods_from_bundle()
+
+    assert result[0]["mod_id"] == "attendance-industry"
+    assert result[0]["status"] == "refreshed"
+    assert invalidations == [True]
+    assert (installed / "dashboard.js").read_text() == "new dashboard"
+    assert not (installed / "local-only.txt").exists()
+    archives = list(
+        (tmp_path / "bundled-mod-backups" / "attendance-industry").glob("*/local-only.txt")
+    )
+    assert len(archives) == 1
+    assert archives[0].read_text() == "stale"
+
+
+def test_refresh_installed_industry_mods_does_not_install_unselected(tmp_path, monkeypatch):
+    pool = tmp_path / "industry-seeds"
+    source = pool / "coating-industry"
+    source.mkdir(parents=True)
+    (source / "manifest.json").write_text('{"id":"coating-industry"}')
+    mods_root = tmp_path / "mods"
+    mods_root.mkdir()
+
+    monkeypatch.setenv("XCAGI_INDUSTRY_SEEDS_DIR", str(pool))
+    monkeypatch.setattr(
+        "app.infrastructure.mods.mod_manager.get_mod_manager",
+        lambda: type("MM", (), {"mods_root": str(mods_root)})(),
+    )
+    monkeypatch.setattr(
+        "app.mod_sdk.industry_seed.open_industry_seed_mod_ids",
+        lambda: ["coating-industry"],
+    )
+
+    assert refresh_installed_industry_mods_from_bundle() == []
+    assert not (mods_root / "coating-industry").exists()
 
 
 def test_deactivate_other_open_industry_mods(tmp_path, monkeypatch):

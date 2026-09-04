@@ -167,7 +167,7 @@ def _archive_bundled_mod(dst: Path, root: Path) -> Path:
     return archive
 
 
-def _refresh_bundled_mod(src: Path, dst: Path, root: Path) -> tuple[str, str]:
+def refresh_bundled_mod(src: Path, dst: Path, root: Path) -> tuple[str, str]:
     """Seed or atomically refresh one official Mod, archiving replaced contents."""
     source_digest = _bundled_mod_digest(src)
     if dst.is_dir() and _bundled_mod_digest(dst) == source_digest:
@@ -312,7 +312,7 @@ def seed_edition_mods_from_bundle(
             )
             continue
         try:
-            status, message = _refresh_bundled_mod(src, dst, root)
+            status, message = refresh_bundled_mod(src, dst, root)
             results.append({"mod_id": mod_id, "status": status, "message": message})
         except OSError:
             results.append({"mod_id": mod_id, "status": "error", "message": "mod seed failed"})
@@ -329,5 +329,6 @@ __all__ = [
     "edition_mod_ids",
     "configure_edition_defaults",
     "bundled_mods_dir",
+    "refresh_bundled_mod",
     "seed_edition_mods_from_bundle",
 ]
