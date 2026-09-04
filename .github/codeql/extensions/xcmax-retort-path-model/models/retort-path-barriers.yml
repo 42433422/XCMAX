@@ -8,10 +8,11 @@ extensions:
       # one. Its rejection behavior is covered by runtime integration tests.
       - ["retort_engine.service.RetortService", "Member[_path].ReturnValue", "path-injection"]
       - ["retort_engine.service.RetortService", "Member[_authorized_payload].ReturnValue", "path-injection"]
+      - ["retort_engine.service", "Member[_authorize_http_payload].ReturnValue", "path-injection"]
       # These employee entrypoints canonicalize the requested output and only
       # return a path below the server-selected workspace.
-      - ["backend.employees.avatar_generation_employee", "Member[_resolve_output].ReturnValue", "path-injection"]
-      - ["backend.employees.trademark_generation_employee", "Member[_resolve_output].ReturnValue", "path-injection"]
+      - ["employees.avatar_generation_employee", "Member[_resolve_output].ReturnValue", "path-injection"]
+      - ["employees.trademark_generation_employee", "Member[_resolve_output].ReturnValue", "path-injection"]
       # The FHD workspace SDK rejects absolute/traversal paths and symlink
       # escapes before returning the canonical path.
       - ["app.infrastructure.workspace", "Member[resolve_safe_workspace_relpath].ReturnValue", "path-injection"]

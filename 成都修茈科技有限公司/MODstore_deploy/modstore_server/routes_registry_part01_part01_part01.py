@@ -203,13 +203,16 @@ def api_export_fhd_shell_mods(
         raise _facade().HTTPException(
             500, "无法定位 FHD 仓库根目录（预期 MODstore 位于 FHD/MODstore）"
         )
+    target = (fhd / "backend" / "shell" / "fhd_shell_mods.json").resolve()
     raw = body.output_path or ""
     raw = raw.strip()
-    if raw:
-        target = _facade().Path(raw).expanduser().resolve()
-    else:
-        target = (fhd / "backend" / "shell" / "fhd_shell_mods.json").resolve()
-    _facade()._assert_path_inside_fhd_repo(fhd, target)
+    allowed_names = {
+        "",
+        "backend/shell/fhd_shell_mods.json",
+        target.as_posix(),
+    }
+    if raw.replace("\\", "/") not in allowed_names:
+        raise _facade().HTTPException(400, "output_path 必须是固定壳层清单路径")
     lib = _facade()._lib()
     n = _facade().write_fhd_shell_mods_json(lib, target, output_root=fhd)
     return {"ok": True, "path": str(target), "count": n}

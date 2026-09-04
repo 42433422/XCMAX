@@ -27,9 +27,7 @@ def _configured_repo_path(raw: str, *, field: str) -> str:
     if not value:
         return ""
     root = os.path.realpath(os.path.abspath(library_paths.fhd_repo_root()))
-    candidate = os.path.realpath(
-        os.path.abspath(os.path.expanduser(value))
-    )
+    candidate = os.path.realpath(os.path.abspath(os.path.expanduser(value)))
     root_prefix = root.rstrip(os.sep) + os.sep
     if candidate != root and not candidate.startswith(root_prefix):
         raise HTTPException(400, f"{field} 必须位于 FHD 仓库根目录内")
@@ -66,18 +64,16 @@ def api_export_fhd_shell_mods(
     fhd = library_paths.fhd_repo_root()
     if not fhd.is_dir():
         raise HTTPException(500, "无法定位 FHD 仓库根目录（预期 MODstore 位于 FHD/MODstore）")
+    target = (fhd / "backend" / "shell" / "fhd_shell_mods.json").resolve()
     raw = body.output_path or ""
     raw = raw.strip()
-    if raw:
-        target = Path(
-            os.path.realpath(os.path.abspath(os.path.expanduser(raw)))
-        )
-    else:
-        target = (fhd / "backend" / "shell" / "fhd_shell_mods.json").resolve()
-    try:
-        library_paths.assert_path_inside_fhd_repo(fhd, target)
-    except ValueError as e:
-        raise HTTPException(400, str(e)) from e
+    allowed_names = {
+        "",
+        "backend/shell/fhd_shell_mods.json",
+        target.as_posix(),
+    }
+    if raw.replace("\\", "/") not in allowed_names:
+        raise HTTPException(400, "output_path 必须是固定壳层清单路径")
     lib = library_paths.lib()
     n = write_fhd_shell_mods_json(lib, target, output_root=fhd)
     return {"ok": True, "path": str(target), "count": n}

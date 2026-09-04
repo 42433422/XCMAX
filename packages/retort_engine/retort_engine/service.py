@@ -135,11 +135,17 @@ def _authorize_http_payload(
         os.path.realpath(os.path.abspath(configured))
         for configured in set(trusted_paths.values())
     )
-    authorized = dict(payload)
+    # Rebuild the mapping without caller-provided path values.  Updating a
+    # shallow copy leaves the original value connected to the destination in
+    # conservative data-flow analysis and makes later code too easy to change
+    # into a real path-injection bug.
+    authorized = {
+        key: value for key, value in payload.items() if key not in _HTTP_PATH_FIELDS
+    }
     for key in _HTTP_PATH_FIELDS:
-        if key not in authorized:
+        if key not in payload:
             continue
-        raw = authorized[key]
+        raw = payload[key]
         if raw is None or raw == "":
             continue
         if not isinstance(raw, str) or not raw.strip():
@@ -202,9 +208,11 @@ class RetortService:
         return self._path(payload, "project", "project_path", default=".")
 
     def _authorized_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
-        authorized = dict(payload)
+        authorized = {
+            key: value for key, value in payload.items() if key not in _HTTP_PATH_FIELDS
+        }
         for field in _HTTP_PATH_FIELDS:
-            if field in authorized:
+            if field in payload:
                 authorized[field] = self._path(payload, field)
         return authorized
 
