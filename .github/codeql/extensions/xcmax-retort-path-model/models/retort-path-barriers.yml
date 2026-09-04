@@ -7,3 +7,11 @@ extensions:
       # when it is exactly an operator-configured workspace root or a child of
       # one. Its rejection behavior is covered by runtime integration tests.
       - ["retort_engine.service.RetortService", "Member[_path].ReturnValue", "path-injection"]
+      - ["retort_engine.service.RetortService", "Member[_authorized_payload].ReturnValue", "path-injection"]
+      # These employee entrypoints canonicalize the requested output and only
+      # return a path below the server-selected workspace.
+      - ["backend.employees.avatar_generation_employee", "Member[_resolve_output].ReturnValue", "path-injection"]
+      - ["backend.employees.trademark_generation_employee", "Member[_resolve_output].ReturnValue", "path-injection"]
+      # The FHD workspace SDK rejects absolute/traversal paths and symlink
+      # escapes before returning the canonical path.
+      - ["app.infrastructure.workspace", "Member[resolve_safe_workspace_relpath].ReturnValue", "path-injection"]

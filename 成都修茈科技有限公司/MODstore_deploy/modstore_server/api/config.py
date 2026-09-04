@@ -79,7 +79,7 @@ def api_export_fhd_shell_mods(
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
     lib = library_paths.lib()
-    n = write_fhd_shell_mods_json(lib, target)
+    n = write_fhd_shell_mods_json(lib, target, output_root=fhd)
     return {"ok": True, "path": str(target), "count": n}
 
 

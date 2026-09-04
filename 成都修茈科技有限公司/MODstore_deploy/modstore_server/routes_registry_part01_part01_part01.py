@@ -211,7 +211,7 @@ def api_export_fhd_shell_mods(
         target = (fhd / "backend" / "shell" / "fhd_shell_mods.json").resolve()
     _facade()._assert_path_inside_fhd_repo(fhd, target)
     lib = _facade()._lib()
-    n = _facade().write_fhd_shell_mods_json(lib, target)
+    n = _facade().write_fhd_shell_mods_json(lib, target, output_root=fhd)
     return {"ok": True, "path": str(target), "count": n}
 
 
