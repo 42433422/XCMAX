@@ -41,10 +41,7 @@ def test_desktop_identity_rejects_non_git_sha(invalid: str) -> None:
 
 def test_windows_installer_writes_same_release_identity() -> None:
     script = (
-        Path(__file__).resolve().parents[2]
-        / "scripts"
-        / "package"
-        / "build-installer.ps1"
+        Path(__file__).resolve().parents[2] / "scripts" / "package" / "build-installer.ps1"
     ).read_text(encoding="utf-8")
     assert "^[0-9a-fA-F]{40}$" in script
     assert '$releaseId = "xcagi-$Version-$buildSha"' in script

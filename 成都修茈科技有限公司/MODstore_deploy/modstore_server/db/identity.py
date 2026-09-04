@@ -45,7 +45,9 @@ class User(Base):
     enterprise_verification_sha256 = Column(String(64), nullable=True)
     enterprise_verified_at = Column(DateTime, nullable=True)
     enterprise_verified_by_user_id = Column(Integer, nullable=True)
-    account_state = Column(String(32), default="pending_plan", nullable=False, index=True)
+    account_state = Column(
+        String(32), default="pending_plan", nullable=False, index=True
+    )
     created_at = Column(DateTime, default=lambda: datetime.now(UTC))
     first_login_at = Column(DateTime, nullable=True, index=True)
     last_login_at = Column(DateTime, nullable=True, index=True)

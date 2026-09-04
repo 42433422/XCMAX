@@ -54,9 +54,7 @@ class _PinnedHTTPSConnection(http.client.HTTPSConnection):
         self._pinned_ip = pinned_ip
 
     def connect(self) -> None:
-        self.sock = socket.create_connection(
-            (self._pinned_ip, self.port), self.timeout, self.source_address
-        )
+        self.sock = socket.create_connection((self._pinned_ip, self.port), self.timeout, self.source_address)
         if self._tunnel_host:
             self._tunnel()
         self.sock = self._context.wrap_socket(self.sock, server_hostname=self.host)

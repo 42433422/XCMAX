@@ -107,11 +107,7 @@ def _dismissal_fields(row: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(comment, dict):
         comment = {}
     dismissed_by = row.get("dismissed_by")
-    reviewer = (
-        str(dismissed_by.get("login") or "")
-        if isinstance(dismissed_by, dict)
-        else ""
-    )
+    reviewer = str(dismissed_by.get("login") or "") if isinstance(dismissed_by, dict) else ""
     return {
         "status": "active",
         "disposition": "false_positive",
@@ -147,9 +143,7 @@ def normalize(kind: str, data: Any) -> list[dict[str, Any]]:
             rule = row.get("rule") if isinstance(row.get("rule"), dict) else {}
             severity = rule.get("security_severity_level") or rule.get("severity")
             extra = _dismissal_fields(row) if row.get("state") == "dismissed" else {}
-            findings.append(
-                _finding(row.get("number") or rule.get("id"), severity, **extra)
-            )
+            findings.append(_finding(row.get("number") or rule.get("id"), severity, **extra))
     elif kind == "dependabot":
         for row in _flatten_pages(data):
             if not isinstance(row, dict) or row.get("state") not in (

@@ -205,9 +205,7 @@ def collect(
         sample_raw: str | None = None
         if credentials_available:
             try:
-                raw = prom_query(
-                    prom_url, expr, bearer_token=prom_token, query_at=current
-                )
+                raw = prom_query(prom_url, expr, bearer_token=prom_token, query_at=current)
                 sample_raw = prom_query(
                     prom_url, sample_expr, bearer_token=prom_token, query_at=current
                 )
@@ -303,9 +301,7 @@ def main() -> int:
     evidence_at = None
     if args.evidence_at:
         try:
-            evidence_at = datetime.fromisoformat(
-                args.evidence_at.replace("Z", "+00:00")
-            )
+            evidence_at = datetime.fromisoformat(args.evidence_at.replace("Z", "+00:00"))
         except ValueError as exc:
             parser.error(f"--evidence-at is invalid: {exc}")
         if evidence_at.tzinfo is None:

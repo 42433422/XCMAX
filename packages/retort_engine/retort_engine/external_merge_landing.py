@@ -219,9 +219,7 @@ def _land_case(
         if line.strip()
     ]
     commands.append(_run("git_checkout_main", repo))
-    commands.append(
-        _run("git_merge_case", repo, case_index=index)
-    )
+    commands.append(_run("git_merge_case", repo, case_index=index))
     merge_commit = _run("git_rev_parse", repo)
     post_tests = _run(
         "pytest",

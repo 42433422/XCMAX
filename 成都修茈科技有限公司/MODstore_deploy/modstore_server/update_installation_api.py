@@ -113,10 +113,13 @@ def list_update_installation_receipts(
         raise HTTPException(403, "需要管理员权限")
     query = db.query(UpdateInstallationReceipt)
     if target_build_sha.strip():
-        query = query.filter(UpdateInstallationReceipt.target_build_sha == target_build_sha.strip())
+        query = query.filter(
+            UpdateInstallationReceipt.target_build_sha == target_build_sha.strip()
+        )
     rows = (
         query.order_by(
-            UpdateInstallationReceipt.reported_at.desc(), UpdateInstallationReceipt.id.desc()
+            UpdateInstallationReceipt.reported_at.desc(),
+            UpdateInstallationReceipt.id.desc(),
         )
         .limit(limit)
         .all()
@@ -128,7 +131,9 @@ def list_update_installation_receipts(
     summary = {
         "reported_devices": len(latest),
         "installed_devices": sum(1 for row in latest if row.status == "installed"),
-        "failed_devices": sum(1 for row in latest if row.status in {"failed", "rolled_back"}),
+        "failed_devices": sum(
+            1 for row in latest if row.status in {"failed", "rolled_back"}
+        ),
         "rolled_back_devices": sum(1 for row in latest if row.status == "rolled_back"),
     }
     return {"items": [_serialize(row) for row in rows], "summary": summary}

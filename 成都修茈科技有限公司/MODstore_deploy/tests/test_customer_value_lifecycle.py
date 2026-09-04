@@ -373,10 +373,12 @@ def test_enterprise_identity_is_single_assignment(tmp_path, monkeypatch) -> None
     models._SessionFactory = None
 
 
-def test_java_payment_identity_is_frozen_before_local_commit(tmp_path, monkeypatch) -> None:
+def test_java_payment_identity_is_frozen_before_local_commit(
+    tmp_path, monkeypatch
+) -> None:
     sf = _init_db(tmp_path, monkeypatch)
     import modstore_server.api.market_routes as market_routes
-    import modstore_server.api.market_routes_part04 as routes
+    import modstore_server.api.market_enterprise_identity as routes
 
     with sf() as session:
         session.add_all(

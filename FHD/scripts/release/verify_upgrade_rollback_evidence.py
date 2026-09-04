@@ -82,7 +82,10 @@ def verify(payload: dict[str, Any], *, release_sha: str) -> dict[str, Any]:
     desktops = payload.get("desktops") if isinstance(payload.get("desktops"), dict) else {}
     for target in DESKTOP_TARGETS:
         row = desktops.get(target) if isinstance(desktops.get(target), dict) else {}
-        if row.get("real_machine") is not True or row.get("controlled_acceptance_device") is not True:
+        if (
+            row.get("real_machine") is not True
+            or row.get("controlled_acceptance_device") is not True
+        ):
             blockers.append(f"{target}_real_controlled_device_missing")
         from_sha = str(row.get("from_build_sha") or "").lower()
         if not FULL_SHA.fullmatch(from_sha) or from_sha == release_sha:

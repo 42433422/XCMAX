@@ -45,8 +45,13 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert script.index('migrate_env_file "$ENV_FILE"') < script.index(
         "import fastapi, pytest, pytest_cov, uvicorn, modstore_server.app"
     )
-    assert 'BUILD_JWT_SECRET="$(read_env_value "$ENV_FILE" MODSTORE_JWT_SECRET)"' in script
-    assert 'BUILD_DATABASE_URL="$(read_env_value "$ENV_FILE" MODSTORE_DATABASE_URL)"' in script
+    assert (
+        'BUILD_JWT_SECRET="$(read_env_value "$ENV_FILE" MODSTORE_JWT_SECRET)"' in script
+    )
+    assert (
+        'BUILD_DATABASE_URL="$(read_env_value "$ENV_FILE" MODSTORE_DATABASE_URL)"'
+        in script
+    )
     assert 'BUILD_DATABASE_URL="$(read_env_value "$ENV_FILE" DATABASE_URL)"' in script
     assert "MODSTORE_ENV=production" in script
     assert 'MODSTORE_JWT_SECRET="$BUILD_JWT_SECRET"' in script
@@ -54,7 +59,10 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert "MODSTORE_INSECURE_EMPTY_JWT" not in script
     assert ".[web,knowledge,evolution-metrics]" in script
     assert "alembic>=1.16,<2" in pyproject["project"]["optional-dependencies"]["web"]
-    assert "pandas>=2.0" in pyproject["project"]["optional-dependencies"]["evolution-metrics"]
+    assert (
+        "pandas>=2.0"
+        in pyproject["project"]["optional-dependencies"]["evolution-metrics"]
+    )
     assert "import fastapi, pytest, pytest_cov, uvicorn, modstore_server.app" in script
     assert "Environment=MODSTORE_BUS=rabbitmq" not in script
     assert "npm ci --no-audit --legacy-peer-deps --ignore-scripts" in script
@@ -87,7 +95,10 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert "XCMAX_MONOREPO_ROOT=%s" in script
     assert "MODSTORE_CAPABILITY_PROPOSAL_REPO=%s" in script
     assert 'GITHUB_REPOSITORY_SLUG="${XCMAX_GITHUB_REPOSITORY:-}"' in script
-    assert 'CLI_LAUNCHER_PATH="${XCMAX_CLI_LAUNCHER_PATH:-/usr/local/bin/xcmax-terminal}"' in script
+    assert (
+        'CLI_LAUNCHER_PATH="${XCMAX_CLI_LAUNCHER_PATH:-/usr/local/bin/xcmax-terminal}"'
+        in script
+    )
     assert "install_cli_launcher" in script
     assert 'exec "${CURRENT_LINK}/${MODSTORE_SUBDIR}/.venv/bin/python"' in script
     assert "verify_cli_identity" in script
@@ -97,13 +108,18 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert "verify_customer_value_reconciler" in script
     assert "customer value reconciler did not prove" in script
     reconciler_gate = script[
-        script.index("verify_customer_value_reconciler()") : script.index("PREVIOUS_SHA=")
+        script.index("verify_customer_value_reconciler()") : script.index(
+            "PREVIOUS_SHA="
+        )
     ]
     assert 'assert payload.get("ok") is True' not in reconciler_gate
     assert 'assert isinstance(payload.get("jobs"), list)' in reconciler_gate
     assert 'assert job.get("state") == "healthy"' in reconciler_gate
     assert 'RELEASES_TO_KEEP="${XCMAX_RELEASES_TO_KEEP:-4}"' in script
-    assert 'prune_releases "$CURRENT_ROOT_BEFORE_BUILD" "$RELEASES_DIR/$TARGET_SHA"' in script
+    assert (
+        'prune_releases "$CURRENT_ROOT_BEFORE_BUILD" "$RELEASES_DIR/$TARGET_SHA"'
+        in script
+    )
     assert 'prune_releases "$FINAL_ROOT" "$PREVIOUS_ROOT"' in script
     payment_restart = script.index(
         "systemctl restart modstore-payment.service",
@@ -118,17 +134,24 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
         "resolve_java_home", script.index("PAYMENT_SERVICE_PRESENT=0")
     ) < script.index("mvn -B -q -DskipTests package")
 
-    source_ci = yaml.safe_load((ROOT / ".github/workflows/ci-backend-python.yml").read_text())
+    source_ci = yaml.safe_load(
+        (ROOT / ".github/workflows/ci-backend-python.yml").read_text()
+    )
     published_ci = yaml.safe_load(
         (REPO_ROOT / ".github/workflows/modstore-ci-backend-python.yml").read_text()
     )
     source_java_job = source_ci["jobs"]["java-payment-test"]
     published_java_job = published_ci["jobs"]["java-payment-test"]
-    assert source_java_job["defaults"]["run"]["working-directory"] == "java_payment_service"
+    assert (
+        source_java_job["defaults"]["run"]["working-directory"]
+        == "java_payment_service"
+    )
     assert published_java_job["defaults"]["run"]["working-directory"] == (
         "成都修茈科技有限公司/MODstore_deploy/java_payment_service"
     )
-    assert any(step.get("run") == "mvn -B test package" for step in source_java_job["steps"])
+    assert any(
+        step.get("run") == "mvn -B test package" for step in source_java_job["steps"]
+    )
 
     payment_config = yaml.safe_load(
         (ROOT / "java_payment_service/src/main/resources/application.yml").read_text()
@@ -155,7 +178,9 @@ def test_release_retention_prunes_only_verified_sha_directories(tmp_path: Path) 
     for position, sha in enumerate(shas, start=1):
         release = releases / sha
         release.mkdir()
-        (release / ".xcmax-release.json").write_text(json.dumps({"git_sha": sha}), encoding="utf-8")
+        (release / ".xcmax-release.json").write_text(
+            json.dumps({"git_sha": sha}), encoding="utf-8"
+        )
         os.utime(release, (position, position))
 
     malformed_sha = "f" * 40
@@ -224,7 +249,10 @@ def test_release_retention_rejects_unsafe_limit(tmp_path: Path) -> None:
     )
 
     assert result.returncode != 0
-    assert "XCMAX_RELEASES_TO_KEEP must be an integer greater than or equal to 2" in result.stderr
+    assert (
+        "XCMAX_RELEASES_TO_KEEP must be an integer greater than or equal to 2"
+        in result.stderr
+    )
 
 
 def test_production_workflow_requires_manually_orchestrated_exact_sha() -> None:
@@ -249,7 +277,9 @@ def test_production_workflow_requires_manually_orchestrated_exact_sha() -> None:
         assert "reset --hard" not in rendered
 
 
-def test_production_receipt_finalizer_uses_completed_source_workflow_and_signed_callback() -> None:
+def test_production_receipt_finalizer_uses_completed_source_workflow_and_signed_callback() -> (
+    None
+):
     source_path = ROOT / ".github/workflows/prod-deploy-receipt.yml"
     published_path = REPO_ROOT / ".github/workflows/modstore-prod-deploy-receipt.yml"
     source = yaml.safe_load(source_path.read_text())
@@ -258,7 +288,10 @@ def test_production_receipt_finalizer_uses_completed_source_workflow_and_signed_
     for workflow in (source, published):
         trigger = workflow[True]
         assert trigger["workflow_run"]["workflows"] == ["Deploy MODstore Production"]
-        assert trigger["workflow_dispatch"]["inputs"]["source_deploy_run_id"]["required"] is True
+        assert (
+            trigger["workflow_dispatch"]["inputs"]["source_deploy_run_id"]["required"]
+            is True
+        )
         assert "package_source_sha" in trigger["workflow_dispatch"]["inputs"]
         receipt = workflow["jobs"]["receipt"]
         assert "workflow_run.conclusion == 'success'" in receipt["if"]
@@ -296,9 +329,13 @@ def test_production_receipt_finalizer_uses_completed_source_workflow_and_signed_
         assert "os.fsdecode" in workflow_text
 
 
-def test_corp_site_deploy_uses_canonical_vhost_and_fails_closed_on_public_smoke() -> None:
+def test_corp_site_deploy_uses_canonical_vhost_and_fails_closed_on_public_smoke() -> (
+    None
+):
     updater = (ROOT / "scripts/xcmax-site-auto-update.sh").read_text(encoding="utf-8")
-    workflow = (REPO_ROOT / ".github/workflows/corp-site-deploy.yml").read_text(encoding="utf-8")
+    workflow = (REPO_ROOT / ".github/workflows/corp-site-deploy.yml").read_text(
+        encoding="utf-8"
+    )
 
     canonical_vhost = "/etc/nginx/conf.d/xiu-ci.com.conf"
     assert canonical_vhost in updater
@@ -316,8 +353,12 @@ def test_corp_site_deploy_uses_canonical_vhost_and_fails_closed_on_public_smoke(
 
 def test_corp_site_deploy_publishes_and_verifies_world_will_ticker() -> None:
     updater = (ROOT / "scripts/xcmax-site-auto-update.sh").read_text(encoding="utf-8")
-    workflow = (REPO_ROOT / ".github/workflows/corp-site-deploy.yml").read_text(encoding="utf-8")
-    homepage = (REPO_ROOT / "成都修茈科技有限公司/index.html").read_text(encoding="utf-8")
+    workflow = (REPO_ROOT / ".github/workflows/corp-site-deploy.yml").read_text(
+        encoding="utf-8"
+    )
+    homepage = (REPO_ROOT / "成都修茈科技有限公司/index.html").read_text(
+        encoding="utf-8"
+    )
     visualization = (REPO_ROOT / "成都修茈科技有限公司/visualization.html").read_text(
         encoding="utf-8"
     )
@@ -330,7 +371,9 @@ def test_corp_site_deploy_publishes_and_verifies_world_will_ticker() -> None:
     assert '"${GIT_SITE}/world-will-ticker.css"' in workflow
     assert "https://xiu-ci.com/world-will-ticker.js" in workflow
     assert "https://xiu-ci.com/world-will-ticker.css" in workflow
-    assert "grep -F -q '/api/public/action-board' /tmp/xc-world-will-ticker.js" in workflow
+    assert (
+        "grep -F -q '/api/public/action-board' /tmp/xc-world-will-ticker.js" in workflow
+    )
     for page in (homepage, visualization):
         assert 'href="/world-will-ticker.css?v=20260729a"' in page
         assert 'src="/world-will-ticker.js?v=20260729a"' in page

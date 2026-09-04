@@ -124,7 +124,9 @@ def _remote_sources(
             continue
         try:
             payload = json_fetcher(url)
-            reported = payload.get("sha") if name == "origin_main" else payload.get("git_sha")
+            reported = (
+                payload.get("sha") if name == "origin_main" else payload.get("git_sha")
+            )
             result.append(
                 _source(
                     name,
@@ -213,17 +215,12 @@ def _installation_sources(
         if row.status == "revoked" and not required:
             continue
         devices_by_user[user_id] = devices_by_user.get(user_id, 0) + 1
-        reported_at = (
-            row.reported_at.replace(tzinfo=UTC) if row.reported_at else None
-        )
+        reported_at = row.reported_at.replace(tzinfo=UTC) if row.reported_at else None
         fresh = bool(
-            reported_at
-            and now - timedelta(hours=max_age_hours) <= reported_at <= now
+            reported_at and now - timedelta(hours=max_age_hours) <= reported_at <= now
         )
         installed_sha = (
-            row.installed_build_sha
-            if row.status == "installed" and fresh
-            else ""
+            row.installed_build_sha if row.status == "installed" and fresh else ""
         )
         reason = (
             ""
@@ -318,9 +315,7 @@ def build_release_convergence(
             )
         )
     current = (now or datetime.now(UTC)).astimezone(UTC)
-    installations, account_count = _installation_sources(
-        db, release_sha, now=current
-    )
+    installations, account_count = _installation_sources(db, release_sha, now=current)
     sources.extend(installations)
     blockers = [
         f"{row['name']}:{row['status']}"
@@ -340,7 +335,8 @@ def build_release_convergence(
         "reported_installations": sum(
             1
             for row in installations
-            if str(row.get("name") or "").startswith("device-") and row.get("reported_at")
+            if str(row.get("name") or "").startswith("device-")
+            and row.get("reported_at")
         ),
     }
 

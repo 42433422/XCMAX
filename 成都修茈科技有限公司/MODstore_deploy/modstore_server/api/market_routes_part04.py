@@ -4,9 +4,6 @@
 from __future__ import annotations
 
 import importlib
-import os
-
-import httpx
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
@@ -32,7 +29,12 @@ def api_admin_list_users(
         elif is_enterprise is False:
             q = q.filter(_facade().User.is_enterprise.is_(False))
         total = q.count()
-        rows = q.order_by(_facade().User.created_at.desc()).offset(offset).limit(limit).all()
+        rows = (
+            q.order_by(_facade().User.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
         uid_list = [int(r.id) for r in rows]
         mod_map = _facade()._user_mod_ids_map(uid_list)
         return {
@@ -60,7 +62,9 @@ def api_admin_set_admin_status(
 ):
     sf = _facade().get_session_factory()
     with sf() as session:
-        target = session.query(_facade().User).filter(_facade().User.id == user_id).first()
+        target = (
+            session.query(_facade().User).filter(_facade().User.id == user_id).first()
+        )
         if not target:
             raise _facade().HTTPException(404, "用户不存在")
         target.is_admin = is_admin
@@ -76,12 +80,16 @@ def api_admin_set_enterprise_status(
 ):
     sf = _facade().get_session_factory()
     with sf() as session:
-        target = session.query(_facade().User).filter(_facade().User.id == user_id).first()
+        target = (
+            session.query(_facade().User).filter(_facade().User.id == user_id).first()
+        )
         if not target:
             raise _facade().HTTPException(404, "用户不存在")
         target.is_enterprise = is_enterprise
         target.account_state = (
-            _facade().ACCOUNT_ACTIVE if is_enterprise else _facade().ACCOUNT_PENDING_PLAN
+            _facade().ACCOUNT_ACTIVE
+            if is_enterprise
+            else _facade().ACCOUNT_PENDING_PLAN
         )
         session.commit()
         return {
@@ -89,120 +97,6 @@ def api_admin_set_enterprise_status(
             "user_id": user_id,
             "is_enterprise": is_enterprise,
             **_facade().lifecycle_for_user(session, target).to_dict(),
-        }
-
-
-class EnterpriseIdentityDTO(_facade().BaseModel):
-    """Single-assignment legal identity backed by reviewed source material."""
-
-    enterprise_subject_id: str = _facade().Field(..., min_length=4, max_length=128)
-    legal_name: str = _facade().Field(..., min_length=2, max_length=256)
-    verification_sha256: str = _facade().Field(
-        ..., pattern="^[0-9a-fA-F]{64}$"
-    )
-
-
-def _freeze_java_enterprise_identity(
-    *, user_id: int, verified_by_user_id: int, subject_id: str, legal_name: str, digest: str
-) -> None:
-    if os.environ.get("PAYMENT_BACKEND", "").strip().lower() != "java":
-        return
-    key = (
-        os.environ.get("MODSTORE_INTERNAL_API_KEY")
-        or os.environ.get("XCAGI_MARKET_INTERNAL_API_KEY")
-        or ""
-    ).strip()
-    if not key:
-        raise _facade().HTTPException(503, "Java 支付身份同步密钥未配置")
-    base = (
-        os.environ.get("JAVA_PAYMENT_SERVICE_URL") or "http://127.0.0.1:8080"
-    ).rstrip("/")
-    try:
-        response = httpx.post(
-            f"{base}/api/internal/payment/enterprise-identities",
-            headers={"X-Internal-Api-Key": key},
-            json={
-                "user_id": user_id,
-                "verified_by_user_id": verified_by_user_id,
-                "enterprise_subject_id": subject_id,
-                "legal_name": legal_name,
-                "verification_sha256": digest,
-            },
-            timeout=10.0,
-        )
-        if response.status_code == 409:
-            raise _facade().HTTPException(409, "Java 支付企业主体已冻结且不一致")
-        response.raise_for_status()
-        payload = response.json()
-    except _facade().HTTPException:
-        raise
-    except (httpx.HTTPError, TypeError, ValueError) as exc:
-        raise _facade().HTTPException(503, "Java 支付企业身份同步失败") from exc
-    if (
-        not isinstance(payload, dict)
-        or payload.get("ok") is not True
-        or payload.get("source") != "java_postgresql"
-        or payload.get("frozen") is not True
-        or str(payload.get("enterprise_subject_id") or "") != subject_id
-    ):
-        raise _facade().HTTPException(503, "Java 支付企业身份同步回执无效")
-
-
-@_facade().router.put("/admin/users/{user_id}/enterprise-identity")
-def api_admin_verify_enterprise_identity(
-    user_id: int,
-    body: EnterpriseIdentityDTO,
-    user: _facade().User = _facade().Depends(_facade()._require_admin),
-):
-    """Freeze a verified enterprise identity before its qualifying payment.
-
-    Existing identity cannot be replaced through the API.  A correction must
-    use a new customer account so historical orders retain their original legal
-    entity instead of being silently reassigned.
-    """
-
-    subject_id = body.enterprise_subject_id.strip()
-    legal_name = body.legal_name.strip()
-    digest = body.verification_sha256.lower()
-    sf = _facade().get_session_factory()
-    with sf() as session:
-        target = session.query(_facade().User).filter(_facade().User.id == user_id).first()
-        if not target:
-            raise _facade().HTTPException(404, "用户不存在")
-        if target.is_admin:
-            raise _facade().HTTPException(409, "管理员账号不能计为客户企业主体")
-        existing = (
-            str(getattr(target, "enterprise_subject_id", "") or ""),
-            str(getattr(target, "enterprise_legal_name", "") or ""),
-            str(getattr(target, "enterprise_verification_sha256", "") or "").lower(),
-        )
-        requested = (subject_id, legal_name, digest)
-        if any(existing) and existing != requested:
-            raise _facade().HTTPException(409, "企业主体已冻结，不允许覆盖历史身份")
-        _freeze_java_enterprise_identity(
-            user_id=user_id,
-            verified_by_user_id=int(user.id),
-            subject_id=subject_id,
-            legal_name=legal_name,
-            digest=digest,
-        )
-        if not any(existing):
-            target.enterprise_subject_id = subject_id
-            target.enterprise_legal_name = legal_name
-            target.enterprise_verification_sha256 = digest
-            target.enterprise_verified_at = _facade().datetime.now(
-                _facade().timezone.utc
-            ).replace(tzinfo=None)
-            target.enterprise_verified_by_user_id = int(user.id)
-        target.is_enterprise = True
-        session.commit()
-        return {
-            "ok": True,
-            "user_id": user_id,
-            "enterprise_subject_id": subject_id,
-            "legal_name": legal_name,
-            "verification_sha256": digest,
-            "frozen": True,
         }
 
 
@@ -226,7 +120,9 @@ def api_admin_list_user_mods(
 
     sf = _facade().get_session_factory()
     with sf() as session:
-        target = session.query(_facade().User).filter(_facade().User.id == user_id).first()
+        target = (
+            session.query(_facade().User).filter(_facade().User.id == user_id).first()
+        )
         if not target:
             raise _facade().HTTPException(404, "用户不存在")
     mod_ids = sorted(get_user_mod_ids(user_id))
@@ -251,7 +147,10 @@ def api_admin_bind_user_mod(
     mid = _facade()._assert_enterprise_assignable_mod_id(mod_id)
     sf = _facade().get_session_factory()
     with sf() as session:
-        if session.query(_facade().User).filter(_facade().User.id == user_id).first() is None:
+        if (
+            session.query(_facade().User).filter(_facade().User.id == user_id).first()
+            is None
+        ):
             raise _facade().HTTPException(404, "用户不存在")
     add_user_mod(user_id, mid)
     return {"ok": True, "user_id": user_id, "mod_id": mid}
@@ -268,7 +167,10 @@ def api_admin_unbind_user_mod(
     mid = _facade()._assert_enterprise_assignable_mod_id(mod_id)
     sf = _facade().get_session_factory()
     with sf() as session:
-        if session.query(_facade().User).filter(_facade().User.id == user_id).first() is None:
+        if (
+            session.query(_facade().User).filter(_facade().User.id == user_id).first()
+            is None
+        ):
             raise _facade().HTTPException(404, "用户不存在")
     remove_user_mod(user_id, mid)
     return {"ok": True, "user_id": user_id, "mod_id": mid}
@@ -414,8 +316,12 @@ def api_admin_list_orders(
     """
     from modstore_server import payment_orders
 
-    rows, total = payment_orders.list_orders(user_id=0, status=status, limit=limit, offset=offset)
-    all_rows, _ = payment_orders.list_orders(user_id=0, status=None, limit=100000, offset=0)
+    rows, total = payment_orders.list_orders(
+        user_id=0, status=status, limit=limit, offset=offset
+    )
+    all_rows, _ = payment_orders.list_orders(
+        user_id=0, status=None, limit=100000, offset=0
+    )
     summary: dict[str, _facade().Any] = {
         "total_orders": len(all_rows),
         "paid_orders": 0,
@@ -429,7 +335,9 @@ def api_admin_list_orders(
         if st == "paid":
             summary["paid_orders"] += 1
             try:
-                summary["paid_revenue"] += _facade().Decimal(str(o.get("total_amount") or "0"))
+                summary["paid_revenue"] += _facade().Decimal(
+                    str(o.get("total_amount") or "0")
+                )
             except RECOVERABLE_ERRORS:
                 pass
         elif st == "pending":
@@ -439,7 +347,9 @@ def api_admin_list_orders(
         "items": rows,
         "total": total,
         "summary": summary,
-        "source": "python_json" if payment_orders.is_local_source_of_truth() else "java",
+        "source": "python_json"
+        if payment_orders.is_local_source_of_truth()
+        else "java",
     }
 
 
@@ -452,9 +362,15 @@ def api_wallet_overview(
     """钱包概览：余额 + 最近交易流水（前端 walletOverview 消费此接口）。"""
     sf = _facade().get_session_factory()
     with sf() as session:
-        wallet = session.query(_facade().Wallet).filter(_facade().Wallet.user_id == user.id).first()
+        wallet = (
+            session.query(_facade().Wallet)
+            .filter(_facade().Wallet.user_id == user.id)
+            .first()
+        )
         balance = wallet.balance if wallet else 0.0
-        updated_at = wallet.updated_at.isoformat() if wallet and wallet.updated_at else ""
+        updated_at = (
+            wallet.updated_at.isoformat() if wallet and wallet.updated_at else ""
+        )
         total = (
             session.query(_facade().Transaction)
             .filter(_facade().Transaction.user_id == user.id)

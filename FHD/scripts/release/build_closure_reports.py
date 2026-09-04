@@ -29,7 +29,9 @@ STAGES = ("payment", "installation", "first_use", "outcome", "acceptance", "reus
 
 
 def _canonical(value: Any) -> bytes:
-    return (json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    return (
+        json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
+    ).encode()
 
 
 def _digest(path: Path) -> str:
@@ -52,9 +54,7 @@ def _source(label: str, path: Path, payload: dict[str, Any]) -> dict[str, str]:
     }
 
 
-def _common(
-    *, release_sha: str, product_version: str, generated_at: datetime
-) -> dict[str, Any]:
+def _common(*, release_sha: str, product_version: str, generated_at: datetime) -> dict[str, Any]:
     return {
         "generated_at": generated_at.astimezone(UTC).isoformat(),
         "product_version": product_version,
@@ -112,12 +112,8 @@ def build_reports(
         "passed": convergence_passed,
         "summary": {
             "converged": convergence.get("converged") is True,
-            "active_purchased_accounts": int(
-                convergence.get("active_purchased_accounts") or 0
-            ),
-            "reported_installations": int(
-                convergence.get("reported_installations") or 0
-            ),
+            "active_purchased_accounts": int(convergence.get("active_purchased_accounts") or 0),
+            "reported_installations": int(convergence.get("reported_installations") or 0),
             "source_status_counts": dict(sorted(source_states.items())),
             "blockers": convergence_blockers,
         },
@@ -222,12 +218,8 @@ def build_reports(
         destination = output_dir / filename
         destination.write_bytes(_canonical(report))
         digest = _digest(destination)
-        (output_dir / f"{filename}.sha256").write_text(
-            f"{digest}  {filename}\n", encoding="utf-8"
-        )
-        report_entries.append(
-            {"file": filename, "sha256": digest, "passed": report["passed"]}
-        )
+        (output_dir / f"{filename}.sha256").write_text(f"{digest}  {filename}\n", encoding="utf-8")
+        report_entries.append({"file": filename, "sha256": digest, "passed": report["passed"]})
     manifest = {
         **common,
         "schema": "xcagi.closure.evidence_manifest/v1",

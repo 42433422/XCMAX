@@ -9,10 +9,7 @@ from pathlib import Path
 
 def _module():
     script = (
-        Path(__file__).resolve().parents[2]
-        / "scripts"
-        / "release"
-        / "build_closure_reports.py"
+        Path(__file__).resolve().parents[2] / "scripts" / "release" / "build_closure_reports.py"
     )
     spec = importlib.util.spec_from_file_location("build_closure_reports", script)
     assert spec and spec.loader
