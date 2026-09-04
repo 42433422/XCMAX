@@ -72,6 +72,8 @@ def test_complete_six_stage_chain_requires_post_acceptance_reuse(tmp_path, monke
     acceptance_at = NOW + timedelta(hours=3)
     reuse_at = acceptance_at + timedelta(hours=25)
     with sf() as session:
+        session.add(models.User(id=11, username="lifecycle-user-11", password_hash="x"))
+        session.flush()
         session.add(
             models.UpdateInstallationReceipt(
                 user_id=11,
@@ -177,6 +179,8 @@ def test_aggregate_selects_a_complete_goal_without_mixing_earlier_goal(
     monkeypatch.setenv("XCMAX_RELEASE_SHA", sha)
     order = _order()
     with sf() as session:
+        session.add(models.User(id=11, username="lifecycle-goal-user-11", password_hash="x"))
+        session.flush()
         session.add(
             models.UpdateInstallationReceipt(
                 user_id=11,

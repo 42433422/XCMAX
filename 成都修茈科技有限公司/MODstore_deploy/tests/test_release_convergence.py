@@ -32,6 +32,8 @@ def test_release_convergence_requires_every_source_and_device(tmp_path, monkeypa
         lambda _db, kind: [SimpleNamespace(user_id=7)] if kind == "permanent" else [],
     )
     with sf() as session:
+        session.add(models.User(id=7, username="convergence-user-7", password_hash="x"))
+        session.flush()
         session.add(
             models.UpdateInstallationReceipt(
                 user_id=7,
@@ -122,6 +124,8 @@ def test_stale_or_revoked_device_cannot_disappear_from_required_denominator(
         lambda _db, _kind: [],
     )
     with sf() as session:
+        session.add(models.User(id=9, username="convergence-user-9", password_hash="x"))
+        session.flush()
         session.add(
             models.UpdateInstallationReceipt(
                 user_id=9,
