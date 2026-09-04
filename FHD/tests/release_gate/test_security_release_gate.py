@@ -255,6 +255,7 @@ def test_full_scan_collects_and_uploads_evidence_after_individual_scanner_failur
 
     assert "Build and scan final FHD production image\n        continue-on-error: true" in workflow
     assert "--config /repo/.github/gitleaks-config.toml" in workflow
+    assert "secrets.CI_COMMIT_TOKEN || github.token" in workflow
     assert "--no-emit-local" in workflow
     assert "production-host-rootfs.tar.gz" in workflow
     assert "var/lib/dpkg/status" in workflow

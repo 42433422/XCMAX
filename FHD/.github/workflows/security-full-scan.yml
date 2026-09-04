@@ -37,7 +37,10 @@ jobs:
       - name: Export open and manually dismissed CodeQL and Dependabot alerts
         continue-on-error: true
         env:
-          GH_TOKEN: ${{ github.token }}
+          # GITHUB_TOKEN cannot read Dependabot alerts in this repository.
+          # The existing CI token is read-only here and keeps the scanner from
+          # silently treating an HTTP 403 envelope as a zero-alert report.
+          GH_TOKEN: ${{ secrets.CI_COMMIT_TOKEN || github.token }}
         run: |
           set +e
           for state in open dismissed; do
