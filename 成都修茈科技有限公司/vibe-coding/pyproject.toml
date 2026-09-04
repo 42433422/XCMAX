@@ -21,7 +21,7 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-llm = ["openai>=1.0.0"]
+llm = ["openai>=3.6.0"]
 test = ["pytest>=7.0"]
 agent = []
 agent-treesitter = ["tree-sitter>=0.21", "tree-sitter-python>=0.21"]
