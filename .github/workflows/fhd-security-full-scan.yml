@@ -67,7 +67,8 @@ jobs:
         run: |
           set +e
           docker run --rm -v "${PWD}:/repo" zricethezav/gitleaks:latest detect \
-            --source /repo --report-format sarif \
+            --source /repo --config /repo/.github/gitleaks-config.toml \
+            --report-format sarif \
             --report-path /repo/gitleaks-release.sarif --no-banner --redact
           test -s gitleaks-release.sarif && mv gitleaks-release.sarif "${RUNNER_TEMP}/security-native/gitleaks.sarif"
 
@@ -82,6 +83,13 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: false
           exit-code: "0"
+
+      - name: Build production admin console for image context
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          npm ci --prefix FHD/frontend
+          VITE_XCAGI_GIT_SHA="${{ inputs.release_sha }}" npm --prefix FHD/admin-console run build
 
       - name: Build and scan final FHD production image
         continue-on-error: true
@@ -104,7 +112,7 @@ jobs:
           set +e
           python -m pip install --quiet pip-audit uv
           (cd FHD && uv export --frozen --all-extras --no-dev \
-            --no-emit-project --no-hashes \
+            --no-emit-project --no-emit-local --no-hashes \
             --output-file "${RUNNER_TEMP}/fhd-production-requirements.txt")
           pip-audit -r "${RUNNER_TEMP}/fhd-production-requirements.txt" -f json \
             -o "${RUNNER_TEMP}/security-native/python-dependencies.json"
@@ -140,15 +148,38 @@ jobs:
           HOST: ${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}
           SSH_KEY: ${{ secrets.FHD_PUSH_SSH_KEY || secrets.SERVER_SSH_KEY }}
         run: |
+          set -euo pipefail
+          test -n "${SSH_KEY:-}"
+          trivy_bin="$(command -v trivy)"
+          tool_dir="${RUNNER_TEMP}/production-host-trivy"
+          cache_dir="${tool_dir}/cache"
+          mkdir -p "${cache_dir}"
+          cp "${trivy_bin}" "${tool_dir}/trivy"
+          "${tool_dir}/trivy" image --cache-dir "${cache_dir}" --download-db-only
+          tar -C "${tool_dir}" -czf "${RUNNER_TEMP}/production-host-trivy.tar.gz" trivy cache
+
+          key="${RUNNER_TEMP}/production-host-scan-key"
+          printf '%s\n' "$SSH_KEY" > "$key"
+          chmod 600 "$key"
+          remote_dir="/tmp/xcagi-production-host-scan-${GITHUB_RUN_ID}"
+          ssh_opts=(-i "$key" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20)
+          ssh "${ssh_opts[@]}" "root@${HOST}" "install -d -m 700 '${remote_dir}'"
+          scp "${ssh_opts[@]}" "${RUNNER_TEMP}/production-host-trivy.tar.gz" \
+            "root@${HOST}:${remote_dir}/tool.tar.gz"
           set +e
-          if [ -n "${SSH_KEY:-}" ]; then
-            key="${RUNNER_TEMP}/production-host-scan-key"
-            printf '%s\n' "$SSH_KEY" > "$key"
-            chmod 600 "$key"
-            ssh -i "$key" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 "root@${HOST}" \
-              "docker run --rm -v /:/host:ro aquasec/trivy:latest rootfs --format json --severity CRITICAL,HIGH --ignore-unfixed=false /host" \
-              > "${RUNNER_TEMP}/security-native/production-host.json"
-          fi
+          ssh "${ssh_opts[@]}" "root@${HOST}" \
+            "set -euo pipefail
+             cd '${remote_dir}'
+             tar -xzf tool.tar.gz
+             chmod 700 trivy
+             ./trivy rootfs --cache-dir cache --skip-db-update --scanners vuln \
+               --skip-dirs /proc --skip-dirs /sys --skip-dirs /dev --skip-dirs /run \
+               --skip-dirs /var/lib/docker --skip-dirs /var/lib/containerd \
+               --format json --severity CRITICAL,HIGH --ignore-unfixed=false /" \
+            > "${RUNNER_TEMP}/security-native/production-host.json"
+          scan_rc=$?
+          ssh "${ssh_opts[@]}" "root@${HOST}" "rm -rf -- '${remote_dir}'" || true
+          exit "${scan_rc}"
 
       - name: Normalize all scanner reports
         if: always()

@@ -49,6 +49,16 @@ def _validate_native_payload(kind: str, data: Any) -> None:
     if kind in {"codeql", "dependabot"}:
         if not isinstance(data, list):
             raise ValueError(f"{kind} output must be a list")
+        for row in _flatten_pages(data):
+            if not isinstance(row, dict):
+                raise ValueError(f"{kind} output contains a non-object row")
+            required = (
+                {"number", "rule", "state"}
+                if kind == "codeql"
+                else {"number", "dependency", "security_advisory", "state"}
+            )
+            if not required.issubset(row):
+                raise ValueError(f"{kind} output contains an error envelope")
         return
     if kind == "trivy":
         if not isinstance(data, dict) or not isinstance(data.get("Results"), list):
@@ -107,7 +117,9 @@ def _dismissal_fields(row: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(comment, dict):
         comment = {}
     dismissed_by = row.get("dismissed_by")
-    reviewer = str(dismissed_by.get("login") or "") if isinstance(dismissed_by, dict) else ""
+    reviewer = (
+        str(dismissed_by.get("login") or "") if isinstance(dismissed_by, dict) else ""
+    )
     return {
         "status": "active",
         "disposition": "false_positive",
@@ -198,7 +210,9 @@ def normalize(kind: str, data: Any) -> list[dict[str, Any]]:
             rule = row.get("rule") if isinstance(row.get("rule"), dict) else {}
             severity = rule.get("security_severity_level") or rule.get("severity")
             extra = _dismissal_fields(row) if row.get("state") == "dismissed" else {}
-            findings.append(_finding(row.get("number") or rule.get("id"), severity, **extra))
+            findings.append(
+                _finding(row.get("number") or rule.get("id"), severity, **extra)
+            )
     elif kind == "dependabot":
         for row in _flatten_pages(data):
             if not isinstance(row, dict) or row.get("state") not in (
@@ -225,12 +239,18 @@ def normalize(kind: str, data: Any) -> list[dict[str, Any]]:
                 continue
             for row in result.get("Vulnerabilities") or []:
                 if isinstance(row, dict):
-                    findings.append(_finding(row.get("VulnerabilityID"), row.get("Severity")))
+                    findings.append(
+                        _finding(row.get("VulnerabilityID"), row.get("Severity"))
+                    )
             for row in result.get("Secrets") or []:
                 if isinstance(row, dict):
-                    findings.append(_finding(row.get("RuleID"), row.get("Severity"), secret=True))
+                    findings.append(
+                        _finding(row.get("RuleID"), row.get("Severity"), secret=True)
+                    )
     elif kind == "pip-audit":
-        for dependency in data.get("dependencies", []) if isinstance(data, dict) else []:
+        for dependency in (
+            data.get("dependencies", []) if isinstance(data, dict) else []
+        ):
             if not isinstance(dependency, dict):
                 continue
             for vulnerability in dependency.get("vulns") or []:
@@ -247,7 +267,9 @@ def normalize(kind: str, data: Any) -> list[dict[str, Any]]:
         documents = data if isinstance(data, list) else [data]
         for document in documents:
             vulnerabilities = (
-                document.get("vulnerabilities", {}) if isinstance(document, dict) else {}
+                document.get("vulnerabilities", {})
+                if isinstance(document, dict)
+                else {}
             )
             for name, row in vulnerabilities.items():
                 if isinstance(row, dict):
@@ -260,12 +282,16 @@ def normalize(kind: str, data: Any) -> list[dict[str, Any]]:
                 if not isinstance(row, dict):
                     continue
                 properties = (
-                    row.get("properties") if isinstance(row.get("properties"), dict) else {}
+                    row.get("properties")
+                    if isinstance(row.get("properties"), dict)
+                    else {}
                 )
                 findings.append(
                     _finding(
                         row.get("ruleId"),
-                        properties.get("security-severity") or row.get("level") or "high",
+                        properties.get("security-severity")
+                        or row.get("level")
+                        or "high",
                     )
                 )
     return findings

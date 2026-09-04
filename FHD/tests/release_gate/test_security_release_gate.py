@@ -10,7 +10,10 @@ import pytest
 
 def _module():
     script = (
-        Path(__file__).resolve().parents[2] / "scripts" / "security" / "security_release_gate.py"
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "security"
+        / "security_release_gate.py"
     )
     spec = importlib.util.spec_from_file_location("security_release_gate", script)
     assert spec and spec.loader
@@ -93,6 +96,8 @@ def test_scanner_error_json_cannot_be_normalized_as_zero_findings() -> None:
     mod = _normalizer_module()
 
     for kind, payload in (
+        ("codeql", [{"message": "service unavailable", "status": "503"}]),
+        ("dependabot", [{"message": "not accessible", "status": "403"}]),
         ("npm-audit", {"error": {"summary": "registry unavailable"}}),
         ("pip-audit", {"error": "index unavailable"}),
         ("trivy", {"ArtifactName": "repo"}),
@@ -120,13 +125,17 @@ def test_false_positive_requires_independent_fresh_review(tmp_path: Path) -> Non
         },
     }
     (tmp_path / "codeql.json").write_text(
-        json.dumps({"available": True, "scanned_at": now.isoformat(), "findings": [finding]})
+        json.dumps(
+            {"available": True, "scanned_at": now.isoformat(), "findings": [finding]}
+        )
     )
     assert mod.evaluate(tmp_path, now=now)["passed"] is True
 
     finding["false_positive_approval"]["reviewer"] = "developer-a"
     (tmp_path / "codeql.json").write_text(
-        json.dumps({"available": True, "scanned_at": now.isoformat(), "findings": [finding]})
+        json.dumps(
+            {"available": True, "scanned_at": now.isoformat(), "findings": [finding]}
+        )
     )
     assert mod.evaluate(tmp_path, now=now)["passed"] is False
 
@@ -246,18 +255,34 @@ def test_release_gate_rejects_relabelled_scanner_evidence(tmp_path: Path) -> Non
     assert "codeql:source_sha_mismatch" in failed["blockers"]
 
 
-def test_full_scan_collects_and_uploads_evidence_after_individual_scanner_failure() -> None:
+def test_full_scan_collects_and_uploads_evidence_after_individual_scanner_failure() -> (
+    None
+):
     workflow = (
-        Path(__file__).resolve().parents[2] / ".github" / "workflows" / "security-full-scan.yml"
+        Path(__file__).resolve().parents[2]
+        / ".github"
+        / "workflows"
+        / "security-full-scan.yml"
     ).read_text()
 
-    assert "Build and scan final FHD production image\n        continue-on-error: true" in workflow
+    assert (
+        "Build and scan final FHD production image\n        continue-on-error: true"
+        in workflow
+    )
+    assert "--config /repo/.github/gitleaks-config.toml" in workflow
+    assert "--no-emit-local" in workflow
+    assert "production-host-trivy.tar.gz" in workflow
+    assert "--skip-db-update" in workflow
+    assert "docker run --rm -v /:/host:ro aquasec/trivy:latest" not in workflow
     assert (
         "continue-on-error: true\n        working-directory: .\n        run: docker build"
         in workflow
     )
     assert "Normalize all scanner reports\n        if: always()" in workflow
-    assert "Enforce all-source zero critical/high gate\n        if: always()" in workflow
     assert (
-        "Upload auditable security evidence even when gate fails\n        if: always()" in workflow
+        "Enforce all-source zero critical/high gate\n        if: always()" in workflow
+    )
+    assert (
+        "Upload auditable security evidence even when gate fails\n        if: always()"
+        in workflow
     )
