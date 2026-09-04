@@ -8,10 +8,7 @@ from pathlib import Path
 
 def _module():
     script = (
-        Path(__file__).resolve().parents[2]
-        / "scripts"
-        / "observability"
-        / "collect_slo_metrics.py"
+        Path(__file__).resolve().parents[2] / "scripts" / "observability" / "collect_slo_metrics.py"
     )
     spec = importlib.util.spec_from_file_location("production_slo_collector", script)
     assert spec and spec.loader
@@ -36,10 +33,7 @@ def _verifier_module():
 
 def test_daily_workflow_uses_private_authenticated_prometheus_tunnel() -> None:
     workflow = (
-        Path(__file__).resolve().parents[2]
-        / ".github"
-        / "workflows"
-        / "slo-metrics-collect.yml"
+        Path(__file__).resolve().parents[2] / ".github" / "workflows" / "slo-metrics-collect.yml"
     ).read_text(encoding="utf-8")
 
     assert "Open authenticated production Prometheus SSH tunnel" in workflow
