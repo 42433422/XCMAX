@@ -13,12 +13,16 @@ from datetime import UTC, datetime
 from typing import Any, Dict, List, Sequence, Tuple
 
 from modstore_server.digest_daily_phase_chain import PHASE_A_LINES as PHASE_A_LINES
-from modstore_server.digest_daily_phase_chain import PHASE_B_LINES_NO_APP as PHASE_B_LINES_NO_APP
+from modstore_server.digest_daily_phase_chain import (
+    PHASE_B_LINES_NO_APP as PHASE_B_LINES_NO_APP,
+)
 from modstore_server.digest_daily_phase_chain import (
     PHASE_B_LINES_WITH_APP as PHASE_B_LINES_WITH_APP,
 )
 from modstore_server.digest_daily_phase_chain import _env_bool as _env_bool
-from modstore_server.digest_daily_phase_chain import _merge_phase_block as _merge_phase_block
+from modstore_server.digest_daily_phase_chain import (
+    _merge_phase_block as _merge_phase_block,
+)
 from modstore_server.digest_daily_phase_chain import (
     execute_phase_a_line_chain as execute_phase_a_line_chain,
 )
@@ -28,7 +32,9 @@ from modstore_server.digest_daily_phase_chain import (
 from modstore_server.digest_daily_phase_chain import (
     trigger_strategic_layer_dispatch as trigger_strategic_layer_dispatch,
 )
-from modstore_server.digest_daily_phase_chain import wait_for_phase_a as wait_for_phase_a
+from modstore_server.digest_daily_phase_chain import (
+    wait_for_phase_a as wait_for_phase_a,
+)
 from modstore_server.digest_line_executor import (
     _load_digest_execute_context,
     _read_execute_meta,
@@ -110,7 +116,9 @@ def _ci_correlation(kind: str, step_ids: Sequence[str]) -> Dict[str, Any]:
     }
 
 
-def _build_chain_context(record_id: int, release_train: str, release_kind: str) -> Dict[str, Any]:
+def _build_chain_context(
+    record_id: int, release_train: str, release_kind: str
+) -> Dict[str, Any]:
     try:
         from modstore_server.integrations.ops_action_handlers import repo_root
 
@@ -144,7 +152,9 @@ def _dispatch_employee_chain(
     all_ok = True
 
     for step_id, employee_id, brief in steps:
-        full_brief = f"[{step_id} · release_train {release_train} · {release_kind}]\n{brief}"
+        full_brief = (
+            f"[{step_id} · release_train {release_train} · {release_kind}]\n{brief}"
+        )
         if shadow:
             step_results.append(
                 {
@@ -165,7 +175,9 @@ def _dispatch_employee_chain(
                 target_employee_id=employee_id,
                 created_by_user_id=0,
                 include_dependencies=True,
-                allow_high_risk_real_run=_env_bool("MODSTORE_INSTALLER_PUSH_ALLOW_HIGH_RISK", "0"),
+                allow_high_risk_real_run=_env_bool(
+                    "MODSTORE_INSTALLER_PUSH_ALLOW_HIGH_RISK", "0"
+                ),
             )
             step_ok = bool(out.get("ok"))
             step_results.append(
@@ -178,17 +190,15 @@ def _dispatch_employee_chain(
             )
             if not step_ok:
                 all_ok = False
-        except RECOVERABLE_ERRORS as exc:
-            logger.exception(
-                "%s chain step=%s employee=%s failed", phase_label, step_id, employee_id
-            )
+        except RECOVERABLE_ERRORS:
+            logger.error("employee chain step failed")
             all_ok = False
             step_results.append(
                 {
                     "ok": False,
                     "step": step_id,
                     "employee_id": employee_id,
-                    "error": str(exc),
+                    "error": "employee_chain_step_failed",
                 }
             )
 
@@ -248,13 +258,7 @@ def execute_installer_employee_chain(
         block_key="phase_c",
         phase_label="C",
     )
-    logger.info(
-        "phase_c installer chain record_id=%s kind=%s shadow=%s ok=%s",
-        record_id,
-        kind,
-        shadow,
-        block.get("ok"),
-    )
+    logger.info("phase_c installer chain completed")
     # 真实（非 shadow）installer/major 日：回写下载版本 SSOT last_push + 刷新官网公开清单，
     # 让「P5 构建 → P6 推 COS」在数据面真正落到「官网下载」这一环（解决历史断点）。
     if not shadow and block.get("ok"):
@@ -268,7 +272,7 @@ def execute_installer_employee_chain(
             )
             block["fastgate"] = gate
             if not gate.get("ok"):
-                logger.warning("phase_c installer FASTGATE blocked push: %s", gate.get("reason"))
+                logger.warning("phase_c installer FASTGATE blocked push")
                 block["download_release"] = {
                     "ok": False,
                     "blocked_by": "fastgate",
@@ -287,7 +291,7 @@ def execute_installer_employee_chain(
                         reason=str(gate.get("reason") or "fastgate failed"),
                     )
                 except BOUNDARY_ERRORS:  # noqa: BLE001
-                    logger.exception("phase_c installer FASTGATE auto-rollback failed")
+                    logger.error("phase_c installer FASTGATE auto-rollback failed")
                 return block
 
             from modstore_server.download_release import record_installer_push
@@ -301,7 +305,7 @@ def execute_installer_employee_chain(
             )
             block["download_release"] = push
         except BOUNDARY_ERRORS:  # noqa: BLE001
-            logger.exception("phase_c installer chain: record_installer_push failed")
+            logger.error("phase_c installer chain: record_installer_push failed")
     return block
 
 
@@ -370,9 +374,9 @@ def execute_production_pipeline_chain(
         from modstore_server.runtime_async import run_coro_sync
 
         out = run_coro_sync(_run_pipeline_with_optional_auto_approve(step_ids, context))
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("production pipeline chain failed record_id=%s", record_id)
-        out = {"ok": False, "error": str(exc)}
+    except RECOVERABLE_ERRORS:
+        logger.error("production pipeline chain failed")
+        out = {"ok": False, "error": "production_pipeline_failed"}
 
     block = {
         **out,
@@ -402,7 +406,7 @@ def execute_production_pipeline_chain(
                     failed_step=failed_step,
                 )
             except BOUNDARY_ERRORS:  # noqa: BLE001
-                logger.exception("production pipeline auto-rollback failed record_id=%s", record_id)
+                logger.error("production pipeline auto-rollback failed")
 
     meta = _read_execute_meta(int(record_id))
     persist_line_execute_on_digest_record(
