@@ -9,7 +9,12 @@ from typing import Any, Dict, List
 
 from pydantic import BaseModel, Field
 
-from modman.manifest_util import read_manifest, save_manifest_validated
+from modman.manifest_util import (
+    get_public_workflow_rows,
+    read_manifest,
+    save_manifest_validated,
+    set_public_workflow_rows,
+)
 from modstore_server.file_safe import write_text_file
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
@@ -127,7 +132,7 @@ def run_workflow_employee_scaffold(
     if err or not data:
         raise ValueError(err or "manifest 无效")
     manifest = dict(data)
-    wf = manifest.get("workflow_employees")
+    wf = get_public_workflow_rows(manifest)
     if wf is None:
         wf = []
     if not isinstance(wf, list):
@@ -194,7 +199,7 @@ def run_workflow_employee_scaffold(
     }
     wf = list(wf)
     wf.append(entry)
-    manifest["workflow_employees"] = wf
+    set_public_workflow_rows(manifest, wf)
     warnings = save_manifest_validated(mod_dir, manifest)
     return {
         "ok": True,

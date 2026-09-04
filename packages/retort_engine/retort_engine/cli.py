@@ -1284,12 +1284,7 @@ def main(argv: list[str] | None = None) -> int:
             workers_per_round=args.workers_per_round,
         )
         if args.output:
-            output = Path(args.output)
-            output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(
-                json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
-                encoding="utf-8",
-            )
+            write_private_json(args.output, result)
         if args.json:
             _print_public_json(result)
         else:

@@ -161,6 +161,14 @@ def test_llm_cannot_redirect_catalog_gap_package_identity():
     assert proposal["estimated_files"] == 5
 
 
+def test_direct_caller_cannot_materialize_unreviewed_package_identity():
+    proposal = propose_employee_pack(_signals(), llm_call=lambda _prompt: {})
+    proposal["employee_pack"]["name"] = "another-safe-looking-pack"
+
+    with pytest.raises(ProposalScaffoldError, match="not allowlisted"):
+        build_source_files(proposal)
+
+
 def test_malformed_llm_catalog_proposal_uses_safe_fallback():
     proposal = propose_employee_pack(
         _signals(),
