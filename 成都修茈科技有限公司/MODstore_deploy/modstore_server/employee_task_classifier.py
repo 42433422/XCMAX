@@ -262,9 +262,7 @@ def classify_task(task_text: str) -> Dict[str, Any]:
     if cat_first == "handoff":
         reason = f"任务提到转交关键词（{', '.join(kws_first[:3])}），建议转交"
     elif should_handoff:
-        reason = (
-            f"判断为 {cat_first}（命中：{', '.join(kws_first[:3])}），但同时也提到转交，可考虑转交"
-        )
+        reason = f"判断为 {cat_first}（命中：{', '.join(kws_first[:3])}），但同时也提到转交，可考虑转交"
     else:
         reason = f"判断为 {cat_first}（命中关键词：{', '.join(kws_first[:3])}）"
 
@@ -298,8 +296,8 @@ def enrich_perception_with_classification(
             ni = {}
             perceived["normalized_input"] = ni
         ni["_task_classification"] = classification
-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
-        logger.debug("task_classifier enrich failed employee_id=%s err=%s", employee_id, exc)
+    except BOUNDARY_ERRORS:  # noqa: BLE001
+        logger.debug("task classifier enrichment failed")
 
 
 __all__ = ["classify_task", "enrich_perception_with_classification"]

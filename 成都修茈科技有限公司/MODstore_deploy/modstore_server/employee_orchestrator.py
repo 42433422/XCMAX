@@ -72,7 +72,7 @@ def _record_dispatch_metric(
             )
             session.commit()
     except RECOVERABLE_ERRORS:
-        logger.debug("record_dispatch_metric failed employee=%s", employee_id, exc_info=True)
+        logger.debug("record_dispatch_metric failed")
 
 
 def _resolve_uid(created_by_user_id: int) -> int:
@@ -82,7 +82,12 @@ def _resolve_uid(created_by_user_id: int) -> int:
     if uid <= 0:
         sf = get_session_factory()
         with sf() as session:
-            u = session.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
+            u = (
+                session.query(User)
+                .filter(User.is_admin.is_(True))
+                .order_by(User.id.asc())
+                .first()
+            )
             uid = int(u.id) if u else 0
             if uid <= 0:
                 u2 = session.query(User).order_by(User.id.asc()).first()
@@ -231,7 +236,9 @@ def _topo_layers(subtasks: List[SubTask]) -> List[List[SubTask]]:
     layers: List[List] = []
 
     while remaining:
-        layer = [st for st in remaining if all(d in done_ids for d in (st.depends_on or []))]
+        layer = [
+            st for st in remaining if all(d in done_ids for d in (st.depends_on or []))
+        ]
         if not layer:
             # 循环依赖或无法解析，剩余全部放最后一层
             layer = list(remaining)
@@ -263,7 +270,9 @@ def _run_layer(
         input_data = dict(st.input_data or {})
         for dep_id in st.depends_on or []:
             if dep_id in completed:
-                input_data.setdefault("upstream_results", {})[dep_id] = completed[dep_id]
+                input_data.setdefault("upstream_results", {})[dep_id] = completed[
+                    dep_id
+                ]
         t0 = time.perf_counter()
         try:
             result = execute_employee_task(
@@ -273,7 +282,9 @@ def _run_layer(
                 user_id=uid,
                 bench_llm_override=bench_llm_override,
             )
-            ok, reason = _evaluate_execution_success(result if isinstance(result, dict) else {})
+            ok, reason = _evaluate_execution_success(
+                result if isinstance(result, dict) else {}
+            )
             duration_ms = round((time.perf_counter() - t0) * 1000, 3)
             if not ok:
                 _record_dispatch_metric(
@@ -293,7 +304,7 @@ def _run_layer(
             }
         except RECOVERABLE_ERRORS as exc:
             duration_ms = round((time.perf_counter() - t0) * 1000, 3)
-            logger.exception("dispatch_subtasks: employee=%s failed", st.employee_id)
+            logger.error("dispatch_subtasks: employee failed")
             _record_dispatch_metric(
                 employee_id=st.employee_id,
                 task_brief=st.task_brief,
@@ -311,7 +322,10 @@ def _run_layer(
     with ThreadPoolExecutor(max_workers=min(max_concurrency, len(layer))) as pool:
         # 用 copy_context() 把当前上下文（含平台模型作用域）带进池内线程，
         # 否则后台 loop 的平台作用域会在子线程丢失而静默回落到用户配额。
-        futures = {pool.submit(contextvars.copy_context().run, _run_one, st): st for st in layer}
+        futures = {
+            pool.submit(contextvars.copy_context().run, _run_one, st): st
+            for st in layer
+        }
         for fut in as_completed(futures):
             results.append(fut.result())
     return results

@@ -76,7 +76,9 @@ async def align_catalog_employee_packs_llm_from_deepseek(
             aid = int(row.author_id) if row and row.author_id else int(admin_user.id)
             eff_user = db.query(User).filter(User.id == aid).first() or admin_user
 
-            new_p, new_m, err = await resolve_llm_provider_model_auto(db, eff_user, None, None)
+            new_p, new_m, err = await resolve_llm_provider_model_auto(
+                db, eff_user, None, None
+            )
             if err or not new_p or not new_m:
                 errors.append({"pack_id": pack_id, "error": err or "无法解析可用 LLM"})
                 continue
@@ -108,15 +110,17 @@ async def align_catalog_employee_packs_llm_from_deepseek(
         mdl["provider"] = new_p
         mdl["model_name"] = new_m
 
-        body = EmployeeSaveBody(manifest=mf2, employee_id=pack_id, register_skills=False)
+        body = EmployeeSaveBody(
+            manifest=mf2, employee_id=pack_id, register_skills=False
+        )
         try:
             await employee_save_impl(body, eff_user)
         except HTTPException as he:
             errors.append({"pack_id": pack_id, "error": he.detail or str(he)})
             continue
-        except BOUNDARY_ERRORS as e:  # noqa: BLE001
-            logger.exception("align deepseek pack=%s", pack_id)
-            errors.append({"pack_id": pack_id, "error": str(e)[:500]})
+        except BOUNDARY_ERRORS:  # noqa: BLE001
+            logger.error("align deepseek pack failed")
+            errors.append({"pack_id": pack_id, "error": "align_deepseek_failed"})
             continue
 
         updated.append(
@@ -331,15 +335,17 @@ async def align_catalog_employee_packs_llm_to_auto_sentinel(
         mdl["provider"] = "auto"
         mdl["model_name"] = "auto"
 
-        body = EmployeeSaveBody(manifest=mf2, employee_id=pack_id, register_skills=False)
+        body = EmployeeSaveBody(
+            manifest=mf2, employee_id=pack_id, register_skills=False
+        )
         try:
             await employee_save_impl(body, eff_user)
         except HTTPException as he:
             errors.append({"pack_id": pack_id, "error": he.detail or str(he)})
             continue
-        except BOUNDARY_ERRORS as e:  # noqa: BLE001
-            logger.exception("align auto sentinel pack=%s", pack_id)
-            errors.append({"pack_id": pack_id, "error": str(e)[:500]})
+        except BOUNDARY_ERRORS:  # noqa: BLE001
+            logger.error("align auto sentinel pack failed")
+            errors.append({"pack_id": pack_id, "error": "align_auto_sentinel_failed"})
             continue
 
         updated.append(

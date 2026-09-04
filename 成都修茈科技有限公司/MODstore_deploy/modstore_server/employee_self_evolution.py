@@ -68,12 +68,12 @@ def check_evolution_signal(
             .limit(20)
             .all()
         )
-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
-        logger.debug("evolution_signal query failed employee_id=%s err=%s", employee_id, exc)
+    except BOUNDARY_ERRORS:  # noqa: BLE001
+        logger.debug("evolution signal query failed")
         return {
             "needed": False,
             "fail_count": 0,
-            "error": str(exc)[:200],
+            "error": "evolution_signal_unavailable",
         }
 
     fail_count = len(rows)

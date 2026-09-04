@@ -69,25 +69,25 @@ def ensure_secure_config() -> None:
         if is_production:
             raise SystemExit(1)
     elif jwt_secret in _INSECURE_JWT_DEFAULTS:
-        print(f"错误: MODSTORE_JWT_SECRET 使用了已知不安全默认值 '{jwt_secret}'，服务拒绝启动")
+        print("错误: MODSTORE_JWT_SECRET 使用了已知不安全默认值，服务拒绝启动")
         if is_production:
             raise SystemExit(1)
         else:
-            print(f"建议使用: {generate_secure_key()}")
+            print("建议在密钥管理系统中生成并轮换密钥")
 
     admin_token = get_env_var("MODSTORE_ADMIN_RECHARGE_TOKEN")
     if not admin_token:
         print("警告: MODSTORE_ADMIN_RECHARGE_TOKEN 未设置，管理员充值接口不可用")
     elif admin_token in _INSECURE_ADMIN_TOKEN_DEFAULTS:
-        print(f"错误: MODSTORE_ADMIN_RECHARGE_TOKEN 使用了已知不安全默认值 '{admin_token}'")
+        print("错误: MODSTORE_ADMIN_RECHARGE_TOKEN 使用了已知不安全默认值")
         if is_production:
             raise SystemExit(1)
         else:
-            print(f"建议使用: {generate_secure_key()}")
+            print("建议在密钥管理系统中生成并轮换管理员令牌")
 
     bootstrap_pwd = get_env_var("MODSTORE_BOOTSTRAP_ADMIN_PASSWORD")
     if bootstrap_pwd and bootstrap_pwd in _INSECURE_ADMIN_PASSWORD_DEFAULTS:
-        print(f"错误: MODSTORE_BOOTSTRAP_ADMIN_PASSWORD 使用了已知不安全默认值 '{bootstrap_pwd}'")
+        print("错误: MODSTORE_BOOTSTRAP_ADMIN_PASSWORD 使用了已知不安全默认值")
         if is_production:
             raise SystemExit(1)
         else:
@@ -107,11 +107,11 @@ def ensure_secure_config() -> None:
         if is_production:
             raise SystemExit(1)
     elif payment_secret in _INSECURE_PAYMENT_SECRET_DEFAULTS:
-        print(f"错误: PAYMENT_SECRET_KEY 使用了已知不安全默认值 '{payment_secret}'，服务拒绝启动")
+        print("错误: PAYMENT_SECRET_KEY 使用了已知不安全默认值，服务拒绝启动")
         if is_production:
             raise SystemExit(1)
         else:
-            print(f"建议使用: {generate_secure_key()}")
+            print("建议在密钥管理系统中生成并轮换支付密钥")
 
 
 def secure_file_permissions(file_path: Path) -> None:
@@ -136,14 +136,17 @@ def validate_secure_config() -> dict[str, bool]:
         ),
         "admin_token_set": bool(
             get_env_var("MODSTORE_ADMIN_RECHARGE_TOKEN")
-            and get_env_var("MODSTORE_ADMIN_RECHARGE_TOKEN") not in _INSECURE_ADMIN_TOKEN_DEFAULTS
+            and get_env_var("MODSTORE_ADMIN_RECHARGE_TOKEN")
+            not in _INSECURE_ADMIN_TOKEN_DEFAULTS
         ),
         "payment_secret_set": bool(
             get_env_var("PAYMENT_SECRET_KEY")
-            and get_env_var("PAYMENT_SECRET_KEY") not in _INSECURE_PAYMENT_SECRET_DEFAULTS
+            and get_env_var("PAYMENT_SECRET_KEY")
+            not in _INSECURE_PAYMENT_SECRET_DEFAULTS
         ),
         "alipay_configured": bool(
-            get_env_var("ALIPAY_APP_ID") and get_env_var("ALIPAY_APP_ID") != "your-alipay-app-id"
+            get_env_var("ALIPAY_APP_ID")
+            and get_env_var("ALIPAY_APP_ID") != "your-alipay-app-id"
         ),
         "smtp_configured": bool(
             get_env_var("MODSTORE_SMTP_PASSWORD")

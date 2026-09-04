@@ -27,7 +27,9 @@ from modstore_server.file_retention_support import (
 from modstore_server.file_retention_support import (
     record_retention_runtime as _record_retention_runtime,
 )
-from modstore_server.file_retention_support import resolve_admin_user_id as _resolve_admin_user_id
+from modstore_server.file_retention_support import (
+    resolve_admin_user_id as _resolve_admin_user_id,
+)
 from modstore_server.file_retention_support import write_metric as _write_metric
 from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
@@ -319,7 +321,9 @@ def run_retention_janitor(
     started_at = datetime.now(UTC)
     t0 = time.perf_counter()
     is_dry = is_dry_run() if dry_run is None else bool(dry_run)
-    database_is_dry = is_dry if notification_dry_run is None else bool(notification_dry_run)
+    database_is_dry = (
+        is_dry if notification_dry_run is None else bool(notification_dry_run)
+    )
 
     target_reports: List[TargetReport] = []
     cumulative_released = 0
@@ -466,11 +470,11 @@ def cleanup_employee_workspaces() -> Dict[str, Any]:
         )
 
         result = cleanup_expired_workspaces()
-        logger.info("janitor: workspace cleanup: %s", result)
+        logger.info("janitor: workspace cleanup completed")
         return result
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("janitor: workspace cleanup failed")
-        return {"cleaned_files": 0, "error": str(exc)}
+    except RECOVERABLE_ERRORS:
+        logger.error("janitor: workspace cleanup failed")
+        return {"cleaned_files": 0, "error": "workspace_cleanup_failed"}
 
 
 if __name__ == "__main__":

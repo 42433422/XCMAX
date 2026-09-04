@@ -11,7 +11,9 @@ from concurrent.futures import TimeoutError as FuturesTimeoutError
 from typing import Any, Dict, List, Optional
 
 from modstore_server.employee_executor import execute_employee_task
-from modstore_server.incident_team_dispatch import dispatch_incident_team as dispatch_incident_team
+from modstore_server.incident_team_dispatch import (
+    dispatch_incident_team as dispatch_incident_team,
+)
 from modstore_server.llm_failure_classifier import (
     FAILURE_KIND_PROMPT,
     FAILURE_KIND_QUOTA,
@@ -91,13 +93,13 @@ def _execute_employee_task_with_timeout(
     )
     try:
         result = fut.result(timeout=max(15, int(timeout_seconds)))
-        return result if isinstance(result, dict) else {"ok": False, "error": "invalid_result"}
-    except FuturesTimeoutError:
-        logger.warning(
-            "incident_team: role timeout employee_id=%s timeout=%ss",
-            employee_id,
-            timeout_seconds,
+        return (
+            result
+            if isinstance(result, dict)
+            else {"ok": False, "error": "invalid_result"}
         )
+    except FuturesTimeoutError:
+        logger.warning("incident_team: role timed out")
         return {
             "ok": False,
             "handler_failed": True,
@@ -112,7 +114,10 @@ def _execute_employee_task_with_timeout(
 
 def _admin_user_id(session) -> int:
     row = (
-        session.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
+        session.query(User)
+        .filter(User.is_admin.is_(True))
+        .order_by(User.id.asc())
+        .first()
     )  # noqa: E712
     if row:
         return int(row.id)
@@ -138,7 +143,11 @@ def _candidate_rows(event_id: int) -> List[Dict[str, Any]]:
         from modstore_server.employee_task_market import rank_market_candidates
 
         ranked = rank_market_candidates(event_id)
-        rows = ranked.get("candidates") if isinstance(ranked.get("candidates"), list) else []
+        rows = (
+            ranked.get("candidates")
+            if isinstance(ranked.get("candidates"), list)
+            else []
+        )
         return [row for row in rows if isinstance(row, dict)]
     except RECOVERABLE_ERRORS:
         return []
@@ -211,7 +220,11 @@ def build_incident_team(event_id: int) -> Dict[str, Any]:
     code_owner = ""
     code_owner_match: Dict[str, Any] = {}
     for row in candidate_rows:
-        ownership = row.get("code_ownership") if isinstance(row.get("code_ownership"), dict) else {}
+        ownership = (
+            row.get("code_ownership")
+            if isinstance(row.get("code_ownership"), dict)
+            else {}
+        )
         if ownership.get("match_count"):
             code_owner = str(row.get("employee_id") or "").strip()
             code_owner_match = ownership
@@ -308,7 +321,9 @@ def _follow_up_handler_failures(
 
     # transient 重试上限（env 可调，默认 1，避免无限重试占满调度）
     try:
-        transient_retry_limit = max(0, int(os.environ.get(_TRANSIENT_RETRY_LIMIT_ENV) or "1"))
+        transient_retry_limit = max(
+            0, int(os.environ.get(_TRANSIENT_RETRY_LIMIT_ENV) or "1")
+        )
     except ValueError:
         transient_retry_limit = 1
 
@@ -339,26 +354,25 @@ def _follow_up_handler_failures(
             # 配额/计费类：不重试，标记需要人工处理。飞书告警由 boss_daily_im_report 消费 _team_claim.follow_ups。
             follow_up["action"] = "quota_blocked_need_human"
             follow_up["ok"] = False
-            logger.warning(
-                "incident_team: event_id=%s role=%s handler_failed quota_blocked error=%s",
-                event_id,
-                role,
-                error_text[:200],
-            )
+            logger.warning("incident_team: handler failed because quota is blocked")
         elif failure_kind == FAILURE_KIND_TRANSIENT and transient_retry_limit > 0:
             # 瞬时网络/限流抖动：自动重试 1 次（同 employee + 同 task）。
             follow_up["action"] = "transient_retry"
             try:
                 retry_result = _retry_member(
                     event_id=event_id,
-                    member=member_by_role.get(role, {"employee_id": employee_id, "role": role}),
+                    member=member_by_role.get(
+                        role, {"employee_id": employee_id, "role": role}
+                    ),
                     team_plan=team_plan,
                     payload=payload,
                     event_type=event_type,
                     source=source,
                     uid=uid,
                     prev_results={
-                        str(r.get("role") or ""): r for r in results if isinstance(r, dict)
+                        str(r.get("role") or ""): r
+                        for r in results
+                        if isinstance(r, dict)
                     },
                 )
                 follow_up["retry_result"] = {
@@ -394,7 +408,9 @@ def _follow_up_handler_failures(
                     for k, v in market_result.items()
                     if k in {"ok", "claimed", "employee_id", "reason"}
                 }
-                follow_up["ok"] = bool(market_result.get("ok") and market_result.get("claimed"))
+                follow_up["ok"] = bool(
+                    market_result.get("ok") and market_result.get("claimed")
+                )
             except RECOVERABLE_ERRORS as exc:
                 follow_up["retry_result"] = {"error": str(exc)[:500]}
                 follow_up["ok"] = False

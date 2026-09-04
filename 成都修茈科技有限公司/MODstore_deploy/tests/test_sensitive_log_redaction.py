@@ -6,6 +6,7 @@ import logging
 from modstore_server import (
     daily_employee_briefs,
     employee_perception_enricher,
+    security,
     task_router,
 )
 
@@ -68,3 +69,23 @@ def test_recent_run_query_failure_does_not_log_exception(monkeypatch, caplog) ->
         employee_perception_enricher._recent_runs_from_db(_Session(), "employee") == []
     )
     assert secret not in caplog.text
+
+
+def test_insecure_defaults_are_rejected_without_printing_secret(
+    monkeypatch, capsys
+) -> None:
+    insecure_values = {
+        "MODSTORE_JWT_SECRET": "modstore-dev-secret-change-in-prod",
+        "MODSTORE_ADMIN_RECHARGE_TOKEN": "dev-admin-token",
+        "MODSTORE_BOOTSTRAP_ADMIN_PASSWORD": "admin123",
+        "PAYMENT_SECRET_KEY": "default_secret_key",
+    }
+    monkeypatch.setenv("MODSTORE_DEPLOY_TIER", "development")
+    for name, value in insecure_values.items():
+        monkeypatch.setenv(name, value)
+
+    security.ensure_secure_config()
+
+    output = capsys.readouterr().out
+    for secret_value in insecure_values.values():
+        assert secret_value not in output

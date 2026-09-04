@@ -226,17 +226,13 @@ def stage_file_to_employee_branch(
     if ct.returncode != 0 or not commit_sha:
         return {"ok": False, "reason": f"commit-tree failed: {ct.stderr[:200]}"}
 
-    ur = _run_git(root_str, ["update-ref", f"refs/heads/{branch}", commit_sha], timeout=10)
+    ur = _run_git(
+        root_str, ["update-ref", f"refs/heads/{branch}", commit_sha], timeout=10
+    )
     if ur.returncode != 0:
         return {"ok": False, "reason": f"update-ref failed: {ur.stderr[:200]}"}
 
-    logger.info(
-        "cr_git_pipeline: staged CR-%d on branch %s base=%s head=%s",
-        cr_id,
-        branch,
-        base[:10],
-        commit_sha[:10],
-    )
+    logger.info("cr_git_pipeline: change request staged")
     return {
         "ok": True,
         "branch": branch,
@@ -335,7 +331,9 @@ def maybe_open_pr_for_cr(
         return {"ok": False, "reason": "repo_root() unavailable"}
 
     base = os.environ.get("MODSTORE_AUTO_PR_BASE_BRANCH", "main").strip() or "main"
-    push_remote = os.environ.get("MODSTORE_DEPLOY_PUSH_REMOTE", "origin").strip() or "origin"
+    push_remote = (
+        os.environ.get("MODSTORE_DEPLOY_PUSH_REMOTE", "origin").strip() or "origin"
+    )
 
     push = _run_git(str(root), ["push", "-u", push_remote, branch], timeout=120)
     if push.returncode != 0:
@@ -343,7 +341,9 @@ def maybe_open_pr_for_cr(
 
     title = f"[AI 员工] CR-{int(cr_id)}：{branch}"
     risk = (risk_level or "").strip().lower()
-    risk_emoji = {"low": "🟢", "medium": "🟡", "high": "🔴", "critical": "🚨"}.get(risk, "⚪")
+    risk_emoji = {"low": "🟢", "medium": "🟡", "high": "🔴", "critical": "🚨"}.get(
+        risk, "⚪"
+    )
     body = (
         f"**CR id**: {int(cr_id)}\n"
         f"**Branch**: `{branch}`\n"

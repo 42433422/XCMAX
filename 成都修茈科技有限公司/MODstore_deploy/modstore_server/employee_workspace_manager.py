@@ -88,13 +88,7 @@ def enforce_workspace_limit(employee_id: str) -> Dict[str, object]:
             pass
 
     after_mb = get_workspace_size_mb(employee_id)
-    logger.info(
-        "workspace_manager: enforce_limit employee=%s before=%.1fMB after=%.1fMB deleted=%d",
-        employee_id,
-        before_mb,
-        after_mb,
-        deleted,
-    )
+    logger.info("workspace_manager: storage limit enforced")
     return {"before_mb": before_mb, "after_mb": after_mb, "deleted_files": deleted}
 
 

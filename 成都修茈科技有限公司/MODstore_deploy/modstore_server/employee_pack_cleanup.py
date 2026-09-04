@@ -23,7 +23,9 @@ _EXPERIMENTAL_SUFFIXES = (
 _EXPERIMENTAL_PATTERN = re.compile(r"-llm-lab(-\d+)?$")
 
 
-def is_experimental_pack_id(pack_id: str, metadata: Optional[Dict[str, Any]] = None) -> bool:
+def is_experimental_pack_id(
+    pack_id: str, metadata: Optional[Dict[str, Any]] = None
+) -> bool:
     pid = str(pack_id or "").strip()
     if not pid:
         return False
@@ -64,18 +66,18 @@ def cleanup_experimental_pack(
         if mod_dir.is_dir():
             shutil.rmtree(mod_dir, ignore_errors=True)
             result["library_removed"] = True
-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
-        logger.warning("cleanup library dir failed %s: %s", pid, exc)
-        result["library_error"] = str(exc)[:300]
+    except BOUNDARY_ERRORS:  # noqa: BLE001
+        logger.warning("cleanup library directory failed")
+        result["library_error"] = "library_cleanup_failed"
 
     try:
         from modstore_server.catalog_store import remove_package
 
         n = remove_package(pid, version=None)
         result["packages_json_removed"] = n
-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
-        logger.warning("cleanup packages.json failed %s: %s", pid, exc)
-        result["packages_json_error"] = str(exc)[:300]
+    except BOUNDARY_ERRORS:  # noqa: BLE001
+        logger.warning("cleanup packages.json failed")
+        result["packages_json_error"] = "packages_json_cleanup_failed"
 
     result["cleaned"] = True
     return result

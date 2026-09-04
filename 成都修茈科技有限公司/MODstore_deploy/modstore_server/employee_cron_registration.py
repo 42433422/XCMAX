@@ -44,19 +44,13 @@ def build_employee_cron_candidates(
                     manifest = pack["manifest"]
             except RECOVERABLE_ERRORS:
                 logger.warning(
-                    "catalog manifest unavailable for %s; trying reviewed duty SSOT",
-                    employee_id,
-                    exc_info=True,
+                    "catalog manifest unavailable; trying reviewed duty SSOT"
                 )
         if not manifest and contract:
             try:
                 manifest = load_reviewed_duty_manifest(employee_id)
             except RECOVERABLE_ERRORS:
-                logger.warning(
-                    "reviewed duty manifest unavailable for %s",
-                    employee_id,
-                    exc_info=True,
-                )
+                logger.warning("reviewed duty manifest unavailable")
         candidates.append((employee_id, manifest, contract))
     return candidates
 
