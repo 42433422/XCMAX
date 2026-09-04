@@ -7,18 +7,19 @@ import importlib
 import os
 
 import httpx
+from pydantic import BaseModel, Field
 
 
 def _facade():
     return importlib.import_module("modstore_server.api.market_routes")
 
 
-class EnterpriseIdentityDTO(_facade().BaseModel):
+class EnterpriseIdentityDTO(BaseModel):
     """Single-assignment legal identity backed by reviewed source material."""
 
-    enterprise_subject_id: str = _facade().Field(..., min_length=4, max_length=128)
-    legal_name: str = _facade().Field(..., min_length=2, max_length=256)
-    verification_sha256: str = _facade().Field(..., pattern="^[0-9a-fA-F]{64}$")
+    enterprise_subject_id: str = Field(..., min_length=4, max_length=128)
+    legal_name: str = Field(..., min_length=2, max_length=256)
+    verification_sha256: str = Field(..., pattern="^[0-9a-fA-F]{64}$")
 
 
 def _freeze_java_enterprise_identity(

@@ -151,10 +151,10 @@ def _installation_sources(
 ) -> tuple[list[dict[str, Any]], int]:
     plans_by_user: dict[int, UserPlan] = {}
     for license_type in ("permanent", "trial"):
-        for row in _purchased_plan_rows(db, license_type):
-            plans_by_user.setdefault(int(row.user_id), row)
+        for plan_row in _purchased_plan_rows(db, license_type):
+            plans_by_user.setdefault(int(plan_row.user_id), plan_row)
     plans = list(plans_by_user.values())
-    user_ids = {int(row.user_id) for row in plans}
+    user_ids = {int(plan_row.user_id) for plan_row in plans}
     required_ids = {
         value.strip()
         for value in re.split(r"[\s,;]+", os.environ.get("XCMAX_REQUIRED_INSTALLATION_IDS", ""))
@@ -171,34 +171,41 @@ def _installation_sources(
         .all()
     )
     latest_by_device: dict[tuple[int, str], UpdateInstallationReceipt] = {}
-    for row in receipts:
-        key = (int(row.user_id), str(row.installation_id or "").strip())
+    for receipt_row in receipts:
+        key = (
+            int(receipt_row.user_id),
+            str(receipt_row.installation_id or "").strip(),
+        )
         if (
             not key[1]
             or key in latest_by_device
             or (key[0] not in user_ids and key[1] not in required_ids)
         ):
             continue
-        latest_by_device[key] = row
+        latest_by_device[key] = receipt_row
 
     sources: list[dict[str, Any]] = []
     devices_by_user: dict[int, int] = {}
     max_age_hours = max(1, int(os.environ.get("XCMAX_INSTALLATION_RECEIPT_MAX_AGE_HOURS", "24")))
-    for (user_id, installation_id), row in latest_by_device.items():
+    for (user_id, installation_id), receipt_row in latest_by_device.items():
         required = installation_id in required_ids
-        if row.status == "revoked" and not required:
+        if receipt_row.status == "revoked" and not required:
             continue
         devices_by_user[user_id] = devices_by_user.get(user_id, 0) + 1
-        reported_at = row.reported_at.replace(tzinfo=UTC) if row.reported_at else None
+        reported_at = (
+            receipt_row.reported_at.replace(tzinfo=UTC) if receipt_row.reported_at else None
+        )
         fresh = bool(reported_at and now - timedelta(hours=max_age_hours) <= reported_at <= now)
-        installed_sha = row.installed_build_sha if row.status == "installed" and fresh else ""
+        installed_sha = (
+            receipt_row.installed_build_sha if receipt_row.status == "installed" and fresh else ""
+        )
         reason = (
             ""
-            if row.status == "installed" and fresh
+            if receipt_row.status == "installed" and fresh
             else (
                 "installation_receipt_stale_or_device_offline"
-                if row.status == "installed"
-                else f"latest_receipt_{row.status}"
+                if receipt_row.status == "installed"
+                else f"latest_receipt_{receipt_row.status}"
             )
         )
         sources.append(
@@ -207,9 +214,11 @@ def _installation_sources(
                 installed_sha,
                 expected_sha,
                 account_alias=_alias("account", user_id),
-                platform=str(row.platform or ""),
-                receipt_status=str(row.status or ""),
-                reported_at=row.reported_at.isoformat() if row.reported_at else "",
+                platform=str(receipt_row.platform or ""),
+                receipt_status=str(receipt_row.status or ""),
+                reported_at=(
+                    receipt_row.reported_at.isoformat() if receipt_row.reported_at else ""
+                ),
                 reason=reason,
             )
         )

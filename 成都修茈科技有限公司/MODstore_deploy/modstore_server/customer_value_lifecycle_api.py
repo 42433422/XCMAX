@@ -101,7 +101,7 @@ def _authoritative_order(order_no: str, user_id: int | None = None) -> dict[str,
         raise HTTPException(409, f"订单不是有效生产付款凭证: {reason}")
     if user_id is not None:
         try:
-            owner_id = int(order.get("user_id"))
+            owner_id = int(order.get("user_id") or 0)
         except (TypeError, ValueError):
             owner_id = 0
         if owner_id != int(user_id):
@@ -111,7 +111,7 @@ def _authoritative_order(order_no: str, user_id: int | None = None) -> dict[str,
 
 def _customer_ref(order: dict[str, Any]) -> str:
     try:
-        user_id = int(order.get("user_id"))
+        user_id = int(order.get("user_id") or 0)
     except (TypeError, ValueError):
         user_id = 0
     if not user_id:

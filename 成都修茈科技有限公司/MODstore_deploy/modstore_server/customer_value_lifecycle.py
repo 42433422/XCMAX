@@ -8,7 +8,7 @@ import os
 import re
 from collections import Counter
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, cast
 
 from modstore_server.customer_value_classification import parse_datetime as _parse_datetime
 from modstore_server.customer_value_classification import text as _text
@@ -24,10 +24,17 @@ def _receipt_evidence(row: CustomerValueReceipt | None) -> dict[str, Any]:
     if row is None:
         return {}
     try:
-        parsed = json.loads(row.evidence_json or "{}")
+        parsed = json.loads(str(row.evidence_json or "{}"))
     except (TypeError, ValueError, json.JSONDecodeError):
         return {}
     return parsed if isinstance(parsed, dict) else {}
+
+
+def _float_or_nan(value: Any) -> float:
+    try:
+        return float(value) if value is not None else float("nan")
+    except (TypeError, ValueError):
+        return float("nan")
 
 
 def build_customer_lifecycle(
@@ -45,15 +52,18 @@ def build_customer_lifecycle(
     internal_installation_ids = {
         value.casefold() for value in configured_internal_installation_ids()
     }
-    for row in installation_receipts:
-        key = (int(row.user_id), _text(row.installation_id, 64))
+    for installation_row in installation_receipts:
+        key = (
+            int(installation_row.user_id),
+            _text(installation_row.installation_id, 64),
+        )
         if key[1]:
-            latest_install_by_device.setdefault(key, row)
+            latest_install_by_device.setdefault(key, installation_row)
 
     receipts_by_order: dict[str, list[CustomerValueReceipt]] = {}
-    for row in verified_receipts:
-        if row.order_no:
-            receipts_by_order.setdefault(str(row.order_no), []).append(row)
+    for verified_row in verified_receipts:
+        if verified_row.order_no:
+            receipts_by_order.setdefault(str(verified_row.order_no), []).append(verified_row)
 
     lifecycle_rows: list[dict[str, Any]] = []
     stage_counts: Counter[str] = Counter()
@@ -61,7 +71,7 @@ def build_customer_lifecycle(
     lifecycle_gaps: Counter[str] = Counter()
     for order_no, order in eligible_orders.items():
         try:
-            user_id = int(order.get("user_id"))
+            user_id = int(order.get("user_id") or 0)
         except (TypeError, ValueError):
             user_id = 0
         entity_ref = _text(
@@ -75,9 +85,11 @@ def build_customer_lifecycle(
         )
         order_receipts = receipts_by_order.get(order_no, [])
         receipts_by_goal: dict[str, list[CustomerValueReceipt]] = {}
-        for row in order_receipts:
-            if row.customer_goal_id:
-                receipts_by_goal.setdefault(str(row.customer_goal_id), []).append(row)
+        for order_receipt in order_receipts:
+            if order_receipt.customer_goal_id:
+                receipts_by_goal.setdefault(str(order_receipt.customer_goal_id), []).append(
+                    order_receipt
+                )
 
         def goal_rank(rows: list[CustomerValueReceipt]) -> tuple[bool, int, datetime]:
             kinds: dict[str, CustomerValueReceipt] = {}
@@ -89,11 +101,8 @@ def build_customer_lifecycle(
             reused = kinds.get("reuse")
             achieved = False
             outcome_data = _receipt_evidence(measured_outcome)
-            try:
-                measured_value = float(outcome_data.get("measured_value"))
-                target_value = float(outcome_data.get("target"))
-            except (TypeError, ValueError):
-                measured_value = target_value = float("nan")
+            measured_value = _float_or_nan(outcome_data.get("measured_value"))
+            target_value = _float_or_nan(outcome_data.get("target"))
             operator = _text(outcome_data.get("comparison"), 8).lower()
             if operator == "ge":
                 achieved = measured_value >= target_value
@@ -109,26 +118,26 @@ def build_customer_lifecycle(
                 and accepted.occurred_at + timedelta(hours=24) <= reused.occurred_at
             )
             latest = max(
-                (row.occurred_at for row in rows),
+                (cast(datetime, lifecycle_row.occurred_at) for lifecycle_row in rows),
                 default=datetime.min,
             )
             return sequence_valid, len(kinds), latest
 
         selected_rows = max(receipts_by_goal.values(), key=goal_rank) if receipts_by_goal else []
         by_kind: dict[str, CustomerValueReceipt] = {}
-        for row in sorted(selected_rows, key=lambda item: item.occurred_at):
-            by_kind.setdefault(str(row.receipt_kind), row)
+        for selected_row in sorted(selected_rows, key=lambda item: item.occurred_at):
+            by_kind.setdefault(str(selected_row.receipt_kind), selected_row)
 
         matching_installs = [
-            row
+            installation_row
             for (
                 receipt_user_id,
                 installation_id,
-            ), row in latest_install_by_device.items()
+            ), installation_row in latest_install_by_device.items()
             if receipt_user_id == user_id
             and installation_id.casefold() not in internal_installation_ids
-            and row.status == "installed"
-            and _text(row.installed_build_sha, 40).lower() == release_sha
+            and installation_row.status == "installed"
+            and _text(installation_row.installed_build_sha, 40).lower() == release_sha
         ]
         first_use = by_kind.get("first_use")
         goal = by_kind.get("goal")
@@ -140,11 +149,8 @@ def build_customer_lifecycle(
         acceptance_evidence = _receipt_evidence(acceptance)
         reuse_evidence = _receipt_evidence(reuse)
         comparison = _text(outcome_evidence.get("comparison"), 8).lower()
-        try:
-            measured = float(outcome_evidence.get("measured_value"))
-            target = float(outcome_evidence.get("target"))
-        except (TypeError, ValueError):
-            measured = target = float("nan")
+        measured = _float_or_nan(outcome_evidence.get("measured_value"))
+        target = _float_or_nan(outcome_evidence.get("target"))
         outcome_achieved = (
             comparison == "ge" and measured >= target or comparison == "le" and measured <= target
         )
@@ -208,7 +214,9 @@ def build_customer_lifecycle(
                 lifecycle_gaps[stage] += 1
         paid_at = _parse_datetime(order.get("paid_at"))
         install_times = [
-            row.reported_at.replace(tzinfo=UTC) for row in matching_installs if row.reported_at
+            installation_row.reported_at.replace(tzinfo=UTC)
+            for installation_row in matching_installs
+            if installation_row.reported_at
         ]
         same_goal = bool(
             first_use
