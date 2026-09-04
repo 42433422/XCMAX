@@ -52,12 +52,17 @@ class _PinnedHTTPSConnection(http.client.HTTPSConnection):
     def __init__(self, host: str, pinned_ip: str, *, port: int, timeout: float, context):
         super().__init__(host, port=port, timeout=timeout, context=context)
         self._pinned_ip = pinned_ip
+        self._xcagi_context = context
 
     def connect(self) -> None:
-        self.sock = socket.create_connection((self._pinned_ip, self.port), self.timeout, self.source_address)
-        if self._tunnel_host:
-            self._tunnel()
-        self.sock = self._context.wrap_socket(self.sock, server_hostname=self.host)
+        self.sock = socket.create_connection((self._pinned_ip, self.port), self.timeout)
+        self.sock = self._xcagi_context.wrap_socket(self.sock, server_hostname=self.host)
+
+
+class _PinnedRequest(urllib.request.Request):
+    """Request carrying the address that passed destination validation."""
+
+    _xcagi_pinned_ip: str
 
 
 def _open_no_redirect(
@@ -306,7 +311,7 @@ class MODstoreClient:
             if not self.access_token:
                 raise MODstoreAuthError("access_token required; call login() first")
             h.setdefault("Authorization", f"Bearer {self.access_token}")
-        req = urllib.request.Request(url=url, data=body, method=method, headers=h)
+        req = _PinnedRequest(url=url, data=body, method=method, headers=h)
         req._xcagi_pinned_ip = pinned_ip
         try:
             ctx = self._ssl_context()
