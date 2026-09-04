@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import json
 
-from cryptography.fernet import Fernet
-
 import retort_engine.cli as cli_module
+from cryptography.fernet import Fernet
 from retort_engine.cli import _print_public_json, _print_public_status, _public_status
 from retort_engine.secure_artifacts import read_private_json
 
