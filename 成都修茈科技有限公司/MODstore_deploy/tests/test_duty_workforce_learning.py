@@ -306,3 +306,26 @@ def test_gap_write_fails_closed_without_encryption_key(monkeypatch, tmp_path):
         run_duty_workforce_learning(audit_path=audit, gap_path=gaps)
 
     assert not gaps.exists()
+
+
+def test_gap_read_fails_closed_without_encryption_key(monkeypatch, tmp_path):
+    audit = tmp_path / "burnin.jsonl"
+    gaps = tmp_path / "gaps.jsonl"
+    _write_audit(
+        audit,
+        [
+            _row(
+                employee_id="host-checker",
+                run_id="run-01",
+                accepted=False,
+                manifest="a" * 64,
+                contract="b" * 64,
+                reasons=["programmatic_verification_failed"],
+            )
+        ],
+    )
+    run_duty_workforce_learning(audit_path=audit, gap_path=gaps)
+    monkeypatch.delenv("MODSTORE_LLM_MASTER_KEY", raising=False)
+
+    with pytest.raises(RuntimeError, match="MASTER_KEY"):
+        load_open_workforce_gaps(path=gaps)

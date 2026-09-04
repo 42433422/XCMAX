@@ -45,8 +45,10 @@ def _decode_gap_event(payload: Any) -> tuple[Optional[Dict[str, Any]], bool]:
         return None, False
     try:
         decoded = json.loads(decrypt_secret(ciphertext))
-    except (RuntimeError, ValueError, json.JSONDecodeError):
-        return None, False
+    except RuntimeError:
+        raise
+    except (ValueError, json.JSONDecodeError) as exc:
+        raise ValueError("invalid encrypted workforce gap ledger event") from exc
     return (decoded, False) if isinstance(decoded, dict) else (None, False)
 
 
