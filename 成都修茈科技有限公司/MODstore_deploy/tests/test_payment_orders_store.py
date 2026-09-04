@@ -8,6 +8,7 @@ critical-modules coverage gate stays above 80%.
 from __future__ import annotations
 
 import json
+import re
 
 import pytest
 
@@ -45,6 +46,36 @@ def test_find_returns_none_for_missing():
     assert payment_orders.find("MISSING") is None
 
 
+def test_order_path_rejects_unsafe_id_and_does_not_expose_order_number():
+    for value in ("", "../escape", "bad/name", "bad\\name", "space value"):
+        with pytest.raises(ValueError, match="非法支付订单号"):
+            payment_orders._path(value)
+
+    target = payment_orders._path("SAFE-ORDER-1")
+    assert "SAFE-ORDER-1" not in target.name
+    assert re.fullmatch(r"order_[0-9a-f]{64}\.json", target.name)
+
+
+def test_find_and_update_support_legacy_clear_name_record(tmp_path):
+    orders = tmp_path / "orders"
+    orders.mkdir()
+    legacy = orders / "order_LEGACY-1.json"
+    legacy.write_text(
+        json.dumps(
+            {
+                "out_trade_no": "LEGACY-1",
+                "status": "pending",
+                "notify_count": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert payment_orders.find("LEGACY-1")["status"] == "pending"
+    assert payment_orders.update_status(out_trade_no="LEGACY-1", status="paid") is True
+    assert json.loads(legacy.read_text(encoding="utf-8"))["status"] == "paid"
+
+
 def test_find_returns_none_for_corrupt_json(tmp_path):
     target = payment_orders._path("CORRUPT")
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -64,7 +95,9 @@ def test_merge_fields_skips_none_values():
         user_id=1,
         order_kind="wallet",
     )
-    assert payment_orders.merge_fields("MERGE-NONE", refunded=True, qr_code=None) is True
+    assert (
+        payment_orders.merge_fields("MERGE-NONE", refunded=True, qr_code=None) is True
+    )
     doc = payment_orders.find("MERGE-NONE")
     assert doc["refunded"] is True
     # qr_code default value preserved (None)
@@ -123,7 +156,9 @@ def test_list_orders_filters_by_user_and_status():
     assert total == 3
     assert all(row["user_id"] == 42 for row in rows)
 
-    rows_paid, total_paid = payment_orders.list_orders(user_id=42, status="paid", limit=10)
+    rows_paid, total_paid = payment_orders.list_orders(
+        user_id=42, status="paid", limit=10
+    )
     assert total_paid == 1
     assert rows_paid[0]["out_trade_no"] == "L-0"
 
@@ -183,7 +218,9 @@ def test_close_pending_older_than_handles_corrupt_and_missing_timestamp(tmp_path
 
     bad_ts = payment_orders._path("BAD-TS")
     bad_ts.write_text(
-        json.dumps({"out_trade_no": "BAD-TS", "status": "pending", "created_at": "not-a-date"}),
+        json.dumps(
+            {"out_trade_no": "BAD-TS", "status": "pending", "created_at": "not-a-date"}
+        ),
         encoding="utf-8",
     )
 
