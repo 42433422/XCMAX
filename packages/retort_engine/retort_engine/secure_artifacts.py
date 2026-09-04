@@ -10,7 +10,6 @@ from typing import Any
 
 from cryptography.fernet import Fernet, InvalidToken
 
-
 PRIVATE_JSON_SCHEMA = "retort.private_json.encrypted/v1"
 
 
