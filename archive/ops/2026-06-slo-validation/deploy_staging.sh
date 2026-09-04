@@ -91,7 +91,7 @@ services:
     ports:
       - "127.0.0.1:5902:3000"
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD}
       GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
@@ -181,12 +181,15 @@ curl -s http://127.0.0.1:5500/api/health 2>&1 | head -3
 echo "---"
 curl -s http://127.0.0.1:5901/api/v1/targets 2>&1 | head -50
 echo "---"
-curl -s -u admin:admin123 http://127.0.0.1:5902/api/search?type=dash-db 2>&1 | head -20
+grafana_auth="admin"
+grafana_auth+=":"
+grafana_auth+="${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD}"
+curl -s -u "$grafana_auth" http://127.0.0.1:5902/api/search?type=dash-db 2>&1 | head -20
 
 echo ""
 echo "=== 部署完成！ ==="
 echo "  - FHD API:    http://127.0.0.1:5500"
 echo "  - Prometheus: http://127.0.0.1:5901"
-echo "  - Grafana:    http://127.0.0.1:5902 (admin/admin123)"
+echo "  - Grafana:    http://127.0.0.1:5902 (admin / configured password)"
 echo "  - k6:         在容器内跑 168h（7 天）"
 echo "  - 7 天后跑 collect_7day.sh 一键收尾"

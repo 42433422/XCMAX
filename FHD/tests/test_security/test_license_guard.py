@@ -12,6 +12,8 @@ from app.security.license_guard import (
     _send_json,
 )
 
+_TEST_LICENSE_SECRET = "license-test-secret-" + ("x" * 24)
+
 # ---------------------------------------------------------------------------
 # _read_cookie
 # ---------------------------------------------------------------------------
@@ -210,7 +212,7 @@ class TestLanLicenseGuard:
         mock_cfg.enabled = True
         mock_cfg.is_secret_ready.return_value = True
         mock_cfg.cookie_name = "lan_token"
-        mock_cfg.license_secret = "testsecret1234567890"
+        mock_cfg.license_secret = _TEST_LICENSE_SECRET
         mock_cfg.trusted_proxies = []
         mock_cfg.admin_host_ips = []
         messages = []
@@ -244,7 +246,7 @@ class TestLanLicenseGuard:
         mock_cfg.enabled = True
         mock_cfg.is_secret_ready.return_value = True
         mock_cfg.cookie_name = "lan_token"
-        mock_cfg.license_secret = "testsecret1234567890"
+        mock_cfg.license_secret = _TEST_LICENSE_SECRET
         mock_cfg.trusted_proxies = []
         mock_cfg.admin_host_ips = []
         messages = []
@@ -280,7 +282,7 @@ class TestLanLicenseGuard:
         mock_cfg.enabled = True
         mock_cfg.is_secret_ready.return_value = True
         mock_cfg.cookie_name = "lan_token"
-        mock_cfg.license_secret = "testsecret1234567890"
+        mock_cfg.license_secret = _TEST_LICENSE_SECRET
         mock_cfg.trusted_proxies = []
         mock_cfg.admin_host_ips = []
         messages = []
@@ -317,7 +319,7 @@ class TestLanLicenseGuard:
         mock_cfg.enabled = True
         mock_cfg.is_secret_ready.return_value = True
         mock_cfg.cookie_name = "lan_token"
-        mock_cfg.license_secret = "testsecret1234567890"
+        mock_cfg.license_secret = _TEST_LICENSE_SECRET
         mock_cfg.trusted_proxies = []
         mock_cfg.admin_host_ips = []
 

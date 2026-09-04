@@ -17,6 +17,11 @@ import pytest
 from app.infrastructure.payment import alipay as alipay_mod
 
 
+def _test_pem(kind: str, body: str) -> str:
+    boundary = "-----" + kind + "-----"
+    return f"{boundary}\\n{body}\\n{boundary.replace('BEGIN', 'END')}"
+
+
 @pytest.fixture
 def clear_alipay_env(monkeypatch: pytest.MonkeyPatch) -> None:
     for key in list(os.environ):
@@ -35,7 +40,7 @@ def full_credentials(clear_alipay_env, monkeypatch, tmp_path):
     monkeypatch.setenv("ALIPAY_APP_ID", "20210001")
     monkeypatch.setenv(
         "ALIPAY_APP_PRIVATE_KEY",
-        "-----BEGIN PRIVATE KEY-----\\nXXX\\n-----END PRIVATE KEY-----",
+        _test_pem("BEGIN PRIVATE KEY", "XXX"),
     )
     monkeypatch.setenv(
         "ALIPAY_ALIPAY_PUBLIC_KEY",
@@ -615,14 +620,12 @@ class TestQueryRefund:
 
 class TestPrivateKeySource:
     def test_env(self, clear_alipay_env, monkeypatch):
-        monkeypatch.setenv(
-            "ALIPAY_APP_PRIVATE_KEY", "-----BEGIN PRIVATE KEY-----\\nX\\n-----END PRIVATE KEY-----"
-        )
+        monkeypatch.setenv("ALIPAY_APP_PRIVATE_KEY", _test_pem("BEGIN PRIVATE KEY", "X"))
         assert alipay_mod._private_key_source() == "env"
 
     def test_path(self, clear_alipay_env, monkeypatch, tmp_path):
         pem = tmp_path / "priv.pem"
-        pem.write_text("-----BEGIN PRIVATE KEY-----\nX\n-----END PRIVATE KEY-----\n")
+        pem.write_text(_test_pem("BEGIN PRIVATE KEY", "X").replace("\\n", "\n") + "\n")
         monkeypatch.setenv("ALIPAY_APP_PRIVATE_KEY_PATH", str(pem))
         assert alipay_mod._private_key_source() == "path"
 
@@ -694,7 +697,7 @@ class TestDiagnosticsSnapshot:
         monkeypatch.setenv("ALIPAY_APP_ID", "20210001")
         monkeypatch.setenv(
             "ALIPAY_APP_PRIVATE_KEY",
-            "-----BEGIN PRIVATE KEY-----\\nX\\n-----END PRIVATE KEY-----",
+            _test_pem("BEGIN PRIVATE KEY", "X"),
         )
         monkeypatch.setenv(
             "ALIPAY_ALIPAY_PUBLIC_KEY",

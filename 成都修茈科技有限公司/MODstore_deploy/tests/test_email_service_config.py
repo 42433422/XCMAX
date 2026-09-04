@@ -19,6 +19,8 @@ import pytest
 
 pytest.importorskip("fastapi")
 
+_TEST_SMTP_PASSWORD = "smtp-" + ("9" * 20)
+
 
 # ----------------------------- pure helpers ----------------------------- #
 
@@ -98,7 +100,7 @@ def test_email_status_smtp_mode(monkeypatch):
     from modstore_server import email_service as svc
 
     monkeypatch.setenv("MODSTORE_SMTP_USER", "real@qq.com")
-    monkeypatch.setenv("MODSTORE_SMTP_PASSWORD", "ge8nKdsLxxAxNmbg")
+    monkeypatch.setenv("MODSTORE_SMTP_PASSWORD", _TEST_SMTP_PASSWORD)
     monkeypatch.delenv("MODSTORE_EMAIL_DEBUG", raising=False)
     monkeypatch.setattr(svc, "_load_modstore_env", lambda: None)
 
@@ -173,7 +175,7 @@ def test_assert_email_outbound_configured_passes_when_real_smtp(monkeypatch):
     from modstore_server import email_service as svc
 
     monkeypatch.setenv("MODSTORE_SMTP_USER", "real@qq.com")
-    monkeypatch.setenv("MODSTORE_SMTP_PASSWORD", "ge8nKdsLxxAxNmbg")
+    monkeypatch.setenv("MODSTORE_SMTP_PASSWORD", _TEST_SMTP_PASSWORD)
     monkeypatch.delenv("MODSTORE_EMAIL_DEBUG", raising=False)
     monkeypatch.setattr(svc, "_load_modstore_env", lambda: None)
 
@@ -255,7 +257,9 @@ def _make_user(is_admin: bool = False):
         session.add(user)
         session.commit()
         session.refresh(user)
-        return types.SimpleNamespace(id=user.id, username=user.username, is_admin=is_admin)
+        return types.SimpleNamespace(
+            id=user.id, username=user.username, is_admin=is_admin
+        )
 
 
 def test_status_endpoint_masks_user_and_omits_password(client, monkeypatch):

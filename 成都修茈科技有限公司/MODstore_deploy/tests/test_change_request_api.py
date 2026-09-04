@@ -9,6 +9,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+_TEST_JWT_SECRET = "jwt-test-secret-" + ("x" * 32)
+
 
 def _reset_sqlalchemy_globals() -> None:
     import modstore_server.models as m
@@ -26,7 +28,7 @@ def admin_client(tmp_path, monkeypatch):
     monkeypatch.setenv("MODSTORE_DB_PATH", str(db))
     monkeypatch.setenv("MODSTORE_REPO_ROOT", str(tmp_path))
     monkeypatch.setenv("MODSTORE_AUTO_APPROVE_ENABLED", "0")
-    monkeypatch.setenv("MODSTORE_JWT_SECRET", "pytest-default-secret-at-least-32-characters")
+    monkeypatch.setenv("MODSTORE_JWT_SECRET", _TEST_JWT_SECRET)
     monkeypatch.setenv("MODSTORE_DISABLE_CSRF", "1")
 
     from modstore_server.api.deps import require_admin
@@ -37,13 +39,17 @@ def admin_client(tmp_path, monkeypatch):
     sf = get_session_factory(db)
     uname = f"adm_{uuid.uuid4().hex[:12]}"
     with sf() as s:
-        s.add(User(username=uname, email=f"{uname}@t.t", password_hash="x", is_admin=True))
+        s.add(
+            User(username=uname, email=f"{uname}@t.t", password_hash="x", is_admin=True)
+        )
         s.commit()
     with sf() as s:
         row = s.query(User).filter(User.username == uname).first()
         uid = int(row.id) if row else 1
 
-    admin = types.SimpleNamespace(id=uid, username=uname, is_admin=True, email=f"{uname}@t.t")
+    admin = types.SimpleNamespace(
+        id=uid, username=uname, is_admin=True, email=f"{uname}@t.t"
+    )
     app.dependency_overrides[require_admin] = lambda: admin
     yield TestClient(app), tmp_path
     app.dependency_overrides.pop(require_admin, None)
@@ -98,8 +104,12 @@ def test_high_risk_change_request_waits_for_human_through_autonomy_ssot(
     monkeypatch.setenv("MODSTORE_AUTO_APPROVE_REQUIRE_CI", "0")
     monkeypatch.setenv("MODSTORE_CR_NARROW_CI_ENABLED", "0")
     monkeypatch.setenv("XCAGI_AUTONOMY_MEDIUM_RISK_POLICY", "auto_approve")
-    monkeypatch.setenv("XCAGI_AUTONOMY_AUDIT_DB_PATH", str(tmp_path / "autonomy.sqlite3"))
-    monkeypatch.setenv("XCAGI_AUTONOMY_AUDIT_LOG_PATH", str(tmp_path / "autonomy.jsonl"))
+    monkeypatch.setenv(
+        "XCAGI_AUTONOMY_AUDIT_DB_PATH", str(tmp_path / "autonomy.sqlite3")
+    )
+    monkeypatch.setenv(
+        "XCAGI_AUTONOMY_AUDIT_LOG_PATH", str(tmp_path / "autonomy.jsonl")
+    )
 
     from modstore_server.employee_change_request_service import (
         defer_write_as_change_request,

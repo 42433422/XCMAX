@@ -19,6 +19,9 @@ from app.fastapi_routes.lan_admin_routes import (
     router,
 )
 
+_TEST_LICENSE_SECRET = "license-test-secret-" + ("x" * 24)
+_TEST_BOOTSTRAP_KEY = "bootstrap-test-key-" + ("x" * 16)
+
 
 # ---------------------------------------------------------------------------
 # _is_admin_host_ip
@@ -429,8 +432,8 @@ class TestSettingsEndpoints:
         mock_config = MagicMock()
         mock_config.enabled = True
         mock_config.is_secret_ready.return_value = True
-        mock_config.license_secret = "secret12345678"
-        mock_config.admin_bootstrap_key = "bootstrap12345"
+        mock_config.license_secret = _TEST_LICENSE_SECRET
+        mock_config.admin_bootstrap_key = _TEST_BOOTSTRAP_KEY
         mock_config.allowed_cidrs = ["10.0.0.0/8"]
         mock_cfg.return_value = mock_config
         client = _make_app_with_overrides(dep_host_override=_admin_host_actor)
@@ -453,8 +456,8 @@ class TestSettingsEndpoints:
         mock_config = MagicMock()
         mock_config.enabled = True
         mock_config.is_secret_ready.return_value = True
-        mock_config.license_secret = "newsecret123456"
-        mock_config.admin_bootstrap_key = "bootstrap12345"
+        mock_config.license_secret = _TEST_LICENSE_SECRET
+        mock_config.admin_bootstrap_key = _TEST_BOOTSTRAP_KEY
         mock_config.allowed_cidrs = ["10.0.0.0/8"]
         mock_cfg.return_value = mock_config
         client = _make_app_with_overrides(dep_host_override=_admin_host_actor)

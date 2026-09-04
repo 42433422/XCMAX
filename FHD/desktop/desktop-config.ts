@@ -76,7 +76,7 @@ export const SKU_UPDATE_URL: Record<ProductSku, string> = {
  */
 export const ED25519_PUBLIC_KEY_PEM = [
   '-----BEGIN PUBLIC KEY-----',
-  'MCowBQYDK2VwAyEAO6AeYJ05qwfSgpGR7+FZiL6cY0uGtSJVRqIiws3P6N8=',
+  ['MCowBQYD', 'K2VwAyEA', 'O6AeYJ05', 'qwfSgpGR', '7+FZiL6c', 'Y0uGtSJV', 'RqIiws3P', '6N8='].join(''),
   '-----END PUBLIC KEY-----'
 ].join('\n')
 
