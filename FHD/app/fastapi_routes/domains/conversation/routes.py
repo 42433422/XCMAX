@@ -120,7 +120,13 @@ def ai_analyze_export(export_id: str):
         if not safe_export_id or safe_export_id != export_id:
             return JSONResponse({"success": False, "message": "导出编号无效"}, status_code=400)
         service = get_data_analysis_service()
-        output_path = os.path.join(get_upload_dir(), f"report_{safe_export_id}.xlsx")
+        upload_root = os.path.realpath(os.path.abspath(get_upload_dir()))
+        output_path = os.path.realpath(
+            os.path.abspath(os.path.join(upload_root, f"report_{safe_export_id}.xlsx"))
+        )
+        upload_prefix = upload_root.rstrip(os.sep) + os.sep
+        if output_path != upload_root and not output_path.startswith(upload_prefix):
+            return JSONResponse({"success": False, "message": "导出编号无效"}, status_code=400)
         success = service.export_to_excel({}, output_path)
         if success and os.path.exists(output_path):
             return FileResponse(

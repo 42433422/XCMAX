@@ -223,6 +223,9 @@ class ShipmentTemplateServiceMixin:
         if len(digest_prefix) != 12:
             raise EtlError("ETL_SHIPMENT_TEMPLATE_DIGEST_INVALID", "发货单版式来源摘要无效")
         destination = (template_dir / f"{base_name}-{digest_prefix}.xlsx").resolve()
+        template_prefix = template_dir.resolve().as_posix().rstrip("/") + "/"
+        if not destination.as_posix().startswith(template_prefix):
+            raise EtlError("ETL_SHIPMENT_TEMPLATE_PATH_INVALID", "发货单版式保存路径无效")
         if template_dir.resolve() not in destination.parents:
             raise EtlError("ETL_SHIPMENT_TEMPLATE_PATH_INVALID", "发货单版式保存路径无效")
 

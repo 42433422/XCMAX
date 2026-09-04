@@ -61,9 +61,13 @@ def mount_vue_static(app: FastAPI, vue_dist_dir: Path) -> None:
 
         @app.get("/assets/css/{filename:path}", include_in_schema=False)
         async def sandbox_css(filename: str):
-            fp = (css_dir / filename).resolve()
+            css_root = css_dir.resolve()
+            fp = (css_root / filename).resolve()
+            css_prefix = css_root.as_posix().rstrip("/") + "/"
+            if fp != css_root and not fp.as_posix().startswith(css_prefix):
+                return JSONResponse({"success": False, "message": "资源路径非法"}, status_code=400)
             try:
-                fp.relative_to(css_dir.resolve())
+                fp.relative_to(css_root)
             except ValueError:
                 return JSONResponse({"success": False, "message": "资源路径非法"}, status_code=400)
             if not fp.is_file():
