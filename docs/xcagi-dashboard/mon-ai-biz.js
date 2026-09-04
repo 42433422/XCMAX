@@ -321,6 +321,7 @@
 
   let screenshotGallery = { list: [], index: 0, terminal: 'web', animating: false };
   const screenshotImageCache = new Map();
+  const lazyShotSources = new WeakMap();
   const terminalFetchControllers = {};
   const transparentPixel =
     'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
@@ -897,15 +898,15 @@
     }
   }
 
-  function bindLazyShotThumbs(root, terminal, pages) {
+  function bindLazyShotThumbs(root) {
     const strip = root.querySelector('.aibiz-shot-thumbs');
-    const imgs = root.querySelectorAll('.aibiz-shot-thumb img[data-src]');
+    const imgs = root.querySelectorAll('.aibiz-shot-thumb img');
     const loadImg = (img) => {
-      const src = safeScreenshotImageSrc(img.getAttribute('data-src'));
+      // Never reinterpret DOM-controlled attributes as a URL. Sources are
+      // computed from the validated page model and kept out of markup.
+      const src = lazyShotSources.get(img) || transparentPixel;
       if (!src || img.dataset.loaded) return;
       img.dataset.loaded = '1';
-      // safeScreenshotImageSrc permits only same-origin HTTP(S) or an inert pixel.
-      // lgtm[js/xss-through-dom]
       img.src = src;
     };
     if (!('IntersectionObserver' in window) || !strip) {
@@ -949,7 +950,7 @@
       .map(
         (p, i) =>
           `<button type="button" class="aibiz-shot-thumb" data-aibiz-shot-thumb="${i}" title="${esc(p.name || '')}">` +
-          `<img loading="lazy" decoding="async" alt="${esc(p.name || '')}" src="${transparentPixel}" data-src="${esc(safeScreenshotImageSrc(surfaceImgSrc(terminal, i, p, 'thumb')))}" />` +
+          `<img loading="lazy" decoding="async" alt="${esc(p.name || '')}" src="${transparentPixel}" />` +
           `</button>`
       )
       .join('');
@@ -971,6 +972,12 @@
 
     const root = screen.querySelector('.aibiz-shot');
     const imgEls = root.querySelectorAll('.aibiz-shot-img');
+    root.querySelectorAll('.aibiz-shot-thumb img').forEach((img, i) => {
+      lazyShotSources.set(
+        img,
+        safeScreenshotImageSrc(surfaceImgSrc(terminal, i, pages[i], 'thumb'))
+      );
+    });
     const c = {
       terminal,
       root,
@@ -986,7 +993,7 @@
     };
     terminalCarousels[terminal] = c;
 
-    bindLazyShotThumbs(root, terminal, pages);
+    bindLazyShotThumbs(root);
 
     root.addEventListener('mouseenter', () => {
       c.paused = true;
