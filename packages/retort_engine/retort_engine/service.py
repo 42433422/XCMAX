@@ -88,7 +88,6 @@ from retort_engine.task_dispatch_plan import build_task_dispatch_plan
 from retort_engine.task_prioritization import build_task_prioritization_report
 from retort_engine.upstream_pr_ci_probe import build_upstream_pr_ci_probe
 
-
 _HTTP_PATH_FIELDS = frozenset(
     {
         "project",

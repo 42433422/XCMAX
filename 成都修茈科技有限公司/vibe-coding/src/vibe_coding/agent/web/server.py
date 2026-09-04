@@ -238,13 +238,13 @@ def create_app(
 
     configured_roots = tuple(workspace_roots or (Path.cwd(),))
     trusted_workspaces: dict[str, Path] = {}
-    for index, configured_root in enumerate(configured_roots):
+    for workspace_index, configured_root in enumerate(configured_roots):
         resolved_root = Path(configured_root).expanduser().resolve()
         if not resolved_root.is_dir():
             raise ValueError(f"workspace root is not a directory: {configured_root!s}")
-        trusted_workspaces[str(index)] = resolved_root
+        trusted_workspaces[str(workspace_index)] = resolved_root
         trusted_workspaces[resolved_root.as_posix()] = resolved_root
-        if index == 0:
+        if workspace_index == 0:
             trusted_workspaces["."] = resolved_root
             trusted_workspaces["default"] = resolved_root
 
