@@ -193,7 +193,9 @@ class RetortService:
         candidate = os.path.realpath(os.path.abspath(text))
         for root in self.workspace_roots:
             root_prefix = root.rstrip(os.sep) + os.sep
-            if candidate == root or candidate.startswith(root_prefix):
+            if candidate == root:
+                return root
+            if candidate.startswith(root_prefix):
                 return candidate
         raise ValueError("path is outside configured Retort workspaces")
 

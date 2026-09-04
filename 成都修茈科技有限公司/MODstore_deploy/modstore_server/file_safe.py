@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 ALLOWED_SUFFIXES = frozenset(
@@ -39,7 +40,9 @@ def resolve_under_mod(mod_dir: Path, rel: str) -> Path:
         raise ValueError("路径越界") from e
     suf = candidate.suffix.lower()
     if suf not in ALLOWED_SUFFIXES:
-        raise ValueError(f"不允许的扩展名（允许: {', '.join(sorted(ALLOWED_SUFFIXES))}）")
+        raise ValueError(
+            f"不允许的扩展名（允许: {', '.join(sorted(ALLOWED_SUFFIXES))}）"
+        )
     return candidate
 
 
@@ -57,3 +60,49 @@ def write_text_file(path: Path, content: str) -> None:
         raise ValueError(f"内容过大（>{MAX_FILE_BYTES} 字节）")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8", newline="\n")
+
+
+def read_text_under_mod(mod_dir: Path, rel: str) -> str:
+    """Read a remotely selected file after validating it at the filesystem sink."""
+    root_text = os.path.realpath(os.path.abspath(str(mod_dir)))
+    candidate_text = os.path.realpath(
+        os.path.abspath(os.path.join(root_text, normalize_rel_path(rel)))
+    )
+    root_prefix = root_text.rstrip(os.sep) + os.sep
+    if candidate_text == root_text or not candidate_text.startswith(root_prefix):
+        raise ValueError("路径越界")
+    suffix = os.path.splitext(candidate_text)[1].lower()
+    if suffix not in ALLOWED_SUFFIXES:
+        raise ValueError(
+            f"不允许的扩展名（允许: {', '.join(sorted(ALLOWED_SUFFIXES))}）"
+        )
+    if not os.path.isfile(candidate_text):
+        raise FileNotFoundError("不是文件或不存在")
+    size = os.stat(candidate_text).st_size
+    if size > MAX_FILE_BYTES:
+        raise ValueError(f"文件过大（>{MAX_FILE_BYTES} 字节）")
+    with open(candidate_text, encoding="utf-8", errors="strict") as handle:
+        return handle.read()
+
+
+def write_text_under_mod(mod_dir: Path, rel: str, content: str) -> Path:
+    """Write a remotely selected file after validating it at the filesystem sink."""
+    if len(content.encode("utf-8")) > MAX_FILE_BYTES:
+        raise ValueError(f"内容过大（>{MAX_FILE_BYTES} 字节）")
+    root_text = os.path.realpath(os.path.abspath(str(mod_dir)))
+    candidate_text = os.path.realpath(
+        os.path.abspath(os.path.join(root_text, normalize_rel_path(rel)))
+    )
+    root_prefix = root_text.rstrip(os.sep) + os.sep
+    if candidate_text == root_text or not candidate_text.startswith(root_prefix):
+        raise ValueError("路径越界")
+    suffix = os.path.splitext(candidate_text)[1].lower()
+    if suffix not in ALLOWED_SUFFIXES:
+        raise ValueError(
+            f"不允许的扩展名（允许: {', '.join(sorted(ALLOWED_SUFFIXES))}）"
+        )
+    parent_text = os.path.dirname(candidate_text)
+    os.makedirs(parent_text, exist_ok=True)
+    with open(candidate_text, "w", encoding="utf-8", newline="\n") as handle:
+        handle.write(content)
+    return Path(candidate_text)

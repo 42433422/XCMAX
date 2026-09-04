@@ -1,0 +1,9 @@
+extensions:
+  - addsTo:
+      pack: codeql/python-all
+      extensible: barrierModel
+    data:
+      # RetortService._path canonicalizes a requested path and returns it only
+      # when it is exactly an operator-configured workspace root or a child of
+      # one. Its rejection behavior is covered by runtime integration tests.
+      - ["retort_engine.service.RetortService", "Member[_path].ReturnValue", "path-injection"]

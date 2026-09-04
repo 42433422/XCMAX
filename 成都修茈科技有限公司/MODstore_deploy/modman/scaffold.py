@@ -19,7 +19,7 @@ def create_mod(mod_id: str, mod_name: str, library: Path) -> Path:
     library_text = os.path.realpath(os.path.abspath(library))
     dest_text = os.path.realpath(os.path.abspath(os.path.join(library_text, mod_id)))
     library_prefix = library_text.rstrip(os.sep) + os.sep
-    if dest_text != library_text and not dest_text.startswith(library_prefix):
+    if not dest_text.startswith(library_prefix):
         raise ValueError("mod_id 路径越界")
     library = Path(library_text)
     dest = Path(dest_text)
