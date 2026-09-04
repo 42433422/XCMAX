@@ -173,7 +173,7 @@ jobs:
           tar -xzf "${rootfs_archive}" -C "${rootfs_dir}"
           distro_args=()
           if grep -Eq '^ID_LIKE=.*rhel' "${rootfs_dir}/etc/os-release" && \
-             grep -Eq '^PLATFORM_ID=["'"']?platform:el8["'"']?$' "${rootfs_dir}/etc/os-release"; then
+             grep -Eq '^PLATFORM_ID=.*platform:el8' "${rootfs_dir}/etc/os-release"; then
             distro_args=(--distro redhat/8)
           fi
           trivy rootfs "${distro_args[@]}" \
