@@ -257,9 +257,7 @@ def _make_user(is_admin: bool = False):
         session.add(user)
         session.commit()
         session.refresh(user)
-        return types.SimpleNamespace(
-            id=user.id, username=user.username, is_admin=is_admin
-        )
+        return types.SimpleNamespace(id=user.id, username=user.username, is_admin=is_admin)
 
 
 def test_status_endpoint_masks_user_and_omits_password(client, monkeypatch):

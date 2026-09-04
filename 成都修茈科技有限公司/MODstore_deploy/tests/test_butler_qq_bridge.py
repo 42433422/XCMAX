@@ -15,9 +15,7 @@ import os
 
 import pytest
 
-pytest.importorskip(
-    "nacl", reason="butler_qq_bridge 需要 pynacl；pip install pynacl 后再跑"
-)
+pytest.importorskip("nacl", reason="butler_qq_bridge 需要 pynacl；pip install pynacl 后再跑")
 
 
 def _fake_credential(label: str, size: int = 32) -> str:
