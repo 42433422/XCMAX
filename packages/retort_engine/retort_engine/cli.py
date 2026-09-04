@@ -82,12 +82,12 @@ from retort_engine.review_family_behavior_replay import (
 )
 from retort_engine.review_pipeline import build_diff_pipeline_replay
 from retort_engine.review_quality_benchmark import build_review_quality_benchmark
+from retort_engine.secure_artifacts import read_private_json, write_private_json
 from retort_engine.self_bootstrap import (
     build_self_bootstrap_plan,
     build_self_depth_report,
     external_improvement_gate,
 )
-from retort_engine.secure_artifacts import read_private_json, write_private_json
 from retort_engine.similar_project_loop import (
     build_absorption_saturation_report,
     build_similar_project_radar,

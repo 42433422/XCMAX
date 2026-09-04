@@ -5,7 +5,6 @@ import stat
 
 import pytest
 from cryptography.fernet import Fernet
-
 from retort_engine.secure_artifacts import (
     PRIVATE_JSON_SCHEMA,
     SecureArtifactError,
