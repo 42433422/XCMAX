@@ -142,4 +142,4 @@ cd MODstore_deploy
 
 - Python `payment_api` 在 module import 时调用 `init_db()` 并 reload `alipay_service`；FastAPI 重启时如果 Java 端没准备好，Python 会瞬间承担流量。务必先确认 Java `health` 再改 `PAYMENT_BACKEND`。
 - 防重放：Python 默认使用进程内 `processed_requests` 集合，**多 worker 不安全**。生产环境必须依赖 Java 的 Redis nonce 机制；如果回滚到 Python，需要把请求集中到单 worker，或临时关闭高并发支付活动。
-- Webhook 投递目录：Python `webhook_dispatcher` 的事件落盘在 `MODSTORE_WEBHOOK_EVENTS_DIR`；如果切到 Java 后某事件未送达，可在 Python 端通过 `/api/webhooks/admin/replay` 重放，但前提是事件最初由 Python 发起。Java 端事件需用 Java 自身的重放接口。
+- Webhook 投递目录：Python `webhook_dispatcher` 的事件以 AES-GCM 加密后落盘在 `MODSTORE_WEBHOOK_EVENTS_DIR`，密钥来自 `MODSTORE_WEBHOOK_EVENT_KEY`（未设置时回退 `MODSTORE_WEBHOOK_SECRET`）；两者都为空时禁止落盘重放。切到 Java 后某事件未送达，可在 Python 端通过 `/api/webhooks/admin/replay` 重放，但前提是事件最初由 Python 发起且密钥未变化。Java 端事件需用 Java 自身的重放接口。
