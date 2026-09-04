@@ -107,7 +107,9 @@ def test_release_pipeline_uploads_mac_zip_and_never_synthesizes_scan_success() -
     uploader = (REPO_ROOT / "scripts" / "deploy" / "upload-desktop-skus.sh").read_text(
         encoding="utf-8"
     )
-    scanner = (REPO_ROOT / "desktop" / "scripts" / "security-scan.sh").read_text(encoding="utf-8")
+    scanner = (REPO_ROOT / "desktop" / "scripts" / "security-scan.sh").read_text(
+        encoding="utf-8"
+    )
     finalize = (REPO_ROOT / "scripts" / "package" / "finalize-macos-dmg.sh").read_text(
         encoding="utf-8"
     )
@@ -116,7 +118,10 @@ def test_release_pipeline_uploads_mac_zip_and_never_synthesizes_scan_success() -
     assert workflow.count("--include='*.zip.blockmap'") == 1
     assert "publish_payload()" in workflow
     assert workflow.count('publish_payload "') == 2
-    assert 'immutable_root="/var/www/update/releases/builds/${version}/${release_sha}"' in workflow
+    assert (
+        'immutable_root="/var/www/update/releases/builds/${version}/${release_sha}"'
+        in workflow
+    )
     assert workflow.count("publish_stable_metadata_atomically") == 3
     assert "verify-public-windows-signature:" in workflow
     assert workflow.index("verify-public-windows-signature:") < workflow.index(
@@ -146,28 +151,38 @@ def test_release_pipeline_uploads_mac_zip_and_never_synthesizes_scan_success() -
 
 
 def test_emergency_mac_feed_repair_preserves_release_identity_and_path_parity() -> None:
-    workflow = (REPO_ROOT / ".github" / "workflows" / "fix-mac-update-feed.yml").read_text(
-        encoding="utf-8"
-    )
-    restorer = (REPO_ROOT / "scripts" / "deploy" / "restore_mac_feed_from_artifact.sh").read_text(
-        encoding="utf-8"
-    )
+    workflow = (
+        REPO_ROOT / ".github" / "workflows" / "fix-mac-update-feed.yml"
+    ).read_text(encoding="utf-8")
+    restorer = (
+        REPO_ROOT / "scripts" / "deploy" / "restore_mac_feed_from_artifact.sh"
+    ).read_text(encoding="utf-8")
 
     assert "actions: read" in workflow
     assert "contents: write" in workflow
     assert "source_run_id" in workflow
+    assert "security_scan_run_id:" in workflow
+    assert "previous_security_scan_run_id:" in workflow
+    assert "ref: ${{ inputs.build_sha }}" in workflow
+    assert "verify_security_scan_pair.py" in workflow
+    assert '--release-sha "${{ inputs.build_sha }}"' in workflow
     assert "--name xcagi-desktop-macos-enterprise" in workflow
     assert "RUN_CONCLUSION" in workflow
     assert "RUN_WORKFLOW" in workflow
     assert "SOURCE_RUN_SHA" in workflow
     assert "SOURCE_ARTIFACT_ID" in workflow
     assert "SOURCE_ARTIFACT_SIZE" in workflow
-    assert 'ZIP_BUILD_SHA="$(python3 scripts/deploy/extract_zip_build_sha.py' in workflow
+    assert (
+        'ZIP_BUILD_SHA="$(python3 scripts/deploy/extract_zip_build_sha.py' in workflow
+    )
     assert "Canonical ZIP identity differs from the source release run" in workflow
-    assert "build_sha override differs from the canonical ZIP identity" in workflow
+    assert "build_sha differs from the canonical ZIP identity" in workflow
     assert '"https://xiu-ci.com/xcagi-v${PRODUCT_VERSION}/manifest.json"' in workflow
     assert 'MANIFEST_SHA="$(printf' in workflow
-    assert "Canonical ZIP identity does not match the published release manifest" in workflow
+    assert (
+        "Canonical ZIP identity does not match the published release manifest"
+        in workflow
+    )
     assert 'STABLE_DEST="/var/www/update/releases/stable/enterprise"' in workflow
     assert 'OFFICIAL_DEST="/var/www/xcagi-v${PRODUCT_VERSION}/enterprise"' in workflow
     assert 'RELEASE_TAG="xcagi-v${PRODUCT_VERSION}"' in workflow
@@ -185,11 +200,30 @@ def test_emergency_mac_feed_repair_preserves_release_identity_and_path_parity() 
     assert "--retry-all-errors" not in restorer
     assert 'unzip -q "${artifact_path}"' in restorer
     assert 'actual_build_sha="$(' in restorer
-    assert 'cp -f "${OFFICIAL_DEST}/${ZIP_NAME}.part" "${STABLE_DEST}/${ZIP_NAME}.part"' in restorer
-    assert 'cmp -s "${OFFICIAL_DEST}/latest-mac.yml" "${STABLE_DEST}/latest-mac.yml"' in restorer
+    assert (
+        'cp -f "${OFFICIAL_DEST}/${ZIP_NAME}.part" "${STABLE_DEST}/${ZIP_NAME}.part"'
+        in restorer
+    )
+    assert (
+        'cmp -s "${OFFICIAL_DEST}/latest-mac.yml" "${STABLE_DEST}/latest-mac.yml"'
+        in restorer
+    )
     assert restorer.index('mv -f "${OFFICIAL_DEST}/${ZIP_NAME}.part"') < restorer.index(
         'mv -f "${OFFICIAL_DEST}/latest-mac.yml.part"'
     )
+
+
+def test_unverifiable_local_mac_feed_lane_is_fail_closed() -> None:
+    workflow = (
+        REPO_ROOT / ".github" / "workflows" / "publish-local-mac-feed.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "local upload (disabled)" in workflow
+    assert "Use Release Orchestrator" in workflow
+    assert "exit 1" in workflow
+    assert "scp " not in workflow
+    assert "ssh " not in workflow
+    assert "latest-mac.yml" not in workflow
 
 
 def test_update_metadata_requires_full_build_sha(tmp_path: Path) -> None:
@@ -224,4 +258,6 @@ def test_desktop_updater_rejects_same_version_downgrade_by_release_date() -> Non
     assert "allowDowngrade = false" in updater
     assert "remoteReleaseDate" in updater
     assert "readLocalBuildTimeMs" in updater
-    assert "return Boolean(remoteSha && localSha && remoteSha !== localSha)" not in updater
+    assert (
+        "return Boolean(remoteSha && localSha && remoteSha !== localSha)" not in updater
+    )
