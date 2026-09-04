@@ -22,6 +22,19 @@ def test_cvm_watcher_root_render_has_no_precheckout_working_directory() -> None:
     assert "- name: Require CVM SSH secrets" in body
 
 
+def test_security_full_scan_root_render_scans_monorepo_without_double_prefix() -> None:
+    source = REPO_ROOT / "FHD" / ".github" / "workflows" / "security-full-scan.yml"
+
+    rendered = publisher._render_fhd(source)
+
+    assert rendered is not None
+    _, body = rendered
+    assert "defaults:\n  run:\n    working-directory: FHD" not in body
+    assert "python FHD/scripts/security/normalize_security_report.py" in body
+    assert "FHD/FHD/scripts/security" not in body
+    assert 'docker run --rm -v "${PWD}:/repo"' in body
+
+
 def test_modstore_deploy_root_render_has_no_precheckout_working_directory() -> None:
     source = (
         REPO_ROOT
@@ -48,22 +61,36 @@ def test_ai_self_heal_workflow_run_names_are_not_path_prefixed() -> None:
     assert rendered is not None
     _, body = rendered
     # workflow display names must remain literal while the publisher rewrites paths.
-    assert 'workflows: ["CI/CD Pipeline", "CI - Backend Python", "Source Governance"' in body
+    assert (
+        'workflows: ["CI/CD Pipeline", "CI - Backend Python", "Source Governance"'
+        in body
+    )
     assert '"cvm-autonomy-watcher"' in body
     assert '"FHD/CI/CD Pipeline"' not in body
 
 
 def test_corporate_component_workflows_are_published_with_root_paths() -> None:
     root_frontend = publisher._render_corp(
-        REPO_ROOT / "成都修茈科技有限公司" / ".github" / "workflows" / "ci-root-frontend.yml"
+        REPO_ROOT
+        / "成都修茈科技有限公司"
+        / ".github"
+        / "workflows"
+        / "ci-root-frontend.yml"
     )
     vibe = publisher._render_corp(
-        REPO_ROOT / "成都修茈科技有限公司" / ".github" / "workflows" / "ci-vibe-coding.yml"
+        REPO_ROOT
+        / "成都修茈科技有限公司"
+        / ".github"
+        / "workflows"
+        / "ci-vibe-coding.yml"
     )
 
     assert root_frontend is not None
     assert vibe is not None
     assert "working-directory: 成都修茈科技有限公司" in root_frontend[1]
-    assert "cache-dependency-path: 成都修茈科技有限公司/package-lock.json" in root_frontend[1]
+    assert (
+        "cache-dependency-path: 成都修茈科技有限公司/package-lock.json"
+        in root_frontend[1]
+    )
     assert "working-directory: 成都修茈科技有限公司/vibe-coding" in vibe[1]
     assert "- '成都修茈科技有限公司/vibe-coding/**'" in vibe[1]
