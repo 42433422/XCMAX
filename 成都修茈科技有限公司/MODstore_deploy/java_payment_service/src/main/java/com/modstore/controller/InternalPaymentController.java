@@ -185,8 +185,9 @@ public class InternalPaymentController {
     /**
      * Minimal, paged payment proof for the founder customer-value ledger.
      *
-     * No user id, buyer id, wallet balance or credential crosses this service
-     * boundary. A row is emitted only after the Java-owned order reached
+     * Only the numeric account owner and immutable enterprise subject cross
+     * this service boundary; buyer id, wallet balance and credentials do not.
+     * A row is emitted only after the Java-owned order reached
      * {@code paid}; the existing provider transaction id and payment channel
      * are retained so the Python side can continue to fail closed.
      */
@@ -220,6 +221,72 @@ public class InternalPaymentController {
                 "offset", safeOffset,
                 "total", total,
                 "orders", rows
+        );
+    }
+
+    /** Freeze the legal entity used by all subsequently created payment orders. */
+    @PostMapping("/enterprise-identities")
+    public Map<String, Object> freezeEnterpriseIdentity(
+            @RequestHeader(value = "X-Internal-Api-Key", required = false) String key,
+            @RequestBody Map<String, Object> request
+    ) {
+        requireInternalKey(key);
+        long userId;
+        long verifierUserId;
+        try {
+            userId = Long.parseLong(String.valueOf(request.getOrDefault("user_id", "0")));
+            verifierUserId = Long.parseLong(
+                    String.valueOf(request.getOrDefault("verified_by_user_id", "0"))
+            );
+        } catch (NumberFormatException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "identity user ids invalid");
+        }
+        if (userId <= 0 || verifierUserId <= 0 || userId == verifierUserId) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "identity user ids invalid");
+        }
+        String subjectId = String.valueOf(
+                request.getOrDefault("enterprise_subject_id", "")
+        ).trim();
+        String legalName = String.valueOf(request.getOrDefault("legal_name", "")).trim();
+        String digest = String.valueOf(
+                request.getOrDefault("verification_sha256", "")
+        ).trim().toLowerCase();
+        if (subjectId.length() < 4 || subjectId.length() > 128
+                || legalName.length() < 2 || legalName.length() > 256
+                || !digest.matches("[0-9a-f]{64}")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "enterprise identity invalid");
+        }
+        User target = userRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "user not found"));
+        String existingSubject = target.getEnterpriseSubjectId() == null
+                ? "" : target.getEnterpriseSubjectId();
+        String existingName = target.getEnterpriseLegalName() == null
+                ? "" : target.getEnterpriseLegalName();
+        String existingDigest = target.getEnterpriseVerificationSha256() == null
+                ? "" : target.getEnterpriseVerificationSha256().toLowerCase();
+        boolean hasExisting = !existingSubject.isBlank()
+                || !existingName.isBlank()
+                || !existingDigest.isBlank();
+        if (hasExisting && !(existingSubject.equals(subjectId)
+                && existingName.equals(legalName)
+                && existingDigest.equals(digest))) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "enterprise identity already frozen");
+        }
+        if (!hasExisting) {
+            target.setEnterpriseSubjectId(subjectId);
+            target.setEnterpriseLegalName(legalName);
+            target.setEnterpriseVerificationSha256(digest);
+            target.setEnterpriseVerifiedAt(LocalDateTime.now(BUSINESS_ZONE));
+            target.setEnterpriseVerifiedByUserId(verifierUserId);
+        }
+        target.setEnterprise(true);
+        userRepository.save(target);
+        return Map.of(
+                "ok", true,
+                "source", "java_postgresql",
+                "user_id", userId,
+                "enterprise_subject_id", subjectId,
+                "frozen", true
         );
     }
 
@@ -290,6 +357,11 @@ public class InternalPaymentController {
                 && !order.getRefundStatus().isBlank()
                 && !"none".equalsIgnoreCase(order.getRefundStatus());
         row.put("out_trade_no", order.getOutTradeNo());
+        row.put("user_id", order.getUser() == null ? 0 : order.getUser().getId());
+        row.put(
+                "enterprise_subject_id",
+                order.getEnterpriseSubjectId() == null ? "" : order.getEnterpriseSubjectId()
+        );
         row.put("status", order.getStatus());
         row.put("subject", order.getSubject());
         row.put("order_kind", order.getOrderKind() == null ? "" : order.getOrderKind());

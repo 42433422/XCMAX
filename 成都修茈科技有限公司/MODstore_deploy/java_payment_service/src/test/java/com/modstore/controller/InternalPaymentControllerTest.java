@@ -101,9 +101,53 @@ class InternalPaymentControllerTest {
     }
 
     @Test
+    void enterpriseIdentityIsFrozenInJavaPaymentOwnerBeforeCheckout() {
+        User user = new User();
+        user.setId(73L);
+        when(userRepository.findById(73L)).thenReturn(java.util.Optional.of(user));
+
+        Map<String, Object> result = controller.freezeEnterpriseIdentity(
+                "test-internal-key",
+                Map.of(
+                        "user_id", 73,
+                        "verified_by_user_id", 5,
+                        "enterprise_subject_id", "credit-code-001",
+                        "legal_name", "真实客户甲有限公司",
+                        "verification_sha256", "a".repeat(64)
+                )
+        );
+
+        assertEquals(true, result.get("frozen"));
+        assertEquals("credit-code-001", user.getEnterpriseSubjectId());
+        assertEquals("真实客户甲有限公司", user.getEnterpriseLegalName());
+        assertEquals("a".repeat(64), user.getEnterpriseVerificationSha256());
+        assertTrue(user.isEnterprise());
+        verify(userRepository).save(user);
+
+        ResponseStatusException conflict = assertThrows(
+                ResponseStatusException.class,
+                () -> controller.freezeEnterpriseIdentity(
+                        "test-internal-key",
+                        Map.of(
+                                "user_id", 73,
+                                "verified_by_user_id", 5,
+                                "enterprise_subject_id", "credit-code-other",
+                                "legal_name", "其他客户有限公司",
+                                "verification_sha256", "b".repeat(64)
+                        )
+                )
+        );
+        assertEquals(409, conflict.getStatusCode().value());
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     void valueEvidenceReturnsOnlyMinimalProviderProof() {
         Order order = new Order();
+        User owner = new User();
+        owner.setId(73L);
+        order.setUser(owner);
+        order.setEnterpriseSubjectId("credit-code-001");
         order.setOutTradeNo("customer-order-001");
         order.setStatus("paid");
         order.setSubject("Customer delivery");
@@ -150,7 +194,10 @@ class InternalPaymentControllerTest {
         assertEquals("2026-07-22T12:05:00Z", row.get("fulfilled_at"));
         assertEquals(false, row.get("acceptance_verified"));
         assertEquals("", row.get("accepted_at"));
-        assertTrue(row.keySet().stream().noneMatch(key -> key.contains("user")));
+        assertEquals(73L, row.get("user_id"));
+        assertEquals("credit-code-001", row.get("enterprise_subject_id"));
+        assertTrue(row.keySet().stream().noneMatch(key -> key.contains("username")));
+        assertTrue(row.keySet().stream().noneMatch(key -> key.contains("email")));
         assertTrue(row.keySet().stream().noneMatch(key -> key.contains("buyer")));
     }
 
@@ -198,7 +245,8 @@ class InternalPaymentControllerTest {
         assertEquals(true, row.get("acceptance_verified"));
         assertEquals("verified_plan_usage", row.get("acceptance_reason"));
         assertEquals("2026-07-22T12:30:00Z", row.get("accepted_at"));
-        assertTrue(row.keySet().stream().noneMatch(key -> key.contains("user")));
+        assertEquals(0L, row.get("user_id"));
+        assertEquals("", row.get("enterprise_subject_id"));
         assertTrue(row.keySet().stream().noneMatch(key -> key.contains("buyer")));
     }
 }

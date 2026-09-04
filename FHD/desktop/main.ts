@@ -239,6 +239,20 @@ function bootstrap(): void {
           // 保留 outbox 文件，下次启动重试；不得将“上报失败”当成“安装失败”。
           writeBackendLog(`[updater] install receipt deferred: ${error instanceof Error ? error.message : error}\n`)
         }
+        if (!isE2ERun) {
+          const heartbeat = setInterval(() => {
+            void reportPendingUpdateInstallation({
+              backendPort: DEFAULT_PORT,
+              installedVersion: readLocalProductVersion(),
+              installedBuildSha: readLocalBuildSha(),
+            }).then(receipt => {
+              if (receipt.reported) writeBackendLog('[updater] installation heartbeat reported\n')
+            }).catch(error => {
+              writeBackendLog(`[updater] installation heartbeat deferred: ${error instanceof Error ? error.message : error}\n`)
+            })
+          }, 6 * 60 * 60 * 1000)
+          heartbeat.unref()
+        }
         // 更新日志（What's New）：版本变化时弹一次原生提示（首次运行与测试/E2E 模式跳过）。
         if (!process.env.XCAGI_DESKTOP_TEST && !isE2ERun) {
           const releaseNote = consumeReleaseNotes()

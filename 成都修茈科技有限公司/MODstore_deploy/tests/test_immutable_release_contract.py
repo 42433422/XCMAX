@@ -75,6 +75,10 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert "verify_payment_identity" in script
     assert "/actuator/info" in script
     assert "MODSTORE_RELEASE_ARTIFACT_SHA256" in script
+    assert 'RELEASE_ID="xcagi-${PRODUCT_VERSION}-${TARGET_SHA}"' in script
+    assert '"release_id": release_id' in script
+    assert "XCMAX_RELEASE_SHA=%s" in script
+    assert "XCMAX_PRODUCT_VERSION=%s" in script
     assert 'RUNTIME_DIR="${MODSTORE_RUNTIME_DIR:-${RELEASE_BASE}/runtime}"' in script
     assert '[[ "$RUNTIME_DIR" == /* ]]' in script
     assert 'install -d -m 700 "$RUNTIME_DIR"' in script
@@ -223,7 +227,7 @@ def test_release_retention_rejects_unsafe_limit(tmp_path: Path) -> None:
     assert "XCMAX_RELEASES_TO_KEEP must be an integer greater than or equal to 2" in result.stderr
 
 
-def test_production_workflow_deploys_only_successful_tested_main_sha() -> None:
+def test_production_workflow_requires_manually_orchestrated_exact_sha() -> None:
     source = yaml.safe_load((ROOT / ".github/workflows/prod-deploy.yml").read_text())
     published = yaml.safe_load(
         (REPO_ROOT / ".github/workflows/modstore-prod-deploy.yml").read_text()
@@ -231,13 +235,14 @@ def test_production_workflow_deploys_only_successful_tested_main_sha() -> None:
 
     for workflow in (source, published):
         trigger = workflow[True]
-        assert trigger["workflow_run"]["workflows"] == ["CI - Backend Python"]
+        assert "workflow_run" not in trigger
+        assert trigger["workflow_dispatch"]["inputs"]["git_sha"]["required"] is True
         deploy = workflow["jobs"]["deploy"]
-        assert "workflow_run.conclusion == 'success'" in deploy["if"]
         rendered = str(deploy)
         assert "TARGET_SHA" in rendered
         assert "REPOSITORY_SLUG" in rendered
         assert "XCMAX_GITHUB_REPOSITORY" in rendered
+        assert "XCMAX_PRODUCT_VERSION" in rendered
         assert "xcmax-immutable-release.sh" in rendered
         assert "modstore-deployment-correlation" in rendered
         assert "actions/upload-artifact@v4" in rendered

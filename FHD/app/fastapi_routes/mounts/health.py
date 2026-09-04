@@ -19,13 +19,16 @@ def register_health_routes(app: FastAPI) -> None:
     @app.get("/api/health", tags=["health"])
     async def health_check(lite: bool = False):
         runtime = runtime_integrity_snapshot(app)
+        identity = build_identity()
         payload: dict = {
             "status": runtime["status"],
             "version": app.version,
             "service": "xcagi-fastapi",
             "runtime": runtime,
             "degradedReasons": list(runtime["degraded_reasons"]),
-            "build": build_identity(),
+            "build": identity,
+            "git_sha": identity["git_sha"],
+            "release_id": identity["release_id"],
         }
         if lite:
             return payload

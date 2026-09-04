@@ -143,6 +143,34 @@ class OrderServiceTest {
         }
 
         @Test
+        void snapshotsOnlyFullyVerifiedEnterpriseIdentity() {
+            LocalDateTime verifiedAt = LocalDateTime.of(2026, 9, 4, 9, 0);
+            user.setEnterprise(true);
+            user.setEnterpriseSubjectId("credit-code-001");
+            user.setEnterpriseLegalName("真实客户甲有限公司");
+            user.setEnterpriseVerificationSha256("a".repeat(64));
+            user.setEnterpriseVerifiedAt(verifiedAt);
+            when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            Order result = orderService.createOrder(
+                    user, "OT-IDENTITY", "test", new BigDecimal("99.00"),
+                    "plan", null, "plan_enterprise", "req-identity"
+            );
+
+            assertThat(result.getEnterpriseSubjectId()).isEqualTo("credit-code-001");
+            assertThat(result.getEnterpriseLegalName()).isEqualTo("真实客户甲有限公司");
+            assertThat(result.getEnterpriseVerificationSha256()).isEqualTo("a".repeat(64));
+            assertThat(result.getEnterpriseVerifiedAt()).isEqualTo(verifiedAt);
+
+            user.setEnterpriseVerificationSha256("not-a-digest");
+            Order unverified = orderService.createOrder(
+                    user, "OT-UNVERIFIED", "test", new BigDecimal("99.00"),
+                    "plan", null, "plan_enterprise", "req-unverified"
+            );
+            assertThat(unverified.getEnterpriseSubjectId()).isNull();
+        }
+
+        @Test
         void accountLicenseOrderMovesUnlicensedAccountToPendingPayment() {
             when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 

@@ -59,15 +59,14 @@ def test_external_merge_landing_runs_real_branch_merge_and_pytest(
         stdout=subprocess.PIPE,
         text=True,
     ).stdout
-    assert "merge absorbed owner/agent-a rule" in log
-    assert "merge absorbed owner/agent-b rule" in log
+    assert log.count("merge external review rule") == 2
 
 
 def test_external_merge_landing_rejects_unapproved_commands(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="unapproved"):
-        _run(["sh", "-c", "echo unsafe"], tmp_path)
-    with pytest.raises(ValueError, match="unapproved"):
-        _run(["git", "checkout", "--orphan", "unsafe"], tmp_path)
+        _run("shell", tmp_path)
+    with pytest.raises(ValueError, match="case index"):
+        _run("git_create_case", tmp_path, case_index=-1)
 
 
 def test_external_merge_landing_blocks_missing_cache(tmp_path: Path) -> None:

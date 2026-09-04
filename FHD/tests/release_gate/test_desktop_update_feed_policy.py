@@ -43,10 +43,42 @@ def test_macos_update_feed_is_generated_from_zip(tmp_path: Path) -> None:
     assert f"url: {update_zip.name}" in feed
     assert f"path: {update_zip.name}" in feed
     assert "buildSha: " + "a" * 40 in feed
+    assert "releaseId: xcagi-1.0.0.0-" + "a" * 40 in feed
     assert "releaseDate:" in feed
     assert "releaseMedia:" in feed
     assert "https://cdn.example.com/a.webp" in feed
     assert "https://cdn.example.com/a.mp4" in feed
+
+
+def test_update_feed_can_point_to_immutable_sha_directory(tmp_path: Path) -> None:
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is required for desktop updater policy test")
+
+    generator = REPO_ROOT / "scripts" / "package" / "generate-update-metadata.mjs"
+    update_zip = tmp_path / "XCAGI-Enterprise-1.0.0.1-mac-arm64.zip"
+    update_zip.write_bytes(b"immutable-signed-app")
+    git_sha = "b" * 40
+    prefix = f"https://xiu-ci.com/releases/builds/1.0.0.1/{git_sha}/enterprise"
+    env = {
+        **os.environ,
+        "XCAGI_BUILD_SHA": git_sha,
+        "XCAGI_PRODUCT_VERSION": "1.0.0.1",
+        "XCAGI_ARTIFACT_URL_PREFIX": prefix,
+    }
+
+    subprocess.run(
+        [node, str(generator), str(update_zip), "1.0.0", "mac"],
+        check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    feed = (tmp_path / "latest-mac.yml").read_text(encoding="utf-8")
+    expected = f"{prefix}/{update_zip.name}"
+    assert f"url: {expected}" in feed
+    assert f"path: {expected}" in feed
+    assert f"releaseId: xcagi-1.0.0.1-{git_sha}" in feed
 
 
 def test_macos_update_feed_rejects_dmg(tmp_path: Path) -> None:
@@ -84,6 +116,8 @@ def test_release_pipeline_uploads_mac_zip_and_never_synthesizes_scan_success() -
     assert workflow.count("--include='*.zip.blockmap'") == 1
     assert "publish_payload()" in workflow
     assert workflow.count('publish_payload "') == 2
+    assert 'immutable_root="/var/www/update/releases/builds/${version}/${release_sha}"' in workflow
+    assert workflow.count("publish_stable_metadata_atomically") == 3
     assert "verify-public-windows-signature:" in workflow
     assert workflow.index("verify-public-windows-signature:") < workflow.index(
         "publish-website-pointer:"
@@ -102,7 +136,7 @@ def test_release_pipeline_uploads_mac_zip_and_never_synthesizes_scan_success() -
     assert '"XCAGI-*-${VERSION}-mac-*.zip"' in uploader
     assert '"XCAGI-*-${VERSION}-mac-*.zip.blockmap"' in uploader
     assert "/var/www/update/releases/stable" in uploader
-    assert "Node.js 20+ is required" in scanner
+    assert "Node.js 22.12+ is required" in scanner
     assert "synthetic green report" in scanner
     assert 'electronegativity.csv" -r -v false || true' not in scanner
     assert 'electronegativity.sarif" -r -v false || true' not in scanner

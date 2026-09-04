@@ -1,0 +1,70 @@
+name: Release convergence readback
+run-name: Release convergence ${{ inputs.release_sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Exact 40-character release SHA expected everywhere
+        required: true
+        type: string
+      product_version:
+        description: Visible product version
+        required: true
+        default: "1.0.0.1"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  readback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Wait for every configured source and unrevoked device receipt
+        id: convergence
+        continue-on-error: true
+        env:
+          ADMIN_TOKEN: ${{ secrets.RELEASE_CONVERGENCE_ADMIN_TOKEN }}
+          ENDPOINT: ${{ vars.RELEASE_CONVERGENCE_URL || 'https://xiu-ci.com/api/admin/release-convergence' }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          PRODUCT_VERSION: ${{ inputs.product_version }}
+        run: |
+          set -euo pipefail
+          test -n "${ADMIN_TOKEN:-}"
+          printf '%s' "$RELEASE_SHA" | grep -Eq '^[0-9a-f]{40}$'
+          expected_release_id="xcagi-${PRODUCT_VERSION}-${RELEASE_SHA}"
+          for attempt in $(seq 1 40); do
+            if curl --fail-with-body --silent --show-error \
+              --connect-timeout 15 --max-time 45 \
+              -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+              "${ENDPOINT}?release-readback=${GITHUB_RUN_ID}-${attempt}" \
+              -o "${RUNNER_TEMP}/release-convergence.json"; then
+              if jq -e --arg sha "$RELEASE_SHA" --arg rid "$expected_release_id" '
+                .ok == true and
+                .data.release_sha == $sha and
+                .data.release_id == $rid and
+                .data.converged == true and
+                (.data.blockers | length) == 0
+              ' "${RUNNER_TEMP}/release-convergence.json" >/dev/null; then
+                exit 0
+              fi
+            fi
+            sleep 30
+          done
+          jq . "${RUNNER_TEMP}/release-convergence.json" || true
+          exit 1
+
+      - name: Upload anonymized convergence evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcagi-release-convergence
+          path: ${{ runner.temp }}/release-convergence.json
+          retention-days: 120
+          if-no-files-found: error
+
+      - name: Keep convergence fail closed
+        if: steps.convergence.outcome != 'success'
+        run: exit 1

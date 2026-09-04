@@ -26,6 +26,7 @@ router = APIRouter(prefix="/api/admin", tags=["admin-yuangon-onboard"])
 
 DEFAULT_RUNTIME_DIR = str(Path.home() / ".xcmax" / "modstore-daily")
 DEFAULT_GOVERNANCE_AUDIT_NAME = "self_maintenance_governance_actions.jsonl"
+_PKG_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
 
 
 def _governance_audit_path() -> Path:
@@ -67,6 +68,17 @@ def _parse_onboard_summary(stdout: str) -> Dict[str, int]:
     }
 
 
+def _validated_pkg_ids(raw: str) -> str:
+    """Return a canonical closed-language package list for the subprocess."""
+
+    values = [part for part in re.split(r"[\s,;]+", raw.strip()) if part]
+    if len(values) > 200 or any(not _PKG_ID.fullmatch(value) for value in values):
+        raise HTTPException(
+            422, "pkg_ids 只能包含最多 200 个字母数字、点、下划线或连字符 ID"
+        )
+    return ",".join(dict.fromkeys(values))
+
+
 def _discover_yuangon_ids(repo: Path) -> tuple[List[str], List[str]]:
     """扫描 ``yuangon/**/employee.yaml`` 返回 (pkg_ids, parse_errors)。"""
     try:
@@ -99,7 +111,9 @@ def yuangon_onboard_status(admin_user: User = Depends(require_admin)) -> Dict[st
     sf = get_session_factory()
     with sf() as session:
         rows = (
-            session.query(CatalogItem.pkg_id).filter(CatalogItem.artifact == "employee_pack").all()
+            session.query(CatalogItem.pkg_id)
+            .filter(CatalogItem.artifact == "employee_pack")
+            .all()
         )
         catalog_ids = sorted({str(r[0]) for r in rows if r[0]})
 
@@ -129,9 +143,11 @@ def yuangon_onboard_run(
     _ = admin_user
     dry_run = bool(body.get("dry_run", False))
     force = bool(body.get("force", False))
-    pkg_raw = str(body.get("pkg_ids") or "").strip()
+    pkg_raw = _validated_pkg_ids(str(body.get("pkg_ids") or ""))
     repo = _yuangon_repo_root()
-    script = Path(__file__).resolve().parent / "scripts" / "onboard_yuangon_employees.py"
+    script = (
+        Path(__file__).resolve().parent / "scripts" / "onboard_yuangon_employees.py"
+    )
     if not script.is_file():
         raise HTTPException(500, f"onboard script missing: {script}")
 

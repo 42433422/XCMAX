@@ -183,9 +183,11 @@ from modstore_server.api.market_routes_part03 import (
 
 
 from modstore_server.api.market_routes_part04 import (
+    EnterpriseIdentityDTO as EnterpriseIdentityDTO,
     api_admin_list_users as api_admin_list_users,
     api_admin_set_admin_status as api_admin_set_admin_status,
     api_admin_set_enterprise_status as api_admin_set_enterprise_status,
+    api_admin_verify_enterprise_identity as api_admin_verify_enterprise_identity,
     api_admin_enterprise_assignable_mods as api_admin_enterprise_assignable_mods,
     api_admin_list_user_mods as api_admin_list_user_mods,
     api_admin_bind_user_mod as api_admin_bind_user_mod,

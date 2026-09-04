@@ -31,6 +31,7 @@ BUILD_INFO_SCRIPT = FHD_ROOT / "scripts" / "package" / "generate-desktop-build-i
 
 
 def _generate(tmp_path: Path, *, include_enterprise_mac: bool = True) -> tuple[dict, dict]:
+    git_sha = "a" * 40
     release_root = tmp_path / "release" / "xcagi-v1.0.0.0"
     enterprise = release_root / "enterprise"
     personal = release_root / "personal"
@@ -77,7 +78,7 @@ def _generate(tmp_path: Path, *, include_enterprise_mac: bool = True) -> tuple[d
             "--release-subdir",
             "xcagi-v1.0.0.0",
             "--git-sha",
-            "abc123",
+            git_sha,
             "--android-version",
             "1.0.0.0",
             "--android-git-sha",
@@ -101,6 +102,8 @@ def test_stable_manifest_is_enterprise_only_even_when_personal_files_exist(tmp_p
     assert manifest["active_skus"] == ["enterprise"]
     assert manifest["frozen_skus"] == ["personal"]
     assert manifest["primary_sku"] == "enterprise"
+    assert manifest["git_sha"] == "a" * 40
+    assert manifest["release_id"] == f"xcagi-1.0.0.0-{'a' * 40}"
     for channel in manifest["channels"].values():
         assert "enterprise" in channel
         assert "personal" not in channel
@@ -109,6 +112,7 @@ def test_stable_manifest_is_enterprise_only_even_when_personal_files_exist(tmp_p
     assert public_release["active_skus"] == ["enterprise"]
     assert public_release["frozen_skus"] == ["personal"]
     assert public_release["primary_sku"] == "enterprise"
+    assert public_release["release_id"] == manifest["release_id"]
     assert public_release["win_installer_mb"] == 0
     assert public_release["android_version"] == "1.0.0.0"
     assert public_release["android_git_sha"] == "a" * 40
@@ -156,6 +160,45 @@ def test_release_metadata_version_drift_fails_closed(tmp_path: Path) -> None:
 
     assert result.returncode != 0
     assert "version_lock does not match requested version" in result.stderr
+
+
+def test_release_identity_must_match_version_and_full_sha(tmp_path: Path) -> None:
+    release_root = tmp_path / "release" / "xcagi-v1.0.0.1" / "enterprise"
+    release_root.mkdir(parents=True)
+    (release_root / "XCAGI-Enterprise-Setup-1.0.0.1-x64.exe").write_bytes(b"MZ")
+
+    common = [
+        sys.executable,
+        str(SCRIPT),
+        "--version",
+        "1.0.0.1",
+        "--release-dir",
+        str(tmp_path / "release"),
+        "--release-subdir",
+        "xcagi-v1.0.0.1",
+        "--output",
+        str(tmp_path / "manifest.json"),
+        "--download-release-output",
+        str(tmp_path / "download-release.json"),
+    ]
+    invalid_sha = subprocess.run([*common, "--git-sha", "abc123"], capture_output=True, text=True)
+    assert invalid_sha.returncode == 1
+    assert "40-character SHA" in invalid_sha.stderr
+
+    git_sha = "b" * 40
+    mismatched_id = subprocess.run(
+        [
+            *common,
+            "--git-sha",
+            git_sha,
+            "--release-id",
+            f"xcagi-1.0.0.1-{'c' * 40}",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert mismatched_id.returncode == 1
+    assert "release identity mismatch" in mismatched_id.stderr
 
 
 def test_frozen_personal_has_no_secondary_stable_desktop_publisher() -> None:
@@ -248,6 +291,7 @@ def test_desktop_build_info_requires_and_preserves_full_git_identity(tmp_path: P
     assert payload["schema_version"] == 1
     assert payload["gitSha"] == git_sha
     assert payload["version"] == "1.0.0.0"
+    assert payload["releaseId"] == f"xcagi-1.0.0.0-{git_sha}"
     assert isinstance(payload.get("builtAt"), str) and payload["builtAt"].endswith("Z")
 
     rejected = subprocess.run(
@@ -273,7 +317,7 @@ def test_release_workflow_hard_checks_packaged_git_sha_and_version() -> None:
 
     assert 'build_info="${app}/Contents/Resources/build-info.json"' in workflow
     assert 'BUILD_INFO_PATH="${build_info}"' in workflow
-    assert 'EXPECTED_BUILD_SHA="${GITHUB_SHA}"' in workflow
+    assert 'EXPECTED_BUILD_SHA="${XCAGI_BUILD_SHA}"' in workflow
     assert 'EXPECTED_PRODUCT_VERSION="${v}"' in workflow
     assert "packaged gitSha mismatch" in workflow
     assert "packaged version mismatch" in workflow

@@ -84,6 +84,8 @@ def test_compat_health_returns_ok_status() -> None:
         "built_at",
         "git_sha",
         "image_digest",
+        "product_version",
+        "release_id",
     }
 
 

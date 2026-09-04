@@ -1,6 +1,7 @@
 # CI SSOT: generated from FHD/.github/workflows/release-desktop.yml — DO NOT edit here.
 # Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
 name: Release Desktop
+run-name: Release Desktop ${{ inputs.release_sha }}
 
 on:
   workflow_dispatch:
@@ -12,7 +13,6 @@ on:
         type: choice
         options:
           - "1.0.0.1"
-          - "1.0.0.0"
       verify_only:
         description: "Verify already-published public artifacts without rebuilding or uploading"
         required: true
@@ -20,8 +20,19 @@ on:
         type: boolean
       frontend_run_id:
         description: "Run ID of the orchestrator's build-frontend job producing the shared xcagi-vue-dist artifact"
-        required: false
-        default: ""
+        required: true
+        type: string
+      release_sha:
+        description: "Immutable 40-character source SHA shared by Windows, macOS, feeds, and manifests"
+        required: true
+        type: string
+      security_scan_run_id:
+        description: "Most recent zero-finding security scan run ID"
+        required: true
+        type: string
+      previous_security_scan_run_id:
+        description: "Prior-day zero-finding security scan run ID for the same SHA"
+        required: true
         type: string
   # Tag (FHD/v*) entry is centralized in fhd-release-orchestrator.yml, which gates on
   # verify-version-anchors and then dispatches this workflow. Removing the direct tag
@@ -36,11 +47,14 @@ defaults:
   run:
     working-directory: FHD
 
+env:
+  XCAGI_BUILD_SHA: ${{ inputs.release_sha }}
+
 jobs:
   release-preflight:
     if: ${{ inputs.verify_only != true }}
     runs-on: ubuntu-latest
-    # Preflight has no checkout; do not inherit defaults.working-directory=FHD.
+    # Security evidence lives at repository root; do not inherit FHD working directory.
     defaults:
       run:
         working-directory: .
@@ -61,6 +75,32 @@ jobs:
       FHD_PUSH_SSH_KEY: ${{ secrets.FHD_PUSH_SSH_KEY }}
       XCAGI_WINDOWS_PUBLISHER_NAME: ${{ vars.XCAGI_WINDOWS_PUBLISHER_NAME }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Download normalized security evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: xcagi-security-release-reports
+          path: security-reports/current
+          run-id: ${{ inputs.security_scan_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Download prior-day normalized security evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: xcagi-security-release-reports
+          path: security-reports/previous
+          run-id: ${{ inputs.previous_security_scan_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Enforce two consecutive fresh zero-critical/high scans
+        run: >-
+          python FHD/scripts/security/verify_security_scan_pair.py
+          --previous-dir security-reports/previous
+          --current-dir security-reports/current
+          --release-sha "${XCAGI_BUILD_SHA}"
       - name: Fail closed before either platform builds
         shell: bash
         run: |
@@ -85,6 +125,10 @@ jobs:
             printf '::error::Stable desktop release preflight is missing: %s\n' "${missing[*]}"
             exit 1
           fi
+          if ! printf '%s' "${XCAGI_BUILD_SHA}" | grep -Eq '^[0-9a-fA-F]{40}$'; then
+            echo "::error::release_sha must be a full 40-character Git SHA."
+            exit 1
+          fi
           echo "Stable desktop release preflight passed for Windows + macOS."
 
   windows:
@@ -95,10 +139,18 @@ jobs:
       XCAGI_REQUIRE_WINDOWS_SIGNING: "1"
       XCAGI_WINDOWS_SIGNING_PROVIDER: sslcom
       XCAGI_WINDOWS_PUBLISHER_NAME: ${{ vars.XCAGI_WINDOWS_PUBLISHER_NAME }}
+      XCAGI_ARTIFACT_URL_PREFIX: https://xiu-ci.com/releases/builds/${{ inputs.version }}/${{ inputs.release_sha }}/enterprise
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+      - name: Lock Windows checkout to release SHA
+        shell: pwsh
+        run: |
+          $actual = (git rev-parse HEAD).Trim().ToLowerInvariant()
+          $expected = $env:XCAGI_BUILD_SHA.Trim().ToLowerInvariant()
+          if ($actual -ne $expected) { throw "Checkout drift: actual=$actual expected=$expected" }
       - name: Download shared vue-dist (single frontend build)
-        if: ${{ inputs.frontend_run_id != '' }}
         uses: actions/download-artifact@v4
         with:
           name: xcagi-vue-dist
@@ -106,7 +158,6 @@ jobs:
           run-id: ${{ inputs.frontend_run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Assert shared vue-dist present (fail closed)
-        if: ${{ inputs.frontend_run_id != '' }}
         shell: pwsh
         run: |
           # defaults.run.working-directory=FHD：相对路径相对 FHD/
@@ -120,7 +171,7 @@ jobs:
           cache: "pip"
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
           cache-dependency-path: |
             FHD/frontend/package-lock.json
@@ -145,8 +196,7 @@ jobs:
           $raw = "${{ github.event.inputs.version || github.ref_name }}"
           $raw = $raw -replace '^FHD/', ''
           $v = $raw.TrimStart('v','V')
-          $skipF = if ("${{ inputs.frontend_run_id }}" -ne "") { "-SkipFrontend" } else { "" }
-          scripts/package/build-installer.ps1 -Version $v -ProductSku enterprise -SkipUiInstaller $skipF
+          scripts/package/build-installer.ps1 -Version $v -ProductSku enterprise -SkipUiInstaller -SkipFrontend
       - name: Verify Windows enterprise installer
         shell: pwsh
         run: |
@@ -192,7 +242,7 @@ jobs:
           scripts/package/verify-windows-installed-runtime.ps1 `
             -InstallerPath $installer `
             -ExpectedPublisher $env:XCAGI_WINDOWS_PUBLISHER_NAME `
-            -ExpectedBuildSha "${{ github.sha }}" `
+            -ExpectedBuildSha "${{ inputs.release_sha }}" `
             -ExpectedProductVersion $v `
             -ReadyTimeoutSeconds 240
       - uses: actions/upload-artifact@v4
@@ -220,10 +270,17 @@ jobs:
       XCAGI_UPDATE_ED25519_PRIVATE_KEY: ${{ secrets.XCAGI_UPDATE_ED25519_PRIVATE_KEY }}
       CSC_LINK: ${{ secrets.CSC_LINK }}
       CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      XCAGI_ARTIFACT_URL_PREFIX: https://xiu-ci.com/releases/builds/${{ inputs.version }}/${{ inputs.release_sha }}/enterprise
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+      - name: Lock macOS checkout to release SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD | tr '[:upper:]' '[:lower:]')" = "$(printf '%s' "${XCAGI_BUILD_SHA}" | tr '[:upper:]' '[:lower:]')"
       - name: Download shared vue-dist (single frontend build)
-        if: ${{ inputs.frontend_run_id != '' }}
         uses: actions/download-artifact@v4
         with:
           name: xcagi-vue-dist
@@ -231,7 +288,6 @@ jobs:
           run-id: ${{ inputs.frontend_run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Assert shared vue-dist present (fail closed)
-        if: ${{ inputs.frontend_run_id != '' }}
         shell: bash
         run: |
           test -f templates/vue-dist/index.html || {
@@ -244,7 +300,7 @@ jobs:
           cache: "pip"
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
           cache-dependency-path: |
             FHD/frontend/package-lock.json
@@ -259,7 +315,7 @@ jobs:
         shell: bash
         env:
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          SKIP_FRONTEND: ${{ inputs.frontend_run_id != '' && '1' || '0' }}
+          SKIP_FRONTEND: "1"
         run: |
           set -euo pipefail
           if [ -z "${CSC_NAME:-}" ]; then
@@ -326,7 +382,7 @@ jobs:
           build_info="${app}/Contents/Resources/build-info.json"
           test -f "${build_info}"
           BUILD_INFO_PATH="${build_info}" \
-            EXPECTED_BUILD_SHA="${GITHUB_SHA}" \
+            EXPECTED_BUILD_SHA="${XCAGI_BUILD_SHA}" \
             EXPECTED_PRODUCT_VERSION="${v}" \
             python3 <<'PY'
           import json
@@ -373,6 +429,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+      - name: Lock manifest checkout to release SHA
+        run: test "$(git rev-parse HEAD)" = "${XCAGI_BUILD_SHA}"
       - uses: actions/download-artifact@v4
         with:
           pattern: xcagi-desktop-*
@@ -388,7 +448,7 @@ jobs:
           raw="${raw#FHD/}"
           raw="${raw#v}"
           raw="${raw#V}"
-          version="${raw:-1.0.0.0}"
+          version="${raw:-1.0.0.1}"
           mkdir -p "release/xcagi-v${version}"
           BASE="${RUNNER_TEMP}/artifacts"
           sku=enterprise
@@ -419,7 +479,7 @@ jobs:
           raw="${raw#FHD/}"
           raw="${raw#v}"
           raw="${raw#V}"
-          version="${raw:-1.0.0.0}"
+          version="${raw:-1.0.0.1}"
           for metadata in "release/xcagi-v${version}/enterprise"/latest*.yml; do
             test -f "$metadata"
             python scripts/dev/sign_update_metadata.py "$metadata"
@@ -432,14 +492,21 @@ jobs:
           raw="${raw#FHD/}"
           raw="${raw#v}"
           raw="${raw#V}"
-          version="${raw:-1.0.0.0}"
+          version="${raw:-1.0.0.1}"
+          release_id="xcagi-${version}-${XCAGI_BUILD_SHA,,}"
+          immutable_base="https://xiu-ci.com/releases/builds/${version}/${XCAGI_BUILD_SHA,,}"
           android_version="$(jq -er '.android_version' config/download_release.json)"
           android_git_sha="$(jq -er '.android_git_sha' config/download_release.json)"
           python scripts/package/generate-download-manifest.py \
             --version "$version" \
             --release-dir release \
             --release-subdir "xcagi-v${version}" \
-            --git-sha "${{ github.sha }}" \
+            --git-sha "${XCAGI_BUILD_SHA}" \
+            --release-id "$release_id" \
+            --build-workflow-run-id "${GITHUB_RUN_ID}" \
+            --frontend-workflow-run-id "${{ inputs.frontend_run_id }}" \
+            --auto-update-base "$immutable_base" \
+            --official-download-base "$immutable_base" \
             --android-version "$android_version" \
             --android-git-sha "$android_git_sha" \
             --release-metadata-source config/download_release.json \
@@ -471,7 +538,8 @@ jobs:
           SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
           raw="${{ github.event.inputs.version || github.ref_name }}"
           raw="${raw#FHD/}"; raw="${raw#v}"; raw="${raw#V}"
-          version="${raw:-1.0.0.0}"
+          version="${raw:-1.0.0.1}"
+          release_sha="${XCAGI_BUILD_SHA,,}"
           sku=enterprise
           src_dir="${GITHUB_WORKSPACE}/FHD/release/xcagi-v${version}/${sku}"
           test -d "$src_dir"
@@ -506,16 +574,87 @@ jobs:
               "chmod 0644 '$remote_tmp' && mv -f '$remote_tmp' '$target'"
           }
 
-          # Publish the immutable official path first. Stable auto-update metadata is
-          # changed only after the complete two-platform payload is available there.
+          publish_stable_metadata_atomically() {
+            local source="$1"
+            local target="$2"
+            local remote_tmp="${target}.tmp.${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
+            scp "${SSH_OPTS[@]}" "$source" "root@${HOST}:$remote_tmp"
+            ssh "${SSH_OPTS[@]}" "root@${HOST}" \
+              "chmod 0644 '$remote_tmp' && mv -f '$remote_tmp' '$target'"
+          }
+
+          rollback_root="/var/www/update/releases/rollback/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           official_root="/var/www/xcagi-v${version}"
+          stable_root="/var/www/update/releases/stable"
+          ssh "${SSH_OPTS[@]}" "root@${HOST}" "bash -s" -- \
+            "$rollback_root" "$official_root" "$stable_root" <<'REMOTE_BACKUP'
+          set -euo pipefail
+          backup_root="$1"
+          official_root="$2"
+          stable_root="$3"
+          mkdir -p "$backup_root/files"
+          : > "$backup_root/missing"
+          for target in \
+            "$stable_root/enterprise/latest.yml" \
+            "$stable_root/enterprise/latest-mac.yml" \
+            "$stable_root/manifest.json" \
+            "$official_root/enterprise/latest.yml" \
+            "$official_root/enterprise/latest-mac.yml" \
+            "$official_root/manifest.json" \
+            "$official_root/download-release.json" \
+            "/root/成都修茈科技有限公司/download-release.json" \
+            "/root/成都修茈科技有限公司/MODstore_deploy/market/public/download-release.json" \
+            "/root/成都修茈科技有限公司/MODstore_deploy/market/dist/download-release.json" \
+            "/root/成都修茈科技有限公司/corp-butler/download-release.json"
+          do
+            if [ -f "$target" ]; then
+              mkdir -p "$backup_root/files$(dirname "$target")"
+              cp -p "$target" "$backup_root/files$target"
+            else
+              printf '%s\n' "$target" >> "$backup_root/missing"
+            fi
+          done
+          REMOTE_BACKUP
+
+          rollback_public_pointers() {
+            ssh "${SSH_OPTS[@]}" "root@${HOST}" "bash -s" -- "$rollback_root" <<'REMOTE_ROLLBACK'
+          set -euo pipefail
+          backup_root="$1"
+          [ -d "$backup_root/files" ] || exit 0
+          while IFS= read -r -d '' saved; do
+            target="${saved#${backup_root}/files}"
+            mkdir -p "$(dirname "$target")"
+            tmp="${target}.rollback.$$"
+            cp -p "$saved" "$tmp"
+            mv -f "$tmp" "$target"
+          done < <(find "$backup_root/files" -type f -print0)
+          while IFS= read -r target; do
+            [ -n "$target" ] && rm -f -- "$target"
+          done < "$backup_root/missing"
+          REMOTE_ROLLBACK
+          }
+          trap rollback_public_pointers ERR
+
+          # Preserve every same-version build under its full source SHA. Stable
+          # metadata only moves after the complete two-platform payload exists.
+          immutable_root="/var/www/update/releases/builds/${version}/${release_sha}"
+          publish_payload "${immutable_root}/${sku}"
+          publish_json_atomically "${RUNNER_TEMP}/manifest.json" "${immutable_root}/manifest.json"
+          publish_json_atomically "${RUNNER_TEMP}/download-release.json" "${immutable_root}/download-release.json"
+
+          # Compatibility mirror for existing download URLs. It is never used as
+          # the rollback identity because it may be replaced by a later SHA.
           publish_payload "${official_root}/${sku}"
           publish_json_atomically "${RUNNER_TEMP}/manifest.json" "${official_root}/manifest.json"
           publish_json_atomically "${RUNNER_TEMP}/download-release.json" "${official_root}/download-release.json"
 
-          stable_root="/var/www/update/releases/stable"
-          publish_payload "${stable_root}/${sku}"
+          ssh "${SSH_OPTS[@]}" "root@${HOST}" "mkdir -p '${stable_root}/${sku}'"
+          publish_stable_metadata_atomically \
+            "${src_dir}/latest.yml" "${stable_root}/${sku}/latest.yml"
+          publish_stable_metadata_atomically \
+            "${src_dir}/latest-mac.yml" "${stable_root}/${sku}/latest-mac.yml"
           publish_json_atomically "${RUNNER_TEMP}/manifest.json" "${stable_root}/manifest.json"
+          trap - ERR
           echo "Unified Windows + macOS release published to official and stable paths."
 
   cross-platform-parity:
@@ -528,6 +667,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
+          ref: ${{ inputs.release_sha }}
       - uses: actions/download-artifact@v4
         if: ${{ inputs.verify_only != true }}
         with:
@@ -554,6 +694,12 @@ jobs:
           test -f "$manifest"
           top_version="$(jq -er '.version' "$manifest")"
           top_git_sha="$(jq -er '.git_sha' "$manifest")"
+          top_release_id="$(jq -er '.release_id' "$manifest")"
+          expected_release_id="xcagi-${top_version}-${top_git_sha}"
+          if [ "$top_release_id" != "$expected_release_id" ]; then
+            echo "::error::Manifest release_id mismatch: ${top_release_id} != ${expected_release_id}"
+            exit 1
+          fi
           # Manifest structure (scripts/package/generate-download-manifest.py):
           # enterprise.win is a single object and enterprise.mac is an array
           # (multi-arch dmg/pkg, platform key is exactly "mac"); entries carry
@@ -591,6 +737,7 @@ jobs:
           manifest="${RUNNER_TEMP}/manifest/manifest.json"
           expected_version="$(jq -er '.version' "$manifest")"
           expected_sha="$(jq -er '.git_sha' "$manifest")"
+          expected_release_id="$(jq -er '.release_id' "$manifest")"
           if [ "${{ inputs.verify_only }}" = "true" ]; then
             base="https://xiu-ci.com/releases/stable"
           else
@@ -607,18 +754,24 @@ jobs:
           win_sha="$(sed -n 's/^buildSha:[[:space:]]*//p' "$tmpdir/latest.yml" | head -n 1)"
           mac_version="$(sed -n 's/^productVersion:[[:space:]]*//p' "$tmpdir/latest-mac.yml" | head -n 1)"
           mac_sha="$(sed -n 's/^buildSha:[[:space:]]*//p' "$tmpdir/latest-mac.yml" | head -n 1)"
+          win_release_id="$(sed -n 's/^releaseId:[[:space:]]*//p' "$tmpdir/latest.yml" | head -n 1)"
+          mac_release_id="$(sed -n 's/^releaseId:[[:space:]]*//p' "$tmpdir/latest-mac.yml" | head -n 1)"
           missing=()
           [ -n "$win_version" ] || missing+=("latest.yml productVersion")
           [ -n "$win_sha" ] || missing+=("latest.yml buildSha")
           [ -n "$mac_version" ] || missing+=("latest-mac.yml productVersion")
           [ -n "$mac_sha" ] || missing+=("latest-mac.yml buildSha")
+          [ -n "$win_release_id" ] || missing+=("latest.yml releaseId")
+          [ -n "$mac_release_id" ] || missing+=("latest-mac.yml releaseId")
           if [ "${#missing[@]}" -gt 0 ]; then
             printf '::error::Update metadata is missing identity lines: %s\n' "${missing[*]}"
             exit 1
           fi
           if [ "$win_version" != "$mac_version" ] || [ "$win_sha" != "$mac_sha" ] ||
              [ "$win_version" != "$expected_version" ] || [ "$win_sha" != "$expected_sha" ] ||
-             [ "$mac_version" != "$expected_version" ] || [ "$mac_sha" != "$expected_sha" ]; then
+             [ "$mac_version" != "$expected_version" ] || [ "$mac_sha" != "$expected_sha" ] ||
+             [ "$win_release_id" != "$expected_release_id" ] ||
+             [ "$mac_release_id" != "$expected_release_id" ]; then
             printf '::error::Cross-platform parity mismatch: win version=%s git_sha=%s / mac version=%s git_sha=%s\n' \
               "$win_version" "$win_sha" "$mac_version" "$mac_sha"
             echo "Manifest top-level identity: version=${expected_version} git_sha=${expected_sha}"
@@ -634,6 +787,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
       - uses: actions/download-artifact@v4
         if: ${{ inputs.verify_only != true }}
         with:
@@ -664,6 +819,7 @@ jobs:
           manifest="${RUNNER_TEMP}/manifest/manifest.json"
           expected_version="$(jq -er '.version' "$manifest")"
           expected_sha="$(jq -er '.git_sha' "$manifest")"
+          expected_release_id="$(jq -er '.release_id' "$manifest")"
           tmpdir="$(mktemp -d)"
           trap 'rm -rf "$tmpdir"' EXIT
           for metadata in latest.yml latest-mac.yml; do
@@ -683,6 +839,7 @@ jobs:
             }
             grep -Fxq "productVersion: ${expected_version}" "$official"
             grep -Fxq "buildSha: ${expected_sha}" "$official"
+            grep -Fxq "releaseId: ${expected_release_id}" "$official"
             grep -Eq "^releaseDate: ['\''\"]?[0-9]{4}-[0-9]{2}-[0-9]{2}T" "$official" || {
               echo "::error::$metadata is missing a usable releaseDate (required to prevent same-version downgrade)."
               exit 1
@@ -699,6 +856,8 @@ jobs:
       XCAGI_WINDOWS_PUBLISHER_NAME: ${{ vars.XCAGI_WINDOWS_PUBLISHER_NAME }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
       - name: Verify published Windows Authenticode signature
         shell: pwsh
         run: |
@@ -786,6 +945,7 @@ jobs:
             and .version_lock == $manifest[0].version
             and .download_version == $manifest[0].version
             and .git_sha == $manifest[0].git_sha
+            and .release_id == $manifest[0].release_id
             and .active_skus == ["enterprise"]
             and (.frozen_skus | index("personal") != null)
             and .primary_sku == "enterprise"
@@ -843,7 +1003,7 @@ jobs:
           set -euo pipefail
           raw="${{ github.event.inputs.version || github.ref_name }}"
           raw="${raw#FHD/}"; raw="${raw#v}"; raw="${raw#V}"
-          version="${raw:-1.0.0.0}"
+          version="${raw:-1.0.0.1}"
           tmpdir="$(mktemp -d)"
           trap 'rm -rf "$tmpdir"' EXIT
 
@@ -891,6 +1051,55 @@ jobs:
           grep -Fq "fetch('/download-release.json'" "$tmpdir/download-releases.html"
           grep -Fq 'id="release-list"' "$tmpdir/download-releases.html"
           echo "Download center and changelog verified for ${version} @ ${expected_sha}."
+
+  rollback-stable-pointers:
+    name: Restore previous stable pointers on failed acceptance
+    needs:
+      - generate-manifest
+      - cross-platform-parity
+      - verify-download
+      - verify-public-windows-signature
+      - publish-website-pointer
+      - verify-download-center
+    if: >-
+      always() &&
+      inputs.verify_only != true &&
+      needs.generate-manifest.result == 'success' &&
+      (needs.cross-platform-parity.result != 'success' ||
+       needs.verify-download.result != 'success' ||
+       needs.verify-public-windows-signature.result != 'success' ||
+       needs.publish-website-pointer.result != 'success' ||
+       needs.verify-download-center.result != 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Restore the exact pre-release metadata set
+        env:
+          DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "${DESKTOP_SSH_KEY:-}"
+          HOST="${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}"
+          key="${RUNNER_TEMP}/desktop-rollback-key"
+          printf '%s\n' "$DESKTOP_SSH_KEY" > "$key"
+          chmod 600 "$key"
+          backup_root="/var/www/update/releases/rollback/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          ssh -i "$key" -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
+            -o ConnectTimeout=15 "root@${HOST}" "bash -s" -- "$backup_root" <<'REMOTE'
+          set -euo pipefail
+          backup_root="$1"
+          test -d "$backup_root/files"
+          while IFS= read -r -d '' saved; do
+            target="${saved#${backup_root}/files}"
+            mkdir -p "$(dirname "$target")"
+            tmp="${target}.rollback.$$"
+            cp -p "$saved" "$tmp"
+            mv -f "$tmp" "$target"
+          done < <(find "$backup_root/files" -type f -print0)
+          while IFS= read -r target; do
+            [ -n "$target" ] && rm -f -- "$target"
+          done < "$backup_root/missing"
+          REMOTE
+          echo "Restored stable and public pointers; immutable failed-build payload retained for audit."
 
   github-release:
     needs: [release-preflight, windows, macos, cross-platform-parity, verify-download, verify-public-windows-signature, verify-download-center]

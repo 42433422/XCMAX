@@ -18,6 +18,7 @@ client subclassing :class:`MODstoreClient`.
 
 from __future__ import annotations
 
+import http.client
 import ipaddress
 import json
 import mimetypes
@@ -45,11 +46,20 @@ class MODstoreAuthError(MODstoreError):
     """Raised when login fails or a protected call returns 401."""
 
 
-class _RejectRedirects(urllib.request.HTTPRedirectHandler):
-    """Keep a validated MODstore origin from redirecting to another target."""
+class _PinnedHTTPSConnection(http.client.HTTPSConnection):
+    """Connect to a validated address while retaining origin-host TLS SNI."""
 
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        return None
+    def __init__(self, host: str, pinned_ip: str, *, port: int, timeout: float, context):
+        super().__init__(host, port=port, timeout=timeout, context=context)
+        self._pinned_ip = pinned_ip
+
+    def connect(self) -> None:
+        self.sock = socket.create_connection(
+            (self._pinned_ip, self.port), self.timeout, self.source_address
+        )
+        if self._tunnel_host:
+            self._tunnel()
+        self.sock = self._context.wrap_socket(self.sock, server_hostname=self.host)
 
 
 def _open_no_redirect(
@@ -58,19 +68,40 @@ def _open_no_redirect(
     timeout: float,
     context,
 ):
-    """Open one validated-origin request without proxies or redirects."""
-    opener = urllib.request.build_opener(
-        urllib.request.ProxyHandler({}),
-        urllib.request.HTTPHandler(),
-        urllib.request.HTTPSHandler(context=context),
-        _RejectRedirects(),
+    """Open one origin request on the exact address that passed policy checks."""
+
+    parsed = urllib.parse.urlsplit(request.full_url)
+    host = str(parsed.hostname or "")
+    pinned_ip = str(getattr(request, "_xcagi_pinned_ip", ""))
+    # Reject a missing/tampered pin even if a caller bypassed MODstoreClient.
+    ipaddress.ip_address(pinned_ip)
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    if parsed.scheme == "https":
+        connection: http.client.HTTPConnection = _PinnedHTTPSConnection(
+            host, pinned_ip, port=port, timeout=timeout, context=context
+        )
+    else:
+        connection = http.client.HTTPConnection(pinned_ip, port=port, timeout=timeout)
+    target = urllib.parse.urlunsplit(("", "", parsed.path or "/", parsed.query, ""))
+    headers = dict(request.header_items())
+    default_port = 443 if parsed.scheme == "https" else 80
+    headers["Host"] = host if port == default_port else f"{host}:{port}"
+    connection.request(
+        request.get_method(),
+        target,
+        body=request.data,
+        headers=headers,
     )
-    # The caller permits only an origin-relative path, rejects credentials,
-    # re-resolves the configured host immediately before this call, and blocks
-    # every non-public address unless the operator explicitly opts into a
-    # private MODstore. Redirects and ambient proxy rewriting are disabled.
-    # lgtm[py/full-ssrf]
-    return opener.open(request, timeout=timeout)
+    response = connection.getresponse()
+    if response.status >= 300:
+        raise urllib.error.HTTPError(
+            request.full_url,
+            response.status,
+            response.reason,
+            response.headers,
+            response,
+        )
+    return response
 
 
 @dataclass(slots=True)
@@ -268,7 +299,7 @@ class MODstoreClient:
         if parsed_path.scheme or parsed_path.netloc:
             raise MODstoreError("request path must not override the configured origin")
         url = self.base_url + path
-        _assert_outbound_destination_safe(
+        pinned_ip = _assert_outbound_destination_safe(
             self.base_url,
             allow_private_network=self.allow_private_network,
         )
@@ -278,6 +309,7 @@ class MODstoreClient:
                 raise MODstoreAuthError("access_token required; call login() first")
             h.setdefault("Authorization", f"Bearer {self.access_token}")
         req = urllib.request.Request(url=url, data=body, method=method, headers=h)
+        req._xcagi_pinned_ip = pinned_ip
         try:
             ctx = self._ssl_context()
             with _open_no_redirect(req, timeout=self.timeout_s, context=ctx) as resp:
@@ -290,6 +322,8 @@ class MODstoreClient:
             raise MODstoreError(f"{exc.code} {exc.reason}: {text}") from exc
         except urllib.error.URLError as exc:
             raise MODstoreError(f"network error: {exc.reason}") from exc
+        except (OSError, ValueError, http.client.HTTPException) as exc:
+            raise MODstoreError(f"network error: {exc}") from exc
 
     def _ssl_context(self):
         return ssl_context_for_endpoint(self.base_url, verify_ssl=self.verify_ssl)
@@ -320,12 +354,12 @@ def _assert_outbound_destination_safe(
     base_url: str,
     *,
     allow_private_network: bool,
-) -> None:
+) -> str:
     host = str(urllib.parse.urlsplit(base_url).hostname or "").strip().lower()
     if not host:
         raise MODstoreError("base_url is missing a host")
     if host.endswith(_RESERVED_TEST_SUFFIXES):
-        return
+        return "192.0.2.1"
     try:
         literal = ipaddress.ip_address(host)
     except ValueError:
@@ -346,7 +380,7 @@ def _assert_outbound_destination_safe(
         if not addresses:
             raise MODstoreError(f"base_url host has no addresses: {host}")
     if allow_private_network:
-        return
+        return str(addresses[0])
     for address in addresses:
         if (
             address.is_private
@@ -357,6 +391,7 @@ def _assert_outbound_destination_safe(
             or address.is_unspecified
         ):
             raise MODstoreError(f"base_url resolves to a blocked network: {address}")
+    return str(addresses[0])
 
 
 def _parse_json_response(raw: str) -> dict[str, Any]:

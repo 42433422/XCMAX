@@ -135,4 +135,38 @@ describe('update installation receipts', () => {
     })
     expect(idempotencyKeys[0]).toBe(idempotencyKeys[1])
   })
+
+  it('refreshes inventory evidence after the heartbeat interval', async () => {
+    fs.mkdirSync(state.holder.userDataDir, { recursive: true })
+    fs.writeFileSync(
+      path.join(state.holder.userDataDir, 'installation-id'),
+      'customer-installation-heartbeat-01\n',
+    )
+    fs.writeFileSync(
+      path.join(state.holder.userDataDir, 'reported-update-installation.json'),
+      JSON.stringify({
+        installationId: 'customer-installation-heartbeat-01',
+        installedVersion: '1.0.0.1',
+        installedBuildSha: 'a'.repeat(40),
+        reportedAt: '2026-09-01T00:00:00.000Z',
+      }),
+    )
+    const bodies: Record<string, unknown>[] = []
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)))
+      return new Response('{"ok":true}', { status: 200 })
+    }))
+
+    await reportPendingUpdateInstallation({
+      backendPort: 17600,
+      installedVersion: '1.0.0.1',
+      installedBuildSha: 'a'.repeat(40),
+    })
+
+    expect(bodies[0]).toMatchObject({
+      source: 'desktop_heartbeat',
+      status: 'installed',
+      installed_build_sha: 'a'.repeat(40),
+    })
+  })
 })

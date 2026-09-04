@@ -1,14 +1,20 @@
 # CI SSOT: edit this file, then run: python scripts/dev/publish_ci_workflows_to_root.py
 name: Release Enterprise Mobile
+run-name: Release Android ${{ inputs.release_sha }}
 
 on:
   workflow_dispatch:
     inputs:
       version:
         description: Release version (manual dispatch only)
-        required: false
+        required: true
+        type: choice
+        default: "1.0.0.1"
+        options: ["1.0.0.1"]
+      release_sha:
+        description: Immutable 40-character source SHA
+        required: true
         type: string
-        default: "1.0.0.0"
   # Tag (FHD/v*) entry is centralized in fhd-release-orchestrator.yml (gated on
   # verify-version-anchors, then dispatches this workflow) — avoids the double-run.
 
@@ -27,6 +33,13 @@ jobs:
         working-directory: mobile-flutter-poc
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+      - name: Lock Android checkout to the immutable release SHA
+        run: |
+          set -euo pipefail
+          printf '%s' "${{ inputs.release_sha }}" | grep -Eq '^[0-9a-f]{40}$'
+          test "$(git rev-parse HEAD)" = "${{ inputs.release_sha }}"
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -40,13 +53,13 @@ jobs:
         run: |
           raw="${{ github.event.inputs.version || github.ref_name }}"
           if [[ "${raw}" == "main" || "${raw}" == "master" || "${raw}" == "feature"* || -z "${raw}" ]]; then
-            raw="1.0.0.0"
+            raw="1.0.0.1"
           fi
           raw="${raw#FHD/}"
           raw="${raw#v}"
           raw="${raw#V}"
           if [[ -z "${raw}" ]]; then
-            raw="1.0.0.0"
+            raw="1.0.0.1"
           fi
           echo "version=${raw}" >> "${GITHUB_OUTPUT}"
           echo "toolchain_version=$(printf '%s' "${raw}" | cut -d. -f1-3)" >> "${GITHUB_OUTPUT}"

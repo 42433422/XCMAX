@@ -15,6 +15,8 @@ ENV_DIR="${MODSTORE_ENV_DIR:-/etc/xcmax}"
 ENV_FILE="${MODSTORE_ENV_FILE:-${ENV_DIR}/modstore.env}"
 SCHEDULER_ENV_FILE="${MODSTORE_SCHEDULER_ENV_FILE:-${ENV_DIR}/modstore-scheduler.env}"
 TARGET_SHA="${XCMAX_TARGET_SHA:-${1:-}}"
+PRODUCT_VERSION="${XCMAX_PRODUCT_VERSION:-1.0.0.1}"
+RELEASE_ID="xcagi-${PRODUCT_VERSION}-${TARGET_SHA}"
 GITHUB_REPOSITORY_SLUG="${XCMAX_GITHUB_REPOSITORY:-}"
 SITE_SUBDIR="成都修茈科技有限公司"
 MODSTORE_SUBDIR="${SITE_SUBDIR}/MODstore_deploy"
@@ -64,6 +66,8 @@ resolve_java_home() {
 }
 
 [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "XCMAX_TARGET_SHA must be a full 40-character commit SHA"
+[[ "$PRODUCT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] \
+  || fail "XCMAX_PRODUCT_VERSION must be a numeric product version"
 [[ -d "$SOURCE_ROOT/.git" ]] || fail "source Git mirror not found: $SOURCE_ROOT"
 [[ "$RELEASE_BASE" == /opt/xcmax || "${XCMAX_ALLOW_CUSTOM_RELEASE_BASE:-0}" == 1 ]] \
   || fail "custom release base requires XCMAX_ALLOW_CUSTOM_RELEASE_BASE=1"
@@ -342,18 +346,19 @@ else
   fi
 
   TREE_SHA="$(git -C "$SOURCE_ROOT" rev-parse "${TARGET_SHA}^{tree}")"
-  python3 - "$BUILD_ROOT/.xcmax-release.json" "$TARGET_SHA" "$TREE_SHA" "$ARTIFACT_SHA" <<'PY'
+  python3 - "$BUILD_ROOT/.xcmax-release.json" "$TARGET_SHA" "$TREE_SHA" "$ARTIFACT_SHA" "$PRODUCT_VERSION" "$RELEASE_ID" <<'PY'
 import datetime
 import json
 import sys
 
-path, git_sha, tree_sha, artifact_sha = sys.argv[1:]
+path, git_sha, tree_sha, artifact_sha, product_version, release_id = sys.argv[1:]
 payload = {
     "artifact_sha256": artifact_sha,
     "built_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
     "git_sha": git_sha,
     "git_tree": tree_sha,
-    "release_id": git_sha,
+    "product_version": product_version,
+    "release_id": release_id,
 }
 with open(path, "w", encoding="utf-8") as handle:
     json.dump(payload, handle, indent=2, sort_keys=True)
@@ -456,9 +461,10 @@ write_service_units() {
   if [[ -f "$release_manifest" ]]; then
     release_artifact_sha="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("artifact_sha256", ""))' "$release_manifest")"
   fi
-  printf 'MODSTORE_GIT_SHA=%s\nMODSTORE_EXPECTED_GIT_SHA=%s\nMODSTORE_DEPLOY_TIER=production\nMODSTORE_RELEASE_MANIFEST=%s/.xcmax-release.json\nMODSTORE_RELEASE_ARTIFACT_SHA256=%s\nMODSTORE_RUNTIME_DIR=%s\nMODSTORE_REPO_ROOT=%s\nXCMAX_MONOREPO_ROOT=%s\nMODSTORE_CAPABILITY_PROPOSAL_REPO=%s\nJAVA_PAYMENT_SERVICE_URL=http://127.0.0.1:8080\n' \
+  printf 'MODSTORE_GIT_SHA=%s\nMODSTORE_EXPECTED_GIT_SHA=%s\nMODSTORE_DEPLOY_TIER=production\nMODSTORE_RELEASE_MANIFEST=%s/.xcmax-release.json\nMODSTORE_RELEASE_ARTIFACT_SHA256=%s\nMODSTORE_RUNTIME_DIR=%s\nMODSTORE_REPO_ROOT=%s\nXCMAX_MONOREPO_ROOT=%s\nMODSTORE_CAPABILITY_PROPOSAL_REPO=%s\nXCMAX_RELEASE_SHA=%s\nXCMAX_PRODUCT_VERSION=%s\nJAVA_PAYMENT_SERVICE_URL=http://127.0.0.1:8080\n' \
     "$TARGET_SHA" "$TARGET_SHA" "$CURRENT_LINK" "$release_artifact_sha" \
-    "$RUNTIME_DIR" "$CURRENT_LINK" "$CURRENT_LINK" "$GITHUB_REPOSITORY_SLUG" > "${release_env}.tmp"
+    "$RUNTIME_DIR" "$CURRENT_LINK" "$CURRENT_LINK" "$GITHUB_REPOSITORY_SLUG" \
+    "$TARGET_SHA" "$PRODUCT_VERSION" > "${release_env}.tmp"
   chmod 644 "${release_env}.tmp"
   mv -f "${release_env}.tmp" "$release_env"
 
@@ -587,17 +593,20 @@ verify_health_identity() {
   local expected_artifact="$3"
   local payload
   payload="$(curl --noproxy '*' -fsS --max-time 10 "$url")" || return 1
-  HEALTH_PAYLOAD="$payload" EXPECTED_SHA="$expected_sha" EXPECTED_ARTIFACT="$expected_artifact" python3 - <<'PY'
+  HEALTH_PAYLOAD="$payload" EXPECTED_SHA="$expected_sha" \
+    EXPECTED_RELEASE_ID="xcagi-${PRODUCT_VERSION}-${expected_sha}" \
+    EXPECTED_ARTIFACT="$expected_artifact" python3 - <<'PY'
 import json
 import os
 
 payload = json.loads(os.environ["HEALTH_PAYLOAD"])
 expected = os.environ["EXPECTED_SHA"]
+expected_release_id = os.environ["EXPECTED_RELEASE_ID"]
 expected_artifact = os.environ["EXPECTED_ARTIFACT"]
 assert payload.get("ok") is True
 assert payload.get("deploy_tier") == "production"
 assert payload.get("git_sha") == expected
-assert payload.get("release_id") == expected
+assert payload.get("release_id") == expected_release_id
 assert payload.get("artifact_sha256") == expected_artifact
 PY
 }

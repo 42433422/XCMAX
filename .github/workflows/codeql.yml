@@ -38,3 +38,62 @@ jobs:
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:${{ matrix.language }}"
+
+  security-no-new-critical-high:
+    name: security-no-new-critical-high
+    if: ${{ github.event_name == 'pull_request' }}
+    needs: analyze
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: read
+    steps:
+      - name: Fail closed on a newly introduced critical/high CodeQL alert
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BASE_REF: refs/heads/${{ github.base_ref }}
+          PR_REF: refs/pull/${{ github.event.pull_request.number }}/merge
+        run: |
+          set -euo pipefail
+          export_alerts() {
+            local ref="$1"
+            local output="$2"
+            gh api --paginate --slurp -X GET \
+              "repos/${GH_REPO}/code-scanning/alerts" \
+              -f state=open -f "ref=${ref}" -f per_page=100 \
+              | jq '[.[][] | select(
+                  ((.rule.security_severity_level // "") | ascii_downcase)
+                  as $severity | $severity == "critical" or $severity == "high"
+                ) | {number, rule_id:.rule.id, path:.most_recent_instance.location.path}]' \
+              > "$output"
+          }
+          export_alerts "$BASE_REF" base.json
+          export_alerts "$PR_REF" pr.json
+          jq -n --slurpfile base base.json --slurpfile pr pr.json '
+            ($base[0] | map(.number)) as $known
+            | ($pr[0] | map(select((.number as $number | $known | index($number)) == null))) as $new
+            | {
+                schema:"security-no-new-critical-high/v1",
+                base_ref:env.BASE_REF,
+                pr_ref:env.PR_REF,
+                base_blocking_count:($base[0] | length),
+                pr_blocking_count:($pr[0] | length),
+                new_blocking:$new,
+                passed:($new | length == 0)
+              }
+          ' > security-no-new-critical-high.json
+          jq . security-no-new-critical-high.json
+          jq -e '.passed == true' security-no-new-critical-high.json >/dev/null || {
+            echo "::error::This pull request introduces a new critical/high CodeQL alert."
+            exit 1
+          }
+      - name: Retain the no-new-alert decision
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-no-new-critical-high-${{ github.event.pull_request.number }}
+          path: security-no-new-critical-high.json
+          retention-days: 120
+          if-no-files-found: error

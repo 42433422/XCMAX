@@ -72,7 +72,7 @@ def test_tarball_push_does_not_scp_optional_image_archive(tmp_path: Path) -> Non
                 "artifact": artifact.name,
                 "sha256": hashlib.sha256(artifact.read_bytes()).hexdigest(),
                 "version": "1.0.0.0",
-                "git_sha": "test-sha",
+                "git_sha": "a" * 40,
                 "deploy_mode": "tarball",
                 "admin_console_sha256": "a" * 64,
             }
@@ -136,6 +136,17 @@ def test_strict_push_applies_and_verifies_exact_sha() -> None:
     assert 'HEALTH_RETRIES="${FHD_PUSH_HEALTH_RETRIES:-120}"' in script
     assert "for ((attempt = 1; attempt <= HEALTH_RETRIES; attempt++))" in script
     assert "remote_identity_mismatch" in script
+
+
+def test_server_release_is_retained_by_version_and_full_sha_before_pointer_switch() -> None:
+    script = (FHD_ROOT / "scripts/deploy/fhd-push-release.sh").read_text(encoding="utf-8")
+
+    assert "/var/www/update/releases/builds/${VERSION}/${GIT_SHA}/server" in script
+    assert 'atomic_upload "$TARBALL" "${IMMUTABLE_REMOTE_DIR}/${ARTIFACT}"' in script
+    assert 'atomic_upload "$MANIFEST" "${IMMUTABLE_REMOTE_DIR}/fhd-manifest.json"' in script
+    assert script.index('promote "$immutable_dir/$artifact"') < script.index(
+        'promote "$immutable_dir/fhd-manifest.json"'
+    )
 
 
 def test_tarball_apply_ignores_optional_image_digest_but_verifies_artifact(
@@ -302,7 +313,6 @@ def test_evolution_dispatch_runs_before_any_checkout_directory_exists() -> None:
 def test_autonomous_ci_workflows_have_no_environment_approval_gate() -> None:
     workflow_paths = [
         REPO_ROOT / ".github/workflows/fhd-ci-cd.yml",
-        REPO_ROOT / ".github/workflows/fhd-deploy.yml",
         REPO_ROOT / ".github/workflows/fhd-employee-smoke-gate.yml",
         REPO_ROOT / ".github/workflows/fhd-release-gate-ci.yml",
         REPO_ROOT / ".github/workflows/modstore-prod-deploy.yml",
@@ -329,14 +339,14 @@ def test_autonomy_resume_waits_for_http_ready_after_secret_sync() -> None:
     assert "did not become HTTP-ready after autonomy config sync" in sync_step
 
 
-def test_autonomy_deploy_has_no_human_environment_approval() -> None:
+def test_production_deploy_requires_human_environment_approval() -> None:
     deploy = (REPO_ROOT / ".github/workflows/fhd-deploy.yml").read_text(encoding="utf-8")
     assert "report-autonomy-failure:" in deploy
     assert "needs: cvm-rolling" in deploy
     assert "needs['cvm-rolling'].result != 'success'" in deploy
     assert 'decision="execution_failed"' in deploy
     assert "Autonomy action was already terminal" in deploy
-    assert "\n    environment:\n" not in deploy
+    assert "\n    environment:\n      name: ${{ inputs.environment }}" in deploy
     assert "actions/runs/${GITHUB_RUN_ID}/approvals" not in deploy
     assert "Resume approved autonomy action" not in deploy
     assert "XCAGI_AUTONOMY_MEDIUM_RISK_POLICY=auto_approve" in deploy

@@ -45,13 +45,14 @@ def test_update_install_receipt_is_idempotent_and_summarizes_latest_device(clien
         user = _user(db, admin=False)
         admin = _user(db, admin=True)
         installation_id = str(uuid.uuid4())
+        target_sha = "a" * 40
         first = UpdateInstallationReceiptBody(
             installation_id=installation_id,
             idempotency_key=f"install-{uuid.uuid4().hex}",
             target_version="1.0.0.1",
-            target_build_sha="sha-target",
+            target_build_sha=target_sha,
             installed_version="1.0.0.1",
-            installed_build_sha="sha-target",
+            installed_build_sha=target_sha,
             status="installed",
             reported_at=datetime.now(UTC) - timedelta(minutes=1),
         )
@@ -64,15 +65,15 @@ def test_update_install_receipt_is_idempotent_and_summarizes_latest_device(clien
             installation_id=installation_id,
             idempotency_key=f"install-{uuid.uuid4().hex}",
             target_version="1.0.0.1",
-            target_build_sha="sha-target",
+            target_build_sha=target_sha,
             installed_version="1.0.0.1",
-            installed_build_sha="wrong-sha",
+            installed_build_sha="b" * 40,
             status="failed",
             error="build mismatch",
             reported_at=datetime.now(UTC),
         )
         record_update_installation_receipt(failed, db, user)
-        listed = list_update_installation_receipts("sha-target", 200, db, admin)
+        listed = list_update_installation_receipts(target_sha, 200, db, admin)
         assert len(listed["items"]) == 2
         assert listed["summary"] == {
             "reported_devices": 1,
