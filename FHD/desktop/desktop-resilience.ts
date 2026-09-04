@@ -3,10 +3,10 @@ import fs from 'node:fs'
 import path from 'node:path'
 import {
   downloadUpdate,
-  installUpdate,
   isForceUpgradeRequired,
   readLocalProductVersion,
 } from './updater'
+import { installUpdate } from './desktop-install-update'
 
 type WriteLog = (line: string) => void
 type BeforeInstall = NonNullable<Parameters<typeof installUpdate>[0]>

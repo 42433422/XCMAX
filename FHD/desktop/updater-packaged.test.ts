@@ -433,7 +433,8 @@ describe('updater — parseYamlBlock', () => {
 
 describe('updater — installUpdate without download', () => {
   it('throws when no update downloaded', async () => {
-    const { installUpdate, __resetUpdateDownloadedForTest } = await import('./updater.js')
+    const { installUpdate } = await import('./desktop-install-update.js')
+    const { __resetUpdateDownloadedForTest } = await import('./updater.js')
     __resetUpdateDownloadedForTest()
     await expect(installUpdate()).rejects.toThrow(/尚未下载更新包/)
   })

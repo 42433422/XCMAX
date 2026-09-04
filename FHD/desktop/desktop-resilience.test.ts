@@ -16,9 +16,11 @@ vi.mock('electron', () => ({
 
 vi.mock('./updater', () => ({
   downloadUpdate: mocks.downloadUpdate,
-  installUpdate: mocks.installUpdate,
   isForceUpgradeRequired: mocks.forceRequired,
   readLocalProductVersion: vi.fn(() => '1.0.0.0'),
+}))
+vi.mock('./desktop-install-update', () => ({
+  installUpdate: mocks.installUpdate,
 }))
 
 import { createForceUpgradeHandler } from './desktop-resilience'

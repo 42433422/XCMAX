@@ -17,11 +17,10 @@ import {
 import {
   downloadUpdate,
   getUpdateStatus,
-  installUpdate,
   runUpdateCheckWithDirectNet,
 } from './updater'
 import { cancelPreparedRollback } from './rollback'
-import { assertSelfUpdateInstallSupported, getDesktopInstallIdentity } from './desktop-install-update'
+import { assertSelfUpdateInstallSupported, getDesktopInstallIdentity, installUpdate } from './desktop-install-update'
 import { desktopOfflineDbPath, queryOffline } from './data-bridge'
 import { deleteSecret, getSecret, listSecrets, setSecret } from './secure-store'
 import { reportRendererError } from './desktop-resilience'

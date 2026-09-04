@@ -10,7 +10,7 @@ import {
   parseReleaseMediaFromYaml,
   type ReleaseMediaSlide,
 } from './release-media.js'
-import { discardPendingUpdateInstallReceipt, stageUpdateInstallReceipt } from './update-install-receipts.js'
+import { appendUpdaterEvent, discardPendingUpdateInstallReceipt } from './update-install-receipts.js'
 
 let updateDownloaded = false
 let downloadedVersion = ''
@@ -72,22 +72,21 @@ function updaterLogPath(): string {
   return path.join(app.getPath('userData'), 'logs', 'updater-events.jsonl')
 }
 
-function appendUpdaterEvent(type: string, data?: unknown): void {
-  try {
-    const dir = path.dirname(updaterLogPath())
-    fs.mkdirSync(dir, { recursive: true })
-    fs.appendFileSync(
-      updaterLogPath(),
-      `${JSON.stringify({ ts: new Date().toISOString(), type, data })}\n`,
-      'utf8',
-    )
-  } catch {
-    /* ignore log failures */
-  }
-}
-
 export function isUpdateDownloaded(): boolean {
   return updateDownloaded
+}
+
+/** 已下载更新的只读快照，供 installUpdate（desktop-install-update.ts）执行安装。 */
+export function getDownloadedUpdateState(): {
+  downloaded: boolean
+  version: string
+  buildSha: string
+} {
+  return {
+    downloaded: updateDownloaded,
+    version: downloadedVersion,
+    buildSha: downloadedBuildSha,
+  }
 }
 
 /** 渲染进程挂载时拉取，避免 update-available 发生在订阅前或页面刷新后丢失角标。 */
@@ -521,53 +520,6 @@ export async function fetchLatestMetadataText(): Promise<string> {
 
 export async function verifyLatestMetadataSignature(): Promise<void> {
   await fetchLatestMetadataText()
-}
-
-export async function installUpdate(
-  beforeInstall?: (toVersion: string) => Promise<void>,
-  onInstallFailed?: () => Promise<void> | void,
-  prepareQuit?: () => Promise<void> | void,
-): Promise<void> {
-  if (!updateDownloaded) {
-    throw new Error('尚未下载更新包，请先在更新面板确认下载')
-  }
-  try {
-    if (beforeInstall) {
-      const version = downloadedVersion || 'unknown'
-      const identity = downloadedBuildSha ? `${version}+${downloadedBuildSha.slice(0, 12)}` : version
-      await beforeInstall(identity)
-    }
-    stageUpdateInstallReceipt({ targetVersion: downloadedVersion || 'unknown', targetBuildSha: downloadedBuildSha, channel: process.env.XCAGI_UPDATE_CHANNEL })
-    appendUpdaterEvent('install_start', {})
-    // macOS 原生 quitAndInstall 经 [NSApp terminate] 触发退出，will-quit 中的
-    // 异步后端优雅关闭（preventDefault + await stopBackend）在该路径下不可靠，
-    // 会致 ShipIt 无限等待应用退出（2026-09-03 实测：install_start 后进程残留一整夜，
-    // 更新永远无法完成）。先在 JS 层同步等待后端停止，再交出退出控制权。
-    if (prepareQuit) {
-      await prepareQuit()
-    }
-    autoUpdater.quitAndInstall(false, true)
-  } catch (error) {
-    discardPendingUpdateInstallReceipt()
-    let cleanupError: unknown
-    try {
-      await onInstallFailed?.()
-    } catch (caught) {
-      cleanupError = caught
-    }
-    appendUpdaterEvent('install_failed', {
-      message: error instanceof Error ? error.message : String(error),
-      cleanupError: cleanupError instanceof Error ? cleanupError.message : String(cleanupError || ''),
-    })
-    if (cleanupError) {
-      throw new Error(
-        `${error instanceof Error ? error.message : String(error)}；清理回滚准备失败：${
-          cleanupError instanceof Error ? cleanupError.message : String(cleanupError)
-        }`,
-      )
-    }
-    throw error
-  }
 }
 
 /** 纯函数：校验 update 元数据文本的 Ed25519 二次签名。便于单测。 */
