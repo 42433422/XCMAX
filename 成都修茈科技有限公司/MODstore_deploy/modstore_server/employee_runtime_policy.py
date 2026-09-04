@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
+from modstore_server.llm_crypto import decrypt_secret, encrypt_secret
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 DEFAULT_POLICY_NAME = "employee_runtime_policy.json"
@@ -34,7 +35,13 @@ def _now_iso() -> str:
 def load_policy() -> Dict[str, Any]:
     path = policy_path()
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        envelope = json.loads(path.read_text(encoding="utf-8"))
+        if envelope.get("schema") != "xcagi.employee_runtime_policy.encrypted/v1":
+            return {"employees": {}, "schema_version": 1}
+        encrypted = str(envelope.get("ciphertext") or "").strip()
+        if not encrypted:
+            return {"employees": {}, "schema_version": 1}
+        data = json.loads(decrypt_secret(encrypted))
         return data if isinstance(data, dict) else {"employees": {}, "schema_version": 1}
     except FileNotFoundError:
         return {"employees": {}, "schema_version": 1}
@@ -49,11 +56,19 @@ def save_policy(policy: Dict[str, Any]) -> Dict[str, Any]:
     path = policy_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    envelope = {
+        "schema": "xcagi.employee_runtime_policy.encrypted/v1",
+        "ciphertext": encrypt_secret(
+            json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+        ),
+        "updated_at": payload["updated_at"],
+    }
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        json.dump(envelope, handle, ensure_ascii=True, indent=2, sort_keys=True)
+        handle.write("\n")
     tmp.replace(path)
+    path.chmod(0o600)
     return {**payload, "path": str(path)}
 
 
