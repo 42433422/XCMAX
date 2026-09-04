@@ -31,12 +31,28 @@ on:
         required: false
         type: string
         default: ""
+      release_sha:
+        description: Required for production apply-latest; exact 40-character release commit
+        required: false
+        type: string
+        default: ""
+      security_scan_run_id:
+        description: Required for production apply-latest; current successful full security scan
+        required: false
+        type: string
+        default: ""
+      previous_security_scan_run_id:
+        description: Required for production apply-latest; previous-day successful full security scan
+        required: false
+        type: string
+        default: ""
 
 concurrency:
   group: fhd-deploy-${{ inputs.environment }}
   cancel-in-progress: false
 
 permissions:
+  actions: read
   contents: read
   deployments: read
 
@@ -47,6 +63,55 @@ jobs:
     environment:
       name: ${{ inputs.environment }}
     steps:
+      - name: Checkout exact production release for gate verification
+        if: ${{ inputs.environment == 'production' && inputs.action == 'apply-latest' }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+
+      - name: Verify exact production release input
+        if: ${{ inputs.environment == 'production' && inputs.action == 'apply-latest' }}
+        env:
+          ACTION_ID: ${{ inputs.action_id }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${RELEASE_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::production apply-latest requires release_sha=<40-char git sha>."
+            exit 1
+          fi
+          if [ "${ACTION_ID}" != "release:${RELEASE_SHA}" ]; then
+            echo "::error::action_id must identify the same exact release_sha."
+            exit 1
+          fi
+          test "$(git rev-parse HEAD)" = "${RELEASE_SHA}"
+
+      - name: Download normalized security evidence
+        if: ${{ inputs.environment == 'production' && inputs.action == 'apply-latest' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: xcagi-security-release-reports
+          path: ${{ runner.temp }}/security-reports/current
+          run-id: ${{ inputs.security_scan_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Download prior-day normalized security evidence
+        if: ${{ inputs.environment == 'production' && inputs.action == 'apply-latest' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: xcagi-security-release-reports
+          path: ${{ runner.temp }}/security-reports/previous
+          run-id: ${{ inputs.previous_security_scan_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Enforce exact-SHA two-day security clearance
+        if: ${{ inputs.environment == 'production' && inputs.action == 'apply-latest' }}
+        run: |
+          python FHD/scripts/security/verify_security_scan_pair.py \
+            --previous-dir "${{ runner.temp }}/security-reports/previous" \
+            --current-dir "${{ runner.temp }}/security-reports/current" \
+            --release-sha "${{ inputs.release_sha }}"
+
       - name: Require CVM SSH secrets
         env:
           FHD_PUSH_HOST: ${{ secrets.FHD_PUSH_HOST }}

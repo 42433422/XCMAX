@@ -39,6 +39,8 @@ jobs:
       FHD_PUSH_HOST: ${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_git_sha }}
 
       - name: Validate source run and inputs
         working-directory: .
@@ -48,11 +50,13 @@ jobs:
           test -n "${DESKTOP_SSH_KEY:-}"
           [[ "${{ inputs.source_run_id }}" =~ ^[0-9]+$ ]]
           [[ "${{ inputs.release_git_sha }}" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "${{ inputs.release_git_sha }}"
           run_json="$(gh run view '${{ inputs.source_run_id }}' --repo '${{ github.repository }}' --json headSha,jobs,workflowName)"
           jq -e --arg sha '${{ inputs.release_git_sha }}' '
             def step_ok($name): any(.jobs[].steps[]; .name == $name and .conclusion == "success");
             .headSha == $sha
             and .workflowName == "Release Desktop macOS OTA"
+            and step_ok("Enforce exact-SHA two-day security clearance")
             and step_ok("Build macOS enterprise installer")
             and step_ok("Notarize and staple macOS enterprise DMG")
             and step_ok("Verify packaged identity and ZIP feed")
