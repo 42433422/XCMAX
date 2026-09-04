@@ -4,7 +4,7 @@
 
 # syntax=docker/dockerfile:1
 
-FROM python:3.11-slim AS builder
+FROM python:3.11-slim@sha256:9534e5a8e315485d4061ed659af0fd78a284c015f9b73661b41d6bab25604534 AS builder
 
 WORKDIR /build
 
@@ -20,9 +20,12 @@ COPY deploy/requirements-server-api.txt requirements.txt
 COPY packages /build/packages
 
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt
+    pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt \
+    && pip install --no-cache-dir --no-deps --target /opt/site-packages /wheels/* \
+    && pip install --no-cache-dir --target /opt/site-packages --upgrade \
+        'wheel>=0.46.2' 'jaraco.context>=6.1.0' 'setuptools>=78.0.0'
 
-FROM python:3.11-slim AS production
+FROM cgr.dev/chainguard/wolfi-base@sha256:96ff486b326d15db16aa1fbd41a17043a557bebf76d2c0ac932e717534025940 AS production
 
 ARG XCAGI_GIT_SHA=""
 
@@ -36,19 +39,20 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUTF8=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONPATH=/opt/site-packages \
     XCAGI_GIT_SHA=${XCAGI_GIT_SHA}
 
-RUN apt-get update && apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends \
-    curl \
-    && rm -rf /var/lib/apt/lists/* \
-    && useradd --create-home --shell /bin/bash appuser
+RUN apk upgrade --no-cache \
+    && apk add --no-cache python-3.11 curl \
+    && addgroup -S appuser \
+    && adduser -S -G appuser -h /home/appuser -s /bin/sh appuser
 
-COPY --from=builder /wheels /wheels
-RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels \
-    && pip install --no-cache-dir --upgrade 'wheel>=0.46.2' 'jaraco.context>=6.1.0' 'setuptools>=78.0.0'
+ENV PYTHONPATH=/app/packages/xcagi_langgraph_core:/app/packages/xcagi_langgraph_checkpoint:/app/packages/xcagi_langgraph_checkpoint_backends/checkpoint-sqlite:/app/packages/xcagi_langgraph_checkpoint_backends/checkpoint-postgres:/app/packages/xcagi_langgraph_prebuilt:/app/packages/xcagi_langgraph_sdk:/opt/site-packages
+
+COPY --from=builder /opt/site-packages /opt/site-packages
 
 COPY --chown=appuser:appuser app /app/app
+COPY --chown=appuser:appuser packages /app/packages
 COPY --chown=appuser:appuser XCAGI /app/XCAGI
 COPY --chown=appuser:appuser alembic /app/alembic
 COPY --chown=appuser:appuser alembic.ini /app/alembic.ini
@@ -70,4 +74,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
     CMD curl -fsS http://127.0.0.1:5000/api/health >/dev/null || exit 1
 
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["gunicorn", "app.fastapi_app:create_fastapi_app", "--factory", "-c", "/app/gunicorn_config.py"]
+CMD ["python3.11", "-m", "gunicorn", "app.fastapi_app:create_fastapi_app()", "-c", "/app/gunicorn_config.py"]

@@ -395,6 +395,36 @@ jobs:
       - name: Build image for scanning
         run: docker build --target production -f docker/Dockerfile.fhd-api -t xcagi-ci-scan:local .
 
+      - name: Smoke test production image
+        run: |
+          set -euo pipefail
+          container_name="xcagi-ci-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cleanup() {
+            docker rm -f "${container_name}" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          docker run -d --name "${container_name}" \
+            -e XCAGI_GUNICORN_WORKERS=1 \
+            -e FHD_SKIP_ADMIN_BOOTSTRAP=1 \
+            -e DATABASE_URL=sqlite:////app/data/ci-smoke.db \
+            -e VECTOR_DB_URL=sqlite:////app/data/ci-smoke.db \
+            xcagi-ci-scan:local
+
+          for attempt in $(seq 1 60); do
+            if [ "$(docker inspect --format '{{.State.Running}}' "${container_name}")" != "true" ]; then
+              break
+            fi
+            if payload="$(docker exec "${container_name}" curl -fsS http://127.0.0.1:5000/api/health)" \
+              && jq -e '.runtime.status == "healthy" and .version == "1.0.0.1"' <<<"${payload}" >/dev/null; then
+              jq '{status, version, runtime_status: .runtime.status}' <<<"${payload}"
+              exit 0
+            fi
+            sleep 1
+          done
+
+          docker logs --tail 200 "${container_name}" >&2
+          exit 1
+
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@0.35.0
         with:
