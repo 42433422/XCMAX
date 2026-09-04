@@ -193,6 +193,7 @@ export function applyTemplateV2(templateId: string): EmployeeConfigRecord {
       workflow: {
         ...(base.collaboration?.workflow || {}),
         ...(patch.collaboration?.workflow || {}),
+        workflow_id: patch.collaboration?.workflow?.workflow_id ?? base.collaboration?.workflow?.workflow_id ?? 0,
       },
     },
   }
