@@ -150,36 +150,26 @@ jobs:
         run: |
           set -euo pipefail
           test -n "${SSH_KEY:-}"
-          trivy_bin="$(command -v trivy)"
-          tool_dir="${RUNNER_TEMP}/production-host-trivy"
-          cache_dir="${tool_dir}/cache"
-          mkdir -p "${cache_dir}"
-          cp "${trivy_bin}" "${tool_dir}/trivy"
-          "${tool_dir}/trivy" image --cache-dir "${cache_dir}" --download-db-only
-          tar -C "${tool_dir}" -czf "${RUNNER_TEMP}/production-host-trivy.tar.gz" trivy cache
-
           key="${RUNNER_TEMP}/production-host-scan-key"
           printf '%s\n' "$SSH_KEY" > "$key"
           chmod 600 "$key"
-          remote_dir="/tmp/xcagi-production-host-scan-${GITHUB_RUN_ID}"
           ssh_opts=(-i "$key" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20)
-          ssh "${ssh_opts[@]}" "root@${HOST}" "install -d -m 700 '${remote_dir}'"
-          scp "${ssh_opts[@]}" "${RUNNER_TEMP}/production-host-trivy.tar.gz" \
-            "root@${HOST}:${remote_dir}/tool.tar.gz"
-          set +e
+          rootfs_archive="${RUNNER_TEMP}/production-host-rootfs.tar.gz"
+          rootfs_dir="${RUNNER_TEMP}/production-host-rootfs"
+          mkdir -p "${rootfs_dir}"
           ssh "${ssh_opts[@]}" "root@${HOST}" \
-            "set -euo pipefail
-             cd '${remote_dir}'
-             tar -xzf tool.tar.gz
-             chmod 700 trivy
-             ./trivy rootfs --cache-dir cache --skip-db-update --scanners vuln \
-               --skip-dirs /proc --skip-dirs /sys --skip-dirs /dev --skip-dirs /run \
-               --skip-dirs /var/lib/docker --skip-dirs /var/lib/containerd \
-               --format json --severity CRITICAL,HIGH --ignore-unfixed=false /" \
-            > "${RUNNER_TEMP}/security-native/production-host.json"
-          scan_rc=$?
-          ssh "${ssh_opts[@]}" "root@${HOST}" "rm -rf -- '${remote_dir}'" || true
-          exit "${scan_rc}"
+            'set -euo pipefail
+             paths=()
+             for path in etc/os-release usr/lib/os-release var/lib/dpkg/status var/lib/dpkg/status-old; do
+               [ -f "/${path}" ] && paths+=("${path}")
+             done
+             [ "${#paths[@]}" -ge 2 ]
+             tar -C / -czf - "${paths[@]}"' \
+            > "${rootfs_archive}"
+          tar -xzf "${rootfs_archive}" -C "${rootfs_dir}"
+          trivy rootfs --cache-dir "${GITHUB_WORKSPACE}/.cache/trivy" --skip-db-update \
+            --scanners vuln --format json --severity CRITICAL,HIGH --ignore-unfixed=false \
+            --output "${RUNNER_TEMP}/security-native/production-host.json" "${rootfs_dir}"
 
       - name: Normalize all scanner reports
         if: always()

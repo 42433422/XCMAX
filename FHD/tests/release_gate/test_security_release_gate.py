@@ -256,8 +256,10 @@ def test_full_scan_collects_and_uploads_evidence_after_individual_scanner_failur
     assert "Build and scan final FHD production image\n        continue-on-error: true" in workflow
     assert "--config /repo/.github/gitleaks-config.toml" in workflow
     assert "--no-emit-local" in workflow
-    assert "production-host-trivy.tar.gz" in workflow
+    assert "production-host-rootfs.tar.gz" in workflow
+    assert "var/lib/dpkg/status" in workflow
     assert "--skip-db-update" in workflow
+    assert "scp " not in workflow
     assert "docker run --rm -v /:/host:ro aquasec/trivy:latest" not in workflow
     assert (
         "continue-on-error: true\n        working-directory: .\n        run: docker build"
