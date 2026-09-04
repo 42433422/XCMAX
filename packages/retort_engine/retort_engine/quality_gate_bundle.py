@@ -159,14 +159,14 @@ def _run_command(command: list[str], root: Path) -> dict[str, Any]:
             timeout=300,
             check=False,
         )
-    except subprocess.TimeoutExpired as exc:
+    except subprocess.TimeoutExpired:
         return {
             "returncode": 124,
-            "stdout": str(exc.stdout or ""),
-            "stderr": str(exc.stderr or "timeout"),
+            "stdout": "",
+            "stderr": "command_timeout",
         }
-    except OSError as exc:
-        return {"returncode": 127, "stdout": "", "stderr": str(exc)}
+    except OSError:
+        return {"returncode": 127, "stdout": "", "stderr": "command_unavailable"}
     return {
         "returncode": int(completed.returncode),
         "stdout": completed.stdout or "",

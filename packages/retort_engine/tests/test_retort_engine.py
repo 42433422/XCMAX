@@ -920,6 +920,24 @@ def test_paibi_llm_review_can_skip_dispatch_record(tmp_path: Path, monkeypatch) 
     assert not (project / ".retort" / "llm_reviews.jsonl").exists()
 
 
+def test_paibi_dispatch_failure_does_not_expose_exception_details(
+    tmp_path: Path, monkeypatch
+) -> None:
+    project = tmp_path / "own"
+    project.mkdir()
+    monkeypatch.setenv("RETORT_PAIBI_API_URL", "http://paibi.invalid")
+
+    def fail_request(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise RuntimeError("private host path and credential")
+
+    monkeypatch.setattr(PaibiLLMClient, "_request", fail_request)
+
+    result = request_paibi_llm_review(project=str(project), mode="assess")
+
+    assert result["dispatch"]["reason"] == "paibi_dispatch_failed"
+    assert "private host path" not in json.dumps(result, ensure_ascii=False)
+
+
 def test_paibi_llm_review_honors_preferred_tool(tmp_path: Path, monkeypatch) -> None:
     project = tmp_path / "own"
     project.mkdir()

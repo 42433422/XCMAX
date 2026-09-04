@@ -3,8 +3,25 @@ from __future__ import annotations
 from pathlib import Path
 
 from retort_engine.contracts import validate_contract
-from retort_engine.quality_gate_bundle import run_quality_gate_bundle
+from retort_engine.quality_gate_bundle import _run_command, run_quality_gate_bundle
 from retort_engine.service import RetortService
+
+
+def test_command_failure_does_not_expose_exception_details(
+    tmp_path: Path, monkeypatch
+) -> None:
+    def fail(*_args: object, **_kwargs: object) -> object:
+        raise OSError("private host path and credential")
+
+    monkeypatch.setattr("retort_engine.quality_gate_bundle.subprocess.run", fail)
+
+    result = _run_command(["missing-command"], tmp_path)
+
+    assert result == {
+        "returncode": 127,
+        "stdout": "",
+        "stderr": "command_unavailable",
+    }
 
 
 def test_quality_gate_bundle_runs_lint_pytest_and_contracts(tmp_path: Path) -> None:
