@@ -1,6 +1,6 @@
 # 服务器全量 API（无 GPU / 无 Windows 音频栈）；与 XCAGI/requirements.txt 相比去掉 torch 等大包。
 # SSOT 声明：pyproject.toml [project.optional-dependencies].server-api
-# 锁定版本：deploy/requirements-server-api.lock.txt（CI: scripts/dev/check_requirements_lock.py）
+# 锁定版本：deploy/requirements-server.lock.txt（CI: scripts/dev/check_requirements_lock.py）
 # 重型 ML：requirements.txt / optional-dependencies.ml（torch、transformers）
 
 # XCAGI 吸收并维护的 LangGraph 运行时；CI/服务端必须从仓库内同一份源码安装。
