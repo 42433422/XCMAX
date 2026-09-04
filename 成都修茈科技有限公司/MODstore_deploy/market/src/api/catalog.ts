@@ -33,6 +33,17 @@ export interface MyStoreResponse extends Record<string, unknown> {
   }>
 }
 
+export interface AssetInstallCommandResponse extends Record<string, unknown> {
+  ok?: boolean
+  queued?: boolean
+  duplicate?: boolean
+  command?: {
+    id?: number
+    status?: string
+    installation_id?: string
+  }
+}
+
 export const catalog = {
   catalog: (
     q = '',
@@ -135,5 +146,12 @@ export const catalog = {
     a.remove()
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
   },
+  installPurchasedItem: (catalogId: string | number, idempotencyKey = '') =>
+    req<AssetInstallCommandResponse>('/api/asset-installations/commands', {
+      method: 'POST',
+      body: JSON.stringify({ catalog_id: Number(catalogId), idempotency_key: idempotencyKey }),
+    }),
+  getAssetInstallCommand: (commandId: string | number) =>
+    req<AssetInstallCommandResponse>(`/api/asset-installations/commands/${encodeURIComponent(String(commandId))}`),
   myStore: (limit = 50, offset = 0) => req<MyStoreResponse>(`/api/my-store?limit=${limit}&offset=${offset}`),
 }

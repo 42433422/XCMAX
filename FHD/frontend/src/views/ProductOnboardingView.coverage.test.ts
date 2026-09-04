@@ -23,6 +23,7 @@ const mockContainer = vi.hoisted(() => ({
   fetchProductSku: vi.fn(),
   fetchIndustryBaseline: vi.fn(),
   fetchOnboardingIndustryCatalog: vi.fn(),
+  seedOnboardingDemo: vi.fn(),
   clearDeliverableStatusCache: vi.fn(),
   appAlert: vi.fn(),
   promptAdvancedTutorialAfterInstall: vi.fn(),
@@ -32,6 +33,7 @@ const mockContainer = vi.hoisted(() => ({
   readBuildEdition: vi.fn(),
   isEnterpriseEdition: vi.fn(),
   patchWorkspacePrefs: vi.fn(),
+  queueWorkspacePrefsSync: vi.fn(),
   // productFlow 工具
   setRuntimeOnboardingOpenIndustryIds: vi.fn(),
   readProductFlowCompleted: vi.fn(),
@@ -78,6 +80,7 @@ vi.mock('@/utils/platformShellApi', () => ({
   clearDeliverableStatusCache: mockContainer.clearDeliverableStatusCache,
   fetchIndustryBaseline: mockContainer.fetchIndustryBaseline,
   fetchOnboardingIndustryCatalog: mockContainer.fetchOnboardingIndustryCatalog,
+  seedOnboardingDemo: mockContainer.seedOnboardingDemo,
 }))
 
 vi.mock('@/utils/appDialog', () => ({
@@ -100,6 +103,7 @@ vi.mock('@/utils/hostPackOnboardingGate', () => ({
 
 vi.mock('@/utils/workspacePrefsApi', () => ({
   patchWorkspacePrefs: mockContainer.patchWorkspacePrefs,
+  queueWorkspacePrefsSync: mockContainer.queueWorkspacePrefsSync,
 }))
 
 vi.mock('@/constants/productFlow', async () => {
@@ -278,6 +282,11 @@ async function mountComponent(
     mockContainer.installIndustrySeed.mockResolvedValue({ success: true, message: '' })
     mockContainer.installCustomerDeliverySeed.mockResolvedValue({ success: true, message: '' })
     mockContainer.autoOnboardWorkflowEmployeesFromMods.mockResolvedValue([])
+    mockContainer.seedOnboardingDemo.mockResolvedValue({
+      industry_id: '涂料',
+      customer: { id: 1, name: '新手演示客户' },
+      product: { id: 1, name: '新手演示商品' },
+    })
     mockContainer.appAlert.mockResolvedValue(undefined)
     mockContainer.patchWorkspacePrefs.mockResolvedValue({ success: true, data: {} })
     mockContainer.promptAdvancedTutorialAfterInstall.mockResolvedValue('dismissed')
@@ -825,7 +834,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     expect(wrapper.find('.account-custom-empty-hint').exists()).toBe(true)
   })
 
-  it('host-pack 步骤：baselineOk 时显示「完成并进入对话」按钮', async () => {
+  it('host-pack 步骤：baselineOk 时显示“跟 AI 员工做第一单”入口', async () => {
     const { wrapper } = await mountComponent({
       route: { step: 'host-pack' },
       baseline: createBaselinePlan({ baseline_ready: true }),
@@ -833,7 +842,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     await flushPromises()
     const buttons = wrapper.findAll('.actions .btn.primary')
-    const nextBtn = buttons.find((b) => b.text().trim() === '完成并进入对话')
+    const nextBtn = buttons.find((b) => b.text().trim() === '下一步：跟 AI 员工做第一单')
     expect(nextBtn).toBeTruthy()
   })
 
@@ -867,8 +876,8 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
 
   // ===== 4. runBootstrap 测试 =====
 
-  it('runBootstrap：成功装齐后调用 promptAdvancedTutorialAfterInstall', async () => {
-    const { wrapper } = await mountComponent({
+  it('runBootstrap：成功装齐后进入演示数据步骤', async () => {
+    const { wrapper, router } = await mountComponent({
       route: { step: 'host-pack' },
       baseline: createBaselinePlan({ baseline_ready: false }),
     })
@@ -878,7 +887,6 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     mockContainer.fetchIndustryBaseline
       .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: false }))
       .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: true }))
-    mockContainer.promptAdvancedTutorialAfterInstall.mockClear()
     const bootstrapBtn = wrapper.find('.btn.primary')
     expect(bootstrapBtn.text()).toContain('一键装齐')
     await bootstrapBtn.trigger('click')
@@ -886,10 +894,12 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     await flushPromises()
     expect(mockContainer.installHostFoundation).toHaveBeenCalled()
-    expect(mockContainer.promptAdvancedTutorialAfterInstall).toHaveBeenCalled()
+    expect(mockContainer.flowState.markHostPackAcknowledged).toHaveBeenCalled()
+    expect(mockContainer.invalidateHostPackCompletionCache).toHaveBeenCalled()
+    expect(router.currentRoute.value.query.step).toBe('seed-demo')
   })
 
-  it('runBootstrap：promptAdvancedTutorialAfterInstall 返回 already_completed 时调用 appAlert', async () => {
+  it('runBootstrap：成功装齐后明确提示下一步准备演示数据', async () => {
     const { wrapper } = await mountComponent({
       route: { step: 'host-pack' },
       baseline: createBaselinePlan({ baseline_ready: false }),
@@ -899,14 +909,13 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     mockContainer.fetchIndustryBaseline
       .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: false }))
       .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: true }))
-    mockContainer.promptAdvancedTutorialAfterInstall.mockResolvedValue('already_completed')
     mockContainer.appAlert.mockClear()
     const bootstrapBtn = wrapper.find('.btn.primary')
     await bootstrapBtn.trigger('click')
     await flushPromises()
     await flushPromises()
     await flushPromises()
-    expect(mockContainer.appAlert).toHaveBeenCalled()
+    expect(mockContainer.appAlert).toHaveBeenCalledWith('本行业推荐菜单已装齐。下一步准备首次使用的演示数据。')
   })
 
   it('runBootstrap：装齐失败时调用 appAlert 显示错误', async () => {
@@ -1543,11 +1552,11 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
 
   // ===== 13. step-rail 渲染 =====
 
-  it('step-rail：渲染 3 个步骤（done 已过滤）', async () => {
+  it('step-rail：渲染 5 个首用步骤（done 已过滤）', async () => {
     const { wrapper } = await mountComponent()
     await flushPromises()
     const items = wrapper.findAll('.step-rail-item')
-    expect(items.length).toBe(3)
+    expect(items.length).toBe(5)
   })
 
   it('step-rail：当前步骤标记 active', async () => {

@@ -36,6 +36,7 @@ class OrderServiceTest {
     @Mock PlanTemplateRepository planTemplateRepository;
     @Mock CatalogItemRepository catalogItemRepository;
     @Mock WebhookDispatcher webhookDispatcher;
+    @Mock AssetInstallCommandService assetInstallCommandService;
     @Mock AccountLevelService accountLevelService;
     @Mock AlipayService alipayService;
     @Mock WechatPayService wechatPayService;
@@ -356,8 +357,12 @@ class OrderServiceTest {
         void itemOrderCreatesPurchaseAndGrantsEntitlement() {
             Order order = buildPaidOrder("OT-I1", "item", new BigDecimal("29.90"));
             order.setItemId(42L);
+            Purchase purchase = new Purchase();
+            purchase.setId(84L);
             when(orderRepository.findByOutTradeNoForUpdate("OT-I1")).thenReturn(Optional.of(order));
             when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(entitlementService.createPurchase(user, 42L, new BigDecimal("29.90")))
+                    .thenReturn(purchase);
 
             orderService.fulfillOrder("OT-I1");
 
@@ -365,6 +370,7 @@ class OrderServiceTest {
             verify(walletService).recordOrderSpend(order);
             verify(entitlementService).createPurchase(user, 42L, new BigDecimal("29.90"));
             verify(entitlementService).grantCatalogEntitlement(user, 42L, "OT-I1");
+            verify(assetInstallCommandService).queuePaidItem(order, purchase);
         }
 
         @Test

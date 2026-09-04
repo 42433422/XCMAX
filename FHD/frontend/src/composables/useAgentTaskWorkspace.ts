@@ -4,6 +4,7 @@ import type { AgentTaskSummary } from '@/api/agentRuns'
 import { buildFullApiUrl } from '@/api/core'
 import type { TaskItem } from './useChatPersistence'
 import { activeRunIdOfTask, conversationIdOfTask, groupAgentRunsIntoTasks, taskSummariesToTaskItems } from '@/utils/agentTaskWorkspaceModel'
+import { completeFirstAiTaskFromRun } from '@/constants/productFlow'
 
 export interface UseAgentTaskWorkspaceOptions {
   taskList: Ref<TaskItem[]>
@@ -33,7 +34,15 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
     options.onPersist?.()
   }
 
+  function applyFirstTaskCompletionEvidence(tasks: AgentTaskSummary[]): void {
+    tasks.forEach((task) => {
+      const runs = [...(Array.isArray(task.runs) ? task.runs : []), ...(task.active_run ? [task.active_run] : [])]
+      runs.forEach((run) => completeFirstAiTaskFromRun(run))
+    })
+  }
+
   function applyServerTasks(tasks: AgentTaskSummary[]): void {
+    applyFirstTaskCompletionEvidence(tasks)
     applyTaskItems(taskSummariesToTaskItems(tasks))
   }
 
@@ -45,11 +54,13 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
       try {
         const response = await agentRunsApi.listTasks({ limit: 200 })
         const tasks = Array.isArray(response?.data) ? response.data : []
+        applyFirstTaskCompletionEvidence(tasks)
         serverTasks = taskSummariesToTaskItems(tasks)
       } catch {
         // Compatibility with an older backend during rolling desktop upgrades.
         const response = await agentRunsApi.listRuns({ limit: 200 })
         const runs = Array.isArray(response?.data) ? response.data : []
+        runs.forEach((run) => completeFirstAiTaskFromRun(run))
         serverTasks = groupAgentRunsIntoTasks(runs)
       }
       applyTaskItems(serverTasks)

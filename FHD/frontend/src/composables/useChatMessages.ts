@@ -127,6 +127,10 @@ export function chatMessageExtrasFromServerRow(raw: unknown): ChatMessageExtras 
   if (Object.keys(agentRunTrace).length) extras.agentRunTrace = agentRunTrace as unknown as NonNullable<ChatMessageExtras['agentRunTrace']>
   const businessResult = asRecord(ui.businessResult)
   if (Object.keys(businessResult).length) extras.businessResult = businessResult
+  const responseData = asRecord(row.data)
+  if (asBoolean(ui.sameAsPrevious ?? row.sameAsPrevious ?? row.cached ?? responseData.cached)) {
+    extras.sameAsPrevious = true
+  }
   return extras
 }
 
@@ -387,11 +391,12 @@ export function useChatMessages(sessionId: Ref<string>) {
   }
 
   /** 将纯文本安全转为气泡 HTML 并写入指定下标（用于 SSE token 追加） */
-  function applyPlainTextToMessageIndex(index: number, plain: string) {
+  function applyPlainTextToMessageIndex(index: number, plain: string, extras?: ChatMessageExtras) {
     const safe = escapeHtml(stripModelToolProtocol(plain)).replace(/\n/g, '<br>')
     const row = messages.value[index]
     if (!row) return
     row.content = safe
+    if (extras) Object.assign(row, extras)
     if (safe) {
       delete row.streamingShell
     } else {
@@ -473,6 +478,7 @@ export function useChatMessages(sessionId: Ref<string>) {
         agentRunTrace: message.agentRunTrace,
         attachments: message.attachments,
         businessResult: message.businessResult,
+        sameAsPrevious: message.sameAsPrevious,
       })),
     () => persistMessagesCache(),
     { deep: true, flush: 'post' },

@@ -29,6 +29,7 @@ public class RefundService {
     private final WalletService walletService;
     private final EntitlementService entitlementService;
     private final AccountLevelService accountLevelService;
+    private final AssetInstallCommandService assetInstallCommandService;
 
     @Transactional
     public Refund apply(User user, String orderNo, String reason) {
@@ -101,6 +102,7 @@ public class RefundService {
         if ("approve".equals(normalizedAction) || "approved".equals(normalizedAction)) {
             Transaction walletTransaction = walletService.refundToWallet(order, refund);
             entitlementService.revokeOrderEntitlements(refund.getUser(), order.getOutTradeNo());
+            assetInstallCommandService.revokeForOrder(order.getOutTradeNo());
             if ("plan".equals(order.getOrderKind())) {
                 walletService.revokePlanMembershipTokenAllowance(order);
             }

@@ -75,7 +75,7 @@ export function useConversationList(params: UseConversationListParams) {
     if (isAdminCustomerServiceConsole.value) {
       return [CODEX_SUPER_EMPLOYEE_ENTRY, CURSOR_SUPER_EMPLOYEE_ENTRY, CLAUDE_SUPER_EMPLOYEE_ENTRY, ...dutyEmployees.value]
     }
-    return [...contacts.value.filter((c) => isEnterpriseDedicatedContact(c))]
+    return [...dutyEmployees.value, ...contacts.value.filter((c) => isEnterpriseDedicatedContact(c))]
   })
 
   const externalChannelEntries = computed<ExternalAppEntry[]>(() => [

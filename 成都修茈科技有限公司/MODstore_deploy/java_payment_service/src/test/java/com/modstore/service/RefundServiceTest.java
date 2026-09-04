@@ -24,6 +24,7 @@ class RefundServiceTest {
     @Mock WalletService walletService;
     @Mock EntitlementService entitlementService;
     @Mock AccountLevelService accountLevelService;
+    @Mock AssetInstallCommandService assetInstallCommandService;
 
     @InjectMocks RefundService refundService;
 
@@ -177,6 +178,7 @@ class RefundServiceTest {
             assertThat(result.getStatus()).isEqualTo("approved");
             verify(walletService).refundToWallet(order, refund);
             verify(entitlementService).revokeOrderEntitlements(user, "OT-RV1");
+            verify(assetInstallCommandService).revokeForOrder("OT-RV1");
         }
 
         @Test

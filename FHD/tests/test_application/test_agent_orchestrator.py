@@ -715,6 +715,89 @@ def test_agent_orchestrator_continues_multistep_run_after_second_step_repair():
     assert "run.completed" in event_types
 
 
+def test_agent_orchestrator_executes_three_ordered_tools_in_one_conversation():
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+    from app.application.workflow.types import PlanGraph, WorkflowNode
+
+    plan = PlanGraph(
+        plan_id="p-first-order-three-tools",
+        intent="first_order_multistep",
+        nodes=[
+            WorkflowNode(
+                node_id="find_customer",
+                tool_id="business_db",
+                action="read",
+                params={"entity": "customers", "keyword": "新手演示客户"},
+                risk="low",
+                idempotent=True,
+            ),
+            WorkflowNode(
+                node_id="find_product",
+                tool_id="business_db",
+                action="read",
+                params={"entity": "products", "keyword": "新手演示商品"},
+                risk="low",
+                idempotent=True,
+                depends_on=["find_customer"],
+            ),
+            WorkflowNode(
+                node_id="create_first_order",
+                tool_id="business_db",
+                action="write",
+                params={
+                    "entity": "shipment_records",
+                    "operation": "create",
+                    "payload": {
+                        "unit_name": "新手演示客户",
+                        "products": [{"name": "新手演示商品", "qty": 1}],
+                    },
+                },
+                risk="medium",
+                idempotent=False,
+                depends_on=["find_product"],
+            ),
+        ],
+    )
+
+    def fake_execute(_tool_id: str, _action: str, params: dict):
+        node_id = params["_runtime_context"]["node_id"]
+        outputs = params["_runtime_context"]["node_outputs"]
+        if node_id == "find_customer":
+            return {"success": True, "data": [{"customer_id": 10}]}
+        if node_id == "find_product":
+            assert outputs["find_customer"]["data"][0]["customer_id"] == 10
+            return {"success": True, "data": [{"product_id": 20}]}
+        assert outputs["find_product"]["data"][0]["product_id"] == 20
+        return {"success": True, "data": {"shipment_id": 30}}
+
+    with patch(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool",
+        side_effect=fake_execute,
+    ):
+        repository = InMemoryAgentRunRepository()
+        orchestrator = AgentOrchestrator(repository=repository)
+        waiting = orchestrator.start_run_from_plan(
+            user_id="u1",
+            message="查询演示客户和商品，然后创建第一张演示出货单",
+            plan=plan,
+            runtime_context={"source": "first-order-acceptance"},
+        )
+        assert waiting.status == "waiting_user"
+        assert [call.node_id for call in waiting.tool_calls] == ["find_customer", "find_product"]
+        run = orchestrator.continue_run(waiting.run_id, approved_by="u1")
+
+    assert run is not None
+    assert run.status == "completed", (run.error, [step.to_dict() for step in run.steps])
+    assert [call.node_id for call in run.tool_calls] == [
+        "find_customer",
+        "find_product",
+        "create_first_order",
+    ]
+    assert run.metadata["tool_call_count"] == 3
+    assert run.final_output["node_outputs"]["create_first_order"]["data"]["shipment_id"] == 30
+
+
 def test_agent_orchestrator_uses_llm_repair_for_low_risk_idempotent_step(tmp_path, monkeypatch):
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_models import LLMCall

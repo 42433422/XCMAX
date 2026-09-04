@@ -283,13 +283,14 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   // ===== 2. 会话列表与空状态 =====
 
-  it('会话列表为空且无企业专属联系人时不渲染会话行', async () => {
+  it('会话列表为空且无企业专属联系人时仍展示精选 AI 员工', async () => {
     imMocks.fetchImConversations.mockResolvedValue([])
     imMocks.fetchImContacts.mockResolvedValue([normalContact])
     const wrapper = await mountView()
-    // AI 群聊已从信息侧栏固定项移除；会话列表为空且无企业专属联系人时不渲染任何会话行（含固定项）
+    // 普通联系人不会固定展示，但企业版精选 AI 员工仍是信息页的可用入口。
     expect(wrapper.findAll('.im-conv-item:not(.im-conv-item--pinned)')).toHaveLength(0)
-    expect(wrapper.findAll('.im-conv-item--pinned')).toHaveLength(0)
+    expect(wrapper.findAll('.im-conv-item--pinned')).toHaveLength(7)
+    expect(wrapper.text()).toContain('用户客服员工')
   })
 
   it('会话列表展示标题与未读徽章', async () => {

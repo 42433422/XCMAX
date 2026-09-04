@@ -179,6 +179,49 @@ def test_fallback_plan_generic_query() -> None:
     assert plan.nodes
 
 
+def test_fallback_plan_onboarding_first_order_is_three_real_tools() -> None:
+    planner = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
+    plan = planner._fallback_plan(
+        "pid-first-order",
+        """这是我的新手第一单，请你作为 AI 业务员工按顺序执行：
+1. 查询客户「新手演示客户」；
+2. 查询商品「新手演示商品」并确认可用数量；
+3. 根据查询结果创建一张数量为 1 的演示出货单。""",
+        get_tool_registry(),
+    )
+
+    assert plan.intent == "onboarding_first_order"
+    assert [(node.tool_id, node.action) for node in plan.nodes] == [
+        ("business_db", "read"),
+        ("business_db", "read"),
+        ("business_db", "write"),
+    ]
+    assert plan.nodes[1].depends_on == ["find_onboarding_customer"]
+    assert plan.nodes[2].depends_on == ["find_onboarding_product"]
+    assert plan.nodes[2].params["entity"] == "shipment_records"
+    assert plan.nodes[2].risk == "medium"
+
+
+def test_planner_uses_deterministic_first_order_without_external_model() -> None:
+    planner = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
+    message = """这是我的新手第一单，请你作为 AI 业务员工按顺序执行：
+1. 查询客户「新手演示客户」；
+2. 查询商品「新手演示商品」并确认可用数量；
+3. 根据查询结果创建一张数量为 1 的演示出货单。"""
+
+    with patch.object(planner, "_plan_with_react_multiagent") as external_planner:
+        plan = planner.plan(
+            "new-user",
+            message,
+            get_tool_registry(),
+            {"tool_execution_profile": "pro_default"},
+        )
+
+    external_planner.assert_not_called()
+    assert plan.intent == "onboarding_first_order"
+    assert len(plan.nodes) == 3
+
+
 @patch("app.application.workflow.planner.get_ai_conversation_service")
 @patch("app.application.get_user_memory_rag_app_service")
 def test_planner_injects_rag_summary(mock_rag_get: MagicMock, mock_ai: MagicMock) -> None:

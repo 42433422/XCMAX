@@ -288,6 +288,8 @@ class TestExecuteOrGenerateResponse:
                 "u1",
             )
         assert result["action"] == "fallback"
+        assert "联系人工客服" not in result["text"]
+        assert "业务对象和期望结果" in result["text"]
 
 
 # ---------------------------------------------------------------------------
@@ -896,3 +898,4 @@ class TestCallAi:
             ctx = ConversationContext(user_id="u1", metadata={}, conversation_history=[])
             result = await svc._call_ai("hello", ctx, {"final_intent": "greeting"})
         assert result["action"] == "fallback"
+        assert "联系人工客服" not in result["text"]

@@ -130,9 +130,9 @@
               <i class="fa" :class="bootstrapBusy ? 'fa-spinner fa-spin' : 'fa-download'"></i>
               {{ bootstrapBusy ? '正在装齐…' : '一键装齐' }}
             </button>
-            <button v-else type="button" class="btn primary" :disabled="finishing" @click="finishOnboardingComplete">
-              <i class="fa" :class="finishing ? 'fa-spinner fa-spin' : 'fa-check'"></i>
-              {{ finishing ? '正在进入智能对话…' : '完成并进入对话' }}
+            <button v-else type="button" class="btn primary" :disabled="seedBusy" @click="prepareDemoData">
+              <i class="fa" :class="seedBusy ? 'fa-spinner fa-spin' : 'fa-arrow-right'"></i>
+              {{ seedBusy ? '正在准备演示数据…' : '下一步：跟 AI 员工做第一单' }}
             </button>
             <button type="button" class="btn link" :disabled="finishing" @click="finishToChat">先进入对话</button>
           </div>
@@ -178,6 +178,33 @@
               </button>
             </div>
           </details>
+        </template>
+
+        <template v-else-if="currentStep === 'seed-demo'">
+          <h1>先给您一套可以动手的数据</h1>
+          <p class="lead">系统会为 <strong>{{ pickedIndustryName }}</strong> 创建一个演示客户和一个演示商品；重复点击不会重复创建，也不会覆盖您的真实数据。</p>
+          <div class="status-card ok">
+            <i class="fa fa-database"></i>
+            演示数据带有明确名称，体验结束后可以自行删除。
+          </div>
+          <div class="actions">
+            <button type="button" class="btn primary" :disabled="seedBusy" @click="prepareDemoData">
+              <i class="fa" :class="seedBusy ? 'fa-spinner fa-spin' : 'fa-magic'"></i>
+              {{ seedBusy ? '正在准备…' : '一键准备演示数据' }}
+            </button>
+          </div>
+        </template>
+
+        <template v-else-if="currentStep === 'first-ai-task'">
+          <h1>跟着 AI 员工完成第一单</h1>
+          <p class="lead">这次不是只聊天：AI 会依次查询演示客户、查询演示商品，再创建演示出货单。写入前仍会让您确认。</p>
+          <pre class="first-task-prompt">{{ firstOrderPrompt }}</pre>
+          <div class="actions">
+            <button type="button" class="btn primary" :disabled="finishing" @click="finishOnboardingComplete">
+              <i class="fa" :class="finishing ? 'fa-spinner fa-spin' : 'fa-play'"></i>
+              {{ finishing ? '正在打开智能对话…' : '跟 AI 员工做第一单' }}
+            </button>
+          </div>
         </template>
 
         <template v-else-if="currentStep === 'done'">
@@ -245,6 +272,7 @@ const {
   loading,
   bootstrapBusy,
   finishing,
+  seedBusy,
   baselinePlan,
   welcomeLogoSrc,
   onWelcomeLogoError,
@@ -260,6 +288,7 @@ const {
   missingIndustryPackageCount,
   showNoAccountCustomHint,
   pickedIndustryName,
+  firstOrderPrompt,
   currentIndex,
   currentStepMeta,
   editionLabel,
@@ -269,7 +298,7 @@ const {
 } = state
 
 const { goStep, returnFromTutorial, openModStore, finishToChat, skipEntireFlow } = nav
-const { refreshStatus, runBootstrap, pickIndustry, confirmIndustryAndNext, finishOnboardingComplete } = actions
+const { refreshStatus, runBootstrap, prepareDemoData, pickIndustry, confirmIndustryAndNext, finishOnboardingComplete } = actions
 
 watch(
   () => route.query.step,

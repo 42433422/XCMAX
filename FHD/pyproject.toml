@@ -69,7 +69,7 @@ server-api = [
 ]
 ml = [
     "torch>=2.13.0",
-    "transformers>=4.35.0",
+    "transformers>=5.10.0",
     # ML 运行时依赖（音频/视频/预测/加速）
     "accelerate>=0.25.0",
     "faster-whisper>=1.0.0",
@@ -98,7 +98,7 @@ dev = [
     "types-pillow",
     "types-openpyxl",
     "celery-types",
-    "safety>=3.0",
+    "pip-audit>=2.9",
     "bandit>=1.7",
     "httpx2>=2.9,<3",
 ]

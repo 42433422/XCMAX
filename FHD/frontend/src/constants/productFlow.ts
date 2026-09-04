@@ -14,6 +14,9 @@ import {
 export const LS_PRODUCT_FLOW_COMPLETED = 'xcagi_product_flow_completed'
 export const LS_PRODUCT_FLOW_HOST_ACK = 'xcagi_product_flow_host_ack'
 export const LS_PRODUCT_FLOW_LAST_STEP = 'xcagi_product_flow_last_step'
+export const LS_PRODUCT_FLOW_PENDING_PROMPT = 'xcagi_product_flow_pending_prompt'
+export const LS_PRODUCT_FLOW_FIRST_TASK_PENDING = 'xcagi_product_flow_first_task_pending'
+export const LS_PRODUCT_FLOW_FIRST_TASK_RUN_ID = 'xcagi_product_flow_first_task_run_id'
 
 /** 副窗「新手教程」默认路线 id（宿主三步引导，原基础教程） */
 export const DEFAULT_TUTORIAL_TRACK_ID = 'basic'
@@ -32,17 +35,16 @@ export function readOnboardingReturnPath(raw: unknown): string {
   return '/'
 }
 
-/** 宿主入门仅三步；seed/first-ai 仅为旧 URL 兼容别名，会映射回 host-pack。 */
 export type ProductFlowStepId = 'welcome' | 'host-pack' | 'industry' | 'seed-demo' | 'first-ai-task' | 'done'
 
 export interface ProductFlowStepMeta {
-  id: Exclude<ProductFlowStepId, 'seed-demo' | 'first-ai-task'>
+  id: ProductFlowStepId
   index: number
   title: string
   subtitle: string
 }
 
-/** 宿主入门步骤轨：1 认识 → 2 行业 → 3 准备菜单（随后进入对话） */
+/** 首次登录完整步骤轨：认识 → 行业 → 菜单 → 演示数据 → AI 第一单。 */
 export const PRODUCT_FLOW_STEPS: ProductFlowStepMeta[] = [
   {
     id: 'welcome',
@@ -63,8 +65,20 @@ export const PRODUCT_FLOW_STEPS: ProductFlowStepMeta[] = [
     subtitle: '一键装齐本行业侧栏菜单，即可进入对话',
   },
   {
-    id: 'done',
+    id: 'seed-demo',
     index: 4,
+    title: '演示数据',
+    subtitle: '准备一套可删除的演示客户和商品，第一次操作不再面对空白页',
+  },
+  {
+    id: 'first-ai-task',
+    index: 5,
+    title: 'AI 第一单',
+    subtitle: '让 AI 员工串联查询与制单工具，陪您完成第一笔业务',
+  },
+  {
+    id: 'done',
+    index: 6,
     title: '开始使用',
     subtitle: '进入智能对话与日常操作',
   },
@@ -205,9 +219,15 @@ export function resetProductFlowState(): void {
     const scope = resolveTenantStorageScopeFromRuntime()
     removeTenantScopedStorageItem(LS_PRODUCT_FLOW_COMPLETED, scope)
     removeTenantScopedStorageItem(LS_PRODUCT_FLOW_HOST_ACK, scope)
+    removeTenantScopedStorageItem(LS_PRODUCT_FLOW_PENDING_PROMPT, scope)
+    removeTenantScopedStorageItem(LS_PRODUCT_FLOW_FIRST_TASK_PENDING, scope)
+    removeTenantScopedStorageItem(LS_PRODUCT_FLOW_FIRST_TASK_RUN_ID, scope)
     if (scope === 'local') {
       localStorage.removeItem(LS_PRODUCT_FLOW_COMPLETED)
       localStorage.removeItem(LS_PRODUCT_FLOW_HOST_ACK)
+      localStorage.removeItem(LS_PRODUCT_FLOW_PENDING_PROMPT)
+      localStorage.removeItem(LS_PRODUCT_FLOW_FIRST_TASK_PENDING)
+      localStorage.removeItem(LS_PRODUCT_FLOW_FIRST_TASK_RUN_ID)
     }
   } catch {
     /* ignore */
@@ -220,12 +240,128 @@ export function parseFlowStepQuery(raw: unknown): ProductFlowStepId {
     .toLowerCase()
   if (s === 'host-pack' || s === 'host') return 'host-pack'
   if (s === 'industry' || s === 'mod') return 'industry'
-  // 旧四/五步链接：种子与 AI 验收已移出宿主入门，落到第 3 步
-  if (s === 'seed-demo' || s === 'seed' || s === 'first-ai-task' || s === 'ai-demo') {
-    return 'host-pack'
-  }
+  if (s === 'seed-demo' || s === 'seed') return 'seed-demo'
+  if (s === 'first-ai-task' || s === 'ai-demo') return 'first-ai-task'
   if (s === 'done' || s === 'finish') return 'done'
   return 'welcome'
+}
+
+export function queueFirstAiTaskPrompt(prompt: string): void {
+  if (typeof localStorage === 'undefined') return
+  const text = String(prompt || '').trim()
+  if (!text) return
+  try {
+    const scope = resolveTenantStorageScopeFromRuntime()
+    writeTenantScopedStorageItem(LS_PRODUCT_FLOW_PENDING_PROMPT, text, scope)
+    writeTenantScopedStorageItem(LS_PRODUCT_FLOW_FIRST_TASK_PENDING, '1', scope)
+    removeTenantScopedStorageItem(LS_PRODUCT_FLOW_FIRST_TASK_RUN_ID, scope)
+    if (scope === 'local') localStorage.setItem(LS_PRODUCT_FLOW_PENDING_PROMPT, text)
+    if (scope === 'local') {
+      localStorage.setItem(LS_PRODUCT_FLOW_FIRST_TASK_PENDING, '1')
+      localStorage.removeItem(LS_PRODUCT_FLOW_FIRST_TASK_RUN_ID)
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+function readScopedFlowValue(key: string): string {
+  if (typeof localStorage === 'undefined') return ''
+  try {
+    const scope = resolveTenantStorageScopeFromRuntime()
+    return String(
+      readTenantScopedStorageItem(key, scope) ?? (scope === 'local' ? localStorage.getItem(key) : '') ?? '',
+    ).trim()
+  } catch {
+    return ''
+  }
+}
+
+export function isFirstAiTaskPending(): boolean {
+  return readScopedFlowValue(LS_PRODUCT_FLOW_FIRST_TASK_PENDING) === '1'
+}
+
+/** Bind the onboarding attempt to the exact durable AgentRun created by its seeded prompt. */
+export function bindPendingFirstAiTaskRun(runId: string, userText: string): boolean {
+  const id = String(runId || '').trim()
+  const text = String(userText || '')
+  if (!id || !isFirstAiTaskPending() || !text.includes('新手第一单') || !text.includes('演示出货单')) return false
+  try {
+    const scope = resolveTenantStorageScopeFromRuntime()
+    writeTenantScopedStorageItem(LS_PRODUCT_FLOW_FIRST_TASK_RUN_ID, id, scope)
+    if (scope === 'local') localStorage.setItem(LS_PRODUCT_FLOW_FIRST_TASK_RUN_ID, id)
+    return true
+  } catch {
+    return false
+  }
+}
+
+export function readPendingFirstAiTaskRunId(): string {
+  return readScopedFlowValue(LS_PRODUCT_FLOW_FIRST_TASK_RUN_ID)
+}
+
+export interface FirstAiTaskRunEvidence {
+  run_id?: string
+  status?: string
+  intent?: string
+  steps?: Array<{
+    tool_id?: string
+    action?: string
+    status?: string
+    params?: Record<string, unknown>
+    output?: Record<string, unknown>
+  }>
+}
+
+/**
+ * Close onboarding only from the bound run's durable three-tool evidence.
+ * Waiting approval, failed tools, another run, or a chat-only completion never qualifies.
+ */
+export function completeFirstAiTaskFromRun(run: FirstAiTaskRunEvidence): boolean {
+  const boundRunId = readPendingFirstAiTaskRunId()
+  if (!isFirstAiTaskPending() || !boundRunId || String(run.run_id || '').trim() !== boundRunId) return false
+  if (String(run.status || '').trim() !== 'completed' || String(run.intent || '').trim() !== 'onboarding_first_order') return false
+  const completedSteps = Array.isArray(run.steps)
+    ? run.steps.filter((step) => String(step.status || '').trim() === 'completed' && step.output?.success === true)
+    : []
+  const hasCustomerRead = completedSteps.some(
+    (step) => step.tool_id === 'business_db' && step.action === 'read' && step.params?.entity === 'customers',
+  )
+  const hasProductRead = completedSteps.some(
+    (step) => step.tool_id === 'business_db' && step.action === 'read' && step.params?.entity === 'products',
+  )
+  const hasShipmentWrite = completedSteps.some(
+    (step) => step.tool_id === 'business_db' && step.action === 'write' && step.params?.entity === 'shipment_records',
+  )
+  if (!hasCustomerRead || !hasProductRead || !hasShipmentWrite) return false
+  try {
+    const scope = resolveTenantStorageScopeFromRuntime()
+    removeTenantScopedStorageItem(LS_PRODUCT_FLOW_FIRST_TASK_PENDING, scope)
+    removeTenantScopedStorageItem(LS_PRODUCT_FLOW_FIRST_TASK_RUN_ID, scope)
+    if (scope === 'local') {
+      localStorage.removeItem(LS_PRODUCT_FLOW_FIRST_TASK_PENDING)
+      localStorage.removeItem(LS_PRODUCT_FLOW_FIRST_TASK_RUN_ID)
+    }
+  } catch {
+    return false
+  }
+  markProductFlowCompleted()
+  return true
+}
+
+export function consumeFirstAiTaskPrompt(): string {
+  if (typeof localStorage === 'undefined') return ''
+  try {
+    const scope = resolveTenantStorageScopeFromRuntime()
+    const text =
+      readTenantScopedStorageItem(LS_PRODUCT_FLOW_PENDING_PROMPT, scope) ??
+      (scope === 'local' ? localStorage.getItem(LS_PRODUCT_FLOW_PENDING_PROMPT) : '')
+    removeTenantScopedStorageItem(LS_PRODUCT_FLOW_PENDING_PROMPT, scope)
+    if (scope === 'local') localStorage.removeItem(LS_PRODUCT_FLOW_PENDING_PROMPT)
+    return String(text || '').trim()
+  } catch {
+    return ''
+  }
 }
 
 export function readProductFlowLastStep(): ProductFlowStepId | null {

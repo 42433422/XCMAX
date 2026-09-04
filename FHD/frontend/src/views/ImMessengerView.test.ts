@@ -164,7 +164,9 @@ describe('ImMessengerView.vue', () => {
     })
     await flushPromises()
 
-    await wrapper.find('.im-conv-item--pinned').trigger('click')
+    const enterpriseCs = wrapper.findAll('.im-conv-item--pinned').find((item) => item.text().includes('企业专属客服'))
+    expect(enterpriseCs).toBeTruthy()
+    await enterpriseCs!.trigger('click')
     await flushPromises()
     expect(fetchEnterpriseCsThread).toHaveBeenCalled()
     expect(fetchImMessages).not.toHaveBeenCalled()

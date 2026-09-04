@@ -3,7 +3,8 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import ProductOnboardingView from './ProductOnboardingView.vue'
-import { fetchIndustryBaseline, fetchOnboardingIndustryCatalog } from '@/utils/platformShellApi'
+import { fetchIndustryBaseline, fetchOnboardingIndustryCatalog, seedOnboardingDemo } from '@/utils/platformShellApi'
+import { LS_PRODUCT_FLOW_COMPLETED, LS_PRODUCT_FLOW_FIRST_TASK_PENDING, LS_PRODUCT_FLOW_PENDING_PROMPT } from '@/constants/productFlow'
 
 vi.mock('@/api/modStore', () => ({
   installHostFoundation: vi.fn().mockResolvedValue({ success: true }),
@@ -26,6 +27,11 @@ vi.mock('@/utils/platformShellApi', () => ({
   fetchIndustryBaseline: vi.fn().mockResolvedValue({}),
   clearDeliverableStatusCache: vi.fn(),
   fetchDeliverableStatus: vi.fn().mockResolvedValue({ deliverable: true }),
+  seedOnboardingDemo: vi.fn().mockResolvedValue({
+    industry_id: '涂料',
+    customer: { id: 1, name: '新手演示客户' },
+    product: { id: 1, name: '新手演示商品' },
+  }),
 }))
 vi.mock('@/composables/useTutorialCatalog', () => ({
   useTutorialCatalog: () => ({ buildContext: vi.fn(() => ({})) }),
@@ -42,12 +48,17 @@ vi.mock('@/tutorial/promptAdvancedTutorial', () => ({
 function makeRouter() {
   return createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/onboarding', name: 'onboarding', component: ProductOnboardingView, props: true }],
+    routes: [
+      { path: '/', name: 'chat', component: { template: '<div>chat</div>' } },
+      { path: '/onboarding', name: 'product-onboarding', component: ProductOnboardingView, props: true },
+    ],
   })
 }
 
 describe('ProductOnboardingView.vue', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
     setActivePinia(createPinia())
     vi.mocked(fetchOnboardingIndustryCatalog).mockResolvedValue({
       open_packages: [],
@@ -69,6 +80,50 @@ describe('ProductOnboardingView.vue', () => {
     })
     expect(wrapper.find('.product-flow').exists()).toBe(true)
     expect(wrapper.text()).toContain('认识 XC')
+
+    await wrapper.get('button.btn.primary').trigger('click')
+    await flushPromises()
+
+    expect(router.currentRoute.value.query.step).toBe('industry')
+    expect(wrapper.text()).toContain('先定行业')
+  })
+
+  it('seeds demo data before presenting the first AI order', async () => {
+    const router = makeRouter()
+    await router.push({ path: '/onboarding', query: { step: 'seed-demo' } })
+    await router.isReady()
+    const wrapper = mount(ProductOnboardingView, {
+      global: { plugins: [router], stubs: { RouterLink: true } },
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('先给您一套可以动手的数据')
+    await wrapper.get('button.btn.primary').trigger('click')
+    await flushPromises()
+
+    expect(seedOnboardingDemo).toHaveBeenCalled()
+    expect(router.currentRoute.value.query.step).toBe('first-ai-task')
+    expect(wrapper.text()).toContain('跟着 AI 员工完成第一单')
+    expect(wrapper.text()).toContain('新手演示客户')
+  })
+
+  it('re-reads the idempotent demo seed after reload and does not complete before the run', async () => {
+    const router = makeRouter()
+    await router.push({ path: '/onboarding', query: { step: 'first-ai-task' } })
+    await router.isReady()
+    const wrapper = mount(ProductOnboardingView, {
+      global: { plugins: [router], stubs: { RouterLink: true } },
+    })
+    await flushPromises()
+
+    await wrapper.get('button.btn.primary').trigger('click')
+    await flushPromises()
+
+    expect(seedOnboardingDemo).toHaveBeenCalled()
+    expect(localStorage.getItem(LS_PRODUCT_FLOW_PENDING_PROMPT)).toContain('新手演示客户')
+    expect(localStorage.getItem(LS_PRODUCT_FLOW_FIRST_TASK_PENDING)).toBe('1')
+    expect(localStorage.getItem(LS_PRODUCT_FLOW_COMPLETED)).not.toBe('1')
+    expect(router.currentRoute.value.name).toBe('chat')
   })
 
   it('keeps enterprise-filtered SUNBIRD industry as accessories packaging', async () => {

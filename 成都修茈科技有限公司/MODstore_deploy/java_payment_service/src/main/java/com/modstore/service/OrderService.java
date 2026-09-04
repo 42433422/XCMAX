@@ -3,6 +3,7 @@ package com.modstore.service;
 import com.modstore.model.CatalogItem;
 import com.modstore.model.Order;
 import com.modstore.model.PlanTemplate;
+import com.modstore.model.Purchase;
 import com.modstore.model.User;
 import com.modstore.repository.CatalogItemRepository;
 import com.modstore.repository.OrderRepository;
@@ -40,6 +41,7 @@ public class OrderService {
     private final PlanTemplateRepository planTemplateRepository;
     private final CatalogItemRepository catalogItemRepository;
     private final WebhookDispatcher webhookDispatcher;
+    private final AssetInstallCommandService assetInstallCommandService;
     private final AccountLevelService accountLevelService;
     private final AlipayService alipayService;
     private final WechatPayService wechatPayService;
@@ -460,8 +462,11 @@ public class OrderService {
                 } else if ("item".equals(order.getOrderKind())) {
                     walletService.recordExternalPayment(order);
                     walletService.recordOrderSpend(order);
-                    entitlementService.createPurchase(order.getUser(), order.getItemId(), order.getTotalAmount());
+                    Purchase purchase = entitlementService.createPurchase(
+                            order.getUser(), order.getItemId(), order.getTotalAmount()
+                    );
                     entitlementService.grantCatalogEntitlement(order.getUser(), order.getItemId(), order.getOutTradeNo());
+                    assetInstallCommandService.queuePaidItem(order, purchase);
                 } else if ("custom_delivery".equals(order.getOrderKind())) {
                     // Service payment: retain real money ledgers without minting
                     // wallet credit, catalog access or plan entitlements.

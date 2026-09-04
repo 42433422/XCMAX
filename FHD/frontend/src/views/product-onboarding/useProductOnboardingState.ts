@@ -6,6 +6,7 @@ import type {
   OnboardingIndustryCatalog,
   OnboardingIndustryPackage,
 } from '@/constants/platformShell'
+import type { OnboardingDemoSeedResult } from '@/utils/platformShellApi'
 import { readBuildEdition } from '@/constants/genericModPack'
 import { isEnterpriseEdition } from '@/utils/productSku'
 import { getIndustryPreset, listIndustryPresets } from '@/constants/industryPresets'
@@ -140,6 +141,8 @@ export function useProductOnboardingState(route: RouteLocationNormalizedLoaded) 
   const loading = ref(false)
   const bootstrapBusy = ref(false)
   const finishing = ref(false)
+  const seedBusy = ref(false)
+  const demoSeedResult = ref<OnboardingDemoSeedResult | null>(null)
   const baselinePlan = ref<IndustryBaselinePlan | null>(null)
 
   function startupAsset(fileName: string): string {
@@ -228,6 +231,17 @@ export function useProductOnboardingState(route: RouteLocationNormalizedLoaded) 
     () => isEnterpriseEdition(productSku.value) && currentStep.value === 'host-pack' && !loading.value && !hasAccountCustomEntitlement.value,
   )
   const pickedIndustryName = computed(() => getIndustryPreset(pickedIndustryId.value).name)
+  const firstOrderPrompt = computed(() => {
+    const customer = String(demoSeedResult.value?.customer?.name || '演示客户').trim()
+    const product = String(demoSeedResult.value?.product?.name || '演示商品').trim()
+    return [
+      '这是我的新手第一单，请你作为 AI 业务员工按顺序执行：',
+      `1. 查询客户「${customer}」；`,
+      `2. 查询商品「${product}」并确认可用数量；`,
+      '3. 根据查询结果创建一张数量为 1 的演示出货单。',
+      '涉及写入时先展示计划并让我确认，完成后告诉我每一步调用的工具和业务结果。',
+    ].join('\n')
+  })
 
   const currentIndex = computed(() => {
     const row = steps.find((s) => s.id === currentStep.value)
@@ -274,6 +288,8 @@ export function useProductOnboardingState(route: RouteLocationNormalizedLoaded) 
     loading,
     bootstrapBusy,
     finishing,
+    seedBusy,
+    demoSeedResult,
     baselinePlan,
     welcomeLogoSrc,
     onWelcomeLogoError,
@@ -289,6 +305,7 @@ export function useProductOnboardingState(route: RouteLocationNormalizedLoaded) 
     missingIndustryPackageCount,
     showNoAccountCustomHint,
     pickedIndustryName,
+    firstOrderPrompt,
     currentIndex,
     currentStepMeta,
     editionLabel,

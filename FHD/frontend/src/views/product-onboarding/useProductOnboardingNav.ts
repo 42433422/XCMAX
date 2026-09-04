@@ -56,6 +56,16 @@ export function useProductOnboardingNav(state: ProductOnboardingState, options: 
     void router.replace({ path: '/' })
   }
 
+  function launchFirstAiTask() {
+    invalidateHostPackCompletionCache()
+    flow.markHostPackAcknowledged()
+    if (fromTutorial.value) {
+      returnFromTutorial()
+      return
+    }
+    void router.replace({ path: '/' })
+  }
+
   function finishToChat() {
     finishHostPackFlow()
   }
@@ -79,6 +89,7 @@ export function useProductOnboardingNav(state: ProductOnboardingState, options: 
     returnFromTutorial,
     openModStore,
     finishHostPackFlow,
+    launchFirstAiTask,
     finishToChat,
     skipEntireFlow,
   }

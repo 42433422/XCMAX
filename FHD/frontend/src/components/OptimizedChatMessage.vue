@@ -20,6 +20,8 @@
       <template v-else>
         <div class="message-html" v-html="sanitizedContent"></div>
 
+        <span v-if="message.role === 'ai' && message.sameAsPrevious" class="same-answer-badge">与之前相同</span>
+
         <!-- 发货单下载按钮 -->
         <div v-if="message.role === 'ai' && message.shipmentDownloadUrl" class="message-shipment-actions">
           <a class="btn btn-primary btn-sm" :href="message.shipmentDownloadUrl" download> 下载发货单 </a>

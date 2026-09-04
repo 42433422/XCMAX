@@ -46,14 +46,15 @@ public class EntitlementService {
     private final ObjectMapper objectMapper = new ObjectMapper();
     
     @Transactional
-    public void createPurchase(User user, Long catalogId, BigDecimal amount) {
+    public Purchase createPurchase(User user, Long catalogId, BigDecimal amount) {
         Purchase purchase = new Purchase();
         purchase.setUser(user);
         purchase.setCatalogId(catalogId);
         purchase.setAmount(amount);
-        purchaseRepository.save(purchase);
+        Purchase saved = purchaseRepository.save(purchase);
         log.info("创建购买记录: userId={}, catalogId={}, amount={}", 
                 user.getId(), catalogId, amount);
+        return saved;
     }
 
     @Transactional
