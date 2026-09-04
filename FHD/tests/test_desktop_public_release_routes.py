@@ -22,8 +22,7 @@ def test_versioned_public_download_routes_are_not_pinned_to_a_retired_release() 
     assert "xcagi-v8.0.0" not in snippet
     assert "alias /root/成都修茈科技有限公司/download-release.json;" in snippet
     assert (
-        "alias /var/www/update/releases/stable/enterprise/download-windows-hotfix.json;"
-        in snippet
+        "alias /var/www/update/releases/stable/enterprise/download-windows-hotfix.json;" in snippet
     )
     assert "alias /root/成都修茈科技有限公司/download-windows-hotfix.json;" not in snippet
 
@@ -38,8 +37,7 @@ def test_standalone_vhost_uses_the_same_versioned_public_download_contract() -> 
     assert "location ^~ /xcagi-v1.0.0.0/" not in config
     assert "alias /root/成都修茈科技有限公司/download-release.json;" in config
     assert (
-        "alias /var/www/update/releases/stable/enterprise/download-windows-hotfix.json;"
-        in config
+        "alias /var/www/update/releases/stable/enterprise/download-windows-hotfix.json;" in config
     )
     assert "alias /root/成都修茈科技有限公司/download-windows-hotfix.json;" not in config
 
