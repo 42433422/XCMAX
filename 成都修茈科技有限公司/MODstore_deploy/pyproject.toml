@@ -38,7 +38,7 @@ knowledge = [
     "chromadb>=0.5",
     "pysqlite3-binary>=0.5.4; platform_system == 'Linux'",
     "pypdf>=4.0",
-    "PyMuPDF>=1.24",
+    "PyMuPDF>=1.28.2",
     "python-docx>=1.0",
     "openpyxl>=3.1",
     "rank-bm25>=0.2.2",
