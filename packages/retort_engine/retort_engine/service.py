@@ -160,57 +160,102 @@ def _authorize_http_payload(
 
 
 class RetortService:
-    def __init__(self) -> None:
+    def __init__(
+        self, *, workspace_roots: Iterable[str | Path] | None = None
+    ) -> None:
+        configured = tuple(workspace_roots or ())
+        if not configured:
+            configured_env = tuple(
+                item
+                for item in os.environ.get("RETORT_WORKSPACE_ROOTS", "").split(os.pathsep)
+                if item.strip()
+            )
+            configured = configured_env or (Path.cwd(),)
+        self.workspace_roots = tuple(
+            os.path.realpath(os.path.abspath(path)) for path in configured
+        )
         self.llm_service = LLMRetortService()
 
+    def _path(
+        self,
+        payload: dict[str, Any],
+        *fields: str,
+        default: str = "",
+    ) -> str:
+        raw: Any = default
+        for field in fields:
+            value = payload.get(field)
+            if value not in (None, ""):
+                raw = value
+                break
+        text = str(raw or "").strip()
+        if not text:
+            return ""
+        candidate = os.path.realpath(os.path.abspath(text))
+        for root in self.workspace_roots:
+            root_prefix = root.rstrip(os.sep) + os.sep
+            if candidate == root or candidate.startswith(root_prefix):
+                return candidate
+        raise ValueError("path is outside configured Retort workspaces")
+
+    def _project(self, payload: dict[str, Any]) -> str:
+        return self._path(payload, "project", "project_path", default=".")
+
+    def _authorized_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        authorized = dict(payload)
+        for field in _HTTP_PATH_FIELDS:
+            if field in authorized:
+                authorized[field] = self._path(payload, field)
+        return authorized
+
     def assess(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return self.llm_service.assess(payload)
+        return self.llm_service.assess(self._authorized_payload(payload))
 
     def record_proof(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return self.llm_service.record_proof(payload)
+        return self.llm_service.record_proof(self._authorized_payload(payload))
 
     def similar_project_radar(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return self.llm_service.similar_project_radar(payload)
+        return self.llm_service.similar_project_radar(self._authorized_payload(payload))
 
     def similar_project_loop(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return self.llm_service.similar_project_loop(payload)
+        return self.llm_service.similar_project_loop(self._authorized_payload(payload))
 
     def absorption_saturation_report(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return self.llm_service.absorption_saturation_report(payload)
+        return self.llm_service.absorption_saturation_report(
+            self._authorized_payload(payload)
+        )
 
     def absorption_lights(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return self.llm_service.absorption_lights(payload)
+        return self.llm_service.absorption_lights(self._authorized_payload(payload))
 
     def llm_review(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return self.llm_service.llm_review(payload)
+        return self.llm_service.llm_review(self._authorized_payload(payload))
 
     def llm_review_status(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return self.llm_service.llm_review_status(payload)
+        return self.llm_service.llm_review_status(self._authorized_payload(payload))
 
     def llm_parallel_review(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return self.llm_service.llm_parallel_review(payload)
+        return self.llm_service.llm_parallel_review(self._authorized_payload(payload))
 
     def llm_parallel_status(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return self.llm_service.llm_parallel_status(payload)
+        return self.llm_service.llm_parallel_status(self._authorized_payload(payload))
 
     def self_evolve(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return self.llm_service.self_evolve(payload)
+        return self.llm_service.self_evolve(self._authorized_payload(payload))
 
     def absorb(self, payload: dict[str, Any]) -> dict[str, Any]:
         return run_absorption(
-            own_project=str(
-                payload.get("own_project") or payload.get("project") or "."
-            ),
+            own_project=self._path(payload, "own_project", "project", default="."),
             github_url=str(payload.get("github_url") or payload.get("github") or ""),
-            external_path=str(payload.get("external_path") or ""),
-            cache_dir=str(payload.get("cache_dir") or ""),
+            external_path=self._path(payload, "external_path"),
+            cache_dir=self._path(payload, "cache_dir"),
             ref=str(payload.get("ref") or ""),
             refresh=bool(payload.get("refresh")),
             run_local_gates=bool(payload.get("run_local_gates")),
             min_delta=float(payload.get("min_delta") or 3.0),
             max_tasks=int(payload.get("max_tasks") or 12),
-            employee_queue_path=str(payload.get("employee_queue") or ""),
-            history_store=str(payload.get("history_store") or ""),
+            employee_queue_path=self._path(payload, "employee_queue"),
+            history_store=self._path(payload, "history_store"),
             enforce_license=bool(payload.get("enforce_license")),
             branch_workflow=bool(payload.get("branch_workflow")),
             absorption_branch=str(payload.get("absorption_branch") or ""),
@@ -220,24 +265,24 @@ class RetortService:
 
     def self_bootstrap_plan(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_self_bootstrap_plan(
-            str(payload.get("project") or payload.get("project_path") or ".")
+            self._project(payload)
         )
 
     def self_depth_report(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_self_depth_report(
-            str(payload.get("project") or payload.get("project_path") or ".")
+            self._project(payload)
         )
 
     def external_improvement_gate(self, payload: dict[str, Any]) -> dict[str, Any]:
         return external_improvement_gate(
-            str(payload.get("project") or payload.get("project_path") or "."),
-            str(payload.get("target") or ""),
+            self._project(payload),
+            self._path(payload, "target"),
         )
 
     def record_result(self, payload: dict[str, Any]) -> dict[str, Any]:
         return feedback_ingest(
-            history_store=str(payload.get("history_store") or ""),
-            result_file=str(payload.get("result_file") or ""),
+            history_store=self._path(payload, "history_store"),
+            result_file=self._path(payload, "result_file"),
             task_id=str(payload.get("task_id") or ""),
             status=str(payload.get("status") or ""),
             summary=str(payload.get("summary") or ""),
@@ -282,13 +327,13 @@ class RetortService:
 
     def publish_pr_dry_run(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_publish_dry_run(
-            str(payload.get("review_file") or payload.get("review_report") or ""),
+            self._path(payload, "review_file", "review_report"),
             max_comments=int(payload.get("max_comments") or 50),
         )
 
     def publish_pr_sandbox(self, payload: dict[str, Any]) -> dict[str, Any]:
         return run_publish_sandbox(
-            str(payload.get("dry_run_file") or payload.get("publish_dry_run") or "")
+            self._path(payload, "dry_run_file", "publish_dry_run")
         )
 
     def publish_pr_live_probe(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -311,14 +356,14 @@ class RetortService:
 
     def pr_long_run_review(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_pr_long_run_review(
-            str(payload.get("project") or payload.get("project_path") or "."),
+            self._project(payload),
             min_prs=int(payload.get("min_prs") or 10),
         )
 
     def pr_holdout_blind_eval(self, payload: dict[str, Any]) -> dict[str, Any]:
         urls = [str(item) for item in payload.get("pr_urls") or [] if str(item).strip()]
         return build_pr_holdout_blind_eval(
-            str(payload.get("project") or payload.get("project_path") or "."),
+            self._project(payload),
             pr_urls=urls or None,
             target_prs=int(payload.get("target_prs") or 20),
             max_comments=int(payload.get("max_comments") or 12),
@@ -328,40 +373,40 @@ class RetortService:
     def pr_failure_rollback_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
         urls = [str(item) for item in payload.get("pr_urls") or [] if str(item).strip()]
         return build_pr_failure_rollback_replay(
-            str(payload.get("project") or payload.get("project_path") or "."),
+            self._project(payload),
             pr_urls=urls or None,
             min_cases=int(payload.get("min_cases") or 3),
         )
 
     def cross_project_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_cross_project_replay(
-            str(payload.get("project") or payload.get("project_path") or ".")
+            self._project(payload)
         )
 
     def multi_project_absorption_replay(
         self, payload: dict[str, Any]
     ) -> dict[str, Any]:
         return build_multi_project_absorption_replay(
-            str(payload.get("project") or payload.get("project_path") or "."),
+            self._project(payload),
             min_projects=int(payload.get("min_projects") or 10),
         )
 
     def absorption_continuity_probe(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_absorption_continuity_probe(
-            str(payload.get("project") or payload.get("project_path") or "."),
+            self._project(payload),
             min_runs=int(payload.get("min_runs") or 5),
         )
 
     def record_hardening_run(self, payload: dict[str, Any]) -> dict[str, Any]:
         return record_post_absorption_hardening_run(
-            str(payload.get("project") or payload.get("project_path") or "."),
+            self._project(payload),
             worker_count=int(payload.get("worker_count") or 5),
         )
 
     def complex_pr_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
         urls = [str(item) for item in payload.get("pr_urls") or [] if str(item).strip()]
         return build_complex_pr_replay_report(
-            str(payload.get("project") or payload.get("project_path") or "."),
+            self._project(payload),
             pr_urls=urls or None,
             max_comments=int(payload.get("max_comments") or 20),
             max_bytes=int(payload.get("max_bytes") or 800000),
@@ -369,25 +414,25 @@ class RetortService:
 
     def task_prioritization_report(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_task_prioritization_report(
-            str(payload.get("project") or payload.get("project_path") or ".")
+            self._project(payload)
         )
 
     def task_dispatch_plan(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_task_dispatch_plan(
-            str(payload.get("project") or payload.get("project_path") or "."),
+            self._project(payload),
             enqueue=bool(payload.get("enqueue")),
         )
 
     def review_quality_benchmark(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_review_quality_benchmark(
-            str(payload.get("project") or payload.get("project_path") or "."),
+            self._project(payload),
             sample_count=int(payload.get("sample_count") or 30),
             negative_sample_count=int(payload.get("negative_sample_count") or 0),
         )
 
     def external_advantage_matrix(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_external_advantage_matrix(
-            str(payload.get("project") or payload.get("project_path") or "."),
+            self._project(payload),
             min_cases=int(payload.get("min_cases") or 6),
         )
 
@@ -395,21 +440,21 @@ class RetortService:
         self, payload: dict[str, Any]
     ) -> dict[str, Any]:
         return build_external_advantage_ci_regression(
-            str(payload.get("project") or payload.get("project_path") or "."),
+            self._project(payload),
             min_cases=int(payload.get("min_cases") or 6),
             min_blind_delta=int(payload.get("min_blind_delta") or 80),
         )
 
     def external_process_adjudication(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_external_process_adjudication(
-            str(payload.get("project") or payload.get("project_path") or "."),
+            self._project(payload),
             min_cases=int(payload.get("min_cases") or 6),
             min_delta=int(payload.get("min_delta") or 80),
         )
 
     def external_advantage_repeat(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_external_advantage_repeat(
-            str(payload.get("project") or payload.get("project_path") or "."),
+            self._project(payload),
             repeat_count=int(
                 payload.get("repeat_count") or payload.get("repeats") or 2
             ),
@@ -418,89 +463,89 @@ class RetortService:
 
     def upstream_pr_ci_probe(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_upstream_pr_ci_probe(
-            str(payload.get("project") or payload.get("project_path") or "."),
+            self._project(payload),
             repo=str(payload.get("repo") or ""),
             pr_number=int(payload.get("pr_number") or 0),
         )
 
     def competitor_runtime_comparison(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_competitor_runtime_comparison(
-            str(payload.get("project") or payload.get("project_path") or "."),
-            competitor_root=str(payload.get("competitor_root") or ""),
+            self._project(payload),
+            competitor_root=self._path(payload, "competitor_root"),
             live_upstream=bool(payload.get("live_upstream")),
             force_live_refresh=bool(payload.get("force_live_refresh")),
         )
 
     def competitor_blind_adjudication(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_competitor_blind_adjudication(
-            str(payload.get("project") or payload.get("project_path") or "."),
-            comparison_path=str(payload.get("comparison_path") or ""),
+            self._project(payload),
+            comparison_path=self._path(payload, "comparison_path"),
             min_competitors=int(payload.get("min_competitors") or 3),
             min_delta=int(payload.get("min_delta") or 45),
         )
 
     def competitor_behavior_regression(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_competitor_behavior_regression(
-            str(payload.get("project") or payload.get("project_path") or "."),
+            self._project(payload),
             min_cases=int(payload.get("min_cases") or 3),
         )
 
     def paibi_cli_cross_adjudication(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_paibi_cli_cross_adjudication(
-            str(payload.get("project") or payload.get("project_path") or "."),
-            blind_path=str(payload.get("blind_path") or ""),
-            behavior_path=str(payload.get("behavior_path") or ""),
+            self._project(payload),
+            blind_path=self._path(payload, "blind_path"),
+            behavior_path=self._path(payload, "behavior_path"),
         )
 
     def heterogeneous_absorption_replay(
         self, payload: dict[str, Any]
     ) -> dict[str, Any]:
         return build_heterogeneous_absorption_replay(
-            str(payload.get("project") or payload.get("project_path") or "."),
+            self._project(payload),
             min_cases=int(payload.get("min_cases") or 6),
         )
 
     def cross_domain_absorption_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_cross_domain_absorption_replay(
-            str(payload.get("project") or payload.get("project_path") or "."),
+            self._project(payload),
             min_domains=int(payload.get("min_domains") or 10),
         )
 
     def cross_domain_end_to_end(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_cross_domain_end_to_end(
-            str(payload.get("project") or payload.get("project_path") or "."),
+            self._project(payload),
             min_domains=int(payload.get("min_domains") or 10),
         )
 
     def cross_domain_ci_regression(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_cross_domain_ci_regression(
-            str(payload.get("project") or payload.get("project_path") or "."),
+            self._project(payload),
             rounds=int(payload.get("rounds") or 3),
             min_domains=int(payload.get("min_domains") or 10),
         )
 
     def contract_runtime_rehearsal(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_contract_runtime_rehearsal(
-            str(payload.get("project") or payload.get("project_path") or "."),
+            self._project(payload),
             concurrent_workers=int(payload.get("concurrent_workers") or 120),
         )
 
     def contract_stability_stress(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_contract_stability_stress(
-            str(payload.get("project") or payload.get("project_path") or "."),
+            self._project(payload),
             rounds=int(payload.get("rounds") or 2),
             concurrent_workers=int(payload.get("concurrent_workers") or 120),
         )
 
     def review_family_behavior_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_review_family_behavior_replay(
-            str(payload.get("project") or payload.get("project_path") or "."),
+            self._project(payload),
             min_cases=int(payload.get("min_cases") or 3),
         )
 
     def external_merge_landing(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_external_merge_landing(
-            str(payload.get("project") or payload.get("project_path") or "."),
+            self._project(payload),
             min_cases=int(payload.get("min_cases") or 10),
             cases=(
                 payload.get("cases") if isinstance(payload.get("cases"), list) else None
@@ -511,12 +556,12 @@ class RetortService:
         self, payload: dict[str, Any]
     ) -> dict[str, Any]:
         return build_review_adjudication_calibration(
-            str(payload.get("project") or payload.get("project_path") or ".")
+            self._project(payload)
         )
 
     def employee_scheduler_stress(self, payload: dict[str, Any]) -> dict[str, Any]:
         return run_employee_scheduler_stress(
-            str(payload.get("project") or payload.get("project_path") or "."),
+            self._project(payload),
             round_count=int(payload.get("round_count") or payload.get("rounds") or 10),
             tasks_per_round=int(payload.get("tasks_per_round") or 3),
             workers_per_round=int(payload.get("workers_per_round") or 1),
@@ -524,12 +569,12 @@ class RetortService:
 
     def employee_patch_closure(self, payload: dict[str, Any]) -> dict[str, Any]:
         return run_employee_patch_closure_suite(
-            str(payload.get("project") or payload.get("project_path") or ".")
+            self._project(payload)
         )
 
     def employee_patch_stress(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_employee_patch_stress(
-            str(payload.get("project") or payload.get("project_path") or "."),
+            self._project(payload),
             concurrent_workers=int(
                 payload.get("concurrent_workers") or payload.get("workers") or 120
             ),
@@ -537,35 +582,35 @@ class RetortService:
 
     def production_recovery_drill(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_production_recovery_drill(
-            str(payload.get("project") or payload.get("project_path") or ".")
+            self._project(payload)
         )
 
     def product_mainline_absorption_proof(
         self, payload: dict[str, Any]
     ) -> dict[str, Any]:
         return build_product_mainline_absorption_proof(
-            str(payload.get("project") or payload.get("project_path") or "."),
+            self._project(payload),
             commit=str(payload.get("commit") or "HEAD"),
         )
 
     def absorption_release_decision(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_absorption_release_decision(
-            str(payload.get("project") or payload.get("project_path") or ".")
+            self._project(payload)
         )
 
     def operator_journey_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_operator_journey_replay(
-            str(payload.get("project") or payload.get("project_path") or ".")
+            self._project(payload)
         )
 
     def quality_gate_bundle(self, payload: dict[str, Any]) -> dict[str, Any]:
         return run_quality_gate_bundle(
-            str(payload.get("project") or payload.get("project_path") or ".")
+            self._project(payload)
         )
 
     def codebase_graph_report(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_codebase_graph(
-            str(payload.get("project") or payload.get("project_path") or "."),
+            self._project(payload),
             include_tests=bool(payload.get("include_tests")),
             max_files=int(payload.get("max_files") or 400),
         )
@@ -575,7 +620,7 @@ class RetortService:
             str(item) for item in payload.get("focus_terms") or [] if str(item).strip()
         ]
         return build_context_pack(
-            str(payload.get("project") or payload.get("project_path") or "."),
+            self._project(payload),
             focus_terms=focus_terms or None,
             max_files=int(payload.get("max_files") or 24),
             max_chars=int(payload.get("max_chars") or 24000),
@@ -583,14 +628,14 @@ class RetortService:
 
     def evolution_map(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_evolution_map(
-            str(payload.get("project") or payload.get("project_path") or "."),
+            self._project(payload),
             max_files=int(payload.get("max_files") or 140),
         )
 
     def architecture_contract_report(self, payload: dict[str, Any]) -> dict[str, Any]:
         contracts = payload.get("contracts")
         return evaluate_architecture_contracts(
-            str(payload.get("project") or payload.get("project_path") or "."),
+            self._project(payload),
             contracts=(
                 [dict(item) for item in contracts]
                 if isinstance(contracts, list)
@@ -606,14 +651,17 @@ def create_app(
     workspace_roots: Iterable[str | Path] | None = None,
     workspace_paths: Iterable[str | Path] | None = None,
 ) -> Any:
-    service = RetortService()
+    configured_paths = tuple(workspace_roots or (Path.cwd(),)) + tuple(
+        workspace_paths or ()
+    )
+    service = RetortService(workspace_roots=configured_paths)
     try:
         from fastapi import FastAPI
     except ImportError:
         return service
     app = FastAPI(title="Retort Engine")
     trusted_paths = _trusted_path_registry(
-        tuple(workspace_roots or (Path.cwd(),)) + tuple(workspace_paths or ())
+        configured_paths
     )
 
     def _authorized(payload: dict[str, Any]) -> dict[str, Any]:

@@ -156,6 +156,21 @@ def test_http_path_authorization_uses_only_configured_server_paths(tmp_path: Pat
         _authorize_http_payload({"project": str(outside)}, trusted)
 
 
+def test_service_layer_rejects_paths_outside_configured_workspaces(
+    tmp_path: Path,
+) -> None:
+    project = tmp_path / "project"
+    outside = tmp_path / "outside"
+    project.mkdir()
+    outside.mkdir()
+    (project / "sample.py").write_text("VALUE = 1\n", encoding="utf-8")
+    service = RetortService(workspace_roots=[project])
+
+    assert service.codebase_graph_report({"project": str(project)})["status"] == "ready"
+    with pytest.raises(ValueError, match="outside configured Retort workspaces"):
+        service.codebase_graph_report({"project": str(outside)})
+
+
 def test_service_exposes_codebase_graph_report(tmp_path: Path) -> None:
     project = tmp_path / "project"
     package = project / "retort_engine"
