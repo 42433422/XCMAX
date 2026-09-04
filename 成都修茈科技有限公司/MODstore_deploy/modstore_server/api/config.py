@@ -27,7 +27,9 @@ def _configured_repo_path(raw: str, *, field: str) -> str:
     if not value:
         return ""
     root = os.path.realpath(os.path.abspath(library_paths.fhd_repo_root()))
-    candidate = os.path.realpath(os.path.abspath(Path(value).expanduser()))
+    candidate = os.path.realpath(
+        os.path.abspath(os.path.expanduser(value))
+    )
     root_prefix = root.rstrip(os.sep) + os.sep
     if candidate != root and not candidate.startswith(root_prefix):
         raise HTTPException(400, f"{field} 必须位于 FHD 仓库根目录内")
@@ -67,7 +69,9 @@ def api_export_fhd_shell_mods(
     raw = body.output_path or ""
     raw = raw.strip()
     if raw:
-        target = Path(raw).expanduser().resolve()
+        target = Path(
+            os.path.realpath(os.path.abspath(os.path.expanduser(raw)))
+        )
     else:
         target = (fhd / "backend" / "shell" / "fhd_shell_mods.json").resolve()
     try:

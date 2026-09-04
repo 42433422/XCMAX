@@ -94,13 +94,14 @@ def api_sandbox_push_and_test(body: PushAndTestRequest, _user=Depends(require_us
         mod_dir = library_paths.mod_dir(mod_id)
     except (FileNotFoundError, ValueError):
         return {"ok": False, "error": f"Mod '{mod_id}' not found in library"}
+    safe_mod_id = mod_dir.name
 
     import os
     import tempfile
     import zipfile
 
     with tempfile.TemporaryDirectory() as tmp:
-        zip_path = os.path.join(tmp, f"{mod_id}.xcmod")
+        zip_path = os.path.join(tmp, f"{safe_mod_id}.xcmod")
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
             for root, _dirs, files in os.walk(str(mod_dir)):
                 for fname in files:
@@ -114,7 +115,7 @@ def api_sandbox_push_and_test(body: PushAndTestRequest, _user=Depends(require_us
                     resp = client.post(
                         f"{url}/api/mod-store/install",
                         headers=_sandbox_install_headers(),
-                        files={"file": (f"{mod_id}.xcmod", f, "application/zip")},
+                        files={"file": (f"{safe_mod_id}.xcmod", f, "application/zip")},
                     )
                 resp.raise_for_status()
                 install_data = resp.json()
