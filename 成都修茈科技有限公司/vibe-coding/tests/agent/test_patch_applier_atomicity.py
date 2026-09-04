@@ -195,6 +195,26 @@ def test_untrusted_patch_id_never_becomes_a_backup_path(tmp_path: Path) -> None:
     assert not (tmp_path / "pkg" / "new.py").exists()
 
 
+def test_backup_manifest_contains_only_project_relative_paths(tmp_path: Path) -> None:
+    _make_project(tmp_path)
+    patch = ProjectPatch(
+        patch_id="relative-backup-manifest",
+        edits=[FileEdit(path="pkg/delete_me.py", operation="delete")],
+    )
+    applier = PatchApplier(tmp_path)
+
+    result = applier.apply(patch)
+
+    assert result.applied
+    manifest_path = Path(result.backup_dir) / "manifest.json"
+    manifest_text = manifest_path.read_text(encoding="utf-8")
+    manifest = json.loads(manifest_text)
+    assert str(tmp_path) not in manifest_text
+    assert manifest["entries"][0]["backup_file"] == "pkg/delete_me.py"
+    assert applier.rollback(patch.patch_id)
+    assert (tmp_path / "pkg" / "delete_me.py").is_file()
+
+
 def test_rollback_rejects_tampered_manifest_project_escape(tmp_path: Path) -> None:
     _make_project(tmp_path)
     outside = tmp_path.parent / f"{tmp_path.name}-outside.txt"

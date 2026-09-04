@@ -346,7 +346,12 @@ class PatchApplier:
             backup_file = self._backup_file(backup_path, item.edit.path)
             backup_file.parent.mkdir(parents=True, exist_ok=True)
             backup_file.write_bytes(item.original_bytes)
-            entry["backup_file"] = str(backup_file.relative_to(backup_path).as_posix())
+            # ``item.edit.path`` has already passed the central path-safety
+            # gate and is exactly the relative location used under the backup
+            # root.  Persist that value instead of deriving it from the local
+            # absolute backup directory, which would unnecessarily disclose a
+            # machine-specific workspace path in the rollback manifest.
+            entry["backup_file"] = item.edit.path
         manifest["entries"].append(entry)
 
     def _write_one(self, item: _StagedFile) -> None:
