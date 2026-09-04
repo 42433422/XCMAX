@@ -14,7 +14,6 @@ from pathlib import Path
 import pytest
 from cryptography.fernet import Fernet
 
-
 _TEST_ARTIFACT_MASTER_KEY = Fernet.generate_key().decode("ascii")
 
 
