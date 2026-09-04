@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -46,6 +47,22 @@ def _validate_native_payload(kind: str, data: Any) -> None:
     false green release gate.
     """
 
+    if kind == "credential-incidents":
+        if (
+            not isinstance(data, dict)
+            or data.get("schema") != "credential-incidents/v1"
+            or not isinstance(data.get("incidents"), list)
+        ):
+            raise ValueError("credential incident registry is incomplete")
+        for row in data["incidents"]:
+            if not isinstance(row, dict) or not all(
+                str(row.get(field) or "").strip()
+                for field in ("id", "fingerprint_sha256", "status", "author")
+            ):
+                raise ValueError("credential incident entry is incomplete")
+            if not re.fullmatch(r"[0-9a-f]{64}", str(row["fingerprint_sha256"])):
+                raise ValueError("credential incident fingerprint is invalid")
+        return
     if kind in {"codeql", "dependabot"}:
         if not isinstance(data, list):
             raise ValueError(f"{kind} output must be a list")
@@ -197,7 +214,21 @@ def _validate_codeql_provenance(
 
 def normalize(kind: str, data: Any) -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
-    if kind == "codeql":
+    if kind == "credential-incidents":
+        for row in data.get("incidents", []) if isinstance(data, dict) else []:
+            status = str(row.get("status") or "").strip().lower()
+            resolved = status == "resolved" and _credential_resolution_is_valid(row)
+            findings.append(
+                _finding(
+                    row.get("id"),
+                    "high",
+                    secret=not resolved,
+                    status="closed" if resolved else "open",
+                    provider=str(row.get("provider") or ""),
+                    fingerprint_sha256=str(row.get("fingerprint_sha256") or ""),
+                )
+            )
+    elif kind == "codeql":
         for row in _flatten_pages(data):
             if not isinstance(row, dict) or row.get("state") not in (
                 None,
@@ -279,6 +310,33 @@ def normalize(kind: str, data: Any) -> list[dict[str, Any]]:
                     )
                 )
     return findings
+
+
+def _credential_resolution_is_valid(row: dict[str, Any]) -> bool:
+    """Accept rotation only with two-party, hashed and time-bounded evidence."""
+
+    author = str(row.get("author") or "").strip()
+    reviewer = str(row.get("reviewer") or "").strip()
+    evidence = str(row.get("resolution_evidence_sha256") or "").strip().lower()
+    if not author or not reviewer or author == reviewer:
+        return False
+    if not re.fullmatch(r"[0-9a-f]{64}", evidence):
+        return False
+    timestamps: dict[str, datetime] = {}
+    for field in ("revoked_at", "rotated_at", "reviewed_at", "review_due"):
+        try:
+            parsed = datetime.fromisoformat(str(row.get(field) or "").replace("Z", "+00:00"))
+        except ValueError:
+            return False
+        if parsed.tzinfo is None:
+            return False
+        timestamps[field] = parsed.astimezone(UTC)
+    now = datetime.now(UTC)
+    return bool(
+        timestamps["revoked_at"] <= timestamps["reviewed_at"] <= now
+        and timestamps["rotated_at"] <= timestamps["reviewed_at"]
+        and timestamps["review_due"] >= now
+    )
 
 
 def main() -> int:

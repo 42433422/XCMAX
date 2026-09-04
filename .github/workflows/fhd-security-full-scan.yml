@@ -203,6 +203,7 @@ jobs:
           normalize node-dependencies npm-audit "${RUNNER_TEMP}/security-native/node-dependencies.json"
           normalize desktop-prerelease sarif "${RUNNER_TEMP}/security-native/desktop-prerelease.sarif"
           normalize gitleaks sarif "${RUNNER_TEMP}/security-native/gitleaks.sarif"
+          normalize credential-rotation credential-incidents ".github/security/credential-incidents.json"
           normalize production-host trivy "${RUNNER_TEMP}/security-native/production-host.json"
 
       - name: Enforce all-source zero critical/high gate
