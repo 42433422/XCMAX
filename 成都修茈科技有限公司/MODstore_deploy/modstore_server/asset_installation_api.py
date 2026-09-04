@@ -202,8 +202,8 @@ def revoke_asset_install_commands_for_order(*, user_id: int, order_no: str) -> i
             )
             if not exact_order_command and not no_remaining_catalog_right:
                 continue
-            row.status = "revoked"
-            row.error = "payment_refunded"
+            setattr(row, "status", "revoked")
+            setattr(row, "error", "payment_refunded")
             session.add(row)
             changed += 1
         session.commit()
@@ -327,8 +327,8 @@ def claim_asset_install_command(
     if row is None:
         raise HTTPException(404, "安装命令不存在")
     if not _purchase_is_current(db, int(user.id), int(row.catalog_id)):
-        row.status = "revoked"
-        row.error = "payment_refunded"
+        setattr(row, "status", "revoked")
+        setattr(row, "error", "payment_refunded")
         db.add(row)
         db.commit()
         raise HTTPException(403, "该资产购买权益已退款或撤销")
@@ -345,11 +345,11 @@ def claim_asset_install_command(
         return {"ok": True, "duplicate": True, "command": serialize_install_command(row, item)}
     if row.status not in {"pending", "failed", "claimed"}:
         raise HTTPException(409, f"安装命令当前状态不可领取：{row.status}")
-    row.installation_id = installation_id
-    row.status = "claimed"
-    row.attempt_count = int(row.attempt_count or 0) + 1
-    row.error = ""
-    row.claimed_at = datetime.now(UTC).replace(tzinfo=None)
+    setattr(row, "installation_id", installation_id)
+    setattr(row, "status", "claimed")
+    setattr(row, "attempt_count", int(row.attempt_count or 0) + 1)
+    setattr(row, "error", "")
+    setattr(row, "claimed_at", datetime.now(UTC).replace(tzinfo=None))
     db.add(row)
     db.commit()
     db.refresh(row)
@@ -379,8 +379,8 @@ def download_claimed_asset_install_command(
     if row.status != "claimed" or str(row.installation_id or "") != target:
         raise HTTPException(409, "安装命令尚未由当前设备领取")
     if not _purchase_is_current(db, int(user.id), int(row.catalog_id)):
-        row.status = "revoked"
-        row.error = "payment_refunded"
+        setattr(row, "status", "revoked")
+        setattr(row, "error", "payment_refunded")
         db.add(row)
         db.commit()
         raise HTTPException(403, "该资产购买权益已退款或撤销")
@@ -441,8 +441,8 @@ def complete_asset_install_command(
     if row.status != "claimed":
         raise HTTPException(409, "安装命令尚未由当前设备领取")
     if not _purchase_is_current(db, int(user.id), int(row.catalog_id)):
-        row.status = "revoked"
-        row.error = "payment_refunded"
+        setattr(row, "status", "revoked")
+        setattr(row, "error", "payment_refunded")
         db.add(row)
         db.commit()
         raise HTTPException(403, "该资产购买权益已退款或撤销")
@@ -454,18 +454,22 @@ def complete_asset_install_command(
             raise HTTPException(409, "安装回执的资产 ID 与命令不一致")
         if body.installed_version.strip() != str(item.version or "").strip():
             raise HTTPException(409, "安装回执的资产版本与命令不一致")
-    row.status = body.status
-    row.error = body.error.strip() if body.status == "failed" else ""
-    row.result_json = json.dumps(
-        {
-            "installed_mod_id": body.installed_mod_id.strip(),
-            "installed_version": body.installed_version.strip(),
-            "result": body.result,
-        },
-        ensure_ascii=False,
-        sort_keys=True,
+    setattr(row, "status", body.status)
+    setattr(row, "error", body.error.strip() if body.status == "failed" else "")
+    setattr(
+        row,
+        "result_json",
+        json.dumps(
+            {
+                "installed_mod_id": body.installed_mod_id.strip(),
+                "installed_version": body.installed_version.strip(),
+                "result": body.result,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        ),
     )
-    row.completed_at = datetime.now(UTC).replace(tzinfo=None)
+    setattr(row, "completed_at", datetime.now(UTC).replace(tzinfo=None))
     db.add(row)
     db.commit()
     db.refresh(row)
