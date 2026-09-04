@@ -446,14 +446,29 @@ def _cli() -> int:
         os.environ["MODSTORE_RETENTION_DRY_RUN"] = "0"
 
     result = run_retention_janitor(dry_run=dry)
+    status = str(result.get("status") or "failed")
+    if status not in {"success", "warning", "failed"}:
+        status = "failed"
+    summary = {
+        "ok": status != "failed",
+        "status": status,
+        "dry_run": bool(result.get("dry_run")),
+        "removed_count": int(result.get("removed_count") or 0),
+        "released_bytes": int(result.get("released_bytes") or 0),
+        "warning_count": len(result.get("warnings") or []),
+        "has_error": bool(result.get("error")),
+    }
     if args.json:
-        print(json.dumps(result, ensure_ascii=False))
+        print(json.dumps(summary, ensure_ascii=False))
     else:
-        print(result["report_md"])
-        if result.get("warnings"):
-            print("WARNINGS:", result["warnings"])
-        if result.get("error"):
-            print("ERROR:", result["error"])
+        print(
+            "retention janitor: "
+            f"status={status} dry_run={summary['dry_run']} "
+            f"removed={summary['removed_count']} released_bytes={summary['released_bytes']} "
+            f"warnings={summary['warning_count']}"
+        )
+        if summary["has_error"]:
+            print("ERROR: retention_failed; inspect the protected runtime record")
             return 1
     return 0
 
@@ -466,11 +481,11 @@ def cleanup_employee_workspaces() -> Dict[str, Any]:
         )
 
         result = cleanup_expired_workspaces()
-        logger.info("janitor: workspace cleanup: %s", result)
+        logger.info("janitor: workspace cleanup completed")
         return result
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("janitor: workspace cleanup failed")
-        return {"cleaned_files": 0, "error": str(exc)}
+    except RECOVERABLE_ERRORS:
+        logger.error("janitor: workspace cleanup failed")
+        return {"cleaned_files": 0, "error": "workspace_cleanup_failed"}
 
 
 if __name__ == "__main__":

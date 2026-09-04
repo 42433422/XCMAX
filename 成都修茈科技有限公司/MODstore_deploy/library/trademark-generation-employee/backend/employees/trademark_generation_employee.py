@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-import sys
 
 BOUNDARY_ERRORS = (Exception,)
 
@@ -78,20 +78,22 @@ def _backend_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def _workspace_root(ctx: Dict[str, Any], payload: Dict[str, Any]) -> Path:
-    raw = payload.get("workspace_root") or ctx.get("workspace_root") or Path.cwd()
-    return Path(str(raw)).expanduser()
+def _workspace_root(ctx: Dict[str, Any]) -> Path:
+    """Return the server-selected workspace; request payloads cannot replace it."""
+
+    raw = ctx.get("workspace_root") or Path.cwd()
+    return Path(str(raw)).expanduser().resolve()
 
 
 def _resolve_output(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
-    rel = str(
-        payload.get("output_relpath")
-        or RULE_SPEC.get("default_output_relpath")
-        or "outputs/trademark_profile.json"
-    ).strip()
-    p = Path(rel).expanduser()
-    if not p.is_absolute():
-        p = _workspace_root(ctx, payload) / rel
+    default_rel = "outputs/trademark_profile.json"
+    requested_rel = str(payload.get("output_relpath") or default_rel).strip().replace("\\", "/")
+    if requested_rel != default_rel:
+        raise ValueError("output_relpath must stay inside the employee workspace")
+    # The employee has one declared output contract.  Letting request data
+    # choose a filesystem destination adds no product value and turns every
+    # downstream image/profile write into a path-injection risk.
+    p = (_workspace_root(ctx) / "outputs" / "trademark_profile.json").resolve()
     p.parent.mkdir(parents=True, exist_ok=True)
     return p
 
@@ -100,9 +102,7 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
     payload = dict(payload or {})
     ctx = dict(ctx or {})
     action = (
-        str(payload.get("action") or RULE_SPEC.get("default_action") or "generate")
-        .strip()
-        .lower()
+        str(payload.get("action") or RULE_SPEC.get("default_action") or "generate").strip().lower()
     )
     if action in ("help", "说明", "status"):
         return _ok(
@@ -122,9 +122,7 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
         from trademark_generation.convert import convert_trademark_profile
 
         out = _resolve_output(payload, ctx)
-        result = convert_trademark_profile(
-            payload, ctx, output_path=out, rule_spec=RULE_SPEC
-        )
+        result = convert_trademark_profile(payload, ctx, output_path=out, rule_spec=RULE_SPEC)
         if asyncio.iscoroutine(result):
             result = await result
         if not out.is_file():
@@ -134,9 +132,7 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
             )
         return _ok(
             result,
-            warnings=list(result.get("warnings") or [])
-            if isinstance(result, dict)
-            else [],
+            warnings=list(result.get("warnings") or []) if isinstance(result, dict) else [],
             meta={
                 "handler": "direct_python",
                 "action": "generate",

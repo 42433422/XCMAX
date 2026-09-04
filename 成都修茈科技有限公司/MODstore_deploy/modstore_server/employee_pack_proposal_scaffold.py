@@ -266,9 +266,13 @@ def main() -> int:
     parser.add_argument("--repo-root", required=True, type=Path)
     args = parser.parse_args()
     proposal = json.loads(args.proposal_file.read_text(encoding="utf-8"))
+    result = materialize_proposal(proposal, repo_root=args.repo_root)
     print(
         json.dumps(
-            materialize_proposal(proposal, repo_root=args.repo_root),
+            {
+                "ok": bool(result.get("ok")),
+                "file_count": int(result.get("file_count") or 0),
+            },
             ensure_ascii=False,
             sort_keys=True,
         )

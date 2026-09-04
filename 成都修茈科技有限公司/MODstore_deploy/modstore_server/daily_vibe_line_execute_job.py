@@ -107,30 +107,17 @@ def run_daily_vibe_line_execute_job(
     except RECOVERABLE_ERRORS:
         pass
     if release_kind:
-        logger.info("daily vibe line execute record_id=%s release_kind=%s", rid, release_kind)
+        logger.info("daily vibe line execute release kind resolved")
 
     from modstore_server.digest_daily_line_chain import execute_phase_a_line_chain
 
     out = execute_phase_a_line_chain(rid, force=force)
     if out.get("ok") and not out.get("skipped"):
-        lr = out.get("line_results") or {}
-        ps = lr.get("P-S") or {}
-        app = lr.get("P-App") or {}
-        logger.info(
-            "daily vibe line execute ok record_id=%s ps_units=%s app_units=%s employees=%s",
-            rid,
-            ps.get("unit_count"),
-            app.get("unit_count"),
-            out.get("employee_chain"),
-        )
+        logger.info("daily vibe line execute completed")
     elif out.get("skipped"):
-        logger.info(
-            "daily vibe line execute skipped record_id=%s reason=%s",
-            rid,
-            out.get("reason"),
-        )
+        logger.info("daily vibe line execute skipped")
     else:
-        logger.warning("daily vibe line execute failed record_id=%s err=%s", rid, out.get("error"))
+        logger.warning("daily vibe line execute failed")
     return out
 
 

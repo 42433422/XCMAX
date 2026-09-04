@@ -61,8 +61,7 @@ def _reject_local_write(action: str, out_trade_no: str) -> bool:
 
 def _orders_dir() -> Path:
     d = Path(
-        os.environ.get(_ORDERS_DIR_VAR, "")
-        or (Path(__file__).resolve().parent / "payment_orders")
+        os.environ.get(_ORDERS_DIR_VAR, "") or (Path(__file__).resolve().parent / "payment_orders")
     )
     d.mkdir(parents=True, exist_ok=True)
     return d
@@ -270,9 +269,7 @@ def close_pending_older_than(*, minutes: int = 30) -> int:
         doc["status"] = "closed"
         doc["updated_at"] = _now_iso()
         try:
-            path.write_text(
-                json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
+            path.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
             closed += 1
         except OSError:
             continue

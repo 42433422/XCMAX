@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -21,6 +23,40 @@ def test_is_actionable_warning() -> None:
     assert not _is_actionable_warning("目录不存在")
     assert _is_actionable_warning("glob 失败：permission denied")
     assert _is_actionable_warning("删除失败 foo：EBUSY")
+
+
+def test_cli_emits_only_aggregate_retention_summary(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import modstore_server.file_retention_janitor as janitor
+
+    monkeypatch.setattr(
+        janitor,
+        "run_retention_janitor",
+        lambda **_kwargs: {
+            "status": "warning",
+            "dry_run": True,
+            "removed_count": 2,
+            "released_bytes": 42,
+            "warnings": ["private/customer/path"],
+            "error": "",
+            "report_md": "private/customer/path",
+            "employee_id": "customer-employee-1",
+        },
+    )
+    monkeypatch.setattr(sys, "argv", ["retention-janitor", "--json"])
+
+    assert janitor._cli() == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload == {
+        "ok": True,
+        "status": "warning",
+        "dry_run": True,
+        "removed_count": 2,
+        "released_bytes": 42,
+        "warning_count": 1,
+        "has_error": False,
+    }
 
 
 def test_missing_dir_is_note_not_metric_warning(tmp_path: Path) -> None:

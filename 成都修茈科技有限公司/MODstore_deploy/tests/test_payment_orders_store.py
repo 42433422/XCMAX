@@ -95,9 +95,7 @@ def test_merge_fields_skips_none_values():
         user_id=1,
         order_kind="wallet",
     )
-    assert (
-        payment_orders.merge_fields("MERGE-NONE", refunded=True, qr_code=None) is True
-    )
+    assert payment_orders.merge_fields("MERGE-NONE", refunded=True, qr_code=None) is True
     doc = payment_orders.find("MERGE-NONE")
     assert doc["refunded"] is True
     # qr_code default value preserved (None)
@@ -156,9 +154,7 @@ def test_list_orders_filters_by_user_and_status():
     assert total == 3
     assert all(row["user_id"] == 42 for row in rows)
 
-    rows_paid, total_paid = payment_orders.list_orders(
-        user_id=42, status="paid", limit=10
-    )
+    rows_paid, total_paid = payment_orders.list_orders(user_id=42, status="paid", limit=10)
     assert total_paid == 1
     assert rows_paid[0]["out_trade_no"] == "L-0"
 
@@ -218,9 +214,7 @@ def test_close_pending_older_than_handles_corrupt_and_missing_timestamp(tmp_path
 
     bad_ts = payment_orders._path("BAD-TS")
     bad_ts.write_text(
-        json.dumps(
-            {"out_trade_no": "BAD-TS", "status": "pending", "created_at": "not-a-date"}
-        ),
+        json.dumps({"out_trade_no": "BAD-TS", "status": "pending", "created_at": "not-a-date"}),
         encoding="utf-8",
     )
 

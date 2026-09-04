@@ -30,9 +30,10 @@ def load_fallback() -> Dict[str, List[Any]]:
 
 def cache_key(user_id: int, provider: str, api_key: str) -> str:
     payload = f"{user_id}:{provider}:{api_key}".encode("utf-8")
-    # A process-random keyed digest prevents an exposed cache key from being
-    # used as an offline oracle for provider credentials.
-    digest = hashlib.blake2b(payload, key=_CACHE_KEY_SALT, digest_size=16).hexdigest()
+    # A process-random, memory-hard KDF prevents an exposed cache key from
+    # becoming an offline oracle for provider credentials. The short result is
+    # only an in-process cache identifier, never an authentication verifier.
+    digest = hashlib.scrypt(payload, salt=_CACHE_KEY_SALT, n=2**14, r=8, p=1, dklen=16).hex()
     return f"{provider}:{digest}"
 
 

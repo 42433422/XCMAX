@@ -178,17 +178,15 @@ def _dispatch_employee_chain(
             )
             if not step_ok:
                 all_ok = False
-        except RECOVERABLE_ERRORS as exc:
-            logger.exception(
-                "%s chain step=%s employee=%s failed", phase_label, step_id, employee_id
-            )
+        except RECOVERABLE_ERRORS:
+            logger.error("employee chain step failed")
             all_ok = False
             step_results.append(
                 {
                     "ok": False,
                     "step": step_id,
                     "employee_id": employee_id,
-                    "error": str(exc),
+                    "error": "employee_chain_step_failed",
                 }
             )
 
@@ -248,13 +246,7 @@ def execute_installer_employee_chain(
         block_key="phase_c",
         phase_label="C",
     )
-    logger.info(
-        "phase_c installer chain record_id=%s kind=%s shadow=%s ok=%s",
-        record_id,
-        kind,
-        shadow,
-        block.get("ok"),
-    )
+    logger.info("phase_c installer chain completed")
     # 真实（非 shadow）installer/major 日：回写下载版本 SSOT last_push + 刷新官网公开清单，
     # 让「P5 构建 → P6 推 COS」在数据面真正落到「官网下载」这一环（解决历史断点）。
     if not shadow and block.get("ok"):
@@ -268,7 +260,7 @@ def execute_installer_employee_chain(
             )
             block["fastgate"] = gate
             if not gate.get("ok"):
-                logger.warning("phase_c installer FASTGATE blocked push: %s", gate.get("reason"))
+                logger.warning("phase_c installer FASTGATE blocked push")
                 block["download_release"] = {
                     "ok": False,
                     "blocked_by": "fastgate",
@@ -287,7 +279,7 @@ def execute_installer_employee_chain(
                         reason=str(gate.get("reason") or "fastgate failed"),
                     )
                 except BOUNDARY_ERRORS:  # noqa: BLE001
-                    logger.exception("phase_c installer FASTGATE auto-rollback failed")
+                    logger.error("phase_c installer FASTGATE auto-rollback failed")
                 return block
 
             from modstore_server.download_release import record_installer_push
@@ -301,7 +293,7 @@ def execute_installer_employee_chain(
             )
             block["download_release"] = push
         except BOUNDARY_ERRORS:  # noqa: BLE001
-            logger.exception("phase_c installer chain: record_installer_push failed")
+            logger.error("phase_c installer chain: record_installer_push failed")
     return block
 
 
@@ -370,9 +362,9 @@ def execute_production_pipeline_chain(
         from modstore_server.runtime_async import run_coro_sync
 
         out = run_coro_sync(_run_pipeline_with_optional_auto_approve(step_ids, context))
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("production pipeline chain failed record_id=%s", record_id)
-        out = {"ok": False, "error": str(exc)}
+    except RECOVERABLE_ERRORS:
+        logger.error("production pipeline chain failed")
+        out = {"ok": False, "error": "production_pipeline_failed"}
 
     block = {
         **out,
@@ -402,7 +394,7 @@ def execute_production_pipeline_chain(
                     failed_step=failed_step,
                 )
             except BOUNDARY_ERRORS:  # noqa: BLE001
-                logger.exception("production pipeline auto-rollback failed record_id=%s", record_id)
+                logger.error("production pipeline auto-rollback failed")
 
     meta = _read_execute_meta(int(record_id))
     persist_line_execute_on_digest_record(

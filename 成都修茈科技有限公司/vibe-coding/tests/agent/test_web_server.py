@@ -134,8 +134,8 @@ def stub_coder() -> _StubCoder:
 
 
 @pytest.fixture
-def client(stub_coder: _StubCoder) -> TestClient:
-    return TestClient(create_app(coder=stub_coder))
+def client(stub_coder: _StubCoder, tmp_path) -> TestClient:
+    return TestClient(create_app(coder=stub_coder, workspace_roots=[tmp_path]))
 
 
 def test_index_html_served(client: TestClient) -> None:
@@ -182,6 +182,15 @@ def test_post_index(client: TestClient, stub_coder: _StubCoder, tmp_path) -> Non
     res = client.post("/api/index", json={"root": str(tmp_path)})
     assert res.status_code == 200
     assert res.json() == {"files": 3, "symbols": 12}
+
+
+def test_project_routes_reject_unconfigured_workspace(client: TestClient, tmp_path) -> None:
+    outside = tmp_path.parent / "outside-workspace"
+
+    res = client.post("/api/index", json={"root": str(outside)})
+
+    assert res.status_code == 403
+    assert res.json()["detail"] == "workspace_not_allowed"
 
 
 def test_post_edit(client: TestClient) -> None:

@@ -27,7 +27,12 @@ def traditional_workspace_root() -> Path:
 def traditional_resolve_path(rel: str) -> Path:
     base = traditional_workspace_root()
     raw = unquote(rel or "").strip().replace("\\", "/").lstrip("/")
-    target = (base / raw).resolve() if raw else base
+    base_text = os.path.realpath(os.path.abspath(base))
+    target_text = os.path.realpath(os.path.abspath(os.path.join(base_text, raw)))
+    base_prefix = base_text.rstrip(os.sep) + os.sep
+    if target_text != base_text and not target_text.startswith(base_prefix):
+        raise HTTPException(status_code=400, detail="invalid path")
+    target = Path(target_text)
     try:
         target.relative_to(base)
     except ValueError as e:
@@ -40,7 +45,12 @@ def resolve_safe_workspace_relpath(rel: str) -> Path:
     raw = unquote(rel or "").strip().replace("\\", "/").lstrip("/")
     if not raw:
         raise HTTPException(status_code=400, detail="missing path")
-    target = (base / raw).resolve()
+    base_text = os.path.realpath(os.path.abspath(base))
+    target_text = os.path.realpath(os.path.abspath(os.path.join(base_text, raw)))
+    base_prefix = base_text.rstrip(os.sep) + os.sep
+    if target_text != base_text and not target_text.startswith(base_prefix):
+        raise HTTPException(status_code=400, detail="invalid path")
+    target = Path(target_text)
     try:
         target.relative_to(base)
     except ValueError as e:

@@ -35,9 +35,7 @@ def notify_calls(monkeypatch) -> List[Dict[str, Any]]:
     return calls
 
 
-def _seed_pending_question(
-    user_id: int, employee_id: str, question: str = "先做哪个？"
-) -> int:
+def _seed_pending_question(user_id: int, employee_id: str, question: str = "先做哪个？") -> int:
     sf = get_session_factory()
     with sf() as session:
         if session.get(User, user_id) is None:
@@ -79,9 +77,7 @@ def test_boss_message_answers_pending_question(notify_calls):
     from modstore_server.boss_im_inbound import handle_boss_im_message
 
     qid = _seed_pending_question(7, "emp-answer-path")
-    out = handle_boss_im_message(
-        user_id=7, employee_id="emp-answer-path", text="先做 A"
-    )
+    out = handle_boss_im_message(user_id=7, employee_id="emp-answer-path", text="先做 A")
     assert out["ok"] and out["mode"] == "question_answered"
     assert int(out["question_id"]) == qid
     # 是答案不是新指令：不建任务、不发 ACK
@@ -97,9 +93,7 @@ def test_boss_message_answers_pending_question(notify_calls):
 def test_boss_message_without_pending_becomes_task_with_ack(notify_calls):
     from modstore_server.boss_im_inbound import handle_boss_im_message
 
-    out = handle_boss_im_message(
-        user_id=9, employee_id="emp-task-path", text="帮我盘点一下库存"
-    )
+    out = handle_boss_im_message(user_id=9, employee_id="emp-task-path", text="帮我盘点一下库存")
     assert out["ok"] and out["mode"] == "task_enqueued"
     tasks = _boss_im_tasks("emp-task-path")
     assert len(tasks) == 1
@@ -144,15 +138,11 @@ def test_dispatch_boss_im_task_executes_and_replies(monkeypatch, notify_calls):
         )
         return {
             "employee_id": employee_id,
-            "result": {
-                "outputs": [{"handler": "echo", "output": "库存盘点完成：共 42 件"}]
-            },
+            "result": {"outputs": [{"handler": "echo", "output": "库存盘点完成：共 42 件"}]},
             "reasoning_excerpt": "",
         }
 
-    monkeypatch.setattr(
-        "modstore_server.employee_executor.execute_employee_task", _fake_execute
-    )
+    monkeypatch.setattr("modstore_server.employee_executor.execute_employee_task", _fake_execute)
 
     enq = enqueue_boss_im_task(boss_user_id=11, employee_id="emp-exec", text="盘点库存")
     out = dispatch_boss_im_task(int(enq["task_id"]), actor_user_id=3)
@@ -185,9 +175,7 @@ def test_dispatch_boss_im_task_failure_still_replies(monkeypatch, notify_calls, 
     def _boom(*args, **kwargs):
         raise RuntimeError("LLM 配额用尽")
 
-    monkeypatch.setattr(
-        "modstore_server.employee_executor.execute_employee_task", _boom
-    )
+    monkeypatch.setattr("modstore_server.employee_executor.execute_employee_task", _boom)
 
     enq = enqueue_boss_im_task(boss_user_id=12, employee_id="emp-fail", text="做个报表")
     with caplog.at_level("WARNING", logger="modstore_server.boss_im_inbound"):
@@ -231,9 +219,7 @@ def test_dispatch_loop_routes_boss_im_directly(monkeypatch, notify_calls):
         "modstore_server.boss_im_inbound.dispatch_boss_im_task", _fake_boss_dispatch
     )
 
-    enq = enqueue_boss_im_task(
-        boss_user_id=13, employee_id="emp-loop", text="修复导出乱码"
-    )
+    enq = enqueue_boss_im_task(boss_user_id=13, employee_id="emp-loop", text="修复导出乱码")
     out = dispatch_pending_brief_tasks(limit=10)
     assert out["ok"] is True
     assert not routed, "boss_im 任务不应流入 task_router"

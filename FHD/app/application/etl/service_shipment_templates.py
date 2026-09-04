@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -222,7 +223,14 @@ class ShipmentTemplateServiceMixin:
         )
         if len(digest_prefix) != 12:
             raise EtlError("ETL_SHIPMENT_TEMPLATE_DIGEST_INVALID", "发货单版式来源摘要无效")
-        destination = (template_dir / f"{base_name}-{digest_prefix}.xlsx").resolve()
+        template_root = os.path.realpath(os.path.abspath(template_dir))
+        destination_text = os.path.realpath(
+            os.path.abspath(os.path.join(template_root, f"{base_name}-{digest_prefix}.xlsx"))
+        )
+        template_prefix = template_root.rstrip(os.sep) + os.sep
+        if not destination_text.startswith(template_prefix):
+            raise EtlError("ETL_SHIPMENT_TEMPLATE_PATH_INVALID", "发货单版式保存路径无效")
+        destination = Path(destination_text)
         if template_dir.resolve() not in destination.parents:
             raise EtlError("ETL_SHIPMENT_TEMPLATE_PATH_INVALID", "发货单版式保存路径无效")
 

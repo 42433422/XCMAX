@@ -209,7 +209,7 @@ def _record_runtime_policy(
             severity=severity,
         )
     except RECOVERABLE_ERRORS:
-        logger.debug("employee runtime policy update failed eid=%s", employee_id, exc_info=True)
+        logger.debug("employee runtime policy update failed")
 
 
 def _record_evolution(
@@ -252,7 +252,7 @@ def _record_evolution(
             session.commit()
             return True
     except RECOVERABLE_ERRORS:
-        logger.debug("employee evolution record failed eid=%s", employee_id, exc_info=True)
+        logger.debug("employee evolution record failed")
         return False
 
 

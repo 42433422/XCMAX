@@ -76,14 +76,17 @@ def _try_serve_vue_dist_root_file(fallback: str) -> FileResponse | None:
     media = _VUE_DIST_ROOT_FILES.get(fallback)
     if not media:
         return None
-    if fallback == "workflow-employees.json":
+    safe_name = next((name for name in _VUE_DIST_ROOT_FILES if fallback == name), "")
+    if not safe_name:
+        return None
+    if safe_name == "workflow-employees.json":
         for p in _workflow_employees_json_candidates():
             if os.path.isfile(p):
                 return FileResponse(p, media_type=media)
         return None
     candidates = [
-        os.path.join(_vue_dist_dir(), fallback),
-        os.path.join(get_base_dir(), "frontend", "public", fallback),
+        os.path.join(_vue_dist_dir(), safe_name),
+        os.path.join(get_base_dir(), "frontend", "public", safe_name),
     ]
     for p in candidates:
         if os.path.isfile(p):

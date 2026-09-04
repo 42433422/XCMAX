@@ -79,5 +79,8 @@ def test_payment_webhook_sign_and_replay_roundtrip(monkeypatch):
 
     stored_path = webhook_dispatcher._event_path(event["id"])
     assert stored_path.exists()
-    envelope = json.loads(stored_path.read_text(encoding="utf-8"))
-    assert envelope["event"]["id"] == event["id"]
+    stored = stored_path.read_text(encoding="utf-8")
+    envelope = json.loads(stored)
+    assert envelope["schema"] == "modstore.webhook-replay-encrypted/v1"
+    assert "ORDER-42" not in stored
+    assert webhook_dispatcher._load_event(event["id"])["id"] == event["id"]

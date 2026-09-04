@@ -114,9 +114,9 @@ async def align_catalog_employee_packs_llm_from_deepseek(
         except HTTPException as he:
             errors.append({"pack_id": pack_id, "error": he.detail or str(he)})
             continue
-        except BOUNDARY_ERRORS as e:  # noqa: BLE001
-            logger.exception("align deepseek pack=%s", pack_id)
-            errors.append({"pack_id": pack_id, "error": str(e)[:500]})
+        except BOUNDARY_ERRORS:  # noqa: BLE001
+            logger.error("align deepseek pack failed")
+            errors.append({"pack_id": pack_id, "error": "align_deepseek_failed"})
             continue
 
         updated.append(
@@ -337,9 +337,9 @@ async def align_catalog_employee_packs_llm_to_auto_sentinel(
         except HTTPException as he:
             errors.append({"pack_id": pack_id, "error": he.detail or str(he)})
             continue
-        except BOUNDARY_ERRORS as e:  # noqa: BLE001
-            logger.exception("align auto sentinel pack=%s", pack_id)
-            errors.append({"pack_id": pack_id, "error": str(e)[:500]})
+        except BOUNDARY_ERRORS:  # noqa: BLE001
+            logger.error("align auto sentinel pack failed")
+            errors.append({"pack_id": pack_id, "error": "align_auto_sentinel_failed"})
             continue
 
         updated.append(

@@ -39,7 +39,7 @@ def _load_employee_module(mod_id: str, stem: str):
     try:
         return import_mod_backend_py(mod_path, mod_id, f"employees/{stem}")
     except BOUNDARY_ERRORS:
-        logger.exception("load employee module failed mod=%s stem=%s", mod_id, stem)
+        logger.error("load employee module failed")
         return None
 
 
@@ -82,8 +82,8 @@ async def _build_ctx(mod_id: str, employee_id: str) -> Dict[str, Any]:
             )
 
         ctx["call_llm"] = _call_llm
-    except BOUNDARY_ERRORS as exc:
-        logger.warning("mod_employee_complete unavailable: %s", exc)
+    except BOUNDARY_ERRORS:
+        logger.warning("mod_employee_complete unavailable")
     return ctx
 
 
@@ -104,9 +104,9 @@ async def _dispatch_run(
         if asyncio.iscoroutine(out):
             out = await out
         return {"success": True, "data": out}
-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
-        logger.exception("employee run failed emp=%s", emp_id)
-        return _unified_err(f"employee run failed: {exc!s}"[:300], employee_id=emp_id)
+    except BOUNDARY_ERRORS:  # noqa: BLE001
+        logger.error("employee run failed")
+        return _unified_err("employee run failed", employee_id=emp_id)
 
 
 def register_fastapi_routes(app, mod_id: str) -> None:
@@ -148,10 +148,8 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         )
 
     app.include_router(router)
-    logger.info(
-        "workflow employee mod registered mod_id=%s employee=%s", mod_id, EMPLOYEE_ID
-    )
+    logger.info("workflow employee mod registered")
 
 
 def mod_init():
-    logger.info("%s mod_init employee=%s", MOD_ID, EMPLOYEE_ID)
+    logger.info("workflow employee mod initialized")

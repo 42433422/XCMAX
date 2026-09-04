@@ -21,6 +21,7 @@ manifest 可选扩展字段 ``fhd_shell``::
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, List
@@ -91,9 +92,17 @@ def build_fhd_shell_mod_rows(library: Path) -> List[Dict[str, Any]]:
     return [_CATEGORY_ALL, *mod_rows]
 
 
-def write_fhd_shell_mods_json(library: Path, output: Path) -> int:
+def write_fhd_shell_mods_json(
+    library: Path, output: Path, *, output_root: Path | None = None
+) -> int:
     rows = build_fhd_shell_mod_rows(library)
-    output = output.expanduser().resolve()
+    output_text = os.path.realpath(os.path.abspath(os.path.expanduser(output)))
+    if output_root is not None:
+        root_text = os.path.realpath(os.path.abspath(output_root))
+        root_prefix = root_text.rstrip(os.sep) + os.sep
+        if not output_text.startswith(root_prefix):
+            raise ValueError("output must stay inside the configured FHD repository")
+    output = Path(output_text)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(rows, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return len(rows)

@@ -6,6 +6,9 @@ import json
 import subprocess
 import sys
 
+import pytest
+from cryptography.fernet import Fernet
+
 from modstore_server import employee_orchestrator as eo
 from modstore_server.cr_narrow_ci import (
     _copytree_filtered,
@@ -266,10 +269,36 @@ def test_line_rollout_policy_ps_primary_default(monkeypatch):
 
 def test_prompt_override_roundtrip(tmp_path, monkeypatch):
     monkeypatch.setenv("MODSTORE_PROMPT_OVERRIDE_DIR", str(tmp_path / "overrides"))
+    monkeypatch.setenv("MODSTORE_LLM_MASTER_KEY", Fernet.generate_key().decode("ascii"))
     apply_prompt_override("test-emp", "prompt v2", meta={"test": True})
+    stored_path = tmp_path / "overrides" / "test-emp.json"
+    stored = stored_path.read_text(encoding="utf-8")
+    assert "prompt v2" not in stored
+    assert '"test":true' not in stored.replace(" ", "")
+    assert stored_path.stat().st_mode & 0o777 == 0o600
     assert get_effective_system_prompt("test-emp", "prompt v1") == "prompt v2"
     revert_prompt_override("test-emp")
     assert get_effective_system_prompt("test-emp", "prompt v1") == "prompt v1"
+
+
+def test_prompt_override_fails_closed_without_master_key(tmp_path, monkeypatch):
+    monkeypatch.setenv("MODSTORE_PROMPT_OVERRIDE_DIR", str(tmp_path / "overrides"))
+    monkeypatch.delenv("MODSTORE_LLM_MASTER_KEY", raising=False)
+
+    with pytest.raises(RuntimeError, match="MODSTORE_LLM_MASTER_KEY not configured"):
+        apply_prompt_override("test-emp", "private prompt", meta={"task": "private"})
+
+    assert not (tmp_path / "overrides" / "test-emp.json").exists()
+
+
+def test_prompt_override_rejects_path_traversal(tmp_path, monkeypatch):
+    monkeypatch.setenv("MODSTORE_PROMPT_OVERRIDE_DIR", str(tmp_path / "overrides"))
+    monkeypatch.setenv("MODSTORE_LLM_MASTER_KEY", Fernet.generate_key().decode("ascii"))
+
+    with pytest.raises(ValueError, match="invalid employee_id"):
+        apply_prompt_override("../escape", "private prompt", meta={})
+
+    assert not (tmp_path / "escape.json").exists()
 
 
 def test_cursor_delegate_disabled(monkeypatch):

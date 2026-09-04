@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from fastapi import APIRouter, Body, HTTPException
@@ -17,6 +18,20 @@ from modstore_server.api.dto import ConfigDTO, ExportFhdShellDTO
 from modstore_server.infrastructure import library_paths
 
 router = APIRouter(tags=["config"])
+
+
+def _configured_repo_path(raw: str, *, field: str) -> str:
+    """Confine HTTP-selected repository paths to the deployed FHD tree."""
+
+    value = raw.strip()
+    if not value:
+        return ""
+    root = os.path.realpath(os.path.abspath(library_paths.fhd_repo_root()))
+    candidate = os.path.realpath(os.path.abspath(os.path.expanduser(value)))
+    root_prefix = root.rstrip(os.sep) + os.sep
+    if candidate != root and not candidate.startswith(root_prefix):
+        raise HTTPException(400, f"{field} 必须位于 FHD 仓库根目录内")
+    return candidate
 
 
 @router.get("/api/config")
@@ -49,18 +64,18 @@ def api_export_fhd_shell_mods(
     fhd = library_paths.fhd_repo_root()
     if not fhd.is_dir():
         raise HTTPException(500, "无法定位 FHD 仓库根目录（预期 MODstore 位于 FHD/MODstore）")
+    target = (fhd / "backend" / "shell" / "fhd_shell_mods.json").resolve()
     raw = body.output_path or ""
     raw = raw.strip()
-    if raw:
-        target = Path(raw).expanduser().resolve()
-    else:
-        target = (fhd / "backend" / "shell" / "fhd_shell_mods.json").resolve()
-    try:
-        library_paths.assert_path_inside_fhd_repo(fhd, target)
-    except ValueError as e:
-        raise HTTPException(400, str(e)) from e
+    allowed_names = {
+        "",
+        "backend/shell/fhd_shell_mods.json",
+        target.as_posix(),
+    }
+    if raw.replace("\\", "/") not in allowed_names:
+        raise HTTPException(400, "output_path 必须是固定壳层清单路径")
     lib = library_paths.lib()
-    n = write_fhd_shell_mods_json(lib, target)
+    n = write_fhd_shell_mods_json(lib, target, output_root=fhd)
     return {"ok": True, "path": str(target), "count": n}
 
 
@@ -70,8 +85,8 @@ def put_config(body: ConfigDTO):
     xr = (body.xcagi_root or "").strip()
     url = (body.xcagi_backend_url or "").strip()
     cfg = RepoConfig(
-        library_root=str(Path(lr).expanduser().resolve()) if lr else "",
-        xcagi_root=str(Path(xr).expanduser().resolve()) if xr else "",
+        library_root=_configured_repo_path(lr, field="library_root"),
+        xcagi_root=_configured_repo_path(xr, field="xcagi_root"),
         xcagi_backend_url=url,
     )
     library_paths.save_config(cfg)

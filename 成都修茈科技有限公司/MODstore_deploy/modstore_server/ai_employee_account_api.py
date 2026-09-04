@@ -291,13 +291,7 @@ def create_account(
         session.refresh(row)
         view = _to_view(row, has_secret=True)
 
-    logger.info(
-        "ai-account 新建：id=%s platform=%s external=%s employee=%s",
-        view["id"],
-        view["platform"],
-        view["external_id"],
-        view["employee_id"],
-    )
+    logger.info("ai-account 新建成功")
     _invalidate_runtime_caches()
     return view
 

@@ -90,8 +90,12 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     """在 FastAPI 上注册示例 hello 与考勤接口。"""
     # 考勤转换的实现放在 mod 私有包 ``taiyangniao_attendance/``
     # （被 mod_manager 加到 sys.path 的 ``backend/`` 可直接绝对 import）。
+    from app.infrastructure.workspace import workspace_root
+    from app.mod_sdk.workspace import (
+        allocate_generated_workspace_file,
+        resolve_existing_workspace_file,
+    )
     from taiyangniao_attendance.convert import convert_attendance_file
-    from app.mod_sdk.workspace import resolve_safe_workspace_relpath
 
     # import_mod_backend_py 以独立模块名加载本文件时无包上下文，相对导入会失败。
     try:
@@ -184,30 +188,33 @@ def register_fastapi_routes(app, mod_id: str) -> None:
                 status_code=400,
             )
 
-        try:
-            out_rel = _normalize_relpath(output_relpath, field_name="output_relpath")
-        except ValueError as e:
-            return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+        # Kept in the form contract for older clients; the server now allocates
+        # the actual output path so request data never becomes a disk path.
+        _ = output_relpath
 
         try:
-            upload_dir = resolve_safe_workspace_relpath("uploads")
-            upload_dir.mkdir(parents=True, exist_ok=True)
-            src_name = Path(file.filename).name or "attendance-upload.xlsx"
-            src_path = upload_dir / src_name
+            upload_kind = {
+                ".xlsx": "attendance-upload-xlsx",
+                ".xlsm": "attendance-upload-xlsm",
+                ".xls": "attendance-upload-xls",
+            }[suffix]
+            src_path = allocate_generated_workspace_file(upload_kind)
             content = await file.read()
-            with src_path.open("wb") as f:
-                f.write(content)
-        except BOUNDARY_ERRORS as e:
+            src_path.write_bytes(content)
+        except BOUNDARY_ERRORS:
             logger.exception("Failed to save attendance upload")
             return JSONResponse(
-                {"success": False, "error": f"save upload failed: {e}"},
+                {"success": False, "error": "save upload failed"},
                 status_code=500,
             )
 
         try:
-            out_path = resolve_safe_workspace_relpath(out_rel)
-        except BOUNDARY_ERRORS as e:
-            return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+            out_path = allocate_generated_workspace_file("attendance-output")
+            out_rel = out_path.relative_to(workspace_root()).as_posix()
+        except BOUNDARY_ERRORS:
+            return JSONResponse(
+                {"success": False, "error": "输出路径无效"}, status_code=400
+            )
 
         raw_tpl_rel = unquote(template_relpath or "").strip()
         if raw_tpl_rel:
@@ -230,7 +237,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
         tpl_rel = DEFAULT_TEMPLATE_RELPATH
         try:
-            template_path = resolve_safe_workspace_relpath(tpl_rel)
+            template_path = resolve_existing_workspace_file(tpl_rel)
             if not template_path.exists():
                 return JSONResponse(
                     {"success": False, "error": f"模板文件不存在: {tpl_rel}"},
@@ -349,9 +356,17 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.get("/attendance/download", response_model=None)
     async def attendance_download(relpath: str):
+        if not unquote(relpath or "").strip().replace("\\", "/").lstrip("/"):
+            return JSONResponse(
+                {"success": False, "error": "missing relpath"}, status_code=400
+            )
         try:
             rel = _normalize_relpath(relpath, field_name="relpath")
-            p = resolve_safe_workspace_relpath(rel)
+            p = resolve_existing_workspace_file(rel)
+        except FileNotFoundError:
+            return JSONResponse(
+                {"success": False, "error": "file not found"}, status_code=404
+            )
         except ValueError as e:
             return JSONResponse({"success": False, "error": str(e)}, status_code=400)
         except BOUNDARY_ERRORS as e:

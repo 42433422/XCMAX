@@ -105,3 +105,18 @@ def test_trademark_generation_employee_presets_app_icon_and_sheet(tmp_path: Path
         "app_icon_mark",
         "package_label_mark",
     }
+
+
+def test_trademark_generation_rejects_parent_output_escape(tmp_path: Path):
+    module = _load_employee_module()
+
+    result = asyncio.run(
+        module.run(
+            {"output_relpath": "../outside.json", "generate_image": False},
+            {"workspace_root": str(tmp_path)},
+        )
+    )
+
+    assert result["ok"] is False
+    assert "employee workspace" in result["error"]
+    assert not (tmp_path.parent / "outside.json").exists()

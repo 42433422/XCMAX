@@ -87,7 +87,7 @@ def record_job_run(
             )
             session.commit()
     except RECOVERABLE_ERRORS:  # pragma: no cover - 可观测性不能拖垮调度器
-        logger.exception("record_job_run 失败: job_id=%s status=%s", job_id, status)
+        logger.error("record_job_run 失败")
 
 
 @contextmanager

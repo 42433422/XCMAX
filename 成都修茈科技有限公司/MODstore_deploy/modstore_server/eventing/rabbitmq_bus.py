@@ -126,18 +126,11 @@ class RabbitMqNeuroBus(InMemoryNeuroBus):
                 auto_delete=True,
             )
             self._connected = True
-            logger.info(
-                "RabbitMqNeuroBus connected to %s, queue=%s",
-                self._amqp_url.split("@")[-1] if "@" in self._amqp_url else self._amqp_url,
-                self._queue_name,
-            )
+            logger.info("RabbitMqNeuroBus connected")
             self._rebind_all()
             self._start_consumer()
         except RECOVERABLE_ERRORS:
-            logger.exception(
-                "RabbitMqNeuroBus connection failed; falling back to in-memory mode. URL=%s",
-                self._amqp_url.split("@")[-1] if "@" in self._amqp_url else "(unset)",
-            )
+            logger.error("RabbitMqNeuroBus connection failed; falling back to in-memory mode")
             self._connected = False
             self._connection = None
             self._channel = None

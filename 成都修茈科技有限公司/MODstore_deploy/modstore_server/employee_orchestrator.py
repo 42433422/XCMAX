@@ -72,7 +72,7 @@ def _record_dispatch_metric(
             )
             session.commit()
     except RECOVERABLE_ERRORS:
-        logger.debug("record_dispatch_metric failed employee=%s", employee_id, exc_info=True)
+        logger.debug("record_dispatch_metric failed")
 
 
 def _resolve_uid(created_by_user_id: int) -> int:
@@ -293,7 +293,7 @@ def _run_layer(
             }
         except RECOVERABLE_ERRORS as exc:
             duration_ms = round((time.perf_counter() - t0) * 1000, 3)
-            logger.exception("dispatch_subtasks: employee=%s failed", st.employee_id)
+            logger.error("dispatch_subtasks: employee failed")
             _record_dispatch_metric(
                 employee_id=st.employee_id,
                 task_brief=st.task_brief,

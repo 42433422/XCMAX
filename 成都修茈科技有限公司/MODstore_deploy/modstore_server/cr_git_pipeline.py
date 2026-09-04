@@ -230,13 +230,7 @@ def stage_file_to_employee_branch(
     if ur.returncode != 0:
         return {"ok": False, "reason": f"update-ref failed: {ur.stderr[:200]}"}
 
-    logger.info(
-        "cr_git_pipeline: staged CR-%d on branch %s base=%s head=%s",
-        cr_id,
-        branch,
-        base[:10],
-        commit_sha[:10],
-    )
+    logger.info("cr_git_pipeline: change request staged")
     return {
         "ok": True,
         "branch": branch,

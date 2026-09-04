@@ -10,8 +10,10 @@ from modstore_server.file_safe import (
     MAX_FILE_BYTES,
     normalize_rel_path,
     read_text_file,
+    read_text_under_mod,
     resolve_under_mod,
     write_text_file,
+    write_text_under_mod,
 )
 
 
@@ -48,6 +50,14 @@ def test_read_write_roundtrip(tmp_path: Path):
     p = resolve_under_mod(mod, "readme.md")
     write_text_file(p, "hello")
     assert read_text_file(p) == "hello"
+
+
+def test_remote_read_write_stays_under_mod(tmp_path: Path):
+    mod = tmp_path / "m"
+    write_text_under_mod(mod, "nested/readme.md", "hello")
+    assert read_text_under_mod(mod, "nested/readme.md") == "hello"
+    with pytest.raises(ValueError, match="非法路径"):
+        read_text_under_mod(mod, "../outside.md")
 
 
 def test_read_rejects_oversize(tmp_path: Path):

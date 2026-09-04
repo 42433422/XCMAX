@@ -47,7 +47,11 @@ class TestSafePath:
         # Use an absolute target that is outside the workspace root.
         with (
             patch.object(code_editor, "_workspace_root", return_value=Path("/tmp/ws_a").resolve()),
-            patch("pathlib.Path.resolve", return_value=Path("/tmp/ws_b/file.py")),
+            patch.object(
+                code_editor.os.path,
+                "realpath",
+                side_effect=["/tmp/ws_a", "/tmp/ws_b/file.py"],
+            ),
         ):
             with pytest.raises(Exception):
                 code_editor._safe_rel_path("file.py")

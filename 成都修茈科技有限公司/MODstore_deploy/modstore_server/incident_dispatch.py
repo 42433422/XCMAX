@@ -299,11 +299,7 @@ def _dispatch_incident_body(event_id: int) -> None:
                 incident=payload,
             )
             if reviewed_contract and duty_input.get("_duty_input_ready") is False:
-                logger.info(
-                    "incident_bus: reviewed duty input unavailable event_id=%s employee_id=%s",
-                    event_id,
-                    eid_emp,
-                )
+                logger.info("incident_bus: reviewed duty input unavailable")
                 continue
             duty_input.pop("_duty_input_ready", None)
             exec_result = execute_employee_task(

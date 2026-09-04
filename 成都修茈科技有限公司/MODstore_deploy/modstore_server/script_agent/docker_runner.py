@@ -105,7 +105,12 @@ async def run_in_docker(
     input_dir = work_dir / "inputs"
     for item in files or []:
         name = _safe_name(str(item.get("filename") or "upload.bin"))
-        (input_dir / name).write_bytes(item.get("content") or b"")
+        input_root_text = os.path.realpath(os.path.abspath(str(input_dir)))
+        input_path_text = os.path.realpath(os.path.abspath(os.path.join(input_root_text, name)))
+        input_root_prefix = input_root_text.rstrip(os.sep) + os.sep
+        if not input_path_text.startswith(input_root_prefix):
+            raise ValueError("sandbox input path escapes run directory")
+        Path(input_path_text).write_bytes(item.get("content") or b"")
 
     script_path = work_dir / "script.py"
     script_path.write_text(PREAMBLE_SOURCE + script_text, encoding="utf-8")

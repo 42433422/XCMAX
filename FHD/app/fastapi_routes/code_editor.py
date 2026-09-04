@@ -56,7 +56,12 @@ def _safe_rel_path(rel: str) -> Path:
     if not s or ".." in Path(s).parts:
         raise HTTPException(status_code=400, detail="invalid path")
     root = _workspace_root()
-    target = (root / s).resolve()
+    root_text = os.path.realpath(os.path.abspath(root))
+    target_text = os.path.realpath(os.path.abspath(os.path.join(root_text, s)))
+    root_prefix = root_text.rstrip(os.sep) + os.sep
+    if target_text != root_text and not target_text.startswith(root_prefix):
+        raise HTTPException(status_code=400, detail="path escapes workspace")
+    target = Path(target_text)
     try:
         target.relative_to(root)
     except ValueError as e:

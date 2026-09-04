@@ -22,7 +22,7 @@ Python-callable surface.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
@@ -219,6 +219,7 @@ def create_app(
     coder: VibeCoder | None = None,
     coder_factory: Callable[[], VibeCoder] | None = None,
     api_prefix: str = "/api",
+    workspace_roots: Iterable[str | Path] | None = None,
 ):
     """Build a FastAPI app exposing the vibe-coding API.
 
@@ -234,6 +235,27 @@ def create_app(
 
     if coder is None and coder_factory is None:
         coder_factory = _default_demo_coder
+
+    configured_roots = tuple(workspace_roots or (Path.cwd(),))
+    trusted_workspaces: dict[str, Path] = {}
+    for workspace_index, configured_root in enumerate(configured_roots):
+        resolved_root = Path(configured_root).expanduser().resolve()
+        if not resolved_root.is_dir():
+            raise ValueError(f"workspace root is not a directory: {configured_root!s}")
+        trusted_workspaces[str(workspace_index)] = resolved_root
+        trusted_workspaces[resolved_root.as_posix()] = resolved_root
+        if workspace_index == 0:
+            trusted_workspaces["."] = resolved_root
+            trusted_workspaces["default"] = resolved_root
+
+    def _trusted_workspace(payload: dict[str, Any]) -> Path:
+        raw = payload.get("workspace_id", payload.get("root", "."))
+        if not isinstance(raw, str) or not raw.strip():
+            raise HTTPException(400, detail="workspace_id must identify a configured workspace")
+        selected = trusted_workspaces.get(raw.strip())
+        if selected is None:
+            raise HTTPException(403, detail="workspace_not_allowed")
+        return selected
 
     def _resolve_coder() -> VibeCoder:
         if coder is not None:
@@ -289,14 +311,14 @@ def create_app(
 
     @app.post(f"{api_prefix}/index")
     async def index_project(payload: dict[str, Any]) -> dict[str, Any]:
-        root = payload.get("root") or "."
+        root = _trusted_workspace(payload)
         index = _resolve_coder().index_project(root, refresh=bool(payload.get("refresh", False)))
         return index.summary()
 
     @app.post(f"{api_prefix}/edit")
     async def edit_project(payload: dict[str, Any]) -> dict[str, Any]:
         brief = (payload.get("brief") or "").strip()
-        root = payload.get("root") or "."
+        root = _trusted_workspace(payload)
         if not brief:
             raise HTTPException(400, detail="`brief` is required")
         patch = _resolve_coder().edit_project(brief, root=root)
@@ -309,7 +331,7 @@ def create_app(
         patch_dict = payload.get("patch")
         if not isinstance(patch_dict, dict):
             raise HTTPException(400, detail="`patch` must be a ProjectPatch JSON object")
-        root = payload.get("root") or "."
+        root = _trusted_workspace(payload)
         dry_run = bool(payload.get("dry_run", False))
         try:
             patch = ProjectPatch.from_dict(patch_dict)
@@ -321,7 +343,7 @@ def create_app(
     @app.post(f"{api_prefix}/heal")
     async def heal_project(payload: dict[str, Any]) -> dict[str, Any]:
         brief = (payload.get("brief") or "").strip()
-        root = payload.get("root") or "."
+        root = _trusted_workspace(payload)
         max_rounds = int(payload.get("max_rounds") or 3)
         if not brief:
             raise HTTPException(400, detail="`brief` is required")
@@ -359,6 +381,7 @@ def run_server(
     port: int = 8765,
     coder: VibeCoder | None = None,
     coder_factory: Callable[[], VibeCoder] | None = None,
+    workspace_roots: Iterable[str | Path] | None = None,
     log_level: str = "info",
 ) -> None:
     """Boot the bundled UI/API on ``host:port`` via uvicorn."""
@@ -370,7 +393,11 @@ def run_server(
             "uvicorn is required to launch the Web UI. "
             "Install with `pip install uvicorn` or `pip install vibe-coding[web]`."
         ) from exc
-    app = create_app(coder=coder, coder_factory=coder_factory)
+    app = create_app(
+        coder=coder,
+        coder_factory=coder_factory,
+        workspace_roots=workspace_roots,
+    )
     uvicorn.run(app, host=host, port=port, log_level=log_level)
 
 
