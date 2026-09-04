@@ -234,6 +234,8 @@ export const ACCOUNT_CUSTOM_SIDEBAR_MENU_KEYS = new Set(['qsm-pro-home', 'mod-qs
 
 /** 考勤 Mod 侧栏入口（manifest.menu.id 与 mod- 前缀 key 两种形态） */
 export const ATTENDANCE_MOD_SIDEBAR_MENU_KEYS = new Set([
+  'attendance-industry-dashboard',
+  'mod-attendance-industry-dashboard',
   'attendance-industry-home',
   'mod-attendance-industry-home',
   'attendance-industry-settings',

@@ -15,8 +15,14 @@
   },
   "frontend": {
     "routes": "frontend/routes",
-    "pro_entry_path": "/attendance-industry",
+    "pro_entry_path": "/attendance-industry/dashboard",
     "menu": [
+      {
+        "id": "attendance-industry-dashboard",
+        "label": "考勤看板",
+        "icon": "fa-dashboard",
+        "path": "/attendance-industry/dashboard"
+      },
       {
         "id": "attendance-industry-home",
         "label": "考勤表转换",
@@ -32,7 +38,7 @@
     ]
   },
   "onboarding": {
-    "custom_line_hint": "统一提供考勤转换、部门人员、排班菜单与考勤 AI 助手"
+    "custom_line_hint": "统一提供考勤看板、考勤转换、部门人员、排班菜单与考勤 AI 助手"
   },
   "hooks": {},
   "industry": {

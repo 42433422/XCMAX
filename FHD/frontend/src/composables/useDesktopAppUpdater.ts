@@ -6,6 +6,7 @@ export type DesktopUpdatePhase = 'idle' | 'available' | 'available-with-error' |
 
 export interface DesktopUpdateInfo {
   version?: string
+  productVersion?: string
   buildSha?: string
   releaseNotes?: string
   releaseName?: string
@@ -49,7 +50,7 @@ export function __resetDesktopAppUpdaterForTest(): void {
 
 function versionKey(info: DesktopUpdateInfo | null): string {
   if (!info) return ''
-  return `${info.version || ''}@${info.buildSha || ''}`
+  return `${info.productVersion || info.version || ''}@${info.buildSha || ''}`
 }
 
 function isDismissed(info: DesktopUpdateInfo | null): boolean {
@@ -189,8 +190,10 @@ export function useDesktopAppUpdater() {
       Boolean(updateInfo.value?.version),
   )
 
+  const displayVersion = computed(() => updateInfo.value?.productVersion || updateInfo.value?.version || '')
+
   const badgeLabel = computed(() => {
-    const version = updateInfo.value?.version || ''
+    const version = displayVersion.value
     if (phase.value === 'downloading') {
       return `下载中 ${Math.round(downloadPercent.value)}%`
     }
@@ -203,7 +206,7 @@ export function useDesktopAppUpdater() {
   const notesText = computed(() => {
     const notes = String(updateInfo.value?.releaseNotes || '').trim()
     if (notes) return notes
-    const version = updateInfo.value?.version || ''
+    const version = displayVersion.value
     const sha = updateInfo.value?.buildSha || ''
     return [
       version ? `版本 ${version}` : '有新版本可用',
@@ -298,6 +301,7 @@ export function useDesktopAppUpdater() {
     modalOpen,
     busy,
     badgeVisible,
+    displayVersion,
     badgeLabel,
     notesText,
     mediaSlides,

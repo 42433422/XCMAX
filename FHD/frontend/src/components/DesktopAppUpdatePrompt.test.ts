@@ -65,12 +65,14 @@ describe('DesktopAppUpdatePrompt', () => {
     await flushPromises()
     emitUpdate('update-available', {
       version: '1.0.0',
+      productVersion: '1.0.0.1',
       buildSha: 'abcdef123456',
       releaseNotes: '- fix mac OTA\n- cursor-style prompt',
     })
     await nextTick()
     expect(wrapper.find('.desktop-update-chip').exists()).toBe(true)
-    expect(wrapper.text()).toContain('可更新 1.0.0')
+    expect(wrapper.text()).toContain('可更新 1.0.0.1')
+    expect(wrapper.text()).not.toContain('可更新 1.0.0 ')
   })
 
   it('keeps the update visible when refreshed status includes an error', async () => {
@@ -341,5 +343,17 @@ describe('DesktopAppUpdatePrompt', () => {
     await nextTick()
     // notesText fallback uses "版本 {version}" when releaseNotes is empty
     expect(wrapper.text()).toContain('版本 1.0.0')
+  })
+
+  it('uses the four-part product version in the badge, modal and fallback notes', async () => {
+    const wrapper = mountPrompt()
+    await flushPromises()
+    emitUpdate('update-available', { version: '1.0.0', productVersion: '1.0.0.1' })
+    await nextTick()
+    expect(wrapper.find('.desktop-update-chip').text()).toContain('可更新 1.0.0.1')
+    await wrapper.find('.desktop-update-chip').trigger('click')
+    await nextTick()
+    expect(wrapper.text()).toContain('新版本 1.0.0.1 可用')
+    expect(wrapper.text()).toContain('版本 1.0.0.1')
   })
 })

@@ -1,5 +1,11 @@
 const modRoutes = [
   {
+    path: '/attendance-industry/dashboard',
+    name: 'attendance-industry-dashboard',
+    component: () => import('./views/DashboardView.vue'),
+    meta: { title: '考勤看板', mod: 'attendance-industry' },
+  },
+  {
     path: '/attendance-industry',
     name: 'attendance-industry-home',
     component: () => import('./views/HomeView.vue'),
@@ -14,6 +20,12 @@ const modRoutes = [
 ];
 
 const modMenu = [
+  {
+    id: 'attendance-industry-dashboard',
+    label: '考勤看板',
+    icon: 'fa-dashboard',
+    path: '/attendance-industry/dashboard',
+  },
   {
     id: 'attendance-industry-home',
     label: '考勤表转换',

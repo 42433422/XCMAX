@@ -5,6 +5,12 @@ import { SUNBIRD_CLIENT_MOD_ID } from './accountModBinding'
 /** 与 mods/attendance-industry/manifest.json frontend.menu 保持一致 */
 export const ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU: NonNullable<ModInfo['menu']> = [
   {
+    id: 'attendance-industry-dashboard',
+    label: '考勤看板',
+    icon: 'fa-dashboard',
+    path: '/attendance-industry/dashboard',
+  },
+  {
     id: 'attendance-industry-home',
     label: '考勤表转换',
     icon: 'fa-file-excel-o',
@@ -43,7 +49,7 @@ export function buildAttendanceIndustryModStub(): ModInfo {
     author: 'XCAGI',
     description: '跨行业通用考勤、排班与出勤统计模块',
     primary: true,
-    frontend: { pro_entry_path: '/attendance-industry' },
+    frontend: { pro_entry_path: '/attendance-industry/dashboard' },
     menu: ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU.map((row) => ({ ...row })),
     menu_overrides: [],
     industry: {

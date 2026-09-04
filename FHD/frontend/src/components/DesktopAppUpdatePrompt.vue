@@ -90,8 +90,8 @@
       </div>
 
       <p class="desktop-update-modal__lead">
-        <template v-if="updateInfo?.version">
-          新版本 <strong>{{ updateInfo.version }}</strong> 可用
+        <template v-if="displayVersion">
+          新版本 <strong>{{ displayVersion }}</strong> 可用
         </template>
         <template v-else>有新版本可用</template>
         <span v-if="updateInfo?.buildSha" class="muted"> · 构建 {{ updateInfo.buildSha.slice(0, 12) }} </span>
@@ -139,6 +139,7 @@ const {
   modalOpen,
   busy,
   badgeVisible,
+  displayVersion,
   badgeLabel,
   notesText,
   mediaSlides,
