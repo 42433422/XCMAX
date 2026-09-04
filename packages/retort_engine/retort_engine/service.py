@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+import os
 from pathlib import Path
 from typing import Any
 
@@ -131,6 +132,10 @@ def _trusted_path_registry(paths: Iterable[str | Path]) -> dict[str, str]:
 def _authorize_http_payload(
     payload: dict[str, Any], trusted_paths: dict[str, str]
 ) -> dict[str, Any]:
+    trusted_roots = tuple(
+        os.path.realpath(os.path.abspath(configured))
+        for configured in set(trusted_paths.values())
+    )
     authorized = dict(payload)
     for key in _HTTP_PATH_FIELDS:
         if key not in authorized:
@@ -143,7 +148,14 @@ def _authorize_http_payload(
         selected = trusted_paths.get(raw.strip())
         if selected is None:
             raise ValueError(f"{key} is not an allowed server path")
-        authorized[key] = selected
+        candidate = os.path.realpath(os.path.abspath(selected))
+        if not any(
+            candidate == root
+            or candidate.startswith(root.rstrip(os.sep) + os.sep)
+            for root in trusted_roots
+        ):
+            raise ValueError(f"{key} escapes the configured server paths")
+        authorized[key] = candidate
     return authorized
 
 

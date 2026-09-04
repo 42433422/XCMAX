@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from fastapi import APIRouter, Body, HTTPException
@@ -17,6 +18,20 @@ from modstore_server.api.dto import ConfigDTO, ExportFhdShellDTO
 from modstore_server.infrastructure import library_paths
 
 router = APIRouter(tags=["config"])
+
+
+def _configured_repo_path(raw: str, *, field: str) -> str:
+    """Confine HTTP-selected repository paths to the deployed FHD tree."""
+
+    value = raw.strip()
+    if not value:
+        return ""
+    root = os.path.realpath(os.path.abspath(library_paths.fhd_repo_root()))
+    candidate = os.path.realpath(os.path.abspath(Path(value).expanduser()))
+    root_prefix = root.rstrip(os.sep) + os.sep
+    if candidate != root and not candidate.startswith(root_prefix):
+        raise HTTPException(400, f"{field} 必须位于 FHD 仓库根目录内")
+    return candidate
 
 
 @router.get("/api/config")
@@ -70,8 +85,8 @@ def put_config(body: ConfigDTO):
     xr = (body.xcagi_root or "").strip()
     url = (body.xcagi_backend_url or "").strip()
     cfg = RepoConfig(
-        library_root=str(Path(lr).expanduser().resolve()) if lr else "",
-        xcagi_root=str(Path(xr).expanduser().resolve()) if xr else "",
+        library_root=_configured_repo_path(lr, field="library_root"),
+        xcagi_root=_configured_repo_path(xr, field="xcagi_root"),
         xcagi_backend_url=url,
     )
     library_paths.save_config(cfg)

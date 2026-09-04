@@ -78,9 +78,11 @@ def _backend_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def _workspace_root(ctx: Dict[str, Any], payload: Dict[str, Any]) -> Path:
-    raw = payload.get("workspace_root") or ctx.get("workspace_root") or Path.cwd()
-    return Path(str(raw)).expanduser()
+def _workspace_root(ctx: Dict[str, Any]) -> Path:
+    """Return the server-selected workspace; request payloads cannot replace it."""
+
+    raw = ctx.get("workspace_root") or Path.cwd()
+    return Path(str(raw)).expanduser().resolve()
 
 
 def _resolve_output(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
@@ -89,9 +91,14 @@ def _resolve_output(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
         or RULE_SPEC.get("default_output_relpath")
         or "outputs/avatar_profile.json"
     ).strip()
-    p = Path(rel).expanduser()
-    if not p.is_absolute():
-        p = _workspace_root(ctx, payload) / rel
+    requested = Path(rel)
+    if requested.is_absolute() or ".." in requested.parts:
+        raise ValueError("output_relpath must stay inside the employee workspace")
+    root = _workspace_root(ctx)
+    p = (root / requested).resolve()
+    root_prefix = root.as_posix().rstrip("/") + "/"
+    if p != root and not p.as_posix().startswith(root_prefix):
+        raise ValueError("output_relpath must stay inside the employee workspace")
     p.parent.mkdir(parents=True, exist_ok=True)
     return p
 

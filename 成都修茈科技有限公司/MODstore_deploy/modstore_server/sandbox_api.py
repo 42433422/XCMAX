@@ -90,9 +90,9 @@ def api_sandbox_push_and_test(body: PushAndTestRequest, _user=Depends(require_us
 
     from modstore_server.infrastructure import library_paths
 
-    lib = library_paths.lib()
-    mod_dir = lib / mod_id
-    if not mod_dir.is_dir():
+    try:
+        mod_dir = library_paths.mod_dir(mod_id)
+    except (FileNotFoundError, ValueError):
         return {"ok": False, "error": f"Mod '{mod_id}' not found in library"}
 
     import os

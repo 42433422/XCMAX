@@ -84,3 +84,23 @@ def test_avatar_generation_employee_presets_batch_avatar_sheet(tmp_path: Path):
         "xiaoc_human_aquatic",
         "mobile_contact_avatar",
     }
+
+
+def test_avatar_generation_rejects_payload_selected_output_escape(tmp_path: Path):
+    module = _load_employee_module()
+    outside = tmp_path.parent / "avatar-escape.json"
+
+    result = asyncio.run(
+        module.run(
+            {
+                "output_relpath": str(outside),
+                "workspace_root": str(tmp_path.parent),
+                "generate_image": False,
+            },
+            {"workspace_root": str(tmp_path)},
+        )
+    )
+
+    assert result["ok"] is False
+    assert "employee workspace" in result["error"]
+    assert not outside.exists()
