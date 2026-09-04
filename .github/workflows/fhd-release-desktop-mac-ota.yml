@@ -16,13 +16,29 @@ on:
         options:
           - "1.0.0.1"
           - "1.0.0.0"
+      release_sha:
+        description: "Immutable 40-character source SHA"
+        required: true
+        type: string
+      security_scan_run_id:
+        description: "Most recent completed all-source zero-finding scan run ID"
+        required: true
+        type: string
+      previous_security_scan_run_id:
+        description: "Prior-day all-source zero-finding scan run ID for the same SHA"
+        required: true
+        type: string
 
 permissions:
   contents: write
+  actions: read
 
 defaults:
   run:
     working-directory: FHD
+
+env:
+  XCAGI_BUILD_SHA: ${{ inputs.release_sha }}
 
 jobs:
   macos-ota:
@@ -38,6 +54,31 @@ jobs:
       CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+
+      - name: Download normalized security evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: xcagi-security-release-reports
+          path: ${{ runner.temp }}/security-reports/current
+          run-id: ${{ inputs.security_scan_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download prior-day normalized security evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: xcagi-security-release-reports
+          path: ${{ runner.temp }}/security-reports/previous
+          run-id: ${{ inputs.previous_security_scan_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Enforce exact-SHA two-day security clearance
+        run: >-
+          python scripts/security/verify_security_scan_pair.py
+          --previous-dir "${RUNNER_TEMP}/security-reports/previous"
+          --current-dir "${RUNNER_TEMP}/security-reports/current"
+          --release-sha "${XCAGI_BUILD_SHA}"
 
       - name: Preflight macOS OTA secrets
         working-directory: .
@@ -123,7 +164,7 @@ jobs:
           test -f "${src}/latest-mac.yml"
           test -f "${src}/XCAGI-Enterprise-${v}-mac-arm64.zip" || \
             test -n "$(find "${src}" -maxdepth 1 -name 'XCAGI-*-mac-*.zip' -print -quit)"
-          grep -Fxq "buildSha: ${GITHUB_SHA}" "${src}/latest-mac.yml"
+          grep -Fxq "buildSha: ${XCAGI_BUILD_SHA}" "${src}/latest-mac.yml"
           grep -Eq "^releaseDate: ['\"]?[0-9]{4}-[0-9]{2}-[0-9]{2}T" "${src}/latest-mac.yml"
           grep -Eq '^signature: ed25519:[A-Za-z0-9+/=]+$' "${src}/latest-mac.yml"
 
@@ -211,10 +252,10 @@ jobs:
           curl -fsSL --retry 3 --retry-all-errors --connect-timeout 15 --max-time 60 \
             "https://xiu-ci.com/releases/stable/enterprise/latest-mac.yml" -o "$tmp"
           grep -Fxq "productVersion: ${v}" "$tmp"
-          grep -Fxq "buildSha: ${GITHUB_SHA}" "$tmp"
+          grep -Fxq "buildSha: ${XCAGI_BUILD_SHA}" "$tmp"
           grep -Eq "^releaseDate: ['\"]?[0-9]{4}-[0-9]{2}-[0-9]{2}T" "$tmp"
           grep -Eq '^signature: ed25519:[A-Za-z0-9+/=]+$' "$tmp"
-          echo "Public macOS OTA feed verified for ${GITHUB_SHA}"
+          echo "Public macOS OTA feed verified for ${XCAGI_BUILD_SHA}"
 
       - name: Publish download center metadata and changelog
         working-directory: FHD
@@ -228,5 +269,5 @@ jobs:
           chmod +x scripts/package/publish-macos-download-center.sh
           scripts/package/publish-macos-download-center.sh \
             "$v" \
-            "${GITHUB_SHA}" \
+            "${XCAGI_BUILD_SHA}" \
             "${GITHUB_WORKSPACE}/FHD/release/xcagi-v${v}/enterprise"

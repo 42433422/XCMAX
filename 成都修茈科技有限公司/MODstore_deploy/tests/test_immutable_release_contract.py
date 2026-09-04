@@ -237,6 +237,16 @@ def test_production_workflow_requires_manually_orchestrated_exact_sha() -> None:
         trigger = workflow[True]
         assert "workflow_run" not in trigger
         assert trigger["workflow_dispatch"]["inputs"]["git_sha"]["required"] is True
+        assert (
+            trigger["workflow_dispatch"]["inputs"]["security_scan_run_id"]["required"]
+            is True
+        )
+        assert (
+            trigger["workflow_dispatch"]["inputs"]["previous_security_scan_run_id"][
+                "required"
+            ]
+            is True
+        )
         deploy = workflow["jobs"]["deploy"]
         rendered = str(deploy)
         assert "TARGET_SHA" in rendered
@@ -246,6 +256,8 @@ def test_production_workflow_requires_manually_orchestrated_exact_sha() -> None:
         assert "xcmax-immutable-release.sh" in rendered
         assert "modstore-deployment-correlation" in rendered
         assert "actions/upload-artifact@v4" in rendered
+        assert "verify_security_scan_pair.py" in rendered
+        assert "actions/download-artifact@v4" in rendered
         assert "reset --hard" not in rendered
 
 

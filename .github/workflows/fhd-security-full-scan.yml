@@ -42,6 +42,7 @@ jobs:
           mkdir -p "${RUNNER_TEMP}/security-native" "${RUNNER_TEMP}/security-reports"
 
       - name: Export open and manually dismissed CodeQL and Dependabot alerts
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -54,6 +55,9 @@ jobs:
               "repos/${GITHUB_REPOSITORY}/dependabot/alerts?state=${state}&per_page=100" \
               > "${RUNNER_TEMP}/security-native/dependabot-${state}.json"
           done
+          gh api --paginate --slurp \
+            "repos/${GITHUB_REPOSITORY}/code-scanning/analyses?ref=refs/heads/main&tool_name=CodeQL&per_page=100" \
+            > "${RUNNER_TEMP}/security-native/codeql-analyses.json"
           jq -s '[.[][][]]' \
             "${RUNNER_TEMP}/security-native/codeql-open.json" \
             "${RUNNER_TEMP}/security-native/codeql-dismissed.json" \
@@ -64,6 +68,7 @@ jobs:
             > "${RUNNER_TEMP}/security-native/dependabot.json"
 
       - name: Run gitleaks without hiding findings
+        continue-on-error: true
         run: |
           set +e
           docker run --rm -v "${PWD}:/repo" zricethezav/gitleaks:latest detect \
@@ -72,6 +77,7 @@ jobs:
           test -s gitleaks-release.sarif && mv gitleaks-release.sarif "${RUNNER_TEMP}/security-native/gitleaks.sarif"
 
       - name: Run Trivy filesystem scan including unfixed findings
+        continue-on-error: true
         uses: aquasecurity/trivy-action@0.35.0
         with:
           scan-type: fs
@@ -83,8 +89,12 @@ jobs:
           exit-code: "0"
 
       - name: Build and scan final FHD production image
+        continue-on-error: true
+        working-directory: .
         run: docker build --target production -f FHD/docker/Dockerfile.fhd-api -t xcagi-release-scan:${{ inputs.release_sha }} FHD
-      - uses: aquasecurity/trivy-action@0.35.0
+      - name: Scan final FHD production image
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: xcagi-release-scan:${{ inputs.release_sha }}
           format: json
@@ -94,6 +104,7 @@ jobs:
           exit-code: "0"
 
       - name: Audit locked Python dependencies
+        continue-on-error: true
         run: |
           set +e
           python -m pip install --quiet pip-audit uv
@@ -104,6 +115,7 @@ jobs:
             -o "${RUNNER_TEMP}/security-native/python-dependencies.json"
 
       - name: Audit every shipped Node lockfile
+        continue-on-error: true
         run: |
           set +e
           for directory in FHD/frontend FHD/desktop FHD/XCAGI \
@@ -117,6 +129,7 @@ jobs:
             > "${RUNNER_TEMP}/security-native/node-dependencies.json"
 
       - name: Run desktop prerelease Electron scan
+        continue-on-error: true
         env:
           ELECTRONEGATIVITY_REPORT_DIR: ${{ runner.temp }}/desktop-security
         run: |
@@ -127,6 +140,7 @@ jobs:
               "${RUNNER_TEMP}/security-native/desktop-prerelease.sarif"
 
       - name: Scan production host packages read-only
+        continue-on-error: true
         env:
           HOST: ${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}
           SSH_KEY: ${{ secrets.FHD_PUSH_SSH_KEY || secrets.SERVER_SSH_KEY }}
@@ -142,6 +156,8 @@ jobs:
           fi
 
       - name: Normalize all scanner reports
+        if: always()
+        continue-on-error: true
         run: |
           set +e
           normalize() {
@@ -150,7 +166,14 @@ jobs:
               --release-sha "${{ inputs.release_sha }}" \
               --output "${RUNNER_TEMP}/security-reports/$1.json"
           }
-          normalize codeql codeql "${RUNNER_TEMP}/security-native/codeql.json"
+          python FHD/scripts/security/normalize_security_report.py \
+            --scanner codeql --kind codeql \
+            --input "${RUNNER_TEMP}/security-native/codeql.json" \
+            --provenance-input "${RUNNER_TEMP}/security-native/codeql-analyses.json" \
+            --required-codeql-category /language:python \
+            --required-codeql-category /language:javascript-typescript \
+            --release-sha "${{ inputs.release_sha }}" \
+            --output "${RUNNER_TEMP}/security-reports/codeql.json"
           normalize dependabot dependabot "${RUNNER_TEMP}/security-native/dependabot.json"
           normalize trivy-filesystem trivy "${RUNNER_TEMP}/security-native/trivy-filesystem.json"
           normalize trivy-image trivy "${RUNNER_TEMP}/security-native/trivy-image.json"
@@ -161,6 +184,7 @@ jobs:
           normalize production-host trivy "${RUNNER_TEMP}/security-native/production-host.json"
 
       - name: Enforce all-source zero critical/high gate
+        if: always()
         id: release-gate
         continue-on-error: true
         run: >-
@@ -190,5 +214,5 @@ jobs:
           if-no-files-found: error
 
       - name: Keep security-release-gate fail closed
-        if: steps.release-gate.outcome != 'success'
+        if: ${{ always() && steps.release-gate.outcome != 'success' }}
         run: exit 1

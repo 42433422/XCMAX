@@ -27,6 +27,14 @@ on:
         required: false
         type: string
         default: "1.0.0.1"
+      security_scan_run_id:
+        description: Most recent completed all-source zero-finding scan run ID
+        required: true
+        type: string
+      previous_security_scan_run_id:
+        description: Prior-day all-source zero-finding scan run ID for the same SHA
+        required: true
+        type: string
 
 concurrency:
   group: modstore-prod-deploy
@@ -34,11 +42,16 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.git_sha }}
+
       - name: Resolve exact tested SHA
         id: target
         env:
@@ -48,6 +61,31 @@ jobs:
           target="${REQUESTED_SHA:-}"
           [[ "$target" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::invalid exact SHA: $target"; exit 1; }
           echo "sha=$target" >> "$GITHUB_OUTPUT"
+
+      - name: Download normalized security evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: xcagi-security-release-reports
+          path: ${{ runner.temp }}/security-reports/current
+          run-id: ${{ inputs.security_scan_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download prior-day normalized security evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: xcagi-security-release-reports
+          path: ${{ runner.temp }}/security-reports/previous
+          run-id: ${{ inputs.previous_security_scan_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Enforce exact-SHA two-day security clearance
+        env:
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+        run: >-
+          python FHD/scripts/security/verify_security_scan_pair.py
+          --previous-dir "${RUNNER_TEMP}/security-reports/previous"
+          --current-dir "${RUNNER_TEMP}/security-reports/current"
+          --release-sha "${TARGET_SHA}"
 
       - name: Preserve exact deployment correlation
         env:

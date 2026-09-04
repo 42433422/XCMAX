@@ -11,6 +11,11 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+  schedule:
+    # Keep the release scanner's CodeQL provenance fresh enough for the
+    # required two-consecutive-day zero-finding proof.
+    - cron: "17 18 * * *"
 
 jobs:
   analyze:

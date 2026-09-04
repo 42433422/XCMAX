@@ -296,6 +296,14 @@ def test_ci_requires_explicit_manual_opt_in_for_image_archive() -> None:
         assert "== 'staging' && '1' || '0'" in workflow
         assert 'FHD_CVM_PUSH_TIMEOUT: "75m"' in workflow
         assert "timeout-minutes: 90" in workflow
+        assert "security_scan_run_id:" in workflow
+        assert "previous_security_scan_run_id:" in workflow
+        assert "verify_security_scan_pair.py" in workflow
+        assert "inputs.release_channel == 'stable'" in workflow
+        cvm_job = workflow.split("  cvm-push-release:", 1)[1].split(
+            "  dispatch-evolution-after-cvm:", 1
+        )[0]
+        assert "startsWith(github.ref, 'refs/tags/FHD/v')" not in cvm_job
 
 
 def test_evolution_dispatch_runs_before_any_checkout_directory_exists() -> None:

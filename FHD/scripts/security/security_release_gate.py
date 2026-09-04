@@ -88,6 +88,8 @@ def evaluate(
             blockers.append(f"{scanner}:report_stale")
         if release_sha and str(report.get("release_sha") or "").lower() != release_sha.lower():
             blockers.append(f"{scanner}:release_sha_mismatch")
+        if release_sha and str(report.get("source_sha") or "").lower() != release_sha.lower():
+            blockers.append(f"{scanner}:source_sha_mismatch")
         findings = report.get("findings") if isinstance(report.get("findings"), list) else []
         blocking_ids: list[str] = []
         secret_ids: list[str] = []

@@ -13,6 +13,7 @@ import {
   INDETERMINATE_REVIEW_RECOVERY_MAX_AGE_MS,
   INITIAL_PR_LABELS,
   TASK_CONCURRENCY,
+  automaticProductionDeploymentDecision,
   botMergeCheckArgs,
   botMergeWatchdogDecision,
   buildMergeConflictPayload,
@@ -42,6 +43,17 @@ import {
   selfUpdateTemporaryPath,
   taskHasRecoverableIndeterminateReviewConflict,
 } from './merge_worker.mjs';
+
+test('automatic merge never bypasses the security release orchestrator by default', () => {
+  assert.deepEqual(automaticProductionDeploymentDecision(false), {
+    allowed: false,
+    reason: 'release_orchestrator_security_evidence_required',
+  });
+  assert.deepEqual(automaticProductionDeploymentDecision(true), {
+    allowed: true,
+    reason: 'explicitly_enabled',
+  });
+});
 
 test('self-update accepts only the exact GitHub blob for the merge worker source', () => {
   const source = Buffer.from(
