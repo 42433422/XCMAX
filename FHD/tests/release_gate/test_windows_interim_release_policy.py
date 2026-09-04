@@ -4,9 +4,9 @@ FHD_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _workflow() -> str:
-    return (
-        FHD_ROOT / ".github" / "workflows" / "windows-macalign-hotfix.yml"
-    ).read_text(encoding="utf-8")
+    return (FHD_ROOT / ".github" / "workflows" / "windows-macalign-hotfix.yml").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_unsigned_windows_lane_is_quarantined_and_has_no_publish_job() -> None:

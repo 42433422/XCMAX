@@ -9,9 +9,7 @@ from pathlib import Path
 FHD_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = FHD_ROOT / "scripts" / "package" / "generate-windows-hotfix-pointer.py"
 WORKFLOW = FHD_ROOT / ".github" / "workflows" / "windows-macalign-hotfix.yml"
-ROOT_WORKFLOW = (
-    FHD_ROOT.parent / ".github" / "workflows" / "fhd-windows-macalign-hotfix.yml"
-)
+ROOT_WORKFLOW = FHD_ROOT.parent / ".github" / "workflows" / "fhd-windows-macalign-hotfix.yml"
 
 
 def _metadata(path: Path, version: str = "1.0.0.1") -> None:
