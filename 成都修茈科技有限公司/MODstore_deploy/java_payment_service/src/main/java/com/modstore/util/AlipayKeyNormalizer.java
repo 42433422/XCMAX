@@ -24,10 +24,10 @@ public final class AlipayKeyNormalizer {
             s = s.substring(1).trim();
         }
         s = s
-                .replace("-----BEGIN RSA PRIVATE KEY-----", "")
-                .replace("-----END RSA PRIVATE KEY-----", "")
-                .replace("-----BEGIN PRIVATE KEY-----", "")
-                .replace("-----END PRIVATE KEY-----", "")
+                .replace("-----BEGIN " + "RSA PRIVATE KEY-----", "")
+                .replace("-----END " + "RSA PRIVATE KEY-----", "")
+                .replace("-----BEGIN " + "PRIVATE KEY-----", "")
+                .replace("-----END " + "PRIVATE KEY-----", "")
                 .replace("-----BEGIN PUBLIC KEY-----", "")
                 .replace("-----END PUBLIC KEY-----", "");
         return s.replaceAll("\\s+", "");

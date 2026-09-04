@@ -27,6 +27,7 @@ from modman.repo_config import resolved_xcagi
 from modman.store import (
     build_mod_zip_bytes,
     deploy_to_xcagi,
+    find_mod_dir_by_manifest_id,
     list_mods,
     pull_from_xcagi,
 )
@@ -203,15 +204,18 @@ def api_v1_mod_sync_list_mods(
     return {"data": rows}
 
 
-@router.get("/export-zip/{mod_id}", summary="下载 Mod zip（供本机 modman remote-deploy）")
+@router.get(
+    "/export-zip/{mod_id}", summary="下载 Mod zip（供本机 modman remote-deploy）"
+)
 def api_v1_mod_sync_export_zip(
     mod_id: str,
     authorization: Optional[str] = Header(None, alias="Authorization"),
 ):
     auth = _require_mod_sync_auth(authorization)
     mid = _assert_sync_can_read_mod(auth, mod_id)
-    d = _lib() / mid
-    if not d.is_dir():
+    try:
+        d = find_mod_dir_by_manifest_id(_lib(), mid)
+    except (ValueError, FileNotFoundError):
         raise HTTPException(404, f"Mod 不存在: {mid}")
     buf = build_mod_zip_bytes(d)
     return StreamingResponse(

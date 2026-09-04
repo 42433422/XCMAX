@@ -19,6 +19,7 @@ REQUIRED_SCANNERS = (
     "node-dependencies",
     "desktop-prerelease",
     "gitleaks",
+    "credential-rotation",
     "production-host",
 )
 BLOCKING_SEVERITIES = {"critical", "high"}

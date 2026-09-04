@@ -58,7 +58,12 @@ WORKFLOW_RENAMES = {
 
 # These workflows use only absolute/remote commands.  Injecting the normal FHD
 # working directory before checkout makes their first preflight step fail.
-FHD_NO_DEFAULTS = {"cvm-autonomy-watcher.yml"}
+FHD_NO_DEFAULTS = {
+    "cvm-autonomy-watcher.yml",
+    # This release scan intentionally covers the monorepo and already uses
+    # explicit FHD/ paths where component-local access is required.
+    "security-full-scan.yml",
+}
 MOD_NO_DEFAULTS = {"prod-deploy-receipt.yml", "prod-deploy.yml"}
 
 MOD_RENAMES = {

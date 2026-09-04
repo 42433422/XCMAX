@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -174,3 +175,89 @@ def test_fuzzy_anchor_within_tolerance(tmp_path: Path) -> None:
     assert result.applied
     text = (tmp_path / "x.py").read_text(encoding="utf-8")
     assert "return 100" in text and "return 1\n" not in text
+
+
+def test_untrusted_patch_id_never_becomes_a_backup_path(tmp_path: Path) -> None:
+    _make_project(tmp_path)
+    patch = ProjectPatch(
+        patch_id="../../*-attacker-controlled",
+        edits=[FileEdit(path="pkg/new.py", operation="create", contents="SAFE = True\n")],
+    )
+    applier = PatchApplier(tmp_path)
+
+    result = applier.apply(patch)
+
+    assert result.applied
+    backup = Path(result.backup_dir)
+    assert backup.parent == applier.backup_dir
+    assert patch.patch_id not in backup.name
+    assert applier.rollback(patch.patch_id)
+    assert not (tmp_path / "pkg" / "new.py").exists()
+
+
+def test_rollback_rejects_tampered_manifest_project_escape(tmp_path: Path) -> None:
+    _make_project(tmp_path)
+    outside = tmp_path.parent / f"{tmp_path.name}-outside.txt"
+    outside.write_text("do not touch\n", encoding="utf-8")
+    patch = ProjectPatch(
+        patch_id="tampered-target",
+        edits=[FileEdit(path="pkg/delete_me.py", operation="delete")],
+    )
+    applier = PatchApplier(tmp_path)
+    result = applier.apply(patch)
+    manifest_path = Path(result.backup_dir) / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["entries"][0]["path"] = f"../{outside.name}"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    assert not applier.rollback(patch.patch_id)
+    assert outside.read_text(encoding="utf-8") == "do not touch\n"
+
+
+def test_rollback_rejects_backup_symlink_escape(tmp_path: Path) -> None:
+    _make_project(tmp_path)
+    outside = tmp_path.parent / f"{tmp_path.name}-backup-source.txt"
+    outside.write_text("attacker controlled\n", encoding="utf-8")
+    patch = ProjectPatch(
+        patch_id="tampered-backup",
+        edits=[FileEdit(path="pkg/delete_me.py", operation="delete")],
+    )
+    applier = PatchApplier(tmp_path)
+    result = applier.apply(patch)
+    backup_source = Path(result.backup_dir) / "pkg" / "delete_me.py"
+    backup_source.unlink()
+    backup_source.symlink_to(outside)
+
+    assert not applier.rollback(patch.patch_id)
+    assert not (tmp_path / "pkg" / "delete_me.py").exists()
+
+
+def test_modify_rejects_project_symlink_escape(tmp_path: Path) -> None:
+    _make_project(tmp_path)
+    outside = tmp_path.parent / f"{tmp_path.name}-project-target.py"
+    outside.write_text("VALUE = 'outside'\n", encoding="utf-8")
+    target = tmp_path / "pkg" / "math.py"
+    target.unlink()
+    target.symlink_to(outside)
+    patch = ProjectPatch(
+        edits=[
+            FileEdit(
+                path="pkg/math.py",
+                operation="modify",
+                hunks=[
+                    Hunk(
+                        anchor_before="VALUE = '",
+                        old_text="outside",
+                        new_text="changed",
+                        anchor_after="'\n",
+                    )
+                ],
+            )
+        ]
+    )
+
+    result = PatchApplier(tmp_path).apply(patch)
+
+    assert not result.applied
+    assert "escapes root" in result.error
+    assert outside.read_text(encoding="utf-8") == "VALUE = 'outside'\n"

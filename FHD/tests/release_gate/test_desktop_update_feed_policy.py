@@ -156,6 +156,11 @@ def test_emergency_mac_feed_repair_preserves_release_identity_and_path_parity() 
     assert "actions: read" in workflow
     assert "contents: write" in workflow
     assert "source_run_id" in workflow
+    assert "security_scan_run_id:" in workflow
+    assert "previous_security_scan_run_id:" in workflow
+    assert "ref: ${{ inputs.build_sha }}" in workflow
+    assert "verify_security_scan_pair.py" in workflow
+    assert '--release-sha "${{ inputs.build_sha }}"' in workflow
     assert "--name xcagi-desktop-macos-enterprise" in workflow
     assert "RUN_CONCLUSION" in workflow
     assert "RUN_WORKFLOW" in workflow
@@ -164,7 +169,7 @@ def test_emergency_mac_feed_repair_preserves_release_identity_and_path_parity() 
     assert "SOURCE_ARTIFACT_SIZE" in workflow
     assert 'ZIP_BUILD_SHA="$(python3 scripts/deploy/extract_zip_build_sha.py' in workflow
     assert "Canonical ZIP identity differs from the source release run" in workflow
-    assert "build_sha override differs from the canonical ZIP identity" in workflow
+    assert "build_sha differs from the canonical ZIP identity" in workflow
     assert '"https://xiu-ci.com/xcagi-v${PRODUCT_VERSION}/manifest.json"' in workflow
     assert 'MANIFEST_SHA="$(printf' in workflow
     assert "Canonical ZIP identity does not match the published release manifest" in workflow
@@ -190,6 +195,19 @@ def test_emergency_mac_feed_repair_preserves_release_identity_and_path_parity() 
     assert restorer.index('mv -f "${OFFICIAL_DEST}/${ZIP_NAME}.part"') < restorer.index(
         'mv -f "${OFFICIAL_DEST}/latest-mac.yml.part"'
     )
+
+
+def test_unverifiable_local_mac_feed_lane_is_fail_closed() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "publish-local-mac-feed.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "local upload (disabled)" in workflow
+    assert "Use Release Orchestrator" in workflow
+    assert "exit 1" in workflow
+    assert "scp " not in workflow
+    assert "ssh " not in workflow
+    assert "latest-mac.yml" not in workflow
 
 
 def test_update_metadata_requires_full_build_sha(tmp_path: Path) -> None:

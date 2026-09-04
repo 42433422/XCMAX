@@ -137,6 +137,8 @@ def test_macos_release_flow_publishes_download_center_metadata_and_has_recovery_
     assert "verify_security_scan_pair.py" in mac_workflow
     assert "ref: ${{ inputs.release_sha }}" in mac_workflow
     assert "source_run_id:" in recovery_workflow
+    assert "ref: ${{ inputs.release_git_sha }}" in recovery_workflow
+    assert 'step_ok("Enforce exact-SHA two-day security clearance")' in recovery_workflow
     assert "gh run download" in recovery_workflow
     assert "publish-macos-download-center.sh" in recovery_workflow
     assert "release_ready == false" in publish_script

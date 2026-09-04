@@ -338,7 +338,9 @@ def import_zip(zip_path: Path, library: Path, *, replace: bool = True) -> Path:
     mid = (data.get("id") or "").strip()
     if mid != mod_dir.name:
         shutil.rmtree(mod_dir, ignore_errors=True)
-        raise ValueError(f"zip 内文件夹名 {mod_dir.name!r} 须与 manifest.id {mid!r} 一致")
+        raise ValueError(
+            f"zip 内文件夹名 {mod_dir.name!r} 须与 manifest.id {mid!r} 一致"
+        )
     ve = validate_manifest_dict(data)
     if ve:
         raise ValueError("manifest: " + "; ".join(ve))
@@ -347,19 +349,26 @@ def import_zip(zip_path: Path, library: Path, *, replace: bool = True) -> Path:
 
 def write_registry_note(library: Path, note: dict) -> None:
     p = library / "_registry.json"
-    p.write_text(json.dumps(note, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    p.write_text(
+        json.dumps(note, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
 
 
 def remove_mod(library: Path, mod_id: str) -> None:
     if not mod_id or "/" in mod_id or "\\" in mod_id or mod_id in (".", ".."):
         raise ValueError("非法 mod id")
     lib = library.resolve()
-    p = (library / mod_id).resolve()
-    if p.parent.resolve() != lib:
-        raise ValueError("非法路径")
-    if not p.is_dir():
-        raise FileNotFoundError(mod_id)
-    shutil.rmtree(p)
+    for candidate in lib.iterdir():
+        if candidate.name != mod_id:
+            continue
+        resolved = candidate.resolve()
+        if candidate.is_symlink() or resolved.parent != lib:
+            raise ValueError("非法路径")
+        if resolved.is_dir():
+            shutil.rmtree(resolved)
+            return
+        break
+    raise FileNotFoundError(mod_id)
 
 
 def find_mod_dir_by_manifest_id(library: Path, mod_id: str) -> Path:
@@ -382,9 +391,6 @@ def find_mod_dir_by_manifest_id(library: Path, mod_id: str) -> Path:
             p = d.resolve()
             if p.parent.resolve() == lib:
                 return p
-    p = (library / target).resolve()
-    if p.is_dir() and p.parent.resolve() == lib:
-        return p
     raise FileNotFoundError(target)
 
 

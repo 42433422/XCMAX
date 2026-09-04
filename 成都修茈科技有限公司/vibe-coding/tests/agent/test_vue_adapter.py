@@ -22,8 +22,7 @@ def test_extensions(adapter: VueLanguageAdapter) -> None:
 
 
 def test_script_setup_extracts_symbols(adapter: VueLanguageAdapter) -> None:
-    src = textwrap.dedent(
-        """\
+    src = textwrap.dedent("""\
         <script setup lang="ts">
         import { ref } from "vue";
 
@@ -41,8 +40,7 @@ def test_script_setup_extracts_symbols(adapter: VueLanguageAdapter) -> None:
         <template>
           <button @click="increment">{{ label }}: {{ count }}</button>
         </template>
-        """
-    )
+        """)
     pf = adapter.parse(path="MyButton.vue", source=src)
     names = {s.name for s in pf.symbols}
     # Function declarations are detected; bare ``const`` bindings aren't
@@ -57,8 +55,7 @@ def test_script_setup_extracts_symbols(adapter: VueLanguageAdapter) -> None:
 
 
 def test_classic_options_api(adapter: VueLanguageAdapter) -> None:
-    src = textwrap.dedent(
-        """\
+    src = textwrap.dedent("""\
         <script>
         export default {
           name: 'MyComponent',
@@ -72,17 +69,23 @@ def test_classic_options_api(adapter: VueLanguageAdapter) -> None:
         <template>
           <div>hi</div>
         </template>
-        """
-    )
+        """)
     pf = adapter.parse(path="X.vue", source=src)
     # No top-level functions but the parser shouldn't crash.
     assert isinstance(pf.symbols, list)
     assert pf.parse_error == ""
 
 
+def test_script_end_tag_allows_html_whitespace(adapter: VueLanguageAdapter) -> None:
+    src = "<script>function safeClose() { return 1; }</script   ><template />"
+
+    pf = adapter.parse(path="X.vue", source=src)
+
+    assert "safeClose" in {symbol.name for symbol in pf.symbols}
+
+
 def test_template_extracts_pascalcase_components(adapter: VueLanguageAdapter) -> None:
-    src = textwrap.dedent(
-        """\
+    src = textwrap.dedent("""\
         <template>
           <div>
             <FooBar :prop="x" />
@@ -91,8 +94,7 @@ def test_template_extracts_pascalcase_components(adapter: VueLanguageAdapter) ->
             <H1>uppercase, no lowercase second char, ignored</H1>
           </div>
         </template>
-        """
-    )
+        """)
     pf = adapter.parse(path="Page.vue", source=src)
     component_names = {s.name for s in pf.symbols if s.kind == "component_use"}
     assert "FooBar" in component_names
@@ -101,16 +103,14 @@ def test_template_extracts_pascalcase_components(adapter: VueLanguageAdapter) ->
 
 
 def test_imports_carried_from_script(adapter: VueLanguageAdapter) -> None:
-    src = textwrap.dedent(
-        """\
+    src = textwrap.dedent("""\
         <script setup>
         import Foo from './Foo.vue';
         import { useStore } from 'pinia';
 
         const store = useStore();
         </script>
-        """
-    )
+        """)
     pf = adapter.parse(path="X.vue", source=src)
     assert "./Foo.vue" in pf.imports
     assert "pinia" in pf.imports
@@ -119,15 +119,13 @@ def test_imports_carried_from_script(adapter: VueLanguageAdapter) -> None:
 
 
 def test_line_offsets_point_into_vue_file(adapter: VueLanguageAdapter) -> None:
-    src = textwrap.dedent(
-        """\
+    src = textwrap.dedent("""\
         <template><div /></template>
 
         <script setup lang="ts">
         function helperFn() { return 42; }
         </script>
-        """
-    )
+        """)
     pf = adapter.parse(path="X.vue", source=src)
     helper = next(s for s in pf.symbols if s.name == "helperFn")
     # Line should be inside the script block (≥ line 4 in the .vue file).
@@ -159,82 +157,71 @@ def test_repo_index_indexes_vue_files(tmp_path: Path) -> None:
 
 
 def test_define_props_type_literal(adapter: VueLanguageAdapter) -> None:
-    src = textwrap.dedent(
-        """\
+    src = textwrap.dedent("""\
         <script setup lang="ts">
         defineProps<{
           label: string;
           count?: number;
         }>();
         </script>
-        """
-    )
+        """)
     pf = adapter.parse(path="X.vue", source=src)
     props = {s.name for s in pf.symbols if s.kind == "prop"}
     assert {"label", "count"} <= props
 
 
 def test_define_props_runtime_array(adapter: VueLanguageAdapter) -> None:
-    src = textwrap.dedent(
-        """\
+    src = textwrap.dedent("""\
         <script setup>
         defineProps(['title', 'description']);
         </script>
-        """
-    )
+        """)
     pf = adapter.parse(path="X.vue", source=src)
     props = {s.name for s in pf.symbols if s.kind == "prop"}
     assert {"title", "description"} <= props
 
 
 def test_define_props_runtime_object(adapter: VueLanguageAdapter) -> None:
-    src = textwrap.dedent(
-        """\
+    src = textwrap.dedent("""\
         <script setup>
         defineProps({
           msg: String,
           settings: { type: Object, default: () => ({}) },
         });
         </script>
-        """
-    )
+        """)
     pf = adapter.parse(path="X.vue", source=src)
     props = {s.name for s in pf.symbols if s.kind == "prop"}
     assert {"msg", "settings"} <= props
 
 
 def test_define_emits_runtime_array(adapter: VueLanguageAdapter) -> None:
-    src = textwrap.dedent(
-        """\
+    src = textwrap.dedent("""\
         <script setup>
         defineEmits(['submit', 'cancel']);
         </script>
-        """
-    )
+        """)
     pf = adapter.parse(path="X.vue", source=src)
     emits = {s.name for s in pf.symbols if s.kind == "emit"}
     assert {"submit", "cancel"} <= emits
 
 
 def test_define_emits_type_form(adapter: VueLanguageAdapter) -> None:
-    src = textwrap.dedent(
-        """\
+    src = textwrap.dedent("""\
         <script setup lang="ts">
         defineEmits<{
           (e: 'submit', value: string): void;
           (e: 'reset'): void;
         }>();
         </script>
-        """
-    )
+        """)
     pf = adapter.parse(path="X.vue", source=src)
     emits = {s.name for s in pf.symbols if s.kind == "emit"}
     assert {"submit", "reset"} <= emits
 
 
 def test_template_slot_named(adapter: VueLanguageAdapter) -> None:
-    src = textwrap.dedent(
-        """\
+    src = textwrap.dedent("""\
         <template>
           <div>
             <slot name="header" />
@@ -242,24 +229,21 @@ def test_template_slot_named(adapter: VueLanguageAdapter) -> None:
             <slot name="footer">default footer</slot>
           </div>
         </template>
-        """
-    )
+        """)
     pf = adapter.parse(path="X.vue", source=src)
     slots = {s.name for s in pf.symbols if s.kind == "slot"}
     assert {"header", "footer", "default"} <= slots
 
 
 def test_template_event_handler_reference(adapter: VueLanguageAdapter) -> None:
-    src = textwrap.dedent(
-        """\
+    src = textwrap.dedent("""\
         <template>
           <button @click="onLogin">Login</button>
           <button v-on:click="onCancel">Cancel</button>
           <input @input.lazy="onChange" />
           <span @click="count++">inline (skipped)</span>
         </template>
-        """
-    )
+        """)
     pf = adapter.parse(path="X.vue", source=src)
     refs = {r.name for r in pf.references}
     assert {"onLogin", "onCancel", "onChange"} <= refs

@@ -93,7 +93,9 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
     for row in run_rows:
         sid = str(row.get("session_id") or "")
         snapshot = (
-            await get_workbench_session_snapshot(sid, int(ticket.user_id or 0)) if sid else None
+            await get_workbench_session_snapshot(sid, int(ticket.user_id or 0))
+            if sid
+            else None
         )
         item = dict(row)
         if snapshot:
@@ -129,7 +131,9 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
     elif str(latest_snapshot.get("status") or "") == "done":
         gate_ok, _ = custom_delivery_gate(latest_snapshot)
         stage, label = (
-            ("acceptance", "质量门通过，待您验收") if gate_ok else ("rework", "质量门未通过")
+            ("acceptance", "质量门通过，待您验收")
+            if gate_ok
+            else ("rework", "质量门未通过")
         )
     else:
         stage, label = "production", "生产员工制作中"
@@ -141,7 +145,9 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
     )
     artifacts: list[dict[str, str]] = []
     artifact = (
-        latest_snapshot.get("artifact") if isinstance(latest_snapshot.get("artifact"), dict) else {}
+        latest_snapshot.get("artifact")
+        if isinstance(latest_snapshot.get("artifact"), dict)
+        else {}
     )
     if artifact.get("mod_id"):
         artifacts.append({"kind": "module", "id": str(artifact["mod_id"])})
@@ -190,11 +196,15 @@ async def list_custom_deliveries(
         reconcile_custom_delivery_payment,
     )
 
-    q = db.query(CustomerServiceTicket).filter(CustomerServiceTicket.intent == "custom_delivery")
+    q = db.query(CustomerServiceTicket).filter(
+        CustomerServiceTicket.intent == "custom_delivery"
+    )
     if not user.is_admin:
         q = q.filter(CustomerServiceTicket.user_id == user.id)
     rows = (
-        q.order_by(CustomerServiceTicket.updated_at.desc(), CustomerServiceTicket.id.desc())
+        q.order_by(
+            CustomerServiceTicket.updated_at.desc(), CustomerServiceTicket.id.desc()
+        )
         .limit(limit)
         .all()
     )
@@ -228,14 +238,18 @@ async def decide_custom_delivery(
         is_admin = bool(getattr(user, "is_admin", False))
         evidence["acceptance_status"] = "internal_approved" if is_admin else "accepted"
         evidence["accepted_at"] = datetime.now(UTC).isoformat() if not is_admin else ""
-        evidence["internal_approved_at"] = datetime.now(UTC).isoformat() if is_admin else ""
+        evidence["internal_approved_at"] = (
+            datetime.now(UTC).isoformat() if is_admin else ""
+        )
         evidence["acceptance_actor"] = "admin_internal" if is_admin else "customer"
         evidence["accepted_by_user_id"] = int(user.id)
         evidence["acceptance_note"] = body.note.strip()[:4000]
         ticket.decision_status = "reviewed" if is_admin else "approved"
         ticket.status = "processing"
         decision_event = (
-            "custom_delivery_internal_approved" if is_admin else "custom_delivery_accepted"
+            "custom_delivery_internal_approved"
+            if is_admin
+            else "custom_delivery_accepted"
         )
     else:
         note = body.note.strip()
@@ -306,11 +320,14 @@ async def download_custom_delivery_artifact(
         raise HTTPException(404, "定制产物不存在")
     artifact_id = str(target.get("id") or "").strip()
     if artifact_kind == "module":
-        from modman.store import build_mod_zip_bytes
+        from modman.store import build_mod_zip_bytes, find_mod_dir_by_manifest_id
         from modstore_server.mod_scaffold_runner import modstore_library_path
 
-        artifact_path = modstore_library_path() / artifact_id
-        if not artifact_path.is_dir():
+        try:
+            artifact_path = find_mod_dir_by_manifest_id(
+                modstore_library_path(), artifact_id
+            )
+        except (ValueError, FileNotFoundError):
             raise HTTPException(404, "Mod 产物已不在生产库")
         stream = build_mod_zip_bytes(artifact_path)
         filename = f"{artifact_id}.zip"
@@ -327,7 +344,9 @@ async def download_custom_delivery_artifact(
         if not manifest_path.is_file():
             raise HTTPException(404, "AI 员工产物已不在生产库")
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        raw = build_employee_pack_zip_for_library(artifact_id, manifest, pack_dir=artifact_path)
+        raw = build_employee_pack_zip_for_library(
+            artifact_id, manifest, pack_dir=artifact_path
+        )
         stream = BytesIO(raw)
         filename = f"{artifact_id}.xcemp"
     else:
@@ -374,7 +393,8 @@ async def record_custom_delivery_install(
     artifacts = payload.get("custom_delivery", {}).get("artifacts", [])
     evidence["delivery_artifacts"] = artifacts
     if not any(
-        r.get("kind") == body.artifact_kind and r.get("id") == body.artifact_id for r in artifacts
+        r.get("kind") == body.artifact_kind and r.get("id") == body.artifact_id
+        for r in artifacts
     ):
         raise HTTPException(409, "安装回执与本工单产物不匹配")
     grants = [r for r in evidence.get("download_grants", []) if isinstance(r, dict)]
@@ -396,7 +416,8 @@ async def record_custom_delivery_install(
     evidence["download_grants"] = grants
     receipts = [r for r in evidence.get("install_receipts", []) if isinstance(r, dict)]
     if not any(
-        r.get("kind") == body.artifact_kind and r.get("id") == body.artifact_id for r in receipts
+        r.get("kind") == body.artifact_kind and r.get("id") == body.artifact_id
+        for r in receipts
     ):
         receipts.append(
             {

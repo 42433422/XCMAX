@@ -93,13 +93,55 @@ def test_scanner_error_json_cannot_be_normalized_as_zero_findings() -> None:
     mod = _normalizer_module()
 
     for kind, payload in (
+        ("codeql", [{"message": "service unavailable", "status": "503"}]),
+        ("dependabot", [{"message": "not accessible", "status": "403"}]),
         ("npm-audit", {"error": {"summary": "registry unavailable"}}),
         ("pip-audit", {"error": "index unavailable"}),
         ("trivy", {"ArtifactName": "repo"}),
         ("sarif", {"version": "2.1.0"}),
+        ("credential-incidents", {"schema": "credential-incidents/v1"}),
     ):
         with pytest.raises(ValueError):
             mod._validate_native_payload(kind, payload)
+
+
+def test_pending_credential_rotation_blocks_release() -> None:
+    normalizer = _normalizer_module()
+    payload = {
+        "schema": "credential-incidents/v1",
+        "incidents": [
+            {
+                "id": "INC-1",
+                "fingerprint_sha256": "a" * 64,
+                "status": "rotation_pending",
+                "author": "fix-author",
+            }
+        ],
+    }
+    normalizer._validate_native_payload("credential-incidents", payload)
+    finding = normalizer.normalize("credential-incidents", payload)[0]
+    assert finding["status"] == "open"
+    assert finding["secret"] is True
+
+
+def test_credential_rotation_requires_independent_hashed_evidence() -> None:
+    normalizer = _normalizer_module()
+    now = datetime.now(UTC)
+    row = {
+        "id": "INC-1",
+        "fingerprint_sha256": "a" * 64,
+        "status": "resolved",
+        "author": "fix-author",
+        "reviewer": "security-reviewer",
+        "revoked_at": (now - timedelta(minutes=20)).isoformat(),
+        "rotated_at": (now - timedelta(minutes=10)).isoformat(),
+        "reviewed_at": now.isoformat(),
+        "review_due": (now + timedelta(days=30)).isoformat(),
+        "resolution_evidence_sha256": "b" * 64,
+    }
+    assert normalizer._credential_resolution_is_valid(row) is True
+    row["reviewer"] = "fix-author"
+    assert normalizer._credential_resolution_is_valid(row) is False
 
 
 def test_false_positive_requires_independent_fresh_review(tmp_path: Path) -> None:
@@ -252,6 +294,19 @@ def test_full_scan_collects_and_uploads_evidence_after_individual_scanner_failur
     ).read_text()
 
     assert "Build and scan final FHD production image\n        continue-on-error: true" in workflow
+    assert "--config /repo/.github/gitleaks-config.toml" in workflow
+    assert "credential-rotation credential-incidents" in workflow
+    assert "secrets.CI_COMMIT_TOKEN || github.token" in workflow
+    assert "--no-emit-local" in workflow
+    assert "production-host-rootfs.tar.gz" in workflow
+    assert "var/lib/dpkg/status" in workflow
+    assert "var/lib/rpm" in workflow
+    assert "usr/lib/sysimage/rpm" in workflow
+    assert "PLATFORM_ID=" in workflow
+    assert "distro_args=(--distro redhat/8)" in workflow
+    assert "--skip-db-update" in workflow
+    assert "scp " not in workflow
+    assert "docker run --rm -v /:/host:ro aquasec/trivy:latest" not in workflow
     assert (
         "continue-on-error: true\n        working-directory: .\n        run: docker build"
         in workflow

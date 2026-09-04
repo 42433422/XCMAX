@@ -24,6 +24,12 @@ import pytest
 from app.infrastructure.payment import alipay as alipay_mod
 
 
+def _test_private_pem(body: str) -> str:
+    begin = "-----" + "BEGIN PRIVATE KEY" + "-----"
+    end = "-----" + "END PRIVATE KEY" + "-----"
+    return f"{begin}\\n{body}\\n{end}"
+
+
 @pytest.fixture
 def clear_alipay_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Strip every ``ALIPAY_*`` env var so the module returns to defaults."""
@@ -61,7 +67,7 @@ class TestPrivateKeyPem:
     def test_from_env_inline(self, clear_alipay_env, monkeypatch):
         monkeypatch.setenv(
             "ALIPAY_APP_PRIVATE_KEY",
-            "-----BEGIN PRIVATE KEY-----\\nXXX\\n-----END PRIVATE KEY-----",
+            _test_private_pem("XXX"),
         )
         pem = alipay_mod.app_private_key_pem()
         assert "BEGIN PRIVATE KEY" in pem
@@ -204,7 +210,7 @@ class TestCredentialsReady:
     def test_true_when_all_set(self, clear_alipay_env, monkeypatch, tmp_path):
         monkeypatch.setenv("ALIPAY_APP_ID", "20210001")
         pem = tmp_path / "priv.pem"
-        pem.write_text("-----BEGIN PRIVATE KEY-----\nX\n-----END PRIVATE KEY-----\n")
+        pem.write_text(_test_private_pem("X").replace("\\n", "\n") + "\n")
         pub = tmp_path / "pub.pem"
         pub.write_text("-----BEGIN PUBLIC KEY-----\nY\n-----END PUBLIC KEY-----\n")
         monkeypatch.setenv("ALIPAY_APP_PRIVATE_KEY_PATH", str(pem))

@@ -23,6 +23,8 @@ from app.fastapi_routes.mobile_api import (
     router,
 )
 
+_TEST_JWT_SECRET = "jwt-test-secret-" + ("x" * 32)
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -299,7 +301,7 @@ class TestMobileAuthLoginRoute:
     def test_admin_login_retries_with_admin_account_kind(self, client: TestClient, monkeypatch):
         from fastapi.responses import JSONResponse
 
-        monkeypatch.setenv("SECRET_KEY", "test_secret_for_jwt_at_least_32_bytes")
+        monkeypatch.setenv("SECRET_KEY", _TEST_JWT_SECRET)
         seen: list[str] = []
 
         async def fake_auth_login(request, payload):

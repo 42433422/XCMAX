@@ -1,5 +1,6 @@
 """Test vibe-coding for long/complex code generation with quantitative analysis."""
 
+import os
 import sys
 import time
 from dataclasses import dataclass, field
@@ -206,7 +207,9 @@ def analyze_long_code(source_code: str, test_case: dict) -> dict[str, Any]:
 
 
 def run_long_code_test():
-    API_KEY = "tp-cum1pkvt1sda673mc22tmbyv5cyqyx52y8nd4us9r799w3vr"
+    API_KEY = os.environ.get("MIMO_API_KEY", "").strip()
+    if not API_KEY:
+        raise SystemExit("MIMO_API_KEY is required for this live API test")
     BASE_URL = "https://token-plan-cn.xiaomimimo.com/v1"
     MODEL = "mimo-v2.5-pro"
 

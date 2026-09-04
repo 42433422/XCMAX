@@ -15,6 +15,7 @@ from email.utils import parseaddr
 from typing import Any, Dict, List
 
 from modstore_server.email_service import _load_modstore_env
+from modstore_server.html_text import html_to_plain_text
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -78,13 +79,7 @@ def _decode_payload(part: Message) -> str:
 
 
 def _strip_html(html: str) -> str:
-    # This path extracts inert plain text from email; it never emits HTML.
-    # lgtm[py/bad-tag-filter]
-    text = re.sub(r"(?is)<script.*?>.*?</script>", "", html or "")
-    text = re.sub(r"(?is)<style.*?>.*?</style>", "", text)
-    text = re.sub(r"<[^>]+>", " ", text)
-    text = re.sub(r"\s+", " ", text)
-    return text.strip()
+    return html_to_plain_text(html)
 
 
 def _message_body_text(msg: Message) -> str:

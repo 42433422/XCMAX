@@ -94,6 +94,11 @@ from app.mod_sdk.employee_specialized_tools import (
     tool_write_file,
 )
 
+
+def _fake_api_key(label: str = "test") -> str:
+    return "sk-" + label + ("x" * 24)
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -1421,7 +1426,8 @@ class TestReadLlmEnvConfig:
     async def test_with_env_file(self, tmp_path):
         env_path = tmp_path / ".env"
         env_path.write_text(
-            "OPENAI_API_KEY=sk-test12345678\nXCAGI_LLM_PROVIDER=openai\n", encoding="utf-8"
+            f"OPENAI_API_KEY={_fake_api_key()}\nXCAGI_LLM_PROVIDER=openai\n",
+            encoding="utf-8",
         )
         with patch.object(module, "_FHD_ROOT", tmp_path):
             r = await tool_read_llm_env_config({}, {})
@@ -1434,7 +1440,7 @@ class TestReadLlmEnvConfig:
         env_path = tmp_path / ".env"
         env_path.write_text("FOO=bar\n", encoding="utf-8")
         with patch.object(module, "_FHD_ROOT", tmp_path):
-            with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-runtime12345"}):
+            with patch.dict(os.environ, {"OPENAI_API_KEY": _fake_api_key("runtime")}):
                 r = await tool_read_llm_env_config({}, {})
         assert r["ok"] is True
         if "OPENAI_API_KEY" in r.get("runtime_config", {}):
@@ -1456,7 +1462,7 @@ class TestListConfiguredProviders:
     async def test_with_openai_key(self):
         with patch.dict(
             os.environ,
-            {"OPENAI_API_KEY": "sk-test12345678", "OPENAI_BASE_URL": "https://api.openai.com/v1"},
+            {"OPENAI_API_KEY": _fake_api_key(), "OPENAI_BASE_URL": "https://api.openai.com/v1"},
         ):
             r = await tool_list_configured_providers({}, {})
         assert r["ok"] is True
@@ -1523,7 +1529,10 @@ class TestTestLlmKeyHealth:
 
         with patch.dict(
             os.environ,
-            {"OPENAI_API_KEY": "sk-abcdefgh12345", "OPENAI_BASE_URL": "https://api.openai.com/v1"},
+            {
+                "OPENAI_API_KEY": _fake_api_key("health"),
+                "OPENAI_BASE_URL": "https://api.openai.com/v1",
+            },
         ):
             with patch.object(module, "httpx") as mock_httpx:
                 mock_httpx.AsyncClient.return_value = mock_client
@@ -1557,7 +1566,7 @@ class TestQueryProviderUsage:
         mock_client = AsyncMock()
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
-        with patch.dict(os.environ, {"DASHSCOPE_API_KEY": "sk-qwen12345"}):
+        with patch.dict(os.environ, {"DASHSCOPE_API_KEY": _fake_api_key("qwen")}):
             with patch.object(module, "httpx") as mock_httpx:
                 mock_httpx.AsyncClient.return_value = mock_client
                 r = await tool_query_provider_usage({"provider": "qwen"}, {})

@@ -1,5 +1,6 @@
 """Test vibe-coding with REAL MIMO API - generate a real Python function from NL brief."""
 
+import os
 import sys
 
 from vibe_coding.operational_errors import BOUNDARY_ERRORS
@@ -10,7 +11,9 @@ from vibe_coding import OpenAILLM, VibeCoder
 
 if __name__ == "__main__":
     # Use MIMO API (OpenAI-compatible)
-    API_KEY = "tp-cum1pkvt1sda673mc22tmbyv5cyqyx52y8nd4us9r799w3vr"
+    API_KEY = os.environ.get("MIMO_API_KEY", "").strip()
+    if not API_KEY:
+        raise SystemExit("MIMO_API_KEY is required for this live API test")
     BASE_URL = "https://token-plan-cn.xiaomimimo.com/v1"
     MODEL = "mimo-v2.5-pro"
 

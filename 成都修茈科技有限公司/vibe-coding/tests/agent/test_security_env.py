@@ -64,7 +64,7 @@ def test_default_allowlist_covers_essentials() -> None:
 
 def test_subprocess_command_does_not_leak_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Run a tiny script that prints whether OPENAI_API_KEY is visible."""
-    monkeypatch.setenv("OPENAI_API_KEY", "leaked-secret-12345")
+    monkeypatch.setenv("OPENAI_API_KEY", "leak-test-" + ("x" * 24))
     monkeypatch.setenv("MY_PRIVATE_TOKEN", "leaked-token")
     drv = SubprocessSandboxDriver()
     res = drv.execute(

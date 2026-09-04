@@ -9,36 +9,33 @@ def _workflow() -> str:
     )
 
 
-def test_windows_interim_build_and_publish_are_split_across_native_runners() -> None:
+def test_unsigned_windows_lane_is_quarantined_and_has_no_publish_job() -> None:
     workflow = _workflow()
 
     assert "windows:\n    runs-on: windows-latest" in workflow
-    assert "publish:\n    if:" in workflow
-    assert "needs: windows" in workflow
-    assert "runs-on: ubuntu-latest" in workflow
-    assert "uses: actions/download-artifact@v4" in workflow
-    assert "name: xcagi-windows-macalign-hotfix" in workflow
+    assert "Public delivery: forbidden" in workflow
+    assert "WINDOWS-QUARANTINE.json" in workflow
+    assert "publish:" not in workflow
+    assert "Publish mac-align hotfix to CVM" not in workflow
+    assert "SERVER_SSH_KEY" not in workflow
+    assert "/var/www/" not in workflow
 
 
-def test_windows_interim_upload_is_resumable_and_never_clears_partial_first() -> None:
+def test_unsigned_windows_lane_requires_exact_sha_two_day_security_evidence() -> None:
     workflow = _workflow()
 
-    assert "timeout-minutes: 300" in workflow
-    assert 'remote_stage="/var/tmp/xcagi-macalign-${GITHUB_SHA}"' in workflow
-    assert "rsync --archive --partial --append-verify --timeout=180" in workflow
-    assert 'while [ "$attempt" -le 24 ]' in workflow
-    assert "partial retained for resume" in workflow
-    assert "rm -rf '$remote_stage' && mkdir" not in workflow
+    assert "release_sha:" in workflow
+    assert "security_scan_run_id:" in workflow
+    assert "previous_security_scan_run_id:" in workflow
+    assert "ref: ${{ inputs.release_sha }}" in workflow
+    assert "verify_security_scan_pair.py" in workflow
+    assert '--release-sha "${{ inputs.release_sha }}"' in workflow
 
 
-def test_windows_interim_publish_remains_checksum_gated_and_atomic() -> None:
+def test_unsigned_windows_artifact_cannot_be_mistaken_for_an_update_feed() -> None:
     workflow = _workflow()
 
-    assert 'actual="$(sha256sum "$stage/$artifact"' in workflow
-    assert 'test "$actual" = "$expected"' in workflow
-    assert 'payload["git_sha"] == git_sha' in workflow
-    assert 'mv -f "$destination/$artifact$suffix" "$destination/$artifact"' in workflow
-    assert "Verify public interim installer, download center, and changelog" in workflow
-    assert 'test "$(sha256sum "$tmpdir/installer.exe"' in workflow
-    assert workflow.count('grep -Fq "/download-windows-hotfix.json"') == 2
-    assert "grep -Fq \"fetch('/download-windows-hotfix.json'\"" not in workflow
+    assert "xcagi-windows-unsigned-quarantine-${{ inputs.release_sha }}" in workflow
+    assert "latest.yml" not in workflow
+    assert "download-windows-hotfix.json" not in workflow
+    assert "xiu-ci.com" not in workflow

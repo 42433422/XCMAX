@@ -28,6 +28,10 @@ paths = [
     '''package-lock\.json''',
     '''poetry\.lock''',
     '''Pipfile\.lock''',
+    # Local bytecode is generated, non-source material; runtime-artifact CI
+    # independently forbids committing it.
+    '''__pycache__/''',
+    '''\.pyc$''',
     # CI 配置中的 ${{ secrets.* }} 占位符
     '''\.github/workflows/.*\.yml''',
     # .env.example 模板

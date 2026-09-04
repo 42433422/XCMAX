@@ -8,9 +8,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -18,6 +20,7 @@ from typing import Any, Optional
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 _ORDERS_DIR_VAR = "MODSTORE_PAYMENT_ORDERS_DIR"
+_ORDER_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 
 logger = logging.getLogger(__name__)
 
@@ -58,14 +61,41 @@ def _reject_local_write(action: str, out_trade_no: str) -> bool:
 
 def _orders_dir() -> Path:
     d = Path(
-        os.environ.get(_ORDERS_DIR_VAR, "") or (Path(__file__).resolve().parent / "payment_orders")
+        os.environ.get(_ORDERS_DIR_VAR, "")
+        or (Path(__file__).resolve().parent / "payment_orders")
     )
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
 def _path(out_trade_no: str) -> Path:
-    return _orders_dir() / f"order_{out_trade_no}.json"
+    normalized = (out_trade_no or "").strip()
+    if _ORDER_ID_RE.fullmatch(normalized) is None:
+        raise ValueError("非法支付订单号")
+    # Never place a caller-controlled identifier in a filesystem path.  The
+    # digest remains deterministic for lookups while the original order number
+    # stays inside the JSON document for audit and display.
+    storage_id = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+    return _orders_dir() / f"order_{storage_id}.json"
+
+
+def _existing_path(out_trade_no: str) -> Path | None:
+    """Locate hashed records and legacy clear-name records without path injection."""
+
+    target = _path(out_trade_no)
+    if target.is_file():
+        return target
+    normalized = out_trade_no.strip()
+    for candidate in _orders_dir().glob("order_*.json"):
+        if candidate == target or not candidate.is_file():
+            continue
+        try:
+            doc = json.loads(candidate.read_text(encoding="utf-8"))
+        except RECOVERABLE_ERRORS:
+            continue
+        if isinstance(doc, dict) and doc.get("out_trade_no") == normalized:
+            return candidate
+    return None
 
 
 def _now_iso() -> str:
@@ -90,7 +120,7 @@ def create(
     if _reject_local_write("create", out_trade_no):
         return {"ok": False, "message": _JAVA_READONLY_MSG, "code": "java_sot_readonly"}
     p = _path(out_trade_no)
-    if p.is_file():
+    if _existing_path(out_trade_no) is not None:
         return {"ok": False, "message": f"订单 {out_trade_no} 已存在"}
     kind = order_kind or ("item" if item_id else "plan" if plan_id else "wallet")
     doc: dict[str, Any] = {
@@ -127,7 +157,9 @@ def merge_fields(out_trade_no: str, **kwargs: Any) -> bool:
         if v is not None:
             doc[k] = v
     doc["updated_at"] = _now_iso()
-    p = _path(out_trade_no)
+    p = _existing_path(out_trade_no)
+    if p is None:
+        return False
     try:
         p.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
         return True
@@ -136,8 +168,8 @@ def merge_fields(out_trade_no: str, **kwargs: Any) -> bool:
 
 
 def find(out_trade_no: str) -> Optional[dict[str, Any]]:
-    p = _path(out_trade_no)
-    if not p.is_file():
+    p = _existing_path(out_trade_no)
+    if p is None:
         return None
     try:
         return json.loads(p.read_text(encoding="utf-8"))
@@ -167,7 +199,9 @@ def update_status(
     if paid_at:
         doc["paid_at"] = paid_at
     doc["notify_count"] = doc.get("notify_count", 0) + 1
-    p = _path(out_trade_no)
+    p = _existing_path(out_trade_no)
+    if p is None:
+        return False
     try:
         p.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
         return True
@@ -236,7 +270,9 @@ def close_pending_older_than(*, minutes: int = 30) -> int:
         doc["status"] = "closed"
         doc["updated_at"] = _now_iso()
         try:
-            path.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
+            path.write_text(
+                json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
             closed += 1
         except OSError:
             continue

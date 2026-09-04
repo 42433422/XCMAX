@@ -133,6 +133,29 @@ def test_debug_sandbox_copy(client, library: Path, project_home: Path, auth_head
     assert (root / "sand-mod" / "manifest.json").is_file()
 
 
+def test_debug_sandbox_rejects_library_symlink_escape(
+    client, library: Path, project_home: Path, auth_headers: dict
+):
+    client.post(
+        "/api/mods/create",
+        json={"mod_id": "sand-link", "display_name": "S"},
+        headers=auth_headers,
+    )
+    outside = project_home.parent / f"{project_home.name}-outside-mod"
+    outside.mkdir()
+    (outside / "manifest.json").write_text('{"id":"sand-link"}', encoding="utf-8")
+    shutil.rmtree(library / "sand-link")
+    (library / "sand-link").symlink_to(outside, target_is_directory=True)
+
+    response = client.post(
+        "/api/debug/sandbox",
+        json={"mod_id": "sand-link", "mode": "copy"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 400
+
+
 def test_focus_primary(client, library: Path, auth_headers: dict):
     client.post(
         "/api/mods/create",

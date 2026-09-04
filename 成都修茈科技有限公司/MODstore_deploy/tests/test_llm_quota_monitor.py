@@ -145,6 +145,19 @@ async def test_fetch_minimax_quota_uses_china_endpoint_and_normalized_key(monkey
     assert kwargs["headers"]["Authorization"] == "Bearer sk-cp-example"
 
 
+@pytest.mark.parametrize(
+    ("base_url", "expected"),
+    [
+        ("https://api.minimaxi.com", "https://www.minimaxi.com/v1/token_plan/remains"),
+        ("api.minimaxi.com/v1", "https://www.minimaxi.com/v1/token_plan/remains"),
+        ("https://minimaxi.com.evil.example", "https://www.minimax.io/v1/token_plan/remains"),
+        ("https://evilminimaxi.com", "https://www.minimax.io/v1/token_plan/remains"),
+    ],
+)
+def test_minimax_quota_endpoint_requires_an_exact_trusted_hostname(base_url, expected):
+    assert llm_quota_monitor._minimax_remains_url(base_url) == expected
+
+
 @pytest.mark.asyncio
 async def test_fetch_minimax_quota_redacts_secret_from_errors(monkeypatch):
     fake_secret = "unit-test-secret-that-must-not-leak"
