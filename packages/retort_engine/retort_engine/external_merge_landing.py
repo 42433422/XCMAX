@@ -331,6 +331,7 @@ def _run(
         "git_diff_main": ["git", "diff", "--name-only", "main...HEAD"],
         "pytest": [sys.executable, "-m", "pytest", "tests", "-q"],
     }
+    command: list[str] | None
     if action in {"git_create_case", "git_merge_case"}:
         branch = _case_branch(case_index)
         command = (
