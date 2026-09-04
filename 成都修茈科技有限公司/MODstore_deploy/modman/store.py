@@ -338,9 +338,7 @@ def import_zip(zip_path: Path, library: Path, *, replace: bool = True) -> Path:
     mid = (data.get("id") or "").strip()
     if mid != mod_dir.name:
         shutil.rmtree(mod_dir, ignore_errors=True)
-        raise ValueError(
-            f"zip 内文件夹名 {mod_dir.name!r} 须与 manifest.id {mid!r} 一致"
-        )
+        raise ValueError(f"zip 内文件夹名 {mod_dir.name!r} 须与 manifest.id {mid!r} 一致")
     ve = validate_manifest_dict(data)
     if ve:
         raise ValueError("manifest: " + "; ".join(ve))
@@ -349,9 +347,7 @@ def import_zip(zip_path: Path, library: Path, *, replace: bool = True) -> Path:
 
 def write_registry_note(library: Path, note: dict) -> None:
     p = library / "_registry.json"
-    p.write_text(
-        json.dumps(note, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    p.write_text(json.dumps(note, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def remove_mod(library: Path, mod_id: str) -> None:

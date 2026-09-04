@@ -47,9 +47,7 @@ def _jloads(text: str, default: Any) -> Any:
 def _ack_enabled() -> bool:
     import os
 
-    return (
-        os.environ.get("MODSTORE_BOSS_IM_ACK_ENABLED") or "1"
-    ).strip().lower() not in (
+    return (os.environ.get("MODSTORE_BOSS_IM_ACK_ENABLED") or "1").strip().lower() not in (
         "0",
         "false",
         "no",
@@ -71,20 +69,14 @@ def _employee_display_name(employee_id: str) -> str:
         with sf() as session:
             pack = load_employee_pack_resolved(session, employee_id)
         manifest = pack.get("manifest") or {}
-        ident = (
-            manifest.get("identity")
-            if isinstance(manifest.get("identity"), dict)
-            else {}
-        )
+        ident = manifest.get("identity") if isinstance(manifest.get("identity"), dict) else {}
         return str(ident.get("name") or manifest.get("name") or "").strip()
     except RECOVERABLE_ERRORS:
         logger.debug("boss_im display name lookup failed")
         return ""
 
 
-def enqueue_boss_im_task(
-    *, boss_user_id: int, employee_id: str, text: str
-) -> Dict[str, Any]:
+def enqueue_boss_im_task(*, boss_user_id: int, employee_id: str, text: str) -> Dict[str, Any]:
     """把老板的一条 IM 指令入队为 ``PendingBriefTask(source_kind="boss_im")``。
 
     与 daily_brief 的去重指纹不同：聊天指令允许重复文本（老板可以连说两次「继续」），
@@ -99,9 +91,9 @@ def enqueue_boss_im_task(
     from modstore_server.models import PendingBriefTask, get_session_factory
 
     now = datetime.now(UTC)
-    fp = hashlib.sha256(
-        f"boss_im|{uid}|{eid}|{body}|{now.timestamp():.6f}".encode()
-    ).hexdigest()[:64]
+    fp = hashlib.sha256(f"boss_im|{uid}|{eid}|{body}|{now.timestamp():.6f}".encode()).hexdigest()[
+        :64
+    ]
     sf = get_session_factory()
     with sf() as session:
         row = PendingBriefTask(
@@ -123,9 +115,7 @@ def enqueue_boss_im_task(
     return {"ok": True, "task_id": task_id}
 
 
-def handle_boss_im_message(
-    *, user_id: int, employee_id: str, text: str
-) -> Dict[str, Any]:
+def handle_boss_im_message(*, user_id: int, employee_id: str, text: str) -> Dict[str, Any]:
     """老板 IM 消息统一入口：先当答案，不成再当新指令。
 
     返回：
@@ -143,9 +133,7 @@ def handle_boss_im_message(
         answer_latest_pending_for_employee,
     )
 
-    answered = answer_latest_pending_for_employee(
-        user_id=uid, employee_id=eid, answer=body
-    )
+    answered = answer_latest_pending_for_employee(user_id=uid, employee_id=eid, answer=body)
     if answered.get("ok"):
         return {"ok": True, "mode": "question_answered", **answered}
     if str(answered.get("reason") or "") not in ("", "no_pending"):
@@ -207,9 +195,7 @@ def _extract_reply_text(raw: Dict[str, Any]) -> str:
         for out in outputs:
             if not isinstance(out, dict):
                 continue
-            cand = str(
-                out.get("answer") or out.get("summary") or out.get("output") or ""
-            ).strip()
+            cand = str(out.get("answer") or out.get("summary") or out.get("output") or "").strip()
             if not cand:
                 continue
             # agent 的 summary 有时是 {"thought":..,"answer":..} JSON，抽出 answer 当人话

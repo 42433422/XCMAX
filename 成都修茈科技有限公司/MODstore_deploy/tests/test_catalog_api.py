@@ -90,9 +90,7 @@ def test_catalog_upload_with_token(monkeypatch, tmp_path: Path):
         "/v1/packages",
         headers={"Authorization": "Bearer secret-test"},
         data={"metadata": meta},
-        files={
-            "file": ("catalog-test-mod-0.0.1.xcmod", buf.getvalue(), "application/zip")
-        },
+        files={"file": ("catalog-test-mod-0.0.1.xcmod", buf.getvalue(), "application/zip")},
     )
     assert r.status_code == 200, r.text
     idx = c.get("/v1/index.json").json()
@@ -129,9 +127,7 @@ def test_remove_package_deletes_json_and_file(monkeypatch, tmp_path: Path):
     assert not (tmp_path / "files" / str(fn)).is_file()
 
 
-def test_append_package_uses_safe_extension_and_opaque_filename(
-    monkeypatch, tmp_path: Path
-):
+def test_append_package_uses_safe_extension_and_opaque_filename(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path / "catalog"))
     from modstore_server.catalog_store import append_package
 

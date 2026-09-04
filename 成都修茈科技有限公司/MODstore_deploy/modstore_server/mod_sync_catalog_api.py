@@ -204,9 +204,7 @@ def api_v1_mod_sync_list_mods(
     return {"data": rows}
 
 
-@router.get(
-    "/export-zip/{mod_id}", summary="下载 Mod zip（供本机 modman remote-deploy）"
-)
+@router.get("/export-zip/{mod_id}", summary="下载 Mod zip（供本机 modman remote-deploy）")
 def api_v1_mod_sync_export_zip(
     mod_id: str,
     authorization: Optional[str] = Header(None, alias="Authorization"),
