@@ -126,9 +126,7 @@ def test_item_payment_callback_queues_durable_desktop_install(monkeypatch):
 
     subscribers._on_payment_paid_asset_install(event)
 
-    assert captured == [
-        {"user_id": 42, "catalog_id": 7, "event_id": "payment.paid:ORDER-ASSET-1"}
-    ]
+    assert captured == [{"user_id": 42, "catalog_id": 7, "event_id": "payment.paid:ORDER-ASSET-1"}]
 
 
 def test_refund_outcome_dispatches_distinct_messages(fresh_bus, monkeypatch):

@@ -83,7 +83,11 @@ def _latest_owned_installation_ids(session: Session, user_id: int) -> set[str]:
         .limit(500)
         .all()
     )
-    return {str(row.installation_id or "").strip() for row in rows if str(row.installation_id or "").strip()}
+    return {
+        str(row.installation_id or "").strip()
+        for row in rows
+        if str(row.installation_id or "").strip()
+    }
 
 
 def _purchase_is_current(session: Session, user_id: int, catalog_id: int) -> bool:
@@ -125,8 +129,7 @@ def queue_install_command(
     # Scope and hash it so another account cannot collide with or read this row.
     request_key = str(idempotency_key or source_event_id or "").strip()
     material = (
-        f"asset-install:{int(user_id)}:{int(purchase.id)}:{target}:"
-        f"{source}:{request_key}"
+        f"asset-install:{int(user_id)}:{int(purchase.id)}:{target}:" f"{source}:{request_key}"
     )
     stable_key = hashlib.sha256(material.encode("utf-8")).hexdigest()
     existing = (
@@ -221,9 +224,10 @@ def revoke_asset_install_commands_for_order(*, user_id: int, order_no: str) -> i
         changed = 0
         for row in rows:
             exact_order_command = str(row.source_event_id or "") == source_event_id
-            no_remaining_catalog_right = (
-                int(row.catalog_id) in catalog_ids
-                and not _purchase_is_current(session, int(user_id), int(row.catalog_id))
+            no_remaining_catalog_right = int(
+                row.catalog_id
+            ) in catalog_ids and not _purchase_is_current(
+                session, int(user_id), int(row.catalog_id)
             )
             if not exact_order_command and not no_remaining_catalog_right:
                 continue
@@ -270,7 +274,12 @@ def create_asset_install_command(
     )
     db.commit()
     db.refresh(row)
-    return {"ok": True, "queued": created, "duplicate": not created, "command": _serialize(row, item)}
+    return {
+        "ok": True,
+        "queued": created,
+        "duplicate": not created,
+        "command": _serialize(row, item),
+    }
 
 
 @router.get("/commands")
@@ -293,11 +302,18 @@ def list_asset_install_commands(
         query = query.filter(AssetInstallCommand.status.in_(["pending", "failed", "claimed"]))
     rows = query.order_by(AssetInstallCommand.id.asc()).limit(limit).all()
     item_ids = {int(row.catalog_id) for row in rows}
-    items = {
-        int(item.id): item
-        for item in db.query(CatalogItem).filter(CatalogItem.id.in_(item_ids)).all()
-    } if item_ids else {}
-    return {"items": [_serialize(row, items.get(int(row.catalog_id))) for row in rows], "total": len(rows)}
+    items = (
+        {
+            int(item.id): item
+            for item in db.query(CatalogItem).filter(CatalogItem.id.in_(item_ids)).all()
+        }
+        if item_ids
+        else {}
+    )
+    return {
+        "items": [_serialize(row, items.get(int(row.catalog_id))) for row in rows],
+        "total": len(rows),
+    }
 
 
 @router.get("/commands/{command_id}")
@@ -308,7 +324,9 @@ def get_asset_install_command(
 ):
     row = (
         db.query(AssetInstallCommand)
-        .filter(AssetInstallCommand.id == int(command_id), AssetInstallCommand.user_id == int(user.id))
+        .filter(
+            AssetInstallCommand.id == int(command_id), AssetInstallCommand.user_id == int(user.id)
+        )
         .first()
     )
     if row is None:
@@ -329,7 +347,9 @@ def claim_asset_install_command(
         raise HTTPException(403, "目标设备不属于当前账号")
     row = (
         db.query(AssetInstallCommand)
-        .filter(AssetInstallCommand.id == int(command_id), AssetInstallCommand.user_id == int(user.id))
+        .filter(
+            AssetInstallCommand.id == int(command_id), AssetInstallCommand.user_id == int(user.id)
+        )
         .with_for_update()
         .first()
     )
@@ -378,7 +398,9 @@ def download_claimed_asset_install_command(
         raise HTTPException(403, "目标设备不属于当前账号")
     row = (
         db.query(AssetInstallCommand)
-        .filter(AssetInstallCommand.id == int(command_id), AssetInstallCommand.user_id == int(user.id))
+        .filter(
+            AssetInstallCommand.id == int(command_id), AssetInstallCommand.user_id == int(user.id)
+        )
         .first()
     )
     if row is None:
@@ -433,7 +455,9 @@ def complete_asset_install_command(
 ):
     row = (
         db.query(AssetInstallCommand)
-        .filter(AssetInstallCommand.id == int(command_id), AssetInstallCommand.user_id == int(user.id))
+        .filter(
+            AssetInstallCommand.id == int(command_id), AssetInstallCommand.user_id == int(user.id)
+        )
         .with_for_update()
         .first()
     )

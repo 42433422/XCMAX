@@ -162,9 +162,7 @@ def test_refunded_entitlement_blocks_and_revokes_pending_command(client, auth_he
         assert row.error == "payment_refunded"
 
 
-def test_refund_revokes_exact_order_without_revoking_another_active_purchase(
-    client, auth_headers
-):
+def test_refund_revokes_exact_order_without_revoking_another_active_purchase(client, auth_headers):
     catalog_id, purchase_id, entitlement_id, _ = _paid_asset(auth_headers)
     user_id = _user_id(auth_headers)
     from modstore_server.asset_installation_api import (
@@ -213,9 +211,7 @@ def test_refund_revokes_exact_order_without_revoking_another_active_purchase(
         refunded_id = int(refunded.id)
         retained_id = int(retained.id)
 
-    assert revoke_asset_install_commands_for_order(
-        user_id=user_id, order_no="ORDER-REFUNDED"
-    ) == 1
+    assert revoke_asset_install_commands_for_order(user_id=user_id, order_no="ORDER-REFUNDED") == 1
     with sf() as db:
         assert db.get(AssetInstallCommand, refunded_id).status == "revoked"
         assert db.get(AssetInstallCommand, retained_id).status == "pending"
