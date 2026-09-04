@@ -94,7 +94,6 @@ jobs:
           PRODUCTION_PROMETHEUS_URL: ${{ secrets.PRODUCTION_PROMETHEUS_URL }}
           PRODUCTION_PROMETHEUS_TOKEN: ${{ secrets.PRODUCTION_PROMETHEUS_TOKEN }}
           NO_PROXY: 127.0.0.1,localhost
-          no_proxy: 127.0.0.1,localhost
         run: |
           set -euo pipefail
           test -n "${FHD_PUSH_HOST:-}"
@@ -128,7 +127,6 @@ jobs:
           PRODUCTION_PROMETHEUS_TOKEN: ${{ secrets.PRODUCTION_PROMETHEUS_TOKEN }}
           PRODUCTION_PROMETHEUS_RETENTION_DAYS: ${{ vars.PRODUCTION_PROMETHEUS_RETENTION_DAYS }}
           NO_PROXY: 127.0.0.1,localhost
-          no_proxy: 127.0.0.1,localhost
         run: |
           set -uo pipefail
           args=(
