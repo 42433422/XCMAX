@@ -6,14 +6,13 @@ import re
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from pydantic import BaseModel, Field
-
 from modman.manifest_util import (
     get_public_workflow_rows,
     read_manifest,
     save_manifest_validated,
     set_public_workflow_rows,
 )
+from pydantic import BaseModel, Field
 
 _EMP_ID_RE = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
 

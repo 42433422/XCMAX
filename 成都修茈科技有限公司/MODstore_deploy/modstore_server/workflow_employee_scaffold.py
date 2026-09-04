@@ -7,14 +7,14 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List
 
-from pydantic import BaseModel, Field
-
 from modman.manifest_util import (
     get_public_workflow_rows,
     read_manifest,
     save_manifest_validated,
     set_public_workflow_rows,
 )
+from pydantic import BaseModel, Field
+
 from modstore_server.file_safe import write_text_file
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 

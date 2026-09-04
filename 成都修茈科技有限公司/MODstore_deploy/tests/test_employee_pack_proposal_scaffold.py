@@ -7,7 +7,6 @@ import importlib.util
 import json
 
 import pytest
-
 from modstore_server.employee_pack_proposal import _call_llm, propose_employee_pack
 from modstore_server.employee_pack_proposal_scaffold import (
     ProposalScaffoldError,

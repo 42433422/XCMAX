@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from modman.manifest_util import (
     get_public_workflow_rows,
     public_workflow_rows_field,
