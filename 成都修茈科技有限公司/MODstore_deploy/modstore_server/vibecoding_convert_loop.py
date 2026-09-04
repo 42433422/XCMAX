@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -18,9 +19,44 @@ from modstore_server.employee_golden_compare import (
     compare_with_golden,
     golden_pack_id_for_runtime,
 )
+from modstore_server.llm_crypto import encrypt_secret
 
 MAX_CODEGEN_REPAIR_ROUNDS = 3
 LLM_CODEGEN_SOURCES = frozenset({"llm_codegen", "llm_codegen_repair"})
+
+
+def _safe_trace_session_id(session_id: str) -> str:
+    normalized = str(session_id or "").strip()
+    if (
+        not normalized
+        or len(normalized) > 128
+        or any(not (char.isalnum() or char in {"-", "_"}) for char in normalized)
+    ):
+        raise ValueError("invalid vibecoding trace session_id")
+    return normalized
+
+
+def _write_encrypted_trace(path: Path, payload: Any, *, media_type: str) -> None:
+    if isinstance(payload, str):
+        plaintext = payload
+    else:
+        plaintext = json.dumps(
+            payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+            default=str,
+        )
+    envelope = {
+        "schema": "xcagi.vibecoding_trace.encrypted/v1",
+        "media_type": media_type,
+        "ciphertext": encrypt_secret(plaintext),
+    }
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        json.dump(envelope, handle, ensure_ascii=True, indent=2, sort_keys=True)
+        handle.write("\n")
+    path.chmod(0o600)
 
 
 def is_llm_codegen_source(meta: Optional[Dict[str, Any]]) -> bool:
@@ -49,20 +85,28 @@ def write_codegen_trace(
     smoke: Dict[str, Any],
     golden: Dict[str, Any],
 ) -> None:
-    base = trace_root / str(session_id)
+    base = trace_root / _safe_trace_session_id(session_id)
     base.mkdir(parents=True, exist_ok=True)
-    (base / f"round_{round_no}_convert.py").write_text(convert_py or "", encoding="utf-8")
-    (base / f"round_{round_no}_meta.json").write_text(
-        json.dumps(meta, ensure_ascii=False, indent=2, default=str),
-        encoding="utf-8",
+    round_index = max(0, int(round_no))
+    _write_encrypted_trace(
+        base / f"round_{round_index}_convert.py.enc.json",
+        convert_py or "",
+        media_type="text/x-python",
     )
-    (base / f"round_{round_no}_smoke.json").write_text(
-        json.dumps(smoke, ensure_ascii=False, indent=2, default=str),
-        encoding="utf-8",
+    _write_encrypted_trace(
+        base / f"round_{round_index}_meta.enc.json",
+        meta,
+        media_type="application/json",
     )
-    (base / f"round_{round_no}_golden.json").write_text(
-        json.dumps(golden, ensure_ascii=False, indent=2, default=str),
-        encoding="utf-8",
+    _write_encrypted_trace(
+        base / f"round_{round_index}_smoke.enc.json",
+        smoke,
+        media_type="application/json",
+    )
+    _write_encrypted_trace(
+        base / f"round_{round_index}_golden.enc.json",
+        golden,
+        media_type="application/json",
     )
 
 
