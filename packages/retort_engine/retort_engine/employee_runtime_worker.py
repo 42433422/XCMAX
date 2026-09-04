@@ -12,11 +12,12 @@ from retort_engine.history import RetortHistoryStore
 from retort_engine.models import EmployeeTaskResult
 from retort_engine.operational_errors import BOUNDARY_ERRORS
 from retort_engine.pr_review import review_diff
+from retort_engine.secure_artifacts import read_private_json, write_private_json
 
 
 def write_employee_runtime_results(payload_file: str | Path) -> dict[str, Any]:
     payload_path = Path(payload_file).expanduser().resolve()
-    payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    payload = read_private_json(payload_path)
     output_path = Path(str(payload["output_path"]))
     output_path.parent.mkdir(parents=True, exist_ok=True)
     process_boundary = _process_boundary(payload, payload_path, output_path)
@@ -89,10 +90,7 @@ def write_employee_runtime_results(payload_file: str | Path) -> dict[str, Any]:
         },
         "results": task_results,
     }
-    output_path.write_text(
-        json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
+    write_private_json(output_path, result)
     history_store = str(payload.get("history_store") or "")
     if history_store:
         store = RetortHistoryStore(history_store)
@@ -145,10 +143,7 @@ def _apply_behavior_synthesis(
             run_id=str(payload.get("run_id") or "employee-runtime"),
         )
         artifact = output_path.with_suffix(".behavior_synthesis.json")
-        artifact.write_text(
-            json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
-            encoding="utf-8",
-        )
+        write_private_json(artifact, result)
         result["artifact"] = str(artifact)
         return result
     except BOUNDARY_ERRORS as exc:
@@ -278,10 +273,7 @@ def _write_worker_review_artifact(
         }
     review = review_diff(diff_text, max_comments=12)
     artifact_path = output_path.with_suffix(".worker_review.json")
-    artifact_path.write_text(
-        json.dumps(review, ensure_ascii=False, indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
+    write_private_json(artifact_path, review)
     return {
         "status": str(review.get("status") or ""),
         "artifact": str(artifact_path),

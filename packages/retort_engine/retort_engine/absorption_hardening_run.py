@@ -19,6 +19,7 @@ from retort_engine.real_absorption_run_proof import (
     code_graph_proof_gate,
     record_real_absorption_run,
 )
+from retort_engine.secure_artifacts import read_private_json, write_private_json
 
 
 def record_post_absorption_hardening_run(
@@ -177,10 +178,7 @@ def record_post_absorption_hardening_run(
     if output:
         output_path = Path(output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(
-            json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
-            encoding="utf-8",
-        )
+        write_private_json(output_path, result)
     return result
 
 
@@ -322,10 +320,7 @@ def _run_employee_workers(
             ),
             "diff_text": _git_diff(root, changed_files),
         }
-        payload_path.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
-            encoding="utf-8",
-        )
+        write_private_json(payload_path, payload)
         payloads.append(
             {
                 "payload_path": payload_path,
@@ -493,14 +488,8 @@ def _aggregate_worker_results(
         "artifact": str(aggregate_review_path),
         "worker_review_count": len(reviews),
     }
-    aggregate_review_path.write_text(
-        json.dumps(
-            {"reviews": reviews, "summary": aggregate_review},
-            ensure_ascii=False,
-            indent=2,
-            sort_keys=True,
-        ),
-        encoding="utf-8",
+    write_private_json(
+        aggregate_review_path, {"reviews": reviews, "summary": aggregate_review}
     )
     successful_processes = [item for item in worker_results if _returncode(item) == 0]
     process_isolation = _process_isolation_evidence(payloads, worker_results)
@@ -536,10 +525,7 @@ def _aggregate_worker_results(
         "status": "completed" if verified else "partial",
         "summary": "Independent employee runtime workers completed post-absorption hardening tasks.",
     }
-    output_path.write_text(
-        json.dumps(aggregate, ensure_ascii=False, indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
+    write_private_json(output_path, aggregate)
     return aggregate
 
 
@@ -749,7 +735,7 @@ def _project_rel(root: Path, path: str) -> str:
 
 def _read_json(path: Path) -> dict[str, Any]:
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        payload = read_private_json(path)
+    except (OSError, RuntimeError):
         return {}
     return payload if isinstance(payload, dict) else {}

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from retort_engine.absorption_hardening_run import record_post_absorption_hardening_run
 from retort_engine.contracts import validate_contract
+from retort_engine.secure_artifacts import read_private_json
 
 
 def test_record_post_absorption_hardening_run_materializes_latest_behavior_diff(
@@ -78,9 +79,7 @@ def test_record_post_absorption_hardening_run_materializes_latest_behavior_diff(
     assert result["summary"]["crash_isolation_verified"] is True
     assert result["summary"]["crash_isolation_verified_count"] == 2
     assert result["code_graph_proof"]["run_id"] == result["run_id"]
-    employee_result = json.loads(
-        Path(result["employee_results_path"]).read_text(encoding="utf-8")
-    )
+    employee_result = read_private_json(Path(result["employee_results_path"]))
     assert employee_result["execution_mode"] == "employee_runtime_worker_multi_process"
     assert employee_result["runtime_evidence"]["multi_worker"]["verified"] is True
     process_isolation = employee_result["runtime_evidence"]["multi_worker"][

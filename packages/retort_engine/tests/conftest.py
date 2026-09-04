@@ -12,10 +12,15 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from cryptography.fernet import Fernet
+
+
+_TEST_ARTIFACT_MASTER_KEY = Fernet.generate_key().decode("ascii")
 
 
 @pytest.fixture(autouse=True)
 def _allow_external_improvement_gate(request, monkeypatch):
+    monkeypatch.setenv("RETORT_ARTIFACT_MASTER_KEY", _TEST_ARTIFACT_MASTER_KEY)
     monkeypatch.setenv(
         "RETORT_WORKSPACE_ROOTS",
         os.pathsep.join((str(Path.cwd()), tempfile.gettempdir())),
