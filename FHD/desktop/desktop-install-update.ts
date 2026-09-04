@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { resolveDesktopInstallIdentity } from './installation-identity'
+import { desktopRuntime } from './runtime-state'
 import { getDownloadedUpdateState } from './updater'
 import {
   appendUpdaterEvent,
@@ -50,6 +51,9 @@ export async function installUpdate(
     // 先在 JS 层同步等待后端停止，再交出退出控制权。
     if (prepareQuit) {
       await prepareQuit()
+      // The normal will-quit hook prevents the first quit while it drains the
+      // backend. It is already drained here, so let ShipIt own this quit.
+      desktopRuntime.backendShutdownComplete = true
     }
     autoUpdater.quitAndInstall(false, true)
   } catch (error) {
