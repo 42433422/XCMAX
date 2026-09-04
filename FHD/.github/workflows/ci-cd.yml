@@ -356,13 +356,11 @@ jobs:
         run: |
           # Security gate policy (see docs/CI_SSOT.md → Security scanning):
           #  - HARD gate for CRITICAL/HIGH = container-scan job (Trivy, exit-code 1).
-          #  - safety (dependency CVE advisories) is ADVISORY here (needs triage), non-blocking.
+          #  - pip-audit is a blocking dependency CVE gate.
           #  - bandit broad scan (--exit-zero) is ADVISORY; the focused B608 (SQL injection)
           #    pass below is BLOCKING.
-          pip install safety bandit
-          safety check -r deploy/requirements-server-api.txt --full-report || {
-            echo "::warning::safety reported advisories (non-blocking); see full-report above"
-          }
+          pip install pip-audit bandit
+          pip-audit -r deploy/requirements-server-api.txt
           bandit -r app/ -lll --skip B101,B601,B110 --exit-zero
           # B608=SQLi (blocking scan below skips it); B324/B413=cache-key hash & legacy wechat crypto (non-exploit)
           bandit -r app/ -lll -s B608,B324,B413
