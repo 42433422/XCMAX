@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
 import os
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -150,8 +150,7 @@ def _authorize_http_payload(
             raise ValueError(f"{key} is not an allowed server path")
         candidate = os.path.realpath(os.path.abspath(selected))
         if not any(
-            candidate == root
-            or candidate.startswith(root.rstrip(os.sep) + os.sep)
+            candidate == root or candidate.startswith(root.rstrip(os.sep) + os.sep)
             for root in trusted_roots
         ):
             raise ValueError(f"{key} escapes the configured server paths")
@@ -160,14 +159,14 @@ def _authorize_http_payload(
 
 
 class RetortService:
-    def __init__(
-        self, *, workspace_roots: Iterable[str | Path] | None = None
-    ) -> None:
+    def __init__(self, *, workspace_roots: Iterable[str | Path] | None = None) -> None:
         configured = tuple(workspace_roots or ())
         if not configured:
             configured_env = tuple(
                 item
-                for item in os.environ.get("RETORT_WORKSPACE_ROOTS", "").split(os.pathsep)
+                for item in os.environ.get("RETORT_WORKSPACE_ROOTS", "").split(
+                    os.pathsep
+                )
                 if item.strip()
             )
             configured = configured_env or (Path.cwd(),)
@@ -264,14 +263,10 @@ class RetortService:
         ).to_dict()
 
     def self_bootstrap_plan(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return build_self_bootstrap_plan(
-            self._project(payload)
-        )
+        return build_self_bootstrap_plan(self._project(payload))
 
     def self_depth_report(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return build_self_depth_report(
-            self._project(payload)
-        )
+        return build_self_depth_report(self._project(payload))
 
     def external_improvement_gate(self, payload: dict[str, Any]) -> dict[str, Any]:
         return external_improvement_gate(
@@ -379,9 +374,7 @@ class RetortService:
         )
 
     def cross_project_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return build_cross_project_replay(
-            self._project(payload)
-        )
+        return build_cross_project_replay(self._project(payload))
 
     def multi_project_absorption_replay(
         self, payload: dict[str, Any]
@@ -413,9 +406,7 @@ class RetortService:
         )
 
     def task_prioritization_report(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return build_task_prioritization_report(
-            self._project(payload)
-        )
+        return build_task_prioritization_report(self._project(payload))
 
     def task_dispatch_plan(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_task_dispatch_plan(
@@ -555,9 +546,7 @@ class RetortService:
     def review_adjudication_calibration(
         self, payload: dict[str, Any]
     ) -> dict[str, Any]:
-        return build_review_adjudication_calibration(
-            self._project(payload)
-        )
+        return build_review_adjudication_calibration(self._project(payload))
 
     def employee_scheduler_stress(self, payload: dict[str, Any]) -> dict[str, Any]:
         return run_employee_scheduler_stress(
@@ -568,9 +557,7 @@ class RetortService:
         )
 
     def employee_patch_closure(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return run_employee_patch_closure_suite(
-            self._project(payload)
-        )
+        return run_employee_patch_closure_suite(self._project(payload))
 
     def employee_patch_stress(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_employee_patch_stress(
@@ -581,9 +568,7 @@ class RetortService:
         )
 
     def production_recovery_drill(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return build_production_recovery_drill(
-            self._project(payload)
-        )
+        return build_production_recovery_drill(self._project(payload))
 
     def product_mainline_absorption_proof(
         self, payload: dict[str, Any]
@@ -594,19 +579,13 @@ class RetortService:
         )
 
     def absorption_release_decision(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return build_absorption_release_decision(
-            self._project(payload)
-        )
+        return build_absorption_release_decision(self._project(payload))
 
     def operator_journey_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return build_operator_journey_replay(
-            self._project(payload)
-        )
+        return build_operator_journey_replay(self._project(payload))
 
     def quality_gate_bundle(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return run_quality_gate_bundle(
-            self._project(payload)
-        )
+        return run_quality_gate_bundle(self._project(payload))
 
     def codebase_graph_report(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_codebase_graph(
@@ -660,9 +639,7 @@ def create_app(
     except ImportError:
         return service
     app = FastAPI(title="Retort Engine")
-    trusted_paths = _trusted_path_registry(
-        configured_paths
-    )
+    trusted_paths = _trusted_path_registry(configured_paths)
 
     def _authorized(payload: dict[str, Any]) -> dict[str, Any]:
         from fastapi import HTTPException

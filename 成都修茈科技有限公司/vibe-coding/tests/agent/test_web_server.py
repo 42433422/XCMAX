@@ -184,9 +184,7 @@ def test_post_index(client: TestClient, stub_coder: _StubCoder, tmp_path) -> Non
     assert res.json() == {"files": 3, "symbols": 12}
 
 
-def test_project_routes_reject_unconfigured_workspace(
-    client: TestClient, tmp_path
-) -> None:
+def test_project_routes_reject_unconfigured_workspace(client: TestClient, tmp_path) -> None:
     outside = tmp_path.parent / "outside-workspace"
 
     res = client.post("/api/index", json={"root": str(outside)})

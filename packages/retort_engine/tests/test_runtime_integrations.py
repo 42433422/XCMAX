@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from retort_engine.core import RetortService as CoreRetortService
 from retort_engine.employee_queue import RetortEmployeeQueue
 from retort_engine.feedback import feedback_ingest
@@ -140,16 +139,16 @@ def test_product_service_and_blackhole_ui_surface(tmp_path: Path, monkeypatch) -
     assert "ownProjectFolder" in (ui_root / "index.html").read_text(encoding="utf-8")
 
 
-def test_http_path_authorization_uses_only_configured_server_paths(tmp_path: Path) -> None:
+def test_http_path_authorization_uses_only_configured_server_paths(
+    tmp_path: Path,
+) -> None:
     project = tmp_path / "project"
     outside = tmp_path / "outside"
     project.mkdir()
     outside.mkdir()
     trusted = _trusted_path_registry([project])
 
-    authorized = _authorize_http_payload(
-        {"project": ".", "max_files": 5}, trusted
-    )
+    authorized = _authorize_http_payload({"project": ".", "max_files": 5}, trusted)
 
     assert authorized == {"project": str(project.resolve()), "max_files": 5}
     with pytest.raises(ValueError, match="not an allowed server path"):
