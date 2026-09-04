@@ -25,7 +25,7 @@
     "security:scan:medium": "bash scripts/security-scan.sh --gate-severity medium"
   },
   "dependencies": {
-    "electron-updater": "^6.8.3"
+    "electron-updater": "^6.8.9"
   },
   "devDependencies": {
     "@electron/notarize": "3.1.1",
