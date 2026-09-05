@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import difflib
 import hashlib
-import json
 import subprocess
 import sys
 import uuid
@@ -11,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from retort_engine.pr_review import review_diff
+from retort_engine.secure_artifacts import write_private_json
 
 
 def run_employee_patch_closure_suite(
@@ -265,10 +265,7 @@ def run_employee_patch_closure_suite(
     if output:
         output_path = Path(output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(
-            json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
-            encoding="utf-8",
-        )
+        write_private_json(output_path, result)
     return result
 
 

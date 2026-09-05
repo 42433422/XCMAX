@@ -13,6 +13,12 @@ from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, In
 from starlette.responses import Response
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.performance.metrics_routing import (
+    customer_operation,
+    document_type,
+    export_type,
+    mod_operation,
+)
 
 materials_created_total = Counter(
     "materials_created_total", "Total number of materials created", ["category"]
@@ -216,7 +222,7 @@ export_task_duration_seconds = Histogram(
 mod_install_total = Counter(
     "mod_install_total",
     "Total mod install/uninstall operations",
-    ["operation", "status"],
+    ["operation", "status", "device_scope"],
 )
 
 
@@ -242,6 +248,45 @@ def record_http_request(method: str, path: str, status_code: int, duration_secon
         )
     except RECOVERABLE_ERRORS:
         pass
+
+
+def record_chat_stream_first_byte(duration_seconds: float) -> None:
+    """Record the first non-empty byte of a real AI SSE response.
+
+    Tenant identifiers are deliberately not exported as Prometheus labels.  The
+    fixed label values keep cardinality bounded and prevent customer identity
+    from leaking into the production metrics store.
+    """
+
+    try:
+        chat_stream_first_byte_seconds.labels(model="stream", tenant_id="redacted").observe(
+            duration_seconds
+        )
+    except RECOVERABLE_ERRORS:
+        pass
+
+
+def record_business_http_request(
+    method: str,
+    path: str,
+    status_code: int,
+    duration_seconds: float,
+) -> None:
+    """Wire real production HTTP paths into the five business SLI families."""
+
+    status = "error" if status_code >= 400 else "success"
+    customer_op = customer_operation(method, path)
+    if customer_op:
+        record_customer_op(customer_op, status, duration_seconds)
+    doc_type = document_type(path)
+    if doc_type:
+        record_doc_recognition(doc_type, status, duration_seconds)
+    task_type = export_type(path)
+    if task_type:
+        record_export_task(task_type, status, duration_seconds)
+    install_op = mod_operation(path)
+    if install_op:
+        record_mod_install(install_op, status, device_scope="server_runtime")
 
 
 def record_api_request(method: str, endpoint: str, status: int | str) -> None:
@@ -322,14 +367,23 @@ def record_export_task(export_type: str, status: str, duration_seconds: float) -
         pass
 
 
-def record_mod_install(operation: str, status: str) -> None:
+def record_mod_install(
+    operation: str,
+    status: str,
+    *,
+    device_scope: str = "server_runtime",
+) -> None:
     """MOD 安装/卸载埋点（SLO-BIZ-05）。
 
     operation: install / uninstall / activate / deactivate
     status: success / error
     """
     try:
-        mod_install_total.labels(operation=operation, status=status).inc()
+        mod_install_total.labels(
+            operation=operation,
+            status=status,
+            device_scope=device_scope,
+        ).inc()
     except RECOVERABLE_ERRORS:
         pass
 

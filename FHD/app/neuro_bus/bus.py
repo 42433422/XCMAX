@@ -26,16 +26,11 @@ from app.neuro_bus.bus_primitives import (
     _neuro_reliability_wanted,
     _should_trace_event,
 )
-from app.neuro_bus.bus_primitives import (
-    _deployment_is_production as _deployment_is_production,
-)
-from app.neuro_bus.bus_primitives import (
-    _deployment_is_staging as _deployment_is_staging,
-)
-from app.neuro_bus.bus_primitives import (
-    _neuro_trace_sample_rate as _neuro_trace_sample_rate,
-)
+from app.neuro_bus.bus_primitives import _deployment_is_production as _deployment_is_production
+from app.neuro_bus.bus_primitives import _deployment_is_staging as _deployment_is_staging
+from app.neuro_bus.bus_primitives import _neuro_trace_sample_rate as _neuro_trace_sample_rate
 from app.neuro_bus.bus_subscriptions import NeuroBusSubscriptionsMixin
+from app.neuro_bus.delivery_metrics import record_delivery_metric
 from app.neuro_bus.events.base import NeuroEvent
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -88,6 +83,7 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
         self._published_count = 0
         self._processed_count = 0
         self._error_count = 0
+
         self._dropped_count = 0
         # Event to signal new items in the queue; created when start() runs on the event loop.
         self._event_available: asyncio.Event | None = None
@@ -376,8 +372,10 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
                         retry_count=retry_count,
                         handler_name=getattr(subscription.handler, "__name__", None),
                     )
+                    record_delivery_metric(self._enable_metrics, "dead_lettered")
                 except RECOVERABLE_ERRORS as dlq_exc:
                     logger.exception("NeuroBus DLQ enqueue failed: %s", dlq_exc)
+                    record_delivery_metric(self._enable_metrics, "lost")
             return False
         return True
 
@@ -407,9 +405,11 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
         """
         if not self._running or self._shutdown:
             logger.warning("Cannot publish: NeuroBus not running")
+            record_delivery_metric(self._enable_metrics, "lost")
             return False
 
         if not self._preflight_publish(event):
+            record_delivery_metric(self._enable_metrics, "lost")
             return False
 
         # 持久化（如果启用）
@@ -431,6 +431,7 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
         success = self._event_queue.put(event)
         if success:
             self._published_count += 1
+            record_delivery_metric(self._enable_metrics, "published")
             if self._redis_bridge is not None and not event.payload.get("_neuro_remote_ingest"):
                 self._redis_bridge.publish_remote(event)
             # wake processing loop if it's waiting
@@ -442,6 +443,7 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
                     # ignore any loop-related errors
                     pass
         else:
+            record_delivery_metric(self._enable_metrics, "lost")
             if self._rel_dedup is not None:
                 self._rel_dedup.remove(event)
             if span_id is not None and self._rel_tracer is not None:
@@ -455,18 +457,23 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
     def ingest_remote_event(self, event: NeuroEvent) -> bool:
         """跨进程 Redis 订阅 ingest — 不再向外广播。"""
         if not self._running or self._shutdown:
+            record_delivery_metric(self._enable_metrics, "lost")
             return False
         if not self._preflight_publish(event):
+            record_delivery_metric(self._enable_metrics, "lost")
             return False
         success = self._event_queue.put(event)
         if success:
             self._published_count += 1
+            record_delivery_metric(self._enable_metrics, "published")
             ev = getattr(self, "_event_available", None)
             if ev is not None:
                 try:
                     ev.set()
                 except RECOVERABLE_ERRORS:
                     pass
+        else:
+            record_delivery_metric(self._enable_metrics, "lost")
         return success
 
 

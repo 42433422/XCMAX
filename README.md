@@ -84,7 +84,7 @@ make -f Makefile.win dev
 | 路径 | 用途 |
 |------|------|
 | [`FHD/uv.lock`](FHD/uv.lock) | **主仓** uv 锁定（`cd FHD && uv sync`） |
-| [`FHD/XCAGI/requirements.lock.txt`](FHD/XCAGI/requirements.lock.txt) | pip-compile 锁定（CI / 传统 pip 安装） |
+| [`FHD/XCAGI/requirements-desktop.lock.txt`](FHD/XCAGI/requirements-desktop.lock.txt) | pip-compile 锁定（CI / 传统 pip 安装） |
 
 Monorepo 根目录 **无** 独立 `uv.lock`；Python 开发请以 **`FHD/`** 为工作目录。
 

@@ -7,11 +7,13 @@ from fastapi.testclient import TestClient
 
 from modstore_server.metrics import (
     CSP_REPORT_ONLY_VIOLATIONS,
+    MOD_INSTALL_TOTAL,
     PROXY_COUNT,
     REALTIME_WS_EVENTS,
     _status_outcome,
     install_metrics,
     observe_csp_violation,
+    observe_mod_install,
     observe_payment_proxy,
     observe_realtime_ws_event,
 )
@@ -69,6 +71,14 @@ class TestObserveRealtimeWsEvent:
         labels = REALTIME_WS_EVENTS.labels("accepted")
         before = labels._value.get()
         observe_realtime_ws_event("accepted")
+        assert labels._value.get() == before + 1
+
+
+class TestObserveModInstall:
+    def test_external_customer_success(self):
+        labels = MOD_INSTALL_TOTAL.labels("install", "success", "external_customer")
+        before = labels._value.get()
+        observe_mod_install("install", "success", "external_customer")
         assert labels._value.get() == before + 1
 
     def test_auth_fail(self):

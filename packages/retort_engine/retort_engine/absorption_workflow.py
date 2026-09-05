@@ -7,6 +7,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
 
+from retort_engine.secure_artifacts import read_private_json, write_private_json
+
 PythonResolver = Callable[[], str]
 GitRootResolver = Callable[[Path], Path | None]
 
@@ -57,10 +59,8 @@ def run_real_absorption_cli(
         "python": resolve_python(),
         "keep_runtime_residue": bool(payload.get("keep_runtime_residue")),
     }
-    request_path.write_text(
-        json.dumps(request_payload, ensure_ascii=False, indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
+    write_private_json(request_path, request_payload)
+    result_path = request_dir / f"{os.urandom(16).hex()}.result.json"
     cmd = [
         resolve_python(),
         "-m",
@@ -68,6 +68,8 @@ def run_real_absorption_cli(
         "apply-absorption",
         "--payload-file",
         str(request_path),
+        "--result-file",
+        str(result_path),
         "--json",
     ]
     env = os.environ.copy()
@@ -96,7 +98,10 @@ def run_real_absorption_cli(
             "stdout_tail": _timeout_text(exc.stdout),
             "stderr_tail": _timeout_text(exc.stderr),
         }
-    parsed = extract_json_from_stdout(result.stdout)
+    try:
+        parsed = read_private_json(result_path, allow_legacy=False)
+    except (OSError, RuntimeError):
+        parsed = {}
     if not parsed:
         return {
             "status": "failed",

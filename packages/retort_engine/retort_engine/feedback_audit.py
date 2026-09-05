@@ -5,6 +5,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from retort_engine.secure_artifacts import read_private_json
+
 
 def audit_feedback_closure(
     *,
@@ -59,8 +61,8 @@ def _load_employee_results(path: str | Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for file_path in files:
         try:
-            payload = json.loads(file_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+            payload = read_private_json(file_path)
+        except (OSError, RuntimeError):
             continue
         rows.extend(
             row for row in payload.get("results") or [] if isinstance(row, dict)

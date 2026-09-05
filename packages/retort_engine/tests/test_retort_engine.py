@@ -29,6 +29,7 @@ from retort_engine.paibi_llm import (
 )
 from retort_engine.proof import rollback_rehearsal
 from retort_engine.real_absorption import apply_real_absorption
+from retort_engine.secure_artifacts import read_private_json
 from retort_engine.ui_features import (
     blackhole_ui_detected,
     blackhole_ui_operation_replay,
@@ -1233,9 +1234,7 @@ def test_real_absorption_writes_behavior_module_tests_and_runtime_mode(
     assert Path(result["review_context_bias_test_path"]).is_file()
     assert Path(result["review_policy_path"]).is_file()
     assert Path(result["review_policy_test_path"]).is_file()
-    employee_result = json.loads(
-        Path(result["employee_results_path"]).read_text(encoding="utf-8")
-    )
+    employee_result = read_private_json(Path(result["employee_results_path"]))
     assert employee_result["execution_mode"] == "employee_runtime_worker"
     assert employee_result["runtime_evidence"]["independent_process"] is True
     worker_review = employee_result["runtime_evidence"]["worker_review"]
@@ -1277,9 +1276,7 @@ def test_real_absorption_defaults_feedback_loop_to_project_retort_paths(
 
     queue = project / ".retort" / "employee_queue.jsonl"
     history = project / ".retort" / "retort_history.sqlite"
-    employee_result = json.loads(
-        Path(result["employee_results_path"]).read_text(encoding="utf-8")
-    )
+    employee_result = read_private_json(Path(result["employee_results_path"]))
 
     assert result["status"] == "applied"
     assert result["queue_records_written"] == 1
