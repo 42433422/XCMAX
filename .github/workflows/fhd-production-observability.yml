@@ -53,8 +53,8 @@ jobs:
           remote="${FHD_PUSH_USER:-root}@${FHD_PUSH_HOST}"
           ssh "${ssh_opts[@]}" "$remote" "install -d -m 700 '${remote_dir}'"
           scp "${ssh_opts[@]}" \
-            FHD/monitoring/prometheus.production.yml \
-            FHD/scripts/observability/install_production_prometheus_config.sh \
+            monitoring/prometheus.production.yml \
+            scripts/observability/install_production_prometheus_config.sh \
             "${remote}:${remote_dir}/"
           ssh "${ssh_opts[@]}" "$remote" \
             "chmod 700 '${remote_dir}/install_production_prometheus_config.sh' && '${remote_dir}/install_production_prometheus_config.sh' '${remote_dir}/prometheus.production.yml' '${RELEASE_SHA}'" \

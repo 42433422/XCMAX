@@ -45,8 +45,9 @@ def _false_positive_is_valid(finding: dict[str, Any], now: datetime) -> bool:
     evidence = str(approval.get("evidence") or "").strip()
     review_due = _parse_time(approval.get("review_due"))
     return bool(
-        reviewer
-        and reviewer != author
+        author
+        and reviewer
+        and reviewer.casefold() != author.casefold()
         and evidence
         and reviewed_at
         and reviewed_at <= now

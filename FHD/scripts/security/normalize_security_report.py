@@ -158,9 +158,14 @@ def _dismissal_fields(row: dict[str, Any]) -> dict[str, Any]:
         comment = {}
     dismissed_by = row.get("dismissed_by")
     reviewer = str(dismissed_by.get("login") or "") if isinstance(dismissed_by, dict) else ""
+    reason = str(row.get("dismissed_reason") or "").strip().casefold()
     return {
         "status": "active",
-        "disposition": "false_positive",
+        "disposition": (
+            "false_positive"
+            if reason in {"false positive", "inaccurate"}
+            else "unapproved_dismissal"
+        ),
         "author": str(comment.get("author") or ""),
         "dismissal_reason": str(row.get("dismissed_reason") or ""),
         "false_positive_approval": {
@@ -369,7 +374,7 @@ def _credential_resolution_is_valid(row: dict[str, Any]) -> bool:
     author = str(row.get("author") or "").strip()
     reviewer = str(row.get("reviewer") or "").strip()
     evidence = str(row.get("resolution_evidence_sha256") or "").strip().lower()
-    if not author or not reviewer or author == reviewer:
+    if not author or not reviewer or author.casefold() == reviewer.casefold():
         return False
     if not re.fullmatch(r"[0-9a-f]{64}", evidence):
         return False
