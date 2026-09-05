@@ -63,6 +63,28 @@ def _validate_native_payload(kind: str, data: Any) -> None:
             if not re.fullmatch(r"[0-9a-f]{64}", str(row["fingerprint_sha256"])):
                 raise ValueError("credential incident fingerprint is invalid")
         return
+    if kind == "dnf-updateinfo":
+        if (
+            not isinstance(data, dict)
+            or data.get("schema") != "dnf-security-updateinfo/v1"
+            or not all(
+                str(data.get(field) or "").strip()
+                for field in ("os_id", "os_version", "running_kernel")
+            )
+            or not isinstance(data.get("advisories"), list)
+        ):
+            raise ValueError("DNF security updateinfo is incomplete")
+        for row in data["advisories"]:
+            if (
+                not isinstance(row, dict)
+                or not str(row.get("id") or "").strip()
+                or str(row.get("severity") or "").lower()
+                not in {"critical", "important", "moderate", "low"}
+                or not isinstance(row.get("packages"), list)
+                or not row["packages"]
+            ):
+                raise ValueError("DNF security advisory entry is incomplete")
+        return
     if kind in {"codeql", "dependabot"}:
         if not isinstance(data, list):
             raise ValueError(f"{kind} output must be a list")
@@ -258,6 +280,25 @@ def normalize(kind: str, data: Any) -> list[dict[str, Any]]:
                     or dependency.get("package", {}).get("name"),
                     advisory.get("severity"),
                     **extra,
+                )
+            )
+    elif kind == "dnf-updateinfo":
+        for row in data.get("advisories", []) if isinstance(data, dict) else []:
+            if not isinstance(row, dict):
+                continue
+            severity = (
+                "high"
+                if str(row.get("severity") or "").lower() == "important"
+                else row.get("severity")
+            )
+            findings.append(
+                _finding(
+                    row.get("id"),
+                    severity,
+                    packages=sorted(str(package) for package in row.get("packages") or []),
+                    os_id=str(data.get("os_id") or ""),
+                    os_version=str(data.get("os_version") or ""),
+                    running_kernel=str(data.get("running_kernel") or ""),
                 )
             )
     elif kind == "trivy":

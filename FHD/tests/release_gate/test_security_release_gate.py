@@ -33,6 +33,17 @@ def _normalizer_module():
     return module
 
 
+def _dnf_collector_module():
+    script = (
+        Path(__file__).resolve().parents[2] / "scripts" / "security" / "collect_dnf_updateinfo.py"
+    )
+    spec = importlib.util.spec_from_file_location("collect_dnf_updateinfo", script)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def _write_reports(directory: Path, mod, now: datetime) -> None:
     directory.mkdir(exist_ok=True)
     for scanner in mod.REQUIRED_SCANNERS:
@@ -100,9 +111,46 @@ def test_scanner_error_json_cannot_be_normalized_as_zero_findings() -> None:
         ("trivy", {"ArtifactName": "repo"}),
         ("sarif", {"version": "2.1.0"}),
         ("credential-incidents", {"schema": "credential-incidents/v1"}),
+        ("dnf-updateinfo", {"schema": "dnf-security-updateinfo/v1"}),
     ):
         with pytest.raises(ValueError):
             mod._validate_native_payload(kind, payload)
+
+
+def test_dnf_vendor_updateinfo_deduplicates_advisories_and_maps_important_to_high() -> None:
+    collector = _dnf_collector_module()
+    normalizer = _normalizer_module()
+    advisories = collector.parse_updateinfo(
+        "\n".join(
+            (
+                "TSSA-2026:0001 Important/Sec. package-a-2.0.x86_64",
+                "TSSA-2026:0001 Important/Sec. package-b-2.0.x86_64",
+                "TSSA-2026:0002 Critical/Sec. kernel-2.0.x86_64",
+                "TSSA-2026:0003 Moderate/Sec. package-c-2.0.x86_64",
+            )
+        )
+    )
+    payload = {
+        "schema": "dnf-security-updateinfo/v1",
+        "os_id": "tencentos",
+        "os_version": "3.3",
+        "running_kernel": "5.4.241-24.0017.28",
+        "advisories": advisories,
+    }
+
+    normalizer._validate_native_payload("dnf-updateinfo", payload)
+    findings = normalizer.normalize("dnf-updateinfo", payload)
+
+    assert [row["id"] for row in findings] == [
+        "TSSA-2026:0001",
+        "TSSA-2026:0002",
+        "TSSA-2026:0003",
+    ]
+    assert [row["severity"] for row in findings] == ["high", "critical", "medium"]
+    assert findings[0]["packages"] == [
+        "package-a-2.0.x86_64",
+        "package-b-2.0.x86_64",
+    ]
 
 
 def test_pending_credential_rotation_blocks_release() -> None:
@@ -298,13 +346,11 @@ def test_full_scan_collects_and_uploads_evidence_after_individual_scanner_failur
     assert "credential-rotation credential-incidents" in workflow
     assert "secrets.CI_COMMIT_TOKEN || github.token" in workflow
     assert "--no-emit-local" in workflow
-    assert "production-host-rootfs.tar.gz" in workflow
-    assert "var/lib/dpkg/status" in workflow
-    assert "var/lib/rpm" in workflow
-    assert "usr/lib/sysimage/rpm" in workflow
-    assert "PLATFORM_ID=" in workflow
-    assert "distro_args=(--distro redhat/8)" in workflow
-    assert "--skip-db-update" in workflow
+    assert "collect_dnf_updateinfo.py" in workflow
+    assert "dnf -q --refresh" in workflow
+    assert "updateinfo list --security updates" in workflow
+    assert "normalize production-host dnf-updateinfo" in workflow
+    assert "mktemp -d /tmp/xcmax-security-scan.XXXXXX" in workflow
     assert "scp " not in workflow
     assert "docker run --rm -v /:/host:ro aquasec/trivy:latest" not in workflow
     assert (
