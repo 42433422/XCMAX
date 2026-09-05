@@ -327,6 +327,7 @@ class ExecutionServiceMixin(RollbackServiceMixin):
                     context = {
                         **base_context,
                         "source_row": row.source_row,
+                        "preview_before": load_json(row.before_json, {}),
                     }
                     result = adapter.execute_row(
                         db,
@@ -361,6 +362,7 @@ class ExecutionServiceMixin(RollbackServiceMixin):
                     context = {
                         **base_context,
                         "source_row": completed_row.source_row,
+                        "preview_before": load_json(completed_row.before_json, {}),
                     }
                     result = adapter.execute_row(
                         db,

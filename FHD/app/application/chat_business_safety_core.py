@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
+import unicodedata
 import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -50,7 +51,8 @@ _PERSONNEL_ENTITY_RE = re.compile(r"员工|人员|职员|工号|员工号|姓名
 
 
 _AI_EMPLOYEE_MENTION_RE = re.compile(
-    r"(?:AI|人工智能|智能|数字|虚拟)(?:业务|销售|客服|采购|财务|仓储|运营|办公)?员工",
+    r"(?:AI|人工智能|智能|数字|虚拟)[\-‐‑–—·]*"
+    r"(?:(?:业务|销售|客服|采购|财务|仓储|运营|办公)[\-‐‑–—·]*)?员工",
     re.IGNORECASE,
 )
 
@@ -122,11 +124,41 @@ _DB_NAME = "taiyangniao_pro.db"
 
 
 def _compact(text: str) -> str:
-    return re.sub(r"\s+", "", str(text or "")).strip()
+    return re.sub(r"\s+", "", unicodedata.normalize("NFKC", str(text or ""))).strip()
+
+
+_CLAUSE_BOUNDARY_RE = re.compile(
+    r"[,，;；。!?！？]+|然后|接着|随后|并且|"
+    r"再(?=查询|查|登记|录入|取消|撤销|修改|帮|为|导出|打印)"
+)
 
 
 def classify_business_chat_intent(message: str) -> BusinessChatIntent | None:
-    """Classify protected business semantics without relying on exact phrases."""
+    """Keep protected actions visible even alongside policy explanations."""
+    intent = _classify_business_clause(message)
+    if intent is not None:
+        return intent
+    # A policy cue in one clause must not exempt an independent record/action
+    # request. Retain the whole-message pass for cross-clause entity references.
+    operations = (
+        "attendance_print",
+        "attendance_export",
+        "leave_write",
+        "attendance_read",
+        "personnel_read",
+    )
+    candidates = [
+        candidate
+        for clause in _CLAUSE_BOUNDARY_RE.split(_compact(message))
+        if (candidate := _classify_business_clause(clause)) is not None
+    ]
+    return (
+        min(candidates, key=lambda item: operations.index(item.operation)) if candidates else None
+    )
+
+
+def _classify_business_clause(message: str) -> BusinessChatIntent | None:
+    """Classify one coherent request without relying on exact phrases."""
 
     text = _compact(message)
     if not text:
