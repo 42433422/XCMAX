@@ -77,13 +77,13 @@ describe('productFlow', () => {
     expect(readOnboardingReturnPath('/\\external.example')).toBe('/')
   })
 
-  it('PRODUCT_FLOW_STEPS includes demo data and the first AI task', () => {
-    expect(PRODUCT_FLOW_STEPS).toHaveLength(6)
+  it('PRODUCT_FLOW_STEPS keeps only the three setup steps and completion', () => {
+    expect(PRODUCT_FLOW_STEPS).toHaveLength(4)
   })
 
   it('PRODUCT_FLOW_STEPS has correct step ids', () => {
     const ids = PRODUCT_FLOW_STEPS.map((s) => s.id)
-    expect(ids).toEqual(['welcome', 'industry', 'host-pack', 'seed-demo', 'first-ai-task', 'done'])
+    expect(ids).toEqual(['welcome', 'industry', 'host-pack', 'done'])
     expect(ids).toContain('welcome')
     expect(ids).toContain('industry')
     expect(ids).toContain('host-pack')

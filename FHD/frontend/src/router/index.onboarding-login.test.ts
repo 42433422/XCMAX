@@ -119,7 +119,7 @@ describe('normal desktop login through the real onboarding router guard', () => 
     expect(useAccountProfileStore().loaded).toBe(true)
     expect(mocks.backgroundRefresh).not.toHaveBeenCalled()
     expect(router.currentRoute.value.name).toBe('product-onboarding')
-    expect(router.currentRoute.value.query).toMatchObject({ step: 'industry', redirect: modChatPath })
+    expect(router.currentRoute.value.query).toMatchObject({ step: 'welcome', redirect: modChatPath })
     expect(mocks.catalog).toHaveBeenCalled()
     expect(mocks.prefs).toHaveBeenCalledTimes(2)
   })

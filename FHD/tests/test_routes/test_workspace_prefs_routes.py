@@ -4,11 +4,36 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from app.fastapi_routes.workspace_prefs_routes import (
     WorkspacePrefsPatch,
     patch_workspace_prefs_endpoint,
+    router,
 )
+
+
+@pytest.mark.parametrize("industry_id", ["业" * 33, "x" * 128])
+def test_oversized_industry_is_rejected_before_any_write(monkeypatch, industry_id):
+    app = FastAPI()
+    app.include_router(router)
+    user = SimpleNamespace(id=7)
+    monkeypatch.setattr(
+        "app.fastapi_routes.workspace_prefs_routes.get_logged_in_user",
+        lambda _request: user,
+    )
+    writes = MagicMock()
+    monkeypatch.setattr("app.fastapi_routes.workspace_prefs_routes.patch_workspace_prefs", writes)
+    with TestClient(app) as client:
+        response = client.patch("/api/workspace/prefs", json={"selected_industry_id": industry_id})
+    assert response.status_code == 422
+    writes.assert_not_called()
+
+
+def test_industry_name_at_database_limit_is_not_truncated():
+    industry_id = "业" * 32
+    assert WorkspacePrefsPatch(selected_industry_id=industry_id).selected_industry_id == industry_id
 
 
 @pytest.mark.asyncio

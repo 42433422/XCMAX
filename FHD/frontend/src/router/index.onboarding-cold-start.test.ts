@@ -10,6 +10,7 @@ import { invalidateTenantStorageScopeCache } from '@/utils/tenantStorageScope'
 
 const mocks = vi.hoisted(() => ({
   loggedIn: false,
+  industry: '考勤',
   validateFailure: null as Error | null,
   rejectBinding: false,
   get: vi.fn(), post: vi.fn(), transport: vi.fn(), alert: vi.fn(),
@@ -29,7 +30,7 @@ vi.mock('@/utils/appDialog', () => ({ appAlert: mocks.alert }))
 vi.mock('@/composables/useTutorialCatalog', () => ({ useTutorialCatalog: () => ({ buildContext: { value: {} } }) }))
 vi.mock('@/api/system', () => ({ systemApi: {
   getIndustries: vi.fn().mockResolvedValue({ success: true, data: { industries: [] } }),
-  getCurrentIndustry: vi.fn().mockResolvedValue({ success: true, data: { id: '考勤', name: '考勤' } }),
+  getCurrentIndustry: vi.fn(async () => ({ success: true, data: { id: mocks.industry, name: mocks.industry } })),
 } }))
 vi.mock('@/stores/workflowAiEmployees', () => ({
   useWorkflowAiEmployeesStore: () => ({ reloadForTenantScope: vi.fn() }), workflowAiEmployeesStorageKey: () => 'test-workflow-employees',
@@ -65,10 +66,11 @@ async function selectFromWelcome() {
   await router.replace({ path: '/onboarding', query: { redirect: returnPath } })
   wrapper = mount(RouterView, { global: { plugins: [router] } })
   await flushPromises()
-  expect(wrapper.text()).toContain('认识 XC')
-  await button('下一步：行业定型').trigger('click')
+  expect(wrapper.text()).toContain('您的公司叫什么')
+  await wrapper.get('#onboarding-company').setValue('蓝色公司 & 团队')
+  await button('让 XC 认识我的公司').trigger('click')
   await flushPromises()
-  await wrapper.get('[role="option"][aria-selected="false"]').trigger('click')
+  await button('涂料与新材料').trigger('click')
   expect(wrapper.find('[role="option"][aria-selected="true"]').text()).toContain('涂料')
 }
 
@@ -83,6 +85,7 @@ beforeEach(() => {
   clearDeliverableStatusCache()
   setActivePinia(createPinia())
   mocks.loggedIn = false
+  mocks.industry = '考勤'
   mocks.validateFailure = null
   mocks.rejectBinding = false
   mocks.get.mockImplementation(async (path: string) => {
@@ -94,6 +97,7 @@ beforeEach(() => {
     return loginPayload
   })
   mocks.post.mockImplementation(async (path: string) => {
+    if (path === '/api/auth/company-brand') return { success: true, company_brand: '蓝色公司 & 团队', tenant_name: '蓝色公司 & 团队' }
     if (path !== '/api/auth/login') throw new Error(`Unexpected POST ${path}`)
     mocks.loggedIn = true
     return loginPayload
@@ -101,6 +105,7 @@ beforeEach(() => {
   mocks.transport.mockImplementation(async (url: string, init?: RequestInit) => {
     if (url === '/api/workspace/prefs') {
       if (init?.method === 'PATCH' && (!mocks.loggedIn || mocks.rejectBinding)) return respond({}, 401)
+      if (init?.method === 'PATCH') mocks.industry = JSON.parse(String(init.body)).selected_industry_id || mocks.industry
       return respond({ success: true, owner_id: mocks.loggedIn ? 'tenant:10' : null, data: {} })
     }
     if (url === '/api/platform-shell/onboarding-industries') return respond({ data: {
@@ -119,7 +124,7 @@ afterEach(() => { wrapper?.unmount(); wrapper = undefined; vi.unstubAllGlobals()
 
 it('starts at welcome, offers normal login, and resumes the chosen industry before an explicit bind', async () => {
   await selectFromWelcome()
-  await button('下一步：准备业务功能').trigger('click')
+  await button('生成我的配置方案').trigger('click')
   await flushPromises()
   expect(wrapper!.text()).toContain('请先登录')
   expect(wrapper!.text()).not.toContain('登录已过期')
@@ -135,11 +140,11 @@ it('starts at welcome, offers normal login, and resumes the chosen industry befo
   await flushPromises()
   await vi.waitFor(() => expect(router.currentRoute.value.name).toBe('product-onboarding'))
   await flushPromises()
-  expect(router.currentRoute.value.query).toMatchObject({ step: 'industry', industry: '涂料', redirect: returnPath })
+  expect(router.currentRoute.value.query).toMatchObject({ step: 'industry', industry: '涂料', company: '蓝色公司 & 团队', redirect: returnPath })
   expect(wrapper!.find('[role="option"][aria-selected="true"]').text()).toContain('涂料')
   expect(wrapper!.text()).not.toContain('请先登录')
   expect(mocks.transport.mock.calls.filter(([, init]) => init?.method === 'PATCH')).toHaveLength(0)
-  await button('下一步：准备业务功能').trigger('click')
+  await button('生成我的配置方案').trigger('click')
   await flushPromises()
   expect(router.currentRoute.value.query.step).toBe('host-pack')
   expect(router.currentRoute.value.query.redirect).toBe(returnPath)
@@ -151,13 +156,13 @@ it('starts at welcome, offers normal login, and resumes the chosen industry befo
 it('keeps a retry available when session validation is offline without attempting a binding', async () => {
   await selectFromWelcome()
   mocks.validateFailure = new Error('network offline')
-  await button('下一步：准备业务功能').trigger('click')
+  await button('生成我的配置方案').trigger('click')
   await flushPromises()
   expect(mocks.alert).toHaveBeenCalled()
   expect(String(mocks.alert.mock.calls[0][0])).not.toContain('登录已过期')
   expect(mocks.transport.mock.calls.filter(([, init]) => init?.method === 'PATCH')).toHaveLength(0)
   expect(router.currentRoute.value.query.step).toBe('industry')
-  expect(button('下一步：准备业务功能').attributes('disabled')).toBeUndefined()
+  expect(button('生成我的配置方案').attributes('disabled')).toBeUndefined()
 })
 
 it('also offers login when the session disappears between validation and the protected write', async () => {
@@ -166,7 +171,7 @@ it('also offers login when the session disappears between validation and the pro
   vi.stubGlobal('xcagiDesktop', { consumeBootstrapSessionHint })
   mocks.loggedIn = true
   mocks.rejectBinding = true
-  await button('下一步：准备业务功能').trigger('click')
+  await button('生成我的配置方案').trigger('click')
   await flushPromises()
   expect(wrapper!.text()).toContain('请先登录')
   expect(button('登录并继续设置').exists()).toBe(true)

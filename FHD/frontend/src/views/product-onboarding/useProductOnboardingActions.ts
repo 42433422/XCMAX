@@ -10,7 +10,12 @@ import { cancelPendingFirstAiTask, queueFirstAiTaskPrompt, setRuntimeOnboardingO
 import { appAlert } from '@/utils/appDialog'
 import { productErrorMessage } from '@/utils/productErrorMessage'
 import { invalidateEnterpriseSessionCache, validateEnterpriseSessionCached } from '@/utils/authSessionCache'
-import { clearDeliverableStatusCache, fetchIndustryBaseline, fetchOnboardingIndustryCatalog, seedOnboardingDemo } from '@/utils/platformShellApi'
+import {
+  clearDeliverableStatusCache,
+  fetchIndustryBaseline,
+  fetchOnboardingIndustryCatalog,
+  seedOnboardingDemo,
+} from '@/utils/platformShellApi'
 import { invalidateHostPackCompletionCache } from '@/utils/hostPackOnboardingGate'
 import type { WorkspacePrefs } from '@/utils/workspacePrefsApi'
 import type { TutorialBuildContext } from '@/tutorial/types'
@@ -71,10 +76,14 @@ export function useProductOnboardingActions(
     }
   }
 
-  watch(state.isAttendanceOnboarding, (attendance) => {
-    demoSeedResult.value = null
-    if (attendance) cancelPendingFirstAiTask()
-  }, { immediate: true })
+  watch(
+    state.isAttendanceOnboarding,
+    (attendance) => {
+      demoSeedResult.value = null
+      if (attendance) cancelPendingFirstAiTask()
+    },
+    { immediate: true },
+  )
 
   async function refreshBaseline(force = false) {
     baselinePlan.value = await fetchIndustryBaseline(pickedIndustryId.value, force)
@@ -150,9 +159,7 @@ export function useProductOnboardingActions(
       if (baselineOk.value) {
         invalidateHostPackCompletionCache()
         flow.markHostPackAcknowledged()
-        await appAlert(state.isAttendanceOnboarding.value ? '考勤功能已准备好。下一步到考勤工作区确认部门和人员名单。' : '本行业推荐菜单已装齐。下一步准备首次使用的演示数据。')
-        nav.goStep('seed-demo')
-        return
+        return true
       }
 
       const requiredMissing = baselinePlan.value?.missing_required_mod_ids || []
@@ -212,8 +219,9 @@ export function useProductOnboardingActions(
     pickedIndustryId.value = normalizePickedIndustryId(id)
   }
 
-  async function confirmIndustryAndNext() {
+  async function persistIndustryChoice() {
     pickedIndustryId.value = normalizePickedIndustryId(pickedIndustryId.value)
+    const industryId = pickedIndustryId.value
     if (!industryStore.isLoaded) {
       try {
         await industryStore.initialize()
@@ -221,24 +229,33 @@ export function useProductOnboardingActions(
         /* 离线仍允许继续 */
       }
     }
+    await state.saveCompanyName()
+    const saved = await patchWorkspacePrefs({
+      selected_industry_id: industryId,
+      industry_mod_id: industryPackageModId(industryId) || '',
+    })
+    if (saved.success !== true) throw new Error('行业未保存，请重试')
+    await industryStore.loadFromServer()
+    if (industryStore.error || industryStore.currentIndustryId !== industryId || pickedIndustryId.value !== industryId) {
+      throw new Error('行业已保存，但工作空间尚未刷新，请重试')
+    }
+    clearDeliverableStatusCache()
+    try {
+      onboardingCatalog.value = await fetchOnboardingIndustryCatalog()
+      if (onboardingCatalog.value?.open_industry_ids?.length) {
+        setRuntimeOnboardingOpenIndustryIds(onboardingCatalog.value.open_industry_ids)
+      }
+    } catch {
+      /* 绑定已完成，目录刷新失败不阻断下一步 */
+    }
+  }
+
+  async function confirmIndustryAndNext() {
+    if (loading.value || finishing.value) return
     loading.value = true
     try {
       if (!(await requireAccount())) return
-      await patchWorkspacePrefs({
-        selected_industry_id: pickedIndustryId.value,
-        industry_mod_id: industryPackageModId(pickedIndustryId.value) || undefined,
-      })
-      clearDeliverableStatusCache()
-      try {
-        onboardingCatalog.value = await fetchOnboardingIndustryCatalog()
-        if (onboardingCatalog.value?.open_industry_ids?.length) {
-          setRuntimeOnboardingOpenIndustryIds(onboardingCatalog.value.open_industry_ids)
-        }
-      } catch {
-        /* 绑定已完成，目录刷新失败不阻断下一步 */
-      }
-      // 首次选择行业后即幂等预置，避免用户进入业务页先看到空数据。
-      await ensureDemoData()
+      await persistIndustryChoice()
     } catch (err) {
       if (!handleMissingAccount(err)) await appAlert(productErrorMessage(err, '行业绑定失败，请稍后重试'))
       return
@@ -246,6 +263,28 @@ export function useProductOnboardingActions(
       loading.value = false
     }
     nav.goStep('host-pack')
+  }
+
+  async function createWorkspace() {
+    if (bootstrapBusy.value || loading.value || finishing.value) return
+    finishing.value = true
+    try {
+      if (!(await requireAccount())) return
+      // Deep links and login redirects can reach configuration without the
+      // industry-step action. Bind the displayed selection before accepting
+      // readiness; an earlier ready plan may belong to the previous industry.
+      await persistIndustryChoice()
+      await refreshBaseline(true)
+      if (!baselineOk.value && !(await runBootstrap())) return
+      // This confirms configuration only; no demo run is queued or completed.
+      const saved = await patchWorkspacePrefs({ host_pack_acknowledged: true, product_flow_completed: true })
+      if (saved.success !== true) throw new Error('工作空间配置未保存，请重试')
+      nav.finishHostPackFlow()
+    } catch (error) {
+      if (!handleMissingAccount(error)) await appAlert(productErrorMessage(error, '工作空间暂时未准备好，请重试'))
+    } finally {
+      finishing.value = false
+    }
   }
 
   async function finishOnboardingComplete() {
@@ -270,6 +309,7 @@ export function useProductOnboardingActions(
 
   return {
     loginRequired,
+    createWorkspace,
     refreshBaseline,
     refreshStatus,
     runBootstrap,

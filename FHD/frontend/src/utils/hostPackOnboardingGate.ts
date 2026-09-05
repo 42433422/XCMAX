@@ -5,7 +5,7 @@ import { fetchProductSku, isEnterpriseEdition } from '@/utils/productSku'
 import { fetchWorkspacePrefs } from '@/utils/workspacePrefsApi'
 import { readTenantScopedStorageItem } from '@/utils/tenantStorageScope'
 
-export type HostPackOnboardingStep = 'industry' | 'host-pack'
+export type HostPackOnboardingStep = 'welcome' | 'industry' | 'host-pack'
 
 /** 本 tab 会话内用户点了「先进入对话，稍后再补」则不再反复拦截（下次登录再提示） */
 export const SS_HOST_PACK_SKIPPED_SESSION = 'xcagi_host_pack_skip_session'
@@ -41,7 +41,7 @@ function readPersistedHostPackNeedsCache(): HostPackNeedsCache | null {
     if (!parsed || typeof parsed.needs !== 'boolean' || !Number.isFinite(Number(parsed.at))) {
       return null
     }
-    const step: HostPackOnboardingStep | null = parsed.step === 'industry' || parsed.step === 'host-pack' ? parsed.step : null
+    const step: HostPackOnboardingStep | null = parsed.step === 'welcome' || parsed.step === 'industry' || parsed.step === 'host-pack' ? parsed.step : null
     if (parsed.needs !== (step !== null)) return null
     const cached = { needs: parsed.needs, at: Number(parsed.at), step }
     if (Date.now() - cached.at >= HOST_PACK_CACHE_TTL_MS) return null
@@ -125,7 +125,7 @@ export async function isAdminAccountSessionForGate(): Promise<boolean> {
 }
 
 /**
- * 企业版未完成引导时应进入的步骤：未选行业 → industry；否则 host-pack。
+ * 企业版未完成引导时应进入的步骤：未选行业 → welcome；否则 host-pack。
  * 返回 null 表示无需拦截。
  */
 export async function resolveHostPackOnboardingStep(force = false): Promise<HostPackOnboardingStep | null> {
@@ -189,7 +189,7 @@ export async function needsHostPackCompletion(force = false): Promise<boolean> {
       const completed = prefs.product_flow_completed === true || (
         prefs.product_flow_completed !== false && readTenantScopedStorageItem(LS_PRODUCT_FLOW_COMPLETED, ownerId) === '1'
       )
-      if (!industryId && !completed) return saveResult(true, 'industry')
+      if (!industryId && !completed) return saveResult(true, 'welcome')
     }
     const plan = await fetchIndustryBaseline(industryId || defaultOnboardingIndustryId(), force)
     const needs = plan?.baseline_ready !== true

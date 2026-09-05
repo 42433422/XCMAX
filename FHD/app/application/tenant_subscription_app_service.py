@@ -75,11 +75,24 @@ def provision_trial_for_user(*, user_id: int, username: str, display_name: str =
         return int(tenant.id)
 
 
-def sync_tenant_display_name(*, user_id: int, company_brand: str) -> str:
+def sync_tenant_display_name(*, user_id: int, company_brand: str, db: Any = None) -> str:
     """若市场 company 与租户名不一致则更新 tenants.name。"""
     brand = (company_brand or "").strip()
     if not brand:
         return ""
+    if db is not None:
+        # The company-name endpoint owns one host transaction for the tenant
+        # and session, so a failed session write cannot leave half a local save.
+        user = db.query(User).filter(User.id == int(user_id)).first()
+        tenant = (
+            db.query(Tenant).filter(Tenant.id == int(user.tenant_id)).first()
+            if user and user.tenant_id
+            else None
+        )
+        if tenant is None:
+            raise ValueError("当前账号尚未建立工作区，请重新登录")
+        tenant.name = brand[:256]
+        return str(tenant.name)
     with get_db() as db:
         user = db.query(User).filter(User.id == int(user_id)).first()
         if not user or not user.tenant_id:

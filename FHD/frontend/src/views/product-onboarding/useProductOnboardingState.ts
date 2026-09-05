@@ -1,4 +1,7 @@
 import { computed, ref } from 'vue'
+import { useOnboardingCompany } from './useOnboardingCompany'
+import { ONBOARDING_INDUSTRY_CATEGORIES, listOnboardingIndustryOptions } from '@/constants/onboardingIndustryCatalog'
+import { resolveIndustryNavigationProfile } from '@/constants/industryNavigationProfiles'
 import type { RouteLocationNormalizedLoaded } from 'vue-router'
 import type {
   IndustryBaselineGroup,
@@ -13,7 +16,6 @@ import { getIndustryPreset, listIndustryPresets } from '@/constants/industryPres
 import {
   PRODUCT_FLOW_STEPS,
   defaultOnboardingIndustryId,
-  isOnboardingIndustryOpen,
   isTutorialReplayQuery,
   parseFlowStepQuery,
   readOnboardingReturnPath,
@@ -41,6 +43,7 @@ export interface OnboardingSubscriptionStatus {
  * 各行为 composable 共享同一组 ref，保证与拆分前同一实例。
  */
 export function useProductOnboardingState(route: RouteLocationNormalizedLoaded) {
+  const company = useOnboardingCompany(route)
   const industryOptions = listIndustryPresets()
   const onboardingCatalog = ref<OnboardingIndustryCatalog | null>(null)
   const onboardingCatalogLoaded = ref(false)
@@ -55,65 +58,44 @@ export function useProductOnboardingState(route: RouteLocationNormalizedLoaded) 
     }
   }
 
+  // The company taxonomy describes the business; installed/entitled packages
+  // are a separate server contract. Free text receives the generic baseline.
   const openIndustryOptions = computed<CatalogChipRow[]>(() => {
-    const catalog = onboardingCatalog.value
-    if (catalog) {
-      return (catalog.open_packages || []).map(catalogChipRow)
+    const options = new Map(listOnboardingIndustryOptions().map((item) => [item.id, { ...item, productName: '' }]))
+    for (const pkg of onboardingCatalog.value?.open_packages || []) {
+      const item = catalogChipRow(pkg)
+      if (!options.has(item.id)) options.set(item.id, { ...item, categoryId: 'business-services', aliases: [], popular: true })
     }
-    if (isEnterpriseEdition(productSku.value)) return []
-    return industryOptions
-      .filter((p) => isOnboardingIndustryOpen(p.id))
-      .map((p) => ({ id: p.id, name: p.name, scenario: p.scenario, productName: '' }))
+    return [...options.values()]
   })
-
-  const previewIndustryOptions = computed<CatalogChipRow[]>(() => {
-    const previewPkgs = onboardingCatalog.value?.preview_packages
-    if (Array.isArray(previewPkgs) && previewPkgs.length) {
-      return previewPkgs.map(catalogChipRow)
-    }
-    if (isEnterpriseEdition(productSku.value) && !onboardingCatalogLoaded.value) return []
-    return industryOptions
-      .filter((p) => !isOnboardingIndustryOpen(p.id))
-      .map((p) => ({ id: p.id, name: p.name, scenario: p.scenario, productName: '' }))
+  const previewIndustryOptions = computed<CatalogChipRow[]>(() => [])
+  const openIndustryLeadNames = computed(() => openIndustryOptions.value.map((item) => item.id))
+  const industryLeadKindText = computed(() => '行业方向')
+  const industryQuery = ref('')
+  const industryCategory = ref('popular')
+  const industryExpanded = ref(false)
+  const industryCategories = ONBOARDING_INDUSTRY_CATEGORIES
+  const filteredIndustryOptions = computed(() => {
+    const query = industryQuery.value.trim().toLocaleLowerCase()
+    const catalog = new Map(listOnboardingIndustryOptions().map((item) => [item.id, item]))
+    return openIndustryOptions.value.filter((item) => {
+      const meta = catalog.get(item.id)
+      if (query) return [item.id, item.name, ...(meta?.aliases || [])].some((text) => text.toLocaleLowerCase().includes(query))
+      if (industryCategory.value === 'all') return true
+      return industryCategory.value === 'popular' ? meta?.popular || !meta : meta?.categoryId === industryCategory.value
+    })
   })
-
-  const openIndustryLeadNames = computed<string[]>(() => {
-    const ids = onboardingCatalog.value?.open_industry_ids
-    if (Array.isArray(ids) && ids.length) return ids
-    return openIndustryOptions.value.map((p) => p.id)
-  })
-
-  const industryLeadKindText = computed(() => {
-    const count = openIndustryLeadNames.value.length
-    return count > 1 ? `${count} 套行业方向` : '行业方向'
-  })
+  const visibleIndustryOptions = computed(() => industryExpanded.value || industryQuery.value.trim() ? filteredIndustryOptions.value : filteredIndustryOptions.value.slice(0, 10))
 
   function isIndustrySelectable(id: unknown): boolean {
-    const key = String(id || '').trim()
-    if (!key) return false
-    const openIds = onboardingCatalog.value?.open_industry_ids
-    if (Array.isArray(openIds)) {
-      return openIds.includes(key)
-    }
-    return isOnboardingIndustryOpen(key)
+    return typeof id === 'string' && id.trim().length > 0 && id.trim().length <= 32
   }
-
-  function resolveDefaultPickedIndustryId(): string {
-    const selected = String(onboardingCatalog.value?.selected_industry_id || '').trim()
-    if (selected && isIndustrySelectable(selected)) return selected
-    const openIds = onboardingCatalog.value?.open_industry_ids
-    if (Array.isArray(openIds) && openIds.length) return openIds[0]
-    return defaultOnboardingIndustryId()
-  }
-
   function normalizePickedIndustryId(raw: unknown): string {
     const id = String(raw || '').trim()
-    if (isIndustrySelectable(id)) return id
-    return resolveDefaultPickedIndustryId()
+    return isIndustrySelectable(id) ? id : defaultOnboardingIndustryId()
   }
-
-  const pickedIndustryId = ref<string>(resolveDefaultPickedIndustryId())
-  const canConfirmIndustry = computed(() => openIndustryOptions.value.length > 0 && isIndustrySelectable(pickedIndustryId.value))
+  const pickedIndustryId = ref<string>(normalizePickedIndustryId(route.query.industry))
+  const canConfirmIndustry = computed(() => isIndustrySelectable(pickedIndustryId.value))
 
   function industryPackageLabel(industryId: unknown): string {
     const id = String(industryId || '').trim()
@@ -180,25 +162,12 @@ export function useProductOnboardingState(route: RouteLocationNormalizedLoaded) 
   })
   const baselineOk = computed(() => baselinePlan.value?.baseline_ready === true)
 
-  const SIDEBAR_PREVIEW_MENU_KEYS = [
-    'products',
-    'customers',
-    'orders',
-    'shipment-records',
-    'materials',
-    'data-sources',
-    'print',
-    'printer-list',
-    'template-preview',
-  ]
+  const industryNavigationProfile = computed(() => resolveIndustryNavigationProfile(pickedIndustryId.value))
   const industrySidebarPreviewLabels = computed<string[]>(() => {
-    const id = String(pickedIndustryId.value || '').trim()
-    const labels = SIDEBAR_PREVIEW_MENU_KEYS.map((key) => resolveCoreNavLabel(key, id, null)).filter(Boolean)
-    const capabilityIds = new Set((baselinePlan.value?.capability_mod_ids || []).map((value) => String(value || '').trim()))
-    if (id === '考勤' || capabilityIds.has('attendance-industry')) {
-      labels.unshift('考勤工作区')
-    }
-    return [...new Set(labels)]
+    if (pickedIndustryId.value === '考勤') return ['考勤工作区', '部门管理', '人员管理', '考勤查询']
+    const labels = industryNavigationProfile.value.previewMenuKeys.map((key) => resolveCoreNavLabel(key, pickedIndustryId.value, null)).filter(Boolean)
+    if (baselinePlan.value?.capability_mod_ids?.includes('attendance-industry')) labels.unshift('考勤工作区')
+    return labels
   })
   const baselineGroups = computed<IndustryBaselineGroup[]>(() => baselinePlan.value?.groups || [])
   const SIDEBAR_BASELINE_GROUP_IDS = new Set(['core', 'host'])
@@ -230,7 +199,7 @@ export function useProductOnboardingState(route: RouteLocationNormalizedLoaded) 
   const showNoAccountCustomHint = computed(
     () => isEnterpriseEdition(productSku.value) && currentStep.value === 'host-pack' && !loading.value && !hasAccountCustomEntitlement.value,
   )
-  const pickedIndustryName = computed(() => getIndustryPreset(pickedIndustryId.value).name)
+  const pickedIndustryName = computed(() => openIndustryOptions.value.find((item) => item.id === pickedIndustryId.value)?.name || pickedIndustryId.value)
   const isAttendanceOnboarding = computed(() => pickedIndustryId.value === '考勤' || industryPackageModId(pickedIndustryId.value) === 'attendance-industry')
   const firstOrderPrompt = computed(() => {
     if (isAttendanceOnboarding.value) return ''
@@ -267,10 +236,18 @@ export function useProductOnboardingState(route: RouteLocationNormalizedLoaded) 
   const fromTutorial = computed(() => isTutorialReplayQuery(route.query.from))
   const returnPath = computed(() => readOnboardingReturnPath(route.query.redirect))
   const footerHint = computed(() =>
-    fromTutorial.value ? '来自新手教程 · 可随时返回继续日常使用' : '完整流程见 docs/guides/PRODUCT_USER_FLOW.md',
+    fromTutorial.value ? '可随时返回继续日常使用' : '信息用于配置工作空间，示例业务由您另行选择',
   )
 
   return {
+    ...company,
+    industryQuery,
+    industryCategory,
+    industryExpanded,
+    industryCategories,
+    filteredIndustryOptions,
+    visibleIndustryOptions,
+    industryNavigationProfile,
     industryOptions,
     onboardingCatalog,
     onboardingCatalogLoaded,

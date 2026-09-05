@@ -124,9 +124,9 @@ describe('hostPackOnboardingGate', () => {
     await expect(resolveHostPackOnboardingStep(true)).resolves.toBe('host-pack')
   })
 
-  it('resolves industry step when no selected industry', async () => {
+  it('resolves company step when no selected industry', async () => {
     vi.mocked(fetchOnboardingIndustryCatalog).mockResolvedValue(industryCatalog(''))
-    await expect(resolveHostPackOnboardingStep(true)).resolves.toBe('industry')
+    await expect(resolveHostPackOnboardingStep(true)).resolves.toBe('welcome')
   })
 
   it('returns null when baseline ready', async () => {
@@ -139,8 +139,8 @@ describe('hostPackOnboardingGate', () => {
   it('asks a new enterprise workspace to choose an industry even with all required mods preinstalled', async () => {
     vi.mocked(fetchOnboardingIndustryCatalog).mockResolvedValue(industryCatalog(''))
     vi.mocked(fetchIndustryBaseline).mockResolvedValue({ baseline_ready: true, missing_required_mod_ids: [] } as unknown as IndustryBaselinePlan)
-    await expect(resolveHostPackOnboardingStep(true)).resolves.toBe('industry')
-    await expect(resolveHostPackOnboardingStep()).resolves.toBe('industry')
+    await expect(resolveHostPackOnboardingStep(true)).resolves.toBe('welcome')
+    await expect(resolveHostPackOnboardingStep()).resolves.toBe('welcome')
     expect(fetchWorkspacePrefs).toHaveBeenCalledTimes(1)
     expect(fetchIndustryBaseline).not.toHaveBeenCalled()
   })
@@ -191,7 +191,7 @@ describe('hostPackOnboardingGate', () => {
     vi.mocked(fetchWorkspacePrefs).mockRejectedValueOnce(new Error('offline'))
     await expect(resolveHostPackOnboardingStep(true)).resolves.toBeNull()
     expect(sessionStorage.getItem('xcagi_host_pack_needs_cache_v2')).toBeNull()
-    await expect(resolveHostPackOnboardingStep()).resolves.toBe('industry')
+    await expect(resolveHostPackOnboardingStep()).resolves.toBe('welcome')
   })
 
   it('allows an unavailable industry catalog through without changing onboarding state', async () => {
@@ -212,7 +212,7 @@ describe('hostPackOnboardingGate', () => {
     vi.mocked(fetchOnboardingIndustryCatalog).mockResolvedValue(industryCatalog(''))
     vi.mocked(fetchIndustryBaseline).mockResolvedValue({ baseline_ready: true } as IndustryBaselinePlan)
     writeTenantScopedStorageItem(LS_PRODUCT_FLOW_COMPLETED, '1', 'tenant:20')
-    await expect(resolveHostPackOnboardingStep(true)).resolves.toBe('industry')
+    await expect(resolveHostPackOnboardingStep(true)).resolves.toBe('welcome')
     writeTenantScopedStorageItem(LS_PRODUCT_FLOW_COMPLETED, '1', 'tenant:10')
     await expect(resolveHostPackOnboardingStep(true)).resolves.toBeNull()
   })

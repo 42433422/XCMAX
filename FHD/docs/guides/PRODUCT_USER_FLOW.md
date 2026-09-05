@@ -80,18 +80,20 @@ flowchart LR
 
 ---
 
-## 四、阶段 2：行业定型（引导步骤 2，可跳过）
+## 四、阶段 2：公司与行业设置
 
-> **实现顺序**（`PRODUCT_FLOW_STEPS`）：`welcome` → **`industry`** → **`host-pack`** → `seed-demo` → `first-ai-task`。  
-> 企业版若行业 baseline 未齐，路由门禁会优先拦到 `industry` 或 `host-pack`（见 `hostPackOnboardingGate.ts`）。
+> **首次设置顺序**（`PRODUCT_FLOW_STEPS`）：`welcome`（公司名称）→ `industry`（行业）→ `host-pack`（配置）。演示数据与 AI 第一单是另外选择的体验，不是完成入门的条件。
+> 新账号从公司名称开始；已完成设置的企业若功能未齐，仍须通过功能准备检查（见 `hostPackOnboardingGate.ts`）。
 
 ### 4.1 界面：`/onboarding?step=industry`
 
 | 步骤 ID | 标题 | 用户动作 | 接口 |
 |---------|------|----------|------|
-| `welcome` | 认识宿主 | 阅读说明 → 下一步 | — |
-| `industry` | 行业定型 | 选择开放行业 / 跳过 | `GET /api/platform-shell/onboarding-industries` |
-| `host-pack` | 补基础线 | **一键装齐通用包** / 重新检测 | `GET deliverable-status`、`POST bootstrap-edition-pack` |
+| `welcome` | 公司名称 | 输入名称，保留草稿以继续选择行业 | — |
+| `industry` | 所属行业 | 选择大类和细分行业，保存账号工作区分类 | `GET /api/platform-shell/onboarding-industries`、`PATCH /api/workspace/prefs` |
+| `host-pack` | 配置功能 | 查看可用功能、准备缺失项、重新检测后完成 | `GET /api/platform-shell/industry-baseline`、`POST /api/mod-store/install-host-foundation`、按需 `POST /api/mod-store/install-industry-seed` |
+
+生成配置方案前，登录账号通过 `POST /api/auth/company-brand` 保存公司名称，再保存行业分类；失败时留在当前步骤显示错误。匿名用户可以先填名称和选择行业，登录后继续。行业分类与专版权限分别处理：选择行业不自动开通付费或定制功能。侧栏按当前行业组织真实可用的功能，智能对话保持置顶。
 
 ### 4.2 宿主包内容（generic）
 
@@ -104,14 +106,11 @@ flowchart LR
 - `xcagi-approval-bridge`、`xcagi-lan-license-bridge`、`xcagi-model-payment-bridge`  
 - `xcagi-office-employee-pack-bridge`、`xcagi-customer-service-bridge`  
 
-### 4.3 完成判定
+### 4.3 保存判定
 
-```http
-GET /api/platform-shell/deliverable-status
-```
+公司名称与行业写入成功，并从服务器重新读取到相同的行业后，进入配置步骤。此时还没有完成整个入门，也没有创建演示业务。
 
-当 `data.deliverable === true` 且 `generic_pack_installed === true` 时，阶段 2 完成。  
-本地标记：`localStorage.xcagi_product_flow_host_ack = 1`。
+最后进入工作空间前，再次保存并核对所选行业、获取该行业的最新功能准备结果。所需功能就绪且工作区完成状态保存成功，才确认入门完成。
 
 ---
 
@@ -207,9 +206,11 @@ sequenceDiagram
 
 ## 九、验收检查表（实施人员勾选）
 
-- [ ] 新装后首次打开进入 `/onboarding`  
-- [ ] 步骤 2 检测通过后 `deliverable: true`  
-- [ ] 完成引导后进入对话，侧栏无内置 ERP 杂项（generic 壳）  
+- [ ] 新账号完成登录后进入公司名称步骤，匿名用户可明确进入登录
+- [ ] 公司名称保存后刷新和重新登录仍一致；失败可重试
+- [ ] 九大行业分类可选择，分类不会绕过专版权限；配置结果与实际可用功能一致
+- [ ] 完成三步后进入真实业务入口，未自动创建演示数据或 AI 任务
+- [ ] 智能对话在加载 Mod、拖拽排序及重启后始终置顶，其他菜单保持用户顺序
 - [ ] 扩展市场能列出 Catalog 并成功安装至少 1 个 Mod  
 - [ ] 安装行业 Mod 后出现 Mod 菜单项  
 - [ ] 重启应用后不再强制进入引导（除非清除 `xcagi_product_flow_completed`）  

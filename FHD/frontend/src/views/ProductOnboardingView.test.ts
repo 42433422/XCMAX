@@ -17,7 +17,7 @@ vi.mock('@/api/system', () => ({ systemApi: {
   getCurrentIndustry: vi.fn().mockResolvedValue({ success: true, data: { id: '涂料', name: '涂料' } }),
 } }))
 vi.mock('@/utils/workspacePrefsApi', () => ({
-  patchWorkspacePrefs: vi.fn().mockResolvedValue({}),
+  patchWorkspacePrefs: vi.fn().mockResolvedValue({ success: true }),
   queueWorkspacePrefsSync: vi.fn(),
 }))
 
@@ -124,13 +124,14 @@ describe('ProductOnboardingView.vue', () => {
       },
     })
     expect(wrapper.find('.product-flow').exists()).toBe(true)
-    expect(wrapper.text()).toContain('认识 XC')
+    expect(wrapper.text()).toContain('您的公司叫什么')
 
+    await wrapper.get('#onboarding-company').setValue('新公司')
     await wrapper.get('button.btn.primary').trigger('click')
     await flushPromises()
 
     expect(router.currentRoute.value.query.step).toBe('industry')
-    expect(wrapper.text()).toContain('先定行业')
+    expect(wrapper.text()).toContain('属于什么行业')
   })
 
   it('seeds demo data before presenting the first AI order', async () => {
@@ -179,7 +180,14 @@ describe('ProductOnboardingView.vue', () => {
     const wrapper = mount(RouterView, { global: { plugins: [router] } })
     try {
       await flushPromises()
-      expect(wrapper.get('button.btn.primary').text()).toContain('跟 AI 员工做第一单')
+      expect(wrapper.get('button.btn.primary').text()).toContain('进入我的工作空间')
+      expect(seedOnboardingDemo).not.toHaveBeenCalled()
+      const optionalExample = wrapper.findAll('button').find((button) => button.text() === '查看演示业务体验')
+      expect(optionalExample).toBeDefined()
+      await optionalExample!.trigger('click')
+      await flushPromises()
+      expect(router.currentRoute.value.query.step).toBe('seed-demo')
+      expect(seedOnboardingDemo).not.toHaveBeenCalled()
       await wrapper.get('button.btn.primary').trigger('click')
       await flushPromises()
       expect(router.currentRoute.value.query).toMatchObject({ step: 'first-ai-task', from: 'tutorial', redirect: '/data-sources' })
@@ -263,11 +271,10 @@ describe('ProductOnboardingView.vue', () => {
     })
     await flushPromises()
 
-    const openChips = wrapper.findAll('.industry-pick--open .industry-chip')
-    expect(openChips).toHaveLength(1)
-    expect(openChips[0].text()).toContain('饰品包装')
-    expect(openChips[0].classes()).toContain('active')
-    expect(wrapper.find('.industry-pick--preview').text()).toContain('考勤/排班')
+    const selected = wrapper.get('[role="option"][aria-selected="true"]')
+    expect(selected.text()).toContain('饰品包装')
+    expect(selected.classes()).toContain('active')
+    expect(wrapper.text()).not.toContain('即将开放')
     expect(wrapper.text()).not.toContain('两套行业方向')
   })
 
@@ -299,12 +306,12 @@ describe('ProductOnboardingView.vue', () => {
     })
     await flushPromises()
 
-    expect(wrapper.text()).toContain('装好后侧栏会出现')
+    expect(wrapper.text()).toContain('准备完成后可使用')
     expect(wrapper.text()).toContain('考勤工作区')
     expect(wrapper.text()).toContain('人员管理')
     expect(wrapper.text()).not.toContain('再用演示数据体验操作')
-    expect(wrapper.text()).toContain('考勤数据源')
-    expect(wrapper.text()).toContain('考勤模板库')
+    expect(wrapper.text()).toContain('部门管理')
+    expect(wrapper.text()).toContain('考勤查询')
   })
 
   it('keeps packaging shell labels while showing unified attendance capability', async () => {
@@ -407,7 +414,7 @@ describe('ProductOnboardingView.vue', () => {
       await router.isReady()
       const wrapper = mount(ProductOnboardingView, { global: { plugins: [router] } })
       await flushPromises()
-      const next = wrapper.findAll('button').find((button) => button.text() === '下一步：确认考勤名单')
+      const next = wrapper.findAll('button').find((button) => button.text() === '核对考勤名单')
       expect(next).toBeDefined()
       await next!.trigger('click')
       await flushPromises()

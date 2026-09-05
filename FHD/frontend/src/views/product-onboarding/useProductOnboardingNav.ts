@@ -15,6 +15,7 @@ export function useProductOnboardingNav(state: ProductOnboardingState, options: 
   function goStep(id: string) {
     const query: Record<string, string> = { step: id }
     if (returnPath.value !== '/') query.redirect = returnPath.value
+    if (state.companyName.value.trim()) query.company = state.companyName.value.trim()
     if (router.currentRoute.value.query.industry) query.industry = state.pickedIndustryId.value
     if (fromTutorial.value) {
       query.from = 'tutorial'
@@ -27,6 +28,7 @@ export function useProductOnboardingNav(state: ProductOnboardingState, options: 
     const query: Record<string, string> = {
       step: state.currentStep.value,
       industry: state.pickedIndustryId.value,
+      company: state.companyName.value.trim(),
       redirect: returnPath.value,
     }
     if (fromTutorial.value) query.from = 'tutorial'

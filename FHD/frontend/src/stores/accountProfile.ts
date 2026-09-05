@@ -23,7 +23,7 @@ function buildScopeInput(
   }
 }
 
-function syncTenantScopedStoresFromProfile(
+async function syncTenantScopedStoresFromProfile(
   tenantId: number | null,
   marketUserId: number | null,
   localUserId: number | null,
@@ -32,7 +32,11 @@ function syncTenantScopedStoresFromProfile(
 ): Promise<void> {
   const input = buildScopeInput(tenantId, marketUserId, localUserId, accountKind, marketUsername)
   setRuntimeTenantStorageScopeInput(input)
-  return refreshTenantScopedClientStores(input)
+  await refreshTenantScopedClientStores(input)
+  if (tenantId !== null || localUserId !== null || marketUserId !== null) {
+    const { useIndustryStore } = await import('@/stores/industry')
+    await useIndustryStore().loadFromServer()
+  }
 }
 
 export const useAccountProfileStore = defineStore('accountProfile', () => {

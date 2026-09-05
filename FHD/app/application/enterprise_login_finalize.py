@@ -123,9 +123,27 @@ async def finalize_enterprise_login(
         elif skip_market_sync:
             user_id = (result.get("user") or {}).get("id")
             if user_id is not None:
+                from app.db.models.tenant import Tenant
+                from app.db.models.user import User
+                from app.db.session import get_host_db
+
+                # A local account has no market profile to restore its name.
+                # Preserve its existing workspace instead of renaming it to
+                # the login username whenever a new session is created.
+                local_company_brand = str(result.get("company_brand") or "").strip()
+                with get_host_db() as db:
+                    local_user = db.query(User).filter(User.id == int(user_id)).first()
+                    tenant = (
+                        db.query(Tenant).filter(Tenant.id == local_user.tenant_id).first()
+                        if local_user and local_user.tenant_id
+                        else None
+                    )
+                    if tenant and str(tenant.name or "").strip():
+                        local_company_brand = str(tenant.name).strip()
+                local_company_brand = local_company_brand or username
                 tenant_info = flow.bind_tenant_for_login(
                     user_id=int(user_id),
-                    company_brand=str(result.get("company_brand") or username),
+                    company_brand=local_company_brand,
                     username=username,
                 )
                 if tenant_info.get("tenant_id") is not None:
@@ -135,11 +153,12 @@ async def finalize_enterprise_login(
                 flow.persist_session_account_meta(
                     str(session_id),
                     account_kind=account_kind,
-                    company_brand=str(result.get("company_brand") or ""),
+                    company_brand=local_company_brand,
                     tenant_id=(
                         int(tenant_info["tenant_id"]) if tenant_info.get("tenant_id") else None
                     ),
                 )
+                result["company_brand"] = local_company_brand
             result["account_kind"] = account_kind
 
         if (

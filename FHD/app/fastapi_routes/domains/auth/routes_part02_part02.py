@@ -157,42 +157,96 @@ async def auth_update_company_brand(
     body: dict = _facade().Body(default_factory=dict),
     user=_facade().Depends(_facade().get_logged_in_user),
 ):
-    """更新企业品牌名（写入 session，并同步修茈市场 user.company）。"""
+    """保存当前账号的公司名，确认市场写入后再更新宿主工作区。"""
     brand = str(body.get("company_brand") or body.get("company") or "").strip()[:256]
+    if not brand:
+        return _facade().JSONResponse(
+            _facade().error_envelope(_facade().INVALID_INPUT, "请输入公司或团队名称"),
+            status_code=400,
+        )
     sid = _facade().session_id_from_request(request)
     if not sid:
         return _facade().JSONResponse(
             _facade().error_envelope(_facade().NO_SESSION, "无会话"), status_code=400
         )
-    from app.application.session_account_meta import (
-        load_session_account_meta,
-        normalize_account_kind,
-        persist_session_account_meta,
-    )
+    from app.application.session_account_meta import load_session_account_meta
+    from app.application.tenant_subscription_app_service import sync_tenant_display_name
+    from app.db.models.user import Session, User
+    from app.db.session import get_host_db
     from app.fastapi_routes.market_account import _proxy_json, resolve_valid_market_access_token
 
     meta = load_session_account_meta(sid) or {}
-    persist_session_account_meta(
-        sid,
-        account_kind=normalize_account_kind(meta.get("account_kind"), default="enterprise"),
-        company_brand=brand,
-        market_user_id=meta.get("market_user_id"),
-        market_is_admin=bool(meta.get("market_is_admin")),
-        market_is_enterprise=bool(meta.get("market_is_enterprise")),
-        impersonating_market_user_id=meta.get("impersonating_market_user_id"),
-        impersonating_username=str(meta.get("impersonating_username") or ""),
+    market_bound = bool(
+        meta.get("market_user_id")
+        or getattr(user, "market_user_id", None)
+        or meta.get("market_is_enterprise")
+        or meta.get("market_is_admin")
     )
-    tok = await resolve_valid_market_access_token(sid)
+    try:
+        tok = await resolve_valid_market_access_token(sid)
+    except _facade().RECOVERABLE_ERRORS:
+        tok = None
+        market_bound = True
+    if market_bound and not tok:
+        return _facade().JSONResponse(
+            _facade().error_envelope(
+                _facade().MARKET_NOT_BOUND, "企业账号登录已失效，请重新登录后保存公司名称"
+            ),
+            status_code=409,
+        )
     if tok:
         auth = tok if tok.lower().startswith("bearer ") else f"Bearer {tok}"
-        await _proxy_json(
-            "PUT",
-            "/api/auth/profile",
-            json_body={"company": brand},
-            authorization=auth,
-            return_error_payload=True,
+        try:
+            result = await _proxy_json(
+                "PUT",
+                "/api/auth/profile",
+                json_body={"company": brand},
+                authorization=auth,
+                return_error_payload=True,
+            )
+        except _facade().RECOVERABLE_ERRORS:
+            result = None
+        if not (
+            isinstance(result, dict)
+            and not result.get("__proxy_error__")
+            and (result.get("ok") is True or result.get("success") is True)
+            and str(result.get("company") or "").strip() == brand
+        ):
+            return _facade().JSONResponse(
+                _facade().error_envelope(
+                    _facade().UPDATE_FAILED, "公司名称未能同步到企业账号，请稍后重试"
+                ),
+                status_code=502,
+            )
+    try:
+        with get_host_db() as db:
+            db_user = db.query(User).filter(User.id == user.id).first()
+            session = (
+                db.query(Session)
+                .filter(Session.session_id == sid, Session.user_id == user.id)
+                .first()
+            )
+            if db_user is None or session is None:
+                raise ValueError("登录会话已失效")
+            tenant_name = sync_tenant_display_name(user_id=user.id, company_brand=brand, db=db)
+            session.company_brand = brand
+            session.tenant_id = db_user.tenant_id
+    except _facade().RECOVERABLE_ERRORS:
+        _facade().logger.exception("company brand local persistence failed")
+        message = (
+            "企业账号名称已同步，但当前工作区保存失败，请重试保存"
+            if tok
+            else "当前工作区名称保存失败，请重新登录后重试"
         )
-    return {"success": True, "company_brand": brand}
+        return _facade().JSONResponse(
+            _facade().error_envelope(_facade().SAVE_FAILED, message), status_code=500
+        )
+    return {
+        "success": True,
+        "company_brand": brand,
+        "tenant_name": tenant_name,
+        "persistence_scope": "account" if tok else "local",
+    }
 
 
 @_facade().router.post("/api/auth/logout")

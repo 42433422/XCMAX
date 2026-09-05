@@ -44,44 +44,12 @@ export interface ProductFlowStepMeta {
   subtitle: string
 }
 
-/** 首次登录完整步骤轨：认识 → 行业 → 菜单 → 演示数据 → AI 第一单。 */
+/** 公司设置只有三步；演示业务通过单独的可选入口使用。 */
 export const PRODUCT_FLOW_STEPS: ProductFlowStepMeta[] = [
-  {
-    id: 'welcome',
-    index: 1,
-    title: '认识XC',
-    subtitle: '从已有表格开始，完成一次可核对的业务操作',
-  },
-  {
-    id: 'industry',
-    index: 2,
-    title: '行业定型',
-    subtitle: '选择业务场景，查看当前账号可用的行业功能',
-  },
-  {
-    id: 'host-pack',
-    index: 3,
-    title: '准备功能',
-    subtitle: '准备本行业所需功能，再用演示数据体验操作',
-  },
-  {
-    id: 'seed-demo',
-    index: 4,
-    title: '演示数据',
-    subtitle: '准备一套可删除的演示客户和商品，第一次操作不再面对空白页',
-  },
-  {
-    id: 'first-ai-task',
-    index: 5,
-    title: 'AI 第一单',
-    subtitle: '查询客户和商品，确认后制单，再核对业务记录',
-  },
-  {
-    id: 'done',
-    index: 6,
-    title: '开始使用',
-    subtitle: '进入智能对话与日常操作',
-  },
+  { id: 'welcome', index: 1, title: '公司', subtitle: '先认识您的公司或团队' },
+  { id: 'industry', index: 2, title: '行业', subtitle: '选择行业方向，也可以自由描述' },
+  { id: 'host-pack', index: 3, title: '配置', subtitle: '确认真实可用的工作空间能力' },
+  { id: 'done', index: 4, title: '开始使用', subtitle: '工作空间已准备好' },
 ]
 
 /** 引导「行业定型」当前开放可选（其余仅展示）；运行时以服务器 catalog 为准 */
