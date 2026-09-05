@@ -4,27 +4,27 @@
 #
 #    pip-compile --output-file=XCAGI/requirements.lock.txt XCAGI/requirements.txt
 #
-accelerate==1.13.0
+accelerate==1.14.0
     # via -r XCAGI/requirements.txt
 aiofiles==25.1.0
     # via -r XCAGI/requirements.txt
-aiohappyeyeballs==2.6.1
+aiohappyeyeballs==2.7.1
     # via aiohttp
 aiohttp==3.14.3
     # via edge-tts
 aiosignal==1.4.0
     # via aiohttp
-alembic==1.18.4
+alembic==1.19.1
     # via -r XCAGI/requirements.txt
 amqp==5.3.1
     # via kombu
-annotated-doc==0.0.4
+annotated-doc==0.0.5
     # via
     #   fastapi
     #   typer
-annotated-types==0.7.0
+annotated-types==0.8.0
     # via pydantic
-anyio==4.13.0
+anyio==4.14.2
     # via
     #   httpx
     #   openai
@@ -36,22 +36,22 @@ av==17.0.1
     # via faster-whisper
 billiard==4.2.4
     # via celery
-celery==5.3.4
+celery==5.6.3
     # via -r XCAGI/requirements.txt
-certifi==2026.4.22
+certifi==2026.7.22
     # via
     #   edge-tts
     #   httpcore
     #   httpx
-cffi==2.0.0
+cffi==2.1.1
     # via
     #   cryptography
     #   gevent
     #   miniaudio
     #   soundcard
-charset-normalizer==3.4.7
+charset-normalizer==3.5.1
     # via pdfminer-six
-click==8.3.3
+click==8.5.0
     # via
     #   celery
     #   click-didyoumean
@@ -75,13 +75,13 @@ colorama==0.4.6
     #   uvicorn
 contourpy==1.3.3
     # via matplotlib
-coverage[toml]==7.13.5
+coverage[toml]==7.16.0
     # via pytest-cov
-cryptography==50.0.0
+cryptography==50.0.1
     # via
     #   pdfminer-six
     #   pyopenssl
-ctranslate2==4.7.1
+ctranslate2==4.8.2
     # via faster-whisper
 cycler==0.12.1
     # via matplotlib
@@ -91,29 +91,29 @@ edge-tts==7.2.8
     # via -r XCAGI/requirements.txt
 et-xmlfile==2.0.0
     # via openpyxl
-fastapi==0.136.1
+fastapi==0.141.1
     # via -r XCAGI/requirements.txt
 faster-whisper==1.2.1
     # via -r XCAGI/requirements.txt
-filelock==3.29.0
+filelock==3.32.5
     # via
     #   huggingface-hub
     #   torch
 flatbuffers==25.12.19
     # via onnxruntime
-fonttools==4.62.1
+fonttools==4.64.0
     # via matplotlib
 frozenlist==1.8.0
     # via
     #   aiohttp
     #   aiosignal
-fsspec==2026.4.0
+fsspec==2026.7.0
     # via
     #   huggingface-hub
     #   torch
 gevent==24.2.1
     # via -r XCAGI/requirements.txt
-greenlet==3.5.0
+greenlet==3.5.5
     # via
     #   gevent
     #   sqlalchemy
@@ -123,26 +123,26 @@ h11==0.16.0
     # via
     #   httpcore
     #   uvicorn
-hf-xet==1.4.3
+hf-xet==1.6.0
     # via huggingface-hub
-holidays==0.95
+holidays==0.103
     # via prophet
 httpcore==1.0.9
     # via httpx
-httptools==0.7.1
+httptools==0.8.0
     # via uvicorn
-httpx==0.26.0
+httpx==0.28.1
     # via
     #   -r XCAGI/requirements.txt
     #   huggingface-hub
     #   openai
-huggingface-hub==1.13.0
+huggingface-hub==1.29.0
     # via
     #   accelerate
     #   faster-whisper
     #   tokenizers
     #   transformers
-idna==3.15
+idna==3.19
     # via
     #   anyio
     #   httpx
@@ -155,31 +155,31 @@ iniconfig==2.3.0
     # via pytest
 jinja2==3.1.6
     # via torch
-jiter==0.14.0
+jiter==0.16.0
     # via openai
-joblib==1.5.3
+joblib==1.6.0
     # via scikit-learn
-kiwisolver==1.5.0
+kiwisolver==1.5.1
     # via matplotlib
 kombu==5.6.2
     # via celery
-lxml==6.1.0
+lxml==6.1.2
     # via python-docx
-mako==1.3.12
+mako==1.4.1
     # via alembic
-markdown-it-py==4.0.0
+markdown-it-py==4.2.0
     # via rich
 markupsafe==3.0.3
     # via
     #   jinja2
     #   mako
-matplotlib==3.10.9
+matplotlib==3.11.1
     # via prophet
 mdurl==0.1.2
     # via markdown-it-py
 miniaudio==1.71
     # via -r XCAGI/requirements.txt
-mpmath==1.3.0
+mpmath==1.4.1
     # via sympy
 multidict==6.7.1
     # via
@@ -187,7 +187,7 @@ multidict==6.7.1
     #   yarl
 networkx==3.6.1
     # via torch
-numpy==2.4.4
+numpy==2.4.6
     # via
     #   -r XCAGI/requirements.txt
     #   accelerate
@@ -206,13 +206,13 @@ numpy==2.4.4
     #   stanio
     #   statsmodels
     #   transformers
-onnxruntime==1.25.1
+onnxruntime==1.29.0
     # via faster-whisper
 openai==2.33.0
     # via -r XCAGI/requirements.txt
 openpyxl==3.1.5
     # via -r XCAGI/requirements.txt
-packaging==26.2
+packaging==26.3
     # via
     #   accelerate
     #   gunicorn
@@ -229,13 +229,13 @@ pandas==3.0.2
     #   cmdstanpy
     #   prophet
     #   statsmodels
-patsy==1.0.2
+patsy==1.0.3
     # via statsmodels
 pdfminer-six==20251230
     # via pdfplumber
-pdfplumber==0.11.9
+pdfplumber==0.11.10
     # via -r XCAGI/requirements.txt
-pgvector==0.4.2
+pgvector==0.5.0
     # via -r XCAGI/requirements.txt
 pillow==12.3.0
     # via
@@ -244,15 +244,15 @@ pillow==12.3.0
     #   pdfplumber
 pluggy==1.6.0
     # via pytest
-prometheus-client==0.25.0
+prometheus-client==0.26.0
     # via -r XCAGI/requirements.txt
-prompt-toolkit==3.0.52
+prompt-toolkit==3.0.53
     # via click-repl
-propcache==0.4.1
+propcache==0.5.2
     # via
     #   aiohttp
     #   yarl
-prophet==1.3.0
+prophet==1.4.0
     # via -r XCAGI/requirements.txt
 protobuf==7.34.1
     # via
@@ -262,9 +262,9 @@ psutil==7.2.2
     # via
     #   -r XCAGI/requirements.txt
     #   accelerate
-psycopg[binary]==3.3.4
+psycopg[binary]==3.3.5
     # via -r XCAGI/requirements.txt
-psycopg-binary==3.3.4
+psycopg-binary==3.3.5
     # via psycopg
 pyaudio==0.2.14
     # via -r XCAGI/requirements.txt
@@ -272,28 +272,28 @@ pycparser==3.0
     # via cffi
 pycryptodomex==3.23.0
     # via python-alipay-sdk
-pydantic==2.13.3
+pydantic==2.13.5
     # via
     #   fastapi
     #   openai
-pydantic-core==2.46.3
+pydantic-core==2.48.0
     # via pydantic
-pygments==2.20.0
+pygments==2.21.0
     # via rich
 pyopenssl==26.4.0
     # via python-alipay-sdk
 pyparsing==3.3.2
     # via matplotlib
-pypdfium2==5.7.1
+pypdfium2==5.13.0
     # via pdfplumber
-pytest==9.0.3
+pytest==9.1.1
     # via
     #   -r XCAGI/requirements.txt
     #   pytest-cov
     #   pytest-mock
 pytest-cov==4.1.0
     # via -r XCAGI/requirements.txt
-pytest-mock==3.12.0
+pytest-mock==3.15.1
     # via -r XCAGI/requirements.txt
 python-alipay-sdk==3.4.0
     # via -r XCAGI/requirements.txt
@@ -305,11 +305,11 @@ python-dateutil==2.9.0.post0
     #   pandas
 python-docx==1.2.0
     # via -r XCAGI/requirements.txt
-python-dotenv==1.2.2
+python-dotenv==1.2.3
     # via
     #   -r XCAGI/requirements.txt
     #   uvicorn
-python-multipart==0.0.31
+python-multipart==0.0.32
     # via -r XCAGI/requirements.txt
 pyyaml==6.0.3
     # via
@@ -320,15 +320,15 @@ pyyaml==6.0.3
     #   uvicorn
 redis==5.0.1
     # via -r XCAGI/requirements.txt
-regex==2026.4.4
+regex==2026.9.3
     # via transformers
 rich==15.0.0
     # via typer
-safetensors==0.7.0
+safetensors==0.8.0
     # via
     #   accelerate
     #   transformers
-scikit-learn==1.8.0
+scikit-learn==1.9.0
     # via -r XCAGI/requirements.txt
 scipy==1.17.1
     # via
@@ -344,17 +344,17 @@ sniffio==1.3.1
     #   openai
 soundcard==0.4.6
     # via -r XCAGI/requirements.txt
-sqlalchemy==2.0.49
+sqlalchemy==2.0.52
     # via
     #   -r XCAGI/requirements.txt
     #   alembic
 stanio==0.5.1
     # via cmdstanpy
-starlette==1.3.1
+starlette==1.6.0
     # via
     #   -r XCAGI/requirements.txt
     #   fastapi
-statsmodels==0.14.6
+statsmodels==0.15.0
     # via -r XCAGI/requirements.txt
 sympy==1.14.0
     # via torch
@@ -364,7 +364,7 @@ tenacity==9.1.4
     # via -r XCAGI/requirements.txt
 threadpoolctl==3.6.0
     # via scikit-learn
-tokenizers==0.22.2
+tokenizers==0.23.1
     # via
     #   faster-whisper
     #   transformers
@@ -372,7 +372,7 @@ torch==2.13.0
     # via
     #   -r XCAGI/requirements.txt
     #   accelerate
-tqdm==4.67.3
+tqdm==4.70.0
     # via
     #   cmdstanpy
     #   faster-whisper
@@ -380,13 +380,13 @@ tqdm==4.67.3
     #   openai
     #   prophet
     #   transformers
-transformers==5.13.1
+transformers==5.16.1
     # via -r XCAGI/requirements.txt
-typer==0.25.1
+typer==0.27.2
     # via
     #   huggingface-hub
     #   transformers
-typing-extensions==4.15.0
+typing-extensions==4.16.0
     # via
     #   aiosignal
     #   alembic
@@ -404,36 +404,36 @@ typing-extensions==4.15.0
     #   starlette
     #   torch
     #   typing-inspection
-typing-inspection==0.4.2
+typing-inspection==0.4.4
     # via
     #   fastapi
     #   pydantic
-tzdata==2026.2
+tzdata==2026.3
     # via
     #   celery
     #   kombu
     #   pandas
     #   psycopg
-uvicorn[standard]==0.46.0
+uvicorn[standard]==0.52.4
     # via -r XCAGI/requirements.txt
 vine==5.1.0
     # via
     #   amqp
     #   celery
     #   kombu
-watchfiles==1.1.1
+watchfiles==1.2.0
     # via uvicorn
-wcwidth==0.7.0
+wcwidth==0.8.3
     # via prompt-toolkit
 websockets==16.0
     # via uvicorn
 xlrd==2.0.2
     # via -r XCAGI/requirements.txt
-yarl==1.23.0
+yarl==1.24.5
     # via aiohttp
 zope-event==6.2
     # via gevent
-zope-interface==8.4
+zope-interface==8.6
     # via gevent
 
 # The following packages are considered to be unsafe in a requirements file:
