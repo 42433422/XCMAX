@@ -152,22 +152,29 @@ class TestRefreshModsRootIfNeeded:
     def test_env_var_updates_root(self, tmp_path):
         mods_dir = str(tmp_path / "env_mods")
         os.makedirs(mods_dir)
-        mm = ModManager(mods_root="/tmp/old_nonexistent")
+        with patch(
+            "app.infrastructure.mods.mod_manager._default_mods_root",
+            return_value=str(tmp_path / "old-default"),
+        ):
+            mm = ModManager()
         with patch.dict(os.environ, {"XCAGI_MODS_ROOT": mods_dir}):
             mm._refresh_mods_root_if_needed()
         assert mm.mods_root == mods_dir
 
     def test_missing_root_fallback(self, tmp_path):
-        mm = ModManager(mods_root="/tmp/nonexistent_path_for_test")
         with patch(
             "app.infrastructure.mods.mod_manager._default_mods_root",
-            return_value=str(tmp_path / "fallback"),
+            side_effect=[str(tmp_path / "missing-default"), str(tmp_path / "fallback")],
         ):
+            mm = ModManager()
             mm._refresh_mods_root_if_needed()
         assert mm.mods_root == str(tmp_path / "fallback")
 
     def test_env_var_not_a_dir(self, tmp_path):
-        mm = ModManager(mods_root=str(tmp_path))
+        with patch(
+            "app.infrastructure.mods.mod_manager._default_mods_root", return_value=str(tmp_path)
+        ):
+            mm = ModManager()
         with patch.dict(os.environ, {"XCAGI_MODS_ROOT": "/tmp/nonexistent_env_dir"}):
             mm._refresh_mods_root_if_needed()
         # Should keep existing root

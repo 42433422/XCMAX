@@ -23,38 +23,61 @@
       "轨道上的交付物以节点为单位展示进度；整轨状态由节点进度汇总",
       "每个节点的阶段是流程，不是自由枚举：只能按 stage_flow.transitions 推进或转入返工，禁止跨阶段跳跃",
       "转返工必须填写问题说明，并开现有客服变更工单（user_cs_change_request · bug_fix · source=private_mod_rework），禁止另建工单系统",
-      "太阳鸟属于饰品包装行业；部门、人员、考勤使用主系统共享工作区；「考勤表转化」及模板规则仍是账号专属定制功能，继续走客户交付流程",
-      "delivery_mode=integrated_feature 表示定制功能运行在共享 runtime_mod_id 中；legacy_mod_id 保留为定制权益与交付记录身份，不代表独立系统或安装包",
+      "太阳鸟使用 main 标准宿主；人员、部门与记录属于当前账号共享考勤工作区；考勤表转换及模板规则由账号授权的独立私有 Mod 提供",
+      "delivery_mode=private_mod 的 runtime_mod_id 是独立签名交付包；legacy_mod_id 保留历史权益与进度身份，禁止把客户功能预装进通用宿主",
       "delivery_mode=unified_industry 的客户安装 industry_mod_id 对应行业包，并按 runtime_mod_id 使用归并后的通用业务模块；legacy_mod_id 只保留历史进度兼容，不得作为运行包或安装门槛",
       "客户交付走通用 Enterprise 安装包 + 生产员工私有交付进度（制作/测试/返工/验收）；太阳鸟定制安装包（太阳鸟-Setup / sunbird-custom-installer）已退役，禁止再作为正式交付面"
     ],
-    "stages": ["production", "testing", "rework", "acceptance", "delivered"],
-    "happy_path": ["production", "testing", "acceptance", "delivered"],
+    "stages": [
+      "production",
+      "testing",
+      "rework",
+      "acceptance",
+      "delivered"
+    ],
+    "happy_path": [
+      "production",
+      "testing",
+      "acceptance",
+      "delivered"
+    ],
     "stage_flow": {
       "production": {
         "label": "制作中",
         "goal": "完成开发与自测，进入可测状态",
-        "next": ["testing"]
+        "next": [
+          "testing"
+        ]
       },
       "testing": {
         "label": "测试中",
         "goal": "用例通过；不通过则返工",
-        "next": ["acceptance", "rework"]
+        "next": [
+          "acceptance",
+          "rework"
+        ]
       },
       "rework": {
         "label": "返工中",
         "goal": "修复问题后重回测试",
-        "next": ["testing"]
+        "next": [
+          "testing"
+        ]
       },
       "acceptance": {
         "label": "验收中",
         "goal": "生产/客户验收通过后交付",
-        "next": ["delivered", "rework"]
+        "next": [
+          "delivered",
+          "rework"
+        ]
       },
       "delivered": {
         "label": "已交付",
         "goal": "节点交付完成，流程结束",
-        "next": []
+        "next": [
+          "rework"
+        ]
       }
     }
   },
@@ -64,9 +87,11 @@
       "industry_id": "饰品包装",
       "industry_mod_id": "accessories-packaging-industry",
       "legacy_mod_id": "taiyangniao-pro",
-      "runtime_mod_id": "attendance-industry",
-      "delivery_mode": "integrated_feature",
-      "custom_features": ["attendance-convert"],
+      "runtime_mod_id": "sunbird-attendance-custom",
+      "delivery_mode": "private_mod",
+      "custom_features": [
+        "attendance-convert"
+      ],
       "customer_account": "SUNBIRD",
       "customer_brand": "太阳鸟 PRO",
       "customer_name": "太阳鸟",
@@ -104,7 +129,7 @@
         "apply": "sunbird_roster",
         "description": "太阳鸟交付种子：花名册、统一考勤侧库、考勤模板"
       },
-      "notes": "标准 Enterprise 客户端；考勤使用共享工作区；表转换及模板规则按太阳鸟账号定制交付，沿用 taiyangniao-pro 权益与进度身份，不安装独立太阳鸟系统"
+      "notes": "标准 main Enterprise 宿主；公共考勤由 attendance-industry 提供；转换、规则与模板在 sunbird-attendance-custom 独立 Mod，沿用 taiyangniao-pro 权益与进度身份；不生成客户专用宿主"
     },
     {
       "delivery_id": "customer-qishimei",

@@ -1,20 +1,29 @@
 from __future__ import annotations
 
 import re
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import date, datetime, time
 from typing import Any
 
 TIME_RANGE_RE = re.compile(r"(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})")
 
-# 由 ``convert`` 在每次转换前注入 ``resources/config/approval_config.yaml`` 中的 ``attendance_policy``。
-ACTIVE_POLICY: dict[str, Any] = {}
+# Each conversion uses only its authenticated owner policy, including when
+# separate requests execute concurrently in worker threads.
+_POLICY: ContextVar[dict[str, Any]] = ContextVar("sunbird_conversion_policy", default={})
+
+
+class _PolicyView:
+    def get(self, key: str, default: Any = None) -> Any:
+        return _POLICY.get().get(key, default)
+
+
+ACTIVE_POLICY = _PolicyView()
 
 
 def set_attendance_policy(policy: dict[str, Any] | None) -> None:
     """用毕可传 ``{}`` 清空，避免测试间串味。"""
-    global ACTIVE_POLICY
-    ACTIVE_POLICY = dict(policy or {})
+    _POLICY.set(dict(policy or {}))
 
 
 @dataclass(frozen=True)

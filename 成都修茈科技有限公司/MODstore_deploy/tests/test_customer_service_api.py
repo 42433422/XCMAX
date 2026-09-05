@@ -2,11 +2,26 @@ from __future__ import annotations
 
 import types
 import uuid
+from threading import enumerate as live_threads
 from unittest.mock import AsyncMock
 
 import pytest
 
 pytest.importorskip("fastapi")
+
+
+@pytest.fixture(autouse=True)
+def isolate_customer_ticket_workers(monkeypatch):
+    """Keep API workers inside their fixture and never invoke real repair employees."""
+    from modstore_server import incident_bus
+
+    monkeypatch.setenv("MODSTORE_INCIDENT_SYNC_DISPATCH", "1")
+    monkeypatch.setattr(incident_bus, "_dispatch_incident", lambda _event_id: None)
+    yield
+    for worker in live_threads():
+        if worker.name == "cs-ticket-incident":
+            worker.join(timeout=5)
+            assert not worker.is_alive(), "customer ticket worker escaped its test fixture"
 
 
 def _make_user(username: str, *, admin: bool = False):
@@ -354,7 +369,7 @@ def test_product_issue_domain_clarify_continues_ticket(client, monkeypatch):
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
     published: list = []
 
-    def _fake_publish(event_type, payload, *, source, fingerprint=None):
+    def _fake_publish(event_type, payload, *, source, fingerprint=None, dedupe_minutes=0):
         published.append(
             {"event_type": event_type, "payload": dict(payload or {}), "source": source}
         )
@@ -551,7 +566,9 @@ def test_apply_customer_ticket_incident_progress_advances_lifecycle(client, monk
         assert any("员工处理进展" in (m.content or "") for m in msgs)
 
 
-def test_custom_delivery_requires_quality_acceptance_and_install_receipt(client, monkeypatch):
+def test_custom_delivery_requires_quality_acceptance_and_install_receipt(
+    client, monkeypatch, tmp_path
+):
     """定制交付不能因员工报告成功提前结案；必须质量门、验收和安装回执齐全。"""
     from modstore_server import (
         customer_service_api,
@@ -580,7 +597,7 @@ def test_custom_delivery_requires_quality_acceptance_and_install_receipt(client,
         "sandbox_report": None,
     }
 
-    async def fake_start(user_id, payload):
+    async def fake_start(user_id, payload, **kwargs):
         assert user_id == user.id
         assert payload["intent"] in {"mod", "employee"}
         return {"session_id": state["id"], "status": "running"}
@@ -661,6 +678,10 @@ def test_custom_delivery_requires_quality_acceptance_and_install_receipt(client,
             assert row.status == "processing"
             assert row.closed_at is None
 
+        from tests.customer_delivery_fixture import signed_artifact
+
+        record = signed_artifact(tmp_path, monkeypatch, user.id, ticket_id, generation=state["id"])
+        state["verified_artifacts"] = [record]
         state.update(
             {
                 "status": "done",
@@ -701,6 +722,11 @@ def test_custom_delivery_requires_quality_acceptance_and_install_receipt(client,
         assert accepted.json()["custom_delivery"]["stage"] == "delivering"
         assert accepted.json()["custom_delivery"]["commerce_ready"] is True
         with sf() as db:
+            accepted_ticket = db.query(CustomerServiceTicket).filter_by(id=ticket_id).one()
+            accepted_evidence = customer_service_api._custom_delivery_evidence(accepted_ticket)
+            assert accepted_evidence["runs"][-1]["verified_artifacts"] == [record]
+            assert accepted_evidence["delivery_artifacts"] == [record]
+            assert accepted_evidence["delivery_generation"] == state["id"]
             accepted_audit = (
                 db.query(CustomerServiceAuditLog)
                 .filter_by(ticket_id=ticket_id, event_type="custom_delivery_accepted")
@@ -741,45 +767,57 @@ def test_custom_delivery_requires_quality_acceptance_and_install_receipt(client,
         assert updated.json()["custom_delivery"]["stage"] == "delivering"
         app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
 
-        receipt_token = "pytest-download-receipt-token-73"
-        with sf() as db:
-            row = db.query(CustomerServiceTicket).filter_by(id=ticket_id).first()
-            evidence = customer_service_api._custom_delivery_evidence(row)
-            evidence["download_grants"] = [
-                {
-                    "token": receipt_token,
-                    "kind": "module",
-                    "id": "contract-review-private",
-                    "used": False,
-                }
-            ]
-            row.evidence_json = customer_service_api.json_dumps(evidence)
-            db.commit()
-
-        installed = client.post(
-            f"/api/customer-service/custom-deliveries/{ticket_id}/installed",
-            json={
-                "artifact_kind": "module",
-                "artifact_id": "contract-review-private",
-                "installed_version": "1.0.0",
-                "host": "XCAGI Desktop pytest",
-                "receipt_token": receipt_token,
-            },
+        downloaded = client.get(
+            f"/api/customer-service/custom-deliveries/{ticket_id}/artifacts/module/download"
         )
+        assert downloaded.status_code == 200, downloaded.text
+        assert downloaded.headers["x-delivery-artifact-sha256"] == record["package_sha256"]
+        receipt = {
+            "artifact_kind": "module",
+            "artifact_id": record["id"],
+            "installed_version": record["version"],
+            "receipt_token": downloaded.headers["x-delivery-receipt-token"],
+            "receipt_id": "fixture-install",
+            "stage": "installed",
+            "client_instance_id": "fixture-client",
+            "package_sha256": record["package_sha256"],
+        }
+        endpoint = f"/api/customer-service/custom-deliveries/{ticket_id}/installed"
+        installed = client.post(endpoint, json=receipt)
         assert installed.status_code == 200, installed.text
-        assert installed.json()["status"] == "resolved"
-        assert installed.json()["custom_delivery"]["stage"] == "delivered"
-        replayed = client.post(
-            f"/api/customer-service/custom-deliveries/{ticket_id}/installed",
-            json={
-                "artifact_kind": "module",
-                "artifact_id": "contract-review-private",
-                "installed_version": "1.0.0",
-                "host": "XCAGI Desktop pytest",
-                "receipt_token": receipt_token,
-            },
+        assert installed.json()["status"] == "processing"
+        assert "等待" in installed.json()["custom_delivery"]["stage_label"]
+        from modstore_server import customer_delivery_receipts
+        from modstore_server.customer_delivery_receipts import canonical_sha256
+
+        monkeypatch.setattr(
+            customer_delivery_receipts,
+            "trusted_host_release",
+            lambda sha: {"git_sha": sha, "source_ref": "main"},
         )
-        assert replayed.status_code == 409
+        probe = {
+            "case_id": "fixture-case",
+            "passed": True,
+            "observations": {"rows": 2},
+            "observed_at": "2026-09-06T00:00:00Z",
+        }
+        runtime = {
+            **receipt,
+            "receipt_id": "fixture-running",
+            "stage": "running",
+            "host_sha": "c" * 40,
+            "runtime_files_sha256": record["runtime_files_sha256"],
+            "business_verification": {
+                **probe,
+                "evidence_sha256": canonical_sha256(probe),
+            },
+        }
+        completed = client.post(endpoint, json=runtime)
+        assert completed.status_code == 200, completed.text
+        assert completed.json()["status"] == "resolved"
+        assert completed.json()["custom_delivery"]["stage"] == "delivered"
+        replayed = client.post(endpoint, json=runtime)
+        assert replayed.status_code == 200 and replayed.json()["receipt"]["replayed"] is True
 
         # A tier/entitlement refresh still belongs to the same purchased account;
         # it must not reset the one included initial custom delivery.

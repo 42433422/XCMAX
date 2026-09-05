@@ -58,6 +58,11 @@ async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse
     try:
         token = await _market_token(request)
         if token:
+            from app.application.mod_delivery_receipt_outbox import (
+                retry_delivery_receipts_best_effort,
+            )
+
+            await retry_delivery_receipts_best_effort(request, token)
             remote_rows = await fetch_private_mod_library(token)
         elif mod_ids:
             remote_error = "未检测到市场登录凭证"
@@ -66,7 +71,9 @@ async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse
         logger.warning("private Mod update check failed: %s", exc)
     if token:
         try:
-            from app.application.private_mod_delivery_app import custom_delivery_remote_json
+            from app.application.private_mod_delivery_app import (
+                custom_delivery_remote_json,
+            )
 
             request_rows = await custom_delivery_remote_json(
                 token, "/api/customer-service/custom-deliveries"
@@ -80,16 +87,16 @@ async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse
     remote_by_id = {
         _safe_text(row.get("id")): row
         for row in remote_rows
-        if _safe_text(row.get("id")) in mod_ids
+        if _safe_text(row.get("id")) in mod_ids | runtime_ids
     }
     scope = _enterprise_delivery_scope(context, mod_ids)
     projects: list[dict[str, Any]] = []
     for mod_id in sorted(mod_ids):
         delivery = deliveries[mod_id]
         integrated = delivery.get("delivery_mode") == "integrated_feature"
-        runtime_id = _safe_text(delivery.get("runtime_mod_id")) if integrated else mod_id
+        runtime_id = _safe_text(delivery.get("runtime_mod_id")) or mod_id
         row = local_rows.get(runtime_id, {})
-        remote = remote_by_id.get(mod_id, {})
+        remote = remote_by_id.get(runtime_id) or remote_by_id.get(mod_id, {})
         local_version = _safe_text(row.get("version"))
         latest_version = _safe_text(remote.get("version"))
         project = project_state(
@@ -117,9 +124,11 @@ async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse
                     and latest_version
                     and is_newer_version(latest_version, local_version)
                 ),
-                "update_source": "shared_runtime"
-                if integrated
-                else ("private_mod_sync" if remote else "unavailable"),
+                "update_source": (
+                    "shared_runtime"
+                    if integrated
+                    else ("private_mod_sync" if remote else "unavailable")
+                ),
                 "business_modules": modules,
                 "ai_employees": employees,
                 "track_nodes": track_nodes,
@@ -159,7 +168,9 @@ async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse
 
 
 @router.post("/private-delivery/requests", response_model=ModStoreSimpleResponse)
-async def mod_store_create_private_delivery_request(request: Request) -> ModStoreSimpleResponse:
+async def mod_store_create_private_delivery_request(
+    request: Request,
+) -> ModStoreSimpleResponse:
     payload = await _request_payload(request)
     kind = _safe_text(payload.get("kind"))
     title = _safe_text(payload.get("title"))
@@ -241,13 +252,35 @@ async def mod_store_install_private_delivery_request(
 ) -> ModStoreSimpleResponse:
     payload = await _request_payload(request)
     artifact_kind = _safe_text(payload.get("artifact_kind"))
+    artifact_id = _safe_text(payload.get("artifact_id"))
     token = await _market_token(request)
     if not token:
         raise HTTPException(status_code=401, detail="请先登录并绑定修茈市场账号")
-    from app.application.private_mod_delivery_app import install_custom_delivery_artifact
+    from app.application.private_mod_delivery_app import (
+        install_custom_delivery_artifact,
+    )
 
     try:
-        data = await install_custom_delivery_artifact(token, ticket_id, artifact_kind)
+        from app.application.mod_delivery_receipt_outbox import (
+            retry_delivery_receipts_best_effort,
+        )
+        from app.application.tenant_workspace_prefs import resolve_workspace_owner_id
+        from app.infrastructure.auth.dependencies import get_logged_in_user
+
+        owner = resolve_workspace_owner_id(request, get_logged_in_user(request))
+        if not owner:
+            raise HTTPException(status_code=401, detail="无法确定当前工作空间")
+        data = await install_custom_delivery_artifact(
+            token,
+            ticket_id,
+            artifact_kind,
+            owner_scope=owner,
+            artifact_id=artifact_id,
+        )
+        from app.application.delivery_entitlements import refresh_delivery_entitlements
+
+        data["entitlements_refreshed"] = await refresh_delivery_entitlements(request, token)
+        data["receipts"] = await retry_delivery_receipts_best_effort(request, token)
     except (ConnectionError, LookupError, RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return ModStoreSimpleResponse(
@@ -257,6 +290,8 @@ async def mod_store_install_private_delivery_request(
     )
 
 
-from app.fastapi_routes.private_mod_delivery_progress_routes import router as progress_router
+from app.fastapi_routes.private_mod_delivery_progress_routes import (
+    router as progress_router,
+)
 
 router.include_router(progress_router)

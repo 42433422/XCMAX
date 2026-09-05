@@ -285,6 +285,11 @@ def analyze_mod_employee_readiness(
 
 
 def modstore_library_path() -> _facade().Path:
+    from modstore_server.customer_delivery_sources import active_private_library
+
+    private = active_private_library()
+    if private is not None:
+        return private
     p = _facade().resolved_library(_facade().load_config())
     p.mkdir(parents=True, exist_ok=True)
     return p

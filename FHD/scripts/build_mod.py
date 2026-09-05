@@ -22,6 +22,7 @@ import hashlib
 import json
 import os
 import re
+import sys
 import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -106,7 +107,11 @@ def _write_reproducible_file(zf: zipfile.ZipFile, full: Path, rel: str) -> None:
     zf.writestr(info, full.read_bytes(), compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
 
 
-def build_xcemp(src: Path, out_dir: Path, *, sign: bool = False) -> tuple[Path, dict]:
+def build_xcemp(
+    src: Path, out_dir: Path, *, sign: bool = False, private_key: Path | None = None
+) -> tuple[Path, dict]:
+    if sign and private_key is None:
+        raise SystemExit("--sign requires --private-key; unsigned release packages are forbidden")
     manifest = _load_manifest(src)
     errs = _validate_manifest(manifest)
     if errs:
@@ -128,10 +133,32 @@ def build_xcemp(src: Path, out_dir: Path, *, sign: bool = False) -> tuple[Path, 
             for name in sorted(files):
                 full = Path(root) / name
                 rel = full.relative_to(src).as_posix()
-                if _exclude_path(rel):
+                if _exclude_path(rel) or rel.startswith("META-INF/"):
                     continue
                 _write_reproducible_file(zf, full, rel)
                 written.append(rel)
+
+    if sign:
+        assert private_key is not None
+        if str(REPO_ROOT) not in sys.path:
+            sys.path.insert(0, str(REPO_ROOT))
+        from app.infrastructure.mods.package_signing import (
+            sign_members,
+            verify_signed_package_bytes,
+        )
+
+        with zipfile.ZipFile(out_path) as archive:
+            members = [(name, archive.read(name)) for name in archive.namelist()]
+        signature = sign_members(members, manifest, private_key)
+        with zipfile.ZipFile(out_path, "a", compression=zipfile.ZIP_DEFLATED) as archive:
+            info = zipfile.ZipInfo("META-INF/signature.json", date_time=_ZIP_TIMESTAMP)
+            info.create_system = 3
+            info.external_attr = (0o100000 | 0o644) << 16
+            archive.writestr(info, signature, compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
+        # An unrelated/private key cannot create an apparently installable public
+        # release: verify against exactly the same roots as the installed host.
+        verify_signed_package_bytes(out_path.read_bytes())
+        written.append("META-INF/signature.json")
 
     # 计算 sha256
     sha = hashlib.sha256()
@@ -172,11 +199,14 @@ def main() -> None:
         default=REPO_ROOT / "dist" / "employee_packs",
         help="输出目录（默认 dist/employee_packs）",
     )
-    parser.add_argument("--sign", action="store_true", help="预留签名标志位（暂未实现签名算法）")
+    parser.add_argument("--sign", action="store_true", help="使用宿主受信 Ed25519 私钥签名并验签")
+    parser.add_argument(
+        "--private-key", type=Path, help="仓库外 Ed25519 私钥 PEM 文件（--sign 必填）"
+    )
     args = parser.parse_args()
 
     src = _resolve_src(args.mod_id, args.src)
-    out_path, meta = build_xcemp(src, args.out, sign=args.sign)
+    out_path, meta = build_xcemp(src, args.out, sign=args.sign, private_key=args.private_key)
     print(f"OK: {out_path}")
     print(f"   sha256: {meta['sha256']}")
     print(f"   size:   {meta['size']} bytes")

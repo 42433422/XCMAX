@@ -502,37 +502,23 @@ class TestUpdateModExtractFailure:
         assert ok is False
         assert "未安装" in msg
 
-    def test_extract_failure_reloads_mod(self, tmp_path):
-        from app.infrastructure.mods.mod_manager import ModManager
+    def test_corrupt_package_preserves_loaded_mod_without_reload(self, tmp_path, monkeypatch):
+        from app.infrastructure.mods.install_receipts import read_verified_install
+        from tests.test_infrastructure.test_mod_manager_ext2 import _signed_manager_fixture
 
-        mm = ModManager(mods_root=str(tmp_path))
-        mm._loaded_mods.append("m1")
-
-        mock_meta = MagicMock()
-        mock_meta.version = "1.0"
-
-        with (
-            patch("app.infrastructure.mods.mod_manager.get_mod_registry") as mock_reg,
-            patch("app.infrastructure.mods.mod_manager.ModPackage") as mock_pkg,
-            patch.object(mm, "unload_mod"),
-            patch.object(mm, "load_mod") as mock_load,
-        ):
-            registry = MagicMock()
-            registry.get_mod_metadata.return_value = mock_meta
-            mock_reg.return_value = registry
-
-            mock_pkg_instance = MagicMock()
-            mock_pkg_instance.manifest = {"version": "2.0"}
-            mock_pkg.return_value = mock_pkg_instance
-
-            mock_pkg.extract_package.side_effect = RuntimeError("extract failed")
-
-            ok, msg, meta = mm.update_mod("m1", "/fake/path.xcmod")
-
-        assert ok is False
-        assert "更新失败" in msg
-        # Should attempt to reload the mod after extract failure
-        mock_load.assert_called_once_with("m1")
+        mm, package, _ = _signed_manager_fixture(tmp_path, monkeypatch, installed=True, loaded=True)
+        corrupt = Path(package())
+        corrupt.write_bytes(b"not a ZIP")
+        with patch.object(mm, "unload_mod") as unload, patch.object(mm, "load_mod") as load:
+            ok, msg, meta = mm.update_mod("fixture-mod", str(corrupt))
+        assert ok is False and "更新失败" in msg and meta is None
+        unload.assert_not_called()
+        load.assert_not_called()
+        assert (Path(mm.mods_root) / "fixture-mod/logic.py").read_text() == "old"
+        assert (
+            read_verified_install("fixture-mod", mods_root=mm.mods_root)["package_version"]
+            == "1.0.0"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -684,6 +670,7 @@ class TestRegisterSingleModHttpRoutes:
         from app.infrastructure.mods.mod_manager import _register_single_mod_http_routes
 
         mm = MagicMock()
+        mm.mods_root = str(tmp_path)
         mm._http_routes_registered = set()
         mm._backend_entry_modules = {}
         meta = MagicMock()
@@ -1397,11 +1384,11 @@ class TestLoadModBundlePath:
             result = mm.load_mod("m1")
         assert result is True
 
-    def test_bundle_register_success_returns_true(self):
+    def test_bundle_register_success_returns_true(self, tmp_path):
         from app.infrastructure.mods.artifact_constants import ARTIFACT_BUNDLE
         from app.infrastructure.mods.mod_manager import ModManager
 
-        mm = ModManager(mods_root="/tmp")
+        mm = ModManager(mods_root=str(tmp_path))
         meta, reg_mock = self._setup_bundle_mocks(mm, register_return=True)
 
         with (
@@ -1421,11 +1408,11 @@ class TestLoadModBundlePath:
         assert result is True
         assert "m1" in mm._loaded_mods
 
-    def test_bundle_register_false_still_returns_true(self):
+    def test_bundle_register_false_still_returns_true(self, tmp_path):
         from app.infrastructure.mods.artifact_constants import ARTIFACT_BUNDLE
         from app.infrastructure.mods.mod_manager import ModManager
 
-        mm = ModManager(mods_root="/tmp")
+        mm = ModManager(mods_root=str(tmp_path))
         meta, reg_mock = self._setup_bundle_mocks(mm, register_return=False)
 
         with (
@@ -1518,14 +1505,14 @@ class TestRefreshModsRootEnvNotDir:
     def test_mods_root_missing_re_resolves(self, tmp_path):
         from app.infrastructure.mods.mod_manager import ModManager
 
-        mm = ModManager(mods_root=str(tmp_path / "missing"))
         with (
             patch.dict("os.environ", {"XCAGI_MODS_ROOT": ""}, clear=False),
             patch(
                 "app.infrastructure.mods.mod_manager._default_mods_root",
-                return_value=str(tmp_path),
+                side_effect=[str(tmp_path / "missing"), str(tmp_path)],
             ),
         ):
+            mm = ModManager()
             mm._refresh_mods_root_if_needed()
         assert mm.mods_root == str(tmp_path)
 

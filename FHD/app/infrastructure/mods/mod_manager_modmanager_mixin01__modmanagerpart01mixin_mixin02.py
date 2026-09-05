@@ -62,7 +62,12 @@ class __ModManagerPart01MixinPart02Mixin:
         return True
 
     def install_mod_package(
-        self, package_path: str, verify_signature: bool = True, activate: bool = True
+        self,
+        package_path: str,
+        verify_signature: bool = True,
+        activate: bool = True,
+        *,
+        owner_scope: str = "",
     ) -> tuple[bool, str, _facade().ModMetadata | None]:
         """
         安装 MOD 包
@@ -98,20 +103,27 @@ class __ModManagerPart01MixinPart02Mixin:
                     assert_mod_allowed_for_sku(mod_id)
                 except PermissionError as exc:
                     return (False, str(exc), None)
+                from app.infrastructure.mods.install_receipts import install_extracted
+
+                was_loaded = bool(
+                    _facade().get_mod_registry().get_mod_metadata(mod_id)
+                    or mod_id in self._loaded_mods
+                    or mod_id in self._backend_entry_modules
+                )
+                restart_required = install_extracted(
+                    mods_root=self.mods_root,
+                    extracted_root=extract_path,
+                    manifest=manifest,
+                    package_path=package_path,
+                    verify_signature=verify_signature,
+                    was_loaded=was_loaded,
+                    owner_scope=owner_scope,
+                )
+                self.invalidate_scan_cache()
                 target_path = _facade().os.path.join(self.mods_root, mod_id)
-                if _facade().os.path.exists(target_path):
-                    existing_metadata = _facade().parse_manifest(target_path)
-                    existing_version = existing_metadata.version if existing_metadata else "unknown"
-                    new_version = manifest.get("version", "unknown")
-                    _facade().logger.info(
-                        "MOD %s already exists (v%s), updating to v%s",
-                        mod_id,
-                        existing_version,
-                        new_version,
-                    )
-                    _facade().shutil.rmtree(target_path)
-                _facade().shutil.copytree(extract_path, target_path)
-                _facade().logger.info("MOD installed to: %s", target_path)
+                if restart_required:
+                    metadata = _facade().parse_manifest(extract_path)
+                    return (True, f"MOD {mod_id} 新版本已安装，重启后生效", metadata)
                 if activate:
                     if self.load_mod(mod_id):
                         metadata = _facade().parse_manifest(target_path)
@@ -121,7 +133,11 @@ class __ModManagerPart01MixinPart02Mixin:
                 else:
                     metadata = _facade().parse_manifest(target_path)
                     return (True, f"MOD {mod_id} 安装成功（未激活）", metadata)
-        except _facade().RECOVERABLE_ERRORS as e:
+        except (
+            *_facade().RECOVERABLE_ERRORS,
+            _facade().ModPackageError,
+            _facade().ModSignatureError,
+        ) as e:
             _facade().logger.exception("MOD installation failed")
             return (False, f"安装失败：{e}", None)
 

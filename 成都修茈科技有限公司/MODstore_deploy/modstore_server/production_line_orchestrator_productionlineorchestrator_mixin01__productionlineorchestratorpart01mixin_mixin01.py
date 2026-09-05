@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
+from modstore_server.customer_issue_delivery_contract import execution_succeeded
 import importlib
 
 
@@ -111,6 +112,22 @@ class __ProductionLineOrchestratorPart01MixinPart01Mixin:
         self._fire("step_started", step_id=step_id, step_name=step.name, line=step.line.value)
         try:
             result_data = await self._execute_step(step, context or {})
+            if step_id == "O7" and not execution_succeeded(result_data.get("result")):
+                failed = result_data.get("result") or {}
+                error = str(failed.get("error") or "反馈员工未明确完成执行")
+                self._step_results[step_id] = _facade().StepResult(
+                    step_id=step_id,
+                    status=_facade().StepStatus.FAILED,
+                    data={**result_data, "context": dict(context or {})},
+                    error=error,
+                )
+                self._fire("step_failed", step_id=step_id, step_name=step.name, error=error)
+                from modstore_server.customer_issue_intake import (
+                    record_dispatch_failure,
+                )
+
+                record_dispatch_failure(dict(context or {}), error)
+                return self._step_results[step_id]
             if step.approval_gate != _facade().ApprovalGate.NONE:
                 self._step_results[step_id] = _facade().StepResult(
                     step_id=step_id,
@@ -129,10 +146,17 @@ class __ProductionLineOrchestratorPart01MixinPart01Mixin:
             )
             self._fire("step_completed", step_id=step_id, step_name=step.name)
             if step.cross_line_trigger:
+                cross_context = {
+                    key: value
+                    for key, value in (context or {}).items()
+                    if key not in {"from_step", "to_step", "result_data"}
+                }
                 self._fire(
                     "cross_line_trigger",
                     from_step=step_id,
                     to_step=step.cross_line_trigger,
+                    **cross_context,
+                    result_data=result_data,
                 )
             if step.auto_trigger_next and (not getattr(self, "_release_train_subset", False)):
                 next_step = self._get_next_step(step)
@@ -145,6 +169,13 @@ class __ProductionLineOrchestratorPart01MixinPart01Mixin:
                 step_id=step_id, status=_facade().StepStatus.FAILED, error=str(exc)
             )
             self._fire("step_failed", step_id=step_id, step_name=step.name, error=str(exc))
+            if step_id == "O7":
+                from modstore_server.customer_issue_intake import (
+                    record_dispatch_failure,
+                )
+
+                record_dispatch_failure(dict(context or {}), str(exc))
+                return self._step_results[step_id]
             if step.retry_on_failure and step.max_retries > 0:
                 return await self._retry_step(step, context, remaining=step.max_retries)
             return self._step_results[step_id]

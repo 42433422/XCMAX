@@ -1263,25 +1263,105 @@ class TestUninstallRoute:
 # ===========================================================================
 
 
+@pytest.fixture
+def update_catalog(monkeypatch):
+    """Keep real discovery and routing; isolate only auth and remote/local I/O."""
+    from fastapi import HTTPException
+
+    user = types.SimpleNamespace(id=7)
+    rows = [{"id": "m1", "version": "2.0.0", "sha256": "a" * 64}]
+
+    def current_user(request):
+        if request.headers.get("x-session-id") != "synthetic-update-session":
+            raise HTTPException(401, "login required")
+        return user
+
+    def current_owner(request, authenticated_user):
+        assert authenticated_user is user
+        assert request.headers["x-session-id"] == "synthetic-update-session"
+        return "tenant:7"
+
+    async def public_catalog():
+        for row in rows:
+            yield dict(row)
+
+    async def market_token(request):
+        assert request.headers["x-session-id"] == "synthetic-update-session"
+        return "synthetic-caller-market-token"
+
+    async def private_library(token):
+        assert token == "synthetic-caller-market-token"
+        return []
+
+    for module, name, replacement in (
+        ("app.infrastructure.auth.dependencies", "get_logged_in_user", current_user),
+        ("app.application.tenant_workspace_prefs", "resolve_workspace_owner_id", current_owner),
+        ("app.infrastructure.mods.install_receipts", "read_verified_install", lambda mid: None),
+        (
+            "app.fastapi_routes.private_mod_delivery_context",
+            "_private_delivery_market_token",
+            market_token,
+        ),
+        (
+            "app.application.private_mod_delivery_artifacts",
+            "fetch_private_mod_library",
+            private_library,
+        ),
+    ):
+        monkeypatch.setattr(importlib.import_module(module), name, replacement)
+    monkeypatch.setattr(_mod, "_installed_by_id", lambda: {"m1": {"version": "1.0.0"}})
+    monkeypatch.setattr(_mod, "iter_catalog_packages", public_catalog)
+    return rows, {"x-session-id": "synthetic-update-session"}
+
+
 class TestUpdateRoute:
-    def test_calls_install_from_catalog(self):
+    def test_calls_install_from_catalog(self, update_catalog):
+        rows, headers = update_catalog
         install_mock = AsyncMock(
             return_value=_mod.ModStoreInstallResult(success=True, message="updated")
         )
         with patch.object(_mod, "_install_from_catalog", install_mock):
             with _make_client() as client:
-                resp = client.post("/update", json={"pkg_id": "m1", "version": "2.0"})
+                resp = client.post(
+                    "/update", json={"pkg_id": "m1", "version": "2.0.0"}, headers=headers
+                )
         assert resp.status_code == 200
         assert resp.json()["success"] is True
+        install_mock.assert_awaited_once_with(
+            "m1", "2.0.0", activate=True, expected_sha256=rows[0]["sha256"]
+        )
 
-    def test_from_package_file(self):
+    def test_from_package_file(self, update_catalog):
+        rows, headers = update_catalog
         install_mock = AsyncMock(
             return_value=_mod.ModStoreInstallResult(success=True, message="updated")
         )
         with patch.object(_mod, "_install_from_catalog", install_mock):
             with _make_client() as client:
-                resp = client.post("/update", json={"package_file": "m1:2.0"})
+                resp = client.post("/update", json={"package_file": "m1:2.0.0"}, headers=headers)
         assert resp.status_code == 200
+        install_mock.assert_awaited_once_with(
+            "m1", "2.0.0", activate=True, expected_sha256=rows[0]["sha256"]
+        )
+
+    def test_anonymous_cannot_install_catalog_update(self, update_catalog):
+        install_mock = AsyncMock()
+        with patch.object(_mod, "_install_from_catalog", install_mock):
+            with _make_client() as client:
+                resp = client.post("/update", json={"pkg_id": "m1", "version": "2.0.0"})
+        assert resp.status_code == 401
+        install_mock.assert_not_awaited()
+
+    def test_requested_version_must_be_available_to_current_caller(self, update_catalog):
+        _, headers = update_catalog
+        install_mock = AsyncMock()
+        with patch.object(_mod, "_install_from_catalog", install_mock):
+            with _make_client() as client:
+                resp = client.post(
+                    "/update", json={"pkg_id": "m1", "version": "99.0.0"}, headers=headers
+                )
+        assert resp.status_code == 409
+        install_mock.assert_not_awaited()
 
 
 # ===========================================================================
@@ -1296,11 +1376,18 @@ class TestSimpleGetRoutes:
         assert resp.status_code == 200
         assert resp.json()["success"] is False
 
-    def test_updates_returns_empty_list(self):
+    def test_updates_returns_empty_list_only_after_all_sources_checked(self, update_catalog):
+        rows, headers = update_catalog
+        rows[0]["version"] = "1.0.0"
         with _make_client() as client:
-            resp = client.get("/updates")
+            resp = client.get("/updates", headers=headers)
         assert resp.status_code == 200
-        assert resp.json()["data"]["count"] == 0
+        assert resp.json()["data"] == {
+            "updates_available": [],
+            "count": 0,
+            "complete": True,
+            "source_errors": {},
+        }
 
     def test_dependencies_returns_structure(self):
         with _make_client() as client:

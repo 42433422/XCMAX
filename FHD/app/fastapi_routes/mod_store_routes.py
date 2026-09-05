@@ -218,7 +218,7 @@ def _remote_to_mod_info(d: dict[str, Any], installed_ids: set[str]) -> dict[str,
         "avg_rating": float(d.get("avg_rating") or 0.0),
         "rating_count": int(d.get("rating_count") or 0),
         "created_at": d.get("created_at") or d.get("updated_at"),
-        "dependencies": d.get("dependencies") if isinstance(d.get("dependencies"), dict) else {},
+        "dependencies": (d.get("dependencies") if isinstance(d.get("dependencies"), dict) else {}),
         "artifact": d.get("artifact") or "mod",
         "sha256": d.get("sha256"),
         "commerce": commerce,
@@ -408,6 +408,14 @@ _normalize_package_zip = normalize_package_zip_path
 
 _delivery_routes = __import__("app.fastapi_routes.private_mod_delivery_routes", fromlist=["router"])
 router.include_router(_delivery_routes.router)
+
+from app.fastapi_routes.issue_runtime_routes import router as issue_runtime_router
+
+router.include_router(issue_runtime_router)
+
+from app.fastapi_routes.delivery_sync_routes import router as delivery_sync_router
+
+router.include_router(delivery_sync_router)
 
 from app.fastapi_routes import mod_store_route_handlers as _route_handlers
 

@@ -69,6 +69,8 @@ class ModMetadata:
     # 例如 entity/query_title/starter_pack 等，未声明时由 industry 字段推导。
     ui_labels: dict[str, Any] = field(default_factory=dict)
     ui_starter_pack: list[dict[str, Any]] = field(default_factory=list)
+    scope: str = "global"
+    frontend_runtime: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any], mod_path: str = "") -> "ModMetadata":
@@ -130,6 +132,10 @@ class ModMetadata:
             artifact=normalize_artifact(data),
             bundle=bundle,
             dependencies=_normalize_dependencies(data.get("dependencies")),
+            scope=str(data.get("scope") or "global"),
+            frontend_runtime=(
+                dict(frontend.get("runtime")) if isinstance(frontend.get("runtime"), dict) else {}
+            ),
             backend_entry=backend.get("entry", ""),
             backend_init=backend.get("init", ""),
             frontend_routes=frontend.get("routes", ""),

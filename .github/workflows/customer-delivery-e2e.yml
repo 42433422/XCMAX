@@ -1,0 +1,75 @@
+name: Customer issue delivery
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "FHD/app/**"
+      - "FHD/mods/**"
+      - "FHD/XCAGI/mods/**"
+      - "FHD/scripts/build_mod.py"
+      - "FHD/scripts/dev/build-runtime-mod-frontend.mjs"
+      - "FHD/frontend/src/utils/runtimeModSdk.ts"
+      - "成都修茈科技有限公司/MODstore_deploy/**"
+      - ".github/workflows/customer-delivery-e2e.yml"
+  push:
+    branches: [main]
+    paths:
+      - "FHD/app/**"
+      - "FHD/mods/**"
+      - "FHD/XCAGI/mods/**"
+      - "FHD/scripts/build_mod.py"
+      - "FHD/scripts/dev/build-runtime-mod-frontend.mjs"
+      - "FHD/frontend/src/utils/runtimeModSdk.ts"
+      - "成都修茈科技有限公司/MODstore_deploy/**"
+      - ".github/workflows/customer-delivery-e2e.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: customer-delivery-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  signed-customer-delivery:
+    name: Signed customer delivery round trip
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: FHD/frontend/package-lock.json
+      - name: Install the actual runtime frontend compiler
+        working-directory: FHD/frontend
+        run: npm ci --no-audit --no-fund
+      - name: Install isolated cross-service test dependencies
+        run: |
+          python -m venv .delivery-e2e-venv
+          .delivery-e2e-venv/bin/python -m pip install --upgrade pip
+          .delivery-e2e-venv/bin/python -m pip install \
+            -e './成都修茈科技有限公司/MODstore_deploy[web,dev]' \
+            'pandas>=2.0' 'pydantic-settings>=2.11'
+      - name: Verify signed delivery, runtime receipt and original-ticket rework
+        working-directory: 成都修茈科技有限公司/MODstore_deploy
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          ../../.delivery-e2e-venv/bin/python -m pytest \
+            tests/sunbird_host_delivery_e2e.py \
+            --junitxml=../../delivery-e2e-results.xml
+      - name: Upload the exact-run result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-customer-delivery-${{ github.sha }}
+          path: delivery-e2e-results.xml
+          if-no-files-found: warn
+          retention-days: 14

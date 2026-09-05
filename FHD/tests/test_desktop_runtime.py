@@ -137,7 +137,7 @@ def test_model_manifest_loads_assets(tmp_path):
     assert assets[0].version == "1.0.0"
 
 
-def test_sunbird_delivery_files_sync_missing_payload(tmp_path, monkeypatch):
+def test_sunbird_delivery_files_are_not_copied_before_authenticated_install(tmp_path, monkeypatch):
     seed = tmp_path / "seed"
     runtime = tmp_path / "runtime"
     (seed / "424").mkdir(parents=True)
@@ -153,10 +153,9 @@ def test_sunbird_delivery_files_sync_missing_payload(tmp_path, monkeypatch):
 
     copied = sync_sunbird_delivery_files(runtime)
 
-    assert copied == 3
-    assert (runtime / "424" / "考勤-2026-3月份考勤统计表.xlsx").read_bytes() == b"template"
-    assert (runtime / "config" / "sunbird-roster.json").is_file()
-    assert (runtime / "data" / "mod_dbs" / "taiyangniao_pro.db").read_bytes() == b"db"
+    assert copied == 0
+    assert not runtime.exists()
+    assert (seed / "data" / "mod_dbs" / "taiyangniao_pro.db").read_bytes() == b"db"
 
 
 def test_sunbird_delivery_files_do_not_overwrite_existing_payload(tmp_path, monkeypatch):
@@ -182,7 +181,7 @@ def test_sunbird_delivery_files_do_not_overwrite_existing_payload(tmp_path, monk
     assert (runtime / "424" / template_name).read_bytes() == b"customer"
 
 
-def test_sunbird_roster_seed_syncs_files_before_marker_check(tmp_path, monkeypatch):
+def test_sunbird_legacy_marker_does_not_enable_ownerless_copy(tmp_path, monkeypatch):
     seed = tmp_path / "seed"
     runtime = tmp_path / "runtime"
     (seed / "424").mkdir(parents=True)
@@ -197,4 +196,5 @@ def test_sunbird_roster_seed_syncs_files_before_marker_check(tmp_path, monkeypat
     applied = apply_sunbird_roster_seed_if_needed(runtime)
 
     assert applied is False
-    assert (runtime / "424" / "考勤-2026-3月份考勤统计表.xlsx").is_file()
+    assert not (runtime / "424").exists()
+    assert (runtime / "config" / "sunbird-roster.applied").read_text() == "already-applied\n"

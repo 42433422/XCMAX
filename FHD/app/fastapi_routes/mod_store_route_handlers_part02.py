@@ -58,12 +58,16 @@ async def ai_mod_delivery_start(
     return _facade().ModStoreSimpleResponse(
         success=True,
         message="已开始生成自用 MOD",
-        data={"session_id": session_id, "status": str(payload.get("status") or "running")},
+        data={
+            "session_id": session_id,
+            "status": str(payload.get("status") or "running"),
+        },
     )
 
 
 @_facade().router.get(
-    "/ai-delivery/sessions/{session_id}", response_model=_facade().ModStoreSimpleResponse
+    "/ai-delivery/sessions/{session_id}",
+    response_model=_facade().ModStoreSimpleResponse,
 )
 async def ai_mod_delivery_status(
     request: _facade().Request,
@@ -89,7 +93,8 @@ async def ai_mod_delivery_status(
 
 
 @_facade().router.post(
-    "/ai-delivery/sessions/{session_id}/install", response_model=_facade().ModStoreInstallResult
+    "/ai-delivery/sessions/{session_id}/install",
+    response_model=_facade().ModStoreInstallResult,
 )
 async def ai_mod_delivery_install(
     request: _facade().Request,
@@ -148,7 +153,9 @@ async def mod_store_reload_employees(
 
 
 @_facade().router.post("/uninstall", response_model=_facade().ModStoreSimpleResponse)
-async def mod_store_uninstall(request: _facade().Request) -> _facade().ModStoreSimpleResponse:
+async def mod_store_uninstall(
+    request: _facade().Request,
+) -> _facade().ModStoreSimpleResponse:
     mod_id = await _facade()._body_value(request, "mod_id")
     if not mod_id:
         raise _facade().HTTPException(status_code=400, detail="缺少 mod_id")
@@ -159,14 +166,60 @@ async def mod_store_uninstall(request: _facade().Request) -> _facade().ModStoreS
 
 
 @_facade().router.post("/update", response_model=_facade().ModStoreInstallResult)
-async def mod_store_update(request: _facade().Request) -> _facade().ModStoreInstallResult:
+async def mod_store_update(
+    request: _facade().Request,
+) -> _facade().ModStoreInstallResult:
+    from app.application.tenant_workspace_prefs import resolve_workspace_owner_id
+    from app.infrastructure.auth.dependencies import get_logged_in_user
+
+    user = get_logged_in_user(request)
+    owner = resolve_workspace_owner_id(request, user)
+    if not owner:
+        raise _facade().HTTPException(status_code=401, detail="无法确定当前工作空间")
     payload = await _facade()._request_payload(request)
-    pkg_id = _facade()._safe_text(payload.get("pkg_id") or payload.get("mod_id"))
-    version = _facade()._safe_text(payload.get("version"))
-    if not pkg_id:
-        pkg_id, parsed_version = _facade()._split_package_file(payload.get("package_file") or "")
-        version = version or parsed_version
-    return await _facade()._install_from_catalog(pkg_id, version, activate=True)
+    parsed_id, parsed_version = _facade()._split_package_file(payload.get("package_file") or "")
+    pkg_id = _facade()._safe_text(payload.get("pkg_id") or payload.get("mod_id") or parsed_id)
+    version = _facade()._safe_text(payload.get("version") or parsed_version)
+    if parsed_id and parsed_id != pkg_id:
+        raise _facade().HTTPException(status_code=400, detail="更新包与目标 MOD 不一致")
+    discovery = await mod_store_updates(request)
+    update = next(
+        (row for row in discovery.data["updates_available"] if row["mod_id"] == pkg_id),
+        None,
+    )
+    if not update or (version and update["new_version"] != version):
+        raise _facade().HTTPException(
+            status_code=409, detail="当前账号没有该版本更新，请刷新后重试"
+        )
+    if update["source"] == "private_mod_sync":
+        from app.application.mod_delivery_receipt_outbox import (
+            retry_delivery_receipts_best_effort,
+        )
+        from app.application.private_mod_delivery_artifacts import (
+            update_private_mod_from_library,
+        )
+        from app.fastapi_routes.private_mod_delivery_context import (
+            _private_delivery_market_token,
+        )
+
+        token = await _private_delivery_market_token(request)
+        result = await update_private_mod_from_library(
+            pkg_id,
+            token,
+            expected_version=update["new_version"],
+            owner_scope=owner,
+        )
+        from app.application.delivery_entitlements import refresh_delivery_entitlements
+
+        result["entitlements_refreshed"] = await refresh_delivery_entitlements(request, token)
+        result["receipts"] = await retry_delivery_receipts_best_effort(request, token)
+        return _facade().ModStoreInstallResult(success=True, message=result["message"], data=result)
+    return await _facade()._install_from_catalog(
+        pkg_id,
+        update["new_version"],
+        activate=True,
+        expected_sha256=update["package_sha256"],
+    )
 
 
 @_facade().router.get("/validate", response_model=_facade().ModStoreSimpleResponse)
@@ -175,14 +228,72 @@ async def mod_store_validate() -> _facade().ModStoreSimpleResponse:
 
 
 @_facade().router.get("/updates", response_model=_facade().ModStoreUpdatesResponse)
-async def mod_store_updates() -> _facade().ModStoreUpdatesResponse:
-    return _facade().ModStoreUpdatesResponse(data={"updates_available": [], "count": 0})
+async def mod_store_updates(
+    request: _facade().Request,
+) -> _facade().ModStoreUpdatesResponse:
+    from app.application.mod_update_discovery import available_updates
+    from app.application.private_mod_delivery_artifacts import fetch_private_mod_library
+    from app.application.tenant_workspace_prefs import resolve_workspace_owner_id
+    from app.fastapi_routes.private_mod_delivery_context import (
+        _private_delivery_market_token,
+    )
+    from app.infrastructure.auth.dependencies import get_logged_in_user
+    from app.infrastructure.mods.install_receipts import read_verified_install
+
+    user = get_logged_in_user(request)
+    owner = resolve_workspace_owner_id(request, user)
+    installed = _facade()._installed_by_id()
+    for mid in list(installed):
+        receipt = read_verified_install(mid)
+        if receipt and receipt.get("owner_scope") and receipt["owner_scope"] != owner:
+            installed.pop(mid)
+    public_rows = []
+    private_rows = []
+    errors = {}
+    try:
+        public_rows = [row async for row in _facade().iter_catalog_packages()]
+    except _facade().HTTPException:
+        errors["public_catalog"] = "公共更新源暂不可用"
+    token = await _private_delivery_market_token(request)
+    if token:
+        try:
+            private_rows = await fetch_private_mod_library(token)
+        except _facade().HTTPException:
+            errors["private_mod_sync"] = "账号私有更新源暂不可用"
+    else:
+        errors["private_mod_sync"] = "未登录市场账号，未检查私有更新"
+    # Never substitute a public package for an installed owner-bound package.
+    private_installed = {
+        mid
+        for mid in installed
+        if (receipt := read_verified_install(mid)) and receipt.get("owner_scope")
+    }
+    public_rows = [
+        row
+        for row in public_rows
+        if str(row.get("id") or row.get("pkg_id") or "") not in private_installed
+    ]
+    updates = available_updates(installed, public_rows, private_rows)
+    return _facade().ModStoreUpdatesResponse(
+        data={
+            "updates_available": updates,
+            "count": len(updates),
+            "complete": not errors,
+            "source_errors": errors,
+        }
+    )
 
 
 @_facade().router.get("/dependencies", response_model=_facade().ModStoreDependenciesResponse)
 async def mod_store_dependencies() -> _facade().ModStoreDependenciesResponse:
     return _facade().ModStoreDependenciesResponse(
-        data={"mod_id": "", "dependencies": [], "satisfied": [], "missing": [], "can_install": True}
+        data={
+            "mod_id": "",
+            "dependencies": [],
+            "satisfied": [],
+            "missing": [],
+            "can_install": True,
+        }
     )
 
 
@@ -201,9 +312,12 @@ async def mod_store_download(package_file: str) -> None:
 
 
 @_facade().router.delete(
-    "/package/{package_file:path}", response_model=_facade().ModStoreNotImplementedResponse
+    "/package/{package_file:path}",
+    response_model=_facade().ModStoreNotImplementedResponse,
 )
-async def mod_store_delete_package(package_file: str) -> _facade().ModStoreNotImplementedResponse:
+async def mod_store_delete_package(
+    package_file: str,
+) -> _facade().ModStoreNotImplementedResponse:
     return _facade().ModStoreNotImplementedResponse(
         detail="删除包 尚未在本后端实现；请将 Mod 包放入 XCAGI/mods 或通过 MODstore 工具链。"
     )
@@ -212,7 +326,8 @@ async def mod_store_delete_package(package_file: str) -> _facade().ModStoreNotIm
 @_facade().router.post("/index/rebuild", response_model=_facade().ModStoreRebuildResponse)
 async def mod_store_rebuild_index() -> _facade().ModStoreRebuildResponse:
     return _facade().ModStoreRebuildResponse(
-        data={"indexed": 0, "failed": 0}, message="索引由磁盘 manifest 实时生成，无需重建。"
+        data={"indexed": 0, "failed": 0},
+        message="索引由磁盘 manifest 实时生成，无需重建。",
     )
 
 
@@ -221,7 +336,10 @@ async def _ensure_host_foundation_employee_on_disk() -> tuple[bool, str]:
     import shutil
     import sys
 
-    from app.infrastructure.mods.employee_registry import employees_root, get_employee_registry
+    from app.infrastructure.mods.employee_registry import (
+        employees_root,
+        get_employee_registry,
+    )
     from app.mod_sdk.host_foundation import HOST_FOUNDATION_EMPLOYEE_PACK_ID
 
     mm_root = get_employee_registry().mods_root
@@ -261,7 +379,9 @@ def _can_materialize_host_foundation_without_employee_marker() -> bool:
     )
 
 
-async def _install_host_foundation_internal(edition: str | None) -> _facade().ModStoreInstallResult:
+async def _install_host_foundation_internal(
+    edition: str | None,
+) -> _facade().ModStoreInstallResult:
     from app.mod_sdk.edition_policy import resolve_edition
     from app.mod_sdk.host_foundation import materialize_host_foundation_bridges
 
@@ -390,7 +510,8 @@ async def mod_store_sync_modstore_library(
         mod_ids = [x.strip() for x in raw_ids.split(",") if x.strip()]
     if not sync_all and (not mod_ids or len(mod_ids) == 0):
         raise _facade().HTTPException(
-            status_code=400, detail="请指定 mod_ids（数组或逗号分隔字符串）或设置 all: true"
+            status_code=400,
+            detail="请指定 mod_ids（数组或逗号分隔字符串）或设置 all: true",
         )
     try:
         raw = await _facade().sync_modstore_library_to_local(

@@ -3,7 +3,10 @@
 import sqlite3
 from contextlib import closing
 
+from fastapi import Depends
 from fastapi.responses import JSONResponse
+
+from app.mod_sdk.owner_workspace import require_owner_workspace
 
 
 def _connect_for_write(db_path):
@@ -12,20 +15,9 @@ def _connect_for_write(db_path):
     conn = sqlite3.connect(str(db_path), timeout=30)
     conn.row_factory = sqlite3.Row
     try:
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS attendance_employees ("
-            "id INTEGER PRIMARY KEY AUTOINCREMENT, source_file TEXT NOT NULL DEFAULT 'manual', "
-            "employee_name TEXT NOT NULL, department TEXT NOT NULL DEFAULT '', "
-            "main_department TEXT NOT NULL DEFAULT '', attendance_group TEXT NOT NULL DEFAULT '', "
-            "employee_no TEXT NOT NULL DEFAULT '', position TEXT NOT NULL DEFAULT '', "
-            "user_id TEXT NOT NULL DEFAULT '', UNIQUE(source_file, employee_name, department))"
-        )
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS attendance_departments ("
-            "id INTEGER PRIMARY KEY AUTOINCREMENT, source_file TEXT NOT NULL DEFAULT 'manual', "
-            "department TEXT NOT NULL, main_department TEXT NOT NULL DEFAULT '', "
-            "attendance_group TEXT NOT NULL DEFAULT '', UNIQUE(source_file, department, attendance_group))"
-        )
+        from app.mod_sdk.attendance_roster import ensure_roster_schema
+
+        ensure_roster_schema(conn)
         conn.execute("BEGIN IMMEDIATE")
         return conn
     except sqlite3.Error:
@@ -39,7 +31,8 @@ def _has_table(db_path, table):
     with closing(sqlite3.connect(f"{db_path.as_uri()}?mode=ro", uri=True)) as conn:
         return (
             conn.execute(
-                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+                (table,),
             ).fetchone()
             is not None
         )
@@ -62,6 +55,16 @@ def _check_department_duplicate(conn, department, department_id=0):
 
 
 def register(router, *, logger, get_database_path) -> None:
+    # Apply to every registered route, including the plural /api/mods alias.
+    # An async dependency keeps the owner ContextVar in the endpoint task.
+    router.dependencies.append(Depends(require_owner_workspace))
+
+    @router.get("/roster", response_model=None)
+    async def roster_get():
+        from app.mod_sdk.attendance_roster import read_attendance_roster
+
+        return {"success": True, "data": read_attendance_roster()}
+
     @router.get("/schedules", response_model=None)
     async def schedules_get():
         """共享考勤组资源来自人员主数据，不读取任何客户模板规则。"""
@@ -125,7 +128,12 @@ def register(router, *, logger, get_database_path) -> None:
             items = [dict(r) for r in cur.fetchall()]
             return {
                 "success": True,
-                "data": {"items": items, "total": total, "page": page, "page_size": page_size},
+                "data": {
+                    "items": items,
+                    "total": total,
+                    "page": page,
+                    "page_size": page_size,
+                },
             }
         except sqlite3.Error:
             logger.exception("读取人员管理失败")
@@ -172,7 +180,10 @@ def register(router, *, logger, get_database_path) -> None:
                 "FROM attendance_employees WHERE id = ?",
                 (cur.lastrowid,),
             ).fetchone()
-            return {"success": True, "data": dict(row) if row else {"id": cur.lastrowid, **fields}}
+            return {
+                "success": True,
+                "data": dict(row) if row else {"id": cur.lastrowid, **fields},
+            }
         except sqlite3.IntegrityError:
             conn.rollback()
             return JSONResponse(
@@ -305,7 +316,12 @@ def register(router, *, logger, get_database_path) -> None:
             items = [dict(r) for r in cur.fetchall()]
             return {
                 "success": True,
-                "data": {"items": items, "total": total, "page": page, "page_size": page_size},
+                "data": {
+                    "items": items,
+                    "total": total,
+                    "page": page,
+                    "page_size": page_size,
+                },
             }
         except sqlite3.Error:
             logger.exception("读取部门管理失败")

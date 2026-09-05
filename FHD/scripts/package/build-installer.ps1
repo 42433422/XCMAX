@@ -13,6 +13,9 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+if ($SunbirdSeedZipPath) {
+  throw "Customer seed embedding is retired. Use the standard main host and account-authorized Mod delivery."
+}
 $Root = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 Set-Location $Root
 $Version = $Version.TrimStart("v", "V")
@@ -254,9 +257,6 @@ if (-not $SkipUiInstaller) {
   )
   if (Test-Path $licenseSrc) {
     $publishArgs += "-p:LicenseFilePath=$licenseSrc"
-  }
-  if ($SunbirdSeedZipPath -and (Test-Path $SunbirdSeedZipPath)) {
-    $publishArgs += "-p:SunbirdSeedZipPath=$SunbirdSeedZipPath"
   }
   & dotnet @publishArgs
 

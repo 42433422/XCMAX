@@ -18,6 +18,10 @@ def normalize_package_zip_path(src: str) -> str:
         return src
     with zipfile.ZipFile(src, "r") as zf:
         names = [n for n in zf.namelist() if n and not n.endswith("/")]
+        # ModPackage supports the signed nested layout directly. Flattening it
+        # changes signed member names and used to discard META-INF entirely.
+        if "META-INF/signature.json" in names:
+            return src
         if "manifest.json" in names:
             return src
         top_levels = {

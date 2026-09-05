@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 
 import pytest
@@ -139,7 +140,7 @@ def test_employee_orchestration_fallback_plan_splits_briefs():
 
 
 @pytest.mark.asyncio
-async def test_workbench_employee_multipart_session_keeps_uploaded_files(monkeypatch):
+async def test_workbench_employee_multipart_session_keeps_uploaded_files(monkeypatch, tmp_path):
     """做员工带样本文件时，附件必须进入员工配套脚本生成链路。"""
     from types import SimpleNamespace
 
@@ -165,25 +166,23 @@ async def test_workbench_employee_multipart_session_keeps_uploaded_files(monkeyp
             )
             return FormData([("metadata", json.dumps(meta, ensure_ascii=False)), ("files", upload)])
 
+    completed = asyncio.Event()
+
     async def _fake_run_pipeline(sid, user_id, payload):
-        return None
+        captured.update(sid=sid, user_id=user_id, payload=payload)
+        completed.set()
 
-    def _fake_run_pipeline_factory(sid, user_id, payload):
-        captured["sid"] = sid
-        captured["user_id"] = user_id
-        captured["payload"] = payload
-        return _fake_run_pipeline(sid, user_id, payload)
-
-    class _NoopTask:
-        def add_done_callback(self, _cb):
-            return None
-
-    monkeypatch.setattr(wa.asyncio, "create_task", lambda coro: (coro.close(), _NoopTask())[1])
-    monkeypatch.setattr(wa, "_run_pipeline", _fake_run_pipeline_factory)
+    store = tmp_path / "workbench-sessions"
+    store.mkdir()
+    monkeypatch.setattr(wa, "_workbench_session_store_dir", lambda: store)
+    monkeypatch.setattr(wa, "_run_pipeline", _fake_run_pipeline)
 
     res = await wa.create_workbench_session(_Req(), user=SimpleNamespace(id=7))
+    await asyncio.wait_for(completed.wait(), timeout=1)
 
     sid = res["session_id"]
+    assert captured["sid"] == sid and captured["user_id"] == 7
+    assert json.loads((store / f"{sid}.json").read_text())["user_id"] == 7
     assert captured["payload"]["intent"] == "employee"
     assert captured["payload"]["_files"][0]["filename"] == "太阳鸟展示包装_考勤报表.xlsx"
     assert captured["payload"]["_files"][0]["content"] == b"xlsx-bytes"
@@ -193,6 +192,7 @@ async def test_workbench_employee_multipart_session_keeps_uploaded_files(monkeyp
 @pytest.mark.asyncio
 async def test_workbench_json_session_body_parses_without_fastapi_body_injection(
     monkeypatch,
+    tmp_path,
 ):
     """JSON 启动会话也必须由 request 手动解析，避免 Optional body 触发 Pydantic 英文错误。"""
     from types import SimpleNamespace
@@ -213,23 +213,23 @@ async def test_workbench_json_session_body_parses_without_fastapi_body_injection
                 "employee_target": "pack_plus_workflow",
             }
 
+    completed = asyncio.Event()
+
     async def _fake_run_pipeline(sid, user_id, payload):
-        return None
+        captured.update(sid=sid, user_id=user_id, payload=payload)
+        completed.set()
 
-    def _fake_run_pipeline_factory(sid, user_id, payload):
-        captured["payload"] = payload
-        return _fake_run_pipeline(sid, user_id, payload)
-
-    class _NoopTask:
-        def add_done_callback(self, _cb):
-            return None
-
-    monkeypatch.setattr(wa.asyncio, "create_task", lambda coro: (coro.close(), _NoopTask())[1])
-    monkeypatch.setattr(wa, "_run_pipeline", _fake_run_pipeline_factory)
+    store = tmp_path / "workbench-sessions"
+    store.mkdir()
+    monkeypatch.setattr(wa, "_workbench_session_store_dir", lambda: store)
+    monkeypatch.setattr(wa, "_run_pipeline", _fake_run_pipeline)
 
     res = await wa.create_workbench_session(_Req(), user=SimpleNamespace(id=7))
+    await asyncio.wait_for(completed.wait(), timeout=1)
 
     sid = res["session_id"]
+    assert captured["sid"] == sid and captured["user_id"] == 7
+    assert json.loads((store / f"{sid}.json").read_text())["user_id"] == 7
     assert captured["payload"]["intent"] == "employee"
     assert captured["payload"]["employee_target"] == "pack_plus_workflow"
     wa.WORKBENCH_SESSIONS.pop(sid, None)

@@ -1,30 +1,35 @@
-"""兼容 shim：历史上 ``app.shell.taiyangniao_attendance`` 承载了太阳鸟 PRO 的考勤
-实现；实际代码已迁入 ``mods/taiyangniao-pro/backend/taiyangniao_attendance/``。
+"""Legacy Python imports delegated to the owning Mod's implementation.
 
-本包下的每个子模块都只做一件事——把 mod 的同名模块 re-export 过来——这样
-老的调用方（开发脚本、``app.mod_sdk.attendance``）继续可用，而新增的 mod 能
-在没有宿主代码的环境下自给自足。
+Workbook parsing is shared; conversion rules belong to the independently
+installed customer extension. No retired customer-host package is imported.
 """
 
 from __future__ import annotations
 
 import importlib
-import os
 import sys
+from pathlib import Path
 
 
-def _ensure_mod_backend_on_path() -> None:
-    here = os.path.abspath(os.path.dirname(__file__))
-    # app/shell/taiyangniao_attendance -> repo_root
-    repo_root = os.path.abspath(os.path.join(here, "..", "..", ".."))
-    mod_backend = os.path.join(repo_root, "mods", "taiyangniao-pro", "backend")
-    if os.path.isdir(mod_backend) and mod_backend not in sys.path:
-        sys.path.insert(0, mod_backend)
+def _ensure_mod_backend_on_path(stem: str = "parser") -> str:
+    from app.infrastructure.mods.mod_manager import get_mod_manager
+
+    generic = stem in {"parser", "header_resolver"}
+    mod_id = "attendance-industry" if generic else "sunbird-attendance-custom"
+    location = get_mod_manager().resolve_mod_directory(mod_id)
+    if not location:
+        raise ModuleNotFoundError(f"{mod_id} Mod is not installed")
+    backend = str(Path(location) / "backend")
+    if backend not in sys.path:
+        sys.path.insert(0, backend)
+    return "attendance_formats" if generic else "sunbird_attendance"
 
 
 def _load_mod_submodule(stem: str):
-    _ensure_mod_backend_on_path()
-    return importlib.import_module(f"taiyangniao_attendance.{stem}")
+    if stem not in {"parser", "header_resolver", "convert", "mapper", "mapping", "rules", "paths"}:
+        raise ModuleNotFoundError(f"Unsupported attendance module: {stem}")
+    namespace = _ensure_mod_backend_on_path(stem)
+    return importlib.import_module(f"{namespace}.{stem}")
 
 
 __all__ = ["_load_mod_submodule"]

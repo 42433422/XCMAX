@@ -63,6 +63,24 @@ def _metadata(
         raise PublishError("manifest.id contains unsafe characters")
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+-]{0,31}", version):
         raise PublishError("manifest.version contains unsafe characters")
+    if (
+        manifest.get("public_listing") is not True
+        or str(manifest.get("visibility") or "").lower() in {"private", "customer", "internal"}
+        or any(
+            manifest.get(key)
+            for key in (
+                "customer_account",
+                "account_mod_id",
+                "owner_id",
+                "owner_user_id",
+                "customer_id",
+                "tenant_id",
+            )
+        )
+    ):
+        raise PublishError(
+            "explicit public_listing=true is required; private/customer packages must use the owner-bound production-center delivery channel"
+        )
     artifact = str(manifest.get("artifact") or "mod").strip().lower()
     if artifact not in {"mod", "employee_pack"}:
         raise PublishError(f"unsupported artifact: {artifact}")
@@ -212,6 +230,18 @@ def publish_package(
         source_sha=source_sha,
         workflow_run_id=workflow_run_id,
     )
+    root = Path(__file__).resolve().parents[2]
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+    from app.infrastructure.mods.package import ModSignatureError
+    from app.infrastructure.mods.package_signing import verify_signed_package_bytes
+
+    try:
+        verified = verify_signed_package_bytes(raw)
+    except (ModSignatureError, ValueError, KeyError, zipfile.BadZipFile) as exc:
+        raise PublishError(f"trusted signed package required: {exc}") from exc
+    if verified["manifest"] != manifest:
+        raise PublishError("verified manifest differs from publication metadata")
     body, boundary = _multipart(metadata, package, raw)
     result = _request_json(
         f"{base}/v1/packages",

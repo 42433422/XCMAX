@@ -45,7 +45,9 @@ async def mobile_install_mod(
     "/mod-store/install-customer-delivery-seed", response_model=dict[str, _facade().Any]
 )
 async def mobile_install_customer_delivery_seed(
-    body: dict[str, _facade().Any], user=_facade().Depends(_facade().get_mobile_user)
+    request: _facade().Request,
+    body: dict[str, _facade().Any],
+    user=_facade().Depends(_facade().get_mobile_user),
 ):
     """安装客户交付场景的移动端种子包。"""
     if user is None:
@@ -61,6 +63,7 @@ async def mobile_install_customer_delivery_seed(
         from app.mod_sdk.customer_delivery_seed import install_customer_delivery_seed_package
 
         data = await install_customer_delivery_seed_package(
+            request=request,
             mod_id=mod_id,
             industry_id=industry_id,
             market_token=str(
@@ -167,7 +170,7 @@ async def mobile_nav_menu(user=_facade().Depends(_facade().get_mobile_user)):
                 ).strip()
                 items.append(
                     {
-                        "key": f"mod-{menu_id}" if not menu_id.startswith("mod-") else menu_id,
+                        "key": (f"mod-{menu_id}" if not menu_id.startswith("mod-") else menu_id),
                         "name": menu_label,
                         "icon": menu_icon,
                         "path": menu_path,
@@ -250,7 +253,10 @@ async def mobile_admin_employee_pending_questions(
     meta, err = _facade()._require_mobile_admin(request, user)
     if err is not None:
         return err
-    params: dict[str, _facade().Any] = {"limit": limit, "include_expired": bool(include_history)}
+    params: dict[str, _facade().Any] = {
+        "limit": limit,
+        "include_expired": bool(include_history),
+    }
     if employee_id:
         params["employee_id"] = employee_id
     out = await _facade()._modstore_admin_proxy(

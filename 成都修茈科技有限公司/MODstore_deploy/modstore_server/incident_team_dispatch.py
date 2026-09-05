@@ -9,6 +9,10 @@ from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
 
 from modstore_server import incident_team_orchestrator as facade
+from modstore_server.customer_issue_delivery_contract import (
+    execution_succeeded,
+    team_succeeded,
+)
 from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 
@@ -168,12 +172,7 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
         )
         row = {
             "employee_id": employee_id,
-            "ok": (
-                not risk_blocked
-                and not bool(result.get("handler_failed"))
-                and not bool(result.get("error"))
-                and status not in {"handler_failed", "orchestrator_failed", "failed"}
-            ),
+            "ok": (not risk_blocked and execution_succeeded(result)),
             "role": role,
             "route": route,
             "result": result,
@@ -185,7 +184,7 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
         elif role == "fix":
             fix_result = row
 
-    ok = bool(results) and all(bool(row.get("ok")) for row in results if row.get("role") != "fix")
+    ok = team_succeeded(results)
 
     failed_roles = [
         str(row.get("role") or "")
@@ -261,6 +260,16 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
                         team_rows=slim_rows,
                         summary_hint=str(payload.get("summary") or "")[:200],
                     )
+                    from modstore_server.customer_issue_shared_release import (
+                        record_worker_repair,
+                    )
+                    from modstore_server.models_cs import CustomerServiceTicket
+
+                    ticket = session.get(CustomerServiceTicket, ticket_id)
+                    if ticket is not None and int(ticket.user_id) == int(
+                        payload.get("user_id") or 0
+                    ):
+                        record_worker_repair(session, ticket, int(event_id), results)
                     updated["_cs_progress"] = {
                         k: cs_progress.get(k)
                         for k in (

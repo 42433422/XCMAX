@@ -11,7 +11,9 @@ from sqlalchemy.orm import Session
 from modstore_server.api.deps import get_current_user, get_db
 from modstore_server.customer_service_api import _visible_ticket_or_404
 from modstore_server.customer_service_delivery_api import _start_custom_delivery_run
-from modstore_server.customer_service_delivery_completion import complete_delivery_if_ready
+from modstore_server.customer_service_delivery_completion import (
+    complete_delivery_if_ready,
+)
 from modstore_server.customer_service_delivery_models import (
     CustomDeliveryPaymentCheckoutBody,
     custom_delivery_commerce_blockers,
@@ -85,7 +87,10 @@ async def reconcile_custom_delivery_payment(db: Session, ticket: CustomerService
         try:
             evidence["runs"] = [
                 await _start_custom_delivery_run(
-                    user_id=int(ticket.user_id), evidence=evidence, attempt=1
+                    ticket_id=int(ticket.id),
+                    user_id=int(ticket.user_id),
+                    evidence=evidence,
+                    attempt=1,
                 )
             ]
             evidence.pop("start_error", None)

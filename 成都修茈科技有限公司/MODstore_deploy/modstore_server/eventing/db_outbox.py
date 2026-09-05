@@ -271,7 +271,12 @@ def drain(
             except RECOVERABLE_ERRORS:
                 logger.exception("neuro_bus publish failed event_id=%s", record.event_id)
         try:
-            result = dispatcher(record.to_envelope())
+            if record.event_name == "ops.intake.customer_ticket":
+                from modstore_server.customer_issue_intake import dispatch_issue_event
+
+                result = dispatch_issue_event(record.to_envelope())
+            else:
+                result = dispatcher(record.to_envelope())
         except RECOVERABLE_ERRORS as exc:
             logger.exception("outbox dispatcher raised event_id=%s", record.event_id)
             mark_failed(

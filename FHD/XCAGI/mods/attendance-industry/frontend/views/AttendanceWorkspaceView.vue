@@ -7,7 +7,7 @@
         <router-link
           v-for="item in sections"
           :key="item.section"
-          :to="{ name: item.route }"
+          :to="item.path || { name: item.route }"
           :class="{ active: section === item.section }"
           :aria-current="section === item.section ? 'page' : undefined"
           >{{ item.label }}</router-link
@@ -18,8 +18,7 @@
       <p v-if="customSection && !conversionEnabled" role="status">
         {{ checking ? '正在核验定制功能权限…' : '当前账号未开通考勤表转换定制功能。' }}
       </p>
-      <HomeView v-else-if="section === 'convert'" />
-      <AttendanceSettingsView v-else-if="section === 'settings'" />
+      <router-link v-else-if="customSection" to="/mod/sunbird-attendance-custom/convert">打开考勤定制 Mod</router-link>
       <AttendanceManagementView v-else :key="section" :section="section" :conversion-enabled="conversionEnabled" />
     </div>
   </section>
@@ -29,8 +28,6 @@
   import { computed, ref, watch } from 'vue';
   import { apiFetch } from '@/utils/apiBase';
   import AttendanceManagementView from './AttendanceManagementView.vue';
-  import AttendanceSettingsView from './AttendanceSettingsView.vue';
-  import HomeView from './HomeView.vue';
 
   const props = defineProps({ section: { type: String, default: 'personnel' } });
   const conversionEnabled = ref(false);
@@ -60,8 +57,7 @@
     { section: 'schedules', label: '排班资源', route: 'attendance-industry-schedules' },
     { section: 'records', label: '考勤记录', route: 'attendance-industry-records' },
     ...(conversionEnabled.value ? [
-      { section: 'convert', label: '考勤表转换（定制）', route: 'attendance-industry-home' },
-      { section: 'settings', label: '转换规则（定制）', route: 'attendance-industry-settings' },
+      { section: 'convert', label: '考勤定制 Mod', path: '/mod/sunbird-attendance-custom/convert' },
     ] : []),
   ]);
 </script>

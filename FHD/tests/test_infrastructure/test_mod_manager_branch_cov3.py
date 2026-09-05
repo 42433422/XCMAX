@@ -785,8 +785,8 @@ class TestLoadModBranches:
             assert mm.load_mod("loaded-mod") is True
             assert "loaded-mod" in mm._loaded_mods
 
-    def test_mod_path_not_found_returns_false(self) -> None:
-        mm = ModManager(mods_root="/tmp")
+    def test_mod_path_not_found_returns_false(self, tmp_path) -> None:
+        mm = ModManager(mods_root=str(tmp_path))
         with (
             patch("app.mod_sdk.product_skus.assert_mod_allowed_for_sku"),
             patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr,
@@ -838,8 +838,8 @@ class TestLoadModBranches:
             with patch.object(mm, "resolve_mod_directory", return_value="/mods/bundle"):
                 assert mm.load_mod("bundle-mod") is True
 
-    def test_bundle_register_success(self) -> None:
-        mm = ModManager(mods_root="/tmp")
+    def test_bundle_register_success(self, tmp_path) -> None:
+        mm = ModManager(mods_root=str(tmp_path))
         meta = ModMetadata(
             id="bundle-mod",
             name="Bundle",
@@ -862,9 +862,9 @@ class TestLoadModBranches:
                 assert "bundle-mod" in mm._loaded_mods
                 reg.register_mod.assert_called_once_with(meta)
 
-    def test_bundle_register_false_still_returns_true(self) -> None:
+    def test_bundle_register_false_still_returns_true(self, tmp_path) -> None:
         """bundle register_mod 返回 False → 仍返回 True（兼容历史）。"""
-        mm = ModManager(mods_root="/tmp")
+        mm = ModManager(mods_root=str(tmp_path))
         meta = ModMetadata(
             id="bundle-mod",
             name="Bundle",
@@ -885,8 +885,8 @@ class TestLoadModBranches:
             with patch.object(mm, "resolve_mod_directory", return_value="/mods/bundle"):
                 assert mm.load_mod("bundle-mod") is True
 
-    def test_dependencies_not_satisfied_returns_false(self) -> None:
-        mm = ModManager(mods_root="/tmp")
+    def test_dependencies_not_satisfied_returns_false(self, tmp_path) -> None:
+        mm = ModManager(mods_root=str(tmp_path))
         meta = ModMetadata(
             id="dep-mod",
             name="Dep",
@@ -910,8 +910,8 @@ class TestLoadModBranches:
                 failures = mm.get_recent_load_failures()
                 assert any(f["stage"] == "dependencies" for f in failures)
 
-    def test_backend_error_returns_false(self) -> None:
-        mm = ModManager(mods_root="/tmp")
+    def test_backend_error_returns_false(self, tmp_path) -> None:
+        mm = ModManager(mods_root=str(tmp_path))
         meta = ModMetadata(
             id="backend-mod",
             name="Backend",
@@ -937,8 +937,8 @@ class TestLoadModBranches:
                 failures = mm.get_recent_load_failures()
                 assert any(f["stage"] == "backend" for f in failures)
 
-    def test_successful_load_with_effective_id(self) -> None:
-        mm = ModManager(mods_root="/tmp")
+    def test_successful_load_with_effective_id(self, tmp_path) -> None:
+        mm = ModManager(mods_root=str(tmp_path))
         meta = ModMetadata(
             id="real-id",
             name="Real",
@@ -1193,89 +1193,56 @@ class TestInstallModPackage:
             assert ok is False
             assert "sku blocked" in msg
 
-    def test_existing_mod_updated(self, tmp_path: Path) -> None:
-        """已存在的 mod → 删除旧目录 → 复制新内容。"""
-        mods_root = tmp_path / "mods"
-        mods_root.mkdir()
-        existing = mods_root / "existing-mod"
-        existing.mkdir()
-        (existing / "manifest.json").write_text(
-            json.dumps({"id": "existing-mod", "version": "1.0.0"})
-        )
+    def test_existing_inactive_mod_updates_but_reports_load_failure(self, tmp_path, monkeypatch):
+        from app.infrastructure.mods.install_receipts import read_verified_install
+        from tests.test_infrastructure.test_mod_manager_ext2 import _signed_manager_fixture
 
-        extract_dir = tmp_path / "extract"
-        extract_dir.mkdir()
-        (extract_dir / "manifest.json").write_text(
-            json.dumps({"id": "existing-mod", "name": "Existing", "version": "2.0.0"})
-        )
+        mm, package, registry = _signed_manager_fixture(tmp_path, monkeypatch, installed=True)
+        registry.get_mod_metadata.return_value = None
+        with patch.object(mm, "load_mod", return_value=False) as load:
+            ok, msg, meta = mm.install_mod_package(package(), activate=True)
+        assert ok is False
+        assert "加载失败" in msg
+        assert (Path(mm.mods_root) / "fixture-mod/logic.py").read_text() == "new"
+        receipt = read_verified_install("fixture-mod", mods_root=mm.mods_root)
+        assert receipt["signature_verified"] is True
+        assert receipt["package_version"] == "2.0.0"
+        assert receipt["requires_restart"] is False
+        load.assert_called_once_with("fixture-mod")
 
-        mm = ModManager(mods_root=str(mods_root))
-        with (
-            patch(
-                "app.infrastructure.mods.mod_manager.ModPackage.extract_package",
-                return_value=(
-                    str(extract_dir),
-                    {"id": "existing-mod", "name": "Existing", "version": "2.0.0"},
-                ),
-            ),
-            patch("app.mod_sdk.product_skus.assert_mod_allowed_for_sku"),
-            patch.object(mm, "load_mod", return_value=False),
-        ):
-            ok, msg, meta = mm.install_mod_package("/pkg.xcmod", activate=True)
-            assert ok is False  # 加载失败
-            assert "加载失败" in msg
+    def test_activate_load_success(self, tmp_path, monkeypatch):
+        from app.infrastructure.mods.install_receipts import read_verified_install
+        from tests.test_infrastructure.test_mod_manager_ext2 import _signed_manager_fixture
 
-    def test_activate_load_success(self, tmp_path: Path) -> None:
-        mods_root = tmp_path / "mods"
-        mods_root.mkdir()
-        extract_dir = tmp_path / "extract"
-        extract_dir.mkdir()
-        (extract_dir / "manifest.json").write_text(
-            json.dumps({"id": "new-mod", "name": "New", "version": "1.0.0"})
-        )
+        mm, package, registry = _signed_manager_fixture(tmp_path, monkeypatch, installed=False)
+        registry.get_mod_metadata.return_value = None
+        with patch.object(mm, "load_mod", return_value=True) as load:
+            ok, msg, meta = mm.install_mod_package(package(), activate=True)
+        assert ok is True
+        assert "安装成功" in msg
+        assert (Path(mm.mods_root) / "fixture-mod/logic.py").read_text() == "new"
+        receipt = read_verified_install("fixture-mod", mods_root=mm.mods_root)
+        assert receipt["signature_verified"] is True
+        assert receipt["package_version"] == "2.0.0"
+        assert receipt["requires_restart"] is False
+        load.assert_called_once_with("fixture-mod")
 
-        mm = ModManager(mods_root=str(mods_root))
-        with (
-            patch(
-                "app.infrastructure.mods.mod_manager.ModPackage.extract_package",
-                return_value=(
-                    str(extract_dir),
-                    {"id": "new-mod", "name": "New", "version": "1.0.0"},
-                ),
-            ),
-            patch("app.mod_sdk.product_skus.assert_mod_allowed_for_sku"),
-            patch.object(mm, "load_mod", return_value=True),
-        ):
-            ok, msg, meta = mm.install_mod_package("/pkg.xcmod", activate=True)
-            assert ok is True
-            assert "安装成功" in msg
-            assert meta is not None
+    def test_no_activate_returns_success(self, tmp_path, monkeypatch):
+        from app.infrastructure.mods.install_receipts import read_verified_install
+        from tests.test_infrastructure.test_mod_manager_ext2 import _signed_manager_fixture
 
-    def test_no_activate_returns_success(self, tmp_path: Path) -> None:
-        mods_root = tmp_path / "mods"
-        mods_root.mkdir()
-        extract_dir = tmp_path / "extract"
-        extract_dir.mkdir()
-        (extract_dir / "manifest.json").write_text(
-            json.dumps({"id": "inactive-mod", "name": "Inactive", "version": "1.0.0"})
-        )
-
-        mm = ModManager(mods_root=str(mods_root))
-        with (
-            patch(
-                "app.infrastructure.mods.mod_manager.ModPackage.extract_package",
-                return_value=(
-                    str(extract_dir),
-                    {"id": "inactive-mod", "name": "Inactive", "version": "1.0.0"},
-                ),
-            ),
-            patch("app.mod_sdk.product_skus.assert_mod_allowed_for_sku"),
-            patch.object(mm, "load_mod") as lm,
-        ):
-            ok, msg, meta = mm.install_mod_package("/pkg.xcmod", activate=False)
-            assert ok is True
-            assert "未激活" in msg
-            lm.assert_not_called()
+        mm, package, registry = _signed_manager_fixture(tmp_path, monkeypatch, installed=False)
+        registry.get_mod_metadata.return_value = None
+        with patch.object(mm, "load_mod", return_value=True) as load:
+            ok, msg, meta = mm.install_mod_package(package(), activate=False)
+        assert ok is True
+        assert "未激活" in msg
+        assert (Path(mm.mods_root) / "fixture-mod/logic.py").read_text() == "new"
+        receipt = read_verified_install("fixture-mod", mods_root=mm.mods_root)
+        assert receipt["signature_verified"] is True
+        assert receipt["package_version"] == "2.0.0"
+        assert receipt["requires_restart"] is False
+        load.assert_not_called()
 
     def test_recoverable_error_returns_false(self, tmp_path: Path) -> None:
         mm = ModManager(mods_root=str(tmp_path))
@@ -1399,141 +1366,81 @@ class TestUpdateMod:
             assert "未安装" in msg
             assert meta is None
 
-    def test_was_loaded_unloaded_and_reloaded_success(self, tmp_path: Path) -> None:
-        mods_root = tmp_path / "mods"
-        mods_root.mkdir()
-        mod_dir = mods_root / "up-mod"
-        mod_dir.mkdir()
-        (mod_dir / "manifest.json").write_text(json.dumps({"id": "up-mod", "version": "1.0.0"}))
+    def test_registered_update_stages_without_unloading_live_code(self, tmp_path, monkeypatch):
+        from app.infrastructure.mods.install_receipts import read_verified_install
+        from tests.test_infrastructure.test_mod_manager_ext2 import _signed_manager_fixture
 
-        mm = ModManager(mods_root=str(mods_root))
-        mm._loaded_mods.append("up-mod")
-        cur_meta = ModMetadata(id="up-mod", name="Up", version="1.0.0")
-        extract_dir = tmp_path / "extract"
-        extract_dir.mkdir()
-        (extract_dir / "manifest.json").write_text(json.dumps({"id": "up-mod", "version": "2.0.0"}))
+        mm, package, _ = _signed_manager_fixture(tmp_path, monkeypatch, installed=True, loaded=True)
+        with patch.object(mm, "unload_mod") as unload, patch.object(mm, "load_mod") as load:
+            ok, msg, meta = mm.update_mod("fixture-mod", package())
+        assert ok is True and "重启后生效" in msg
+        assert meta.version == "2.0.0"
+        unload.assert_not_called()
+        load.assert_not_called()
+        assert (Path(mm.mods_root) / "fixture-mod/logic.py").read_text() == "old"
+        receipt = read_verified_install("fixture-mod", mods_root=mm.mods_root)
+        assert receipt["requires_restart"] is True and receipt["package_version"] == "2.0.0"
 
-        with (
-            patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr,
-            patch("app.infrastructure.mods.mod_manager.ModPackage") as MP,
-            patch.object(mm, "unload_mod") as ul,
-            patch.object(mm, "load_mod", return_value=True) as lm,
-        ):
-            reg = MagicMock()
-            reg.get_mod_metadata.return_value = cur_meta
-            gr.return_value = reg
-            pkg = MagicMock()
-            pkg.manifest = {"id": "up-mod", "version": "2.0.0"}
-            MP.return_value = pkg
-            MP.extract_package.return_value = (
-                str(extract_dir),
-                {"id": "up-mod", "version": "2.0.0"},
-            )
-            ok, msg, meta = mm.update_mod("up-mod", "/pkg.xcmod")
-            assert ok is True
-            assert "更新成功" in msg
-            ul.assert_called_once()
-            lm.assert_called_once()
+    @pytest.mark.parametrize("invalid_kind", ["unsigned", "wrong_signature"])
+    def test_untrusted_update_preserves_old_code_and_receipt(
+        self, tmp_path, monkeypatch, invalid_kind
+    ):
+        from app.infrastructure.mods.install_receipts import read_verified_install
+        from tests.test_infrastructure.test_mod_manager_ext2 import _signed_manager_fixture
 
-    def test_was_loaded_extract_fail_reloads_old(self, tmp_path: Path) -> None:
-        mods_root = tmp_path / "mods"
-        mods_root.mkdir()
-        mod_dir = mods_root / "fail-mod"
-        mod_dir.mkdir()
-        (mod_dir / "manifest.json").write_text(json.dumps({"id": "fail-mod", "version": "1.0.0"}))
+        mm, package, _ = _signed_manager_fixture(tmp_path, monkeypatch, installed=True, loaded=True)
+        candidate = Path(package(signed=invalid_kind != "unsigned"))
+        if invalid_kind == "wrong_signature":
+            import base64
+            import zipfile
 
-        mm = ModManager(mods_root=str(mods_root))
-        mm._loaded_mods.append("fail-mod")
-        cur_meta = ModMetadata(id="fail-mod", name="Fail", version="1.0.0")
-
-        with (
-            patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr,
-            patch("app.infrastructure.mods.mod_manager.ModPackage") as MP,
-            patch.object(mm, "unload_mod"),
-            patch.object(mm, "load_mod", return_value=True) as lm,
-        ):
-            reg = MagicMock()
-            reg.get_mod_metadata.return_value = cur_meta
-            gr.return_value = reg
-            pkg = MagicMock()
-            pkg.manifest = {"id": "fail-mod", "version": "2.0.0"}
-            MP.return_value = pkg
-            MP.extract_package.side_effect = OSError("extract boom")
-            ok, msg, meta = mm.update_mod("fail-mod", "/pkg.xcmod")
-            assert ok is False
-            assert "更新失败" in msg
-            lm.assert_called_once_with("fail-mod")  # 重新加载旧的
-
-    def test_was_loaded_reload_fails(self, tmp_path: Path) -> None:
-        mods_root = tmp_path / "mods"
-        mods_root.mkdir()
-        mod_dir = mods_root / "reload-fail"
-        mod_dir.mkdir()
-        (mod_dir / "manifest.json").write_text(
-            json.dumps({"id": "reload-fail", "version": "1.0.0"})
+            with zipfile.ZipFile(candidate) as archive:
+                members = [(name, archive.read(name)) for name in archive.namelist()]
+            with zipfile.ZipFile(candidate, "w") as archive:
+                for name, raw in members:
+                    if name == "META-INF/signature.json":
+                        signature = json.loads(raw)
+                        signature["signature"] = base64.b64encode(bytes(64)).decode()
+                        raw = json.dumps(signature).encode()
+                    archive.writestr(name, raw)
+        with patch.object(mm, "unload_mod") as unload, patch.object(mm, "load_mod") as load:
+            ok, msg, meta = mm.update_mod("fixture-mod", str(candidate))
+        assert ok is False and "更新失败" in msg and meta is None
+        unload.assert_not_called()
+        load.assert_not_called()
+        assert (Path(mm.mods_root) / "fixture-mod/logic.py").read_text() == "old"
+        assert (
+            read_verified_install("fixture-mod", mods_root=mm.mods_root)["package_version"]
+            == "1.0.0"
         )
 
-        mm = ModManager(mods_root=str(mods_root))
-        mm._loaded_mods.append("reload-fail")
-        cur_meta = ModMetadata(id="reload-fail", name="RF", version="1.0.0")
-        extract_dir = tmp_path / "extract"
-        extract_dir.mkdir()
-        (extract_dir / "manifest.json").write_text(
-            json.dumps({"id": "reload-fail", "version": "2.0.0"})
+    def test_modified_pending_update_cannot_replace_code_after_restart(self, tmp_path, monkeypatch):
+        from app.infrastructure.mods import install_receipts as receipts
+        from tests.test_infrastructure.test_mod_manager_ext2 import _signed_manager_fixture
+
+        mm, package, _ = _signed_manager_fixture(tmp_path, monkeypatch, installed=True, loaded=True)
+        assert mm.update_mod("fixture-mod", package())[0]
+        pending = receipts.read_verified_install("fixture-mod", mods_root=mm.mods_root)
+        (Path(pending["installed_root"]) / "logic.py").write_text("tampered")
+        monkeypatch.setattr(receipts, "PROCESS_ID", "fixture-new-process")
+        with pytest.raises(ValueError, match="changed"):
+            receipts.activate_pending_install("fixture-mod", mods_root=mm.mods_root)
+        assert (Path(mm.mods_root) / "fixture-mod/logic.py").read_text() == "old"
+
+    def test_registry_presence_alone_requires_restart(self, tmp_path, monkeypatch):
+        from app.infrastructure.mods.install_receipts import read_verified_install
+        from tests.test_infrastructure.test_mod_manager_ext2 import _signed_manager_fixture
+
+        mm, package, _ = _signed_manager_fixture(tmp_path, monkeypatch, installed=True)
+        assert mm._loaded_mods == []
+        with patch.object(mm, "load_mod") as load:
+            ok, msg, _ = mm.update_mod("fixture-mod", package())
+        assert ok is True and "重启后生效" in msg
+        load.assert_not_called()
+        assert (Path(mm.mods_root) / "fixture-mod/logic.py").read_text() == "old"
+        assert (
+            read_verified_install("fixture-mod", mods_root=mm.mods_root)["requires_restart"] is True
         )
-
-        with (
-            patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr,
-            patch("app.infrastructure.mods.mod_manager.ModPackage") as MP,
-            patch.object(mm, "unload_mod"),
-            patch.object(mm, "load_mod", return_value=False),
-        ):
-            reg = MagicMock()
-            reg.get_mod_metadata.return_value = cur_meta
-            gr.return_value = reg
-            pkg = MagicMock()
-            pkg.manifest = {"id": "reload-fail", "version": "2.0.0"}
-            MP.return_value = pkg
-            MP.extract_package.return_value = (
-                str(extract_dir),
-                {"id": "reload-fail", "version": "2.0.0"},
-            )
-            ok, msg, meta = mm.update_mod("reload-fail", "/pkg.xcmod")
-            assert ok is False
-            assert "加载失败" in msg
-
-    def test_not_loaded_no_reload(self, tmp_path: Path) -> None:
-        mods_root = tmp_path / "mods"
-        mods_root.mkdir()
-        mod_dir = mods_root / "nl-mod"
-        mod_dir.mkdir()
-        (mod_dir / "manifest.json").write_text(json.dumps({"id": "nl-mod", "version": "1.0.0"}))
-
-        mm = ModManager(mods_root=str(mods_root))
-        cur_meta = ModMetadata(id="nl-mod", name="NL", version="1.0.0")
-        extract_dir = tmp_path / "extract"
-        extract_dir.mkdir()
-        (extract_dir / "manifest.json").write_text(json.dumps({"id": "nl-mod", "version": "2.0.0"}))
-
-        with (
-            patch("app.infrastructure.mods.mod_manager.get_mod_registry") as gr,
-            patch("app.infrastructure.mods.mod_manager.ModPackage") as MP,
-            patch.object(mm, "load_mod") as lm,
-        ):
-            reg = MagicMock()
-            reg.get_mod_metadata.return_value = cur_meta
-            gr.return_value = reg
-            pkg = MagicMock()
-            pkg.manifest = {"id": "nl-mod", "version": "2.0.0"}
-            MP.return_value = pkg
-            MP.extract_package.return_value = (
-                str(extract_dir),
-                {"id": "nl-mod", "version": "2.0.0"},
-            )
-            ok, msg, meta = mm.update_mod("nl-mod", "/pkg.xcmod")
-            assert ok is True
-            assert "更新成功" in msg
-            lm.assert_not_called()
 
     def test_recoverable_error_returns_false(self, tmp_path: Path) -> None:
         mm = ModManager(mods_root=str(tmp_path))
@@ -2260,7 +2167,7 @@ class TestRegisterSingleModHttpRoutes:
     def test_register_fastapi_routes_callable(self, tmp_path: Path) -> None:
         from app.infrastructure.mods.mod_manager import _register_single_mod_http_routes
 
-        mm = ModManager(mods_root="/tmp")
+        mm = ModManager(mods_root=str(tmp_path))
         meta = ModMetadata(
             id="m", name="M", version="1.0.0", backend_entry="entry", mod_path="/mods/m"
         )
@@ -2281,7 +2188,7 @@ class TestRegisterSingleModHttpRoutes:
     def test_register_websocket_routes_true(self, tmp_path: Path) -> None:
         from app.infrastructure.mods.mod_manager import _register_single_mod_http_routes
 
-        mm = ModManager(mods_root="/tmp")
+        mm = ModManager(mods_root=str(tmp_path))
         meta = ModMetadata(
             id="m", name="M", version="1.0.0", backend_entry="entry", mod_path="/mods/m"
         )
@@ -2303,7 +2210,7 @@ class TestRegisterSingleModHttpRoutes:
     def test_register_websocket_routes_false(self, tmp_path: Path) -> None:
         from app.infrastructure.mods.mod_manager import _register_single_mod_http_routes
 
-        mm = ModManager(mods_root="/tmp")
+        mm = ModManager(mods_root=str(tmp_path))
         meta = ModMetadata(
             id="m", name="M", version="1.0.0", backend_entry="entry", mod_path="/mods/m"
         )

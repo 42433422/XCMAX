@@ -1,182 +1,175 @@
-"""客户交付种子包安装。"""
+"""Install private delivery data into the current authenticated owner's workspace."""
 
 from __future__ import annotations
 
-import os
+import json
 import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.parse import quote
 
+from fastapi import HTTPException, Request
+
 from app.application.mod_store_catalog_app import catalog_download_to, catalog_get_json
-from app.desktop_runtime.paths import get_desktop_data_dir
+from app.mod_sdk.attendance_roster import initialize_roster_once
 from app.mod_sdk.customer_delivery import (
     delivery_for_account_custom_mod,
     delivery_for_runtime_mod,
     delivery_seed_package_for_mod,
 )
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.mod_sdk.customer_features import require_attendance_conversion
+from app.mod_sdk.owner_workspace import (
+    authenticated_owner,
+    owner_context,
+    owner_workspace,
+)
 
-_ALLOWED_TOP_LEVELS = {"424", "config", "data", "mods", "delivery-manifest.json"}
+_MOD_ID = "sunbird-attendance-custom"
+_SEED_FILES = {
+    "config/sunbird-roster.json": "seed-roster.json",
+    "424/考勤-2026-3月份考勤统计表.xlsx": "attendance-template.xlsx",
+}
+_MAX_SEED_BYTES = 64 * 1024 * 1024
 
 
 def _safe_member_relpath(name: str) -> Path | None:
-    raw = str(name or "").replace("\\", "/").strip("/")
-    if not raw:
-        return None
+    raw = str(name or "").replace("\\", "/")
     rel = PurePosixPath(raw)
-    if rel.is_absolute() or any(part in {"", ".", ".."} for part in rel.parts):
+    if not raw or raw.endswith("/"):
+        return None
+    if rel.is_absolute() or any(part in {"", ".", ".."} for part in raw.split("/")):
         raise ValueError(f"交付包包含非法路径: {name}")
-    if rel.parts[0] not in _ALLOWED_TOP_LEVELS:
-        raise ValueError(f"交付包包含未允许目录: {name}")
-    if rel.parts[0] == "data" and len(rel.parts) >= 2 and rel.parts[1] != "mod_dbs":
-        raise ValueError(f"交付包 data/ 下只允许 mod_dbs: {name}")
     return Path(*rel.parts)
 
 
-def extract_customer_delivery_seed(zip_path: Path, data_root: Path) -> list[str]:
-    """安全解压交付种子到桌面数据目录。"""
-    root = data_root.resolve()
-    extracted: list[str] = []
-    with zipfile.ZipFile(zip_path) as zf:
-        for info in zf.infolist():
+def extract_customer_delivery_seed(zip_path: Path) -> dict[str, Any]:
+    """Only fixed data files are accepted; legacy code/DB payloads are never activated."""
+    workspace = owner_workspace(_MOD_ID)
+    payloads: dict[str, bytes] = {}
+    ignored: list[str] = []
+    total = 0
+    with zipfile.ZipFile(zip_path) as archive:
+        for info in archive.infolist():
             if info.is_dir():
                 continue
-            rel = _safe_member_relpath(info.filename)
-            if rel is None:
+            relative = _safe_member_relpath(info.filename)
+            if relative is None:
                 continue
-            dest = (root / rel).resolve()
-            if root not in dest.parents and dest != root:
-                raise ValueError(f"交付包路径越界: {info.filename}")
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            with zf.open(info) as src, dest.open("wb") as out:
-                out.write(src.read())
-            extracted.append(rel.as_posix())
-    return extracted
+            name = relative.as_posix()
+            if (info.external_attr >> 16) & 0o170000 == 0o120000:
+                raise ValueError("交付包不可包含符号链接")
+            total += info.file_size
+            if total > _MAX_SEED_BYTES or info.file_size < 0:
+                raise ValueError("交付种子数据超过 64 MB")
+            if name in _SEED_FILES:
+                if name in payloads:
+                    raise ValueError("交付包包含重复数据文件")
+                with archive.open(info) as stream:
+                    payloads[name] = stream.read(_MAX_SEED_BYTES + 1)
+                if len(payloads[name]) != info.file_size:
+                    raise ValueError("交付包数据长度不正确")
+            elif name == "delivery-manifest.json" or name.startswith(("mods/", "data/mod_dbs/")):
+                ignored.append(name)
+            else:
+                raise ValueError(f"交付包包含未允许文件: {name}")
+    roster = payloads.get("config/sunbird-roster.json")
+    employees: list[dict] = []
+    if roster is not None:
+        document = json.loads(roster)
+        raw = document.get("employees") if isinstance(document, dict) else None
+        if not isinstance(raw, list) or any(not isinstance(row, dict) for row in raw):
+            raise ValueError("交付花名册格式不正确")
+        employees = raw
+    if not payloads:
+        raise ValueError("交付包不含可用的模板或花名册")
+    workspace.root.mkdir(parents=True, exist_ok=True)
+    written: list[str] = []
+    preserved: list[str] = []
+    for archive_name, content in payloads.items():
+        filename = _SEED_FILES[archive_name]
+        target = workspace.file_path(filename)
+        try:
+            with target.open("xb") as stream:
+                stream.write(content)
+        except FileExistsError:
+            preserved.append(filename)
+        else:
+            written.append(filename)
+    # Existing owner data wins even if a user intentionally removed every row.
+    initialized = initialize_roster_once(employees) if roster is not None else False
+    return {
+        "extracted_files": written,
+        "preserved_files": preserved,
+        "ignored_legacy_files": ignored,
+        "roster_initialized": initialized,
+    }
 
 
 async def _resolve_version(pkg_id: str, version: str) -> str:
-    ver = str(version or "").strip()
-    if ver:
-        return ver
-    versions = await catalog_get_json(f"/packages/by-id/{pkg_id}/versions")
-    rows = versions.get("versions") or []
-    if isinstance(rows, list) and rows:
-        first = rows[0]
-        if isinstance(first, dict):
-            ver = str(first.get("version") or "").strip()
-        else:
-            ver = str(first or "").strip()
-    return ver
+    if str(version or "").strip():
+        return version.strip()
+    response = await catalog_get_json(f"/packages/by-id/{pkg_id}/versions")
+    rows = response.get("versions") or []
+    if not isinstance(rows, list) or not rows:
+        return ""
+    first = rows[0]
+    return (
+        str(first.get("version") or "").strip()
+        if isinstance(first, dict)
+        else str(first or "").strip()
+    )
 
 
 async def install_customer_delivery_seed_package(
     *,
+    request: Request,
     mod_id: str,
     industry_id: str = "",
     market_token: str = "",
     account_username: str = "",
 ) -> dict[str, Any]:
-    """按账号定制 Mod 下载并应用客户交付种子包。"""
+    """Authentication and entitlement precede download, with no global seed fallback."""
+    owner = authenticated_owner(request)
+    require_attendance_conversion(request)
     mid = str(mod_id or "").strip()
-    iid = str(industry_id or "").strip()
-    if not mid:
-        return {"success": False, "message": "缺少 mod_id"}
-
-    delivery = delivery_for_account_custom_mod(mid, iid)
-    if delivery is None:
-        delivery = delivery_for_runtime_mod(mid, account_username=account_username)
-    pkg = delivery_seed_package_for_mod(
-        mid,
-        iid,
-        account_username=account_username,
+    delivery = delivery_for_account_custom_mod(mid, industry_id) or delivery_for_runtime_mod(
+        mid, account_username=account_username
     )
-    if not delivery or not pkg:
-        return {
-            "success": True,
-            "message": "该账号定制 Mod 未配置交付种子包",
-            "mod_id": mid,
-            "applied": False,
-            "skipped": True,
-        }
+    package = delivery_seed_package_for_mod(mid, industry_id, account_username=account_username)
+    if not delivery or delivery.get("runtime_mod_id") != _MOD_ID or not package:
+        raise HTTPException(403, "当前账号未授权此交付种子包")
+    package_id = str(package.get("pkg_id") or "").strip()
+    version = await _resolve_version(package_id, str(package.get("version") or ""))
+    if not package_id or not version:
+        raise HTTPException(409, "交付种子包缺少 pkg_id/version")
+    from app.fastapi_routes.market_account import resolve_valid_market_access_token
+    from app.infrastructure.auth.dependencies import session_id_from_request
 
-    pkg_id = str(pkg.get("pkg_id") or "").strip()
-    version = await _resolve_version(pkg_id, str(pkg.get("version") or "").strip())
-    if not pkg_id or not version:
-        return {"success": False, "message": "交付种子包缺少 pkg_id/version", "mod_id": mid}
-
-    token = str(market_token or "").strip()
+    # Never accept a different account's token from a mobile request body.
+    token = str(
+        await resolve_valid_market_access_token(session_id_from_request(request)) or ""
+    ).strip()
     if not token:
-        return {
-            "success": False,
-            "message": "缺少市场登录凭证，无法下载账号专属交付种子包",
-            "mod_id": mid,
-            "package": {"pkg_id": pkg_id, "version": version, "artifact": pkg.get("artifact")},
-        }
-    auth_header = token if token.lower().startswith("bearer ") else f"Bearer {token}"
-    entitlement_id = str(pkg.get("account_mod_id") or mid).strip()
-    protected_path = (
-        f"/api/enterprise/customer-delivery-seeds/{quote(pkg_id, safe='')}/"
-        f"{quote(version, safe='')}/download?mod_id={quote(entitlement_id, safe='')}"
-    )
-
-    tmp = tempfile.NamedTemporaryFile(prefix="xcagi-delivery-seed-", suffix=".zip", delete=False)
-    tmp_path = Path(tmp.name)
-    tmp.close()
-    try:
-        await catalog_download_to(
-            protected_path,
-            tmp_path,
-            headers={"Authorization": auth_header},
-        )
-        data_root = Path(get_desktop_data_dir()).resolve()
-        extracted = extract_customer_delivery_seed(tmp_path, data_root)
-
-        applied = False
-        apply_kind = str(pkg.get("apply") or "").strip()
-        if apply_kind == "sunbird_roster":
-            from app.desktop_runtime.sunbird_delivery_seed import (
-                apply_sunbird_roster_seed_if_needed,
-            )
-
-            applied = bool(apply_sunbird_roster_seed_if_needed(data_root))
-
-        route_ready = False
-        try:
-            from app.infrastructure.mods.mod_manager import ensure_mod_api_ready, get_mod_manager
-
-            get_mod_manager().scan_mods(use_cache=False)
-            route_ready = bool(ensure_mod_api_ready(mid))
-        except RECOVERABLE_ERRORS:
-            route_ready = False
-
-        return {
-            "success": True,
-            "message": "客户交付种子包已下载并应用",
-            "mod_id": mid,
-            "delivery_id": str((delivery or {}).get("delivery_id") or ""),
-            "package": {"pkg_id": pkg_id, "version": version, "artifact": pkg.get("artifact")},
-            "data_root": str(data_root),
-            "extracted_files": extracted,
-            "applied": applied,
-            "route_ready": route_ready,
-        }
-    except RECOVERABLE_ERRORS as exc:
-        return {
-            "success": False,
-            "message": f"客户交付种子包安装失败：{exc}",
-            "mod_id": mid,
-        }
-    finally:
-        try:
-            if tmp_path.exists():
-                os.unlink(tmp_path)
-        except OSError:
-            pass
-
-
-__all__ = [
-    "extract_customer_delivery_seed",
-    "install_customer_delivery_seed_package",
-]
+        raise HTTPException(409, "缺少市场登录凭证，无法下载账号专属交付种子包")
+    entitlement = str(package.get("account_mod_id") or mid)
+    endpoint = f"/api/enterprise/customer-delivery-seeds/{quote(package_id, safe='')}/{quote(version, safe='')}/download?mod_id={quote(entitlement, safe='')}"
+    authorization = token if token.lower().startswith("bearer ") else f"Bearer {token}"
+    with tempfile.TemporaryDirectory(prefix="xcagi-owner-seed-") as temporary:
+        archive = Path(temporary) / "seed.zip"
+        await catalog_download_to(endpoint, archive, headers={"Authorization": authorization})
+        with owner_context(owner):
+            result = extract_customer_delivery_seed(archive)
+    return {
+        "success": True,
+        "message": "交付数据已检查；已有名单和模板保持不变",
+        "mod_id": mid,
+        "owner_scope": owner,
+        "applied": bool(result["extracted_files"] or result["roster_initialized"]),
+        "package": {
+            "pkg_id": package_id,
+            "version": version,
+            "artifact": package.get("artifact"),
+        },
+        **result,
+    }

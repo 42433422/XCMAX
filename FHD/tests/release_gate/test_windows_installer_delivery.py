@@ -1,4 +1,5 @@
 import json
+import subprocess
 from pathlib import Path
 
 import yaml
@@ -70,3 +71,35 @@ def test_stable_lane_still_requires_signing():
     workflow = yaml.safe_load((ROOT / ".github/workflows/release-desktop.yml").read_text())
     assert workflow["jobs"]["windows"]["env"]["XCAGI_REQUIRE_WINDOWS_SIGNING"] == "1"
     assert "verify-public-windows-signature" in workflow["jobs"]["publish-website-pointer"]["needs"]
+
+
+def test_retired_customer_workflow_cannot_checkout_old_sources(tmp_path):
+    workflow = yaml.safe_load((ROOT / ".github/workflows/sunbird-installer.yml").read_text())
+    trigger = workflow.get("on", workflow.get(True))
+    assert not (trigger["workflow_dispatch"] or {}).get("inputs")
+    assert workflow["defaults"]["run"]["working-directory"] == "."
+    steps = [step for job in workflow["jobs"].values() for step in job["steps"]]
+    assert len(steps) == 1
+    assert all("uses" not in step for step in steps)
+    # Execute the actual sole job command: historical acknowledgements and refs
+    # cannot cause checkout, packaging or publication before this refusal.
+    result = subprocess.run(
+        ["bash", "-c", steps[0]["run"]],
+        cwd=tmp_path,
+        env={"acknowledge_retired": "retired-ok", "source_ref": "feat/enterprise-deploy-maturity"},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "retired" in (result.stdout + result.stderr).lower()
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_standard_installer_refuses_customer_seed_before_building():
+    script = (ROOT / "scripts/package/build-installer.ps1").read_text()
+    guard = script.index("if ($SunbirdSeedZipPath)")
+    setup = script.index("$Root = Resolve-Path")
+    assert guard < setup
+    assert 'throw "Customer seed embedding is retired.' in script[guard:setup]
+    assert "-p:SunbirdSeedZipPath=" not in script

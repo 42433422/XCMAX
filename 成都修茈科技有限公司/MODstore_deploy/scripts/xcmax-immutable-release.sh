@@ -65,6 +65,39 @@ resolve_java_home() {
   fail "Java 17 runtime is required by the active payment service"
 }
 
+verify_runtime_mod_compiler() {
+  local release_root="$1"
+  local node_binary="$2"
+  "$node_binary" --input-type=module - "$release_root/FHD/frontend/package.json" <<'JS'
+import assert from 'node:assert/strict'
+import { readFileSync, realpathSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { dirname, relative, resolve, isAbsolute } from 'node:path'
+
+const frontend = dirname(process.argv[2])
+const require = createRequire(process.argv[2])
+const resolved = realpathSync(require.resolve('esbuild'))
+const inside = relative(resolve(frontend, 'node_modules'), resolved)
+assert(inside && !inside.startsWith('..') && !isAbsolute(inside), 'esbuild must belong to this release')
+const lock = JSON.parse(readFileSync(resolve(frontend, 'package-lock.json'), 'utf8'))
+const nativePackage = `@esbuild/${process.platform}-${process.arch}`
+const nativePath = realpathSync(require.resolve(`${nativePackage}/bin/esbuild`))
+const nativeInside = relative(resolve(frontend, 'node_modules'), nativePath)
+assert(nativeInside && !nativeInside.startsWith('..') && !isAbsolute(nativeInside), 'native esbuild must belong to this release')
+delete process.env.ESBUILD_BINARY_PATH
+const { buildSync, version } = require('esbuild')
+assert.equal(version, lock.packages['node_modules/esbuild'].version, 'esbuild must match the frontend lock')
+const result = buildSync({
+  stdin: { contents: 'export const answer = 21 * 2', loader: 'js' },
+  bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2022',
+})
+assert.equal(result.outputFiles.length, 1)
+const compiled = await import('data:text/javascript;base64,' + Buffer.from(result.outputFiles[0].contents).toString('base64'))
+assert.equal(compiled.answer, 42, 'native compiler output must execute correctly')
+console.log(JSON.stringify({ runtime_mod_compiler: 'ready', esbuild: version, node: process.version }))
+JS
+}
+
 [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "XCMAX_TARGET_SHA must be a full 40-character commit SHA"
 [[ "$PRODUCT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] \
   || fail "XCMAX_PRODUCT_VERSION must be a numeric product version"
@@ -291,6 +324,11 @@ if systemctl cat modstore-payment.service >/dev/null 2>&1; then
   PAYMENT_JAVA_BIN="${JAVA_HOME}/bin/java"
 fi
 
+RUNTIME_NODE_BIN="$(command -v node)" || fail "Node.js is required by the private Mod compiler"
+RUNTIME_NODE_BIN="$(readlink -f "$RUNTIME_NODE_BIN")"
+[[ "$RUNTIME_NODE_BIN" == /* && -x "$RUNTIME_NODE_BIN" ]] \
+  || fail "private Mod compiler requires an executable absolute Node.js path"
+
 FINAL_ROOT="${RELEASES_DIR}/${TARGET_SHA}"
 if [[ -f "$FINAL_ROOT/.xcmax-release.json" ]]; then
   EXISTING_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["git_sha"])' "$FINAL_ROOT/.xcmax-release.json")"
@@ -319,6 +357,17 @@ else
     MODSTORE_RUNTIME_DIR="$BUILD_ROOT/.runtime-build" \
     "$DEPLOY_DIR/.venv/bin/python" -c 'import fastapi, pytest, pytest_cov, uvicorn, modstore_server.app'
   rm -rf -- "$BUILD_ROOT/.runtime-build"
+
+  log "installing the locked private Mod compiler inside the release"
+  command -v npm >/dev/null 2>&1 || fail "npm is required by the private Mod compiler"
+  (
+    export PATH="$(dirname "$RUNTIME_NODE_BIN"):$PATH"
+    npm ci --prefix "$BUILD_ROOT/FHD/frontend" --include=dev --include=optional \
+      --ignore-scripts --no-audit --no-fund
+  )
+  # The real native esbuild binary must work without lifecycle downloads.
+  verify_runtime_mod_compiler "$BUILD_ROOT" "$RUNTIME_NODE_BIN" \
+    || fail "private Mod compiler is unavailable in the prepared release"
 
   if [[ -f "$DEPLOY_DIR/market/package-lock.json" ]]; then
     command -v npm >/dev/null 2>&1 || fail "npm is required to build the market"
@@ -376,6 +425,8 @@ unset BUILD_JWT_SECRET
 chmod 0555 "$FINAL_ROOT"
 
 DEPLOY_DIR="$FINAL_ROOT/$MODSTORE_SUBDIR"
+verify_runtime_mod_compiler "$FINAL_ROOT" "$RUNTIME_NODE_BIN" \
+  || fail "private Mod compiler verification failed before promotion"
 EXPECTED_ARTIFACT_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["artifact_sha256"])' "$FINAL_ROOT/.xcmax-release.json")"
 [[ "$EXPECTED_ARTIFACT_SHA" =~ ^[0-9a-f]{64}$ ]] || fail "release artifact SHA256 is invalid"
 
@@ -465,6 +516,7 @@ write_service_units() {
     "$TARGET_SHA" "$TARGET_SHA" "$CURRENT_LINK" "$release_artifact_sha" \
     "$RUNTIME_DIR" "$CURRENT_LINK" "$CURRENT_LINK" "$GITHUB_REPOSITORY_SLUG" \
     "$TARGET_SHA" "$PRODUCT_VERSION" > "${release_env}.tmp"
+  printf 'MODSTORE_NODE_EXECUTABLE=%s\n' "$RUNTIME_NODE_BIN" >> "${release_env}.tmp"
   chmod 644 "${release_env}.tmp"
   mv -f "${release_env}.tmp" "$release_env"
 

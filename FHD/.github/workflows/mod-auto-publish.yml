@@ -1,146 +1,155 @@
 name: Mod Auto Publish
 
-# 进化状态闭环 — 系统自己打包上架 MODstore：
-#   - 触发：PR 合并到 main 且涉及 FHD/mods/_employees/** 文件
-#   - 流程：检测变更 mod → build_mod.py 打包 → 五维审核 → 公开上架 → 下载摘要复验
-#   - 输出：每个 mod 的包、sha256、审核结论、公开目录与下载回执
-#
-# 也支持 workflow_dispatch 手动触发单个 mod_id
-
+# Standard main host plus independently versioned, explicitly public Mods.
+# Private customer artifacts use the owner-bound production-center channel.
 on:
   pull_request:
+    branches: [main]
     types: [closed]
     paths:
-      - "FHD/mods/_employees/**"
-      - "FHD/mods/**/manifest.json"
+      - "FHD/mods/**"
+      - "FHD/XCAGI/mods/**"
   workflow_dispatch:
     inputs:
+      source_sha:
+        description: "Exact 40-character commit in main history with successful required checks"
+        required: true
       mod_id:
-        description: "要打包的 mod id（留空则扫描全部 mods/_employees/）"
+        description: "One Mod id; blank discovers changes at source_sha"
         required: false
         default: ""
 
 permissions:
   contents: read
-  pull-requests: write
+  checks: read
+  statuses: read
+
+# A pending release for a different Mod must never be cancelled by this workflow.
+defaults:
+  run:
+    working-directory: .
+
+env:
+  SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.merge_commit_sha || inputs.source_sha }}
 
 jobs:
-  package-and-publish:
-    # PR 触发：仅当 PR 已合并；workflow_dispatch 无此限制
-    if: |
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+  prepare:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      MODSTORE_AUTO_PUBLISH_TOKEN: ${{ secrets.MODSTORE_AUTO_PUBLISH_TOKEN }}
-      MODSTORE_BASE_URL: ${{ vars.MODSTORE_BASE_URL || 'https://xiu-ci.com' }}
+    timeout-minutes: 40
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      count: ${{ steps.plan.outputs.count }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Discover changed mods
-        id: discover
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.mod_id }}" ]; then
-            echo "mod_ids=${{ github.event.inputs.mod_id }}" >> $GITHUB_OUTPUT
-          else
-            # PR 触发：从 commits 检测变更的 mod 目录
-            MODS=$(gh pr view ${{ github.event.pull_request.number }} --json files --jq '.files[].path' \
-              | grep -E '^FHD/mods/(_employees/)?[^/]+/' \
-              | awk -F/ '{print $(NF-1)}' \
-              | sort -u | tr '\n' ' ')
-            echo "mod_ids=$MODS" >> $GITHUB_OUTPUT
-          fi
+      - name: Resolve exact main sources, version bumps and successful checks
+        id: plan
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build & publish each mod
-        if: steps.discover.outputs.mod_ids != ''
-        working-directory: FHD
-        env:
-          MOD_IDS: ${{ steps.discover.outputs.mod_ids }}
-          SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.merge_commit_sha || github.sha }}
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_MOD_ID: ${{ inputs.mod_id }}
         run: |
           set -euo pipefail
-          test -n "${MODSTORE_AUTO_PUBLISH_TOKEN:-}" || {
-            echo "::error::MODSTORE_AUTO_PUBLISH_TOKEN is required"
-            exit 1
-          }
-          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || {
-            echo "::error::exact merged source SHA is required"
-            exit 1
-          }
-          mkdir -p dist/employee_packs
-          mkdir -p test_reports/modstore_publish
-          for mod_id in $MOD_IDS; do
-            echo "=== Building: $mod_id ==="
-            python scripts/build_mod.py --mod-id "$mod_id" --out dist/employee_packs
-            package="$(find dist/employee_packs -maxdepth 1 -type f \
-              \( -name "${mod_id}-*.xcemp" -o -name "${mod_id}-*.xcmod" \) \
-              -print | sort | tail -n 1)"
-            test -n "$package" && test -f "$package"
-            python scripts/dev/publish_modstore.py "$package" \
-              --base-url "$MODSTORE_BASE_URL" \
-              --token "$MODSTORE_AUTO_PUBLISH_TOKEN" \
-              --source-repository "$GITHUB_REPOSITORY" \
-              --source-sha "$SOURCE_SHA" \
-              --workflow-run-id "$GITHUB_RUN_ID" \
-              --duty-roster config/duty_roster.json \
-              --receipt "test_reports/modstore_publish/${mod_id}.receipt.json"
-          done
-
-      - name: Upload artifacts
+          git fetch origin main:refs/remotes/origin/main
+          matrix=$(python FHD/scripts/dev/mod_publish_plan.py \
+            --source-sha "$SOURCE_SHA" --repository "$GITHUB_REPOSITORY" \
+            --mod-id "$REQUESTED_MOD_ID" --wait-seconds 1800 \
+            --output FHD/test_reports/modstore_publish/source-plan.json)
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "count=$(jq '.include | length' <<< "$matrix")" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
         if: always()
-        uses: actions/upload-artifact@v4
         with:
-          name: mod-packages
+          name: mod-source-plan
+          path: FHD/test_reports/modstore_publish/source-plan.json
+          if-no-files-found: warn
+
+  package-and-publish:
+    needs: prepare
+    if: needs.prepare.outputs.count != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Require signing configuration before building
+        env:
+          MODSTORE_SIGNING_PRIVATE_KEY_PEM: ${{ secrets.MODSTORE_SIGNING_PRIVATE_KEY_PEM }}
+        run: |
+          test -n "${MODSTORE_SIGNING_PRIVATE_KEY_PEM:-}" || {
+            echo "::error::MODSTORE_SIGNING_PRIVATE_KEY_PEM is not configured; refusing unsigned publication."
+            exit 1
+          }
+      - name: Detect runtime Mod frontend
+        id: runtime
+        env:
+          MOD_SOURCE: ${{ matrix.source }}
+        run: |
+          required=$(python -c 'import json,os; print("true" if json.load(open(os.environ["MOD_SOURCE"]+"/manifest.json")).get("frontend", {}).get("runtime", {}).get("source") else "false")')
+          echo "required=$required" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        if: steps.runtime.outputs.required == 'true'
+        with:
+          node-version: "24"
+      - name: Compile runtime Mod frontend before signing
+        if: steps.runtime.outputs.required == 'true'
+        env:
+          MOD_SOURCE: ${{ matrix.source }}
+        run: |
+          set -euo pipefail
+          npm ci --prefix FHD/frontend
+          node FHD/scripts/dev/build-runtime-mod-frontend.mjs "$MOD_SOURCE"
+      - name: Build exact source and publish an immutable reviewed version
+        env:
+          MODSTORE_SIGNING_PRIVATE_KEY_PEM: ${{ secrets.MODSTORE_SIGNING_PRIVATE_KEY_PEM }}
+          MOD_SOURCE: ${{ matrix.source }}
+          MOD_ID: ${{ matrix.id }}
+          MOD_VERSION: ${{ matrix.version }}
+          MODSTORE_AUTO_PUBLISH_TOKEN: ${{ secrets.MODSTORE_AUTO_PUBLISH_TOKEN }}
+          MODSTORE_BASE_URL: ${{ vars.MODSTORE_BASE_URL || 'https://xiu-ci.com' }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test -n "${MODSTORE_SIGNING_PRIVATE_KEY_PEM:-}" || {
+            echo "::error::MODSTORE_SIGNING_PRIVATE_KEY_PEM is not configured; no signed release can be published."
+            exit 1
+          }
+          crypto_version=$(python -c 'import tomllib; print(next(p["version"] for p in tomllib.load(open("FHD/uv.lock", "rb"))["package"] if p["name"] == "cryptography"))')
+          python -m pip install "cryptography==$crypto_version"
+          key_path="${RUNNER_TEMP}/mod-signing-${GITHUB_RUN_ID}-${MOD_ID}.pem"
+          trap 'rm -f "$key_path"' EXIT
+          umask 077
+          printf '%s' "$MODSTORE_SIGNING_PRIVATE_KEY_PEM" > "$key_path"
+          unset MODSTORE_SIGNING_PRIVATE_KEY_PEM
+          python FHD/scripts/build_mod.py --src "$MOD_SOURCE" --out FHD/dist/mod-publish \
+            --sign --private-key "$key_path"
+          artifact=$(python -c 'import json,os; print(json.load(open(os.environ["MOD_SOURCE"]+"/manifest.json")).get("artifact", "mod"))')
+          suffix=xcmod
+          if [ "$artifact" = employee_pack ]; then suffix=xcemp; fi
+          package="FHD/dist/mod-publish/${MOD_ID}-${MOD_VERSION}.${suffix}"
+          test -f "$package"
+          python FHD/scripts/dev/publish_modstore.py "$package" \
+            --base-url "$MODSTORE_BASE_URL" --token "$MODSTORE_AUTO_PUBLISH_TOKEN" \
+            --source-repository "$GITHUB_REPOSITORY" --source-sha "$SOURCE_SHA" \
+            --workflow-run-id "$GITHUB_RUN_ID" --duty-roster FHD/config/duty_roster.json \
+            --receipt "FHD/test_reports/modstore_publish/${MOD_ID}.receipt.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mod-package-${{ matrix.id }}
           path: |
-            FHD/dist/employee_packs/*.xcemp
-            FHD/dist/employee_packs/*.xcmod
-            FHD/dist/employee_packs/*.meta.json
+            FHD/dist/mod-publish/*
             FHD/test_reports/modstore_publish/*.receipt.json
           if-no-files-found: error
-
-      - name: Comment on PR with package info
-        if: github.event_name == 'pull_request' && steps.discover.outputs.mod_ids != ''
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const mods = '${{ steps.discover.outputs.mod_ids }}'.trim().split(/\s+/).filter(Boolean);
-            if (mods.length === 0) return;
-            const fs = require('fs');
-            const receipts = mods.map(mod => {
-              const path = `FHD/test_reports/modstore_publish/${mod}.receipt.json`;
-              const row = JSON.parse(fs.readFileSync(path, 'utf8'));
-              if (row.status === 'internal_only') {
-                return `- \`${row.pkg_id}@${row.version}\` — ⏭️ 编制内能力，按策略保留为内部能力、不公开上架`;
-              }
-              return `- \`${row.pkg_id}@${row.version}\` — ✅ 五维审核通过 / ✅ 公开可见 / ✅ 下载 SHA-256 \`${row.sha256.slice(0, 16)}…\`${row.idempotent ? '（幂等复用）' : ''}`;
-            });
-            const body = [
-              '## Mod Auto Publish',
-              '',
-              '以下 MOD 已完成真实上架与下载后置校验：',
-              ...receipts,
-              '',
-              '### 进化状态闭环',
-              '',
-              '1. ✅ Mod 代码已合并到 main',
-              '2. ✅ Mod 已自动打包并绑定合并 SHA / workflow run',
-              '3. ✅ 可公开能力经 MODstore 五维审核后上架',
-              '4. ✅ 公开目录、详情与下载包 SHA-256 已复验；编制内能力保持内部可见',
-              '',
-              '_本评论由 mod-auto-publish.yml workflow 自动生成。_'
-            ].join('\n');
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.payload.pull_request.number,
-              body
-            });

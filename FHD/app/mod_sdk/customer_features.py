@@ -13,13 +13,13 @@ def attendance_custom_features(request: Request) -> dict:
     delivery = delivery_for_account(binding.get("username", "")) or {}
     granted = (
         binding.get("market_user_id")
-        and delivery.get("delivery_mode") == "integrated_feature"
-        and delivery.get("runtime_mod_id") == "attendance-industry"
+        and delivery.get("delivery_mode") == "private_mod"
+        and delivery.get("runtime_mod_id") == "sunbird-attendance-custom"
         and delivery.get("legacy_mod_id") in binding.get("mod_ids", set())
     )
     return {
         "success": True,
-        "custom_features": list(delivery.get("custom_features") or []) if granted else [],
+        "custom_features": (list(delivery.get("custom_features") or []) if granted else []),
         "delivery_id": delivery.get("legacy_mod_id", "") if granted else "",
     }
 

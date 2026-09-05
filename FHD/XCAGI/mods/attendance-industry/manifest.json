@@ -1,9 +1,10 @@
 {
   "id": "attendance-industry",
   "name": "通用考勤模块",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "XCAGI",
-  "description": "主系统共享考勤工作区：部门、人员、排班资源与考勤记录；客户模板转换按账号定制权益开放。",
+  "description": "共享考勤工作区：部门、人员、排班资源与考勤记录；客户模板转换由账号私有 Mod 独立交付。",
+  "public_listing": true,
   "primary": true,
   "legacy_mod_ids": ["taiyangniao-pro"],
   "dependencies": {

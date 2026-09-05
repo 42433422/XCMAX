@@ -112,6 +112,15 @@ def _client(db_path: Path) -> TestClient:
     )
     app = FastAPI()
     app.include_router(router)
+    # These CRUD tests inject an isolated database. Real session/owner rejection
+    # and cross-account storage are exercised in test_deep_mods/test_owner_workspace.
+    from app.mod_sdk.owner_workspace import owner_context, require_owner_workspace
+
+    async def authenticated_test_owner():
+        with owner_context("tenant:fixture"):
+            yield "tenant:fixture"
+
+    app.dependency_overrides[require_owner_workspace] = authenticated_test_owner
     return TestClient(app)
 
 
@@ -188,16 +197,11 @@ def test_management_and_conversion_share_roster_even_after_last_person_deleted(
 ):
     db_path = tmp_path / "attendance.db"
     _seed_db(db_path)
-    spec = importlib.util.spec_from_file_location(
-        "attendance_blueprints_management_test", MODULE_PATH.with_name("blueprints.py")
-    )
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    monkeypatch.setattr(
-        module, "_load_products_personnel_roster_from_host", lambda: [("旧部门", "", "旧人员")]
-    )
+    from app.mod_sdk import attendance_roster
+
+    monkeypatch.setattr(attendance_roster, "attendance_database_path", lambda: db_path)
     client = _client(db_path)
-    assert module._resolve_personnel_roster(db_path) == [("生产部", "木工", "张三")]
+    assert attendance_roster.read_attendance_roster() == [("生产部", "木工", "张三")]
 
     assert (
         client.put(
@@ -205,7 +209,7 @@ def test_management_and_conversion_share_roster_even_after_last_person_deleted(
         ).status_code
         == 200
     )
-    assert module._resolve_personnel_roster(db_path) == [("新生产部", "木工", "张三")]
+    assert attendance_roster.read_attendance_roster() == [("新生产部", "木工", "张三")]
     assert (
         client.put(
             "/api/mod/attendance-industry/employees/1",
@@ -213,9 +217,9 @@ def test_management_and_conversion_share_roster_even_after_last_person_deleted(
         ).status_code
         == 200
     )
-    assert module._resolve_personnel_roster(db_path) == [("新生产部", "计时", "张三改名")]
+    assert attendance_roster.read_attendance_roster() == [("新生产部", "计时", "张三改名")]
     assert client.delete("/api/mod/attendance-industry/employees/1").status_code == 200
-    assert module._resolve_personnel_roster(db_path) == []
+    assert attendance_roster.read_attendance_roster() == []
 
 
 def test_new_install_can_create_first_department_and_person(tmp_path):

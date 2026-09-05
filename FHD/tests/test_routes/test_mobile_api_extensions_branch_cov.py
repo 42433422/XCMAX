@@ -2203,62 +2203,107 @@ class TestMobileInstallMod:
 
 
 class TestMobileInstallCustomerDeliverySeed:
-    @pytest.mark.asyncio
-    async def test_user_none_returns_401(self, m):
-        result = await m.mobile_install_customer_delivery_seed(body={}, user=None)
-        assert result.status_code == 401
+    @pytest.fixture
+    def seed_request(self):
+        from starlette.requests import Request
+
+        return Request(
+            {
+                "type": "http",
+                "method": "POST",
+                "path": "/mod-store/install-customer-delivery-seed",
+                "headers": [(b"x-session-id", b"synthetic-seed-session")],
+            }
+        )
 
     @pytest.mark.asyncio
-    async def test_no_mod_id_returns_400(self, m):
-        result = await m.mobile_install_customer_delivery_seed(body={}, user=_user())
-        assert result.status_code == 400
-
-    @pytest.mark.asyncio
-    async def test_success(self, m):
+    async def test_user_none_returns_401(self, m, seed_request):
         with patch(
             "app.mod_sdk.customer_delivery_seed.install_customer_delivery_seed_package",
-            new=AsyncMock(return_value={"success": True, "message": "ok"}),
-        ):
+            new_callable=AsyncMock,
+        ) as install:
             result = await m.mobile_install_customer_delivery_seed(
-                body={"mod_id": "m1", "industry_id": "retail"}, user=_user()
+                request=seed_request, body={}, user=None
             )
-        assert result is not None
+        assert result.status_code == 401
+        install.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_failed_install(self, m):
-        """branch: data.success is False → code 409."""
+    async def test_no_mod_id_returns_400(self, m, seed_request):
+        with patch(
+            "app.mod_sdk.customer_delivery_seed.install_customer_delivery_seed_package",
+            new_callable=AsyncMock,
+        ) as install:
+            result = await m.mobile_install_customer_delivery_seed(
+                request=seed_request, body={}, user=_user()
+            )
+        assert result.status_code == 400
+        install.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_success(self, m, seed_request):
+        data = {"success": True, "message": "ok"}
+        with patch(
+            "app.mod_sdk.customer_delivery_seed.install_customer_delivery_seed_package",
+            new=AsyncMock(return_value=data),
+        ) as install:
+            result = await m.mobile_install_customer_delivery_seed(
+                request=seed_request,
+                body={"mod_id": "m1", "industry_id": "retail", "account_username": "forged"},
+                user=_user(),
+            )
+        install.assert_awaited_once_with(
+            request=seed_request,
+            mod_id="m1",
+            industry_id="retail",
+            market_token="",
+            account_username="tester",
+        )
+        assert result == {"code": 200, "message": "ok", "success": True, "data": data}
+
+    @pytest.mark.asyncio
+    async def test_failed_install(self, m, seed_request):
+        """The installer conflict remains visible in the mobile response envelope."""
         with patch(
             "app.mod_sdk.customer_delivery_seed.install_customer_delivery_seed_package",
             new=AsyncMock(return_value={"success": False, "message": "failed"}),
-        ):
+        ) as install:
             result = await m.mobile_install_customer_delivery_seed(
-                body={"mod_id": "m1"}, user=_user()
+                request=seed_request, body={"mod_id": "m1"}, user=_user()
             )
-        assert result is not None
+        assert install.await_args.kwargs["request"] is seed_request
+        assert result["code"] == 409
+        assert result["success"] is False
+        assert result["message"] == "failed"
 
     @pytest.mark.asyncio
-    async def test_recoverable_error(self, m):
+    async def test_recoverable_error(self, m, seed_request):
         err_class = _err_class(m)
         with patch(
             "app.mod_sdk.customer_delivery_seed.install_customer_delivery_seed_package",
             new=AsyncMock(side_effect=err_class("fail")),
-        ):
+        ) as install:
             result = await m.mobile_install_customer_delivery_seed(
-                body={"mod_id": "m1"}, user=_user()
+                request=seed_request, body={"mod_id": "m1"}, user=_user()
             )
+        assert install.await_args.kwargs["request"] is seed_request
         assert result.status_code == 500
 
     @pytest.mark.asyncio
-    async def test_industry_id_from_industryId_key(self, m):
-        """branch: industry_id from industryId key."""
+    async def test_industry_id_from_industryId_key(self, m, seed_request):
         with patch(
             "app.mod_sdk.customer_delivery_seed.install_customer_delivery_seed_package",
             new=AsyncMock(return_value={"success": True}),
-        ):
+        ) as install:
             result = await m.mobile_install_customer_delivery_seed(
-                body={"mod_id": "m1", "industryId": "retail"}, user=_user()
+                request=seed_request,
+                body={"mod_id": "m1", "industryId": "retail"},
+                user=_user(),
             )
-        assert result is not None
+        assert install.await_args.kwargs["request"] is seed_request
+        assert install.await_args.kwargs["industry_id"] == "retail"
+        assert result["code"] == 200
+        assert result["success"] is True
 
 
 # ============================================================

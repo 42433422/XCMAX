@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import uuid
 from datetime import UTC, datetime
@@ -59,6 +60,7 @@ async def _start_custom_delivery_run(
     evidence: dict[str, Any],
     attempt: int,
     rework_note: str = "",
+    ticket_id: int = 0,
 ) -> dict[str, Any]:
     from modstore_server.workbench_api import start_workbench_session_for_user
 
@@ -73,7 +75,11 @@ async def _start_custom_delivery_run(
         "employee_target": "pack_plus_workflow",
         "embed_script_workflow": kind == "employee",
     }
-    started = await start_workbench_session_for_user(int(user_id), payload)
+    started = await start_workbench_session_for_user(
+        int(user_id),
+        payload,
+        delivery_context={"ticket_id": ticket_id, "evidence": evidence} if ticket_id else None,
+    )
     return {
         "kind": kind,
         "attempt": int(attempt),
@@ -103,6 +109,10 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
             item["error"] = snapshot.get("error")
             item["quality_report"] = snapshot.get("quality_report")
             item["sandbox_report"] = snapshot.get("sandbox_report")
+            item["verified_artifacts"] = (
+                snapshot.get("verified_artifacts") or item.get("verified_artifacts") or []
+            )
+            snapshot["verified_artifacts"] = item["verified_artifacts"]
             latest_snapshot = snapshot
         runs.append(item)
 
@@ -112,12 +122,27 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
     commerce_blockers = custom_delivery_commerce_blockers(evidence)
     if str(ticket.status or "") in {"resolved", "closed", "done"}:
         stage, label = "delivered", "已交付并上岗"
+    elif (evidence.get("resolution") or {}).get("runtime_failure") and (
+        evidence.get("resolution") or {}
+    ).get("state") in {"queued_rework", "repair_failed"}:
+        stage, label = "rework", str(
+            (evidence.get("resolution") or {}).get("last_error") or "业务验证未通过，原单返工中"
+        )
+    elif (evidence.get("resolution") or {}).get("state") == "awaiting_runtime":
+        stage, label = "delivering", "业务验证失败，等待宿主发行身份核验"
     elif pricing_mode == "post_delivery_addon" and not run_rows and commerce_blockers:
         stage, label = "commerce", "交付后新增，待报价付款"
     elif accepted and commerce_blockers:
         stage, label = "commerce", "商务条件待完成"
     elif accepted:
-        stage, label = "delivering", "验收通过，待安装回执"
+        stage, label = (
+            "delivering",
+            (
+                "已安装，等待客户宿主运行与业务验证"
+                if evidence.get("install_receipts")
+                else "验收通过，待安装回执"
+            ),
+        )
     elif evidence.get("start_error") and not latest_snapshot:
         stage, label = "rework", "生产未启动，待返工"
     elif acceptance_status == "internal_approved" and latest_snapshot:
@@ -147,6 +172,20 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
         artifacts.append({"kind": "module", "id": str(artifact["mod_id"])})
     if artifact.get("pack_id"):
         artifacts.append({"kind": "employee", "id": str(artifact["pack_id"])})
+    verified = latest_snapshot.get("verified_artifacts", []) if latest_snapshot else []
+    if verified:
+        artifacts = [
+            {
+                "kind": row["kind"],
+                "id": row["id"],
+                **(
+                    {"source_artifact_kind": "employee"}
+                    if row.get("source_employee_pack_id")
+                    else {}
+                ),
+            }
+            for row in verified
+        ]
     return {
         **ticket_payload(ticket),
         "custom_delivery": {
@@ -173,6 +212,7 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
             "included_in_purchase": pricing_mode == "initial_included",
             "delivery_terms": evidence.get("delivery_terms") or {},
             "install_receipts": evidence.get("install_receipts") or [],
+            "receipt_events": evidence.get("receipt_events") or [],
             "crm": custom_delivery_crm(evidence),
             "commerce_ready": not commerce_blockers,
             "commerce_blockers": commerce_blockers,
@@ -200,6 +240,10 @@ async def list_custom_deliveries(
     )
     changed = False
     for row in rows:
+        from modstore_server.customer_delivery_failure import reconcile_runtime_failures
+
+        if reconcile_runtime_failures(db, row):
+            db.commit()
         if await reconcile_custom_delivery_payment(db, row):
             changed = True
     if changed:
@@ -226,6 +270,11 @@ async def decide_custom_delivery(
         if custom.get("stage") != "acceptance" or custom.get("gate_ok") is not True:
             raise HTTPException(409, "产物尚未通过生产质量门，不能验收")
         is_admin = bool(getattr(user, "is_admin", False))
+        verified_runs = custom.get("runs") or []
+        if verified_runs and verified_runs[-1].get("verified_artifacts"):
+            evidence["runs"] = verified_runs
+            evidence["delivery_generation"] = str(verified_runs[-1].get("session_id") or "")
+            evidence["delivery_artifacts"] = verified_runs[-1]["verified_artifacts"]
         evidence["acceptance_status"] = "internal_approved" if is_admin else "accepted"
         evidence["accepted_at"] = datetime.now(UTC).isoformat() if not is_admin else ""
         evidence["internal_approved_at"] = datetime.now(UTC).isoformat() if is_admin else ""
@@ -243,12 +292,16 @@ async def decide_custom_delivery(
             raise HTTPException(400, "返工意见至少 4 个字")
         runs = [r for r in evidence.get("runs", []) if isinstance(r, dict)]
         run = await _start_custom_delivery_run(
+            ticket_id=int(ticket.id),
             user_id=int(ticket.user_id),
             evidence=evidence,
             attempt=len(runs) + 1,
             rework_note=note,
         )
         evidence["runs"] = [*runs, run]
+        evidence["delivery_generation"] = str(run.get("session_id") or "")
+        evidence["delivery_artifacts"] = []
+        evidence["download_grants"] = []
         evidence.pop("start_error", None)
         notes = [r for r in evidence.get("rework_notes", []) if isinstance(r, dict)]
         notes.append({"note": note, "at": datetime.now(UTC).isoformat()})
@@ -288,10 +341,13 @@ async def download_custom_delivery_artifact(
     artifact_kind: str,
     db: Session = Depends(get_db),
     user: User = Depends(_get_current_user),
+    artifact_id: str = Query(default="", max_length=128),
 ):
     ticket = _visible_ticket_or_404(db, user, ticket_id)
     if ticket.intent != "custom_delivery":
         raise HTTPException(404, "定制交付工单不存在")
+    if int(ticket.user_id) != int(user.id):
+        raise HTTPException(403, "只有原工单账号可以下载私有交付")
     evidence = _custom_delivery_evidence(ticket)
     if str(evidence.get("acceptance_status") or "") != "accepted":
         raise HTTPException(409, "请先在生产员工页确认验收")
@@ -300,39 +356,78 @@ async def download_custom_delivery_artifact(
         raise HTTPException(409, f"商务交付条件未完成：{'、'.join(blockers)}")
     payload = await _custom_delivery_payload(ticket)
     artifacts = payload.get("custom_delivery", {}).get("artifacts", [])
-    evidence["delivery_artifacts"] = artifacts
-    target = next((r for r in artifacts if r.get("kind") == artifact_kind), None)
+    candidates = [
+        row
+        for row in artifacts
+        if row.get("kind") == artifact_kind and (not artifact_id or row.get("id") == artifact_id)
+    ]
+    if len(candidates) > 1:
+        raise HTTPException(409, "组合交付包含多个同类产物，请指定 artifact_id")
+    target = candidates[0] if candidates else None
     if not target:
         raise HTTPException(404, "定制产物不存在")
     artifact_id = str(target.get("id") or "").strip()
-    if artifact_kind == "module":
-        from modman.store import build_mod_zip_bytes, find_mod_dir_by_manifest_id
-        from modstore_server.mod_scaffold_runner import modstore_library_path
+    from modstore_server.customer_delivery_build import read_verified_artifact
+    from modstore_server.customer_delivery_receipts import canonical_sha256
 
-        try:
-            artifact_path = find_mod_dir_by_manifest_id(modstore_library_path(), artifact_id)
-        except (ValueError, FileNotFoundError):
-            raise HTTPException(404, "Mod 产物已不在生产库")
-        stream = build_mod_zip_bytes(artifact_path)
-        filename = f"{artifact_id}.zip"
-    elif artifact_kind == "employee":
-        import json
-
-        from modstore_server.employee_asset_pipeline import (
-            build_employee_pack_zip_for_library,
+    runs = payload.get("custom_delivery", {}).get("runs", [])
+    records = runs[-1].get("verified_artifacts", []) if runs else []
+    record = next(
+        (
+            row
+            for row in records
+            if row.get("kind") == artifact_kind and row.get("id") == artifact_id
+        ),
+        None,
+    )
+    if not record:
+        raise HTTPException(409, "产物尚未完成正式编译与签包")
+    try:
+        raw, signed = read_verified_artifact(
+            record, owner_id=int(ticket.user_id), ticket_id=int(ticket.id)
         )
-        from modstore_server.mod_scaffold_runner import modstore_library_path
-
-        artifact_path = modstore_library_path() / artifact_id
-        manifest_path = artifact_path / "manifest.json"
-        if not manifest_path.is_file():
-            raise HTTPException(404, "AI 员工产物已不在生产库")
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        raw = build_employee_pack_zip_for_library(artifact_id, manifest, pack_dir=artifact_path)
-        stream = BytesIO(raw)
-        filename = f"{artifact_id}.xcemp"
-    else:
-        raise HTTPException(400, "artifact_kind 必须是 module 或 employee")
+    except (ValueError, RuntimeError, ImportError, OSError) as exc:
+        raise HTTPException(409, f"交付产物尚未通过可信签名校验：{exc}") from exc
+    manifest = signed["manifest"]
+    stream = BytesIO(raw)
+    filename = f"{artifact_id}.xcmod" if artifact_kind == "module" else f"{artifact_id}.xcemp"
+    runtime_files_sha256 = canonical_sha256(signed["files_sha256"])
+    package_sha256 = hashlib.sha256(raw).hexdigest()
+    version = str(manifest.get("version") or "").strip()
+    verification = manifest.get("delivery_verification") or {}
+    case_id = (
+        str(verification.get("case_id") or "")
+        if verification.get("handler") == "verify_delivery"
+        else ""
+    )
+    if not version or not case_id:
+        raise HTTPException(409, "交付产物缺少版本或固定业务验证探针，须重新生产")
+    runs = [r for r in evidence.get("runs", []) if isinstance(r, dict)]
+    generation = str(runs[-1].get("session_id") or "") if runs else ""
+    if not generation or manifest.get("delivery_generation") != generation:
+        raise HTTPException(409, "签名产物与工单当前生产轮次不匹配")
+    if str(evidence.get("delivery_generation") or "") != generation:
+        evidence["delivery_artifacts"] = []
+        evidence["download_grants"] = []
+        evidence["delivery_generation"] = generation
+    evidence["delivery_artifacts"] = [
+        {
+            key: row[key]
+            for key in (
+                "kind",
+                "id",
+                "version",
+                "package_sha256",
+                "verification_case_id",
+            )
+        }
+        | (
+            {"source_employee_pack_id": row["source_employee_pack_id"]}
+            if row.get("source_employee_pack_id")
+            else {}
+        )
+        for row in records
+    ]
     receipt_token = uuid.uuid4().hex
     grants = [r for r in evidence.get("download_grants", []) if isinstance(r, dict)]
     grants.append(
@@ -341,10 +436,19 @@ async def download_custom_delivery_artifact(
             "kind": artifact_kind,
             "id": artifact_id,
             "issued_at": datetime.now(UTC).isoformat(),
+            "owner_user_id": int(ticket.user_id),
+            "version": version,
+            "package_sha256": package_sha256,
+            "verification_case_id": case_id,
+            "generation": generation,
+            "runtime_files_sha256": runtime_files_sha256,
             "used": False,
         }
     )
     evidence["download_grants"] = grants[-20:]
+    from modstore_server.customer_delivery_entitlements import grant_verified_delivery_access
+
+    grant_verified_delivery_access(db, ticket, evidence, manifest, owner_id=int(user.id))
     ticket.evidence_json = json_dumps(evidence)
     ticket.updated_at = datetime.now(UTC)
     db.commit()
@@ -354,6 +458,10 @@ async def download_custom_delivery_artifact(
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
             "X-Delivery-Receipt-Token": receipt_token,
+            "X-Delivery-Artifact-SHA256": package_sha256,
+            "X-Delivery-Artifact-Version": version,
+            "X-Delivery-Verification-Case": case_id,
+            "X-Delivery-Entitlements-Refresh": "1",
         },
     )
 
@@ -369,49 +477,30 @@ async def record_custom_delivery_install(
     if ticket.intent != "custom_delivery":
         raise HTTPException(404, "定制交付工单不存在")
     evidence = _custom_delivery_evidence(ticket)
-    if str(evidence.get("acceptance_status") or "") != "accepted":
-        raise HTTPException(409, "定制产物尚未验收")
-    payload = await _custom_delivery_payload(ticket)
-    artifacts = payload.get("custom_delivery", {}).get("artifacts", [])
-    evidence["delivery_artifacts"] = artifacts
-    if not any(
-        r.get("kind") == body.artifact_kind and r.get("id") == body.artifact_id for r in artifacts
-    ):
-        raise HTTPException(409, "安装回执与本工单产物不匹配")
-    grants = [r for r in evidence.get("download_grants", []) if isinstance(r, dict)]
-    grant = next(
-        (
-            r
-            for r in grants
-            if r.get("token") == body.receipt_token
-            and r.get("kind") == body.artifact_kind
-            and r.get("id") == body.artifact_id
-            and r.get("used") is not True
-        ),
-        None,
+    known = any(
+        row.get("receipt_id") == body.receipt_id
+        for row in evidence.get("receipt_events", [])
+        if isinstance(row, dict)
     )
-    if not grant:
-        raise HTTPException(409, "安装回执凭证无效或已使用，请重新下载定制产物")
-    grant["used"] = True
-    grant["used_at"] = datetime.now(UTC).isoformat()
-    evidence["download_grants"] = grants
-    receipts = [r for r in evidence.get("install_receipts", []) if isinstance(r, dict)]
-    if not any(
-        r.get("kind") == body.artifact_kind and r.get("id") == body.artifact_id for r in receipts
-    ):
-        receipts.append(
-            {
-                "kind": body.artifact_kind,
-                "id": body.artifact_id,
-                "version": body.installed_version,
-                "host": body.host,
-                "installed_at": datetime.now(UTC).isoformat(),
-            }
-        )
-    evidence["install_receipts"] = receipts
-    complete_delivery_if_ready(ticket, evidence)
+    if str(evidence.get("acceptance_status") or "") != "accepted" and not known:
+        raise HTTPException(409, "定制产物尚未验收")
+    from modstore_server.customer_delivery_receipts import record_receipt
+
+    outcome = record_receipt(ticket, evidence, body.model_dump(), owner_id=int(user.id))
+    if outcome["replayed"]:
+        payload = await _custom_delivery_payload(ticket)
+        payload["receipt"] = outcome
+        return payload
+    if body.stage == "verification_failed":
+        from modstore_server.customer_delivery_failure import apply_runtime_failure
+
+        apply_runtime_failure(db, ticket, evidence, outcome["record"])
+    else:
+        complete_delivery_if_ready(ticket, evidence)
     ticket.evidence_json = json_dumps(evidence)
     ticket.updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(ticket)
-    return await _custom_delivery_payload(ticket)
+    payload = await _custom_delivery_payload(ticket)
+    payload["receipt"] = outcome
+    return payload

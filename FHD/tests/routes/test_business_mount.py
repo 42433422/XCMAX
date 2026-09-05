@@ -6,7 +6,8 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi.testclient import TestClient
 
 from app.fastapi_routes.mounts import business as business_mount
 from app.fastapi_routes.registry import RouteRegistry
@@ -112,4 +113,45 @@ def test_load_taiyangniao_attendance_compat_router_loads_routes_when_mod_absent(
     )
     router = business_mount._load_taiyangniao_attendance_compat_router()
     paths = {getattr(r, "path", "") for r in router.routes}
-    assert "/api/mod/taiyangniao-pro/attendance/rules" in paths
+    assert paths == {"/api/mod/taiyangniao-pro/attendance/{operation}"}
+    from app.mod_sdk import customer_features
+
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        assert client.get("/api/mod/taiyangniao-pro/attendance/rules").status_code == 401
+
+        def current_user(request):
+            if request.headers.get("x-session-id") != "compat-session":
+                raise HTTPException(401, "login required")
+            return object()
+
+        binding = {"username": "SUNBIRD", "market_user_id": 61, "mod_ids": set()}
+
+        def current_binding(session_id):
+            assert session_id == "compat-session"
+            return binding
+
+        monkeypatch.setattr(customer_features, "get_logged_in_user", current_user)
+        monkeypatch.setattr(
+            customer_features, "load_session_private_delivery_binding", current_binding
+        )
+        headers = {"x-session-id": "compat-session"}
+        assert (
+            client.get("/api/mod/taiyangniao-pro/attendance/rules", headers=headers).status_code
+            == 403
+        )
+        binding["mod_ids"] = {"taiyangniao-pro"}
+        response = client.post(
+            "/api/mod/taiyangniao-pro/attendance/convert-upload?format=xlsx",
+            headers=headers,
+            follow_redirects=False,
+        )
+        assert response.status_code == 307
+        assert response.headers["location"] == (
+            "/api/mod/sunbird-attendance-custom/attendance/convert-upload?format=xlsx"
+        )
+        assert (
+            client.get("/api/mod/taiyangniao-pro/attendance/old-file", headers=headers).status_code
+            == 410
+        )

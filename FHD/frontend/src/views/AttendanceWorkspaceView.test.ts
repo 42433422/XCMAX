@@ -24,7 +24,10 @@ describe('AttendanceWorkspaceView', () => {
   it('navigates all sections within the workspace and supports browser back', async () => {
     const router = createRouter({
       history: createMemoryHistory(),
-      routes: modRoutes.map((route) => (route.redirect ? route : { ...route, component: AttendanceWorkspaceView })),
+      routes: [
+        ...modRoutes.map((route) => (route.redirect ? route : { ...route, component: AttendanceWorkspaceView })),
+        { path: '/mod/sunbird-attendance-custom/convert', component: { template: '<div data-test="independent-custom">独立定制包</div>' } },
+      ],
     })
     await router.push('/attendance-industry')
     const wrapper = mount(
@@ -44,8 +47,8 @@ describe('AttendanceWorkspaceView', () => {
     expect(wrapper.find('h1').text()).toBe('考勤工作区')
     expect(wrapper.find('[data-test="management"]').text()).toBe('personnel')
     const links = wrapper.findAll('nav a')
-    expect(links.map((link) => link.text())).toEqual(['部门管理', '人员管理', '排班资源', '考勤记录', '考勤表转换（定制）', '转换规则（定制）'])
-    for (const [index, section] of ['departments', 'personnel', 'schedules', 'records', 'convert', 'settings'].entries()) {
+    expect(links.map((link) => link.text())).toEqual(['部门管理', '人员管理', '排班资源', '考勤记录', '考勤定制 Mod'])
+    for (const [index, section] of ['departments', 'personnel', 'schedules', 'records'].entries()) {
       await links[index].trigger('click')
       await flushPromises()
       expect(router.currentRoute.value.path).toBe(`/attendance-industry/${section}`)
@@ -53,10 +56,15 @@ describe('AttendanceWorkspaceView', () => {
       expect(wrapper.find('nav [aria-current="page"]').text()).toBe(links[index].text())
       if (index < 4) expect(wrapper.find('[data-test="management"]').text()).toBe(section)
     }
+    await links[4].trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/mod/sunbird-attendance-custom/convert')
+    expect(wrapper.find('[data-test="independent-custom"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="conversion"]').exists()).toBe(false)
     router.back()
     await new Promise((resolve) => setTimeout(resolve, 0))
     await flushPromises()
-    expect(wrapper.find('[data-test="conversion"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="management"]').text()).toBe('records')
   })
 
   it.each(['convert', 'settings'])('denies direct custom %s links without entitlement', async (section) => {

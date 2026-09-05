@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import uuid
@@ -97,6 +98,7 @@ def create_change_request(
     priority: str = "normal",
     username: str = "",
     source: str = "enterprise_portal",
+    idempotency_key: str = "",
 ) -> dict[str, Any]:
     ct = str(change_type or "").strip()
     if ct not in _CHANGE_TYPES:
@@ -105,7 +107,13 @@ def create_change_request(
         raise ValueError("标题不能为空")
     uid = int(market_user_id)
     rows = _load_rows(uid)
+    if idempotency_key:
+        existing = next((r for r in rows if r.get("idempotency_key") == idempotency_key), None)
+        if existing:
+            return _decorate(existing)
     ticket_id = uuid.uuid4().hex[:12]
+    if idempotency_key:
+        ticket_id = hashlib.sha256(f"{uid}:{idempotency_key}".encode()).hexdigest()[:24]
     row = {
         "id": ticket_id,
         "ticket_no": f"CR-{uid}-{len(rows) + 1:04d}",
@@ -116,12 +124,32 @@ def create_change_request(
         "description": str(description or "").strip()[:8000],
         "priority": str(priority or "normal"),
         "source": str(source or ""),
+        "idempotency_key": idempotency_key,
         "status": "pending",
         "created_at": _now_iso(),
         "updated_at": _now_iso(),
     }
     rows.insert(0, row)
     _save_rows(uid, rows)
+    return _decorate(row)
+
+
+def bind_change_request_intake(
+    market_user_id: int, ticket_id: str, result: dict[str, Any]
+) -> dict[str, Any]:
+    rows = _load_rows(int(market_user_id))
+    row = _find_row(rows, ticket_id)
+    if row is None:
+        raise ValueError("未找到该变更工单")
+    if result.get("success") is not True or not result.get("ticket_id"):
+        row["intake_error"] = str(result.get("error") or "统一工单受理失败")[:500]
+    else:
+        row["market_ticket_id"] = int(result["ticket_id"])
+        row["market_ticket_no"] = str(result.get("ticket_no") or "")
+        row["status"] = "in_progress"
+        row.pop("intake_error", None)
+    row["updated_at"] = _now_iso()
+    _save_rows(int(market_user_id), rows)
     return _decorate(row)
 
 
