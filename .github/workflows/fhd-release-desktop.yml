@@ -150,7 +150,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: xcagi-windows-installer-${{ inputs.release_sha }}
-          path: FHD/delivery/
+          path: |
+            FHD/delivery/XCAGI-Enterprise-Setup-${{ inputs.version }}-x64-*.exe
+            FHD/delivery/XCAGI-Enterprise-Setup-${{ inputs.version }}-x64-*.exe.sha256
+            FHD/delivery/delivery-receipt.json
           if-no-files-found: error
           retention-days: 30
 
