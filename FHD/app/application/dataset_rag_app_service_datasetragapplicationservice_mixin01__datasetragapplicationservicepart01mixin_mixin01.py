@@ -65,6 +65,8 @@ class __DatasetRagApplicationServicePart01MixinPart01Mixin:
         tenant_id: str = "",
         version: int | str | None = None,
         version_label: str = "",
+        idempotency_key: str = "",
+        expected_source_version: int | None = None,
         access_context: _facade().DatasetAccessContext | dict[str, _facade().Any] | None = None,
     ) -> dict[str, _facade().Any]:
         dataset_key = _facade()._clean_key(dataset_id, default="default")
@@ -106,6 +108,31 @@ class __DatasetRagApplicationServicePart01MixinPart01Mixin:
                 raise ValueError("document produced no chunks")
             base_metadata.update(extract_metadata)
             base_metadata["tenant_id"] = tenant_key
+            if idempotency_key:
+                fingerprint = (
+                    _facade()
+                    .hashlib.sha256(
+                        _facade()
+                        .json.dumps(
+                            [
+                                tenant_key,
+                                source_label,
+                                extracted_text,
+                                base_metadata,
+                                chunk_strategy,
+                                chunk_size,
+                                chunk_overlap,
+                            ],
+                            sort_keys=True,
+                            ensure_ascii=False,
+                            default=str,
+                        )
+                        .encode("utf-8")
+                    )
+                    .hexdigest()
+                )
+                base_metadata["ingest_idempotency_key"] = idempotency_key
+                base_metadata["ingest_fingerprint"] = fingerprint
             with self._lock:
                 state = self._datasets.setdefault(dataset_key, _facade()._DatasetState(dataset_key))
                 document_version = self._resolve_document_version(
@@ -153,6 +180,46 @@ class __DatasetRagApplicationServicePart01MixinPart01Mixin:
                 for chunk in chunks
             ]
             with self._lock:
+                previous = state.documents.get(doc_id)
+                if previous is not None:
+                    # Explicit document IDs live in a dataset-wide namespace.
+                    # Permission to write one tenant never authorizes replacement
+                    # of a document owned by another tenant, even for admins.
+                    if previous.tenant_id != tenant_key:
+                        return {"success": False, "error_code": "dataset_document_conflict"}
+                    if idempotency_key:
+                        if (
+                            previous.metadata.get("ingest_idempotency_key") == idempotency_key
+                            and previous.metadata.get("ingest_fingerprint") == fingerprint
+                        ):
+                            return {
+                                "success": True,
+                                "dataset_id": dataset_key,
+                                "document": previous.to_dict(),
+                                "chunk_count": previous.chunk_count,
+                            }
+                        return {"success": False, "error_code": "dataset_document_conflict"}
+                latest_version = (
+                    self._resolve_document_version(
+                        state, source=source_label, tenant_id=tenant_key, requested=None
+                    )
+                    - 1
+                )
+                if (
+                    expected_source_version is not None
+                    and latest_version != expected_source_version
+                ):
+                    return {"success": False, "error_code": "dataset_source_version_conflict"}
+                # Allocate the default version in the same critical section as
+                # insertion; concurrent ingests must not get the same version.
+                if version is None or str(version).strip() == "":
+                    document.version = latest_version + 1
+                    document.version_label = version_label.strip() or f"v{document.version}"
+                    document.metadata["document_version"] = document.version
+                    document.metadata["version_label"] = document.version_label
+                    for chunk in retrieved_chunks:
+                        chunk.metadata["document_version"] = document.version
+                        chunk.metadata["version_label"] = document.version_label
                 state.documents[doc_id] = document
                 state.chunks = [
                     c
@@ -183,6 +250,8 @@ class __DatasetRagApplicationServicePart01MixinPart01Mixin:
         dataset_id: str,
         document_id: str,
         *,
+        expected_version: int | None = None,
+        expected_metadata: dict[str, _facade().Any] | None = None,
         access_context: _facade().DatasetAccessContext | dict[str, _facade().Any] | None = None,
     ) -> dict[str, _facade().Any]:
         dataset_key = _facade()._clean_key(dataset_id, default="default")
@@ -209,6 +278,13 @@ class __DatasetRagApplicationServicePart01MixinPart01Mixin:
             if denied is not None:
                 denied["document_id"] = doc_key
                 return denied
+            if (expected_version is not None and document.version != expected_version) or (
+                expected_metadata is not None
+                and any(
+                    document.metadata.get(key) != value for key, value in expected_metadata.items()
+                )
+            ):
+                return {"success": False, "error_code": "dataset_document_conflict"}
             state.documents.pop(doc_key, None)
             before = len(state.chunks)
             state.chunks = [
