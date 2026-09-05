@@ -13,8 +13,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
-from modstore_server.llm_crypto import decrypt_secret, encrypt_secret
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
+from modstore_server.services.employee import (
+    decrypt_employee_policy,
+    encrypt_employee_policy,
+)
 
 DEFAULT_POLICY_NAME = "employee_runtime_policy.json"
 
@@ -41,7 +44,7 @@ def load_policy() -> Dict[str, Any]:
         encrypted = str(envelope.get("ciphertext") or "").strip()
         if not encrypted:
             return {"employees": {}, "schema_version": 1}
-        data = json.loads(decrypt_secret(encrypted))
+        data = json.loads(decrypt_employee_policy(encrypted))
         return data if isinstance(data, dict) else {"employees": {}, "schema_version": 1}
     except FileNotFoundError:
         return {"employees": {}, "schema_version": 1}
@@ -58,7 +61,7 @@ def save_policy(policy: Dict[str, Any]) -> Dict[str, Any]:
     tmp = path.with_suffix(path.suffix + ".tmp")
     envelope = {
         "schema": "xcagi.employee_runtime_policy.encrypted/v1",
-        "ciphertext": encrypt_secret(
+        "ciphertext": encrypt_employee_policy(
             json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
         ),
         "updated_at": payload["updated_at"],
