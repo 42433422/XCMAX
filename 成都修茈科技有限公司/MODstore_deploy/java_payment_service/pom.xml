@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.5.12</version>
+        <version>3.5.14</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
 
@@ -19,6 +19,14 @@
 
     <properties>
         <java.version>17</java.version>
+        <!-- Security floors verified by the release Trivy scan. -->
+        <spring-framework.version>6.2.19</spring-framework.version>
+        <tomcat.version>10.1.59</tomcat.version>
+        <netty.version>4.1.135.Final</netty.version>
+        <rabbit-amqp-client.version>5.33.1</rabbit-amqp-client.version>
+        <micrometer.version>1.15.12</micrometer.version>
+        <jackson-bom.version>2.21.4</jackson-bom.version>
+        <dom4j.version>2.2.0</dom4j.version>
         <!--
             jacoco.line/branch.coverage: payment contract classes (see JaCoCo check rule).
             jacoco.bundle.*: whole artifact floor; raise as more tests land.
@@ -83,6 +91,18 @@
             <groupId>com.alipay.sdk</groupId>
             <artifactId>alipay-sdk-java</artifactId>
             <version>4.34.0.ALL</version>
+            <exclusions>
+                <!-- The SDK still declares the retired dom4j:dom4j 1.6.1 coordinate. -->
+                <exclusion>
+                    <groupId>dom4j</groupId>
+                    <artifactId>dom4j</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.dom4j</groupId>
+            <artifactId>dom4j</artifactId>
+            <version>${dom4j.version}</version>
         </dependency>
 
         <!-- JWT -->

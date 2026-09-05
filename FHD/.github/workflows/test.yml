@@ -91,7 +91,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r deploy/requirements-server-api.txt
+          pip install -r requirements-server-api.txt
           pip install -r deploy/requirements-dev.txt
 
       - name: Verify stable version anchors

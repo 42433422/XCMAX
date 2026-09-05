@@ -39,7 +39,7 @@ jobs:
           python -m venv .venv
           .venv/bin/python -m pip install --upgrade pip
           .venv/bin/python -m pip install \
-            -r deploy/requirements-server-api.txt \
+            -r requirements-server-api.txt \
             -r deploy/requirements-dev.txt
 
       - name: Install dependencies
