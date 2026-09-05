@@ -141,8 +141,27 @@ h2 {
 }
 
 .editor-card {
-  margin-bottom: 14px;
-  padding: 18px;
+  position: fixed;
+  inset: 0;
+  box-sizing: border-box;
+  width: min(720px, calc(100vw - 32px));
+  max-height: calc(100dvh - 48px);
+  margin: auto;
+  padding: 24px;
+  overflow-y: auto;
+  color: #172038;
+  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.24);
+}
+
+.editor-card::backdrop {
+  background: rgba(15, 23, 42, 0.42);
+}
+
+.editor-card .editor-actions {
+  position: sticky;
+  bottom: -24px;
+  padding: 16px 0;
+  background: #fff;
 }
 
 .editor-heading {

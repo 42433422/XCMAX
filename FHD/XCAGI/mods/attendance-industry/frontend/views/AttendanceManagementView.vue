@@ -23,28 +23,28 @@
         >
           转换规则（定制）
         </router-link>
-        <button type="button" class="btn" :disabled="loading" @click="loadData">
+        <button type="button" class="btn" :disabled="loading" @click="loadData()">
           {{ loading ? '刷新中…' : '刷新' }}
         </button>
       </div>
     </header>
 
-    <section v-if="isEditable && editorOpen" class="editor-card" aria-label="编辑表单">
+    <dialog v-if="isEditable" ref="editorDialog" class="editor-card" aria-labelledby="attendance-editor-title" @cancel.prevent="cancelEdit">
       <div class="editor-heading">
-        <h3>
+        <h3 id="attendance-editor-title">
           {{
             editingId
               ? `编辑${section === 'personnel' ? '人员' : '部门'}`
               : `新增${section === 'personnel' ? '人员' : '部门'}`
           }}
         </h3>
-        <button type="button" class="close-btn" aria-label="关闭编辑" @click="cancelEdit">×</button>
+        <button type="button" class="close-btn" aria-label="关闭编辑" :disabled="saving" @click="cancelEdit">×</button>
       </div>
 
       <div v-if="section === 'personnel'" class="form-grid">
         <label>
           <span>姓名 *</span>
-          <input v-model.trim="employeeForm.employee_name" autocomplete="off" />
+          <input v-model.trim="employeeForm.employee_name" autocomplete="off" autofocus />
         </label>
         <label>
           <span>工号</span>
@@ -82,7 +82,7 @@
       <div v-else class="form-grid">
         <label>
           <span>部门名称 *</span>
-          <input v-model.trim="departmentForm.department" autocomplete="off" />
+          <input v-model.trim="departmentForm.department" autocomplete="off" autofocus />
         </label>
         <label>
           <span>上级部门</span>
@@ -101,7 +101,7 @@
         </button>
         <button type="button" class="btn" :disabled="saving" @click="cancelEdit">取消</button>
       </div>
-    </section>
+    </dialog>
 
     <section v-if="section !== 'schedules'" class="toolbar-card">
       <div class="search-box">
@@ -129,7 +129,7 @@
     <div v-if="error" class="state-card state-card-error" role="alert">
       <strong>数据加载失败</strong>
       <span>{{ error }}</span>
-      <button type="button" class="btn" @click="loadData">重试</button>
+      <button type="button" class="btn" @click="loadData()">重试</button>
     </div>
     <div v-else-if="loading" class="state-card" aria-live="polite">正在读取{{ pageTitle }}…</div>
 
@@ -271,7 +271,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, reactive, ref, watch } from 'vue';
+  import { computed, nextTick, reactive, ref, watch } from 'vue';
   import { apiFetch } from '@/utils/apiBase';
   import { appConfirm } from '@/utils/appDialog';
 
@@ -298,6 +298,12 @@
   const ruleLines = ref<string[]>([]);
   const departmentNames = ref<string[]>([]);
   const editorOpen = ref(false);
+  const editorDialog = ref<HTMLDialogElement | null>(null);
+  watch(editorOpen, async (open) => {
+    await nextTick();
+    if (open && editorOpen.value) editorDialog.value?.showModal();
+    else editorDialog.value?.close();
+  });
   const editingId = ref<number | null>(null);
 
   const emptyEmployee = () => ({
@@ -379,9 +385,9 @@
     }
   }
 
-  async function loadData() {
+  async function loadData(quiet = false) {
     const generation = ++loadGeneration;
-    loading.value = true;
+    if (!quiet) loading.value = true;
     error.value = '';
     try {
       if (props.section === 'schedules') {
@@ -452,12 +458,18 @@
   }
 
   function cancelEdit() {
+    if (saving.value) return;
+    closeEditor();
+  }
+
+  function closeEditor() {
     editorOpen.value = false;
     editingId.value = null;
     editorError.value = '';
   }
 
   async function saveEditor() {
+    if (saving.value) return;
     const entity = props.section === 'personnel' ? 'employees' : 'departments';
     const payload = props.section === 'personnel' ? { ...employeeForm } : { ...departmentForm };
     const id = editingId.value;
@@ -469,8 +481,9 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      cancelEdit();
-      await loadData();
+      closeEditor();
+      // 保留表格 DOM 与分页，避免刷新时列表折叠导致滚动位置归零。
+      await loadData(true);
     } catch (cause) {
       editorError.value = cause instanceof Error ? cause.message : String(cause);
     } finally {

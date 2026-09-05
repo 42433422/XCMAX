@@ -30,6 +30,50 @@ function mountView(section: 'personnel' | 'departments' | 'schedules' | 'records
 describe('AttendanceManagementView', () => {
   beforeEach(() => {
     apiFetch.mockReset()
+    HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', '') }
+    HTMLDialogElement.prototype.close = function () { this.removeAttribute('open') }
+  })
+
+  it.each(['personnel', 'departments'] as const)('edits %s in a modal and cancels without changing the list', async (section) => {
+    apiFetch.mockReturnValue(response({ items: [{ id: 2, employee_name: '张三', department: '生产部' }], total: 80 }))
+    const wrapper = mountView(section)
+    await flushPromises()
+    expect(wrapper.find('dialog').attributes('open')).toBeUndefined()
+    await wrapper.findAll('tbody button').find(button => button.text() === '编辑')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('dialog').attributes('open')).toBe('')
+    expect(wrapper.find('dialog input').element.value).toBe(section === 'personnel' ? '张三' : '生产部')
+    await wrapper.find('dialog').trigger('cancel')
+    await flushPromises()
+    expect(wrapper.find('dialog').attributes('open')).toBeUndefined()
+    expect(wrapper.find('tbody').text()).toContain('生产部')
+    expect(apiFetch.mock.calls.every(([, options]) => !options?.method)).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('keeps the current page and rendered table while saving and refreshing', async () => {
+    let finishRefresh: ((value: unknown) => void) | undefined
+    let saved = false
+    apiFetch.mockImplementation((url: string, options?: RequestInit) => {
+      if (options?.method === 'PUT') { saved = true; return response({}) }
+      if (saved && url.includes('/employees?')) return new Promise(resolve => { finishRefresh = resolve })
+      return response({ items: [{ id: 2, employee_name: '张三', department: '生产部' }], total: 80 })
+    })
+    const wrapper = mountView('personnel')
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === '下一页')!.trigger('click')
+    await flushPromises()
+    await wrapper.findAll('tbody button').find(button => button.text() === '编辑')!.trigger('click')
+    await flushPromises()
+    await wrapper.findAll('dialog button').find(button => button.text() === '保存')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('tbody').exists()).toBe(true)
+    expect(wrapper.text()).toContain('第 2 / 4 页')
+    expect(apiFetch).toHaveBeenCalledWith(expect.stringContaining('page=2'), undefined)
+    finishRefresh!(await response({ items: [{ id: 2, employee_name: '张三', department: '生产部' }], total: 80 }))
+    await flushPromises()
+    expect(wrapper.find('dialog').attributes('open')).toBeUndefined()
+    wrapper.unmount()
   })
 
   it('renders the real personnel-management list from the attendance roster', async () => {
