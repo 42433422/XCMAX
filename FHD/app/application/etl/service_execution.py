@@ -451,7 +451,8 @@ class ExecutionServiceMixin:
             run.error_message = message[:500]
             db.commit()
             self._record_rollback_metric(run.target_type, "failed")
-            raise EtlError(code, message, status_code=500) from exc
+            status_code = exc.status_code if isinstance(exc, EtlError) else 500
+            raise EtlError(code, message, status_code=status_code) from exc
 
     @staticmethod
     def _record_rollback_metric(target_type: str, status: str) -> None:

@@ -16,6 +16,7 @@ from app.application.etl.targets.customer_product_support import (
     owned_query,
 )
 from app.application.etl.targets.helpers import optional_text
+from app.application.etl.targets.rollback_compare_swap import delete_created_row, restore_fields
 from app.db.models.purchase_unit import PurchaseUnit
 from app.infrastructure.tenant_scope import tenant_id_for_write
 
@@ -127,10 +128,16 @@ class CustomerAdapter(TargetAdapter):
                     "客户在本次导入后又被修改，已停止撤销以避免覆盖新数据",
                     status_code=409,
                 )
-            for key in changed:
-                model_field = CUSTOMER_MODEL_FIELDS.get(key)
-                if model_field:
-                    setattr(obj, model_field, before[key])
+            restore_fields(
+                db,
+                obj,
+                {
+                    CUSTOMER_MODEL_FIELDS[key]: before[key]
+                    for key in changed
+                    if key in CUSTOMER_MODEL_FIELDS
+                },
+                "客户",
+            )
         elif obj:
             if not customer_image_matches(obj, after):
                 raise EtlError(
@@ -138,4 +145,4 @@ class CustomerAdapter(TargetAdapter):
                     "客户在本次导入后又被修改，已停止撤销以避免删除新数据",
                     status_code=409,
                 )
-            db.delete(obj)
+            delete_created_row(db, obj, "客户")

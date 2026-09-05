@@ -231,6 +231,7 @@ def test_failed_rollback_retry_skips_previously_restored_rows(db):
     with pytest.raises(EtlError) as error:
         service.rollback(db, run_id=run.id, owner_user_id=1)
     assert error.value.code == "ETL_ROLLBACK_CONCURRENT_CHANGE"
+    assert error.value.status_code == 409
     assert run.rollback_status == "failed"
     assert [row.execution_status for row in rows] == ["success", "rolled_back"]
     assert customer.contact_phone == "300"
