@@ -79,8 +79,7 @@ LEGACY_PLATFORM_PREFIXES: list[str] = [
 ]
 LEGACY_SKU_BUNDLED: dict[str, tuple[str, ...]] = {
     "personal": LEGACY_MINIMAL_HOST_MOD_IDS,
-    "enterprise": LEGACY_GENERIC_HOST_MOD_IDS
-    + ("xcagi-planner-excel-tools",),
+    "enterprise": LEGACY_GENERIC_HOST_MOD_IDS + ("xcagi-planner-excel-tools",),
 }
 LEGACY_STAGE: dict[str, tuple[str, ...]] = {
     "personal": LEGACY_MINIMAL_HOST_MOD_IDS,

@@ -434,7 +434,8 @@ class TestInstallCustomerDeliverySeedPackage:
         mock_download.assert_awaited_once()
         args, kwargs = mock_download.await_args
         assert args[0] == (
-            "/api/enterprise/customer-delivery-seeds/pkg-123/1.0.0/download?mod_id=" + (account_mod_id or "some-mod")
+            "/api/enterprise/customer-delivery-seeds/pkg-123/1.0.0/download?mod_id="
+            + (account_mod_id or "some-mod")
         )
         assert kwargs["headers"] == {"Authorization": "Bearer tok"}
         assert result["applied"] is False
