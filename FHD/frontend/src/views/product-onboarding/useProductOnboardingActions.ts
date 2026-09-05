@@ -1,4 +1,4 @@
-import { nextTick } from 'vue'
+import { nextTick, watch } from 'vue'
 import type { Router } from 'vue-router'
 import { installHostFoundation, installMod, installIndustrySeed, installCustomerDeliverySeed } from '@/api/modStore'
 import { autoOnboardWorkflowEmployeesFromMods } from '@/utils/workflowEmployeeOnboard'
@@ -6,7 +6,7 @@ import { deliverySeedModIds } from '@/utils/deliverySeedPackages'
 import { patchWorkspacePrefs, queueWorkspacePrefsSync } from '@/utils/workspacePrefsApi'
 import { useModsStore } from '@/stores/mods'
 import { readBuildEdition } from '@/constants/genericModPack'
-import { queueFirstAiTaskPrompt, setRuntimeOnboardingOpenIndustryIds } from '@/constants/productFlow'
+import { cancelPendingFirstAiTask, queueFirstAiTaskPrompt, setRuntimeOnboardingOpenIndustryIds } from '@/constants/productFlow'
 import { appAlert } from '@/utils/appDialog'
 import { productErrorMessage } from '@/utils/productErrorMessage'
 import { clearDeliverableStatusCache, fetchIndustryBaseline, fetchOnboardingIndustryCatalog, seedOnboardingDemo } from '@/utils/platformShellApi'
@@ -48,6 +48,11 @@ export function useProductOnboardingActions(
     industryPackageModId,
   } = state
   const { flow, industryStore, nav } = options
+
+  watch(state.isAttendanceOnboarding, (attendance) => {
+    demoSeedResult.value = null
+    if (attendance) cancelPendingFirstAiTask()
+  }, { immediate: true })
 
   async function refreshBaseline(force = false) {
     baselinePlan.value = await fetchIndustryBaseline(pickedIndustryId.value, force)
@@ -122,7 +127,7 @@ export function useProductOnboardingActions(
       if (baselineOk.value) {
         invalidateHostPackCompletionCache()
         flow.markHostPackAcknowledged()
-        await appAlert('本行业推荐菜单已装齐。下一步准备首次使用的演示数据。')
+        await appAlert(state.isAttendanceOnboarding.value ? '考勤功能已准备好。下一步到考勤工作区确认部门和人员名单。' : '本行业推荐菜单已装齐。下一步准备首次使用的演示数据。')
         nav.goStep('seed-demo')
         return
       }
@@ -147,11 +152,14 @@ export function useProductOnboardingActions(
   }
 
   async function ensureDemoData(): Promise<boolean> {
+    if (state.isAttendanceOnboarding.value) return false
     if (demoSeedResult.value) return true
     if (seedBusy.value) return false
     seedBusy.value = true
     try {
-      demoSeedResult.value = await seedOnboardingDemo(pickedIndustryId.value)
+      const result = await seedOnboardingDemo(pickedIndustryId.value)
+      if (result.seeded === false || result.seed_status === 'workspace_review_required') return false
+      demoSeedResult.value = result
       queueWorkspacePrefsSync({ onboarding_seed_done: true } as WorkspacePrefs)
       return true
     } catch (err) {
@@ -163,6 +171,10 @@ export function useProductOnboardingActions(
   }
 
   async function prepareDemoData() {
+    if (state.isAttendanceOnboarding.value) {
+      nav.goStep('first-ai-task')
+      return
+    }
     if (await ensureDemoData()) {
       nav.goStep('first-ai-task')
       return
@@ -211,6 +223,10 @@ export function useProductOnboardingActions(
   }
 
   async function finishOnboardingComplete() {
+    if (state.isAttendanceOnboarding.value) {
+      await nav.openAttendanceWorkspace()
+      return
+    }
     if (finishing.value) return
     finishing.value = true
     // A reload on the first-task step loses the in-memory names. Re-read the

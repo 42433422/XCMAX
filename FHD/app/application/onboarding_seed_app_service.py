@@ -1,4 +1,4 @@
-"""空企业首启演示数据：按行业 manifest subsystems 写入首笔 tenant-scoped 业务数据。"""
+"""首次使用的数据准备：客户/产品行业幂等预置，考勤转到既有工作区核对名单。"""
 
 from __future__ import annotations
 
@@ -18,9 +18,28 @@ logger = logging.getLogger(__name__)
 
 
 def seed_onboarding_demo_data(*, tenant_id: int, industry_id: str = "通用") -> dict[str, Any]:
-    """幂等写入 1 个演示客户/部门 + 1 个演示产品/人员；已存在则跳过。"""
+    """业务行业幂等准备客户/产品；考勤只返回工作区核对指引。"""
     tid = int(tenant_id)
     profile = resolve_onboarding_seed_profile(industry_id)
+    if profile.mod_id == "attendance-industry" or profile.industry_id in {
+        "考勤",
+        "考勤排班",
+        "attendance",
+        "attendance-industry",
+    }:
+        # Attendance belongs to its existing workspace. No ERP rows or shared
+        # private database reads/writes can establish that workspace's ownership.
+        return {
+            "industry_id": profile.industry_id,
+            "mod_id": "attendance-industry",
+            "seeded": False,
+            "seed_status": "workspace_review_required",
+            "customer": None,
+            "product": None,
+            "workspace_path": "/attendance-industry/personnel",
+            "message": "请先到考勤工作区确认部门和人员名单；已有名单直接核对，尚无名单时先录入部门和人员。",
+            "demo_queries": {},
+        }
     customer_spec = build_customer_row(tenant_id=tid, profile=profile)
     product_spec = build_product_row(tenant_id=tid, profile=profile)
     demo_customer_name = str(customer_spec.get("customer_name") or profile.demo_customer_name)

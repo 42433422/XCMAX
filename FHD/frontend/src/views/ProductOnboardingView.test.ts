@@ -4,7 +4,19 @@ import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import ProductOnboardingView from './ProductOnboardingView.vue'
 import { fetchIndustryBaseline, fetchOnboardingIndustryCatalog, seedOnboardingDemo } from '@/utils/platformShellApi'
-import { LS_PRODUCT_FLOW_COMPLETED, LS_PRODUCT_FLOW_FIRST_TASK_PENDING, LS_PRODUCT_FLOW_PENDING_PROMPT } from '@/constants/productFlow'
+import { LS_PRODUCT_FLOW_COMPLETED, LS_PRODUCT_FLOW_FIRST_TASK_PENDING, LS_PRODUCT_FLOW_PENDING_PROMPT, queueFirstAiTaskPrompt, bindPendingFirstAiTaskRun, readPendingFirstAiTaskRunId } from '@/constants/productFlow'
+
+import { appAlert } from '@/utils/appDialog'
+
+vi.mock('@/api/auth', () => ({ authApi: { getSubscriptionStatus: vi.fn().mockResolvedValue({ data: null }) } }))
+vi.mock('@/api/system', () => ({ systemApi: {
+  getIndustries: vi.fn().mockResolvedValue({ success: true, data: { industries: [] } }),
+  getCurrentIndustry: vi.fn().mockResolvedValue({ success: true, data: { id: '涂料', name: '涂料' } }),
+} }))
+vi.mock('@/utils/workspacePrefsApi', () => ({
+  patchWorkspacePrefs: vi.fn().mockResolvedValue({}),
+  queueWorkspacePrefsSync: vi.fn(),
+}))
 
 vi.mock('@/api/modStore', () => ({
   installHostFoundation: vi.fn().mockResolvedValue({ success: true }),
@@ -50,6 +62,7 @@ function makeRouter() {
     history: createMemoryHistory(),
     routes: [
       { path: '/', name: 'chat', component: { template: '<div>chat</div>' } },
+      { path: '/attendance-industry/personnel', name: 'attendance-industry-personnel', component: { template: '<div>人员管理</div>' } },
       { path: '/onboarding', name: 'product-onboarding', component: ProductOnboardingView, props: true },
     ],
   })
@@ -200,8 +213,9 @@ describe('ProductOnboardingView.vue', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('装好后侧栏会出现')
-    expect(wrapper.text()).toContain('考勤表转换')
+    expect(wrapper.text()).toContain('考勤工作区')
     expect(wrapper.text()).toContain('人员管理')
+    expect(wrapper.text()).not.toContain('再用演示数据体验操作')
     expect(wrapper.text()).toContain('考勤数据源')
     expect(wrapper.text()).toContain('考勤模板库')
   })
@@ -240,6 +254,81 @@ describe('ProductOnboardingView.vue', () => {
 
     expect(wrapper.text()).toContain('饰品包装品管理')
     expect(wrapper.text()).toContain('包装标签打印')
-    expect(wrapper.text()).toContain('考勤表转换')
+    expect(wrapper.text()).toContain('考勤工作区')
+  })
+
+  describe('attendance roster onboarding', () => {
+    beforeEach(() => {
+      vi.mocked(fetchOnboardingIndustryCatalog).mockResolvedValue({
+        open_industry_ids: ['考勤'],
+        selected_industry_id: '考勤',
+        open_packages: [{ industry_id: '考勤', name: '考勤/排班', mod_id: 'attendance-industry', selectable: true }],
+        preview_packages: [],
+      } as any)
+    })
+
+    it.each(['seed-demo', 'first-ai-task'])('opens the real roster from %s without ERP seed, shipment or completion', async (step) => {
+      const oldPrompt = '新手第一单，请创建演示出货单'
+      queueFirstAiTaskPrompt(oldPrompt)
+      expect(bindPendingFirstAiTaskRun('old-shipment-run', oldPrompt)).toBe(true)
+      const router = makeRouter()
+      await router.push({ path: '/onboarding', query: { step } })
+      await router.isReady()
+      const wrapper = mount(ProductOnboardingView, { global: { plugins: [router] } })
+      await flushPromises()
+
+      expect(wrapper.text()).toContain('先到考勤工作区确认名单')
+      expect(wrapper.text()).toContain('已有名单')
+      expect(wrapper.text()).toContain('尚无名单')
+      expect(wrapper.text()).toContain('按账号开通')
+      expect(wrapper.text()).not.toContain('演示出货单')
+      expect(wrapper.text()).not.toContain('新手演示客户')
+      expect(localStorage.getItem(LS_PRODUCT_FLOW_PENDING_PROMPT)).toBeNull()
+      expect(localStorage.getItem(LS_PRODUCT_FLOW_FIRST_TASK_PENDING)).toBeNull()
+      expect(readPendingFirstAiTaskRunId()).toBe('')
+
+      await wrapper.get('button.btn.primary').trigger('click')
+      await flushPromises()
+      expect(router.currentRoute.value.name).toBe('attendance-industry-personnel')
+      expect(seedOnboardingDemo).not.toHaveBeenCalled()
+      expect(localStorage.getItem(LS_PRODUCT_FLOW_COMPLETED)).not.toBe('1')
+      expect(localStorage.getItem(LS_PRODUCT_FLOW_FIRST_TASK_PENDING)).toBeNull()
+      wrapper.unmount()
+    })
+
+    it('returns to installation when the attendance workspace is unavailable', async () => {
+      const router = makeRouter()
+      router.removeRoute('attendance-industry-personnel')
+      await router.push({ path: '/onboarding', query: { step: 'first-ai-task' } })
+      await router.isReady()
+      const wrapper = mount(ProductOnboardingView, { global: { plugins: [router] } })
+      await flushPromises()
+      await wrapper.get('button.btn.primary').trigger('click')
+      await flushPromises()
+      expect(appAlert).toHaveBeenCalledWith('考勤工作区尚未准备好，请先安装考勤功能并重新检测。')
+      expect(router.currentRoute.value.query.step).toBe('host-pack')
+      expect(seedOnboardingDemo).not.toHaveBeenCalled()
+      expect(localStorage.getItem(LS_PRODUCT_FLOW_COMPLETED)).not.toBe('1')
+      expect(localStorage.getItem(LS_PRODUCT_FLOW_PENDING_PROMPT)).toBeNull()
+      wrapper.unmount()
+    })
+
+    it('continues from prepared attendance functions without generating demo ERP data', async () => {
+      vi.mocked(fetchIndustryBaseline).mockResolvedValue({ baseline_ready: true, groups: [] } as any)
+      const router = makeRouter()
+      await router.push({ path: '/onboarding', query: { step: 'host-pack' } })
+      await router.isReady()
+      const wrapper = mount(ProductOnboardingView, { global: { plugins: [router] } })
+      await flushPromises()
+      const next = wrapper.findAll('button').find((button) => button.text() === '下一步：确认考勤名单')
+      expect(next).toBeDefined()
+      await next!.trigger('click')
+      await flushPromises()
+      expect(router.currentRoute.value.query.step).toBe('first-ai-task')
+      expect(wrapper.text()).toContain('先到考勤工作区确认名单')
+      expect(seedOnboardingDemo).not.toHaveBeenCalled()
+      expect(localStorage.getItem(LS_PRODUCT_FLOW_COMPLETED)).not.toBe('1')
+      wrapper.unmount()
+    })
   })
 })

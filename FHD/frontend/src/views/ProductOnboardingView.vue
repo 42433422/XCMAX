@@ -5,7 +5,7 @@
         <div class="product-flow-header-main">
           <div class="brand">{{ fromTutorial ? '新手教程 · 开始使用' : 'XCAGI · 开始使用' }}</div>
           <p v-if="currentStepMeta?.subtitle && currentStep !== 'welcome'" class="brand-lead">
-            {{ currentStepMeta.subtitle }}
+            {{ isAttendanceOnboarding && ['host-pack', 'seed-demo', 'first-ai-task'].includes(currentStep) ? '在考勤工作区核对部门和人员，再开始考勤查询' : currentStepMeta.subtitle }}
           </p>
         </div>
         <div class="edition-tag">发行版：{{ editionLabel }}</div>
@@ -19,7 +19,7 @@
           :class="{ active: step.id === currentStep, done: step.index < currentIndex }"
         >
           <span class="step-num">{{ step.index }}</span>
-          <span class="step-label">{{ step.title }}</span>
+          <span class="step-label">{{ isAttendanceOnboarding && step.id === 'seed-demo' ? '确认名单' : isAttendanceOnboarding && step.id === 'first-ai-task' ? '核对人员' : step.title }}</span>
         </div>
       </nav>
 
@@ -29,14 +29,20 @@
             <img class="welcome-logo" :src="welcomeLogoSrc" height="56" alt="XC" decoding="async" @error="onWelcomeLogoError" />
             <div>
               <h1>认识 XC</h1>
-              <p class="welcome-tagline">让表格、查询和开单连成一条可核对的业务流程</p>
-              <p class="lead">
+              <p class="welcome-tagline">{{ isAttendanceOnboarding ? '从部门和人员名单开始，逐步核对考勤记录' : '让表格、查询和开单连成一条可核对的业务流程' }}</p>
+              <p v-if="isAttendanceOnboarding" class="lead">先准备考勤功能，再到考勤工作区确认部门和人员名单。已有名单直接核对；尚无名单时先录入部门和人员，再开始考勤查询。</p>
+              <p v-else class="lead">
                 您可以导入已有业务表格，核对客户和商品，再让<strong>智能对话</strong>协助查询与开单。
                 先选业务场景、准备所需功能，再用演示数据体验一次查询、确认和制单。
               </p>
             </div>
           </div>
-          <ul class="flow-list bullets">
+          <ul v-if="isAttendanceOnboarding" class="flow-list bullets">
+            <li><strong>准备考勤功能</strong>：进入统一的考勤工作区</li>
+            <li><strong>确认部门与人员</strong>：核对真实姓名、工号及所属部门</li>
+            <li><strong>查询后核对结果</strong>：打开页面只是开始，仍需确认名单和查询结果</li>
+          </ul>
+          <ul v-else class="flow-list bullets">
             <li><strong>选择业务场景</strong>：按您的行业准备对应功能，安装前可查看功能清单</li>
             <li><strong>先用演示数据练习</strong>：创建一个演示客户和商品，操作前看清要写入的内容</li>
             <li><strong>核对后再确认</strong>：完成首单后，在业务记录中检查客户、商品和数量</li>
@@ -103,14 +109,14 @@
           <h1>准备业务功能</h1>
           <p class="lead">
             已选 <strong>{{ pickedIndustryName }}</strong
-            >。安装下方推荐功能后，就可以用演示数据完成第一次操作。额外的 AI 员工可按需要选购。
+            >。{{ isAttendanceOnboarding ? '安装下方推荐功能后，请到考勤工作区确认部门和人员名单。' : '安装下方推荐功能后，就可以用演示数据完成第一次操作。' }}额外的 AI 员工可按需要选购。
           </p>
           <p class="lead muted">行业 Mod 含在授权内，不单独收费；定制 AI 员工按需另行评估。</p>
           <div class="status-card" :class="{ ok: baselineOk && !loading, warn: !baselineOk && !loading }">
             <template v-if="loading"> <i class="fa fa-spinner fa-spin"></i> 正在检测… </template>
             <template v-else-if="baselineOk">
               <i class="fa fa-check-circle"></i>
-              推荐功能已准备好，可以开始演示操作。
+              {{ isAttendanceOnboarding ? '考勤功能已准备好，下一步确认部门和人员名单。' : '推荐功能已准备好，可以开始演示操作。' }}
             </template>
             <template v-else>
               <i class="fa fa-exclamation-circle"></i>
@@ -132,7 +138,7 @@
             </button>
             <button v-else type="button" class="btn primary" :disabled="seedBusy" @click="prepareDemoData">
               <i class="fa" :class="seedBusy ? 'fa-spinner fa-spin' : 'fa-arrow-right'"></i>
-              {{ seedBusy ? '正在准备演示数据…' : '下一步：跟 AI 员工做第一单' }}
+              {{ isAttendanceOnboarding ? '下一步：确认考勤名单' : seedBusy ? '正在准备演示数据…' : '下一步：跟 AI 员工做第一单' }}
             </button>
             <button type="button" class="btn link" :disabled="finishing" @click="finishToChat">先进入对话</button>
           </div>
@@ -178,6 +184,21 @@
               </button>
             </div>
           </details>
+        </template>
+
+        <template v-else-if="isAttendanceOnboarding && ['seed-demo', 'first-ai-task'].includes(currentStep)">
+          <h1>先到考勤工作区确认名单</h1>
+          <p class="lead">请先确认部门和人员名单，再开始考勤查询。这里不会自动添加演示人员或修改您的现有名单。</p>
+          <ul class="flow-list bullets">
+            <li><strong>已有名单</strong>：在人员管理中查询一位员工，核对姓名、工号和所属部门。</li>
+            <li><strong>尚无名单</strong>：先在部门管理中录入部门，再录入人员；完成后重新查询核对。</li>
+            <li><strong>考勤表转换</strong>：属于按账号开通的定制功能；未开通时仍可准备部门和人员名单。</li>
+          </ul>
+          <div class="status-card warn" role="status">名单尚待您在考勤工作区确认。打开工作区不会将人员查询记为完成。</div>
+          <div class="actions">
+            <button type="button" class="btn primary" @click="openAttendanceWorkspace">打开考勤工作区</button>
+            <button type="button" class="btn ghost" @click="goStep('host-pack')">重新检测考勤功能</button>
+          </div>
         </template>
 
         <template v-else-if="currentStep === 'seed-demo'">
@@ -289,6 +310,7 @@ const {
   showNoAccountCustomHint,
   pickedIndustryName,
   firstOrderPrompt,
+  isAttendanceOnboarding,
   currentIndex,
   currentStepMeta,
   editionLabel,
@@ -297,7 +319,7 @@ const {
   footerHint,
 } = state
 
-const { goStep, returnFromTutorial, openModStore, finishToChat, skipEntireFlow } = nav
+const { goStep, returnFromTutorial, openModStore, openAttendanceWorkspace, finishToChat, skipEntireFlow } = nav
 const { refreshStatus, runBootstrap, prepareDemoData, pickIndustry, confirmIndustryAndNext, finishOnboardingComplete } = actions
 
 watch(

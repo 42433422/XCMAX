@@ -180,3 +180,25 @@ def test_seeded_first_order_from_chat_runs_real_tools_and_persists_after_confirm
         else:
             monkeypatch.setenv("DATABASE_URL", previous_database_url)
         db_mod.dispose_and_recreate_engine()
+
+
+@pytest.mark.parametrize("industry", ["考勤", "考勤排班", "attendance", "attendance-industry"])
+def test_attendance_onboarding_never_reads_or_writes_erp_or_private_roster(monkeypatch, industry):
+    from app.application import onboarding_seed_app_service as service
+
+    database = Mock(side_effect=AssertionError("attendance onboarding must not open a database"))
+    customer = Mock(side_effect=AssertionError("must not manufacture an ERP department"))
+    product = Mock(side_effect=AssertionError("must not manufacture an ERP employee"))
+    monkeypatch.setattr(service, "get_db", database)
+    monkeypatch.setattr(service, "build_customer_row", customer)
+    monkeypatch.setattr(service, "build_product_row", product)
+    for _ in range(2):
+        result = service.seed_onboarding_demo_data(tenant_id=77, industry_id=industry)
+        assert result["seeded"] is False
+        assert result["seed_status"] == "workspace_review_required"
+        assert result["customer"] is result["product"] is None
+        assert result["workspace_path"] == "/attendance-industry/personnel"
+        assert not result["demo_queries"]
+    database.assert_not_called()
+    customer.assert_not_called()
+    product.assert_not_called()

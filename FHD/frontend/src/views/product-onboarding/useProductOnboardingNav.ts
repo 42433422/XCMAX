@@ -1,5 +1,6 @@
 import type { Router } from 'vue-router'
 import { readProductFlowCompleted } from '@/constants/productFlow'
+import { appAlert } from '@/utils/appDialog'
 import { invalidateHostPackCompletionCache, markHostPackSkippedThisSession } from '@/utils/hostPackOnboardingGate'
 import type { useProductFlow } from '@/composables/useProductFlow'
 import type { ProductOnboardingState } from './useProductOnboardingState'
@@ -66,6 +67,16 @@ export function useProductOnboardingNav(state: ProductOnboardingState, options: 
     void router.replace({ path: '/' })
   }
 
+  async function openAttendanceWorkspace() {
+    if (!router.hasRoute('attendance-industry-personnel')) {
+      await appAlert('考勤工作区尚未准备好，请先安装考勤功能并重新检测。')
+      goStep('host-pack')
+      return
+    }
+    flow.markHostPackAcknowledged()
+    await router.push({ name: 'attendance-industry-personnel' })
+  }
+
   function finishToChat() {
     finishHostPackFlow()
   }
@@ -90,6 +101,7 @@ export function useProductOnboardingNav(state: ProductOnboardingState, options: 
     openModStore,
     finishHostPackFlow,
     launchFirstAiTask,
+    openAttendanceWorkspace,
     finishToChat,
     skipEntireFlow,
   }

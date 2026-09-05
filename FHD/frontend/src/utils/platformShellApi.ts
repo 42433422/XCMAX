@@ -83,6 +83,10 @@ export async function fetchOnboardingIndustryCatalog(force = false): Promise<Onb
 }
 
 export interface OnboardingDemoSeedResult {
+  seeded?: boolean
+  seed_status?: string
+  workspace_path?: string
+  message?: string
   industry_id?: string
   customer?: { id?: number; name?: string; existing?: boolean }
   product?: { id?: number; name?: string; existing?: boolean }

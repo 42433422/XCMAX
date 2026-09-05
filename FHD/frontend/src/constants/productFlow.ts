@@ -115,7 +115,7 @@ export function industryBaselineHint(industryId: string): string {
     通用: '通用场景：工作流员工、Planner 工具、企微与局域网入口等基础线，用到哪补哪即可。',
     涂料: '涂料/批发类：在通用基础线上，出货、客户、标签打印等行业 Mod 可按需从扩展市场安装。',
     批发: '批发分销：基础线装齐后，库存与客户相关 Mod 建议从扩展市场按需加载。',
-    考勤: '考勤排班：先补 ERP 门面与表格工具侧栏，再装行业包；部门/人员与 AI 员工在账号定制 Mod。',
+    考勤: '考勤排班：准备考勤功能后，在考勤工作区核对部门和人员名单；定制转换功能按账号开通情况使用。',
     电商: '电商零售：基础线装齐后，订单与 SKU 相关 Mod 可按需安装。',
     餐饮: '餐饮门店：基础线装齐后，食材与订货 Mod 可按需安装。',
     物流: '物流运单：基础线装齐后，运单与客户 Mod 可按需安装。',
@@ -262,6 +262,20 @@ export function queueFirstAiTaskPrompt(prompt: string): void {
     }
   } catch {
     /* ignore */
+  }
+}
+
+/** Discard an unexecuted first-order walkthrough when switching to a different business flow. */
+export function cancelPendingFirstAiTask(): void {
+  if (typeof localStorage === 'undefined') return
+  try {
+    const scope = resolveTenantStorageScopeFromRuntime()
+    for (const key of [LS_PRODUCT_FLOW_PENDING_PROMPT, LS_PRODUCT_FLOW_FIRST_TASK_PENDING, LS_PRODUCT_FLOW_FIRST_TASK_RUN_ID]) {
+      removeTenantScopedStorageItem(key, scope)
+      if (scope === 'local') localStorage.removeItem(key)
+    }
+  } catch {
+    /* No completion flag is written when cancelling a pending walkthrough. */
   }
 }
 

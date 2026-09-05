@@ -23,6 +23,7 @@ import {
   LS_PRODUCT_FLOW_FIRST_TASK_PENDING,
   LS_PRODUCT_FLOW_FIRST_TASK_RUN_ID,
   queueFirstAiTaskPrompt,
+  cancelPendingFirstAiTask,
   consumeFirstAiTaskPrompt,
   isFirstAiTaskPending,
   bindPendingFirstAiTaskRun,
@@ -35,6 +36,23 @@ describe('productFlow', () => {
     localStorage.clear()
     invalidateTenantStorageScopeCache()
     setRuntimeOnboardingOpenIndustryIds(null)
+  })
+
+  it('cancels only the current workspace pending first order without completing it', () => {
+    setTenantStorageScopeCache('tenant-a')
+    queueFirstAiTaskPrompt('新手第一单，演示出货单')
+    expect(bindPendingFirstAiTaskRun('run-a', '新手第一单，演示出货单')).toBe(true)
+    setTenantStorageScopeCache('tenant-b')
+    queueFirstAiTaskPrompt('另一个工作区的首单')
+    setTenantStorageScopeCache('tenant-a')
+    cancelPendingFirstAiTask()
+    expect(isFirstAiTaskPending()).toBe(false)
+    expect(consumeFirstAiTaskPrompt()).toBe('')
+    expect(localStorage.getItem(buildTenantScopedStorageKey(LS_PRODUCT_FLOW_FIRST_TASK_RUN_ID, 'tenant-a'))).toBeNull()
+    expect(readProductFlowCompleted()).toBe(false)
+    setTenantStorageScopeCache('tenant-b')
+    expect(isFirstAiTaskPending()).toBe(true)
+    expect(consumeFirstAiTaskPrompt()).toBe('另一个工作区的首单')
   })
 
   it('isTutorialReplayQuery returns true for tutorial', () => {

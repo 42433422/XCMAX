@@ -196,7 +196,7 @@ export function useProductOnboardingState(route: RouteLocationNormalizedLoaded) 
     const labels = SIDEBAR_PREVIEW_MENU_KEYS.map((key) => resolveCoreNavLabel(key, id, null)).filter(Boolean)
     const capabilityIds = new Set((baselinePlan.value?.capability_mod_ids || []).map((value) => String(value || '').trim()))
     if (id === '考勤' || capabilityIds.has('attendance-industry')) {
-      labels.unshift('考勤表转换')
+      labels.unshift('考勤工作区')
     }
     return [...new Set(labels)]
   })
@@ -231,7 +231,9 @@ export function useProductOnboardingState(route: RouteLocationNormalizedLoaded) 
     () => isEnterpriseEdition(productSku.value) && currentStep.value === 'host-pack' && !loading.value && !hasAccountCustomEntitlement.value,
   )
   const pickedIndustryName = computed(() => getIndustryPreset(pickedIndustryId.value).name)
+  const isAttendanceOnboarding = computed(() => pickedIndustryId.value === '考勤' || industryPackageModId(pickedIndustryId.value) === 'attendance-industry')
   const firstOrderPrompt = computed(() => {
+    if (isAttendanceOnboarding.value) return ''
     const customer = String(demoSeedResult.value?.customer?.name || '演示客户').trim()
     const product = String(demoSeedResult.value?.product?.name || '演示商品').trim()
     return [
@@ -306,6 +308,7 @@ export function useProductOnboardingState(route: RouteLocationNormalizedLoaded) 
     showNoAccountCustomHint,
     pickedIndustryName,
     firstOrderPrompt,
+    isAttendanceOnboarding,
     currentIndex,
     currentStepMeta,
     editionLabel,
