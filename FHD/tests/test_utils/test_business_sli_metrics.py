@@ -130,23 +130,58 @@ class TestRecordExportTask:
 class TestRecordModInstall:
     def test_increments_install_success(self):
         before = metrics.mod_install_total.labels(
-            operation="install", status="success"
+            operation="install", status="success", device_scope="server_runtime"
         )._value.get()
         metrics.record_mod_install("install", "success")
-        after = metrics.mod_install_total.labels(operation="install", status="success")._value.get()
+        after = metrics.mod_install_total.labels(
+            operation="install", status="success", device_scope="server_runtime"
+        )._value.get()
         assert after == before + 1
 
     def test_increments_uninstall_error(self):
         before = metrics.mod_install_total.labels(
-            operation="uninstall", status="error"
+            operation="uninstall", status="error", device_scope="server_runtime"
         )._value.get()
         metrics.record_mod_install("uninstall", "error")
-        after = metrics.mod_install_total.labels(operation="uninstall", status="error")._value.get()
+        after = metrics.mod_install_total.labels(
+            operation="uninstall", status="error", device_scope="server_runtime"
+        )._value.get()
         assert after == before + 1
 
     def test_mod_install_has_no_duration_metric(self):
         """SLO-BIZ-05 只测成功率，不测延迟（设计取舍）。"""
         assert not hasattr(metrics, "mod_install_duration_seconds")
+
+
+class TestBusinessHttpInstrumentation:
+    def test_customer_request_records_real_operation(self):
+        labels = metrics.customer_op_total.labels(operation="update", status="success")
+        before = labels._value.get()
+        metrics.record_business_http_request("PATCH", "/api/customers/42", 200, 0.2)
+        assert labels._value.get() == before + 1
+
+    def test_ocr_and_export_paths_record_separate_sli_families(self):
+        ocr = metrics.doc_recognition_total.labels(doc_type="ocr", status="success")
+        export = metrics.export_task_total.labels(export_type="pdf", status="error")
+        ocr_before = ocr._value.get()
+        export_before = export._value.get()
+        metrics.record_business_http_request("POST", "/api/ocr/recognize", 201, 0.8)
+        metrics.record_business_http_request("GET", "/api/report/export.pdf", 500, 1.2)
+        assert ocr._value.get() == ocr_before + 1
+        assert export._value.get() == export_before + 1
+
+    def test_server_mod_action_is_not_mislabelled_as_external_customer(self):
+        local = metrics.mod_install_total.labels(
+            operation="install", status="success", device_scope="server_runtime"
+        )
+        external = metrics.mod_install_total.labels(
+            operation="install", status="success", device_scope="external_customer"
+        )
+        local_before = local._value.get()
+        external_before = external._value.get()
+        metrics.record_business_http_request("POST", "/api/mod-store/install", 200, 0.4)
+        assert local._value.get() == local_before + 1
+        assert external._value.get() == external_before
 
 
 # ── collect_slo_metrics.py QUERIES / TARGETS 注册完整性 ────────────────────

@@ -151,6 +151,14 @@ def test_llm_cannot_redirect_catalog_gap_package_identity():
     assert proposal["estimated_files"] == 5
 
 
+def test_direct_caller_cannot_materialize_unreviewed_package_identity():
+    proposal = propose_employee_pack(_signals(), llm_call=lambda _prompt: {})
+    proposal["employee_pack"]["name"] = "another-safe-looking-pack"
+
+    with pytest.raises(ProposalScaffoldError, match="not allowlisted"):
+        build_source_files(proposal)
+
+
 def test_malformed_llm_catalog_proposal_uses_safe_fallback():
     proposal = propose_employee_pack(
         _signals(),
@@ -162,3 +170,33 @@ def test_malformed_llm_catalog_proposal_uses_safe_fallback():
     )
     assert proposal["proposal_mode"] == "deterministic_safe_fallback"
     assert proposal["employee_pack"]["name"] == "autonomy-gap-analyst"
+
+
+def test_llm_private_text_never_materializes_as_source(tmp_path):
+    private_marker = "customer-secret-do-not-persist"
+    proposal = propose_employee_pack(
+        _signals(),
+        llm_call=lambda _prompt: {
+            "proposal_id": "llm-private-proposal",
+            "department": "quality",
+            "employee_pack": {
+                "name": "redirected-by-normalizer",
+                "responsibility": private_marker,
+                "prompt_template": private_marker,
+                "skills": [private_marker],
+                "tools": ["shell"],
+                "acceptance_criteria": [private_marker],
+            },
+            "estimated_files": 5,
+            "estimated_tokens": 1000,
+        },
+    )
+
+    result = materialize_proposal(proposal, repo_root=tmp_path)
+
+    source_dir = tmp_path / result["source_dir"]
+    assert all(
+        private_marker not in path.read_text(encoding="utf-8")
+        for path in source_dir.rglob("*")
+        if path.is_file()
+    )

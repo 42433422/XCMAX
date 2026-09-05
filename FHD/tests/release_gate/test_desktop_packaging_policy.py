@@ -367,7 +367,7 @@ def test_server_api_runtime_excludes_unmaintained_python_ecdsa_stack() -> None:
         REPO_ROOT / "pyproject.toml",
         REPO_ROOT / "requirements.txt",
         REPO_ROOT / "deploy" / "requirements-server-api.txt",
-        REPO_ROOT / "deploy" / "requirements-server-api.lock.txt",
+        REPO_ROOT / "deploy" / "requirements-server.lock.txt",
         REPO_ROOT / "uv.lock",
     )
     for dependency_file in dependency_files:

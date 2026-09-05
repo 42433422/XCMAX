@@ -219,6 +219,13 @@ jobs:
             -f action=apply-latest \
             -f "action_id=release:${RELEASE_SHA}"
 
+          # 5. Install the audited Prometheus SSOT and require FHD stable,
+          # staging, and MODstore targets to read back healthy.  The workflow
+          # atomically restores the previous config if target validation fails.
+          "$helper" fhd-production-observability.yml \
+            "Production observability configuration ${RELEASE_SHA}" \
+            -f "release_sha=${RELEASE_SHA}"
+
   dispatch-client-releases:
     needs: [verify-version-anchors, build-frontend, deploy-servers-in-order]
     runs-on: ubuntu-latest

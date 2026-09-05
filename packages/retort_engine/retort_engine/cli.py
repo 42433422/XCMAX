@@ -82,6 +82,7 @@ from retort_engine.review_family_behavior_replay import (
 )
 from retort_engine.review_pipeline import build_diff_pipeline_replay
 from retort_engine.review_quality_benchmark import build_review_quality_benchmark
+from retort_engine.secure_artifacts import read_private_json, write_private_json
 from retort_engine.self_bootstrap import (
     build_self_bootstrap_plan,
     build_self_depth_report,
@@ -97,6 +98,46 @@ from retort_engine.task_prioritization import build_task_prioritization_report
 from retort_engine.ui_server import run_ui_server
 from retort_engine.upstream_pr_ci_probe import build_upstream_pr_ci_probe
 from retort_engine.workspace_hygiene import clean_workspace
+
+
+def _public_status(value: Any) -> str:
+    """Map internal status values to fixed public CLI vocabulary."""
+
+    if value == "ready":
+        return "ready"
+    if value == "converged":
+        return "converged"
+    if value == "applied":
+        return "applied"
+    if value == "noop":
+        return "noop"
+    if value == "blocked":
+        return "blocked"
+    if value == "needs_attention":
+        return "needs_attention"
+    if value == "needs_more_replay":
+        return "needs_more_replay"
+    return "not_ready"
+
+
+def _print_public_json(result: dict[str, Any]) -> None:
+    """Print a non-sensitive receipt; detailed evidence belongs in a secure artifact."""
+
+    receipt = {
+        "schema": "retort.cli.public_receipt/v1",
+        "status": _public_status(result.get("status")),
+        "details": "sensitive execution evidence omitted from terminal output",
+    }
+    print(json.dumps(receipt, ensure_ascii=False, indent=2, sort_keys=True))
+
+
+def _print_public_status(label: str, result: dict[str, Any]) -> None:
+    print(f"{label}: {_public_status(result.get('status'))}")
+    print("Detailed execution evidence is omitted from terminal output.")
+
+
+def _print_output_notice() -> None:
+    print("Encrypted output artifact written.")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -134,6 +175,7 @@ def main(argv: list[str] | None = None) -> int:
     absorb_cmd.add_argument("--json", action="store_true")
     apply_absorb = sub.add_parser("apply-absorption")
     apply_absorb.add_argument("--payload-file", required=True)
+    apply_absorb.add_argument("--result-file", default="")
     apply_absorb.add_argument("--json", action="store_true")
     llm = sub.add_parser("llm-review")
     llm.add_argument("--project", default=".")
@@ -482,11 +524,12 @@ def main(argv: list[str] | None = None) -> int:
                 "require_deep_review": True,
             }
         )
-        print(
-            json.dumps(result, ensure_ascii=False, indent=2)
-            if args.json
-            else _format_scores("Retort assessment", result["scores"])
-        )
+        if args.json:
+            _print_public_json(result)
+        else:
+            print(
+                "Retort assessment completed; detailed scores are not written to stdout."
+            )
         return 0
     if args.command == "self-evolve":
         result = RetortService().self_evolve(
@@ -499,11 +542,9 @@ def main(argv: list[str] | None = None) -> int:
             }
         )
         if args.json:
-            print(json.dumps(result, ensure_ascii=False, indent=2))
+            _print_public_json(result)
         else:
-            print(f"Retort self-evolution status: {result['status']}")
-            print(f"Stop reason: {result['stop_reason']}")
-            print(_format_scores("Final scores", result["final_assessment"]["scores"]))
+            _print_public_status("Retort self-evolution status", result)
         return 0 if result["status"] == "converged" else 1
     if args.command == "absorb":
         result = absorb(
@@ -525,21 +566,20 @@ def main(argv: list[str] | None = None) -> int:
                 "keep_runtime_residue": args.keep_runtime_residue,
             }
         )
-        print(
-            json.dumps(result, ensure_ascii=False, indent=2)
-            if args.json
-            else f"Retort absorption status: {result['status']}"
-        )
+        if args.json:
+            _print_public_json(result)
+        else:
+            _print_public_status("Retort absorption status", result)
         return 0
     if args.command == "apply-absorption":
-        with open(args.payload_file, encoding="utf-8") as handle:
-            payload = json.load(handle)
+        payload = read_private_json(args.payload_file)
         result = apply_real_absorption(payload)
-        print(
-            json.dumps(result, ensure_ascii=False, indent=2)
-            if args.json
-            else f"Retort apply absorption status: {result['status']}"
-        )
+        if args.result_file:
+            write_private_json(args.result_file, result)
+        if args.json:
+            _print_public_json(result)
+        else:
+            _print_public_status("Retort apply absorption status", result)
         return (
             0
             if result["status"] in {"applied", "noop"} and result.get("gates_passed")
@@ -844,14 +884,13 @@ def main(argv: list[str] | None = None) -> int:
             args.project, min_projects=args.min_projects, output=args.output
         )
         if args.json:
-            print(json.dumps(result, ensure_ascii=False, indent=2))
+            _print_public_json(result)
         else:
-            print(f"Retort multi-project absorption replay status: {result['status']}")
-            print(
-                f"Ready projects: {result['summary']['ready_project_count']}/{result['summary']['min_project_count']}"
+            _print_public_status(
+                "Retort multi-project absorption replay status", result
             )
             if args.output:
-                print(f"Output: {args.output}")
+                _print_output_notice()
         return 0 if result["status"] == "ready" else 1
     if args.command == "absorption-continuity-probe":
         result = build_absorption_continuity_probe(
@@ -872,14 +911,11 @@ def main(argv: list[str] | None = None) -> int:
             args.project, output=args.output, worker_count=args.worker_count
         )
         if args.json:
-            print(json.dumps(result, ensure_ascii=False, indent=2))
+            _print_public_json(result)
         else:
-            print(f"Retort hardening run status: {result['status']}")
-            print(
-                f"Behavior files: {result['summary']['behavior_source_file_count']} source / {result['summary']['behavior_test_file_count']} tests"
-            )
+            _print_public_status("Retort hardening run status", result)
             if args.output:
-                print(f"Output: {args.output}")
+                _print_output_notice()
         return 0 if result["gates_passed"] else 1
     if args.command == "complex-pr-replay":
         result = build_complex_pr_replay_report(
@@ -1248,44 +1284,33 @@ def main(argv: list[str] | None = None) -> int:
             workers_per_round=args.workers_per_round,
         )
         if args.output:
-            output = Path(args.output)
-            output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(
-                json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
-                encoding="utf-8",
-            )
+            write_private_json(args.output, result)
         if args.json:
-            print(json.dumps(result, ensure_ascii=False, indent=2))
+            _print_public_json(result)
         else:
-            print(f"Retort employee scheduler stress status: {result['status']}")
-            print(f"Rounds: {result['summary']['round_count']}")
-            print(f"Completed: {result['summary']['completed_result_count']}")
+            _print_public_status("Retort employee scheduler stress status", result)
             if args.output:
-                print(f"Output: {args.output}")
+                _print_output_notice()
         return 0 if result["status"] == "ready" else 1
     if args.command == "employee-patch-closure":
         result = run_employee_patch_closure_suite(args.project, output=args.output)
         if args.json:
-            print(json.dumps(result, ensure_ascii=False, indent=2))
+            _print_public_json(result)
         else:
-            print(f"Retort employee patch closure status: {result['status']}")
-            print(f"Patch cases: {result['summary']['case_count']}")
+            _print_public_status("Retort employee patch closure status", result)
             if args.output:
-                print(f"Output: {args.output}")
+                _print_output_notice()
         return 0 if result["status"] == "ready" else 1
     if args.command == "employee-patch-stress":
         result = build_employee_patch_stress(
             args.project, concurrent_workers=args.concurrent_workers, output=args.output
         )
         if args.json:
-            print(json.dumps(result, ensure_ascii=False, indent=2))
+            _print_public_json(result)
         else:
-            print(f"Retort employee patch stress status: {result['status']}")
-            print(
-                f"Workers: {result['summary']['ready_worker_count']}/{result['summary']['worker_count']}"
-            )
+            _print_public_status("Retort employee patch stress status", result)
             if args.output:
-                print(f"Output: {args.output}")
+                _print_output_notice()
         return 0 if result["status"] == "ready" else 1
     if args.command == "production-recovery-drill":
         result = build_production_recovery_drill(args.project, output=args.output)
@@ -1328,14 +1353,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "operator-journey-replay":
         result = build_operator_journey_replay(args.project, output=args.output)
         if args.json:
-            print(json.dumps(result, ensure_ascii=False, indent=2))
+            _print_public_json(result)
         else:
-            print(f"Retort operator journey replay status: {result['status']}")
-            print(
-                f"Ready stages: {result['summary']['ready_stage_count']}/{result['summary']['stage_count']}"
-            )
+            _print_public_status("Retort operator journey replay status", result)
             if args.output:
-                print(f"Output: {args.output}")
+                _print_output_notice()
         return 0 if result["status"] == "ready" else 1
     if args.command == "quality-gates":
         result = run_quality_gate_bundle(args.project, output=args.output)

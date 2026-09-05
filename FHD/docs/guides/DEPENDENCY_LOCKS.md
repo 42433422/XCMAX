@@ -6,7 +6,11 @@
 
 ## 已纳入版本控制的锁定文件
 
-仓库包含 **[`XCAGI/requirements.lock.txt`](../../XCAGI/requirements.lock.txt)**（由 `pip-compile` 根据 `XCAGI/requirements.txt` 生成，pip 可直接安装）。
+仓库包含 **[`XCAGI/requirements-desktop.lock.txt`](../../XCAGI/requirements-desktop.lock.txt)**（由 `pip-compile` 根据 `XCAGI/requirements.txt` 生成，pip 可直接安装）。
+
+旧的 `XCAGI/requirements.lock.txt` 与 `deploy/requirements-server-api.lock.txt`
+路径已经退役。GitHub 依赖图曾在这两个路径下同时保留已替换的旧版本和安全新版本；
+迁移到新的唯一清单路径后，不得重新创建旧路径，否则会重新引入重复依赖与过期告警。
 
 ## 方案 A：pip-tools（当前采用）
 
@@ -14,26 +18,26 @@
 
 ```bash
 python -m pip install pip-tools
-python -m piptools compile XCAGI/requirements.txt -o XCAGI/requirements.lock.txt --resolver=backtracking
+python -m piptools compile XCAGI/requirements.txt -o XCAGI/requirements-desktop.lock.txt --resolver=backtracking
 ```
 
-升级依赖：先改 `requirements.txt`，再执行上述命令并提交 `requirements.lock.txt` 的 diff。
+升级依赖：先改 `requirements.txt`，再执行上述命令并提交 `requirements-desktop.lock.txt` 的 diff。
 
 ### CI / 安装
 
 ```bash
-pip install -r XCAGI/requirements.lock.txt
+pip install -r XCAGI/requirements-desktop.lock.txt
 ```
 
-CI 中 **`.github/workflows/test.yml`** 的 `requirements-lock-consistency` 任务会在 PR 上重跑 `pip-compile` 并与 `requirements.lock.txt` diff，防止漂移。
+CI 中 **`.github/workflows/test.yml`** 的 `requirements-lock-consistency` 任务会在 PR 上重跑 `pip-compile` 并与 `requirements-desktop.lock.txt` diff，防止漂移。
 
 ## 方案 B：uv（可选）
 
 若已安装 [uv](https://docs.astral.sh/uv/)：
 
 ```bash
-uv pip compile XCAGI/requirements.txt -o XCAGI/requirements.lock.txt
-uv pip sync XCAGI/requirements.lock.txt
+uv pip compile XCAGI/requirements.txt -o XCAGI/requirements-desktop.lock.txt
+uv pip sync XCAGI/requirements-desktop.lock.txt
 ```
 
 与 pip-tools **二选一维护即可**，避免两套流程并行未同步。
@@ -53,4 +57,4 @@ uv pip sync XCAGI/requirements.lock.txt
 | `deploy/requirements-server-api.txt` | CI/部署锁定入口 |
 | `pip install -e ".[dev]"` | 本地测试依赖 |
 
-`XCAGI/requirements.lock.txt` 仍用于 Docker/子树检出；发版前运行 `python scripts/dev/check_requirements_lock.py`。
+`XCAGI/requirements-desktop.lock.txt` 仍用于 Docker/子树检出；发版前运行 `python scripts/dev/check_requirements_lock.py`。
