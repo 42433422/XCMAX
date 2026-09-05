@@ -89,6 +89,20 @@ def _seed_db(db_path: Path) -> None:
     conn.close()
 
 
+def test_shared_schedule_resources_do_not_expose_customer_template(tmp_path):
+    path = tmp_path / "attendance.db"
+    _seed_db(path)
+    with _client(path) as client:
+        response = client.get("/api/mod/attendance-industry/schedules")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["schedule_groups"] == [
+            {"name": "计时", "headcount": "1 人", "shift_type": "人员考勤组", "lines": []}
+        ]
+        assert data["lines"] == []
+        assert "424/" not in response.text
+
+
 def _client(db_path: Path) -> TestClient:
     router = APIRouter(prefix="/api/mod/attendance-industry")
     ROUTES.register(

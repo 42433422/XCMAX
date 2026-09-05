@@ -62,6 +62,35 @@ def _check_department_duplicate(conn, department, department_id=0):
 
 
 def register(router, *, logger, get_database_path) -> None:
+    @router.get("/schedules", response_model=None)
+    async def schedules_get():
+        """共享考勤组资源来自人员主数据，不读取任何客户模板规则。"""
+        db_path = get_database_path()
+        try:
+            if not _has_table(db_path, "attendance_employees"):
+                return {"success": True, "schedule_groups": [], "lines": []}
+            with closing(sqlite3.connect(f"{db_path.as_uri()}?mode=ro", uri=True)) as conn:
+                groups = conn.execute(
+                    "SELECT attendance_group, COUNT(*) FROM attendance_employees "
+                    "WHERE TRIM(attendance_group) <> '' GROUP BY attendance_group ORDER BY attendance_group"
+                ).fetchall()
+            return {
+                "success": True,
+                "schedule_groups": [
+                    {
+                        "name": name,
+                        "headcount": f"{count} 人",
+                        "shift_type": "人员考勤组",
+                        "lines": [],
+                    }
+                    for name, count in groups
+                ],
+                "lines": [],
+            }
+        except sqlite3.Error:
+            logger.exception("读取排班资源失败")
+            return JSONResponse({"success": False, "message": "读取排班资源失败"}, status_code=500)
+
     @router.get("/employees", response_model=None)
     async def list_employees(page: int = 1, page_size: int = 50, search: str = ""):
         import sqlite3

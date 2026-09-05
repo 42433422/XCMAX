@@ -115,9 +115,10 @@ async def install_customer_delivery_seed_package(
             "package": {"pkg_id": pkg_id, "version": version, "artifact": pkg.get("artifact")},
         }
     auth_header = token if token.lower().startswith("bearer ") else f"Bearer {token}"
+    entitlement_id = str(pkg.get("account_mod_id") or mid).strip()
     protected_path = (
         f"/api/enterprise/customer-delivery-seeds/{quote(pkg_id, safe='')}/"
-        f"{quote(version, safe='')}/download?mod_id={quote(mid, safe='')}"
+        f"{quote(version, safe='')}/download?mod_id={quote(entitlement_id, safe='')}"
     )
 
     tmp = tempfile.NamedTemporaryFile(prefix="xcagi-delivery-seed-", suffix=".zip", delete=False)

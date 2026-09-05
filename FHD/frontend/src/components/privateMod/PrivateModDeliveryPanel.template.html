@@ -164,7 +164,8 @@
           <h4>{{ project.name }}</h4>
           <div class="private-mod-project__meta">
             <code>{{ project.mod_id }}</code>
-            <span>{{ project.current_version ? `当前 v${project.current_version}` : '尚未安装' }}</span>
+            <span v-if="project.delivery_mode === 'integrated_feature'">标准客户端 · 工作区定制功能</span>
+            <span>{{ project.current_version ? `当前 v${project.current_version}` : '运行模块未就绪' }}</span>
             <span class="private-mod-project__overall" :data-status="project.overall_status"> {{ project.overall_label }} </span>
           </div>
         </div>
@@ -174,6 +175,7 @@
             {{ updating === project.mod_id ? '更新中…' : '更新私有 Mod' }}
           </button>
         </div>
+        <span v-else-if="project.delivery_mode === 'integrated_feature'" class="private-mod-project__latest">随标准客户端更新，无需独立安装包</span>
         <span v-else-if="project.latest_version" class="private-mod-project__latest">已是最新私有版本</span>
       </header>
 

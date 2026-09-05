@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { apiFetch } from '@/utils/apiBase'
 
 import AttendanceWorkspaceView from '../../../XCAGI/mods/attendance-industry/frontend/views/AttendanceWorkspaceView.vue'
 import { modMenu, modRoutes } from '../../../XCAGI/mods/attendance-industry/frontend/routes.js'
@@ -10,6 +11,9 @@ import manifest from '../../../XCAGI/mods/attendance-industry/manifest.json'
 vi.mock('@/utils/apiBase', () => ({ apiFetch: vi.fn() }))
 
 describe('AttendanceWorkspaceView', () => {
+  beforeEach(() => {
+    vi.mocked(apiFetch).mockImplementation(async () => new Response(JSON.stringify({ custom_features: ['attendance-convert'] })))
+  })
   it('keeps the manifest, fallback and runtime menu at one workspace entry', () => {
     expect(manifest.frontend.menu).toEqual(modMenu)
     expect(ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU).toEqual(modMenu)
@@ -40,7 +44,7 @@ describe('AttendanceWorkspaceView', () => {
     expect(wrapper.find('h1').text()).toBe('考勤工作区')
     expect(wrapper.find('[data-test="management"]').text()).toBe('personnel')
     const links = wrapper.findAll('nav a')
-    expect(links.map((link) => link.text())).toEqual(['部门管理', '人员管理', '排班资源', '考勤记录', '考勤表转换', '考勤设置'])
+    expect(links.map((link) => link.text())).toEqual(['部门管理', '人员管理', '排班资源', '考勤记录', '考勤表转换（定制）', '转换规则（定制）'])
     for (const [index, section] of ['departments', 'personnel', 'schedules', 'records', 'convert', 'settings'].entries()) {
       await links[index].trigger('click')
       await flushPromises()
@@ -53,5 +57,29 @@ describe('AttendanceWorkspaceView', () => {
     await new Promise((resolve) => setTimeout(resolve, 0))
     await flushPromises()
     expect(wrapper.find('[data-test="conversion"]').exists()).toBe(true)
+  })
+
+  it.each(['convert', 'settings'])('denies direct custom %s links without entitlement', async (section) => {
+    vi.mocked(apiFetch).mockImplementation(async () => new Response(JSON.stringify({ custom_features: [] })))
+    const wrapper = mount(AttendanceWorkspaceView, {
+      props: { section },
+      global: { stubs: { RouterLink: true, HomeView: true, AttendanceSettingsView: true, AttendanceManagementView: true } },
+    })
+    await flushPromises()
+    expect(wrapper.findAll('nav router-link-stub')).toHaveLength(4)
+    expect(wrapper.text()).toContain('未开通考勤表转换定制功能')
+    expect(wrapper.find('home-view-stub').exists()).toBe(false)
+    expect(wrapper.find('attendance-settings-view-stub').exists()).toBe(false)
+  })
+
+  it('fails closed when the capability request fails', async () => {
+    vi.mocked(apiFetch).mockRejectedValue(new Error('offline'))
+    const wrapper = mount(AttendanceWorkspaceView, {
+      props: { section: 'convert' },
+      global: { stubs: { RouterLink: true, HomeView: true, AttendanceSettingsView: true } },
+    })
+    await flushPromises()
+    expect(wrapper.find('home-view-stub').exists()).toBe(false)
+    expect(wrapper.text()).toContain('未开通')
   })
 })

@@ -2,7 +2,7 @@
   <section class="attendance-workspace" aria-label="考勤工作区">
     <header class="workspace-header">
       <h1>考勤工作区</h1>
-      <p>统一维护部门、人员、排班和考勤，转换使用同一份人员名单。</p>
+      <p>主系统统一维护部门、人员、排班资源和考勤记录。</p>
       <nav aria-label="考勤工作区功能">
         <router-link
           v-for="item in sections"
@@ -15,28 +15,55 @@
       </nav>
     </header>
     <div class="workspace-content">
-      <HomeView v-if="section === 'convert'" />
+      <p v-if="customSection && !conversionEnabled" role="status">
+        {{ checking ? '正在核验定制功能权限…' : '当前账号未开通考勤表转换定制功能。' }}
+      </p>
+      <HomeView v-else-if="section === 'convert'" />
       <AttendanceSettingsView v-else-if="section === 'settings'" />
-      <AttendanceManagementView v-else :key="section" :section="section" />
+      <AttendanceManagementView v-else :key="section" :section="section" :conversion-enabled="conversionEnabled" />
     </div>
   </section>
 </template>
 
 <script setup>
+  import { computed, ref, watch } from 'vue';
+  import { apiFetch } from '@/utils/apiBase';
   import AttendanceManagementView from './AttendanceManagementView.vue';
   import AttendanceSettingsView from './AttendanceSettingsView.vue';
   import HomeView from './HomeView.vue';
 
-  defineProps({ section: { type: String, default: 'personnel' } });
+  const props = defineProps({ section: { type: String, default: 'personnel' } });
+  const conversionEnabled = ref(false);
+  const checking = ref(true);
+  const customSection = computed(() => ['convert', 'settings'].includes(props.section));
+  let generation = 0;
+  watch(() => props.section, async () => {
+    const current = ++generation;
+    conversionEnabled.value = false;
+    checking.value = true;
+    try {
+      const response = await apiFetch('/api/mod/attendance-industry/attendance/capabilities');
+      const data = response.ok ? await response.json() : {};
+      if (current === generation) {
+        conversionEnabled.value = data.custom_features?.includes('attendance-convert') === true;
+      }
+    } catch {
+      // 权限接口失败时不挂载定制页面；共享管理功能仍可使用。
+    } finally {
+      if (current === generation) checking.value = false;
+    }
+  }, { immediate: true });
 
-  const sections = [
+  const sections = computed(() => [
     { section: 'departments', label: '部门管理', route: 'attendance-industry-departments' },
     { section: 'personnel', label: '人员管理', route: 'attendance-industry-personnel' },
     { section: 'schedules', label: '排班资源', route: 'attendance-industry-schedules' },
     { section: 'records', label: '考勤记录', route: 'attendance-industry-records' },
-    { section: 'convert', label: '考勤表转换', route: 'attendance-industry-home' },
-    { section: 'settings', label: '考勤设置', route: 'attendance-industry-settings' },
-  ];
+    ...(conversionEnabled.value ? [
+      { section: 'convert', label: '考勤表转换（定制）', route: 'attendance-industry-home' },
+      { section: 'settings', label: '转换规则（定制）', route: 'attendance-industry-settings' },
+    ] : []),
+  ]);
 </script>
 
 <style scoped>

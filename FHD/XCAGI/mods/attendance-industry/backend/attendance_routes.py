@@ -5,9 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 from urllib.parse import unquote
 
-from fastapi import File, Form, UploadFile
+from fastapi import Depends, File, Form, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
+from app.mod_sdk.customer_features import attendance_custom_features, require_attendance_conversion
 from app.mod_sdk.errors import BOUNDARY_ERRORS
 from app.mod_sdk.host_services import workspace_root
 
@@ -26,7 +27,10 @@ def register(
     # （被 mod_manager 加到 sys.path 的 ``backend/`` 可直接绝对 import）。
     from taiyangniao_attendance.convert import convert_attendance_file
 
-    @router.get("/attendance/policy", response_model=None)
+    router.add_api_route("/attendance/capabilities", attendance_custom_features, methods=["GET"])
+    custom_access = [Depends(require_attendance_conversion)]
+
+    @router.get("/attendance/policy", response_model=None, dependencies=custom_access)
     async def attendance_policy_get() -> dict:
         """通用考勤裁窗配置（读写 approval_config.yaml 的 attendance_policy 段）。"""
         try:
@@ -41,7 +45,7 @@ def register(
             )
         return {"success": True, "attendance_policy": pol}
 
-    @router.post("/attendance/policy", response_model=None)
+    @router.post("/attendance/policy", response_model=None, dependencies=custom_access)
     async def attendance_policy_post(body: dict) -> dict:
         payload = body if isinstance(body, dict) else {}
         raw = payload.get("attendance_policy")
@@ -73,7 +77,7 @@ def register(
                 status_code=500,
             )
 
-    @router.get("/attendance/rules")
+    @router.get("/attendance/rules", dependencies=custom_access)
     async def attendance_rules() -> dict:
         lines = [
             "优先读取钉钉「每日统计」，再用「原始记录」补充打卡时间与去重。",
@@ -121,7 +125,7 @@ def register(
             },
         }
 
-    @router.post("/attendance/convert-upload", response_model=None)
+    @router.post("/attendance/convert-upload", response_model=None, dependencies=custom_access)
     async def attendance_convert_upload(
         file: UploadFile = File(...),
         output_relpath: str = Form("424/考勤转换输出.xlsx"),
@@ -298,7 +302,7 @@ def register(
             },
         }
 
-    @router.get("/attendance/download", response_model=None)
+    @router.get("/attendance/download", response_model=None, dependencies=custom_access)
     async def attendance_download(relpath: str):
         try:
             rel = _normalize_relpath(relpath, field_name="relpath")

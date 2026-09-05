@@ -10,18 +10,18 @@
           {{ section === 'personnel' ? '新增人员' : '新增部门' }}
         </button>
         <router-link
-          v-if="section === 'records'"
+          v-if="section === 'records' && conversionEnabled"
           class="btn btn-primary"
           :to="{ name: 'attendance-industry-home' }"
         >
           上传考勤表
         </router-link>
         <router-link
-          v-if="section === 'schedules'"
+          v-if="section === 'schedules' && conversionEnabled"
           class="btn btn-primary"
           :to="{ name: 'attendance-industry-settings' }"
         >
-          考勤设置
+          转换规则（定制）
         </router-link>
         <button type="button" class="btn" :disabled="loading" @click="loadData">
           {{ loading ? '刷新中…' : '刷新' }}
@@ -252,7 +252,7 @@
         <button v-if="isEditable" type="button" class="btn btn-primary" @click="startCreate">
           {{ section === 'personnel' ? '新增第一位人员' : '新增第一个部门' }}
         </button>
-        <router-link v-else class="btn btn-primary" :to="{ name: 'attendance-industry-home' }"
+        <router-link v-else-if="conversionEnabled" class="btn btn-primary" :to="{ name: 'attendance-industry-home' }"
           >上传考勤表</router-link
         >
       </div>
@@ -278,7 +278,7 @@
   type Section = 'personnel' | 'departments' | 'schedules' | 'records';
   type DataRow = Record<string, string | number | null | undefined>;
 
-  const props = defineProps<{ section: Section }>();
+  const props = defineProps<{ section: Section; conversionEnabled?: boolean }>();
 
   let loadGeneration = 0;
   const loading = ref(false);
@@ -328,9 +328,9 @@
   const pageDescription = computed(
     () =>
       ({
-        personnel: '维护考勤名单、工号、所属部门与考勤组；考勤转换会读取这份名单。',
+        personnel: '维护考勤名单、工号、所属部门与考勤组。',
         departments: '维护组织部门、上级部门和对应考勤组。',
-        schedules: '查看当前班制、工作时段与考勤计算规则。',
+        schedules: '查看人员名单中的考勤组与人数；客户模板规则在定制转换功能内维护。',
         records: '按人员、部门和月份查询导入后的逐日考勤明细。',
       })[props.section]
   );
@@ -352,7 +352,7 @@
   );
   const emptyDescription = computed(() =>
     props.section === 'records'
-      ? '当前没有符合条件的入库明细。考勤表转换生成的文件可在转换页下载。'
+      ? '当前没有符合条件的入库明细。'
       : `当前${pageTitle.value}还没有符合条件的数据。`
   );
   const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
@@ -385,7 +385,7 @@
     error.value = '';
     try {
       if (props.section === 'schedules') {
-        const data = await requestJson('/api/mod/attendance-industry/attendance/rules');
+        const data = await requestJson('/api/mod/attendance-industry/schedules');
         if (generation !== loadGeneration) return;
         scheduleGroups.value = Array.isArray(data?.schedule_groups) ? data.schedule_groups : [];
         ruleLines.value = Array.isArray(data?.lines) ? data.lines : [];
