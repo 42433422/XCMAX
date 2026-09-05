@@ -160,6 +160,10 @@ jobs:
           ssh "${ssh_opts[@]}" "root@${HOST}" 'uname -r' \
             > "${RUNNER_TEMP}/security-native/production-host-running-kernel"
           ssh "${ssh_opts[@]}" "root@${HOST}" \
+            'dnf -q repoquery --installed --latest-limit 1 \
+             --qf "%{version}-%{release}.%{arch}" kernel-core' \
+            > "${RUNNER_TEMP}/security-native/production-host-installed-kernel"
+          ssh "${ssh_opts[@]}" "root@${HOST}" \
             'set -euo pipefail
              scan_dir=$(mktemp -d /tmp/xcmax-security-scan.XXXXXX)
              trap '\''rm -rf -- "$scan_dir"'\'' EXIT
@@ -173,6 +177,7 @@ jobs:
             --input "${RUNNER_TEMP}/security-native/production-host-updateinfo.txt" \
             --os-release "${RUNNER_TEMP}/security-native/production-host-os-release" \
             --running-kernel "${RUNNER_TEMP}/security-native/production-host-running-kernel" \
+            --installed-kernel "${RUNNER_TEMP}/security-native/production-host-installed-kernel" \
             --output "${RUNNER_TEMP}/security-native/production-host.json"
 
       - name: Normalize all scanner reports

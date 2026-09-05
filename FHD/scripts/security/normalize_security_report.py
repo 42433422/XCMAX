@@ -69,8 +69,9 @@ def _validate_native_payload(kind: str, data: Any) -> None:
             or data.get("schema") != "dnf-security-updateinfo/v1"
             or not all(
                 str(data.get(field) or "").strip()
-                for field in ("os_id", "os_version", "running_kernel")
+                for field in ("os_id", "os_version", "running_kernel", "installed_kernel")
             )
+            or not isinstance(data.get("running_kernel_current"), bool)
             or not isinstance(data.get("advisories"), list)
         ):
             raise ValueError("DNF security updateinfo is incomplete")
@@ -299,6 +300,15 @@ def normalize(kind: str, data: Any) -> list[dict[str, Any]]:
                     os_id=str(data.get("os_id") or ""),
                     os_version=str(data.get("os_version") or ""),
                     running_kernel=str(data.get("running_kernel") or ""),
+                )
+            )
+        if data.get("running_kernel_current") is False:
+            findings.append(
+                _finding(
+                    "RUNNING-KERNEL-STALE",
+                    "high",
+                    running_kernel=str(data.get("running_kernel") or ""),
+                    installed_kernel=str(data.get("installed_kernel") or ""),
                 )
             )
     elif kind == "trivy":

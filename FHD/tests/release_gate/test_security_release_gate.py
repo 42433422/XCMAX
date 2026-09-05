@@ -135,6 +135,8 @@ def test_dnf_vendor_updateinfo_deduplicates_advisories_and_maps_important_to_hig
         "os_id": "tencentos",
         "os_version": "3.3",
         "running_kernel": "5.4.241-24.0017.28",
+        "installed_kernel": "5.4.241-24.0017.41.5.tl3.x86_64",
+        "running_kernel_current": False,
         "advisories": advisories,
     }
 
@@ -145,8 +147,9 @@ def test_dnf_vendor_updateinfo_deduplicates_advisories_and_maps_important_to_hig
         "TSSA-2026:0001",
         "TSSA-2026:0002",
         "TSSA-2026:0003",
+        "RUNNING-KERNEL-STALE",
     ]
-    assert [row["severity"] for row in findings] == ["high", "critical", "medium"]
+    assert [row["severity"] for row in findings] == ["high", "critical", "medium", "high"]
     assert findings[0]["packages"] == [
         "package-a-2.0.x86_64",
         "package-b-2.0.x86_64",
@@ -351,6 +354,7 @@ def test_full_scan_collects_and_uploads_evidence_after_individual_scanner_failur
     assert "updateinfo list --security updates" in workflow
     assert "normalize production-host dnf-updateinfo" in workflow
     assert "mktemp -d /tmp/xcmax-security-scan.XXXXXX" in workflow
+    assert "production-host-installed-kernel" in workflow
     assert "scp " not in workflow
     assert "docker run --rm -v /:/host:ro aquasec/trivy:latest" not in workflow
     assert (

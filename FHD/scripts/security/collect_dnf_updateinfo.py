@@ -49,11 +49,16 @@ def parse_updateinfo(raw: str) -> list[dict[str, object]]:
     return [advisories[key] for key in sorted(advisories)]
 
 
+def _running_kernel_is_current(running_kernel: str, installed_kernel: str) -> bool:
+    return installed_kernel == running_kernel or installed_kernel.startswith(f"{running_kernel}.")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--os-release", type=Path, required=True)
     parser.add_argument("--running-kernel", type=Path, required=True)
+    parser.add_argument("--installed-kernel", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
 
@@ -61,7 +66,8 @@ def main() -> int:
     os_id = os_fields.get("ID", "").strip().lower()
     os_version = os_fields.get("VERSION_ID", "").strip()
     running_kernel = args.running_kernel.read_text(encoding="utf-8").strip()
-    if not os_id or not os_version or not running_kernel:
+    installed_kernel = args.installed_kernel.read_text(encoding="utf-8").strip()
+    if not os_id or not os_version or not running_kernel or not installed_kernel:
         raise SystemExit("incomplete production host identity")
 
     payload = {
@@ -69,6 +75,8 @@ def main() -> int:
         "os_id": os_id,
         "os_version": os_version,
         "running_kernel": running_kernel,
+        "installed_kernel": installed_kernel,
+        "running_kernel_current": _running_kernel_is_current(running_kernel, installed_kernel),
         "advisories": parse_updateinfo(args.input.read_text(encoding="utf-8")),
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
