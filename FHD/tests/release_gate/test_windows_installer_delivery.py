@@ -40,6 +40,12 @@ def test_manual_installer_is_part_of_official_workflow_without_stable_publicatio
     assert "latest.yml" not in text
     assert "publish_cvm" not in text
     assert "actions/upload-artifact@v4" in text
+    upload = next(step for step in job["steps"] if step.get("uses") == "actions/upload-artifact@v4")
+    paths = upload["with"]["path"].strip().splitlines()
+    assert len(paths) == 3
+    assert all(path.startswith("FHD/delivery/") and not path.endswith("/") for path in paths)
+    assert paths[-1] == "FHD/delivery/delivery-receipt.json"
+    assert "sunbird-seed" not in upload["with"]["path"]
 
 
 def test_unsigned_opt_in_never_accepts_invalid_signatures():
