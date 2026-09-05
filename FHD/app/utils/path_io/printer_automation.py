@@ -150,6 +150,10 @@ class PrinterAutomation:
         return False
 
     def print_with_automation(self, file_path: str, target_printer: str) -> dict:
+        from app.infrastructure.printing.label_pdf_printer import is_label_job_location
+
+        if is_label_job_location(file_path):
+            return {"success": False, "message": "受控标签任务不能通过自动化文件打印绕过确认"}
         if not self._is_available():
             return self._unavailable_result()
         try:

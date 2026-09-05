@@ -94,6 +94,26 @@ def test_total_mounted_path_count(legacy_app: FastAPI):
     assert len(paths) >= 50, f"expected >=50 mounted paths from full legacy stack, got {len(paths)}"
 
 
+def test_confirmed_label_workflow_is_mounted_once(legacy_app: FastAPI):
+    """The actual desktop compatibility mount must expose the entire label workflow."""
+    expected = {
+        ("POST", "/api/print/label-jobs"),
+        ("GET", "/api/print/label-jobs/products"),
+        ("GET", "/api/print/label-jobs/{job_id}"),
+        ("GET", "/api/print/label-jobs/{job_id}/file"),
+        ("POST", "/api/print/label-jobs/{job_id}/confirmation"),
+        ("POST", "/api/print/label-jobs/{job_id}/submit"),
+    }
+    mounted = [
+        (method, route.path)
+        for route in iter_effective_routes(legacy_app.routes)
+        for method in route.methods or ()
+        if route.path.startswith("/api/print/label-jobs")
+    ]
+    assert set(mounted) == expected
+    assert len(mounted) == len(expected)
+
+
 def test_critical_early_mount_paths_present(legacy_app: FastAPI):
     """Paths that must mount early (before xcagi_compat / SPA fallback)."""
     paths = _paths(legacy_app)

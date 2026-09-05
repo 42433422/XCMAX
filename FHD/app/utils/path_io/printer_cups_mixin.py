@@ -167,6 +167,11 @@ class PrinterCupsMixin:
 
     @classmethod
     def _resolve_allowed_print_path(cls, file_path: str) -> str | None:
+        from app.infrastructure.printing.label_pdf_printer import is_label_job_location
+
+        # Managed label jobs can only enter the spooler through their atomic dispatch guard.
+        if is_label_job_location(file_path):
+            return None
         requested = _facade().os.path.realpath(_facade().os.path.abspath(file_path))
         for root in cls._allowed_print_roots():
             normalized_root = _facade().os.path.realpath(root)
