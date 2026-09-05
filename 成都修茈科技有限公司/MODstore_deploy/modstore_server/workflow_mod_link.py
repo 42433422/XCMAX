@@ -6,9 +6,13 @@ import re
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from modman.manifest_util import (
+    get_public_workflow_rows,
+    read_manifest,
+    save_manifest_validated,
+    set_public_workflow_rows,
+)
 from pydantic import BaseModel, Field
-
-from modman.manifest_util import read_manifest, save_manifest_validated
 
 _EMP_ID_RE = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
 
@@ -56,7 +60,7 @@ def append_workflow_link_to_manifest(
     if err or not data:
         raise ValueError(err or "manifest 无效")
     manifest = dict(data)
-    wf = manifest.get("workflow_employees")
+    wf = get_public_workflow_rows(manifest)
     if wf is None:
         wf = []
     if not isinstance(wf, list):
@@ -98,7 +102,7 @@ def append_workflow_link_to_manifest(
     }
     wf = list(wf)
     wf.append(entry)
-    manifest["workflow_employees"] = wf
+    set_public_workflow_rows(manifest, wf)
     warnings = save_manifest_validated(mod_dir, manifest)
     return {
         "ok": True,
@@ -126,7 +130,7 @@ def merge_workflow_id_into_existing_entry(
     if err or not data:
         raise ValueError(err or "manifest 无效")
     manifest = dict(data)
-    wf = manifest.get("workflow_employees")
+    wf = get_public_workflow_rows(manifest)
     if not isinstance(wf, list) or idx < 0 or idx >= len(wf):
         raise ValueError("workflow_index 越界或 workflow_employees 非数组")
     entry = wf[idx]
@@ -166,7 +170,7 @@ def merge_workflow_id_into_existing_entry(
 
     wf2 = list(wf)
     wf2[idx] = new_entry
-    manifest["workflow_employees"] = wf2
+    set_public_workflow_rows(manifest, wf2)
     warnings = save_manifest_validated(mod_dir, manifest)
     return {
         "ok": True,

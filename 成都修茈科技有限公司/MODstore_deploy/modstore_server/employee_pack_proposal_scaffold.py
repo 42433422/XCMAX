@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -13,6 +14,7 @@ from modstore_server.employee_pack_proposal import validate_proposal
 
 _PACK_NAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$")
 _PACK_VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
+_ALLOWLISTED_PACKAGE_ID = "autonomy-gap-analyst"
 _SAFE_RESPONSIBILITY = (
     "Analyze founder-autonomy scorecard evidence and identify the highest-priority "
     "capability gap without fabricating completion."
@@ -49,12 +51,20 @@ def build_source_files(proposal: Dict[str, Any]) -> Dict[str, str]:
     """Compile one allowlisted pack; LLM prose never becomes executable source."""
 
     validate_proposal(proposal)
-    pack = proposal["employee_pack"]
     if proposal.get("triggered_by") != "catalog_capability_gap":
         raise ProposalScaffoldError(
             "only allowlisted catalog gap proposals are materializable"
         )
-    package_id = _bounded_text(pack.get("name"), limit=128)
+    # This scaffold implements one reviewed capability only. The proposal's nested
+    # employee-pack object can contain LLM-authored/private prose, so no value from
+    # it is copied into source. Proposal generation already pins this identity; the
+    # second check here makes direct callers fail closed as well.
+    proposed_package_id = _bounded_text(
+        proposal.get("employee_pack", {}).get("name"), limit=128
+    )
+    if proposed_package_id != _ALLOWLISTED_PACKAGE_ID:
+        raise ProposalScaffoldError("proposal package is not allowlisted")
+    package_id = _ALLOWLISTED_PACKAGE_ID
     version = _bounded_text(proposal.get("target_version") or "1.0.0", limit=32)
     if not _PACK_NAME_RE.fullmatch(package_id):
         raise ProposalScaffoldError("unsafe package name")
@@ -117,10 +127,11 @@ def build_source_files(proposal: Dict[str, Any]) -> Dict[str, str]:
         },
         "acceptance_criteria": criteria,
         "evolution_proposal": {
-            "proposal_id": _bounded_text(proposal.get("proposal_id"), limit=128),
-            "triggered_by": _bounded_text(proposal.get("triggered_by"), limit=64),
-            "signal_score": proposal.get("signal_score"),
-            "proposal_mode": _bounded_text(proposal.get("proposal_mode"), limit=64),
+            "proposal_sha256": hashlib.sha256(
+                _bounded_text(proposal.get("proposal_id"), limit=128).encode("utf-8")
+            ).hexdigest(),
+            "triggered_by": "catalog_capability_gap",
+            "proposal_mode": "reviewed_allowlist",
         },
     }
     validate_pack_schema(manifest)
@@ -263,7 +274,7 @@ def materialize_proposal(
     """Create a new source directory, refusing overwrite or path escape."""
 
     files = build_source_files(proposal)
-    package_id = str(proposal["employee_pack"]["name"])
+    package_id = _ALLOWLISTED_PACKAGE_ID
     version = str(proposal.get("target_version") or "1.0.0")
     source_rel = Path(PACK_FILES_PREFIX) / f"{package_id}@{version}"
     source_dir = (repo_root / source_rel).resolve()

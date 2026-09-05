@@ -3,8 +3,14 @@ from __future__ import annotations
 import json
 
 import pytest
-
-from modman.manifest_util import read_manifest, save_manifest_validated, write_manifest
+from modman.manifest_util import (
+    get_public_workflow_rows,
+    public_workflow_rows_field,
+    read_manifest,
+    save_manifest_validated,
+    set_public_workflow_rows,
+    write_manifest,
+)
 
 
 def _manifest() -> dict:
@@ -68,3 +74,26 @@ def test_public_manifest_round_trips_display_metadata_without_credentials(
     assert (
         json.loads((mod_dir / "manifest.json").read_text(encoding="utf-8")) == manifest
     )
+
+
+def test_public_workflow_field_helper_preserves_legacy_schema() -> None:
+    manifest = _manifest()
+    rows = [{"id": "invoice_helper", "label": "发票助手"}]
+
+    set_public_workflow_rows(manifest, rows)
+
+    assert public_workflow_rows_field() == "workflow_employees"
+    assert get_public_workflow_rows(manifest) == rows
+
+
+def test_public_workflow_rows_still_reject_nested_credentials(tmp_path) -> None:
+    manifest = _manifest()
+    set_public_workflow_rows(
+        manifest,
+        [{"id": "invoice_helper", "label": "发票助手", "api_key": "not-public"}],
+    )
+    mod_dir = tmp_path / manifest["id"]
+    mod_dir.mkdir()
+
+    with pytest.raises(ValueError, match="公共元数据"):
+        write_manifest(mod_dir, manifest)
