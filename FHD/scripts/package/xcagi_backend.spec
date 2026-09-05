@@ -27,6 +27,15 @@ def add_data(relative_path: str):
     return [(str(src), relative_path)]
 
 
+# Label PDFs embed their own CJK glyphs so readers/printers need no language pack.
+# A partial source export must fail before producing an installer with blank labels.
+for required_resource in (
+    "resources/fonts/NotoSansSC-Regular.ttf",
+    "resources/fonts/OFL-NotoSansSC.txt",
+):
+    if not (ROOT / required_resource).is_file():
+        raise FileNotFoundError(f"missing required label font resource: {required_resource}")
+
 datas = []
 binaries = []
 for item in [
