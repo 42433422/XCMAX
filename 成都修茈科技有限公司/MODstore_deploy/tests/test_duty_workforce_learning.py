@@ -1,11 +1,29 @@
 import json
 from pathlib import Path
 
+import pytest
+from cryptography.fernet import Fernet
+
 from modstore_server.duty_workforce_learning import (
     load_open_workforce_gaps,
     run_duty_workforce_learning,
 )
+from modstore_server.llm_crypto import decrypt_secret
 from modstore_server.self_evolution_knowledge import knowledge_inventory
+
+
+@pytest.fixture(autouse=True)
+def _artifact_encryption_key(monkeypatch):
+    monkeypatch.setenv("MODSTORE_LLM_MASTER_KEY", Fernet.generate_key().decode("ascii"))
+
+
+def _gap_events(path: Path) -> list[dict]:
+    events = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        envelope = json.loads(line)
+        assert envelope["schema"] == "xcagi.duty_workforce.capability_gap.encrypted/v1"
+        events.append(json.loads(decrypt_secret(envelope["ciphertext"])))
+    return events
 
 
 def _row(
@@ -69,6 +87,13 @@ def test_single_failure_is_gap_candidate_not_reusable_knowledge(monkeypatch, tmp
     ]
     assert open_gap["remediation"]["closure_event"] == ("later_strict_burnin_receipt_accepted")
     assert open_gap["remediation"]["auto_close"] is False
+    raw_ledger = gaps.read_text(encoding="utf-8")
+    assert "host-checker" not in raw_ledger
+    assert {event["record_type"] for event in _gap_events(gaps)} == {
+        "candidate",
+        "remediation_plan",
+    }
+    assert gaps.stat().st_mode & 0o777 == 0o600
     assert knowledge_inventory()["total"] == 0
 
 
@@ -195,7 +220,10 @@ def test_unrecognized_reason_text_is_not_copied_into_gap_ledger(monkeypatch, tmp
 
     text = gaps.read_text(encoding="utf-8")
     assert "must-not-copy" not in text
-    assert "programmatic_verification_failed" in text
+    assert "programmatic_verification_failed" not in text
+    events = _gap_events(gaps)
+    assert all("must-not-copy" not in json.dumps(event) for event in events)
+    assert "programmatic_verification_failed" in json.dumps(events)
 
 
 def test_later_accepted_receipt_closes_existing_gap(monkeypatch, tmp_path):
@@ -230,3 +258,74 @@ def test_later_accepted_receipt_closes_existing_gap(monkeypatch, tmp_path):
     assert second["remediation_plan_written_count"] == 0
     assert second["open_gap_count"] == 0
     assert load_open_workforce_gaps(path=gaps) == []
+
+
+def test_legacy_gap_ledger_is_migrated_before_learning(tmp_path):
+    audit = tmp_path / "burnin.jsonl"
+    audit.write_text("\n", encoding="utf-8")
+    gaps = tmp_path / "gaps.jsonl"
+    gaps.write_text(
+        json.dumps(
+            {
+                "schema": "xcagi.duty_workforce.capability_gap/v1",
+                "record_type": "candidate",
+                "gap_key": "a" * 64,
+                "employee_id": "host-checker",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = run_duty_workforce_learning(audit_path=audit, gap_path=gaps)
+
+    assert result["ok"] is True
+    assert "host-checker" not in gaps.read_text(encoding="utf-8")
+    assert _gap_events(gaps)[0]["employee_id"] == "host-checker"
+
+
+def test_gap_write_fails_closed_without_encryption_key(monkeypatch, tmp_path):
+    monkeypatch.delenv("MODSTORE_LLM_MASTER_KEY", raising=False)
+    audit = tmp_path / "burnin.jsonl"
+    gaps = tmp_path / "gaps.jsonl"
+    _write_audit(
+        audit,
+        [
+            _row(
+                employee_id="host-checker",
+                run_id="run-01",
+                accepted=False,
+                manifest="a" * 64,
+                contract="b" * 64,
+                reasons=["programmatic_verification_failed"],
+            )
+        ],
+    )
+
+    with pytest.raises(RuntimeError, match="MASTER_KEY"):
+        run_duty_workforce_learning(audit_path=audit, gap_path=gaps)
+
+    assert not gaps.exists()
+
+
+def test_gap_read_fails_closed_without_encryption_key(monkeypatch, tmp_path):
+    audit = tmp_path / "burnin.jsonl"
+    gaps = tmp_path / "gaps.jsonl"
+    _write_audit(
+        audit,
+        [
+            _row(
+                employee_id="host-checker",
+                run_id="run-01",
+                accepted=False,
+                manifest="a" * 64,
+                contract="b" * 64,
+                reasons=["programmatic_verification_failed"],
+            )
+        ],
+    )
+    run_duty_workforce_learning(audit_path=audit, gap_path=gaps)
+    monkeypatch.delenv("MODSTORE_LLM_MASTER_KEY", raising=False)
+
+    with pytest.raises(RuntimeError, match="MASTER_KEY"):
+        load_open_workforce_gaps(path=gaps)

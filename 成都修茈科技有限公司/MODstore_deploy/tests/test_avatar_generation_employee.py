@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import json
 from pathlib import Path
+
+from cryptography.fernet import Fernet
+
+from modstore_server.llm_crypto import decrypt_secret
 
 ROOT = Path(__file__).resolve().parents[1]
 EMPLOYEE_ENTRY = (
@@ -23,7 +28,8 @@ def _load_employee_module():
     return module
 
 
-def test_avatar_generation_employee_covers_all_human_avatar_types(tmp_path: Path):
+def test_avatar_generation_employee_covers_all_human_avatar_types(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("MODSTORE_LLM_MASTER_KEY", Fernet.generate_key().decode("ascii"))
     module = _load_employee_module()
     result = asyncio.run(
         module.run(
@@ -58,10 +64,19 @@ def test_avatar_generation_employee_covers_all_human_avatar_types(tmp_path: Path
     assert profile["prompt_preset"]["id"] == "xiaoc_human_aquatic"
     assert "human-like" in profile["prompt_en"]
     assert "no animal face" in profile["prompt_en"]
-    assert (tmp_path / "outputs" / "avatar_profile.json").is_file()
+    output_path = tmp_path / "outputs" / "avatar_profile.json"
+    assert output_path.is_file()
+    envelope = json.loads(output_path.read_text(encoding="utf-8"))
+    assert envelope["schema"] == "xcagi.avatar_profile.encrypted/v1"
+    persisted = json.loads(decrypt_secret(envelope["ciphertext"]))
+    assert persisted["profile"]["employee_name"] == "小 C 助理"
+    assert "小 C 助理" not in output_path.read_text(encoding="utf-8")
+    assert output_path.stat().st_mode & 0o777 == 0o600
+    assert payload["outputs"]["profile_json_encrypted"] is True
 
 
-def test_avatar_generation_employee_presets_batch_avatar_sheet(tmp_path: Path):
+def test_avatar_generation_employee_presets_batch_avatar_sheet(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("MODSTORE_LLM_MASTER_KEY", Fernet.generate_key().decode("ascii"))
     module = _load_employee_module()
     result = asyncio.run(
         module.run(
@@ -86,7 +101,8 @@ def test_avatar_generation_employee_presets_batch_avatar_sheet(tmp_path: Path):
     }
 
 
-def test_avatar_generation_rejects_payload_selected_output_escape(tmp_path: Path):
+def test_avatar_generation_rejects_payload_selected_output_escape(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("MODSTORE_LLM_MASTER_KEY", Fernet.generate_key().decode("ascii"))
     module = _load_employee_module()
     outside = tmp_path.parent / "avatar-escape.json"
 
@@ -104,3 +120,19 @@ def test_avatar_generation_rejects_payload_selected_output_escape(tmp_path: Path
     assert result["ok"] is False
     assert "employee workspace" in result["error"]
     assert not outside.exists()
+
+
+def test_avatar_generation_fails_closed_without_encryption_key(tmp_path: Path, monkeypatch):
+    monkeypatch.delenv("MODSTORE_LLM_MASTER_KEY", raising=False)
+    module = _load_employee_module()
+
+    result = asyncio.run(
+        module.run(
+            {"generate_image": False},
+            {"workspace_root": str(tmp_path)},
+        )
+    )
+
+    assert result["ok"] is False
+    assert "MASTER_KEY" in result["error"]
+    assert not (tmp_path / "outputs" / "avatar_profile.json").exists()

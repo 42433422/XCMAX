@@ -31,6 +31,20 @@ def _verifier_module():
     return module
 
 
+def test_daily_workflow_uses_private_authenticated_prometheus_tunnel() -> None:
+    workflow = (
+        Path(__file__).resolve().parents[2] / ".github" / "workflows" / "slo-metrics-collect.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "Open authenticated production Prometheus SSH tunnel" in workflow
+    assert "-L 127.0.0.1:19091:127.0.0.1:9091" in workflow
+    assert 'test "$PRODUCTION_PROMETHEUS_URL" = "http://127.0.0.1:19091"' in workflow
+    assert "PRODUCTION_PROMETHEUS_TOKEN" in workflow
+    assert "NO_PROXY: 127.0.0.1,localhost" in workflow
+    assert "Close production Prometheus SSH tunnel" in workflow
+    assert "seed" not in workflow.lower()
+
+
 def test_missing_production_source_writes_fail_closed_evidence(tmp_path: Path) -> None:
     mod = _module()
     output = tmp_path / "evidence" / "one.json"
@@ -52,6 +66,31 @@ def test_missing_production_source_writes_fail_closed_evidence(tmp_path: Path) -
     assert payload["day0_eligible"] is False
     assert all(row["passes"] is False for row in payload["readings"].values())
     assert json.loads(output.read_text())["all_pass"] is False
+
+
+def test_reachable_source_with_empty_metrics_is_available_but_not_eligible(
+    tmp_path: Path, monkeypatch
+) -> None:
+    mod = _module()
+    monkeypatch.setattr(mod, "prom_query", lambda *_args, **_kwargs: None)
+
+    payload, passed = mod.collect(
+        prom_url="https://prometheus.example.invalid",
+        prom_token="prod-token",
+        window="1d",
+        mode="preflight",
+        release_id="",
+        raw_retention_days=120,
+        out_path=tmp_path / "empty.json",
+        now=datetime(2026, 9, 4, tzinfo=UTC),
+    )
+
+    assert passed is False
+    assert payload["source_status"] == "available"
+    assert payload["source_errors"] == []
+    assert payload["coverage"] == 0
+    assert payload["day0_eligible"] is False
+    assert "SLO-AI-01:empty_reading" in payload["errors"]
 
 
 def test_real_samples_are_required_and_evidence_is_hash_chained(
@@ -131,6 +170,19 @@ def test_slo_evidence_never_overwrites_existing_record(tmp_path: Path) -> None:
         assert "refusing to overwrite" in str(exc)
     else:
         raise AssertionError("existing evidence was overwritten")
+
+
+def test_hash_chain_ignores_unrelated_json_values(tmp_path: Path) -> None:
+    mod = _module()
+    evidence_dir = tmp_path / "evidence"
+    evidence_dir.mkdir()
+    (evidence_dir / "newer-unrelated.json").write_text('["not", "evidence"]\n')
+    expected_hash = "a" * 64
+    (evidence_dir / "older-evidence.json").write_text(
+        json.dumps({"chain_hash": expected_hash}) + "\n"
+    )
+
+    assert mod._latest_chain_hash(evidence_dir) == expected_hash
 
 
 def test_backfill_requires_reason_and_stays_within_24_hours(tmp_path: Path) -> None:

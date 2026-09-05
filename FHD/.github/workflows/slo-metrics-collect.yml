@@ -84,6 +84,41 @@ jobs:
             exit 1
           }
 
+      - name: Open authenticated production Prometheus SSH tunnel
+        id: prometheus_tunnel
+        continue-on-error: true
+        env:
+          FHD_PUSH_HOST: ${{ secrets.FHD_PUSH_HOST }}
+          FHD_PUSH_USER: ${{ secrets.FHD_PUSH_USER }}
+          FHD_PUSH_SSH_KEY_RAW: ${{ secrets.FHD_PUSH_SSH_KEY }}
+          PRODUCTION_PROMETHEUS_URL: ${{ secrets.PRODUCTION_PROMETHEUS_URL }}
+          PRODUCTION_PROMETHEUS_TOKEN: ${{ secrets.PRODUCTION_PROMETHEUS_TOKEN }}
+          NO_PROXY: 127.0.0.1,localhost
+        run: |
+          set -euo pipefail
+          test -n "${FHD_PUSH_HOST:-}"
+          test -n "${FHD_PUSH_SSH_KEY_RAW:-}"
+          test -n "${PRODUCTION_PROMETHEUS_URL:-}"
+          test -n "${PRODUCTION_PROMETHEUS_TOKEN:-}"
+          test "$PRODUCTION_PROMETHEUS_URL" = "http://127.0.0.1:19091"
+          key_file="${RUNNER_TEMP}/fhd_prometheus_metrics_key"
+          control_socket="${RUNNER_TEMP}/fhd_prometheus_metrics_ssh"
+          printf '%s\n' "$FHD_PUSH_SSH_KEY_RAW" > "$key_file"
+          chmod 600 "$key_file"
+          ssh -i "$key_file" \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=30 \
+            -o ExitOnForwardFailure=yes \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=3 \
+            -M -S "$control_socket" -fN \
+            -L 127.0.0.1:19091:127.0.0.1:9091 \
+            "${FHD_PUSH_USER:-root}@${FHD_PUSH_HOST}"
+          echo "PROMETHEUS_SSH_CONTROL=$control_socket" >> "$GITHUB_ENV"
+          curl -fsS --retry 3 --connect-timeout 5 --max-time 15 \
+            -H "Authorization: Bearer ${PRODUCTION_PROMETHEUS_TOKEN}" \
+            "${PRODUCTION_PROMETHEUS_URL}/-/ready" >/dev/null
+
       - name: Collect SLO from Prometheus
         id: slo_collect
         continue-on-error: true
@@ -91,6 +126,7 @@ jobs:
           PRODUCTION_PROMETHEUS_URL: ${{ secrets.PRODUCTION_PROMETHEUS_URL }}
           PRODUCTION_PROMETHEUS_TOKEN: ${{ secrets.PRODUCTION_PROMETHEUS_TOKEN }}
           PRODUCTION_PROMETHEUS_RETENTION_DAYS: ${{ vars.PRODUCTION_PROMETHEUS_RETENTION_DAYS }}
+          NO_PROXY: 127.0.0.1,localhost
         run: |
           set -uo pipefail
           args=(
@@ -105,6 +141,18 @@ jobs:
             )
           fi
           python3 scripts/observability/collect_slo_metrics.py "${args[@]}"
+
+      - name: Close production Prometheus SSH tunnel
+        if: always() && steps.prometheus_tunnel.outcome == 'success'
+        continue-on-error: true
+        env:
+          FHD_PUSH_HOST: ${{ secrets.FHD_PUSH_HOST }}
+          FHD_PUSH_USER: ${{ secrets.FHD_PUSH_USER }}
+        run: |
+          set -euo pipefail
+          test -n "${PROMETHEUS_SSH_CONTROL:-}"
+          ssh -S "$PROMETHEUS_SSH_CONTROL" -O exit \
+            "${FHD_PUSH_USER:-root}@${FHD_PUSH_HOST}"
 
       - name: Fetch authoritative production deploy events
         id: dora_source

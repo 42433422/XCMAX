@@ -10,6 +10,7 @@ non-secret fields (employee IDs, run IDs, hashes, statuses and reason codes).
 from __future__ import annotations
 
 import json
+import os
 import threading
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
@@ -24,12 +25,88 @@ from modstore_server.duty_workforce_evidence import resolved_pairs as _resolved_
 from modstore_server.duty_workforce_evidence import (
     workforce_gap_path,
 )
+from modstore_server.llm_crypto import decrypt_secret, encrypt_secret
 from modstore_server.self_evolution_knowledge import (
     kb_root,
     record_code_pattern,
 )
 
 _RUN_LOCK = threading.Lock()
+_ENCRYPTED_GAP_SCHEMA = "xcagi.duty_workforce.capability_gap.encrypted/v1"
+
+
+def _decode_gap_event(payload: Any) -> tuple[Optional[Dict[str, Any]], bool]:
+    if not isinstance(payload, dict):
+        return None, False
+    if payload.get("schema") != _ENCRYPTED_GAP_SCHEMA:
+        return payload, True
+    ciphertext = str(payload.get("ciphertext") or "").strip()
+    if not ciphertext:
+        return None, False
+    try:
+        decoded = json.loads(decrypt_secret(ciphertext))
+    except RuntimeError:
+        raise
+    except (ValueError, json.JSONDecodeError) as exc:
+        raise ValueError("invalid encrypted workforce gap ledger event") from exc
+    return (decoded, False) if isinstance(decoded, dict) else (None, False)
+
+
+def _load_gap_events(path: Path) -> tuple[list[Dict[str, Any]], bool]:
+    if not path.exists():
+        return [], False
+    events: list[Dict[str, Any]] = []
+    legacy_found = False
+    try:
+        with path.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                try:
+                    raw = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                event, legacy = _decode_gap_event(raw)
+                if event is not None:
+                    events.append(event)
+                    legacy_found = legacy_found or legacy
+    except OSError:
+        return [], False
+    return events, legacy_found
+
+
+def _encrypted_gap_line(payload: Dict[str, Any]) -> str:
+    plaintext = json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    envelope = {
+        "schema": _ENCRYPTED_GAP_SCHEMA,
+        "ciphertext": encrypt_secret(plaintext),
+    }
+    return json.dumps(envelope, ensure_ascii=True, sort_keys=True) + "\n"
+
+
+def _append_gap_event(path: Path, payload: Dict[str, Any]) -> None:
+    encrypted_line = _encrypted_gap_line(payload)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    with os.fdopen(fd, "a", encoding="utf-8") as fh:
+        fh.write(encrypted_line)
+    path.chmod(0o600)
+
+
+def _migrate_legacy_gap_ledger(path: Path) -> None:
+    events, legacy_found = _load_gap_events(path)
+    if not legacy_found:
+        return
+    encrypted_lines = [_encrypted_gap_line(event) for event in events]
+    tmp = path.with_suffix(path.suffix + ".encrypted.tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.writelines(encrypted_lines)
+    tmp.replace(path)
+    path.chmod(0o600)
 
 
 def _existing_learning_keys() -> set[str]:
@@ -51,21 +128,12 @@ def _existing_learning_keys() -> set[str]:
 
 
 def _existing_gap_keys(path: Path) -> set[str]:
-    if not path.exists():
-        return set()
     keys: set[str] = set()
-    try:
-        with path.open("r", encoding="utf-8") as fh:
-            for line in fh:
-                try:
-                    payload = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                key = str(payload.get("gap_key") or "") if isinstance(payload, dict) else ""
-                if key:
-                    keys.add(key)
-    except OSError:
-        return set()
+    events, _legacy_found = _load_gap_events(path)
+    for payload in events:
+        key = str(payload.get("gap_key") or "")
+        if key:
+            keys.add(key)
     return keys
 
 
@@ -105,9 +173,7 @@ def _append_gap_candidates(
             "gap_key": gap_key,
             **evidence,
         }
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
+        _append_gap_event(path, payload)
         existing.add(gap_key)
         written += 1
     return written, skipped
@@ -149,29 +215,18 @@ def _gap_ledger_state(
     candidates: Dict[str, Dict[str, Any]] = {}
     resolved: set[str] = set()
     planned: set[str] = set()
-    if not path.exists():
-        return candidates, resolved, planned
-    try:
-        with path.open("r", encoding="utf-8") as fh:
-            for line in fh:
-                try:
-                    payload = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if not isinstance(payload, dict):
-                    continue
-                gap_key = str(payload.get("gap_key") or "").strip()
-                if not gap_key:
-                    continue
-                record_type = str(payload.get("record_type") or "candidate").strip()
-                if record_type == "resolved":
-                    resolved.add(gap_key)
-                elif record_type == "remediation_plan":
-                    planned.add(gap_key)
-                elif record_type == "candidate":
-                    candidates[gap_key] = payload
-    except OSError:
-        return {}, set(), set()
+    events, _legacy_found = _load_gap_events(path)
+    for payload in events:
+        gap_key = str(payload.get("gap_key") or "").strip()
+        if not gap_key:
+            continue
+        record_type = str(payload.get("record_type") or "candidate").strip()
+        if record_type == "resolved":
+            resolved.add(gap_key)
+        elif record_type == "remediation_plan":
+            planned.add(gap_key)
+        elif record_type == "candidate":
+            candidates[gap_key] = payload
     return candidates, resolved, planned
 
 
@@ -232,9 +287,7 @@ def _append_gap_resolutions(pairs: Iterable[Dict[str, Any]], path: Path) -> tupl
                 "accepted_run_id": accepted["run_id"],
                 "resolution": "later_strict_burnin_receipt_accepted",
             }
-            path.parent.mkdir(parents=True, exist_ok=True)
-            with path.open("a", encoding="utf-8") as fh:
-                fh.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
+            _append_gap_event(path, payload)
             resolved.add(gap_key)
             written += 1
     return written, skipped
@@ -261,9 +314,7 @@ def _append_gap_remediation_plans(path: Path) -> tuple[int, int]:
             "employee_id": employee_id,
             "plan_sha256": _canonical_sha256(plan),
         }
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
+        _append_gap_event(path, payload)
         planned.add(gap_key)
         written += 1
     return written, skipped
@@ -369,6 +420,7 @@ def run_duty_workforce_learning(
                 "schema": "xcagi.duty_workforce.learning/v1",
                 "audit_path": str(source),
             }
+        _migrate_legacy_gap_ledger(gaps)
         pairs, unresolved = _resolved_pairs(rows)
         gap_written, gap_skipped = _append_gap_candidates(unresolved, gaps)
         resolution_written, resolution_skipped = _append_gap_resolutions(pairs, gaps)
