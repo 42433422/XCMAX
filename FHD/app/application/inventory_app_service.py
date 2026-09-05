@@ -16,6 +16,18 @@ class InventoryAppService:
     def get_inventory(self, **kwargs: Any) -> dict:
         return self._facade.get_inventory(**kwargs)
 
+    def export_inventory(self, **filters: Any) -> dict:
+        from app.application.inventory_export import render_inventory_workbook
+
+        result = self._facade.get_inventory_export(**filters)
+        if not result.get("success"):
+            return result
+        return {
+            "success": True,
+            "total": result["total"],
+            "content": render_inventory_workbook(result["data"]),
+        }
+
     def get_inventory_summary(self, warehouse_id: int | None = None) -> dict:
         return self._facade.get_inventory_summary(warehouse_id=warehouse_id)
 

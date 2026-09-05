@@ -5,11 +5,15 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Any
+from urllib.parse import quote
 
 from fastapi import APIRouter, Body, Query, Request
+from fastapi.responses import JSONResponse, Response
 
 from app.application.workflow.types import normalize_workflow_risk
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -131,8 +135,9 @@ def inventory_list(
     warehouse_id: int | None = Query(default=None),
     product_id: int | None = Query(default=None),
     batch_no: str | None = Query(default=None),
-    page: int = Query(default=1),
-    per_page: int = Query(default=50),
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=50, ge=1, le=1000),
+    keyword: str | None = Query(default=None, max_length=200),
 ):
     return _svc().get_inventory(
         warehouse_id=warehouse_id,
@@ -140,7 +145,48 @@ def inventory_list(
         batch_no=batch_no,
         page=page,
         per_page=per_page,
+        keyword=keyword,
     )
+
+
+@router.get("/api/inventory/export.xlsx", response_class=Response)
+def inventory_export(
+    warehouse_id: int | None = Query(default=None, ge=1),
+    product_id: int | None = Query(default=None, ge=1),
+    batch_no: str | None = Query(default=None, max_length=50),
+    keyword: str | None = Query(default=None, max_length=200),
+):
+    try:
+        result = _svc().export_inventory(
+            warehouse_id=warehouse_id,
+            product_id=product_id,
+            batch_no=batch_no,
+            keyword=keyword,
+        )
+        if not result.get("success"):
+            status = 413 if result.get("error_code") == "INVENTORY_EXPORT_LIMIT" else 404
+            return JSONResponse(result, status_code=status, headers={"Cache-Control": "no-store"})
+        filename = f"库存明细-{datetime.now():%Y%m%d-%H%M%S}.xlsx"
+        return Response(
+            result["content"],
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f"attachment; filename=inventory.xlsx; filename*=UTF-8''{quote(filename)}",
+                "X-Inventory-Row-Count": str(result["total"]),
+                "Cache-Control": "no-store",
+            },
+        )
+    except RECOVERABLE_ERRORS:
+        logger.exception("Inventory workbook export failed")
+        return JSONResponse(
+            {
+                "success": False,
+                "error_code": "INVENTORY_EXPORT_FAILED",
+                "message": "库存导出失败，请稍后重试。",
+            },
+            status_code=500,
+            headers={"Cache-Control": "no-store"},
+        )
 
 
 @router.get("/api/inventory/summary")
