@@ -87,6 +87,7 @@ LEGACY_STAGE: dict[str, tuple[str, ...]] = {
     "enterprise": (
         "xcagi-planner-bridge",
         "xcagi-erp-domain-bridge",
+        "xcagi-workflow-visualization-bridge",
         "xcagi-core-workflow-employees",
         "xcagi-approval-bridge",
         "xcagi-lan-license-bridge",

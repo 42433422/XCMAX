@@ -6,6 +6,14 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def test_enterprise_bundle_covers_required_host_bridges():
+    base = json.loads((ROOT / "config/host_profiles/_base.json").read_text())
+    enterprise = json.loads((ROOT / "config/host_profiles/enterprise.json").read_text())
+    required = set(base["generic_host_mod_ids"])
+    assert required <= set(enterprise["package_stage_ids"])
+    assert required <= set(enterprise["sku_bundled_mod_ids"])
+
+
 def test_profile_stage_lists_only_existing_modules():
     for sku in ("personal", "enterprise"):
         profile = json.loads((ROOT / f"config/host_profiles/{sku}.json").read_text())
