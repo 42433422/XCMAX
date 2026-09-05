@@ -9,6 +9,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+_TEST_JWT_SECRET = "jwt-test-secret-" + ("x" * 32)
+
 
 def _reset_sqlalchemy_globals() -> None:
     import modstore_server.models as m
@@ -26,7 +28,7 @@ def admin_client(tmp_path, monkeypatch):
     monkeypatch.setenv("MODSTORE_DB_PATH", str(db))
     monkeypatch.setenv("MODSTORE_REPO_ROOT", str(tmp_path))
     monkeypatch.setenv("MODSTORE_AUTO_APPROVE_ENABLED", "0")
-    monkeypatch.setenv("MODSTORE_JWT_SECRET", "pytest-default-secret-at-least-32-characters")
+    monkeypatch.setenv("MODSTORE_JWT_SECRET", _TEST_JWT_SECRET)
     monkeypatch.setenv("MODSTORE_DISABLE_CSRF", "1")
 
     from modstore_server.api.deps import require_admin

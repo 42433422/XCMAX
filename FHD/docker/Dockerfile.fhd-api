@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # 生产镜像用 server-api 锁定依赖。其 LangGraph 条目指向仓库内受管源码，
 # 构建 wheels 前必须把这些本地项目放进与 requirements 相同的相对路径。
-COPY deploy/requirements-server-api.txt requirements.txt
+COPY requirements-server-api.txt requirements.txt
 COPY packages /build/packages
 
 RUN --mount=type=cache,target=/root/.cache/pip \

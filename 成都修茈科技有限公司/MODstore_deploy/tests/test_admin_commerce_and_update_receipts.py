@@ -30,6 +30,7 @@ def _user(db, *, admin: bool):
 def test_update_install_receipt_is_idempotent_and_summarizes_latest_device(client):
     from modstore_server.api.app_factory import _iter_route_method_signatures
     from modstore_server.app import app
+    from modstore_server.metrics import MOD_INSTALL_TOTAL
     from modstore_server.models import get_session_factory
     from modstore_server.update_installation_api import (
         UpdateInstallationReceiptBody,
@@ -56,11 +57,16 @@ def test_update_install_receipt_is_idempotent_and_summarizes_latest_device(clien
             status="installed",
             reported_at=datetime.now(UTC) - timedelta(minutes=1),
         )
+        success_metric = MOD_INSTALL_TOTAL.labels("install", "success", "external_customer")
+        error_metric = MOD_INSTALL_TOTAL.labels("install", "error", "external_customer")
+        success_before = success_metric._value.get()
+        error_before = error_metric._value.get()
         created = record_update_installation_receipt(first, db, user)
         assert created["ok"] is True
         assert created["duplicate"] is False
         replay = record_update_installation_receipt(first, db, user)
         assert replay["duplicate"] is True
+        assert success_metric._value.get() == success_before + 1
         failed = UpdateInstallationReceiptBody(
             installation_id=installation_id,
             idempotency_key=f"install-{uuid.uuid4().hex}",
@@ -73,6 +79,7 @@ def test_update_install_receipt_is_idempotent_and_summarizes_latest_device(clien
             reported_at=datetime.now(UTC),
         )
         record_update_installation_receipt(failed, db, user)
+        assert error_metric._value.get() == error_before + 1
         listed = list_update_installation_receipts(target_sha, 200, db, admin)
         assert len(listed["items"]) == 2
         assert listed["summary"] == {

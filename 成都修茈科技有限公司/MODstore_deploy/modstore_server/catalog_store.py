@@ -151,16 +151,10 @@ def package_manifest_alignment_errors(record: Dict[str, Any], archive_path: Path
     """
     import logging as _logging
     import shutil as _shutil
-    import traceback as _tb
     import zipfile as _zipfile
 
     _LOG_ALIGN = _logging.getLogger(__name__)
-    _LOG_ALIGN.warning(
-        "package_manifest_alignment_errors called: record.id=%s archive=%s caller=%s",
-        record.get("id"),
-        archive_path,
-        "".join(_tb.format_stack(limit=6)[-4:-1]).replace("\n", " | ")[:500],
-    )
+    _LOG_ALIGN.info("package manifest alignment check started")
     if not archive_path.is_file():
         return ["包文件不存在，无法校验 manifest 对齐"]
     inner = read_package_manifest_from_zip(archive_path)
@@ -183,12 +177,7 @@ def package_manifest_alignment_errors(record: Dict[str, Any], archive_path: Path
         if isinstance(inner.get("employee"), dict):
             emp_id = norm_pkg_id(inner["employee"].get("id"))
             if expected_id and emp_id and expected_id != emp_id:
-                _LOG_ALIGN.warning(
-                    "AUTO-REPAIR: fixing employee.id %s -> %s in zip %s",
-                    emp_id,
-                    expected_id,
-                    archive_path,
-                )
+                _LOG_ALIGN.warning("AUTO-REPAIR: employee id mismatch repaired")
                 inner["employee"]["id"] = expected_id
                 _needs_repair = True
         wf_rows = inner.get("workflow_employees")
@@ -199,11 +188,8 @@ def package_manifest_alignment_errors(record: Dict[str, Any], archive_path: Path
                 wf_id = norm_pkg_id(row.get("id"))
                 if expected_id and wf_id and expected_id != wf_id:
                     _LOG_ALIGN.warning(
-                        "AUTO-REPAIR: fixing workflow_employees[%d].id %s -> %s in zip %s",
+                        "AUTO-REPAIR: workflow employee id mismatch repaired at index %d",
                         idx,
-                        wf_id,
-                        expected_id,
-                        archive_path,
                     )
                     row["id"] = expected_id
                     _needs_repair = True
@@ -231,9 +217,9 @@ def package_manifest_alignment_errors(record: Dict[str, Any], archive_path: Path
                             for _n in _other_entries:
                                 _zw.writestr(_n, _zr.read(_n))
                     _shutil.move(str(_tmp_path), str(archive_path))
-                    _LOG_ALIGN.info("AUTO-REPAIR: zip rewritten successfully %s", archive_path)
+                    _LOG_ALIGN.info("AUTO-REPAIR: package archive rewritten successfully")
             except RECOVERABLE_ERRORS as _repair_exc:
-                _LOG_ALIGN.error("AUTO-REPAIR failed for %s: %s", archive_path, _repair_exc)
+                _LOG_ALIGN.error("AUTO-REPAIR failed (%s)", type(_repair_exc).__name__)
 
     return errors
 
@@ -341,7 +327,10 @@ def append_package(record: Dict[str, Any], src_file: Path | None) -> Dict[str, A
     if src_file is not None and src_file.is_file():
         fd = files_dir()
         ext = src_file.suffix.lower() or ".xcmod"
-        dest = fd / f"{pid}-{ver}{ext}"
+        if ext not in {".xcemp", ".xcmod", ".zip"}:
+            ext = ".xcmod"
+        storage_id = hashlib.sha256(f"{pid}\0{ver}".encode("utf-8")).hexdigest()
+        dest = fd / f"package_{storage_id}{ext}"
         shutil.copy2(src_file, dest)
         rec["sha256"] = sha256_file(dest)
         rec["file_size"] = dest.stat().st_size

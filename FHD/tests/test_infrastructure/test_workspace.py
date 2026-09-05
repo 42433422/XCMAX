@@ -7,6 +7,8 @@ import pytest
 from app.infrastructure.workspace import (
     allocate_generated_workspace_file,
     resolve_existing_file_under_root,
+    resolve_safe_workspace_relpath,
+    traditional_resolve_path,
 )
 
 
@@ -76,3 +78,13 @@ def test_allocate_generated_workspace_file_rejects_unknown_kind(
 
     with pytest.raises(ValueError, match="unsupported workspace file kind"):
         allocate_generated_workspace_file("../../caller-selected")
+
+
+@pytest.mark.parametrize("resolver", [resolve_safe_workspace_relpath, traditional_resolve_path])
+def test_workspace_resolvers_reject_normalized_escape(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, resolver
+) -> None:
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+
+    with pytest.raises(Exception, match="invalid path"):
+        resolver("nested/../../outside.txt")

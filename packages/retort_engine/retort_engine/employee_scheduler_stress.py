@@ -13,6 +13,7 @@ from typing import Any, cast
 
 from retort_engine.history import RetortHistoryStore
 from retort_engine.models import EmployeeTaskRecord, ImprovementTask
+from retort_engine.secure_artifacts import read_private_json, write_private_json
 
 DEFAULT_DIMENSIONS = (
     "comparative_analysis_depth",
@@ -88,10 +89,7 @@ def run_employee_scheduler_stress(
                 "history_store": str(history_path),
                 "output_path": str(result_path),
             }
-            payload_path.write_text(
-                json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
-                encoding="utf-8",
-            )
+            write_private_json(payload_path, payload)
             payloads.append(
                 {
                     "worker_index": worker_index,
@@ -407,8 +405,8 @@ def _result_task_ids(result_dir: Path, run_id: str) -> list[str]:
     task_ids: list[str] = []
     for path in sorted(result_dir.glob(f"{run_id}-round-*.json")):
         try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+            payload = read_private_json(path)
+        except (OSError, RuntimeError):
             continue
         for item in payload.get("results") or []:
             if isinstance(item, dict) and item.get("status") == "completed":

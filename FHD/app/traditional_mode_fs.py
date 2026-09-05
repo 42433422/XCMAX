@@ -59,10 +59,14 @@ def resolve_path_under_root(root: str, relative_path: str = "") -> str | None:
     root_path = os.path.realpath(os.path.abspath(os.path.expanduser(root)))
     candidate = os.path.realpath(os.path.abspath(os.path.join(root_path, fragment)))
     try:
-        common = os.path.commonpath((root_path, candidate))
+        if os.path.commonpath((root_path, candidate)) != root_path:
+            return None
     except ValueError:
         return None
-    return candidate if common == root_path else None
+    root_prefix = root_path.rstrip(os.sep) + os.sep
+    if candidate != root_path and not candidate.startswith(root_prefix):
+        return None
+    return candidate
 
 
 def resolve_safe_path(relative_path: str = "") -> str | None:

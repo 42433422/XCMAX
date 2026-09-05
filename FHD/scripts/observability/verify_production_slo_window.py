@@ -69,6 +69,7 @@ def verify_window(
             and payload.get("release_id") == release_id
             and payload.get("source_status") == "available"
             and float(payload.get("coverage") or 0) >= 0.99
+            and float(payload.get("scrape_coverage") or 0) >= 0.99
             and payload.get("day0_eligible") is True
         ):
             formal_by_day[day] = payload

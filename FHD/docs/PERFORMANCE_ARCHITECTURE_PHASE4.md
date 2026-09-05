@@ -4,7 +4,7 @@
 
 ## API / Worker 分离
 
-- **主 API 进程**：沿用 `deploy/requirements-server-api.txt`，不 import `torch` / 重型 OCR。
+- **主 API 进程**：沿用 `requirements-server-api.txt`，不 import `torch` / 重型 OCR。
 - **Sidecar**：BERT 意图、训练、重 OCR 独立进程；主 API 经 HTTP/队列调用。
 - **桌面包**：PyInstaller 仅打包 enterprise 白名单 Mod；重模型走 `desktop/models` 按需下载。
 

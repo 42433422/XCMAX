@@ -298,8 +298,8 @@ def enrich_perception_with_classification(
             ni = {}
             perceived["normalized_input"] = ni
         ni["_task_classification"] = classification
-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
-        logger.debug("task_classifier enrich failed employee_id=%s err=%s", employee_id, exc)
+    except BOUNDARY_ERRORS:  # noqa: BLE001
+        logger.debug("task classifier enrichment failed")
 
 
 __all__ = ["classify_task", "enrich_perception_with_classification"]

@@ -28,6 +28,12 @@ from app.mod_sdk.employee_specialized_tools import (  # noqa: E402
     handle_specialized,
 )
 
+
+def _fake_api_key(label: str = "test") -> str:
+    """Build a secret-shaped test value without committing a token literal."""
+    return "sk-" + label + ("x" * 24)
+
+
 # ---------------------------------------------------------------------------
 # 全局变量隔离 fixture
 # ---------------------------------------------------------------------------
@@ -130,7 +136,7 @@ class TestMaskSecret:
 
     def test_normal_key_masked(self):
         """正常长度的 key 保留前 3 + 后 3。"""
-        assert _mask_secret("sk-a8m2xbs0jbqbgw9ex6st8o7u4zmqa8jz") == "sk-***8jz"
+        assert _mask_secret(_fake_api_key("mask")) == "sk-***xxx"
 
     def test_short_key_fully_masked(self):
         """短 key 全脱敏。"""
@@ -152,14 +158,14 @@ class TestReadEnvFile:
         """能读取一个有内容的 .env 文件（自洽，不依赖仓库根的真实 .env）。"""
         env_path = tmp_path / ".env"
         env_path.write_text(
-            "XCAGI_LLM_PROVIDER=openai\nOPENAI_API_KEY=sk-test1234567890\n",
+            f"XCAGI_LLM_PROVIDER=openai\nOPENAI_API_KEY={_fake_api_key()}\n",
             encoding="utf-8",
         )
         env_map = _read_env_file(env_path)
         assert isinstance(env_map, dict)
         assert len(env_map) > 0, ".env 应该有内容"
         assert env_map["XCAGI_LLM_PROVIDER"] == "openai"
-        assert env_map["OPENAI_API_KEY"] == "sk-test1234567890"
+        assert env_map["OPENAI_API_KEY"] == _fake_api_key()
 
     def test_skips_comments_and_empty_lines(self):
         """跳过注释和空行。"""
@@ -213,7 +219,7 @@ class TestReadLlmEnvConfig:
         env_path = tmp_path / ".env"
         env_path.write_text(
             "XCAGI_LLM_PROVIDER=openai\n"
-            "OPENAI_API_KEY=sk-a8m2xbs0jbqbgw9ex6st8o7u4zmqa8jz\n"
+            f"OPENAI_API_KEY={_fake_api_key('mask')}\n"
             "OPENAI_BASE_URL=https://api.b.ai/v1\n"
             "OPENAI_MODEL=MiniMax-M3\n",
             encoding="utf-8",
@@ -240,7 +246,7 @@ class TestReadLlmEnvConfig:
             for key, val in cfg.items():
                 if "API_KEY" in key or "PAT" in key:
                     if val:
-                        assert "sk-a8m2" not in val, f"{key} 未脱敏: {val}"
+                        assert _fake_api_key("mask") not in val, f"{key} 未脱敏: {val}"
                         assert "***" in val, f"{key} 缺少脱敏标记: {val}"
 
     def test_returns_configured_provider(self):
@@ -262,7 +268,7 @@ class TestListConfiguredProviders:
 
     def test_lists_openai_provider_when_configured(self, monkeypatch):
         """配了 OPENAI_API_KEY 时列出 openai provider。"""
-        monkeypatch.setenv("OPENAI_API_KEY", "sk-test1234567890abcdef")
+        monkeypatch.setenv("OPENAI_API_KEY", _fake_api_key())
         monkeypatch.setenv("OPENAI_BASE_URL", "https://api.b.ai/v1")
         monkeypatch.setenv("OPENAI_MODEL", "MiniMax-M3")
         fn = TOOL_REGISTRY["list_configured_providers"]
@@ -277,7 +283,7 @@ class TestListConfiguredProviders:
 
     def test_api_key_masked_in_provider_list(self, monkeypatch):
         """provider 列表中的 api_key 必须脱敏（跳过 no_auth 的 ollama）。"""
-        monkeypatch.setenv("OPENAI_API_KEY", "sk-a8m2xbs0jbqbgw9ex6st8o7u4zmqa8jz")
+        monkeypatch.setenv("OPENAI_API_KEY", _fake_api_key("mask"))
         fn = TOOL_REGISTRY["list_configured_providers"]
         result = asyncio.get_event_loop().run_until_complete(fn({}, {}))
         for p in result["providers"]:
@@ -326,10 +332,10 @@ class TestListConfiguredProviders:
 
     def test_lists_multiple_providers(self, monkeypatch):
         """配了多个 provider key 时列出多家。"""
-        monkeypatch.setenv("OPENAI_API_KEY", "sk-test1234567890")
+        monkeypatch.setenv("OPENAI_API_KEY", _fake_api_key())
         monkeypatch.setenv("OPENAI_BASE_URL", "https://api.b.ai/v1")
-        monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-ds1234567890")
-        monkeypatch.setenv("DASHSCOPE_API_KEY", "sk-qwen1234567890")
+        monkeypatch.setenv("DEEPSEEK_API_KEY", _fake_api_key("deepseek"))
+        monkeypatch.setenv("DASHSCOPE_API_KEY", _fake_api_key("qwen"))
         fn = TOOL_REGISTRY["list_configured_providers"]
         result = asyncio.get_event_loop().run_until_complete(fn({}, {}))
         assert result["ok"] is True
@@ -455,9 +461,9 @@ class TestQueryProviderUsage:
 
     def test_supports_multiple_providers(self, monkeypatch):
         """配了多个 provider key 时能查多家 billing。"""
-        monkeypatch.setenv("OPENAI_API_KEY", "sk-test1234567890")
+        monkeypatch.setenv("OPENAI_API_KEY", _fake_api_key())
         monkeypatch.setenv("OPENAI_BASE_URL", "https://api.b.ai/v1")
-        monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-ds1234567890")
+        monkeypatch.setenv("DEEPSEEK_API_KEY", _fake_api_key("deepseek"))
         fn = TOOL_REGISTRY["query_provider_usage"]
         result = asyncio.get_event_loop().run_until_complete(fn({}, {}))
         assert result["ok"] is True
@@ -467,9 +473,9 @@ class TestQueryProviderUsage:
 
     def test_filter_single_provider(self, monkeypatch):
         """provider 过滤生效，只查指定 provider。"""
-        monkeypatch.setenv("OPENAI_API_KEY", "sk-test1234567890")
+        monkeypatch.setenv("OPENAI_API_KEY", _fake_api_key())
         monkeypatch.setenv("OPENAI_BASE_URL", "https://api.b.ai/v1")
-        monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-ds1234567890")
+        monkeypatch.setenv("DEEPSEEK_API_KEY", _fake_api_key("deepseek"))
         fn = TOOL_REGISTRY["query_provider_usage"]
         result = asyncio.get_event_loop().run_until_complete(fn({"provider": "deepseek"}, {}))
         assert result["ok"] is True
@@ -776,7 +782,7 @@ class TestHandleSpecializedDispatch:
 
         env_path = tmp_path / ".env"
         env_path.write_text(
-            "XCAGI_LLM_PROVIDER=openai\nOPENAI_API_KEY=sk-test1234567890\n",
+            f"XCAGI_LLM_PROVIDER=openai\nOPENAI_API_KEY={_fake_api_key()}\n",
             encoding="utf-8",
         )
         monkeypatch.setattr(mod, "_FHD_ROOT", tmp_path)

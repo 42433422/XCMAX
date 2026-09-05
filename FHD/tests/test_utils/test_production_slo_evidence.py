@@ -5,6 +5,9 @@ import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
+import yaml
+
 
 def _module():
     script = (
@@ -31,6 +34,39 @@ def _verifier_module():
     return module
 
 
+def test_daily_workflow_uses_private_authenticated_prometheus_tunnel() -> None:
+    workflow = (
+        Path(__file__).resolve().parents[2] / ".github" / "workflows" / "slo-metrics-collect.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "Open authenticated production Prometheus SSH tunnel" in workflow
+    assert "-L 127.0.0.1:19091:127.0.0.1:9091" in workflow
+    assert 'test "$PRODUCTION_PROMETHEUS_URL" = "http://127.0.0.1:19091"' in workflow
+    assert "PRODUCTION_PROMETHEUS_TOKEN" in workflow
+    assert "NO_PROXY: 127.0.0.1,localhost" in workflow
+    assert "Close production Prometheus SSH tunnel" in workflow
+    assert "seed" not in workflow.lower()
+
+
+def test_observability_installer_paths_resolve_under_published_working_directory():
+    root = Path(__file__).resolve().parents[3]
+    workflow = yaml.safe_load(
+        (root / ".github/workflows/fhd-production-observability.yml").read_text()
+    )
+    cwd = root / workflow["defaults"]["run"]["working-directory"]
+    steps = workflow["jobs"]["install-and-readback"]["steps"]
+    command = next(
+        step["run"]
+        for step in steps
+        if step.get("name") == "Install, validate, and read back production targets"
+    )
+    lines = command.splitlines()
+    index = next(i for i, line in enumerate(lines) if line.strip().startswith("scp "))
+    sources = [line.strip().rstrip("\\").strip() for line in lines[index + 1 : index + 3]]
+    assert len(sources) == 2
+    assert all((cwd / path).is_file() for path in sources)
+
+
 def test_missing_production_source_writes_fail_closed_evidence(tmp_path: Path) -> None:
     mod = _module()
     output = tmp_path / "evidence" / "one.json"
@@ -52,6 +88,31 @@ def test_missing_production_source_writes_fail_closed_evidence(tmp_path: Path) -
     assert payload["day0_eligible"] is False
     assert all(row["passes"] is False for row in payload["readings"].values())
     assert json.loads(output.read_text())["all_pass"] is False
+
+
+def test_reachable_source_with_empty_metrics_is_available_but_not_eligible(
+    tmp_path: Path, monkeypatch
+) -> None:
+    mod = _module()
+    monkeypatch.setattr(mod, "prom_query", lambda *_args, **_kwargs: None)
+
+    payload, passed = mod.collect(
+        prom_url="https://prometheus.example.invalid",
+        prom_token="prod-token",
+        window="1d",
+        mode="preflight",
+        release_id="",
+        raw_retention_days=120,
+        out_path=tmp_path / "empty.json",
+        now=datetime(2026, 9, 4, tzinfo=UTC),
+    )
+
+    assert passed is False
+    assert payload["source_status"] == "available"
+    assert payload["source_errors"] == []
+    assert payload["coverage"] == 0
+    assert payload["day0_eligible"] is False
+    assert "SLO-AI-01:empty_reading" in payload["errors"]
 
 
 def test_real_samples_are_required_and_evidence_is_hash_chained(
@@ -81,6 +142,8 @@ def test_real_samples_are_required_and_evidence_is_hash_chained(
         assert bearer_token == "prod-token"
         assert query_at is not None
         assert 'environment="production"' in expr
+        if expr in mod.SCRAPE_QUERIES.values():
+            return "5760"
         for slo_id, template in mod.SAMPLE_QUERIES.items():
             if expr == template.format(w="90d"):
                 return str(mod.SAMPLE_MINIMUMS[slo_id])
@@ -133,6 +196,19 @@ def test_slo_evidence_never_overwrites_existing_record(tmp_path: Path) -> None:
         raise AssertionError("existing evidence was overwritten")
 
 
+def test_hash_chain_ignores_unrelated_json_values(tmp_path: Path) -> None:
+    mod = _module()
+    evidence_dir = tmp_path / "evidence"
+    evidence_dir.mkdir()
+    (evidence_dir / "newer-unrelated.json").write_text('["not", "evidence"]\n')
+    expected_hash = "a" * 64
+    (evidence_dir / "older-evidence.json").write_text(
+        json.dumps({"chain_hash": expected_hash}) + "\n"
+    )
+
+    assert mod._latest_chain_hash(evidence_dir) == expected_hash
+
+
 def test_backfill_requires_reason_and_stays_within_24_hours(tmp_path: Path) -> None:
     mod = _module()
     recorded_at = datetime(2026, 9, 4, 12, tzinfo=UTC)
@@ -179,6 +255,8 @@ def test_verifier_requires_90_continuous_hash_chained_formal_days(
     }
 
     def fake_query(_url, expr, bearer_token="", query_at=None):
+        if expr in collector.SCRAPE_QUERIES.values():
+            return "5760"
         for slo_id, template in collector.SAMPLE_QUERIES.items():
             if expr == template.format(w="90d"):
                 return str(collector.SAMPLE_MINIMUMS[slo_id])
@@ -212,3 +290,53 @@ def test_verifier_requires_90_continuous_hash_chained_formal_days(
     failed = verifier.verify_window(tmp_path, release_id=release_id)
     assert failed["passed"] is False
     assert any("invalid_evidence_hash" in item for item in failed["blockers"])
+
+
+def test_scrape_inventory_matches_production_configuration():
+    mod = _module()
+    path = Path(__file__).resolve().parents[2] / "monitoring/prometheus.production.yml"
+    config = yaml.safe_load(path.read_text())
+    assert config["global"]["scrape_interval"] == f"{mod.SCRAPE_INTERVAL_SECONDS}s"
+    targets = {
+        job["job_name"]: entry["targets"][0]
+        for job in config["scrape_configs"]
+        for entry in job["static_configs"]
+        if entry["labels"].get("environment") == "production"
+    }
+    assert targets == mod.SCRAPE_TARGETS
+    assert all(
+        len(entry["targets"]) == 1
+        for job in config["scrape_configs"]
+        for entry in job["static_configs"]
+    )
+
+
+@pytest.mark.parametrize(
+    "scrapes,eligible", [(None, False), (0, False), (5000, False), (5760, True), (11520, False)]
+)
+def test_metric_presence_cannot_replace_real_per_target_scrape_coverage(
+    tmp_path, monkeypatch, scrapes, eligible
+):
+    mod = _module()
+
+    def query(_url, expr, **_kwargs):
+        if expr == mod.SCRAPE_QUERIES["modstore-api-production"]:
+            return None if scrapes is None else str(scrapes)
+        if expr in mod.SCRAPE_QUERIES.values():
+            return "5760"
+        return "1"
+
+    monkeypatch.setattr(mod, "prom_query", query)
+    payload, _ = mod.collect(
+        prom_url="https://prometheus.example.invalid",
+        prom_token="prod-token",
+        window="1d",
+        mode="preflight",
+        release_id="",
+        raw_retention_days=120,
+        out_path=tmp_path / "record.json",
+    )
+    assert payload["coverage"] == 1.0
+    assert payload["day0_eligible"] is eligible
+    if not eligible:
+        assert payload["scrape_coverage"] < 0.99

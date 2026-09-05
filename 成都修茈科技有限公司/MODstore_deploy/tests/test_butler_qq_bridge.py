@@ -18,12 +18,16 @@ import pytest
 pytest.importorskip("nacl", reason="butler_qq_bridge 需要 pynacl；pip install pynacl 后再跑")
 
 
+def _fake_credential(label: str, size: int = 32) -> str:
+    return label + ("x" * size)
+
+
 @pytest.fixture()
 def bridge(monkeypatch):
     """配齐 env 后再 import 模块——这样 _ensure_runtime_ready 才会让 router 生效。"""
     monkeypatch.setenv("BUTLER_QQ_APP_ID", "1903977125")
-    monkeypatch.setenv("BUTLER_QQ_APP_SECRET", "kRwFMH0WqvkJdhV4")
-    monkeypatch.setenv("BUTLER_QQ_BOT_TOKEN", "0bDpS5jN2hN3kR9sbL5qbN9wjXLAzpfW")
+    monkeypatch.setenv("BUTLER_QQ_APP_SECRET", _fake_credential("app-secret-"))
+    monkeypatch.setenv("BUTLER_QQ_BOT_TOKEN", _fake_credential("bot-token-"))
     monkeypatch.setenv("BUTLER_QQ_SANDBOX", "1")
     # 让 /push 测试能拿到 admin token
     monkeypatch.setenv("MODSTORE_ADMIN_RECHARGE_TOKEN", "test-admin-token")
@@ -321,8 +325,8 @@ def test_legacy_specific_webhook_passes_employee_id_hint(bridge, monkeypatch):
     from fastapi.testclient import TestClient
 
     monkeypatch.setenv(
-        "TASK_ROUTER_QQ_APP_SECRET", "kRwFMH0WqvkJdhV4"
-    )  # 与默认 BotSecret 同串只为复用 sign_payload
+        "TASK_ROUTER_QQ_APP_SECRET", _fake_credential("app-secret-")
+    )  # 与测试 BotSecret 同串只为复用 sign_payload
 
     captured_args: list = []
     real_create_task = asyncio.create_task

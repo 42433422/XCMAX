@@ -119,7 +119,7 @@ def emit_craft_step_failure(
                 error=msg,
             )
     except RECOVERABLE_ERRORS:
-        logger.debug("craft failure metric record failed step=%s", step_id, exc_info=True)
+        logger.debug("craft failure metric record failed")
 
     escalate = _employee_escalate_to_human(emp) if emp else False
     payload: Dict[str, Any] = {
@@ -140,7 +140,7 @@ def emit_craft_step_failure(
             source=emp or (resolved_step or step_id),
         )
     except RECOVERABLE_ERRORS:
-        logger.exception("craft step on_error publish failed step=%s", step_id)
+        logger.error("craft step on_error publish failed")
 
     if emp:
         try:

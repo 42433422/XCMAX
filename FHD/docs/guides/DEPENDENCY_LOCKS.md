@@ -6,7 +6,11 @@
 
 ## 已纳入版本控制的锁定文件
 
-仓库包含 **[`XCAGI/requirements.lock.txt`](../../XCAGI/requirements.lock.txt)**（由 `pip-compile` 根据 `XCAGI/requirements.txt` 生成，pip 可直接安装）。
+仓库包含 **[`XCAGI/requirements.lock.txt`](../../XCAGI/requirements.lock.txt)**（由 `pip-compile` 根据 `XCAGI/requirements.txt` 生成，pip 可直接安装），以及服务端锁
+[`deploy/requirements-server-api.lock.txt`](../../deploy/requirements-server-api.lock.txt)。
+
+两个 lock 路径是 GitHub 依赖告警的稳定身份：升级时必须在原路径更新安全版本，不能通过改名让旧告警失去后续修复状态。服务端未锁定入口位于
+[`requirements-server-api.txt`](../../requirements-server-api.txt)，这样其中的 `./packages/...` 本地源码依赖既能被 CI 安装，也能由仓库根目录的依赖图解析。
 
 ## 方案 A：pip-tools（当前采用）
 
@@ -50,7 +54,8 @@ uv pip sync XCAGI/requirements.lock.txt
 |------|------|
 | `requirements.txt` | 生产运行时（与 `server-api` 对齐） |
 | `requirements-ml.txt` | ML/GPU 可选 |
-| `deploy/requirements-server-api.txt` | CI/部署锁定入口 |
+| `requirements-server-api.txt` | CI/部署安装入口（含仓库内本地包） |
+| `deploy/requirements-server-api.lock.txt` | 服务端精确版本与依赖告警 SSOT |
 | `pip install -e ".[dev]"` | 本地测试依赖 |
 
 `XCAGI/requirements.lock.txt` 仍用于 Docker/子树检出；发版前运行 `python scripts/dev/check_requirements_lock.py`。

@@ -225,13 +225,23 @@ class TestNeuroBusMetrics:
         ):
             monkeypatch.delenv(name, raising=False)
         bus = NeuroBus(enable_metrics=True)
+        from app.utils.metrics import (
+            neurobus_events_lost_total,
+            neurobus_events_published_total,
+        )
+
+        published_before = neurobus_events_published_total._value.get()
+        lost_before = neurobus_events_lost_total._value.get()
         await bus.start()
         try:
             assert bus.publish(_make_event())
             assert bus.publish(_make_event())
             assert bus._published_count == 2
+            assert neurobus_events_published_total._value.get() == published_before + 2
         finally:
             await bus.stop()
+        assert bus.publish(_make_event()) is False
+        assert neurobus_events_lost_total._value.get() == lost_before + 1
 
 
 class TestEventMetadata:

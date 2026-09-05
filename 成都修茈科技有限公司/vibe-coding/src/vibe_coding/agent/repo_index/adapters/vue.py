@@ -34,11 +34,9 @@ from ..index import Reference, Symbol
 from . import ParsedFile
 from .typescript import TypeScriptLanguageAdapter
 
-# Source-code indexing only: this extracts Vue blocks and never sanitizes or
-# renders attacker-controlled HTML. lgtm[py/bad-tag-filter]
 # ``re.DOTALL`` so the script body's newlines are captured.
 _SCRIPT_BLOCK_RE = re.compile(
-    r"<script\b(?P<attrs>[^>]*)>(?P<body>.*?)</script>",
+    r"<script\b(?P<attrs>[^>]*)>(?P<body>.*?)</script(?:\s[^>]*)?>",
     re.IGNORECASE | re.DOTALL,
 )
 _TEMPLATE_BLOCK_RE = re.compile(

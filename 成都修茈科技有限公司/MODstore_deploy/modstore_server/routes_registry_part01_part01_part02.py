@@ -196,8 +196,7 @@ def api_get_mod_file(
     _facade()._assert_user_owns_mod(user, mod_id)
     d = _facade()._mod_dir(mod_id)
     try:
-        p = _facade().resolve_under_mod(d, path)
-        text = _facade().read_text_file(p)
+        text = _facade().read_text_under_mod(d, path)
     except ValueError as e:
         raise _facade().HTTPException(400, str(e)) from e
     except FileNotFoundError as e:
@@ -214,8 +213,7 @@ def api_put_mod_file(
     _facade()._assert_user_owns_mod(user, mod_id)
     d = _facade()._mod_dir(mod_id)
     try:
-        p = _facade().resolve_under_mod(d, body.path)
-        _facade().write_text_file(p, body.content)
+        p = _facade().write_text_under_mod(d, body.path, body.content)
     except ValueError as e:
         raise _facade().HTTPException(400, str(e)) from e
     manifest_warnings: _facade().List[str] = []

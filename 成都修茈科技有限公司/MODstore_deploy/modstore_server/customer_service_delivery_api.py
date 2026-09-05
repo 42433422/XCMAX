@@ -306,11 +306,12 @@ async def download_custom_delivery_artifact(
         raise HTTPException(404, "定制产物不存在")
     artifact_id = str(target.get("id") or "").strip()
     if artifact_kind == "module":
-        from modman.store import build_mod_zip_bytes
+        from modman.store import build_mod_zip_bytes, find_mod_dir_by_manifest_id
         from modstore_server.mod_scaffold_runner import modstore_library_path
 
-        artifact_path = modstore_library_path() / artifact_id
-        if not artifact_path.is_dir():
+        try:
+            artifact_path = find_mod_dir_by_manifest_id(modstore_library_path(), artifact_id)
+        except (ValueError, FileNotFoundError):
             raise HTTPException(404, "Mod 产物已不在生产库")
         stream = build_mod_zip_bytes(artifact_path)
         filename = f"{artifact_id}.zip"

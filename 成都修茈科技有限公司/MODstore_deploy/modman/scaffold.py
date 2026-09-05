@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 from pathlib import Path
 
@@ -15,7 +16,13 @@ def create_mod(mod_id: str, mod_name: str, library: Path) -> Path:
     td = template_dir()
     if not td.is_dir():
         raise FileNotFoundError(f"缺少模板目录: {td}")
-    dest = library / mod_id
+    library_text = os.path.realpath(os.path.abspath(library))
+    dest_text = os.path.realpath(os.path.abspath(os.path.join(library_text, mod_id)))
+    library_prefix = library_text.rstrip(os.sep) + os.sep
+    if not dest_text.startswith(library_prefix):
+        raise ValueError("mod_id 路径越界")
+    library = Path(library_text)
+    dest = Path(dest_text)
     if dest.exists():
         raise FileExistsError(f"已存在: {dest}")
     library.mkdir(parents=True, exist_ok=True)

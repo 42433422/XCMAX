@@ -22,6 +22,19 @@ def test_cvm_watcher_root_render_has_no_precheckout_working_directory() -> None:
     assert "- name: Require CVM SSH secrets" in body
 
 
+def test_security_full_scan_root_render_scans_monorepo_without_double_prefix() -> None:
+    source = REPO_ROOT / "FHD" / ".github" / "workflows" / "security-full-scan.yml"
+
+    rendered = publisher._render_fhd(source)
+
+    assert rendered is not None
+    _, body = rendered
+    assert "defaults:\n  run:\n    working-directory: FHD" not in body
+    assert "python FHD/scripts/security/normalize_security_report.py" in body
+    assert "FHD/FHD/scripts/security" not in body
+    assert 'docker run --rm -v "${PWD}:/repo"' in body
+
+
 def test_modstore_deploy_root_render_has_no_precheckout_working_directory() -> None:
     source = (
         REPO_ROOT

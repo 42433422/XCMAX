@@ -33,12 +33,14 @@ vi.mock('electron', () => ({
 }))
 
 describe('updater install rollback contract', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.useFakeTimers()
     vi.resetModules()
     mocks.handlers.clear()
     mocks.autoUpdater.on.mockClear()
     mocks.autoUpdater.quitAndInstall.mockReset()
+    const { desktopRuntime } = await import('./runtime-state.js')
+    desktopRuntime.backendShutdownComplete = false
     delete process.env.XCAGI_UPDATE_URL
   })
 
@@ -111,6 +113,8 @@ describe('updater install rollback contract', () => {
     // 原生 quitAndInstall 的 terminate 路径下 will-quit 异步关闭后端不可靠，
     // 必须在交出退出控制权前完成后端停止。
     expect(callOrder).toEqual(['prepareQuit', 'quitAndInstall'])
+    const { desktopRuntime } = await import('./runtime-state.js')
+    expect(desktopRuntime.backendShutdownComplete).toBe(true)
   })
 
   it('blocks quitAndInstall when prepareQuit fails and runs cleanup', async () => {

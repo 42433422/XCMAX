@@ -103,7 +103,11 @@ describe('Windows full application rollback helper', () => {
           '-EncodedCommand',
           encoded,
         ],
-        { cwd: dataDir, timeout: 20_000 },
+        // Hosted Windows runners occasionally spend more than 20 seconds in
+        // Defender while moving the executable-shaped fixture. The helper's
+        // own process wait remains capped at five seconds; leave enough room
+        // for filesystem scanning without turning a genuine hang into a pass.
+        { cwd: dataDir, timeout: 45_000 },
       )
     } catch (error) {
       executionError = error instanceof Error ? error.message : String(error)
@@ -116,5 +120,5 @@ describe('Windows full application rollback helper', () => {
     expect(fs.existsSync(`${databasePath}-wal`)).toBe(false)
     expect(fs.existsSync(markerPath)).toBe(false)
     expect(JSON.parse(fs.readFileSync(appliedPath, 'utf8')).reason).toBe('integration test')
-  }, 30_000)
+  }, 60_000)
 })

@@ -77,10 +77,27 @@ def _safe_name(name: str) -> str:
     return s.strip("._")[:120] or "file"
 
 
+def _contained_child(root: Path, name: str) -> Path:
+    root_text = os.path.realpath(os.path.abspath(root))
+    candidate_text = os.path.realpath(os.path.abspath(os.path.join(root_text, name)))
+    root_prefix = root_text.rstrip(os.sep) + os.sep
+    if candidate_text != root_text and not candidate_text.startswith(root_prefix):
+        raise ValueError("sandbox path escapes run directory")
+    return Path(candidate_text)
+
+
 def _prepare_work_dir(session_id: str, *, script_root: Path) -> Path:
+    root_text = os.path.realpath(os.path.abspath(script_root))
+    script_root = Path(root_text)
     script_root.mkdir(parents=True, exist_ok=True)
-    safe_id = _safe_name(session_id)
-    work = Path(tempfile.mkdtemp(prefix=f"{safe_id}_", dir=str(script_root)))
+    # Session ids are remote input and must never influence a filesystem path.
+    # ``mkdtemp`` supplies the unique, opaque run identity instead.
+    del session_id
+    work_text = os.path.realpath(os.path.abspath(tempfile.mkdtemp(prefix="run_", dir=root_text)))
+    root_prefix = root_text.rstrip(os.sep) + os.sep
+    if work_text != root_text and not work_text.startswith(root_prefix):
+        raise ValueError("sandbox work directory escaped script root")
+    work = Path(work_text)
     (work / "inputs").mkdir()
     (work / "outputs").mkdir()
     runtime_pkg = work / "modstore_runtime"
@@ -205,7 +222,12 @@ async def run_in_sandbox(
     input_dir = work_dir / "inputs"
     for item in files or []:
         name = _safe_name(str(item.get("filename") or "upload.bin"))
-        (input_dir / name).write_bytes(item.get("content") or b"")
+        input_root_text = os.path.realpath(os.path.abspath(str(input_dir)))
+        input_path_text = os.path.realpath(os.path.abspath(os.path.join(input_root_text, name)))
+        input_root_prefix = input_root_text.rstrip(os.sep) + os.sep
+        if not input_path_text.startswith(input_root_prefix):
+            raise ValueError("sandbox input path escapes run directory")
+        Path(input_path_text).write_bytes(item.get("content") or b"")
 
     # 在用户脚本前注入 preamble，把 open / os.* / socket 锁到 work_dir 内并禁网。
     # preamble 自包含、读取 MODSTORE_SANDBOX_WORK_DIR 决定边界。

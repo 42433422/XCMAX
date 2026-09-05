@@ -18,9 +18,14 @@ on:
         required: true
         default: "XCAGI-Enterprise-1.0.0.0-mac-arm64.zip"
       build_sha:
-        description: Optional buildSha override (40-char git sha); empty = use source run SHA
-        required: false
-        default: ""
+        description: Exact 40-character release commit embedded in the canonical ZIP
+        required: true
+      security_scan_run_id:
+        description: Current successful full security scan run ID for build_sha
+        required: true
+      previous_security_scan_run_id:
+        description: Previous-day successful full security scan run ID for build_sha
+        required: true
 
 permissions:
   actions: read
@@ -35,12 +40,48 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.build_sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Verify exact release SHA
+        env:
+          BUILD_SHA: ${{ inputs.build_sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${BUILD_SHA}" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "::error::build_sha must be a full 40-character Git SHA."
+            exit 1
+          fi
+          ACTUAL_SHA="$(git rev-parse HEAD)"
+          if [ "${ACTUAL_SHA}" != "${BUILD_SHA}" ]; then
+            echo "::error::checkout drift: ${ACTUAL_SHA} != ${BUILD_SHA}"
+            exit 1
+          fi
+      - name: Download normalized security evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: xcagi-security-release-reports
+          path: ${{ runner.temp }}/security-reports/current
+          run-id: ${{ inputs.security_scan_run_id }}
+          github-token: ${{ github.token }}
+      - name: Download prior-day normalized security evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: xcagi-security-release-reports
+          path: ${{ runner.temp }}/security-reports/previous
+          run-id: ${{ inputs.previous_security_scan_run_id }}
+          github-token: ${{ github.token }}
+      - name: Enforce exact-SHA two-day security clearance
+        run: |
+          python scripts/security/verify_security_scan_pair.py \
+            --previous-dir "${{ runner.temp }}/security-reports/previous" \
+            --current-dir "${{ runner.temp }}/security-reports/current" \
+            --release-sha "${{ inputs.build_sha }}"
       - name: Install cryptography
         run: pip install --quiet cryptography
       - name: Download canonical release artifact
@@ -114,7 +155,7 @@ jobs:
               exit 1
               ;;
           esac
-          if [ -n "${BUILD_SHA:-}" ] && [[ ! "${BUILD_SHA}" =~ ^[0-9a-fA-F]{40}$ ]]; then
+          if [[ ! "${BUILD_SHA}" =~ ^[0-9a-fA-F]{40}$ ]]; then
             echo "::error::build_sha must be a full 40-character Git SHA."
             exit 1
           fi
@@ -140,8 +181,8 @@ jobs:
             echo "::error::Canonical ZIP identity differs from the source release run."
             exit 1
           fi
-          if [ -n "${BUILD_SHA:-}" ] && [ "${BUILD_SHA}" != "${ZIP_BUILD_SHA}" ]; then
-            echo "::error::build_sha override differs from the canonical ZIP identity."
+          if [ "${BUILD_SHA}" != "${ZIP_BUILD_SHA}" ]; then
+            echo "::error::build_sha differs from the canonical ZIP identity."
             exit 1
           fi
 

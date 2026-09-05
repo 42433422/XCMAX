@@ -8,10 +8,23 @@ import sys
 from pathlib import Path
 
 from retort_engine.competitor_runtime_comparison import (
+    _gh_api,
     build_competitor_runtime_comparison,
 )
 from retort_engine.contracts import validate_contract
 from retort_engine.service import RetortService
+
+
+def test_gh_api_failure_does_not_expose_exception_details(monkeypatch) -> None:
+    def fail(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise OSError("private host path and credential")
+
+    monkeypatch.setattr(subprocess, "run", fail)
+
+    result = _gh_api("repos/example/project")
+
+    assert result["stderr_tail"] == "gh_api_unavailable"
+    assert "private host path" not in json.dumps(result)
 
 
 def test_competitor_runtime_comparison_materializes_side_by_side_outputs(

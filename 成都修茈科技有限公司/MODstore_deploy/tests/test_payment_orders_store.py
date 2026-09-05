@@ -8,6 +8,7 @@ critical-modules coverage gate stays above 80%.
 from __future__ import annotations
 
 import json
+import re
 
 import pytest
 
@@ -43,6 +44,36 @@ def test_create_returns_existing_message_on_duplicate():
 
 def test_find_returns_none_for_missing():
     assert payment_orders.find("MISSING") is None
+
+
+def test_order_path_rejects_unsafe_id_and_does_not_expose_order_number():
+    for value in ("", "../escape", "bad/name", "bad\\name", "space value"):
+        with pytest.raises(ValueError, match="非法支付订单号"):
+            payment_orders._path(value)
+
+    target = payment_orders._path("SAFE-ORDER-1")
+    assert "SAFE-ORDER-1" not in target.name
+    assert re.fullmatch(r"order_[0-9a-f]{64}\.json", target.name)
+
+
+def test_find_and_update_support_legacy_clear_name_record(tmp_path):
+    orders = tmp_path / "orders"
+    orders.mkdir()
+    legacy = orders / "order_LEGACY-1.json"
+    legacy.write_text(
+        json.dumps(
+            {
+                "out_trade_no": "LEGACY-1",
+                "status": "pending",
+                "notify_count": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert payment_orders.find("LEGACY-1")["status"] == "pending"
+    assert payment_orders.update_status(out_trade_no="LEGACY-1", status="paid") is True
+    assert json.loads(legacy.read_text(encoding="utf-8"))["status"] == "paid"
 
 
 def test_find_returns_none_for_corrupt_json(tmp_path):

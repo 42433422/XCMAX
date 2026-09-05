@@ -136,10 +136,7 @@ def _is_low_signal_action_item(text: str) -> bool:
 
 def _dedupe_key(day: str, kind: str, eid: str, text: str) -> str:
     raw = f"{day}|{kind}|{eid}|{text}".encode("utf-8", "replace")
-    # Non-security content identity for same-day deduplication, not password or
-    # integrity protection; keeping SHA-1 preserves durable record identities.
-    # lgtm[py/weak-sensitive-data-hashing]
-    return hashlib.sha1(raw).hexdigest()
+    return hashlib.sha256(raw).hexdigest()
 
 
 def _engine():
@@ -309,8 +306,13 @@ def parse_and_store_action_items(
         for r in rows:
             try:
                 exists = conn.execute(
-                    _sql("SELECT 1 FROM daily_action_items WHERE dedupe_key=:k"),
-                    {"k": r["dedupe_key"]},
+                    _sql(
+                        "SELECT 1 FROM daily_action_items "
+                        "WHERE dedupe_key=:dedupe_key OR "
+                        "(day=:day AND kind=:kind AND "
+                        "COALESCE(employee_id, '')=:employee_id AND text=:text)"
+                    ),
+                    r,
                 ).first()
                 if exists:
                     continue

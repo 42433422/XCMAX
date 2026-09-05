@@ -189,10 +189,10 @@ def test_approval_withdraw_pending_request(
     try:
         applicant_id = _ensure_user(session, "p41_applicant")
         approver_id = _ensure_user(session, "p41_approver")
-        _seed_flow(session, flow_key="phase41_withdraw", approver_id=approver_id)
+        _seed_flow(session, flow_key="withdraw", approver_id=approver_id)
         submit = approval_client.post(
             "/api/approval/requests",
-            json={"flow_key": "phase41_withdraw", "title": "撤回单"},
+            json={"flow_key": "withdraw", "title": "撤回单"},
             headers={"X-User-ID": str(applicant_id)},
         )
         assert submit.status_code == 200
@@ -219,10 +219,10 @@ def test_approval_withdraw_forbidden_for_non_applicant(
         applicant_id = _ensure_user(session, "p41_app2")
         other_id = _ensure_user(session, "p41_other")
         approver_id = _ensure_user(session, "p41_app2_approver")
-        _seed_flow(session, flow_key="phase41_forbid", approver_id=approver_id)
+        _seed_flow(session, flow_key="forbid", approver_id=approver_id)
         submit = approval_client.post(
             "/api/approval/requests",
-            json={"flow_key": "phase41_forbid", "title": "他人撤回"},
+            json={"flow_key": "forbid", "title": "他人撤回"},
             headers={"X-User-ID": str(applicant_id)},
         )
         req_id = submit.json()["data"]["id"]

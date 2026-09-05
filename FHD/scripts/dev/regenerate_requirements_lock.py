@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""从本机已安装的 server-api 依赖重新生成 deploy/requirements-server-api.lock.txt。"""
+"""从本机已安装的 server-api 依赖重新生成服务端 lock。"""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from importlib.metadata import distributions
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-REQ = ROOT / "deploy" / "requirements-server-api.txt"
+REQ = ROOT / "requirements-server-api.txt"
 LOCK = ROOT / "deploy" / "requirements-server-api.lock.txt"
 
 PKG_RE = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)")
@@ -38,8 +38,8 @@ def main() -> int:
         installed[normalize(dist.metadata["Name"])] = dist.version
 
     lines = [
-        "# Top-level pins from local pip install (deploy/requirements-server-api.txt)",
-        "# Regenerate: pip install -r deploy/requirements-server-api.txt && python3 scripts/dev/regenerate_requirements_lock.py",
+        "# Top-level pins from local pip install (requirements-server-api.txt)",
+        "# Regenerate: pip install -r requirements-server-api.txt && python3 scripts/dev/regenerate_requirements_lock.py",
     ]
     missing: list[str] = []
     for pkg in parse_top_level(REQ):
@@ -51,7 +51,7 @@ def main() -> int:
 
     if missing:
         print("install missing packages first:", ", ".join(missing), file=sys.stderr)
-        print("  pip install -r deploy/requirements-server-api.txt", file=sys.stderr)
+        print("  pip install -r requirements-server-api.txt", file=sys.stderr)
         return 1
 
     LOCK.write_text("\n".join(lines) + "\n", encoding="utf-8")

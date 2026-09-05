@@ -1,5 +1,5 @@
-# Top-level pins from local pip install (deploy/requirements-server-api.txt)
-# Regenerate: pip install -r deploy/requirements-server-api.txt && python3 scripts/dev/regenerate_requirements_lock.py
+# Top-level pins from local pip install (requirements-server-api.txt)
+# Regenerate: pip install -r requirements-server-api.txt && python3 scripts/dev/regenerate_requirements_lock.py
 fastapi==0.136.1
 uvicorn==0.39.0
 starlette==1.3.1

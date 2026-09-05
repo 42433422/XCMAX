@@ -359,10 +359,8 @@ class PaibiLLMClient:
                 },
                 "response": task_body,
             }
-        except BOUNDARY_ERRORS as exc:
-            return self._outbox(
-                project, title, prompt, f"paibi_dispatch_error: {str(exc)[:400]}"
-            )
+        except BOUNDARY_ERRORS:
+            return self._outbox(project, title, prompt, "paibi_dispatch_failed")
 
     def dispatch_group(
         self,
@@ -482,10 +480,8 @@ class PaibiLLMClient:
                 ),
                 "dispatches": dispatches,
             }
-        except BOUNDARY_ERRORS as exc:
-            return self._group_outbox(
-                project, title, prompts, f"paibi_dispatch_error: {str(exc)[:400]}"
-            )
+        except BOUNDARY_ERRORS:
+            return self._group_outbox(project, title, prompts, "paibi_dispatch_failed")
 
     def fetch_task(self, task_id: str) -> dict[str, Any]:
         if self.api_url.lower() in {"", "0", "false", "off", "none", "disabled"}:

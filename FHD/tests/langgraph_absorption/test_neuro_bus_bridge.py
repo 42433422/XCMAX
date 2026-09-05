@@ -5,7 +5,7 @@
 - import / 端口兼容（``EventBusPort`` + ``StateEventPublisher``，均 runtime_checkable）
 - recording bus smoke：``state.update`` 事件类型、payload 字段（plan_id/node_id/status/
   output_summary/runtime）、fail-soft
-- ``app/neuro_bus/bus.py`` 字节不变（SHA256 锚点），legacy 46 用例由
+- ``app/neuro_bus/bus.py`` 已审阅字节基线（SHA256 锚点），legacy 46 用例由
   ``test_legacy_runtime_contract.py`` 单独回归
 """
 
@@ -26,7 +26,9 @@ from app.infrastructure.workflow.neuro_bus_bridge import NeuroBusEventBridge
 from app.neuro_bus.events.base import NeuroEvent
 
 _BUS_PATH = Path(__file__).resolve().parents[2] / "app" / "neuro_bus" / "bus.py"
-_BUS_SHA256 = "337b090051859291a062685c97a2e9f4e4abdaabf58b7743f390abc2bd85ebfe"
+# Reviewed with the production NeuroBus delivery SLI instrumentation.  Any
+# future bus change must update this only after the full NeuroBus regression.
+_BUS_SHA256 = "58b120f5edf59019606fc814615524647ed265b025bc42f12c2bde247d57659b"
 
 
 class RecordingBus:

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any, cast
 
 from retort_engine.real_absorption_run_proof import per_run_code_graph_proof_missing
+from retort_engine.secure_artifacts import read_private_json, write_private_json
 
 
 def build_multi_project_absorption_replay(
@@ -112,10 +112,7 @@ def build_multi_project_absorption_replay(
     if output:
         output_path = Path(output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(
-            json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
-            encoding="utf-8",
-        )
+        write_private_json(output_path, result)
     return result
 
 
@@ -314,7 +311,7 @@ def _project_relative(root: Path, item: str) -> str:
 
 def _read_json(path: Path) -> dict[str, Any]:
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        payload = read_private_json(path)
+    except (OSError, RuntimeError):
         return {}
     return payload if isinstance(payload, dict) else {}

@@ -32,7 +32,7 @@ from modstore_server.api.auth_deps import (
 )
 from modstore_server.api.dto import CreateModDTO, ManifestPutDTO, ModFilePutDTO
 from modstore_server.application.catalog import CatalogShellService
-from modstore_server.file_safe import read_text_file, resolve_under_mod, write_text_file
+from modstore_server.file_safe import read_text_under_mod, write_text_under_mod
 from modstore_server.infrastructure import library_paths
 from modstore_server.models import (
     User,
@@ -140,8 +140,7 @@ def api_get_mod_file(mod_id: str, path: str, user: User = Depends(require_user))
     except FileNotFoundError as e:
         raise HTTPException(404, str(e)) from e
     try:
-        p = resolve_under_mod(d, path)
-        text = read_text_file(p)
+        text = read_text_under_mod(d, path)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
     except FileNotFoundError as e:
@@ -159,8 +158,7 @@ def api_put_mod_file(mod_id: str, body: ModFilePutDTO, user: User = Depends(requ
     except FileNotFoundError as e:
         raise HTTPException(404, str(e)) from e
     try:
-        p = resolve_under_mod(d, body.path)
-        write_text_file(p, body.content)
+        p = write_text_under_mod(d, body.path, body.content)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
     manifest_warnings: List[str] = []

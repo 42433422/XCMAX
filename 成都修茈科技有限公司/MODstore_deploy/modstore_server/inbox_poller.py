@@ -12,13 +12,13 @@ import email.policy
 import imaplib
 import logging
 import os
-import re
 from email.message import Message
 from email.utils import parseaddr
 from typing import Any, Dict, List
 
 from modstore_server.approval_dispatcher import handle_incoming_approval_email
 from modstore_server.email_service import _load_modstore_env
+from modstore_server.html_text import html_to_plain_text
 from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -69,13 +69,7 @@ def _message_body_text(msg: Message) -> str:
             elif ctype == "text/html" and "attachment" not in (
                 part.get("Content-Disposition") or ""
             ):
-                t = _decode_payload(part)
-                # Plain-text extraction only; the result is never rendered as HTML.
-                # lgtm[py/bad-tag-filter]
-                s = re.sub(r"(?is)<script.*?>.*?</script>", "", t)
-                s = re.sub(r"(?is)<style.*?>.*?</style>", "", s)
-                s = re.sub(r"<[^>]+>", " ", s)
-                html_fallback.append(s)
+                html_fallback.append(html_to_plain_text(_decode_payload(part)))
         if plain:
             return "\n".join(plain)
         if html_fallback:
@@ -85,13 +79,7 @@ def _message_body_text(msg: Message) -> str:
     if ctype == "text/plain":
         return _decode_payload(msg)
     if ctype == "text/html":
-        t = _decode_payload(msg)
-        # Plain-text extraction only; the result is never rendered as HTML.
-        # lgtm[py/bad-tag-filter]
-        t = re.sub(r"(?is)<script.*?>.*?</script>", "", t)
-        t = re.sub(r"(?is)<style.*?>.*?</style>", "", t)
-        t = re.sub(r"<[^>]+>", " ", t)
-        return t
+        return html_to_plain_text(_decode_payload(msg))
     return ""
 
 

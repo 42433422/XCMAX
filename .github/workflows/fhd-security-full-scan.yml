@@ -15,11 +15,6 @@ permissions:
   security-events: read
   actions: read
 
-
-defaults:
-  run:
-    working-directory: FHD
-
 jobs:
   scan-and-gate:
     name: security-release-gate
@@ -44,7 +39,10 @@ jobs:
       - name: Export open and manually dismissed CodeQL and Dependabot alerts
         continue-on-error: true
         env:
-          GH_TOKEN: ${{ github.token }}
+          # GITHUB_TOKEN cannot read Dependabot alerts in this repository.
+          # The existing CI token is read-only here and keeps the scanner from
+          # silently treating an HTTP 403 envelope as a zero-alert report.
+          GH_TOKEN: ${{ secrets.CI_COMMIT_TOKEN || github.token }}
         run: |
           set +e
           for state in open dismissed; do
@@ -72,7 +70,8 @@ jobs:
         run: |
           set +e
           docker run --rm -v "${PWD}:/repo" zricethezav/gitleaks:latest detect \
-            --source /repo --report-format sarif \
+            --source /repo --config /repo/.github/gitleaks-config.toml \
+            --report-format sarif \
             --report-path /repo/gitleaks-release.sarif --no-banner --redact
           test -s gitleaks-release.sarif && mv gitleaks-release.sarif "${RUNNER_TEMP}/security-native/gitleaks.sarif"
 
@@ -87,6 +86,13 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: false
           exit-code: "0"
+
+      - name: Build production admin console for image context
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          npm ci --prefix FHD/frontend
+          VITE_XCAGI_GIT_SHA="${{ inputs.release_sha }}" npm --prefix FHD/admin-console run build
 
       - name: Build and scan final FHD production image
         continue-on-error: true
@@ -109,7 +115,7 @@ jobs:
           set +e
           python -m pip install --quiet pip-audit uv
           (cd FHD && uv export --frozen --all-extras --no-dev \
-            --no-emit-project --no-hashes \
+            --no-emit-project --no-emit-local --no-hashes \
             --output-file "${RUNNER_TEMP}/fhd-production-requirements.txt")
           pip-audit -r "${RUNNER_TEMP}/fhd-production-requirements.txt" -f json \
             -o "${RUNNER_TEMP}/security-native/python-dependencies.json"
@@ -145,15 +151,36 @@ jobs:
           HOST: ${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}
           SSH_KEY: ${{ secrets.FHD_PUSH_SSH_KEY || secrets.SERVER_SSH_KEY }}
         run: |
-          set +e
-          if [ -n "${SSH_KEY:-}" ]; then
-            key="${RUNNER_TEMP}/production-host-scan-key"
-            printf '%s\n' "$SSH_KEY" > "$key"
-            chmod 600 "$key"
-            ssh -i "$key" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 "root@${HOST}" \
-              "docker run --rm -v /:/host:ro aquasec/trivy:latest rootfs --format json --severity CRITICAL,HIGH --ignore-unfixed=false /host" \
-              > "${RUNNER_TEMP}/security-native/production-host.json"
-          fi
+          set -euo pipefail
+          test -n "${SSH_KEY:-}"
+          key="${RUNNER_TEMP}/production-host-scan-key"
+          printf '%s\n' "$SSH_KEY" > "$key"
+          chmod 600 "$key"
+          ssh_opts=(-i "$key" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20)
+          ssh "${ssh_opts[@]}" "root@${HOST}" 'cat /etc/os-release' \
+            > "${RUNNER_TEMP}/security-native/production-host-os-release"
+          ssh "${ssh_opts[@]}" "root@${HOST}" 'uname -r' \
+            > "${RUNNER_TEMP}/security-native/production-host-running-kernel"
+          ssh "${ssh_opts[@]}" "root@${HOST}" \
+            'dnf -q repoquery --installed --latest-limit 1 \
+             --qf "%{version}-%{release}.%{arch}" kernel-core' \
+            > "${RUNNER_TEMP}/security-native/production-host-installed-kernel"
+          ssh "${ssh_opts[@]}" "root@${HOST}" \
+            'set -euo pipefail
+             scan_dir=$(mktemp -d /tmp/xcmax-security-scan.XXXXXX)
+             trap '\''rm -rf -- "$scan_dir"'\'' EXIT
+             LC_ALL=C dnf -q --refresh \
+               --setopt=cachedir="$scan_dir/cache" \
+               --setopt=persistdir="$scan_dir/persist" \
+               --setopt=logdir="$scan_dir/log" \
+               updateinfo list --security updates' \
+            > "${RUNNER_TEMP}/security-native/production-host-updateinfo.txt"
+          python FHD/scripts/security/collect_dnf_updateinfo.py \
+            --input "${RUNNER_TEMP}/security-native/production-host-updateinfo.txt" \
+            --os-release "${RUNNER_TEMP}/security-native/production-host-os-release" \
+            --running-kernel "${RUNNER_TEMP}/security-native/production-host-running-kernel" \
+            --installed-kernel "${RUNNER_TEMP}/security-native/production-host-installed-kernel" \
+            --output "${RUNNER_TEMP}/security-native/production-host.json"
 
       - name: Normalize all scanner reports
         if: always()
@@ -181,7 +208,8 @@ jobs:
           normalize node-dependencies npm-audit "${RUNNER_TEMP}/security-native/node-dependencies.json"
           normalize desktop-prerelease sarif "${RUNNER_TEMP}/security-native/desktop-prerelease.sarif"
           normalize gitleaks sarif "${RUNNER_TEMP}/security-native/gitleaks.sarif"
-          normalize production-host trivy "${RUNNER_TEMP}/security-native/production-host.json"
+          normalize credential-rotation credential-incidents ".github/security/credential-incidents.json"
+          normalize production-host dnf-updateinfo "${RUNNER_TEMP}/security-native/production-host.json"
 
       - name: Enforce all-source zero critical/high gate
         if: always()

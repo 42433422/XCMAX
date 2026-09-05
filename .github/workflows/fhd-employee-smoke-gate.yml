@@ -43,7 +43,7 @@ jobs:
       - name: Install server and test dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r deploy/requirements-server-api.txt
+          pip install -r requirements-server-api.txt
           pip install -r deploy/requirements-dev.txt
       - name: Run employee risk smoke
         run: |

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the public pointer for an unsigned Windows interim installer."""
+"""Generate non-publishable metadata for an unsigned Windows test artifact."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--version", required=True)
     parser.add_argument("--git-sha", required=True)
     parser.add_argument("--artifact", required=True)
-    parser.add_argument("--public-url", required=True)
+    parser.add_argument("--artifact-url", required=True)
     parser.add_argument("--release-metadata-source", required=True)
     parser.add_argument("--output", required=True)
     return parser.parse_args()
@@ -36,14 +36,21 @@ def sha256(path: Path) -> str:
 
 def load_release(metadata_path: Path, version: str) -> dict:
     payload = json.loads(metadata_path.read_text(encoding="utf-8"))
-    if payload.get("version_lock") != version or payload.get("download_version") != version:
-        raise ValueError("release metadata version does not match requested hotfix version")
+    if (
+        payload.get("version_lock") != version
+        or payload.get("download_version") != version
+    ):
+        raise ValueError(
+            "release metadata version does not match requested hotfix version"
+        )
     history = payload.get("release_history")
     if not isinstance(history, list) or not history:
         raise ValueError("release metadata must contain release_history")
     release = history[0]
     if not isinstance(release, dict) or release.get("version") != version:
-        raise ValueError("release_history[0].version does not match requested hotfix version")
+        raise ValueError(
+            "release_history[0].version does not match requested hotfix version"
+        )
     for key in ("date", "title", "channel"):
         if not isinstance(release.get(key), str) or not release[key].strip():
             raise ValueError(f"release_history[0].{key} must be a non-empty string")
@@ -69,10 +76,15 @@ def main() -> int:
         print(f"[error] invalid four-part version: {version}", file=sys.stderr)
         return 1
     if not SHA_RE.fullmatch(git_sha):
-        print("[error] git SHA must contain 40 or 64 hexadecimal characters", file=sys.stderr)
+        print(
+            "[error] git SHA must contain 40 or 64 hexadecimal characters",
+            file=sys.stderr,
+        )
         return 1
     if not artifact.is_file():
-        print(f"[error] Windows interim installer not found: {artifact}", file=sys.stderr)
+        print(
+            f"[error] Windows interim installer not found: {artifact}", file=sys.stderr
+        )
         return 1
 
     try:
@@ -89,25 +101,28 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    if not args.public_url.endswith("/" + filename):
-        print("[error] public URL filename does not match the installer", file=sys.stderr)
+    if not args.artifact_url.endswith("/" + filename):
+        print(
+            "[error] artifact URL filename does not match the installer",
+            file=sys.stderr,
+        )
         return 1
 
     payload = {
         "schema": "xcagi.windows_interim_release/v1",
         "version": version,
-        "channel": "enterprise-interim",
+        "channel": "enterprise-quarantine",
         "git_sha": git_sha,
         "generated_at": datetime.datetime.now(datetime.UTC).isoformat(),
-        "download_allowed": True,
+        "download_allowed": False,
         "signature_status": "unsigned",
         "warning": (
-            "此 Windows 企业临时交付包尚未完成 Authenticode 代码签名；"
-            "仅供管理员确认来源和 SHA-256 后安装，不会写入稳定自动更新通道。"
+            "此 Windows 产物未完成 Authenticode 代码签名，仅可用于受控测试设备；"
+            "禁止公开下载或写入任何更新通道。"
         ),
         "artifact": {
             "filename": filename,
-            "url": args.public_url,
+            "url": args.artifact_url,
             "size": artifact.stat().st_size,
             "sha256": sha256(artifact),
             "arch": "x64",
@@ -116,7 +131,9 @@ def main() -> int:
         "release": release,
     }
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    output.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
     print(f"[ok] wrote {output} ({output.stat().st_size} bytes)")
     return 0
 

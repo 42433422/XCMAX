@@ -349,6 +349,12 @@ def test_autonomy_resume_waits_for_http_ready_after_secret_sync() -> None:
 
 def test_production_deploy_requires_human_environment_approval() -> None:
     deploy = (REPO_ROOT / ".github/workflows/fhd-deploy.yml").read_text(encoding="utf-8")
+    assert "release_sha:" in deploy
+    assert "security_scan_run_id:" in deploy
+    assert "previous_security_scan_run_id:" in deploy
+    assert "ref: ${{ inputs.release_sha }}" in deploy
+    assert "verify_security_scan_pair.py" in deploy
+    assert 'if [ "${ACTION_ID}" != "release:${RELEASE_SHA}" ]' in deploy
     assert "report-autonomy-failure:" in deploy
     assert "needs: cvm-rolling" in deploy
     assert "needs['cvm-rolling'].result != 'success'" in deploy
@@ -365,6 +371,9 @@ def test_production_deploy_requires_human_environment_approval() -> None:
     assert "fhd-deploy-bootstrap" in deploy
     assert 'tar -xzf "\\$TARBALL"' in deploy
     assert 'AUTO="\\$BOOTSTRAP/scripts/deploy/fhd-auto-update.sh"' in deploy
+    assert 'export FHD_AUTO_UPDATE_LOCK_WAIT_SECONDS="360"' in deploy
+    assert 'DEPLOYED_SHA="\\$(cat "${DEPLOY_ROOT}/.deploy-git-sha"' in deploy
+    assert "Health SHA not converged" in deploy
 
 
 def test_forced_self_maintenance_survives_its_own_service_restart() -> None:

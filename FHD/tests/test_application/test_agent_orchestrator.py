@@ -110,6 +110,84 @@ def test_agent_orchestrator_executes_low_risk_tool_and_records_events():
     assert completed_event.data["cost_units"] == 1
 
 
+def test_agent_tool_executor_restores_durable_runtime_tenant_scope():
+    from app.application.agent_orchestrator.run_models import AgentStep
+    from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+    from app.infrastructure.tenant_scope import current_tenant_id
+
+    observed_tenant_ids: list[int | None] = []
+
+    def _execute(_tool_id, _action, _params):
+        observed_tenant_ids.append(current_tenant_id())
+        return {"success": True, "data": [{"unit_name": "XC 演示客户"}]}
+
+    step = AgentStep(
+        node_id="read_customer",
+        tool_id="business_db",
+        action="read",
+        params={"entity": "customers", "keyword": "XC 演示客户"},
+    )
+    with patch(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool",
+        side_effect=_execute,
+    ) as mock_execute:
+        result = AgentToolExecutor().execute(step, runtime_context={"tenant_id": "7"})
+
+    assert result["success"] is True
+    assert observed_tenant_ids == [7]
+    assert current_tenant_id() == 1
+    mock_execute.assert_called_once()
+
+
+@pytest.mark.parametrize("tenant_id", [True, 0, -1, "not-a-tenant"])
+def test_agent_tool_executor_rejects_invalid_runtime_tenant_scope(tenant_id):
+    from app.application.agent_orchestrator.run_models import AgentStep
+    from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+
+    step = AgentStep(
+        node_id="read_customer",
+        tool_id="business_db",
+        action="read",
+        params={"entity": "customers", "keyword": "XC 演示客户"},
+    )
+    with patch(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool"
+    ) as mock_execute:
+        result = AgentToolExecutor().execute(step, runtime_context={"tenant_id": tenant_id})
+
+    assert result["success"] is False
+    assert result["error_code"] == "invalid_tenant_context"
+    mock_execute.assert_not_called()
+
+
+def test_agent_tool_executor_preserves_opaque_dataset_tenant_key():
+    from app.application.agent_orchestrator.run_models import AgentStep
+    from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+
+    step = AgentStep(
+        node_id="query_dataset",
+        tool_id="dataset_rag",
+        action="query",
+        params={"dataset_id": "platform-docs", "query": "Which model?"},
+    )
+    output = {
+        "success": True,
+        "dataset_id": "platform-docs",
+        "query": "Which model?",
+        "answer": "XCauto",
+        "chunks": [{"chunk_id": "chunk-1", "text": "XCauto", "source": "policy"}],
+        "citations": [{"index": 1, "source": "policy", "chunk_index": 0}],
+    }
+    with patch(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool",
+        return_value=output,
+    ) as mock_execute:
+        result = AgentToolExecutor().execute(step, runtime_context={"tenant_id": "tenant-a"})
+
+    assert result == output
+    assert mock_execute.call_args.args[2]["_runtime_context"]["tenant_id"] == "tenant-a"
+
+
 def test_agent_orchestrator_waits_for_user_on_medium_risk_step():
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository

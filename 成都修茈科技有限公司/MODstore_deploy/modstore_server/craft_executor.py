@@ -86,7 +86,7 @@ async def dispatch_craft_step(
 
     if not fn:
         msg = f"未注册的 craft 步骤：{step_id!r}（解析为 {resolved_step!r}）"
-        logger.warning("dispatch_craft_step: %s", msg)
+        logger.warning("dispatch_craft_step: unregistered craft step")
         emit_craft_step_failure(
             step_id=resolved_step or step_id,
             error=msg,
@@ -175,4 +175,4 @@ def _record_craft_execution(
             )
             session.commit()
     except RECOVERABLE_ERRORS:
-        logger.debug("craft execution record failed for %s", employee_id, exc_info=True)
+        logger.debug("craft execution record failed")

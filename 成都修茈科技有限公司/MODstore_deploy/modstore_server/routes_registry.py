@@ -87,7 +87,7 @@ from modstore_server.auth_service import decode_access_token, get_user_by_id
 from modstore_server.authoring import slim_openapi_paths
 from modstore_server.constants import DEFAULT_XCAGI_BACKEND_URL
 from modstore_server.employee_pack_export import build_employee_pack_zip_from_workflow
-from modstore_server.file_safe import read_text_file, resolve_under_mod, write_text_file
+from modstore_server.file_safe import read_text_under_mod, write_text_under_mod
 from modstore_server.mod_ai_scaffold import (
     render_frontend_routes_js,
     render_generated_home_vue,

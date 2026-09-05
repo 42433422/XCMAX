@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from modman.fhd_shell_export import build_fhd_shell_mod_rows, write_fhd_shell_mods_json
 
 
@@ -62,6 +64,19 @@ def test_write_roundtrip(tmp_path: Path) -> None:
     assert n == 2
     data = json.loads(out.read_text(encoding="utf-8"))
     assert isinstance(data, list) and data[0]["id"] == "all"
+
+
+def test_write_rejects_output_outside_configured_root(tmp_path: Path) -> None:
+    library = tmp_path / "library"
+    output_root = tmp_path / "fhd"
+    library.mkdir()
+    output_root.mkdir()
+    with pytest.raises(ValueError, match="configured FHD repository"):
+        write_fhd_shell_mods_json(
+            library,
+            tmp_path / "outside.json",
+            output_root=output_root,
+        )
 
 
 def test_database_seed_sql_resolves_relative_to_mod(tmp_path: Path) -> None:

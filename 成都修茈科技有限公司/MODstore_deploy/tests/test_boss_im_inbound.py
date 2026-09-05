@@ -166,7 +166,7 @@ def test_dispatch_boss_im_task_executes_and_replies(monkeypatch, notify_calls):
         assert row.status == "done"
 
 
-def test_dispatch_boss_im_task_failure_still_replies(monkeypatch, notify_calls):
+def test_dispatch_boss_im_task_failure_still_replies(monkeypatch, notify_calls, caplog):
     from modstore_server.boss_im_inbound import (
         dispatch_boss_im_task,
         enqueue_boss_im_task,
@@ -178,12 +178,15 @@ def test_dispatch_boss_im_task_failure_still_replies(monkeypatch, notify_calls):
     monkeypatch.setattr("modstore_server.employee_executor.execute_employee_task", _boom)
 
     enq = enqueue_boss_im_task(boss_user_id=12, employee_id="emp-fail", text="做个报表")
-    out = dispatch_boss_im_task(int(enq["task_id"]))
+    with caplog.at_level("WARNING", logger="modstore_server.boss_im_inbound"):
+        out = dispatch_boss_im_task(int(enq["task_id"]))
     assert out["ok"] is False
     # 失败也有回音，不静默
     reply = notify_calls[-1]
     assert reply["hook"] == "reply"
     assert "失败" in reply["body"]
+    assert "emp-fail" not in caplog.text
+    assert "LLM 配额用尽" not in caplog.text
 
     sf = get_session_factory()
     with sf() as session:

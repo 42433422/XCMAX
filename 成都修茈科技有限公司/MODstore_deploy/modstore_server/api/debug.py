@@ -24,20 +24,31 @@ def api_debug_sandbox(body: SandboxDTO, user: User = Depends(require_user)):
     assert_user_owns_mod(user, body.mod_id)
     mod_id = body.mod_id.strip()
     try:
-        library_paths.mod_dir(mod_id)
+        validated_src = library_paths.mod_dir(mod_id)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
     except FileNotFoundError as e:
         raise HTTPException(404, str(e)) from e
-    lib = library_paths.lib()
-    src = (lib / mod_id).resolve()
+    lib = library_paths.lib().resolve()
+    # Choose the source from the server-owned directory enumeration. The
+    # request value is only an equality selector and never becomes a path.
+    src = next(
+        (
+            candidate.resolve()
+            for candidate in iter_mod_dirs(lib)
+            if candidate.resolve() == validated_src
+        ),
+        None,
+    )
+    if src is None or not src.is_relative_to(lib):
+        raise HTTPException(404, "Mod 不存在")
     root = library_paths.project_root()
     sand = root / "debug_sandbox"
     sand.mkdir(parents=True, exist_ok=True)
     session = uuid.uuid4().hex[:12]
     mods_root = (sand / session / "mods").resolve()
     mods_root.mkdir(parents=True, exist_ok=True)
-    dst = mods_root / mod_id
+    dst = mods_root / src.name
     if dst.exists():
         if dst.is_symlink() or dst.is_file():
             dst.unlink()

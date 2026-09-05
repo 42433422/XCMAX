@@ -11,6 +11,7 @@ from typing import Any, cast
 from retort_engine.architecture_contracts import evaluate_architecture_contracts
 from retort_engine.codebase_graph import build_codebase_graph
 from retort_engine.operational_errors import BOUNDARY_ERRORS
+from retort_engine.secure_artifacts import write_private_json
 from retort_engine.ui_features import (
     blackhole_ui_operation_replay,
     blackhole_ui_structure,
@@ -148,10 +149,7 @@ def build_operator_journey_replay(
     if output:
         output_path = Path(output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(
-            json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True),
-            encoding="utf-8",
-        )
+        write_private_json(output_path, result)
     return result
 
 

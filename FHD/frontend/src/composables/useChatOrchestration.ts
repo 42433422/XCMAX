@@ -37,6 +37,7 @@ import { useChatOrchestrationTaskExecution } from './chat-orchestration/useChatO
 import { useChatOrchestrationPrintFlow } from './chat-orchestration/useChatOrchestrationPrintFlow'
 import { useChatOrchestrationExcelTasks } from './chat-orchestration/useChatOrchestrationExcelTasks'
 import { useChatOrchestrationRemoteRound } from './chat-orchestration/useChatOrchestrationRemoteRound'
+import { useOnboardingFirstOrderRun } from './useOnboardingFirstOrderRun'
 
 export function useChatOrchestration(options: UseChatViewOptions) {
   const tutorialStore = useTutorialStore()
@@ -248,6 +249,12 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     createTaskId,
     refreshTasks: agentTaskRuntime.refreshTasks,
   })
+  const onboardingFirstOrderRun = useOnboardingFirstOrderRun({
+    sessionId: () => String(sessionId.value || '').trim() || 'default',
+    saveMessage,
+    addAndSaveMessage,
+    refreshTasks: agentTaskRuntime.refreshTasks,
+  })
   const {
     lastShipmentExecution,
     handleModifyCommand: handleShipmentModify,
@@ -417,6 +424,10 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       messages: [...messages.value],
       turnId: createBusinessHarnessId('turn'),
       taskId: createBusinessHarnessId('task'),
+    }
+    if (await onboardingFirstOrderRun.tryStart(message)) {
+      await refreshHistorySessions()
+      return
     }
     const previewModified = await handleShipmentModify(message)
     if (previewModified) {

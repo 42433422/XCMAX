@@ -19,6 +19,7 @@ def _isolated_events_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("MODSTORE_WEBHOOK_EVENTS_DIR", str(tmp_path / "events"))
     monkeypatch.delenv("MODSTORE_WEBHOOK_URL", raising=False)
     monkeypatch.delenv("MODSTORE_WEBHOOK_SECRET", raising=False)
+    monkeypatch.delenv("MODSTORE_WEBHOOK_EVENT_KEY", raising=False)
     monkeypatch.delenv("MODSTORE_WEBHOOK_TIMEOUT_SECONDS", raising=False)
     monkeypatch.delenv("MODSTORE_WEBHOOK_RETRIES", raising=False)
     yield
@@ -172,8 +173,13 @@ def test_replay_event_returns_not_found_when_missing():
 
 
 def test_replay_event_loads_persisted_envelope(monkeypatch, tmp_path):
+    monkeypatch.setenv("MODSTORE_WEBHOOK_EVENT_KEY", "test-replay-encryption-key")
     event = webhook_dispatcher.build_event("payment.paid", "MODR", {"x": 1})
     webhook_dispatcher._store_event(event, {"ok": False})
+
+    stored = webhook_dispatcher._event_path(event["id"]).read_text(encoding="utf-8")
+    assert event["id"] not in stored
+    assert '"event"' not in stored
 
     captured: dict = {}
 
@@ -186,6 +192,13 @@ def test_replay_event_loads_persisted_envelope(monkeypatch, tmp_path):
     result = webhook_dispatcher.replay_event(event["id"])
     assert result == {"ok": True, "echoed": True}
     assert captured["event"]["id"] == event["id"]
+
+
+def test_event_persistence_fails_closed_without_encryption_key():
+    event = webhook_dispatcher.build_event("payment.paid", "NO-KEY", {"secret": "value"})
+
+    assert webhook_dispatcher._store_event(event, {"ok": False}) is False
+    assert not webhook_dispatcher._event_path(event["id"]).exists()
 
 
 def test_publish_event_dispatches_and_emits_to_neuro_bus(monkeypatch):

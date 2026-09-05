@@ -12,7 +12,9 @@ from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import get_current_user, get_db
 from modstore_server.db.delivery_commerce import UpdateInstallationReceipt
+from modstore_server.metrics import observe_mod_install
 from modstore_server.models import User
+from modstore_server.standard_delivery_api import configured_internal_installation_ids
 
 router = APIRouter(prefix="/api/update-installations", tags=["update-installations"])
 
@@ -81,6 +83,7 @@ def record_update_installation_receipt(
         if abs(received_at - client_time.astimezone(UTC)) > timedelta(minutes=15):
             raise HTTPException(422, "客户端回执时间与服务端相差超过 15 分钟")
     reported_at = received_at.replace(tzinfo=None)
+    source = body.source.strip() or "desktop_ota"
     row = UpdateInstallationReceipt(
         user_id=int(user.id),
         installation_id=body.installation_id.strip(),
@@ -93,12 +96,24 @@ def record_update_installation_receipt(
         installed_build_sha=body.installed_build_sha.strip().lower(),
         status=body.status,
         error=body.error.strip(),
-        source=body.source.strip() or "desktop_ota",
+        source=source,
         reported_at=reported_at,
     )
     db.add(row)
     db.commit()
     db.refresh(row)
+    if source in {"desktop_ota", "desktop_inventory"} and body.status != "revoked":
+        internal_ids = configured_internal_installation_ids()
+        device_scope = (
+            "internal"
+            if body.installation_id.strip().casefold() in internal_ids
+            else "external_customer"
+        )
+        observe_mod_install(
+            "rollback" if body.status == "rolled_back" else "install",
+            "success" if body.status == "installed" else "error",
+            device_scope,
+        )
     return {"ok": True, "duplicate": False, "receipt": _serialize(row)}
 
 

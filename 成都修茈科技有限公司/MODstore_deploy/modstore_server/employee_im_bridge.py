@@ -41,7 +41,7 @@ def _boss_user_id() -> int:
     try:
         return int(raw) if raw else 0
     except ValueError:
-        logger.warning("FHD_BOSS_USER_ID 非法值：%r，跳过 IM 推送", raw)
+        logger.warning("FHD_BOSS_USER_ID 非法，跳过 IM 推送")
         return 0
 
 
@@ -85,11 +85,7 @@ def notify_boss(
     if not body_text:
         return False
     if not _enabled(explicit_boss_user_id=boss_user_id):
-        logger.debug(
-            "employee_im_bridge 跳过推送：env 未配齐（url/key/boss_uid），employee=%s hook=%s",
-            employee_id,
-            hook,
-        )
+        logger.debug("employee_im_bridge 跳过推送：env 未配齐（url/key/boss_uid）")
         return False
 
     url = _internal_im_url()
@@ -117,26 +113,10 @@ def notify_boss(
         with httpx.Client(timeout=5.0, trust_env=False) as client:
             resp = client.post(url, json=payload, headers=headers)
         if resp.status_code >= 400:
-            logger.warning(
-                "employee_im_bridge 推送失败 HTTP %s：employee=%s hook=%s body=%.200s",
-                resp.status_code,
-                employee_id,
-                hook,
-                resp.text,
-            )
+            logger.warning("employee_im_bridge 推送失败 HTTP %s", resp.status_code)
             return False
-        logger.info(
-            "employee_im_bridge 推送成功：employee=%s hook=%s body=%.80s",
-            employee_id,
-            hook,
-            body_text,
-        )
+        logger.info("employee_im_bridge 推送成功")
         return True
     except RECOVERABLE_ERRORS as exc:
-        logger.warning(
-            "employee_im_bridge 推送异常：employee=%s hook=%s err=%s",
-            employee_id,
-            hook,
-            exc,
-        )
+        logger.warning("employee_im_bridge 推送异常（%s）", type(exc).__name__)
         return False

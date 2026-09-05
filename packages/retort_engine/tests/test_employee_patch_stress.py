@@ -37,7 +37,7 @@ def test_service_exposes_employee_patch_stress(tmp_path: Path) -> None:
     assert result["summary"]["all_post_rollback_gates_passed"] is True
 
 
-def test_employee_patch_stress_cli_outputs_contract(tmp_path: Path) -> None:
+def test_employee_patch_stress_cli_outputs_public_receipt(tmp_path: Path) -> None:
     completed = subprocess.run(
         [
             sys.executable,
@@ -57,5 +57,8 @@ def test_employee_patch_stress_cli_outputs_contract(tmp_path: Path) -> None:
 
     assert completed.returncode == 0, completed.stderr
     payload = json.loads(completed.stdout)
-    assert validate_contract("employee_patch_stress_result", payload)["valid"] is True
-    assert payload["summary"]["rollback_verified_count"] == 101
+    assert payload == {
+        "details": "sensitive execution evidence omitted from terminal output",
+        "schema": "retort.cli.public_receipt/v1",
+        "status": "ready",
+    }

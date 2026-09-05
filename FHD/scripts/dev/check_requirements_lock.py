@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""校验 deploy/requirements-server-api.txt 与 lock 文件顶层包名一致。"""
+"""校验 requirements-server-api.txt 与 lock 文件顶层包名一致。"""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-REQ = ROOT / "deploy" / "requirements-server-api.txt"
+REQ = ROOT / "requirements-server-api.txt"
 LOCK = ROOT / "deploy" / "requirements-server-api.lock.txt"
 
 PKG_RE = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)\s*([=<>!~]+.*)?$")
@@ -64,7 +64,7 @@ def main() -> int:
         for name in missing:
             print(f"  - {name}", file=sys.stderr)
         print(
-            "Regenerate: pip install -r deploy/requirements-server-api.txt && pip freeze > deploy/requirements-server-api.lock.txt",
+            "Regenerate: pip install -r requirements-server-api.txt && pip freeze > deploy/requirements-server-api.lock.txt",
             file=sys.stderr,
         )
         return 1

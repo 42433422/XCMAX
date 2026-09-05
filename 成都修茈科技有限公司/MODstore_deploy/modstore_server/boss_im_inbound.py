@@ -72,7 +72,7 @@ def _employee_display_name(employee_id: str) -> str:
         ident = manifest.get("identity") if isinstance(manifest.get("identity"), dict) else {}
         return str(ident.get("name") or manifest.get("name") or "").strip()
     except RECOVERABLE_ERRORS:
-        logger.debug("boss_im display name lookup failed employee=%s", employee_id, exc_info=True)
+        logger.debug("boss_im display name lookup failed")
         return ""
 
 
@@ -111,7 +111,7 @@ def enqueue_boss_im_task(*, boss_user_id: int, employee_id: str, text: str) -> D
         session.add(row)
         session.commit()
         task_id = int(row.id)
-    logger.info("boss_im task enqueued id=%s employee=%s boss=%s", task_id, eid, uid)
+    logger.info("boss_im task enqueued id=%s", task_id)
     return {"ok": True, "task_id": task_id}
 
 
@@ -160,7 +160,7 @@ def handle_boss_im_message(*, user_id: int, employee_id: str, text: str) -> Dict
                 owner_user_id=uid,
             )
         except RECOVERABLE_ERRORS:
-            logger.debug("boss_im ack skipped employee=%s", eid, exc_info=True)
+            logger.debug("boss_im ack skipped")
     return {
         "ok": True,
         "mode": "task_enqueued",
@@ -263,7 +263,11 @@ def dispatch_boss_im_task(task_id: int, *, actor_user_id: int = 0) -> Dict[str, 
             ok = True
             reply = "✅ 已处理完，不过这次没有可展示的文本结果。"
     except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - 员工执行失败必须转成 IM 回音，不能抛死调度循环
-        logger.exception("boss_im dispatch failed task_id=%s employee=%s", task_id, eid)
+        logger.warning(
+            "boss_im dispatch failed task_id=%s error_type=%s",
+            task_id,
+            type(exc).__name__,
+        )
         error = str(exc)[:2000]
         reply = f"❌ 这条我执行失败了：{str(exc)[:300]}\n可以换个说法再发我一次。"
 

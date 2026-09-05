@@ -23,19 +23,34 @@ ROOT = Path(__file__).resolve().parents[2]
 METRICS_DIR = ROOT / "metrics"
 PRODUCTION_EVIDENCE_DIR = METRICS_DIR / "slo-production"
 
+# This fixed target inventory/interval is checked against prometheus.production.yml.
+# Do not discover only currently healthy targets: a disappeared target must block.
+SCRAPE_INTERVAL_SECONDS = 15
+SCRAPE_WINDOW_SECONDS = 86400
+SCRAPE_TARGETS = {
+    "fhd-api-stable": "127.0.0.1:5100",
+    "modstore-api-production": "127.0.0.1:9999",
+}
+SCRAPE_QUERIES = {
+    job: f'sum(sum_over_time(up{{environment="production",job="{job}",instance="{instance}"}}[1d]))'
+    for job, instance in SCRAPE_TARGETS.items()
+}
+
+# Ratio denominators use the actual count. PromQL `> 0` (without `bool`)
+# filters missing/zero traffic without rounding sparse traffic up to one RPS.
 QUERIES = {
     "SLO-API-01": (
-        '1 - ((sum(rate(api_requests_total{{environment="production",status=~"5.."}}[{w}])) '
-        "or vector(0)) / clamp_min(sum(rate(api_requests_total"
-        '{{environment="production"}}[{w}])),1))'
+        '1 - ((sum(increase(api_requests_total{{environment="production",status=~"5.."}}[{w}])) '
+        "or vector(0)) / (sum(increase(api_requests_total"
+        '{{environment="production"}}[{w}])) > 0))'
     ),
     "SLO-API-02": (
         "histogram_quantile(0.95, sum by (le) (rate(api_request_duration_seconds_bucket"
         '{{environment="production",endpoint="/api/auth/login"}}[{w}]))) * 1000'
     ),
     "SLO-API-03": (
-        '(sum(rate(api_requests_total{{environment="production",status=~"5.."}}[{w}])) '
-        'or vector(0)) / clamp_min(sum(rate(api_requests_total{{environment="production"}}[{w}])),1)'
+        '(sum(increase(api_requests_total{{environment="production",status=~"5.."}}[{w}])) '
+        'or vector(0)) / (sum(increase(api_requests_total{{environment="production"}}[{w}])) > 0)'
     ),
     "SLO-AI-01": (
         "histogram_quantile(0.95, sum by (le) (rate(chat_stream_first_byte_seconds_bucket"
@@ -44,8 +59,8 @@ QUERIES = {
     "SLO-BUS-01": (
         '(1 - ((sum(increase(neurobus_events_dead_lettered_total{{environment="production"}}[{w}])) '
         'or vector(0)) + (sum(increase(neurobus_events_lost_total{{environment="production"}}[{w}])) '
-        "or vector(0))) / clamp_min(sum(increase(neurobus_events_published_total"
-        '{{environment="production"}}[{w}])),1))'
+        "or vector(0))) / (sum(increase(neurobus_events_published_total"
+        '{{environment="production"}}[{w}])) > 0))'
     ),
     "SLO-BIZ-01": (
         "histogram_quantile(0.95, sum by (le) (rate(customer_op_duration_seconds_bucket"
@@ -53,7 +68,7 @@ QUERIES = {
     ),
     "SLO-BIZ-02": (
         '(sum(increase(customer_op_total{{environment="production",status="error"}}[{w}])) '
-        'or vector(0)) / clamp_min(sum(increase(customer_op_total{{environment="production"}}[{w}])),1)'
+        'or vector(0)) / (sum(increase(customer_op_total{{environment="production"}}[{w}])) > 0)'
     ),
     "SLO-BIZ-03": (
         "histogram_quantile(0.95, sum by (le) (rate(doc_recognition_duration_seconds_bucket"
@@ -65,8 +80,8 @@ QUERIES = {
     ),
     "SLO-BIZ-05": (
         '(1 - (sum(increase(mod_install_total{{environment="production",device_scope="external_customer",status="error"}}[{w}])) '
-        "or vector(0)) / clamp_min(sum(increase(mod_install_total"
-        '{{environment="production",device_scope="external_customer"}}[{w}])),1))'
+        "or vector(0)) / (sum(increase(mod_install_total"
+        '{{environment="production",device_scope="external_customer"}}[{w}])) > 0))'
     ),
 }
 
@@ -155,6 +170,8 @@ def _latest_chain_hash(directory: Path) -> str:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError, TypeError):
             continue
+        if not isinstance(payload, dict):
+            continue
         value = str(payload.get("chain_hash") or "")
         if len(value) == 64:
             return value
@@ -191,12 +208,52 @@ def collect(
         if not backfill_reason.strip():
             raise ValueError("SLO backfill requires a non-empty reason")
     errors: list[str] = []
+    source_errors: list[str] = []
     readings: dict[str, dict[str, Any]] = {}
     credentials_available = bool(prom_url.strip() and prom_token.strip())
     if not credentials_available:
-        errors.append("production_prometheus_credentials_unavailable")
+        source_errors.append("production_prometheus_credentials_unavailable")
+        errors.extend(source_errors)
     if raw_retention_days < 120:
         errors.append(f"raw_metric_retention_below_120_days:{raw_retention_days}")
+
+    scrape_evidence: dict[str, dict[str, Any]] = {}
+    expected_scrapes = SCRAPE_WINDOW_SECONDS / SCRAPE_INTERVAL_SECONDS
+    for job, expr in SCRAPE_QUERIES.items():
+        successful_scrapes = None
+        if credentials_available:
+            try:
+                successful_scrapes = _numeric(
+                    prom_query(prom_url, expr, bearer_token=prom_token, query_at=current)
+                )
+            except (OSError, ValueError, TypeError, RuntimeError) as exc:
+                source_error = f"{job}:scrape_source_unavailable:{type(exc).__name__}"
+                source_errors.append(source_error)
+                errors.append(source_error)
+        valid_count = (
+            successful_scrapes is not None and 0 <= successful_scrapes <= expected_scrapes + 1
+        )
+        # One endpoint-boundary sample of scrape jitter is harmless; a faster
+        # interval or duplicate target must not compensate for a missing target.
+        ratio = (
+            min(successful_scrapes / expected_scrapes, 1.0)
+            if valid_count and successful_scrapes is not None
+            else None
+        )
+        if ratio is None:
+            errors.append(f"{job}:scrape_coverage_missing_or_invalid")
+        elif ratio < 0.99:
+            errors.append(f"{job}:scrape_coverage_below_99_percent")
+        scrape_evidence[job] = {
+            "instance": SCRAPE_TARGETS[job],
+            "promql": expr,
+            "window_seconds": SCRAPE_WINDOW_SECONDS,
+            "interval_seconds": SCRAPE_INTERVAL_SECONDS,
+            "expected_scrapes": expected_scrapes,
+            "successful_scrapes": successful_scrapes,
+            "coverage": ratio,
+        }
+    scrape_coverage = min(item["coverage"] or 0.0 for item in scrape_evidence.values())
 
     for slo_id, template in QUERIES.items():
         expr = template.format(w=window)
@@ -210,7 +267,9 @@ def collect(
                     prom_url, sample_expr, bearer_token=prom_token, query_at=current
                 )
             except (OSError, ValueError, TypeError, RuntimeError) as exc:
-                errors.append(f"{slo_id}:source_unavailable:{type(exc).__name__}")
+                source_error = f"{slo_id}:source_unavailable:{type(exc).__name__}"
+                source_errors.append(source_error)
+                errors.append(source_error)
         value = _numeric(raw)
         sample_count = _numeric(sample_raw)
         sample_minimum = SAMPLE_MINIMUMS[slo_id]
@@ -232,13 +291,15 @@ def collect(
         if sample_count is None:
             errors.append(f"{slo_id}:empty_sample_count")
 
-    source_status = "available" if not errors else "source_unavailable"
+    source_status = "source_unavailable" if source_errors else "available"
     coverage = sum(1 for item in readings.values() if item["reading_numeric"] is not None) / len(
         readings
     )
     day0_eligible = bool(
         source_status == "available"
+        and not errors
         and coverage >= 0.99
+        and scrape_coverage >= 0.99
         and all(
             item["sample_count"] is not None and item["sample_count"] > 0
             for item in readings.values()
@@ -257,7 +318,10 @@ def collect(
         "window": window,
         "raw_metric_retention_days": raw_retention_days,
         "source_status": source_status,
+        "source_errors": sorted(set(source_errors)),
         "coverage": coverage,
+        "scrape_coverage": scrape_coverage,
+        "scrape_evidence": scrape_evidence,
         "day0_eligible": day0_eligible,
         "errors": sorted(set(errors)),
         "readings": readings,
@@ -270,6 +334,7 @@ def collect(
     ).hexdigest()
     all_pass = (
         source_status == "available"
+        and not errors
         and coverage == 1.0
         and all(item["passes"] is True for item in readings.values())
     )
@@ -309,7 +374,10 @@ def main() -> int:
     stamp = recorded_at.strftime("%Y%m%dT%H%M%SZ")
     suffix = "-".join(
         value
-        for value in (os.environ.get("GITHUB_RUN_ID", ""), os.environ.get("GITHUB_RUN_ATTEMPT", ""))
+        for value in (
+            os.environ.get("GITHUB_RUN_ID", ""),
+            os.environ.get("GITHUB_RUN_ATTEMPT", ""),
+        )
         if value
     )
     filename = f"{stamp}{('-' + suffix) if suffix else ''}.json"

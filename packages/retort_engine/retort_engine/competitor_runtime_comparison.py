@@ -487,8 +487,8 @@ def _gh_api(endpoint: str) -> dict[str, Any]:
             timeout=30,
             check=False,
         )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        return {"returncode": 127, "json": {}, "stderr_tail": str(exc)[-300:]}
+    except (OSError, subprocess.TimeoutExpired):
+        return {"returncode": 127, "json": {}, "stderr_tail": "gh_api_unavailable"}
     try:
         payload = json.loads(completed.stdout)
     except json.JSONDecodeError:

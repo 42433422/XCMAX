@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from datetime import UTC, datetime, timedelta
 from typing import Any, Dict, List, Tuple
 
@@ -30,6 +31,11 @@ from modstore_server.models import (
 from modstore_server.platform_llm_scope import platform_llm_scoped
 
 logger = logging.getLogger(__name__)
+
+_OFFICIAL_SITE_RE = re.compile(
+    r"(?<![a-z0-9.-])(?:www\.)?xiu-ci\.com(?=$|[/:?#\s])",
+    flags=re.IGNORECASE,
+)
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -88,9 +94,7 @@ def _scope_from_incident(source: str, payload: Dict[str, Any]) -> str:
             payload.get("_unregistered_event_type"),
         )
     ).lower()
-    # Classification only: this value is never accepted as or copied into a URL.
-    # lgtm[py/incomplete-url-substring-sanitization]
-    if "xiu-ci.com" in text or "official" in text or "官网" in text:
+    if _OFFICIAL_SITE_RE.search(text) or "official" in text or "官网" in text:
         return "official_site"
     if "/fhd/" in text or "fhd" in text:
         return "fhd"

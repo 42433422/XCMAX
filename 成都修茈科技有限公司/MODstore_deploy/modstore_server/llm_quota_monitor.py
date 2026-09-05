@@ -7,6 +7,7 @@ import os
 import re
 from datetime import UTC, datetime, timedelta
 from typing import Any, Optional
+from urllib.parse import urlsplit
 
 from sqlalchemy import case, func
 
@@ -50,12 +51,12 @@ def _minimax_remains_url(base_url: Optional[str] = None) -> str:
     explicit = (os.environ.get("MINIMAX_TOKEN_PLAN_REMAINS_URL") or "").strip()
     if explicit:
         return explicit
-    base = str(base_url or platform_base_url("minimax") or "").lower()
-    # The substring only selects between two hard-coded trusted origins; no
-    # portion of base_url is used in the returned URL.
-    # lgtm[py/incomplete-url-substring-sanitization]
-    host = "www.minimaxi.com" if "minimaxi.com" in base else "www.minimax.io"
-    return f"https://{host}/v1/token_plan/remains"
+    base = str(base_url or platform_base_url("minimax") or "").strip()
+    parsed = urlsplit(base if "://" in base else f"//{base}")
+    hostname = (parsed.hostname or "").lower().rstrip(".")
+    if hostname == "minimaxi.com" or hostname.endswith(".minimaxi.com"):
+        return "https://www.minimaxi.com/v1/token_plan/remains"
+    return "https://www.minimax.io/v1/token_plan/remains"
 
 
 def _quota_state(remaining_percent: Optional[int]) -> str:

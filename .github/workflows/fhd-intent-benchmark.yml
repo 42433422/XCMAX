@@ -30,7 +30,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -r deploy/requirements-server-api.txt pytest
+          pip install -r requirements-server-api.txt pytest
 
       - name: Run intent golden set benchmark
         env:

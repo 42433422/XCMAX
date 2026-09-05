@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -46,9 +47,58 @@ def _validate_native_payload(kind: str, data: Any) -> None:
     false green release gate.
     """
 
+    if kind == "credential-incidents":
+        if (
+            not isinstance(data, dict)
+            or data.get("schema") != "credential-incidents/v1"
+            or not isinstance(data.get("incidents"), list)
+        ):
+            raise ValueError("credential incident registry is incomplete")
+        for row in data["incidents"]:
+            if not isinstance(row, dict) or not all(
+                str(row.get(field) or "").strip()
+                for field in ("id", "fingerprint_sha256", "status", "author")
+            ):
+                raise ValueError("credential incident entry is incomplete")
+            if not re.fullmatch(r"[0-9a-f]{64}", str(row["fingerprint_sha256"])):
+                raise ValueError("credential incident fingerprint is invalid")
+        return
+    if kind == "dnf-updateinfo":
+        if (
+            not isinstance(data, dict)
+            or data.get("schema") != "dnf-security-updateinfo/v1"
+            or not all(
+                str(data.get(field) or "").strip()
+                for field in ("os_id", "os_version", "running_kernel", "installed_kernel")
+            )
+            or not isinstance(data.get("running_kernel_current"), bool)
+            or not isinstance(data.get("advisories"), list)
+        ):
+            raise ValueError("DNF security updateinfo is incomplete")
+        for row in data["advisories"]:
+            if (
+                not isinstance(row, dict)
+                or not str(row.get("id") or "").strip()
+                or str(row.get("severity") or "").lower()
+                not in {"critical", "important", "moderate", "low"}
+                or not isinstance(row.get("packages"), list)
+                or not row["packages"]
+            ):
+                raise ValueError("DNF security advisory entry is incomplete")
+        return
     if kind in {"codeql", "dependabot"}:
         if not isinstance(data, list):
             raise ValueError(f"{kind} output must be a list")
+        for row in _flatten_pages(data):
+            if not isinstance(row, dict):
+                raise ValueError(f"{kind} output contains a non-object row")
+            required = (
+                {"number", "rule", "state"}
+                if kind == "codeql"
+                else {"number", "dependency", "security_advisory", "state"}
+            )
+            if not required.issubset(row):
+                raise ValueError(f"{kind} output contains an error envelope")
         return
     if kind == "trivy":
         if not isinstance(data, dict) or not isinstance(data.get("Results"), list):
@@ -108,9 +158,14 @@ def _dismissal_fields(row: dict[str, Any]) -> dict[str, Any]:
         comment = {}
     dismissed_by = row.get("dismissed_by")
     reviewer = str(dismissed_by.get("login") or "") if isinstance(dismissed_by, dict) else ""
+    reason = str(row.get("dismissed_reason") or "").strip().casefold()
     return {
         "status": "active",
-        "disposition": "false_positive",
+        "disposition": (
+            "false_positive"
+            if reason in {"false positive", "inaccurate"}
+            else "unapproved_dismissal"
+        ),
         "author": str(comment.get("author") or ""),
         "dismissal_reason": str(row.get("dismissed_reason") or ""),
         "false_positive_approval": {
@@ -187,7 +242,21 @@ def _validate_codeql_provenance(
 
 def normalize(kind: str, data: Any) -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
-    if kind == "codeql":
+    if kind == "credential-incidents":
+        for row in data.get("incidents", []) if isinstance(data, dict) else []:
+            status = str(row.get("status") or "").strip().lower()
+            resolved = status == "resolved" and _credential_resolution_is_valid(row)
+            findings.append(
+                _finding(
+                    row.get("id"),
+                    "high",
+                    secret=not resolved,
+                    status="closed" if resolved else "open",
+                    provider=str(row.get("provider") or ""),
+                    fingerprint_sha256=str(row.get("fingerprint_sha256") or ""),
+                )
+            )
+    elif kind == "codeql":
         for row in _flatten_pages(data):
             if not isinstance(row, dict) or row.get("state") not in (
                 None,
@@ -217,6 +286,34 @@ def normalize(kind: str, data: Any) -> list[dict[str, Any]]:
                     or dependency.get("package", {}).get("name"),
                     advisory.get("severity"),
                     **extra,
+                )
+            )
+    elif kind == "dnf-updateinfo":
+        for row in data.get("advisories", []) if isinstance(data, dict) else []:
+            if not isinstance(row, dict):
+                continue
+            severity = (
+                "high"
+                if str(row.get("severity") or "").lower() == "important"
+                else row.get("severity")
+            )
+            findings.append(
+                _finding(
+                    row.get("id"),
+                    severity,
+                    packages=sorted(str(package) for package in row.get("packages") or []),
+                    os_id=str(data.get("os_id") or ""),
+                    os_version=str(data.get("os_version") or ""),
+                    running_kernel=str(data.get("running_kernel") or ""),
+                )
+            )
+        if data.get("running_kernel_current") is False:
+            findings.append(
+                _finding(
+                    "RUNNING-KERNEL-STALE",
+                    "high",
+                    running_kernel=str(data.get("running_kernel") or ""),
+                    installed_kernel=str(data.get("installed_kernel") or ""),
                 )
             )
     elif kind == "trivy":
@@ -269,6 +366,33 @@ def normalize(kind: str, data: Any) -> list[dict[str, Any]]:
                     )
                 )
     return findings
+
+
+def _credential_resolution_is_valid(row: dict[str, Any]) -> bool:
+    """Accept rotation only with two-party, hashed and time-bounded evidence."""
+
+    author = str(row.get("author") or "").strip()
+    reviewer = str(row.get("reviewer") or "").strip()
+    evidence = str(row.get("resolution_evidence_sha256") or "").strip().lower()
+    if not author or not reviewer or author.casefold() == reviewer.casefold():
+        return False
+    if not re.fullmatch(r"[0-9a-f]{64}", evidence):
+        return False
+    timestamps: dict[str, datetime] = {}
+    for field in ("revoked_at", "rotated_at", "reviewed_at", "review_due"):
+        try:
+            parsed = datetime.fromisoformat(str(row.get(field) or "").replace("Z", "+00:00"))
+        except ValueError:
+            return False
+        if parsed.tzinfo is None:
+            return False
+        timestamps[field] = parsed.astimezone(UTC)
+    now = datetime.now(UTC)
+    return bool(
+        timestamps["revoked_at"] <= timestamps["reviewed_at"] <= now
+        and timestamps["rotated_at"] <= timestamps["reviewed_at"]
+        and timestamps["review_due"] >= now
+    )
 
 
 def main() -> int:

@@ -1,0 +1,84 @@
+# CI SSOT: generated from FHD/.github/workflows/production-observability.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+name: Production observability configuration
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Exact release SHA whose production SLO targets are being installed
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: xcagi-production-observability
+  cancel-in-progress: false
+
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  install-and-readback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+      - name: Lock observability source to the release SHA
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ inputs.release_sha }}"
+          printf '%s' "${{ inputs.release_sha }}" | grep -Eq '^[0-9a-f]{40}$'
+      - name: Install, validate, and read back production targets
+        env:
+          FHD_PUSH_HOST: ${{ secrets.FHD_PUSH_HOST }}
+          FHD_PUSH_USER: ${{ secrets.FHD_PUSH_USER }}
+          FHD_PUSH_SSH_KEY_RAW: ${{ secrets.FHD_PUSH_SSH_KEY }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          test -n "${FHD_PUSH_HOST:-}"
+          test -n "${FHD_PUSH_SSH_KEY_RAW:-}"
+          key="${RUNNER_TEMP}/production-observability-key"
+          remote_dir="/tmp/xcmax-production-observability-${GITHUB_RUN_ID}"
+          printf '%s\n' "$FHD_PUSH_SSH_KEY_RAW" > "$key"
+          chmod 600 "$key"
+          ssh_opts=(-i "$key" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20)
+          remote="${FHD_PUSH_USER:-root}@${FHD_PUSH_HOST}"
+          ssh "${ssh_opts[@]}" "$remote" "install -d -m 700 '${remote_dir}'"
+          scp "${ssh_opts[@]}" \
+            monitoring/prometheus.production.yml \
+            scripts/observability/install_production_prometheus_config.sh \
+            "${remote}:${remote_dir}/"
+          ssh "${ssh_opts[@]}" "$remote" \
+            "chmod 700 '${remote_dir}/install_production_prometheus_config.sh' && '${remote_dir}/install_production_prometheus_config.sh' '${remote_dir}/prometheus.production.yml' '${RELEASE_SHA}'" \
+            | tee "${RUNNER_TEMP}/production-observability-readback.log"
+      - name: Remove only this run's remote temporary files
+        if: always()
+        env:
+          FHD_PUSH_HOST: ${{ secrets.FHD_PUSH_HOST }}
+          FHD_PUSH_USER: ${{ secrets.FHD_PUSH_USER }}
+        run: |
+          set -u
+          key="${RUNNER_TEMP}/production-observability-key"
+          remote_dir="/tmp/xcmax-production-observability-${GITHUB_RUN_ID}"
+          if [ -n "${FHD_PUSH_HOST:-}" ] && [ -s "$key" ]; then
+            ssh -i "$key" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 \
+              "${FHD_PUSH_USER:-root}@${FHD_PUSH_HOST}" \
+              "rm -f '${remote_dir}/prometheus.production.yml' '${remote_dir}/install_production_prometheus_config.sh'; rmdir '${remote_dir}' 2>/dev/null || true" \
+              || true
+          fi
+      - name: Upload target readback and rollback pointer
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcagi-production-observability-readback
+          path: ${{ runner.temp }}/production-observability-readback.log
+          retention-days: 120
+          if-no-files-found: error

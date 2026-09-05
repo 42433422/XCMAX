@@ -193,7 +193,7 @@ def resolve_daily_brief_research_brief(pkg_id: str, display_name: str) -> str:
             if v and str(v).strip():
                 return str(v).strip()
     except RECOVERABLE_ERRORS:
-        logger.debug("daily brief: no manifest seed for %s", pkg_id, exc_info=True)
+        logger.debug("daily brief: manifest seed unavailable")
     return f"{display_name}（{pkg_id}）MODstore 运维、质量、发布与近期行业公开动态"
 
 
@@ -329,7 +329,7 @@ async def _one_brief_html(pkg_id: str, display_name: str, prov: str, mdl: str) -
                             + "</p>"
                         )
                 except RECOVERABLE_ERRORS:
-                    logger.exception("daily brief todo enqueue failed employee=%s", pkg_id)
+                    logger.error("daily brief todo enqueue failed")
             inner = (
                 warn_html
                 + f'<pre style="white-space:pre-wrap;font-size:13px">{html.escape(main_md)}</pre>'
@@ -338,9 +338,9 @@ async def _one_brief_html(pkg_id: str, display_name: str, prov: str, mdl: str) -
             )
         else:
             inner = warn_html + '<p style="color:#888;font-size:13px">（无输出）</p>'
-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
-        logger.exception("daily brief failed employee=%s", pkg_id)
-        inner = f'<p style="color:#b91c1c;font-size:13px">{html.escape(str(exc)[:500])}</p>'
+    except BOUNDARY_ERRORS:  # noqa: BLE001
+        logger.error("daily brief failed")
+        inner = '<p style="color:#b91c1c;font-size:13px">生成简报失败</p>'
 
     title_esc = html.escape(display_name)
     pid_esc = html.escape(pkg_id)

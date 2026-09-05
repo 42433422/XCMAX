@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from retort_engine.core import RetortService as CoreRetortService
 from retort_engine.employee_queue import RetortEmployeeQueue
 from retort_engine.feedback import feedback_ingest
@@ -11,7 +12,12 @@ from retort_engine.license_gate import license_gate
 from retort_engine.models import ImprovementTask
 from retort_engine.runtime_adapter import RetortEmployeeRuntimeAdapter
 from retort_engine.semantic_reviewer import semantic_compare
-from retort_engine.service import RetortService, create_app
+from retort_engine.service import (
+    RetortService,
+    _authorize_http_payload,
+    _trusted_path_registry,
+    create_app,
+)
 from retort_engine.ui_server import RetortUIServer
 
 from tests.test_evidence_evaluator import (
@@ -131,6 +137,37 @@ def test_product_service_and_blackhole_ui_surface(tmp_path: Path, monkeypatch) -
     ui_root = RetortUIServer().static_root
     assert "blackhole" in (ui_root / "app.js").read_text(encoding="utf-8").lower()
     assert "ownProjectFolder" in (ui_root / "index.html").read_text(encoding="utf-8")
+
+
+def test_http_path_authorization_uses_only_configured_server_paths(
+    tmp_path: Path,
+) -> None:
+    project = tmp_path / "project"
+    outside = tmp_path / "outside"
+    project.mkdir()
+    outside.mkdir()
+    trusted = _trusted_path_registry([project])
+
+    authorized = _authorize_http_payload({"project": ".", "max_files": 5}, trusted)
+
+    assert authorized == {"project": str(project.resolve()), "max_files": 5}
+    with pytest.raises(ValueError, match="not an allowed server path"):
+        _authorize_http_payload({"project": str(outside)}, trusted)
+
+
+def test_service_layer_rejects_paths_outside_configured_workspaces(
+    tmp_path: Path,
+) -> None:
+    project = tmp_path / "project"
+    outside = tmp_path / "outside"
+    project.mkdir()
+    outside.mkdir()
+    (project / "sample.py").write_text("VALUE = 1\n", encoding="utf-8")
+    service = RetortService(workspace_roots=[project])
+
+    assert service.codebase_graph_report({"project": str(project)})["status"] == "ready"
+    with pytest.raises(ValueError, match="outside configured Retort workspaces"):
+        service.codebase_graph_report({"project": str(outside)})
 
 
 def test_service_exposes_codebase_graph_report(tmp_path: Path) -> None:

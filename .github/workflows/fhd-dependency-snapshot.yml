@@ -1,0 +1,57 @@
+# CI SSOT: generated from FHD/.github/workflows/dependency-snapshot.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+name: Refresh locked Python dependency graph
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '15 1 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: xcmax-locked-python-main
+  cancel-in-progress: false
+
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Export exact main lockfile pins
+        run: |
+          python scripts/security/export_locked_dependency_snapshot.py \
+            --sha "$(git rev-parse HEAD)" \
+            --job-id "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --output "${RUNNER_TEMP}/locked-dependencies.json"
+      - name: Submit current snapshot without dismissing alerts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          expected=$(git rev-parse HEAD)
+          current=$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)
+          test "$expected" = "$current"
+          gh api "repos/${GITHUB_REPOSITORY}/dependency-graph/snapshots" \
+            --method POST --input "${RUNNER_TEMP}/locked-dependencies.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: locked-dependencies-${{ github.run_id }}
+          path: ${{ runner.temp }}/locked-dependencies.json
+          if-no-files-found: error
+          retention-days: 120

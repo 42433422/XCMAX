@@ -354,12 +354,17 @@ def remove_mod(library: Path, mod_id: str) -> None:
     if not mod_id or "/" in mod_id or "\\" in mod_id or mod_id in (".", ".."):
         raise ValueError("非法 mod id")
     lib = library.resolve()
-    p = (library / mod_id).resolve()
-    if p.parent.resolve() != lib:
-        raise ValueError("非法路径")
-    if not p.is_dir():
-        raise FileNotFoundError(mod_id)
-    shutil.rmtree(p)
+    for candidate in lib.iterdir():
+        if candidate.name != mod_id:
+            continue
+        resolved = candidate.resolve()
+        if candidate.is_symlink() or resolved.parent != lib:
+            raise ValueError("非法路径")
+        if resolved.is_dir():
+            shutil.rmtree(resolved)
+            return
+        break
+    raise FileNotFoundError(mod_id)
 
 
 def find_mod_dir_by_manifest_id(library: Path, mod_id: str) -> Path:
@@ -382,9 +387,6 @@ def find_mod_dir_by_manifest_id(library: Path, mod_id: str) -> Path:
             p = d.resolve()
             if p.parent.resolve() == lib:
                 return p
-    p = (library / target).resolve()
-    if p.is_dir() and p.parent.resolve() == lib:
-        return p
     raise FileNotFoundError(target)
 
 

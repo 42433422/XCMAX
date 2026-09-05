@@ -123,7 +123,7 @@ def publish_doc_change_signal(
     payload: Optional[Dict[str, Any]] = None,
 ) -> bool:
     if source_employee not in DOC_CHANGE_SOURCE_EMPLOYEES:
-        logger.debug("Ignoring doc change signal from non-doc source: %s", source_employee)
+        logger.debug("Ignoring doc change signal from non-doc source")
         return False
 
     signal = ChangeSignal(

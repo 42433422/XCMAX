@@ -93,11 +93,7 @@ def _execute_employee_task_with_timeout(
         result = fut.result(timeout=max(15, int(timeout_seconds)))
         return result if isinstance(result, dict) else {"ok": False, "error": "invalid_result"}
     except FuturesTimeoutError:
-        logger.warning(
-            "incident_team: role timeout employee_id=%s timeout=%ss",
-            employee_id,
-            timeout_seconds,
-        )
+        logger.warning("incident_team: role timed out")
         return {
             "ok": False,
             "handler_failed": True,
@@ -339,12 +335,7 @@ def _follow_up_handler_failures(
             # 配额/计费类：不重试，标记需要人工处理。飞书告警由 boss_daily_im_report 消费 _team_claim.follow_ups。
             follow_up["action"] = "quota_blocked_need_human"
             follow_up["ok"] = False
-            logger.warning(
-                "incident_team: event_id=%s role=%s handler_failed quota_blocked error=%s",
-                event_id,
-                role,
-                error_text[:200],
-            )
+            logger.warning("incident_team: handler failed because quota is blocked")
         elif failure_kind == FAILURE_KIND_TRANSIENT and transient_retry_limit > 0:
             # 瞬时网络/限流抖动：自动重试 1 次（同 employee + 同 task）。
             follow_up["action"] = "transient_retry"

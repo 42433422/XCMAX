@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 from retort_engine.employee_queue import parse_employee_task_result
 from retort_engine.history import RetortHistoryStore
 from retort_engine.models import EmployeeTaskResult
+from retort_engine.secure_artifacts import read_private_json
 
 
 def feedback_ingest(
@@ -18,7 +16,7 @@ def feedback_ingest(
     evidence: tuple[str, ...] = (),
 ) -> EmployeeTaskResult:
     if result_file:
-        payload = json.loads(Path(result_file).read_text(encoding="utf-8"))
+        payload = read_private_json(result_file)
     else:
         payload = {
             "task_id": task_id,
