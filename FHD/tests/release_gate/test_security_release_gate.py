@@ -193,6 +193,8 @@ def test_credential_rotation_requires_independent_hashed_evidence() -> None:
     assert normalizer._credential_resolution_is_valid(row) is True
     row["reviewer"] = "fix-author"
     assert normalizer._credential_resolution_is_valid(row) is False
+    row["reviewer"] = " FIX-AUTHOR "
+    assert normalizer._credential_resolution_is_valid(row) is False
 
 
 def test_false_positive_requires_independent_fresh_review(tmp_path: Path) -> None:
@@ -224,6 +226,21 @@ def test_false_positive_requires_independent_fresh_review(tmp_path: Path) -> Non
     assert mod.evaluate(tmp_path, now=now)["passed"] is False
 
 
+@pytest.mark.parametrize("author", ["", "  ", "SECURITY-REVIEWER", "security-reviewer"])
+def test_false_positive_cannot_omit_author_or_change_account_case(author):
+    now = datetime(2026, 9, 5, tzinfo=UTC)
+    finding = {
+        "author": author,
+        "false_positive_approval": {
+            "reviewer": "security-reviewer",
+            "evidence": "reviewed source and data flow",
+            "reviewed_at": now.isoformat(),
+            "review_due": (now + timedelta(days=30)).isoformat(),
+        },
+    }
+    assert _module()._false_positive_is_valid(finding, now) is False
+
+
 def test_dismissed_alert_requires_structured_independent_review() -> None:
     normalizer = _normalizer_module()
     rows = normalizer.normalize(
@@ -251,6 +268,23 @@ def test_dismissed_alert_requires_structured_independent_review() -> None:
     assert rows[0]["disposition"] == "false_positive"
     assert rows[0]["author"] == "fix-author"
     assert rows[0]["false_positive_approval"]["reviewer"] == "security-reviewer"
+
+
+@pytest.mark.parametrize(
+    "reason",
+    ["won't fix", "used in tests", "tolerable_risk", "no_bandwidth", "fix_started", "not_used", ""],
+)
+def test_risk_acceptance_cannot_masquerade_as_false_positive(reason):
+    fields = _normalizer_module()._dismissal_fields({"dismissed_reason": reason})
+    assert fields["status"] == "active"
+    assert fields["disposition"] == "unapproved_dismissal"
+
+
+@pytest.mark.parametrize("reason", ["false positive", "inaccurate"])
+def test_only_native_false_positive_reasons_enter_review_gate(reason):
+    fields = _normalizer_module()._dismissal_fields({"dismissed_reason": reason})
+    assert fields["disposition"] == "false_positive"
+    assert _module()._false_positive_is_valid(fields, datetime.now(UTC)) is False
 
 
 def test_sarif_numeric_and_error_severity_cannot_evade_high_gate() -> None:
