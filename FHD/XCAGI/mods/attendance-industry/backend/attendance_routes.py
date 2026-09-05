@@ -12,126 +12,6 @@ from app.mod_sdk.errors import BOUNDARY_ERRORS
 from app.mod_sdk.host_services import workspace_root
 
 
-def build_attendance_dashboard_snapshot(db_path: Path) -> dict:
-    """Build a read-only dashboard snapshot from the attendance Mod database."""
-    import sqlite3
-
-    empty = {
-        "employees_total": 0,
-        "departments_total": 0,
-        "daily_records_total": 0,
-        "anomaly_records_total": 0,
-        "months_total": 0,
-        "latest_month": "",
-        "date_from": "",
-        "date_to": "",
-        "latest_import": None,
-        "department_breakdown": [],
-        "readiness": "empty",
-    }
-    if not db_path.exists():
-        return empty
-
-    conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
-
-    def table_exists(name: str) -> bool:
-        row = conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
-            (name,),
-        ).fetchone()
-        return row is not None
-
-    def count_rows(table: str) -> int:
-        if not table_exists(table):
-            return 0
-        row = conn.execute(f"SELECT COUNT(*) AS total FROM {table}").fetchone()
-        return int(row["total"] or 0) if row else 0
-
-    try:
-        snapshot = {
-            **empty,
-            "employees_total": count_rows("attendance_employees"),
-            "departments_total": count_rows("attendance_departments"),
-            "daily_records_total": count_rows("attendance_daily_records"),
-        }
-
-        if table_exists("attendance_daily_records"):
-            summary = conn.execute(
-                """
-                SELECT
-                    COUNT(DISTINCT NULLIF(TRIM(month_label), '')) AS months_total,
-                    COALESCE(MAX(NULLIF(TRIM(month_label), '')), '') AS latest_month,
-                    COALESCE(MIN(NULLIF(TRIM(work_date), '')), '') AS date_from,
-                    COALESCE(MAX(NULLIF(TRIM(work_date), '')), '') AS date_to,
-                    SUM(
-                        CASE WHEN COALESCE(leave_hours, 0) > 0
-                            OR COALESCE(absent_days, 0) > 0
-                            OR COALESCE(late_count_hint, 0) > 0
-                            OR COALESCE(early_count_hint, 0) > 0
-                            OR COALESCE(missing_card_count, 0) > 0
-                        THEN 1 ELSE 0 END
-                    ) AS anomaly_records_total
-                FROM attendance_daily_records
-                """
-            ).fetchone()
-            if summary:
-                snapshot.update(
-                    {
-                        "months_total": int(summary["months_total"] or 0),
-                        "latest_month": str(summary["latest_month"] or ""),
-                        "date_from": str(summary["date_from"] or ""),
-                        "date_to": str(summary["date_to"] or ""),
-                        "anomaly_records_total": int(summary["anomaly_records_total"] or 0),
-                    }
-                )
-
-        if table_exists("attendance_import_batches"):
-            latest = conn.execute(
-                """
-                SELECT source_file, month_label, rows_in, rows_written, imported_at
-                FROM attendance_import_batches
-                ORDER BY imported_at DESC, id DESC
-                LIMIT 1
-                """
-            ).fetchone()
-            if latest:
-                snapshot["latest_import"] = {
-                    "source_file": str(latest["source_file"] or ""),
-                    "month_label": str(latest["month_label"] or ""),
-                    "rows_in": int(latest["rows_in"] or 0),
-                    "rows_written": int(latest["rows_written"] or 0),
-                    "imported_at": str(latest["imported_at"] or ""),
-                }
-                if not snapshot["latest_month"]:
-                    snapshot["latest_month"] = str(latest["month_label"] or "")
-
-        if table_exists("attendance_employees"):
-            rows = conn.execute(
-                """
-                SELECT
-                    CASE WHEN TRIM(department) = '' THEN '未分配部门' ELSE TRIM(department) END AS department,
-                    COUNT(*) AS employees
-                FROM attendance_employees
-                GROUP BY CASE WHEN TRIM(department) = '' THEN '未分配部门' ELSE TRIM(department) END
-                ORDER BY employees DESC, department ASC
-                LIMIT 12
-                """
-            ).fetchall()
-            snapshot["department_breakdown"] = [
-                {"department": str(row["department"]), "employees": int(row["employees"] or 0)}
-                for row in rows
-            ]
-
-        if snapshot["daily_records_total"]:
-            snapshot["readiness"] = "ready"
-        elif snapshot["employees_total"]:
-            snapshot["readiness"] = "needs_records"
-        return snapshot
-    finally:
-        conn.close()
-
-
 def register(
     router,
     *,
@@ -141,7 +21,7 @@ def register(
     _normalize_relpath,
     _resolve_personnel_roster,
 ) -> None:
-    """在给定 router 上注册 /attendance/*、/employees、/departments 路由。"""
+    """在给定 router 上注册 /attendance/* 转换与规则路由。"""
     # 考勤转换的实现放在 mod 私有包 ``taiyangniao_attendance/``
     # （被 mod_manager 加到 sys.path 的 ``backend/`` 可直接绝对 import）。
     from taiyangniao_attendance.convert import convert_attendance_file
@@ -207,7 +87,7 @@ def register(
             "accepted_extensions": [".xlsx", ".xlsm", ".xls"],
             "allow_template_append": True,
             "default_template_relpath": DEFAULT_TEMPLATE_RELPATH,
-            "default_template_behavior": "固定模板版式；勾选按人员管理名单时用 products 重排明细，钉钉按名回填，无则空",
+            "default_template_behavior": "固定模板版式；按人员管理名单重排明细，钉钉按名回填，无则空",
         }
         schedule_groups = [
             {
@@ -240,18 +120,6 @@ def register(
                 "schedule_groups": schedule_groups,
             },
         }
-
-    @router.get("/attendance/dashboard", response_model=None)
-    async def attendance_dashboard() -> dict:
-        try:
-            data = build_attendance_dashboard_snapshot(get_database_path())
-        except BOUNDARY_ERRORS:  # noqa: BLE001 - route boundary returns a generic error
-            logger.exception("读取考勤看板失败")
-            return JSONResponse(
-                {"success": False, "message": "读取考勤看板失败"},
-                status_code=500,
-            )
-        return {"success": True, "data": data}
 
     @router.post("/attendance/convert-upload", response_model=None)
     async def attendance_convert_upload(
@@ -355,7 +223,7 @@ def register(
                 return JSONResponse(
                     {
                         "success": False,
-                        "error": "已勾选「按人员管理名单」，但主库「人员管理」与 mod 备用库均无人员。请先在侧栏「人员管理」导入或录入后再转换；或取消勾选改用模板内原名单。",
+                        "error": "已勾选「按人员管理名单」，但当前名单为空。请先在侧栏「人员管理」录入后再转换；或取消勾选改用模板内原名单。",
                     },
                     status_code=400,
                 )
@@ -446,69 +314,3 @@ def register(
             return JSONResponse({"success": False, "error": "file not found"}, status_code=404)
 
         return FileResponse(path=str(p), filename=p.name, media_type="application/octet-stream")
-
-    @router.get("/employees", response_model=None)
-    async def list_employees(page: int = 1, page_size: int = 50, search: str = ""):
-        import sqlite3
-
-        db_path = get_database_path()
-        if not db_path.exists():
-            return {
-                "success": True,
-                "data": {"items": [], "total": 0, "page": page, "page_size": page_size},
-            }
-        conn = sqlite3.connect(str(db_path))
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        like = f"%{search}%"
-        cur.execute(
-            "SELECT COUNT(*) FROM attendance_employees WHERE employee_name LIKE ? OR department LIKE ?",
-            (like, like),
-        )
-        total = cur.fetchone()[0]
-        offset = (page - 1) * page_size
-        cur.execute(
-            "SELECT id, employee_name, department, main_department, attendance_group, employee_no, position, user_id "
-            "FROM attendance_employees WHERE employee_name LIKE ? OR department LIKE ? "
-            "ORDER BY id LIMIT ? OFFSET ?",
-            (like, like, page_size, offset),
-        )
-        items = [dict(r) for r in cur.fetchall()]
-        conn.close()
-        return {
-            "success": True,
-            "data": {"items": items, "total": total, "page": page, "page_size": page_size},
-        }
-
-    @router.get("/departments", response_model=None)
-    async def list_departments(page: int = 1, page_size: int = 50, search: str = ""):
-        import sqlite3
-
-        db_path = get_database_path()
-        if not db_path.exists():
-            return {
-                "success": True,
-                "data": {"items": [], "total": 0, "page": page, "page_size": page_size},
-            }
-        conn = sqlite3.connect(str(db_path))
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        like = f"%{search}%"
-        cur.execute(
-            "SELECT COUNT(*) FROM attendance_departments WHERE department LIKE ? OR main_department LIKE ?",
-            (like, like),
-        )
-        total = cur.fetchone()[0]
-        offset = (page - 1) * page_size
-        cur.execute(
-            "SELECT id, department, main_department, attendance_group "
-            "FROM attendance_departments WHERE department LIKE ? OR main_department LIKE ? "
-            "ORDER BY id LIMIT ? OFFSET ?",
-            (like, like, page_size, offset),
-        )
-        items = [dict(r) for r in cur.fetchall()]
-        conn.close()
-        return {
-            "success": True,
-            "data": {"items": items, "total": total, "page": page, "page_size": page_size},
-        }

@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import logging
 import sys
+from contextlib import closing
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -80,6 +81,29 @@ def _load_private_roster(db_path: Path) -> list[tuple[str, str, str]]:
 
 
 def _resolve_personnel_roster(db_path: Path) -> list[tuple[str, str, str]]:
+    """与独立人员管理同源；已维护的空名单也不能回退复活旧人员。"""
+    import sqlite3
+
+    if db_path.is_file():
+        with closing(sqlite3.connect(f"{db_path.as_uri()}?mode=ro", uri=True)) as conn:
+            exists = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'attendance_employees'"
+            ).fetchone()
+            if exists:
+                rows = conn.execute(
+                    "SELECT department, position, employee_name FROM attendance_employees "
+                    "WHERE TRIM(employee_name) <> '' ORDER BY id"
+                ).fetchall()
+                seen: set[str] = set()
+                roster: list[tuple[str, str, str]] = []
+                for department, position, employee_name in rows:
+                    name = str(employee_name or "").strip()
+                    if name and name not in seen:
+                        seen.add(name)
+                        roster.append(
+                            (str(department or "").strip(), str(position or "").strip(), name)
+                        )
+                return roster
     return _load_products_personnel_roster_from_host() or _load_private_roster(db_path)
 
 
@@ -134,6 +158,9 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         DEFAULT_TEMPLATE_RELPATH=DEFAULT_TEMPLATE_RELPATH,
         _normalize_relpath=_normalize_relpath,
         _resolve_personnel_roster=_resolve_personnel_roster,
+    )
+    _load_local_module("management_routes").register(
+        router, logger=logger, get_database_path=get_database_path
     )
     app.include_router(router, prefix=f"/api/mods/{mod_id}")
     app.include_router(router, prefix=f"/api/mod/{mod_id}")

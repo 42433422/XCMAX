@@ -217,10 +217,10 @@ const sampleMods = [
     industry: { id: 'attendance', name: '考勤' },
     menu: [
       {
-        id: 'mod-attendance-dashboard',
-        label: '考勤看板',
-        icon: 'dashboard',
-        path: '/mod/attendance-industry/dashboard',
+        id: 'mod-attendance-personnel',
+        label: '人员管理',
+        icon: 'user',
+        path: '/mod/attendance-industry/personnel',
       },
     ],
   },

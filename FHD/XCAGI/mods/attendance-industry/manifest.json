@@ -15,13 +15,31 @@
   },
   "frontend": {
     "routes": "frontend/routes",
-    "pro_entry_path": "/attendance-industry/dashboard",
+    "pro_entry_path": "/attendance-industry/personnel",
     "menu": [
       {
-        "id": "attendance-industry-dashboard",
-        "label": "考勤看板",
-        "icon": "fa-dashboard",
-        "path": "/attendance-industry/dashboard"
+        "id": "attendance-industry-personnel",
+        "label": "人员管理",
+        "icon": "fa-user",
+        "path": "/attendance-industry/personnel"
+      },
+      {
+        "id": "attendance-industry-departments",
+        "label": "部门管理",
+        "icon": "fa-sitemap",
+        "path": "/attendance-industry/departments"
+      },
+      {
+        "id": "attendance-industry-schedules",
+        "label": "排班资源",
+        "icon": "fa-calendar",
+        "path": "/attendance-industry/schedules"
+      },
+      {
+        "id": "attendance-industry-records",
+        "label": "考勤记录",
+        "icon": "fa-list-alt",
+        "path": "/attendance-industry/records"
       },
       {
         "id": "attendance-industry-home",
@@ -38,7 +56,7 @@
     ]
   },
   "onboarding": {
-    "custom_line_hint": "统一提供考勤看板、考勤转换、部门人员、排班菜单与考勤 AI 助手"
+    "custom_line_hint": "统一提供人员管理、部门管理、排班资源、考勤记录、考勤转换与考勤 AI 助手"
   },
   "hooks": {},
   "industry": {

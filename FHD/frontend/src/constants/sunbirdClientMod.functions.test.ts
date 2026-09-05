@@ -16,12 +16,12 @@ describe('sunbirdClientMod constants and functions', () => {
       expect(ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU.length).toBeGreaterThan(0)
     })
 
-    it('puts the attendance dashboard first', () => {
-      expect(ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU[0].id).toBe('attendance-industry-dashboard')
+    it('puts personnel management first', () => {
+      expect(ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU[0].id).toBe('attendance-industry-personnel')
     })
 
-    it('uses the dashboard as the primary attendance path', () => {
-      expect(ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU[0].path).toBe('/attendance-industry/dashboard')
+    it('uses personnel management as the primary attendance path', () => {
+      expect(ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU[0].path).toBe('/attendance-industry/personnel')
     })
   })
 
@@ -70,13 +70,13 @@ describe('sunbirdClientMod constants and functions', () => {
       expect(buildAttendanceIndustryModStub().industry?.id).toBe('考勤')
     })
 
-    it('has menu with attendance-industry-dashboard', () => {
+    it('has menu with attendance-industry-personnel', () => {
       const stub = buildAttendanceIndustryModStub()
-      expect(stub.menu?.[0]?.id).toBe('attendance-industry-dashboard')
+      expect(stub.menu?.[0]?.id).toBe('attendance-industry-personnel')
     })
 
     it('has frontend pro_entry_path', () => {
-      expect(buildAttendanceIndustryModStub().frontend?.pro_entry_path).toBe('/attendance-industry/dashboard')
+      expect(buildAttendanceIndustryModStub().frontend?.pro_entry_path).toBe('/attendance-industry/personnel')
     })
 
     it('returns a new menu array each call (not shared reference)', () => {
@@ -104,12 +104,12 @@ describe('sunbirdClientMod constants and functions', () => {
       expect(buildSunbirdClientModStub().industry?.id).toBe('考勤')
     })
 
-    it('has menu with attendance-industry-dashboard', () => {
-      expect(buildSunbirdClientModStub().menu?.[0]?.id).toBe('attendance-industry-dashboard')
+    it('has menu with attendance-industry-personnel', () => {
+      expect(buildSunbirdClientModStub().menu?.[0]?.id).toBe('attendance-industry-personnel')
     })
 
-    it('has frontend pro_entry_path /attendance-industry/dashboard', () => {
-      expect(buildSunbirdClientModStub().frontend?.pro_entry_path).toBe('/attendance-industry/dashboard')
+    it('has frontend pro_entry_path /attendance-industry/personnel', () => {
+      expect(buildSunbirdClientModStub().frontend?.pro_entry_path).toBe('/attendance-industry/personnel')
     })
 
     it('does not override the customer industry shell', () => {

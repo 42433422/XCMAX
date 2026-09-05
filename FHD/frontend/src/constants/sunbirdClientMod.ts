@@ -5,10 +5,28 @@ import { SUNBIRD_CLIENT_MOD_ID } from './accountModBinding'
 /** 与 mods/attendance-industry/manifest.json frontend.menu 保持一致 */
 export const ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU: NonNullable<ModInfo['menu']> = [
   {
-    id: 'attendance-industry-dashboard',
-    label: '考勤看板',
-    icon: 'fa-dashboard',
-    path: '/attendance-industry/dashboard',
+    id: 'attendance-industry-personnel',
+    label: '人员管理',
+    icon: 'fa-user',
+    path: '/attendance-industry/personnel',
+  },
+  {
+    id: 'attendance-industry-departments',
+    label: '部门管理',
+    icon: 'fa-sitemap',
+    path: '/attendance-industry/departments',
+  },
+  {
+    id: 'attendance-industry-schedules',
+    label: '排班资源',
+    icon: 'fa-calendar',
+    path: '/attendance-industry/schedules',
+  },
+  {
+    id: 'attendance-industry-records',
+    label: '考勤记录',
+    icon: 'fa-list-alt',
+    path: '/attendance-industry/records',
   },
   {
     id: 'attendance-industry-home',
@@ -49,7 +67,7 @@ export function buildAttendanceIndustryModStub(): ModInfo {
     author: 'XCAGI',
     description: '跨行业通用考勤、排班与出勤统计模块',
     primary: true,
-    frontend: { pro_entry_path: '/attendance-industry/dashboard' },
+    frontend: { pro_entry_path: '/attendance-industry/personnel' },
     menu: ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU.map((row) => ({ ...row })),
     menu_overrides: [],
     industry: {

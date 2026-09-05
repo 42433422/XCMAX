@@ -499,10 +499,10 @@ describe('tutorialSamples', () => {
 })
 
 describe('sunbirdClientMod', () => {
-  it('ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU has dashboard, conversion and settings entries', () => {
-    expect(ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU).toHaveLength(3)
-    expect(ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU[0].id).toBe('attendance-industry-dashboard')
-    expect(ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU[0].path).toBe('/attendance-industry/dashboard')
+  it('ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU has management, conversion and settings entries', () => {
+    expect(ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU).toHaveLength(6)
+    expect(ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU[0].id).toBe('attendance-industry-personnel')
+    expect(ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU[0].path).toBe('/attendance-industry/personnel')
   })
 
   it('ATTENDANCE_INDUSTRY_MOD_FALLBACK_OVERRIDES is empty array', () => {
@@ -527,8 +527,8 @@ describe('sunbirdClientMod', () => {
       expect(stub.name).toBe('通用考勤模块')
       expect(stub.version).toBe('1.0.0')
       expect(stub.primary).toBe(true)
-      expect(stub.frontend?.pro_entry_path).toBe('/attendance-industry/dashboard')
-      expect(stub.menu).toHaveLength(3)
+      expect(stub.frontend?.pro_entry_path).toBe('/attendance-industry/personnel')
+      expect(stub.menu).toHaveLength(6)
       expect(stub.menu_overrides).toEqual([])
       expect(stub.industry?.id).toBe('考勤')
     })
@@ -547,9 +547,9 @@ describe('sunbirdClientMod', () => {
       expect(stub.name).toBe('通用考勤模块')
       expect(stub.version).toBe('1.0.0')
       expect(stub.primary).toBe(true)
-      expect(stub.frontend?.pro_entry_path).toBe('/attendance-industry/dashboard')
-      expect(stub.menu).toHaveLength(3)
-      expect(stub.menu[0].id).toBe('attendance-industry-dashboard')
+      expect(stub.frontend?.pro_entry_path).toBe('/attendance-industry/personnel')
+      expect(stub.menu).toHaveLength(6)
+      expect(stub.menu[0].id).toBe('attendance-industry-personnel')
       expect(stub.menu_overrides).toHaveLength(0)
       expect(stub.industry?.id).toBe('考勤')
     })
