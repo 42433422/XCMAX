@@ -15,9 +15,7 @@ from modstore_server.self_maintenance_subprocess import run_cmd_excerpt
 def test_deadline_covers_silent_and_partial_output(prefix):
     started = time.monotonic()
     with pytest.raises(RuntimeError, match="timed out"):
-        run_cmd_excerpt(
-            [sys.executable, "-c", f"import time;{prefix}time.sleep(3)"], timeout=0.2
-        )
+        run_cmd_excerpt([sys.executable, "-c", f"import time;{prefix}time.sleep(3)"], timeout=0.2)
     assert time.monotonic() - started < 2
 
 
@@ -64,7 +62,5 @@ def test_timeout_removes_descendant_holding_stdout(tmp_path):
 def test_invalid_timeout_does_not_start_command(tmp_path):
     marker = tmp_path / "started"
     with pytest.raises(ValueError, match="positive"):
-        run_cmd_excerpt(
-            [sys.executable, "-c", f"open({str(marker)!r},'w').close()"], timeout=0
-        )
+        run_cmd_excerpt([sys.executable, "-c", f"open({str(marker)!r},'w').close()"], timeout=0)
     assert not marker.exists()
