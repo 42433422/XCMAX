@@ -120,7 +120,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r deploy/requirements-server-api.txt
+          pip install -r requirements-server-api.txt
           pip install -r deploy/requirements-dev.txt
 
       - name: Verify requirements lock is in sync
@@ -370,7 +370,7 @@ jobs:
           #  - bandit broad scan (--exit-zero) is ADVISORY; the focused B608 (SQL injection)
           #    pass below is BLOCKING.
           pip install pip-audit bandit
-          pip-audit -r deploy/requirements-server-api.txt
+          pip-audit -r requirements-server-api.txt
           bandit -r app/ -lll --skip B101,B601,B110 --exit-zero
           # B608=SQLi (blocking scan below skips it); B324/B413=cache-key hash & legacy wechat crypto (non-exploit)
           bandit -r app/ -lll -s B608,B324,B413
@@ -817,7 +817,7 @@ jobs:
       - name: Install backend test deps
         run: |
           python -m pip install --upgrade pip
-          pip install -r deploy/requirements-server-api.txt -r deploy/requirements-dev.txt
+          pip install -r requirements-server-api.txt -r deploy/requirements-dev.txt
 
       - name: Install frontend deps
         working-directory: frontend

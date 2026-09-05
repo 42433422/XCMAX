@@ -4,7 +4,7 @@
 The source modules under test (app.services.intent_trainer,
 app.services.distillation_trainer, app.services.train_intent) import
 ``torch`` and ``transformers`` at module top-level. These heavy ML deps are
-intentionally excluded from the CI/test venv — see deploy/requirements-server-api.txt
+intentionally excluded from the CI/test venv — see requirements-server-api.txt
 which comments "与 XCAGI/requirements.txt 相比去掉 torch 等大包". Without these
 stubs every test file that imports those modules skips via
 ``pytest.skip(allow_module_level=True)``, leaving the trainer code paths with

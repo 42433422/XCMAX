@@ -2,7 +2,7 @@
 # Dev/test: pip install -e ".[dev]"
 # ML/GPU: pip install -r requirements-ml.txt
 #
-# Lock file for CI: deploy/requirements-server-api.txt
+# CI/production install manifest: requirements-server-api.txt
 fastapi>=0.136.1
 uvicorn[standard]>=0.27.0
 starlette>=1.3.1

@@ -7,7 +7,7 @@
   - MEDIUM/LOW → 打印 warning，exit 0
 
 用法：
-    safety check -r deploy/requirements-server-api.txt --json \
+    safety check -r requirements-server-api.txt --json \
       | python scripts/dev/safety_gate.py
 """
 
