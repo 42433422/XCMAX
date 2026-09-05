@@ -14,7 +14,6 @@
     "xcagi-office-employee-pack-bridge",
     "xcagi-customer-service-bridge",
     "xcagi-planner-excel-tools",
-    "wechat-contacts-ai-employee",
     "lan-gate-ai-employee"
   ],
   "sku_bundled_mod_ids": [
@@ -28,7 +27,6 @@
     "xcagi-office-employee-pack-bridge",
     "xcagi-customer-service-bridge",
     "xcagi-planner-excel-tools",
-    "wechat-contacts-ai-employee",
     "lan-gate-ai-employee"
   ]
 }

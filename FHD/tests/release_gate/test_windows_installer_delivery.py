@@ -1,8 +1,18 @@
+import json
 from pathlib import Path
 
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_profile_stage_lists_only_existing_modules():
+    for sku in ("personal", "enterprise"):
+        profile = json.loads((ROOT / f"config/host_profiles/{sku}.json").read_text())
+        for field in ("package_stage_ids", "sku_bundled_mod_ids"):
+            assert "wechat-contacts-ai-employee" not in profile[field]
+            for mod_id in profile[field]:
+                assert (ROOT / "mods" / mod_id / "manifest.json").is_file(), mod_id
 
 
 def test_manual_installer_is_part_of_official_workflow_without_stable_publication():

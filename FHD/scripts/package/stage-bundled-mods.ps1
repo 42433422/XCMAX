@@ -29,8 +29,7 @@ foreach ($modId in $ids) {
   if ($excludeAlways -contains $modId) { continue }
   $src = Join-Path $modsRoot $modId
   if (-not (Test-Path $src)) {
-    Write-Warning "Mod not found, skip: $modId ($src)"
-    continue
+    throw "Required profile mod not found: $modId ($src)"
   }
   $dst = Join-Path $stageDir $modId
   Copy-Item -Path $src -Destination $dst -Recurse -Force
