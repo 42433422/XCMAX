@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 import { captureEvidence, E2E_PASSWORD, E2E_USER, isFullStack } from '../e2e/helpers'
 
 // e2e-full.sh runs this against its fresh data directory before ERP fixtures bind an industry.
-test('fresh enterprise form login requires industry selection with the baseline installed', async ({ page }) => {
+test('fresh enterprise form login starts with company then industry with the baseline installed', async ({ page }) => {
   expect(isFullStack(), 'This case requires the isolated e2e-full.sh backend').toBe(true)
   await page.goto('/login?redirect=%2Forders', { waitUntil: 'domcontentloaded', timeout: 30_000 })
   await page.locator('#lv-username').fill(E2E_USER)
@@ -16,10 +16,14 @@ test('fresh enterprise form login requires industry selection with the baseline 
   expect(loginResponse.status(), await loginResponse.text()).toBe(200)
   expect(await loginResponse.json()).toMatchObject({ success: true })
   await expect(page).toHaveURL(
-    (url) => url.pathname === '/onboarding' && url.searchParams.get('step') === 'industry',
+    (url) => url.pathname === '/onboarding' && url.searchParams.get('step') === 'welcome',
     { timeout: 45_000 },
   )
-  await expect(page.getByRole('heading', { name: '先定行业', exact: true })).toBeVisible()
+  await expect(page.getByLabel('公司或团队名称')).toBeVisible()
+  await page.getByLabel('公司或团队名称').fill('首次登录验收公司')
+  await page.getByRole('button', { name: '让 XC 认识我的公司' }).click()
+  await expect(page).toHaveURL((url) => url.pathname === '/onboarding' && url.searchParams.get('step') === 'industry')
+  await expect(page.getByRole('heading', { name: '首次登录验收公司属于什么行业？', exact: true })).toBeVisible()
   await expect(page.getByRole('listbox', { name: '可选行业' })).toBeVisible()
 
   const prefsResponse = await page.request.get('/api/workspace/prefs')
