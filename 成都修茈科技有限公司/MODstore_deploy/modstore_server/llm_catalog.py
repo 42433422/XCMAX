@@ -80,6 +80,8 @@ from modstore_server.llm_catalog_part02 import (
 
 from modstore_server.llm_catalog_part03 import (
     get_models_for_provider as get_models_for_provider,
+    get_models_for_credentials as get_models_for_credentials,
+    resolve_catalog_credentials as resolve_catalog_credentials,
 )
 
 _PROBE_HTTPX_TIMEOUT = 10.0

@@ -126,8 +126,8 @@ def test_expired_wrong_purpose_wrong_target_and_changed_credentials(database):
 
 def test_api_authentication_no_store_user_binding_and_csrf_first_visit(database, monkeypatch):
     monkeypatch.setenv("MODSTORE_DISABLE_CSRF", "0")
-    from modstore_server.market_auth_api import router as market_auth_router
     from modstore_server.api.app_factory_part01 import _include_router_without_method_conflicts
+    from modstore_server.market_auth_api import router as market_auth_router
 
     app = FastAPI()
     _include_router_without_method_conflicts(app, market_auth_router, prefix="/api")
@@ -197,9 +197,11 @@ def test_disabled_identity_cannot_issue_or_redeem(database):
 def test_migration_creates_ticket_table_and_index(tmp_path, monkeypatch):
     import importlib.util
     from pathlib import Path
+
+    from sqlalchemy import inspect
+
     from alembic.migration import MigrationContext
     from alembic.operations import Operations
-    from sqlalchemy import inspect
 
     path = Path(__file__).resolve().parents[1] / "alembic/versions/20260905_browser_handoff.py"
     spec = importlib.util.spec_from_file_location("handoff_migration", path)

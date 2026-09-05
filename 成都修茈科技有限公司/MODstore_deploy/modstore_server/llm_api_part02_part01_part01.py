@@ -12,11 +12,19 @@ def _facade():
     return importlib.import_module("modstore_server.llm_api")
 
 
+def _read_catalog_credentials(user_id: int, provider: str):
+    from modstore_server.llm_catalog import resolve_catalog_credentials
+    from modstore_server.models import get_session_factory
+
+    with get_session_factory()() as session:
+        return resolve_catalog_credentials(session, user_id, provider)
+
+
 async def _fetch_catalog_provider_block(
     user_id: int, provider: str, *, force_refresh: bool
 ) -> _facade().Dict[str, _facade().Any]:
-    """单厂商目录块；独立 DB Session，可与其它厂商并行拉取。"""
-    from modstore_server.models import get_session_factory
+    """Fetch providers concurrently without holding database connections across awaits."""
+    from modstore_server.llm_catalog import get_models_for_credentials
 
     labels = _facade()._provider_labels()
     empty = {
@@ -31,13 +39,16 @@ async def _fetch_catalog_provider_block(
         "from_cache": False,
     }
     try:
-        sf = get_session_factory()
-        with sf() as sess:
-            block = await _facade().asyncio.wait_for(
-                _facade().get_models_for_provider(
-                    sess, user_id, provider, force_refresh=force_refresh
-                ),
-                timeout=_facade()._CATALOG_PROVIDER_TIMEOUT_SEC,
+        async with _facade().asyncio.timeout(_facade()._CATALOG_PROVIDER_TIMEOUT_SEC):
+            api_key, base_url = await _facade().asyncio.to_thread(
+                _read_catalog_credentials, user_id, provider
+            )
+            block = await get_models_for_credentials(
+                user_id,
+                provider,
+                api_key=api_key,
+                base_url=base_url,
+                force_refresh=force_refresh,
             )
         mids: _facade().List[str] = list(block.get("models") or [])
         detailed = list(block.get("models_detailed") or [])

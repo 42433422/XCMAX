@@ -77,9 +77,12 @@ export interface RefundListResponse extends Record<string, unknown> {
   refunds?: WalletRefundResponse[]
 }
 
+export const WALLET_READ_TIMEOUT_MS = 10_000
+const walletReadOptions = { timeoutMs: WALLET_READ_TIMEOUT_MS }
+
 export const wallet = {
-  balance: () => req<WalletBalanceResponse>('/api/wallet/balance'),
-  walletOverview: (limit = 20, offset = 0) => req<WalletOverviewResponse>(`/api/wallet/overview?limit=${limit}&offset=${offset}`),
+  balance: () => req<WalletBalanceResponse>('/api/wallet/balance', walletReadOptions),
+  walletOverview: (limit = 20, offset = 0) => req<WalletOverviewResponse>(`/api/wallet/overview?limit=${limit}&offset=${offset}`, walletReadOptions),
   walletAdminSelfCredit: (amount: number, description = '') =>
     req('/api/wallet/admin-self-credit', {
       method: 'POST',
@@ -88,21 +91,21 @@ export const wallet = {
   recharge: (amount: number, description = '') =>
     req('/api/wallet/recharge', { method: 'POST', body: JSON.stringify({ amount, description }) }),
   transactions: (limit = 50, offset = 0) =>
-    req<{ transactions?: WalletTransactionResponse[] }>(`/api/wallet/transactions?limit=${limit}&offset=${offset}`),
+    req<{ transactions?: WalletTransactionResponse[] }>(`/api/wallet/transactions?limit=${limit}&offset=${offset}`, walletReadOptions),
 }
 
 export const payment = {
   paymentPlans: () => req<PaymentPlansResponse>('/api/payment/plans'),
   paymentAccountPlans: () => req<AccountLicensePlansResponse>('/api/payment/account-plans'),
-  paymentMyPlan: () => req<PaymentMyPlanResponse>('/api/payment/my-plan'),
+  paymentMyPlan: () => req<PaymentMyPlanResponse>('/api/payment/my-plan', walletReadOptions),
   paymentQuery: (orderId: string, options?: { reconcile?: boolean }) => {
     const r = options?.reconcile ? '?reconcile=true' : ''
     return req<PaymentQueryResponse>(`/api/payment/query/${encodeURIComponent(orderId)}${r}`)
   },
-  paymentOrders: (status = '', limit = 50, offset = 0) => {
+  paymentOrders: (status = '', limit = 50, offset = 0, options?: { timeoutMs: number }) => {
     const q = new URLSearchParams({ limit: String(limit), offset: String(offset) })
     if (status) q.set('status', status)
-    return req<PaymentOrdersResponse>(`/api/payment/orders?${q}`)
+    return options ? req<PaymentOrdersResponse>(`/api/payment/orders?${q}`, options) : req<PaymentOrdersResponse>(`/api/payment/orders?${q}`)
   },
   paymentDismissNonActiveOrders: () =>
     req<{ ok?: boolean; message?: string; dismissed?: number }>('/api/payment/orders/dismiss-non-active', { method: 'POST', body: '{}' }),
@@ -171,7 +174,9 @@ export const refunds = {
     if (res?.ok === false) throw new Error(res.message || '退款申请失败')
     return res
   },
-  refundsMy: () => req<RefundListResponse>('/api/refunds/my'),
+  refundsMy: (options?: { timeoutMs: number }) => options
+    ? req<RefundListResponse>('/api/refunds/my', options)
+    : req<RefundListResponse>('/api/refunds/my'),
   refundsAdminPending: () => req<RefundListResponse>('/api/refunds/admin/pending'),
   refundsAdminReview: (refundId: number, action: string, adminNote = '') =>
     req(`/api/refunds/admin/${encodeURIComponent(String(refundId))}/review`, {

@@ -8,11 +8,11 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from alembic.migration import MigrationContext
-from alembic.operations import Operations
 from sqlalchemy import create_engine, inspect, text, update
 from sqlalchemy.orm import sessionmaker
 
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 from modstore_server import browser_handoff as service
 from modstore_server.db.identity import BrowserHandoffCode, User
 

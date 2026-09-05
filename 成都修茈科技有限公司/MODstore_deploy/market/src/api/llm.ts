@@ -1,4 +1,5 @@
 import { req, authHeaders } from './shared'
+import type { RequestJsonInit } from '../infrastructure/http/client'
 import type { LlmBillingSettings, LlmModelPricing } from '../composables/useLlmPricingDisplay'
 
 export interface LlmStatusRow extends Record<string, unknown> {
@@ -55,9 +56,13 @@ export interface LlmCatalogResponse {
 }
 
 export const llm = {
-  llmStatus: () => req<LlmStatusResponse>('/api/llm/status'),
+  llmStatus: (options?: Pick<RequestJsonInit, 'timeoutMs'>) => options
+    ? req<LlmStatusResponse>('/api/llm/status', options)
+    : req<LlmStatusResponse>('/api/llm/status'),
   llmResolveChatDefault: () => req<{ provider?: string; model?: string }>('/api/llm/resolve-chat-default'),
-  llmCatalog: (refresh = false) => req<LlmCatalogResponse>(`/api/llm/catalog?refresh=${refresh ? 1 : 0}`),
+  llmCatalog: (refresh = false, options?: Pick<RequestJsonInit, 'timeoutMs'>) => options
+    ? req<LlmCatalogResponse>(`/api/llm/catalog?refresh=${refresh ? 1 : 0}`, options)
+    : req<LlmCatalogResponse>(`/api/llm/catalog?refresh=${refresh ? 1 : 0}`),
   llmSaveCredentials: (provider: string, apiKey: string, baseUrl?: string | null) =>
     req(`/api/llm/credentials/${encodeURIComponent(provider)}`, {
       method: 'PUT',

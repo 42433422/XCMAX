@@ -186,7 +186,7 @@ def _complete(
                 billing=dict(result.billing or {}),
                 data=dict(result.data),
             )
-        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - LLM failure must never own ETL execution
+        except BOUNDARY_ERRORS as exc:  # Advisory-provider boundary: preserve deterministic ETL.
             degradation_code = _degradation_code(exc)
             _open_circuit(circuit_key, degradation_code)
             logger.info(

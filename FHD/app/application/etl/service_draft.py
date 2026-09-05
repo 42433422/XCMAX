@@ -33,7 +33,7 @@ from app.application.etl.targets import TargetAdapter, get_adapter
 from app.application.etl.transforms import ALLOWED_TRANSFORMS, apply_mapping
 from app.db.models.etl import EtlRun, EtlRunRow
 from app.infrastructure.tenant_scope import tenant_id_for_write, tenant_scope
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -179,7 +179,7 @@ class DraftServiceMixin:
                         self._apply_row_overrides(db, run_id, owner_user_id, overrides)
                     finish_operation(db, operation)
                     db.commit()
-            except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+            except BOUNDARY_ERRORS as exc:  # Background revalidation task boundary.
                 db.rollback()
                 code, message = safe_error(exc)
                 try:

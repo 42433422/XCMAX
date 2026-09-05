@@ -1,7 +1,9 @@
-import { defaultOnboardingIndustryId } from '@/constants/productFlow'
+import { defaultOnboardingIndustryId, LS_PRODUCT_FLOW_COMPLETED } from '@/constants/productFlow'
 import { authApi } from '@/api/auth'
 import { fetchIndustryBaseline, fetchOnboardingIndustryCatalog } from '@/utils/platformShellApi'
 import { fetchProductSku, isEnterpriseEdition } from '@/utils/productSku'
+import { fetchWorkspacePrefs } from '@/utils/workspacePrefsApi'
+import { readTenantScopedStorageItem } from '@/utils/tenantStorageScope'
 
 export type HostPackOnboardingStep = 'industry' | 'host-pack'
 
@@ -22,21 +24,26 @@ export const HOST_PACK_ONBOARDING_EXEMPT_ROUTE_NAMES = new Set([
   'workflow-employee-stitch-full',
 ])
 
-let hostPackNeedsCache: { needs: boolean; at: number } | null = null
+type HostPackNeedsCache = { needs: boolean; at: number; step: HostPackOnboardingStep | null }
+let hostPackNeedsCache: HostPackNeedsCache | null = null
+let hostPackCacheEpoch = 0
 const HOST_PACK_CACHE_TTL_MS = 60_000
-const SS_HOST_PACK_NEEDS_CACHE = 'xcagi_host_pack_needs_cache_v1'
+const SS_HOST_PACK_NEEDS_CACHE = 'xcagi_host_pack_needs_cache_v2'
 
-function readPersistedHostPackNeedsCache(): { needs: boolean; at: number } | null {
+function readPersistedHostPackNeedsCache(): HostPackNeedsCache | null {
   if (typeof sessionStorage === 'undefined') return null
   try {
     const parsed = JSON.parse(sessionStorage.getItem(SS_HOST_PACK_NEEDS_CACHE) || 'null') as {
       needs?: unknown
       at?: unknown
+      step?: unknown
     } | null
     if (!parsed || typeof parsed.needs !== 'boolean' || !Number.isFinite(Number(parsed.at))) {
       return null
     }
-    const cached = { needs: parsed.needs, at: Number(parsed.at) }
+    const step: HostPackOnboardingStep | null = parsed.step === 'industry' || parsed.step === 'host-pack' ? parsed.step : null
+    if (parsed.needs !== (step !== null)) return null
+    const cached = { needs: parsed.needs, at: Number(parsed.at), step }
     if (Date.now() - cached.at >= HOST_PACK_CACHE_TTL_MS) return null
     return cached
   } catch {
@@ -44,11 +51,11 @@ function readPersistedHostPackNeedsCache(): { needs: boolean; at: number } | nul
   }
 }
 
-function writeHostPackNeedsCache(needs: boolean, at: number): void {
-  hostPackNeedsCache = { needs, at }
+function writeHostPackNeedsCache(needs: boolean, at: number, step: HostPackOnboardingStep | null = null): void {
+  hostPackNeedsCache = { needs, at, step }
   if (typeof sessionStorage === 'undefined') return
   try {
-    sessionStorage.setItem(SS_HOST_PACK_NEEDS_CACHE, JSON.stringify({ needs, at }))
+    sessionStorage.setItem(SS_HOST_PACK_NEEDS_CACHE, JSON.stringify(hostPackNeedsCache))
   } catch {
     /* ignore */
   }
@@ -90,6 +97,7 @@ export function isHostPackSkippedThisSession(): boolean {
 }
 
 export function invalidateHostPackCompletionCache(): void {
+  hostPackCacheEpoch += 1
   hostPackNeedsCache = null
   if (typeof sessionStorage === 'undefined') return
   try {
@@ -122,20 +130,11 @@ export async function isAdminAccountSessionForGate(): Promise<boolean> {
  */
 export async function resolveHostPackOnboardingStep(force = false): Promise<HostPackOnboardingStep | null> {
   const needs = await needsHostPackCompletion(force)
-  if (!needs) return null
-
-  try {
-    const catalog = await fetchOnboardingIndustryCatalog(force)
-    const industryId = String(catalog?.selected_industry_id || '').trim()
-    if (!industryId) return 'industry'
-  } catch {
-    return 'host-pack'
-  }
-  return 'host-pack'
+  return needs ? hostPackNeedsCache?.step ?? 'host-pack' : null
 }
 
 /**
- * 企业版：所选行业必需基础 Mod 未齐（baseline_ready !== true）时需进「补基础线」。
+ * 企业版：新工作区未选行业时先选择；必需基础 Mod 未齐时进「补基础线」。
  * 登录后首次进入受保护路由时 force 刷新；同会话内跳过则不再弹，直至下次登录。
  */
 export async function needsHostPackCompletion(force = false): Promise<boolean> {
@@ -151,6 +150,14 @@ export async function needsHostPackCompletion(force = false): Promise<boolean> {
     }
   }
 
+  const requestEpoch = hostPackCacheEpoch
+  function saveResult(needs: boolean, step: HostPackOnboardingStep | null = null): boolean {
+    // A login, tenant change or explicit skip can invalidate an in-flight read.
+    if (requestEpoch !== hostPackCacheEpoch) return false
+    writeHostPackNeedsCache(needs, now, step)
+    return needs
+  }
+
   let sku = 'generic'
   try {
     sku = await fetchProductSku()
@@ -158,22 +165,35 @@ export async function needsHostPackCompletion(force = false): Promise<boolean> {
     return false
   }
   if (!isEnterpriseEdition(sku)) {
-    writeHostPackNeedsCache(false, now)
-    return false
+    return saveResult(false)
   }
 
   if (await isAdminAccountSessionForGate()) {
-    writeHostPackNeedsCache(false, now)
-    return false
+    return saveResult(false)
   }
 
   try {
     const catalog = await fetchOnboardingIndustryCatalog(force)
-    const industryId = String(catalog?.selected_industry_id || '').trim() || defaultOnboardingIndustryId()
-    const plan = await fetchIndustryBaseline(industryId, force)
+    let industryId = String(catalog?.selected_industry_id || '').trim()
+    if (!industryId) {
+      const selectable = (catalog?.open_packages || []).some((item) => item.selectable !== false && String(item.industry_id || '').trim())
+      if (!selectable) return saveResult(false)
+      const ownerId = String(catalog?.owner_id || '').trim()
+      if (!ownerId) return false
+      // Profile.loaded can become true before preference hydration finishes.
+      // Read the same server workspace before classifying it as first use.
+      const response = await fetchWorkspacePrefs()
+      if (response.success !== true || response.owner_id !== ownerId) return false
+      const prefs = response.data || {}
+      industryId = String(prefs.selected_industry_id || '').trim()
+      const completed = prefs.product_flow_completed === true || (
+        prefs.product_flow_completed !== false && readTenantScopedStorageItem(LS_PRODUCT_FLOW_COMPLETED, ownerId) === '1'
+      )
+      if (!industryId && !completed) return saveResult(true, 'industry')
+    }
+    const plan = await fetchIndustryBaseline(industryId || defaultOnboardingIndustryId(), force)
     const needs = plan?.baseline_ready !== true
-    writeHostPackNeedsCache(needs, now)
-    return needs
+    return saveResult(needs, needs ? 'host-pack' : null)
   } catch {
     return false
   }

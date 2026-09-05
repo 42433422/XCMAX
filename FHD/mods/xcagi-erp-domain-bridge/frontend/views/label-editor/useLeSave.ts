@@ -65,7 +65,7 @@ export function useLeSave(deps: {
       if (!res?.success || !res.template?.id) throw new Error(res?.message || '保存失败，未收到新模板标识。')
       await appAlert(`已保存新模板「${res.template.name || saveName.value}」${source ? '，原模板保持不变。' : '。'}`)
       window.dispatchEvent(new CustomEvent('xcagi:templates-updated', { detail: { source: 'label-editor', templateId: res.template.id } }))
-      pushErpPage(deps.router, { path: '/template-preview' })
+      pushErpPage(deps.router, { path: returnPath() })
     } catch (err) {
       saveError.value = `模板保存失败：${err instanceof Error ? err.message : String(err)}。编辑内容已保留，可重试。`
     } finally {
@@ -74,7 +74,11 @@ export function useLeSave(deps: {
   }
 
   function goBack() {
-    pushErpPage(deps.router, { path: '/template-preview' })
+    pushErpPage(deps.router, { path: returnPath() })
+  }
+
+  function returnPath() {
+    return deps.router.currentRoute.value.query.returnTo === 'print' ? '/print' : '/template-preview'
   }
 
   return {

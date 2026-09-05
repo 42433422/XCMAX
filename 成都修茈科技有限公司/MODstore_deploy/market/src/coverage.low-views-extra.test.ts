@@ -35,6 +35,7 @@ const lowMocks = vi.hoisted(() => ({
   }),
   walletRefreshBalance: vi.fn(async () => 0),
   walletClear: vi.fn(),
+  walletMarkBalanceStale: vi.fn(),
   api: {
     paymentQuery: vi.fn(),
     paymentCancelOrder: vi.fn(),
@@ -100,6 +101,7 @@ vi.mock('./stores/wallet', () => ({
     setMembershipReferenceYuan: lowMocks.walletSetMembershipReferenceYuan,
     refreshBalance: lowMocks.walletRefreshBalance,
     clear: lowMocks.walletClear,
+    markBalanceStale: lowMocks.walletMarkBalanceStale,
   }),
 }))
 
@@ -1221,7 +1223,7 @@ describe('low coverage view business branches', () => {
     await vm.clearByok('openai')
     expect(lowMocks.api.llmDeleteCredentials).toHaveBeenCalledWith('openai')
     await vm.refreshCatalog(true)
-    expect(lowMocks.api.llmCatalog).toHaveBeenCalledWith(true)
+    expect(lowMocks.api.llmCatalog).toHaveBeenCalledWith(true, { timeoutMs: 20_000 })
 
     expect(vm.quotaLabel('storage_mb')).toContain('存储')
     expect(vm.txnTypeLabel('wallet_refund')).toBe('退款入账')
@@ -1241,7 +1243,7 @@ describe('low coverage view business branches', () => {
     expect(lowMocks.walletSetBalance).toHaveBeenCalled()
     lowMocks.api.transactions.mockRejectedValueOnce(new Error('tx down'))
     await vm.loadTransactions()
-    expect(vm.transactions).toEqual([])
+    expect(vm.transactions).toHaveLength(2)
     expect(vm.normalizeTransaction({ amount: '7.5' }).amount).toBe(7.5)
 
     localStorage.removeItem('modstore_token')
@@ -1341,7 +1343,7 @@ describe('low coverage view business branches', () => {
 
     lowMocks.api.llmCatalog.mockRejectedValueOnce(new Error('catalog down'))
     await vm.refreshCatalog(false)
-    expect(vm.llmErr).toContain('catalog down')
+    expect(vm.llmErr).toContain('模型目录加载失败')
     anyVm.catalog = catalog
     vm.selectedProvider = 'openai'
     vm.selectedModel = 'gpt-4o'
@@ -1363,7 +1365,7 @@ describe('low coverage view business branches', () => {
 
     lowMocks.api.paymentMyPlan.mockRejectedValueOnce(new Error('plan down'))
     await vm.loadMyPlan()
-    expect(anyVm.myQuotas).toEqual([])
+    expect(anyVm.myQuotas).toEqual([{ quota_type: 'llm_calls', remaining: 9, total: 10 }])
     localStorage.removeItem('modstore_token')
     await vm.loadWalletOverview()
     expect(anyVm.recentOrders.length).toBeGreaterThanOrEqual(0)

@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import { createRouter, createMemoryHistory } from 'vue-router'
+import { defineComponent, h, ref } from 'vue'
+import { createRouter, createMemoryHistory, RouterView } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import ProductOnboardingView from './ProductOnboardingView.vue'
+import { useChatViewHost, type UseChatViewHostDeps } from '@/composables/useChatViewHost'
 import { fetchIndustryBaseline, fetchOnboardingIndustryCatalog, seedOnboardingDemo } from '@/utils/platformShellApi'
 import { LS_PRODUCT_FLOW_COMPLETED, LS_PRODUCT_FLOW_FIRST_TASK_PENDING, LS_PRODUCT_FLOW_PENDING_PROMPT, queueFirstAiTaskPrompt, bindPendingFirstAiTaskRun, readPendingFirstAiTaskRunId } from '@/constants/productFlow'
 
@@ -66,6 +68,35 @@ function makeRouter() {
       { path: '/onboarding', name: 'product-onboarding', component: ProductOnboardingView, props: true },
     ],
   })
+}
+
+function makeFirstTaskRouter() {
+  const router = makeRouter()
+  const messageInput = ref('')
+  const sendMessage = vi.fn(async () => messageInput.value)
+  const ChatHost = defineComponent({
+    setup() {
+      useChatViewHost({
+        modsStore: { initialize: vi.fn().mockResolvedValue(undefined), isLoaded: true } as UseChatViewHostDeps['modsStore'],
+        modsFromStore: ref([{ id: 'xcagi-planner-bridge' }]),
+        autoRefreshStarredWechat: ref(false),
+        isTaskPaneResizable: ref(true),
+        messageInput,
+        latestAssistantPush: ref(null),
+        syncSessionMessages: vi.fn().mockResolvedValue(undefined),
+        chatHandleAutoAction: vi.fn(),
+        sendMessage: async () => { await sendMessage() },
+        batchCalculateHeights: vi.fn(),
+        stopMessageTts: vi.fn(),
+        cleanupVoiceInput: vi.fn(),
+        stopTaskPaneResize: vi.fn(),
+      })
+      return () => h('div', { 'data-testid': 'chat-host' }, messageInput.value)
+    },
+  })
+  router.addRoute({ path: '/', name: 'chat', component: ChatHost })
+  router.addRoute({ path: '/data-sources', name: 'data-sources', component: { template: '<div>数据来源</div>' } })
+  return { router, sendMessage }
 }
 
 describe('ProductOnboardingView.vue', () => {
@@ -137,6 +168,61 @@ describe('ProductOnboardingView.vue', () => {
     expect(localStorage.getItem(LS_PRODUCT_FLOW_FIRST_TASK_PENDING)).toBe('1')
     expect(localStorage.getItem(LS_PRODUCT_FLOW_COMPLETED)).not.toBe('1')
     expect(router.currentRoute.value.name).toBe('chat')
+  })
+
+  it('runs the tutorial first order in chat instead of returning to its data-source page', async () => {
+    vi.mocked(fetchIndustryBaseline).mockResolvedValue({ baseline_ready: true, groups: [] } as any)
+    const { router, sendMessage } = makeFirstTaskRouter()
+    await router.push({ path: '/onboarding', query: { step: 'host-pack', from: 'tutorial', redirect: '/data-sources' } })
+    await router.isReady()
+    const wrapper = mount(RouterView, { global: { plugins: [router] } })
+    try {
+      await flushPromises()
+      expect(wrapper.get('button.btn.primary').text()).toContain('跟 AI 员工做第一单')
+      await wrapper.get('button.btn.primary').trigger('click')
+      await flushPromises()
+      expect(router.currentRoute.value.query).toMatchObject({ step: 'first-ai-task', from: 'tutorial', redirect: '/data-sources' })
+
+      await wrapper.get('button.btn.primary').trigger('click')
+      await flushPromises()
+
+      expect(router.currentRoute.value.name).toBe('chat')
+      expect(wrapper.get('[data-testid="chat-host"]').text()).toContain('新手演示客户')
+      expect(wrapper.text()).toContain('新手演示商品')
+      expect(sendMessage).toHaveBeenCalledTimes(1)
+      expect(localStorage.getItem(LS_PRODUCT_FLOW_PENDING_PROMPT)).toBeNull()
+      expect(localStorage.getItem(LS_PRODUCT_FLOW_FIRST_TASK_PENDING)).toBe('1')
+      expect(localStorage.getItem(LS_PRODUCT_FLOW_COMPLETED)).not.toBe('1')
+
+      await router.push('/data-sources')
+      await router.push('/')
+      await flushPromises()
+      expect(sendMessage).toHaveBeenCalledTimes(1)
+    } finally {
+      wrapper.unmount()
+    }
+  })
+
+  it('keeps the tutorial return button on its source page without starting a first order', async () => {
+    const { router, sendMessage } = makeFirstTaskRouter()
+    await router.push({ path: '/onboarding', query: { step: 'first-ai-task', from: 'tutorial', redirect: '/data-sources' } })
+    await router.isReady()
+    const wrapper = mount(RouterView, { global: { plugins: [router] } })
+    try {
+      await flushPromises()
+      const returnButton = wrapper.get('.product-flow-footer button.btn.text')
+      expect(returnButton.text()).toBe('返回上一页')
+      await returnButton.trigger('click')
+      await flushPromises()
+
+      expect(router.currentRoute.value.name).toBe('data-sources')
+      expect(wrapper.text()).toBe('数据来源')
+      expect(sendMessage).not.toHaveBeenCalled()
+      expect(localStorage.getItem(LS_PRODUCT_FLOW_PENDING_PROMPT)).toBeNull()
+      expect(localStorage.getItem(LS_PRODUCT_FLOW_FIRST_TASK_PENDING)).toBeNull()
+    } finally {
+      wrapper.unmount()
+    }
   })
 
   it('keeps enterprise-filtered SUNBIRD industry as accessories packaging', async () => {

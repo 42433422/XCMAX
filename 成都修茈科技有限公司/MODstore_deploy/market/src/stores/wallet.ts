@@ -1,8 +1,11 @@
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import { api } from '../api'
+import { useAuthStore } from './auth'
 
 export const useWalletStore = defineStore('wallet', () => {
+  const auth = useAuthStore()
+  let readVersion = 0
   const balance = ref<number | null>(null)
   /** 会员累计参考线（元），来自 /api/wallet/balance */
   const membershipReferenceYuan = ref<number | null>(null)
@@ -12,56 +15,65 @@ export const useWalletStore = defineStore('wallet', () => {
 
   function setMembershipReferenceYuan(v: unknown): void {
     const n = Number(v)
-    membershipReferenceYuan.value = Number.isFinite(n) && n >= 0 ? Math.floor(n) : null
+    membershipReferenceYuan.value = v !== null && v !== undefined && String(v).trim() !== '' && Number.isFinite(n) && n >= 0 ? Math.floor(n) : null
+  }
+
+  function markBalanceStale(message: string): void {
+    error.value = message
   }
 
   async function refreshBalance(retryCount = 2): Promise<number | null> {
+    const version = ++readVersion
     loading.value = true
     error.value = null
-
-    for (let attempt = 0; attempt <= retryCount; attempt++) {
-      try {
-        const res = await api.balance()
-        // Java/payment 可能返回 number 或 numeric 字符串；缺钱包时为 0
-        const n = Number((res as { balance?: unknown } | null)?.balance)
-        if (res && Number.isFinite(n)) {
-          balance.value = n
-          setMembershipReferenceYuan((res as { membership_reference_yuan?: unknown }).membership_reference_yuan)
-          lastUpdated.value = Date.now()
+    try {
+      for (let attempt = 0; attempt <= retryCount; attempt++) {
+        try {
+          const res = await api.balance()
+          if (version !== readVersion) return null
+          const raw = res?.balance
+          if (raw === null || raw === undefined || String(raw).trim() === '' || !Number.isFinite(Number(raw))) {
+            throw new Error('余额暂时无法读取')
+          }
+          setBalance(raw)
+          setMembershipReferenceYuan(res.membership_reference_yuan)
           return balance.value
-        } else {
-          throw new Error('Invalid API response format')
-        }
-      } catch (err) {
-        console.warn(`[Wallet] 余额刷新失败 (尝试 ${attempt + 1}/${retryCount + 1}):`, err)
-        if (attempt < retryCount) {
-          await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)))
-        } else {
-          error.value = err instanceof Error ? err.message : String(err)
-          console.error('[Wallet] 所有重试失败，余额设为 null')
+        } catch {
+          if (version !== readVersion) return null
+          if (attempt < retryCount) {
+            await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)))
+            if (version !== readVersion) return null
+          } else {
+            markBalanceStale('余额加载失败，请重试。')
+          }
         }
       }
+      // A failed refresh says nothing about the amount; keep the last confirmed snapshot.
+      return null
+    } finally {
+      if (version === readVersion) loading.value = false
     }
-
-    balance.value = null
-    membershipReferenceYuan.value = null
-    return null
   }
 
   function setBalance(value: unknown): void {
     const n = Number(value)
-    balance.value = Number.isFinite(n) ? n : null
+    balance.value = value !== null && value !== undefined && String(value).trim() !== '' && Number.isFinite(n) ? n : null
     if (balance.value !== null) {
+      error.value = null
       lastUpdated.value = Date.now()
     }
   }
 
   function clear(): void {
+    readVersion++
+    loading.value = false
     balance.value = null
     membershipReferenceYuan.value = null
     error.value = null
     lastUpdated.value = null
   }
+
+  watch(() => auth.user?.id, () => clear(), { flush: 'sync' })
 
   return {
     balance,
@@ -70,6 +82,7 @@ export const useWalletStore = defineStore('wallet', () => {
     error,
     lastUpdated,
     refreshBalance,
+    markBalanceStale,
     setBalance,
     setMembershipReferenceYuan,
     clear,

@@ -18,10 +18,18 @@ async def chat_completion_openai_format(
     profile: str = "default",
     request: Any | None = None,
     reasoning_enabled: bool | None = None,
+    conversation_service: Any | None = None,
+    provider: Any | None = None,
     **kwargs: Any,
 ) -> dict[str, Any] | None:
     """按 LLM_ROUTING_ORDER / LLM_PROVIDER 解析 Provider 并调用 chat/completions。"""
-    provider = get_active_provider(request=request, profile=profile)
+    # An owner-bound provider must stay bound to that owner through structured
+    # output and retries; it must never fall back to another account's default.
+    if provider is None:
+        routing: dict[str, Any] = {"request": request, "profile": profile}
+        if conversation_service is not None:
+            routing["conversation_service"] = conversation_service
+        provider = get_active_provider(**routing)
     if provider is None:
         logger.error("No configured LLM provider (profile=%s)", profile)
         return None

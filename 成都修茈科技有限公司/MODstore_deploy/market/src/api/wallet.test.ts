@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { wallet, payment, refunds } from './wallet'
+import { wallet, payment, refunds, WALLET_READ_TIMEOUT_MS } from './wallet'
 import { req } from './shared'
 
 vi.mock('./shared', () => ({
@@ -14,38 +14,45 @@ describe('wallet api', () => {
   it('balance calls req', async () => {
     vi.mocked(req).mockResolvedValue({ balance: 100 })
     const res = await wallet.balance()
-    expect(req).toHaveBeenCalledWith('/api/wallet/balance')
+    expect(WALLET_READ_TIMEOUT_MS).toBe(10_000)
+    expect(req).toHaveBeenCalledWith('/api/wallet/balance', { timeoutMs: 10_000 })
     expect(res).toEqual({ balance: 100 })
   })
 
   it('walletOverview uses default limit and offset', async () => {
     vi.mocked(req).mockResolvedValue({})
     await wallet.walletOverview()
-    expect(req).toHaveBeenCalledWith('/api/wallet/overview?limit=20&offset=0')
+    expect(req).toHaveBeenCalledWith('/api/wallet/overview?limit=20&offset=0', { timeoutMs: 10_000 })
   })
 
   it('walletOverview passes custom limit and offset', async () => {
     vi.mocked(req).mockResolvedValue({})
     await wallet.walletOverview(10, 5)
-    expect(req).toHaveBeenCalledWith('/api/wallet/overview?limit=10&offset=5')
+    expect(req).toHaveBeenCalledWith('/api/wallet/overview?limit=10&offset=5', { timeoutMs: 10_000 })
   })
 
   it('walletAdminSelfCredit calls req with POST', async () => {
     vi.mocked(req).mockResolvedValue({})
     await wallet.walletAdminSelfCredit(50, 'test')
-    expect(req).toHaveBeenCalledWith('/api/wallet/admin-self-credit', expect.objectContaining({ method: 'POST' }))
+    expect(req).toHaveBeenCalledWith('/api/wallet/admin-self-credit', {
+      method: 'POST',
+      body: JSON.stringify({ amount: 50, description: 'test' }),
+    })
   })
 
   it('recharge calls req with POST', async () => {
     vi.mocked(req).mockResolvedValue({})
     await wallet.recharge(100, 'desc')
-    expect(req).toHaveBeenCalledWith('/api/wallet/recharge', expect.objectContaining({ method: 'POST' }))
+    expect(req).toHaveBeenCalledWith('/api/wallet/recharge', {
+      method: 'POST',
+      body: JSON.stringify({ amount: 100, description: 'desc' }),
+    })
   })
 
   it('transactions uses default limit and offset', async () => {
     vi.mocked(req).mockResolvedValue({})
     await wallet.transactions()
-    expect(req).toHaveBeenCalledWith('/api/wallet/transactions?limit=50&offset=0')
+    expect(req).toHaveBeenCalledWith('/api/wallet/transactions?limit=50&offset=0', { timeoutMs: 10_000 })
   })
 })
 
@@ -59,7 +66,7 @@ describe('payment api', () => {
   it('paymentMyPlan calls req', async () => {
     vi.mocked(req).mockResolvedValue({})
     await payment.paymentMyPlan()
-    expect(req).toHaveBeenCalledWith('/api/payment/my-plan')
+    expect(req).toHaveBeenCalledWith('/api/payment/my-plan', { timeoutMs: 10_000 })
   })
 
   it('paymentQuery encodes orderId', async () => {

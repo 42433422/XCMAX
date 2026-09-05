@@ -60,10 +60,8 @@ export function useProductOnboardingNav(state: ProductOnboardingState, options: 
   function launchFirstAiTask() {
     invalidateHostPackCompletionCache()
     flow.markHostPackAcknowledged()
-    if (fromTutorial.value) {
-      returnFromTutorial()
-      return
-    }
+    // Chat consumes the queued prompt when it mounts, including tutorial replay.
+    // The root route resolves to the active host or Mod chat through its guard.
     void router.replace({ path: '/' })
   }
 

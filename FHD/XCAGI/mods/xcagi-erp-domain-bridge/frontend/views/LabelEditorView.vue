@@ -17,7 +17,7 @@
     <div v-if="templateReady" class="template-name-row">
       <label>模板名称 <input v-model="templateName" aria-label="模板名称" /></label>
       <p v-if="sourceTemplate">当前模板：{{ sourceTemplate.name }}。将另存为「{{ saveName }}」，原模板保持不变。</p>
-      <p>本页用于编辑和保存标签模板。实际打印尚未接入此模板编辑流程。</p>
+      <p>保存模板后，可在标签输出与打印页选择业务产品，生成标签 PDF 并核对后打印。</p>
     </div>
     <div v-if="saveError" class="analyze-status-bar is-error" role="alert">{{ saveError }}</div>
 

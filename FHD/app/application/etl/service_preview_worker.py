@@ -18,7 +18,7 @@ from app.application.etl.operation_owner import (
 from app.application.etl.service_support import dump_json, load_json, safe_error
 from app.db.models.etl import EtlRunRow
 from app.infrastructure.tenant_scope import tenant_scope
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -154,7 +154,7 @@ class PreviewWorkerMixin:
             finish_operation(db, operation)
             db.commit()
             self._record_preview_metrics(run, started_at, status="success")
-        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # Background task boundary has no HTTP error handler.
             db.rollback()
             code, message = safe_error(exc)
             try:

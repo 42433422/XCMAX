@@ -34,7 +34,7 @@ from app.application.etl.service_support import (
 from app.application.etl.targets import TargetAdapter, get_adapter
 from app.db.models.etl import EtlRun, EtlRunRow, EtlUpload
 from app.infrastructure.tenant_scope import tenant_id_for_write, tenant_scope
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +145,15 @@ class ExecutionServiceMixin(RollbackServiceMixin):
         try:
             run = self._owned_run(db, run_id, owner_user_id)
             adapter = get_adapter(run.target_type)
-            kind = "batch_execute" if hasattr(adapter, "execute_batch") else "execute"
+            batch_executor = getattr(adapter, "execute_batch", None)
+            # Row adapters inherit a rejecting batch stub; only an implementation
+            # override may enter the external-effect path.
+            uses_batch = (
+                callable(batch_executor)
+                and getattr(batch_executor, "__func__", batch_executor)
+                is not TargetAdapter.execute_batch
+            )
+            kind = "batch_execute" if uses_batch else "execute"
             operation = (
                 activate_operation(db, run, kind, operation_token)
                 if operation_token
@@ -193,7 +201,7 @@ class ExecutionServiceMixin(RollbackServiceMixin):
                 db.commit()
 
             context["progress_callback"] = progress_callback
-            if hasattr(adapter, "execute_batch"):
+            if uses_batch:
                 previous = (
                     db.query(EtlRunRow)
                     .filter(
@@ -271,7 +279,7 @@ class ExecutionServiceMixin(RollbackServiceMixin):
             finish_operation(db, operation)
             db.commit()
             self._record_execution_metrics(run, started_at, "success")
-        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # Task boundary; external effects retain unknown status.
             db.rollback()
             code, message = safe_error(exc)
             try:
