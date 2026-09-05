@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -165,13 +166,12 @@ def test_second_rollback_never_runs_adapter_or_overwrites_the_first_result(store
     _engine, factory, ids = store
     run_id = make_run(store)
     entered, release = threading.Event(), threading.Event()
-    errors = []
     adapter = get_adapter("products")
     calls = []
 
     def rollback_row(db, **kwargs):
         calls.append(threading.current_thread().name)
-        if threading.current_thread().name == "primary-rollback":
+        if threading.current_thread().name.startswith("primary-rollback"):
             entered.set()
             assert release.wait(5)
         return adapter.rollback_row(db, **kwargs)
@@ -182,24 +182,20 @@ def test_second_rollback_never_runs_adapter_or_overwrites_the_first_result(store
     )
 
     def primary():
-        try:
-            with tenant_scope(1), factory() as db:
-                EtlService(adviser=MagicMock()).rollback(db, run_id=run_id, owner_user_id=1)
-        except BaseException as exc:
-            errors.append(exc)
-
-    thread = threading.Thread(target=primary, name="primary-rollback", daemon=True)
-    thread.start()
-    try:
-        assert entered.wait(5)
-        with factory() as db, pytest.raises(EtlError) as error:
+        with tenant_scope(1), factory() as db:
             EtlService(adviser=MagicMock()).rollback(db, run_id=run_id, owner_user_id=1)
-        assert error.value.code == "ETL_RUN_BUSY"
-    finally:
-        release.set()
-        thread.join(6)
-    assert not errors, errors
-    assert calls == ["primary-rollback"]
+
+    with ThreadPoolExecutor(max_workers=1, thread_name_prefix="primary-rollback") as executor:
+        primary_result = executor.submit(primary)
+        try:
+            assert entered.wait(5)
+            with factory() as db, pytest.raises(EtlError) as error:
+                EtlService(adviser=MagicMock()).rollback(db, run_id=run_id, owner_user_id=1)
+            assert error.value.code == "ETL_RUN_BUSY"
+        finally:
+            release.set()
+            primary_result.result(timeout=6)
+    assert len(calls) == 1 and calls[0].startswith("primary-rollback")
     with factory() as db:
         assert db.get(EtlRun, run_id).rollback_status == "completed"
         assert db.get(Product, ids[1]).price == 10

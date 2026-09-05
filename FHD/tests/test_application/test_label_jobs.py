@@ -229,7 +229,10 @@ def test_no_print_before_confirmation_atomic_token_consumption_and_restart(env):
         restarted.confirmation(OWNER, job["id"], "LabelPrinter")
 
 
-def test_expired_failed_and_uncertain_submissions_have_distinct_retry_rules(env, monkeypatch):
+@pytest.mark.parametrize("failure_type", [TimeoutError, TypeError])
+def test_expired_failed_and_uncertain_submissions_have_distinct_retry_rules(
+    env, monkeypatch, failure_type
+):
     job = create(env)
     confirmation = env.service.confirmation(OWNER, job["id"], "LabelPrinter")
     with monkeypatch.context() as patcher:
@@ -246,15 +249,21 @@ def test_expired_failed_and_uncertain_submissions_have_distinct_retry_rules(env,
     assert rejected["status"] == "failed"
     confirmation = env.service.confirmation(OWNER, job["id"], "LabelPrinter")
 
-    def ambiguous(_):
-        raise TimeoutError("response lost after queue submission")
+    ambiguous = MagicMock(side_effect=failure_type("response lost after queue submission"))
 
     assert (
         env.service.submit(OWNER, job["id"], confirmation["confirm_token"], ambiguous)["status"]
         == "outcome_unknown"
     )
+    restarted = jobs.LabelJobService(env.service.root)
+    assert restarted.get(OWNER, job["id"])["status"] == "outcome_unknown"
+    assert (
+        restarted.submit(OWNER, job["id"], confirmation["confirm_token"], ambiguous)["status"]
+        == "outcome_unknown"
+    )
+    ambiguous.assert_called_once()
     with pytest.raises(jobs.LabelJobError):
-        env.service.confirmation(OWNER, job["id"], "LabelPrinter")
+        restarted.confirmation(OWNER, job["id"], "LabelPrinter")
     env.service.file(OWNER, job["id"])
 
 

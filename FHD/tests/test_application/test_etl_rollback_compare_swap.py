@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import threading
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from decimal import Decimal
 
@@ -80,7 +81,6 @@ def commit_before_rollback_dml(store, table, mutation, edit):
     """Pause the rollback thread after SQL parameters exist, then commit another writer."""
     engine, factory, _ids = store
     ready, done = threading.Event(), threading.Event()
-    errors = []
     caller = threading.get_ident()
     statements = []
 
@@ -91,8 +91,6 @@ def commit_before_rollback_dml(store, table, mutation, edit):
             with tenant_scope(1), factory() as db:
                 edit(db)
                 db.commit()
-        except BaseException as exc:
-            errors.append(exc)
         finally:
             done.set()
 
@@ -103,19 +101,17 @@ def commit_before_rollback_dml(store, table, mutation, edit):
         statements.append(statement)
         ready.set()
         assert done.wait(5), "concurrent writer could not finish before rollback DML"
-        assert not errors, errors
+        writer_result.result(timeout=1)
 
     event.listen(engine, "before_cursor_execute", before_execute)
-    thread = threading.Thread(target=writer, name="isolated-manual-writer", daemon=True)
-    thread.start()
-    try:
-        yield statements
-    finally:
-        event.remove(engine, "before_cursor_execute", before_execute)
-        ready.set()
-        thread.join(6)
-        assert not thread.is_alive()
-        assert not errors, errors
+    with ThreadPoolExecutor(max_workers=1, thread_name_prefix="isolated-manual-writer") as executor:
+        writer_result = executor.submit(writer)
+        try:
+            yield statements
+        finally:
+            event.remove(engine, "before_cursor_execute", before_execute)
+            ready.set()
+            writer_result.result(timeout=6)
 
 
 def import_update(store, target, field):

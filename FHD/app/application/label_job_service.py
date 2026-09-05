@@ -23,6 +23,7 @@ from app.infrastructure.printing.label_dispatch_guard import (
 )
 from app.infrastructure.printing.template_label_renderer import render_template_label
 from app.services.document_templates.crud import _build_template_payload_from_row
+from app.utils.operational_errors import BOUNDARY_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir
 
 
@@ -280,6 +281,7 @@ class LabelJobService:
             )
             self._write(directory, job)
         # Persist consumption BEFORE calling the side-effectful agent, across processes/restarts.
+        # Physical printer adapter boundary: never retry an ambiguous side effect.
         try:
             with authorized_label_dispatch(path, credential):
                 result = dispatch(
@@ -297,7 +299,7 @@ class LabelJobService:
                     message="提交结果待确认，请先检查打印队列；为避免重复出纸已暂停重试",
                 )
             job["run_id"] = result.get("run_id", "")
-        except Exception:  # noqa: BLE001 - never retry an ambiguous physical side effect
+        except BOUNDARY_ERRORS:
             # An exception after dispatch cannot establish that no pages were queued.
             job.update(
                 status="outcome_unknown",

@@ -19,11 +19,7 @@ PURPOSE_PATHS = {"wallet": "/wallet", "plans": "/plans"}
 
 def normalize_target(target: str, purpose: str) -> str:
     """Accept only fixed local destinations and non-secret purchase parameters."""
-    if (
-        not isinstance(target, str)
-        or len(target) > 1024
-        or any(ord(c) < 32 for c in target)
-    ):
+    if not isinstance(target, str) or len(target) > 1024 or any(ord(c) < 32 for c in target):
         raise ValueError("Invalid handoff target")
     parts = urlsplit(target)
     if (
@@ -36,9 +32,7 @@ def normalize_target(target: str, purpose: str) -> str:
     ):
         raise ValueError("Invalid handoff target")
     pairs = parse_qsl(parts.query, keep_blank_values=True)
-    allowed = (
-        {"source", "recharge"} if purpose == "wallet" else {"source", "plan", "tier"}
-    )
+    allowed = {"source", "recharge"} if purpose == "wallet" else {"source", "plan", "tier"}
     if len({key for key, _ in pairs}) != len(pairs):
         raise ValueError("Invalid handoff target")
     for key, value in pairs:
@@ -60,8 +54,7 @@ def _available(user: User | None) -> bool:
     return (
         user is not None
         and getattr(user, "deleted_at", None) is None
-        and str(user.account_state or "")
-        not in {"deleted", "disabled", "suspended", "blocked"}
+        and str(user.account_state or "") not in {"deleted", "disabled", "suspended", "blocked"}
     )
 
 
@@ -74,9 +67,7 @@ def issue_code(user_id: int, target: str, purpose: str) -> dict:
         if not _available(user):
             raise ValueError("Handoff unavailable")
         # Bound storage growth; codes have no durable audit or business value.
-        session.execute(
-            delete(BrowserHandoffCode).where(BrowserHandoffCode.expires_at <= now)
-        )
+        session.execute(delete(BrowserHandoffCode).where(BrowserHandoffCode.expires_at <= now))
         session.add(
             BrowserHandoffCode(
                 code_hash=hashlib.sha256(code.encode()).hexdigest(),
@@ -107,8 +98,7 @@ def consume_code(code: str, target: str, purpose: str) -> User:
         row = session.execute(
             update(BrowserHandoffCode)
             .where(
-                BrowserHandoffCode.code_hash
-                == hashlib.sha256(code.encode()).hexdigest(),
+                BrowserHandoffCode.code_hash == hashlib.sha256(code.encode()).hexdigest(),
                 BrowserHandoffCode.target == target,
                 BrowserHandoffCode.purpose == purpose,
                 BrowserHandoffCode.consumed_at.is_(None),

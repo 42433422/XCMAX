@@ -39,13 +39,9 @@ def issue_browser_handoff(
     try:
         return {"ok": True, "data": issue_code(int(user.id), body.target, body.purpose)}
     except ValueError as exc:
-        raise HTTPException(
-            400, "无法创建登录连接，请重新登录", headers=NO_STORE
-        ) from exc
+        raise HTTPException(400, "无法创建登录连接，请重新登录", headers=NO_STORE) from exc
     except SQLAlchemyError as exc:
-        raise HTTPException(
-            503, "登录连接暂时不可用，请稍后重试", headers=NO_STORE
-        ) from exc
+        raise HTTPException(503, "登录连接暂时不可用，请稍后重试", headers=NO_STORE) from exc
 
 
 @router.post("/consume")
@@ -58,13 +54,9 @@ def consume_browser_handoff(body: HandoffConsume, response: Response):
             401, "登录连接已失效，请从桌面重新打开或登录", headers=NO_STORE
         ) from exc
     except SQLAlchemyError as exc:
-        raise HTTPException(
-            503, "登录连接暂时不可用，请稍后重试", headers=NO_STORE
-        ) from exc
+        raise HTTPException(503, "登录连接暂时不可用，请稍后重试", headers=NO_STORE) from exc
     return {
         "ok": True,
-        "access_token": create_access_token(
-            user.id, user.username, is_admin=bool(user.is_admin)
-        ),
+        "access_token": create_access_token(user.id, user.username, is_admin=bool(user.is_admin)),
         "refresh_token": create_refresh_token(user.id, user.username),
     }

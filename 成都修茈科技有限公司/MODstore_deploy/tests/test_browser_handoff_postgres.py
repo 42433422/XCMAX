@@ -28,12 +28,8 @@ def postgres_handoff(monkeypatch):
     with admin_engine.begin() as connection:
         connection.execute(text(f'CREATE SCHEMA "{schema}"'))
     engine = create_engine(url, connect_args={"options": f"-csearch_path={schema}"})
-    migration_path = (
-        Path(__file__).parents[1] / "alembic/versions/20260905_browser_handoff.py"
-    )
-    spec = importlib.util.spec_from_file_location(
-        "handoff_migration_acceptance", migration_path
-    )
+    migration_path = Path(__file__).parents[1] / "alembic/versions/20260905_browser_handoff.py"
+    spec = importlib.util.spec_from_file_location("handoff_migration_acceptance", migration_path)
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
     try:
@@ -93,9 +89,7 @@ def test_postgres_expiry_and_credential_revocation(postgres_handoff):
     expired = service.issue_code(1, "/wallet", "wallet")
     with factory() as session:
         session.execute(
-            update(BrowserHandoffCode).values(
-                expires_at=datetime.utcnow() - timedelta(seconds=1)
-            )
+            update(BrowserHandoffCode).values(expires_at=datetime.utcnow() - timedelta(seconds=1))
         )
         session.commit()
     with pytest.raises(ValueError):
