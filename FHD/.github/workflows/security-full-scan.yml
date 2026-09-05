@@ -155,31 +155,30 @@ jobs:
           printf '%s\n' "$SSH_KEY" > "$key"
           chmod 600 "$key"
           ssh_opts=(-i "$key" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20)
-          rootfs_archive="${RUNNER_TEMP}/production-host-rootfs.tar.gz"
-          rootfs_dir="${RUNNER_TEMP}/production-host-rootfs"
-          mkdir -p "${rootfs_dir}"
+          ssh "${ssh_opts[@]}" "root@${HOST}" 'cat /etc/os-release' \
+            > "${RUNNER_TEMP}/security-native/production-host-os-release"
+          ssh "${ssh_opts[@]}" "root@${HOST}" 'uname -r' \
+            > "${RUNNER_TEMP}/security-native/production-host-running-kernel"
+          ssh "${ssh_opts[@]}" "root@${HOST}" \
+            'dnf -q repoquery --installed --latest-limit 1 \
+             --qf "%{version}-%{release}.%{arch}" kernel-core' \
+            > "${RUNNER_TEMP}/security-native/production-host-installed-kernel"
           ssh "${ssh_opts[@]}" "root@${HOST}" \
             'set -euo pipefail
-             paths=()
-             for path in \
-               etc/os-release usr/lib/os-release etc/redhat-release \
-               var/lib/dpkg/status var/lib/dpkg/status-old \
-               var/lib/rpm usr/lib/sysimage/rpm; do
-               [ -e "/${path}" ] && paths+=("${path}")
-             done
-             [ "${#paths[@]}" -ge 2 ]
-             tar -C / -czf - "${paths[@]}"' \
-            > "${rootfs_archive}"
-          tar -xzf "${rootfs_archive}" -C "${rootfs_dir}"
-          distro_args=()
-          if grep -Eq '^ID_LIKE=.*rhel' "${rootfs_dir}/etc/os-release" && \
-             grep -Eq '^PLATFORM_ID=.*platform:el8' "${rootfs_dir}/etc/os-release"; then
-            distro_args=(--distro redhat/8)
-          fi
-          trivy rootfs "${distro_args[@]}" \
-            --cache-dir "${GITHUB_WORKSPACE}/.cache/trivy" --skip-db-update \
-            --scanners vuln --format json --severity CRITICAL,HIGH --ignore-unfixed=false \
-            --output "${RUNNER_TEMP}/security-native/production-host.json" "${rootfs_dir}"
+             scan_dir=$(mktemp -d /tmp/xcmax-security-scan.XXXXXX)
+             trap '\''rm -rf -- "$scan_dir"'\'' EXIT
+             LC_ALL=C dnf -q --refresh \
+               --setopt=cachedir="$scan_dir/cache" \
+               --setopt=persistdir="$scan_dir/persist" \
+               --setopt=logdir="$scan_dir/log" \
+               updateinfo list --security updates' \
+            > "${RUNNER_TEMP}/security-native/production-host-updateinfo.txt"
+          python FHD/scripts/security/collect_dnf_updateinfo.py \
+            --input "${RUNNER_TEMP}/security-native/production-host-updateinfo.txt" \
+            --os-release "${RUNNER_TEMP}/security-native/production-host-os-release" \
+            --running-kernel "${RUNNER_TEMP}/security-native/production-host-running-kernel" \
+            --installed-kernel "${RUNNER_TEMP}/security-native/production-host-installed-kernel" \
+            --output "${RUNNER_TEMP}/security-native/production-host.json"
 
       - name: Normalize all scanner reports
         if: always()
@@ -208,7 +207,7 @@ jobs:
           normalize desktop-prerelease sarif "${RUNNER_TEMP}/security-native/desktop-prerelease.sarif"
           normalize gitleaks sarif "${RUNNER_TEMP}/security-native/gitleaks.sarif"
           normalize credential-rotation credential-incidents ".github/security/credential-incidents.json"
-          normalize production-host trivy "${RUNNER_TEMP}/security-native/production-host.json"
+          normalize production-host dnf-updateinfo "${RUNNER_TEMP}/security-native/production-host.json"
 
       - name: Enforce all-source zero critical/high gate
         if: always()
