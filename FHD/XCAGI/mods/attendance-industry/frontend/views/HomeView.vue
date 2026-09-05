@@ -2,7 +2,7 @@
   <div class="mod-home page-view">
     <div class="page-grid">
       <div class="page-content page-main">
-        <h2>通用考勤</h2>
+        <h2>考勤表转换</h2>
         <p class="muted">考勤能力独立于客户所属行业，可统一处理人员名单、排班、出勤统计与考勤表转换。</p>
         <p class="muted small">
           <router-link :to="{ name: 'attendance-industry-settings' }">考勤转换设置</router-link>
@@ -13,7 +13,7 @@
           <h3 id="upload-convert-title">上传转化</h3>
           <p class="muted small">
             将钉钉导出的考勤 xlsx 上传后，由通用考勤转换引擎
-            按列别名解析「每日统计」等表。默认<strong>按侧栏「人员管理」</strong>中维护的姓名、部门及岗位/性质重排「明细」（每人 6
+            按列别名解析「每日统计」等表。默认<strong>按工作区「人员管理」</strong>中维护的姓名、部门及岗位/性质重排「明细」（每人 6
             行），再按姓名把钉钉数据一一填入；<strong>无钉钉记录则打卡区留空</strong>。取消勾选下方选项时，改为仅使用固定模板「明细」里原有姓名名单。路径相对
             <code>WORKSPACE_ROOT</code>（默认写入 <code>424/</code>）。成功后会自动下载，也可点「再次下载」。
           </p>
@@ -65,7 +65,7 @@
               <input type="checkbox" v-model="usePersonnelRoster" />
               按「人员管理」名单重排明细并回填（有钉钉则填，无则空）
             </label>
-            <p class="hint">与侧栏「人员管理」同一数据源；请先在其中维护员工名单。</p>
+            <p class="hint">与工作区「人员管理」同一数据源；请先在其中维护员工名单。</p>
           </div>
 
           <div class="form-row">

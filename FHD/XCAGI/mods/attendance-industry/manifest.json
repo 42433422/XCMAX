@@ -15,43 +15,13 @@
   },
   "frontend": {
     "routes": "frontend/routes",
-    "pro_entry_path": "/attendance-industry/personnel",
+    "pro_entry_path": "/attendance-industry",
     "menu": [
       {
-        "id": "attendance-industry-personnel",
-        "label": "人员管理",
-        "icon": "fa-user",
-        "path": "/attendance-industry/personnel"
-      },
-      {
-        "id": "attendance-industry-departments",
-        "label": "部门管理",
-        "icon": "fa-sitemap",
-        "path": "/attendance-industry/departments"
-      },
-      {
-        "id": "attendance-industry-schedules",
-        "label": "排班资源",
+        "id": "attendance-industry-workspace",
+        "label": "考勤工作区",
         "icon": "fa-calendar",
-        "path": "/attendance-industry/schedules"
-      },
-      {
-        "id": "attendance-industry-records",
-        "label": "考勤记录",
-        "icon": "fa-list-alt",
-        "path": "/attendance-industry/records"
-      },
-      {
-        "id": "attendance-industry-home",
-        "label": "考勤表转换",
-        "icon": "fa-file-excel-o",
         "path": "/attendance-industry"
-      },
-      {
-        "id": "attendance-industry-settings",
-        "label": "考勤设置",
-        "icon": "fa-cog",
-        "path": "/attendance-industry/settings"
       }
     ]
   },

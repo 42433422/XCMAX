@@ -2,7 +2,6 @@
   <div class="attendance-management">
     <header class="management-header">
       <div>
-        <p class="eyebrow">SUNBIRD · 通用考勤</p>
         <h2>{{ pageTitle }}</h2>
         <p class="subtitle">{{ pageDescription }}</p>
       </div>

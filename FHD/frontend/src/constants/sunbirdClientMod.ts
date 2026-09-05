@@ -5,40 +5,10 @@ import { SUNBIRD_CLIENT_MOD_ID } from './accountModBinding'
 /** 与 mods/attendance-industry/manifest.json frontend.menu 保持一致 */
 export const ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU: NonNullable<ModInfo['menu']> = [
   {
-    id: 'attendance-industry-personnel',
-    label: '人员管理',
-    icon: 'fa-user',
-    path: '/attendance-industry/personnel',
-  },
-  {
-    id: 'attendance-industry-departments',
-    label: '部门管理',
-    icon: 'fa-sitemap',
-    path: '/attendance-industry/departments',
-  },
-  {
-    id: 'attendance-industry-schedules',
-    label: '排班资源',
+    id: 'attendance-industry-workspace',
+    label: '考勤工作区',
     icon: 'fa-calendar',
-    path: '/attendance-industry/schedules',
-  },
-  {
-    id: 'attendance-industry-records',
-    label: '考勤记录',
-    icon: 'fa-list-alt',
-    path: '/attendance-industry/records',
-  },
-  {
-    id: 'attendance-industry-home',
-    label: '考勤表转换',
-    icon: 'fa-file-excel-o',
     path: '/attendance-industry',
-  },
-  {
-    id: 'attendance-industry-settings',
-    label: '考勤设置',
-    icon: 'fa-cog',
-    path: '/attendance-industry/settings',
   },
 ]
 
@@ -58,7 +28,7 @@ export const COATING_CUSTOM_MOD_FALLBACK_OVERRIDES: NonNullable<ModInfo['menu_ov
 export const SUNBIRD_CLIENT_MOD_FALLBACK_MENU = ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU
 export const SUNBIRD_CLIENT_MOD_FALLBACK_OVERRIDES = ATTENDANCE_INDUSTRY_MOD_FALLBACK_OVERRIDES
 
-/** API 尚未返回通用考勤模块时，侧栏/设置页仍可展示考勤转换入口 */
+/** API 尚未返回通用考勤模块时，侧栏/设置页仍可展示考勤工作区入口 */
 export function buildAttendanceIndustryModStub(): ModInfo {
   return {
     id: CLIENT_PRIMARY_ERP_MOD_ID,
@@ -67,7 +37,7 @@ export function buildAttendanceIndustryModStub(): ModInfo {
     author: 'XCAGI',
     description: '跨行业通用考勤、排班与出勤统计模块',
     primary: true,
-    frontend: { pro_entry_path: '/attendance-industry/personnel' },
+    frontend: { pro_entry_path: '/attendance-industry' },
     menu: ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU.map((row) => ({ ...row })),
     menu_overrides: [],
     industry: {
