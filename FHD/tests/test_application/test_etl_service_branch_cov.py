@@ -1300,7 +1300,8 @@ class TestServiceExecution:
         _make_row(etl_db, run_id=run.id, id_seq=1, final_action="new", execution_status=None)
         svc._execute_worker(run.id, 1, False)
         etl_db.expire_all()
-        assert etl_db.get(EtlRun, run.id).status == "failed"
+        assert etl_db.get(EtlRun, run.id).status == "outcome_unknown"
+        assert etl_db.get(EtlRun, run.id).error_code == "ETL_OUTCOME_UNKNOWN"
 
     def test_execute_rows_success(
         self, etl_db, svc, app_data, fake_adapter, same_session, mock_etl_metrics

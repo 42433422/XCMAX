@@ -10,11 +10,15 @@ from sqlalchemy.orm import Session
 
 from app.application.etl.compatibility_presets import validate_compatibility_preset
 from app.application.etl.errors import EtlError
-from app.application.etl.mapping_assist import enhance_mappings_with_llm
+from app.application.etl.mapping_assist import (
+    enhance_mappings_with_llm as enhance_mappings_with_llm,
+)
 from app.application.etl.parsers import (
     KNOWLEDGE_ONLY_SUFFIXES,
     ParsedDataset,
-    parse_file,
+)
+from app.application.etl.parsers import (
+    parse_file as parse_file,
 )
 from app.application.etl.product_identity import provenance_validation_issues
 from app.application.etl.service_preview_helpers import (
@@ -22,28 +26,36 @@ from app.application.etl.service_preview_helpers import (
     suggest_mappings,
     update_linked_companion_summary,
 )
+from app.application.etl.service_preview_worker import PreviewWorkerMixin
 from app.application.etl.service_support import (
     ETL_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION,
-    EXECUTOR,
-    SUBMITTED,
-    SUBMITTED_LOCK,
     apply_validation_rules,
     dump_json,
     load_json,
     new_id,
-    new_session,
-    safe_error,
+)
+from app.application.etl.service_support import (
+    EXECUTOR as EXECUTOR,
+)
+from app.application.etl.service_support import (
+    SUBMITTED as SUBMITTED,
+)
+from app.application.etl.service_support import (
+    SUBMITTED_LOCK as SUBMITTED_LOCK,
+)
+from app.application.etl.service_support import (
+    new_session as new_session,
 )
 from app.application.etl.targets import TargetAdapter, get_adapter
 from app.application.etl.transforms import apply_mapping
 from app.db.models.etl import EtlRun, EtlRunRow, EtlUpload
-from app.infrastructure.tenant_scope import tenant_id_for_write, tenant_scope
+from app.infrastructure.tenant_scope import tenant_id_for_write
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
 
-class PreviewServiceMixin:
+class PreviewServiceMixin(PreviewWorkerMixin):
     if TYPE_CHECKING:
         _adviser: Any
         _current_version: Any
@@ -228,125 +240,6 @@ class PreviewServiceMixin:
             self._submit_preview(companion_run.id, tenant_id, owner_user_id)
         db.expire_all()
         return cast("dict[str, Any]", self.get_run(db, run_id=run_id, owner_user_id=owner_user_id))
-
-    def _submit_preview(self, run_id: str, tenant_id: int, owner_user_id: int) -> None:
-        with SUBMITTED_LOCK:
-            if run_id in SUBMITTED:
-                return
-            SUBMITTED.add(run_id)
-
-        def work() -> None:
-            try:
-                with tenant_scope(tenant_id):
-                    self._preview_worker(run_id, owner_user_id)
-            finally:
-                with SUBMITTED_LOCK:
-                    SUBMITTED.discard(run_id)
-
-        EXECUTOR.submit(work)
-
-    def _preview_worker(self, run_id: str, owner_user_id: int) -> None:
-        from app.application.etl.llm_session_provider import (
-            bind_etl_llm_owner,
-            reset_etl_llm_owner,
-        )
-
-        llm_owner_token = bind_etl_llm_owner(owner_user_id)
-        db = new_session()
-        started_at = time.monotonic()
-        try:
-            run = self._owned_run(db, run_id, owner_user_id)
-            upload = self._owned_upload(db, run.upload_id, owner_user_id)
-            run.status = "previewing"
-            run.stage = "parsing"
-            run.progress = 5
-            run.error_code = None
-            run.error_message = None
-            db.commit()
-
-            draft = load_json(run.draft_json, {})
-            compatibility_preset_id = str(draft.get("compatibility_preset_id") or "").strip()
-            dataset = parse_file(
-                upload.storage_path,
-                target_type=run.target_type,
-                compatibility_preset_id=compatibility_preset_id or None,
-            )
-            run = self._owned_run(db, run_id, owner_user_id)
-            draft = load_json(run.draft_json, {})
-            source_features = dict(dataset.source_features or {})
-            summary = load_json(run.summary_json, {})
-            if summary.get("target_detection"):
-                source_features["target_detection"] = summary["target_detection"]
-            if compatibility_preset_id:
-                source_features["compatibility_preset_id"] = compatibility_preset_id
-            if run.target_type == "shipment_records":
-                # Surface an auditable, non-persistent layout candidate with
-                # the preview.  The user must still explicitly save it before
-                # it enters their private template library.
-                from app.application.etl.service_shipment_templates import (
-                    shipment_template_candidates,
-                )
-
-                candidates = shipment_template_candidates(source_features, upload.file_name)
-                if candidates:
-                    # Keep the legacy scalar for callers released before
-                    # multi-layout selection, while exposing every auditable
-                    # layout to the data-docking UI and chat resolver.
-                    source_features["shipment_template_candidates"] = candidates
-                    source_features["shipment_template_candidate"] = dict(candidates[0])
-            if not draft.get("field_mappings"):
-                deterministic_mappings = self._suggest_mappings(
-                    dataset, get_adapter(run.target_type)
-                )
-                draft["field_mappings"], llm_mapping = enhance_mappings_with_llm(
-                    dataset,
-                    get_adapter(run.target_type),
-                    deterministic_mappings,
-                )
-                source_features["llm_mapping"] = llm_mapping
-                run.draft_json = dump_json(draft)
-            run.total_rows = len(dataset.rows)
-            run.source_features_json = dump_json(source_features)
-            run.summary_json = dump_json(
-                {
-                    **summary,
-                    "warnings": dataset.warnings,
-                }
-            )
-            run.stage = "validating"
-            run.progress = 20
-            db.query(EtlRunRow).filter(
-                EtlRunRow.run_id == run.id, EtlRunRow.owner_user_id == owner_user_id
-            ).delete(synchronize_session=False)
-            db.commit()
-
-            self._materialize_preview_rows(db, run, upload, dataset)
-            run = self._owned_run(db, run_id, owner_user_id)
-            run.status = "preview_ready"
-            run.stage = "preview_ready"
-            run.progress = 100
-            run.processed_rows = run.total_rows
-            self._update_linked_companion_summary(db, run, status="preview_ready")
-            db.commit()
-            self._record_preview_metrics(run, started_at, status="success")
-        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
-            db.rollback()
-            code, message = safe_error(exc)
-            try:
-                run = self._owned_run(db, run_id, owner_user_id)
-                run.status = "failed"
-                run.stage = "failed"
-                run.error_code = code
-                run.error_message = message[:500]
-                self._update_linked_companion_summary(db, run, status="failed")
-                db.commit()
-                self._record_preview_metrics(run, started_at, status="failed")
-            except RECOVERABLE_ERRORS:  # noqa: BLE001
-                db.rollback()
-                logger.exception("Unable to persist ETL preview failure for run %s", run_id)
-        finally:
-            db.close()
-            reset_etl_llm_owner(llm_owner_token)
 
     @staticmethod
     def _update_linked_companion_summary(

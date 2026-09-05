@@ -87,12 +87,33 @@ def mark_interrupted_runs_on_startup(bind: Any) -> int:
                         stage = 'interrupted',
                         error_code = 'ETL_EXECUTION_INTERRUPTED',
                         error_message = '上次处理被意外中断，请重新预演或重试',
+                        operation_kind = NULL,
+                        operation_token = NULL,
+                        operation_lease_until = NULL,
                         updated_at = CURRENT_TIMESTAMP
                     WHERE status IN ('queued', 'previewing', 'executing')
+                      AND (operation_token IS NULL OR
+                           (operation_kind NOT IN ('batch_execute', 'batch_rollback')
+                            AND operation_lease_until <= CURRENT_TIMESTAMP))
                     """
                 )
             )
-            return max(0, int(result.rowcount or 0))
+            batch_result = connection.execute(
+                text("""
+                UPDATE etl_runs
+                SET status = 'outcome_unknown', stage = 'outcome_unknown',
+                    rollback_status = CASE WHEN operation_kind = 'batch_rollback'
+                        THEN 'outcome_unknown' ELSE rollback_status END,
+                    error_code = 'ETL_OUTCOME_UNKNOWN',
+                    error_message = '外部批处理结果无法确认，请核对实际结果后人工处理',
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE operation_token IS NOT NULL
+                  AND operation_kind IN ('batch_execute', 'batch_rollback')
+                  AND operation_lease_until <= CURRENT_TIMESTAMP
+                  AND status != 'outcome_unknown'
+            """)
+            )
+            return max(0, int(result.rowcount or 0)) + max(0, int(batch_result.rowcount or 0))
     except RECOVERABLE_ERRORS:  # noqa: BLE001
         logger.exception("Unable to mark interrupted ETL runs during startup")
         return 0
