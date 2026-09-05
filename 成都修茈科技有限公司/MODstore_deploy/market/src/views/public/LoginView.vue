@@ -2,6 +2,7 @@
   <div class="auth-page">
     <div class="auth-card">
       <h2>登录</h2>
+      <div v-if="route.query.handoff === 'expired'" class="flash flash-err" role="status">登录连接已失效，请从桌面重新打开，或在此登录后继续。</div>
       <div v-if="err" class="flash flash-err">{{ err }}</div>
       <form @submit.prevent="doLogin">
         <div class="form-group">

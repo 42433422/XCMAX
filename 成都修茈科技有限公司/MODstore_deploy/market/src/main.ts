@@ -1,3 +1,4 @@
+import { captureBrowserHandoff } from './infrastructure/storage/fhdMarketHandoff'
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
@@ -7,6 +8,7 @@ import './style.css'
 import { bootstrapHostConfig } from './stores/hostConfig'
 import { bootstrapWorkbenchThemeFromStorage } from './utils/personalSettings'
 
+captureBrowserHandoff()
 bootstrapWorkbenchThemeFromStorage()
 void bootstrapHostConfig()
 

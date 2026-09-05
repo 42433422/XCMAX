@@ -959,7 +959,7 @@ class TestMarketDevCreateAccount:
 
 
 class TestMarketSessionHandoff:
-    def test_no_user_no_token_returns_404(self, client: TestClient) -> None:
+    def test_no_user_no_token_returns_401(self, client: TestClient) -> None:
         with (
             patch(
                 "app.fastapi_routes.market_account.session_id_from_request",
@@ -975,7 +975,7 @@ class TestMarketSessionHandoff:
             ),
         ):
             resp = client.get("/api/market/session-handoff")
-        assert resp.status_code == 404
+        assert resp.status_code == 401
 
 
 # ---------------------------------------------------------------------------

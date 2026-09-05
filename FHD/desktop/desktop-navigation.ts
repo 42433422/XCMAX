@@ -33,14 +33,28 @@ export function handleDesktopWindowOpen(
   warn: (message: string) => void,
 ): 'allow' | 'deny' {
   if (isTrustedDesktopExternalUrl(rawUrl)) {
-    void openExternal(rawUrl).catch(error => {
-      warn(`[xcagi-desktop] failed to open trusted external URL: ${error instanceof Error ? error.message : String(error)}`)
+    void openExternal(rawUrl).catch(() => {
+      // Shell errors can echo the entire URL, including a one-use login code.
+      warn('[xcagi-desktop] failed to open trusted external URL')
     })
     return 'deny'
   }
   const action = desktopWindowOpenAction(rawUrl, expectedPort)
-  if (action === 'deny') warn(`[xcagi-desktop] blocked window open to ${rawUrl}`)
+  if (action === 'deny') warn('[xcagi-desktop] blocked untrusted window open')
   return action
+}
+
+/** Never log a navigation URL: fragments may contain one-use sign-in codes. */
+export function handleDesktopWillNavigate(
+  rawUrl: string,
+  expectedPort: number,
+  preventDefault: () => void,
+  warn: (message: string) => void,
+): void {
+  if (!isTrustedDesktopOrigin(rawUrl, expectedPort) && !rawUrl.startsWith('file://') && !rawUrl.startsWith('data:')) {
+    preventDefault()
+    warn('[xcagi-desktop] blocked untrusted will-navigate')
+  }
 }
 
 /**
@@ -48,11 +62,7 @@ export function handleDesktopWindowOpen(
  * from splash to the SPA. If the same trusted desktop page is already loaded,
  * treating that transient abort as a boot failure produces a false error dialog.
  */
-export function isBenignDesktopLoadAbort(
-  error: unknown,
-  currentUrl: string | undefined,
-  expectedPort: number,
-): boolean {
+export function isBenignDesktopLoadAbort(error: unknown, currentUrl: string | undefined, expectedPort: number): boolean {
   const message = error instanceof Error ? error.message : String(error || '')
   return /ERR_ABORTED/i.test(message) && isTrustedDesktopOrigin(currentUrl, expectedPort)
 }
@@ -65,7 +75,7 @@ const DEEP_LINK_SCHEME = 'xcagi://'
  */
 export function findDeepLinkArg(argv: string[] | undefined | null): string | null {
   if (!argv || !Array.isArray(argv) || argv.length === 0) return null
-  const found = argv.find(arg => typeof arg === 'string' && arg.startsWith(DEEP_LINK_SCHEME))
+  const found = argv.find((arg) => typeof arg === 'string' && arg.startsWith(DEEP_LINK_SCHEME))
   return found || null
 }
 

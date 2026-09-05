@@ -169,3 +169,7 @@ from modstore_server.market_auth_api_part02 import (
     api_account_export as api_account_export,
     api_admin_status as api_admin_status,
 )
+
+from modstore_server.browser_handoff_api import router as browser_handoff_router
+
+router.include_router(browser_handoff_router)

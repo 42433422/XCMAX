@@ -769,7 +769,8 @@ class TestMarketAccountRoutes:
 
     def test_market_session_handoff(self, client):
         resp = client.get("/api/market/session-handoff")
-        assert resp.status_code in (200, 404, 502)
+        assert resp.status_code == 401
+        assert "market_access_token" not in resp.text
 
     def test_market_account_overview(self, client):
         resp = client.post("/api/market/account-overview", json={})

@@ -242,88 +242,54 @@ def _proxy_error_http_status(payload: _facade().Any) -> int | None:
 
 @_facade().router.get("/session-handoff")
 async def market_session_handoff(request: _facade().Request):
-    """Return the Xiuci market JWT bound to the current FHD session.
+    """Return credentials only to their verified local session, for API calls.
 
-    Login stores this in-memory via ``save_session_market_token``; the SPA needs it in
-    ``localStorage`` to append ``xcagi_mt=`` on cross-origin links (cookies do not carry).
+    Browser navigation uses POST /browser-handoff. Anonymous, mismatched and
+    unavailable sessions must never borrow another session's credentials.
     """
+    headers = {"Cache-Control": "no-store", "Pragma": "no-cache"}
     try:
         from app.infrastructure.auth.dependencies import resolve_session_user
 
         user = resolve_session_user(request)
-        if user is None:
-            tok = _facade()._normalize_bearer_token(_facade().latest_session_market_token())
-            if tok:
-                return {
-                    "success": True,
-                    "data": {
-                        "market_access_token": tok,
-                        "market_base_url": _facade()._market_base_url(),
-                    },
-                }
-            return _facade().JSONResponse(
-                {
-                    "success": False,
-                    "message": "当前会话未绑定修茈市场账号。请使用与本软件相同的用户名与密码重新登录，或在设置中粘贴修茈 Authorization 完成同步。",
-                },
-                status_code=404,
-            )
         sid = _facade().session_id_from_request(request)
-        tok = await _facade().resolve_valid_market_access_token(sid)
-        if not tok:
-            tok = _facade()._normalize_bearer_token(
-                _facade().latest_session_market_token(user_id=getattr(user, "id", None))
+        if (
+            user is None
+            or getattr(user, "id", None) is None
+            or not getattr(user, "is_active", True)
+            or not sid
+            or _facade()._user_id_from_session(sid) != user.id
+        ):
+            return _facade().JSONResponse(
+                {"success": False, "message": "请先登录当前桌面账号"},
+                status_code=401,
+                headers=headers,
             )
-            if tok:
-                tok = await _facade().resolve_valid_market_access_token(sid)
+        tok = _facade()._normalize_bearer_token(_facade().session_market_token(sid))
         if not tok:
             return _facade().JSONResponse(
-                {
-                    "success": False,
-                    "message": "当前会话未绑定修茈市场账号。请使用与本软件相同的用户名与密码重新登录，或在设置中粘贴修茈 Authorization 完成同步。",
-                },
+                {"success": False, "message": "当前会话未连接市场账号，请重新登录"},
                 status_code=404,
+                headers=headers,
             )
-        _ = user
-        refresh_out = (
-            _facade().session_market_refresh_token(sid)
-            or _facade().latest_session_market_refresh_token()
-        )
-        data: dict[str, _facade().Any] = {
-            "market_access_token": tok,
-            "market_base_url": _facade()._market_base_url(),
-        }
-        if refresh_out:
-            data["market_refresh_token"] = refresh_out
+        data = {"market_access_token": tok, "market_base_url": _facade()._market_base_url()}
+        refresh = _facade().session_market_refresh_token(sid)
+        if refresh:
+            data["market_refresh_token"] = refresh
         try:
-            if sid:
-                from app.enterprise.mod_entitlements import sync_entitlements_for_session
+            from app.enterprise.mod_entitlements import sync_entitlements_for_session
 
-                await sync_entitlements_for_session(sid)
+            await sync_entitlements_for_session(sid)
         except _facade().RECOVERABLE_ERRORS:
-            _facade().logger.exception("enterprise entitlements refresh on session-handoff failed")
-        return {"success": True, "data": data}
+            _facade().logger.warning("current-session entitlement refresh unavailable")
+        return _facade().JSONResponse({"success": True, "data": data}, headers=headers)
     except _facade().RECOVERABLE_ERRORS:
-        _facade().logger.exception("market_session_handoff failed")
-        sid = _facade().session_id_from_request(request)
-        fallback_tok = _facade()._normalize_bearer_token(
-            _facade().session_market_token(sid) or _facade().latest_session_market_token()
-        )
-        if fallback_tok:
-            return {
-                "success": True,
-                "data": {
-                    "market_access_token": fallback_tok,
-                    "market_base_url": _facade()._market_base_url(),
-                },
-            }
+        # Do not publish exception details or fall back after failed authentication.
+        _facade().logger.warning("market session authentication unavailable")
         return _facade().JSONResponse(
-            {
-                "success": False,
-                "message": "修茈市场会话交接暂时不可用，请稍后重试或检查 XCAGI_MARKET_BASE_URL 与市场服务状态。",
-                "data": {"market_base_url": _facade()._market_base_url()},
-            },
+            {"success": False, "message": "市场会话暂时不可用，请重试"},
             status_code=502,
+            headers=headers,
         )
 
 

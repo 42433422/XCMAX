@@ -21,14 +21,10 @@ export function assembleMpModelPayment() {
     forceRefreshAll: () => marketData.forceRefreshAll(),
   })
   const marketData = useMpMarketData({ isOffline: offline.isOffline, dataSource: offline.dataSource })
-  const handoff = useMpHandoff(marketData.marketOverview, marketData.marketToken)
+  const handoff = useMpHandoff()
   const catalog = useMpCatalog(marketData.llmCatalog)
   const plans = useMpMembershipPlans()
   const actions = useMpMarketActions({
-    marketToken: marketData.marketToken,
-    hasSessionMarketToken: marketData.hasSessionMarketToken,
-    applyMarketToken: marketData.applyMarketToken,
-    appendMarketHandoffHash: handoff.appendMarketHandoffHash,
     marketPlanUrl: handoff.marketPlanUrl,
     forceRefreshAll: marketData.forceRefreshAll,
   })

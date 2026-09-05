@@ -270,4 +270,8 @@ from app.fastapi_routes.market_account_part04 import (
 from app.fastapi_routes.market_account_part04 import (
     market_wallet_overview as market_wallet_overview,
 )
+
 # ruff: noqa: F401
+from app.fastapi_routes.market_browser_handoff import router as browser_handoff_router
+
+router.include_router(browser_handoff_router)
