@@ -3,7 +3,7 @@
   "name": "XCAGI 对话 Planner 门面 Mod",
   "version": "1.0.0.0",
   "author": "成都修茈科技有限公司",
-  "description": "Planner 对话/工具 API 门面（3d/B）+ 主对话与智能生态/智脑业务页（K/O+/P 物理视图）。",
+  "description": "Planner 对话/工具 API 门面（3d/B）+ 主对话与智能生态业务页（K/O+/P 物理视图）。",
   "primary": true,
   "dependencies": {
     "xcagi": ">=1.0.0.0"
@@ -26,12 +26,6 @@
         "label": "智能生态",
         "icon": "fa-sitemap",
         "path": "/mod/xcagi-planner-bridge/ai-ecosystem"
-      },
-      {
-        "id": "mod-planner-brain",
-        "label": "智脑集成",
-        "icon": "fa-brain",
-        "path": "/mod/xcagi-planner-bridge/brain"
       }
     ],
     "menu_overrides": [
@@ -41,10 +35,6 @@
       },
       {
         "key": "ai-ecosystem",
-        "hidden": true
-      },
-      {
-        "key": "brain",
         "hidden": true
       }
     ]
@@ -61,7 +51,6 @@
     "physical_views": [
       "ChatView.vue",
       "AIEcosystemView.vue",
-      "BrainView.vue",
       "ChatDebugView.vue"
     ],
     "planner_tools_execution": true,
@@ -76,7 +65,6 @@
     "legacy_host_page_paths": [
       "/",
       "/ai-ecosystem",
-      "/brain",
       "/chat-debug"
     ],
     "phase": "P"

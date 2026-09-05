@@ -238,7 +238,6 @@ vi.mock('../views/ForgotPasswordView.vue', () => ({ default: { template: '<div /
 vi.mock('../views/ChatView.vue', () => ({ default: { template: '<div>Chat</div>' } }))
 vi.mock('../views/LanGateView.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('../views/AIEcosystemView.vue', () => ({ default: { template: '<div />' } }))
-vi.mock('../views/BrainView.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('../views/ProductsView.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('../views/MaterialsView.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('../views/OrdersView.vue', () => ({ default: { template: '<div />' } }))

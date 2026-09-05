@@ -51,7 +51,6 @@ export function readShellTagline(mod: unknown): string {
 export const SHELL_VIEW_TITLE_BASE: Record<string, string> = {
   chat: '智能对话',
   'ai-ecosystem': '智能生态',
-  brain: '智脑集成',
   'model-payment': '模型服务',
   products: '业务对象',
   'materials-list': '资源库',

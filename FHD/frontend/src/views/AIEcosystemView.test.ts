@@ -12,7 +12,6 @@ import { resolvePlannerPageRedirectForRouteName } from '@/utils/plannerPagePaths
 function makeRouter(includeDeliveryCenter = true) {
   const routes = [
     { path: '/', name: 'home', component: { template: '<div />' } },
-    { path: '/brain', name: 'brain', component: { template: '<div />' } },
     { path: '/mod-store', name: 'mod-store', component: { template: '<div />' } },
     { path: '/ecosystem', name: 'ecosystem', component: AIEcosystemView },
   ]

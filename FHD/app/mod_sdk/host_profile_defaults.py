@@ -14,7 +14,6 @@ LEGACY_BRIDGE_MOD_HOST_APIS: dict[str, list[str]] = {
     "xcagi-planner-bridge": [
         "/api/mod/xcagi-planner-bridge/chat",
         "/mod/xcagi-planner-bridge/ai-ecosystem",
-        "/mod/xcagi-planner-bridge/brain",
         "/api/ai/chat",
         "/api/ai/intent",
     ],

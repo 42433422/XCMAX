@@ -8,6 +8,15 @@ vi.mock('@/stores/mods', () => ({
     mods: [],
     modsForUi: [
       {
+        id: 'xcagi-planner-bridge',
+        name: 'Planner',
+        menu: [
+          { id: 'mod-planner-brain', label: '智脑集成', path: '/mod/xcagi-planner-bridge/brain' },
+          { id: 'custom-legacy', label: '旧开发链接', path: '/brain?old=1' },
+          { id: 'mod-planner-chat', label: '智能对话', path: '/mod/xcagi-planner-bridge/chat' },
+        ],
+      },
+      {
         id: 'test-mod',
         name: '测试Mod',
         primary: true,
@@ -96,6 +105,13 @@ describe('ModLandingView', () => {
     expect(cards.length).toBe(2)
     expect(wrapper.text()).toContain('菜单1')
     expect(wrapper.text()).toContain('菜单2')
+  })
+
+  it('does not expose retired brain links from a stale manifest on the Mod landing page', async () => {
+    const wrapper = await mountComponent('xcagi-planner-bridge')
+    expect(wrapper.findAll('.card').map((card) => card.attributes('href'))).toEqual(['/mod/xcagi-planner-bridge/chat'])
+    expect(wrapper.text()).not.toContain('智脑集成')
+    expect(wrapper.text()).not.toContain('旧开发链接')
   })
 
   it('renders go back button', async () => {

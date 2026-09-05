@@ -42,6 +42,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useModsStore } from '@/stores/mods'
 import { apiFetch } from '@/utils/apiBase'
+import { isRetiredBrainPage } from '@/utils/retiredBrainPage'
 
 const route = useRoute()
 const router = useRouter()
@@ -53,7 +54,9 @@ const modMeta = computed(
 )
 const primary = computed(() => Boolean(modMeta.value?.primary))
 const heroTitle = computed(() => modMeta.value?.name || modId.value || 'Mod')
-const menu = computed(() => (Array.isArray(modMeta.value?.menu) ? modMeta.value!.menu! : []))
+const menu = computed(() =>
+  (Array.isArray(modMeta.value?.menu) ? modMeta.value!.menu! : []).filter((item) => !isRetiredBrainPage(item.id, item.path)),
+)
 
 const pushLoading = ref(false)
 const pushMessage = ref('')

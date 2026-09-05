@@ -23,7 +23,8 @@ describe('plannerPagePaths', () => {
     })
     vi.spyOn(xcagiStorageKeys, 'readActiveExtensionModIdFromStorage').mockReturnValue('')
     expect(resolvePlannerPagePath('/')).toBe('/mod/xcagi-planner-bridge/chat')
-    expect(resolvePlannerPagePath('/brain')).toBe('/mod/xcagi-planner-bridge/brain')
+    expect(resolvePlannerPagePath('/ai-ecosystem')).toBe('/mod/xcagi-planner-bridge/ai-ecosystem')
+    expect(resolvePlannerPagePath('/brain')).toBe('/brain')
   })
 
   it('keeps host chat when taiyangniao-pro is active extension', () => {
