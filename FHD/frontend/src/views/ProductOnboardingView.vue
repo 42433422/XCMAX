@@ -3,7 +3,7 @@
     <div class="product-flow-card">
       <header class="product-flow-header">
         <div class="product-flow-header-main">
-          <div class="brand">{{ fromTutorial ? '新手教程 · 宿主入门' : 'XCAGI 宿主' }}</div>
+          <div class="brand">{{ fromTutorial ? '新手教程 · 开始使用' : 'XCAGI · 开始使用' }}</div>
           <p v-if="currentStepMeta?.subtitle && currentStep !== 'welcome'" class="brand-lead">
             {{ currentStepMeta.subtitle }}
           </p>
@@ -29,17 +29,17 @@
             <img class="welcome-logo" :src="welcomeLogoSrc" height="56" alt="XC" decoding="async" @error="onWelcomeLogoError" />
             <div>
               <h1>认识 XC</h1>
-              <p class="welcome-tagline">专属于您的数字公司 · 默认干净，行业业务按需加载</p>
+              <p class="welcome-tagline">让表格、查询和开单连成一条可核对的业务流程</p>
               <p class="lead">
-                日常界面默认有<strong>智能对话</strong>（找小C办事）、<strong>信息</strong>（联系AI同事）、<strong>智能生态</strong>和<strong>员工工作台</strong>；行业业务菜单、定制
-                AI 员工都按需加载。先把 XC 当成会长大的公司，用到哪再补哪。
+                您可以导入已有业务表格，核对客户和商品，再让<strong>智能对话</strong>协助查询与开单。
+                先选业务场景、准备所需功能，再用演示数据体验一次查询、确认和制单。
               </p>
             </div>
           </div>
           <ul class="flow-list bullets">
-            <li><strong>干净起步</strong>：侧栏默认只有对话、信息、生态、员工工作台，不堆满行业菜单</li>
-            <li><strong>先定行业</strong>：选好方向后，再告诉您还要补哪些侧栏能力卡片</li>
-            <li><strong>AI 员工</strong>：从市场或定制 Mod 安装后上岗，不在本步基础线里批量装</li>
+            <li><strong>选择业务场景</strong>：按您的行业准备对应功能，安装前可查看功能清单</li>
+            <li><strong>先用演示数据练习</strong>：创建一个演示客户和商品，操作前看清要写入的内容</li>
+            <li><strong>核对后再确认</strong>：完成首单后，在业务记录中检查客户、商品和数量</li>
           </ul>
           <p class="lead muted pricing-anchor">
             <strong>价格预期</strong>：99 元试用 30 天；满意后选购永久授权（1
@@ -61,7 +61,7 @@
               <strong>{{ name }}</strong
               ><template v-if="idx < openIndustryLeadNames.length - 1"> 与 </template>
             </template>
-            {{ industryLeadKindText }}；选好后下一步会列出要补的基础线。
+            {{ industryLeadKindText }}；选好后下一步会列出需要准备的业务功能。
           </p>
           <p v-else class="lead">正在读取当前账号可选行业，读取完成后再继续下一步。</p>
           <p class="industry-open-hint">请选择您的行业方向</p>
@@ -92,7 +92,7 @@
           </div>
           <div class="actions">
             <button type="button" class="btn primary" :disabled="!canConfirmIndustry || loading" @click="confirmIndustryAndNext">
-              下一步：看要补哪些侧栏基础线
+              下一步：准备业务功能
             </button>
             <button type="button" class="btn ghost" @click="openModStore">打开扩展市场</button>
             <button type="button" class="btn link" @click="finishToChat">先跳过，直接用对话</button>
@@ -100,21 +100,21 @@
         </template>
 
         <template v-else-if="currentStep === 'host-pack'">
-          <h1>准备侧栏菜单</h1>
+          <h1>准备业务功能</h1>
           <p class="lead">
             已选 <strong>{{ pickedIndustryName }}</strong
-            >。点一下装齐推荐菜单，就可以进对话。 AI 员工以后需要再装，不挡这一步。
+            >。安装下方推荐功能后，就可以用演示数据完成第一次操作。额外的 AI 员工可按需要选购。
           </p>
           <p class="lead muted">行业 Mod 含在授权内，不单独收费；定制 AI 员工按需另行评估。</p>
           <div class="status-card" :class="{ ok: baselineOk && !loading, warn: !baselineOk && !loading }">
             <template v-if="loading"> <i class="fa fa-spinner fa-spin"></i> 正在检测… </template>
             <template v-else-if="baselineOk">
               <i class="fa fa-check-circle"></i>
-              菜单已齐，可以进入智能对话。
+              推荐功能已准备好，可以开始演示操作。
             </template>
             <template v-else>
               <i class="fa fa-exclamation-circle"></i>
-              还差 {{ missingSidebarBaselineCount || missingRequiredCount || 1 }} 项推荐菜单
+              还需准备 {{ missingSidebarBaselineCount || missingRequiredCount || 1 }} 项业务功能
             </template>
           </div>
           <div v-if="industrySidebarPreviewLabels.length" class="sidebar-preview" aria-label="进入后补齐的侧栏菜单">
@@ -197,7 +197,7 @@
 
         <template v-else-if="currentStep === 'first-ai-task'">
           <h1>跟着 AI 员工完成第一单</h1>
-          <p class="lead">这次不是只聊天：AI 会依次查询演示客户、查询演示商品，再创建演示出货单。写入前仍会让您确认。</p>
+          <p class="lead">AI 会依次查询演示客户和商品，展示执行计划，等待您确认后创建演示出货单。完成后请核对业务记录中的客户、商品和数量。</p>
           <pre class="first-task-prompt">{{ firstOrderPrompt }}</pre>
           <div class="actions">
             <button type="button" class="btn primary" :disabled="finishing" @click="finishOnboardingComplete">

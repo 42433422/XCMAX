@@ -50,19 +50,19 @@ export const PRODUCT_FLOW_STEPS: ProductFlowStepMeta[] = [
     id: 'welcome',
     index: 1,
     title: '认识XC',
-    subtitle: '专属于您的数字公司 · 先装 Mod，AI 员工按需再来',
+    subtitle: '从已有表格开始，完成一次可核对的业务操作',
   },
   {
     id: 'industry',
     index: 2,
     title: '行业定型',
-    subtitle: '先定行业方向；日常默认只有智能对话与智能生态',
+    subtitle: '选择业务场景，查看当前账号可用的行业功能',
   },
   {
     id: 'host-pack',
     index: 3,
-    title: '准备菜单',
-    subtitle: '一键装齐本行业侧栏菜单，即可进入对话',
+    title: '准备功能',
+    subtitle: '准备本行业所需功能，再用演示数据体验操作',
   },
   {
     id: 'seed-demo',
@@ -74,7 +74,7 @@ export const PRODUCT_FLOW_STEPS: ProductFlowStepMeta[] = [
     id: 'first-ai-task',
     index: 5,
     title: 'AI 第一单',
-    subtitle: '让 AI 员工串联查询与制单工具，陪您完成第一笔业务',
+    subtitle: '查询客户和商品，确认后制单，再核对业务记录',
   },
   {
     id: 'done',

@@ -614,7 +614,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     const statusCard = wrapper.find('.status-card')
     expect(statusCard.classes()).toContain('ok')
-    expect(statusCard.text()).toContain('已齐')
+    expect(statusCard.text()).toContain('推荐功能已准备好')
   })
 
   it('host-pack 步骤：!baselineOk 时显示缺项', async () => {
@@ -630,7 +630,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     const statusCard = wrapper.find('.status-card')
     expect(statusCard.classes()).toContain('warn')
-    expect(statusCard.text()).toContain('还差')
+    expect(statusCard.text()).toContain('还需准备')
   })
 
   it('host-pack 步骤：!baselineOk 且 missingIndustryPackageCount>0 时明细里提示行业包', async () => {
@@ -654,7 +654,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     })
     await flushPromises()
     await flushPromises()
-    expect(wrapper.find('.status-card').text()).toContain('还差')
+    expect(wrapper.find('.status-card').text()).toContain('还需准备')
     const details = wrapper.find('.host-pack-details')
     expect(details.exists()).toBe(true)
     // 展开明细后才看到行业包提示
@@ -1274,12 +1274,12 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
 
   // ===== 6. fromTutorial 模式 =====
 
-  it('fromTutorial 模式：header 显示"新手教程 · 宿主入门"', async () => {
+  it('fromTutorial 模式：header 显示"新手教程 · 开始使用"', async () => {
     const { wrapper } = await mountComponent({
       route: { from: 'tutorial', redirect: '/chat' },
     })
     await flushPromises()
-    expect(wrapper.find('.brand').text()).toContain('新手教程 · 宿主入门')
+    expect(wrapper.find('.brand').text()).toContain('新手教程 · 开始使用')
   })
 
   it('fromTutorial 模式：footer 显示"返回上一页"按钮', async () => {
