@@ -1,0 +1,39 @@
+name: Production SLO expression tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "FHD/scripts/observability/collect_slo_metrics.py"
+      - "FHD/scripts/observability/build_slo_promql_tests.py"
+      - ".github/workflows/slo-promql-tests.yml"
+  push:
+    branches: [main]
+    paths:
+      - "FHD/scripts/observability/collect_slo_metrics.py"
+      - "FHD/scripts/observability/build_slo_promql_tests.py"
+      - ".github/workflows/slo-promql-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  slo-promql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Build synthetic tests from actual production expressions
+        run: |
+          python scripts/observability/build_slo_promql_tests.py \
+            --output "${RUNNER_TEMP}/slo-promql-tests.json"
+      - name: Evaluate expressions with Prometheus (no production network)
+        run: |
+          docker run --rm --network none \
+            -v "${RUNNER_TEMP}/slo-promql-tests.json:/tests.json:ro" \
+            --entrypoint /bin/promtool prom/prometheus:v3.14.0@sha256:5ce7540c3c00ef4ab0c9d2c995c6a5b9c421f44b4a115d97a2c7af3b1c21cbb0 \
+            test rules /tests.json

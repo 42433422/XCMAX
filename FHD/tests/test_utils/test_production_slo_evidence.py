@@ -5,6 +5,9 @@ import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
+import yaml
+
 
 def _module():
     script = (
@@ -120,6 +123,8 @@ def test_real_samples_are_required_and_evidence_is_hash_chained(
         assert bearer_token == "prod-token"
         assert query_at is not None
         assert 'environment="production"' in expr
+        if expr in mod.SCRAPE_QUERIES.values():
+            return "5760"
         for slo_id, template in mod.SAMPLE_QUERIES.items():
             if expr == template.format(w="90d"):
                 return str(mod.SAMPLE_MINIMUMS[slo_id])
@@ -231,6 +236,8 @@ def test_verifier_requires_90_continuous_hash_chained_formal_days(
     }
 
     def fake_query(_url, expr, bearer_token="", query_at=None):
+        if expr in collector.SCRAPE_QUERIES.values():
+            return "5760"
         for slo_id, template in collector.SAMPLE_QUERIES.items():
             if expr == template.format(w="90d"):
                 return str(collector.SAMPLE_MINIMUMS[slo_id])
@@ -264,3 +271,53 @@ def test_verifier_requires_90_continuous_hash_chained_formal_days(
     failed = verifier.verify_window(tmp_path, release_id=release_id)
     assert failed["passed"] is False
     assert any("invalid_evidence_hash" in item for item in failed["blockers"])
+
+
+def test_scrape_inventory_matches_production_configuration():
+    mod = _module()
+    path = Path(__file__).resolve().parents[2] / "monitoring/prometheus.production.yml"
+    config = yaml.safe_load(path.read_text())
+    assert config["global"]["scrape_interval"] == f"{mod.SCRAPE_INTERVAL_SECONDS}s"
+    targets = {
+        job["job_name"]: entry["targets"][0]
+        for job in config["scrape_configs"]
+        for entry in job["static_configs"]
+        if entry["labels"].get("environment") == "production"
+    }
+    assert targets == mod.SCRAPE_TARGETS
+    assert all(
+        len(entry["targets"]) == 1
+        for job in config["scrape_configs"]
+        for entry in job["static_configs"]
+    )
+
+
+@pytest.mark.parametrize(
+    "scrapes,eligible", [(None, False), (0, False), (5000, False), (5760, True), (11520, False)]
+)
+def test_metric_presence_cannot_replace_real_per_target_scrape_coverage(
+    tmp_path, monkeypatch, scrapes, eligible
+):
+    mod = _module()
+
+    def query(_url, expr, **_kwargs):
+        if expr == mod.SCRAPE_QUERIES["modstore-api-production"]:
+            return None if scrapes is None else str(scrapes)
+        if expr in mod.SCRAPE_QUERIES.values():
+            return "5760"
+        return "1"
+
+    monkeypatch.setattr(mod, "prom_query", query)
+    payload, _ = mod.collect(
+        prom_url="https://prometheus.example.invalid",
+        prom_token="prod-token",
+        window="1d",
+        mode="preflight",
+        release_id="",
+        raw_retention_days=120,
+        out_path=tmp_path / "record.json",
+    )
+    assert payload["coverage"] == 1.0
+    assert payload["day0_eligible"] is eligible
+    if not eligible:
+        assert payload["scrape_coverage"] < 0.99
