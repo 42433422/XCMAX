@@ -57,6 +57,8 @@ def consume_browser_handoff(body: HandoffConsume, response: Response):
         raise HTTPException(503, "登录连接暂时不可用，请稍后重试", headers=NO_STORE) from exc
     return {
         "ok": True,
-        "access_token": create_access_token(user.id, user.username, is_admin=bool(user.is_admin)),
-        "refresh_token": create_refresh_token(user.id, user.username),
+        "access_token": create_access_token(
+            int(user.id), str(user.username), is_admin=bool(user.is_admin)
+        ),
+        "refresh_token": create_refresh_token(int(user.id), str(user.username)),
     }

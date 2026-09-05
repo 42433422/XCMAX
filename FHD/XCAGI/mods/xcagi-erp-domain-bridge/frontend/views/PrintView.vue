@@ -5,6 +5,7 @@
       <div class="card">
         <div class="card-header">1. 选择产品与标签模板</div>
         <p v-if="loadError" role="alert">{{ loadError }} <button @click="loadOptions">重新加载</button></p>
+        <p v-if="templateOptionsError" role="alert">{{ templateOptionsError }} <button @click="loadTemplates">重新加载模板</button></p>
         <div class="form-group">
           <label for="label-search">查找业务产品</label>
           <input id="label-search" v-model="productKeyword" placeholder="输入产品名称或型号" :disabled="busy || productsLoading" @keyup.enter="loadProducts(true)">
@@ -24,7 +25,7 @@
             <option v-for="template in templates" :key="template.id" :value="template.id">{{ template.name }}</option>
           </select>
           <p>使用所选模板的字段与位置。动态字段需绑定产品名称、型号、规格、单价等真实产品数据。</p>
-          <a :href="resolveErpPagePath('/label-editor?returnTo=print')">创建标签模板</a>
+          <RouterLink :to="resolveErpPagePath('/label-editor?returnTo=print')">创建标签模板</RouterLink>
         </div>
         <p v-if="templateError" role="alert">{{ templateError }} <button @click="loadTemplate">重试模板加载</button></p>
         <div class="form-group">
@@ -66,6 +67,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { RouterLink } from 'vue-router'
 import printApi, { type LabelConfirmation, type LabelJob } from '@/api/print'
 import templatePreviewApi from '@/api/templatePreview'
 import { resolveErpPagePath } from '@/utils/erpPagePaths'
@@ -88,6 +90,7 @@ const paperLocked = ref(false)
 const templateReady = ref(false)
 const busy = ref(false)
 const loadError = ref('')
+const templateOptionsError = ref('')
 const templateError = ref('')
 const error = ref('')
 const job = ref<LabelJob | null>(null)
@@ -99,6 +102,7 @@ const stale = computed(() => generatedSelection.value !== selection.value)
 const canGenerate = computed(() => !busy.value && templateReady.value && !!productId.value && Number.isInteger(copies.value) && copies.value >= 1 && copies.value <= 100 && widthMm.value >= 10 && widthMm.value <= 500 && heightMm.value >= 10 && heightMm.value <= 500)
 const canConfirm = computed(() => !busy.value && !stale.value && !!previewUrl.value && !!job.value && ['generated', 'failed'].includes(job.value.status))
 let templateRequest = 0
+let templateOptionsRequest = 0
 function message(e: unknown) { return e instanceof Error ? e.message : '操作失败，请重试' }
 function updateHeight() { if (!paperLocked.value) heightMm.value = Math.round(widthMm.value / ratio.value * 100) / 100 }
 function revokePreview() { if (previewUrl.value) URL.revokeObjectURL(previewUrl.value); previewUrl.value = '' }
@@ -121,14 +125,19 @@ async function loadProducts(reset = true) {
 }
 async function loadOptions() {
   loadError.value = ''
-  await Promise.allSettled([loadProducts(true), (async () => {
-    try {
-      const data = await templatePreviewApi.listTemplates() as { success: boolean; templates?: Template[]; message?: string }
-      if (!data.success) throw new Error(data.message || '加载标签模板失败')
-      templates.value = (data.templates || []).filter(t => t.category === 'label' && /^(?:db:)?[1-9][0-9]*$/.test(String(t.id))).map(t => ({ ...t, id: String(t.id) }))
-      if (!templates.value.length) loadError.value = '暂无已保存的标签模板，请先在标签编辑器中创建。'
-    } catch (e) { loadError.value = message(e) }
-  })()])
+  await Promise.allSettled([loadProducts(true), loadTemplates()])
+}
+async function loadTemplates() {
+  const sequence = ++templateOptionsRequest
+  templateOptionsError.value = ''
+  try {
+    const data = await templatePreviewApi.listTemplates() as { success: boolean; templates?: Template[]; message?: string }
+    if (sequence !== templateOptionsRequest) return
+    if (!data.success) throw new Error(data.message || '加载标签模板失败')
+    templates.value = (data.templates || []).filter(t => t.category === 'label' && /^(?:db:)?[1-9][0-9]*$/.test(String(t.id))).map(t => ({ ...t, id: String(t.id) }))
+    if (templateId.value && !templates.value.some(t => t.id === templateId.value)) templateId.value = ''
+    if (!templates.value.length) templateOptionsError.value = '暂无已保存的标签模板，请先在标签编辑器中创建。'
+  } catch (e) { if (sequence === templateOptionsRequest) templateOptionsError.value = message(e) }
 }
 async function loadTemplate() {
   const sequence = ++templateRequest
@@ -206,8 +215,14 @@ async function refreshStatus() {
 }
 watch(templateId, loadTemplate)
 watch(selection, () => { confirmation.value = null })
-onMounted(loadOptions)
-onBeforeUnmount(() => { templateRequest++; revokePreview() })
+onMounted(() => {
+  void loadOptions()
+  window.addEventListener('xcagi:templates-updated', loadTemplates)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('xcagi:templates-updated', loadTemplates)
+  templateRequest++; templateOptionsRequest++; revokePreview()
+})
 </script>
 
 <style scoped>

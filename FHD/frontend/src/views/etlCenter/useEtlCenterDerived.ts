@@ -75,6 +75,10 @@ export function createEtlCenterDerived({ state }: EtlCenterDerivedDeps) {
   const runOutcomeText = computed(() => {
     if (!currentRun.value) return ''
     const summary = currentRun.value.summary
+    if (currentRun.value.rollback_status === 'completed') {
+      const rollback = currentRun.value.receipt.rollback as { rows?: number } | undefined
+      return `已撤销本次写入；已回退 ${rollback?.rows ?? summary.executed} 行`
+    }
     if (currentRun.value.status === 'completed') {
       return `已写入 ${summary.executed} 行；新增 ${summary.new}、更新 ${summary.update}、跳过 ${summary.skip}`
     }

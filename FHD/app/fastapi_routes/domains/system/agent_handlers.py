@@ -167,6 +167,7 @@ def run_document_template_agent(
     body: dict[str, Any],
     action: str,
     route_path: str,
+    authenticated_actor_id: str | None = None,
 ) -> tuple[dict[str, Any], int]:
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.workflow.types import PlanGraph, WorkflowNode
@@ -197,7 +198,11 @@ def run_document_template_agent(
         risk_level=risk,
         metadata={"source": "document_template_route", "route": route_path},
     )
-    user_id = _user_id_from_tool_request(request, data)
+    user_id = (
+        authenticated_actor_id
+        if authenticated_actor_id is not None
+        else _user_id_from_tool_request(request, data)
+    )
     runtime_context = {
         "source": "document_template_route",
         "route": route_path,

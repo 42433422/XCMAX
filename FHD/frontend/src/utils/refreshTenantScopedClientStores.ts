@@ -9,6 +9,7 @@ import { useWorkflowEmployeeSpaceStore } from '@/stores/workflowEmployeeSpace'
 import { useModsStore } from '@/stores/mods'
 import { hydrateWorkspacePrefsFromServer } from '@/utils/workspacePrefsApi'
 import { refreshHostPackAcknowledged } from '@/constants/productFlow'
+import { updateProductReadAccountScope } from './productReadAccountScope'
 
 /**
  * 登录/切换租户/登出后，重载按 tenant 隔离的客户端持久化 store。
@@ -18,6 +19,7 @@ import { refreshHostPackAcknowledged } from '@/constants/productFlow'
  * deciding whether the host onboarding is really required.
  */
 export async function refreshTenantScopedClientStores(input?: TenantStorageScopeInput): Promise<void> {
+  updateProductReadAccountScope(input)
   invalidateTenantStorageScopeCache()
   const scope = resolveTenantStorageScope(input)
   setTenantStorageScopeCache(scope)

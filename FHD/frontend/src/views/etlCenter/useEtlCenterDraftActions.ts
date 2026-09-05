@@ -30,6 +30,7 @@ export function createEtlCenterDraftActions({
   async function saveMappings() {
     if (!currentRun.value) return
     busy.value = true
+    pageError.value = ''
     try {
       const mappings = editableMappings.value.map((mapping, index) => {
         const parsed = JSON.parse(mappingUiTransformJson[String(index)] || '[]')

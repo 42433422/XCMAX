@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import type { APIRequestContext, Page } from '@playwright/test'
+import { expect, type APIRequestContext, type Page } from '@playwright/test'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -114,12 +114,12 @@ export async function csrfHeaders(
   }
 }
 
-async function createLoginCookies(page: Page, base: string): Promise<BrowserCookie[]> {
+async function createLoginCookies(request: APIRequestContext, base: string): Promise<BrowserCookie[]> {
   let lastTransientError: unknown
   for (let attempt = 0; attempt <= LOGIN_RETRY_DELAYS_MS.length; attempt += 1) {
     try {
-      const headers = await csrfHeaders(page.request, {}, base)
-      const resp = await page.request.post(`${base}/api/auth/login`, {
+      const headers = await csrfHeaders(request, {}, base)
+      const resp = await request.post(`${base}/api/auth/login`, {
         headers,
         data: {
           username: E2E_USER,
@@ -135,7 +135,7 @@ async function createLoginCookies(page: Page, base: string): Promise<BrowserCook
       if (body?.success !== true) {
         throw new Error(`E2E login failed: status=${resp.status()} body=${JSON.stringify(body)}`)
       }
-      return (await page.request.storageState()).cookies
+      return (await request.storageState()).cookies
     } catch (error) {
       if (!isTransientLoginError(error) || attempt === LOGIN_RETRY_DELAYS_MS.length) throw error
       lastTransientError = error
@@ -174,7 +174,7 @@ export async function loginBrowserSession(page: Page, apiBase = ''): Promise<voi
   const base = (apiBase || process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:5001').replace(/\/$/, '')
   let cookiePromise = loginCookieCache.get(base)
   if (!cookiePromise) {
-    cookiePromise = createLoginCookies(page, base)
+    cookiePromise = createLoginCookies(page.request, base)
     loginCookieCache.set(base, cookiePromise)
   }
 
@@ -193,12 +193,53 @@ export async function loginBrowserSession(page: Page, apiBase = ''): Promise<voi
     if (!(error instanceof InvalidE2ESessionError)) throw error
     loginCookieCache.delete(base)
     await page.context().clearCookies()
-    const freshCookiePromise = createLoginCookies(page, base)
+    const freshCookiePromise = createLoginCookies(page.request, base)
     loginCookieCache.set(base, freshCookiePromise)
     const freshCookies = await freshCookiePromise
     await page.context().addCookies(freshCookies)
     await assertCurrentBrowserSession(page, base)
   }
+  await bindErpWorkspace(page.request, base)
+}
+
+/** ERP cases start after industry selection, using the same persisted workspace as the UI. */
+async function bindErpWorkspace(request: APIRequestContext, base: string): Promise<string> {
+  const catalogResponse = await request.get(`${base}/api/platform-shell/onboarding-industries`)
+  expect(catalogResponse.ok(), await catalogResponse.text()).toBe(true)
+  const catalogBody = await catalogResponse.json()
+  expect(catalogBody.success).toBe(true)
+  const catalog = catalogBody.data || catalogBody
+  const ownerId = catalog.owner_id
+  expect(typeof ownerId).toBe('string')
+  expect(ownerId.trim()).not.toBe('')
+  expect(catalog.open_packages).toEqual(expect.arrayContaining([
+    expect.objectContaining({ industry_id: '涂料', selectable: true }),
+  ]))
+
+  const beforeResponse = await request.get(`${base}/api/workspace/prefs`)
+  expect(beforeResponse.ok(), await beforeResponse.text()).toBe(true)
+  const before = await beforeResponse.json()
+  expect(before).toMatchObject({ success: true, owner_id: ownerId })
+  const expected = { success: true, owner_id: ownerId, data: { selected_industry_id: '涂料' } }
+  if (before.data?.selected_industry_id !== '涂料') {
+    const patchedResponse = await request.patch(`${base}/api/workspace/prefs`, {
+      headers: await csrfHeaders(request, {}, base),
+      data: { selected_industry_id: '涂料' },
+    })
+    expect(patchedResponse.ok(), await patchedResponse.text()).toBe(true)
+    expect(await patchedResponse.json()).toMatchObject(expected)
+  }
+  const readbackResponse = await request.get(`${base}/api/workspace/prefs`)
+  expect(readbackResponse.ok(), await readbackResponse.text()).toBe(true)
+  expect(await readbackResponse.json()).toMatchObject(expected)
+  return ownerId
+}
+
+/** The separate request fixture prepares ERP state without authenticating the form's browser. */
+export async function prepareErpSession(request: APIRequestContext): Promise<string> {
+  const base = (process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:5001').replace(/\/$/, '')
+  await createLoginCookies(request, base)
+  return bindErpWorkspace(request, base)
 }
 
 export async function imUserHeaders(request: APIRequestContext, userId: string): Promise<Record<string, string>> {

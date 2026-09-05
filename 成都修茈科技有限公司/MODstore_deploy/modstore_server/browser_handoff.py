@@ -64,7 +64,7 @@ def issue_code(user_id: int, target: str, purpose: str) -> dict:
     code = secrets.token_urlsafe(32)
     with get_session_factory()() as session:
         user = session.get(User, user_id)
-        if not _available(user):
+        if user is None or not _available(user):
             raise ValueError("Handoff unavailable")
         # Bound storage growth; codes have no durable audit or business value.
         session.execute(delete(BrowserHandoffCode).where(BrowserHandoffCode.expires_at <= now))
@@ -113,11 +113,13 @@ def consume_code(code: str, target: str, purpose: str) -> User:
         if row is None:
             raise ValueError("Handoff expired or invalid")
         user = session.get(User, row.user_id)
-        valid = _available(user) and secrets.compare_digest(
-            _fingerprint(user), row.credential_fingerprint
+        valid = (
+            user is not None
+            and _available(user)
+            and secrets.compare_digest(_fingerprint(user), row.credential_fingerprint)
         )
         session.commit()
-        if not valid:
+        if user is None or not valid:
             raise ValueError("Handoff expired or invalid")
         session.refresh(user)
         session.expunge(user)

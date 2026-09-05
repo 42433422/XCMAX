@@ -1,12 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import { createMemoryHistory, createRouter, RouterView, type Router } from 'vue-router'
+import { defineComponent, KeepAlive } from 'vue'
+import { LS_ERP_DOMAIN_MOD_FACADE_ENABLED } from '@/constants/erpDomainMod'
 import PrintView from '../../../mods/xcagi-erp-domain-bridge/frontend/views/PrintView.vue'
 
 let wrapper: VueWrapper | undefined
+let router: Router
 let fetchMock: ReturnType<typeof vi.fn>
 let failDetail: boolean
 let failGenerate: boolean
 let submitMode: 'submitted' | 'failed' | 'outcome_unknown' | 'network'
+let savedTemplates: Array<Record<string, unknown>>
 const template = {
   id: 'db:42', name: '指定标签模板', category: 'label', fields: [],
   preview_data: { image_size: { width: 640, height: 400 }, layout: { paper_width_mm: 80, paper_height_mm: 50 } },
@@ -24,13 +29,14 @@ async function chooseAndGenerate() {
 }
 beforeEach(async () => {
   failDetail = false; failGenerate = false; submitMode = 'submitted'
+  savedTemplates = [template, { id: 'db:55', category: 'excel', name: '发货单' }]
   document.cookie = 'csrf_token=label-csrf; path=/'
   vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:label-file'), revokeObjectURL: vi.fn() }))
   fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     if (url.includes('/label-jobs/products') && url.includes('page=2')) return response({ success: true, total: 3, data: [{ id: 2000, name: '末页产品', model_number: 'LAST' }] })
     if (url.includes('/label-jobs/products') && url.includes('keyword=LAST')) return response({ success: true, total: 1, data: [{ id: 2000, name: '末页产品', model_number: 'LAST' }] })
     if (url.includes('/label-jobs/products')) return response({ success: true, total: 3, data: [{ id: 1, name: '同名产品', model_number: 'SKU-1' }, { id: 2, name: '同名产品', model_number: 'SKU-2' }] })
-    if (url.endsWith('/api/templates')) return response({ success: true, templates: [template, { id: 'db:55', category: 'excel', name: '发货单' }] })
+    if (url.endsWith('/api/templates')) return response({ success: true, templates: savedTemplates })
     if (url.endsWith('/api/templates/db:42')) return failDetail ? response({ message: '模板载入失败' }, 503) : response({ success: true, template })
     if (url.endsWith('/api/print/label-jobs')) return failGenerate ? response({ message: '字段缺少产品绑定' }, 400) : response({ success: true, job: baseJob })
     if (url.endsWith('/file')) return new Response(new Blob(['%PDF-1.7 real generated test artifact'], { type: 'application/pdf' }), { headers: { 'Content-Type': 'application/pdf' } })
@@ -42,16 +48,86 @@ beforeEach(async () => {
     throw new Error(`Unexpected ${init?.method} ${url}`)
   })
   vi.stubGlobal('fetch', fetchMock)
-  wrapper = mount(PrintView)
+  router = createRouter({ history: createMemoryHistory(), routes: [
+    { path: '/print', component: PrintView },
+    { path: '/label-editor', component: { template: '<div>标签编辑器</div>' } },
+    { path: '/mod/xcagi-erp-domain-bridge/label-editor', component: { template: '<div>Mod 标签编辑器</div>' } },
+  ] })
+  await router.push('/print')
+  await router.isReady()
+  wrapper = mount(PrintView, { global: { plugins: [router] } })
   await flushPromises()
 })
 afterEach(() => {
   wrapper?.unmount(); wrapper = undefined
   vi.restoreAllMocks(); vi.unstubAllGlobals()
   document.cookie = 'csrf_token=; Max-Age=0; path=/'
+  localStorage.removeItem(LS_ERP_DOMAIN_MOD_FACADE_ENABLED)
 })
 
 describe('actual Mod label output flow', () => {
+  it('does not replace a newly saved template with a late pre-save list response', async () => {
+    wrapper!.unmount()
+    const originalFetch = fetchMock.getMockImplementation()!
+    let releaseOld!: (value: Response) => void
+    let firstList = true
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (url.endsWith('/api/templates') && firstList) {
+        firstList = false
+        return new Promise<Response>(resolve => { releaseOld = resolve })
+      }
+      return originalFetch(url, init)
+    })
+    wrapper = mount(PrintView, { global: { plugins: [router] } })
+    await flushPromises()
+    window.dispatchEvent(new CustomEvent('xcagi:templates-updated'))
+    await flushPromises()
+    expect(wrapper.get('#label-template').text()).toContain('指定标签模板')
+    releaseOld(response({ success: true, templates: [] }))
+    await flushPromises()
+    expect(wrapper.get('#label-template').text()).toContain('指定标签模板')
+    expect(wrapper.text()).not.toContain('暂无已保存的标签模板')
+  })
+  it('refreshes saved templates on return to the kept-alive print page without losing the product', async () => {
+    wrapper!.unmount()
+    savedTemplates = []
+    const Shell = defineComponent({
+      components: { RouterView, KeepAlive },
+      template: '<RouterView v-slot="{ Component }"><KeepAlive><component :is="Component" /></KeepAlive></RouterView>',
+    })
+    wrapper = mount(Shell, { global: { plugins: [router] } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('暂无已保存的标签模板')
+    await wrapper.get('#label-product').setValue('2')
+    const productReads = fetchMock.mock.calls.filter(call => call[0].includes('/label-jobs/products')).length
+    await wrapper.findAll('a').find(a => a.text() === '创建标签模板')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('标签编辑器')
+    savedTemplates = [template]
+    window.dispatchEvent(new CustomEvent('xcagi:templates-updated', { detail: { source: 'label-editor', templateId: 'db:42' } }))
+    await flushPromises()
+    await router.push('/print')
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('暂无已保存的标签模板')
+    expect(wrapper.get('#label-template').text()).toContain('指定标签模板')
+    expect((wrapper.get('#label-product').element as HTMLSelectElement).value).toBe('2')
+    expect(fetchMock.mock.calls.filter(call => call[0].includes('/label-jobs/products'))).toHaveLength(productReads)
+    await chooseAndGenerate()
+    expect(wrapper.find('iframe').exists()).toBe(true)
+  })
+  it.each([false, true])('opens the editor without a document reload when Mod facade is %s', async enabled => {
+    localStorage.setItem(LS_ERP_DOMAIN_MOD_FACADE_ENABLED, enabled ? '1' : '0')
+    wrapper!.unmount()
+    wrapper = mount(PrintView, { global: { plugins: [router] } })
+    await flushPromises()
+    const link = wrapper!.findAll('a').find(a => a.text() === '创建标签模板')!
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })
+    link.element.dispatchEvent(click)
+    await flushPromises()
+    expect(click.defaultPrevented).toBe(true)
+    expect(router.currentRoute.value.path).toBe(`${enabled ? '/mod/xcagi-erp-domain-bridge' : ''}/label-editor`)
+    expect(router.currentRoute.value.query.returnTo).toBe('print')
+  })
   it('searches and paginates the same product source as generation without silently truncating', async () => {
     expect(wrapper!.text()).toContain('已显示 2 / 3')
     await button('加载更多产品').trigger('click'); await flushPromises()

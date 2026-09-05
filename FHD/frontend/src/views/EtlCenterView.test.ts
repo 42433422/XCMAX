@@ -1,8 +1,10 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { EtlRun } from '@/api/etl'
 
-const { etlApiMock } = vi.hoisted(() => ({
+const { etlApiMock, currentUserMock } = vi.hoisted(() => ({
+  currentUserMock: vi.fn(),
   etlApiMock: {
     capabilities: vi.fn(),
     templates: vi.fn(),
@@ -26,6 +28,7 @@ const { etlApiMock } = vi.hoisted(() => ({
 }))
 
 vi.mock('@/api/etl', () => ({ etlApi: etlApiMock }))
+vi.mock('@/api/auth', () => ({ authApi: { getCurrentUser: currentUserMock } }))
 
 import EtlCenterView from './EtlCenterView.vue'
 
@@ -190,6 +193,7 @@ function buttonByText(wrapper: Awaited<ReturnType<typeof mountView>>, text: stri
 describe('EtlCenterView folder workflow', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    currentUserMock.mockResolvedValue({ success: true, data: { permissions: ['etl.read', 'etl.execute', 'etl.rollback'] } })
     etlApiMock.capabilities.mockResolvedValue({
       enabled: true,
       limits: { max_file_bytes: 100 * 1024 * 1024, max_rows: 100_000 },
@@ -270,6 +274,7 @@ describe('EtlCenterView folder workflow', () => {
 
   afterEach(() => {
     vi.restoreAllMocks()
+    vi.useRealTimers()
   })
 
   it('shows separate file and whole-folder pickers', async () => {
@@ -282,6 +287,86 @@ describe('EtlCenterView folder workflow', () => {
     expect(wrapper.text()).toContain('已获取 1 个旧 YAML/知识库兼容预设')
     expect(wrapper.find('input[type="file"][multiple]').exists()).toBe(true)
     expect(wrapper.find('input[type="file"][webkitdirectory]').exists()).toBe(true)
+  })
+
+  it('keeps the single-file list current through queued, auto-write, and completed states', async () => {
+    vi.useFakeTimers()
+    const queued = queuedRun('single-file', 'products.csv')
+    let latest = queued
+    etlApiMock.upload.mockResolvedValue({ upload_id: queued.upload_id })
+    etlApiMock.preview.mockResolvedValue(queued)
+    etlApiMock.run.mockImplementation(async () => latest)
+    etlApiMock.runs.mockImplementation(async () => latest.status === 'queued' ? [] : [latest])
+    etlApiMock.execute.mockImplementation(async () => {
+      latest = { ...latest, status: 'executing', stage: 'executing', progress: 10 }
+      return latest
+    })
+    const wrapper = await mountView()
+    try {
+      const input = wrapper.find('input[type="file"][multiple]')
+      Object.defineProperty(input.element, 'files', { value: [new File(['data'], 'products.csv')] })
+      await input.trigger('change')
+      await buttonByText(wrapper, '上传并写入数据库')?.trigger('click')
+      await flushPromises()
+      expect(wrapper.find('.etl-batch-card').text()).toContain('已排队')
+
+      latest = { ...previewRun(queued.id), summary: { new: 2, update: 0, skip: 0, error: 0, executed: 0 } }
+      await vi.advanceTimersByTimeAsync(1200)
+      await flushPromises()
+      expect(etlApiMock.execute).toHaveBeenCalledTimes(1)
+      latest = { ...latest, status: 'completed', stage: 'completed', progress: 100, summary: { ...latest.summary, executed: 2 } }
+      await vi.advanceTimersByTimeAsync(1200)
+      await flushPromises()
+      await buttonByText(wrapper, '上传文件')?.trigger('click')
+
+      const list = wrapper.find('.etl-batch-card')
+      expect(list.text()).toContain('1/1 已完成')
+      expect(list.text()).toContain('100%')
+      expect(list.text()).toContain('已写入')
+      expect(list.text()).not.toContain('已排队')
+      expect(etlApiMock.execute).toHaveBeenCalledTimes(1)
+    } finally {
+      wrapper.unmount()
+    }
+  })
+
+  it('clears the no-writable-rows warning after an allowed-field change is revalidated', async () => {
+    vi.useFakeTimers()
+    const skipped = { ...previewRun('duplicate-file'), summary: { new: 0, update: 0, skip: 3, error: 0, executed: 0 } }
+    let latest = skipped
+    etlApiMock.upload.mockResolvedValue({ upload_id: skipped.upload_id })
+    etlApiMock.preview.mockResolvedValue(skipped)
+    etlApiMock.run.mockImplementation(async () => latest)
+    etlApiMock.runs.mockImplementation(async () => [latest])
+    etlApiMock.patchDraft.mockImplementation(async (_id: string, draft: Record<string, unknown>) => {
+      latest = { ...latest, status: 'previewing', stage: 'validating', draft: { ...latest.draft, ...draft } }
+      return latest
+    })
+    const wrapper = await mountView()
+    try {
+      const input = wrapper.find('input[type="file"][multiple]')
+      Object.defineProperty(input.element, 'files', { value: [new File(['data'], 'duplicates.csv')] })
+      await input.trigger('change')
+      await buttonByText(wrapper, '上传并写入数据库')?.trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[role="alert"]').text()).toContain('没有可写入行')
+      expect(etlApiMock.execute).not.toHaveBeenCalled()
+
+      await buttonByText(wrapper, '字段映射')?.trigger('click')
+      await wrapper.find('input[type="checkbox"][value="address"]').setValue(true)
+      await buttonByText(wrapper, '保存并重新校验')?.trigger('click')
+      await flushPromises()
+      expect(etlApiMock.patchDraft).toHaveBeenCalledWith(skipped.id, expect.objectContaining({ allowed_update_fields: ['address'] }))
+      latest = { ...latest, status: 'preview_ready', stage: 'preview_ready', summary: { new: 0, update: 1, skip: 2, error: 0, executed: 0 } }
+      await vi.advanceTimersByTimeAsync(1200)
+      await flushPromises()
+
+      expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+      expect(buttonByText(wrapper, '写入数据库')?.attributes('disabled')).toBeUndefined()
+      expect(etlApiMock.execute).not.toHaveBeenCalled()
+    } finally {
+      wrapper.unmount()
+    }
   })
 
   it('explains the 100MB single-file limit before a file reaches the API', async () => {
@@ -905,6 +990,63 @@ describe('EtlCenterView folder workflow', () => {
     await flushPromises()
     expect(etlApiMock.retry).toHaveBeenCalledWith(failed.id)
     wrapper.unmount()
+  })
+
+  it.each(['denied', 'unavailable'] as const)('keeps rollback disabled when effective permission is %s', async (permission) => {
+    if (permission === 'denied') {
+      currentUserMock.mockResolvedValue({ success: true, data: { permissions: ['etl.read', 'etl.execute'] } })
+    } else {
+      currentUserMock.mockRejectedValue(new Error('permission service offline'))
+    }
+    const completed = completedRun()
+    etlApiMock.run.mockResolvedValue(completed)
+    const wrapper = await mountView(completed.id)
+    try {
+      expect(buttonByText(wrapper, '撤销本次写入')?.attributes('disabled')).toBeDefined()
+      expect(wrapper.text()).toContain(permission === 'denied' ? '需要管理员授予撤销权限' : '暂时无法确认撤销权限')
+      await buttonByText(wrapper, '撤销本次写入')?.trigger('click')
+      expect(etlApiMock.rollback).not.toHaveBeenCalled()
+    } finally {
+      wrapper.unmount()
+    }
+  })
+
+  it('replaces a failed rollback warning and reports the completed rollback in list, history, and receipt', async () => {
+    const completed = completedRun('rollback-file')
+    const rolledBack = { ...completed, rollback_status: 'completed', receipt: { rollback: { status: 'completed', rows: 3 } } }
+    let latest: EtlRun = completed
+    etlApiMock.upload.mockResolvedValue({ upload_id: completed.upload_id })
+    etlApiMock.preview.mockResolvedValue(completed)
+    etlApiMock.run.mockImplementation(async () => latest)
+    etlApiMock.runs.mockImplementation(async () => [latest])
+    etlApiMock.rollback.mockRejectedValueOnce(new Error('当前账号没有撤销权限，请联系管理员授权后重试。')).mockImplementationOnce(async () => {
+      latest = rolledBack
+      return latest
+    })
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const wrapper = await mountView()
+    try {
+      const input = wrapper.find('input[type="file"][multiple]')
+      Object.defineProperty(input.element, 'files', { value: [new File(['data'], 'rollback.csv')] })
+      await input.trigger('change')
+      await buttonByText(wrapper, '上传并写入数据库')?.trigger('click')
+      await flushPromises()
+      await buttonByText(wrapper, '撤销本次写入')?.trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[role="alert"]').text()).toContain('没有撤销权限')
+      await buttonByText(wrapper, '撤销本次写入')?.trigger('click')
+      await flushPromises()
+
+      expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+      expect(wrapper.find('.etl-history').text()).toContain('已撤销')
+      expect(wrapper.find('.etl-receipt').text()).toContain('已撤销本次写入；已回退 3 行')
+      expect(wrapper.find('.etl-receipt').text()).not.toContain('已关联写入客户库和产品库')
+      await buttonByText(wrapper, '上传文件')?.trigger('click')
+      expect(wrapper.find('.etl-batch-card').text()).toContain('已撤销')
+      expect(etlApiMock.rollback).toHaveBeenCalledTimes(2)
+    } finally {
+      wrapper.unmount()
+    }
   })
 
   it('validates, saves, and tests a private webhook configuration', async () => {

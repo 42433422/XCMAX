@@ -13,12 +13,14 @@ from typing import Any, cast
 
 from fastapi import APIRouter, HTTPException, Request
 
+from app.fastapi_routes.template_create import router as template_create_router
 from app.neuro_bus.application_neuro_bridge import publish_neuro_event
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["templates-compat"])
+router.include_router(template_create_router)
 
 
 def _templates_payload() -> dict:

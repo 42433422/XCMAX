@@ -161,7 +161,7 @@
             <small v-else>{{ formatEtlBytes(item.file.size) }}</small>
           </div>
           <div class="etl-batch-item__state">
-            <span :class="`etl-status etl-status--${item.status}`"> {{ batchFileStatusLabel(item.status) }} </span>
+            <span :class="`etl-status etl-status--${item.status}`"> {{ batchFileStatusLabel(item.status, item.rollbackStatus) }} </span>
             <button v-if="item.runId" type="button" @click="openBatchRun(item)">查看</button>
             <button v-else-if="item.status === 'waiting' && !busy" type="button" @click="removeSelectedFile(item.id)">移除</button>
           </div>
@@ -546,7 +546,7 @@
           <small>{{ formatTime(run.created_at) }}</small>
         </div>
         <div>
-          <span :class="`etl-status etl-status--${run.status}`">{{ statusLabel(run.status) }}</span>
+          <span :class="`etl-status etl-status--${run.status}`">{{ statusLabel(run.status, run.rollback_status) }}</span>
           <small>
             新增 {{ run.summary.new }} · 更新 {{ run.summary.update }} · 跳过 {{ run.summary.skip }} · 错误 {{ run.summary.error }}
           </small>
@@ -577,15 +577,14 @@
           >
             重新导入
           </button>
-          <button
+          <template
             v-if="['completed', 'failed', 'interrupted'].includes(currentRun.status) && currentRun.summary.executed > 0 && currentRun.reversible && currentRun.rollback_status !== 'completed'"
-            type="button"
-            class="etl-danger"
-            :disabled="busy"
-            @click="rollbackRun"
           >
-            撤销本次写入
-          </button>
+            <button type="button" class="etl-danger" :disabled="busy || !canRollback" @click="rollbackRun">
+              撤销本次写入
+            </button>
+            <small v-if="!canRollback">{{ rollbackPermissionMessage }}</small>
+          </template>
         </div>
       </header>
       <dl>
@@ -595,7 +594,7 @@
         </div>
         <div>
           <dt>状态</dt>
-          <dd>{{ statusLabel(currentRun.status) }}</dd>
+          <dd>{{ statusLabel(currentRun.status, currentRun.rollback_status) }}</dd>
         </div>
         <div>
           <dt>目标</dt>
@@ -610,7 +609,11 @@
           <dd>{{ currentRun.reversible ? '内部目标可撤销' : '外部目标不可撤销' }}</dd>
         </div>
       </dl>
-      <div v-if="currentRun.status === 'completed' && currentRun.target_type === 'customer_products'" class="etl-target-scope-note">
+      <div v-if="currentRun.rollback_status === 'completed'" class="etl-target-scope-note">
+        <strong>本次导入已撤销</strong>
+        <span>已回退本次写入的数据，请到业务库核对当前结果。</span>
+      </div>
+      <div v-else-if="currentRun.status === 'completed' && currentRun.target_type === 'customer_products'" class="etl-target-scope-note">
         <strong>已关联写入客户库和产品库</strong>
         <span>产品的购买单位与客户名称使用同一规范值，可从客户页直接衔接到该客户的产品。</span>
         <div class="etl-result-links">

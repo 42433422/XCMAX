@@ -79,6 +79,7 @@ jobs:
           name: xcagi-full-stack-playwright-evidence
           path: |
             FHD/frontend/playwright-report/
+            FHD/frontend/test-results/
             FHD/docs/evidence/e2e/*.png
           if-no-files-found: warn
           retention-days: 14

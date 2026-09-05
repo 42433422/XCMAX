@@ -27661,6 +27661,50 @@
         },
         "description": "Submit Label"
       }
+    },
+    "/api/templates/create": {
+      "post": {
+        "tags": [
+          "templates-compat"
+        ],
+        "summary": "创建当前租户的模板",
+        "operationId": "templates_create_api_templates_create_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "description": "创建当前租户的模板"
+      }
     }
   },
   "components": {

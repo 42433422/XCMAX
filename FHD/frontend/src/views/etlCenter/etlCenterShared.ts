@@ -33,7 +33,8 @@ export function stageLabel(stage: string) {
   )
 }
 
-export function statusLabel(status: string) {
+export function statusLabel(status: string, rollbackStatus?: string | null) {
+  if (rollbackStatus === 'completed') return '已撤销'
   return (
     (
       {
