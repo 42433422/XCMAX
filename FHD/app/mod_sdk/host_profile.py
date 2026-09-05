@@ -210,7 +210,7 @@ def _legacy_profile_for_sku(sku: str) -> dict[str, Any]:
             "generic": {"legacy_routes_enabled": False},
             "full": {"legacy_routes_enabled": True},
         },
-        "sku_aux_mod_ids": ["xcagi-planner-excel-tools", "wechat-contacts-ai-employee"],
+        "sku_aux_mod_ids": ["xcagi-planner-excel-tools"],
         "erp_domain_bridge_mod_id": erp,
         "_source": "legacy_fallback",
     }

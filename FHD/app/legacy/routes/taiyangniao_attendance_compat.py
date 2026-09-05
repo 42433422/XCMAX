@@ -12,10 +12,11 @@ from pathlib import Path
 from typing import Any, cast
 from urllib.parse import unquote
 
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.infrastructure.workspace import workspace_root
+from app.mod_sdk.customer_features import require_attendance_conversion
 from app.mod_sdk.private_sqlite import resolve_mod_private_sqlite_path
 from app.mod_sdk.workspace import (
     allocate_generated_workspace_file,
@@ -29,7 +30,11 @@ MOD_ID = "taiyangniao-pro"
 DEFAULT_TEMPLATE_RELPATH = "424/考勤-2026-3月份考勤统计表.xlsx"
 DEFAULT_DB_NAME = "taiyangniao_pro.db"
 
-router = APIRouter(prefix=f"/api/mod/{MOD_ID}", tags=["sunbird-attendance-compat"])
+router = APIRouter(
+    prefix=f"/api/mod/{MOD_ID}",
+    tags=["sunbird-attendance-compat"],
+    dependencies=[Depends(require_attendance_conversion)],
+)
 
 
 def _candidate_mod_roots() -> list[Path]:

@@ -1,11 +1,6 @@
 import type { Router } from 'vue-router'
 import { DEFAULT_POST_AUTH, safeRedirectPath } from '../authPaths'
-import {
-  applyFhdMarketToken,
-  extractFhdMarketTokenFromRoute,
-  fhdHandoffNeedsStrip,
-  FHD_MARKET_QUERY_KEY,
-} from '../infrastructure/storage/fhdMarketHandoff'
+import { consumeBrowserHandoff, takeBrowserHandoff } from '../infrastructure/storage/fhdMarketHandoff'
 import { useAuthStore } from '../stores/auth'
 
 export function installAuthGuards(router: Router): void {
@@ -15,20 +10,20 @@ export function installAuthGuards(router: Router): void {
     const requiresAdmin = matched.some((record) => record.meta.admin) || Boolean(to.meta.admin)
 
     const auth = useAuthStore()
-    const handoffToken = extractFhdMarketTokenFromRoute(to)
-    if (handoffToken) {
-      applyFhdMarketToken(handoffToken)
-      const userAfterHandoff = await auth.refreshSession(true)
-      // 仅在 /api/auth/me 校验通过后再剥掉 URL 中的令牌，避免失败时地址栏仍可读但至少不把「假登录」写进历史。
-      if (userAfterHandoff && fhdHandoffNeedsStrip(to)) {
-        const query = { ...to.query } as Record<string, string | string[] | undefined>
-        delete query[FHD_MARKET_QUERY_KEY]
+    const handoff = takeBrowserHandoff(to)
+    if (handoff) {
+      const cleanTarget = safeRedirectPath(handoff.target)
+      try {
+        await consumeBrowserHandoff(handoff)
+        if (!(await auth.refreshSession(true))) throw new Error('登录连接已失效')
         return {
-          path: to.path,
-          query,
+          path: cleanTarget.split('?')[0],
+          query: Object.fromEntries(new URLSearchParams(cleanTarget.split('?')[1] || '')),
           hash: '',
           replace: true,
         }
+      } catch {
+        return { name: 'login', query: { redirect: cleanTarget, handoff: 'expired' }, replace: true }
       }
     }
 
@@ -38,6 +33,7 @@ export function installAuthGuards(router: Router): void {
 
     const guestNames = new Set(['login', 'login-email', 'register', 'forgot-password'])
     if (guestNames.has(String(to.name))) {
+      if (to.query.handoff === 'expired') return undefined
       if (auth.hasToken()) {
         const user = await auth.refreshSession()
         if (user) {

@@ -8852,6 +8852,7 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "minimum": 1,
               "default": 1,
               "title": "Page"
             }
@@ -8862,8 +8863,27 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
               "default": 50,
               "title": "Per Page"
+            }
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Keyword"
             }
           }
         ],
@@ -27185,6 +27205,506 @@
           }
         }
       }
+    },
+    "/api/inventory/export.xlsx": {
+      "get": {
+        "tags": [
+          "inventory"
+        ],
+        "summary": "Export the complete filtered inventory workbook",
+        "description": "Returns a tenant-scoped Excel snapshot; empty or over-limit results are rejected.",
+        "operationId": "inventory_export_api_inventory_export_xlsx_get",
+        "parameters": [
+          {
+            "name": "warehouse_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Warehouse Id"
+            }
+          },
+          {
+            "name": "product_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Product Id"
+            }
+          },
+          {
+            "name": "batch_no",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 50
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Batch No"
+            }
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Keyword"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No inventory matches the filters"
+          },
+          "413": {
+            "description": "More than 50,000 rows; narrow the filters"
+          },
+          "500": {
+            "description": "Workbook generation failed"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/market/browser-handoff": {
+      "post": {
+        "tags": [
+          "market-account"
+        ],
+        "summary": "Market Browser Handoff",
+        "operationId": "market_browser_handoff_api_market_browser_handoff_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrowserHandoffRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/print/label-jobs": {
+      "post": {
+        "tags": [
+          "print",
+          "print-label-jobs"
+        ],
+        "summary": "Generate Label",
+        "operationId": "generate_label_api_print_label_jobs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateLabel"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Generate Label"
+      }
+    },
+    "/api/print/label-jobs/products": {
+      "get": {
+        "tags": [
+          "print",
+          "print-label-jobs"
+        ],
+        "summary": "Label Products",
+        "operationId": "label_products_api_print_label_jobs_products_get",
+        "parameters": [
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100,
+              "default": "",
+              "title": "Keyword"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000000,
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Per Page"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Label Products"
+      }
+    },
+    "/api/print/label-jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "print",
+          "print-label-jobs"
+        ],
+        "summary": "Get Label Job",
+        "operationId": "get_label_job_api_print_label_jobs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Get Label Job"
+      }
+    },
+    "/api/print/label-jobs/{job_id}/file": {
+      "get": {
+        "tags": [
+          "print",
+          "print-label-jobs"
+        ],
+        "summary": "Download Label",
+        "operationId": "download_label_api_print_label_jobs__job_id__file_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Download Label"
+      }
+    },
+    "/api/print/label-jobs/{job_id}/confirmation": {
+      "post": {
+        "tags": [
+          "print",
+          "print-label-jobs"
+        ],
+        "summary": "Confirm Label",
+        "operationId": "confirm_label_api_print_label_jobs__job_id__confirmation_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Confirm Label"
+      }
+    },
+    "/api/print/label-jobs/{job_id}/submit": {
+      "post": {
+        "tags": [
+          "print",
+          "print-label-jobs"
+        ],
+        "summary": "Submit Label",
+        "operationId": "submit_label_api_print_label_jobs__job_id__submit_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmLabel"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Submit Label"
+      }
+    },
+    "/api/templates/create": {
+      "post": {
+        "tags": [
+          "templates-compat"
+        ],
+        "summary": "创建当前租户的模板",
+        "operationId": "templates_create_api_templates_create_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "description": "创建当前租户的模板"
+      }
     }
   },
   "components": {
@@ -30301,6 +30821,89 @@
             "format": "date-time"
           }
         }
+      },
+      "BrowserHandoffRequest": {
+        "properties": {
+          "target": {
+            "type": "string",
+            "maxLength": 1024,
+            "title": "Target"
+          },
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "wallet",
+              "plans"
+            ],
+            "title": "Purpose"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "target",
+          "purpose"
+        ],
+        "title": "BrowserHandoffRequest"
+      },
+      "ConfirmLabel": {
+        "properties": {
+          "confirm_token": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 20,
+            "title": "Confirm Token"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "confirm_token"
+        ],
+        "title": "ConfirmLabel"
+      },
+      "GenerateLabel": {
+        "properties": {
+          "product_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Product Id"
+          },
+          "template_id": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Template Id"
+          },
+          "copies": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Copies"
+          },
+          "paper_width_mm": {
+            "type": "number",
+            "maximum": 500.0,
+            "minimum": 10.0,
+            "title": "Paper Width Mm"
+          },
+          "paper_height_mm": {
+            "type": "number",
+            "maximum": 500.0,
+            "minimum": 10.0,
+            "title": "Paper Height Mm"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "product_id",
+          "template_id",
+          "copies",
+          "paper_width_mm",
+          "paper_height_mm"
+        ],
+        "title": "GenerateLabel"
       }
     }
   }

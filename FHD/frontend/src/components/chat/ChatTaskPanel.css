@@ -339,3 +339,12 @@
   font-size: 12px;
   color: #dc2626;
 }
+
+.task-workspace-action {
+  margin-top: 8px;
+}
+
+.task-workspace-action a {
+  display: inline-flex;
+  text-decoration: none;
+}

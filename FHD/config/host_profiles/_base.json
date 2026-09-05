@@ -50,7 +50,6 @@
     "xcagi-planner-bridge": [
       "/api/mod/xcagi-planner-bridge/chat",
       "/mod/xcagi-planner-bridge/ai-ecosystem",
-      "/mod/xcagi-planner-bridge/brain",
       "/api/ai/chat",
       "/api/ai/intent"
     ],
@@ -129,7 +128,6 @@
   },
   "sku_aux_mod_ids": [
     "xcagi-planner-excel-tools",
-    "wechat-contacts-ai-employee",
     "lan-gate-ai-employee"
   ],
   "erp_domain_bridge_mod_id": "xcagi-erp-domain-bridge"

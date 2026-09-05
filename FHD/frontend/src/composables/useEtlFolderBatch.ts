@@ -1,4 +1,5 @@
-import { computed, onBeforeUnmount, ref, type Ref } from 'vue'
+import { createEtlProductInvalidation } from '@/utils/etlProductInvalidation'
+import { computed, onBeforeUnmount, ref, watch, type Ref } from 'vue'
 import type { Router } from 'vue-router'
 
 import { etlApi, type EtlCapabilities, type EtlRun } from '@/api/etl'
@@ -28,6 +29,7 @@ export type EtlBatchFile = EtlSelectedSourceFile & {
   progress: number
   runId?: string
   message?: string
+  rollbackStatus?: string | null
 }
 
 type EtlFolderBatchOptions = {
@@ -64,7 +66,8 @@ function newBatchId(): string {
   })
 }
 
-export function batchFileStatusLabel(status: BatchFileStatus) {
+export function batchFileStatusLabel(status: BatchFileStatus, rollbackStatus?: string | null) {
+  if (rollbackStatus === 'completed') return '已撤销'
   return (
     {
       waiting: '等待上传',
@@ -92,6 +95,7 @@ export function ignoredReasonLabel(reason: EtlIgnoredSourceFile['reason'], maxFi
 }
 
 export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
+  const productChanges = createEtlProductInvalidation()
   const selectedFiles = ref<EtlBatchFile[]>([])
   const ignoredFiles = ref<EtlIgnoredSourceFile[]>([])
   const selectionFolderName = ref('')
@@ -184,16 +188,27 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
     if (!selectedFiles.value.length) clearSelection()
   }
 
-  function mergeBatchRuns(latest: EtlRun[]) {
+  function syncSelectedFiles(latest: EtlRun[]) {
     const byId = new Map(latest.map((run) => [run.id, run]))
     for (const item of selectedFiles.value) {
       if (!item.runId) continue
       const run = byId.get(item.runId)
       if (!run) continue
       item.status = run.status as BatchFileStatus
+      item.rollbackStatus = run.rollback_status
       item.progress = terminalStatuses().has(item.status) ? 100 : Math.max(item.progress, run.progress)
       item.message = run.error?.message || ''
     }
+  }
+
+  // Single-file polling and history refreshes share the same run state as folder polling.
+  watch([options.runs, options.currentRun], ([runs, currentRun]) => {
+    syncSelectedFiles(currentRun ? [...runs, currentRun] : runs)
+  })
+
+  function mergeBatchRuns(latest: EtlRun[]) {
+    syncSelectedFiles(latest)
+    const byId = new Map(latest.map((run) => [run.id, run]))
     options.runs.value = [...latest, ...options.runs.value.filter((run) => !byId.has(run.id))]
     if (options.currentRun.value) {
       options.currentRun.value = byId.get(options.currentRun.value.id) || options.currentRun.value
@@ -207,7 +222,7 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
     batchPollTimer = setTimeout(async () => {
       try {
         const limit = Math.min(500, Math.max(50, selectedFiles.value.length))
-        const latest = await etlApi.runs(limit, batchId.value)
+        const latest = await productChanges.readMany(() => etlApi.runs(limit, batchId.value))
         mergeBatchRuns(latest)
         if (options.autoWriteEnabled.value) {
           for (const run of latest) {
@@ -301,7 +316,7 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
 
   async function openBatchRun(item: EtlBatchFile) {
     if (!item.runId) return
-    options.currentRun.value = await etlApi.run(item.runId)
+    options.currentRun.value = await productChanges.read(() => etlApi.run(item.runId!))
     options.syncDraft()
     options.activeTab.value = tabForRunStatus(options.currentRun.value.status)
     if (options.currentRun.value.status === 'preview_ready') await options.loadRows()

@@ -192,7 +192,6 @@ const modPathToSidebarKey = computed(() => {
 const viewTitlesBase = {
   chat: '智能对话',
   'ai-ecosystem': '智能生态',
-  brain: '智脑集成',
   'model-payment': '模型服务',
   'kitten-finance': '财务分析',
   'mod-store': '能力库',

@@ -49,6 +49,12 @@ _ATTENDANCE_ENTITY_RE = re.compile(
 _PERSONNEL_ENTITY_RE = re.compile(r"员工|人员|职员|工号|员工号|姓名|部门|岗位|职位", re.IGNORECASE)
 
 
+_AI_EMPLOYEE_MENTION_RE = re.compile(
+    r"(?:AI|人工智能|智能|数字|虚拟)(?:业务|销售|客服|采购|财务|仓储|运营|办公)?员工",
+    re.IGNORECASE,
+)
+
+
 _ATTENDANCE_RECORD_RE = re.compile(
     r"考勤(?:表|单|记录|数据|明细|结果)?|出勤(?:名单|情况|记录)?|"
     r"打卡(?:时间|记录|明细)?|签到(?:时间|记录)?|迟到|早退|缺卡|旷工|"
@@ -127,7 +133,12 @@ def classify_business_chat_intent(message: str) -> BusinessChatIntent | None:
         return None
 
     has_attendance = bool(_ATTENDANCE_ENTITY_RE.search(text))
-    has_personnel = bool(_PERSONNEL_ENTITY_RE.search(text))
+    # An AI employee is an assistant/capability reference, not a human record.
+    # Remove only that noun phrase from personnel-entity detection: the rest of
+    # a mixed request must still trigger the personnel/attendance/leave guard.
+    # In particular, never exempt an entire message merely because it names AI.
+    personnel_text = _AI_EMPLOYEE_MENTION_RE.sub("", text)
+    has_personnel = bool(_PERSONNEL_ENTITY_RE.search(personnel_text))
     is_explanation = bool(_INFO_CUE_RE.search(text))
     has_record_cue = bool(
         _QUERY_CUE_RE.search(text)

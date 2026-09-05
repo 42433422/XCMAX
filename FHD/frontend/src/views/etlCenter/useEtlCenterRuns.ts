@@ -7,17 +7,22 @@ import type { Router } from 'vue-router'
 import { etlApi, type EtlRun, type EtlRunRow } from '@/api/etl'
 import { tabForRunStatus } from '@/utils/etlRunView'
 import type { EtlCenterState } from './etlCenterState'
+import { createEtlProductInvalidation } from '@/utils/etlProductInvalidation'
 
 export interface EtlCenterRunsDeps {
   state: EtlCenterState
   route: { query: Record<string, unknown> }
   router: Pick<Router, 'replace'>
   canExecute: ComputedRef<boolean>
+  canRollback: ComputedRef<boolean>
   shipmentTemplateCandidates: ComputedRef<Array<Record<string, unknown>>>
   bulkNewRows: ComputedRef<EtlRunRow[]>
 }
 
-export function createEtlCenterRuns({ state, route, router, canExecute, shipmentTemplateCandidates, bulkNewRows }: EtlCenterRunsDeps) {
+export function createEtlCenterRuns({ state, route, router, canExecute, canRollback, shipmentTemplateCandidates, bulkNewRows }: EtlCenterRunsDeps) {
+  const productChanges = createEtlProductInvalidation()
+  const readRun = (id: string) => productChanges.read(() => etlApi.run(id))
+  const readRuns = () => productChanges.readMany(() => etlApi.runs())
   const {
     activeTab,
     busy,
@@ -72,13 +77,13 @@ export function createEtlCenterRuns({ state, route, router, canExecute, shipment
     try {
       const onlyValid = (run.summary.error || 0) > 0
       validRowsOnly.value = onlyValid
-      currentRun.value = await etlApi.execute(run.id, onlyValid)
+      currentRun.value = await productChanges.mutate(run, () => etlApi.execute(run.id, onlyValid))
       activeTab.value = 'history'
       await refreshRuns()
       schedulePoll()
     } catch (error) {
       pageError.value = error instanceof Error ? error.message : '自动写入失败'
-      currentRun.value = await etlApi.run(run.id).catch(() => run)
+      currentRun.value = await readRun(run.id).catch(() => run)
       syncDraft()
       activeTab.value = 'preview'
       if (currentRun.value?.status === 'preview_ready') await loadRows()
@@ -95,7 +100,7 @@ export function createEtlCenterRuns({ state, route, router, canExecute, shipment
       const [caps, templateRows, history, configs] = await Promise.all([
         etlApi.capabilities(),
         etlApi.templates(),
-        etlApi.runs(),
+        readRuns(),
         etlApi.targetConfigs(),
       ])
       state.capabilities.value = caps
@@ -107,7 +112,7 @@ export function createEtlCenterRuns({ state, route, router, canExecute, shipment
       }
       const requestedRun = String(route.query.run_id || '')
       if (requestedRun) {
-        currentRun.value = await etlApi.run(requestedRun)
+        currentRun.value = await readRun(requestedRun)
         syncDraft()
         activeTab.value = tabForRunStatus(currentRun.value.status)
         if (currentRun.value.status === 'preview_ready') await loadRows()
@@ -126,7 +131,7 @@ export function createEtlCenterRuns({ state, route, router, canExecute, shipment
     pollTimer.value = setTimeout(async () => {
       if (!currentRun.value) return
       try {
-        currentRun.value = await etlApi.run(currentRun.value.id)
+        currentRun.value = await readRun(currentRun.value.id)
         syncDraft()
         if (currentRun.value.status === 'preview_ready') {
           if (autoWriteEnabled.value && pendingAutoWriteIds.value.has(currentRun.value.id)) {
@@ -193,6 +198,7 @@ export function createEtlCenterRuns({ state, route, router, canExecute, shipment
     if (!currentRun.value) return
     const action = (event.target as HTMLSelectElement).value
     busy.value = true
+    pageError.value = ''
     try {
       currentRun.value = await etlApi.patchDraft(currentRun.value.id, {
         row_overrides: { [String(row.id)]: action },
@@ -210,6 +216,7 @@ export function createEtlCenterRuns({ state, route, router, canExecute, shipment
     const candidates = action === 'new' ? bulkNewRows.value : runRows.value.filter((row) => row.validation_issues.length === 0)
     if (!candidates.length) return
     busy.value = true
+    pageError.value = ''
     try {
       currentRun.value = await etlApi.patchDraft(currentRun.value.id, {
         row_overrides: Object.fromEntries(candidates.map((row) => [String(row.id), action])),
@@ -225,21 +232,22 @@ export function createEtlCenterRuns({ state, route, router, canExecute, shipment
   async function executeCurrentRun() {
     if (!currentRun.value || !canExecute.value) return
     busy.value = true
+    pageError.value = ''
     try {
-      currentRun.value = await etlApi.execute(currentRun.value.id, validRowsOnly.value)
+      currentRun.value = await productChanges.mutate(currentRun.value, () => etlApi.execute(currentRun.value!.id, validRowsOnly.value))
       activeTab.value = 'history'
       await refreshRuns()
       schedulePoll()
     } catch (error) {
       pageError.value = error instanceof Error ? error.message : '执行失败'
-      if (currentRun.value) currentRun.value = await etlApi.run(currentRun.value.id).catch(() => currentRun.value)
+      if (currentRun.value) currentRun.value = await readRun(currentRun.value.id).catch(() => currentRun.value)
     } finally {
       busy.value = false
     }
   }
 
   async function refreshRuns() {
-    runs.value = await etlApi.runs()
+    runs.value = await readRuns()
     if (currentRun.value) {
       const latest = runs.value.find((item) => item.id === currentRun.value?.id)
       if (latest) currentRun.value = latest
@@ -247,8 +255,9 @@ export function createEtlCenterRuns({ state, route, router, canExecute, shipment
   }
 
   async function selectRun(run: EtlRun) {
+    pageError.value = ''
     customerProductPreviewMessage.value = ''
-    currentRun.value = await etlApi.run(run.id)
+    currentRun.value = await readRun(run.id)
     syncDraft()
     activeTab.value = 'history'
     await router.replace({ path: '/business-docking', query: { run_id: run.id } })
@@ -258,6 +267,7 @@ export function createEtlCenterRuns({ state, route, router, canExecute, shipment
   async function retryRun() {
     if (!currentRun.value) return
     busy.value = true
+    pageError.value = ''
     try {
       currentRun.value = await etlApi.retry(currentRun.value.id)
       activeTab.value = 'upload'
@@ -270,10 +280,16 @@ export function createEtlCenterRuns({ state, route, router, canExecute, shipment
   }
 
   async function rollbackRun() {
-    if (!currentRun.value || !window.confirm('确认撤销本次内部写入？更新将恢复前镜像，新增记录将被删除。')) return
+    if (!currentRun.value) return
+    if (!canRollback.value) {
+      pageError.value = '当前账号没有撤销权限，请联系管理员授权后重试。'
+      return
+    }
+    if (!window.confirm('确认撤销本次内部写入？更新将恢复前镜像，新增记录将被删除。')) return
     busy.value = true
+    pageError.value = ''
     try {
-      currentRun.value = await etlApi.rollback(currentRun.value.id)
+      currentRun.value = await productChanges.mutate(currentRun.value, () => etlApi.rollback(currentRun.value!.id))
       await refreshRuns()
     } catch (error) {
       pageError.value = error instanceof Error ? error.message : '撤销失败'

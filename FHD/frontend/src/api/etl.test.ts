@@ -111,6 +111,18 @@ describe('etlApi', () => {
     })
   })
 
+  it.each([
+    { detail: { code: 'FORBIDDEN', message: '权限不足: etl.rollback' } },
+    { success: false, error_code: 'http_403', message: "{'code': 'FORBIDDEN', 'message': '权限不足: etl.rollback'}" },
+  ])('turns rollback permission denials into readable guidance', async (body) => {
+    apiFetchMock.mockResolvedValueOnce(response(body, false, 403))
+    await expect(etlApi.rollback('run-1')).rejects.toMatchObject({
+      message: '当前账号没有撤销权限，请联系管理员授权后重试。',
+      code: 'FORBIDDEN',
+      status: 403,
+    })
+  })
+
   it('sends the explicitly selected shipment layout region to the save API', async () => {
     await etlApi.saveShipmentTemplate('run/1', '金汉武家私-发货单版式', '侯雪梅!R29C1:10')
 

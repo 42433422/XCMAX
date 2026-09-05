@@ -34,6 +34,7 @@ async def _private_mod_context(request: Request) -> dict[str, Any]:
     from app.enterprise.private_delivery_binding import load_session_private_delivery_binding
     from app.infrastructure.auth.dependencies import session_id_from_request
     from app.mod_sdk.customer_delivery import (
+        delivery_for_account_custom_mod,
         list_account_custom_mod_ids,
         list_industry_mod_ids_from_delivery,
     )
@@ -58,6 +59,15 @@ async def _private_mod_context(request: Request) -> dict[str, Any]:
         mid
         for mid in (binding.get("mod_ids") or set())
         if str(mid).strip() in account_custom and str(mid).strip() not in industry_packs
+    }
+    # 共享运行模块的定制身份还必须属于当前账号，不能仅凭同名运行包推断。
+    username = str(binding.get("username") or "").strip().casefold()
+    entitled = {
+        mid
+        for mid in entitled
+        if not (row := delivery_for_account_custom_mod(mid))
+        or row.get("delivery_mode") != "integrated_feature"
+        or str(row.get("customer_account") or "").strip().casefold() == username
     }
     return {
         "mod_ids": entitled,

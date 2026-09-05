@@ -698,6 +698,12 @@ class TestErrorMessageEdgeCases:
 
 
 class TestMarketSessionHandoffRoute:
+    @pytest.fixture(autouse=True)
+    def isolate_entitlements(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.enterprise.mod_entitlements.sync_entitlements_for_session", AsyncMock()
+        )
+
     @pytest.mark.asyncio
     async def test_no_user_with_desktop_token(self, monkeypatch):
         monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "http://localhost:8765")
@@ -709,8 +715,9 @@ class TestMarketSessionHandoffRoute:
             patch.object(ma, "latest_session_market_token", return_value="desktop_tok"),
         ):
             result = await ma.market_session_handoff(request)
-        assert result["success"] is True
-        assert result["data"]["market_access_token"] == "desktop_tok"
+        assert isinstance(result, ma.JSONResponse)
+        assert result.status_code == 401
+        assert b"desktop_tok" not in result.body
 
     @pytest.mark.asyncio
     async def test_no_user_no_token(self, monkeypatch):
@@ -724,7 +731,7 @@ class TestMarketSessionHandoffRoute:
         ):
             result = await ma.market_session_handoff(request)
         assert isinstance(result, ma.JSONResponse)
-        assert result.status_code == 404
+        assert result.status_code == 401
 
     @pytest.mark.asyncio
     async def test_with_user_and_valid_token(self, monkeypatch):
@@ -735,15 +742,16 @@ class TestMarketSessionHandoffRoute:
         with (
             patch(
                 "app.infrastructure.auth.dependencies.resolve_session_user",
-                return_value=MagicMock(),
+                return_value=MagicMock(id=1),
             ),
-            patch.object(ma, "resolve_valid_market_access_token", return_value="valid_tok"),
+            patch.object(ma, "_user_id_from_session", return_value=1),
+            patch.object(ma, "session_market_token", return_value="valid_tok"),
             patch.object(ma, "session_market_refresh_token", return_value=""),
             patch.object(ma, "latest_session_market_refresh_token", return_value=""),
         ):
             result = await ma.market_session_handoff(request)
-        assert result["success"] is True
-        assert result["data"]["market_access_token"] == "valid_tok"
+        assert result.status_code == 200
+        assert json.loads(result.body)["data"]["market_access_token"] == "valid_tok"
 
     @pytest.mark.asyncio
     async def test_recoverable_error_fallback(self, monkeypatch):
@@ -760,8 +768,8 @@ class TestMarketSessionHandoffRoute:
             patch.object(ma, "latest_session_market_token", return_value=""),
         ):
             result = await ma.market_session_handoff(request)
-        assert result["success"] is True
-        assert result["data"]["market_access_token"] == "fallback_tok"
+        assert result.status_code == 502
+        assert b"fallback_tok" not in result.body
 
     @pytest.mark.asyncio
     async def test_recoverable_error_no_fallback(self, monkeypatch):

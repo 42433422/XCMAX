@@ -54,6 +54,8 @@ class SecurityHeadersMiddleware:
                             + b"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
                             + b"img-src 'self' data: blob:; "
                             + b"font-src 'self' data: https://fonts.gstatic.com; "
+                            # Authenticated label downloads become local blob PDF previews.
+                            + (b"frame-src 'self' blob:; " if is_desktop_mode else b"")
                             + b"connect-src 'self' ws: wss:"
                         ),
                     }

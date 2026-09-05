@@ -3,6 +3,7 @@
  * 右键长按进入拖拽、命中缓存、RAF 节流移动、pointerup 落位。
  */
 import { computed, ref, watch } from 'vue'
+import { pinSidebarMenuItemsTop } from '@/utils/pinSidebarMenuItemsTop'
 
 export function useSidebarMenuReorder({ sidebarLayoutStore, menuItems, sidebarMenuRef }) {
   const LONG_PRESS_MS = 1000
@@ -20,7 +21,7 @@ export function useSidebarMenuReorder({ sidebarLayoutStore, menuItems, sidebarMe
   let menuHitCache = []
 
   const displayMenuItems = computed(() => {
-    const items = menuItems.value
+    const items = pinSidebarMenuItemsTop(menuItems.value)
     const drag = draggingKey.value
     const over = dragOverKey.value
     if (!drag || !over || drag === over) return items
@@ -32,7 +33,7 @@ export function useSidebarMenuReorder({ sidebarLayoutStore, menuItems, sidebarMe
     const [lifted] = nextKeys.splice(from, 1)
     nextKeys.splice(to, 0, lifted)
     const byKey = new Map(items.map((m) => [m.key, m]))
-    return nextKeys.map((k) => byKey.get(k)).filter(Boolean)
+    return pinSidebarMenuItemsTop(nextKeys.map((k) => byKey.get(k)).filter(Boolean))
   })
 
   function clearPressTimer() {
@@ -142,12 +143,9 @@ export function useSidebarMenuReorder({ sidebarLayoutStore, menuItems, sidebarMe
     if (draggingKey.value) {
       const from = draggingKey.value
       const to = dragOverKey.value
-      if (to && to !== from) {
-        sidebarLayoutStore.moveItem(
-          from,
-          to,
-          menuItems.value.map((m) => m.key),
-        )
+      if (sidebarLayoutStore.reorderEnabled && to && to !== from) {
+        // Persist exactly the pinned preview, including when cached order predates pinning.
+        sidebarLayoutStore.resetOrder(displayMenuItems.value.map((m) => m.key))
       }
     }
     clearReorderGesture()

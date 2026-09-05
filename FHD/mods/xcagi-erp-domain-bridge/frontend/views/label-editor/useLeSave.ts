@@ -1,64 +1,97 @@
 import type { Router } from 'vue-router'
-import type { Ref } from 'vue'
-import type { LeField } from './leTypes'
+import { computed, ref, type Ref } from 'vue'
+import templatePreviewApi from '@/api/templatePreview'
+import type { TplRecord } from '../template-preview/tpTemplateMeta'
+import type { TplDetailResponse } from '../template-preview/tpApiContracts'
+import type { LeField, LeGrid } from './leTypes'
+import { asRecord, normalizeLabelFields } from './leTemplateData'
 import { appAlert } from '@/utils/appDialog'
-import { pushErpPage } from '@/utils/erpPagePaths'
+import { resolveErpPagePath } from '@/utils/erpPagePaths'
+import { ERP_DOMAIN_BRIDGE_MOD_ID } from '@/constants/erpDomainMod'
 
-// 拆分自 LabelEditorView.vue script（原 methods 中 normalizeFieldsForSave/saveTemplate/goBack）；
-// 逻辑逐字迁移，行为不变。
 export function useLeSave(deps: {
   fields: Ref<LeField[]>
+  grid: Ref<LeGrid | null>
+  uploadedImage: Ref<string | null>
+  canvasWidth: Ref<number>
+  canvasHeight: Ref<number>
   templateName: Ref<string>
+  sourceTemplate: Ref<TplRecord | null>
+  canSave: Ref<boolean>
   router: Router
 }) {
-  const { fields, templateName, router } = deps
+  const savingTemplate = ref(false)
+  const saveError = ref('')
+  const saveName = computed(() => {
+    const name = deps.templateName.value.trim()
+    return deps.sourceTemplate.value?.name === name ? `${name}（副本）` : name
+  })
 
   function normalizeFieldsForSave() {
-    return (fields.value || []).map((field, idx) => ({
-      id: field.id || idx + 1,
-      label: field.label || `字段${idx + 1}`,
-      value: field.value || '',
-      type: field.type || 'dynamic',
-      position: field.position || { left: 0, top: 0, width: 150, height: 30 }
-    }))
+    return normalizeLabelFields(deps.fields.value)
   }
 
   async function saveTemplate() {
-    const templateData = {
-      name: templateName.value || '标签模板',
-      category: 'label',
-      template_type: '标签',
-      fields: normalizeFieldsForSave(),
-      source: 'generated'
+    if (savingTemplate.value) return
+    saveError.value = ''
+    if (!deps.canSave.value) {
+      saveError.value = '请先成功载入模板或完成识别，并添加有效字段后再保存。'
+      return
     }
-
+    if (!saveName.value) {
+      saveError.value = '请输入模板名称。'
+      return
+    }
+    savingTemplate.value = true
     try {
-      const response = await fetch('/api/templates/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
+      const source = deps.sourceTemplate.value
+      const res = await templatePreviewApi.createTemplate({
+        name: saveName.value,
+        category: 'label',
+        template_type: source?.template_type || '标签',
+        business_scope: source?.business_scope || '',
+        fields: normalizeFieldsForSave(),
+        preview_data: {
+          ...source?.preview_data,
+          grid: deps.grid.value,
+          image_size: {
+            ...asRecord(source?.preview_data?.image_size),
+            width: deps.canvasWidth.value, height: deps.canvasHeight.value,
+          },
+          image: deps.uploadedImage.value,
         },
-        body: JSON.stringify(templateData)
-      })
-      const res = (await response.json()) as { success?: boolean; message?: string }
-      if (!res?.success) {
-        throw new Error(res?.message || '保存失败')
-      }
-      await appAlert('模板保存成功！')
-      window.dispatchEvent(new CustomEvent('xcagi:templates-updated', { detail: { source: 'label-editor' } }))
-      pushErpPage(router, { name: 'template-preview' })
+        file_path: source?.file_path || null,
+        source: 'generated',
+      }) as TplDetailResponse
+      if (!res?.success || !res.template?.id) throw new Error(res?.message || '保存失败，未收到新模板标识。')
+      await appAlert(`已保存新模板「${res.template.name || saveName.value}」${source ? '，原模板保持不变。' : '。'}`)
+      window.dispatchEvent(new CustomEvent('xcagi:templates-updated', { detail: { source: 'label-editor', templateId: res.template.id } }))
+      await deps.router.push(returnPath())
     } catch (err) {
-      await appAlert(`模板保存失败：${err instanceof Error ? (err.message || '未知错误') : String(err)}`)
+      saveError.value = `模板保存失败：${err instanceof Error ? err.message : String(err)}。编辑内容已保留，可重试。`
+    } finally {
+      savingTemplate.value = false
     }
   }
 
   function goBack() {
-    pushErpPage(router, { path: '/template-preview', query: { scope: 'orders' } })
+    void deps.router.push(returnPath())
+  }
+
+  function returnPath() {
+    const target = deps.router.currentRoute.value.query.returnTo
+    if (typeof target === 'string') {
+      const path = target.split(/[?#]/)[0]
+      // Return to the same cached print route, retaining its query and form.
+      if (path === '/print' || path === `/mod/${ERP_DOMAIN_BRIDGE_MOD_ID}/print`) return target
+    }
+    return resolveErpPagePath(target === 'print' ? '/print' : '/template-preview')
   }
 
   return {
     normalizeFieldsForSave,
     saveTemplate,
     goBack,
+    saveName, savingTemplate, saveError,
   }
 }

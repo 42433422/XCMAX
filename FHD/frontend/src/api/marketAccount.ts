@@ -362,3 +362,27 @@ export async function directMarketCheckout(payload: Record<string, unknown>): Pr
   }
   return j.data
 }
+
+/** A one-use code for browser navigation; no access or refresh token leaves in a URL. */
+export async function createMarketBrowserHandoff(
+  target: string,
+  purpose: 'wallet' | 'plans',
+): Promise<{
+  code: string
+  target: string
+  purpose: 'wallet' | 'plans'
+  expires_in: number
+}> {
+  const response = await apiFetch('/api/market/browser-handoff', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ target, purpose }),
+    timeoutMs: 8_000,
+  })
+  if (!response.ok) throw new Error('暂时无法连接市场账号，请重试或重新登录')
+  const result = await response.json()
+  if (!result.success || !/^[A-Za-z0-9_-]{43}$/.test(result.data?.code || '')) {
+    throw new Error('登录连接无效，请重试')
+  }
+  return result.data
+}

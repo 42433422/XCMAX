@@ -18,6 +18,7 @@ async def _proxy_json(
     authorization: str = "",
     extra_headers: dict[str, str] | None = None,
     return_error_payload: bool = False,
+    sensitive: bool = False,
     timeout: float | None = None,
     retries: int | None = None,
 ):
@@ -61,7 +62,10 @@ async def _proxy_json(
                     status_code=status_code,
                 )
         except _facade().RECOVERABLE_ERRORS as exc:
-            _facade().logger.warning("_proxy_json transport error to %s: %s", url, exc)
+            if sensitive:
+                _facade().logger.warning("market authentication transport unavailable")
+            else:
+                _facade().logger.warning("_proxy_json transport error to %s: %s", url, exc)
             message, status_code = _facade()._transport_error_message(exc)
             return _facade().JSONResponse(
                 {
@@ -92,7 +96,11 @@ async def _proxy_json(
     except ValueError:
         payload = {"detail": res.text}
     if res.status_code >= 400:
-        if res.status_code >= 500:
+        if res.status_code >= 500 and sensitive:
+            _facade().logger.warning(
+                "market authentication request failed status=%s", res.status_code
+            )
+        elif res.status_code >= 500:
             _facade().logger.warning(
                 "market proxy %s %s -> %s body=%s",
                 method,

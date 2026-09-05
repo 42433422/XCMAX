@@ -189,10 +189,20 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_SHA: ${{ inputs.release_sha }}
           PRODUCT_VERSION: ${{ inputs.product_version }}
+          SECURITY_SCAN_RUN_ID: ${{ inputs.security_scan_run_id }}
+          PREVIOUS_SECURITY_SCAN_RUN_ID: ${{ inputs.previous_security_scan_run_id }}
         run: |
           set -euo pipefail
           helper="FHD/scripts/release/dispatch_workflow_and_wait.sh"
           test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          # security-preflight already verified these reports for this SHA.
+          # Keep their exact run IDs; never infer evidence from a latest run.
+          if [[ ! "$SECURITY_SCAN_RUN_ID" =~ ^[1-9][0-9]*$ ]] \
+            || [[ ! "$PREVIOUS_SECURITY_SCAN_RUN_ID" =~ ^[1-9][0-9]*$ ]] \
+            || [ "$SECURITY_SCAN_RUN_ID" = "$PREVIOUS_SECURITY_SCAN_RUN_ID" ]; then
+            echo "::error::Two distinct successful security scan run IDs are required."
+            exit 1
+          fi
 
           # 1. Full staging deployment and its own health/readback gates.
           "$helper" fhd-ci-cd.yml "CI/CD ${RELEASE_SHA}" \
@@ -205,8 +215,8 @@ jobs:
           "$helper" modstore-prod-deploy.yml "Deploy MODstore ${RELEASE_SHA}" \
             -f "git_sha=${RELEASE_SHA}" \
             -f "product_version=${PRODUCT_VERSION}" \
-            -f "security_scan_run_id=${{ inputs.security_scan_run_id }}" \
-            -f "previous_security_scan_run_id=${{ inputs.previous_security_scan_run_id }}" \
+            -f "security_scan_run_id=${SECURITY_SCAN_RUN_ID}" \
+            -f "previous_security_scan_run_id=${PREVIOUS_SECURITY_SCAN_RUN_ID}" \
             -f require_platform_key=true
 
           # 3. Upload the same FHD build to stable without applying it.
@@ -215,16 +225,19 @@ jobs:
             -f release_channel=stable \
             -f push_to_cvm=true \
             -f push_image_tar=false \
-            -f "security_scan_run_id=${{ inputs.security_scan_run_id }}" \
-            -f "previous_security_scan_run_id=${{ inputs.previous_security_scan_run_id }}"
+            -f "security_scan_run_id=${SECURITY_SCAN_RUN_ID}" \
+            -f "previous_security_scan_run_id=${PREVIOUS_SECURITY_SCAN_RUN_ID}"
 
-          # 4. The production environment gate pauses for its required human
-          # reviewer before consuming stable manifest release:<SHA>.
+          # 4. Apply the configured production environment protection rules and
+          # reverify the exact SHA/scan pair before consuming release:<SHA>.
           "$helper" fhd-deploy.yml \
             "fhd-deploy production apply-latest autonomy:release:${RELEASE_SHA}" \
             -f environment=production \
             -f action=apply-latest \
-            -f "action_id=release:${RELEASE_SHA}"
+            -f "action_id=release:${RELEASE_SHA}" \
+            -f "release_sha=${RELEASE_SHA}" \
+            -f "security_scan_run_id=${SECURITY_SCAN_RUN_ID}" \
+            -f "previous_security_scan_run_id=${PREVIOUS_SECURITY_SCAN_RUN_ID}"
 
           # 5. Install the audited Prometheus SSOT and require FHD stable,
           # staging, and MODstore targets to read back healthy.  The workflow

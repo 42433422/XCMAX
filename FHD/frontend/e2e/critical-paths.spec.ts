@@ -156,7 +156,7 @@ test.describe('P0 critical paths', () => {
         waitUntil: 'domcontentloaded',
         timeout: 30_000,
       })
-      await expect(page).toHaveURL(/\/orders(?:[?#]|$)/, { timeout: 25_000 })
+      await expect(page).toHaveURL((url) => url.pathname === '/orders', { timeout: 25_000 })
       await expect(page.locator('#view-orders')).toBeVisible({ timeout: 25_000 })
     }
 
@@ -253,10 +253,10 @@ test.describe('P0 critical paths', () => {
       waitUntil: 'domcontentloaded',
       timeout: 30_000,
     })
-    await expect(page).toHaveURL(/\/orders(?:[?#]|$)/, { timeout: 25_000 })
+    await expect(page).toHaveURL((url) => url.pathname === '/orders', { timeout: 25_000 })
     await expect(page.locator('#view-orders')).toBeVisible({ timeout: 25_000 })
     await page.goto('/materials', { waitUntil: 'domcontentloaded', timeout: 30_000 })
-    await expect(page).toHaveURL(/\/materials(?:[?#]|$)/)
+    await expect(page).toHaveURL((url) => url.pathname === '/materials')
     try {
       await expect(page.locator('#view-materials')).toBeVisible({ timeout: 25_000 })
     } catch (error) {

@@ -4,7 +4,7 @@
 
 字段分工：
 - ``industry_id`` / ``industry_mod_id``：客户所属行业及行业包——不进生产员工私有交付
-- ``legacy_mod_id``：历史客户包 id；``delivery_mode=unified_industry`` 时只作进度兼容
+- ``legacy_mod_id``：客户定制权益与进度身份；integrated_feature 不要求独立运行包
 - ``runtime_mod_id``：当前实际运行包（太阳鸟为 attendance-industry）
 - ``tracks.modules[]`` / ``tracks.employees[]``：双轨节点；节点各自有制作进度
   （例：太阳鸟「考勤表转化」= 模块轨节点）
@@ -205,7 +205,7 @@ def delivery_seed_package_for_mod(
 ) -> dict[str, Any] | None:
     """返回当前运行 Mod 绑定的账号交付种子包元数据。"""
     row = delivery_for_account_custom_mod(mod_id, industry_id)
-    if row and _is_unified_industry_delivery(row):
+    if row and row.get("delivery_mode") in {"unified_industry", "integrated_feature"}:
         row = None
     if row is None:
         row = delivery_for_runtime_mod(mod_id, account_username=account_username)

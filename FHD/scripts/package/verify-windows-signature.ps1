@@ -2,7 +2,8 @@ param(
   [Parameter(Mandatory = $true)]
   [string]$Path,
 
-  [string]$ExpectedPublisher = ''
+  [string]$ExpectedPublisher = '',
+  [switch]$AllowUnsigned
 )
 
 $ErrorActionPreference = 'Stop'
@@ -23,6 +24,10 @@ Write-Host "Authenticode path: $Path"
 Write-Host "Authenticode status: $($signature.Status)"
 Write-Host "Authenticode message: $($signature.StatusMessage)"
 
+if ($AllowUnsigned -and $signature.Status -eq 'NotSigned') {
+  Write-Warning 'UNSIGNED: manual installer delivery only; not eligible for stable automatic updates.'
+  return
+}
 if ($signature.Status -ne 'Valid') {
   throw "Invalid Authenticode signature: $($signature.Status) $($signature.StatusMessage)"
 }

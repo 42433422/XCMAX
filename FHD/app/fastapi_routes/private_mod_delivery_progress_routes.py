@@ -145,6 +145,14 @@ async def mod_store_private_mod_update(request: Request) -> ModStoreInstallResul
     context = await _private_mod_context(request)
     if mod_id not in context["mod_ids"]:
         raise HTTPException(status_code=403, detail="当前账号未授权该客户私有 Mod")
+    from app.mod_sdk.customer_delivery import delivery_for_account_custom_mod
+
+    delivery = delivery_for_account_custom_mod(mod_id) or {}
+    if delivery.get("delivery_mode") == "integrated_feature":
+        raise HTTPException(
+            status_code=409,
+            detail="该定制功能集成于共享工作区，请更新标准客户端；不安装独立客户 Mod",
+        )
     try:
         from app.application.private_mod_delivery_app import update_private_mod_from_library
         from app.fastapi_routes.market_account import resolve_valid_market_access_token

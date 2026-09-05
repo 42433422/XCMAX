@@ -23,7 +23,8 @@
       "轨道上的交付物以节点为单位展示进度；整轨状态由节点进度汇总",
       "每个节点的阶段是流程，不是自由枚举：只能按 stage_flow.transitions 推进或转入返工，禁止跨阶段跳跃",
       "转返工必须填写问题说明，并开现有客服变更工单（user_cs_change_request · bug_fix · source=private_mod_rework），禁止另建工单系统",
-      "太阳鸟属于饰品包装行业；「考勤表转化」已归并到通用考勤模块，客户轨道只保留历史交付进度，不再形成独立运行 Mod",
+      "太阳鸟属于饰品包装行业；部门、人员、考勤使用主系统共享工作区；「考勤表转化」及模板规则仍是账号专属定制功能，继续走客户交付流程",
+      "delivery_mode=integrated_feature 表示定制功能运行在共享 runtime_mod_id 中；legacy_mod_id 保留为定制权益与交付记录身份，不代表独立系统或安装包",
       "delivery_mode=unified_industry 的客户安装 industry_mod_id 对应行业包，并按 runtime_mod_id 使用归并后的通用业务模块；legacy_mod_id 只保留历史进度兼容，不得作为运行包或安装门槛",
       "客户交付走通用 Enterprise 安装包 + 生产员工私有交付进度（制作/测试/返工/验收）；太阳鸟定制安装包（太阳鸟-Setup / sunbird-custom-installer）已退役，禁止再作为正式交付面"
     ],
@@ -64,7 +65,8 @@
       "industry_mod_id": "accessories-packaging-industry",
       "legacy_mod_id": "taiyangniao-pro",
       "runtime_mod_id": "attendance-industry",
-      "delivery_mode": "unified_industry",
+      "delivery_mode": "integrated_feature",
+      "custom_features": ["attendance-convert"],
       "customer_account": "SUNBIRD",
       "customer_brand": "太阳鸟 PRO",
       "customer_name": "太阳鸟",
@@ -78,12 +80,12 @@
           {
             "id": "personnel",
             "label": "人员管理",
-            "summary": "部门人员主数据（products 侧栏覆盖）"
+            "summary": "共享考勤工作区人员主数据接入与交付验收"
           },
           {
             "id": "department",
             "label": "部门管理",
-            "summary": "组织部门主数据（customers 侧栏覆盖）"
+            "summary": "共享考勤工作区部门主数据接入与交付验收"
           }
         ],
         "employees": [
@@ -98,10 +100,11 @@
         "pkg_id": "sunbird-delivery-seed",
         "version": "1.0.0",
         "artifact": "customer_delivery_seed",
+        "account_mod_id": "taiyangniao-pro",
         "apply": "sunbird_roster",
         "description": "太阳鸟交付种子：花名册、统一考勤侧库、考勤模板"
       },
-      "notes": "饰品包装行业客户；考勤能力统一使用 attendance-industry，taiyangniao-pro 仅保留历史交付进度兼容"
+      "notes": "标准 Enterprise 客户端；考勤使用共享工作区；表转换及模板规则按太阳鸟账号定制交付，沿用 taiyangniao-pro 权益与进度身份，不安装独立太阳鸟系统"
     },
     {
       "delivery_id": "customer-qishimei",

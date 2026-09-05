@@ -117,6 +117,8 @@ async def complete_structured(
     profile: str = "default",
     temperature: float = 0.3,
     max_tokens: int = 2000,
+    conversation_service: Any | None = None,
+    provider: Any | None = None,
 ) -> StructuredResult:
     """调用 LLM 并保证返回通过 schema 校验的 dict；失败带反馈重试。"""
     repairs = _max_repairs_default() if max_repairs is None else max(0, max_repairs)
@@ -124,6 +126,11 @@ async def complete_structured(
     attempt_messages = list(messages)
     last_errors: list[str] = ["尚未调用"]
     last_raw = ""
+    routing: dict[str, Any] = {}
+    if conversation_service is not None:
+        routing["conversation_service"] = conversation_service
+    if provider is not None:
+        routing["provider"] = provider
 
     for attempt in range(1, total_attempts + 1):
         try:
@@ -132,6 +139,7 @@ async def complete_structured(
                 temperature=temperature,
                 max_tokens=max_tokens,
                 profile=profile,
+                **routing,
             )
         except RECOVERABLE_ERRORS as exc:
             last_errors = [f"LLM 调用异常: {type(exc).__name__}: {exc}"]

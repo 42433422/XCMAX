@@ -5,6 +5,7 @@ import {
   normalizeModSidebarNavKey,
   shouldSuppressClientErpModMenuId,
 } from '@/constants/genericModPack'
+import { isRetiredBrainPage } from '@/utils/retiredBrainPage'
 
 export type ResolvedSidebarMenuItem = {
   key: string
@@ -84,6 +85,17 @@ function isRetiredMaterialsListMenuItem(item: ResolvedSidebarMenuItem): boolean 
     .split('?')[0]
     .split('#')[0]
   return path === '/materials-list' || path.endsWith('/materials-list')
+}
+
+/** 兼容已缓存的旧 manifest / 自定义菜单，开发控制台不再进入产品导航。 */
+function withoutRetiredBrainMenuItems(items: ResolvedSidebarMenuItem[]): ResolvedSidebarMenuItem[] {
+  return items.flatMap((item) => {
+    if (isRetiredBrainPage(item.key, item.path)) return []
+    if (!item.children) return [item]
+    const children = withoutRetiredBrainMenuItems(item.children)
+    if (children.length === item.children.length && children.every((child, index) => child === item.children![index])) return [item]
+    return [{ ...item, children }]
+  })
 }
 
 /**
@@ -181,10 +193,10 @@ export function mergeSidebarMenuItems(
     out.push(item)
   }
 
-  for (const item of coreItems) push(item)
-  for (const item of modItems) push(item)
-  for (const item of adminItems) push(item)
-  for (const item of trailingItems) push(item)
+  for (const item of withoutRetiredBrainMenuItems(coreItems)) push(item)
+  for (const item of withoutRetiredBrainMenuItems(modItems)) push(item)
+  for (const item of withoutRetiredBrainMenuItems(adminItems)) push(item)
+  for (const item of withoutRetiredBrainMenuItems(trailingItems)) push(item)
 
   _lastCache = { args, result: out }
   return out

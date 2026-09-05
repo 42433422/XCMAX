@@ -36,15 +36,23 @@ const {
 vi.mock('@/stores/products', async () => {
   const { ref } = await import('vue')
   return {
-    useProductsStore: () => ({
-      products: ref([]),
+    useProductsStore: () => {
+      const products = ref<any[]>([])
+      return {
+      products,
       loading: ref(false),
-      fetchProducts: mockFetchProducts,
+      error: ref(null), fresh: ref(true), canEditProducts: ref(true), scopeEpoch: ref(0), invalidationVersion: ref(0), mutating: false,
+      syncReadScope: vi.fn(), captureProductsScope: () => ({ key: 'test', epoch: 0 }), isProductsScopeCurrent: () => true,
+      fetchProducts: async (params: unknown, options: { append?: boolean } = {}) => {
+        const result = await mockFetchProducts(params, options)
+        if (result?.success) products.value = options.append ? [...products.value, ...(result.data || [])] : result.data || []
+        return result
+      },
       createProduct: mockCreateProduct,
       updateProduct: mockUpdateProduct,
       deleteProduct: mockDeleteProduct,
       batchDelete: mockBatchDelete,
-    }),
+    } },
   }
 })
 
@@ -262,7 +270,7 @@ describe('ProductsView.coverage', () => {
       const state = getSetupState(wrapper)
       await state.loadProducts(true)
       await flushPromises()
-      expect(mockFetchProducts).toHaveBeenCalledWith(expect.objectContaining({ page: 1, per_page: 1000 }))
+      expect(mockFetchProducts).toHaveBeenCalledWith(expect.objectContaining({ page: 1, per_page: 1000 }), { append: false })
     })
 
     it('reset=false 时追加列表（loadMore 场景）', async () => {
@@ -288,7 +296,7 @@ describe('ProductsView.coverage', () => {
       setSetupValue(wrapper, 'selectedUnit', '单位A')
       await state.loadProducts(true)
       await flushPromises()
-      expect(mockFetchProducts).toHaveBeenCalledWith(expect.objectContaining({ keyword: 'A001', unit: '单位A' }))
+      expect(mockFetchProducts).toHaveBeenCalledWith(expect.objectContaining({ keyword: 'A001', unit: '单位A' }), { append: false })
     })
 
     it('result 为 null 时不更新列表', async () => {
@@ -302,7 +310,7 @@ describe('ProductsView.coverage', () => {
       expect(getSetupRefValue(wrapper, 'products')).toEqual([{ id: 1, name: 'existing' }])
     })
 
-    it('result 无 data 字段时不更新列表', async () => {
+    it('store 将成功但无 data 的响应视为空列表', async () => {
       mockFetchProducts.mockResolvedValue({ success: true })
       const wrapper = await mountProducts()
       await flushPromises()
@@ -310,7 +318,7 @@ describe('ProductsView.coverage', () => {
       setSetupValue(wrapper, 'products', [{ id: 1, name: 'existing' }])
       await state.loadProducts(true)
       await flushPromises()
-      expect(getSetupRefValue(wrapper, 'products')).toEqual([{ id: 1, name: 'existing' }])
+      expect(getSetupRefValue(wrapper, 'products')).toEqual([])
     })
   })
 

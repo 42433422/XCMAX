@@ -16,6 +16,12 @@
       >
         ¥{{ balance !== null ? balance.toFixed(2) : '--' }}
       </div>
+      <div v-if="balanceError" class="flash flash-err" role="alert">
+        {{ balanceError }}
+        <span v-if="balance !== null">当前显示上次读取的余额，可能已过期。</span>
+        <button type="button" class="btn btn-ghost" :disabled="financeLoading" @click="loadWalletOverview">重试读取余额</button>
+      </div>
+      <p v-else-if="financeLoading && balance === null" class="loading">正在读取余额…</p>
       <div v-if="balance !== null" class="balance-gauge" aria-hidden="true">
         <template v-if="(membershipReferenceYuan ?? 0) > 0">
           <div class="balance-gauge__track">
@@ -31,14 +37,20 @@
             ：多笔/升级时累加（退款会冲抵）；无流水时按当前有效套餐的对应整数额度。条长为当前余额相对本线，满格即达参考线。其它入金不计入本线，以实际扣费为准。
           </p>
         </template>
-        <p v-else class="balance-gauge__empty">
+        <p v-else-if="membershipReferenceYuan !== null" class="balance-gauge__empty">
           暂无会员参考线：成为会员后，会按随单赠额与当前套餐价显示参考线；也可先
           <router-link to="/plans" class="inline-link">选套餐</router-link>。
         </p>
       </div>
     </div>
-    <div class="card" v-if="myPlan">
+    <div class="card" v-if="myPlan || planError || planLoading">
       <h3 class="card-title">我的套餐</h3>
+      <div v-if="planError" class="flash flash-err" role="alert">
+        {{ planError }} <span v-if="myPlan">当前显示上次读取的套餐信息。</span>
+        <button type="button" class="btn btn-ghost" :disabled="planLoading" @click="loadMyPlan">重试读取套餐</button>
+      </div>
+      <p v-else-if="planLoading && !myPlan" class="loading">正在读取套餐…</p>
+      <template v-if="myPlan">
       <p class="recharge-intro">{{ myPlan.name }} · 到期 {{ formatDate(myPlan.expires_at) }}</p>
       <div class="quota-chips">
         <span v-for="q in myQuotas" :key="q.quota_type" class="quota-chip">
@@ -52,6 +64,7 @@
         <span class="plan-extra-sep">·</span>
         <router-link to="/refunds" class="inline-link">退款申请</router-link>
       </p>
+      </template>
     </div>
 
     <div class="card recharge-card">
@@ -77,8 +90,7 @@
       </div>
       <p v-if="amountError" class="error-message">{{ amountError }}</p>
       <p class="recharge-hint">
-        若按钮无反应，请确认服务端已配置支付宝密钥与
-        <code>ALIPAY_NOTIFY_URL</code>。套餐购买请前往
+        未能打开支付页面时，请稍后重试；仍无法支付时，请联系客服并提供操作时间与页面提示。套餐购买请前往
         <router-link to="/plans" class="inline-link">套餐页</router-link>。
       </p>
     </div>
@@ -90,8 +102,11 @@
           <p class="recharge-intro">订单付款会先进入钱包，再从钱包扣款；退款审核通过后退回钱包余额。</p>
         </div>
         <button type="button" class="btn btn-ghost" :disabled="financeLoading" @click="loadWalletOverview">
-          {{ financeLoading ? '刷新中…' : '刷新' }}
+          {{ financeLoading ? '刷新中…' : financeError ? '重试' : '刷新' }}
         </button>
+      </div>
+      <div v-if="financeError" class="flash flash-err" role="alert">
+        {{ financeError }} <span v-if="financeLoaded">当前显示上次加载的记录，可能已过期。</span>
       </div>
       <div class="finance-grid">
         <section class="finance-panel">
@@ -111,13 +126,13 @@
             </div>
           </div>
           <p
-            v-if="!financeLoading && orderListTotal > RECENT_ORDERS_PANEL_LIMIT"
+            v-if="!financeLoading && !financeError && orderListTotal > RECENT_ORDERS_PANEL_LIMIT"
             class="finance-orders-omit"
           >
             本卡片仅显示最近 {{ RECENT_ORDERS_PANEL_LIMIT }} 单；当前列表共
             <strong>{{ orderListTotal }}</strong> 单，可点「全部订单」查看。点击「清理展示」可隐藏已关闭/失败/已退款等终态，仅保留待付、已付与退款中。
           </p>
-          <div v-if="financeLoading" class="loading">加载中...</div>
+          <div v-if="financeLoading && !recentOrders.length" class="loading">加载中...</div>
           <div v-else-if="recentOrders.length" class="finance-list">
             <button
               v-for="order in recentOrdersPanel"
@@ -136,14 +151,15 @@
               </span>
             </button>
           </div>
-          <div v-else class="empty-state">暂无订单</div>
+          <div v-else-if="financeLoaded && !financeError" class="empty-state">暂无订单</div>
+          <div v-else-if="financeError" class="empty-state">订单暂时无法读取</div>
         </section>
         <section class="finance-panel">
           <div class="finance-panel-head">
             <h4>退款记录</h4>
             <router-link to="/refunds" class="inline-link">申请退款</router-link>
           </div>
-          <div v-if="financeLoading" class="loading">加载中...</div>
+          <div v-if="financeLoading && !recentRefunds.length" class="loading">加载中...</div>
           <div v-else-if="recentRefunds.length" class="finance-list">
             <div v-for="refund in recentRefunds" :key="refund.id" class="finance-row finance-row--static">
               <span>
@@ -156,14 +172,19 @@
               </span>
             </div>
           </div>
-          <div v-else class="empty-state">暂无退款记录</div>
+          <div v-else-if="financeLoaded && !financeError" class="empty-state">暂无退款记录</div>
+          <div v-else-if="financeError" class="empty-state">退款记录暂时无法读取</div>
         </section>
       </div>
     </div>
 
     <div class="card">
       <h3 class="card-title">交易记录</h3>
-      <div v-if="txLoading" class="loading">加载中...</div>
+      <div v-if="txError" class="flash flash-err" role="alert">
+        {{ txError }} <span v-if="txLoaded">当前显示上次加载的交易记录，可能已过期。</span>
+        <button type="button" class="btn btn-ghost" :disabled="txLoading" @click="loadTransactions">重试读取交易</button>
+      </div>
+      <div v-if="txLoading && !transactions.length" class="loading">加载中...</div>
       <template v-else-if="transactions.length">
         <table class="tx-table">
           <thead>
@@ -197,7 +218,7 @@
           </button>
         </div>
       </template>
-      <div v-else class="empty-state">暂无交易记录</div>
+      <div v-else-if="txLoaded && !txError" class="empty-state">暂无交易记录</div>
     </div>
 
     <WalletLlmCard :llm="llm" :is-admin="isAdmin" />
@@ -237,6 +258,13 @@ const {
   startAlipayRecharge,
   amountError,
   financeLoading,
+  financeError,
+  financeLoaded,
+  txError,
+  txLoaded,
+  balanceError,
+  planError,
+  planLoading,
   loadWalletOverview,
   recentOrders,
   orderListTotal,

@@ -31,7 +31,7 @@ export function isTutorialReplayQuery(raw: unknown): boolean {
 
 export function readOnboardingReturnPath(raw: unknown): string {
   const p = String(raw || '').trim()
-  if (p.startsWith('/')) return p
+  if (p.startsWith('/') && !p.startsWith('//') && !p.includes('\\') && !Array.from(p).some((char) => char.charCodeAt(0) < 32)) return p
   return '/'
 }
 
@@ -44,44 +44,12 @@ export interface ProductFlowStepMeta {
   subtitle: string
 }
 
-/** 首次登录完整步骤轨：认识 → 行业 → 菜单 → 演示数据 → AI 第一单。 */
+/** 公司设置只有三步；演示业务通过单独的可选入口使用。 */
 export const PRODUCT_FLOW_STEPS: ProductFlowStepMeta[] = [
-  {
-    id: 'welcome',
-    index: 1,
-    title: '认识XC',
-    subtitle: '专属于您的数字公司 · 先装 Mod，AI 员工按需再来',
-  },
-  {
-    id: 'industry',
-    index: 2,
-    title: '行业定型',
-    subtitle: '先定行业方向；日常默认只有智能对话与智能生态',
-  },
-  {
-    id: 'host-pack',
-    index: 3,
-    title: '准备菜单',
-    subtitle: '一键装齐本行业侧栏菜单，即可进入对话',
-  },
-  {
-    id: 'seed-demo',
-    index: 4,
-    title: '演示数据',
-    subtitle: '准备一套可删除的演示客户和商品，第一次操作不再面对空白页',
-  },
-  {
-    id: 'first-ai-task',
-    index: 5,
-    title: 'AI 第一单',
-    subtitle: '让 AI 员工串联查询与制单工具，陪您完成第一笔业务',
-  },
-  {
-    id: 'done',
-    index: 6,
-    title: '开始使用',
-    subtitle: '进入智能对话与日常操作',
-  },
+  { id: 'welcome', index: 1, title: '公司', subtitle: '先认识您的公司或团队' },
+  { id: 'industry', index: 2, title: '行业', subtitle: '选择行业方向，也可以自由描述' },
+  { id: 'host-pack', index: 3, title: '配置', subtitle: '确认真实可用的工作空间能力' },
+  { id: 'done', index: 4, title: '开始使用', subtitle: '工作空间已准备好' },
 ]
 
 /** 引导「行业定型」当前开放可选（其余仅展示）；运行时以服务器 catalog 为准 */
@@ -115,7 +83,7 @@ export function industryBaselineHint(industryId: string): string {
     通用: '通用场景：工作流员工、Planner 工具、企微与局域网入口等基础线，用到哪补哪即可。',
     涂料: '涂料/批发类：在通用基础线上，出货、客户、标签打印等行业 Mod 可按需从扩展市场安装。',
     批发: '批发分销：基础线装齐后，库存与客户相关 Mod 建议从扩展市场按需加载。',
-    考勤: '考勤排班：先补 ERP 门面与表格工具侧栏，再装行业包；部门/人员与 AI 员工在账号定制 Mod。',
+    考勤: '考勤排班：准备考勤功能后，在考勤工作区核对部门和人员名单；定制转换功能按账号开通情况使用。',
     电商: '电商零售：基础线装齐后，订单与 SKU 相关 Mod 可按需安装。',
     餐饮: '餐饮门店：基础线装齐后，食材与订货 Mod 可按需安装。',
     物流: '物流运单：基础线装齐后，运单与客户 Mod 可按需安装。',
@@ -262,6 +230,20 @@ export function queueFirstAiTaskPrompt(prompt: string): void {
     }
   } catch {
     /* ignore */
+  }
+}
+
+/** Discard an unexecuted first-order walkthrough when switching to a different business flow. */
+export function cancelPendingFirstAiTask(): void {
+  if (typeof localStorage === 'undefined') return
+  try {
+    const scope = resolveTenantStorageScopeFromRuntime()
+    for (const key of [LS_PRODUCT_FLOW_PENDING_PROMPT, LS_PRODUCT_FLOW_FIRST_TASK_PENDING, LS_PRODUCT_FLOW_FIRST_TASK_RUN_ID]) {
+      removeTenantScopedStorageItem(key, scope)
+      if (scope === 'local') localStorage.removeItem(key)
+    }
+  } catch {
+    /* No completion flag is written when cancelling a pending walkthrough. */
   }
 }
 

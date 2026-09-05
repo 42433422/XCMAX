@@ -156,6 +156,14 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const body = await res.json().catch(() => ({}))
   if (!res.ok || body?.success === false) {
     const detail = body?.detail || body || {}
+    const rollbackPermissionDenied = res.status === 403 && path.endsWith('/rollback') &&
+      (detail.code === 'FORBIDDEN' || String(body?.message || '').includes('FORBIDDEN'))
+    if (rollbackPermissionDenied) {
+      const error = new Error('当前账号没有撤销权限，请联系管理员授权后重试。') as Error & { code?: string; status?: number }
+      error.code = 'FORBIDDEN'
+      error.status = res.status
+      throw error
+    }
     const message = String(detail.message || body?.message || `请求失败 HTTP ${res.status}`)
     const error = new Error(message) as Error & { code?: string; status?: number }
     error.code = String(detail.code || body?.error_code || 'ETL_REQUEST_FAILED')

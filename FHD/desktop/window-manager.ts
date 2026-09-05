@@ -24,8 +24,8 @@ import { checkPendingRollback } from './rollback'
 import { configureUpdater } from './updater'
 import {
   handleDesktopWindowOpen,
+  handleDesktopWillNavigate,
   isBenignDesktopLoadAbort,
-  isTrustedDesktopOrigin,
 } from './desktop-navigation'
 
 /** 闪屏进度 0–100；供启动阶段与单测共用。 */
@@ -222,10 +222,7 @@ export async function createWindow(): Promise<void> {
   }
 
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    if (!isTrustedDesktopOrigin(url, DEFAULT_PORT) && !url.startsWith('file://') && !url.startsWith('data:')) {
-      event.preventDefault()
-      console.warn(`[xcagi-desktop] blocked will-navigate to ${url}`)
-    }
+    handleDesktopWillNavigate(url, DEFAULT_PORT, () => event.preventDefault(), console.warn)
   })
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     return { action: handleDesktopWindowOpen(url, DEFAULT_PORT, target => shell.openExternal(target), message => console.warn(message)) }

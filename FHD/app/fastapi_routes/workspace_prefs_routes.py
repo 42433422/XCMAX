@@ -6,7 +6,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.application.tenant_workspace_prefs import (
     bind_selected_industry_for_user,
@@ -29,7 +29,7 @@ router = APIRouter(prefix="/api/workspace", tags=["workspace"])
 class WorkspacePrefsPatch(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    selected_industry_id: str | None = None
+    selected_industry_id: str | None = Field(default=None, max_length=32)
     industry_mod_id: str | None = None
     workflow_ai_employees: dict[str, bool] | None = None
     product_flow_completed: bool | None = None

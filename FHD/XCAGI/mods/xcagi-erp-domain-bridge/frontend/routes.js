@@ -29,7 +29,7 @@ const modRoutes = [
 // 旧「业务对接」页已退役；数据对接中心由宿主 EtlCenterView（/business-docking）承担
   { path: `${PREFIX}/business-docking`, name: 'mod-erp-business-docking', redirect: '/business-docking' },
   route('/data-sources', 'mod-erp-data-sources', 'DataSourcesView.vue', '数据来源'),
-  route('/print', 'mod-erp-print', 'PrintView.vue', '考勤表打印'),
+  route('/print', 'mod-erp-print', 'PrintView.vue', '标签输出与打印'),
   route('/printer-list', 'mod-erp-printer-list', 'PrinterListView.vue', '打印机列表'),
   route('/template-preview', 'mod-erp-template-preview', 'TemplatePreviewView.vue', '模板库'),
   route('/label-editor', 'mod-erp-label-editor', 'LabelEditorView.vue', '标签编辑器'),
@@ -47,7 +47,7 @@ const modMenu = [
   { id: 'mod-erp-traditional-mode', label: '表格模式', icon: 'fa-table', path: `${PREFIX}/traditional-mode` },
   { id: 'mod-erp-business-docking', label: '数据对接中心', icon: 'fa-exchange', path: `${PREFIX}/business-docking` },
   { id: 'mod-erp-data-sources', label: '数据来源', icon: 'fa-database', path: `${PREFIX}/data-sources` },
-  { id: 'mod-erp-print', label: '考勤表打印', icon: 'fa-print', path: `${PREFIX}/print` },
+  { id: 'mod-erp-print', label: '标签输出与打印', icon: 'fa-print', path: `${PREFIX}/print` },
   { id: 'mod-erp-printer-list', label: '打印机列表', icon: 'fa-print', path: `${PREFIX}/printer-list` },
   { id: 'mod-erp-template-preview', label: '模板库', icon: 'fa-file-o', path: `${PREFIX}/template-preview` },
 ]

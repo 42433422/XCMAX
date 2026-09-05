@@ -14,6 +14,7 @@ import { createEtlCenterDerived } from './etlCenter/useEtlCenterDerived'
 import { createEtlCenterRuns } from './etlCenter/useEtlCenterRuns'
 import { createEtlCenterDraftActions } from './etlCenter/useEtlCenterDraftActions'
 import { createEtlCenterExtras } from './etlCenter/useEtlCenterExtras'
+import { useEtlRollbackPermission } from './etlCenter/useEtlRollbackPermission'
 import {
   actionLabel,
   actionReason,
@@ -36,11 +37,13 @@ const router = useRouter()
 
 const state = createEtlCenterState()
 const derived = createEtlCenterDerived({ state })
+const { canRollback, rollbackPermissionMessage } = useEtlRollbackPermission()
 const runsApi = createEtlCenterRuns({
   state,
   route,
   router,
   canExecute: derived.canExecute,
+  canRollback,
   shipmentTemplateCandidates: derived.shipmentTemplateCandidates,
   bulkNewRows: derived.bulkNewRows,
 })

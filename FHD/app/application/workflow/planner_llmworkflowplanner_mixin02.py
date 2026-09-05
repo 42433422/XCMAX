@@ -4,11 +4,38 @@
 from __future__ import annotations
 
 import importlib
-import re
 
 
 def _facade():
     return importlib.import_module("app.application.workflow.planner")
+
+
+def _first_onboarding_quoted_slot(text: str, prefixes: tuple[str, ...]) -> str | None:
+    """Walk forward once, preserving the original first nonempty quoted match."""
+    cursor = 0
+    length = len(text)
+    while cursor < length:
+        prefix = next((value for value in prefixes if text.startswith(value, cursor)), None)
+        if prefix is None:
+            cursor += 1
+            continue
+        cursor += len(prefix)
+        while cursor < length and text[cursor].isspace():
+            cursor += 1
+        if cursor == length or text[cursor] not in ("「", "“", '"', "'"):
+            continue
+        cursor += 1
+        start = cursor
+        # Any of these closing quotes ended the old match, including mixed styles.
+        while cursor < length and text[cursor] not in ("」", "”", '"', "'"):
+            cursor += 1
+        if cursor == length:
+            # No later candidate can close either; never restart over this suffix.
+            return None
+        if cursor > start:
+            return text[start:cursor].strip()
+        cursor += 1
+    return None
 
 
 def _onboarding_first_order_slots(message: str) -> tuple[str, str] | None:
@@ -16,12 +43,8 @@ def _onboarding_first_order_slots(message: str) -> tuple[str, str] | None:
     text = str(message or "")
     if "新手第一单" not in text or "演示出货单" not in text:
         return None
-    customer_match = re.search(r"查询客户\s*[「“\"']([^」”\"']+)[」”\"']", text)
-    product_match = re.search(r"查询(?:商品|产品)\s*[「“\"']([^」”\"']+)[」”\"']", text)
-    if not customer_match or not product_match:
-        return None
-    customer = customer_match.group(1).strip()
-    product = product_match.group(1).strip()
+    customer = _first_onboarding_quoted_slot(text, ("查询客户",))
+    product = _first_onboarding_quoted_slot(text, ("查询商品", "查询产品"))
     return (customer, product) if customer and product else None
 
 

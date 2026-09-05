@@ -270,7 +270,7 @@ class TestLegacyProfileForSkuDeep:
     def test_sku_aux_mod_ids(self):
         out = hp._legacy_profile_for_sku("enterprise")
         assert "xcagi-planner-excel-tools" in out["sku_aux_mod_ids"]
-        assert "wechat-contacts-ai-employee" in out["sku_aux_mod_ids"]
+        assert "wechat-contacts-ai-employee" not in out["sku_aux_mod_ids"]
 
 
 # ── load_industry_presets_document deep ─────────────────────────────────────

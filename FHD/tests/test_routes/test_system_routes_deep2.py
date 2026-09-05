@@ -4,20 +4,18 @@ Targets remaining uncovered branches:
 - get_current_industry_endpoint: user is None after resolve_session_user returns None
 - get_current_industry_endpoint: user present but owner_id is None
 - get_current_industry_endpoint: user present, owner_id present, but saved is None/empty
-- set_industry_endpoint: enterprise_filter_applied but no canonical mod id
-- set_industry_endpoint: enterprise_filter_applied, industry in open_ids
-- set_industry_endpoint: user present but owner_id is falsy
-- set_industry_endpoint: package found but mod_id is empty
-- set_industry_endpoint: package found, mod_id set, but industry_mod_id_for returns None
 - get_industries: empty industries list
 - get_industry_detail: industry_id with special characters
+
+Retired POST behavior is covered by test_system_routes_ext2 and the real-session,
+zero-mutation checks in test_system_routes_industry_admin.
 """
 
 from __future__ import annotations
 
 import sys
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -28,7 +26,6 @@ from app.fastapi_routes.system_routes import (
     IndustriesListData,
     IndustryData,
     IndustryResponse,
-    SetIndustryRequest,
     _build_industry_response,
     get_current_industry_endpoint,
     get_employee_registry_rules,
@@ -38,9 +35,7 @@ from app.fastapi_routes.system_routes import (
     get_industry_presets,
     get_workflow_employee_catalog,
     router,
-    set_industry_endpoint,
 )
-from app.infrastructure.auth.dependencies import require_admin_user
 
 
 def _make_profile(
@@ -66,13 +61,6 @@ def _make_profile(
 def client() -> TestClient:
     app = FastAPI()
     app.include_router(router)
-    # POST /api/system/industry 现在受 require_admin_user 门禁保护（仅管理端账号可
-    # 切换行业）。这里注入一个管理端用户，使测试得以验证端点内部的业务逻辑分支
-    # （行业切换 / 工作区偏好保存 / 企业授权过滤 / mod 去激活），而非每个用例都被
-    # 401/403 拦在门外。
-    app.dependency_overrides[require_admin_user] = lambda: SimpleNamespace(
-        id=1, username="admin", tier="admin"
-    )
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -152,265 +140,6 @@ class TestGetCurrentIndustryEndpointDeep:
             r = client.get("/api/system/industry")
         assert r.status_code == 200
         assert r.json()["data"]["id"] == "涂料"
-
-
-# ── set_industry_endpoint deep ──────────────────────────────────────────────
-
-
-class TestSetIndustryEndpointDeep:
-    def test_enterprise_filter_no_canonical_mod_id(self, client: TestClient) -> None:
-        """enterprise_filter_applied=True but canonical_mod_id_for_industry returns None → no block."""
-        fake_module = MagicMock()
-        fake_module.set_current_industry.return_value = True
-        fake_module.get_industry_profile.return_value = _make_profile()
-        user = SimpleNamespace(id=1, username="u")
-        cat = {
-            "enterprise_filter_applied": True,
-            "open_packages": [{"industry_id": "涂料", "mod_id": "mod-1"}],
-            "open_industry_ids": ["other"],
-        }
-        with (
-            patch.dict(sys.modules, {"resources.config.industry_config": fake_module}),
-            patch(
-                "app.infrastructure.auth.dependencies.resolve_session_user",
-                return_value=user,
-            ),
-            patch(
-                "app.application.tenant_workspace_prefs.resolve_workspace_owner_id",
-                return_value=1,
-            ),
-            patch(
-                "app.application.tenant_workspace_prefs.save_selected_industry",
-            ),
-            patch(
-                "app.mod_sdk.industry_baseline.build_onboarding_industry_catalog_for_request",
-                new=AsyncMock(return_value=cat),
-            ),
-            patch(
-                "app.mod_sdk.industry_mod_aliases.canonical_mod_id_for_industry",
-                return_value=None,  # No canonical mod id → no block
-            ),
-        ):
-            r = client.post("/api/system/industry", json={"industry_id": "涂料"})
-        assert r.status_code == 200
-
-    def test_enterprise_filter_industry_in_open_ids(self, client: TestClient) -> None:
-        """enterprise_filter_applied=True, industry in open_ids → no block."""
-        fake_module = MagicMock()
-        fake_module.set_current_industry.return_value = True
-        fake_module.get_industry_profile.return_value = _make_profile()
-        user = SimpleNamespace(id=1, username="u")
-        cat = {
-            "enterprise_filter_applied": True,
-            "open_packages": [{"industry_id": "涂料", "mod_id": "mod-1"}],
-            "open_industry_ids": ["涂料"],  # industry is open
-        }
-        with (
-            patch.dict(sys.modules, {"resources.config.industry_config": fake_module}),
-            patch(
-                "app.infrastructure.auth.dependencies.resolve_session_user",
-                return_value=user,
-            ),
-            patch(
-                "app.application.tenant_workspace_prefs.resolve_workspace_owner_id",
-                return_value=1,
-            ),
-            patch(
-                "app.application.tenant_workspace_prefs.save_selected_industry",
-            ),
-            patch(
-                "app.mod_sdk.industry_baseline.build_onboarding_industry_catalog_for_request",
-                new=AsyncMock(return_value=cat),
-            ),
-            patch(
-                "app.mod_sdk.industry_mod_aliases.canonical_mod_id_for_industry",
-                return_value="mod-1",
-            ),
-        ):
-            r = client.post("/api/system/industry", json={"industry_id": "涂料"})
-        assert r.status_code == 200
-
-    def test_user_present_owner_id_falsy(self, client: TestClient) -> None:
-        """User present but owner_id is falsy (empty string) → no save."""
-        fake_module = MagicMock()
-        fake_module.set_current_industry.return_value = True
-        fake_module.get_industry_profile.return_value = _make_profile()
-        user = SimpleNamespace(id=1, username="u")
-        with (
-            patch.dict(sys.modules, {"resources.config.industry_config": fake_module}),
-            patch(
-                "app.infrastructure.auth.dependencies.resolve_session_user",
-                return_value=user,
-            ),
-            patch(
-                "app.application.tenant_workspace_prefs.resolve_workspace_owner_id",
-                return_value="",  # falsy
-            ),
-        ):
-            r = client.post("/api/system/industry", json={"industry_id": "涂料"})
-        assert r.status_code == 200
-
-    def test_package_found_mod_id_empty(self, client: TestClient) -> None:
-        """Package found but mod_id is empty → save without mod_id, no deactivate."""
-        fake_module = MagicMock()
-        fake_module.set_current_industry.return_value = True
-        fake_module.get_industry_profile.return_value = _make_profile()
-        user = SimpleNamespace(id=1, username="u")
-        cat = {
-            "enterprise_filter_applied": False,
-            "open_packages": [{"industry_id": "涂料", "mod_id": ""}],  # empty mod_id
-            "open_industry_ids": [],
-        }
-        with (
-            patch.dict(sys.modules, {"resources.config.industry_config": fake_module}),
-            patch(
-                "app.infrastructure.auth.dependencies.resolve_session_user",
-                return_value=user,
-            ),
-            patch(
-                "app.application.tenant_workspace_prefs.resolve_workspace_owner_id",
-                return_value=1,
-            ),
-            patch(
-                "app.application.tenant_workspace_prefs.save_selected_industry",
-            ) as mock_save,
-            patch(
-                "app.mod_sdk.industry_baseline.build_onboarding_industry_catalog_for_request",
-                new=AsyncMock(return_value=cat),
-            ),
-        ):
-            r = client.post("/api/system/industry", json={"industry_id": "涂料"})
-        assert r.status_code == 200
-        # save_selected_industry called with owner_id, industry_id, industry_mod_id=""
-        call_args = mock_save.call_args
-        assert call_args.args[0] == 1  # owner_id
-        assert call_args.args[1] == "涂料"  # industry_id
-        assert call_args.kwargs.get("industry_mod_id", "") == ""  # mod_id is empty
-
-    def test_package_not_found(self, client: TestClient) -> None:
-        """No matching package in open_packages → mod_id defaults to empty."""
-        fake_module = MagicMock()
-        fake_module.set_current_industry.return_value = True
-        fake_module.get_industry_profile.return_value = _make_profile()
-        user = SimpleNamespace(id=1, username="u")
-        cat = {
-            "enterprise_filter_applied": False,
-            "open_packages": [{"industry_id": "other", "mod_id": "mod-other"}],
-            "open_industry_ids": [],
-        }
-        with (
-            patch.dict(sys.modules, {"resources.config.industry_config": fake_module}),
-            patch(
-                "app.infrastructure.auth.dependencies.resolve_session_user",
-                return_value=user,
-            ),
-            patch(
-                "app.application.tenant_workspace_prefs.resolve_workspace_owner_id",
-                return_value=1,
-            ),
-            patch(
-                "app.application.tenant_workspace_prefs.save_selected_industry",
-            ) as mock_save,
-            patch(
-                "app.mod_sdk.industry_baseline.build_onboarding_industry_catalog_for_request",
-                new=AsyncMock(return_value=cat),
-            ),
-        ):
-            r = client.post("/api/system/industry", json={"industry_id": "涂料"})
-        assert r.status_code == 200
-        # mod_id should be empty (no matching package)
-        call_args = mock_save.call_args
-        assert call_args.kwargs.get("industry_mod_id", "") == ""
-
-    def test_mod_id_present_industry_mod_id_for_returns_none(self, client: TestClient) -> None:
-        """mod_id present, but industry_mod_id_for returns None → uses mod_id."""
-        fake_module = MagicMock()
-        fake_module.set_current_industry.return_value = True
-        fake_module.get_industry_profile.return_value = _make_profile()
-        user = SimpleNamespace(id=1, username="u")
-        cat = {
-            "enterprise_filter_applied": False,
-            "open_packages": [{"industry_id": "涂料", "mod_id": "mod-1"}],
-            "open_industry_ids": [],
-        }
-        with (
-            patch.dict(sys.modules, {"resources.config.industry_config": fake_module}),
-            patch(
-                "app.infrastructure.auth.dependencies.resolve_session_user",
-                return_value=user,
-            ),
-            patch(
-                "app.application.tenant_workspace_prefs.resolve_workspace_owner_id",
-                return_value=1,
-            ),
-            patch(
-                "app.application.tenant_workspace_prefs.save_selected_industry",
-            ),
-            patch(
-                "app.mod_sdk.industry_baseline.build_onboarding_industry_catalog_for_request",
-                new=AsyncMock(return_value=cat),
-            ),
-            patch(
-                "app.mod_sdk.industry_seed.industry_mod_id_for",
-                return_value=None,  # Returns None → falls back to mod_id
-            ),
-            patch(
-                "app.mod_sdk.industry_seed.deactivate_other_open_industry_mods",
-            ) as mock_deactivate,
-        ):
-            r = client.post("/api/system/industry", json={"industry_id": "涂料"})
-        assert r.status_code == 200
-        # deactivate called with mod_id (fallback)
-        mock_deactivate.assert_called_once_with("mod-1")
-
-    def test_mod_id_whitespace_stripped(self, client: TestClient) -> None:
-        """mod_id with whitespace → stripped, becomes empty → no deactivate."""
-        fake_module = MagicMock()
-        fake_module.set_current_industry.return_value = True
-        fake_module.get_industry_profile.return_value = _make_profile()
-        user = SimpleNamespace(id=1, username="u")
-        cat = {
-            "enterprise_filter_applied": False,
-            "open_packages": [{"industry_id": "涂料", "mod_id": "   "}],  # whitespace
-            "open_industry_ids": [],
-        }
-        with (
-            patch.dict(sys.modules, {"resources.config.industry_config": fake_module}),
-            patch(
-                "app.infrastructure.auth.dependencies.resolve_session_user",
-                return_value=user,
-            ),
-            patch(
-                "app.application.tenant_workspace_prefs.resolve_workspace_owner_id",
-                return_value=1,
-            ),
-            patch(
-                "app.application.tenant_workspace_prefs.save_selected_industry",
-            ),
-            patch(
-                "app.mod_sdk.industry_baseline.build_onboarding_industry_catalog_for_request",
-                new=AsyncMock(return_value=cat),
-            ),
-        ):
-            r = client.post("/api/system/industry", json={"industry_id": "涂料"})
-        assert r.status_code == 200
-
-    def test_http_exception_propagates(self, client: TestClient) -> None:
-        """HTTPException from set_current_industry path propagates."""
-        fake_module = MagicMock()
-        fake_module.set_current_industry.return_value = True
-        fake_module.get_industry_profile.side_effect = HTTPException(
-            status_code=418, detail="teapot"
-        )
-        with (
-            patch.dict(sys.modules, {"resources.config.industry_config": fake_module}),
-            patch(
-                "app.infrastructure.auth.dependencies.resolve_session_user",
-                return_value=None,
-            ),
-        ):
-            r = client.post("/api/system/industry", json={"industry_id": "涂料"})
-        assert r.status_code == 418
 
 
 # ── get_industries deep ─────────────────────────────────────────────────────

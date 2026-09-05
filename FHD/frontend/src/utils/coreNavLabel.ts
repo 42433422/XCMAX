@@ -3,6 +3,7 @@
  * 优先级：Mod manifest `menu_overrides[].label` → 行业名 → 默认名。
  */
 
+import { resolveIndustryNavigationLabel } from '@/constants/industryNavigationProfiles'
 import { DEFAULT_INDUSTRY_ID } from '@/constants/industryDefaults'
 import { INDUSTRY_PRESETS } from '@/constants/industryPresets'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
@@ -25,7 +26,6 @@ export const MENU_DEFAULT_NAMES: Record<string, string> = {
   im: '信息',
   'ai-ecosystem': '智能生态',
   'persy-knowledge': '知识库',
-  brain: '智脑集成',
   'model-payment': '模型服务',
   'kitten-finance': '财务分析',
   'mod-store': '能力库',
@@ -154,6 +154,10 @@ export function resolveCoreNavLabel(menuKey: string, industryId: string, modsFor
   if (!key) return ''
   const fromMod = modLabelOverride(key, modsForUi)
   if (fromMod) return fromMod
+  const exact = INDUSTRY_MENU_LABELS[industryId]?.[key]
+  if (exact) return exact
+  const profileLabel = resolveIndustryNavigationLabel(industryId, key)
+  if (profileLabel) return profileLabel
   const byInd = INDUSTRY_MENU_LABELS[industryId] || INDUSTRY_MENU_LABELS[DEFAULT_INDUSTRY_ID]
   if (byInd[key]) return byInd[key]
   if (key === 'other-tools' && isAdminConsoleSpa()) return '编制图谱'

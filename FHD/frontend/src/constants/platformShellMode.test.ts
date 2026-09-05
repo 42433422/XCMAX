@@ -30,7 +30,7 @@ describe('platformShellMode', () => {
     expect(SHELL_CORE_ROUTE_NAMES.has('login-help')).toBe(true)
     expect(SHELL_CORE_ROUTE_NAMES.has('login-forgot-password')).toBe(true)
     expect(SHELL_CORE_ROUTE_NAMES.has('private-mod-delivery')).toBe(true)
-    expect(SHELL_CORE_ROUTE_NAMES.has('brain')).toBe(true)
+    expect(SHELL_CORE_ROUTE_NAMES.has('brain')).toBe(false)
     expect(SHELL_CORE_ROUTE_NAMES.has('task-workspace')).toBe(true)
   })
 

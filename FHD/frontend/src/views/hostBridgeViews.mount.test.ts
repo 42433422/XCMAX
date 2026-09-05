@@ -9,7 +9,6 @@ const hostStub = {
 }
 
 const views = [
-  { name: 'BrainView', modId: 'xcagi-planner-bridge', view: 'BrainView' },
   { name: 'OrdersView', modId: 'xcagi-erp-domain-bridge', view: 'OrdersView' },
   { name: 'CustomersView', modId: 'xcagi-erp-domain-bridge', view: 'CustomersView' },
   { name: 'MaterialsView', modId: 'xcagi-erp-domain-bridge', view: 'MaterialsView' },

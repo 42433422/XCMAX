@@ -10,7 +10,17 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.application.etl.errors import EtlConflict, EtlError
+from app.application.etl.operation_owner import (
+    OperationOwner,
+    activate_operation,
+    bind_owner,
+    claim_operation,
+    fail_operation,
+    finish_operation,
+    unbind_owner,
+)
 from app.application.etl.parsers import MAX_ROWS
+from app.application.etl.service_rollback import RollbackServiceMixin
 from app.application.etl.service_support import (
     EXECUTOR,
     SUBMITTED,
@@ -24,12 +34,12 @@ from app.application.etl.service_support import (
 from app.application.etl.targets import TargetAdapter, get_adapter
 from app.db.models.etl import EtlRun, EtlRunRow, EtlUpload
 from app.infrastructure.tenant_scope import tenant_id_for_write, tenant_scope
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
 
-class ExecutionServiceMixin:
+class ExecutionServiceMixin(RollbackServiceMixin):
     if TYPE_CHECKING:
         _owned_run: Any
         _owned_target_config: Any
@@ -66,6 +76,14 @@ class ExecutionServiceMixin:
         if run.target_type == "webhook":
             config_id = str(draft.get("target_config_id") or "")
             self._owned_target_config(db, config_id, owner_user_id)
+        operation = claim_operation(
+            db,
+            run,
+            "execute_queue",
+            allowed_statuses={"preview_ready"},
+            require_unrolled_back=True,
+        )
+        bind_owner(db, operation)
         run.status = "executing"
         run.stage = "executing"
         run.progress = 0
@@ -74,7 +92,15 @@ class ExecutionServiceMixin:
         run.error_message = None
         tenant_id = tenant_id_for_write()
         db.commit()
-        self._submit_execution(run.id, tenant_id, owner_user_id, valid_rows_only)
+        unbind_owner(db)
+        try:
+            self._submit_execution(
+                run.id, tenant_id, owner_user_id, valid_rows_only, operation_token=operation.token
+            )
+        except RECOVERABLE_ERRORS as exc:
+            code, message = safe_error(exc)
+            fail_operation(db, operation, code=code, message=message)
+            raise
         db.expire_all()
         return cast("dict[str, Any]", self.get_run(db, run_id=run.id, owner_user_id=owner_user_id))
 
@@ -84,16 +110,20 @@ class ExecutionServiceMixin:
         tenant_id: int,
         owner_user_id: int,
         valid_rows_only: bool,
+        *,
+        operation_token: str | None = None,
     ) -> None:
         with SUBMITTED_LOCK:
-            if run_id in SUBMITTED:
+            if run_id in SUBMITTED and operation_token is None:
                 return
             SUBMITTED.add(run_id)
 
         def work() -> None:
             try:
                 with tenant_scope(tenant_id):
-                    self._execute_worker(run_id, owner_user_id, valid_rows_only)
+                    self._execute_worker(
+                        run_id, owner_user_id, valid_rows_only, operation_token=operation_token
+                    )
             finally:
                 with SUBMITTED_LOCK:
                     SUBMITTED.discard(run_id)
@@ -105,13 +135,35 @@ class ExecutionServiceMixin:
         run_id: str,
         owner_user_id: int,
         valid_rows_only: bool,
+        *,
+        operation_token: str | None = None,
     ) -> None:
         db = new_session()
         started_at = time.monotonic()
+        operation: OperationOwner | None = None
+        external_started = False
         try:
             run = self._owned_run(db, run_id, owner_user_id)
-            upload = self._owned_upload(db, run.upload_id, owner_user_id)
             adapter = get_adapter(run.target_type)
+            batch_executor = getattr(adapter, "execute_batch", None)
+            # Row adapters inherit a rejecting batch stub; only an implementation
+            # override may enter the external-effect path.
+            uses_batch = (
+                callable(batch_executor)
+                and getattr(batch_executor, "__func__", batch_executor)
+                is not TargetAdapter.execute_batch
+            )
+            kind = "batch_execute" if uses_batch else "execute"
+            operation = (
+                activate_operation(db, run, kind, operation_token)
+                if operation_token
+                else claim_operation(
+                    db, run, kind, allowed_statuses={"executing"}, require_unrolled_back=True
+                )
+            )
+            bind_owner(db, operation)
+            db.commit()
+            upload = self._owned_upload(db, run.upload_id, owner_user_id)
             draft = load_json(run.draft_json, {})
             target_config = None
             if run.target_type == "webhook":
@@ -124,7 +176,7 @@ class ExecutionServiceMixin:
                 EtlRunRow.final_action.in_(["new", "update"]),
                 or_(
                     EtlRunRow.execution_status.is_(None),
-                    EtlRunRow.execution_status != "success",
+                    EtlRunRow.execution_status.not_in(["success", "rolled_back"]),
                 ),
             )
             eligible_count = db.query(EtlRunRow).filter(*eligible_filters).count()
@@ -149,7 +201,7 @@ class ExecutionServiceMixin:
                 db.commit()
 
             context["progress_callback"] = progress_callback
-            if hasattr(adapter, "execute_batch"):
+            if uses_batch:
                 previous = (
                     db.query(EtlRunRow)
                     .filter(
@@ -178,6 +230,7 @@ class ExecutionServiceMixin:
                             last_id = row.id
                             yield load_json(row.normalized_json, {})
 
+                external_started = True
                 result = adapter.execute_batch(normalized_rows(), context)
                 db.query(EtlRunRow).filter(*eligible_filters).update(
                     {
@@ -223,23 +276,23 @@ class ExecutionServiceMixin:
                 }
             )
             run.receipt_json = dump_json(receipt)
+            finish_operation(db, operation)
             db.commit()
             self._record_execution_metrics(run, started_at, "success")
-        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+        except BOUNDARY_ERRORS as exc:  # Task boundary; external effects retain unknown status.
             db.rollback()
             code, message = safe_error(exc)
             try:
-                run = self._owned_run(db, run_id, owner_user_id)
-                run.status = "failed"
-                run.stage = "failed"
-                run.error_code = code
-                run.error_message = message[:500]
-                db.commit()
-                self._record_execution_metrics(run, started_at, "failed")
+                if operation is not None and fail_operation(
+                    db, operation, code=code, message=message, outcome_unknown=external_started
+                ):
+                    run = self._owned_run(db, run_id, owner_user_id)
+                    self._record_execution_metrics(run, started_at, "failed")
             except RECOVERABLE_ERRORS:  # noqa: BLE001
                 db.rollback()
                 logger.exception("Unable to persist ETL execution failure for %s", run_id)
         finally:
+            unbind_owner(db)
             db.close()
 
     @staticmethod
@@ -294,6 +347,9 @@ class ExecutionServiceMixin:
                 run.progress = min(99, int((chunk_start + len(chunk)) / max(1, total) * 100))
                 db.commit()
             except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+                if isinstance(exc, EtlError) and exc.code == "ETL_OPERATION_LEASE_LOST":
+                    db.rollback()
+                    raise
                 failed_row_id = row.id
                 completed_row_ids = [item.id for item in chunk[:completed_in_chunk]]
                 db.rollback()
@@ -344,6 +400,14 @@ class ExecutionServiceMixin:
             raise EtlConflict("ETL_RETRY_NOT_ALLOWED", "当前运行无需重试")
         if run.rollback_status == "completed":
             raise EtlConflict("ETL_ALREADY_ROLLED_BACK", "本次运行已经撤销，不能重试")
+        operation = claim_operation(
+            db,
+            run,
+            "preview_queue",
+            allowed_statuses={"failed", "interrupted"},
+            require_unrolled_back=True,
+        )
+        bind_owner(db, operation)
         run.status = "previewing"
         rerun_parse = run.executed_rows == 0 and (
             run.total_rows == 0
@@ -361,6 +425,7 @@ class ExecutionServiceMixin:
         run.error_message = None
         tenant_id = tenant_id_for_write()
         db.commit()
+        unbind_owner(db)
         try:
             from app.utils.metrics import etl_retries_total
 
@@ -368,96 +433,10 @@ class ExecutionServiceMixin:
         except RECOVERABLE_ERRORS:  # noqa: BLE001
             logger.debug("ETL retry metrics unavailable", exc_info=True)
         if rerun_parse:
-            self._submit_preview(run_id, tenant_id, owner_user_id)
+            self._submit_preview(run_id, tenant_id, owner_user_id, operation_token=operation.token)
         else:
-            self._submit_revalidation(run_id, tenant_id, owner_user_id)
+            self._submit_revalidation(
+                run_id, tenant_id, owner_user_id, operation_token=operation.token
+            )
         db.expire_all()
         return cast("dict[str, Any]", self.get_run(db, run_id=run_id, owner_user_id=owner_user_id))
-
-    def rollback(self, db: Session, *, run_id: str, owner_user_id: int) -> dict[str, Any]:
-        run = self._owned_run(db, run_id, owner_user_id)
-        if run.status not in {"completed", "failed", "interrupted"}:
-            raise EtlConflict("ETL_ROLLBACK_NOT_ALLOWED", "当前运行没有可撤销的写入")
-        if not run.reversible:
-            raise EtlConflict("ETL_TARGET_NOT_REVERSIBLE", "导出和 Webhook 等外部目标不可撤销")
-        if run.rollback_status == "completed":
-            raise EtlConflict("ETL_ALREADY_ROLLED_BACK", "本次运行已经撤销")
-        adapter = get_adapter(run.target_type)
-        upload = self._owned_upload_record(db, run.upload_id, owner_user_id)
-        rows = (
-            db.query(EtlRunRow)
-            .filter(
-                EtlRunRow.run_id == run.id,
-                EtlRunRow.owner_user_id == owner_user_id,
-                EtlRunRow.execution_status == "success",
-            )
-            .order_by(EtlRunRow.id.desc())
-            .all()
-        )
-        if not rows:
-            raise EtlConflict("ETL_ROLLBACK_EMPTY", "本次运行没有已写入的数据")
-        run.rollback_status = "running"
-        db.commit()
-        try:
-            if hasattr(adapter, "rollback_batch"):
-                receipt = load_json(run.receipt_json, {})
-                deleted = adapter.rollback_batch(
-                    self._row_context(run, upload, 0),
-                    receipt,
-                )
-                for row in rows:
-                    row.execution_status = "rolled_back"
-                run.rollback_status = "completed"
-                run.rolled_back_at = utcnow()
-                receipt["rollback"] = {
-                    "status": "completed",
-                    "rows": len(rows),
-                    "deleted_records": deleted,
-                    "at": run.rolled_back_at.isoformat(),
-                }
-                run.receipt_json = dump_json(receipt)
-                db.commit()
-                self._record_rollback_metric(run.target_type, "success")
-                return cast("dict[str, Any]", self.run_dict(run, file_name=upload.file_name))
-            for row in rows:
-                adapter.rollback_row(
-                    db,
-                    match_ref=str(row.match_ref or ""),
-                    before=load_json(row.before_json, {}),
-                    after=load_json(row.after_json, {}),
-                    context=self._row_context(run, upload, row.source_row),
-                )
-                row.execution_status = "rolled_back"
-                db.commit()
-            run = self._owned_run(db, run_id, owner_user_id)
-            run.rollback_status = "completed"
-            run.rolled_back_at = utcnow()
-            receipt = load_json(run.receipt_json, {})
-            receipt["rollback"] = {
-                "status": "completed",
-                "rows": len(rows),
-                "at": run.rolled_back_at.isoformat(),
-            }
-            run.receipt_json = dump_json(receipt)
-            db.commit()
-            self._record_rollback_metric(run.target_type, "success")
-            return cast("dict[str, Any]", self.run_dict(run, file_name=upload.file_name))
-        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
-            db.rollback()
-            code, message = safe_error(exc)
-            run = self._owned_run(db, run_id, owner_user_id)
-            run.rollback_status = "failed"
-            run.error_code = code
-            run.error_message = message[:500]
-            db.commit()
-            self._record_rollback_metric(run.target_type, "failed")
-            raise EtlError(code, message, status_code=500) from exc
-
-    @staticmethod
-    def _record_rollback_metric(target_type: str, status: str) -> None:
-        try:
-            from app.utils.metrics import etl_rollbacks_total
-
-            etl_rollbacks_total.labels(target_type, status).inc()
-        except RECOVERABLE_ERRORS:  # noqa: BLE001
-            logger.debug("ETL rollback metrics unavailable", exc_info=True)

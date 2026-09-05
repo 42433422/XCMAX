@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, cast
 
-from sqlalchemy import Table, inspect
+from sqlalchemy import Table, inspect, text
 
 from app.db.base import Base
 from app.db.models.etl import (
@@ -53,6 +53,19 @@ def ensure_sqlite_etl_bootstrap(
                 [table.name for table in missing],
             )
             Base.metadata.create_all(real_engine, tables=missing, checkfirst=True)
+        # create_all does not add columns to an existing packaged desktop database.
+        columns = {item["name"] for item in inspect(real_engine).get_columns("etl_runs")}
+        with real_engine.begin() as connection:
+            for name, ddl in (
+                ("operation_kind", "ALTER TABLE etl_runs ADD COLUMN operation_kind VARCHAR(16)"),
+                ("operation_token", "ALTER TABLE etl_runs ADD COLUMN operation_token VARCHAR(36)"),
+                (
+                    "operation_lease_until",
+                    "ALTER TABLE etl_runs ADD COLUMN operation_lease_until DATETIME",
+                ),
+            ):
+                if name not in columns:
+                    connection.execute(text(ddl))
     except RECOVERABLE_ERRORS as exc:
         if swallow_errors:
             logger.warning("ensure_sqlite_etl_bootstrap 失败: %s", exc, exc_info=True)

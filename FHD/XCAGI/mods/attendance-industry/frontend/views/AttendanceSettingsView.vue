@@ -1,7 +1,7 @@
 <template>
   <div class="tyn-settings page-view">
     <header class="tyn-settings__head">
-      <h2>考勤转换设置</h2>
+      <h2>转换规则 · 太阳鸟定制</h2>
       <p class="muted">
         钉钉导出表 →「明细」工作表的裁窗与符号规则。配置保存在
         <code>resources/config/approval_config.yaml</code> 的 <code>attendance_policy</code> 段。
@@ -187,7 +187,7 @@ onMounted(async () => {
   margin: 0 0 1rem;
   font-size: 0.875rem;
   line-height: 1.55;
-  color: rgba(255, 255, 255, 0.65);
+  color: var(--text-secondary, #6b7280);
 }
 
 .attendance-grid {
@@ -206,7 +206,7 @@ onMounted(async () => {
   display: block;
   margin-bottom: 0.35rem;
   font-size: 0.8125rem;
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--text-primary, #1f2937);
 }
 
 .inp {

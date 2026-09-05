@@ -6,13 +6,12 @@ beforeEach(() => {
   localStorage.setItem('modstore_token', 'router-token')
   sessionStorage.clear()
   assignMock.mockClear()
-  Object.defineProperty(window, 'location', {
-    configurable: true,
-    value: { ...window.location, assign: assignMock },
-  })
+  // Keep the real Location getters (notably origin) for the browser handoff guard.
+  vi.spyOn(window.location, 'assign').mockImplementation(assignMock)
 })
 
 afterEach(() => {
+  vi.restoreAllMocks()
   document.title = ''
   document.head.querySelectorAll('meta[name="description"]').forEach((el) => el.remove())
 })

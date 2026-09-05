@@ -182,6 +182,12 @@ describe('updater — parseYamlField', () => {
     const content = `version: 10.0.0\nbuildSha: abc123\ntest: 1`
     expect(parseYamlField(content, 'buildSha')).toBe('abc123')
   })
+
+  it('extracts the four-part productVersion from yaml text', async () => {
+    const { parseYamlField } = await import('./updater.js')
+    const content = `version: 1.0.0\nproductVersion: 1.0.0.1\nbuildSha: abc123`
+    expect(parseYamlField(content, 'productVersion')).toBe('1.0.0.1')
+  })
 })
 
 describe('updater — forced-upgrade product versions', () => {

@@ -66,6 +66,7 @@ export function useProductFlow() {
 export function shouldRouteToProductOnboarding(toName: string | symbol | null | undefined): boolean {
   const name = String(toName || '')
   if (
+    name.startsWith('attendance-industry-') ||
     name === 'product-onboarding' ||
     name === 'login' ||
     name === 'lan-gate' ||

@@ -35,6 +35,7 @@ vi.mock('./rollback', () => ({ checkPendingRollback: vi.fn(() => null) }))
 vi.mock('./updater', () => ({ configureUpdater: vi.fn() }))
 vi.mock('./desktop-navigation', () => ({
   handleDesktopWindowOpen: vi.fn(),
+  handleDesktopWillNavigate: vi.fn(),
   isBenignDesktopLoadAbort: vi.fn(),
   isTrustedDesktopOrigin: vi.fn(),
 }))

@@ -173,8 +173,12 @@ export E2E_USER="${E2E_USER:-xcagi-enterprise-demo}"
 export E2E_PASSWORD="${E2E_PASSWORD:-Demo@2026}"
 export E2E_ACCOUNT_KIND="${E2E_ACCOUNT_KIND:-enterprise}"
 
+log "验证新账号首次表单登录（ERP fixture 绑定行业之前）…"
+npx playwright test --config playwright.fresh-login.config.ts --output test-results/first-login
+
 log "运行 Playwright P0 + 表单登录闭环（E2E_FULL_STACK=${E2E_FULL_STACK}）…"
 npx playwright test \
+  --output test-results/erp \
   e2e/smoke.spec.ts \
   e2e/desktop-resilience.spec.ts \
   e2e/critical-paths.spec.ts \

@@ -6,6 +6,7 @@
   "package_stage_ids": [
     "xcagi-planner-bridge",
     "xcagi-erp-domain-bridge",
+    "xcagi-workflow-visualization-bridge",
     "xcagi-core-workflow-employees",
     "xcagi-approval-bridge",
     "xcagi-lan-license-bridge",
@@ -14,12 +15,12 @@
     "xcagi-office-employee-pack-bridge",
     "xcagi-customer-service-bridge",
     "xcagi-planner-excel-tools",
-    "wechat-contacts-ai-employee",
     "lan-gate-ai-employee"
   ],
   "sku_bundled_mod_ids": [
     "xcagi-planner-bridge",
     "xcagi-erp-domain-bridge",
+    "xcagi-workflow-visualization-bridge",
     "xcagi-core-workflow-employees",
     "xcagi-approval-bridge",
     "xcagi-lan-license-bridge",
@@ -28,7 +29,6 @@
     "xcagi-office-employee-pack-bridge",
     "xcagi-customer-service-bridge",
     "xcagi-planner-excel-tools",
-    "wechat-contacts-ai-employee",
     "lan-gate-ai-employee"
   ]
 }

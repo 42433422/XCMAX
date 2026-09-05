@@ -23,7 +23,6 @@ ProductSku = Literal["personal", "enterprise"]
 
 SKU_AUX_MOD_IDS: tuple[str, ...] = (
     "xcagi-planner-excel-tools",
-    "wechat-contacts-ai-employee",
     "lan-gate-ai-employee",
 )
 

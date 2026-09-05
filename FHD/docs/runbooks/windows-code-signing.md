@@ -45,6 +45,8 @@ XCAGI_UPDATE_ED25519_PRIVATE_KEY
 SERVER_SSH_KEY 或 FHD_PUSH_SSH_KEY
 ```
 
+正式发布后的收敛回读还要求 repository secret `RELEASE_CONVERGENCE_ADMIN_TOKEN`；它与上面的签名凭据分别配置。
+
 不要把任何 secret 写入仓库、Issue、PR、CI 命令输出或聊天。
 
 ## 3. 签名链
@@ -76,14 +78,24 @@ XCAGI-Enterprise-Setup-<version>-x64.exe
 
 ## 4. 发布
 
-证书已签发且所有配置齐全后，从主分支运行：
+证书已签发且所有配置齐全后，使用主分支的 `Release Orchestrator` 正式入口。该编排器还会发布服务器组件，并构建供桌面共用的前端制品；它不是仅验证 Windows 签名的任务。
+
+运行前，将 `RELEASE_SHA` 设为已冻结的当前 `origin/main` 完整 40 位提交 SHA，并确认该提交的所有受保护检查成功。`CURRENT_SCAN_RUN_ID` 和 `PREVIOUS_SCAN_RUN_ID` 必须是这个相同 SHA 的真实安全扫描运行 ID，覆盖连续两个 UTC 日期；当前报告须在 24 小时内，前一天报告须在 48 小时内。不要用短 SHA、其他提交的扫描或示例运行 ID 替代。
 
 ```bash
-gh workflow run fhd-release-desktop.yml \
-  --repo 42433422/XCMAX \
-  -f version=1.0.0.0 \
-  -f verify_only=false
+: "${RELEASE_SHA:?请设置已验证的完整发布 SHA}"
+: "${CURRENT_SCAN_RUN_ID:?请设置当前日期的真实扫描运行 ID}"
+: "${PREVIOUS_SCAN_RUN_ID:?请设置前一个 UTC 日期的真实扫描运行 ID}"
+
+gh workflow run fhd-release-orchestrator.yml \
+  --repo 42433422/XCMAX --ref main \
+  -f product_version=1.0.0.1 \
+  -f release_sha="$RELEASE_SHA" \
+  -f security_scan_run_id="$CURRENT_SCAN_RUN_ID" \
+  -f previous_security_scan_run_id="$PREVIOUS_SCAN_RUN_ID"
 ```
+
+编排器会把同一个发布 SHA、两个扫描运行 ID 和它生成的真实 `frontend_run_id` 传给 `Release Desktop`；无需手工猜测前端运行 ID。
 
 发布任务必须依次证明：
 
@@ -99,7 +111,7 @@ gh workflow run fhd-release-desktop.yml \
 公开路径：
 
 ```text
-https://xiu-ci.com/xcagi-v1.0.0.0/enterprise/
+https://xiu-ci.com/xcagi-v1.0.0.1/enterprise/
 https://xiu-ci.com/releases/stable/enterprise/
 ```
 

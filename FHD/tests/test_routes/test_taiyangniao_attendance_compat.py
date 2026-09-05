@@ -23,6 +23,8 @@ XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 def _make_app() -> FastAPI:
     app = FastAPI()
+    # 本文件测试授权后的转换行为；拒绝路径由 test_customer_features 单独覆盖。
+    app.dependency_overrides[tac.require_attendance_conversion] = lambda: None
     app.include_router(router)
     return app
 

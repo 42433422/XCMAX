@@ -24,7 +24,6 @@ PHYSICAL_VIEW_MODS: dict[str, list[str]] = {
     "xcagi-planner-bridge": [
         "ChatView.vue",
         "AIEcosystemView.vue",
-        "BrainView.vue",
         "ChatDebugView.vue",
     ],
     "xcagi-model-payment-bridge": [

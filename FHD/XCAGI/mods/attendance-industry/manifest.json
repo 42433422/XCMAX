@@ -3,7 +3,7 @@
   "name": "通用考勤模块",
   "version": "1.0.0",
   "author": "XCAGI",
-  "description": "跨行业通用考勤模块：部门与人员、排班、出勤统计、考勤表转换及考勤 AI 助手。",
+  "description": "主系统共享考勤工作区：部门、人员、排班资源与考勤记录；客户模板转换按账号定制权益开放。",
   "primary": true,
   "legacy_mod_ids": ["taiyangniao-pro"],
   "dependencies": {
@@ -18,21 +18,15 @@
     "pro_entry_path": "/attendance-industry",
     "menu": [
       {
-        "id": "attendance-industry-home",
-        "label": "考勤表转换",
-        "icon": "fa-file-excel-o",
+        "id": "attendance-industry-workspace",
+        "label": "考勤工作区",
+        "icon": "fa-calendar",
         "path": "/attendance-industry"
-      },
-      {
-        "id": "attendance-industry-settings",
-        "label": "考勤设置",
-        "icon": "fa-cog",
-        "path": "/attendance-industry/settings"
       }
     ]
   },
   "onboarding": {
-    "custom_line_hint": "统一提供考勤转换、部门人员、排班菜单与考勤 AI 助手"
+    "custom_line_hint": "通用考勤与账号定制分开交付：部门、人员使用共享工作区，表转换及模板规则走客户定制节点"
   },
   "hooks": {},
   "industry": {

@@ -34,9 +34,14 @@ class __AIChatApplicationServicePart02MixinPart03Mixin(_DynamicWorkflowPendingRe
             route_normal_mode_message,
             run_normal_slot_shipment_preview,
         )
+        from app.application.workflow.planner import _onboarding_first_order_slots
 
         profile = resolve_tool_execution_profile(context if isinstance(context, dict) else {})
-        if profile == "normal" and (not explicit_workflow_tool_intent):
+        # The seeded first order has an existing read/read/write plan. Parsing
+        # its whole instruction as a single shipment would discard the reads
+        # and the user's explicit confirmation boundary before planning.
+        has_onboarding_plan = _onboarding_first_order_slots(text) is not None
+        if profile == "normal" and not explicit_workflow_tool_intent and not has_onboarding_plan:
             rr = route_normal_mode_message(text)
             if rr.get("intent") == "product_query":
                 pq = build_product_query_response_dict(rr)
@@ -130,7 +135,7 @@ class __AIChatApplicationServicePart02MixinPart03Mixin(_DynamicWorkflowPendingRe
         )
         if pending_handled:
             return pending_result
-        if profile == "pro_default":
+        if profile == "pro_default" and not has_onboarding_plan:
             rr_pro_ship = route_normal_mode_message(text)
             if rr_pro_ship.get("intent") == "shipment":
                 try:

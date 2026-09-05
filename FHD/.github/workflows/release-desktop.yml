@@ -16,9 +16,14 @@ on:
         required: true
         default: false
         type: boolean
+      windows_installer_only:
+        description: "Windows installer delivery: auto-sign if configured, otherwise explicitly unsigned; no stable feed publication"
+        required: false
+        default: false
+        type: boolean
       frontend_run_id:
         description: "Run ID of the orchestrator's build-frontend job producing the shared xcagi-vue-dist artifact"
-        required: true
+        required: false
         type: string
       release_sha:
         description: "Immutable 40-character source SHA shared by Windows, macOS, feeds, and manifests"
@@ -26,11 +31,11 @@ on:
         type: string
       security_scan_run_id:
         description: "Most recent zero-finding security scan run ID"
-        required: true
+        required: false
         type: string
       previous_security_scan_run_id:
         description: "Prior-day zero-finding security scan run ID for the same SHA"
-        required: true
+        required: false
         type: string
   # Tag (FHD/v*) entry is centralized in fhd-release-orchestrator.yml, which gates on
   # verify-version-anchors and then dispatches this workflow. Removing the direct tag
@@ -49,8 +54,109 @@ env:
   XCAGI_BUILD_SHA: ${{ inputs.release_sha }}
 
 jobs:
+  windows-installer-delivery:
+    if: ${{ inputs.windows_installer_only == true && inputs.verify_only != true }}
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: utf-8
+      ES_USERNAME: ${{ secrets.ES_USERNAME }}
+      ES_PASSWORD: ${{ secrets.ES_PASSWORD }}
+      CREDENTIAL_ID: ${{ secrets.CREDENTIAL_ID }}
+      ES_TOTP_SECRET: ${{ secrets.ES_TOTP_SECRET }}
+      XCAGI_WINDOWS_PUBLISHER_NAME: ${{ vars.XCAGI_WINDOWS_PUBLISHER_NAME }}
+      XCAGI_WINDOWS_SIGNING_PROVIDER: sslcom
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+      - name: Validate identity and resolve signing mode
+        id: signing
+        shell: pwsh
+        run: |
+          if ($env:XCAGI_BUILD_SHA -notmatch '^[0-9a-fA-F]{40}$') { throw 'Full release SHA required' }
+          if ((git rev-parse HEAD).Trim() -ne $env:XCAGI_BUILD_SHA) { throw 'Checkout SHA mismatch' }
+          $names = @('ES_USERNAME', 'ES_PASSWORD', 'CREDENTIAL_ID', 'ES_TOTP_SECRET', 'XCAGI_WINDOWS_PUBLISHER_NAME')
+          $present = @($names | Where-Object { [Environment]::GetEnvironmentVariable($_) })
+          if ($present.Count -ne 0 -and $present.Count -ne $names.Count) {
+            throw 'Partial signing configuration: complete or remove it; never silently downgrade a configured signer.'
+          }
+          $required = if ($present.Count -eq $names.Count) { '1' } else { '0' }
+          "required=$required" >> $env:GITHUB_OUTPUT
+          "XCAGI_REQUIRE_WINDOWS_SIGNING=$required" >> $env:GITHUB_ENV
+          if ($required -eq '0') { Write-Warning 'Delivering explicitly unsigned installer; stable feeds are untouched.' }
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            FHD/frontend/package-lock.json
+            FHD/desktop/package-lock.json
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Install SSL.com CodeSignTool when configured
+        if: steps.signing.outputs.required == '1'
+        uses: SSLcom/esigner-codesign@cf5f6c1d38ad10f47e3ed9aca873f429b1a8d85b
+        with:
+          command: --version
+          environment_name: PROD
+          signing_method: v2
+      - name: Build exact-SHA Windows installer
+        shell: pwsh
+        env:
+          DELIVERY_VERSION: ${{ inputs.version }}
+        run: |
+          scripts/package/test-windows-signature-policy.ps1
+          scripts/package/build-installer.ps1 -Version $env:DELIVERY_VERSION -ProductSku enterprise -SkipUiInstaller
+      - name: Verify resources, install, start, and uninstall
+        shell: pwsh
+        env:
+          DELIVERY_VERSION: ${{ inputs.version }}
+        run: |
+          $allowUnsigned = $env:XCAGI_REQUIRE_WINDOWS_SIGNING -eq '0'
+          scripts/package/pre-release-security.ps1 -Phase post -Version $env:DELIVERY_VERSION -ProductSku enterprise -AllowUnsigned:$allowUnsigned
+          $installer = "release/xcagi-v$env:DELIVERY_VERSION/enterprise/XCAGI-Enterprise-Setup-$env:DELIVERY_VERSION-x64.exe"
+          scripts/package/verify-windows-installed-runtime.ps1 -InstallerPath $installer -ExpectedPublisher $env:XCAGI_WINDOWS_PUBLISHER_NAME -ExpectedBuildSha $env:XCAGI_BUILD_SHA -ExpectedProductVersion $env:DELIVERY_VERSION -AllowUnsigned:$allowUnsigned
+      - name: Prepare truthful delivery receipt
+        shell: pwsh
+        env:
+          DELIVERY_VERSION: ${{ inputs.version }}
+        run: |
+          $installer = "release/xcagi-v$env:DELIVERY_VERSION/enterprise/XCAGI-Enterprise-Setup-$env:DELIVERY_VERSION-x64.exe"
+          $signature = Get-AuthenticodeSignature -LiteralPath $installer
+          $state = if ($signature.Status -eq 'Valid') { 'signed' } elseif ($signature.Status -eq 'NotSigned') { 'unsigned' } else { throw "Invalid signature: $($signature.Status)" }
+          New-Item -ItemType Directory -Path delivery -Force | Out-Null
+          $filename = "XCAGI-Enterprise-Setup-$env:DELIVERY_VERSION-x64-$state.exe"
+          Copy-Item $installer "delivery/$filename"
+          $hash = (Get-FileHash "delivery/$filename" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $filename" | Set-Content "delivery/$filename.sha256" -Encoding utf8
+          @{
+            version = $env:DELIVERY_VERSION; git_sha = $env:XCAGI_BUILD_SHA
+            signature_status = $state; authenticode_status = [string]$signature.Status
+            filename = $filename; sha256 = $hash; size = (Get-Item "delivery/$filename").Length
+            delivery_mode = 'manual_installer'; stable_auto_update = $false
+            runner_install_smoke = 'passed'; customer_machine_acceptance = 'not_verified'
+            warning = $(if ($state -eq 'unsigned') { '未签名安装包，Windows 可能显示未知发布者或安全提示；不进入稳定自动更新。' } else { '' })
+          } | ConvertTo-Json | Set-Content delivery/delivery-receipt.json -Encoding utf8
+          Get-Content delivery/delivery-receipt.json >> $env:GITHUB_STEP_SUMMARY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xcagi-windows-installer-${{ inputs.release_sha }}
+          path: |
+            FHD/delivery/XCAGI-Enterprise-Setup-${{ inputs.version }}-x64-*.exe
+            FHD/delivery/XCAGI-Enterprise-Setup-${{ inputs.version }}-x64-*.exe.sha256
+            FHD/delivery/delivery-receipt.json
+          if-no-files-found: error
+          retention-days: 30
+
   release-preflight:
-    if: ${{ inputs.verify_only != true }}
+    if: ${{ inputs.verify_only != true && inputs.windows_installer_only != true }}
     runs-on: ubuntu-latest
     # Security evidence lives at repository root; do not inherit FHD working directory.
     defaults:

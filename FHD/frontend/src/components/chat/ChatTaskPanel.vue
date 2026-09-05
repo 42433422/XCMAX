@@ -132,7 +132,7 @@
                 />
                 <span class="task-list-title">{{ normalizeTaskDisplayText(task.title) }}</span>
                 <span
-                  v-if="task.type === 'workflow_employee'"
+                  v-if="task.type === 'workflow_employee' || task.type === 'agent_task'"
                   class="task-list-chevron"
                   aria-hidden="true"
                 >{{ expandedTaskIds.includes(task.id) ? '▼' : '▶' }}</span>
@@ -147,6 +147,11 @@
                   v-if="typeof task.progress === 'number' && task.status !== 'failed' && task.status !== 'cancelled' && !(task.type === 'workflow_employee' && task.payload?.workflowProgressStarted === false)"
                 >{{ $t('chat.progress', { pct: task.progress }) }}</span>
                 <span v-if="task.stage">{{ normalizeTaskDisplayText(task.stage) }}</span>
+              </div>
+              <div v-if="workspaceTargets[task.id]" class="task-workspace-action">
+                <RouterLink :to="workspaceTargets[task.id]" class="btn btn-primary btn-sm">
+                  {{ task.payload?.rawRunStatus === 'waiting_user' ? '前往确认' : '查看任务' }}
+                </RouterLink>
               </div>
               <div
                 v-if="task.type === 'workflow_employee' && expandedTaskIds.includes(task.id) && hasWorkflowBody(task)"
@@ -219,7 +224,7 @@
               <div v-if="expandedTaskIds.includes(task.id)" class="task-list-detail">
                 <div v-if="task.summary" class="task-summary">{{ normalizeTaskDisplayText(task.summary) }}</div>
                 <div v-if="task.error" class="task-error">{{ normalizeTaskDisplayText(task.error) }}</div>
-                <AgentTaskRuntimePanel v-if="task.type === 'agent_task'" :task="task" @open="$emit('select-task', task)" @approve="$emit('approve-task', task.id)" @retry="$emit('retry-task', task.id)" @pause="$emit('pause-task', task.id)" @resume="$emit('resume-task', task.id)" @cancel="$emit('cancel-task-by-id', task.id)" />
+                <AgentTaskRuntimePanel v-if="task.type === 'agent_task'" :task="task" @open="openWorkspace(task)" @approve="$emit('approve-task', task.id)" @retry="$emit('retry-task', task.id)" @pause="$emit('pause-task', task.id)" @resume="$emit('resume-task', task.id)" @cancel="$emit('cancel-task-by-id', task.id)" />
                 <div
                   v-if="task.type !== 'workflow_employee' && task.type !== 'agent_task'"
                   class="task-actions"
@@ -263,12 +268,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { RouterLink, useRouter, type RouteLocationRaw } from 'vue-router'
 import type { ShipmentTask } from '@/composables/useShipmentTask'
 import type { TaskFilter, TaskItem } from '@/composables/useChatPersistence'
 import AgentTaskRuntimePanel from './AgentTaskRuntimePanel.vue'
 import { workflowProgressIsIdle } from '@/workflow/coreWorkflowTaskUi'
 import { normalizeTaskDisplayText } from '@/utils/chatTaskLabels'
 useI18n()
+const router = useRouter()
 type WorkflowTaskPayload = {
   workflowProgressPct?: number
   workflowMonitorLine?: string
@@ -328,6 +335,24 @@ const emit = defineEmits<{
   'copy-assistant-push': []
   'open-assistant-float': []
 }>()
+// Only durable tasks have independent workspaces; local snapshots must not invent a destination.
+const workspaceTargets = computed(() => {
+  const targets: Record<string, RouteLocationRaw> = {}
+  for (const task of props.filteredTaskList) {
+    const payload = task.payload
+    const taskId = typeof payload?.taskId === 'string' ? payload.taskId.trim() : ''
+    if (task.type !== 'agent_task' || payload?.serverBacked !== true || !taskId) continue
+    const conversation = [payload.conversationId, payload.workspaceId, taskId]
+      .find(value => typeof value === 'string' && value.trim()) as string
+    targets[task.id] = { name: 'task-workspace', params: { taskId }, query: { conversation: conversation.trim() } }
+  }
+  return targets
+})
+function openWorkspace(task: TaskItem): void {
+  const target = workspaceTargets.value[task.id]
+  if (target) void router.push(target)
+  else emit('select-task', task)
+}
 const customOrderNumberModel = computed({
   get: () => props.currentTask?.customOrderNumber ?? '',
   set: (value: string) => emit('set-custom-order-number', value),

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from app.mod_sdk.industry_baseline import load_industry_baseline_document
+from app.mod_sdk.industry_seed_refresh import refresh_installed_industry_mods_from_bundle
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -445,6 +446,7 @@ __all__ = [
     "resolve_industry_or_mod_id",
     "bundled_industry_seeds_dir",
     "other_open_industry_mod_ids",
+    "refresh_installed_industry_mods_from_bundle",
     "deactivate_other_open_industry_mods",
     "seed_industry_mod",
     "install_industry_seed_with_fallback",

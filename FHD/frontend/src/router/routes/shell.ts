@@ -3,6 +3,15 @@ import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 
 /** 设置 / 工具 / 员工空间 / Mod 落地等壳层路由 */
 export const SHELL_ROUTES: RouteRecordRaw[] = [
+  // 开发能力已移至 CLI；所有发行模式都接住旧书签，不再装载独立开发页面。
+  {
+    path: '/brain',
+    redirect: { path: '/', query: {}, hash: '' },
+  },
+  {
+    path: '/mod/xcagi-planner-bridge/brain',
+    redirect: { path: '/', query: {}, hash: '' },
+  },
   {
     path: '/onboarding',
     name: 'product-onboarding',

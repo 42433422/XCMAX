@@ -14,7 +14,6 @@ LEGACY_BRIDGE_MOD_HOST_APIS: dict[str, list[str]] = {
     "xcagi-planner-bridge": [
         "/api/mod/xcagi-planner-bridge/chat",
         "/mod/xcagi-planner-bridge/ai-ecosystem",
-        "/mod/xcagi-planner-bridge/brain",
         "/api/ai/chat",
         "/api/ai/intent",
     ],
@@ -79,14 +78,14 @@ LEGACY_PLATFORM_PREFIXES: list[str] = [
 ]
 LEGACY_SKU_BUNDLED: dict[str, tuple[str, ...]] = {
     "personal": LEGACY_MINIMAL_HOST_MOD_IDS,
-    "enterprise": LEGACY_GENERIC_HOST_MOD_IDS
-    + ("xcagi-planner-excel-tools", "wechat-contacts-ai-employee"),
+    "enterprise": LEGACY_GENERIC_HOST_MOD_IDS + ("xcagi-planner-excel-tools",),
 }
 LEGACY_STAGE: dict[str, tuple[str, ...]] = {
     "personal": LEGACY_MINIMAL_HOST_MOD_IDS,
     "enterprise": (
         "xcagi-planner-bridge",
         "xcagi-erp-domain-bridge",
+        "xcagi-workflow-visualization-bridge",
         "xcagi-core-workflow-employees",
         "xcagi-approval-bridge",
         "xcagi-lan-license-bridge",
@@ -95,6 +94,5 @@ LEGACY_STAGE: dict[str, tuple[str, ...]] = {
         "xcagi-office-employee-pack-bridge",
         "xcagi-customer-service-bridge",
         "xcagi-planner-excel-tools",
-        "wechat-contacts-ai-employee",
     ),
 }

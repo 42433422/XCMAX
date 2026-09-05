@@ -1298,22 +1298,22 @@ class TestMarketDevCreateAccountRoute:
 class TestMarketSessionHandoffRoute:
     """Cover ``/api/market/session-handoff`` route."""
 
-    def test_no_user_no_token_returns_404(self, market_client: TestClient) -> None:
+    def test_no_user_no_token_returns_401(self, market_client: TestClient) -> None:
         with (
             patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=None),
             patch.object(ma, "latest_session_market_token", return_value=""),
         ):
             resp = market_client.get("/api/market/session-handoff")
-        assert resp.status_code == 404
+        assert resp.status_code == 401
 
-    def test_no_user_with_latest_token_returns_200(self, market_client: TestClient) -> None:
+    def test_no_user_with_latest_token_returns_401(self, market_client: TestClient) -> None:
         with (
             patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=None),
             patch.object(ma, "latest_session_market_token", return_value="latest-tok"),
         ):
             resp = market_client.get("/api/market/session-handoff")
-        assert resp.status_code == 200
-        assert resp.json()["data"]["market_access_token"] == "latest-tok"
+        assert resp.status_code == 401
+        assert "latest-tok" not in resp.text
 
 
 class TestMarketAccountOverviewRoute:

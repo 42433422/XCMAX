@@ -13,8 +13,28 @@ def _facade():
 async def get_models_for_provider(
     session, user_id: int, provider: str, *, force_refresh: bool = False
 ) -> _facade().Dict[str, _facade().Any]:
-    """返回模型 ID 与标准化能力详情，并带 TTL 缓存。"""
+    """Compatibility entry point for callers owning their database session."""
+    api_key, base_url = resolve_catalog_credentials(session, user_id, provider)
+    return await get_models_for_credentials(
+        user_id, provider, api_key=api_key, base_url=base_url, force_refresh=force_refresh
+    )
+
+
+def resolve_catalog_credentials(session, user_id: int, provider: str):
+    """Read credential values without retaining ORM rows or a database session."""
     api_key, _src = _facade().resolve_api_key(session, user_id, provider)
+    base_url = (
+        _facade().resolve_base_url(session, user_id, provider)
+        if api_key and provider in _facade().OAI_COMPAT_OPENAI_STYLE_PROVIDERS
+        else None
+    )
+    return api_key, base_url
+
+
+async def get_models_for_credentials(
+    user_id: int, provider: str, *, api_key, base_url, force_refresh: bool = False
+) -> _facade().Dict[str, _facade().Any]:
+    """Fetch a catalog after the caller has released its credential connection."""
     if not api_key:
         models = _facade()._merge_fallback(provider, [])
         detailed = _facade()._models_detailed(provider, models)
@@ -57,12 +77,12 @@ async def get_models_for_provider(
     err: _facade().Optional[str] = None
     src = "remote"
     if provider == "minimax" and _facade().is_minimax_token_plan_key(api_key):
-        raw_base = _facade().resolve_base_url(session, user_id, provider)
+        raw_base = base_url
         remote_records, err = await _facade()._fetch_minimax_token_plan_records(
             api_key, base_url=raw_base
         )
     elif provider in _facade().OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
-        raw_base = _facade().resolve_base_url(session, user_id, provider)
+        raw_base = base_url
         b = (raw_base or _facade().openai_compat_default_root(provider)).rstrip("/")
         if not (b.endswith("/v1") or b.endswith("/v2") or b.endswith("/v3") or b.endswith("/v4")):
             b = b + "/v1"

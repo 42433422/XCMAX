@@ -733,6 +733,9 @@ describe('main — desktop CSP defense-in-depth injection', () => {
     expect(csp).toContain("default-src 'self'")
     expect(csp).toContain("script-src 'self' 'unsafe-inline' 'unsafe-eval'")
     expect(csp).toContain("connect-src 'self' ws: wss: http: https:")
+    expect(csp?.split('; ').find(rule => rule.startsWith('frame-src '))).toBe("frame-src 'self' blob:")
+    expect(csp).toContain("object-src 'none'")
+    expect(csp).toContain("frame-ancestors 'self'")
   })
 
   it('does not override an existing CSP header (avoid intersection becoming stricter)', async () => {

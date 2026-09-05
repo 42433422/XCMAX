@@ -9,14 +9,12 @@ const HOST_PATH_TO_MOD: Record<string, string> = {
   '/': '/chat',
   '/chat': '/chat',
   '/ai-ecosystem': '/ai-ecosystem',
-  '/brain': '/brain',
   '/chat-debug': '/chat-debug',
 }
 
 const HOST_ROUTE_NAME_TO_MOD: Record<string, string> = {
   chat: '/chat',
   'ai-ecosystem': '/ai-ecosystem',
-  brain: '/brain',
   'chat-debug': '/chat-debug',
 }
 

@@ -25,6 +25,7 @@ from app.application.etl.targets.helpers import (
     model_values,
     optional_text,
 )
+from app.application.etl.targets.rollback_compare_swap import delete_created_row, restore_fields
 from app.db.models.product import Product
 from app.infrastructure.tenant_scope import tenant_id_for_write
 
@@ -205,13 +206,13 @@ class ProductAdapter(TargetAdapter):
         if before:
             if not obj:
                 raise EtlError("ETL_ROLLBACK_TARGET_MISSING", "产品撤销目标已不存在")
-            assert_rollback_image_matches(obj, before, after, self.fields, "产品")
-            for field in self.fields:
-                if field.key in before:
-                    setattr(obj, field.key, before[field.key])
+            changed_fields = assert_rollback_image_matches(obj, before, after, self.fields, "产品")
+            restore_fields(
+                db, obj, {field.key: before[field.key] for field in changed_fields}, "产品"
+            )
         elif obj:
             assert_created_row_unchanged(obj, after, self.fields, "产品")
-            db.delete(obj)
+            delete_created_row(db, obj, "产品")
 
     @staticmethod
     def _match_key(data: dict[str, Any]) -> tuple[str, str, str]:

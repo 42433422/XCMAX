@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -53,6 +54,29 @@ def test_desktop_mode_allows_vue_i18n_runtime_compile(monkeypatch):
     assert r.status_code == 200
     assert r.headers["x-frame-options"] == "DENY"
     assert "script-src 'self' 'unsafe-inline' 'unsafe-eval'" in r.headers["content-security-policy"]
+
+
+@pytest.mark.parametrize("desktop", [False, True])
+def test_generated_label_preview_has_a_desktop_only_frame_source(monkeypatch, desktop):
+    monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1" if desktop else "0")
+    app = FastAPI()
+    app.add_middleware(SecurityHeadersMiddleware)
+
+    @app.get("/print")
+    def print_page():
+        return {"success": True}
+
+    response = TestClient(app).get("/print")
+    directives = {
+        parts[0]: parts[1:]
+        for directive in response.headers["content-security-policy"].split(";")
+        if (parts := directive.split())
+    }
+    frame_sources = directives.get("frame-src", directives["default-src"])
+    assert frame_sources == (["'self'", "blob:"] if desktop else ["'self'"])
+    assert directives["default-src"] == ["'self'"]
+    assert response.headers["x-frame-options"] == "DENY"
+    assert response.headers["x-content-type-options"] == "nosniff"
 
 
 def test_sandbox_query_param_relaxes_csp():

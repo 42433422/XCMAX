@@ -8,6 +8,14 @@ from typing import TYPE_CHECKING, Any, cast
 from sqlalchemy.orm import Session
 
 from app.application.etl.errors import EtlConflict, EtlError, EtlNotFound
+from app.application.etl.operation_owner import (
+    activate_operation,
+    bind_owner,
+    claim_operation,
+    fail_operation,
+    finish_operation,
+    unbind_owner,
+)
 from app.application.etl.parsers import MAX_ROWS
 from app.application.etl.product_identity import provenance_validation_issues
 from app.application.etl.service_support import (
@@ -25,7 +33,7 @@ from app.application.etl.targets import TargetAdapter, get_adapter
 from app.application.etl.transforms import ALLOWED_TRANSFORMS, apply_mapping
 from app.db.models.etl import EtlRun, EtlRunRow
 from app.infrastructure.tenant_scope import tenant_id_for_write, tenant_scope
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +70,24 @@ class DraftServiceMixin:
         overrides = patch.get("row_overrides") or {}
         if not changes_draft:
             if isinstance(overrides, dict) and overrides:
-                self._apply_row_overrides(db, run.id, owner_user_id, overrides)
+                operation = claim_operation(
+                    db,
+                    run,
+                    "edit",
+                    allowed_statuses={"preview_ready", "failed", "interrupted"},
+                    require_unrolled_back=True,
+                )
+                bind_owner(db, operation)
+                try:
+                    self._apply_row_overrides(db, run.id, owner_user_id, overrides)
+                    finish_operation(db, operation)
+                    db.commit()
+                except RECOVERABLE_ERRORS as exc:
+                    code, message = safe_error(exc)
+                    fail_operation(db, operation, code=code, message=message)
+                    raise
+                finally:
+                    unbind_owner(db)
                 self._record_correction_metrics(mapping_changed=False, overrides=overrides)
             return cast(
                 "dict[str, Any]", self.get_run(db, run_id=run.id, owner_user_id=owner_user_id)
@@ -73,6 +98,14 @@ class DraftServiceMixin:
             if key in patch:
                 draft[key] = patch[key]
         self._validate_draft(draft, get_adapter(run.target_type))
+        operation = claim_operation(
+            db,
+            run,
+            "preview_queue",
+            allowed_statuses={"preview_ready", "failed", "interrupted"},
+            require_unrolled_back=True,
+        )
+        bind_owner(db, operation)
         run.draft_json = dump_json(draft)
         run.status = "previewing"
         run.stage = "validating"
@@ -81,11 +114,13 @@ class DraftServiceMixin:
         run.error_message = None
         tenant_id = tenant_id_for_write()
         db.commit()
+        unbind_owner(db)
         self._submit_revalidation(
             run.id,
             tenant_id,
             owner_user_id,
             overrides if isinstance(overrides, dict) else {},
+            operation_token=operation.token,
         )
         self._record_correction_metrics(
             mapping_changed=patch.get("field_mappings") is not None,
@@ -112,34 +147,50 @@ class DraftServiceMixin:
         tenant_id: int,
         owner_user_id: int,
         overrides: dict[str, Any] | None = None,
+        *,
+        operation_token: str | None = None,
     ) -> None:
         with SUBMITTED_LOCK:
-            if run_id in SUBMITTED:
+            if run_id in SUBMITTED and operation_token is None:
                 return
             SUBMITTED.add(run_id)
 
         def work() -> None:
             db = new_session()
+            operation = None
             try:
                 with tenant_scope(tenant_id):
+                    run = self._owned_run(db, run_id, owner_user_id)
+                    operation = (
+                        activate_operation(db, run, "preview", operation_token)
+                        if operation_token
+                        else claim_operation(
+                            db,
+                            run,
+                            "preview",
+                            allowed_statuses={"previewing", "preview_ready"},
+                            require_unrolled_back=True,
+                        )
+                    )
+                    bind_owner(db, operation)
+                    db.commit()
                     self._revalidate_existing_rows(db, run_id, owner_user_id)
                     if overrides:
                         self._apply_row_overrides(db, run_id, owner_user_id, overrides)
-            except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+                    finish_operation(db, operation)
+                    db.commit()
+            except BOUNDARY_ERRORS as exc:  # Background revalidation task boundary.
                 db.rollback()
                 code, message = safe_error(exc)
                 try:
                     with tenant_scope(tenant_id):
-                        run = self._owned_run(db, run_id, owner_user_id)
-                        run.status = "failed"
-                        run.stage = "failed"
-                        run.error_code = code
-                        run.error_message = message[:500]
-                        db.commit()
+                        if operation is not None:
+                            fail_operation(db, operation, code=code, message=message)
                 except RECOVERABLE_ERRORS:  # noqa: BLE001
                     db.rollback()
                     logger.exception("Unable to persist ETL revalidation failure for %s", run_id)
             finally:
+                unbind_owner(db)
                 db.close()
                 with SUBMITTED_LOCK:
                     SUBMITTED.discard(run_id)
@@ -330,7 +381,7 @@ class DraftServiceMixin:
             )
             if row is None:
                 raise EtlNotFound("预演行")
-            if row.execution_status == "success":
+            if row.execution_status in {"success", "rolled_back"}:
                 raise EtlConflict("ETL_ROW_ALREADY_EXECUTED", "已执行成功的行不能再次修改动作")
             if load_json(row.validation_json, []):
                 raise EtlConflict(

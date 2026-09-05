@@ -385,7 +385,8 @@ class TestInstallCustomerDeliverySeedPackage:
         assert "市场登录凭证" in result["message"]
         mock_download.assert_not_called()
 
-    async def test_successful_install_no_apply(self, tmp_path):
+    @pytest.mark.parametrize("account_mod_id", ["", "taiyangniao-pro"])
+    async def test_successful_install_no_apply(self, tmp_path, account_mod_id):
         """Full happy path: pkg downloaded, extracted, no apply_kind."""
         zip_path = tmp_path / "seed.zip"
         with zipfile.ZipFile(zip_path, "w") as zf:
@@ -405,6 +406,7 @@ class TestInstallCustomerDeliverySeedPackage:
                     "version": "1.0.0",
                     "apply": "",
                     "artifact": "seed.zip",
+                    "account_mod_id": account_mod_id,
                 },
             ),
             patch(
@@ -432,7 +434,8 @@ class TestInstallCustomerDeliverySeedPackage:
         mock_download.assert_awaited_once()
         args, kwargs = mock_download.await_args
         assert args[0] == (
-            "/api/enterprise/customer-delivery-seeds/pkg-123/1.0.0/download?mod_id=some-mod"
+            "/api/enterprise/customer-delivery-seeds/pkg-123/1.0.0/download?mod_id="
+            + (account_mod_id or "some-mod")
         )
         assert kwargs["headers"] == {"Authorization": "Bearer tok"}
         assert result["applied"] is False

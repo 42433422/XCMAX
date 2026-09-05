@@ -1,4 +1,4 @@
-"""里程碑 K：Planner 智能生态/智脑页经 ``xcagi-planner-bridge`` Mod 路由。"""
+"""Planner 对话与智能生态页经 ``xcagi-planner-bridge`` Mod 路由。"""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 PLANNER_BRIDGE_MOD_ID = "xcagi-planner-bridge"
 MOD_PAGE_PREFIX = f"/mod/{PLANNER_BRIDGE_MOD_ID}"
 
-HOST_PAGES = ["/", "/ai-ecosystem", "/brain", "/chat-debug"]
+HOST_PAGES = ["/", "/ai-ecosystem", "/chat-debug"]
 
 
 def _truthy_env(name: str) -> bool:

@@ -36,6 +36,13 @@ describe('useProductFlow', () => {
       expect(shouldRouteToProductOnboarding('product-onboarding')).toBe(false)
     })
 
+    it('allows roster review without claiming onboarding is complete', () => {
+      expect(shouldRouteToProductOnboarding('attendance-industry-personnel')).toBe(false)
+      expect(shouldRouteToProductOnboarding('attendance-industry-departments')).toBe(false)
+      expect(useProductFlow().readProductFlowCompleted()).toBe(false)
+      expect(shouldRouteToProductOnboarding('chat')).toBe(true)
+    })
+
     it('excludes login route from onboarding redirect', () => {
       expect(shouldRouteToProductOnboarding('login')).toBe(false)
     })

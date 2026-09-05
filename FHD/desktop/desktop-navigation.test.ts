@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   findDeepLinkArg,
+  handleDesktopWindowOpen,
+  handleDesktopWillNavigate,
   parseDesktopDeepLink,
   isBenignDesktopLoadAbort,
   isTrustedDesktopOrigin,
@@ -55,4 +57,37 @@ describe('既有权重行为回归', () => {
   it('err_aborted 且已在可信页视为良性加载中断', () => {
     expect(isBenignDesktopLoadAbort(new Error('net::ERR_ABORTED'), 'http://127.0.0.1:5100/', 5100)).toBe(true)
   })
+})
+
+describe('browser handoff navigation contract', () => {
+  it('delegates a trusted code URL to the system browser and denies an Electron child', () => {
+    const url = 'https://xiu-ci.com/wallet?recharge=30#xcagi_code=' + 'a'.repeat(43)
+    const open = vi.fn().mockResolvedValue(undefined)
+    const warn = vi.fn()
+    expect(handleDesktopWindowOpen(url, 17500, open, warn)).toBe('deny')
+    expect(open).toHaveBeenCalledExactlyOnceWith(url)
+    expect(warn).not.toHaveBeenCalled()
+    expect(handleDesktopWindowOpen('about:blank', 17500, open, warn)).toBe('deny')
+    expect(open).toHaveBeenCalledTimes(1)
+  })
+
+  it('never logs URL credentials even when shell errors echo them', async () => {
+    const url = 'https://xiu-ci.com/wallet?xcagi_mt=reusable#xcagi_code=secret-code'
+    const warn = vi.fn()
+    handleDesktopWindowOpen(url, 17500, vi.fn().mockRejectedValue(new Error('failed ' + url)), warn)
+    await Promise.resolve()
+    handleDesktopWindowOpen('https://evil.example/?access_token=reusable#xcagi_code=secret-code', 17500, vi.fn(), warn)
+    expect(warn).toHaveBeenCalledTimes(2)
+    expect(JSON.stringify(warn.mock.calls)).not.toMatch(/reusable|secret-code|xcagi_mt|access_token|xcagi_code/)
+  })
+})
+
+it('the will-navigate policy blocks external replacement without logging credentials', () => {
+  const prevent = vi.fn()
+  const warn = vi.fn()
+  handleDesktopWillNavigate('https://xiu-ci.com/wallet?xcagi_mt=reusable#xcagi_code=secret-code', 17500, prevent, warn)
+  expect(prevent).toHaveBeenCalledOnce()
+  expect(JSON.stringify(warn.mock.calls)).not.toMatch(/reusable|secret-code|xcagi_code|xcagi_mt/)
+  handleDesktopWillNavigate('http://127.0.0.1:17500/model-payment', 17500, prevent, warn)
+  expect(prevent).toHaveBeenCalledOnce()
 })

@@ -1,5 +1,6 @@
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { api } from '../api'
+import { useAuthStore } from '../stores/auth'
 import { parseByokPaste } from '../byokEnvImport'
 import { requestJson } from '../infrastructure/http/client'
 import { LLM_OAI_COMPAT_BASE_URL_PROVIDERS } from '../llmModels'
@@ -29,6 +30,8 @@ import {
 
 /** WalletView 大模型 API 域：目录拉取 / 厂商磁贴 / 模型选择 / BYOK 密钥（自 WalletView.vue 原样迁移） */
 export function useWalletLlm() {
+  const auth = useAuthStore()
+  let accountVersion = 0
   const catalog = ref<WalletCatalog | null>(null)
   const llmStatusList = ref<LlmStatusRecord[]>([])
   const llmCatalogLoading = ref(false)
@@ -293,21 +296,25 @@ export function useWalletLlm() {
   }
 
   async function loadLlmStatus() {
+    const version = accountVersion
     try {
-      const res = await api.llmStatus()
+      const res = await api.llmStatus({ timeoutMs: 20_000 })
+      if (version !== accountVersion) return
       llmStatusList.value = res.providers || []
-    } catch (e: unknown) {
-      llmStatusList.value = []
-      if (localStorage.getItem('modstore_token')) llmErr.value = errorMessage(e)
+    } catch {
+      if (version !== accountVersion) return
+      if (localStorage.getItem('modstore_token')) llmErr.value = '模型服务状态加载失败，请刷新模型列表重试。'
     }
   }
 
   async function loadCatalog(isManualRefresh: boolean): Promise<void> {
     if (!localStorage.getItem('modstore_token')) return
+    const version = accountVersion
     llmCatalogLoading.value = true
     llmErr.value = ''
     try {
-      const res = await api.llmCatalog(isManualRefresh)
+      const res = await api.llmCatalog(isManualRefresh, { timeoutMs: 20_000 })
+      if (version !== accountVersion) return
       catalog.value = res
       if (!llmBootstrapped.value) {
         syncSelectionFromServerPrefs()
@@ -315,10 +322,13 @@ export function useWalletLlm() {
       } else if (isManualRefresh) {
         validateSelectionAfterRefresh()
       }
-    } catch (e: unknown) {
-      llmErr.value = errorMessage(e)
+    } catch {
+      if (version !== accountVersion) return
+      llmErr.value = catalog.value
+        ? '模型目录加载失败，当前显示上次加载的目录；请刷新模型列表重试。'
+        : '模型目录加载失败，请刷新模型列表重试。'
     } finally {
-      llmCatalogLoading.value = false
+      if (version === accountVersion) llmCatalogLoading.value = false
     }
   }
 
@@ -484,6 +494,23 @@ export function useWalletLlm() {
       refreshCatalog(false)
     }
   }
+
+  watch(() => auth.user?.id, () => {
+    accountVersion++
+    if (_prefTimer) clearTimeout(_prefTimer)
+    catalog.value = null
+    llmStatusList.value = []
+    llmBootstrapped.value = false
+    llmErr.value = ''
+    llmNote.value = ''
+    llmCatalogLoading.value = false
+    selectedProvider.value = ''
+    selectedModel.value = ''
+    byokBulkPaste.value = ''
+    for (const key of Object.keys(byokKey)) delete byokKey[key]
+    for (const key of Object.keys(byokBaseUrl)) delete byokBaseUrl[key]
+    if (auth.user?.id) void refreshCatalog(false)
+  }, { flush: 'sync' })
 
   onMounted(() => {
     void refreshCatalog(false)

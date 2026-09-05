@@ -5,6 +5,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import ProductsView from './ProductsView.vue'
 
 vi.mock('@/utils/apiBase', () => ({
+  getApiBase: () => '',
   apiFetch: vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true, data: [], total: 0 }) }),
 }))
 vi.mock('@/utils/appDialog', () => ({

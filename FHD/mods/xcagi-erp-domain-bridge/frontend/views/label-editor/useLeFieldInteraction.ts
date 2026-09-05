@@ -1,13 +1,13 @@
 import { ref, type Ref } from 'vue'
-import type { LeField } from './leTypes'
+import type { LeField, LeFieldId } from './leTypes'
 
 // 拆分自 LabelEditorView.vue script（原 data 中拖拽相关状态 + methods 中鼠标交互与字段增删方法）；
 // 逻辑逐字迁移，行为不变。
 export function useLeFieldInteraction(deps: {
   fields: Ref<LeField[]>
   selectedField: Ref<LeField | null>
-  selectedFieldId: Ref<number | null>
-  hoverFieldId: Ref<number | null>
+  selectedFieldId: Ref<LeFieldId | null>
+  hoverFieldId: Ref<LeFieldId | null>
   labelCanvas: Ref<HTMLCanvasElement | null>
   drawCanvas: () => void
 }) {
@@ -15,6 +15,15 @@ export function useLeFieldInteraction(deps: {
 
   const isDragging = ref(false)
   const dragOffset = ref({ x: 0, y: 0 })
+
+  function canvasPoint(e: MouseEvent) {
+    const canvas = labelCanvas.value!
+    const rect = canvas.getBoundingClientRect()
+    return {
+      x: (e.clientX - rect.left) * (rect.width ? canvas.width / rect.width : 1),
+      y: (e.clientY - rect.top) * (rect.height ? canvas.height / rect.height : 1),
+    }
+  }
 
   function getFieldAtPosition(mouseX: number, mouseY: number) {
     for (let i = fields.value.length - 1; i >= 0; i--) {
@@ -33,9 +42,7 @@ export function useLeFieldInteraction(deps: {
   }
 
   function handleCanvasClick(e: MouseEvent) {
-    const rect = labelCanvas.value!.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
+    const { x, y } = canvasPoint(e)
 
     const field = getFieldAtPosition(x, y)
 
@@ -51,9 +58,7 @@ export function useLeFieldInteraction(deps: {
   }
 
   function handleMouseMove(e: MouseEvent) {
-    const rect = labelCanvas.value!.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
+    const { x, y } = canvasPoint(e)
 
     const field = getFieldAtPosition(x, y)
 
@@ -75,9 +80,7 @@ export function useLeFieldInteraction(deps: {
   }
 
   function handleMouseDown(e: MouseEvent) {
-    const rect = labelCanvas.value!.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
+    const { x, y } = canvasPoint(e)
 
     const field = getFieldAtPosition(x, y)
 
@@ -115,7 +118,7 @@ export function useLeFieldInteraction(deps: {
   }
 
   function addField() {
-    const newId = Math.max(0, ...fields.value.map((f) => f.id)) + 1
+    const newId = Math.max(0, ...fields.value.map((f) => typeof f.id === 'number' ? f.id : 0)) + 1
     fields.value.push({
       id: newId,
       label: '新字段',

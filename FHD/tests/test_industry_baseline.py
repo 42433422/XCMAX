@@ -164,7 +164,13 @@ def test_industry_baseline_legacy_sunbird_entitlement_does_not_restore_retired_m
     assert not any(g["id"] == "account_custom" for g in data["groups"])
 
 
-def test_sunbird_packaging_industry_composes_unified_attendance_module():
+@pytest.mark.parametrize("employee_tools_installed", [False, True])
+def test_sunbird_packaging_industry_keeps_integrated_custom_conversion(employee_tools_installed):
+    employee_tools = [
+        "xcagi-core-workflow-employees",
+        "xcagi-office-employee-pack-bridge",
+        "wechat-contacts-ai-employee",
+    ]
     data = build_industry_baseline_plan(
         "饰品包装",
         installed_mod_ids=[
@@ -175,7 +181,8 @@ def test_sunbird_packaging_industry_composes_unified_attendance_module():
             "xcagi-approval-bridge",
             "accessories-packaging-industry",
             "attendance-industry",
-        ],
+        ]
+        + (employee_tools if employee_tools_installed else []),
         entitled_mod_ids={"taiyangniao-pro"},
         account_username="SUNBIRD",
     )
@@ -189,9 +196,17 @@ def test_sunbird_packaging_industry_composes_unified_attendance_module():
     assert data["capability_mod_ids"] == ["attendance-industry"]
     module_group = next(g for g in data["groups"] if g["id"] == "business_modules")
     assert module_group["items"][0]["label"] == "通用考勤模块"
-    assert all(g["id"] != "account_custom" for g in data["groups"])
+    # Conversion remains account-scoped even though the retired runtime package
+    # was merged into attendance-industry. Preserve that delivery identity.
+    custom_group = next(g for g in data["groups"] if g["id"] == "account_custom")
+    conversion = next(it for it in custom_group["items"] if it["mod_id"] == "taiyangniao-pro")
+    assert conversion["installed"] is True  # shared runtime is already present
+    assert data["account_custom_mod_ids"] == ["taiyangniao-pro", *employee_tools]
+    assert data["missing_account_custom_mod_ids"] == (
+        [] if employee_tools_installed else employee_tools
+    )
     assert data["account_delivery_seed_packages"][0]["mod_id"] == "attendance-industry"
-    assert data["full_stack_ready"] is True
+    assert data["full_stack_ready"] is employee_tools_installed
 
 
 def test_onboarding_catalog_open_industries_stay_selectable_unrelated_entitlement():

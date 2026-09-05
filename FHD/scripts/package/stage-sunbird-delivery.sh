@@ -11,6 +11,9 @@
 #   SKIP_BUILD=1 bash FHD/scripts/package/stage-sunbird-delivery.sh
 set -euo pipefail
 
+echo "[retired] 太阳鸟独立安装包已退役。请交付标准 Enterprise 客户端，并通过账号定制交付节点发布表转换与模板数据。" >&2
+exit 2
+
 VERSION="${VERSION:-1.0.0.0}"
 VERSION="${VERSION#v}"
 VERSION="${VERSION#V}"

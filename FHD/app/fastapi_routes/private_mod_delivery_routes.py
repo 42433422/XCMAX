@@ -47,7 +47,9 @@ async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse
 
     context = await _private_mod_context(request)
     mod_ids = context["mod_ids"]
-    local_rows = _private_mod_local_rows(mod_ids)
+    deliveries = {mid: delivery_for_account_custom_mod(mid) or {} for mid in mod_ids}
+    runtime_ids = {d.get("runtime_mod_id") for d in deliveries.values() if d.get("runtime_mod_id")}
+    local_rows = _private_mod_local_rows(mod_ids | runtime_ids)
     remote_rows: list[dict[str, Any]] = []
     remote_error = ""
     request_error = ""
@@ -83,15 +85,17 @@ async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse
     scope = _enterprise_delivery_scope(context, mod_ids)
     projects: list[dict[str, Any]] = []
     for mod_id in sorted(mod_ids):
-        row = local_rows.get(mod_id, {})
+        delivery = deliveries[mod_id]
+        integrated = delivery.get("delivery_mode") == "integrated_feature"
+        runtime_id = _safe_text(delivery.get("runtime_mod_id")) if integrated else mod_id
+        row = local_rows.get(runtime_id, {})
         remote = remote_by_id.get(mod_id, {})
-        delivery = delivery_for_account_custom_mod(mod_id)
         local_version = _safe_text(row.get("version"))
         latest_version = _safe_text(remote.get("version"))
         project = project_state(
             scope,
             mod_id,
-            name=_safe_text(row.get("name") or (delivery or {}).get("customer_brand") or mod_id),
+            name=_safe_text(delivery.get("customer_brand") or row.get("name") or mod_id),
             version=local_version,
         )
         modules, employees = _private_mod_items(row)
@@ -100,17 +104,22 @@ async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse
         projects.append(
             {
                 "mod_id": mod_id,
-                "name": _safe_text(
-                    row.get("name") or (delivery or {}).get("customer_brand") or mod_id
-                ),
-                "description": _safe_text(row.get("description") or (delivery or {}).get("notes")),
+                "runtime_mod_id": runtime_id,
+                "delivery_mode": delivery.get("delivery_mode", "private_mod"),
+                "custom_features": delivery.get("custom_features", []),
+                "name": _safe_text(delivery.get("customer_brand") or row.get("name") or mod_id),
+                "description": _safe_text(delivery.get("notes") or row.get("description")),
                 "installed": bool(row),
                 "current_version": local_version,
                 "latest_version": latest_version,
                 "update_available": bool(
-                    latest_version and is_newer_version(latest_version, local_version)
+                    not integrated
+                    and latest_version
+                    and is_newer_version(latest_version, local_version)
                 ),
-                "update_source": "private_mod_sync" if remote else "unavailable",
+                "update_source": "shared_runtime"
+                if integrated
+                else ("private_mod_sync" if remote else "unavailable"),
                 "business_modules": modules,
                 "ai_employees": employees,
                 "track_nodes": track_nodes,

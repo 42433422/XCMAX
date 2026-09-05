@@ -34,7 +34,10 @@ from app.utils.security.safe_download_path import (
 
 logger = logging.getLogger(__name__)
 
+from app.fastapi_routes.label_jobs import router as label_jobs_router
+
 router = APIRouter(prefix="/api/print", tags=["print"])
+router.include_router(label_jobs_router)
 
 __all__ = [
     "_agent_node_output",

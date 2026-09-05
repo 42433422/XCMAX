@@ -4,7 +4,7 @@ System API Routes - FastAPI Implementation
 Provides endpoints for:
 - GET /api/system/industries - List all available industries
 - GET /api/system/industry - Get current industry profile
-- POST /api/system/industry - Set current industry
+- POST /api/system/industry - Retired global switch (authenticated admin receives 410)
 - GET /api/system/industry/{industry_id} - Get specific industry profile
 
 行业数据优先级（2026-04 调整）：
@@ -180,85 +180,29 @@ async def get_current_industry_endpoint(request: Request):
             raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@router.post("/industry")
+@router.post(
+    "/industry",
+    deprecated=True,
+    status_code=410,
+    responses={
+        401: {"description": "Authentication required"},
+        403: {"description": "Administrator account required"},
+        410: {"description": "Retired industry switch; no data is changed"},
+    },
+)
 async def set_industry_endpoint(
     request_body: SetIndustryRequest,
     request: Request,
     admin_user: Any = Depends(require_admin_user),
 ):
-    """Set current industry（仅限管理端 admin 账号）。"""
-    try:
-        from resources.config.industry_config import (
-            get_industry_profile,
-            set_current_industry,
-        )
-
-        success = set_current_industry(request_body.industry_id)
-        if not success:
-            raise HTTPException(
-                status_code=400, detail=f"Unknown industry: {request_body.industry_id}"
-            )
-
-        try:
-            from app.application.tenant_workspace_prefs import (
-                resolve_workspace_owner_id,
-                save_selected_industry,
-            )
-            from app.infrastructure.auth.dependencies import resolve_session_user
-            from app.mod_sdk.industry_baseline import build_onboarding_industry_catalog_for_request
-            from app.mod_sdk.industry_mod_aliases import canonical_mod_id_for_industry
-
-            user = resolve_session_user(request)
-            if user is not None:
-                owner_id = resolve_workspace_owner_id(request, user)
-                if owner_id:
-                    cat = await build_onboarding_industry_catalog_for_request(request)
-                    industry_id = request_body.industry_id
-                    if cat.get("enterprise_filter_applied") and canonical_mod_id_for_industry(
-                        industry_id
-                    ):
-                        open_ids = set(cat.get("open_industry_ids") or [])
-                        if industry_id not in open_ids:
-                            raise HTTPException(
-                                status_code=403,
-                                detail="当前企业账号未开通该行业方向",
-                            )
-                    pkg = next(
-                        (
-                            p
-                            for p in (cat.get("open_packages") or [])
-                            if p.get("industry_id") == industry_id
-                        ),
-                        None,
-                    )
-                    mod_id = str((pkg or {}).get("mod_id") or "").strip()
-                    save_selected_industry(
-                        owner_id,
-                        industry_id,
-                        industry_mod_id=mod_id,
-                    )
-                    if mod_id:
-                        from app.mod_sdk.industry_seed import (
-                            deactivate_other_open_industry_mods,
-                            industry_mod_id_for,
-                        )
-
-                        canonical = industry_mod_id_for(industry_id) or mod_id
-                        deactivate_other_open_industry_mods(canonical)
-        except RECOVERABLE_ERRORS:
-            logger.debug("workspace industry prefs save skipped", exc_info=True)
-
-        profile = get_industry_profile(request_body.industry_id)
-
-        return {
-            "success": True,
-            "data": _build_industry_response(request_body.industry_id, profile),
-        }
-    except HTTPException:
-        raise
-    except RECOVERABLE_ERRORS as e:
-        logger.error("Failed to set industry: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+    """已停用的全局行业切换入口；保留登录及管理员门禁，不再返回虚假成功。"""
+    raise HTTPException(
+        status_code=410,
+        detail={
+            "code": "INDUSTRY_SWITCH_RETIRED",
+            "message": "行业由账号资料确定，该切换入口已停用。",
+        },
+    )
 
 
 @router.get("/host-profile")

@@ -1162,28 +1162,43 @@ class TestInstallCustomerDeliverySeedRoute:
             resp = client.post("/install-customer-delivery-seed", json={"mod_id": "mod-x"})
         assert resp.status_code == 200
 
-    def test_session_market_token_passed_to_seed_installer(self):
+    def test_session_market_token_passed_to_seed_installer(self, monkeypatch):
+        from starlette.requests import Request
+
+        import app.infrastructure.auth.dependencies as auth_dependencies
+
         self._setup_entitlements(active=False)
         install_mock = AsyncMock(return_value={"success": True, "message": "done"})
-        sys.modules[
-            "app.mod_sdk.customer_delivery_seed"
-        ].install_customer_delivery_seed_package = install_mock
-        sys.modules[
-            "app.fastapi_routes.market_account"
-        ].resolve_valid_market_access_token = AsyncMock(return_value="market-tok")
-        sys.modules["app.infrastructure.auth.dependencies"].session_id_from_request = MagicMock(
-            return_value="sid"
-        )
-
-        with _make_client() as client:
-            resp = client.post(
-                "/install-customer-delivery-seed",
-                json={"mod_id": "mod-x", "industry_id": "attendance"},
+        # These may be real, already imported modules. Restore every replacement
+        # before later route tests validate their own persisted sessions.
+        with monkeypatch.context() as scoped:
+            scoped.setattr(
+                sys.modules["app.mod_sdk.customer_delivery_seed"],
+                "install_customer_delivery_seed_package",
+                install_mock,
             )
+            scoped.setattr(
+                sys.modules["app.fastapi_routes.market_account"],
+                "resolve_valid_market_access_token",
+                AsyncMock(return_value="market-tok"),
+            )
+            scoped.setattr(
+                auth_dependencies, "session_id_from_request", MagicMock(return_value="sid")
+            )
+
+            with _make_client() as client:
+                resp = client.post(
+                    "/install-customer-delivery-seed",
+                    json={"mod_id": "mod-x", "industry_id": "attendance"},
+                )
 
         assert resp.status_code == 200
         install_mock.assert_awaited_once()
         assert install_mock.await_args.kwargs["market_token"] == "market-tok"
+        request = Request(
+            {"type": "http", "headers": [(b"x-session-id", b"session-after-seed-test")]}
+        )
+        assert auth_dependencies.session_id_from_request(request) == "session-after-seed-test"
 
     def test_recoverable_error_in_entitlement_check_skipped(self):
         """Branch: RECOVERABLE_ERRORS during entitlement check → warning + continue."""

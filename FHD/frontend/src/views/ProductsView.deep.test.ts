@@ -18,7 +18,9 @@ vi.mock('@/stores/products', async () => {
       return {
         products,
         loading,
-        fetchProducts: mockFetchProducts,
+        error: ref(null), fresh: ref(true), canEditProducts: ref(true), scopeEpoch: ref(0), invalidationVersion: ref(0), mutating: false,
+      syncReadScope: vi.fn(), captureProductsScope: () => ({ key: 'test', epoch: 0 }), isProductsScopeCurrent: () => true,
+      fetchProducts: mockFetchProducts,
         createProduct: vi.fn().mockResolvedValue({ success: true }),
         updateProduct: vi.fn().mockResolvedValue({ success: true }),
         deleteProduct: vi.fn().mockResolvedValue({ success: true }),

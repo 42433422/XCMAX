@@ -15,6 +15,9 @@ dependencies = [
     "langgraph-sdk==0.4.2",
 ]
 
+[project.scripts]
+xcagi-brain = "app.cli.brain:main"
+
 [project.optional-dependencies]
 server-api = [
     "fastapi>=0.136.1",

@@ -2,8 +2,8 @@ param(
   [Parameter(Mandatory = $true)]
   [string]$InstallerPath,
 
-  [Parameter(Mandatory = $true)]
-  [string]$ExpectedPublisher,
+  [string]$ExpectedPublisher = '',
+  [switch]$AllowUnsigned,
 
   [Parameter(Mandatory = $true)]
   [string]$ExpectedBuildSha,
@@ -47,7 +47,7 @@ function Wait-PathRemoved {
 if (-not (Test-Path -LiteralPath $InstallerPath)) {
   throw "Windows installer not found: $InstallerPath"
 }
-if (-not $ExpectedPublisher.Trim()) {
+if (-not $AllowUnsigned -and -not $ExpectedPublisher.Trim()) {
   throw 'ExpectedPublisher is required; use the exact organization text from the issued certificate Subject.'
 }
 if ($ExpectedBuildSha -notmatch '^[0-9a-fA-F]{40}$') {
@@ -96,14 +96,14 @@ $installed = $false
 $uninstalled = $false
 
 try {
-  Write-Host "Verifying signed installer before installation: $InstallerPath"
-  & $signatureVerifier -Path $InstallerPath -ExpectedPublisher $ExpectedPublisher
+  Write-Host "Verifying installer before installation (AllowUnsigned=$AllowUnsigned): $InstallerPath"
+  & $signatureVerifier -Path $InstallerPath -ExpectedPublisher $ExpectedPublisher -AllowUnsigned:$AllowUnsigned
 
   Stop-XcagiProcesses
   Remove-Item -LiteralPath $InstallDir -Recurse -Force -ErrorAction SilentlyContinue
   New-Item -ItemType Directory -Force -Path (Split-Path -Parent $InstallDir) | Out-Null
 
-  Write-Host "Installing signed package silently into: $InstallDir"
+  Write-Host "Installing package silently into: $InstallDir"
   $installProcess = Start-Process `
     -FilePath $InstallerPath `
     -ArgumentList @('/S', "/D=$InstallDir") `
@@ -142,8 +142,8 @@ try {
   }
 
   Write-Host 'Verifying installed executable signatures.'
-  & $signatureVerifier -Path $installedExe -ExpectedPublisher $ExpectedPublisher
-  & $signatureVerifier -Path $backendExe -ExpectedPublisher $ExpectedPublisher
+  & $signatureVerifier -Path $installedExe -ExpectedPublisher $ExpectedPublisher -AllowUnsigned:$AllowUnsigned
+  & $signatureVerifier -Path $backendExe -ExpectedPublisher $ExpectedPublisher -AllowUnsigned:$AllowUnsigned
 
   Stop-XcagiProcesses
   Write-Host "Launching installed desktop runtime: $installedExe"
@@ -174,7 +174,7 @@ try {
     -Encoding UTF8
 
   Stop-XcagiProcesses
-  Write-Host "Uninstalling signed package silently: $uninstaller"
+  Write-Host "Uninstalling package silently: $uninstaller"
   $uninstallProcess = Start-Process `
     -FilePath $uninstaller `
     -ArgumentList @('/S') `
@@ -190,7 +190,7 @@ try {
     throw 'Uninstall unexpectedly deleted XCAGI user data; deleteAppDataOnUninstall must remain false.'
   }
 
-  Write-Host 'OK: signed installer installed, launched, passed runtime smoke, and uninstalled.'
+  Write-Host "OK: installer installed, launched, passed runtime smoke, and uninstalled (AllowUnsigned=$AllowUnsigned)."
   Write-Host "OK: installed buildSha=$actualBuildSha version=$actualVersion sku=$($skuInfo.sku)"
   Write-Host "OK: uninstall retained user data marker=$retentionMarker"
 } finally {

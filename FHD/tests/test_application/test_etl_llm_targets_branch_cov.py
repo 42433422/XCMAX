@@ -1167,7 +1167,7 @@ def test_customers_rollback_row(session):
         )
     assert ex2.value.code == "ETL_ROLLBACK_CONCURRENT_CHANGE"
 
-    # before present, match -> restore
+    # An unchanged snapshot owns no fields; preserve the current manual value.
     r = a.rollback_row(
         session,
         match_ref=str(obj.id),
@@ -1175,7 +1175,7 @@ def test_customers_rollback_row(session):
         after={"contact_person": "原始"},
         context={},
     )
-    assert obj.contact_person == "原始"
+    assert obj.contact_person == "A"
 
     # before empty, obj deleted
     obj2 = _make_customer(session, "客户Y")

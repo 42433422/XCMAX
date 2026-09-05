@@ -142,6 +142,13 @@ def configure_desktop_environment(data_dir: str | os.PathLike[str] | None = None
         logging.getLogger(__name__).warning("Desktop mod seed skipped: %s", exc)
 
     try:
+        from app.mod_sdk.industry_seed import refresh_installed_industry_mods_from_bundle
+
+        refresh_installed_industry_mods_from_bundle(mods_root=dirs["mods"])
+    except RECOVERABLE_ERRORS as exc:
+        logging.getLogger(__name__).warning("Desktop industry mod refresh skipped: %s", exc)
+
+    try:
         from app.desktop_runtime.sunbird_delivery_seed import apply_sunbird_roster_seed_if_needed
 
         apply_sunbird_roster_seed_if_needed(root)

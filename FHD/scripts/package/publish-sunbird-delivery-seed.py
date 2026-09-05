@@ -29,7 +29,7 @@ PACKAGE_REQUIRED_FILES = (
     "data/mod_dbs/taiyangniao_pro.db",
     "424/考勤-2026-3月份考勤统计表.xlsx",
 )
-PACKAGE_MOD_IDS = ("taiyangniao-pro",)
+PACKAGE_MOD_IDS = ("attendance-industry",)
 
 
 def _resolve_mod_source(mod_id: str) -> Path:
@@ -57,8 +57,9 @@ def _stage_customer_mods(seed_root: Path) -> None:
 
 def _iter_package_files(seed_root: Path) -> list[str]:
     files: list[str] = list(PACKAGE_REQUIRED_FILES)
-    mods_root = seed_root / "mods"
-    if mods_root.is_dir():
+    # 只打包当前声明的共享运行模块，忽略 staging 中残留的退役客户系统。
+    for mod_id in PACKAGE_MOD_IDS:
+        mods_root = seed_root / "mods" / mod_id
         for path in sorted(mods_root.rglob("*")):
             if not path.is_file():
                 continue
@@ -133,9 +134,9 @@ def _upsert_package(modstore_root: Path, zip_path: Path, version: str) -> dict[s
         "version": version,
         "artifact": ARTIFACT,
         "name": "太阳鸟交付种子数据",
-        "description": "SUNBIRD 通用包迁移交付数据：花名册、太阳鸟 Mod 侧库、2026 年 3 月考勤模板。",
+        "description": "SUNBIRD 标准客户端定制功能数据：花名册、共享考勤库与太阳鸟专属转换模板。",
         "author": "成都修茈科技有限公司",
-        "industry": "考勤",
+        "industry": "饰品包装",
         "customer_account": "SUNBIRD",
         "delivery_id": "customer-taiyangniao",
         "account_mod_id": "taiyangniao-pro",

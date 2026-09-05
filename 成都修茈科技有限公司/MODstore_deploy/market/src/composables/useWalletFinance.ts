@@ -1,8 +1,11 @@
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { api } from '../api'
+import { ApiError } from '../infrastructure/http/client'
 import { useWalletStore } from '../stores/wallet'
+import { useAuthStore } from '../stores/auth'
+import { WALLET_READ_TIMEOUT_MS } from '../api/wallet'
 import {
   errorMessage,
   type PlanRecord,
@@ -17,11 +20,21 @@ import type { PaymentOrder } from '../types/api'
 export function useWalletFinance() {
   const router = useRouter()
   const walletStore = useWalletStore()
+  const auth = useAuthStore()
+  let accountVersion = 0
   const { balance, membershipReferenceYuan } = storeToRefs(walletStore)
 
   const transactions = ref<TransactionRecord[]>([])
   const txLoading = ref(true)
   const financeLoading = ref(true)
+  const financeError = ref('')
+  const txError = ref('')
+  const planError = ref('')
+  const planLoading = ref(true)
+  const financeLoaded = ref(false)
+  const txLoaded = ref(false)
+  const balanceError = computed(() => walletStore.error || '')
+  let overviewPending = false
   const recentOrders = ref<PaymentOrder[]>([])
   const orderListTotal = ref(0)
   const dismissOrdersLoading = ref(false)
@@ -37,7 +50,6 @@ export function useWalletFinance() {
   const payErr = ref('')
   const payHint = ref('')
   const isUpdating = ref(false)
-  const lastBalance = ref<number | null>(null)
   const amountError = ref('')
   const myPlan = ref<PlanRecord | null>(null)
   const myQuotas = ref<QuotaRecord[]>([])
@@ -71,13 +83,20 @@ export function useWalletFinance() {
   })
 
   async function loadMyPlan() {
+    const version = accountVersion
+    planLoading.value = true
+    planError.value = ''
     try {
       const res = await api.paymentMyPlan()
+      if (version !== accountVersion) return
+      if (!res || !Object.hasOwn(res, 'plan') || !Array.isArray(res.quotas)) throw new Error('套餐信息暂时无法读取')
       myPlan.value = res.plan ?? null
       myQuotas.value = res.quotas || []
     } catch {
-      myPlan.value = null
-      myQuotas.value = []
+      if (version !== accountVersion) return
+      planError.value = '套餐信息加载失败，请重试。'
+    } finally {
+      if (version === accountVersion) planLoading.value = false
     }
   }
 
@@ -141,33 +160,61 @@ export function useWalletFinance() {
   }
 
   async function loadWalletOverview() {
+    if (overviewPending) return
+    overviewPending = true
+    const version = accountVersion
+    let walletSnapshotApplied = false
     financeLoading.value = true
     txLoading.value = true
+    financeError.value = ''
+    txError.value = ''
     try {
       const res = await api.walletOverview(20, 0)
+      if (version !== accountVersion) return
       const walletBalance = res?.wallet?.balance
-      if (walletBalance !== undefined) {
-        walletStore.setBalance(walletBalance)
+      if (walletBalance === undefined || walletBalance === null || String(walletBalance).trim() === ''
+        || !Number.isFinite(Number(walletBalance)) || !Array.isArray(res.transactions)) {
+        throw new Error('资金信息暂时无法读取')
       }
+      walletStore.setBalance(walletBalance)
       if (res?.wallet?.membership_reference_yuan !== undefined) {
         walletStore.setMembershipReferenceYuan(res.wallet.membership_reference_yuan)
       }
       transactions.value = (res.transactions || []).map(normalizeTransaction)
-      recentOrders.value = res.orders || []
-      if (res.order_total != null) {
-        orderListTotal.value = Number(res.order_total)
-      } else {
-        orderListTotal.value = (res.orders || []).length
-      }
-      recentRefunds.value = res.refunds || []
-    } catch {
-      recentOrders.value = []
-      orderListTotal.value = 0
-      recentRefunds.value = []
-      await Promise.all([loadBalance(), loadTransactions()])
-    } finally {
-      financeLoading.value = false
+      txLoaded.value = true
       txLoading.value = false
+      walletSnapshotApplied = true
+      // The legacy overview only includes balance and transactions. Read each
+      // missing finance collection explicitly before presenting it as empty.
+      const [orderResult, refunds] = await Promise.all([
+        Array.isArray(res.orders) ? Promise.resolve({ orders: res.orders, total: res.order_total }) : api.paymentOrders('', 20, 0, { timeoutMs: WALLET_READ_TIMEOUT_MS }),
+        Array.isArray(res.refunds) ? Promise.resolve(res.refunds) : api.refundsMy({ timeoutMs: WALLET_READ_TIMEOUT_MS }).then((data) => data.refunds),
+      ])
+      if (version !== accountVersion) return
+      const orders = orderResult.orders
+      if (!Array.isArray(orders) || !Array.isArray(refunds)) throw new Error('资金记录暂时无法读取')
+      recentOrders.value = orders
+      orderListTotal.value = orderResult.total != null ? Number(orderResult.total) : orders.length
+      recentRefunds.value = refunds
+      financeLoaded.value = true
+    } catch (error: unknown) {
+      if (version !== accountVersion) return
+      financeError.value = '订单与退款记录加载失败，请重试。'
+      if (!walletSnapshotApplied) {
+        txError.value = '交易记录加载失败，请重试。'
+        walletStore.markBalanceStale('余额加载失败，请重试。')
+      }
+      // Older servers may lack overview. Only that explicit case uses bounded
+      // read fallbacks; timeouts must not start more requests against a stalled server.
+      if (!walletSnapshotApplied && error instanceof ApiError && [404, 405].includes(error.status)) {
+        await Promise.all([loadBalance(), loadTransactions()])
+      }
+    } finally {
+      if (version === accountVersion) {
+        overviewPending = false
+        financeLoading.value = false
+        txLoading.value = false
+      }
     }
   }
 
@@ -199,38 +246,29 @@ export function useWalletFinance() {
 
   async function loadBalance() {
     try {
-      const newBalance = await walletStore.refreshBalance()
-
-      // 检测余额变化并触发动画
-      if (balance.value !== null && newBalance !== balance.value) {
-        isUpdating.value = true
-        lastBalance.value = balance.value
-
-        // 短暂延迟后更新余额
-        setTimeout(() => {
-          walletStore.setBalance(newBalance)
-          // 动画结束后重置状态
-          setTimeout(() => {
-            isUpdating.value = false
-          }, 500)
-        }, 100)
-      } else {
-        walletStore.setBalance(newBalance)
-      }
+      // The wallet page provides an explicit retry button; do not hide a failed
+      // read behind three sequential network timeouts.
+      await walletStore.refreshBalance(0)
     } catch {
-      walletStore.clear()
+      walletStore.markBalanceStale('余额加载失败，请重试。')
     }
   }
 
   async function loadTransactions() {
+    const version = accountVersion
     txLoading.value = true
+    txError.value = ''
     try {
       const res = await api.transactions()
-      transactions.value = (res.transactions || []).map(normalizeTransaction)
+      if (version !== accountVersion) return
+      if (!Array.isArray(res.transactions)) throw new Error('交易记录暂时无法读取')
+      transactions.value = res.transactions.map(normalizeTransaction)
+      txLoaded.value = true
     } catch {
-      transactions.value = []
+      if (version !== accountVersion) return
+      txError.value = '交易记录加载失败，请重试。'
     } finally {
-      txLoading.value = false
+      if (version === accountVersion) txLoading.value = false
     }
   }
 
@@ -300,6 +338,29 @@ export function useWalletFinance() {
     return new Date(iso).toLocaleString('zh-CN')
   }
 
+  watch(() => auth.user?.id, () => {
+    accountVersion++
+    overviewPending = false
+    transactions.value = []
+    recentOrders.value = []
+    orderListTotal.value = 0
+    recentRefunds.value = []
+    myPlan.value = null
+    myQuotas.value = []
+    financeLoaded.value = false
+    txLoaded.value = false
+    financeError.value = ''
+    txError.value = ''
+    planError.value = ''
+    financeLoading.value = false
+    txLoading.value = false
+    planLoading.value = false
+    if (auth.user?.id) {
+      void loadWalletOverview()
+      void loadMyPlan()
+    }
+  }, { flush: 'sync' })
+
   onMounted(() => {
     // 资金区与模型目录分开加载，避免 catalog 慢请求拖死整页「加载中…」
     void loadWalletOverview()
@@ -312,6 +373,13 @@ export function useWalletFinance() {
     transactions,
     txLoading,
     financeLoading,
+    financeError,
+    financeLoaded,
+    txError,
+    txLoaded,
+    balanceError,
+    planError,
+    planLoading,
     recentOrders,
     orderListTotal,
     dismissOrdersLoading,

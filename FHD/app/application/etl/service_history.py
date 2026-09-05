@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.orm import Session
 
+from app.application.etl.operation_owner import recover_stale_owner
 from app.application.etl.service_support import (
     SUBMITTED,
     SUBMITTED_LOCK,
@@ -25,6 +26,7 @@ class HistoryServiceMixin:
 
     def get_run(self, db: Session, *, run_id: str, owner_user_id: int) -> dict[str, Any]:
         run = self._owned_run(db, run_id, owner_user_id)
+        recover_stale_owner(db, run)
         if self._execution_is_stale(run):
             run.status = "interrupted"
             run.stage = "interrupted"
@@ -57,6 +59,7 @@ class HistoryServiceMixin:
         rows = query.order_by(EtlRun.created_at.desc()).limit(min(max(limit, 1), 500)).all()
         interrupted = False
         for run in rows:
+            recover_stale_owner(db, run)
             if self._execution_is_stale(run):
                 run.status = "interrupted"
                 run.stage = "interrupted"
@@ -139,6 +142,8 @@ class HistoryServiceMixin:
 
     @staticmethod
     def _execution_is_stale(run: EtlRun) -> bool:
+        if run.operation_token:
+            return False
         if run.status != "executing" or run.updated_at is None:
             return False
         with SUBMITTED_LOCK:

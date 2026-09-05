@@ -35,6 +35,7 @@
         :current-task="currentTask"
         :task-list="taskList"
         :filtered-task-list="filteredTaskList"
+        :active-task-id="activeTaskId"
         :expanded-task-ids="expandedTaskIds"
         :task-filter="taskFilter"
         :latest-assistant-push="latestAssistantPush"
@@ -57,10 +58,13 @@
         @switch-view="emitSwitchView"
         @set-task-filter="setTaskFilter"
         @clear-task-history="clearTaskHistory"
-        @toggle-task-expanded="toggleTaskExpanded"
+        @select-task="selectTask"
         @open-shipment-records="openShipmentRecordsFromAuditTask"
         @jump-to-task-message="jumpToTaskMessage"
         @retry-task="retryTask"
+        @pause-task="pauseTask"
+        @resume-task="resumeTask"
+        @approve-task="approveTask"
         @cancel-task-by-id="cancelTaskById"
         @copy-assistant-push="copyAssistantPushContent"
         @open-assistant-float="openAssistantFloatFromTaskPanel"
@@ -236,6 +240,7 @@ const {
   latestAssistantPush,
   taskList,
   filteredTaskList,
+  activeTaskId,
   expandedTaskIds,
   taskFilter,
   showHistory,
@@ -263,10 +268,13 @@ const {
   onExcelAnalyzeFileChange,
   bindExcelSheetToChat,
   bindAllExcelSheetsToChat,
-  toggleTaskExpanded,
+  selectTask,
   setTaskFilter,
   clearTaskHistory,
   retryTask,
+  pauseTask,
+  resumeTask,
+  approveTask,
   cancelTaskById,
   jumpToTaskMessage,
   showHistoryPanel,

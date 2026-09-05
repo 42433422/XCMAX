@@ -46,8 +46,8 @@ for mod_id in "${IDS[@]}"; do
   [[ "${skip}" -eq 1 ]] && continue
   src="${MODS_ROOT}/${mod_id}"
   if [[ ! -d "${src}" ]]; then
-    echo "WARN: Mod not found, skip: ${mod_id}" >&2
-    continue
+    echo "Required profile mod not found: ${mod_id}" >&2
+    exit 1
   fi
   cp -R "${src}" "${STAGE_DIR}/${mod_id}"
   echo "Staged: ${mod_id}"

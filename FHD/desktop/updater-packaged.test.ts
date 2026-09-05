@@ -175,6 +175,7 @@ describe('updater — checkForUpdates with metadata parsing', () => {
     process.env.XCAGI_UPDATE_URL = 'http://127.0.0.1:19999/releases/'
     process.env.XCAGI_UPDATE_ED25519_PUBLIC_KEY = TEST_PUBLIC_KEY_PEM
     const body = `version: 3.0.0
+productVersion: 3.0.0.7
 releaseNotes: |
   - 修复了若干问题
   - 新增功能
@@ -198,8 +199,9 @@ releaseDate: '2026-08-23T00:00:00.000Z'`
     const handler = mocks.handlers.get('update-available')
     handler?.({ version: '3.0.0', files: [] })
     const payload = send.mock.calls.find(c => c[0] === 'xcagi:update-event')?.[1] as {
-      data?: { releaseNotes?: string }
+      data?: { productVersion?: string; releaseNotes?: string }
     }
+    expect(payload?.data?.productVersion).toBe('3.0.0.7')
     expect(payload?.data?.releaseNotes).toContain('修复了若干问题')
     fetchSpy.mockRestore()
   })

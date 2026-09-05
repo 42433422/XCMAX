@@ -18,7 +18,7 @@ describe('modViews', () => {
   it('finds planner bridge physical views', () => {
     expect(physicalViewExists('xcagi-planner-bridge', 'ChatView.vue')).toBe(true)
     expect(physicalViewExists('xcagi-planner-bridge', 'AIEcosystemView.vue')).toBe(true)
-    expect(physicalViewExists('xcagi-planner-bridge', 'BrainView.vue')).toBe(true)
+    expect(physicalViewExists('xcagi-planner-bridge', 'BrainView.vue')).toBe(false)
   })
 
   it('finds erp and model-payment physical views', () => {

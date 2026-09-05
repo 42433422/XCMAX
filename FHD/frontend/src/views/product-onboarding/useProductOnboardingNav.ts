@@ -1,5 +1,6 @@
 import type { Router } from 'vue-router'
 import { readProductFlowCompleted } from '@/constants/productFlow'
+import { appAlert } from '@/utils/appDialog'
 import { invalidateHostPackCompletionCache, markHostPackSkippedThisSession } from '@/utils/hostPackOnboardingGate'
 import type { useProductFlow } from '@/composables/useProductFlow'
 import type { ProductOnboardingState } from './useProductOnboardingState'
@@ -13,11 +14,28 @@ export function useProductOnboardingNav(state: ProductOnboardingState, options: 
 
   function goStep(id: string) {
     const query: Record<string, string> = { step: id }
+    if (returnPath.value !== '/') query.redirect = returnPath.value
+    if (state.companyName.value.trim()) query.company = state.companyName.value.trim()
+    if (router.currentRoute.value.query.industry) query.industry = state.pickedIndustryId.value
     if (fromTutorial.value) {
       query.from = 'tutorial'
       query.redirect = returnPath.value
     }
     void router.replace({ name: 'product-onboarding', query })
+  }
+
+  function loginToContinue() {
+    const query: Record<string, string> = {
+      step: state.currentStep.value,
+      industry: state.pickedIndustryId.value,
+      company: state.companyName.value.trim(),
+      redirect: returnPath.value,
+    }
+    if (fromTutorial.value) query.from = 'tutorial'
+    const redirect = router.resolve({ name: 'product-onboarding', query }).fullPath
+    // The existing login error gate also disables provisional desktop resume;
+    // a stale one-shot cookie hint must not bounce this explicit login back.
+    void router.push({ name: 'login', query: { redirect, error: '请先登录，登录后将返回当前设置步骤。' } })
   }
 
   function returnFromTutorial() {
@@ -59,11 +77,19 @@ export function useProductOnboardingNav(state: ProductOnboardingState, options: 
   function launchFirstAiTask() {
     invalidateHostPackCompletionCache()
     flow.markHostPackAcknowledged()
-    if (fromTutorial.value) {
-      returnFromTutorial()
+    // Chat consumes the queued prompt when it mounts, including tutorial replay.
+    // The root route resolves to the active host or Mod chat through its guard.
+    void router.replace({ path: '/' })
+  }
+
+  async function openAttendanceWorkspace() {
+    if (!router.hasRoute('attendance-industry-personnel')) {
+      await appAlert('考勤工作区尚未准备好，请先安装考勤功能并重新检测。')
+      goStep('host-pack')
       return
     }
-    void router.replace({ path: '/' })
+    flow.markHostPackAcknowledged()
+    await router.push({ name: 'attendance-industry-personnel' })
   }
 
   function finishToChat() {
@@ -86,10 +112,12 @@ export function useProductOnboardingNav(state: ProductOnboardingState, options: 
 
   return {
     goStep,
+    loginToContinue,
     returnFromTutorial,
     openModStore,
     finishHostPackFlow,
     launchFirstAiTask,
+    openAttendanceWorkspace,
     finishToChat,
     skipEntireFlow,
   }

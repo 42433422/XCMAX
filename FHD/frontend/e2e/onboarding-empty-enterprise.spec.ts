@@ -1,72 +1,58 @@
-import { test, expect } from '@playwright/test'
-import { installE2eShellMocks, isFullStack } from './helpers'
+import { test, expect, type Page } from '@playwright/test'
+import { csrfHeaders, E2E_ACCOUNT_KIND, E2E_PASSWORD, E2E_USER, isFullStack } from './helpers'
 
-test.describe('onboarding empty enterprise @onboarding_e2e', () => {
-  test.describe('full-stack only', () => {
-    test.skip(true, 'requires full-stack E2E backend; run with E2E_FULL_STACK=1')
+// This writes the test account's company and industry. Use a fresh, isolated
+// desktop database and a dedicated account; never a customer's working account.
+test.describe('three-step enterprise onboarding @onboarding_e2e', () => {
+  test.skip(!isFullStack() || process.env.E2E_ISOLATED_ONBOARDING !== '1', 'requires an explicitly isolated full-stack onboarding fixture')
 
-    test('register → industry → host-pack（宿主入门仅三步）', async ({ page }) => {
-      await page.goto('/register')
-      await page.getByRole('button', { name: /注册|创建/i }).click()
-      await page.goto('/onboarding?step=welcome')
-      await expect(page.getByText(/认识 XC|认识XC/)).toBeVisible()
-      await page.goto('/onboarding?step=industry')
-      await expect(page.getByText(/先定行业|行业定型/)).toBeVisible()
-      await page.goto('/onboarding?step=host-pack')
-      await expect(page.getByText(/准备侧栏|准备菜单/)).toBeVisible()
+  async function login(page: Page) {
+    const headers = await csrfHeaders(page.request)
+    const response = await page.request.post('/api/auth/login', {
+      headers,
+      data: { username: E2E_USER, password: E2E_PASSWORD, account_kind: E2E_ACCOUNT_KIND },
     })
-  })
+    expect(response.ok()).toBe(true)
+    expect((await response.json()).success).toBe(true)
+  }
 
-  test('onboarding 多步：industry → host-pack → seed → ai-demo 全流程串接', async ({ page, request }) => {
-    const apiBase = (process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:5001').replace(/\/$/, '')
+  test('saves company and industry, completes three steps, and keeps chat first after a new login', async ({ page }) => {
+    test.setTimeout(120_000)
+    const company = process.env.E2E_ONBOARDING_COMPANY || 'XC 入门回归测试公司'
+    const seedRequests: string[] = []
+    page.on('request', (request) => {
+      if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/platform-shell/onboarding/seed-demo') {
+        seedRequests.push(request.url())
+      }
+    })
+    await login(page)
+    await page.goto('/')
+    await expect(page.getByLabel('公司或团队名称')).toBeVisible()
+    await expect(page.getByLabel('设置流程')).toContainText('公司')
+    await expect(page.getByLabel('设置流程')).not.toContainText('演示数据')
+    await page.getByLabel('公司或团队名称').fill(company)
+    await page.getByRole('button', { name: /让 XC 认识我的公司/ }).click()
+    await expect(page.getByRole('listbox', { name: '可选行业' })).toBeVisible()
+    await page.getByLabel('搜索或描述行业').fill('涂料')
+    await page.getByRole('option', { name: /^涂料/ }).first().click()
+    await page.getByRole('button', { name: '生成我的配置方案' }).click()
+    await expect(page.getByRole('heading', { name: `${company}的配置方案` })).toBeVisible()
+    await page.getByRole('button', { name: `进入${company}工作空间` }).click()
+    await expect(page).not.toHaveURL(/\/onboarding/)
+    await expect(page.locator('button.menu-item[data-view]').first()).toContainText('智能对话')
+    expect(seedRequests).toEqual([])
 
-    if (!isFullStack()) {
-      await installE2eShellMocks(page)
-      await page.route('**/api/onboarding/industry', (route) =>
-        route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({ success: true, data: { step: 'industry', industries: ['retail', 'manufacturing'] } }),
-        }),
-      )
-      await page.route('**/api/onboarding/host-pack', (route) =>
-        route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({ success: true, data: { step: 'host-pack', packs: ['basic', 'pro'] } }),
-        }),
-      )
-      await page.route('**/api/onboarding/seed', (route) =>
-        route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({ success: true, data: { step: 'seed', seeded: true, count: 12 } }),
-        }),
-      )
-      await page.route('**/api/onboarding/ai-demo', (route) =>
-        route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({ success: true, data: { step: 'ai-demo', ready: true } }),
-        }),
-      )
-    }
-
-    const steps = ['industry', 'host-pack', 'seed', 'ai-demo']
-    const seenSteps: string[] = []
-    for (const step of steps) {
-      const resp = await request.get(`${apiBase}/api/onboarding/${step}`, { timeout: 15_000 })
-      expect(resp.status(), await resp.text()).toBeLessThan(500)
-      const body = await resp.json().catch(() => ({}) as any)
-      expect(body?.success, `onboarding ${step} body: ${JSON.stringify(body)}`).toBe(true)
-      const stepField = String(body?.data?.step || step)
-      expect(stepField).toBe(step)
-      seenSteps.push(stepField)
-    }
-    expect(seenSteps).toEqual(steps)
-
-    await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 })
-    await expect(page.locator('.app-shell.is-ready')).toBeVisible({ timeout: 25_000 })
-    expect(seenSteps.length).toBe(4)
+    const me = await page.request.get('/api/auth/me')
+    expect(me.ok()).toBe(true)
+    expect((await me.json()).data.tenant_name).toBe(company)
+    const logout = await page.request.post('/api/auth/logout', { headers: await csrfHeaders(page.request) })
+    expect(logout.ok()).toBe(true)
+    await login(page)
+    await page.reload()
+    await expect(page).not.toHaveURL(/\/onboarding/)
+    await expect(page.locator('button.menu-item[data-view]').first()).toContainText('智能对话')
+    const restored = await page.request.get('/api/auth/me')
+    expect((await restored.json()).data.tenant_name).toBe(company)
+    expect(seedRequests).toEqual([])
   })
 })

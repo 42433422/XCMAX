@@ -283,7 +283,7 @@ export async function startBackend(): Promise<void> {
       XCAGI_DESKTOP_FAST_START: '1',
       ...backendEditionEnv(),
       PYTHONUTF8: '1'
-    }, app.isPackaged ? undefined : repoRoot()),
+    }, app.isPackaged ? undefined : repoRoot(), app.isPackaged ? process.resourcesPath : undefined),
     windowsHide: true
   })
   desktopRuntime.backendProcess = child
@@ -366,7 +366,7 @@ function runBackendMigration(): Promise<string> {
         XCAGI_GLOBAL_RATE_LIMIT: '0',
         ...backendEditionEnv(),
         PYTHONUTF8: '1'
-      }, app.isPackaged ? undefined : repoRoot()),
+      }, app.isPackaged ? undefined : repoRoot(), app.isPackaged ? process.resourcesPath : undefined),
       windowsHide: true
     })
     let stderr = ''

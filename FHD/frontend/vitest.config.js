@@ -39,7 +39,11 @@ export default defineConfig({
         replacement: path.resolve(__dirname, './src/views/adminDutyRosterGraphView.stub.vue'),
       },
       { find: '@', replacement: path.resolve(__dirname, './src') },
+      // Real Mod views live outside frontend/src, matching production Vite resolution.
+      { find: 'vue-router', replacement: path.resolve(__dirname, 'node_modules/vue-router') },
+      { find: 'pinia', replacement: path.resolve(__dirname, 'node_modules/pinia') },
     ],
+    dedupe: ['vue', 'vue-router', 'pinia'],
   },
   test: {
     setupFiles: ['./vitest.setup.ts'],

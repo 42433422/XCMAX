@@ -208,7 +208,10 @@ async def platform_model_catalog(
 ) -> dict[str, Any]:
     """Return selectable platform-funded models from the canonical catalog."""
 
-    from modstore_server.llm_catalog import get_models_for_provider
+    from modstore_server.llm_catalog import (
+        get_models_for_credentials,
+        resolve_catalog_credentials,
+    )
     from modstore_server.llm_key_resolver import KNOWN_PROVIDERS, platform_api_key
     from modstore_server.models import get_session_factory
 
@@ -216,6 +219,11 @@ async def platform_model_catalog(
     if target and target not in KNOWN_PROVIDERS:
         return {"ok": False, "error": f"unknown provider: {target}", "providers": []}
     provider_ids = [target] if target else list(KNOWN_PROVIDERS)
+
+    def _read_credentials(provider_id: str) -> tuple[str | None, str | None]:
+        with get_session_factory()() as session:
+            api_key, base_url = resolve_catalog_credentials(session, 0, provider_id)
+            return api_key, base_url
 
     async def _one(provider_id: str) -> dict[str, Any]:
         configured = bool(platform_api_key(provider_id))
@@ -229,14 +237,14 @@ async def platform_model_catalog(
                 "source": "no_platform_key",
                 "error": "no_platform_key",
             }
-        sf = get_session_factory()
-        with sf() as session:
-            block = await get_models_for_provider(
-                session,
-                0,
-                provider_id,
-                force_refresh=bool(refresh),
-            )
+        api_key, base_url = await asyncio.to_thread(_read_credentials, provider_id)
+        block = await get_models_for_credentials(
+            0,
+            provider_id,
+            api_key=api_key,
+            base_url=base_url,
+            force_refresh=bool(refresh),
+        )
         detailed = list(block.get("models_detailed") or [])
         runtime_models = [
             str(row.get("id") or "").strip()

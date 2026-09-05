@@ -1553,81 +1553,8 @@ class TestAuthSubscriptionStatus:
         assert result["data"]["plan"] == "trial"
 
 
-# ---------------------------------------------------------------------------
-# auth_update_company_brand
-# ---------------------------------------------------------------------------
-
-
-class TestAuthUpdateCompanyBrand:
-    @pytest.mark.asyncio
-    async def test_no_session(self):
-        from app.fastapi_routes.domains.auth.routes import auth_update_company_brand
-
-        request = MagicMock()
-        mock_user = MagicMock()
-        with patch(
-            "app.fastapi_routes.domains.auth.routes.session_id_from_request",
-            return_value=None,
-        ):
-            result = await auth_update_company_brand(
-                request, {"company_brand": "Acme"}, user=mock_user
-            )
-        assert isinstance(result, JSONResponse)
-        assert result.status_code == 400
-
-    @pytest.mark.asyncio
-    async def test_with_session_no_market_token(self):
-        from app.fastapi_routes.domains.auth.routes import auth_update_company_brand
-
-        request = MagicMock()
-        mock_user = MagicMock()
-        with (
-            patch(
-                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
-                return_value="sid",
-            ),
-            patch(
-                "app.application.session_account_meta.load_session_account_meta",
-                return_value={"account_kind": "enterprise"},
-            ),
-            patch("app.application.session_account_meta.persist_session_account_meta"),
-            patch(
-                "app.fastapi_routes.market_account.resolve_valid_market_access_token",
-                new=AsyncMock(return_value=None),
-            ),
-        ):
-            result = await auth_update_company_brand(
-                request, {"company_brand": "Acme"}, user=mock_user
-            )
-        assert result["success"] is True
-        assert result["company_brand"] == "Acme"
-
-    @pytest.mark.asyncio
-    async def test_with_session_and_market_token(self):
-        from app.fastapi_routes.domains.auth.routes import auth_update_company_brand
-
-        request = MagicMock()
-        mock_user = MagicMock()
-        with (
-            patch(
-                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
-                return_value="sid",
-            ),
-            patch(
-                "app.application.session_account_meta.load_session_account_meta",
-                return_value={"account_kind": "enterprise"},
-            ),
-            patch("app.application.session_account_meta.persist_session_account_meta"),
-            patch(
-                "app.fastapi_routes.market_account.resolve_valid_market_access_token",
-                new=AsyncMock(return_value="Bearer xyz"),
-            ),
-            patch("app.fastapi_routes.market_account._proxy_json", new=AsyncMock()),
-        ):
-            result = await auth_update_company_brand(
-                request, {"company_brand": "Acme"}, user=mock_user
-            )
-        assert result["success"] is True
+# Company-name persistence and error contracts use real sessions and SQLite in
+# test_company_brand_persistence.py.
 
 
 # ---------------------------------------------------------------------------

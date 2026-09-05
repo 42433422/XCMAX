@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +26,53 @@ def _identity_file() -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
+def _desktop_identity_file() -> dict[str, Any]:
+    """Read Electron's signed resources, never a userData or working directory copy."""
+    configured = (os.environ.get("XCAGI_DESKTOP_RESOURCES") or "").strip()
+    if configured:
+        resources = Path(configured)
+    elif getattr(sys, "frozen", False):
+        backend = Path(sys.executable).resolve().parent
+        if backend.name in {"_internal", "xcagi-backend"} and backend.parent.name == "backend":
+            backend = backend.parent
+        if backend.name != "backend":
+            return {}
+        resources = backend.parent
+    else:
+        return {}
+    # Same locations and field aliases as the desktop updater's buildInfoCandidates.
+    for path in (resources / "build-info.json", resources / "backend" / "build-info.json"):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8-sig"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        raw_sha = payload.get("gitSha") or payload.get("buildSha") or ""
+        raw_version = payload.get("version") or ""
+        built_at = payload.get("builtAt") or ""
+        if not all(isinstance(value, str) for value in (raw_sha, raw_version, built_at)):
+            continue
+        sha = str(raw_sha).strip().lower()
+        version = str(raw_version).strip()
+        if len(sha) != 40 or any(char not in "0123456789abcdef" for char in sha) or not version:
+            continue
+        release_id = str(payload.get("releaseId") or "").strip()
+        if release_id and release_id != f"xcagi-{version}-{sha}":
+            continue
+        return {
+            "git_sha": sha,
+            "version": version,
+            "built_at": built_at,
+            # build_identity derives release_id from the resolved SHA/version,
+            # so an explicit identity environment override remains consistent.
+        }
+    return {}
+
+
 def _local_git_sha() -> str:
+    if getattr(sys, "frozen", False):
+        return ""
     root = _release_root()
     try:
         # FHD 通常是仓库子目录，.git 位于上层 XCMAX。git -C 可以自行向上
@@ -59,7 +106,7 @@ def _admin_console_identity() -> dict[str, Any]:
 
 
 def build_identity() -> dict[str, str]:
-    packaged = _identity_file()
+    packaged = _identity_file() or _desktop_identity_file()
     admin_console = _admin_console_identity()
     git_sha = str(
         os.environ.get("XCAGI_GIT_SHA")

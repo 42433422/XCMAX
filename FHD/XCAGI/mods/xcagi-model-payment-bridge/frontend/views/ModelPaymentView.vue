@@ -17,17 +17,17 @@
           <h2>模型服务</h2>
           <p class="muted header-sub">
             余额与充值走修茈市场；本页汇总展示，支付在
-            <a :href="walletUrlHandoff" target="_blank" rel="noopener noreferrer">钱包</a>
+            <a :href="walletUrl" @click.prevent="openMarketUrl(walletUrl)" target="_blank" rel="noopener noreferrer">钱包</a>
             /
-            <a :href="plansUrlHandoff" target="_blank" rel="noopener noreferrer">套餐</a>
+            <a :href="plansUrl" @click.prevent="openMarketUrl(plansUrl)" target="_blank" rel="noopener noreferrer">套餐</a>
             完成。
           </p>
         </div>
         <div class="mp-hero-actions">
-          <a class="mp-hero-btn mp-hero-btn--primary" :href="walletUrlHandoff" target="_blank" rel="noopener noreferrer">
+          <a class="mp-hero-btn mp-hero-btn--primary" :href="walletUrl" @click.prevent="openMarketUrl(walletUrl)" target="_blank" rel="noopener noreferrer">
             打开修茈钱包
           </a>
-          <a class="mp-hero-btn" :href="plansUrlHandoff" target="_blank" rel="noopener noreferrer">会员套餐</a>
+          <a class="mp-hero-btn" :href="plansUrl" @click.prevent="openMarketUrl(plansUrl)" target="_blank" rel="noopener noreferrer">会员套餐</a>
           <button type="button" class="mp-hero-btn" :disabled="isRefreshing" @click="forceRefreshAll()">
             {{ isRefreshing ? '同步中…' : '刷新' }}
           </button>
@@ -35,6 +35,8 @@
       </div>
 
       <p v-if="marketSyncWarning" class="mp-sync-warning" role="status">{{ marketSyncWarning }}</p>
+
+      <p v-if="handoffError" class="mp-sync-warning" role="alert">{{ handoffError }}</p>
 
       <MpBalanceFold :tm="mp" />
 
@@ -46,6 +48,7 @@
             :key="item.amount"
             class="mp-recharge-card"
             :href="item.url"
+            @click.prevent="openMarketUrl(item.url)"
             target="_blank"
             rel="noopener noreferrer"
           >
@@ -76,8 +79,8 @@ const mp = assembleMpModelPayment()
 
 const {
   isOffline, dataSource, cacheAgeText, retryConnection,
-  walletUrlHandoff, plansUrlHandoff, isRefreshing, forceRefreshAll,
-  marketSyncWarning, rechargeLinks,
+  walletUrl, plansUrl, isRefreshing, forceRefreshAll,
+  marketSyncWarning, rechargeLinks, openMarketUrl, handoffError,
 } = mp
 </script>
 

@@ -195,6 +195,10 @@ class PrinterService:
     def print_document(
         self, file_path: str, printer_name: str | None = None, use_automation: bool = False
     ) -> dict:
+        from app.infrastructure.printing.label_pdf_printer import is_label_job_location
+
+        if is_label_job_location(file_path):
+            return {"success": False, "message": "受控标签任务必须通过标签确认流程提交"}
         try:
             if not printer_name:
                 printer_name = (
@@ -223,6 +227,21 @@ class PrinterService:
             return {"success": False, "message": "打印文档失败"}
 
     def print_label(self, file_path: str, printer_name: str | None = None, copies: int = 1) -> dict:
+        from app.infrastructure.printing.label_pdf_printer import (
+            owned_label_pdf_path,
+            submit_label_pdf,
+        )
+
+        if owned_label_pdf_path(file_path) is not None:
+            if copies != 1:
+                return {
+                    "success": False,
+                    "submission_state": "rejected",
+                    "message": "标签 PDF 已包含全部份数，不能重复扩印",
+                }
+            return submit_label_pdf(
+                self.printer_utils, file_path, printer_name or self.get_label_printer()
+            )
         try:
             if not printer_name:
                 printer_name = self.get_label_printer()

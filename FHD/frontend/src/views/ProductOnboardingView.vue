@@ -3,15 +3,14 @@
     <div class="product-flow-card">
       <header class="product-flow-header">
         <div class="product-flow-header-main">
-          <div class="brand">{{ fromTutorial ? '新手教程 · 宿主入门' : 'XCAGI 宿主' }}</div>
+          <div class="brand">{{ fromTutorial ? '新手教程 · 创建工作空间' : 'XCAGI · 创建您的数字公司' }}</div>
           <p v-if="currentStepMeta?.subtitle && currentStep !== 'welcome'" class="brand-lead">
-            {{ currentStepMeta.subtitle }}
+            {{ isAttendanceOnboarding && ['host-pack', 'seed-demo', 'first-ai-task'].includes(currentStep) ? '在考勤工作区核对部门和人员，再开始考勤查询' : currentStepMeta.subtitle }}
           </p>
         </div>
-        <div class="edition-tag">发行版：{{ editionLabel }}</div>
       </header>
 
-      <nav class="step-rail" aria-label="设置流程">
+      <nav v-if="['welcome', 'industry', 'host-pack'].includes(currentStep)" class="step-rail" aria-label="设置流程">
         <div
           v-for="step in steps"
           :key="step.id"
@@ -24,160 +23,27 @@
       </nav>
 
       <section class="step-panel">
-        <template v-if="currentStep === 'welcome'">
-          <div class="welcome-hero">
-            <img class="welcome-logo" :src="welcomeLogoSrc" height="56" alt="XC" decoding="async" @error="onWelcomeLogoError" />
-            <div>
-              <h1>认识 XC</h1>
-              <p class="welcome-tagline">专属于您的数字公司 · 默认干净，行业业务按需加载</p>
-              <p class="lead">
-                日常界面默认有<strong>智能对话</strong>（找小C办事）、<strong>信息</strong>（联系AI同事）、<strong>智能生态</strong>和<strong>员工工作台</strong>；行业业务菜单、定制
-                AI 员工都按需加载。先把 XC 当成会长大的公司，用到哪再补哪。
-              </p>
-            </div>
-          </div>
+        <div v-if="loginRequired" class="status-card warn" role="status">
+          <p>请先登录，登录后继续准备业务功能。已选行业和当前步骤会保留。</p>
+          <button type="button" class="btn primary" @click="loginToContinue">登录并继续设置</button>
+        </div>
+        <OnboardingCompanyStep v-if="currentStep === 'welcome'" v-model="companyName" @continue="goStep('industry')" />
+        <OnboardingIndustryStep v-else-if="currentStep === 'industry'" v-model:query="industryQuery" :company-name="companyName" :category="industryCategory" :categories="industryCategories" :options="visibleIndustryOptions" :hidden-count="filteredIndustryOptions.length - visibleIndustryOptions.length" :selected="pickedIndustryId" :selected-name="pickedIndustryName" :has-special-plan="Boolean(industryPackageModId(pickedIndustryId))" :busy="loading || companySaving" :login-required="loginRequired" @category="industryCategory = $event; industryExpanded = false" @select="pickIndustry" @custom="pickIndustry($event.trim()); industryQuery = ''" @expand="industryExpanded = true" @continue="confirmIndustryAndNext" @back="goStep('welcome')" />
+        <OnboardingConfigurationStep v-else-if="currentStep === 'host-pack'" :company-name="companyName" :industry-name="pickedIndustryName" :labels="industrySidebarPreviewLabels" :deferred="isAttendanceOnboarding ? [] : industryNavigationProfile.deferredCapabilities" :has-special-plan="Boolean(industryPackageModId(pickedIndustryId))" :ready="baselineOk" :loading="loading" :busy="bootstrapBusy || finishing || companySaving" :missing-count="missingSidebarBaselineCount || missingRequiredCount" :attendance="isAttendanceOnboarding" :login-required="loginRequired" :groups="hostPackDetailGroups" @create="createWorkspace" @back="goStep('industry')" @refresh="refreshStatus" @example="goStep(isAttendanceOnboarding ? 'first-ai-task' : 'seed-demo')" />
+
+        <template v-else-if="isAttendanceOnboarding && ['seed-demo', 'first-ai-task'].includes(currentStep)">
+          <h1>先到考勤工作区确认名单</h1>
+          <p class="lead">请先确认部门和人员名单，再开始考勤查询。这里不会自动添加演示人员或修改您的现有名单。</p>
           <ul class="flow-list bullets">
-            <li><strong>干净起步</strong>：侧栏默认只有对话、信息、生态、员工工作台，不堆满行业菜单</li>
-            <li><strong>先定行业</strong>：选好方向后，再告诉您还要补哪些侧栏能力卡片</li>
-            <li><strong>AI 员工</strong>：从市场或定制 Mod 安装后上岗，不在本步基础线里批量装</li>
+            <li><strong>已有名单</strong>：在人员管理中查询一位员工，核对姓名、工号和所属部门。</li>
+            <li><strong>尚无名单</strong>：先在部门管理中录入部门，再录入人员；完成后重新查询核对。</li>
+            <li><strong>考勤表转换</strong>：属于按账号开通的定制功能；未开通时仍可准备部门和人员名单。</li>
           </ul>
-          <p class="lead muted pricing-anchor">
-            <strong>价格预期</strong>：99 元试用 30 天；满意后选购永久授权（1
-            万元起），一次购买永久使用。试用到期账户冻结，购买后即可继续使用。
-          </p>
-          <p v-if="trialStatusText" class="lead muted trial-status" role="status">
-            {{ trialStatusText }}
-          </p>
+          <div class="status-card warn" role="status">名单尚待您在考勤工作区确认。打开工作区不会将人员查询记为完成。</div>
           <div class="actions">
-            <button type="button" class="btn primary" @click="goStep('industry')">下一步：行业定型</button>
+            <button type="button" class="btn primary" @click="openAttendanceWorkspace">打开考勤工作区</button>
+            <button type="button" class="btn ghost" @click="goStep('host-pack')">重新检测考勤功能</button>
           </div>
-        </template>
-
-        <template v-else-if="currentStep === 'industry'">
-          <h1>先定行业</h1>
-          <p v-if="openIndustryLeadNames.length" class="lead">
-            当前开放
-            <template v-for="(name, idx) in openIndustryLeadNames" :key="name">
-              <strong>{{ name }}</strong
-              ><template v-if="idx < openIndustryLeadNames.length - 1"> 与 </template>
-            </template>
-            {{ industryLeadKindText }}；选好后下一步会列出要补的基础线。
-          </p>
-          <p v-else class="lead">正在读取当前账号可选行业，读取完成后再继续下一步。</p>
-          <p class="industry-open-hint">请选择您的行业方向</p>
-          <div class="industry-pick industry-pick--open" role="listbox" aria-label="可选行业">
-            <button
-              v-for="preset in openIndustryOptions"
-              :key="preset.id"
-              type="button"
-              class="industry-chip"
-              :class="{ active: pickedIndustryId === preset.id }"
-              role="option"
-              :aria-selected="pickedIndustryId === preset.id"
-              @click="pickIndustry(preset.id)"
-            >
-              <span class="industry-chip-name">{{ preset.name }}</span>
-              <span class="industry-chip-product">{{ industryPackageLabel(preset.id) }}</span>
-              <span class="industry-chip-scenario">{{ chipScenarioText(preset.scenario) }}</span>
-            </button>
-          </div>
-          <p v-if="!openIndustryOptions.length" class="industry-loading-hint">正在加载行业权限…</p>
-          <p v-if="previewIndustryOptions.length" class="industry-preview-hint">更多行业（即将开放，暂不可选）</p>
-          <div v-if="previewIndustryOptions.length" class="industry-pick industry-pick--preview" aria-hidden="true">
-            <div v-for="preset in previewIndustryOptions" :key="preset.id" class="industry-chip industry-chip--locked">
-              <span class="industry-chip-name">{{ preset.name }}</span>
-              <span class="industry-chip-product industry-chip-product--locked">即将开放</span>
-              <span class="industry-chip-scenario">{{ chipScenarioText(preset.scenario) }}</span>
-            </div>
-          </div>
-          <div class="actions">
-            <button type="button" class="btn primary" :disabled="!canConfirmIndustry || loading" @click="confirmIndustryAndNext">
-              下一步：看要补哪些侧栏基础线
-            </button>
-            <button type="button" class="btn ghost" @click="openModStore">打开扩展市场</button>
-            <button type="button" class="btn link" @click="finishToChat">先跳过，直接用对话</button>
-          </div>
-        </template>
-
-        <template v-else-if="currentStep === 'host-pack'">
-          <h1>准备侧栏菜单</h1>
-          <p class="lead">
-            已选 <strong>{{ pickedIndustryName }}</strong
-            >。点一下装齐推荐菜单，就可以进对话。 AI 员工以后需要再装，不挡这一步。
-          </p>
-          <p class="lead muted">行业 Mod 含在授权内，不单独收费；定制 AI 员工按需另行评估。</p>
-          <div class="status-card" :class="{ ok: baselineOk && !loading, warn: !baselineOk && !loading }">
-            <template v-if="loading"> <i class="fa fa-spinner fa-spin"></i> 正在检测… </template>
-            <template v-else-if="baselineOk">
-              <i class="fa fa-check-circle"></i>
-              菜单已齐，可以进入智能对话。
-            </template>
-            <template v-else>
-              <i class="fa fa-exclamation-circle"></i>
-              还差 {{ missingSidebarBaselineCount || missingRequiredCount || 1 }} 项推荐菜单
-            </template>
-          </div>
-          <div v-if="industrySidebarPreviewLabels.length" class="sidebar-preview" aria-label="进入后补齐的侧栏菜单">
-            <p class="sidebar-preview-title">装好后侧栏会出现</p>
-            <div class="sidebar-preview-list">
-              <span v-for="label in industrySidebarPreviewLabels" :key="label" class="sidebar-preview-chip">
-                {{ label }}
-              </span>
-            </div>
-          </div>
-          <div class="actions">
-            <button v-if="!baselineOk" type="button" class="btn primary" :disabled="bootstrapBusy || loading" @click="runBootstrap">
-              <i class="fa" :class="bootstrapBusy ? 'fa-spinner fa-spin' : 'fa-download'"></i>
-              {{ bootstrapBusy ? '正在装齐…' : '一键装齐' }}
-            </button>
-            <button v-else type="button" class="btn primary" :disabled="seedBusy" @click="prepareDemoData">
-              <i class="fa" :class="seedBusy ? 'fa-spinner fa-spin' : 'fa-arrow-right'"></i>
-              {{ seedBusy ? '正在准备演示数据…' : '下一步：跟 AI 员工做第一单' }}
-            </button>
-            <button type="button" class="btn link" :disabled="finishing" @click="finishToChat">先进入对话</button>
-          </div>
-          <p v-if="finishing" class="finish-progress" role="status" aria-live="polite">菜单已经准备好，正在打开智能对话…</p>
-          <details v-if="hostPackDetailGroups.length" class="host-pack-details">
-            <summary>查看明细（可选）</summary>
-            <p v-if="baselinePlan?.summary" class="lead muted">{{ baselinePlan.summary }}</p>
-            <p v-if="showNoAccountCustomHint" class="account-custom-empty-hint muted">
-              当前账号未绑定定制能力；AI 员工可稍后在扩展市场安装。
-            </p>
-            <p v-else-if="missingAccountCustomCount > 0 || missingIndustryPackageCount > 0" class="muted host-pack-details-note">
-              <template v-if="missingAccountCustomCount > 0"> 另有 {{ missingAccountCustomCount }} 项定制/员工可稍后安装 </template>
-              <template v-if="missingAccountCustomCount > 0 && missingIndustryPackageCount > 0">；</template>
-              <template v-if="missingIndustryPackageCount > 0"> 另有 {{ missingIndustryPackageCount }} 项行业包可选 </template>
-            </p>
-            <div class="baseline-groups">
-              <section v-for="group in hostPackDetailGroups" :key="group.id" class="baseline-group">
-                <h3>{{ group.title }}</h3>
-                <ul class="baseline-list">
-                  <li
-                    v-for="item in group.items"
-                    :key="item.mod_id"
-                    :class="{
-                      ok: item.installed,
-                      warn: !item.installed && item.required,
-                      optional: !item.required && !item.installed,
-                    }"
-                  >
-                    <i
-                      class="fa"
-                      :class="item.installed ? 'fa-check-circle' : item.required ? 'fa-exclamation-circle' : 'fa-circle-o'"
-                      aria-hidden="true"
-                    ></i>
-                    <span>{{ item.label }}</span>
-                  </li>
-                </ul>
-              </section>
-            </div>
-            <div class="actions host-pack-details-actions">
-              <button type="button" class="btn ghost" :disabled="loading" @click="refreshStatus">重新检测</button>
-              <button v-if="!baselineOk" type="button" class="btn ghost" :disabled="bootstrapBusy || loading" @click="runBootstrap">
-                再次一键装齐
-              </button>
-            </div>
-          </details>
         </template>
 
         <template v-else-if="currentStep === 'seed-demo'">
@@ -197,7 +63,7 @@
 
         <template v-else-if="currentStep === 'first-ai-task'">
           <h1>跟着 AI 员工完成第一单</h1>
-          <p class="lead">这次不是只聊天：AI 会依次查询演示客户、查询演示商品，再创建演示出货单。写入前仍会让您确认。</p>
+          <p class="lead">AI 会依次查询演示客户和商品，展示执行计划，等待您确认后创建演示出货单。完成后请核对业务记录中的客户、商品和数量。</p>
           <pre class="first-task-prompt">{{ firstOrderPrompt }}</pre>
           <div class="actions">
             <button type="button" class="btn primary" :disabled="finishing" @click="finishOnboardingComplete">
@@ -218,7 +84,7 @@
 
       <footer class="product-flow-footer">
         <button v-if="fromTutorial" type="button" class="btn text" @click="returnFromTutorial">返回上一页</button>
-        <button v-else type="button" class="btn text" @click="skipEntireFlow">跳过引导（高级用户）</button>
+        <button v-else type="button" class="btn text" @click="skipEntireFlow">先进入，稍后再设置</button>
         <span class="doc-hint">{{ footerHint }}</span>
       </footer>
     </div>
@@ -228,6 +94,9 @@
 <script setup>
 // 入口 façade：状态/行为/导航拆分至 ./product-onboarding/，此处仅装配，行为与拆分前一致
 import { onMounted, watch } from 'vue'
+import OnboardingCompanyStep from './product-onboarding/OnboardingCompanyStep.vue'
+import OnboardingIndustryStep from './product-onboarding/OnboardingIndustryStep.vue'
+import OnboardingConfigurationStep from './product-onboarding/OnboardingConfigurationStep.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useProductFlow } from '@/composables/useProductFlow'
 import { useIndustryStore } from '@/stores/industry'
@@ -253,6 +122,7 @@ const actions = useProductOnboardingActions(state, { router, flow, industryStore
 
 // 顶层解耦保留全部同名绑定：模板渲染与测试 setupState（pickedIndustryId）访问面与拆分前一致
 const {
+  companyName, companySaving, industryQuery, industryCategory, industryExpanded, industryCategories, filteredIndustryOptions, visibleIndustryOptions, industryNavigationProfile,
   industryOptions,
   onboardingCatalog,
   onboardingCatalogLoaded,
@@ -289,6 +159,7 @@ const {
   showNoAccountCustomHint,
   pickedIndustryName,
   firstOrderPrompt,
+  isAttendanceOnboarding,
   currentIndex,
   currentStepMeta,
   editionLabel,
@@ -297,8 +168,8 @@ const {
   footerHint,
 } = state
 
-const { goStep, returnFromTutorial, openModStore, finishToChat, skipEntireFlow } = nav
-const { refreshStatus, runBootstrap, prepareDemoData, pickIndustry, confirmIndustryAndNext, finishOnboardingComplete } = actions
+const { goStep, loginToContinue, returnFromTutorial, openModStore, openAttendanceWorkspace, finishToChat, skipEntireFlow } = nav
+const { loginRequired, createWorkspace, refreshStatus, runBootstrap, prepareDemoData, pickIndustry, confirmIndustryAndNext, finishOnboardingComplete } = actions
 
 watch(
   () => route.query.step,
@@ -352,8 +223,8 @@ onMounted(async () => {
     }
   }
   const cur = String(industryStore.currentIndustryId || DEFAULT_INDUSTRY_ID).trim()
-  pickedIndustryId.value = normalizePickedIndustryId(onboardingCatalog.value?.selected_industry_id || cur)
-  const expectedQuery = { step: currentStep.value }
+  pickedIndustryId.value = normalizePickedIndustryId(route.query.industry || onboardingCatalog.value?.selected_industry_id || cur)
+  const expectedQuery = { ...route.query, step: currentStep.value }
   if (fromTutorial.value) {
     expectedQuery.from = 'tutorial'
     expectedQuery.redirect = returnPath.value
@@ -366,4 +237,4 @@ onMounted(async () => {
 })
 </script>
 
-<style scoped src="./product-onboarding/product-onboarding.css"></style>
+<style src="./product-onboarding/product-onboarding.css"></style>

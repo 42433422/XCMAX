@@ -36,6 +36,8 @@ _CSRF_EXEMPT_PATHS = frozenset(
         "/api/auth/send-reset-password-code",
         "/api/auth/reset-password",
         "/api/auth/refresh",
+        # One-use code authenticates the first browser POST, before any cookie exists.
+        "/api/auth/browser-handoff/consume",
         "/api/auth/verify-admin-digest-code",
         # 运维密钥接口：无用户 Cookie 场景（脚本 / TestClient），由 X-Modstore-Recharge-Token 单独鉴权
         "/api/admin/reset-user-password",

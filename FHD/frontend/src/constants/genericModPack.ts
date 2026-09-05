@@ -68,8 +68,8 @@ export function isClientErpSidebarContext(installedModIds: Iterable<string>, act
   return false
 }
 
-/** Planner bridge 侧栏项与宿主「智能对话 / 智能生态 / 智脑」重复，客户 ERP 场景不展示 */
-export const REDUNDANT_PLANNER_BRIDGE_MENU_IDS = new Set(['mod-planner-chat', 'mod-planner-ai-ecosystem', 'mod-planner-brain'])
+/** Planner bridge 侧栏项与宿主「智能对话 / 智能生态」重复，客户 ERP 场景不展示 */
+export const REDUNDANT_PLANNER_BRIDGE_MENU_IDS = new Set(['mod-planner-chat', 'mod-planner-ai-ecosystem'])
 
 /**
  * 已装客户主 ERP（太阳鸟等）时，宿主 bridge 的 Mod 侧栏入口与 core/trailing 重复，一律不展示。
@@ -152,7 +152,7 @@ function isPlatformShellSidebarMode(): boolean {
   return def === '1' || def === 'true' || def === 'yes'
 }
 
-/** 企业完整侧栏：流程可视化 / 智脑集成等由宿主页承担，不重复挂 Mod 入口 */
+/** 企业完整侧栏：流程可视化等由宿主页承担，不重复挂 Mod 入口 */
 export function shouldSuppressRedundantModMenuInFullHostSidebar(menuId: string): boolean {
   if (isPlatformShellSidebarMode() || isSandboxSidebarMode()) return false
   const id = normalizeModSidebarNavKey(String(menuId || '').trim())
@@ -197,7 +197,6 @@ export const MOD_MENU_ID_TO_HOST_NAV_KEY: Readonly<Record<string, string>> = {
   'mod-workflow-visualization': 'workflow-visualization',
   'mod-planner-chat': 'chat',
   'mod-planner-ai-ecosystem': 'ai-ecosystem',
-  'mod-planner-brain': 'brain',
   'mod-erp-products': 'products',
   'mod-erp-customers': 'customers',
   'mod-erp-orders': 'orders',
@@ -234,6 +233,16 @@ export const ACCOUNT_CUSTOM_SIDEBAR_MENU_KEYS = new Set(['qsm-pro-home', 'mod-qs
 
 /** 考勤 Mod 侧栏入口（manifest.menu.id 与 mod- 前缀 key 两种形态） */
 export const ATTENDANCE_MOD_SIDEBAR_MENU_KEYS = new Set([
+  'attendance-industry-workspace',
+  'mod-attendance-industry-workspace',
+  'attendance-industry-personnel',
+  'mod-attendance-industry-personnel',
+  'attendance-industry-departments',
+  'mod-attendance-industry-departments',
+  'attendance-industry-schedules',
+  'mod-attendance-industry-schedules',
+  'attendance-industry-records',
+  'mod-attendance-industry-records',
   'attendance-industry-home',
   'mod-attendance-industry-home',
   'attendance-industry-settings',

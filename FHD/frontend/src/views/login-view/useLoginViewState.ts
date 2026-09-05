@@ -47,10 +47,12 @@ export function useLoginViewState(route: RouteLocationNormalizedLoaded) {
       const q = v.indexOf('?')
       if (q < 0) return '/'
       const nested = new URLSearchParams(v.slice(q + 1)).get('redirect')
-      v = nested ? decodeURIComponent(nested.trim()) : '/'
+      // URLSearchParams already decodes the nested value. Decoding it again
+      // would turn an encoded '&' in onboarding's return path into a new key.
+      v = nested ? nested.trim() : '/'
     }
     const pathOnly = v.split('?')[0].split('#')[0]
-    return pathOnly
+    return pathOnly === '/onboarding' ? v : pathOnly
   }
 
   const redirectPath = computed(() => {
@@ -59,7 +61,7 @@ export function useLoginViewState(route: RouteLocationNormalizedLoaded) {
     if (!value || typeof value !== 'string') return '/'
     let v = value.trim()
     try {
-      v = decodeURIComponent(v)
+      if (!v.startsWith('/')) v = decodeURIComponent(v)
     } catch {
       /* keep */
     }

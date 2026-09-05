@@ -102,3 +102,27 @@ describe('auth router guards', () => {
     ).resolves.toEqual({ name: 'home' })
   })
 })
+
+it('legacy JWT URLs go to a clean login with an explanation, never a token store', async () => {
+  const guard = installAndGetGuard()
+  const result = await guard({
+    path: '/wallet',
+    fullPath: '/wallet?recharge=30&xcagi_mt=old-jwt',
+    query: { recharge: '30', xcagi_mt: 'old-jwt' },
+    hash: '',
+    meta: { auth: true },
+    name: 'wallet',
+  })
+  expect(result).toEqual({ name: 'login', query: { redirect: '/wallet?recharge=30', handoff: 'expired' }, replace: true })
+  expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBeNull()
+})
+
+it('a rejected exchange strips the code from login redirect and does not reapply a legacy JWT', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401 }))
+  const guard = installAndGetGuard()
+  const fullPath = '/plans?plan=vip&xcagi_mt=old-jwt#xcagi_code=' + 'a'.repeat(43)
+  const result = await guard({ path: '/plans', fullPath, query: {}, hash: '', meta: {}, name: 'plans' })
+  expect(result).toEqual({ name: 'login', query: { redirect: '/plans?plan=vip', handoff: 'expired' }, replace: true })
+  expect(JSON.stringify(result)).not.toContain('old-jwt')
+  vi.unstubAllGlobals()
+})

@@ -11,6 +11,7 @@ from sqlalchemy import text
 
 from app.application.ports.template_store import TemplateStorePort
 from app.db.session import get_db
+from app.infrastructure.templates.stored_metadata import read_stored_template_metadata
 from app.infrastructure.templates.template_discovery import (
     business_scope,
     discovery_directories,
@@ -184,7 +185,8 @@ class FileSystemTemplateStore(TemplateStorePort):
                     text(
                         f"""
                         SELECT id, template_key, template_name, template_type,
-                               original_file_path, is_active, tenant_id
+                               original_file_path, is_active, tenant_id,
+                               analyzed_data, editable_config, business_rules
                         FROM templates
                         WHERE (is_active IS NULL OR is_active = 1)
                           AND ({tenant_sql})
@@ -222,6 +224,7 @@ class FileSystemTemplateStore(TemplateStorePort):
                     "is_active": getattr(r, "is_active", 1),
                     "tenant_id": getattr(r, "tenant_id", None),
                     "source": "db",
+                    **read_stored_template_metadata(r),
                 }
             )
         return out

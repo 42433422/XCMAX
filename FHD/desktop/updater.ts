@@ -16,6 +16,7 @@ let updateDownloaded = false
 let downloadedVersion = ''
 let downloadedBuildSha = ''
 let remoteBuildSha = ''
+let remoteProductVersion = ''
 let remoteReleaseDate = ''
 let remoteReleaseNotes = ''
 let remoteReleaseMedia: ReleaseMediaSlide[] = []
@@ -288,7 +289,12 @@ function updateInfoHasMacZip(updateInfo: UpdateInfo): boolean {
 
 function enrichUpdateInfo(
   info: UpdateInfo,
-): UpdateInfo & { buildSha?: string; releaseNotes?: string; releaseMedia?: ReleaseMediaSlide[] } {
+): UpdateInfo & {
+  productVersion?: string
+  buildSha?: string
+  releaseNotes?: string
+  releaseMedia?: ReleaseMediaSlide[]
+} {
   const notes = String(
     (info as UpdateInfo & { releaseNotes?: string }).releaseNotes || remoteReleaseNotes || ''
   ).trim()
@@ -298,6 +304,7 @@ function enrichUpdateInfo(
   const releaseMedia = fromInfo.length ? fromInfo : remoteReleaseMedia
   return {
     ...info,
+    productVersion: remoteProductVersion || String(info.version || '').trim(),
     buildSha: String(
       (info as UpdateInfo & { buildSha?: string }).buildSha || remoteBuildSha || ''
     ).trim(),
@@ -476,6 +483,7 @@ export async function checkForUpdates(): Promise<unknown> {
   if (!app.isPackaged && !process.env.XCAGI_UPDATE_URL) {
     return { skipped: true, reason: 'dev-mode-without-XCAGI_UPDATE_URL' }
   }
+  remoteProductVersion = ''
   if (process.env.XCAGI_DESKTOP_TEST !== '1') {
     await ensureUpdaterNetSession()
   }
@@ -483,6 +491,7 @@ export async function checkForUpdates(): Promise<unknown> {
   const updateUrl = process.env.XCAGI_UPDATE_URL
   if (publicKeyPem && updateUrl) {
     const metadataText = await fetchLatestMetadataText()
+    remoteProductVersion = parseYamlField(metadataText, 'productVersion').replace(/^['"]|['"]$/g, '')
     remoteBuildSha = parseYamlField(metadataText, 'buildSha')
     remoteReleaseDate = parseYamlField(metadataText, 'releaseDate').replace(/^['"]|['"]$/g, '')
     remoteReleaseNotes = parseYamlBlock(metadataText, 'releaseNotes')

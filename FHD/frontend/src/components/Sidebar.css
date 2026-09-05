@@ -135,3 +135,25 @@
 .sidebar-menu.reorder-enabled.is-dragging .sidebar-menu-shift-move {
   transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1) !important;
 }
+.runtime-health-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.runtime-health-button:focus-visible {
+  outline: 2px solid var(--primary-color, #2563eb);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+.runtime-health-button .status-dot.warning { background: #b76e00; }
+.runtime-health-button .status-dot.offline { background: #c63333; }
+.runtime-health-button .status-dot.pending { background: #64748b; }

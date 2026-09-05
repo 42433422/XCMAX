@@ -31,6 +31,7 @@ from app.application.etl.targets.helpers import (
     optional_text,
 )
 from app.application.etl.targets.products import ProductAdapter
+from app.application.etl.targets.rollback_compare_swap import delete_created_row, restore_fields
 from app.db.models.product import Product
 from app.db.models.purchase_unit import PurchaseUnit
 from app.infrastructure.tenant_scope import tenant_id_for_write
@@ -364,25 +365,24 @@ class CustomerProductsAdapter(CustomerProductPreviewMixin, TargetAdapter):
             if not product:
                 raise EtlError("ETL_ROLLBACK_TARGET_MISSING", "关联产品撤销目标已不存在")
             assert_created_row_unchanged(product, product_after, ProductAdapter.fields, "关联产品")
-            db.delete(product)
-            db.flush()
+            delete_created_row(db, product, "关联产品")
         elif metadata.get("product_updated"):
             if not product:
                 raise EtlError("ETL_ROLLBACK_TARGET_MISSING", "关联产品撤销目标已不存在")
-            assert_rollback_image_matches(
+            changed_fields = assert_rollback_image_matches(
                 product,
                 product_before,
                 product_after,
                 ProductAdapter.fields,
                 "关联产品",
             )
-            for field in ProductAdapter.fields:
-                if field.key in product_before:
-                    value = product_before[field.key]
-                    if field.key == "price":
-                        value = decimal_or_zero(value)
-                    setattr(product, field.key, value)
-            db.flush()
+            values = {}
+            for field in changed_fields:
+                value = product_before[field.key]
+                if field.key == "price":
+                    value = decimal_or_zero(value)
+                values[field.key] = value
+            restore_fields(db, product, values, "关联产品")
 
         customer_after = after.get("customer") if isinstance(after.get("customer"), dict) else {}
         customer_before = (
@@ -410,9 +410,16 @@ class CustomerProductsAdapter(CustomerProductPreviewMixin, TargetAdapter):
                     "关联客户在本次导入后又被修改，已停止撤销以避免覆盖新数据",
                     status_code=409,
                 )
-            for key, model_field in CUSTOMER_MODEL_FIELDS.items():
-                if key in customer_before:
-                    setattr(customer, model_field, customer_before[key])
+            restore_fields(
+                db,
+                customer,
+                {
+                    CUSTOMER_MODEL_FIELDS[key]: customer_before[key]
+                    for key in changed
+                    if key in CUSTOMER_MODEL_FIELDS
+                },
+                "关联客户",
+            )
         if metadata.get("customer_created"):
             if not customer:
                 raise EtlError("ETL_ROLLBACK_TARGET_MISSING", "关联客户撤销目标已不存在")
@@ -431,4 +438,4 @@ class CustomerProductsAdapter(CustomerProductPreviewMixin, TargetAdapter):
                     "关联客户在本次导入后又被修改，已停止撤销以避免删除新数据",
                     status_code=409,
                 )
-            db.delete(customer)
+            delete_created_row(db, customer, "关联客户")

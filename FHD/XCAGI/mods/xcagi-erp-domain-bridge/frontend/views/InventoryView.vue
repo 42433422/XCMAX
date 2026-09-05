@@ -4,19 +4,27 @@
       <div class="page-header">
         <h2>库存管理</h2>
         <div>
-          <button class="btn btn-secondary" @click="exportInventory" style="margin-right:10px;">导出</button>
+          <button class="btn btn-secondary" data-testid="inventory-export" :disabled="exporting" @click="exportInventory" style="margin-right:10px;">
+            {{ exporting ? '正在生成…' : '导出 Excel' }}
+          </button>
           <button class="btn btn-primary" @click="showInModal">入库</button>
           <button class="btn btn-warning" @click="showOutModal" style="margin-left:10px;">出库</button>
         </div>
       </div>
+      <p class="inventory-export-hint">按当前筛选导出全部库存明细，单次最多 50,000 条。</p>
+      <p v-if="exportMessage" role="status" aria-live="polite">{{ exportMessage }}</p>
+      <p v-if="exportError" role="alert" class="text-danger">{{ exportError }}</p>
 
       <div class="search-box">
-        <select v-model="selectedWarehouse" style="min-width:180px;" @change="loadInventory">
+        <select v-model="selectedWarehouse" style="min-width:180px;" @change="applyInventoryFilters">
           <option value="">全部仓库</option>
           <option v-for="w in warehouses" :key="w.id" :value="w.id">{{ w.name }}</option>
         </select>
-        <input v-model="searchQuery" type="text" placeholder="搜索产品名称或型号..." @input="loadInventory">
+        <input v-model="searchQuery" type="text" maxlength="200" placeholder="搜索产品名称或型号..." @input="applyInventoryFilters">
       </div>
+      <p v-if="inventoryError" role="alert" class="text-danger">
+        {{ inventoryError }} <button class="btn btn-secondary" @click="loadInventory">重试</button>
+      </p>
 
       <section v-if="tutorialSalesEvidence" class="tutorial-inventory-proof" data-tutorial-id="tutorial-inventory-proof">
         <strong>教学库存结果 · 服务端核验</strong>
@@ -50,16 +58,19 @@
                 <td>{{ item.unit || '个' }}</td>
                 <td>{{ item.in_date || '-' }}</td>
               </tr>
-              <tr v-if="inventoryList.length === 0">
+              <tr v-if="loading">
+                <td colspan="8" class="text-center">正在加载库存…</td>
+              </tr>
+              <tr v-else-if="!inventoryError && inventoryList.length === 0">
                 <td colspan="8" class="text-center">暂无库存数据</td>
               </tr>
             </tbody>
           </table>
         </div>
         <div class="pagination" v-if="total > pageSize">
-          <button @click="prevPage" :disabled="page <= 1">上一页</button>
+          <button @click="prevPage" :disabled="loading || page <= 1">上一页</button>
           <span>{{ page }} / {{ totalPages }}</span>
-          <button @click="nextPage" :disabled="page >= totalPages">下一页</button>
+          <button @click="nextPage" :disabled="loading || page >= totalPages">下一页</button>
         </div>
       </div>
 
@@ -175,6 +186,7 @@ import { get, post } from '@/api'
 import productsApi from '@/api/products'
 import { appAlert } from '@/utils/appDialog'
 import { useTutorialV2Store } from '@/stores/tutorialV2'
+import { useInventoryExport } from './inventory/useInventoryExport'
 
 export default {
   name: 'InventoryView',
@@ -190,6 +202,7 @@ export default {
     const products = ref([])
     const lowStockList = ref([])
     const loading = ref(false)
+    const inventoryError = ref('')
     const selectedWarehouse = ref('')
     const searchQuery = ref('')
     const page = ref(1)
@@ -215,6 +228,14 @@ export default {
     })
 
     const totalPages = computed(() => Math.ceil(total.value / pageSize))
+    const inventoryFilters = () => {
+      const filters = {}
+      if (selectedWarehouse.value) filters.warehouse_id = String(selectedWarehouse.value)
+      if (searchQuery.value.trim()) filters.keyword = searchQuery.value.trim()
+      return filters
+    }
+    const { exporting, exportMessage, exportError, exportInventory } = useInventoryExport(inventoryFilters)
+    let inventoryRequestId = 0
 
     const loadWarehouses = async () => {
       try {
@@ -239,28 +260,35 @@ export default {
     }
 
     const loadInventory = async () => {
+      const requestId = ++inventoryRequestId
       loading.value = true
+      inventoryError.value = ''
+      inventoryList.value = []
       try {
         const params = {
           page: page.value,
-          per_page: pageSize
-        }
-        if (selectedWarehouse.value) {
-          params.warehouse_id = selectedWarehouse.value
-        }
-        if (searchQuery.value) {
-          params.keyword = searchQuery.value
+          per_page: pageSize,
+          ...inventoryFilters()
         }
         const res = await get('/api/inventory', params)
-        if (res.success) {
-          inventoryList.value = res.data || []
-          total.value = res.total || 0
-        }
+        if (requestId !== inventoryRequestId) return
+        if (!res.success) throw new Error(res.message || '库存加载失败，请稍后重试。')
+        inventoryList.value = Array.isArray(res.data) ? res.data : []
+        total.value = res.total || 0
       } catch (e) {
-        console.error('加载库存失败', e)
+        if (requestId !== inventoryRequestId) return
+        inventoryError.value = e instanceof Error ? e.message : '库存加载失败，请稍后重试。'
+        total.value = 0
       } finally {
-        loading.value = false
+        if (requestId === inventoryRequestId) loading.value = false
       }
+    }
+
+    const applyInventoryFilters = () => {
+      page.value = 1
+      exportMessage.value = ''
+      exportError.value = ''
+      void loadInventory()
     }
 
     const loadLowStock = async () => {
@@ -336,10 +364,6 @@ export default {
       }
     }
 
-    const exportInventory = async () => {
-      await appAlert('导出功能开发中')
-    }
-
     const prevPage = () => {
       if (page.value > 1) {
         page.value--
@@ -373,6 +397,10 @@ export default {
       products,
       lowStockList,
       loading,
+      inventoryError,
+      exporting,
+      exportMessage,
+      exportError,
       selectedWarehouse,
       searchQuery,
       page,
@@ -384,6 +412,7 @@ export default {
       outForm,
       totalPages,
       loadInventory,
+      applyInventoryFilters,
       showInModal,
       showOutModal,
       doInventoryIn,

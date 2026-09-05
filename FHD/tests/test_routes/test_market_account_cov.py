@@ -1387,128 +1387,78 @@ class TestLatestSessionMarketToken:
 
 
 class TestMarketSessionHandoff:
-    def test_user_none_with_token_returns_success(self):
-        with patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=None):
-            with patch.object(ma, "latest_session_market_token", return_value="raw_tok"):
-                resp = _client.get("/api/market/session-handoff")
-        assert resp.status_code == 200
-        assert "market_access_token" in resp.json()["data"]
+    @pytest.fixture(autouse=True)
+    def isolate_entitlements(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.enterprise.mod_entitlements.sync_entitlements_for_session", AsyncMock()
+        )
 
-    def test_user_none_no_token_returns_404(self):
-        with patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=None):
-            with patch.object(ma, "latest_session_market_token", return_value=""):
-                resp = _client.get("/api/market/session-handoff")
-        assert resp.status_code == 404
-
-    def test_user_present_with_valid_token_returns_success(self):
-        mock_user = MagicMock()
-        with patch(
-            "app.infrastructure.auth.dependencies.resolve_session_user", return_value=mock_user
+    @pytest.mark.parametrize(
+        "user_id,session_owner,sid", [(None, 1, "sid"), (1, 2, "sid"), (1, None, "sid"), (1, 1, "")]
+    )
+    def test_unverified_session_never_exposes_any_token(self, user_id, session_owner, sid):
+        user = MagicMock(id=user_id) if user_id is not None else None
+        with (
+            patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=user),
+            patch.object(ma, "session_id_from_request", return_value=sid),
+            patch.object(ma, "_user_id_from_session", return_value=session_owner),
+            patch.object(
+                ma, "latest_session_market_token", return_value="another-user-token"
+            ) as latest,
         ):
-            with patch.object(
-                ma, "resolve_valid_market_access_token", new=AsyncMock(return_value="valid_tok")
-            ):
-                with patch.object(ma, "session_market_refresh_token", return_value="rt"):
-                    with patch(
-                        "app.enterprise.mod_entitlements.sync_entitlements_for_session",
-                        new=AsyncMock(),
-                    ):
-                        _client.cookies.set("session_id", "sid_abc")
-                        resp = _client.get("/api/market/session-handoff")
-        assert resp.status_code == 200
-        assert resp.json()["data"]["market_access_token"] == "valid_tok"
-
-    def test_user_present_no_token_returns_404(self):
-        mock_user = MagicMock()
-        with patch(
-            "app.infrastructure.auth.dependencies.resolve_session_user", return_value=mock_user
-        ):
-            with patch.object(
-                ma, "resolve_valid_market_access_token", new=AsyncMock(return_value="")
-            ):
-                with patch.object(ma, "latest_session_market_token", return_value=""):
-                    resp = _client.get("/api/market/session-handoff")
-        assert resp.status_code == 404
-
-    def test_user_present_tok_none_latest_fallback_resolved(self):
-        mock_user = MagicMock()
-        with patch(
-            "app.infrastructure.auth.dependencies.resolve_session_user", return_value=mock_user
-        ):
-            # First call returns "" (no session token), second (after latest) also ""
-            with patch.object(
-                ma,
-                "resolve_valid_market_access_token",
-                new=AsyncMock(side_effect=["", "resolved_tok"]),
-            ):
-                with patch.object(ma, "latest_session_market_token", return_value="latest_raw"):
-                    with patch.object(ma, "session_market_refresh_token", return_value=""):
-                        with patch.object(
-                            ma, "latest_session_market_refresh_token", return_value=""
-                        ):
-                            with patch(
-                                "app.enterprise.mod_entitlements.sync_entitlements_for_session",
-                                new=AsyncMock(),
-                            ):
-                                resp = _client.get("/api/market/session-handoff")
-        assert resp.status_code == 200
-
-    def test_exception_with_fallback_token(self):
-        ma._MARKET_SESSION_TOKENS["fallback_sid"] = "fallback_tok"
-        with patch(
-            "app.infrastructure.auth.dependencies.resolve_session_user",
-            side_effect=RuntimeError("boom"),
-        ):
-            _client.cookies.set("session_id", "fallback_sid")
             resp = _client.get("/api/market/session-handoff")
-        assert resp.status_code == 200
-        assert "market_access_token" in resp.json()["data"]
+        assert resp.status_code == 401
+        assert "token" not in resp.text
+        assert resp.headers["cache-control"] == "no-store"
+        latest.assert_not_called()
 
-    def test_exception_no_fallback_token_returns_502(self):
-        with patch(
-            "app.infrastructure.auth.dependencies.resolve_session_user",
-            side_effect=RuntimeError("boom"),
+    @pytest.mark.parametrize(
+        "token,refresh,status",
+        [("current", "current-refresh", 200), ("current", "", 200), ("", "", 404)],
+    )
+    def test_valid_session_returns_only_its_own_credentials(self, token, refresh, status):
+        with (
+            patch(
+                "app.infrastructure.auth.dependencies.resolve_session_user",
+                return_value=MagicMock(id=1),
+            ),
+            patch.object(ma, "session_id_from_request", return_value="sid"),
+            patch.object(ma, "_user_id_from_session", return_value=1),
+            patch.object(ma, "session_market_token", return_value=token),
+            patch.object(ma, "session_market_refresh_token", return_value=refresh),
+            patch.object(
+                ma, "latest_session_market_token", return_value="another-user-token"
+            ) as latest,
+            patch.object(
+                ma, "latest_session_market_refresh_token", return_value="another-refresh"
+            ) as latest_refresh,
         ):
-            with patch.object(ma, "session_market_token", return_value=""):
-                with patch.object(ma, "latest_session_market_token", return_value=""):
-                    resp = _client.get("/api/market/session-handoff")
+            resp = _client.get("/api/market/session-handoff")
+        assert resp.status_code == status
+        assert resp.headers["cache-control"] == "no-store"
+        assert "another" not in resp.text
+        if token:
+            assert resp.json()["data"]["market_access_token"] == token
+            assert resp.json()["data"].get("market_refresh_token", "") == refresh
+        latest.assert_not_called()
+        latest_refresh.assert_not_called()
+
+    def test_authentication_error_does_not_fall_back(self):
+        with (
+            patch(
+                "app.infrastructure.auth.dependencies.resolve_session_user",
+                side_effect=RuntimeError("sensitive-context"),
+            ),
+            patch.object(
+                ma, "latest_session_market_token", return_value="another-user-token"
+            ) as latest,
+        ):
+            resp = _client.get("/api/market/session-handoff")
         assert resp.status_code == 502
-
-    def test_user_present_with_refresh_token_in_response(self):
-        mock_user = MagicMock()
-        with patch(
-            "app.infrastructure.auth.dependencies.resolve_session_user", return_value=mock_user
-        ):
-            with patch.object(
-                ma, "resolve_valid_market_access_token", new=AsyncMock(return_value="tok_val")
-            ):
-                with patch.object(ma, "session_market_refresh_token", return_value="rf_val"):
-                    with patch(
-                        "app.enterprise.mod_entitlements.sync_entitlements_for_session",
-                        new=AsyncMock(),
-                    ):
-                        _client.cookies.set("session_id", "s1")
-                        resp = _client.get("/api/market/session-handoff")
-        assert resp.status_code == 200
-        assert resp.json()["data"]["market_refresh_token"] == "rf_val"
-
-    def test_entitlements_exception_still_returns_ok(self):
-        mock_user = MagicMock()
-        with patch(
-            "app.infrastructure.auth.dependencies.resolve_session_user", return_value=mock_user
-        ):
-            with patch.object(
-                ma, "resolve_valid_market_access_token", new=AsyncMock(return_value="tok_val")
-            ):
-                with patch.object(ma, "session_market_refresh_token", return_value=""):
-                    with patch.object(ma, "latest_session_market_refresh_token", return_value=""):
-                        with patch(
-                            "app.enterprise.mod_entitlements.sync_entitlements_for_session",
-                            new=AsyncMock(side_effect=RuntimeError("ent_fail")),
-                        ):
-                            _client.cookies.set("session_id", "s2")
-                            resp = _client.get("/api/market/session-handoff")
-        assert resp.status_code == 200
+        assert "token" not in resp.text
+        assert "sensitive" not in resp.text
+        assert resp.headers["cache-control"] == "no-store"
+        latest.assert_not_called()
 
 
 # ===========================================================================

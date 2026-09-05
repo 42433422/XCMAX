@@ -107,14 +107,17 @@ def assert_rollback_image_matches(
     after: dict[str, Any],
     fields: tuple[TargetField, ...],
     label: str,
-) -> None:
-    for field in _changed_image_fields(before, after, fields):
+) -> list[TargetField]:
+    """Validate every imported change before returning its exact restore scope."""
+    changed_fields = _changed_image_fields(before, after, fields)
+    for field in changed_fields:
         if not _values_equal(getattr(obj, field.key, None), after.get(field.key)):
             raise EtlError(
                 "ETL_ROLLBACK_CONCURRENT_CHANGE",
                 f"{label}在本次导入后又被修改，已停止撤销以避免覆盖新数据",
                 status_code=409,
             )
+    return changed_fields
 
 
 def assert_created_row_unchanged(

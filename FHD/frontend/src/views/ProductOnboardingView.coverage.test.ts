@@ -3,6 +3,9 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import { defineComponent, h } from 'vue'
+import { validateEnterpriseSessionCached } from '@/utils/authSessionCache'
+
+vi.mock('@/utils/authSessionCache', () => ({ validateEnterpriseSessionCached: vi.fn().mockResolvedValue(true), invalidateEnterpriseSessionCache: vi.fn() }))
 
 // ===== Mock 容器：使用 vi.hoisted 让 vi.mock 工厂能访问 =====
 const mockContainer = vi.hoisted(() => ({
@@ -15,6 +18,7 @@ const mockContainer = vi.hoisted(() => ({
   // useTutorialCatalog 返回值
   tutorialState: null as any,
   // 各 API mock 引用
+  updateCompanyBrand: vi.fn(),
   installHostFoundation: vi.fn(),
   installMod: vi.fn(),
   installIndustrySeed: vi.fn(),
@@ -40,6 +44,7 @@ const mockContainer = vi.hoisted(() => ({
 }))
 
 // ===== Mock 模块 =====
+vi.mock('@/api/auth', () => ({ authApi: { getSubscriptionStatus: vi.fn().mockResolvedValue({ data: null }), updateCompanyBrand: mockContainer.updateCompanyBrand } }))
 vi.mock('@/api/modStore', () => ({
   installHostFoundation: mockContainer.installHostFoundation,
   installMod: mockContainer.installMod,
@@ -167,6 +172,10 @@ function createIndustryState(overrides: Record<string, unknown> = {}) {
     loading: false,
     error: null,
     initialize: vi.fn(async () => undefined),
+    loadFromServer: vi.fn(async () => {
+      const patch = mockContainer.patchWorkspacePrefs.mock.calls.at(-1)?.[0]
+      if (patch?.selected_industry_id) mockContainer.industryState.currentIndustryId = patch.selected_industry_id
+    }),
     ...overrides,
   }
 }
@@ -210,6 +219,25 @@ function createBaselinePlan(overrides: Record<string, unknown> = {}) {
     industry_mod_ready: false,
     ...overrides,
   }
+}
+
+function mockBaselineForInstallation(
+  install: typeof mockContainer.installHostFoundation,
+  missing = createBaselinePlan(),
+) {
+  let installed = false
+  const runInstall = install.getMockImplementation()
+  if (!runInstall) throw new Error('Configure the installation result before its baseline')
+  // Reading status never installs anything. Only the corresponding successful
+  // installation changes readiness; rejected responses and exceptions keep it missing.
+  mockContainer.fetchIndustryBaseline.mockImplementation(async () => (
+    installed ? createBaselinePlan({ baseline_ready: true }) : missing
+  ))
+  install.mockImplementation(async (...args) => {
+    const result = await runInstall(...args)
+    if (result?.success === true) installed = true
+    return result
+  })
 }
 
 let currentWrapper: ReturnType<typeof mount> | null = null
@@ -256,6 +284,7 @@ async function mountComponent(
   mockContainer.tutorialState = createTutorialState(options.tutorial || {})
 
   if (!options.skipDefaultMocks) {
+    vi.mocked(validateEnterpriseSessionCached).mockResolvedValue(true)
     if (options.productSkuReject) {
       mockContainer.fetchProductSku.mockRejectedValue(new Error('sku fail'))
     } else {
@@ -277,6 +306,7 @@ async function mountComponent(
     } else {
       mockContainer.fetchOnboardingIndustryCatalog.mockResolvedValue(options.catalog === undefined ? null : options.catalog)
     }
+    mockContainer.updateCompanyBrand.mockImplementation(async (name: string) => ({ success: true, company_brand: name, tenant_name: name }))
     mockContainer.installHostFoundation.mockResolvedValue({ success: true, message: '' })
     mockContainer.installMod.mockResolvedValue({ success: true, message: '' })
     mockContainer.installIndustrySeed.mockResolvedValue({ success: true, message: '' })
@@ -314,7 +344,7 @@ async function mountComponent(
   return { wrapper, router }
 }
 
-describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
+describe('ProductOnboardingView three-step configuration contracts', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.stubGlobal(
@@ -345,577 +375,171 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     }
   })
 
-  // ===== 1. 基础渲染 - welcome 步骤 =====
+  async function press(wrapper: ReturnType<typeof mount>, text: string) {
+    const button = wrapper.findAll('button').find((node) => node.text().includes(text))
+    expect(button, `button ${text}`).toBeDefined()
+    await button!.trigger('click')
+    await flushPromises()
+  }
 
-  it('welcome 步骤渲染主标题与下一步按钮', async () => {
-    const { wrapper } = await mountComponent()
-    expect(wrapper.find('.welcome-hero').exists()).toBe(true)
-    expect(wrapper.find('h1').text()).toBe('认识 XC')
-    const nextBtn = wrapper.find('.actions .btn.primary')
-    expect(nextBtn.text()).toContain('下一步：行业定型')
-  })
-
-  it('welcome 步骤渲染欢迎 logo 图片', async () => {
-    const { wrapper } = await mountComponent()
-    const img = wrapper.find('.welcome-logo')
-    expect(img.exists()).toBe(true)
-    expect(img.attributes('src')).toContain('startup/')
-  })
-
-  it('点击 welcome 下一步按钮跳转到 industry 步骤', async () => {
+  it('has exactly three setup steps and requires a company name before continuing', async () => {
     const { wrapper, router } = await mountComponent()
-    const replaceSpy = vi.spyOn(router, 'replace')
-    const nextBtn = wrapper.find('.actions .btn.primary')
-    await nextBtn.trigger('click')
-    await flushPromises()
-    expect(replaceSpy).toHaveBeenCalled()
-    const callArg = replaceSpy.mock.calls[0][0]
-    expect(callArg.query.step).toBe('industry')
+    expect(wrapper.findAll('.step-label').map((node) => node.text())).toEqual(['公司', '行业', '配置'])
+    expect(wrapper.get('.btn.primary').attributes('disabled')).toBeDefined()
+    expect(wrapper.text()).not.toContain('价格预期')
+    expect(wrapper.text()).not.toContain('Mod')
+    await wrapper.get('#onboarding-company').setValue('蓝色科技 & 团队')
+    await press(wrapper, '让 XC 认识我的公司')
+    expect(router.currentRoute.value.query).toMatchObject({ step: 'industry', company: '蓝色科技 & 团队' })
+    expect(mockContainer.seedOnboardingDemo).not.toHaveBeenCalled()
+    expect(mockContainer.patchWorkspacePrefs).not.toHaveBeenCalled()
   })
 
-  // ===== 2. industry 步骤渲染 =====
-
-  it('industry 步骤渲染行业 chip 列表（默认 preset 模式）', async () => {
-    const { wrapper } = await mountComponent({ route: { step: 'industry' } })
-    await flushPromises()
-    expect(wrapper.find('h1').text()).toBe('先定行业')
-    // 默认开放行业为 涂料 与 考勤
-    const chips = wrapper.findAll('.industry-pick--open .industry-chip')
-    expect(chips.length).toBeGreaterThan(0)
-  })
-
-  it('industry 步骤：catalog 提供 open_packages 时使用 catalog 数据', async () => {
-    const catalog = {
-      open_packages: [
-        {
-          industry_id: '涂料',
-          name: '涂料包',
-          scenario: '涂料化工批发。',
-          product_name: '涂料专业版',
-        },
-      ],
-      preview_packages: [{ industry_id: '餐饮', name: '餐饮包', scenario: '餐饮门店。', product_name: '餐饮专业版' }],
-      open_industry_ids: ['涂料'],
-      selected_industry_id: '涂料',
-    }
-    const { wrapper } = await mountComponent({
-      route: { step: 'industry' },
-      catalog,
-    })
-    await flushPromises()
-    const chips = wrapper.findAll('.industry-pick--open .industry-chip')
-    expect(chips.length).toBe(1)
-    expect(chips[0].text()).toContain('涂料包')
-    // 预览区也渲染
-    const previewChips = wrapper.findAll('.industry-pick--preview .industry-chip--locked')
-    expect(previewChips.length).toBe(1)
-    expect(previewChips[0].text()).toContain('餐饮包')
-  })
-
-  it('industry 步骤：openIndustryLeadNames 多个时显示"N 套行业方向"', async () => {
-    const catalog = {
-      open_packages: [
-        { industry_id: '涂料', name: '涂料', scenario: '', product_name: '' },
-        { industry_id: '考勤', name: '考勤', scenario: '', product_name: '' },
-      ],
-      open_industry_ids: ['涂料', '考勤'],
-    }
-    const { wrapper } = await mountComponent({
-      route: { step: 'industry' },
-      catalog,
-    })
-    await flushPromises()
-    const lead = wrapper.find('.lead')
-    expect(lead.text()).toContain('2 套行业方向')
-  })
-
-  it('industry 步骤：openIndustryLeadNames 单个时显示"行业方向"', async () => {
-    const catalog = {
-      open_packages: [{ industry_id: '涂料', name: '涂料', scenario: '', product_name: '' }],
-      open_industry_ids: ['涂料'],
-    }
-    const { wrapper } = await mountComponent({
-      route: { step: 'industry' },
-      catalog,
-    })
-    await flushPromises()
-    const lead = wrapper.find('.lead')
-    expect(lead.text()).toContain('行业方向')
-    expect(lead.text()).not.toContain('套行业方向')
-  })
-
-  it('industry 步骤：openIndustryOptions 为空时显示加载提示', async () => {
-    const { wrapper } = await mountComponent({
-      route: { step: 'industry' },
-      isEnterprise: true,
-      catalog: { open_packages: [], open_industry_ids: [] },
-    })
-    await flushPromises()
-    expect(wrapper.find('.industry-loading-hint').exists()).toBe(true)
-    expect(wrapper.find('.industry-loading-hint').text()).toContain('正在加载行业权限')
-  })
-
-  it('industry 步骤：点击行业 chip 选中', async () => {
-    const { wrapper } = await mountComponent({ route: { step: 'industry' } })
-    await flushPromises()
-    const chip = wrapper.findAll('.industry-pick--open .industry-chip')[0]
-    await chip.trigger('click')
-    await flushPromises()
-    expect(chip.classes()).toContain('active')
-  })
-
-  it('industry 步骤：未选行业时下一步按钮 disabled', async () => {
-    const { wrapper } = await mountComponent({
-      route: { step: 'industry' },
-      isEnterprise: true,
-      catalog: { open_packages: [], open_industry_ids: [] },
-    })
-    await flushPromises()
-    const nextBtn = wrapper.find('.actions .btn.primary')
-    expect(nextBtn.attributes('disabled')).toBeDefined()
-  })
-
-  it('industry 步骤：点击"打开扩展市场"按钮跳转 mod-store', async () => {
+  it('lets users expand the full taxonomy and preserves their selection when returning from company details', async () => {
     const { wrapper, router } = await mountComponent({ route: { step: 'industry' } })
+    await press(wrapper, '全部')
+    const initialCount = wrapper.findAll('[role="option"]').length
+    await press(wrapper, '查看另外')
+    const options = wrapper.findAll('[role="option"]')
+    expect(options.length).toBeGreaterThan(initialCount)
+    const selected = options[options.length - 1]
+    const selectedName = selected.get('.industry-chip-name').text()
+    await selected.trigger('click')
     await flushPromises()
-    const pushSpy = vi.spyOn(router, 'push')
-    const modStoreBtn = wrapper.find('.btn.ghost')
-    expect(modStoreBtn.text()).toContain('打开扩展市场')
-    await modStoreBtn.trigger('click')
-    await flushPromises()
-    expect(pushSpy).toHaveBeenCalled()
-    const callArg = pushSpy.mock.calls[0][0]
-    expect(callArg.name).toBe('mod-store')
-    expect(callArg.query.onboarding).toBe('1')
+    expect(selected.attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('.industry-understanding').text()).toContain(selectedName)
+
+    await press(wrapper, '返回公司名称')
+    expect(router.currentRoute.value.query.step).toBe('welcome')
+    await wrapper.get('#onboarding-company').setValue('行业选择测试公司')
+    await press(wrapper, '让 XC 认识我的公司')
+    expect(router.currentRoute.value.query.step).toBe('industry')
+    expect(wrapper.get('[role="option"][aria-selected="true"]').text()).toContain(selectedName)
+    expect(mockContainer.patchWorkspacePrefs).not.toHaveBeenCalled()
+    expect(mockContainer.seedOnboardingDemo).not.toHaveBeenCalled()
   })
 
-  it('industry 步骤：点击"先跳过，直接用对话"按钮', async () => {
-    const { wrapper } = await mountComponent({ route: { step: 'industry' } })
-    await flushPromises()
-    const skipBtn = wrapper.find('.btn.link')
-    expect(skipBtn.text()).toContain('先跳过')
-    await skipBtn.trigger('click')
-    await flushPromises()
-    // finishToChat -> finishHostPackFlow -> markHostPackSkippedThisSession
-    expect(mockContainer.markHostPackSkippedThisSession).toHaveBeenCalled()
+  it('searches the company taxonomy even when no dedicated package is offered', async () => {
+    const { wrapper } = await mountComponent({ route: { step: 'industry' }, catalog: { open_industry_ids: [], open_packages: [] } })
+    await wrapper.get('#onboarding-industry-search').setValue('SaaS')
+    expect(wrapper.findAll('[role="option"]')).toHaveLength(1)
+    expect(wrapper.get('[role="option"]').text()).toContain('软件与信息技术')
+    await wrapper.get('[role="option"]').trigger('click')
+    expect(wrapper.text()).toContain('通用业务能力')
+    expect(wrapper.text()).not.toContain('即将开放')
   })
 
-  it('industry 步骤：点击"下一步"调用 confirmIndustryAndNext', async () => {
+  it('supports a custom industry and clears the previous dedicated package binding without seeding', async () => {
+    const { wrapper, router } = await mountComponent({ route: { step: 'industry' }, industry: { currentIndustryId: '涂料' } })
+    await wrapper.get('#onboarding-industry-search').setValue('智能硬件服务')
+    await press(wrapper, '作为行业')
+    await press(wrapper, '生成我的配置方案')
+    expect(mockContainer.patchWorkspacePrefs).toHaveBeenCalledWith({ selected_industry_id: '智能硬件服务', industry_mod_id: '' })
+    expect(mockContainer.industryState.loadFromServer).toHaveBeenCalled()
+    expect(router.currentRoute.value.query.step).toBe('host-pack')
+    expect(wrapper.text()).toContain('通用业务工作空间')
+    expect(mockContainer.seedOnboardingDemo).not.toHaveBeenCalled()
+    expect(localStorage.getItem('xcagi_product_flow_pending_prompt')).toBeNull()
+  })
+
+  it('keeps the selected company and industry when company persistence is rejected', async () => {
+    const { wrapper, router } = await mountComponent()
+    await wrapper.get('#onboarding-company').setValue('公司名称')
+    await press(wrapper, '让 XC 认识我的公司')
+    mockContainer.updateCompanyBrand.mockRejectedValue(new Error('名称未同步到账户'))
+    await press(wrapper, '生成我的配置方案')
+    expect(router.currentRoute.value.query.step).toBe('industry')
+    expect(mockContainer.appAlert).toHaveBeenCalledWith('名称未同步到账户')
+    expect(mockContainer.patchWorkspacePrefs).not.toHaveBeenCalled()
+  })
+
+  it.each([false, 'offline'])('does not bind or install when the account validation is %s', async (state) => {
     const { wrapper, router } = await mountComponent({ route: { step: 'industry' } })
-    await flushPromises()
-    const replaceSpy = vi.spyOn(router, 'replace')
-    // 先选中一个行业
-    const chip = wrapper.findAll('.industry-pick--open .industry-chip')[0]
-    await chip.trigger('click')
-    await flushPromises()
-    const nextBtn = wrapper.find('.actions .btn.primary')
-    await nextBtn.trigger('click')
-    await flushPromises()
-    expect(mockContainer.patchWorkspacePrefs).toHaveBeenCalledWith(expect.objectContaining({ selected_industry_id: '涂料' }))
-    expect(replaceSpy).toHaveBeenCalled()
-    const callArg = replaceSpy.mock.calls[replaceSpy.mock.calls.length - 1][0]
-    expect(callArg.query.step).toBe('host-pack')
+    if (state === false) vi.mocked(validateEnterpriseSessionCached).mockResolvedValue(false)
+    else vi.mocked(validateEnterpriseSessionCached).mockRejectedValue(new Error('network offline'))
+    await press(wrapper, '生成我的配置方案')
+    expect(mockContainer.patchWorkspacePrefs).not.toHaveBeenCalled()
+    expect(mockContainer.installHostFoundation).not.toHaveBeenCalled()
+    expect(router.currentRoute.value.query.step).toBe('industry')
+    expect(state === false ? wrapper.text().includes('登录并继续设置') : mockContainer.appAlert.mock.calls.length > 0).toBe(true)
   })
 
-  it('industry 步骤：industryStore 未加载时调用 initialize', async () => {
-    const { wrapper } = await mountComponent({
-      route: { step: 'industry' },
-      industry: { isLoaded: false },
-    })
-    await flushPromises()
-    const chip = wrapper.findAll('.industry-pick--open .industry-chip')[0]
-    await chip.trigger('click')
-    await flushPromises()
-    const nextBtn = wrapper.find('.actions .btn.primary')
-    await nextBtn.trigger('click')
-    await flushPromises()
-    expect(mockContainer.industryState.initialize).toHaveBeenCalled()
-  })
-
-  it('industry 步骤：industryStore.initialize 失败时仍继续', async () => {
-    mockContainer.industryState = createIndustryState({
-      isLoaded: false,
-      initialize: vi.fn(async () => {
-        throw new Error('init fail')
-      }),
-    })
+  it('stays on industry when the binding business result is false', async () => {
     const { wrapper, router } = await mountComponent({ route: { step: 'industry' } })
-    await flushPromises()
-    const chip = wrapper.findAll('.industry-pick--open .industry-chip')[0]
-    await chip.trigger('click')
-    await flushPromises()
-    const replaceSpy = vi.spyOn(router, 'replace')
-    const nextBtn = wrapper.find('.actions .btn.primary')
-    await nextBtn.trigger('click')
-    await flushPromises()
-    expect(replaceSpy).toHaveBeenCalled()
+    mockContainer.patchWorkspacePrefs.mockResolvedValue({ success: false })
+    await press(wrapper, '生成我的配置方案')
+    expect(router.currentRoute.value.query.step).toBe('industry')
+    expect(mockContainer.industryState.loadFromServer).not.toHaveBeenCalled()
+    expect(mockContainer.appAlert).toHaveBeenCalledWith('行业未保存，请重试')
   })
 
-  it('industry 步骤：行业绑定失败时停留在当前步骤', async () => {
-    const { wrapper, router } = await mountComponent({ route: { step: 'industry' } })
-    await flushPromises()
-    mockContainer.patchWorkspacePrefs.mockRejectedValue(new Error('bind fail'))
-    const replaceSpy = vi.spyOn(router, 'replace')
-    const chip = wrapper.findAll('.industry-pick--open .industry-chip')[0]
-    await chip.trigger('click')
-    await flushPromises()
-    const nextBtn = wrapper.find('.actions .btn.primary')
-    await nextBtn.trigger('click')
-    await flushPromises()
-    expect(mockContainer.appAlert).toHaveBeenCalledWith('bind fail')
-    expect(replaceSpy).not.toHaveBeenCalled()
+  it('does not pretend a stale industry store has refreshed', async () => {
+    const { wrapper, router } = await mountComponent({ route: { step: 'industry' }, industry: { currentIndustryId: '旧行业', loadFromServer: vi.fn().mockResolvedValue(undefined) } })
+    await wrapper.get('#onboarding-industry-search').setValue('新行业')
+    await press(wrapper, '作为行业')
+    await press(wrapper, '生成我的配置方案')
+    expect(router.currentRoute.value.query.step).toBe('industry')
+    expect(mockContainer.appAlert).toHaveBeenCalledWith('行业已保存，但工作空间尚未刷新，请重试')
   })
 
-  it('industry 步骤：industryStore 已加载但行业不同时直接进入下一步（不再调用 switchIndustry）', async () => {
-    mockContainer.industryState = createIndustryState({
-      isLoaded: true,
-      currentIndustryId: '通用',
-    })
-    const { wrapper, router } = await mountComponent({ route: { step: 'industry' } })
-    await flushPromises()
-    const chip = wrapper.findAll('.industry-pick--open .industry-chip')[0]
-    await chip.trigger('click')
-    await flushPromises()
-    const replaceSpy = vi.spyOn(router, 'replace')
-    const nextBtn = wrapper.find('.actions .btn.primary')
-    await nextBtn.trigger('click')
-    await flushPromises()
-    // 行业由后端 SSOT 决定，confirmIndustryAndNext 不再调用 switchIndustry，
-    // 仅进入下一步（host-pack）。
-    expect(replaceSpy).toHaveBeenCalled()
-    expect((mockContainer.industryState as any).switchIndustry).toBeUndefined()
+  it('lists actual capabilities separately from deferred business concepts', async () => {
+    const { wrapper } = await mountComponent({ route: { step: 'host-pack' }, industry: { currentIndustryId: '软件信息' }, baseline: createBaselinePlan({ baseline_ready: true }) })
+    expect(wrapper.get('[aria-label="行业工作空间方案"]').text()).toContain('服务订单')
+    expect(wrapper.get('[aria-label="行业工作空间方案"]').text()).not.toContain('合同管理')
+    expect(wrapper.get('.capability-note').text()).toContain('合同管理')
+    expect(wrapper.text()).toContain('通用业务工作空间')
   })
 
-  // ===== 3. host-pack 步骤渲染 =====
-
-  it('host-pack 步骤：loading 时显示检测中', async () => {
-    const { wrapper } = await mountComponent({
-      route: { step: 'host-pack' },
-      baselinePending: true,
-      flow: {
-        refreshDeliverable: vi.fn(() => new Promise(() => undefined)),
-      },
-    })
-    await flushPromises()
-    // loading=true 时模板逻辑 ok/warn 都不应用，仅显示 spinner
-    const statusCard = wrapper.find('.status-card')
-    expect(statusCard.exists()).toBe(true)
-    expect(statusCard.classes()).not.toContain('warn')
-    // loading 状态下显示 spinner
-    expect(wrapper.find('.fa-spinner').exists()).toBe(true)
+  it('completes configuration with a confirmed server receipt and no demo task', async () => {
+    const { wrapper } = await mountComponent({ route: { step: 'host-pack' }, baseline: createBaselinePlan({ baseline_ready: true }) })
+    await press(wrapper, '进入我的工作空间')
+    expect(mockContainer.patchWorkspacePrefs).toHaveBeenCalledWith({ host_pack_acknowledged: true, product_flow_completed: true })
+    expect(mockContainer.flowState.completeFlowAndGoChat).toHaveBeenCalledOnce()
+    expect(mockContainer.seedOnboardingDemo).not.toHaveBeenCalled()
+    expect(localStorage.getItem('xcagi_product_flow_first_task_pending')).toBeNull()
   })
 
-  it('host-pack 步骤：baselineOk 时显示已齐状态', async () => {
-    const { wrapper } = await mountComponent({
-      route: { step: 'host-pack' },
-      baseline: createBaselinePlan({ baseline_ready: true }),
-    })
-    await flushPromises()
-    await flushPromises()
-    const statusCard = wrapper.find('.status-card')
-    expect(statusCard.classes()).toContain('ok')
-    expect(statusCard.text()).toContain('已齐')
+  it('does not complete configuration when the server rejects its receipt', async () => {
+    const { wrapper } = await mountComponent({ route: { step: 'host-pack' }, baseline: createBaselinePlan({ baseline_ready: true }) })
+    mockContainer.patchWorkspacePrefs.mockImplementation(async (patch) => ({ success: patch.product_flow_completed !== true }))
+    await press(wrapper, '进入我的工作空间')
+    expect(mockContainer.patchWorkspacePrefs).toHaveBeenCalledWith({ selected_industry_id: expect.any(String), industry_mod_id: '' })
+    expect(mockContainer.patchWorkspacePrefs).toHaveBeenCalledWith({ host_pack_acknowledged: true, product_flow_completed: true })
+    expect(mockContainer.flowState.completeFlowAndGoChat).not.toHaveBeenCalled()
+    expect(mockContainer.appAlert).toHaveBeenCalledWith('工作空间配置未保存，请重试')
   })
 
-  it('host-pack 步骤：!baselineOk 时显示缺项', async () => {
-    const { wrapper } = await mountComponent({
-      route: { step: 'host-pack' },
-      baseline: createBaselinePlan({
-        baseline_ready: false,
-        missing_required_mod_ids: ['mod-a'],
-        missing_account_custom_mod_ids: ['mod-b'],
-      }),
-    })
-    await flushPromises()
-    await flushPromises()
-    const statusCard = wrapper.find('.status-card')
-    expect(statusCard.classes()).toContain('warn')
-    expect(statusCard.text()).toContain('还差')
+  it('installs missing features and enters the workspace without adding extra setup steps', async () => {
+    const { wrapper } = await mountComponent({ route: { step: 'host-pack' } })
+    mockBaselineForInstallation(mockContainer.installHostFoundation)
+    await press(wrapper, '进入我的工作空间')
+    expect(mockContainer.installHostFoundation).toHaveBeenCalledOnce()
+    expect(mockContainer.flowState.completeFlowAndGoChat).toHaveBeenCalledOnce()
+    expect(mockContainer.seedOnboardingDemo).not.toHaveBeenCalled()
+    await expect(mockContainer.fetchIndustryBaseline()).resolves.toMatchObject({ baseline_ready: true })
   })
 
-  it('host-pack 步骤：!baselineOk 且 missingIndustryPackageCount>0 时明细里提示行业包', async () => {
-    const { wrapper } = await mountComponent({
-      route: { step: 'host-pack' },
-      baseline: createBaselinePlan({
-        baseline_ready: false,
-        missing_required_mod_ids: ['mod-a'],
-        missing_account_custom_mod_ids: [],
-        industry_mod_ids: ['ind-1'],
-        missing_industry_mod_ids: ['ind-1'],
-        groups: [
-          {
-            id: 'core',
-            title: '核心',
-            hint: '核心提示',
-            items: [{ mod_id: 'mod-a', label: '模块A', installed: false, required: true }],
-          },
-        ],
-      }),
-    })
-    await flushPromises()
-    await flushPromises()
-    expect(wrapper.find('.status-card').text()).toContain('还差')
-    const details = wrapper.find('.host-pack-details')
-    expect(details.exists()).toBe(true)
-    // 展开明细后才看到行业包提示
-    details.element.setAttribute('open', '')
-    await flushPromises()
-    expect(wrapper.text()).toContain('行业包')
-  })
-
-  it('host-pack 步骤：baselinePlan.summary 折叠在明细里', async () => {
-    const { wrapper } = await mountComponent({
-      route: { step: 'host-pack' },
-      baseline: createBaselinePlan({
-        summary: '这是摘要',
-        groups: [
-          {
-            id: 'core',
-            title: '核心',
-            hint: '',
-            items: [{ mod_id: 'mod-1', label: '模块1', installed: true, required: true }],
-          },
-        ],
-      }),
-    })
-    await flushPromises()
-    await flushPromises()
-    const details = wrapper.find('.host-pack-details')
-    expect(details.exists()).toBe(true)
-    details.element.setAttribute('open', '')
-    await flushPromises()
-    // baselinePlan.summary 渲染在 .host-pack-details 内的 .lead.muted,
-    // 不能用 find('.lead.muted') 因为页面其他步骤也可能有该 class。
-    expect(details.find('.lead.muted').text()).toContain('这是摘要')
-  })
-
-  it('host-pack 步骤：明细折叠默认隐藏清单与 mod_id', async () => {
-    const { wrapper } = await mountComponent({
-      route: { step: 'host-pack' },
-      baseline: createBaselinePlan({
-        baseline_ready: false,
-        groups: [
-          {
-            id: 'core',
-            title: '核心',
-            hint: '核心提示',
-            items: [
-              {
-                mod_id: 'mod-1',
-                label: '模块1',
-                installed: true,
-                required: true,
-                show_mod_id: true,
-              },
-              {
-                mod_id: 'mod-2',
-                label: '模块2',
-                installed: false,
-                required: true,
-                show_mod_id: true,
-              },
-              {
-                mod_id: 'mod-3',
-                label: '模块3',
-                installed: false,
-                required: false,
-                show_mod_id: false,
-              },
-            ],
-          },
-          {
-            id: 'industry',
-            title: '行业包',
-            hint: '行业提示',
-            items: [
-              {
-                mod_id: 'mod-4',
-                label: '行业模块',
-                installed: false,
-                required: false,
-                show_mod_id: true,
-              },
-            ],
-          },
-        ],
-      }),
-    })
-    await flushPromises()
-    await flushPromises()
-    expect(wrapper.text()).toContain('一键装齐')
-    expect(wrapper.text()).toContain('查看明细')
-    expect(wrapper.find('.baseline-list .mono').exists()).toBe(false)
-    const details = wrapper.find('.host-pack-details')
-    details.element.setAttribute('open', '')
-    await flushPromises()
-    const groups = wrapper.findAll('.baseline-groups')
-    expect(groups.length).toBeGreaterThanOrEqual(1)
-    expect(wrapper.text()).toContain('核心')
-    expect(wrapper.text()).toContain('行业包')
-    expect(wrapper.find('.baseline-list li.ok').exists()).toBe(true)
-    expect(wrapper.find('.baseline-list li.warn').exists()).toBe(true)
-    expect(wrapper.find('.baseline-list li.optional').exists()).toBe(true)
-    // 简化后不再展示 mod_id
-    expect(wrapper.find('.baseline-list .mono').exists()).toBe(false)
-  })
-
-  it('host-pack 步骤：sidebarBaselineGroups 为空但 baselineGroups 有值时走 fallback 分支', async () => {
-    const { wrapper } = await mountComponent({
-      route: { step: 'host-pack' },
-      baseline: createBaselinePlan({
-        baseline_ready: false,
-        groups: [
-          {
-            id: 'industry',
-            title: '行业包',
-            hint: '行业提示',
-            items: [
-              {
-                mod_id: 'mod-4',
-                label: '行业模块',
-                installed: false,
-                required: false,
-                show_mod_id: true,
-              },
-            ],
-          },
-        ],
-      }),
-    })
-    await flushPromises()
-    await flushPromises()
-    // 走 fallback：!sidebarBaselineGroups.length && baselineGroups.length
-    expect(wrapper.text()).toContain('行业模块')
-  })
-
-  it('host-pack 步骤：industrySidebarPreviewLabels 渲染（考勤特殊）', async () => {
-    const { wrapper } = await mountComponent({
-      route: { step: 'host-pack' },
-      baseline: createBaselinePlan({ baseline_ready: true }),
-      catalog: {
-        open_industry_ids: ['考勤'],
-        selected_industry_id: '考勤',
-        open_packages: [{ industry_id: '考勤', name: '考勤', scenario: '', product_name: '' }],
-      },
-    })
-    await flushPromises()
-    await flushPromises()
-    // 考勤行业会 unshift '考勤表转换'
-    const preview = wrapper.find('.sidebar-preview')
-    if (preview.exists()) {
-      expect(preview.text()).toContain('考勤')
-    }
-  })
-
-  it('host-pack 步骤：showNoAccountCustomHint 企业版无账号定制时显示', async () => {
-    const { wrapper } = await mountComponent({
-      route: { step: 'host-pack' },
-      isEnterprise: true,
-      productSku: 'enterprise',
-      baseline: createBaselinePlan({
-        baseline_ready: false,
-        account_custom_mod_ids: [],
-        groups: [
-          {
-            id: 'core',
-            title: '核心',
-            hint: '',
-            items: [{ mod_id: 'mod-1', label: '模块1', installed: false, required: true }],
-          },
-        ],
-      }),
-    })
-    await flushPromises()
-    await flushPromises()
-    const details = wrapper.find('.host-pack-details')
-    expect(details.exists()).toBe(true)
-    details.element.setAttribute('open', '')
-    await flushPromises()
-    expect(wrapper.find('.account-custom-empty-hint').exists()).toBe(true)
-  })
-
-  it('host-pack 步骤：baselineOk 时显示“跟 AI 员工做第一单”入口', async () => {
-    const { wrapper } = await mountComponent({
-      route: { step: 'host-pack' },
-      baseline: createBaselinePlan({ baseline_ready: true }),
-    })
-    await flushPromises()
-    await flushPromises()
-    const buttons = wrapper.findAll('.actions .btn.primary')
-    const nextBtn = buttons.find((b) => b.text().trim() === '下一步：跟 AI 员工做第一单')
-    expect(nextBtn).toBeTruthy()
-  })
-
-  it('host-pack 步骤：点击"重新检测"按钮触发 refreshStatus', async () => {
-    const { wrapper } = await mountComponent({
-      route: { step: 'host-pack' },
-      baseline: createBaselinePlan({
-        baseline_ready: true,
-        groups: [
-          {
-            id: 'core',
-            title: '核心',
-            hint: '',
-            items: [{ mod_id: 'mod-1', label: '模块1', installed: true, required: true }],
-          },
-        ],
-      }),
-    })
-    await flushPromises()
-    await flushPromises()
-    mockContainer.fetchIndustryBaseline.mockClear()
-    const details = wrapper.find('.host-pack-details')
-    details.element.setAttribute('open', '')
-    await flushPromises()
-    const refreshBtn = wrapper.find('.host-pack-details .btn.ghost')
-    expect(refreshBtn.text()).toContain('重新检测')
-    await refreshBtn.trigger('click')
-    await flushPromises()
-    expect(mockContainer.fetchIndustryBaseline).toHaveBeenCalled()
-  })
-
-  // ===== 4. runBootstrap 测试 =====
-
-  it('runBootstrap：成功装齐后进入演示数据步骤', async () => {
-    const { wrapper, router } = await mountComponent({
-      route: { step: 'host-pack' },
-      baseline: createBaselinePlan({ baseline_ready: false }),
-    })
-    await flushPromises()
-    await flushPromises()
-    // 设置 mock 序列：第一次 refreshBaseline 返回 false，第二次返回 true
-    mockContainer.fetchIndustryBaseline
-      .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: false }))
-      .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: true }))
-    const bootstrapBtn = wrapper.find('.btn.primary')
-    expect(bootstrapBtn.text()).toContain('一键装齐')
-    await bootstrapBtn.trigger('click')
-    await flushPromises()
-    await flushPromises()
-    await flushPromises()
-    expect(mockContainer.installHostFoundation).toHaveBeenCalled()
-    expect(mockContainer.flowState.markHostPackAcknowledged).toHaveBeenCalled()
-    expect(mockContainer.invalidateHostPackCompletionCache).toHaveBeenCalled()
+  it('offers the example separately and waits for another explicit click before seeding', async () => {
+    const { wrapper, router } = await mountComponent({ route: { step: 'host-pack' }, baseline: createBaselinePlan({ baseline_ready: true }) })
+    await press(wrapper, '查看演示业务体验')
     expect(router.currentRoute.value.query.step).toBe('seed-demo')
+    expect(mockContainer.seedOnboardingDemo).not.toHaveBeenCalled()
+    expect(mockContainer.flowState.markProductFlowCompleted).not.toHaveBeenCalled()
   })
 
-  it('runBootstrap：成功装齐后明确提示下一步准备演示数据', async () => {
-    const { wrapper } = await mountComponent({
-      route: { step: 'host-pack' },
-      baseline: createBaselinePlan({ baseline_ready: false }),
-    })
-    await flushPromises()
-    await flushPromises()
-    mockContainer.fetchIndustryBaseline
-      .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: false }))
-      .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: true }))
-    mockContainer.appAlert.mockClear()
-    const bootstrapBtn = wrapper.find('.btn.primary')
-    await bootstrapBtn.trigger('click')
-    await flushPromises()
-    await flushPromises()
-    await flushPromises()
-    expect(mockContainer.appAlert).toHaveBeenCalledWith('本行业推荐菜单已装齐。下一步准备首次使用的演示数据。')
+  it('returns tutorial replay to the source without modifying configuration', async () => {
+    const { wrapper, router } = await mountComponent({ route: { step: 'industry', from: 'tutorial', redirect: '/data-sources?tab=files' } })
+    await press(wrapper, '返回上一页')
+    expect(router.currentRoute.value.fullPath).toBe('/data-sources?tab=files')
+    expect(mockContainer.patchWorkspacePrefs).not.toHaveBeenCalled()
+    expect(mockContainer.seedOnboardingDemo).not.toHaveBeenCalled()
+  })
+
+  it('allows an unfinished workspace to be skipped for this session only', async () => {
+    const { wrapper } = await mountComponent({ route: { step: 'host-pack' } })
+    await press(wrapper, '先进入，稍后再设置')
+    expect(mockContainer.markHostPackSkippedThisSession).toHaveBeenCalled()
+    expect(mockContainer.flowState.markProductFlowCompleted).not.toHaveBeenCalled()
   })
 
   it('runBootstrap：装齐失败时调用 appAlert 显示错误', async () => {
@@ -930,12 +554,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
       success: false,
       message: '宿主装包失败',
     })
-    mockContainer.fetchIndustryBaseline.mockResolvedValue(
-      createBaselinePlan({
-        baseline_ready: false,
-        missing_required_mod_ids: ['mod-x'],
-      }),
-    )
+    mockBaselineForInstallation(mockContainer.installHostFoundation, createBaselinePlan({ baseline_ready: false, missing_required_mod_ids: ['mod-x'] }))
     mockContainer.appAlert.mockClear()
     const bootstrapBtn = wrapper.find('.btn.primary')
     await bootstrapBtn.trigger('click')
@@ -945,6 +564,9 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     expect(mockContainer.appAlert).toHaveBeenCalled()
     const alertMsg = mockContainer.appAlert.mock.calls[0][0] as string
     expect(alertMsg).toContain('宿主装包失败')
+    expect(mockContainer.installHostFoundation).toHaveBeenCalledOnce()
+    expect(mockContainer.flowState.completeFlowAndGoChat).not.toHaveBeenCalled()
+    await expect(mockContainer.fetchIndustryBaseline()).resolves.toMatchObject({ baseline_ready: false })
   })
 
   it('runBootstrap：installHostFoundation 抛异常时进入 catch', async () => {
@@ -956,6 +578,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     // 在 mountComponent 之后设置 mock，避免被默认 mock 覆盖
     mockContainer.installHostFoundation.mockRejectedValue(new Error('网络错误'))
+    mockBaselineForInstallation(mockContainer.installHostFoundation)
     mockContainer.appAlert.mockClear()
     const bootstrapBtn = wrapper.find('.btn.primary')
     await bootstrapBtn.trigger('click')
@@ -963,6 +586,9 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     await flushPromises()
     expect(mockContainer.appAlert).toHaveBeenCalledWith('网络错误')
+    expect(mockContainer.installHostFoundation).toHaveBeenCalledOnce()
+    expect(mockContainer.flowState.completeFlowAndGoChat).not.toHaveBeenCalled()
+    await expect(mockContainer.fetchIndustryBaseline()).resolves.toMatchObject({ baseline_ready: false })
   })
 
   it('runBootstrap：installHostFoundation 抛非 Error 异常时显示默认错误', async () => {
@@ -974,6 +600,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     // 在 mountComponent 之后设置 mock，避免被默认 mock 覆盖
     mockContainer.installHostFoundation.mockRejectedValue('string error')
+    mockBaselineForInstallation(mockContainer.installHostFoundation)
     mockContainer.appAlert.mockClear()
     const bootstrapBtn = wrapper.find('.btn.primary')
     await bootstrapBtn.trigger('click')
@@ -981,6 +608,9 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     await flushPromises()
     expect(mockContainer.appAlert).toHaveBeenCalledWith('string error')
+    expect(mockContainer.installHostFoundation).toHaveBeenCalledOnce()
+    expect(mockContainer.flowState.completeFlowAndGoChat).not.toHaveBeenCalled()
+    await expect(mockContainer.fetchIndustryBaseline()).resolves.toMatchObject({ baseline_ready: false })
   })
 
   it('runBootstrap：industryMissing 时调用 installIndustrySeed', async () => {
@@ -993,22 +623,17 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     })
     await flushPromises()
     await flushPromises()
-    mockContainer.fetchIndustryBaseline
-      .mockResolvedValueOnce(
-        createBaselinePlan({
-          baseline_ready: false,
-          missing_industry_mod_ids: ['ind-1'],
-        }),
-      )
-      .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: true }))
     mockContainer.installIndustrySeed.mockResolvedValue({ success: true, message: '' })
     mockContainer.installIndustrySeed.mockClear()
+    mockBaselineForInstallation(mockContainer.installIndustrySeed, createBaselinePlan({ baseline_ready: false, missing_industry_mod_ids: ['ind-1'] }))
     const bootstrapBtn = wrapper.find('.btn.primary')
     await bootstrapBtn.trigger('click')
     await flushPromises()
     await flushPromises()
     await flushPromises()
     expect(mockContainer.installIndustrySeed).toHaveBeenCalled()
+    await expect(mockContainer.fetchIndustryBaseline()).resolves.toMatchObject({ baseline_ready: true })
+    expect(mockContainer.flowState.completeFlowAndGoChat).toHaveBeenCalledOnce()
   })
 
   it('runBootstrap：installIndustrySeed 返回 success=false 时记录错误', async () => {
@@ -1021,16 +646,9 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     })
     await flushPromises()
     await flushPromises()
-    mockContainer.fetchIndustryBaseline
-      .mockResolvedValueOnce(
-        createBaselinePlan({
-          baseline_ready: false,
-          missing_industry_mod_ids: ['ind-1'],
-        }),
-      )
-      .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: false }))
     mockContainer.installIndustrySeed.mockResolvedValue({ success: false, message: '行业包失败' })
     mockContainer.appAlert.mockClear()
+    mockBaselineForInstallation(mockContainer.installIndustrySeed, createBaselinePlan({ baseline_ready: false, missing_industry_mod_ids: ['ind-1'] }))
     const bootstrapBtn = wrapper.find('.btn.primary')
     await bootstrapBtn.trigger('click')
     await flushPromises()
@@ -1039,6 +657,10 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     expect(mockContainer.appAlert).toHaveBeenCalled()
     const alertMsg = mockContainer.appAlert.mock.calls[0][0] as string
     expect(alertMsg).toContain('行业包')
+    expect(mockContainer.installIndustrySeed).toHaveBeenCalledOnce()
+    expect(mockContainer.flowState.completeFlowAndGoChat).not.toHaveBeenCalled()
+    await expect(mockContainer.fetchIndustryBaseline()).resolves.toMatchObject({ baseline_ready: false, missing_industry_mod_ids: ['ind-1'] })
+    expect(mockContainer.appAlert.mock.calls[0][0]).toContain('行业包失败')
   })
 
   it('runBootstrap：installIndustrySeed 抛异常时记录错误', async () => {
@@ -1051,22 +673,19 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     })
     await flushPromises()
     await flushPromises()
-    mockContainer.fetchIndustryBaseline
-      .mockResolvedValueOnce(
-        createBaselinePlan({
-          baseline_ready: false,
-          missing_industry_mod_ids: ['ind-1'],
-        }),
-      )
-      .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: false }))
     mockContainer.installIndustrySeed.mockRejectedValue(new Error('行业包异常'))
     mockContainer.appAlert.mockClear()
+    mockBaselineForInstallation(mockContainer.installIndustrySeed, createBaselinePlan({ baseline_ready: false, missing_industry_mod_ids: ['ind-1'] }))
     const bootstrapBtn = wrapper.find('.btn.primary')
     await bootstrapBtn.trigger('click')
     await flushPromises()
     await flushPromises()
     await flushPromises()
     expect(mockContainer.appAlert).toHaveBeenCalled()
+    expect(mockContainer.installIndustrySeed).toHaveBeenCalledOnce()
+    expect(mockContainer.flowState.completeFlowAndGoChat).not.toHaveBeenCalled()
+    await expect(mockContainer.fetchIndustryBaseline()).resolves.toMatchObject({ baseline_ready: false, missing_industry_mod_ids: ['ind-1'] })
+    expect(mockContainer.appAlert.mock.calls[0][0]).toContain('行业包异常')
   })
 
   it('runBootstrap：customMissing 时调用 installMod 与 autoOnboard', async () => {
@@ -1079,16 +698,9 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     })
     await flushPromises()
     await flushPromises()
-    mockContainer.fetchIndustryBaseline
-      .mockResolvedValueOnce(
-        createBaselinePlan({
-          baseline_ready: false,
-          missing_account_custom_mod_ids: ['custom-1'],
-        }),
-      )
-      .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: true }))
     mockContainer.installMod.mockClear()
     mockContainer.autoOnboardWorkflowEmployeesFromMods.mockClear()
+    mockBaselineForInstallation(mockContainer.installMod, createBaselinePlan({ baseline_ready: false, missing_account_custom_mod_ids: ['custom-1'] }))
     const bootstrapBtn = wrapper.find('.btn.primary')
     await bootstrapBtn.trigger('click')
     await flushPromises()
@@ -1096,6 +708,8 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     expect(mockContainer.installMod).toHaveBeenCalledWith('custom-1')
     expect(mockContainer.autoOnboardWorkflowEmployeesFromMods).toHaveBeenCalled()
+    await expect(mockContainer.fetchIndustryBaseline()).resolves.toMatchObject({ baseline_ready: true })
+    expect(mockContainer.flowState.completeFlowAndGoChat).toHaveBeenCalledOnce()
   })
 
   it('runBootstrap：installMod 返回 success=false 时记录错误', async () => {
@@ -1108,22 +722,19 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     })
     await flushPromises()
     await flushPromises()
-    mockContainer.fetchIndustryBaseline
-      .mockResolvedValueOnce(
-        createBaselinePlan({
-          baseline_ready: false,
-          missing_account_custom_mod_ids: ['custom-1'],
-        }),
-      )
-      .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: false }))
     mockContainer.installMod.mockResolvedValue({ success: false, message: 'mod 失败' })
     mockContainer.appAlert.mockClear()
+    mockBaselineForInstallation(mockContainer.installMod, createBaselinePlan({ baseline_ready: false, missing_account_custom_mod_ids: ['custom-1'] }))
     const bootstrapBtn = wrapper.find('.btn.primary')
     await bootstrapBtn.trigger('click')
     await flushPromises()
     await flushPromises()
     await flushPromises()
     expect(mockContainer.appAlert).toHaveBeenCalled()
+    expect(mockContainer.installMod).toHaveBeenCalledOnce()
+    expect(mockContainer.flowState.completeFlowAndGoChat).not.toHaveBeenCalled()
+    await expect(mockContainer.fetchIndustryBaseline()).resolves.toMatchObject({ baseline_ready: false, missing_account_custom_mod_ids: ['custom-1'] })
+    expect(mockContainer.appAlert.mock.calls[0][0]).toContain('mod 失败')
   })
 
   it('runBootstrap：installMod 抛异常时记录错误', async () => {
@@ -1136,22 +747,19 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     })
     await flushPromises()
     await flushPromises()
-    mockContainer.fetchIndustryBaseline
-      .mockResolvedValueOnce(
-        createBaselinePlan({
-          baseline_ready: false,
-          missing_account_custom_mod_ids: ['custom-1'],
-        }),
-      )
-      .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: false }))
     mockContainer.installMod.mockRejectedValue(new Error('mod 异常'))
     mockContainer.appAlert.mockClear()
+    mockBaselineForInstallation(mockContainer.installMod, createBaselinePlan({ baseline_ready: false, missing_account_custom_mod_ids: ['custom-1'] }))
     const bootstrapBtn = wrapper.find('.btn.primary')
     await bootstrapBtn.trigger('click')
     await flushPromises()
     await flushPromises()
     await flushPromises()
     expect(mockContainer.appAlert).toHaveBeenCalled()
+    expect(mockContainer.installMod).toHaveBeenCalledOnce()
+    expect(mockContainer.flowState.completeFlowAndGoChat).not.toHaveBeenCalled()
+    await expect(mockContainer.fetchIndustryBaseline()).resolves.toMatchObject({ baseline_ready: false, missing_account_custom_mod_ids: ['custom-1'] })
+    expect(mockContainer.appAlert.mock.calls[0][0]).toContain('mod 异常')
   })
 
   it('runBootstrap：account_delivery_seed_packages 时调用 installCustomerDeliverySeed', async () => {
@@ -1166,10 +774,8 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     })
     await flushPromises()
     await flushPromises()
-    mockContainer.fetchIndustryBaseline
-      .mockResolvedValueOnce(seedBaseline)
-      .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: true }))
     mockContainer.installCustomerDeliverySeed.mockClear()
+    mockBaselineForInstallation(mockContainer.installCustomerDeliverySeed, seedBaseline)
     const bootstrapBtn = wrapper.find('.btn.primary')
     await bootstrapBtn.trigger('click')
     await flushPromises()
@@ -1177,6 +783,8 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     expect(mockContainer.installCustomerDeliverySeed).toHaveBeenCalledWith('custom-1', expect.any(String))
     expect(mockContainer.installCustomerDeliverySeed).not.toHaveBeenCalledWith('xcagi-core-workflow-employees', expect.any(String))
+    await expect(mockContainer.fetchIndustryBaseline()).resolves.toMatchObject({ baseline_ready: true })
+    expect(mockContainer.flowState.completeFlowAndGoChat).toHaveBeenCalledOnce()
   })
 
   it('runBootstrap：installCustomerDeliverySeed 返回 success=false 时记录错误', async () => {
@@ -1191,20 +799,22 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     })
     await flushPromises()
     await flushPromises()
-    mockContainer.fetchIndustryBaseline
-      .mockResolvedValueOnce(seedBaseline)
-      .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: false }))
     mockContainer.installCustomerDeliverySeed.mockResolvedValue({
       success: false,
       message: '交付失败',
     })
     mockContainer.appAlert.mockClear()
+    mockBaselineForInstallation(mockContainer.installCustomerDeliverySeed, seedBaseline)
     const bootstrapBtn = wrapper.find('.btn.primary')
     await bootstrapBtn.trigger('click')
     await flushPromises()
     await flushPromises()
     await flushPromises()
     expect(mockContainer.appAlert).toHaveBeenCalled()
+    expect(mockContainer.installCustomerDeliverySeed).toHaveBeenCalledOnce()
+    expect(mockContainer.flowState.completeFlowAndGoChat).not.toHaveBeenCalled()
+    await expect(mockContainer.fetchIndustryBaseline()).resolves.toMatchObject(seedBaseline)
+    expect(mockContainer.appAlert.mock.calls[0][0]).toContain('交付失败')
   })
 
   it('runBootstrap：installCustomerDeliverySeed 抛异常时记录错误', async () => {
@@ -1219,17 +829,19 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     })
     await flushPromises()
     await flushPromises()
-    mockContainer.fetchIndustryBaseline
-      .mockResolvedValueOnce(seedBaseline)
-      .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: false }))
     mockContainer.installCustomerDeliverySeed.mockRejectedValue(new Error('交付异常'))
     mockContainer.appAlert.mockClear()
+    mockBaselineForInstallation(mockContainer.installCustomerDeliverySeed, seedBaseline)
     const bootstrapBtn = wrapper.find('.btn.primary')
     await bootstrapBtn.trigger('click')
     await flushPromises()
     await flushPromises()
     await flushPromises()
     expect(mockContainer.appAlert).toHaveBeenCalled()
+    expect(mockContainer.installCustomerDeliverySeed).toHaveBeenCalledOnce()
+    expect(mockContainer.flowState.completeFlowAndGoChat).not.toHaveBeenCalled()
+    await expect(mockContainer.fetchIndustryBaseline()).resolves.toMatchObject(seedBaseline)
+    expect(mockContainer.appAlert.mock.calls[0][0]).toContain('交付异常')
   })
 
   it('runBootstrap：autoOnboard 抛异常时进入 catch 不阻断', async () => {
@@ -1242,16 +854,9 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     })
     await flushPromises()
     await flushPromises()
-    mockContainer.fetchIndustryBaseline
-      .mockResolvedValueOnce(
-        createBaselinePlan({
-          baseline_ready: false,
-          missing_account_custom_mod_ids: ['custom-1'],
-        }),
-      )
-      .mockResolvedValueOnce(createBaselinePlan({ baseline_ready: true }))
     mockContainer.autoOnboardWorkflowEmployeesFromMods.mockRejectedValue(new Error('onboard 失败'))
     const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    mockBaselineForInstallation(mockContainer.installMod, createBaselinePlan({ baseline_ready: false, missing_account_custom_mod_ids: ['custom-1'] }))
     const bootstrapBtn = wrapper.find('.btn.primary')
     await bootstrapBtn.trigger('click')
     await flushPromises()
@@ -1260,692 +865,9 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     expect(consoleSpy).toHaveBeenCalled()
     consoleSpy.mockRestore()
+    await expect(mockContainer.fetchIndustryBaseline()).resolves.toMatchObject({ baseline_ready: true })
+    expect(mockContainer.flowState.completeFlowAndGoChat).toHaveBeenCalledOnce()
   })
 
-  // ===== 5. done 步骤（else 分支）=====
 
-  it('done 步骤渲染"可以开始使用"', async () => {
-    const { wrapper } = await mountComponent({ route: { step: 'done' } })
-    await flushPromises()
-    expect(wrapper.find('h1').text()).toBe('可以开始使用')
-    const enterBtn = wrapper.find('.actions .btn.primary')
-    expect(enterBtn.text()).toContain('进入智能对话')
-  })
-
-  // ===== 6. fromTutorial 模式 =====
-
-  it('fromTutorial 模式：header 显示"新手教程 · 宿主入门"', async () => {
-    const { wrapper } = await mountComponent({
-      route: { from: 'tutorial', redirect: '/chat' },
-    })
-    await flushPromises()
-    expect(wrapper.find('.brand').text()).toContain('新手教程 · 宿主入门')
-  })
-
-  it('fromTutorial 模式：footer 显示"返回上一页"按钮', async () => {
-    const { wrapper } = await mountComponent({
-      route: { from: 'tutorial', redirect: '/chat' },
-    })
-    await flushPromises()
-    const footerBtn = wrapper.find('.product-flow-footer .btn.text')
-    expect(footerBtn.text()).toContain('返回上一页')
-  })
-
-  it('fromTutorial 模式：点击"返回上一页"调用 returnFromTutorial', async () => {
-    const { wrapper, router } = await mountComponent({
-      route: { from: 'tutorial', redirect: '/chat' },
-    })
-    await flushPromises()
-    const replaceSpy = vi.spyOn(router, 'replace')
-    const footerBtn = wrapper.find('.product-flow-footer .btn.text')
-    await footerBtn.trigger('click')
-    await flushPromises()
-    expect(replaceSpy).toHaveBeenCalledWith('/chat')
-  })
-
-  it('非 fromTutorial 模式：footer 显示"跳过引导"按钮', async () => {
-    const { wrapper } = await mountComponent()
-    await flushPromises()
-    const footerBtn = wrapper.find('.product-flow-footer .btn.text')
-    expect(footerBtn.text()).toContain('跳过引导')
-  })
-
-  it('非 fromTutorial 模式：点击"跳过引导"调用 skipEntireFlow', async () => {
-    const { wrapper } = await mountComponent()
-    await flushPromises()
-    const footerBtn = wrapper.find('.product-flow-footer .btn.text')
-    await footerBtn.trigger('click')
-    await flushPromises()
-    // skipEntireFlow -> !baselineOk -> markHostPackSkippedThisSession
-    expect(mockContainer.markHostPackSkippedThisSession).toHaveBeenCalled()
-  })
-
-  it('fromTutorial 模式：点击"跳过引导"调用 returnFromTutorial', async () => {
-    const { wrapper, router } = await mountComponent({
-      route: { from: 'tutorial', redirect: '/chat' },
-    })
-    await flushPromises()
-    const replaceSpy = vi.spyOn(router, 'replace')
-    const footerBtn = wrapper.find('.product-flow-footer .btn.text')
-    await footerBtn.trigger('click')
-    await flushPromises()
-    expect(replaceSpy).toHaveBeenCalledWith('/chat')
-  })
-
-  it('fromTutorial 模式：openModStore 跳转不带 onboarding 参数', async () => {
-    const { wrapper, router } = await mountComponent({
-      route: { step: 'industry', from: 'tutorial', redirect: '/chat' },
-    })
-    await flushPromises()
-    const pushSpy = vi.spyOn(router, 'push')
-    const modStoreBtn = wrapper.find('.btn.ghost')
-    await modStoreBtn.trigger('click')
-    await flushPromises()
-    expect(pushSpy).toHaveBeenCalled()
-    const callArg = pushSpy.mock.calls[0][0]
-    expect(callArg.name).toBe('mod-store')
-    expect(callArg.query).toEqual({})
-  })
-
-  // ===== 7. editionLabel 测试 =====
-
-  it('editionLabel：enterprise SKU 显示"企业版"', async () => {
-    const { wrapper } = await mountComponent({ productSku: 'enterprise' })
-    await flushPromises()
-    expect(wrapper.find('.edition-tag').text()).toContain('企业版 enterprise')
-  })
-
-  it('editionLabel：personal SKU 显示"个人版"', async () => {
-    const { wrapper } = await mountComponent({ productSku: 'personal' })
-    await flushPromises()
-    expect(wrapper.find('.edition-tag').text()).toContain('个人版 personal')
-  })
-
-  it('editionLabel：minimal edition 显示"空壳"', async () => {
-    const { wrapper } = await mountComponent({ buildEdition: 'minimal' })
-    await flushPromises()
-    expect(wrapper.find('.edition-tag').text()).toContain('空壳 minimal')
-  })
-
-  it('editionLabel：generic edition 显示"通用"', async () => {
-    const { wrapper } = await mountComponent({ buildEdition: 'generic' })
-    await flushPromises()
-    expect(wrapper.find('.edition-tag').text()).toContain('通用 generic')
-  })
-
-  it('editionLabel：full edition 显示"完整"', async () => {
-    const { wrapper } = await mountComponent({ buildEdition: 'full' })
-    await flushPromises()
-    expect(wrapper.find('.edition-tag').text()).toContain('完整 full')
-  })
-
-  // ===== 8. onWelcomeLogoError 测试 =====
-
-  it('onWelcomeLogoError：图片错误时切换到下一个候选 logo', async () => {
-    const { wrapper } = await mountComponent()
-    await flushPromises()
-    const img = wrapper.find('.welcome-logo')
-    const initialSrc = img.attributes('src')
-    await img.trigger('error')
-    await flushPromises()
-    const newSrc = wrapper.find('.welcome-logo').attributes('src')
-    expect(newSrc).not.toBe(initialSrc)
-  })
-
-  it('onWelcomeLogoError：多次错误后不再切换', async () => {
-    const { wrapper } = await mountComponent()
-    await flushPromises()
-    // 触发 3 次错误（共 3 个候选）
-    for (let i = 0; i < 5; i++) {
-      await wrapper.find('.welcome-logo').trigger('error')
-      await flushPromises()
-    }
-    const finalSrc = wrapper.find('.welcome-logo').attributes('src')
-    // 第 3 次错误后不再切换，停留在最后一个候选
-    expect(finalSrc).toContain('xc-logo-base.jpg')
-  })
-
-  // ===== 9. onMounted 测试 =====
-
-  it('onMounted：fetchProductSku 失败时静默处理', async () => {
-    const { wrapper } = await mountComponent({ productSkuReject: true })
-    await flushPromises()
-    expect(wrapper.exists()).toBe(true)
-  })
-
-  it('onMounted：fetchOnboardingIndustryCatalog 失败时静默处理', async () => {
-    const { wrapper } = await mountComponent({
-      route: { step: 'industry' },
-      catalogReject: true,
-    })
-    await flushPromises()
-    await flushPromises()
-    expect(wrapper.exists()).toBe(true)
-    // 失败后 onboardingCatalogLoaded 仍为 true
-    // preset 模式下应渲染行业 chip
-    expect(wrapper.findAll('.industry-pick--open .industry-chip').length).toBeGreaterThan(0)
-  })
-
-  it('onMounted：catalog 有 open_industry_ids 时调用 setRuntimeOnboardingOpenIndustryIds', async () => {
-    mockContainer.setRuntimeOnboardingOpenIndustryIds.mockClear()
-    const { wrapper } = await mountComponent({
-      catalog: { open_industry_ids: ['涂料', '考勤'] },
-    })
-    await flushPromises()
-    expect(mockContainer.setRuntimeOnboardingOpenIndustryIds).toHaveBeenCalledWith(['涂料', '考勤'])
-    expect(wrapper.exists()).toBe(true)
-  })
-
-  it('onMounted：industryStore 未加载时调用 initialize', async () => {
-    await mountComponent({
-      industry: { isLoaded: false },
-    })
-    await flushPromises()
-    expect(mockContainer.industryState.initialize).toHaveBeenCalled()
-  })
-
-  it('onMounted：industryStore.initialize 失败时静默处理', async () => {
-    const { wrapper } = await mountComponent({
-      industry: {
-        isLoaded: false,
-        initialize: vi.fn(async () => {
-          throw new Error('init fail')
-        }),
-      },
-    })
-    await flushPromises()
-    expect(wrapper.exists()).toBe(true)
-  })
-
-  it('onMounted：currentStep 与 query.step 不一致时跳转', async () => {
-    // resolveEntryStep 返回 welcome，但 query.step=industry
-    const { router } = await mountComponent({
-      route: { step: 'industry' },
-      flow: {
-        resolveEntryStep: vi.fn(() => 'welcome'),
-      },
-    })
-    await flushPromises()
-    // 应触发 router.replace
-    // 由于 onMounted 末尾会调用 refreshStatus，这里只验证不报错
-    expect(router).toBeTruthy()
-  })
-
-  // ===== 10. watcher 测试 =====
-
-  it('watcher：route.query.step 变化时更新 currentStep', async () => {
-    const { wrapper, router } = await mountComponent()
-    await flushPromises()
-    expect(wrapper.find('.welcome-hero').exists()).toBe(true)
-    await router.push({ name: 'product-onboarding', query: { step: 'industry' } })
-    await flushPromises()
-    await flushPromises()
-    expect(wrapper.find('h1').text()).toBe('先定行业')
-  })
-
-  it('watcher：currentStep 变为 host-pack 时触发 refreshStatus', async () => {
-    mockContainer.fetchIndustryBaseline.mockClear()
-    const { router } = await mountComponent()
-    await flushPromises()
-    mockContainer.fetchIndustryBaseline.mockClear()
-    await router.push({ name: 'product-onboarding', query: { step: 'host-pack' } })
-    await flushPromises()
-    await flushPromises()
-    expect(mockContainer.fetchIndustryBaseline).toHaveBeenCalled()
-  })
-
-  it('watcher：pickedIndustryId 在 host-pack 步骤变化时触发 refreshStatus', async () => {
-    const { wrapper } = await mountComponent({ route: { step: 'host-pack' } })
-    await flushPromises()
-    await flushPromises()
-    mockContainer.fetchIndustryBaseline.mockClear()
-    mockContainer.clearDeliverableStatusCache.mockClear()
-    // 通过点击行业 chip 改变 pickedIndustryId（但 host-pack 步骤没有 chip）
-    // 改用直接修改 vm setupState
-    const vm = wrapper.vm as any
-    const setupState = vm?.$?.setupState
-    if (setupState && 'pickedIndustryId' in setupState) {
-      // pickedIndustryId 是 ref，通过 devtoolsRawSetupState 修改
-      const rawState = vm?.$?.devtoolsRawSetupState
-      if (rawState?.pickedIndustryId) {
-        rawState.pickedIndustryId.value = '考勤'
-      }
-    }
-    await flushPromises()
-    await flushPromises()
-    // watcher 触发 clearDeliverableStatusCache
-    expect(mockContainer.clearDeliverableStatusCache).toHaveBeenCalled()
-  })
-
-  // ===== 11. footerHint 测试 =====
-
-  it('footerHint：fromTutorial 模式显示教程提示', async () => {
-    const { wrapper } = await mountComponent({
-      route: { from: 'tutorial', redirect: '/chat' },
-    })
-    await flushPromises()
-    expect(wrapper.find('.doc-hint').text()).toContain('新手教程')
-  })
-
-  it('footerHint：非 fromTutorial 模式显示文档提示', async () => {
-    const { wrapper } = await mountComponent()
-    await flushPromises()
-    expect(wrapper.find('.doc-hint').text()).toContain('PRODUCT_USER_FLOW.md')
-  })
-
-  // ===== 12. currentStepMeta subtitle 测试 =====
-
-  it('currentStepMeta：industry 步骤显示 subtitle', async () => {
-    const { wrapper } = await mountComponent({ route: { step: 'industry' } })
-    await flushPromises()
-    const brandLead = wrapper.find('.brand-lead')
-    expect(brandLead.exists()).toBe(true)
-    expect(brandLead.text()).toContain('行业')
-  })
-
-  it('currentStepMeta：welcome 步骤不显示 subtitle', async () => {
-    const { wrapper } = await mountComponent()
-    await flushPromises()
-    // welcome 步骤 currentStepMeta.subtitle 存在但 currentStep === 'welcome'，所以 v-if 不渲染
-    expect(wrapper.find('.brand-lead').exists()).toBe(false)
-  })
-
-  // ===== 13. step-rail 渲染 =====
-
-  it('step-rail：渲染 5 个首用步骤（done 已过滤）', async () => {
-    const { wrapper } = await mountComponent()
-    await flushPromises()
-    const items = wrapper.findAll('.step-rail-item')
-    expect(items.length).toBe(5)
-  })
-
-  it('step-rail：当前步骤标记 active', async () => {
-    const { wrapper } = await mountComponent({ route: { step: 'industry' } })
-    await flushPromises()
-    const activeItems = wrapper.findAll('.step-rail-item.active')
-    expect(activeItems.length).toBe(1)
-  })
-
-  it('step-rail：已完成步骤标记 done', async () => {
-    const { wrapper } = await mountComponent({ route: { step: 'host-pack' } })
-    await flushPromises()
-    const doneItems = wrapper.findAll('.step-rail-item.done')
-    expect(doneItems.length).toBe(2)
-  })
-
-  // ===== 14. industryPackageLabel 测试 =====
-
-  it('industryPackageLabel：catalog 有 product_name 时返回 product_name', async () => {
-    const { wrapper } = await mountComponent({
-      route: { step: 'industry' },
-      catalog: {
-        open_packages: [{ industry_id: '涂料', name: '涂料', scenario: '', product_name: '涂料专业版' }],
-        open_industry_ids: ['涂料'],
-      },
-    })
-    await flushPromises()
-    const chip = wrapper.find('.industry-pick--open .industry-chip')
-    expect(chip.text()).toContain('涂料专业版')
-  })
-
-  it('industryPackageLabel：preset 有 name 时返回"X行业包"', async () => {
-    const { wrapper } = await mountComponent({ route: { step: 'industry' } })
-    await flushPromises()
-    // 默认 preset 模式，无 catalog，无 productName
-    const chip = wrapper.find('.industry-pick--open .industry-chip')
-    expect(chip.text()).toContain('行业包')
-  })
-
-  // ===== 15. chipScenarioText 测试 =====
-
-  it('chipScenarioText：去掉句末句号', async () => {
-    const { wrapper } = await mountComponent({
-      route: { step: 'industry' },
-      catalog: {
-        open_packages: [{ industry_id: '涂料', name: '涂料', scenario: '涂料化工批发。', product_name: '' }],
-        open_industry_ids: ['涂料'],
-      },
-    })
-    await flushPromises()
-    const scenario = wrapper.find('.industry-chip-scenario')
-    expect(scenario.text()).not.toContain('。')
-  })
-
-  // ===== 16. previewIndustryOptions 测试 =====
-
-  it('previewIndustryOptions：enterprise 且 catalog 未加载时返回空', async () => {
-    const { wrapper } = await mountComponent({
-      route: { step: 'industry' },
-      isEnterprise: true,
-      productSku: 'enterprise',
-      catalogPending: true,
-    })
-    await flushPromises()
-    // 预览区不渲染（enterprise 且 catalog 未加载时 previewIndustryOptions 返回空）
-    expect(wrapper.find('.industry-pick--preview').exists()).toBe(false)
-  })
-
-  it('previewIndustryOptions：catalog 有 preview_packages 时使用 catalog', async () => {
-    const { wrapper } = await mountComponent({
-      route: { step: 'industry' },
-      catalog: {
-        open_packages: [{ industry_id: '涂料', name: '涂料', scenario: '', product_name: '' }],
-        preview_packages: [{ industry_id: '餐饮', name: '餐饮', scenario: '', product_name: '' }],
-        open_industry_ids: ['涂料'],
-      },
-    })
-    await flushPromises()
-    const previewHint = wrapper.find('.industry-preview-hint')
-    expect(previewHint.exists()).toBe(true)
-    const previewChips = wrapper.findAll('.industry-pick--preview .industry-chip--locked')
-    expect(previewChips.length).toBe(1)
-  })
-
-  // ===== 17. finishHostPackFlow 测试 =====
-
-  it('finishHostPackFlow：baselineOk 且非 fromTutorial 时调用 completeFlowAndGoChat', async () => {
-    mockContainer.flowState = createFlowState({
-      refreshDeliverable: vi.fn(async () => ({ deliverable: true })),
-    })
-    mockContainer.readProductFlowCompleted.mockReturnValue(false)
-    const { wrapper } = await mountComponent({
-      route: { step: 'host-pack' },
-      baseline: createBaselinePlan({ baseline_ready: true }),
-    })
-    await flushPromises()
-    await flushPromises()
-    mockContainer.flowState.completeFlowAndGoChat.mockClear()
-    mockContainer.flowState.markProductFlowCompleted.mockClear()
-    mockContainer.flowState.markHostPackAcknowledged.mockClear()
-    // 点击"进入智能对话"按钮
-    const buttons = wrapper.findAll('.actions .btn.primary')
-    const enterChatBtn = buttons.find((b) => b.text().includes('进入智能对话'))
-    if (enterChatBtn) {
-      await enterChatBtn.trigger('click')
-      await flushPromises()
-      expect(mockContainer.flowState.markProductFlowCompleted).toHaveBeenCalled()
-      expect(mockContainer.flowState.markHostPackAcknowledged).toHaveBeenCalled()
-      expect(mockContainer.flowState.completeFlowAndGoChat).toHaveBeenCalled()
-    }
-  })
-
-  it('finishHostPackFlow：流程已完成但 host-pack 未确认时仍写入侧栏确认', async () => {
-    const { wrapper } = await mountComponent({
-      route: { step: 'host-pack' },
-      baseline: createBaselinePlan({ baseline_ready: true }),
-    })
-    await flushPromises()
-    await flushPromises()
-    mockContainer.readProductFlowCompleted.mockReturnValue(true)
-    mockContainer.flowState.markProductFlowCompleted.mockClear()
-    mockContainer.flowState.markHostPackAcknowledged.mockClear()
-    mockContainer.flowState.completeFlowAndGoChat.mockClear()
-
-    const skipChatBtn = wrapper.find('.actions .btn.link')
-    expect(skipChatBtn.text()).toContain('先进入对话')
-    await skipChatBtn.trigger('click')
-    await flushPromises()
-
-    expect(mockContainer.flowState.markProductFlowCompleted).not.toHaveBeenCalled()
-    expect(mockContainer.flowState.markHostPackAcknowledged).toHaveBeenCalled()
-    expect(mockContainer.flowState.completeFlowAndGoChat).toHaveBeenCalled()
-  })
-
-  it('finishHostPackFlow：baselineOk 且 fromTutorial 时调用 returnFromTutorial', async () => {
-    mockContainer.flowState = createFlowState({
-      refreshDeliverable: vi.fn(async () => ({ deliverable: true })),
-    })
-    mockContainer.readProductFlowCompleted.mockReturnValue(false)
-    const { wrapper, router } = await mountComponent({
-      route: { step: 'host-pack', from: 'tutorial', redirect: '/chat' },
-      baseline: createBaselinePlan({ baseline_ready: true }),
-    })
-    await flushPromises()
-    await flushPromises()
-    const replaceSpy = vi.spyOn(router, 'replace')
-    const buttons = wrapper.findAll('.actions .btn.primary')
-    const enterChatBtn = buttons.find((b) => b.text().includes('进入智能对话'))
-    if (enterChatBtn) {
-      await enterChatBtn.trigger('click')
-      await flushPromises()
-      expect(replaceSpy).toHaveBeenCalledWith('/chat')
-    }
-  })
-
-  it('finishHostPackFlow：!baselineOk 时调用 markHostPackSkippedThisSession', async () => {
-    const { wrapper, router } = await mountComponent({
-      route: { step: 'host-pack' },
-      baseline: createBaselinePlan({ baseline_ready: false }),
-    })
-    await flushPromises()
-    await flushPromises()
-    mockContainer.markHostPackSkippedThisSession.mockClear()
-    const replaceSpy = vi.spyOn(router, 'replace')
-    // 点击"先进入对话，稍后再补"
-    const linkBtn = wrapper.find('.btn.link')
-    await linkBtn.trigger('click')
-    await flushPromises()
-    expect(mockContainer.markHostPackSkippedThisSession).toHaveBeenCalled()
-    expect(replaceSpy).toHaveBeenCalledWith({ path: '/' })
-  })
-
-  it('finishHostPackFlow：!baselineOk 且 fromTutorial 时调用 returnFromTutorial', async () => {
-    const { wrapper, router } = await mountComponent({
-      route: { step: 'host-pack', from: 'tutorial', redirect: '/chat' },
-      baseline: createBaselinePlan({ baseline_ready: false }),
-    })
-    await flushPromises()
-    await flushPromises()
-    const replaceSpy = vi.spyOn(router, 'replace')
-    const linkBtn = wrapper.find('.btn.link')
-    await linkBtn.trigger('click')
-    await flushPromises()
-    expect(replaceSpy).toHaveBeenCalledWith('/chat')
-  })
-
-  // ===== 18. skipEntireFlow baselineOk 分支 =====
-
-  it('skipEntireFlow：baselineOk 时调用 markProductFlowCompleted', async () => {
-    mockContainer.flowState = createFlowState()
-    mockContainer.readProductFlowCompleted.mockReturnValue(false)
-    const { wrapper } = await mountComponent({
-      route: { step: 'host-pack' },
-      baseline: createBaselinePlan({ baseline_ready: true }),
-    })
-    await flushPromises()
-    await flushPromises()
-    mockContainer.flowState.markProductFlowCompleted.mockClear()
-    mockContainer.flowState.markHostPackAcknowledged.mockClear()
-    // 点击"跳过引导"
-    const footerBtn = wrapper.find('.product-flow-footer .btn.text')
-    await footerBtn.trigger('click')
-    await flushPromises()
-    expect(mockContainer.flowState.markProductFlowCompleted).toHaveBeenCalled()
-    expect(mockContainer.flowState.markHostPackAcknowledged).toHaveBeenCalled()
-  })
-
-  // ===== 19. openModStore 测试 =====
-
-  it('openModStore：非 fromTutorial 且未 completed 时调用 markProductFlowCompleted', async () => {
-    mockContainer.readProductFlowCompleted.mockReturnValue(false)
-    const { wrapper } = await mountComponent({ route: { step: 'industry' } })
-    await flushPromises()
-    mockContainer.flowState.markProductFlowCompleted.mockClear()
-    const modStoreBtn = wrapper.find('.btn.ghost')
-    await modStoreBtn.trigger('click')
-    await flushPromises()
-    expect(mockContainer.flowState.markProductFlowCompleted).toHaveBeenCalled()
-  })
-
-  it('openModStore：非 fromTutorial 时总是调用 markProductFlowCompleted', async () => {
-    // 逻辑：if (!fromTutorial.value || !readProductFlowCompleted()) markProductFlowCompleted()
-    // 非 fromTutorial 时，无论是否 completed 都会调用
-    mockContainer.readProductFlowCompleted.mockReturnValue(true)
-    const { wrapper } = await mountComponent({ route: { step: 'industry' } })
-    await flushPromises()
-    mockContainer.flowState.markProductFlowCompleted.mockClear()
-    const modStoreBtn = wrapper.find('.btn.ghost')
-    await modStoreBtn.trigger('click')
-    await flushPromises()
-    expect(mockContainer.flowState.markProductFlowCompleted).toHaveBeenCalled()
-  })
-
-  it('openModStore：fromTutorial 且已 completed 时不调用 markProductFlowCompleted', async () => {
-    // 逻辑：fromTutorial && readProductFlowCompleted() 时不调用
-    const { wrapper } = await mountComponent({
-      route: { step: 'industry', from: 'tutorial', redirect: '/chat' },
-    })
-    await flushPromises()
-    // 在 mountComponent 之后设置 mock，避免被默认 mock 覆盖
-    mockContainer.readProductFlowCompleted.mockReturnValue(true)
-    mockContainer.flowState.markProductFlowCompleted.mockClear()
-    const modStoreBtn = wrapper.find('.btn.ghost')
-    await modStoreBtn.trigger('click')
-    await flushPromises()
-    expect(mockContainer.flowState.markProductFlowCompleted).not.toHaveBeenCalled()
-  })
-
-  // ===== 20. goStep fromTutorial 分支 =====
-
-  it('goStep：fromTutorial 时携带 from 与 redirect 参数', async () => {
-    const { wrapper, router } = await mountComponent({
-      route: { from: 'tutorial', redirect: '/chat' },
-    })
-    await flushPromises()
-    const replaceSpy = vi.spyOn(router, 'replace')
-    const nextBtn = wrapper.find('.actions .btn.primary')
-    await nextBtn.trigger('click')
-    await flushPromises()
-    expect(replaceSpy).toHaveBeenCalled()
-    const callArg = replaceSpy.mock.calls[0][0]
-    expect(callArg.query.from).toBe('tutorial')
-    expect(callArg.query.redirect).toBe('/chat')
-  })
-
-  // ===== 21. onMounted 路由跳转条件 =====
-
-  it('onMounted：fromTutorial 但 query.from !== tutorial 时跳转', async () => {
-    mockContainer.flowState = createFlowState({
-      resolveEntryStep: vi.fn(() => 'welcome'),
-    })
-    const { router } = await mountComponent({
-      route: { from: 'tutorial', redirect: '/chat' },
-    })
-    await flushPromises()
-    // onMounted 末尾会检查 fromTutorial && route.query.from !== 'tutorial'
-    // 但这里 query.from 已经是 'tutorial'，所以不会跳转
-    expect(router.currentRoute.value.name).toBe('product-onboarding')
-  })
-
-  // ===== 22. missingSidebarBaselineCount 测试 =====
-
-  it('missingSidebarBaselineCount：统计侧栏分组中必需未安装项', async () => {
-    const { wrapper } = await mountComponent({
-      route: { step: 'host-pack' },
-      baseline: createBaselinePlan({
-        baseline_ready: false,
-        groups: [
-          {
-            id: 'core',
-            title: '核心',
-            hint: '',
-            items: [
-              { mod_id: 'mod-1', label: 'M1', installed: false, required: true },
-              { mod_id: 'mod-2', label: 'M2', installed: false, required: true },
-              { mod_id: 'mod-1', label: 'M1', installed: false, required: true }, // 重复 mod_id
-            ],
-          },
-        ],
-      }),
-    })
-    await flushPromises()
-    await flushPromises()
-    const statusCard = wrapper.find('.status-card')
-    // 去重后应为 2 项
-    expect(statusCard.text()).toContain('2')
-  })
-
-  // ===== 23. refreshStatus 异常处理 =====
-
-  it('refreshStatus：fetchIndustryBaseline 抛异常时 loading 恢复', async () => {
-    mockContainer.fetchIndustryBaseline.mockRejectedValue(new Error('baseline fail'))
-    const { wrapper } = await mountComponent({ route: { step: 'host-pack' } })
-    await flushPromises()
-    await flushPromises()
-    // loading 应为 false（finally 块）
-    expect(wrapper.find('.fa-spinner').exists()).toBe(false)
-  })
-
-  // ===== 24. resolveDefaultPickedIndustryId 测试 =====
-
-  it('resolveDefaultPickedIndustryId：catalog.selected_industry_id 可选时使用', async () => {
-    const { wrapper } = await mountComponent({
-      route: { step: 'industry' },
-      catalog: {
-        open_industry_ids: ['涂料', '考勤'],
-        selected_industry_id: '考勤',
-        open_packages: [
-          { industry_id: '涂料', name: '涂料', scenario: '', product_name: '' },
-          { industry_id: '考勤', name: '考勤', scenario: '', product_name: '' },
-        ],
-      },
-    })
-    await flushPromises()
-    // 选中的应为 '考勤'
-    const activeChip = wrapper.find('.industry-chip.active')
-    expect(activeChip.text()).toContain('考勤')
-  })
-
-  it('resolveDefaultPickedIndustryId：selected 不可选时回退到 openIds[0]', async () => {
-    const { wrapper } = await mountComponent({
-      route: { step: 'industry' },
-      catalog: {
-        open_industry_ids: ['涂料'],
-        selected_industry_id: '考勤', // 不在 open_industry_ids 中
-        open_packages: [{ industry_id: '涂料', name: '涂料', scenario: '', product_name: '' }],
-      },
-    })
-    await flushPromises()
-    const activeChip = wrapper.find('.industry-chip.active')
-    expect(activeChip.text()).toContain('涂料')
-  })
-
-  // ===== 25. confirmIndustryAndNext 不再调用 switchIndustry（行业由后端 SSOT 决定） =====
-
-  it('confirmIndustryAndNext：industryStore 已加载且行业相同时直接进入下一步', async () => {
-    const { wrapper, router } = await mountComponent({
-      route: { step: 'industry' },
-      industry: {
-        isLoaded: true,
-        currentIndustryId: '涂料',
-      },
-      catalog: {
-        open_industry_ids: ['涂料'],
-        selected_industry_id: '涂料',
-        open_packages: [{ industry_id: '涂料', name: '涂料', scenario: '', product_name: '' }],
-      },
-    })
-    await flushPromises()
-    const replaceSpy = vi.spyOn(router, 'replace')
-    const nextBtn = wrapper.find('.actions .btn.primary')
-    await nextBtn.trigger('click')
-    await flushPromises()
-    // switchIndustry 已删除，confirmIndustryAndNext 仅进入下一步。
-    expect((mockContainer.industryState as any).switchIndustry).toBeUndefined()
-    expect(replaceSpy).toHaveBeenCalled()
-  })
-
-  // ===== 26. catalogChipRow 测试 =====
-
-  it('catalogChipRow：industry_id 为空时使用 preset 名称', async () => {
-    const { wrapper } = await mountComponent({
-      route: { step: 'industry' },
-      catalog: {
-        open_packages: [{ industry_id: '', name: '', scenario: '', product_name: '' }],
-        open_industry_ids: [''],
-      },
-    })
-    await flushPromises()
-    expect(wrapper.exists()).toBe(true)
-  })
 })

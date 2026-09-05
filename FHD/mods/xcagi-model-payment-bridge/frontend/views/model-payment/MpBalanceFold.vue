@@ -5,7 +5,7 @@ import type { ModelPaymentCtx } from './assemble'
 const props = defineProps<{ tm: ModelPaymentCtx }>()
 
 const {
-  walletUrlHandoff, marketBalanceHint, marketBalanceText, marketOverview,
+  walletUrl, openMarketUrl, marketBalanceHint, marketBalanceText, marketOverview,
   marketMembershipLabel, marketMembershipReferenceText, marketExperienceText,
   marketByokText, marketEmptyHint,
 } = props.tm
@@ -21,7 +21,8 @@ const {
             <div class="card-header mp-panel-title">
               账户余额（本机汇总）
               <a
-                :href="walletUrlHandoff"
+                :href="walletUrl"
+                @click.prevent="openMarketUrl(walletUrl)"
                 target="_blank"
                 rel="noopener noreferrer"
                 class="mp-balance-link"

@@ -30,6 +30,20 @@ class VerificationCode(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
+class BrowserHandoffCode(Base):
+    """Short-lived browser sign-in codes; only their digest is persisted."""
+
+    __tablename__ = "browser_handoff_codes"
+
+    code_hash = Column(String(64), primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    credential_fingerprint = Column(String(64), nullable=False)
+    purpose = Column(String(16), nullable=False)
+    target = Column(String(1024), nullable=False)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    consumed_at = Column(DateTime, nullable=True)
+
+
 class User(Base):
     __tablename__ = "users"
 

@@ -5,9 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 from urllib.parse import unquote
 
-from fastapi import File, Form, UploadFile
+from fastapi import Depends, File, Form, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
+from app.mod_sdk.customer_features import attendance_custom_features, require_attendance_conversion
 from app.mod_sdk.errors import BOUNDARY_ERRORS
 from app.mod_sdk.host_services import workspace_root
 
@@ -21,12 +22,15 @@ def register(
     _normalize_relpath,
     _resolve_personnel_roster,
 ) -> None:
-    """在给定 router 上注册 /attendance/*、/employees、/departments 路由。"""
+    """在给定 router 上注册 /attendance/* 转换与规则路由。"""
     # 考勤转换的实现放在 mod 私有包 ``taiyangniao_attendance/``
     # （被 mod_manager 加到 sys.path 的 ``backend/`` 可直接绝对 import）。
     from taiyangniao_attendance.convert import convert_attendance_file
 
-    @router.get("/attendance/policy", response_model=None)
+    router.add_api_route("/attendance/capabilities", attendance_custom_features, methods=["GET"])
+    custom_access = [Depends(require_attendance_conversion)]
+
+    @router.get("/attendance/policy", response_model=None, dependencies=custom_access)
     async def attendance_policy_get() -> dict:
         """通用考勤裁窗配置（读写 approval_config.yaml 的 attendance_policy 段）。"""
         try:
@@ -41,7 +45,7 @@ def register(
             )
         return {"success": True, "attendance_policy": pol}
 
-    @router.post("/attendance/policy", response_model=None)
+    @router.post("/attendance/policy", response_model=None, dependencies=custom_access)
     async def attendance_policy_post(body: dict) -> dict:
         payload = body if isinstance(body, dict) else {}
         raw = payload.get("attendance_policy")
@@ -73,7 +77,7 @@ def register(
                 status_code=500,
             )
 
-    @router.get("/attendance/rules")
+    @router.get("/attendance/rules", dependencies=custom_access)
     async def attendance_rules() -> dict:
         lines = [
             "优先读取钉钉「每日统计」，再用「原始记录」补充打卡时间与去重。",
@@ -87,7 +91,7 @@ def register(
             "accepted_extensions": [".xlsx", ".xlsm", ".xls"],
             "allow_template_append": True,
             "default_template_relpath": DEFAULT_TEMPLATE_RELPATH,
-            "default_template_behavior": "固定模板版式；勾选按人员管理名单时用 products 重排明细，钉钉按名回填，无则空",
+            "default_template_behavior": "固定模板版式；按人员管理名单重排明细，钉钉按名回填，无则空",
         }
         schedule_groups = [
             {
@@ -121,7 +125,7 @@ def register(
             },
         }
 
-    @router.post("/attendance/convert-upload", response_model=None)
+    @router.post("/attendance/convert-upload", response_model=None, dependencies=custom_access)
     async def attendance_convert_upload(
         file: UploadFile = File(...),
         output_relpath: str = Form("424/考勤转换输出.xlsx"),
@@ -223,7 +227,7 @@ def register(
                 return JSONResponse(
                     {
                         "success": False,
-                        "error": "已勾选「按人员管理名单」，但主库「人员管理」与 mod 备用库均无人员。请先在侧栏「人员管理」导入或录入后再转换；或取消勾选改用模板内原名单。",
+                        "error": "已勾选「按人员管理名单」，但当前名单为空。请先在考勤工作区「人员管理」录入后再转换；或取消勾选改用模板内原名单。",
                     },
                     status_code=400,
                 )
@@ -298,7 +302,7 @@ def register(
             },
         }
 
-    @router.get("/attendance/download", response_model=None)
+    @router.get("/attendance/download", response_model=None, dependencies=custom_access)
     async def attendance_download(relpath: str):
         try:
             rel = _normalize_relpath(relpath, field_name="relpath")
@@ -314,69 +318,3 @@ def register(
             return JSONResponse({"success": False, "error": "file not found"}, status_code=404)
 
         return FileResponse(path=str(p), filename=p.name, media_type="application/octet-stream")
-
-    @router.get("/employees", response_model=None)
-    async def list_employees(page: int = 1, page_size: int = 50, search: str = ""):
-        import sqlite3
-
-        db_path = get_database_path()
-        if not db_path.exists():
-            return {
-                "success": True,
-                "data": {"items": [], "total": 0, "page": page, "page_size": page_size},
-            }
-        conn = sqlite3.connect(str(db_path))
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        like = f"%{search}%"
-        cur.execute(
-            "SELECT COUNT(*) FROM attendance_employees WHERE employee_name LIKE ? OR department LIKE ?",
-            (like, like),
-        )
-        total = cur.fetchone()[0]
-        offset = (page - 1) * page_size
-        cur.execute(
-            "SELECT id, employee_name, department, main_department, attendance_group, employee_no, position, user_id "
-            "FROM attendance_employees WHERE employee_name LIKE ? OR department LIKE ? "
-            "ORDER BY id LIMIT ? OFFSET ?",
-            (like, like, page_size, offset),
-        )
-        items = [dict(r) for r in cur.fetchall()]
-        conn.close()
-        return {
-            "success": True,
-            "data": {"items": items, "total": total, "page": page, "page_size": page_size},
-        }
-
-    @router.get("/departments", response_model=None)
-    async def list_departments(page: int = 1, page_size: int = 50, search: str = ""):
-        import sqlite3
-
-        db_path = get_database_path()
-        if not db_path.exists():
-            return {
-                "success": True,
-                "data": {"items": [], "total": 0, "page": page, "page_size": page_size},
-            }
-        conn = sqlite3.connect(str(db_path))
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        like = f"%{search}%"
-        cur.execute(
-            "SELECT COUNT(*) FROM attendance_departments WHERE department LIKE ? OR main_department LIKE ?",
-            (like, like),
-        )
-        total = cur.fetchone()[0]
-        offset = (page - 1) * page_size
-        cur.execute(
-            "SELECT id, department, main_department, attendance_group "
-            "FROM attendance_departments WHERE department LIKE ? OR main_department LIKE ? "
-            "ORDER BY id LIMIT ? OFFSET ?",
-            (like, like, page_size, offset),
-        )
-        items = [dict(r) for r in cur.fetchall()]
-        conn.close()
-        return {
-            "success": True,
-            "data": {"items": items, "total": total, "page": page, "page_size": page_size},
-        }

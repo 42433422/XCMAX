@@ -16,11 +16,11 @@ describe('sunbirdClientMod constants and functions', () => {
       expect(ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU.length).toBeGreaterThan(0)
     })
 
-    it('first item has id attendance-industry-home', () => {
-      expect(ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU[0].id).toBe('attendance-industry-home')
+    it('exposes the unified workspace', () => {
+      expect(ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU[0].id).toBe('attendance-industry-workspace')
     })
 
-    it('first item has path /attendance-industry', () => {
+    it('uses the workspace as the primary attendance path', () => {
       expect(ATTENDANCE_INDUSTRY_MOD_FALLBACK_MENU[0].path).toBe('/attendance-industry')
     })
   })
@@ -70,9 +70,9 @@ describe('sunbirdClientMod constants and functions', () => {
       expect(buildAttendanceIndustryModStub().industry?.id).toBe('考勤')
     })
 
-    it('has menu with attendance-industry-home', () => {
+    it('has menu with attendance-industry-workspace', () => {
       const stub = buildAttendanceIndustryModStub()
-      expect(stub.menu?.[0]?.id).toBe('attendance-industry-home')
+      expect(stub.menu?.[0]?.id).toBe('attendance-industry-workspace')
     })
 
     it('has frontend pro_entry_path', () => {
@@ -104,8 +104,8 @@ describe('sunbirdClientMod constants and functions', () => {
       expect(buildSunbirdClientModStub().industry?.id).toBe('考勤')
     })
 
-    it('has menu with attendance-industry-home', () => {
-      expect(buildSunbirdClientModStub().menu?.[0]?.id).toBe('attendance-industry-home')
+    it('has menu with attendance-industry-workspace', () => {
+      expect(buildSunbirdClientModStub().menu?.[0]?.id).toBe('attendance-industry-workspace')
     })
 
     it('has frontend pro_entry_path /attendance-industry', () => {

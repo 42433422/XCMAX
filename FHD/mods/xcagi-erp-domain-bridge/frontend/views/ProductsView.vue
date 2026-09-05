@@ -46,6 +46,10 @@
           导入前移除上次「明细」导入的人员
         </label>
       </div>
+      <div v-if="productReadError || (!fresh && products.length) || productListNotice" role="status" class="product-read-status">
+        <span>{{ productReadError ? '产品读取失败：' + productReadError : (!fresh ? '产品数据需要更新，请刷新后再编辑。' : productListNotice) }}</span>
+        <button type="button" class="btn btn-secondary" :disabled="loading" @click="refreshProducts">重新读取</button>
+      </div>
       <div class="card">
         <DataTable
           :columns="columns"
@@ -73,8 +77,8 @@
             {{ value ? '¥' + value.toFixed(2) : '-' }}
           </template>
           <template #actions="{ row }">
-            <button type="button" class="btn btn-sm btn-secondary" @click.stop="editProduct(row)">编辑</button>
-            <button type="button" class="btn btn-sm btn-danger" @click.stop="handleDelete(row)">删除</button>
+            <button type="button" class="btn btn-sm btn-secondary" :disabled="!canEditProducts" @click.stop="editProduct(row)">编辑</button>
+            <button type="button" class="btn btn-sm btn-danger" :disabled="!canEditProducts" @click.stop="handleDelete(row)">删除</button>
           </template>
         </DataTable>
       </div>
@@ -121,7 +125,7 @@
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="showModal = false">取消</button>
-          <button class="btn btn-primary" @click="saveProduct">保存</button>
+          <button class="btn btn-primary" :disabled="loading || (isEdit && !canEditProducts)" @click="saveProduct">保存</button>
         </div>
       </div>
     </div>
@@ -131,8 +135,8 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useProductsStore } from '@/stores/products';
+import { useProductsReadLifecycle, createProductListLoader, createProductUnitsLoader } from '@/composables/useProductsReadLifecycle';
 import { storeToRefs } from 'pinia';
-import customersApi from '@/api/customers';
 import productsApi from '@/api/products';
 import templatePreviewApi from '@/api/templatePreview';
 import { api } from '@/api/index';
@@ -144,7 +148,8 @@ import { useCoreNavLabel } from '@/composables/useCoreNavLabel';
 const pageNavTitle = useCoreNavLabel('products');
 
 const store = useProductsStore();
-const { products, loading } = storeToRefs(store);
+const { products, loading, error: productReadError, fresh, canEditProducts } = storeToRefs(store);
+const productListNotice = ref('');
 
 const units = ref([]);
 const showModal = ref(false);
@@ -184,27 +189,10 @@ const columns = [
 
 const currentRequestId = ref(0);
 
-const loadProducts = async (reset = true) => {
-  const requestId = ++currentRequestId.value;
-  if (reset) {
-    currentPage.value = 1;
-    hasMore.value = false;
-  }
-  const params = { page: currentPage.value, per_page: perPage.value };
-  if (searchQuery.value) params.keyword = searchQuery.value;
-  if (selectedUnit.value) params.unit = selectedUnit.value;
-  const result = await store.fetchProducts(params);
-  if (requestId !== currentRequestId.value) return;
-  if (result && result.data) {
-    if (reset) {
-      products.value = result.data;
-    } else {
-      products.value = [...products.value, ...result.data];
-    }
-    hasMore.value = false;
-    currentPage.value++;
-  }
-};
+const loadProducts = createProductListLoader({
+  store, page: currentPage, hasMore, requestId: currentRequestId,
+  query: () => ({ per_page: perPage.value, ...(searchQuery.value ? { keyword: searchQuery.value } : {}), ...(selectedUnit.value ? { unit: selectedUnit.value } : {}) }),
+});
 
 let isLoadingMore = false;
 
@@ -218,17 +206,7 @@ const loadMoreProducts = async () => {
   }
 };
 
-async function loadUnits() {
-  try {
-    const resp = await customersApi.getCustomers({ page: 1, per_page: 1000 });
-    if (!resp?.success) throw new Error(resp?.message || '加载客户/购买单位失败');
-    const list = resp?.data || [];
-    units.value = Array.isArray(list) ? list.map(c => c.unit_name || c.customer_name).filter(Boolean) : [];
-  } catch (e) {
-    console.error('加载产品单位失败:', e);
-    units.value = [];
-  }
-}
+const loadUnits = createProductUnitsLoader(store, units);
 
 const showAddModal = () => {
   isEdit.value = false;
@@ -243,12 +221,15 @@ const showAddModal = () => {
 };
 
 const editProduct = (product) => {
+  if (!canEditProducts.value) return;
+  productListNotice.value = '';
   isEdit.value = true;
   formData.value = { ...product };
   showModal.value = true;
 };
 
 const saveProduct = async () => {
+  if (isEdit.value && !canEditProducts.value) return;
   const result = isEdit.value && formData.value.id
     ? await store.updateProduct(formData.value.id, formData.value)
     : await store.createProduct(formData.value);
@@ -262,12 +243,13 @@ const saveProduct = async () => {
 };
 
 const handleDelete = (product) => {
+  if (!canEditProducts.value) return;
   itemToDelete.value = product;
   showDeleteConfirm.value = true;
 };
 
 const confirmDelete = async () => {
-  if (!itemToDelete.value) return;
+  if (!itemToDelete.value || !canEditProducts.value) return;
   const result = await store.deleteProduct(itemToDelete.value.id);
   if (!result.success) {
     await appAlert('删除失败: ' + (result.message || '未知错误'));
@@ -276,10 +258,12 @@ const confirmDelete = async () => {
 };
 
 const batchDelete = () => {
+  if (!canEditProducts.value) return;
   showBatchDeleteConfirm.value = true;
 };
 
 const confirmBatchDelete = async () => {
+  if (!canEditProducts.value) return;
   const result = await store.batchDelete(selectedIds.value);
   if (result.success) {
     selectedIds.value = [];
@@ -477,10 +461,24 @@ const handleImport = async (e) => {
   }
 };
 
-onMounted(() => {
-  loadUnits().then(() => loadProducts());
-  loadWordTemplateOptions();
+const { refreshProducts } = useProductsReadLifecycle({
+  store, loadProducts, loadUnits,
+  resetScope: () => {
+    currentRequestId.value++;
+    selectedIds.value = []; selectedUnit.value = ''; searchQuery.value = ''; units.value = [];
+    showModal.value = false; showDeleteConfirm.value = false; showBatchDeleteConfirm.value = false;
+    itemToDelete.value = null; productListNotice.value = '';
+    formData.value = { id: null, model_number: '', name: '', specification: '', price: 0 };
+  },
+  invalidateEditing: () => {
+    selectedIds.value = []; showDeleteConfirm.value = false; showBatchDeleteConfirm.value = false;
+    if (showModal.value && isEdit.value && !store.mutating) {
+      showModal.value = false;
+      productListNotice.value = '产品数据需要重新确认，请重新选择产品后编辑。';
+    }
+  },
 });
+onMounted(loadWordTemplateOptions);
 </script>
 
 <style scoped>
