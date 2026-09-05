@@ -24,6 +24,10 @@
       </nav>
 
       <section class="step-panel">
+        <div v-if="loginRequired" class="status-card warn" role="status">
+          <p>请先登录，登录后继续准备业务功能。已选行业和当前步骤会保留。</p>
+          <button type="button" class="btn primary" @click="loginToContinue">登录并继续设置</button>
+        </div>
         <template v-if="currentStep === 'welcome'">
           <div class="welcome-hero">
             <img class="welcome-logo" :src="welcomeLogoSrc" height="56" alt="XC" decoding="async" @error="onWelcomeLogoError" />
@@ -97,7 +101,7 @@
             </div>
           </div>
           <div class="actions">
-            <button type="button" class="btn primary" :disabled="!canConfirmIndustry || loading" @click="confirmIndustryAndNext">
+            <button v-if="!loginRequired" type="button" class="btn primary" :disabled="!canConfirmIndustry || loading" @click="confirmIndustryAndNext">
               下一步：准备业务功能
             </button>
             <button type="button" class="btn ghost" @click="openModStore">打开扩展市场</button>
@@ -319,8 +323,8 @@ const {
   footerHint,
 } = state
 
-const { goStep, returnFromTutorial, openModStore, openAttendanceWorkspace, finishToChat, skipEntireFlow } = nav
-const { refreshStatus, runBootstrap, prepareDemoData, pickIndustry, confirmIndustryAndNext, finishOnboardingComplete } = actions
+const { goStep, loginToContinue, returnFromTutorial, openModStore, openAttendanceWorkspace, finishToChat, skipEntireFlow } = nav
+const { loginRequired, refreshStatus, runBootstrap, prepareDemoData, pickIndustry, confirmIndustryAndNext, finishOnboardingComplete } = actions
 
 watch(
   () => route.query.step,
@@ -374,8 +378,8 @@ onMounted(async () => {
     }
   }
   const cur = String(industryStore.currentIndustryId || DEFAULT_INDUSTRY_ID).trim()
-  pickedIndustryId.value = normalizePickedIndustryId(onboardingCatalog.value?.selected_industry_id || cur)
-  const expectedQuery = { step: currentStep.value }
+  pickedIndustryId.value = normalizePickedIndustryId(route.query.industry || onboardingCatalog.value?.selected_industry_id || cur)
+  const expectedQuery = { ...route.query, step: currentStep.value }
   if (fromTutorial.value) {
     expectedQuery.from = 'tutorial'
     expectedQuery.redirect = returnPath.value

@@ -14,11 +14,26 @@ export function useProductOnboardingNav(state: ProductOnboardingState, options: 
 
   function goStep(id: string) {
     const query: Record<string, string> = { step: id }
+    if (returnPath.value !== '/') query.redirect = returnPath.value
+    if (router.currentRoute.value.query.industry) query.industry = state.pickedIndustryId.value
     if (fromTutorial.value) {
       query.from = 'tutorial'
       query.redirect = returnPath.value
     }
     void router.replace({ name: 'product-onboarding', query })
+  }
+
+  function loginToContinue() {
+    const query: Record<string, string> = {
+      step: state.currentStep.value,
+      industry: state.pickedIndustryId.value,
+      redirect: returnPath.value,
+    }
+    if (fromTutorial.value) query.from = 'tutorial'
+    const redirect = router.resolve({ name: 'product-onboarding', query }).fullPath
+    // The existing login error gate also disables provisional desktop resume;
+    // a stale one-shot cookie hint must not bounce this explicit login back.
+    void router.push({ name: 'login', query: { redirect, error: '请先登录，登录后将返回当前设置步骤。' } })
   }
 
   function returnFromTutorial() {
@@ -95,6 +110,7 @@ export function useProductOnboardingNav(state: ProductOnboardingState, options: 
 
   return {
     goStep,
+    loginToContinue,
     returnFromTutorial,
     openModStore,
     finishHostPackFlow,

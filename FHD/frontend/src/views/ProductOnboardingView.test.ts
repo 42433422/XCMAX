@@ -11,6 +11,7 @@ import { LS_PRODUCT_FLOW_COMPLETED, LS_PRODUCT_FLOW_FIRST_TASK_PENDING, LS_PRODU
 import { appAlert } from '@/utils/appDialog'
 
 vi.mock('@/api/auth', () => ({ authApi: { getSubscriptionStatus: vi.fn().mockResolvedValue({ data: null }) } }))
+vi.mock('@/utils/authSessionCache', () => ({ validateEnterpriseSessionCached: vi.fn().mockResolvedValue(true), invalidateEnterpriseSessionCache: vi.fn() }))
 vi.mock('@/api/system', () => ({ systemApi: {
   getIndustries: vi.fn().mockResolvedValue({ success: true, data: { industries: [] } }),
   getCurrentIndustry: vi.fn().mockResolvedValue({ success: true, data: { id: '涂料', name: '涂料' } }),

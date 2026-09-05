@@ -1,6 +1,6 @@
 # Product 90: local desktop and account acceptance
 
-Observed on 2026-09-05, beginning approximately 18:45 Asia/Shanghai. The first section records the 4966 candidate; the later b52 observations below supersede its pending items only where explicitly verified. This is isolated local acceptance, not a production or customer sign-off.
+Observed on 2026-09-05, beginning approximately 18:45 Asia/Shanghai. The sections below distinguish the 4966, b52 and b970 candidates; a later observation supersedes an earlier pending item only where explicitly verified. This is isolated local acceptance, not a production or customer sign-off.
 
 ## Identity and boundaries
 
@@ -58,3 +58,26 @@ The immutable `b52c3de095699dd6abb205260eb5819db89bbb77` macOS bundle was built 
 The next source revision repairs the observed ETL status, stale errors, permission display, product freshness, and label navigation defects. It also mounts only the authenticated template-create endpoint in the default application, binds the operation to the verified account and tenant, and restores saved template metadata during list/detail reads. A real default-factory/session/SQLite/agent test creates the actual editor payload, reads back the fields/layout, and produces a PDF. Independent pypdf and Poppler checks confirmed one 90×60 mm page, readable Chinese product text, and embedded NotoSansSC. This remains synthetic API/DB evidence until the new desktop is tested. The product freshness suite passed 168 tests, the template neighborhood 173, and print-page navigation/return/race tests 12; suites may overlap and are not a combined count.
 
 Relevant task evidence: `b52-live-results.md`, `desktop-runtime-acceptance-b52/launch.json`, `rollback-readback.json`, `explicit-rollback-role-fixture.json`, `wallet-ui-timeout-control.json`, `label-ui-development-b52/source-receipt.json`, and `label-default-route-review/created-label-preview.inspection.json`. At `11:57 UTC`, b52 had 10 of 11 required PR checks passing with the final backend behavior-coverage step still running; its separate MODstore typing and full-stack fixture failures have local fixes pending a new CI head.
+
+## b970 candidate: native data and PDF results
+
+At 20:17–20:27 Asia/Shanghai, the separate bundle at `b97073acc61baca1ce8b0d86a4ad06bdb86349eb` was exercised with fresh userdata on port `17600`. Product version was `1.0.0.1`, built at `2026-09-05T12:08:08.965Z`. Developer ID deep/strict verification and all 16 runtime dependencies passed; it remains an unnotarized, unpublished local acceptance bundle. The application in `/Applications` was not replaced.
+
+| Journey | Actual result |
+|---|---|
+| Anonymous cold start | **Failed:** selecting an industry then continuing showed an expired-login dialog without a login action. Recovery required skipping the guide, opening settings and logging in normally. |
+| First order after normal login | Coating preparation succeeded. The visible confirmation action opened the actual workspace; an explicit approval completed `run_51bf24ee834243c2a12fb55fcb26e936`. Shipment records visibly showed the synthetic customer/product order at `20:20:36`, unprinted. |
+| Create import and status | Run `357c96c1-23dd-4515-b106-3a2553b83936` created two rows. Returning to uploads showed 1/1 completed, 100%, and written. Ordinary-user rollback was disabled with an authorization explanation. |
+| Price update and freshness | Run `5f29f76f-58ec-4f47-8b3b-61a6f25d4ac4` initially skipped the duplicate. Explicitly allowing only price updates, saving and revalidating cleared the obsolete error; confirming the write changed 99 to 109. The product page showed 109 immediately, without reload. |
+| Rollback and later manual edit | After manually changing the specification, a backed-up isolated fixture gave only the synthetic account a custom role with `etl.rollback`. UI rollback reported one reverted row and a reverted receipt. The product page immediately showed 99 and retained `25kg/桶（人工核对）`, without reload. Default permissions were unchanged. |
+| Template create | The actual editor saved `PM90标签验收-中文产品` with a dynamic product-name field. The saved template was immediately listed. **Return failed:** the host `/print` became the Mod print route, lost its product selection, and displayed the unrelated attendance title. |
+| PDF output | After reselecting product/template, the UI generated and downloaded three 90×60 mm labels. Independent pypdf checks confirmed all three page dimensions, Chinese product text and embedded NotoSansSC; Poppler rendering was visually checked. No physical print was submitted. |
+| Embedded preview | **Failed:** the native console explicitly reported the blob iframe blocked by `default-src 'self'` because `frame-src` was missing. Downloading the same PDF succeeded. |
+
+The downloaded PDF's SHA-256 is `fd23d7d8bf25b213f1610381b487f270926ffadbb65e55c585031324ce3ca659`. Evidence lives in `b970-live-results.md`, `desktop-runtime-acceptance-b970/launch.json`, `explicit-rollback-role-fixture.json`, and `labels-ffdc9b250eb2457b951626bc08e5f5bf.inspection.json` under the task directory. Account/runtime materials remain private and uncommitted.
+
+One native file selection after clearing the queue returned with no selected file; repeating it succeeded. Actual KeepAlive route tests passed three new-file/same-file/folder cases and 24 existing ETL cases, and an isolated Chromium filechooser succeeded on its first attempt in ten rounds. These do not reproduce the macOS native dialog issue, so it remains unresolved and no speculative production change was made. See `etl-file-selection-review/README.md`.
+
+The next revision supplies a normal login action before protected onboarding writes, retains the onboarding step/industry through login, and returns the label editor to its exact allowed print source so its cached form survives. It also permits same-origin and blob frames only in the desktop CSP and its desktop fallback; ordinary web policy remains unchanged. The CSP regression failed on the original rules and passed 13 backend plus 68 desktop tests after repair. A separate same-version Electron harness with sandbox/context isolation enabled rendered the actual three-page PDF both with plugins enabled and disabled, establishing that no plugin or sandbox setting change is needed. These are repair evidence; the new full bundle must still pass native cold-start, return-state and preview acceptance.
+
+b970's complete local E2E run passed 22 cases without skips, including ordinary first-login and the 21 existing ERP/login cases; its 12 source gates passed. The b970 Market API/frontend were refreshed together and visibly displayed the synthetic account's zero balance and empty records. No payment, cloud-model key, real customer value or production release was accepted as passed. Final-SHA CI and formal delivery remain governed by the separate release ledger.

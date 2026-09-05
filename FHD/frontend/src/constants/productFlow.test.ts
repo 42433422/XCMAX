@@ -73,6 +73,8 @@ describe('productFlow', () => {
   it('readOnboardingReturnPath defaults to /', () => {
     expect(readOnboardingReturnPath('invalid')).toBe('/')
     expect(readOnboardingReturnPath('')).toBe('/')
+    expect(readOnboardingReturnPath('//external.example')).toBe('/')
+    expect(readOnboardingReturnPath('/\\external.example')).toBe('/')
   })
 
   it('PRODUCT_FLOW_STEPS includes demo data and the first AI task', () => {

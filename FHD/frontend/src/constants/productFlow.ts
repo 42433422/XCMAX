@@ -31,7 +31,7 @@ export function isTutorialReplayQuery(raw: unknown): boolean {
 
 export function readOnboardingReturnPath(raw: unknown): string {
   const p = String(raw || '').trim()
-  if (p.startsWith('/')) return p
+  if (p.startsWith('/') && !p.startsWith('//') && !p.includes('\\') && !Array.from(p).some((char) => char.charCodeAt(0) < 32)) return p
   return '/'
 }
 

@@ -72,3 +72,9 @@ TMPDIR=/private/tmp/xcmax-product-90-20260905/worktree/.tmp-pm003 PYTHONDONTWRIT
 | gitleaks / Python / Trivy文件系统与镜像 | 该次报告无finding | 必须对最终SHA重新扫描 |
 
 基础PR扫描通过与完整发布扫描通过是两个不同门禁。当前不能登记正式发布已就绪，也不能为了交付忽略上述完整扫描和两UTC日证据要求。
+
+## b970 本地制品与下一候选
+
+完整SHA `b97073acc61baca1ce8b0d86a4ad06bdb86349eb` 的隔离macOS包通过Developer ID深度严格签名与16项运行依赖检查，实际桌面UI已完成导入、价格更新、保留人工改动的显式授权撤销、模板保存和中文PDF下载。新用户目录匿名冷启动的登录衔接、标签回程和内嵌预览仍失败，修复后需要新SHA构建和复验。该制品未公证、未替换Applications安装版、未更新stable指针；本地Market的同SHA钱包读回也不替代正式服务部署。
+
+2026-09-05 11:56 UTC再次只读查询配置名称，Windows四项eSigner secrets、publisher变量及RELEASE_CONVERGENCE_ADMIN_TOKEN仍未见配置；结果见任务目录 `release-config-presence-current.json`，未读取secret值。真实客户价值、物理打印、跨平台安装、生产收敛和最终SHA连续两UTC日完整扫描仍需各自证据。本地回归数量和临时包签名不能代替这些门禁。

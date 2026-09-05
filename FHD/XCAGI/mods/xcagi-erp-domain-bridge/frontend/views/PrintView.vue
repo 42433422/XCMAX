@@ -25,7 +25,7 @@
             <option v-for="template in templates" :key="template.id" :value="template.id">{{ template.name }}</option>
           </select>
           <p>使用所选模板的字段与位置。动态字段需绑定产品名称、型号、规格、单价等真实产品数据。</p>
-          <RouterLink :to="resolveErpPagePath('/label-editor?returnTo=print')">创建标签模板</RouterLink>
+          <RouterLink :to="{ path: resolveErpPagePath('/label-editor'), query: { returnTo: route.fullPath } }">创建标签模板</RouterLink>
         </div>
         <p v-if="templateError" role="alert">{{ templateError }} <button @click="loadTemplate">重试模板加载</button></p>
         <div class="form-group">
@@ -67,12 +67,13 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 import printApi, { type LabelConfirmation, type LabelJob } from '@/api/print'
 import templatePreviewApi from '@/api/templatePreview'
 import { resolveErpPagePath } from '@/utils/erpPagePaths'
 
 type Template = { id: string; name: string; category?: string; preview_data?: Record<string, unknown> }
+const route = useRoute()
 const products = ref<{ id: number; name: string; model_number?: string; specification?: string }[]>([])
 const templates = ref<Template[]>([])
 const productId = ref('')

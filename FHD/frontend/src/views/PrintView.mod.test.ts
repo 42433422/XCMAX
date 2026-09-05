@@ -4,6 +4,15 @@ import { createMemoryHistory, createRouter, RouterView, type Router } from 'vue-
 import { defineComponent, KeepAlive } from 'vue'
 import { LS_ERP_DOMAIN_MOD_FACADE_ENABLED } from '@/constants/erpDomainMod'
 import PrintView from '../../../mods/xcagi-erp-domain-bridge/frontend/views/PrintView.vue'
+import HostPrintView from './PrintView.vue'
+import LabelEditorView from '../../../mods/xcagi-erp-domain-bridge/frontend/views/LabelEditorView.vue'
+import { modRoutes, modMenu } from '../../../mods/xcagi-erp-domain-bridge/frontend/routes.js'
+
+vi.mock('@/utils/appDialog', () => ({ appAlert: vi.fn().mockResolvedValue(undefined) }))
+// Resolve only the Mod asset boundary; keep the real host bridge and physical views.
+vi.mock('@/composables/useAdminModHostView', () => ({
+  useAdminModHostView: () => ({ View: PrintView, modProps: {} }),
+}))
 
 let wrapper: VueWrapper | undefined
 let router: Router
@@ -66,6 +75,69 @@ afterEach(() => {
 })
 
 describe('actual Mod label output flow', () => {
+  it.each([
+    ['/print', true],
+    ['/print?mode=labels#selection', true],
+    ['/mod/xcagi-erp-domain-bridge/print', true],
+    ['/print?mode=labels#selection', false],
+  ] as const)('returns from the actual editor to %s with the original form intact (save=%s)', async (sourcePath, save) => {
+    wrapper!.unmount()
+    localStorage.setItem(LS_ERP_DOMAIN_MOD_FACADE_ENABLED, '1')
+    const draw = new Proxy({}, { get: (_target, key) => key === 'measureText' ? () => ({ width: 50 }) : vi.fn() })
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(draw as CanvasRenderingContext2D)
+    const originalFetch = fetchMock.getMockImplementation()!
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/api/templates/create')) {
+        const created = { ...JSON.parse(String(init?.body)), id: 'db:99' }
+        savedTemplates.push(created)
+        return response({ success: true, template: created })
+      }
+      return originalFetch(url, init)
+    })
+    router = createRouter({ history: createMemoryHistory(), routes: [
+      { path: '/print', name: 'print', component: HostPrintView },
+      { path: '/mod/xcagi-erp-domain-bridge/print', name: 'mod-erp-print', component: PrintView },
+      { path: '/mod/xcagi-erp-domain-bridge/label-editor', name: 'mod-erp-label-editor', component: LabelEditorView },
+    ] })
+    await router.push(sourcePath)
+    await router.isReady()
+    const Shell = defineComponent({
+      components: { RouterView, KeepAlive },
+      template: '<RouterView v-slot="{ Component, route }"><KeepAlive :max="12"><component :is="Component" :key="String(route.name || route.path)" /></KeepAlive></RouterView>',
+    })
+    wrapper = mount(Shell, { global: { plugins: [router] } })
+    await flushPromises()
+    await wrapper.get('#label-product').setValue('2')
+    await wrapper.get('#label-template').setValue('db:42')
+    await wrapper.get('#label-copies').setValue(3)
+    await flushPromises()
+    const productReads = fetchMock.mock.calls.filter(call => call[0].includes('/label-jobs/products')).length
+    await wrapper.findAll('a').find(a => a.text() === '创建标签模板')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.findComponent(LabelEditorView).exists()).toBe(true)
+    if (save) {
+      await wrapper.get('input[aria-label="模板名称"]').setValue('新保存标签')
+      await button('添加字段').trigger('click')
+      await button('保存新模板').trigger('click')
+    } else {
+      await button('返回').trigger('click')
+    }
+    await flushPromises()
+    expect(router.currentRoute.value.fullPath).toBe(sourcePath)
+    expect(wrapper.get('#label-product').element).toHaveProperty('value', '2')
+    expect(wrapper.get('#label-template').element).toHaveProperty('value', 'db:42')
+    expect(wrapper.get('#label-copies').element).toHaveProperty('value', '3')
+    expect(wrapper.get('#label-width').element).toHaveProperty('value', '80')
+    expect(fetchMock.mock.calls.filter(call => call[0].includes('/label-jobs/products'))).toHaveLength(productReads)
+    if (save) {
+      expect(wrapper.get('#label-template').text()).toContain('新保存标签')
+      expect(fetchMock.mock.calls.filter(call => call[0].endsWith('/api/templates/create'))).toHaveLength(1)
+    }
+  })
+  it('names the actual Mod label page and navigation for label output', () => {
+    expect(modRoutes.find((route: { name?: string }) => route.name === 'mod-erp-print')?.meta?.title).toBe('标签输出与打印')
+    expect(modMenu.find((item: { id: string }) => item.id === 'mod-erp-print')?.label).toBe('标签输出与打印')
+  })
   it('does not replace a newly saved template with a late pre-save list response', async () => {
     wrapper!.unmount()
     const originalFetch = fetchMock.getMockImplementation()!
@@ -126,7 +198,7 @@ describe('actual Mod label output flow', () => {
     await flushPromises()
     expect(click.defaultPrevented).toBe(true)
     expect(router.currentRoute.value.path).toBe(`${enabled ? '/mod/xcagi-erp-domain-bridge' : ''}/label-editor`)
-    expect(router.currentRoute.value.query.returnTo).toBe('print')
+    expect(router.currentRoute.value.query.returnTo).toBe('/print')
   })
   it('searches and paginates the same product source as generation without silently truncating', async () => {
     expect(wrapper!.text()).toContain('已显示 2 / 3')

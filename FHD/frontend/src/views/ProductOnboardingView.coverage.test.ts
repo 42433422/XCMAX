@@ -3,6 +3,9 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import { defineComponent, h } from 'vue'
+import { validateEnterpriseSessionCached } from '@/utils/authSessionCache'
+
+vi.mock('@/utils/authSessionCache', () => ({ validateEnterpriseSessionCached: vi.fn().mockResolvedValue(true), invalidateEnterpriseSessionCache: vi.fn() }))
 
 // ===== Mock 容器：使用 vi.hoisted 让 vi.mock 工厂能访问 =====
 const mockContainer = vi.hoisted(() => ({
@@ -256,6 +259,7 @@ async function mountComponent(
   mockContainer.tutorialState = createTutorialState(options.tutorial || {})
 
   if (!options.skipDefaultMocks) {
+    vi.mocked(validateEnterpriseSessionCached).mockResolvedValue(true)
     if (options.productSkuReject) {
       mockContainer.fetchProductSku.mockRejectedValue(new Error('sku fail'))
     } else {
