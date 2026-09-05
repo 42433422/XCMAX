@@ -1,5 +1,5 @@
 <template>
-  <div class="attendance-management page-view">
+  <div class="attendance-management">
     <header class="management-header">
       <div>
         <p class="eyebrow">SUNBIRD · 通用考勤</p>

@@ -59,6 +59,9 @@ describe('AttendanceManagementView', () => {
     expect(wrapper.text()).toContain('生产部')
     expect(apiFetch).toHaveBeenCalledWith(expect.stringContaining('/api/mod/attendance-industry/employees?'), undefined)
     expect(wrapper.text()).not.toContain('考勤看板')
+    // The shared page-view flex/overflow rules shrink the header and clip pagination.
+    expect(wrapper.classes()).toContain('attendance-management')
+    expect(wrapper.classes()).not.toContain('page-view')
   })
 
   it('renders department counts', async () => {
