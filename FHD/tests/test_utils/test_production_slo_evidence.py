@@ -48,6 +48,25 @@ def test_daily_workflow_uses_private_authenticated_prometheus_tunnel() -> None:
     assert "seed" not in workflow.lower()
 
 
+def test_observability_installer_paths_resolve_under_published_working_directory():
+    root = Path(__file__).resolve().parents[3]
+    workflow = yaml.safe_load(
+        (root / ".github/workflows/fhd-production-observability.yml").read_text()
+    )
+    cwd = root / workflow["defaults"]["run"]["working-directory"]
+    steps = workflow["jobs"]["install-and-readback"]["steps"]
+    command = next(
+        step["run"]
+        for step in steps
+        if step.get("name") == "Install, validate, and read back production targets"
+    )
+    lines = command.splitlines()
+    index = next(i for i, line in enumerate(lines) if line.strip().startswith("scp "))
+    sources = [line.strip().rstrip("\\").strip() for line in lines[index + 1 : index + 3]]
+    assert len(sources) == 2
+    assert all((cwd / path).is_file() for path in sources)
+
+
 def test_missing_production_source_writes_fail_closed_evidence(tmp_path: Path) -> None:
     mod = _module()
     output = tmp_path / "evidence" / "one.json"
