@@ -177,6 +177,19 @@ describe('erpPagePaths – pushErpPage', () => {
     expect(mockRouter.push).toHaveBeenCalledWith({ path: '/mod/xcagi-erp-domain-bridge/products' })
   })
 
+  it.each(['0', '1'])('对象路径保留选中模板和返回范围，facade=%s', (facade) => {
+    vi.stubGlobal('localStorage', { getItem: () => facade })
+    const target = {
+      path: '/label-editor', query: { templateId: 'db:42', scope: 'orders' },
+      hash: '#fields', replace: true,
+    }
+    pushErpPage(mockRouter as unknown as Router, target)
+    expect(mockRouter.push).toHaveBeenCalledWith({
+      ...target,
+      path: facade === '1' ? '/mod/xcagi-erp-domain-bridge/label-editor' : '/label-editor',
+    })
+  })
+
   it('对象路由名带 query 和 hash 时一并传递', async () => {
     vi.stubGlobal('localStorage', { getItem: () => '1' })
     pushErpPage(mockRouter as unknown as Router, {

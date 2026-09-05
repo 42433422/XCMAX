@@ -71,7 +71,7 @@ export function pushErpPage(router: Router, to: string | RouteLocationRaw): void
     return
   }
   if (typeof to === 'object' && to !== null && 'path' in to && typeof to.path === 'string') {
-    void router.push({ path: resolveErpPagePath(to.path) })
+    void router.push({ ...to, path: resolveErpPagePath(to.path) })
     return
   }
   if (typeof to === 'object' && to !== null && 'name' in to && typeof to.name === 'string') {

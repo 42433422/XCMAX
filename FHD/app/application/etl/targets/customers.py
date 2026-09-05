@@ -127,8 +127,9 @@ class CustomerAdapter(TargetAdapter):
                     "客户在本次导入后又被修改，已停止撤销以避免覆盖新数据",
                     status_code=409,
                 )
-            for key, model_field in CUSTOMER_MODEL_FIELDS.items():
-                if key in before:
+            for key in changed:
+                model_field = CUSTOMER_MODEL_FIELDS.get(key)
+                if model_field:
                     setattr(obj, model_field, before[key])
         elif obj:
             if not customer_image_matches(obj, after):

@@ -142,6 +142,13 @@ def business_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, 
         ("我今天有没有迟到？", "attendance_read"),
         ("研发部今天谁出勤", "attendance_read"),
         ("1001号员工叫什么名字？", "personnel_read"),
+        ("请你作为AI业务员工，查询1001号员工的姓名", "personnel_read"),
+        ("AI员工先查客户，再告诉我李四是哪个部门", "personnel_read"),
+        ("数字员工，先查商品库存，然后查我今天有没有迟到", "attendance_read"),
+        ("AI员工，帮李四登记明天事假半天，然后查询商品", "leave_write"),
+        ("AI业务员工先查客户，再取消李四明天的请假", "leave_write"),
+        ("智能员工，直接把今天考勤表打印出来，再查客户", "attendance_print"),
+        ("AI员工，导出本月考勤表，再查客户", "attendance_export"),
         ("李四是哪个部门？", "personnel_read"),
         ("帮李四登记2026年7月14日上午事假半天，主管已经审批通过。", "leave_write"),
         ("李四明天休假半天", "leave_write"),
@@ -165,6 +172,14 @@ def test_business_intent_covers_natural_wording(message: str, operation: str) ->
         "如何办理请假审批流程",
         "给我讲讲迟到规则怎么计算",
         "你好，今天心情不错",
+        "这是我的新手第一单，请你作为 AI 业务员工查询客户和商品，再创建演示出货单",
+        "请你作为 AI 员工，查一下演示客户，再查商品的可用数量",
+        "ai业务员工，帮我查客户、商品和库存，然后准备出货单供我确认",
+        "帮我让AI销售员工查一下客户和商品，并准备订单",
+        "请人工智能业务员工查询客户，列出待我确认的开单计划",
+        "请数字员工帮我查一下库存，再生成报价单",
+        "智能员工，查询演示商品并告诉我可用数量",
+        "请虚拟员工帮我查询客户并生成订单",
     ],
 )
 def test_explanatory_or_general_chat_is_not_intercepted(message: str) -> None:
@@ -201,11 +216,13 @@ def test_department_attendance_query_does_not_treat_department_as_person_name(
     assert "有打卡时间 2 条" in result["response"]
 
 
+@pytest.mark.parametrize("prefix", ["", "AI业务员工，先查商品，再告诉我："])
 def test_unmapped_current_user_never_gets_invented_attendance(
     business_db: tuple[Path, Path],
+    prefix: str,
 ) -> None:
     result = safety.try_handle_business_chat_action(
-        "我2026年7月13日有没有迟到？", user_id="not-mapped"
+        f"{prefix}我2026年7月13日有没有迟到？", user_id="not-mapped"
     )
     assert result is not None
     assert "没有绑定人员档案" in result["response"]
@@ -284,19 +301,25 @@ def test_negative_approval_wording_stays_pending(business_db: tuple[Path, Path])
     assert "状态为待审批" in result["response"]
 
 
-def test_unknown_employee_leave_is_not_written(business_db: tuple[Path, Path]) -> None:
+@pytest.mark.parametrize("prefix", ["", "AI业务员工，先查客户，再"])
+def test_unknown_employee_leave_is_not_written(
+    business_db: tuple[Path, Path],
+    prefix: str,
+) -> None:
     result = safety.try_handle_business_chat_action(
-        "帮赵六登记2026年7月14日上午事假半天，主管已审批通过"
+        f"{prefix}帮赵六登记2026年7月14日上午事假半天，主管已审批通过"
     )
     assert result is not None
     assert "没有找到“赵六”" in result["response"]
     assert result["execution_receipt"]["executed"] is False
 
 
+@pytest.mark.parametrize("prefix", ["", "AI业务员工，先查商品；"])
 def test_leave_cancel_is_blocked_instead_of_creating_or_claiming_cancelled(
     business_db: tuple[Path, Path],
+    prefix: str,
 ) -> None:
-    result = safety.try_handle_business_chat_action("李四明天不休假了")
+    result = safety.try_handle_business_chat_action(f"{prefix}李四明天不休假了")
     assert result is not None
     assert "取消未执行" in result["response"]
     assert result["execution_receipt"]["executed"] is False
@@ -377,13 +400,18 @@ def test_print_reports_submitted_only_after_backend_accepts_job(
     assert Path(printer.printed[0]).is_file()
 
 
+@pytest.mark.parametrize("prefix", ["", "请你作为 AI 业务员工，"])
 def test_stream_path_preempts_legacy_planner_and_returns_same_receipt(
-    business_db: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+    business_db: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch, prefix: str
 ) -> None:
     def fail_if_called(*_args: Any, **_kwargs: Any):
         raise AssertionError("legacy planner must not run for protected business actions")
 
     monkeypatch.setattr(chat_helpers, "_xcagi_guarded_planner_stream_events", fail_if_called)
+    monkeypatch.setattr(
+        "app.application.get_ai_chat_app_service",
+        lambda: SimpleNamespace(_pending_workflows={}),
+    )
     request = Request(
         {
             "type": "http",
@@ -393,7 +421,9 @@ def test_stream_path_preempts_legacy_planner_and_returns_same_receipt(
             "client": ("127.0.0.1", 12345),
         }
     )
-    body = chat_helpers.XcagiCompatChatBody(message="我2026年7月13日有没有迟到？", user_id="u-1001")
+    body = chat_helpers.XcagiCompatChatBody(
+        message=f"{prefix}我2026年7月13日有没有迟到？", user_id="u-1001"
+    )
     raw = b"".join(chat_helpers._xcagi_planner_stream_bytes(request, body, ai_tier="P0"))
     events = [
         json.loads(line.removeprefix("data: "))
@@ -407,8 +437,9 @@ def test_stream_path_preempts_legacy_planner_and_returns_same_receipt(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("prefix", ["", "请你作为 AI 业务员工，"])
 async def test_json_path_preempts_both_mainline_and_legacy_chat(
-    business_db: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+    business_db: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch, prefix: str
 ) -> None:
     monkeypatch.setattr(planner_compat, "assert_p2_elevated_claim_or_raise", lambda _request: None)
     monkeypatch.setattr(planner_compat, "resolve_ai_tier", lambda _request: "P0")
@@ -431,7 +462,9 @@ async def test_json_path_preempts_both_mainline_and_legacy_chat(
             "client": ("127.0.0.1", 12345),
         }
     )
-    body = chat_helpers.XcagiCompatChatBody(message="1001号员工叫什么名字？", user_id="u-1001")
+    body = chat_helpers.XcagiCompatChatBody(
+        message=f"{prefix}1001号员工叫什么名字？", user_id="u-1001"
+    )
     result = await planner_compat.execute_compat_chat(request, body)
     assert result["business_receipt"]["operation"] == "personnel_read"
     assert result["business_receipt"]["verified"] is True

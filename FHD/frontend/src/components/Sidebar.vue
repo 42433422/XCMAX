@@ -73,8 +73,16 @@
     <div class="sidebar-footer">
       <div class="sidebar-status-mods-row">
         <div class="status-indicator">
-          <span class="status-dot online"></span>
-          <span>系统正常</span>
+          <button
+            type="button"
+            class="runtime-health-button"
+            :title="runtimeHealth.detail"
+            :aria-label="`${runtimeHealth.text}，打开系统设置`"
+            @click="selectView(settingsMenuItem.key)"
+          >
+            <span class="status-dot" :class="runtimeHealth.tone" aria-hidden="true"></span>
+            <span role="status">{{ runtimeHealth.text }}</span>
+          </button>
           <DesktopAppUpdatePrompt />
           <span
             v-if="adminDeployStatusText"
@@ -165,7 +173,7 @@ const {
   syncAdminDeployStatusPolling,
 } = useSidebarAdminDeployStatus()
 
-const { sidebarAppVersionText, sidebarAppVersionTitle, refreshHealthAppVersion } = useSidebarAppVersion({
+const { sidebarAppVersionText, sidebarAppVersionTitle, runtimeHealth, startHealthPolling, stopHealthPolling } = useSidebarAppVersion({
   shouldShowAdminDeployStatus,
 })
 
@@ -285,6 +293,7 @@ function onMenuItemKeydown(event, key) {
 }
 
 onMounted(async () => {
+  startHealthPolling()
   window.addEventListener('xcagi:admin-deploy-updated', refreshAdminDeployStatus)
   sidebarLayoutStore.initialize(sidebarLayoutSeedKeys())
   if (!industryStore.isLoaded) {
@@ -299,10 +308,10 @@ onMounted(async () => {
   }
   syncAdminDeployStatusPolling()
   syncEntitlementSyncPolling()
-  void refreshHealthAppVersion()
 })
 
 onBeforeUnmount(() => {
+  stopHealthPolling()
   clearReorderGesture()
   stopAdminDeployStatusPolling()
   stopEntitlementSyncPolling()

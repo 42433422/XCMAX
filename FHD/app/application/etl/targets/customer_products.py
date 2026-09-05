@@ -369,19 +369,18 @@ class CustomerProductsAdapter(CustomerProductPreviewMixin, TargetAdapter):
         elif metadata.get("product_updated"):
             if not product:
                 raise EtlError("ETL_ROLLBACK_TARGET_MISSING", "关联产品撤销目标已不存在")
-            assert_rollback_image_matches(
+            changed_fields = assert_rollback_image_matches(
                 product,
                 product_before,
                 product_after,
                 ProductAdapter.fields,
                 "关联产品",
             )
-            for field in ProductAdapter.fields:
-                if field.key in product_before:
-                    value = product_before[field.key]
-                    if field.key == "price":
-                        value = decimal_or_zero(value)
-                    setattr(product, field.key, value)
+            for field in changed_fields:
+                value = product_before[field.key]
+                if field.key == "price":
+                    value = decimal_or_zero(value)
+                setattr(product, field.key, value)
             db.flush()
 
         customer_after = after.get("customer") if isinstance(after.get("customer"), dict) else {}
@@ -410,8 +409,9 @@ class CustomerProductsAdapter(CustomerProductPreviewMixin, TargetAdapter):
                     "关联客户在本次导入后又被修改，已停止撤销以避免覆盖新数据",
                     status_code=409,
                 )
-            for key, model_field in CUSTOMER_MODEL_FIELDS.items():
-                if key in customer_before:
+            for key in changed:
+                model_field = CUSTOMER_MODEL_FIELDS.get(key)
+                if model_field:
                     setattr(customer, model_field, customer_before[key])
         if metadata.get("customer_created"):
             if not customer:

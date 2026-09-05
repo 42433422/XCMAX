@@ -205,10 +205,9 @@ class ProductAdapter(TargetAdapter):
         if before:
             if not obj:
                 raise EtlError("ETL_ROLLBACK_TARGET_MISSING", "产品撤销目标已不存在")
-            assert_rollback_image_matches(obj, before, after, self.fields, "产品")
-            for field in self.fields:
-                if field.key in before:
-                    setattr(obj, field.key, before[field.key])
+            changed_fields = assert_rollback_image_matches(obj, before, after, self.fields, "产品")
+            for field in changed_fields:
+                setattr(obj, field.key, before[field.key])
         elif obj:
             assert_created_row_unchanged(obj, after, self.fields, "产品")
             db.delete(obj)
