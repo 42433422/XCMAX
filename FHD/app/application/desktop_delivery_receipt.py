@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from app.build_identity import build_identity
 from app.utils.device_system.device_identity import get_stable_device_id
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir
@@ -40,8 +41,15 @@ async def report_desktop_login_delivery_receipt(market_token: str) -> dict[str, 
     if not token:
         return {"reported": False, "reason": "missing_market_token"}
     installation_id = desktop_installation_id()
-    version = str(os.environ.get("XCAGI_VERSION") or os.environ.get("APP_VERSION") or "").strip()
-    build_sha = str(os.environ.get("XCAGI_BUILD_SHA") or os.environ.get("GIT_SHA") or "").strip()
+    identity = build_identity()
+    version = str(
+        os.environ.get("XCAGI_VERSION")
+        or os.environ.get("APP_VERSION")
+        or identity["product_version"]
+    ).strip()
+    build_sha = str(
+        os.environ.get("XCAGI_BUILD_SHA") or os.environ.get("GIT_SHA") or identity["git_sha"]
+    ).strip()
     payload = {
         "installation_id": installation_id,
         "idempotency_key": hashlib.sha256(f"desktop_login:{installation_id}".encode()).hexdigest(),

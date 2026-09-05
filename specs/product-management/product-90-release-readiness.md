@@ -20,7 +20,7 @@
 - **未签名Windows临时安装测试可独立先做**：同 `fhd-release-desktop.yml` 设置 `windows_installer_only=true`、完整本次SHA和version。它保留资源/安装/启动/卸载检查，5项签名配置全缺时允许明确unsigned；任意部分配置或签名错误会阻断。此路不更新stable，也不代替正式两日扫描、稳定签名及三平台收敛。
 - **convergence credential未见配置**：该workflow只使用 `RELEASE_CONVERGENCE_ADMIN_TOKEN`，当前repo secret名称列表没有此名；不能以别的凭据猜测替换，需要按已授权账号配置或明确暂不能取得自动收敛结果。
 - **production environment没有required reviewer**：当前GitHub API `environments/production` 返回 `protection_rules=[]`，原源码注释与此不符，已更正注释。仍存在exact-SHA安全和autonomy校验；本核查未修改environment。正式发布按既有用户授权处理，不能声称GitHub已自动设置人工审批。
-- **旧文档命令过时**：`FHD/docs/runbooks/windows-code-signing.md` 的示例仍传version1.0.0.0且没有新必需SHA/scan/frontend输入。当前workflow定义才是可执行合同；不要复制旧文档命令直接运行。
+- **旧文档命令过时，后续已修正**：核查时`FHD/docs/runbooks/windows-code-signing.md`的示例仍传version1.0.0.0且没有新必需SHA/scan/frontend输入。本轮已改为完整SHA及两日同SHA真实扫描ID的总编排入口，前端run ID由编排生成；命令合同按候选及固定main工作流核对，未执行发布。
 
 ## 历史实机证据，不能冒充本次验收
 
@@ -78,3 +78,21 @@ TMPDIR=/private/tmp/xcmax-product-90-20260905/worktree/.tmp-pm003 PYTHONDONTWRIT
 完整SHA `b97073acc61baca1ce8b0d86a4ad06bdb86349eb` 的隔离macOS包通过Developer ID深度严格签名与16项运行依赖检查，实际桌面UI已完成导入、价格更新、保留人工改动的显式授权撤销、模板保存和中文PDF下载。新用户目录匿名冷启动的登录衔接、标签回程和内嵌预览仍失败，修复后需要新SHA构建和复验。该制品未公证、未替换Applications安装版、未更新stable指针；本地Market的同SHA钱包读回也不替代正式服务部署。
 
 2026-09-05 11:56 UTC再次只读查询配置名称，Windows四项eSigner secrets、publisher变量及RELEASE_CONVERGENCE_ADMIN_TOKEN仍未见配置；结果见任务目录 `release-config-presence-current.json`，未读取secret值。真实客户价值、物理打印、跨平台安装、生产收敛和最终SHA连续两UTC日完整扫描仍需各自证据。本地回归数量和临时包签名不能代替这些门禁。
+
+## 70da 终端与桌面候选的交付状态
+
+`70da5cdf6ca18abc44eb5370734314ca6663fb8f` 已推送到草稿PR #1768。该提交将智脑开发功能迁移到 `xcagi-brain`，移除前端页面与导航，保留主聊天、智能生态和后端能力。独立wheel安装及23项真实后端流程通过；单独构建的macOS包通过Developer ID深度严格签名。21:26–21:31原生UI复验确认智脑入口消失、正常登录与行业引导贯通、首单明确确认后产生业务记录、标签保存返回保留选择、三页中文PDF内嵌展示和下载成功。详见[本地验收记录](product-90-live-acceptance.md)。
+
+此包未公证、未发布、未替换Applications中的安装版。包内健康接口的git_sha为空，身份目前由build-info、已核验启动路径和资源hash确认；缺失的运行身份待修。Market仍是此前b970隔离环境，不声称其与70da同步正式部署。
+
+70da的完整前端CI通过；[完整后端任务](https://github.com/42433422/XCMAX/actions/runs/33968197745/job/101311999347)为36773通过、62跳过、1失败，唯一失败为行业管理员切换接口返回500。旧模板认证污染案例在此全套CI已通过，新失败需独立定位。
+
+[安全门禁任务](https://github.com/42433422/XCMAX/actions/runs/33968197750/job/101312657556)明确失败：CodeQL分析成功后，门禁发现两个新增HIGH告警记录（#3685、#3686，`py/polynomial-redos`），指向首单查询解析第19、20行。实际分析merge SHA为`9560cbf0f812d44c8c45d7c8bc57142fbaab8ae0`，父提交为当时main `de4a4755259865851f7b9def13f29b1e2a62a4ca`与70da；该源码文件在main、b970、4c4及70da哈希完全相同。因此这是本次分析新发现的既有代码风险，不能说是CLI新引入的漏洞，也不能因为既有就忽略门禁。源码修复与局部回归不等于告警已关闭；后续提交必须取得新的正常CI分析结果。现有证据只读核验未运行额外扫描、关闭告警或改变规则。
+
+正式交付仍需最终main SHA、必要CI、连续两UTC日完整安全证据、签名/公证与可下载制品、跨平台实机与业务验收、生产收敛和真实客户价值。70da的本地通过项不能替代这些条件。
+
+14:00 UTC只读配置复核仍未见四项eSigner secret、publisher变量或convergence token；查询成功但仅证明仓库级名称缺失，未读取值。GitHub仓库runner清单为空，DevFleet唯一Windows设备当时offline且linkHealthy=false，因此当前没有可用的Windows实机验收来源。7月的Win11命令PASS/UI FAIL、Win10 pending仍是历史证据。原始名称、设备清单及固定main SHA的工作流副本见任务目录 `release-preflight-70da-current/`。
+
+本地候选与当前main的Desktop工作流必须区分：候选含之前继承的`windows_installer_only`分支，但14:00查询的main `de4a4755259865851f7b9def13f29b1e2a62a4ca`并未声明该输入，正式Desktop要求version、verify_only、frontend_run_id、完整release_sha及两次scan ID。上文手动制品路径仅说明本地候选及历史run，不能直接当作当前main可执行命令。正式入口使用总编排器，在同SHA安全证据和上游服务、前端制品就绪后调用Desktop。
+
+70da之后的源码修复已将首单正则改为线性扫描、将既有no-op全局行业POST明确退役为保留鉴权的410，并接通真实打包Resources身份。局部回归及旧实现反证见任务目录 `onboarding-slot-parser-fix/`、`ci-70da-backend-failure/`、`packaged-build-identity-fix/`。这次范围未改变安全扫描规则、告警状态、默认用户权限或签名门禁；必须等待后续完整CI及新包验收，不能将70da的红色门禁改写为通过。
