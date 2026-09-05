@@ -149,7 +149,24 @@ def inventory_list(
     )
 
 
-@router.get("/api/inventory/export.xlsx", response_class=Response)
+@router.get(
+    "/api/inventory/export.xlsx",
+    response_class=Response,
+    summary="Export the complete filtered inventory workbook",
+    description="Returns a tenant-scoped Excel snapshot; empty or over-limit results are rejected.",
+    responses={
+        200: {
+            "content": {
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                    "schema": {"type": "string", "format": "binary"}
+                }
+            }
+        },
+        404: {"description": "No inventory matches the filters"},
+        413: {"description": "More than 50,000 rows; narrow the filters"},
+        500: {"description": "Workbook generation failed"},
+    },
+)
 def inventory_export(
     warehouse_id: int | None = Query(default=None, ge=1),
     product_id: int | None = Query(default=None, ge=1),

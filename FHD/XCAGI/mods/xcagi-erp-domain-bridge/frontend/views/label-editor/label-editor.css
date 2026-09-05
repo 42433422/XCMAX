@@ -443,3 +443,15 @@
   padding: 6px 12px;
   font-size: 13px;
 }
+.template-name-row {
+  padding: 12px 20px;
+}
+.template-name-row input {
+  padding: 6px 10px;
+  margin-left: 8px;
+  min-width: 240px;
+}
+.template-name-row p {
+  margin: 8px 0 0;
+  font-size: 13px;
+}

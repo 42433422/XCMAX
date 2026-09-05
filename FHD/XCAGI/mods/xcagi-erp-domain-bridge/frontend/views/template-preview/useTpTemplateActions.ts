@@ -40,7 +40,11 @@ export function useTpTemplateActions(deps: TpTemplateActionsDeps) {
 
   async function openTemplateTarget(tpl: TplRecord) {
     if (tpl.category === 'label') {
-      await appAlert('打印功能开发中...')
+      if (!String(tpl.id || '').trim()) {
+        await appAlert('模板缺少标识，无法打开。请刷新模板列表后重试。')
+        return
+      }
+      pushErpPage(router, { path: '/label-editor', query: { templateId: String(tpl.id) } })
     } else if (tpl.category === 'word') {
       const p = String(tpl.file_path || tpl.path || '').trim()
       await appAlert(p ? `请在资源管理器中打开：\n${p}` : '未记录 Word 模板文件路径')

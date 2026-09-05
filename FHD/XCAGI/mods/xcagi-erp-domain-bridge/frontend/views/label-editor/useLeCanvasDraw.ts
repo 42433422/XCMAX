@@ -1,14 +1,13 @@
 import { ref, type Ref } from 'vue'
-import type { LeField, LeGrid } from './leTypes'
+import type { LeField, LeFieldId, LeGrid } from './leTypes'
 
-// 拆分自 LabelEditorView.vue script（原 data 中 canvas 相关状态 + methods 中 initCanvas/getDefaultFields/draw* 方法）；
-// 逻辑逐字迁移，行为不变。
+// Draw the current editable template only; missing templates never acquire sample fields.
 export function useLeCanvasDraw(deps: {
   fields: Ref<LeField[]>
   grid: Ref<LeGrid | null>
   uploadedImage: Ref<string | null>
-  selectedFieldId: Ref<number | null>
-  hoverFieldId: Ref<number | null>
+  selectedFieldId: Ref<LeFieldId | null>
+  hoverFieldId: Ref<LeFieldId | null>
   showGrid: Ref<boolean>
   showMerge: Ref<boolean>
 }) {
@@ -25,39 +24,6 @@ export function useLeCanvasDraw(deps: {
     }
   }
 
-  function getDefaultFields(): LeField[] {
-    return [
-      {
-        id: 1,
-        label: '产品名称',
-        value: '示例产品',
-        type: 'fixed',
-        position: { left: 50, top: 50, width: 200, height: 30 }
-      },
-      {
-        id: 2,
-        label: '规格',
-        value: 'XXX',
-        type: 'dynamic',
-        position: { left: 300, top: 50, width: 150, height: 30 }
-      },
-      {
-        id: 3,
-        label: '数量',
-        value: '100',
-        type: 'dynamic',
-        position: { left: 500, top: 50, width: 100, height: 30 }
-      },
-      {
-        id: 4,
-        label: '日期',
-        value: '2024-01-01',
-        type: 'dynamic',
-        position: { left: 50, top: 120, width: 200, height: 30 }
-      }
-    ]
-  }
-
   function drawCanvas() {
     if (!ctx.value) return
 
@@ -65,7 +31,9 @@ export function useLeCanvasDraw(deps: {
 
     if (uploadedImage.value) {
       const img = new Image()
+      const imageSource = uploadedImage.value
       img.onload = () => {
+        if (uploadedImage.value !== imageSource || !ctx.value) return
         ctx.value!.drawImage(img, 0, 0, canvasWidth.value, canvasHeight.value)
         drawGridOverlay()
         drawFields()
@@ -162,7 +130,6 @@ export function useLeCanvasDraw(deps: {
     canvasHeight,
     ctx,
     initCanvas,
-    getDefaultFields,
     drawCanvas,
   }
 }

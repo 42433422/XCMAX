@@ -87,7 +87,7 @@ async def mod_store_private_delivery(request: Request) -> ModStoreSimpleResponse
     for mod_id in sorted(mod_ids):
         delivery = deliveries[mod_id]
         integrated = delivery.get("delivery_mode") == "integrated_feature"
-        runtime_id = delivery.get("runtime_mod_id") if integrated else mod_id
+        runtime_id = _safe_text(delivery.get("runtime_mod_id")) if integrated else mod_id
         row = local_rows.get(runtime_id, {})
         remote = remote_by_id.get(mod_id, {})
         local_version = _safe_text(row.get("version"))
