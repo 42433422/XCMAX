@@ -26,6 +26,13 @@ vi.mock('./task-center/GlobalTaskCenter.vue', () => ({
   default: { template: '<button class="task-center-stub">工作区</button>' },
 }))
 
+vi.mock('./TopQuickNav.vue', () => ({
+  default: {
+    template: '<input class="top-quick-nav-stub" />',
+    emits: ['select'],
+  },
+}))
+
 describe('MainLayout.vue', () => {
   function createTestRouter() {
     return createRouter({
