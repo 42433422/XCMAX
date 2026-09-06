@@ -1,0 +1,56 @@
+name: Changelog gate
+
+# 更新日志 SSOT 门禁：凡改动产品代码的 PR，必须在 FHD/CHANGELOG.md 的
+# 「## Unreleased」节新增一条人类可读的变更说明（见该文件头部约定）。
+# 豁免：autonomy/* 分支（AI 自愈链路，与 ai-self-heal 递归保护同一约定）。
+
+on:
+  pull_request:
+    branches: [main, master, develop]
+    paths:
+      - "app/**"
+      - "config/**"
+      - "frontend/src/**"
+      - "desktop/**"
+      - "desktop_runtime/**"
+      - "mobile-flutter-poc/**"
+      - "XCAGI/**"
+      - "docker/**"
+      - "FHD/scripts/package/**"
+      - "VERSION.md"
+
+permissions:
+  contents: read
+
+jobs:
+  changelog:
+    name: Changelog updated
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require CHANGELOG.md entry on product PRs
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          if [[ "${HEAD_REF}" == autonomy/* ]]; then
+            echo "[skip] autonomy/* 分支豁免（AI 自愈链路）"
+            exit 0
+          fi
+          files="$(git -C "${GITHUB_WORKSPACE}" diff --name-only "${BASE_SHA}" "${HEAD_SHA}")"
+          echo "[info] PR changed files:"
+          echo "${files}"
+          if ! echo "${files}" | grep -qx 'FHD/CHANGELOG\.md'; then
+            echo "::error title=缺少更新日志::产品代码 PR 必须更新 FHD/CHANGELOG.md —— 在「## Unreleased」节为本次变更加一条说明（一行即可，写给非技术读者看）"
+            exit 1
+          fi
+          if [ -z "$(git -C "${GITHUB_WORKSPACE}" diff "${BASE_SHA}" "${HEAD_SHA}" -- FHD/CHANGELOG.md | grep -E '^\+[^+]' | grep -E '\S' || true)" ]; then
+            echo "::error title=更新日志无实质内容::FHD/CHANGELOG.md 没有新增行，请在「## Unreleased」节补充本次变更说明"
+            exit 1
+          fi
+          echo "[ok] CHANGELOG.md 已随本 PR 更新"
