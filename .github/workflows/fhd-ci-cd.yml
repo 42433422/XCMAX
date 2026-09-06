@@ -203,7 +203,7 @@ jobs:
       # best-effort (continue-on-error); coverage.xml + htmlcov/ remain local SSOT.
       - name: Upload coverage report
         continue-on-error: true
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.xml
