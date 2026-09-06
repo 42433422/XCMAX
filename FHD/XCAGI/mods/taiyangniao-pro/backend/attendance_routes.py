@@ -22,8 +22,12 @@ def register(
     _resolve_personnel_roster,
 ) -> None:
     """在给定 router 上注册 /attendance/*、/employees、/departments 路由。"""
-    # 考勤转换的实现放在 mod 私有包 ``taiyangniao_attendance/``
-    # （被 mod_manager 加到 sys.path 的 ``backend/`` 可直接绝对 import）。
+    # 考勤转换引擎唯一正本在 attendance-industry mod 私有包
+    # ``taiyangniao_attendance/``；显式 ensure 进 sys.path，不依赖 mod 扫描顺序
+    # （本 mod manifest 已声明依赖 attendance-industry >=1.0.0）。
+    from app.mod_sdk.attendance import ensure_attendance_engine_on_path
+
+    ensure_attendance_engine_on_path()
     from taiyangniao_attendance.convert import convert_attendance_file
 
     @router.get("/attendance/policy", response_model=None)

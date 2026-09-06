@@ -313,14 +313,14 @@ class TestImportDailyRecordsIfPossible:
         )
 
     def test_writes_daily_records(self, monkeypatch):
-        import app.shell.taiyangniao_attendance.parser as parser_shim
+        import app.mod_sdk.attendance as attendance_sdk
 
         parsed = SimpleNamespace(
             month="2026-03",
             rows_in=2,
             records=[self._fake_record(4, "张三"), self._fake_record(5, "李四")],
         )
-        monkeypatch.setattr(parser_shim, "parse_attendance_workbook", lambda *a, **k: parsed)
+        monkeypatch.setattr(attendance_sdk, "parse_attendance_workbook", lambda *a, **k: parsed)
 
         conn = self._conn()
         rows_in, written, month = svc._import_daily_records_if_possible(
@@ -337,13 +337,13 @@ class TestImportDailyRecordsIfPossible:
         conn.close()
 
     def test_parser_missing_returns_passthrough(self, monkeypatch):
-        fake = types.ModuleType("app.shell.taiyangniao_attendance.parser")
+        fake = types.ModuleType("app.mod_sdk.attendance")
 
         def _raise(name):
             raise ModuleNotFoundError("No module named 'taiyangniao_attendance'")
 
         fake.__getattr__ = _raise  # type: ignore[attr-defined]
-        monkeypatch.setitem(sys.modules, "app.shell.taiyangniao_attendance.parser", fake)
+        monkeypatch.setitem(sys.modules, "app.mod_sdk.attendance", fake)
         conn = self._conn()
         assert svc._import_daily_records_if_possible(conn, Path("x.xlsx"), "src", "2026-03") == (
             0,
@@ -362,7 +362,7 @@ class TestImportAttendanceWorkbook:
             svc.import_attendance_workbook(tmp_path / "missing.xlsx", tmp_path / "db.sqlite")
 
     def test_dingtalk_full_import(self, monkeypatch, tmp_path):
-        import app.shell.taiyangniao_attendance.parser as parser_shim
+        import app.mod_sdk.attendance as attendance_sdk
 
         record = SimpleNamespace(
             source_row=4,
@@ -385,7 +385,7 @@ class TestImportAttendanceWorkbook:
             notes=[],
         )
         parsed = SimpleNamespace(month="2026-03", rows_in=1, records=[record])
-        monkeypatch.setattr(parser_shim, "parse_attendance_workbook", lambda *a, **k: parsed)
+        monkeypatch.setattr(attendance_sdk, "parse_attendance_workbook", lambda *a, **k: parsed)
 
         excel = _dingtalk_xlsx(tmp_path / "考勤-2026-3月份考勤统计表.xlsx")
         db = tmp_path / "private" / "taiyangniao_pro.db"
