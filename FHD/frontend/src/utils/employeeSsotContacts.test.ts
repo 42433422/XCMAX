@@ -87,4 +87,32 @@ describe('dutyEmployeesFromEmployeeSsot', () => {
     expect(byId.get('emp-unknown')?.subtitle).toBe('编制 · 未安装')
     expect(rows.every((row) => !/[a-z_]{4,} · /.test(row.subtitle))).toBe(true)
   })
+
+  it('后端回显英文 ID 时，员工名回退为编制表中文名；真实名保留', () => {
+    const payload: EmployeeSsotPayload = {
+      contacts: [
+        {
+          employee_id: 'intake-dispatcher',
+          display_name: 'intake-dispatcher',
+          department: 'ops_acquisition',
+          source: 'planned',
+          installed: false,
+          runnable: false,
+        },
+        {
+          employee_id: 'intent-analyst',
+          display_name: '需求分析员工',
+          department: 'prod_mod',
+          source: 'installed',
+          installed: true,
+          runnable: true,
+        },
+      ],
+    }
+
+    const rows = dutyEmployeesFromEmployeeSsot(payload)
+    const byId = new Map(rows.map((row) => [row.id, row]))
+    expect(byId.get('intake-dispatcher')?.display_name).toBe('需求接入员')
+    expect(byId.get('intent-analyst')?.display_name).toBe('需求分析员工')
+  })
 })
