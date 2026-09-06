@@ -123,10 +123,9 @@ def bundled_industry_seeds_dir() -> Path | None:
 
     if getattr(sys, "frozen", False):
         base = Path(getattr(sys, "_MEIPASS", ""))
-        for name in ("industry-seeds",):
-            p = base / name
-            if p.is_dir():
-                return p
+        p = base / "industry-seeds"
+        if p.is_dir():
+            return p
     cwd = Path.cwd()
     for rel in ("industry-seeds", "build/staged-industry-seeds-enterprise"):
         p = (cwd / rel).resolve()

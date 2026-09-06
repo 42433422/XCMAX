@@ -108,6 +108,7 @@ class __AIChatApplicationServicePart01MixinPart01Mixin:
 
         ctx = ensure_business_harness_context(context, message=message)
         ctx = self._inject_excel_vector_context(message=message, context=ctx)
+        ctx = self._inject_wechat_contact_context(message=message, context=ctx)
         chat_run = None
         chat_run_context: dict[str, _facade().Any] = {}
 

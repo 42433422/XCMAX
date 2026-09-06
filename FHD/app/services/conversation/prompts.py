@@ -141,6 +141,9 @@ class PromptsMixin:
         excel_vector_ctx = req.get("excel_vector_context")
         if isinstance(excel_vector_ctx, dict):
             blocks.append(self._format_excel_vector_block(excel_vector_ctx))
+        wechat_ctx = req.get("wechat_contact_context")
+        if isinstance(wechat_ctx, dict):
+            blocks.append(self._format_wechat_contact_block(wechat_ctx))
         extra = {
             k: v
             for k, v in req.items()
@@ -156,6 +159,7 @@ class PromptsMixin:
                 "web_search_error",
                 "web_search_meta",
                 "excel_vector_context",
+                "wechat_contact_context",
             )
         }
         if extra:
@@ -168,6 +172,60 @@ class PromptsMixin:
                 logger.debug("suppressed exception", exc_info=True)
         merged = "\n\n".join(b for b in blocks if b)
         return merged
+
+    def _format_wechat_contact_block(self, payload: dict[str, Any]) -> str:
+        """渲染微信联系人情报块（微信同步基建 → 聊天智慧）。"""
+        raw_contact = payload.get("contact")
+        contact = raw_contact if isinstance(raw_contact, dict) else {}
+        display_name = str(contact.get("display_name") or payload.get("contact_key") or "-")
+        lines = ["【微信联系人情报（来自微信聊天记录同步，服务器记录为准）】"]
+        matched_by = str(payload.get("matched_by") or "").strip()
+        if matched_by:
+            lines.append(
+                f"识别方式：{'用户显式指定' if matched_by == 'explicit' else '从消息文本自动匹配'}"
+            )
+        lines.append(f"联系人：{display_name}")
+        match_status = str(contact.get("match_status") or "").strip()
+        if match_status:
+            status_label = {
+                "auto_linked": "已自动绑定客户档案",
+                "manual_linked": "已人工绑定客户档案",
+                "unlinked": "尚未绑定客户档案",
+            }.get(match_status, match_status)
+            lines.append(f"身份状态：{status_label}")
+        raw_customer = payload.get("customer")
+        customer = raw_customer if isinstance(raw_customer, dict) else None
+        if customer:
+            profile = [f"客户档案：{customer.get('name') or '-'}"]
+            if customer.get("contact_person"):
+                profile.append(f"联系人：{customer['contact_person']}")
+            if customer.get("phone"):
+                profile.append(f"电话：{customer['phone']}")
+            if customer.get("address"):
+                profile.append(f"地址：{customer['address']}")
+            lines.append("；".join(profile))
+        message_count = payload.get("message_count")
+        if isinstance(message_count, int) and message_count:
+            lines.append(f"同步消息总数：{message_count}")
+        recent = (
+            payload.get("recent_messages")
+            if isinstance(payload.get("recent_messages"), list)
+            else []
+        )
+        if recent:
+            lines.append("最近对话（role=self 为机主发送 / other 为对方发送，按时间正序）：")
+            for msg in recent[-12:]:
+                role_label = "机主" if str(msg.get("role")) == "self" else "对方"
+                ts = str(msg.get("msg_ts") or "").replace("T", " ")[:19]
+                prefix = f"[{ts}] " if ts else ""
+                lines.append(f"  {prefix}{role_label}：{msg.get('content')}")
+        else:
+            lines.append("（暂无已同步的聊天消息）")
+        lines.append(
+            "使用规则：以上是真实聊天记录摘要，回答时结合它判断「正在跟谁对接、聊到什么进度」；"
+            "只引用记录中实际出现的事实，严禁编造消息内容、承诺或数据；记录为空或存疑时如实说明。"
+        )
+        return "\n".join(lines)
 
     def _format_excel_vector_block(self, payload: dict[str, Any]) -> str:
         index_id = str(payload.get("index_id") or "").strip()

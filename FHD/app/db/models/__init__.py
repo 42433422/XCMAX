@@ -84,6 +84,7 @@ from app.db.models.tenant import Tenant
 from app.db.models.user import Session as UserSession
 from app.db.models.user import User
 from app.db.models.tutorial import TutorialRun, TutorialStepEvidence, TutorialWorkspace
+from app.db.models.wechat_sync import WechatContact, WechatMessage
 from app.db.models.workflow import (
     WorkflowCheckpoint,
     WorkflowDefinition,
@@ -117,6 +118,8 @@ __all__ = [
     "ImConversationMember",
     "ImCustomerServiceAutomationState",
     "ImMessage",
+    "WechatContact",
+    "WechatMessage",
     "Product",
     "ShipmentRecord",
     "ShipmentEtlImportFingerprint",
