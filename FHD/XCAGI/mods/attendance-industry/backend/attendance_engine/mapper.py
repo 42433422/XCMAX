@@ -673,7 +673,7 @@ _DETAIL_MONTH_LINK_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
 def _detail_side_month_link_column_map(ws) -> dict[str, int]:
     """从明细表 BR..CC 表头解析「月度统计」各指标应对应的侧栏 SUMIF 列号。
 
-    太阳鸟模板常在第 2 行放图示（与 ``_refresh_detail_side_summary_formulas`` 的 ``crit_row`` 一致），
+    考勤明细模板常在第 2 行放图示（与 ``_refresh_detail_side_summary_formulas`` 的 ``crit_row`` 一致），
     亦尝试第 3 行与第 1 行，避免模板改版后解析失败导致月度统计退化为静态数。
     """
     crit_rows = (1, max(1, DETAIL_HEADER_ROWS - 1), DETAIL_HEADER_ROWS)

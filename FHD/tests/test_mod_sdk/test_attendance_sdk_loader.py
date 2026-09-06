@@ -1,6 +1,6 @@
 """考勤 SDK loader（app.mod_sdk.attendance）单一正本与降级行为门禁。
 
-引擎唯一正本：``FHD/XCAGI/mods/attendance-industry/backend/taiyangniao_attendance/``
+引擎唯一正本：``FHD/XCAGI/mods/attendance-industry/backend/attendance_engine/``
 （EXPORT_ONLY 运行时副本 SSOT）。本文件守护三件事：
 1. SDK 导出面（convert/paths/parser）全部解析到 mod 正本；
 2. ``ensure_attendance_engine_on_path`` 幂等；
@@ -25,7 +25,7 @@ def test_engine_exports_resolve_to_mod_copy():
     assert callable(sdk.attendance_workspace_root)
     assert callable(sdk.parse_attendance_workbook)
 
-    import taiyangniao_attendance.convert as engine_convert
+    import attendance_engine.convert as engine_convert
 
     assert Path(engine_convert.__file__).resolve().is_relative_to(ENGINE_BACKEND)
 

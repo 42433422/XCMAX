@@ -23,9 +23,9 @@ def register(
     _resolve_personnel_roster,
 ) -> None:
     """在给定 router 上注册 /attendance/* 转换与规则路由。"""
-    # 考勤转换的实现放在 mod 私有包 ``taiyangniao_attendance/``
+    # 考勤转换的实现放在 mod 私有包 ``attendance_engine/``
     # （被 mod_manager 加到 sys.path 的 ``backend/`` 可直接绝对 import）。
-    from taiyangniao_attendance.convert import convert_attendance_file
+    from attendance_engine.convert import convert_attendance_file
 
     router.add_api_route("/attendance/capabilities", attendance_custom_features, methods=["GET"])
     custom_access = [Depends(require_attendance_conversion)]

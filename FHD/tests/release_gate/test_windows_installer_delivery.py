@@ -1,9 +1,13 @@
 import json
+import sys
 from pathlib import Path
 
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+
+from scripts.dev.mods_ssot import EXPORT_ONLY_MODS, EXPORT_ROOT, SSOT_ROOT  # noqa: E402
 
 
 def test_enterprise_bundle_covers_required_host_bridges():
@@ -14,13 +18,31 @@ def test_enterprise_bundle_covers_required_host_bridges():
     assert required <= set(enterprise["sku_bundled_mod_ids"])
 
 
+def _mod_manifest_exists(mod_id: str) -> bool:
+    """双路径解析：编辑源 SSOT 优先；EXPORT_ONLY mod 落在运行时副本 SSOT。"""
+    if mod_id in EXPORT_ONLY_MODS:
+        return (EXPORT_ROOT / mod_id / "manifest.json").is_file()
+    return (SSOT_ROOT / mod_id / "manifest.json").is_file()
+
+
+def test_attendance_workspace_open_to_generic_users():
+    """考勤工作区通用开放：enterprise 捆绑 attendance-industry；suppress 只压太阳鸟 legacy。"""
+    base = json.loads((ROOT / "config/host_profiles/_base.json").read_text())
+    enterprise = json.loads((ROOT / "config/host_profiles/enterprise.json").read_text())
+    suppress = base["client_mod_policies"]["suppress_generic_shell_mod_ids"]
+    assert "attendance-industry" not in suppress
+    assert "taiyangniao-pro" in suppress
+    for field in ("package_stage_ids", "sku_bundled_mod_ids"):
+        assert "attendance-industry" in enterprise[field], field
+
+
 def test_profile_stage_lists_only_existing_modules():
     for sku in ("personal", "enterprise"):
         profile = json.loads((ROOT / f"config/host_profiles/{sku}.json").read_text())
         for field in ("package_stage_ids", "sku_bundled_mod_ids"):
             assert "wechat-contacts-ai-employee" not in profile[field]
             for mod_id in profile[field]:
-                assert (ROOT / "mods" / mod_id / "manifest.json").is_file(), mod_id
+                assert _mod_manifest_exists(mod_id), mod_id
 
 
 def test_manual_installer_is_part_of_official_workflow_without_stable_publication():

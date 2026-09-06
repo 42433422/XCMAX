@@ -340,7 +340,7 @@ class TestImportDailyRecordsIfPossible:
         fake = types.ModuleType("app.mod_sdk.attendance")
 
         def _raise(name):
-            raise ModuleNotFoundError("No module named 'taiyangniao_attendance'")
+            raise ModuleNotFoundError("No module named 'attendance_engine'")
 
         fake.__getattr__ = _raise  # type: ignore[attr-defined]
         monkeypatch.setitem(sys.modules, "app.mod_sdk.attendance", fake)

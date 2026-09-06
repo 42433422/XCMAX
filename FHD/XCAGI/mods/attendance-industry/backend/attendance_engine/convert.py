@@ -719,7 +719,7 @@ def convert_attendance_file(
     use_llm: bool | None = None,
     personnel_roster: list[tuple[str, str, str]] | None = None,
 ) -> dict[str, Any]:
-    """把钉钉考勤导出 xlsx 转换为太阳鸟明细模板。
+    """把钉钉考勤导出 xlsx 转换为考勤明细模板。
 
     ``header_row`` 是用户在前端填写的表头所在行（1-based），``0`` 代表自动识别。
     ``use_llm`` 为真时允许在本地规则无法识别必需列时调用 LLM 兜底；

@@ -192,7 +192,7 @@ def _legacy_profile_for_sku(sku: str) -> dict[str, Any]:
         "core_workflow_mod_id": _LEGACY_CORE_WORKFLOW,
         "client_mod_policies": {
             "client_primary_erp_mod_id": "attendance-industry",
-            "suppress_generic_shell_mod_ids": ["attendance-industry", "taiyangniao-pro"],
+            "suppress_generic_shell_mod_ids": ["taiyangniao-pro"],
             "protected_ids": list(_LEGACY_PROTECTED),
         },
         "employee_registry_rules": {
@@ -299,7 +299,7 @@ def get_client_mod_policies() -> dict[str, Any]:
         return pol
     return {
         "client_primary_erp_mod_id": "attendance-industry",
-        "suppress_generic_shell_mod_ids": ["attendance-industry", "taiyangniao-pro"],
+        "suppress_generic_shell_mod_ids": ["taiyangniao-pro"],
         "protected_ids": list(_LEGACY_PROTECTED),
     }
 

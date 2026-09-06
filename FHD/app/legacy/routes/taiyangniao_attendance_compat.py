@@ -95,7 +95,7 @@ def _candidate_mod_roots() -> list[Path]:
 def _ensure_sunbird_backend_on_path() -> Path | None:
     for root in _candidate_mod_roots():
         backend = root / MOD_ID / "backend"
-        if (backend / "taiyangniao_attendance" / "convert.py").is_file():
+        if (backend / "attendance_engine" / "convert.py").is_file():
             backend_str = str(backend)
             if backend_str not in sys.path:
                 sys.path.insert(0, backend_str)
@@ -105,10 +105,10 @@ def _ensure_sunbird_backend_on_path() -> Path | None:
 
 def _load_convert_attendance_file() -> Callable[..., dict[str, Any]]:
     _ensure_sunbird_backend_on_path()
-    module = importlib.import_module("taiyangniao_attendance.convert")
+    module = importlib.import_module("attendance_engine.convert")
     convert_fn = module.convert_attendance_file
     if not callable(convert_fn):
-        raise RuntimeError("taiyangniao_attendance.convert.convert_attendance_file 不可用")
+        raise RuntimeError("attendance_engine.convert.convert_attendance_file 不可用")
     return cast("Callable[..., dict[str, Any]]", convert_fn)
 
 
