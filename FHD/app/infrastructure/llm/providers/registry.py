@@ -153,10 +153,30 @@ def _register_llm_port_source() -> None:
         )
 
         _self = sys.modules[__name__]
+
+        def _active_with_conversation():
+            """按会话就绪的对话服务解析活跃 provider。
+
+            真实聊天路径（``call_llm_api`` → ``get_active_provider(conversation_service=...)``）
+            会在解析前把登录 session 的平台适配器注入对话服务；这里保持同一语义，
+            避免 LLMPort/健康检查因省略 ``conversation_service`` 而漏掉已配好的平台模型
+            （表现为"配了本地平台却显示 AI 未就绪"）。
+            """
+            conversation_service = None
+            try:
+                from app.services.conversation.manager import (
+                    get_ai_conversation_service_if_ready,
+                )
+
+                conversation_service = get_ai_conversation_service_if_ready()
+            except RECOVERABLE_ERRORS:
+                conversation_service = None
+            return _self.get_active_provider(conversation_service=conversation_service)
+
         set_llm_provider_source(
             LLMProviderSource(
                 get_by_id=lambda provider_id: _self.get_llm_registry().get(provider_id),
-                get_active=lambda: _self.get_active_provider(),
+                get_active=_active_with_conversation,
             )
         )
     except RECOVERABLE_ERRORS:
