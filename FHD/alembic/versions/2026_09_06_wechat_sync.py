@@ -1,7 +1,7 @@
 """Add wechat sync tables (contact identity + idempotent messages).
 
 Revision ID: 2026_09_06_wechat_sync
-Revises: 2026_08_31_enterprise_cs_ai
+Revises: 2026_09_05_etl_operation_lease
 Create Date: 2026-09-06
 """
 
@@ -14,7 +14,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "2026_09_06_wechat_sync"
-down_revision: str | Sequence[str] | None = "2026_08_31_enterprise_cs_ai"
+down_revision: str | Sequence[str] | None = "2026_09_05_etl_operation_lease"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

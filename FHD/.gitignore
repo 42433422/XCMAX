@@ -290,5 +290,7 @@ resources/routing_policies/reflection_ledger.jsonl
 scripts/deploy/lib/**/__pycache__/
 coverage-behavior.json
 
-# 测试产物（benchmark 运行输出）
-test_reports/
+# 测试产物（benchmark 运行输出；放行 main 已追踪的 2 个历史产物，避免 source-governance 误报）
+test_reports/*
+!test_reports/junit-full.xml
+!test_reports/pytest-full-last.txt
