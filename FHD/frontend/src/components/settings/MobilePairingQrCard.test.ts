@@ -14,8 +14,9 @@ vi.mock('@/utils/apiBase', () => ({
 
 const mockLoadDesktopPairingPayload = vi.fn()
 vi.mock('@/api/mobilePairing', () => ({
+  applyDevProxyReachablePort: (payload: Record<string, unknown>) => payload,
   buildPairingQrText: () => 'qr-text',
-  fetchHostDiscoverHint: vi.fn().mockResolvedValue({}),
+  fetchHostDiscoverHint: vi.fn().mockResolvedValue({ api_port: 5000 }),
   issueMobilePairing: vi.fn().mockResolvedValue({
     host: '127.0.0.1',
     port: 5000,
@@ -25,7 +26,7 @@ vi.mock('@/api/mobilePairing', () => ({
   }),
   loadDesktopPairingPayload: (...args: unknown[]) => mockLoadDesktopPairingPayload(...args),
   resolvePairingHost: () => '127.0.0.1',
-  resolvePairingPortHint: () => 5000,
+  resolveReachablePairingPort: (port: number) => port,
 }))
 
 import MobilePairingQrCard from './MobilePairingQrCard.vue'
@@ -80,5 +81,51 @@ describe('MobilePairingQrCard.vue', () => {
     const wrapper = mount(MobilePairingQrCard)
     await flushPromises()
     expect(wrapper.text()).toContain('尚未绑定手机')
+  })
+
+  it('renders the relay QR code, device code and countdown after pairing succeeds', async () => {
+    const wrapper = mount(MobilePairingQrCard)
+    await flushPromises()
+    // 桌面 payload 缺省 → 走 issueMobilePairing 兜底；shortCode 优先
+    expect(wrapper.find('img.mobile-pairing__qr').attributes('src')).toBe('data:image/png;base64,fakeqr')
+    expect(wrapper.find('.mobile-pairing__code-value').text()).toBe('123456')
+    expect(wrapper.find('.mobile-pairing__countdown').text()).toContain('秒')
+  })
+
+  it('prefers the relay pairing code from qr_json when present', async () => {
+    mockLoadDesktopPairingPayload.mockResolvedValue({
+      host: '127.0.0.1',
+      port: 5000,
+      nonce: 'n-desktop',
+      shortCode: '000000',
+      exp: Math.floor(Date.now() / 1000) + 300,
+      qr_json: { kind: 'xcagi_relay_pairing', code: '654321' },
+    })
+    const wrapper = mount(MobilePairingQrCard)
+    await flushPromises()
+    expect(wrapper.find('.mobile-pairing__code-value').text()).toBe('654321')
+  })
+
+  it('copies the pairing code to the clipboard and shows the toast', async () => {
+    const writeText = vi.fn(async () => undefined)
+    Object.assign(navigator, { clipboard: { writeText } })
+    const wrapper = mount(MobilePairingQrCard)
+    await flushPromises()
+    await wrapper.find('.mobile-pairing__copy-code').trigger('click')
+    await flushPromises()
+    expect(writeText).toHaveBeenCalledWith('123456')
+    expect(wrapper.find('.mobile-pairing__copy-toast').exists()).toBe(true)
+  })
+
+  it('clears timers on unmount', async () => {
+    const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval')
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout')
+    const wrapper = mount(MobilePairingQrCard)
+    await flushPromises()
+    wrapper.unmount()
+    expect(clearIntervalSpy).toHaveBeenCalled()
+    expect(clearTimeoutSpy).toHaveBeenCalled()
+    clearIntervalSpy.mockRestore()
+    clearTimeoutSpy.mockRestore()
   })
 })
