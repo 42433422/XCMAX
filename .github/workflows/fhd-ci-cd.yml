@@ -555,7 +555,7 @@ jobs:
 
       - name: Build and push xcagi-fhd-api
         id: build_fhd
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: FHD
           file: FHD/docker/Dockerfile.fhd-api
