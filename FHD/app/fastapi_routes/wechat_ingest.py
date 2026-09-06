@@ -18,6 +18,7 @@ from app.application.wechat_ingest_service import (
     link_wechat_contact,
     list_wechat_contacts,
 )
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 router = APIRouter(prefix="/api/ops/wechat", tags=["ops-wechat"])
 
@@ -42,7 +43,7 @@ def _auth(
 
             if is_admin_account_session():
                 return
-        except Exception:  # noqa: BLE001 - 旁路失败走 webhook token
+        except BOUNDARY_ERRORS:  # 旁路探测失败回落 webhook token（认证旁路边界）
             pass
     expected = _expected_token()
     supplied = str(x_wechat_token or "").strip()

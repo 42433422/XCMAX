@@ -57,16 +57,16 @@ def _run_trial(trial: int) -> list[dict]:
         timeout=900,
         env={
             **os.environ,
-            "PYTHONPATH": str(PROJECT_ROOT)
-            + os.pathsep
-            + os.environ.get("PYTHONPATH", ""),
+            "PYTHONPATH": str(PROJECT_ROOT) + os.pathsep + os.environ.get("PYTHONPATH", ""),
         },
     )
     if proc.returncode != 0:
         pytest.fail(
             f"trial {trial} runner 失败（exit={proc.returncode}）:\n{proc.stdout[-2000:]}\n{proc.stderr[-2000:]}"
         )
-    return [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines() if line.strip()]
+    return [
+        json.loads(line) for line in out.read_text(encoding="utf-8").splitlines() if line.strip()
+    ]
 
 
 def test_task_golden_set_pass_k():
@@ -117,19 +117,18 @@ def test_task_golden_set_pass_k():
         "pass_k": round(pass_k_count / total, 4),
         "pass_at_k": round(pass_at_k_count / total, 4),
         "by_domain": {
-            d: {"pass_k": s["pass_k"], "total": s["total"]}
-            for d, s in sorted(domain_stats.items())
+            d: {"pass_k": s["pass_k"], "total": s["total"]} for d, s in sorted(domain_stats.items())
         },
         "failures": failures,
     }
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     report_path = REPORT_DIR / "task_benchmark_report.json"
-    report_path.write_text(
-        json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    print(f"\n===== 任务级基准（τ-bench 口径）=====")
-    print(f"tasks={total} trials={trials} pass^1={report['pass_1']} pass^{trials}={report['pass_k']} pass@{trials}={report['pass_at_k']}")
+    print("\n===== 任务级基准（τ-bench 口径）=====")
+    print(
+        f"tasks={total} trials={trials} pass^1={report['pass_1']} pass^{trials}={report['pass_k']} pass@{trials}={report['pass_at_k']}"
+    )
     for d, s in report["by_domain"].items():
         print(f"  {d:12s} {s['pass_k']}/{s['total']}")
     print(f"报告: {report_path}")

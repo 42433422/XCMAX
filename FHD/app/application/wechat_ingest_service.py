@@ -23,6 +23,7 @@ from sqlalchemy import Select, func, or_, select
 
 from app.db.models.customer import Customer
 from app.db.models.wechat_sync import WechatContact, WechatMessage
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -279,7 +280,7 @@ def ingest_wechat_payload(payload: dict[str, Any], *, session: Any = None) -> di
             "messages_skipped": messages_skipped,
             "context": context,
         }
-    except Exception:
+    except RECOVERABLE_ERRORS:
         session.rollback()
         raise
     finally:
@@ -442,7 +443,7 @@ def link_wechat_contact(
             "customer_id": customer.id,
             "match_status": contact.match_status,
         }
-    except Exception:
+    except RECOVERABLE_ERRORS:
         session.rollback()
         raise
     finally:

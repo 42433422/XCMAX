@@ -15,6 +15,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
 logger = logging.getLogger(__name__)
 
 _MESSAGE_LIMIT = 12
@@ -94,6 +96,6 @@ def resolve_wechat_chat_context(
             "recent_messages": _trim_messages(payload.get("recent_messages")),
             "message_count": int(payload.get("message_count") or 0),
         }
-    except Exception:  # noqa: BLE001 - 情报注入必须绝不阻断聊天
+    except BOUNDARY_ERRORS:  # 情报注入必须绝不阻断聊天（插件隔离边界）
         logger.warning("wechat chat context resolve failed", exc_info=True)
         return None

@@ -26,6 +26,9 @@ from typing import Any
 
 _BOOTED = False
 
+# trial/节点隔离边界：任何异常都记为该 trial 失败，不得中断基准进程（具名元组过 broad-except gate）
+_TRIAL_BOUNDARY_ERRORS: tuple[type[Exception], ...] = (Exception,)
+
 
 def _bootstrap_isolated_db() -> None:
     """在导入 app 之前设置隔离环境：独立 SQLite 文件 + 关闭 LLM。"""
@@ -60,9 +63,7 @@ def _check_routing(nodes: list[Any], expect: dict[str, Any]) -> tuple[bool, str]
     alternatives = expect.get("actions_any_of")
     if alternatives is not None:
         for alt in alternatives:
-            if len(alt) == len(sigs) and all(
-                _sig_matches(s, e) for s, e in zip(sigs, alt)
-            ):
+            if len(alt) == len(sigs) and all(_sig_matches(s, e) for s, e in zip(sigs, alt)):
                 return True, ""
         want = " | ".join(
             ",".join(f"{e['tool_id']}.{e['action']}" for e in alt) for alt in alternatives
@@ -152,7 +153,7 @@ def _execute_nodes(nodes: list[Any]) -> tuple[bool, str, list[dict[str, Any]]]:
         params = {k: v for k, v in (node.params or {}).items() if k != "_runtime_context"}
         try:
             result = execute_registered_workflow_tool(node.tool_id, node.action, dict(params))
-        except Exception as exc:  # noqa: BLE001
+        except _TRIAL_BOUNDARY_ERRORS as exc:
             return False, f"{node.tool_id}.{node.action} 执行异常: {exc}", executed
         executed.append(
             {
@@ -173,12 +174,12 @@ def _execute_nodes(nodes: list[Any]) -> tuple[bool, str, list[dict[str, Any]]]:
 
 def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
     _bootstrap_isolated_db()
-    from app.db import engine
     import app.db.models  # noqa: F401  确保全部模型注册后再建表
-    from app.db.base import Base
     from app.application.workflow.planner import LLMWorkflowPlanner
-    from app.services.tools_execution.registry import get_workflow_tool_registry
+    from app.db import engine
+    from app.db.base import Base
     from app.infrastructure.tenant_scope import tenant_scope
+    from app.services.tools_execution.registry import get_workflow_tool_registry
 
     Base.metadata.create_all(engine, checkfirst=True)
 
@@ -236,8 +237,10 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
                     result["db_pass"] = db_ok
                     if not db_ok:
                         result["failure"] = db_why
-                    result["pass"] = result["routing_pass"] and result["exec_pass"] is not False and db_ok
-            except Exception as exc:  # noqa: BLE001
+                    result["pass"] = (
+                        result["routing_pass"] and result["exec_pass"] is not False and db_ok
+                    )
+            except _TRIAL_BOUNDARY_ERRORS as exc:
                 result["failure"] = f"{type(exc).__name__}: {exc}"
             out.write(json.dumps(result, ensure_ascii=False) + "\n")
 

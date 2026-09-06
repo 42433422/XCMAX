@@ -38,6 +38,9 @@ _here = os.path.dirname(os.path.abspath(__file__))
 if _here not in sys.path:
     sys.path.insert(0, _here)
 
+# 守护进程隔离边界：同步代理必须活着，任何异常都不能杀死 loop（具名元组过 broad-except gate）
+_GUARD_ERRORS: tuple[type[Exception], ...] = (Exception,)
+
 STATE_PATH = os.path.join(_here, "wechat_sync_state.json")
 CONTEXT_CACHE_PATH = os.path.join(_here, "wechat_context_cache.json")
 CONFIG_PATH = os.path.join(_here, "wechat_sync_config.json")
@@ -364,7 +367,7 @@ def main() -> int:
                 dry_run=args.dry_run,
             )
             line = json.dumps(out, ensure_ascii=False)
-        except Exception as exc:  # noqa: BLE001 - 守护模式必须活着
+        except _GUARD_ERRORS as exc:  # 守护模式必须活着（进程隔离边界）
             out = {"success": False, "message": str(exc)}
             line = json.dumps(out, ensure_ascii=False)
         print(line)

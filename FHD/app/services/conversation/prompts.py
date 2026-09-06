@@ -207,7 +207,11 @@ class PromptsMixin:
         message_count = payload.get("message_count")
         if isinstance(message_count, int) and message_count:
             lines.append(f"同步消息总数：{message_count}")
-        recent = payload.get("recent_messages") if isinstance(payload.get("recent_messages"), list) else []
+        recent = (
+            payload.get("recent_messages")
+            if isinstance(payload.get("recent_messages"), list)
+            else []
+        )
         if recent:
             lines.append("最近对话（role=self 为机主发送 / other 为对方发送，按时间正序）：")
             for msg in recent[-12:]:

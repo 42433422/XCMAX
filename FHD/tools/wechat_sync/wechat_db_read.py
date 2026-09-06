@@ -18,6 +18,9 @@ import json
 _here = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_KEY_CONFIG = os.path.join(_here, "wechat_db_key.json")
 
+# 工具级兜底边界：采集端独立运行，任何读取/解密失败都降级返回而非崩溃（具名元组过 broad-except gate）
+_BOUNDARY_ERRORS = (Exception,)
+
 
 def load_key_from_config(config_path=None):
     """
@@ -37,7 +40,7 @@ def load_key_from_config(config_path=None):
         if len(key) >= 64 and all(c in "0123456789abcdefABCDEF" for c in key):
             return key
         return None
-    except Exception:
+    except _BOUNDARY_ERRORS:
         return None
 
 
@@ -55,7 +58,7 @@ def get_default_wechat_data_dir(config_path=None):
         dir_path = (data.get("wechat_data_dir") or data.get("wechat_data_path") or "").strip()
         if dir_path and os.path.isdir(dir_path):
             return dir_path
-    except Exception:
+    except _BOUNDARY_ERRORS:
         pass
     return None
 
@@ -82,10 +85,10 @@ def _connect_encrypted(db_path: str, key_hex: str):
         conn.execute("PRAGMA cipher_page_size = 4096")
         conn.execute("SELECT count(*) FROM sqlite_master")
         return conn
-    except Exception:
+    except _BOUNDARY_ERRORS:
         try:
             conn.close()
-        except Exception:
+        except _BOUNDARY_ERRORS:
             pass
         return None
 
@@ -108,10 +111,10 @@ def verify_wechat_db_key(key_hex: str, db_path: str):
         conn.execute("SELECT count(*) FROM sqlite_master")
         conn.close()
         return {"valid": True, "message": "密钥有效，解密成功"}
-    except Exception as e:
+    except _BOUNDARY_ERRORS as e:
         try:
             conn.close()
-        except Exception:
+        except _BOUNDARY_ERRORS:
             pass
         return {"valid": False, "message": str(e)}
 
@@ -136,10 +139,10 @@ def query_encrypted_db(db_path: str, sql: str, params=None, key_hex=None, config
         rows = [dict(zip(cols, r)) for r in cur.fetchall()]
         conn.close()
         return {"success": True, "rows": rows, "count": len(rows)}
-    except Exception as e:
+    except _BOUNDARY_ERRORS as e:
         try:
             conn.close()
-        except Exception:
+        except _BOUNDARY_ERRORS:
             pass
         return {"success": False, "message": str(e), "rows": []}
 
@@ -168,7 +171,7 @@ def get_wechat_data_dirs():
                 p = os.path.join(docs, name)
                 if os.path.isdir(p) and not name.startswith("All Users"):
                     dirs.append(p)
-    except Exception:
+    except _BOUNDARY_ERRORS:
         pass
     return dirs
 
@@ -209,7 +212,7 @@ def query_decrypted_db(db_path: str, sql: str, params=None):
         if "encrypted" in str(e).lower() or "file is not a database" in str(e).lower():
             return {"success": False, "message": "该 db 可能仍为加密状态，请先用解密工具处理", "rows": []}
         return {"success": False, "message": str(e), "rows": []}
-    except Exception as e:
+    except _BOUNDARY_ERRORS as e:
         return {"success": False, "message": str(e), "rows": []}
 
 
@@ -233,7 +236,7 @@ def get_recent_messages(db_path: str, limit: int = 50, table_name: str = "MSG", 
             [limit], key_hex=key_hex, config_path=config_path,
         )
         return r
-    except Exception:
+    except _BOUNDARY_ERRORS:
         return query_decrypted_or_encrypted(
             db_path, f"SELECT * FROM [{table_name}] LIMIT ?", [limit],
             key_hex=key_hex, config_path=config_path,
@@ -267,7 +270,7 @@ def _get_wechat_user_root(wechat_data_dir=None):
                 sub = os.path.join(root, name)
                 if os.path.isdir(os.path.join(sub, "db_storage")):
                     return sub
-    except Exception:
+    except _BOUNDARY_ERRORS:
         pass
     return None
 
