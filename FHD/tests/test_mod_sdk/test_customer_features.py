@@ -139,7 +139,7 @@ def test_shared_runtime_conversion_routes_are_all_guarded(monkeypatch, tmp_path)
     spec.loader.exec_module(module)
     monkeypatch.setitem(
         sys.modules,
-        "taiyangniao_attendance.convert",
+        "attendance_engine.convert",
         SimpleNamespace(convert_attendance_file=lambda: None),
     )
     monkeypatch.setattr(customer_features, "get_logged_in_user", lambda _: object())

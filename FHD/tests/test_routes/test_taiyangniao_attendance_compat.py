@@ -577,7 +577,7 @@ class TestCandidateModRoots:
 class TestEnsureSunbirdBackendOnPath:
     def test_found_inserts_sys_path(self, tmp_path, monkeypatch) -> None:
         backend = tmp_path / "taiyangniao-pro" / "backend"
-        pkg = backend / "taiyangniao_attendance"
+        pkg = backend / "attendance_engine"
         pkg.mkdir(parents=True)
         (pkg / "convert.py").write_text("# stub", encoding="utf-8")
         monkeypatch.setattr(tac, "_candidate_mod_roots", lambda: [tmp_path])
@@ -597,7 +597,7 @@ class TestEnsureSunbirdBackendOnPath:
 class TestLoadConvertAttendanceFile:
     def test_loads_callable_from_fake_backend(self, tmp_path, monkeypatch) -> None:
         backend = tmp_path / "taiyangniao-pro" / "backend"
-        pkg = backend / "taiyangniao_attendance"
+        pkg = backend / "attendance_engine"
         pkg.mkdir(parents=True)
         (pkg / "__init__.py").write_text("", encoding="utf-8")
         (pkg / "convert.py").write_text(
@@ -605,8 +605,8 @@ class TestLoadConvertAttendanceFile:
             encoding="utf-8",
         )
         monkeypatch.setattr(tac, "_candidate_mod_roots", lambda: [tmp_path])
-        monkeypatch.delitem(sys.modules, "taiyangniao_attendance.convert", raising=False)
-        monkeypatch.delitem(sys.modules, "taiyangniao_attendance", raising=False)
+        monkeypatch.delitem(sys.modules, "attendance_engine.convert", raising=False)
+        monkeypatch.delitem(sys.modules, "attendance_engine", raising=False)
         try:
             fn = tac._load_convert_attendance_file()
             assert callable(fn)
@@ -617,13 +617,13 @@ class TestLoadConvertAttendanceFile:
 
     def test_non_callable_raises_runtime_error(self, tmp_path, monkeypatch) -> None:
         backend = tmp_path / "taiyangniao-pro" / "backend"
-        pkg = backend / "taiyangniao_attendance"
+        pkg = backend / "attendance_engine"
         pkg.mkdir(parents=True)
         (pkg / "__init__.py").write_text("", encoding="utf-8")
         (pkg / "convert.py").write_text("convert_attendance_file = 123\n", encoding="utf-8")
         monkeypatch.setattr(tac, "_candidate_mod_roots", lambda: [tmp_path])
-        monkeypatch.delitem(sys.modules, "taiyangniao_attendance.convert", raising=False)
-        monkeypatch.delitem(sys.modules, "taiyangniao_attendance", raising=False)
+        monkeypatch.delitem(sys.modules, "attendance_engine.convert", raising=False)
+        monkeypatch.delitem(sys.modules, "attendance_engine", raising=False)
         try:
             with pytest.raises(RuntimeError, match="不可用"):
                 tac._load_convert_attendance_file()
@@ -897,7 +897,7 @@ class TestCandidateModRootsExtra:
 class TestEnsureSunbirdBackendOnPathExtra:
     def test_second_call_does_not_duplicate_sys_path(self, tmp_path, monkeypatch) -> None:
         backend = tmp_path / "taiyangniao-pro" / "backend"
-        pkg = backend / "taiyangniao_attendance"
+        pkg = backend / "attendance_engine"
         pkg.mkdir(parents=True)
         (pkg / "convert.py").write_text("# stub", encoding="utf-8")
         monkeypatch.setattr(tac, "_candidate_mod_roots", lambda: [tmp_path])

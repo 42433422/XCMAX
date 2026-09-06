@@ -14,8 +14,8 @@
         <section class="card-block" aria-labelledby="upload-convert-title">
           <h3 id="upload-convert-title">上传转化</h3>
           <p class="muted small">
-            将钉钉导出的考勤 xlsx 上传后，由宿主
-            <code>app/shell/taiyangniao_attendance/</code>
+            将钉钉导出的考勤 xlsx 上传后，由考勤模块
+            <code>attendance-industry: backend/attendance_engine/</code>
             按列别名解析「每日统计」等表。默认<strong>按侧栏「人员管理」</strong>（主库产品表：姓名、部门对应「单位」、性质对应「规格」）重排「明细」每人 6 行，再按姓名把钉钉数据一一填入；<strong>无钉钉记录则打卡区留空</strong>。取消勾选下方选项时，改为仅使用固定模板「明细」里原有姓名名单。路径相对
             <code>WORKSPACE_ROOT</code>（默认写入 <code>424/</code>）。成功后会自动下载，也可点「再次下载」。
           </p>
@@ -107,7 +107,7 @@
         <div class="rules-card">
           <h3 id="rules-title" class="rules-title">考勤规则</h3>
           <p class="rules-sub muted small">
-            与宿主 <code>app/shell/taiyangniao_attendance/rules.py</code> 默认配置一致；转换时使用同一套逻辑。
+            与考勤模块 <code>attendance-industry: backend/attendance_engine/rules.py</code> 默认配置一致；转换时使用同一套逻辑。
           </p>
           <p v-if="rulesLoading" class="rules-muted">加载中…</p>
           <p v-else-if="rulesErr" class="rules-err">{{ rulesErr }}</p>

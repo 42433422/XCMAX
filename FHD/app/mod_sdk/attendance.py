@@ -1,7 +1,7 @@
 """考勤转换相关能力（SDK re-export）。
 
 供 ``attendance-industry`` Mod 及 legacy ``taiyangniao-pro`` 使用。考勤转换引擎的
-唯一正本是 ``FHD/XCAGI/mods/attendance-industry/backend/taiyangniao_attendance/``
+唯一正本是 ``FHD/XCAGI/mods/attendance-industry/backend/attendance_engine/``
 （EXPORT_ONLY 运行时副本 SSOT，见 ``scripts/dev/mods_ssot.py``）；本模块通过
 mods root 解析加载它（仓库与打包桌面端同源），未安装时降级为显式 RuntimeError。
 """
@@ -33,13 +33,13 @@ def ensure_attendance_engine_on_path() -> str:
 
 try:
     ensure_attendance_engine_on_path()
-    from taiyangniao_attendance.convert import (  # type: ignore[import-not-found]
+    from attendance_engine.convert import (  # type: ignore[import-not-found]
         convert_attendance_file,  # noqa: E402
     )
-    from taiyangniao_attendance.parser import (  # type: ignore[import-not-found]
+    from attendance_engine.parser import (  # type: ignore[import-not-found]
         parse_attendance_workbook,  # noqa: E402
     )
-    from taiyangniao_attendance.paths import (  # type: ignore[import-not-found]
+    from attendance_engine.paths import (  # type: ignore[import-not-found]
         attendance_workspace_root,  # noqa: E402
     )
 except ModuleNotFoundError:

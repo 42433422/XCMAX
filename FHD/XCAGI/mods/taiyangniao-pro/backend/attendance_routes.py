@@ -23,12 +23,12 @@ def register(
 ) -> None:
     """在给定 router 上注册 /attendance/*、/employees、/departments 路由。"""
     # 考勤转换引擎唯一正本在 attendance-industry mod 私有包
-    # ``taiyangniao_attendance/``；显式 ensure 进 sys.path，不依赖 mod 扫描顺序
+    # ``attendance_engine/``；显式 ensure 进 sys.path，不依赖 mod 扫描顺序
     # （本 mod manifest 已声明依赖 attendance-industry >=1.0.0）。
     from app.mod_sdk.attendance import ensure_attendance_engine_on_path
 
     ensure_attendance_engine_on_path()
-    from taiyangniao_attendance.convert import convert_attendance_file
+    from attendance_engine.convert import convert_attendance_file
 
     @router.get("/attendance/policy", response_model=None)
     async def attendance_policy_get() -> dict:
