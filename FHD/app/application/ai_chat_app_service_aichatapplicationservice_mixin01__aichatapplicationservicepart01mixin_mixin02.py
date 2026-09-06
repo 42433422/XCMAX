@@ -196,6 +196,30 @@ class __AIChatApplicationServicePart01MixinPart02Mixin:
             _facade().logger.warning("注入 Excel 向量上下文失败: %s", err, exc_info=True)
         return context
 
+    def _inject_wechat_contact_context(
+        self, message: str, context: dict[str, _facade().Any]
+    ) -> dict[str, _facade().Any]:
+        """
+        注入微信联系人情报（服务器侧微信同步基建 → 聊天智慧）。
+
+        解析顺序：context.wechat_contact_key 显式指定 > 消息文本自动匹配已同步联系人名。
+        命中时写入 ``wechat_contact_context``（由 PromptsMixin 渲染进 system prompt）；
+        未命中时显式置 None，避免上一轮残留情报污染本轮（request_context 按 user 跨轮合并）。
+        任何异常静默降级，不阻断聊天主链路。
+        """
+        if not isinstance(context, dict):
+            return {}
+        try:
+            from app.application.wechat_chat_context import resolve_wechat_chat_context
+
+            payload = resolve_wechat_chat_context(message, context)
+        except _facade().RECOVERABLE_ERRORS as err:
+            _facade().logger.warning("注入微信联系人情报失败: %s", err, exc_info=True)
+            return context
+        enriched = dict(context)
+        enriched["wechat_contact_context"] = payload
+        return enriched
+
     @staticmethod
     def _build_fallback_response(message: str, error_reason: str) -> dict[str, _facade().Any]:
         """
