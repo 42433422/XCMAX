@@ -33,9 +33,15 @@ def ensure_attendance_engine_on_path() -> str:
 
 try:
     ensure_attendance_engine_on_path()
-    from taiyangniao_attendance.convert import convert_attendance_file  # noqa: E402
-    from taiyangniao_attendance.parser import parse_attendance_workbook  # noqa: E402
-    from taiyangniao_attendance.paths import attendance_workspace_root  # noqa: E402
+    from taiyangniao_attendance.convert import (  # type: ignore[import-not-found]
+        convert_attendance_file,  # noqa: E402
+    )
+    from taiyangniao_attendance.parser import (  # type: ignore[import-not-found]
+        parse_attendance_workbook,  # noqa: E402
+    )
+    from taiyangniao_attendance.paths import (  # type: ignore[import-not-found]
+        attendance_workspace_root,  # noqa: E402
+    )
 except ModuleNotFoundError:
 
     def convert_attendance_file(*_args, **_kwargs):
