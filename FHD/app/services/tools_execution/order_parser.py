@@ -64,16 +64,20 @@ def _parse_order_text(order_text: str) -> dict:
         # 「规格+数字」正序，避免数字被当成编号、「规格」二字残留进单位名。
         # 前瞻排除「规格」后已带数值（含中文数字/冒号）的正序写法，如
         # 「XY-20 规格：20」「9803 规格二十八」，防止误吞编号。
+        # 重复全部加界（{0,4}/{0,2}）：用户话术里分隔符/小数位不会超过这个量，
+        # 无界 \d+/\s* 会在「0000…」长串上触发多项式回溯（CodeQL polynomial-redos）。
         _spec_inverted = re.compile(
-            r"(?<![\dA-Za-z.-])(\d+(?:\.\d+)?)(?:[Ll升])?\s*的?\s*规格"
-            r"(?![\s:：]*(?:[\d.一二两三四五六七八九十]))"
+            r"(?<![\dA-Za-z.-])(\d{1,12}(?:\.\d{1,4})?)(?:[Ll升])?[ \t]{0,4}的?[ \t]{0,4}规格"
+            r"(?![ \t:：]{0,4}(?:[\d.一二两三四五六七八九十]))"
         )
         text = _spec_inverted.sub(r"规格\1", text)
         slot_text = _spec_inverted.sub(r"规格\1", slot_text)
 
         # 独立容量记法「20L」「20升」即规格（如「给太阳鸟开单 20L 5桶」），统一改写成
         # 「规格20」，避免被当成编号或落入兜底产生 name=「20L 5桶」的垃圾槽位。
-        _spec_capacity = re.compile(r"(?<![\dA-Za-z.-])(\d+(?:\.\d+)?)[Ll升](?![\dA-Za-z])")
+        _spec_capacity = re.compile(
+            r"(?<![\dA-Za-z.-])(\d{1,12}(?:\.\d{1,4})?)[Ll升](?![\dA-Za-z])"
+        )
         text = _spec_capacity.sub(r"规格\1", text)
         slot_text = _spec_capacity.sub(r"规格\1", slot_text)
 
