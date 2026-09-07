@@ -156,6 +156,11 @@ jobs:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
         run: python -m pytest tests/test_routes/test_route_registry.py tests/test_routes/test_registry_unit.py tests/test_routes/test_route_golden.py -x -q
 
+      - name: Intent benchmark ratchet (golden set 只升不降)
+        env:
+          XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
+        run: python scripts/dev/intent_benchmark.py --check
+
       - name: Run tests with coverage
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
