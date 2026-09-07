@@ -223,3 +223,4 @@ BERT 标签全集：greet / goodbye / help / settings / negation / customers / c
 | 3.8 订单 CRUD | [!] | `/api/tools/execute` 的 `orders` 是兼容桩：非 `view` 动作一律返回 `{success:true,message:"出货单"}`，不真正增删改。真实订单 CRUD 在 `/api/shipment*` REST 端点；此端点仅产品/客户/物料查询有效 |
 | 3.12 删除确认门禁 | 分层澄清 | 确认门禁在「对话审批卡」层（workflow risk gate），不在 `/api/tools/execute` 裸端点——裸端点是本机兼容 shim，无鉴权无确认属设计预期。删除类需在对话链路（§3.5/§5.1）验证审批卡 |
 | 4.5 tools/execute 查询 | [x] | `products`/`query`、`customers`/`query`、`orders`/`list` 均 200；注册表键=域+动作 |
+| 7.1 对话 trace | [x] | 每轮对话返回 `run_id`/`agent_run_id`；trace 明细端点需登录态（401），未登录不可读属预期 |
