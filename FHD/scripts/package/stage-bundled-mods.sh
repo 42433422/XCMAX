@@ -45,6 +45,10 @@ for mod_id in "${IDS[@]}"; do
   done
   [[ "${skip}" -eq 1 ]] && continue
   src="${MODS_ROOT}/${mod_id}"
+  if [[ ! -d "${src}" && -d "${ROOT}/XCAGI/mods/${mod_id}" ]]; then
+    # EXPORT_ONLY mod（mods_ssot.py）：编辑源不在 mods/，运行时副本 SSOT 在 XCAGI/mods/。
+    src="${ROOT}/XCAGI/mods/${mod_id}"
+  fi
   if [[ ! -d "${src}" ]]; then
     echo "Required profile mod not found: ${mod_id}" >&2
     exit 1
