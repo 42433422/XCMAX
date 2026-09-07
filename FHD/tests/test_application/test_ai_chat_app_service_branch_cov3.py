@@ -1721,7 +1721,7 @@ class TestProcessChatEdge:
             mock_loop.run_until_complete.return_value = ai_result
             mock_new_loop.return_value = mock_loop
             file_context = {"file_path": "/tmp/test.xlsx", "sheet_name": "Sheet1"}
-            result = svc.process_chat("u1", "hello", {}, None, file_context)
+            result = svc.process_chat("u1", "随便说点什么", {}, None, file_context)
         assert result["response"] == "ok"
 
 
