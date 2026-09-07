@@ -178,3 +178,40 @@ class TestParseOrderTextDeliveryNoteKeywords:
     def test_chuhuodan_keyword(self):
         result = _parse_order_text("张三出货单 编号：ABC-123 规格20 5桶")
         assert isinstance(result, dict)
+
+
+class TestParseOrderTextInvertedSpec:
+    """倒装/容量记法：「20L规格」「规格20」「20L」「28的规格」统一解析为 规格=数字。"""
+
+    def test_inverted_spec_with_unit_suffix(self):
+        result = _parse_order_text("发货单 太阳鸟 5桶 20L规格")
+        assert result["success"] is False
+        msg = result.get("message", "")
+        assert "单位 太阳鸟" in msg
+        assert "规格 20" in msg
+        assert "规格，" not in msg and "规格）" not in msg.replace("规格 20）", "")
+
+    def test_inverted_spec_plain_number(self):
+        result = _parse_order_text("发货单 太阳鸟 5桶 规格20")
+        assert result["success"] is False
+        assert "单位 太阳鸟" in result.get("message", "")
+
+    def test_capacity_notation_standalone(self):
+        result = _parse_order_text("给太阳鸟开单 20L 5桶")
+        assert result["success"] is False
+        msg = result.get("message", "")
+        assert "单位 太阳鸟" in msg
+        assert "开单" not in msg
+
+    def test_colloquial_de_spec_lai_qty(self):
+        result = _parse_order_text("太阳鸟那边要28的规格来30桶")
+        assert result["success"] is False
+        msg = result.get("message", "")
+        assert "规格 28" in msg
+        assert "规格" not in (msg.split("单位 ")[1].split("，")[0] if "单位 " in msg else "")
+
+    def test_inverted_spec_does_not_break_forward_order(self):
+        # 正序「XY-20 规格：20」编号不被倒装改写吞掉
+        result = _parse_order_text("王总 型号：XY-20 规格：20 一共3桶")
+        assert result["success"] is True
+        assert result["products"][0]["model_number"] == "XY-20"
