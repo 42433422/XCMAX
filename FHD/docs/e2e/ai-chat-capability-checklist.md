@@ -198,3 +198,22 @@ BERT 标签全集：greet / goodbye / help / settings / negation / customers / c
 - [ ] 清理 `QUICK_INTENT_PATTERNS` 死代码或接入 pipeline
 - [ ] wechat_send 关键词补「用微信通知」类变体
 - [ ] 桌面端 LLM provider 未配置确认（专业模式回复疑似降级路径）
+
+## 冒烟结果（2026-09-08 第二轮，本地 17500 直测）
+
+> 注意：17500 实例为 #1799 合并前的旧构建，小闲聊短路/SQLite 向量修复未生效；以下标 `[源码已修]` 的项待新桌面包重建后复测。
+
+| 项 | 结果 | 说明 |
+|---|---|---|
+| 1.3 流式 | [!] | SSE 帧结构正常（tool_progress→error），但上游 LLM 报 `平台错误(403): CSRF token missing`——桌面 provider 配置问题，与遗留待办同源 |
+| 1.4 批量 | [x] | batch 多条各自回复、`count`/`batch` 字段正确；「你好」走 generic_workflow 属旧构建（短路 `[源码已修]` bd9c8281e） |
+| 1.5 上下文延续 | [x] | 「再来一份」命中 repeat，不重复追问 |
+| 1.7 清空上下文 | [x] | clear 后「再来一份」不再复用旧槽位 |
+| 2.2 问候三件套 | [x] | intent 层 is_greeting/is_goodbye/is_help 正确 |
+| 2.4 客户查询/编辑 | [x] | 查客户→customers；改电话→customer_edit（BERT 档） |
+| 2.5 上传/图片/视频 | [x] | upload_file/show_images/show_videos 意图正确 |
+| 2.6 无意义输入 | [x] | 「啊对对对」不触发工具 |
+| 2.7 意图健康 | [x] | `/api/intent/health` 200；`model_available:false`（BERT 未打包，规则降级路径可用） |
+| 9.1 新建会话 | [x] | 返回 session_id |
+| 9.3 config/context | [x] | 均 200 |
+| 槽位解析（1.5 衍生） | [!]→已修 | 「发货单 太阳鸟 5桶 20L规格」原解析成 单位=太阳鸟规格/编号=20L；已修 order_parser：倒装「20L规格/28的规格」归一为规格槽位、「20L」独立记法、单位名剥离「开单」；现统一输出「已识别：单位 太阳鸟，规格 20」+追问编号。回归 119 测试全绿（commit 63c8bbed5，随 #1801） |
