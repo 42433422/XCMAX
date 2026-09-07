@@ -80,19 +80,33 @@ def _load_private_roster(db_path: Path) -> list[tuple[str, str, str]]:
     return out
 
 
-def _resolve_personnel_roster(db_path: Path) -> list[tuple[str, str, str]]:
-    """与独立人员管理同源；已维护的空名单也不能回退复活旧人员。"""
+def _resolve_personnel_roster(db_path: Path, owner: str = "") -> list[tuple[str, str, str]]:
+    """与独立人员管理同源；已维护的空名单也不能回退复活旧人员。
+
+    ``owner`` 非空时按登录账号隔离花名册（考勤工作区转换只认自己的名单）；
+    为空（未登录）时不返回任何考勤侧库人员，避免跨账号泄露。
+    """
     import sqlite3
 
+    try:
+        from .owner_scope import migrate_owner_column
+    except ImportError:  # mod_manager 以顶层模块名加载 backend/*.py
+        from owner_scope import migrate_owner_column
+
     if db_path.is_file():
+        migrate_owner_column(db_path)
         with closing(sqlite3.connect(f"{db_path.as_uri()}?mode=ro", uri=True)) as conn:
             exists = conn.execute(
                 "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'attendance_employees'"
             ).fetchone()
             if exists:
+                if not owner:
+                    # 已建立考勤名单表但未登录：不回退到任何账号数据。
+                    return []
                 rows = conn.execute(
                     "SELECT department, position, employee_name FROM attendance_employees "
-                    "WHERE TRIM(employee_name) <> '' ORDER BY id"
+                    "WHERE TRIM(employee_name) <> '' AND owner_user_id = ? ORDER BY id",
+                    (owner,),
                 ).fetchall()
                 seen: set[str] = set()
                 roster: list[tuple[str, str, str]] = []
@@ -104,6 +118,8 @@ def _resolve_personnel_roster(db_path: Path) -> list[tuple[str, str, str]]:
                             (str(department or "").strip(), str(position or "").strip(), name)
                         )
                 return roster
+    if not owner:
+        return []
     return _load_products_personnel_roster_from_host() or _load_private_roster(db_path)
 
 

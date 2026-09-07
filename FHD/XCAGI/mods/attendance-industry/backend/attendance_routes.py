@@ -5,12 +5,17 @@ from __future__ import annotations
 from pathlib import Path
 from urllib.parse import unquote
 
-from fastapi import Depends, File, Form, UploadFile
+from fastapi import Depends, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.mod_sdk.customer_features import attendance_custom_features, require_attendance_conversion
 from app.mod_sdk.errors import BOUNDARY_ERRORS
 from app.mod_sdk.host_services import workspace_root
+
+try:
+    from .owner_scope import owner_from_request
+except ImportError:  # mod_manager 以顶层模块名加载 backend/*.py
+    from owner_scope import owner_from_request
 
 
 def register(
@@ -127,6 +132,7 @@ def register(
 
     @router.post("/attendance/convert-upload", response_model=None, dependencies=custom_access)
     async def attendance_convert_upload(
+        request: Request,
         file: UploadFile = File(...),
         output_relpath: str = Form("424/考勤转换输出.xlsx"),
         template_relpath: str = Form(DEFAULT_TEMPLATE_RELPATH),
@@ -222,7 +228,7 @@ def register(
         )
         roster: list[tuple[str, str, str]] | None = None
         if use_pr:
-            roster = _resolve_personnel_roster(get_database_path())
+            roster = _resolve_personnel_roster(get_database_path(), owner_from_request(request))
             if not roster:
                 return JSONResponse(
                     {
