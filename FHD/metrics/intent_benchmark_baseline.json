@@ -1,0 +1,21 @@
+{
+  "total": 97,
+  "rule": {
+    "layer": "rule",
+    "counts": {
+      "core": {
+        "correct": 24,
+        "total": 24
+      },
+      "semantic": {
+        "correct": 19,
+        "total": 73
+      }
+    },
+    "accuracy": {
+      "core": 1.0,
+      "semantic": 0.2603
+    },
+    "failures": "omitted"
+  }
+}
