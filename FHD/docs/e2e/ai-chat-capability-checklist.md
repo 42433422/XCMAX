@@ -198,3 +198,43 @@ BERT 标签全集：greet / goodbye / help / settings / negation / customers / c
 - [ ] 清理 `QUICK_INTENT_PATTERNS` 死代码或接入 pipeline
 - [ ] wechat_send 关键词补「用微信通知」类变体
 - [ ] 桌面端 LLM provider 未配置确认（专业模式回复疑似降级路径）
+
+## 冒烟结果（2026-09-08 第二轮，本地 17500 直测）
+
+> 注意：17500 实例为 #1799 合并前的旧构建，小闲聊短路/SQLite 向量修复未生效；以下标 `[源码已修]` 的项待新桌面包重建后复测。
+
+| 项 | 结果 | 说明 |
+|---|---|---|
+| 1.3 流式 | [!] | SSE 帧结构正常（tool_progress→error），但上游 LLM 报 `平台错误(403): CSRF token missing`——桌面 provider 配置问题，与遗留待办同源 |
+| 1.4 批量 | [x] | batch 多条各自回复、`count`/`batch` 字段正确；「你好」走 generic_workflow 属旧构建（短路 `[源码已修]` bd9c8281e） |
+| 1.5 上下文延续 | [x] | 「再来一份」命中 repeat，不重复追问 |
+| 1.7 清空上下文 | [x] | clear 后「再来一份」不再复用旧槽位 |
+| 2.2 问候三件套 | [x] | intent 层 is_greeting/is_goodbye/is_help 正确 |
+| 2.4 客户查询/编辑 | [x] | 查客户→customers；改电话→customer_edit（BERT 档） |
+| 2.5 上传/图片/视频 | [x] | upload_file/show_images/show_videos 意图正确 |
+| 2.6 无意义输入 | [x] | 「啊对对对」不触发工具 |
+| 2.7 意图健康 | [x] | `/api/intent/health` 200；`model_available:false`（BERT 未打包，规则降级路径可用） |
+| 9.1 新建会话 | [x] | 返回 session_id |
+| 9.3 config/context | [x] | 均 200 |
+| 槽位解析（1.5 衍生） | [!]→已修 | 「发货单 太阳鸟 5桶 20L规格」原解析成 单位=太阳鸟规格/编号=20L；已修 order_parser：倒装「20L规格/28的规格」归一为规格槽位、「20L」独立记法、单位名剥离「开单」；现统一输出「已识别：单位 太阳鸟，规格 20」+追问编号。回归 119 测试全绿（commit 63c8bbed5，随 #1801） |
+| 3.6 模板预览 | [!]→已修 | 「预览送货单模板」原被「送货单」关键词截胡 → 走开单预览；已在 normal 路由新增 template_preview 识别让路（commit da3eefe5a，随 #1801） |
+| 9.4 专业模式 | [!] | `source=pro` → 400 `ai_service_unavailable`——桌面 LLM provider 未配置（与遗留待办同源）；normal 模式走规则/planner 降级路径正常返回 |
+| 5.2 员工列表 | 待 UI 测 | `/api/employees` 返回 catalog 结构（无英文 ID 泄漏问题在卡片层，#1799 已修兜底中文名），完整验证需重启新桌面包 |
+| 3.8 订单 CRUD | [!] | `/api/tools/execute` 的 `orders` 是兼容桩：非 `view` 动作一律返回 `{success:true,message:"出货单"}`，不真正增删改。真实订单 CRUD 在 `/api/shipment*` REST 端点；此端点仅产品/客户/物料查询有效 |
+| 3.12 删除确认门禁 | 分层澄清 | 确认门禁在「对话审批卡」层（workflow risk gate），不在 `/api/tools/execute` 裸端点——裸端点是本机兼容 shim，无鉴权无确认属设计预期。删除类需在对话链路（§3.5/§5.1）验证审批卡 |
+| 4.5 tools/execute 查询 | [x] | `products`/`query`、`customers`/`query`、`orders`/`list` 均 200；注册表键=域+动作 |
+| 7.1 对话 trace | [x] | 每轮对话返回 `run_id`/`agent_run_id`；trace 明细端点需登录态（401），未登录不可读属预期 |
+
+## 意图识别优化（2026-09-08，随 #1801）
+
+> 针对 §2「换说法漏判」根因：规则引擎未命中即 unknown，无模型兜底。本轮接入 hybrid routing。
+
+| 项 | 结果 | 说明 |
+|---|---|---|
+| 2.x LLM 意图闸 | [x] 源码 | 规则未命中→调一次平台模型（`complete_structured_sync`，JSON+置信度）；置信 ≥0.7 且意图在只读白名单内才合成路由，复用既有确定性 builder；写操作动词/否定/离线/失败一律回退 unknown（fail-open，行为与改造前一致）。单测 13 项覆盖命中/低置信/反问/白名单裁剪/写操作拦截/故障降级/缓存 |
+| 2.x 低置信反问澄清 | [x] 源码 | 置信 0.45-0.7 有候选时不猜测执行，返回 `clarify` 意图；主链 `try_normal_slot_read_payload` 直接回反问话术（如「您是想查产品，还是查物料/原材料库存吗？」），用户确认后再走确定性工具 |
+| 评测棘轮进 CI | [x] | `intent_benchmark.py --check` 加入 backend-test：golden set 97 条，core 档（规则稳定命中）容忍 -2%，semantic 档只升不降；基线 core=100% / semantic=26.03%（规则口径，LLM 层提升待 `--llm` 评测） |
+| CodeQL redos | [x] 已修 | 槽位解析新正则 `\d+`/`\s*` 无界重复触发 4 条 polynomial-redos（security-no-new-critical-high 阻断）；数字 `{1,12}`、分隔符 `[ \t]{0,4}` 全加界，139 回归不变、恶意 4000 字符 <20ms |
+| giant-file | [x] 已修 | 注释致 order_parser.py 破 500 行上限（arch-fitness 与声明 lint 双拦），压缩注释回到 500 |
+
+**待新桌面包复测**：clarify 反问端到端（需 provider 配置，见遗留待办第 3 条）；1.1/1.6 小闲聊短路与 SQLite 向量修复（#1799 已合并）。

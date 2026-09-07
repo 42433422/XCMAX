@@ -165,8 +165,14 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
             text,
         )
     )
-    if any(k in text for k in shipment_keywords) or number_style_order:
+    # 「预览…模板」类话术是模板预览意图，不被「送货单/发货单」等单据词截胡成开单。
+    template_preview = bool(
+        _facade().re.search("(?:预览|看看|看下)[^，,。]{0,12}模板|模板[^，,。]{0,8}预览", text)
+    )
+    if (any(k in text for k in shipment_keywords) or number_style_order) and not template_preview:
         return {"intent": "shipment", "slots": {"number_style_order": number_style_order}}
+    if template_preview:
+        return {"intent": "unknown", "slots": {}}
     sales_write_payload = _facade()._parse_sales_write_request(text)
     if sales_write_payload is not None:
         return {
@@ -335,4 +341,13 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
                 if keyword:
                     slots["keyword"] = keyword
         return {"intent": "product_query", "slots": slots}
+    # 规则全部未命中：走一次 LLM 意图闸（平台模型；离线/测试/失败自动回退 unknown）。
+    try:
+        from app.application.llm_intent_gate import llm_route_message
+
+        llm_route = llm_route_message(text)
+        if llm_route is not None:
+            return llm_route
+    except _facade().RECOVERABLE_ERRORS:
+        _facade().logger.debug("LLM 意图闸跳过", exc_info=True)
     return {"intent": "unknown", "slots": {}}

@@ -60,6 +60,25 @@ def _parse_order_text(order_text: str) -> dict:
             .replace("的规格", "规格")
         )
 
+        # 倒装写法「20L规格」「28的规格」：数字（可带 L/升）在「规格」前，统一改写成
+        # 「规格+数字」正序，避免数字被当成编号、「规格」二字残留进单位名。
+        # 前瞻排除正序写法（如「XY-20 规格：20」「9803 规格二十八」）防止误吞编号；
+        # 重复全部加界，无界 \d+/\s* 会在长串「0」上触发多项式回溯（CodeQL redos）。
+        _spec_inverted = re.compile(
+            r"(?<![\dA-Za-z.-])(\d{1,12}(?:\.\d{1,4})?)(?:[Ll升])?[ \t]{0,4}的?[ \t]{0,4}规格"
+            r"(?![ \t:：]{0,4}(?:[\d.一二两三四五六七八九十]))"
+        )
+        text = _spec_inverted.sub(r"规格\1", text)
+        slot_text = _spec_inverted.sub(r"规格\1", slot_text)
+
+        # 独立容量记法「20L」「20升」即规格（如「给太阳鸟开单 20L 5桶」），统一改写成
+        # 「规格20」，避免被当成编号或落入兜底产生 name=「20L 5桶」的垃圾槽位。
+        _spec_capacity = re.compile(
+            r"(?<![\dA-Za-z.-])(\d{1,12}(?:\.\d{1,4})?)[Ll升](?![\dA-Za-z])"
+        )
+        text = _spec_capacity.sub(r"规格\1", text)
+        slot_text = _spec_capacity.sub(r"规格\1", slot_text)
+
         if not text:
             return {"success": False, "message": "订单文本格式不正确，缺少内容"}
 
@@ -197,6 +216,12 @@ def _parse_order_text(order_text: str) -> dict:
                 or "一共" in slot_text
                 or "总共" in slot_text
                 or "共" in slot_text
+                or (
+                    "规格" in slot_text
+                    # 「N桶 <产品token> 规格S」属 pattern-loop/多品项口径（含 ASR 中文
+                    # 编号如「一桶酒吧零三 规格28」），不在此触发槽位模式。
+                    and not re.search(r"桶\s*[^\s，,。]{1,32}\s*规格", slot_text)
+                )
             )
             or re.search(rf"{model_token_pattern}\s{{0,16}}(?:的)?\s{{0,16}}规格", slot_text)
             or re.search(
