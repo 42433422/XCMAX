@@ -1011,7 +1011,7 @@ class TestProcessChatExtended:
         ):
             service = _make_service()
             service.ai_service = mock_ai
-            result = service.process_chat("u1", "你好呀", source=None)
+            result = service.process_chat("u1", "随便说点什么", source=None)
         assert result["success"] is False
 
     def test_pro_source_with_message(self):
@@ -1050,7 +1050,7 @@ class TestProcessChatExtended:
                     return_value=repo,
                 ),
             ):
-                result = service.process_chat("u1", "你好", source=None, context={})
+                result = service.process_chat("u1", "随便说点什么", source=None, context={})
 
         # 主链路结果带 run_id，且与一个真实落库的 run 对应
         assert result["success"] is True
@@ -1128,7 +1128,7 @@ class TestProcessChatExtended:
                 patch.object(service, "_try_handle_dynamic_workflow", return_value=None),
                 patch.object(service, "_start_deterministic_import_agent_run") as mock_start,
             ):
-                result = service.process_chat("u1", "你好", source=None, context={})
+                result = service.process_chat("u1", "随便说点什么", source=None, context={})
 
         # 未走多模态分流，legacy 引擎正常应答
         assert mock_start.called is False

@@ -177,9 +177,11 @@ class __AIChatApplicationServicePart01MixinPart01Mixin:
                 "response": reply_text,
                 "data": {
                     "text": reply_text,
-                    "action": "deterministic_reply",
+                    "action": str(deterministic_reply.get("action") or "deterministic_reply"),
                     "data": {
-                        "intent": "deterministic_chat_reply",
+                        "intent": str(
+                            deterministic_reply.get("trace_intent") or "deterministic_chat_reply"
+                        ),
                         "thinking_steps": deterministic_reply.get("thinking_steps"),
                     },
                 },
@@ -192,7 +194,9 @@ class __AIChatApplicationServicePart01MixinPart01Mixin:
                     source=source,
                     context=ctx,
                     file_context=file_context or {},
-                    intent="deterministic_chat_reply",
+                    intent=str(
+                        deterministic_reply.get("trace_intent") or "deterministic_chat_reply"
+                    ),
                 )
             )
         self._handle_confirmation_flow(user_id, message, file_context)
