@@ -21,6 +21,8 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
 REPO = Path(__file__).resolve().parents[2]
 GOLDEN_PATH = REPO / "tests" / "benchmarks" / "intent_golden_set.json"
 METRICS_DIR = REPO / "metrics"
@@ -66,7 +68,7 @@ def _run_layer(name: str, cases: list[dict], matcher) -> dict:
         tier = str(case.get("tier", "core"))
         try:
             ok = bool(matcher(case, text))
-        except Exception as exc:  # noqa: BLE001 - 评测层单条异常记为 miss
+        except BOUNDARY_ERRORS as exc:  # 评测隔离边界：单条异常记为 miss，不中断整场评测
             ok = False
             failures[tier].append({"text": text, "error": str(exc)[:120]})
         stat[tier][1] += 1
@@ -79,7 +81,7 @@ def _run_layer(name: str, cases: list[dict], matcher) -> dict:
 
                 r = recognize_intents(text)
                 got = {"tool_key": r.get("tool_key"), "primary_intent": r.get("primary_intent")}
-            except Exception:  # noqa: BLE001
+            except BOUNDARY_ERRORS:  # 评测隔离边界：对照组失败记为空观测
                 pass
             failures[tier].append(
                 {

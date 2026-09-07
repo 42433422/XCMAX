@@ -337,7 +337,7 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
         return {"intent": "product_query", "slots": slots}
     # 规则全部未命中：走一次 LLM 意图闸（平台模型；离线/测试/失败自动回退 unknown）。
     try:
-        from app.services.llm_intent_gate import llm_route_message
+        from app.application.llm_intent_gate import llm_route_message
 
         llm_route = llm_route_message(text)
         if llm_route is not None:

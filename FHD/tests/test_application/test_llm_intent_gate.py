@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.services import llm_intent_gate as gate
+from app.application import llm_intent_gate as gate
 
 
 @pytest.fixture(autouse=True)

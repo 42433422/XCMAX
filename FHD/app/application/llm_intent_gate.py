@@ -21,7 +21,7 @@ import re
 import time
 from typing import Any
 
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -200,7 +200,7 @@ def _classify(text: str) -> dict[str, Any]:
             max_tokens=160,
             timeout_seconds=10.0,
         )
-    except Exception as exc:  # noqa: BLE001 - 闸层任何失败都回退规则语义
+    except BOUNDARY_ERRORS as exc:  # 闸层是适配器隔离边界：任何 LLM 失败都回退规则语义
         logger.info("[LLM_INTENT_GATE] skipped: %s", type(exc).__name__)
         return unknown
 
