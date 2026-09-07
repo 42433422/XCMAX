@@ -335,4 +335,13 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
                 if keyword:
                     slots["keyword"] = keyword
         return {"intent": "product_query", "slots": slots}
+    # 规则全部未命中：走一次 LLM 意图闸（平台模型；离线/测试/失败自动回退 unknown）。
+    try:
+        from app.services.llm_intent_gate import llm_route_message
+
+        llm_route = llm_route_message(text)
+        if llm_route is not None:
+            return llm_route
+    except _facade().RECOVERABLE_ERRORS:
+        _facade().logger.debug("LLM 意图闸跳过", exc_info=True)
     return {"intent": "unknown", "slots": {}}
