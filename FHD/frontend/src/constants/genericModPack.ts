@@ -220,6 +220,17 @@ export function normalizeModSidebarNavKey(key: string): string {
   return k.replace(/^mod-mod-/, 'mod-')
 }
 
+/**
+ * 通用叠加能力 Mod：与任意行业扩展包共存，不随当前 active 行业被挤掉。
+ * 考勤是「可与任意客户所属行业组合使用」的通用能力（见 mod 描述），
+ * 企业用户无论选中涂料/饰品还是其它行业，侧栏都应常驻考勤工作区入口。
+ */
+export const UNIVERSAL_OVERLAY_MOD_IDS = [CLIENT_PRIMARY_ERP_MOD_ID] as const
+
+export function isUniversalOverlayModId(modId: string): boolean {
+  return (UNIVERSAL_OVERLAY_MOD_IDS as readonly string[]).includes(String(modId || '').trim())
+}
+
 /** 账号定制 Mod（侧栏菜单应在企业端展示）。太阳鸟已归并到 attendance-industry。 */
 export const ACCOUNT_CUSTOM_MOD_IDS = ['sz-qsm-pro'] as const
 
