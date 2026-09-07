@@ -21,7 +21,9 @@ if (-not (Test-Path $modsDir)) {
   throw "Mods dir not found: $modsDir"
 }
 
-$forbiddenInMods = @('taiyangniao-pro', 'sz-qsm-pro', 'coating-industry', 'attendance-industry')
+$forbiddenInMods = @('taiyangniao-pro', 'sz-qsm-pro', 'coating-industry')
+# attendance-industry is a universal (L1) capability since PR #1793 and ships in active mods/.
+$universalIndustryMods = @('attendance-industry')
 foreach ($mid in $forbiddenInMods) {
   $p = Join-Path $modsDir $mid
   if (Test-Path $p) {
@@ -30,7 +32,7 @@ foreach ($mid in $forbiddenInMods) {
 }
 
 Get-ChildItem $modsDir -Directory -ErrorAction SilentlyContinue | ForEach-Object {
-  if ($_.Name -like '*-industry') {
+  if ($_.Name -like '*-industry' -and $universalIndustryMods -notcontains $_.Name) {
     throw "Industry mod must NOT be in active mods/ seed: $($_.Name)"
   }
 }
