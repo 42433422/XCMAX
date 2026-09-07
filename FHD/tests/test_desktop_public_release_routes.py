@@ -76,7 +76,7 @@ def test_site_refreshes_preserve_a_verified_desktop_release_pointer() -> None:
     # （2026-09-05 回退事故：过期 git 种子曾把线上 1.0.0.1 打回 1.0.0.0）。
     assert 'if [[ ! -e "$live_site/download-release.json" ]]; then' in auto_update
     assert (
-        '/var/www/xcagi-v[0-9]*.*.*.*/download-release.json' in auto_update
+        "/var/www/xcagi-v[0-9]*.*.*.*/download-release.json" in auto_update
         and "sort -V | tail -1" in auto_update
     )
     assert 'elif [[ -f "$git_site/download-release.json" ]]' in auto_update
