@@ -224,3 +224,17 @@ BERT 标签全集：greet / goodbye / help / settings / negation / customers / c
 | 3.12 删除确认门禁 | 分层澄清 | 确认门禁在「对话审批卡」层（workflow risk gate），不在 `/api/tools/execute` 裸端点——裸端点是本机兼容 shim，无鉴权无确认属设计预期。删除类需在对话链路（§3.5/§5.1）验证审批卡 |
 | 4.5 tools/execute 查询 | [x] | `products`/`query`、`customers`/`query`、`orders`/`list` 均 200；注册表键=域+动作 |
 | 7.1 对话 trace | [x] | 每轮对话返回 `run_id`/`agent_run_id`；trace 明细端点需登录态（401），未登录不可读属预期 |
+
+## 意图识别优化（2026-09-08，随 #1801）
+
+> 针对 §2「换说法漏判」根因：规则引擎未命中即 unknown，无模型兜底。本轮接入 hybrid routing。
+
+| 项 | 结果 | 说明 |
+|---|---|---|
+| 2.x LLM 意图闸 | [x] 源码 | 规则未命中→调一次平台模型（`complete_structured_sync`，JSON+置信度）；置信 ≥0.7 且意图在只读白名单内才合成路由，复用既有确定性 builder；写操作动词/否定/离线/失败一律回退 unknown（fail-open，行为与改造前一致）。单测 13 项覆盖命中/低置信/反问/白名单裁剪/写操作拦截/故障降级/缓存 |
+| 2.x 低置信反问澄清 | [x] 源码 | 置信 0.45-0.7 有候选时不猜测执行，返回 `clarify` 意图；主链 `try_normal_slot_read_payload` 直接回反问话术（如「您是想查产品，还是查物料/原材料库存吗？」），用户确认后再走确定性工具 |
+| 评测棘轮进 CI | [x] | `intent_benchmark.py --check` 加入 backend-test：golden set 97 条，core 档（规则稳定命中）容忍 -2%，semantic 档只升不降；基线 core=100% / semantic=26.03%（规则口径，LLM 层提升待 `--llm` 评测） |
+| CodeQL redos | [x] 已修 | 槽位解析新正则 `\d+`/`\s*` 无界重复触发 4 条 polynomial-redos（security-no-new-critical-high 阻断）；数字 `{1,12}`、分隔符 `[ \t]{0,4}` 全加界，139 回归不变、恶意 4000 字符 <20ms |
+| giant-file | [x] 已修 | 注释致 order_parser.py 破 500 行上限（arch-fitness + SSOT gate 双拦），压缩注释回到 500 |
+
+**待新桌面包复测**：clarify 反问端到端（需 provider 配置，见遗留待办第 3 条）；1.1/1.6 小闲聊短路与 SQLite 向量修复（#1799 已合并）。
