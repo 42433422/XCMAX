@@ -165,8 +165,14 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
             text,
         )
     )
-    if any(k in text for k in shipment_keywords) or number_style_order:
+    # 「预览…模板」类话术是模板预览意图，不被「送货单/发货单」等单据词截胡成开单。
+    template_preview = bool(
+        _facade().re.search("(?:预览|看看|看下)[^，,。]{0,12}模板|模板[^，,。]{0,8}预览", text)
+    )
+    if (any(k in text for k in shipment_keywords) or number_style_order) and not template_preview:
         return {"intent": "shipment", "slots": {"number_style_order": number_style_order}}
+    if template_preview:
+        return {"intent": "unknown", "slots": {}}
     sales_write_payload = _facade()._parse_sales_write_request(text)
     if sales_write_payload is not None:
         return {
