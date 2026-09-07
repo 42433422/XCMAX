@@ -235,6 +235,6 @@ BERT 标签全集：greet / goodbye / help / settings / negation / customers / c
 | 2.x 低置信反问澄清 | [x] 源码 | 置信 0.45-0.7 有候选时不猜测执行，返回 `clarify` 意图；主链 `try_normal_slot_read_payload` 直接回反问话术（如「您是想查产品，还是查物料/原材料库存吗？」），用户确认后再走确定性工具 |
 | 评测棘轮进 CI | [x] | `intent_benchmark.py --check` 加入 backend-test：golden set 97 条，core 档（规则稳定命中）容忍 -2%，semantic 档只升不降；基线 core=100% / semantic=26.03%（规则口径，LLM 层提升待 `--llm` 评测） |
 | CodeQL redos | [x] 已修 | 槽位解析新正则 `\d+`/`\s*` 无界重复触发 4 条 polynomial-redos（security-no-new-critical-high 阻断）；数字 `{1,12}`、分隔符 `[ \t]{0,4}` 全加界，139 回归不变、恶意 4000 字符 <20ms |
-| giant-file | [x] 已修 | 注释致 order_parser.py 破 500 行上限（arch-fitness + SSOT gate 双拦），压缩注释回到 500 |
+| giant-file | [x] 已修 | 注释致 order_parser.py 破 500 行上限（arch-fitness 与声明 lint 双拦），压缩注释回到 500 |
 
 **待新桌面包复测**：clarify 反问端到端（需 provider 配置，见遗留待办第 3 条）；1.1/1.6 小闲聊短路与 SQLite 向量修复（#1799 已合并）。

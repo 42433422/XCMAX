@@ -21,9 +21,14 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-from app.utils.operational_errors import BOUNDARY_ERRORS
-
 REPO = Path(__file__).resolve().parents[2]
+# 直接以脚本执行（python scripts/dev/intent_benchmark.py）时 sys.path 不含 FHD/，
+# app 包不可导入；先把仓库根插入 sys.path 再做 app 级导入。
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
+
+from app.utils.operational_errors import BOUNDARY_ERRORS  # noqa: E402
+
 GOLDEN_PATH = REPO / "tests" / "benchmarks" / "intent_golden_set.json"
 METRICS_DIR = REPO / "metrics"
 LATEST_PATH = METRICS_DIR / "intent_benchmark_latest.json"
