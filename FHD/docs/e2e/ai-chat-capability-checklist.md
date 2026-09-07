@@ -217,6 +217,9 @@ BERT 标签全集：greet / goodbye / help / settings / negation / customers / c
 | 9.1 新建会话 | [x] | 返回 session_id |
 | 9.3 config/context | [x] | 均 200 |
 | 槽位解析（1.5 衍生） | [!]→已修 | 「发货单 太阳鸟 5桶 20L规格」原解析成 单位=太阳鸟规格/编号=20L；已修 order_parser：倒装「20L规格/28的规格」归一为规格槽位、「20L」独立记法、单位名剥离「开单」；现统一输出「已识别：单位 太阳鸟，规格 20」+追问编号。回归 119 测试全绿（commit 63c8bbed5，随 #1801） |
-| 3.6 模板预览 | [!] | 「预览送货单模板」被「送货单」关键词截胡 → 走开单预览（缺编号追问），未命中 template_preview 工具。低优：需在 normal 路由给「预览…模板」让路 |
+| 3.6 模板预览 | [!]→已修 | 「预览送货单模板」原被「送货单」关键词截胡 → 走开单预览；已在 normal 路由新增 template_preview 识别让路（commit da3eefe5a，随 #1801） |
 | 9.4 专业模式 | [!] | `source=pro` → 400 `ai_service_unavailable`——桌面 LLM provider 未配置（与遗留待办同源）；normal 模式走规则/planner 降级路径正常返回 |
 | 5.2 员工列表 | 待 UI 测 | `/api/employees` 返回 catalog 结构（无英文 ID 泄漏问题在卡片层，#1799 已修兜底中文名），完整验证需重启新桌面包 |
+| 3.8 订单 CRUD | [!] | `/api/tools/execute` 的 `orders` 是兼容桩：非 `view` 动作一律返回 `{success:true,message:"出货单"}`，不真正增删改。真实订单 CRUD 在 `/api/shipment*` REST 端点；此端点仅产品/客户/物料查询有效 |
+| 3.12 删除确认门禁 | 分层澄清 | 确认门禁在「对话审批卡」层（workflow risk gate），不在 `/api/tools/execute` 裸端点——裸端点是本机兼容 shim，无鉴权无确认属设计预期。删除类需在对话链路（§3.5/§5.1）验证审批卡 |
+| 4.5 tools/execute 查询 | [x] | `products`/`query`、`customers`/`query`、`orders`/`list` 均 200；注册表键=域+动作 |
