@@ -384,6 +384,7 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "save_passive_poll_config",
     ),
     "save_pipeline": ("app.services.user_cs_pipeline", "save_pipeline"),
+    "resolve_session_user": ("app.infrastructure.auth.dependencies", "resolve_session_user"),
     "session_id_from_request": (
         "app.fastapi_routes.market_account",
         "session_id_from_request",
