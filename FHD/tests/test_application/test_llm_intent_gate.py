@@ -91,6 +91,48 @@ def test_low_confidence_returns_none(monkeypatch):
     assert gate.llm_route_message("随便说点什么奇怪的话") is None
 
 
+def test_low_confidence_band_returns_clarify(monkeypatch):
+    monkeypatch.setenv("XCAGI_LLM_INTENT_GATE", "1")
+    _patch_llm(
+        monkeypatch,
+        {
+            "intent": "products",
+            "confidence": 0.55,
+            "candidates": ["products", "materials"],
+            "slots": {},
+        },
+    )
+    result = gate.llm_route_message("那个二十升的还有没有")
+    assert result is not None
+    assert result["intent"] == "clarify"
+    assert result["slots"]["candidates"] == ["products", "materials"]
+    assert "查产品" in result["slots"]["question"]
+    assert "查物料" in result["slots"]["question"]
+
+
+def test_clarify_single_candidate(monkeypatch):
+    monkeypatch.setenv("XCAGI_LLM_INTENT_GATE", "1")
+    _patch_llm(monkeypatch, {"intent": "customers", "confidence": 0.5, "slots": {}})
+    result = gate.llm_route_message("王总那边情况怎么样")
+    assert result is not None and result["intent"] == "clarify"
+    assert "您是想查客户" in result["slots"]["question"]
+
+
+def test_clarify_candidates_filtered_to_whitelist(monkeypatch):
+    monkeypatch.setenv("XCAGI_LLM_INTENT_GATE", "1")
+    _patch_llm(
+        monkeypatch,
+        {
+            "intent": "delete_customer",
+            "confidence": 0.6,
+            "candidates": ["delete_customer", "nonsense"],
+            "slots": {},
+        },
+    )
+    # 主意图与候选都不在白名单内 → 无话可问，回退 unknown（None）。
+    assert gate.llm_route_message("随便说点什么业务外的话") is None
+
+
 def test_unknown_intent_returns_none(monkeypatch):
     monkeypatch.setenv("XCAGI_LLM_INTENT_GATE", "1")
     _patch_llm(monkeypatch, {"intent": "none", "confidence": 0.9, "slots": {}})

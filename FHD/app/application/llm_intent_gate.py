@@ -57,12 +57,28 @@ _ROUTE_INTENTS = "\n".join(
     ]
 )
 
+# LLM 意图 → 中文描述，用于低置信反问话术。
+_INTENT_LABELS: dict[str, str] = {
+    "shipment_generate": "开发货单",
+    "customers": "查客户",
+    "products": "查产品",
+    "materials": "查物料/原材料库存",
+    "print_label": "打印标签",
+    "shipment_records": "查发货记录",
+    "sales_query": "查销售/报价/收款",
+    "reports_query": "看报表/统计",
+    "replenishment_suggest": "补货建议",
+    "inventory_alert": "库存预警",
+    "knowledge_query": "使用帮助",
+}
+
 _SCHEMA: dict[str, Any] = {
     "type": "object",
     "required": ["intent", "confidence"],
     "properties": {
         "intent": {"type": "string"},
         "confidence": {"type": "number"},
+        "candidates": {"type": "array", "items": {"type": "string"}},
         "slots": {"type": "object"},
     },
 }
@@ -84,9 +100,12 @@ _SYSTEM_PROMPT = f"""你是业务助手的意图分类器。用户消息已经�
 2. 明确表达删除/新增/修改/入库等写操作的，intent 填 "none"（交给专门链路）。
 3. 纯寒暄、与业务无关的，intent 填 "none"。
 4. confidence 为你对该分类的把握（0-1）。
+5. 把握不足 0.7 时，在 candidates 里按可能性从高到低列出 2-3 个候选意图（同样只能取上面列表里的值）。
 
 严格只输出 JSON，例如：
-{{"intent": "customers", "confidence": 0.9, "slots": {{"keyword": "王总"}}}}"""
+{{"intent": "customers", "confidence": 0.9, "slots": {{"keyword": "王总"}}}}
+低置信示例：
+{{"intent": "products", "confidence": 0.55, "candidates": ["products", "materials"], "slots": {{}}}}"""
 
 # 写操作动词：命中则不走 LLM 路由（保持既有 planner/确认链路语义）。
 _MUTATION_RE = re.compile(
@@ -94,6 +113,8 @@ _MUTATION_RE = re.compile(
 )
 
 _CONFIDENCE_MIN = 0.7
+# 低置信带：模型有倾向但不够把握 → 不猜测执行，返回 clarify 让主链反问用户。
+_CONFIDENCE_CLARIFY_MIN = 0.45
 _CACHE_TTL_SECONDS = 120.0
 _CACHE_MAX = 256
 _cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
@@ -176,11 +197,22 @@ def llm_route_message(message: str) -> dict[str, Any] | None:
 
     cached = _cached(text)
     if cached is not None:
-        return dict(cached) if cached.get("intent") != "unknown" else None
+        return dict(cached) if cached.get("intent") not in (None, "unknown") else None
 
     result = _classify(text)
     _put_cache(text, result)
     return dict(result) if result and result.get("intent") != "unknown" else None
+
+
+def _clarify_question(candidates: list[str]) -> str:
+    labels = [_INTENT_LABELS[c] for c in candidates if c in _INTENT_LABELS]
+    if not labels:
+        return ""
+    if len(labels) == 1:
+        return (
+            f"您是想{labels[0]}吗？可以直接说「{'、'.join(labels)}」相关的需求，或换个说法告诉我。"
+        )
+    return "您是想" + "，还是".join(labels[:3]) + "吗？告诉我具体一点，我马上帮您办。"
 
 
 def _classify(text: str) -> dict[str, Any]:
@@ -210,16 +242,46 @@ def _classify(text: str) -> dict[str, Any]:
         confidence = float(data.get("confidence") or 0.0)
     except (TypeError, ValueError):
         confidence = 0.0
+    raw_candidates = data.get("candidates")
+    candidates = [
+        str(c).strip() for c in (raw_candidates if isinstance(raw_candidates, list) else [])
+    ]
+    # 候选去重并裁剪到白名单内，主意图置顶。
+    ordered = [intent] + [c for c in candidates if c != intent]
+    ordered = [c for c in ordered if c in _INTENT_LABELS][:3]
+
     route_intent = _LLM_TO_ROUTE.get(intent)
-    if not route_intent or confidence < _CONFIDENCE_MIN:
-        logger.info("[LLM_INTENT_GATE] miss intent=%s conf=%.2f", intent or "none", confidence)
-        return unknown
-    raw_slots = data.get("slots")
-    slots = _normalize_slots(route_intent, raw_slots if isinstance(raw_slots, dict) else {})
-    logger.info(
-        "[LLM_INTENT_GATE] hit %s -> %s conf=%.2f slots=%s", intent, route_intent, confidence, slots
-    )
-    return {"intent": route_intent, "slots": slots, "llm_routed": True, "confidence": confidence}
+    if route_intent and confidence >= _CONFIDENCE_MIN:
+        raw_slots = data.get("slots")
+        slots = _normalize_slots(route_intent, raw_slots if isinstance(raw_slots, dict) else {})
+        logger.info(
+            "[LLM_INTENT_GATE] hit %s -> %s conf=%.2f slots=%s",
+            intent,
+            route_intent,
+            confidence,
+            slots,
+        )
+        return {
+            "intent": route_intent,
+            "slots": slots,
+            "llm_routed": True,
+            "confidence": confidence,
+        }
+
+    # 低置信带：有明确候选但不达执行阈值 → 反问澄清，绝不猜测执行。
+    if ordered and _CONFIDENCE_CLARIFY_MIN <= confidence < _CONFIDENCE_MIN:
+        question = _clarify_question(ordered)
+        if question:
+            logger.info("[LLM_INTENT_GATE] clarify %s conf=%.2f", ordered, confidence)
+            return {
+                "intent": "clarify",
+                "slots": {"question": question, "candidates": ordered},
+                "llm_routed": True,
+                "confidence": confidence,
+            }
+
+    logger.info("[LLM_INTENT_GATE] miss intent=%s conf=%.2f", intent or "none", confidence)
+    return unknown
 
 
 __all__ = ["llm_route_message"]

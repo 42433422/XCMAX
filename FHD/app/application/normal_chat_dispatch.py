@@ -67,6 +67,9 @@ from app.application.normal_chat_dispatch_part02 import (
     build_aging_report_response_dict as build_aging_report_response_dict,
 )
 from app.application.normal_chat_dispatch_part02 import (
+    build_clarify_response_dict as build_clarify_response_dict,
+)
+from app.application.normal_chat_dispatch_part02 import (
     build_finance_query_response_dict as build_finance_query_response_dict,
 )
 from app.application.normal_chat_dispatch_part02 import (
