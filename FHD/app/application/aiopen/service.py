@@ -169,7 +169,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     },
     {
         "name": "api_call",
-        "description": "使用当前登录会话或账号连接口令调用白名单内的业务 API，保留接口权限检查。path 必须是本机路径；method 支持 GET/POST/PUT/PATCH/DELETE，Mod 需有当前账号权益。",
+        "description": "使用当前登录会话或账号连接口令调用白名单内的业务 API，保留接口权限检查。path 必须是本机路径；method 支持 GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS，Mod 需有当前账号权益。",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -179,7 +179,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 },
                 "method": {
                     "type": "string",
-                    "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"],
+                    "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
                     "default": "GET",
                 },
                 "body": {
@@ -342,4 +342,4 @@ for _screen_tool in TOOL_DEFINITIONS:
             {"type": "string", "description": "最近快照 route；页面变化时拒绝操作。"},
         )
 
-_API_CALL_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE"})
+_API_CALL_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"})

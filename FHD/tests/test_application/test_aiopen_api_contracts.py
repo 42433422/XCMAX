@@ -89,3 +89,48 @@ async def test_model_protocol_can_discover_and_inspect():
         "api_schema", {"path": operation["path"], "method": operation["method"]}, app
     )
     assert schema["success"] is True
+
+
+def test_hidden_contract_preserves_include_dependencies_without_exposing_public_docs():
+    from fastapi import Depends, Header
+
+    def tenant_header(x_business_zone: str = Header(...)):
+        raise AssertionError("schema discovery must not execute dependencies")
+
+    child = APIRouter()
+
+    @child.post("/hidden/{record_id}", include_in_schema=False)
+    def hidden(record_id: int, payload: CustomerInput):
+        raise AssertionError("must not execute")
+
+    app = FastAPI()
+    app.include_router(child, prefix="/api/company", dependencies=[Depends(tenant_header)])
+    before = app.openapi()
+    path = "/api/company/hidden/{record_id}"
+    assert path not in before["paths"]
+    result = api_schema(app, {"path": path, "method": "POST"})
+    assert result["success"], result
+    parameters = result["operation"]["parameters"]
+    assert any(row["name"] == "x-business-zone" and row["required"] for row in parameters)
+    assert any(
+        row["name"] == "record_id" and row["schema"]["type"] == "integer" for row in parameters
+    )
+    assert result["components"]["schemas"]["CustomerInput"]["required"] == ["name", "quantity"]
+    app.openapi_schema = None
+    assert app.openapi() == before
+    assert child.routes[0].include_in_schema is False
+
+
+def test_plain_http_routes_are_discovered_without_fabricating_parameter_schemas():
+    app = FastAPI()
+
+    async def untyped(request):
+        raise AssertionError("discovery must not invoke HTTP endpoint")
+
+    app.add_route("/api/plain/{record_id}", untyped, methods=["GET", "OPTIONS"])
+    operations = api_operations(app, {})["operations"]
+    assert {row["method"] for row in operations} == {"GET", "HEAD", "OPTIONS"}
+    assert all(not row["schema_available"] for row in operations)
+    result = api_schema(app, {"path": "/api/plain/{record_id}", "method": "GET"})
+    assert result["code"] == "SCHEMA_UNAVAILABLE"
+    assert "operation" not in result

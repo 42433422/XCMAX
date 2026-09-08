@@ -223,6 +223,27 @@ def _tool_api_call(app: _facade().Any, args: dict[str, _facade().Any]) -> dict[s
                 status_code = int(resp.status_code)
             except (TypeError, ValueError):
                 status_code = 599
+            if method == "HEAD":
+                allowed = (
+                    "content-type",
+                    "content-length",
+                    "content-disposition",
+                    "etag",
+                    "last-modified",
+                    "allow",
+                )
+                return {
+                    "success": 200 <= status_code < 300,
+                    "path": raw_path,
+                    "method": method,
+                    "status_code": status_code,
+                    "execution_scope": scope,
+                    "data": {
+                        "headers": {
+                            key: resp.headers[key] for key in allowed if key in resp.headers
+                        }
+                    },
+                }
             if 200 <= status_code < 300 and is_export_response(resp):
                 artifact = save_api_export(resp, scope)
                 return {

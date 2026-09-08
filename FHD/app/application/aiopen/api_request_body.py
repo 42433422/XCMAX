@@ -23,7 +23,12 @@ def api_request_body(args: dict[str, Any]) -> dict[str, Any]:
             json.dumps(body, allow_nan=False)
         except (TypeError, ValueError) as exc:
             raise ApiBodyError("body 必须是有效 JSON") from exc
-        if "body" not in args and str(args.get("method") or "GET").upper() in {"GET", "DELETE"}:
+        if "body" not in args and str(args.get("method") or "GET").upper() in {
+            "GET",
+            "DELETE",
+            "HEAD",
+            "OPTIONS",
+        }:
             return {}
         if body is None:
             return {"content": b"null", "headers": {"Content-Type": "application/json"}}

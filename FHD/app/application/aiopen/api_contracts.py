@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from copy import copy
 from typing import Any
 
 from fastapi import routing
 from fastapi.openapi.utils import get_openapi
 from fastapi.routing import APIRoute
-from starlette.routing import Mount
+from starlette.routing import Mount, Route
 
 
 def mounted_operations(app: Any, prefix: str = "") -> Iterator[tuple[str, Any]]:
@@ -17,7 +18,7 @@ def mounted_operations(app: Any, prefix: str = "") -> Iterator[tuple[str, Any]]:
     contexts = getattr(routing, "iter_route_contexts", iter)
     for route in contexts(getattr(app, "routes", [])):
         original = getattr(route, "original_route", route)
-        if isinstance(original, APIRoute):
+        if isinstance(original, Route):
             yield prefix + route.path, route
         elif isinstance(original, Mount):
             yield from mounted_operations(original, prefix + route.path)
@@ -43,8 +44,9 @@ def api_operations(app: Any, args: dict[str, Any]) -> dict[str, Any]:
     for path, route in mounted_operations(app):
         if not path.startswith("/api/"):
             continue
-        description = str(route.summary or route.name or "")
-        if query and query not in f"{path} {description} {' '.join(route.tags)}".casefold():
+        description = str(getattr(route, "summary", None) or route.name or "")
+        tags = list(getattr(route, "tags", []))
+        if query and query not in f"{path} {description} {' '.join(tags)}".casefold():
             continue
         for method in sorted(route.methods or []):
             operations.append(
@@ -52,7 +54,10 @@ def api_operations(app: Any, args: dict[str, Any]) -> dict[str, Any]:
                     "path": path,
                     "method": method,
                     "description": description,
-                    "tags": list(route.tags),
+                    "tags": tags,
+                    "schema_available": isinstance(
+                        getattr(route, "original_route", route), APIRoute
+                    ),
                     "enabled": bool(is_path_whitelisted(path)),
                     "authorization": "request_identity_and_endpoint_policy",
                 }
@@ -90,9 +95,27 @@ def api_schema(app: Any, args: dict[str, Any]) -> dict[str, Any]:
             "message": "同一动作存在多个路由，需先消除分发冲突",
         }
     mounted, route = matches[0]
+    original = getattr(route, "original_route", route)
+    if not isinstance(original, APIRoute):
+        return {
+            "success": False,
+            "code": "SCHEMA_UNAVAILABLE",
+            "path": mounted,
+            "method": method,
+            "message": "该 HTTP 动作已挂载，但没有类型化参数协议；不得猜测请求体。",
+        }
     # Build from the actual selected route rather than app.openapi()'s startup
     # cache so Mods mounted after startup are represented immediately.
-    schema = get_openapi(title="XCMAX operation", version="1", routes=[route])
+    contract_route = copy(original)
+    effective = getattr(route, "_effective_route", route)
+    # Preserve effective prefixes, include-level dependencies and model fields.
+    # A private copy exposes this one contract without changing public OpenAPI
+    # visibility or the live handler's routing/dependency state.
+    for name, value in vars(effective).items():
+        if hasattr(contract_route, name):
+            setattr(contract_route, name, value)
+    contract_route.include_in_schema = True
+    schema = get_openapi(title="XCMAX operation", version="1", routes=[contract_route])
     operation = schema.get("paths", {}).get(route.path_format, {}).get(method.lower())
     if not operation:
         return {

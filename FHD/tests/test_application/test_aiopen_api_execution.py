@@ -296,3 +296,37 @@ def test_credentials_never_attach_to_nonlocal_or_ambiguous_path(application, pat
     app, _ = application
     with caller({"X-Session-Id": "login-3"}):
         assert _tool_api_call(app, {"path": path})["code"] == "INVALID_API_PATH"
+
+
+@pytest.mark.parametrize("method", ["HEAD", "OPTIONS"])
+def test_advertised_http_metadata_methods_are_executable_without_fake_exports(application, method):
+    from fastapi.responses import Response
+
+    app, _ = application
+    requests = []
+
+    @app.api_route("/api/test/metadata", methods=["HEAD", "OPTIONS"])
+    async def metadata(request: Request):
+        requests.append((request.method, await request.body()))
+        return Response(
+            b"" if request.method == "HEAD" else b'{"success":true}',
+            media_type="application/octet-stream"
+            if request.method == "HEAD"
+            else "application/json",
+            headers={
+                "Content-Disposition": 'attachment; filename="large.xlsx"',
+                "Set-Cookie": "session=not-for-model",
+                "X-Internal-Token": "private-marker",
+            }
+            if request.method == "HEAD"
+            else {"Allow": "GET, HEAD, OPTIONS"},
+        )
+
+    with caller({"X-Session-ID": "login-3"}):
+        result = _tool_api_call(app, {"path": "/api/test/metadata", "method": method})
+    assert result["success"], result
+    assert requests == [(method, b"")]
+    assert "artifacts" not in result
+    assert "not-for-model" not in str(result) and "private-marker" not in str(result)
+    if method == "HEAD":
+        assert result["data"]["headers"]["content-disposition"].endswith('large.xlsx"')
