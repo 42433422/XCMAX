@@ -311,3 +311,13 @@ domains:
     mode: lint
     check: python scripts/dev/dev_guards.py check
     sync: null
+
+  - name: audit-benchmark
+    owner: audit-quality
+    enabled: true
+    ssot: FHD/config/audit_benchmark_ssot.json
+    derived:
+      - FHD/docs/AUDIT_BENCHMARK_SSOT.md
+    mode: generate
+    check: python scripts/dev/audit_benchmark_ssot.py check
+    sync: python scripts/dev/audit_benchmark_ssot.py generate

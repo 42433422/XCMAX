@@ -14,6 +14,7 @@
 
 | 领域 | SSOT 文档 | 说明 |
 |------|----------|------|
+| audit-benchmark（18 领域对标审计） | [AUDIT_BENCHMARK_SSOT.md](AUDIT_BENCHMARK_SSOT.md) | JSON 为规范源、本文生成；商业 90 / 开源 60 锚点、证据等级与新旧分隔离 |
 | coverage（覆盖率） | [reports/COVERAGE_RAMP.md](reports/COVERAGE_RAMP.md) | 后端/前端覆盖率基线、目标、棘轮 floor |
 | ci（CI/CD） | [../../docs/CI_SSOT.md](../../docs/CI_SSOT.md) | 根仓 .github/workflows/ 唯一调度入口 |
 | mod（Mod 开发） | [guides/MOD_AUTHORING_GUIDE.md](guides/MOD_AUTHORING_GUIDE.md) | Mod 开发规范、mods/ 为唯一编辑源 |
@@ -53,6 +54,7 @@
 
 | 域名 | SSOT 路径 | 门禁 |
 |------|----------|------|
+| audit-benchmark | `FHD/config/audit_benchmark_ssot.json` | blocking |
 | mods | `FHD/mods/` | blocking |
 | ci-workflows | `FHD/.github/workflows/` | blocking |
 | coverage | `FHD/metrics/coverage_ratchet_baseline.json` | blocking |
