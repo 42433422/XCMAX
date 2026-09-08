@@ -220,9 +220,11 @@ def _registered_router_sales(
         )
     if action == "quote":
         return svc.quote(dict(params or {}))
-    if action == "confirm":
+    if action in ("confirm", "confirm_from_result"):
         order_id = params.get("order_id")
         source_id = params.get("order_node_id")
+        if action == "confirm_from_result" and not source_id:
+            return {"success": False, "message": "缺少前序订单节点引用"}
         if source_id:
             source = (runtime_context.get("node_outputs") or {}).get(str(source_id))
             data = source.get("data") if isinstance(source, dict) else None

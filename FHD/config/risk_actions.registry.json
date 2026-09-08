@@ -666,6 +666,13 @@
           "availability": "shared",
           "action_class": "business_db.write"
         },
+        "confirm_from_result": {
+          "risk": "medium",
+          "idempotent": true,
+          "required_params": ["order_node_id"],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        },
         "confirm": {
           "risk": "medium",
           "idempotent": true,
