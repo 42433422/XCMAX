@@ -39,7 +39,9 @@ class ChatTurn:
     @property
     def message_fingerprint(self) -> str:
         """消息指纹（精确匹配用）"""
-        return hashlib.md5(self.message.strip().lower().encode()).hexdigest()[:16]
+        return hashlib.md5(
+            self.message.strip().lower().encode(), usedforsecurity=False
+        ).hexdigest()[:16]
 
     def make_semantic_fingerprint(self) -> str:
         """语义指纹（意图+关键槽位）"""
@@ -57,7 +59,7 @@ class ChatTurn:
             key_parts.append("|".join(key_slots))
 
         fingerprint = "|".join(key_parts)
-        return hashlib.md5(fingerprint.encode()).hexdigest()[:16]
+        return hashlib.md5(fingerprint.encode(), usedforsecurity=False).hexdigest()[:16]
 
 
 class ChatContext:
@@ -199,7 +201,9 @@ class ChatContext:
         Returns:
             (是否重复, 缓存的响应文本, 是否是精确重复)
         """
-        msg_fingerprint = hashlib.md5(message.strip().lower().encode()).hexdigest()[:16]
+        msg_fingerprint = hashlib.md5(
+            message.strip().lower().encode(), usedforsecurity=False
+        ).hexdigest()[:16]
 
         exact_key = f"{user_id}:{msg_fingerprint}"
         if exact_key in self._exact_cache:
@@ -228,7 +232,9 @@ class ChatContext:
             for turn in recent_turns:
                 if (
                     turn.make_semantic_fingerprint()
-                    == hashlib.md5(f"{intent}:{tool_key or ''}".encode()).hexdigest()[:16]
+                    == hashlib.md5(
+                        f"{intent}:{tool_key or ''}".encode(), usedforsecurity=False
+                    ).hexdigest()[:16]
                 ):
                     if turn.response_text:
                         logger.info(
@@ -249,7 +255,9 @@ class ChatContext:
             message: 用户消息
             response_text: 响应文本
         """
-        msg_fingerprint = hashlib.md5(message.strip().lower().encode()).hexdigest()[:16]
+        msg_fingerprint = hashlib.md5(
+            message.strip().lower().encode(), usedforsecurity=False
+        ).hexdigest()[:16]
 
         exact_key = f"{user_id}:{msg_fingerprint}"
         self._exact_cache[exact_key] = (response_text, time.time())
