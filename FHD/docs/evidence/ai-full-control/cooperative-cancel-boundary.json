@@ -1,0 +1,14 @@
+{
+  "source_sha": "cdddff778",
+  "test": "tests/test_application/test_agent_run_cooperative_cancel.py",
+  "result": "1 passed",
+  "verified": [
+    "Separate controller requests cancel while worker tool is in flight.",
+    "First tool result retained, dependent second tool never starts.",
+    "Run cancelled, command applied, execution idle."
+  ],
+  "limits": [
+    "In-memory repository, controlled tool, same process with separate thread.",
+    "Does not prove process restart recovery or revocation of an external side effect already issued."
+  ]
+}
