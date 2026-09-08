@@ -19,6 +19,17 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- CI run 34242372615 exposed formatting and architecture failures. Applied
+  formatter to the 13 reported files; extracted tool fixture generation, market
+  entitlement retrieval, SQL record decoding, and artifact download routing by
+  responsibility. Local architecture fitness now passes without baseline changes.
+  Focused verification: 341 formatting/contract tests, 74 entitlement tests,
+  59 repository/artifact/background tests, and 36 route golden/compatibility tests
+  pass. Golden snapshot now includes the existing artifact and clarification
+  endpoints; no prior endpoint was removed. Cross-Mod task-id reuse has a
+  reproduced negative test and returns conflict; same-Mod deduplication remains.
+  These local results do not establish current remote CI or delivery acceptance.
+
 - Frontend build type-check and all local Vitest tests pass: 620 files / 9808
   tests, with 2 live-backend smoke files / 4 tests skipped by configuration
   (`integration-frontend-all`); the focused Agent API/clarification/runtime suite

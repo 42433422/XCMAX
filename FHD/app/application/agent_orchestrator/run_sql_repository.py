@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import copy
 import json
-import logging
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -16,20 +15,20 @@ from sqlalchemy.orm import Session
 from app.application.agent_orchestrator.run_models import (
     AgentRun,
     RunEvent,
-    agent_run_from_dict,
     utc_now_iso,
+)
+from app.application.agent_orchestrator.run_record_mapping import (
+    _command_record_to_model,
+    _record_to_run,
+    _task_record_to_model,
 )
 from app.application.agent_orchestrator.task_models import (
     AgentTask,
     TaskControlCommand,
-    agent_task_from_dict,
-    task_control_from_dict,
     task_from_run,
     tenant_id_of_run,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-
-logger = logging.getLogger(__name__)
 
 
 class SQLAlchemyAgentRunRepository:
@@ -481,58 +480,9 @@ class SQLAlchemyAgentRunRepository:
         record.created_at = task.created_at
         record.updated_at = task.updated_at
 
-    @staticmethod
-    def _task_record_to_model(record) -> AgentTask:
-        return agent_task_from_dict(
-            {
-                "task_id": record.task_id,
-                "user_id": record.user_id,
-                "tenant_id": record.tenant_id,
-                "title": record.title,
-                "source": record.source,
-                "task_type": record.task_type,
-                "status": record.status,
-                "attention_state": record.attention_state,
-                "active_run_id": record.active_run_id,
-                "root_run_id": record.root_run_id,
-                "conversation_id": record.conversation_id,
-                "workspace_id": record.workspace_id,
-                "workspace_path": record.workspace_path,
-                "workspace_isolation": record.workspace_isolation,
-                "attempt": record.attempt,
-                "run_count": record.run_count,
-                "archived_at": record.archived_at,
-                "metadata": json.loads(record.metadata_json or "{}"),
-                "created_at": record.created_at,
-                "updated_at": record.updated_at,
-            }
-        )
-
-    @staticmethod
-    def _command_record_to_model(record) -> TaskControlCommand:
-        return task_control_from_dict(
-            {
-                "command_id": record.command_id,
-                "task_id": record.task_id,
-                "run_id": record.run_id,
-                "action": record.action,
-                "status": record.status,
-                "requested_by": record.requested_by,
-                "metadata": json.loads(record.metadata_json or "{}"),
-                "created_at": record.created_at,
-                "applied_at": record.applied_at,
-            }
-        )
-
-    @staticmethod
-    def _record_to_run(record) -> AgentRun | None:
-        try:
-            data = json.loads(record.payload_json or "{}")
-            if isinstance(data, dict):
-                return agent_run_from_dict(data)
-        except RECOVERABLE_ERRORS as exc:
-            logger.warning("agent run payload invalid: %s", exc)
-        return None
+    _task_record_to_model = staticmethod(_task_record_to_model)
+    _command_record_to_model = staticmethod(_command_record_to_model)
+    _record_to_run = staticmethod(_record_to_run)
 
 
 __all__ = ["SQLAlchemyAgentRunRepository"]
