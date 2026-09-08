@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from app.application.agent_orchestrator import AgentOrchestrator
 from app.application.agent_orchestrator.approval_grant import (
     ApprovalGrantError,
+    ApprovalGrantStorageError,
     consume_approval_grant,
 )
 from app.application.agent_orchestrator.clarification import ClarificationAnswerError
@@ -304,6 +305,10 @@ def continue_agent_run(
         if run.status == "queued":
             _enqueue_run(run, requested_by=principal.user_id)
         return JSONResponse(_run_response(run, principal=principal), status_code=202)
+    except ApprovalGrantStorageError:
+        return JSONResponse(
+            {"success": False, "message": "审批存储暂时不可用，请稍后重试"}, status_code=503
+        )
     except ApprovalGrantError:
         return JSONResponse(
             {"success": False, "message": _PUBLIC_APPROVAL_ERROR},

@@ -17,6 +17,14 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Signed approval consumption now uses the durable repository instead of Redis
+  with process-local fallback. The HTTP continuation endpoint returns 503 on
+  storage failure before staging or enqueueing the run. An unmigrated SQLite
+  endpoint test verifies waiting state, zero enqueue/tool calls, and successful
+  retry with the same grant after storage recovery; 27 route/repository tests
+  passed (`approval-storage-retry`). Migration execution, signed-grant process
+  restart coverage and atomic consumption/run/queue coordination remain pending.
+
 - Added a durable approval-consumption table and atomic insert repository, with
   migration `2026_09_08_agent_approval` after the verified single migration head.
   Two spawned processes compete for the same JTI: exactly one commits, and a new

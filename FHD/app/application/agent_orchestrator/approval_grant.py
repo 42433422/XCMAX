@@ -7,14 +7,13 @@ import json
 import logging
 import os
 import secrets
-import threading
 import time
 from typing import Any
 
 import jwt
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
-from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -22,12 +21,23 @@ _AUDIENCE = "xcagi-agent-approval"
 _ISSUER = "xcagi-agent-runtime"
 _ALGORITHM = "HS256"
 _FALLBACK_SECRET = secrets.token_urlsafe(48)
-_CONSUMED_JTIS: set[str] = set()
-_CONSUMED_LOCK = threading.RLock()
 
 
 class ApprovalGrantError(ValueError):
     pass
+
+
+class ApprovalGrantStorageError(ApprovalGrantError):
+    pass
+
+
+def _consumption_repository():
+    from app.application.agent_orchestrator.approval_consumption_repository import (
+        SQLAlchemyApprovalConsumptionRepository,
+    )
+    from app.db import SessionLocal
+
+    return SQLAlchemyApprovalConsumptionRepository(SessionLocal)
 
 
 def _secret() -> str:
@@ -115,38 +125,25 @@ def consume_approval_grant(token: str, *, run: AgentRun, principal_id: str) -> d
         raise ApprovalGrantError("approval_grant 与当前待审批步骤不匹配")
 
     jti = str(claims.get("jti") or "")
-    with _CONSUMED_LOCK:
-        if jti in _CONSUMED_JTIS:
-            raise ApprovalGrantError("approval_grant 已使用")
-        try:
-            from app.utils.performance.redis_cache import get_redis_cache
-
-            cache = get_redis_cache()
-            if getattr(cache, "is_available", False):
-                ttl = max(1, int(claims.get("exp") or 0) - int(time.time()))
-                if not cache.set(
-                    f"agent_approval_used:{jti}",
-                    "1",
-                    ttl=ttl,
-                    nx=True,
-                    use_local=False,
-                ):
-                    raise ApprovalGrantError("approval_grant 已使用")
-        except ApprovalGrantError:
-            raise
-        except RECOVERABLE_ERRORS:  # noqa: BLE001 - Redis is optional; local replay guard remains
-            logger.debug("approval grant Redis replay guard unavailable", exc_info=True)
-        _CONSUMED_JTIS.add(jti)
+    try:
+        consumed = _consumption_repository().consume(
+            jti=jti, run_id=run.run_id, step_id=step.step_id
+        )
+    except (SQLAlchemyError, OSError) as exc:
+        logger.exception("approval consumption storage unavailable")
+        raise ApprovalGrantStorageError("审批存储暂时不可用，请稍后重试") from exc
+    if not consumed:
+        raise ApprovalGrantError("approval_grant 已使用")
     return claims
 
 
 def clear_consumed_approval_grants_for_tests() -> None:
-    with _CONSUMED_LOCK:
-        _CONSUMED_JTIS.clear()
+    """Compatibility no-op: durable consumption can only reset via an isolated test DB."""
 
 
 __all__ = [
     "ApprovalGrantError",
+    "ApprovalGrantStorageError",
     "clear_consumed_approval_grants_for_tests",
     "consume_approval_grant",
     "issue_approval_grant",

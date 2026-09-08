@@ -55,7 +55,22 @@ def test_agent_principal_keeps_actor_but_uses_verified_tutorial_tenant() -> None
 
 
 @pytest.fixture(autouse=True)
-def _isolated_agent_task_repositories():
+def _isolated_agent_task_repositories(tmp_path, monkeypatch):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.application.agent_orchestrator.approval_consumption_repository import (
+        SQLAlchemyApprovalConsumptionRepository,
+    )
+    from app.db.models.agent_approval import AgentApprovalConsumption
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'approval-consumption.db'}")
+    AgentApprovalConsumption.__table__.create(engine)
+    repository = SQLAlchemyApprovalConsumptionRepository(sessionmaker(bind=engine))
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.approval_grant._consumption_repository",
+        lambda: repository,
+    )
     set_agent_run_repository_for_tests(InMemoryAgentRunRepository())
     set_task_execution_repository_for_tests(InMemoryTaskExecutionRepository())
     set_agent_task_dispatcher_for_tests(None)
@@ -64,6 +79,7 @@ def _isolated_agent_task_repositories():
     set_agent_task_dispatcher_for_tests(None)
     set_task_execution_repository_for_tests(None)
     set_agent_run_repository_for_tests(None)
+    engine.dispose()
 
 
 def _drain_background_run(run_id: str) -> AgentRun:
@@ -383,6 +399,62 @@ def test_continue_rejects_missing_mismatched_and_replayed_grants() -> None:
         assert execution.state == "completed"
         assert execution.execution_count == 2
         execute.assert_called_once()
+
+
+def test_approval_storage_failure_preserves_waiting_run_and_allows_retry(tmp_path, monkeypatch):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.application.agent_orchestrator import approval_grant
+    from app.application.agent_orchestrator.approval_consumption_repository import (
+        SQLAlchemyApprovalConsumptionRepository,
+    )
+
+    owner = _client("owner")
+    patches = _planner_fallback_patches()
+    engine = create_engine(f"sqlite:///{tmp_path / 'unmigrated.db'}")
+    durable_repository = approval_grant._consumption_repository()
+    unavailable_repository = SQLAlchemyApprovalConsumptionRepository(sessionmaker(bind=engine))
+    try:
+        with (
+            patches[0],
+            patches[1],
+            patches[2],
+            patches[3],
+            patch(
+                "app.application.facades.tools_facade.execute_registered_workflow_tool",
+                return_value={"success": True},
+            ) as execute,
+        ):
+            response = owner.post(
+                "/api/agent/runs", json={"message": "请把客户 星光贸易 写入数据库"}
+            )
+            run_id = response.json()["data"]["run_id"]
+            _drain_background_run(run_id)
+            grant = owner.get(f"/api/agent/runs/{run_id}").json()["approval"]["grant"]
+            monkeypatch.setattr(
+                approval_grant, "_consumption_repository", lambda: unavailable_repository
+            )
+            with patch("app.fastapi_routes.domains.agent.routes._enqueue_run") as enqueue:
+                rejected = owner.post(
+                    f"/api/agent/runs/{run_id}/continue", json={"approval_grant": grant}
+                )
+                assert rejected.status_code == 503
+                assert rejected.json()["message"] == "审批存储暂时不可用，请稍后重试"
+                enqueue.assert_not_called()
+            assert get_agent_run_repository().get(run_id).status == "waiting_user"
+            execute.assert_not_called()
+            monkeypatch.setattr(
+                approval_grant, "_consumption_repository", lambda: durable_repository
+            )
+            accepted = owner.post(
+                f"/api/agent/runs/{run_id}/continue", json={"approval_grant": grant}
+            )
+            assert accepted.status_code == 202
+            assert _drain_background_run(run_id).status == "completed"
+            execute.assert_called_once()
+    finally:
+        engine.dispose()
 
 
 def test_create_agent_run_validates_request_body() -> None:
