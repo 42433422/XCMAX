@@ -34,3 +34,19 @@ describe('Mac control panel', () => {
     wrapper.unmount()
   })
 })
+
+it('keeps malformed customer evidence visible without claiming completion', async () => {
+  sessionStorage.clear()
+  api.readFleet.mockResolvedValue({ enabled: true, freshness: 'fresh', devices: [] })
+  const task = { id: 'fixture', state: 'execution_completed', request: { message: 'fixture' }, execution: {}, delivery: { status: 'not_verified' } }
+  api.readTasks.mockResolvedValue({ tasks: [task] })
+  api.readTask.mockResolvedValue({ task: { ...task, facts: { observed_at: 1, tickets: [{ id: 1, error: 'invalid_delivery_evidence' }] } }, events: [] })
+  const wrapper = mount(MacControlPanel)
+  await flushPromises()
+  const button = wrapper.findAll('button').find(button => button.text().includes('fixture'))
+  expect(button).toBeTruthy()
+  await button!.trigger('click'); await flushPromises()
+  expect(wrapper.text()).toContain('证据读取失败，状态待核实')
+  expect(wrapper.text()).not.toContain('业务系统已完成交付')
+  wrapper.unmount()
+})
