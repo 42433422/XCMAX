@@ -6,6 +6,12 @@
 目标是四个阶段全部完成。本目录记录当前实施证据，不代表四阶段验收通过。
 此前对话中的 20%–30% 覆盖率与工期只是未验证估计，不作为验收基线。
 
+## Product creation contract correction
+
+The risk action catalog, fallback registry and ToolSpec input schema now require name_or_model without requiring unit_name for products.create. This aligns the contract with the existing dispatcher: unit_name is legacy measurement-unit input, not a required customer association; the default measurement unit is 个. Write risk, permission and non-idempotent classification remain unchanged.
+
+28 protocol and regression tests pass, including actual dispatcher payload construction with a mocked product service for default/explicit/legacy units. This does not prove product database persistence or repair the old planner's extra customer node and missing-slot behavior. Business acceptance remains at the prior measured 9/22; no new business score is claimed for this contract increment.
+
 ## Raw SQL request routing boundary
 
 Recognized raw SQL execution requests now produce an explicit non-execution response before model planning, instead of being reinterpreted as structured business writes. Cases cover DELETE FROM, INSERT INTO, UPDATE SET, TRUNCATE TABLE and SELECT FROM; ordinary business deletion requests and SQL explanation examples retain their existing planning path. Existing execution-side raw_sql/sql/query_sql restrictions remain in place.

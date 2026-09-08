@@ -53,7 +53,7 @@ ACTION_ALIASES = {
 }
 
 REQUIRED_PARAMS_BY_TOOL_ACTION = {
-    ("products", "create"): ["name_or_model", "unit_name"],
+    ("products", "create"): ["name_or_model"],
     ("customers", "create"): ["unit_name"],
     ("customers", "update"): ["id"],
     ("customers", "delete"): ["id"],
