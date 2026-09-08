@@ -31,3 +31,26 @@ def test_lookup_requires_actual_completed_tool_output(records, status, expected)
         "includes": [{"customer_name": "星光贸易"}],
     }
     assert check_returned_records(receipt, [assertion])[0] is expected
+
+
+@pytest.mark.parametrize("value, accepted", [(0, False), (None, False), (True, False), (2, True)])
+def test_report_metrics_must_match_seeded_values(value, accepted):
+    execution = {
+        "steps": [
+            {
+                "tool_id": "reports",
+                "action": "dashboard",
+                "status": "completed",
+                "output": {"data": {"product_count": value}},
+            }
+        ]
+    }
+    assertions = [
+        {
+            "tool_id": "reports",
+            "action": "dashboard",
+            "path": ["data", "product_count"],
+            "equals": 2,
+        }
+    ]
+    assert check_returned_records(execution, assertions)[0] is accepted

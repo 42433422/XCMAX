@@ -17,6 +17,11 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Dashboard acceptance now seeds two products and requires product_count=2 from
+  the completed report tool output. All three trials returned exactly 2; ten
+  benchmark/assertion tests passed. Sales totals and ledger contents still need
+  equivalent seeded-value evidence. Evidence: `seeded-dashboard-trials`.
+
 - Sales-month summaries, ledger queries and operational dashboards now route to
   their own read tools; month boundaries include the final day. Snapshot report
   tools no longer ask for date/grouping parameters their handlers do not accept.

@@ -292,7 +292,9 @@
       "domain": "reports",
       "difficulty": "easy",
       "instruction": "看下运营看板",
+      "fixtures": [{"entity": "products", "values": {"name": "测试产品甲", "model_number": "DASH-A"}}, {"entity": "products", "values": {"name": "测试产品乙", "model_number": "DASH-B"}}],
       "expect": {
+        "returned_records": [{"tool_id": "reports", "action": "dashboard", "path": ["data", "product_count"], "equals": 2}],
         "actions": [{"tool_id": "reports", "action": "dashboard"}],
         "forbid_actions": [
           {"tool_id": "business_db", "action": "write"}

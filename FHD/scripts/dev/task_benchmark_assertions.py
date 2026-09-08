@@ -19,6 +19,14 @@ def check_returned_records(execution: dict[str, Any], assertions: list[dict]) ->
             value = step.get("output")
             for key in assertion.get("path", ["data"]):
                 value = value.get(key) if isinstance(value, dict) else None
+            if "equals" in assertion:
+                expected_value = assertion["equals"]
+                if value == expected_value and isinstance(value, bool) == isinstance(
+                    expected_value, bool
+                ):
+                    accepted = True
+                    break
+                continue
             if not isinstance(value, list):
                 continue
             if "count" in assertion and len(value) != assertion["count"]:
