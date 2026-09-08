@@ -14,3 +14,33 @@ Completion requires each item below to have current evidence; local green tests 
 | Cleanup | Only task-owned temporary objects removed; durable evidence retained; workspace and available disk checked | Pending |
 
 Existing work must be preserved. PR #1809 owns attendance upgrades and the missing live intent evaluator; PR #1804 owns AI control expansion; PR #1806 owns Mac/Para control. Their unfinished branches are not silently merged here. Mainline inclusion or a reviewed adaptation will be recorded when relevant to acceptance.
+
+## Current evidence and remaining defects
+
+- Checkpoint `97df226b5` fixes mutation scope, enabled benchmark execution,
+  acceptance thresholds, and source/data-bound receipts. Its targeted regression
+  suite passed 33 tests; generated workflow copies matched their sources.
+- The task runner now uses the product `AgentOrchestrator`, recording step and
+  tool-call outcomes even when routing assertions fail. It permits only explicit
+  scenario approvals with matching action and parameters. This benchmark does
+  not claim HTTP authorization or durable-recovery coverage.
+- Three isolated observation trials of all 22 existing scenarios produced 4/22
+  consecutive successes. Observation is explicitly not acceptance. The earlier
+  direct-tool baseline was 5/22; those numbers measure different execution paths
+  and must not be described as a product regression without further diagnosis.
+- The actual planner marks clarification nodes low-risk/idempotent, and the
+  orchestrator consequently attempts an unregistered `clarify.ask` tool. The
+  synthetic clarification regression currently exercises non-idempotent waiting;
+  a planner-generated clarification integration test and lifecycle fix remain
+  required. Do not claim clarification is fully repaired from the synthetic test.
+- SQL queue completion now performs ownership and lease checks in the UPDATE,
+  not an earlier SELECT; expired owners cannot renew. Three queue tests passed,
+  including a simultaneous claim by two spawned processes and expiration before
+  replacement. Business-write and AgentRun persistence fencing remain required;
+  queue-row ownership alone does not prove those invariants.
+
+Local raw trial evidence is retained at
+`/private/tmp/xcmax-technical-debt-evidence-20260908/orchestrated-trials/`.
+It is a dirty development-tree observation, not a release receipt. Archive the
+useful evidence before task cleanup and produce clean exact-main acceptance
+receipts before marking D5 complete.
