@@ -30,6 +30,30 @@ def test_prediction_is_called_without_gold_label():
     assert result["failures"]["core"][0]["got"] == {"intent": "products_query"}
 
 
+def test_report_retains_every_failed_case_and_expected_contract():
+    cases = [
+        {
+            "text": f"request {i}",
+            "expected_route": "label_print",
+            "expected_slots": {"quantity": i},
+            "expect_negated": False,
+        }
+        for i in range(41)
+    ]
+    result = runner._run_layer(
+        "llm",
+        cases,
+        model_runner.match_prediction,
+        observer=lambda text: {"intent": "unknown"},
+    )
+    assert result["counts"]["core"] == {"correct": 0, "total": 41}
+    failures = result["failures"]["core"]
+    assert len(failures) == 41
+    for case, failure in zip(cases, failures, strict=True):
+        for key, expected in case.items():
+            assert failure[key] == expected
+
+
 def test_exceptions_are_counted_once_without_exposing_error_text():
     def predict(text):
         raise RuntimeError("private provider response")

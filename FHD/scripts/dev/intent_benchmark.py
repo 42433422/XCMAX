@@ -121,8 +121,15 @@ def _run_layer(name: str, cases: list[dict], matcher, observer=None) -> dict:
                     **({"error": error} if error else {}),
                     **{
                         k: case.get(k)
-                        for k in ("expected_tool", "expected_primary", "check")
-                        if case.get(k)
+                        for k in (
+                            "expected_tool",
+                            "expected_primary",
+                            "expected_route",
+                            "expected_slots",
+                            "expect_negated",
+                            "check",
+                        )
+                        if k in case
                     },
                 }
             )
@@ -131,7 +138,7 @@ def _run_layer(name: str, cases: list[dict], matcher, observer=None) -> dict:
         "layer": name,
         "counts": {t: {"correct": c, "total": n} for t, (c, n) in stat.items()},
         "accuracy": acc,
-        "failures": {t: f[:30] for t, f in failures.items()},
+        "failures": dict(failures),
     }
 
 

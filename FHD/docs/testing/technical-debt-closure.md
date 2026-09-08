@@ -19,6 +19,17 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Isolated rule CLI rerun used a temporary SQLite database with the real
+  PurchaseUnit schema and an empty customer fixture. No ERROR/WARNING/Traceback
+  occurred; core remains 24/24 and semantic 19/73 (`isolated-intent-rules.json`,
+  matching log). Thus missing PostgreSQL does not explain this fixture's score;
+  this remains a rule-layer result, not actual model accuracy. Inspection also
+  found failure reports silently truncated each tier at 30 and omitted expected
+  route/slots. Reports now retain all failures and their full expected contract;
+  a 41-failure regression verifies count/content, with seven runner tests passing
+  (`complete-intent-failures`). The existing isolated report predates that report
+  fix and still contains the old truncated failure list.
+
 - Latest main includes #1809's real-model evaluator and attendance upgrade work;
   the previously missing evaluator is now present, not an outstanding branch
   dependency. All 88 selected intent/security/approval/fencing route regressions
