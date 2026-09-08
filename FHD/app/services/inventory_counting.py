@@ -159,7 +159,10 @@ class InventoryCountingMixin:
                 query = query.filter(_facade().InventoryTransaction.transaction_date <= end_date)
             total = query.count()
             items = (
-                query.order_by(_facade().InventoryTransaction.transaction_date.desc())
+                query.order_by(
+                    _facade().InventoryTransaction.transaction_date.desc(),
+                    _facade().InventoryTransaction.id.desc(),
+                )
                 .offset((page - 1) * per_page)
                 .limit(per_page)
                 .all()

@@ -178,4 +178,19 @@ def test_transfer_between_locations_in_same_warehouse(tmp_path, monkeypatch):
             assert {
                 (row.location_id, row.transaction_type, float(row.quantity)) for row in receipts
             } == {(1, "transfer_out", -3), (2, "transfer_in", 3)}
+    with tenant_scope(1):
+        pages = [
+            _registered_router_inventory(
+                "query_transactions",
+                {"product_id": 1, "page": page, "per_page": 1},
+                {},
+                "normal",
+                "",
+            )
+            for page in (1, 2, 3)
+        ]
+        assert all(page["success"] and page["total"] == 2 for page in pages)
+        assert len(pages[0]["data"]) == len(pages[1]["data"]) == 1
+        assert pages[2]["data"] == []
+        assert pages[0]["data"][0]["id"] > pages[1]["data"][0]["id"]
     engine.dispose()
