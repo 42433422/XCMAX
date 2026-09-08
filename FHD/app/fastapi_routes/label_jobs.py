@@ -8,9 +8,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.application.agent_orchestrator.task_mod_scope import (
+    TaskModScopeError,
+    capture_task_mod_scope,
+)
 from app.application.label_job_service import LabelJobError, LabelJobService
 from app.fastapi_routes.print_agent_helpers import run_print_agent
 from app.infrastructure.auth.dependencies import get_logged_in_user
+from app.infrastructure.request_context import reset_current_request, set_current_request
 
 router = APIRouter(prefix="/label-jobs", tags=["print-label-jobs"])
 compat_router = APIRouter(tags=["print-label-jobs"])
@@ -30,10 +35,17 @@ class ConfirmLabel(BaseModel):
     confirm_token: Annotated[str, Field(min_length=20, max_length=100)]
 
 
-def _owner(user: Any = Depends(get_logged_in_user)) -> tuple[int, int]:
+def _owner(request: Request, user: Any = Depends(get_logged_in_user)) -> tuple[int, int]:
     tid, uid = getattr(user, "tenant_id", None), getattr(user, "id", None)
-    if not isinstance(tid, int) or not isinstance(uid, int) or tid < 1 or uid < 1:
+    if type(tid) is not int or type(uid) is not int or tid < 1 or uid < 1:
         raise HTTPException(403, "登录账号缺少租户归属，无法生成或访问标签")
+    token = set_current_request(request)
+    try:
+        capture_task_mod_scope(str(uid), str(tid))
+    except TaskModScopeError as exc:
+        raise HTTPException(403, str(exc)) from exc
+    finally:
+        reset_current_request(token)
     return tid, uid
 
 

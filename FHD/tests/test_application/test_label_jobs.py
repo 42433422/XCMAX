@@ -155,7 +155,7 @@ def test_compat_pdf_labels_generates_real_preview_then_uses_confirmed_job_flow(
 def test_label_artifact_and_confirmation_cannot_cross_mod_scope(env, source, target):
     token = set_request_active_mod_id(source)
     try:
-        job = create(env)
+        job = env.service.generate(OWNER, PAYLOAD)
         confirmation = env.service.confirmation(OWNER, job["id"], "LabelPrinter")
         path = env.service.file(OWNER, job["id"])
         original = path.read_bytes()
@@ -164,14 +164,11 @@ def test_label_artifact_and_confirmation_cannot_cross_mod_scope(env, source, tar
         switched = set_request_active_mod_id(target)
         try:
             base = f"/api/print/label-jobs/{job['id']}"
-            assert env.client.get(base).status_code == 404
-            assert env.client.get(base + "/file").status_code == 404
-            assert (
-                env.client.post(
-                    base + "/submit", json={"confirm_token": confirmation["confirm_token"]}
-                ).status_code
-                == 404
-            )
+            assert env.client.get(base).status_code in {403, 404}
+            assert env.client.get(base + "/file").status_code in {403, 404}
+            assert env.client.post(
+                base + "/submit", json={"confirm_token": confirmation["confirm_token"]}
+            ).status_code in {403, 404}
             with pytest.raises(jobs.LabelJobError) as error:
                 env.service.confirmation(OWNER, job["id"], "LabelPrinter")
             assert error.value.status == 404
