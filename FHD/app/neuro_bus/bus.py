@@ -87,6 +87,7 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
         self._dropped_count = 0
         # Event to signal new items in the queue; created when start() runs on the event loop.
         self._event_available: asyncio.Event | None = None
+        self._local_event_identity: dict[int, tuple[str, int | None]] = {}
 
         # 事件持久化（可选）
         self._event_buffer: list[dict[str, Any]] = []
@@ -253,6 +254,7 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
                         await asyncio.sleep(0.001)
                     continue
 
+                identity = self._local_event_identity.pop(id(event), ("", None))
                 # 检查超时
                 if event.is_expired():
                     logger.warning("Event expired: %s", event)
@@ -260,7 +262,13 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
                     continue
 
                 # 分发事件
-                await self._dispatch_event(event)
+                from app.application.agent_orchestrator.execution_identity import (
+                    execution_actor_scope,
+                )
+                from app.infrastructure.tenant_scope import tenant_scope
+
+                with execution_actor_scope(identity[0]), tenant_scope(identity[1]):
+                    await self._dispatch_event(event)
 
             except asyncio.CancelledError:
                 break
@@ -335,8 +343,10 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
             if subscription.is_async:
                 await subscription.handler(event)
             else:
+                from contextvars import copy_context
+
                 await asyncio.get_running_loop().run_in_executor(
-                    self._executor, subscription.handler, event
+                    self._executor, copy_context().run, subscription.handler, event
                 )
 
         retry_count = 0
@@ -428,7 +438,17 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
             span_id = sp.span_id
             self._trace_by_event_id[event.metadata.event_id] = span_id
 
+        from copy import copy
+
+        from app.application.agent_orchestrator.execution_identity import current_execution_actor
+        from app.infrastructure.tenant_scope import current_tenant_id
+
+        # Each queue entry owns its identity even when a caller reuses an event object.
+        event = copy(event)
+        self._local_event_identity[id(event)] = (current_execution_actor(), current_tenant_id())
         success = self._event_queue.put(event)
+        if not success:
+            self._local_event_identity.pop(id(event), None)
         if success:
             self._published_count += 1
             record_delivery_metric(self._enable_metrics, "published")
