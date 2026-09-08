@@ -166,6 +166,17 @@ def _registered_router_inventory(
                 "success": False,
                 "message": "流水查询日期无效，请使用有效日期且开始时间不晚于结束时间",
             }
+        try:
+            page_raw = params.get("page", 1)
+            size_raw = params.get("per_page", 20)
+            if isinstance(page_raw, bool) or isinstance(size_raw, bool):
+                raise ValueError("boolean pagination")
+            page = int(str(page_raw))
+            per_page = int(str(size_raw))
+            if page < 1 or not 1 <= per_page <= 1000:
+                raise ValueError("pagination range")
+        except (TypeError, ValueError, OverflowError):
+            return {"success": False, "message": "页码须为正整数，每页数量须为 1 到 1000 的整数"}
         inv_svc = InventoryService()
         return inv_svc.query_transactions(
             product_id=params.get("product_id"),
@@ -173,8 +184,8 @@ def _registered_router_inventory(
             transaction_type=params.get("transaction_type"),
             start_date=start_date,
             end_date=end_date,
-            page=int(params.get("page") or 1),
-            per_page=int(params.get("per_page") or 20),
+            page=page,
+            per_page=per_page,
         )
     return {"success": False, "message": f"未注册的 inventory 动作: {action}"}
 

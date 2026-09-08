@@ -176,3 +176,16 @@ def test_ai_transaction_dates_rejected_before_database(dates):
         result = _registered_router_inventory("query_transactions", dates, {}, "normal", "")
     assert not result["success"]
     database.assert_not_called()
+
+
+@pytest.mark.parametrize("pagination", [
+    {"page": 0}, {"page": True}, {"page": "1.5"}, {"page": "bad"},
+    {"per_page": -1}, {"per_page": 1001}, {"per_page": False},
+])
+def test_ai_transaction_pagination_rejected_before_database(pagination):
+    from app.services.tools_workflow_registered_part01_part02 import _registered_router_inventory
+
+    with patch("app.services.inventory_service.get_db") as database:
+        result = _registered_router_inventory("query_transactions", pagination, {}, "normal", "")
+    assert not result["success"]
+    database.assert_not_called()
