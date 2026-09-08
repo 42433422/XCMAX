@@ -19,6 +19,17 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Spawned inbound workers now pause after flushing an actual 50-unit ledger and
+  one inventory transaction, before commit. A separate connection with a clock
+  beyond lease expiry cannot take over while that transaction is held; after
+  commit it can recover the claim. Fresh business reads show zero before commit
+  and one 50-unit movement afterward, for both shared and separate Mod databases.
+  Eleven checks passed (`inventory-commit-takeover-final`). Child workers use the
+  same explicit tenant scope as seeded business data; the initial missing-scope
+  run failed before business writing and is retained as diagnostic evidence.
+  Recovery execution/idempotent business receipts are not covered by this claim
+  test, and must still prevent duplicate inbound after a lost completion receipt.
+
 - SQL dispatcher execution now carries a scoped ownership context. Inventory-in
   acquires a conditional ownership write lock before business queries/writes:
   same-engine uses the business transaction, separate Mod engines hold the queue
