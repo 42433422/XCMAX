@@ -6,6 +6,12 @@
 目标是四个阶段全部完成。本目录记录当前实施证据，不代表四阶段验收通过。
 此前对话中的 20%–30% 覆盖率与工期只是未验证估计，不作为验收基线。
 
+## Business evidence strength breakdown
+
+The last recorded 22-task trial has 10 passing rows, but only four passing rows declare database-state assertions. These are the two customer-create cases, explicit product creation, and the prohibition case asserting zero customers. The other six passing rows do not by themselves establish database-result correctness. This breakdown does not rerun or upgrade the historical trial to current-source acceptance.
+
+See business-evidence-matrix.json for each task's routing, execution, database-assertion presence and failure. Missing business-result checks and the 12 failing tasks remain acceptance work; neither 10/22 nor application regression totals measure all software-function coverage.
+
 ## Business-language clarification options
 
 Finance transaction-type clarification now displays and accepts seven explicit Chinese options using one scoped mapping shared by prompt and parser. Canonical protocol values remain accepted, and the mapped value still passes the existing enum/schema validation. Unknown options leave parameters untouched; unrelated string fields are not translated.
