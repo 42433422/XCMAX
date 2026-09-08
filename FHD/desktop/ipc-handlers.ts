@@ -26,6 +26,7 @@ import { desktopOfflineDbPath, queryOffline } from './data-bridge'
 import { deleteSecret, getSecret, listSecrets, setSecret } from './secure-store'
 import { reportRendererError } from './desktop-resilience'
 import { getUpdateObservation } from './update-observation'
+import { readDesktopBuildIdentity } from './build-identity'
 
 function getLanIPv4(): string {
   const nets = networkInterfaces()
@@ -76,6 +77,8 @@ export function registerDesktopIpcHandlers(): void {
   ipcMain.handle('xcagi:get-app-identity', () => ({
     name: app.getName(),
     version: readPackagedAppVersion(),
+    electronAppVersion: app.getVersion(),
+    buildIdentity: readDesktopBuildIdentity(process.resourcesPath, app.isPackaged, process.env.XCAGI_BUILD_SHA),
     isPackaged: app.isPackaged,
     install: getDesktopInstallIdentity(),
   }))
