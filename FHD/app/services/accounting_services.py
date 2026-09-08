@@ -39,10 +39,10 @@ def query_financial_ledger(
     page: int = 1,
     per_page: int = 20,
 ) -> dict[str, Any]:
-    """查询总账：聚合各科目借贷发生额与余额。
+    """查询总账凭证或指定科目的逐笔分录。
 
     - 有 account 过滤时返回该科目的逐笔分录；
-    - 无 account 过滤时按科目 code 汇总借贷发生额。
+    - 无 account 过滤时返回分页凭证。
     """
     with get_db() as db:
         q = db.query(JournalEntry)
@@ -53,8 +53,6 @@ def query_financial_ledger(
         if end_date:
             q = q.filter(JournalEntry.journal_date <= end_date)
         q = q.order_by(JournalEntry.journal_date.desc(), JournalEntry.id.desc())
-        total = q.count()
-        entries = q.offset((page - 1) * per_page).limit(per_page).all()
 
         if account_id is not None or account_code:
             account = (
@@ -68,37 +66,45 @@ def query_financial_ledger(
             )
             if account is None:
                 return {"success": False, "message": "科目不存在", "data": []}
+            line_query = q.join(JournalEntryLine, JournalEntryLine.entry_id == JournalEntry.id)
+            if account_id is not None:
+                line_query = line_query.filter(JournalEntryLine.account_id == account_id)
+            if account_code:
+                line_query = line_query.filter(JournalEntryLine.account_code == account_code)
+            line_query = line_query.with_entities(JournalEntry, JournalEntryLine).order_by(
+                JournalEntryLine.id.desc()
+            )
+            total = line_query.count()
+            rows = line_query.offset((page - 1) * per_page).limit(per_page).all()
             lines = []
-            for entry in entries:
-                for line in entry.lines:
-                    if account_id is not None and line.account_id != account_id:
-                        continue
-                    if account_code and line.account_code != account_code:
-                        continue
-                    lines.append(
-                        {
-                            "entry_id": entry.id,
-                            "entry_no": entry.entry_no,
-                            "journal_date": (
-                                entry.journal_date.isoformat() if entry.journal_date else None
-                            ),
-                            "description": entry.description,
-                            "account_code": line.account_code,
-                            "account_name": line.account_name,
-                            "debit": _to_float(line.debit),
-                            "credit": _to_float(line.credit),
-                            "partner_name": line.partner_name,
-                            "reference": line.reference,
-                        }
-                    )
+            for entry, line in rows:
+                lines.append(
+                    {
+                        "entry_id": entry.id,
+                        "entry_no": entry.entry_no,
+                        "journal_date": (
+                            entry.journal_date.isoformat() if entry.journal_date else None
+                        ),
+                        "description": entry.description,
+                        "account_code": line.account_code,
+                        "account_name": line.account_name,
+                        "debit": _to_float(line.debit),
+                        "credit": _to_float(line.credit),
+                        "partner_name": line.partner_name,
+                        "reference": line.reference,
+                    }
+                )
             return {
                 "success": True,
                 "data": lines,
-                "total": len(lines),
+                "total": total,
                 "page": page,
                 "per_page": per_page,
                 "account": account.to_dict(),
             }
+
+        total = q.count()
+        entries = q.offset((page - 1) * per_page).limit(per_page).all()
 
         return {
             "success": True,

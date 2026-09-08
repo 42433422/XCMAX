@@ -1,0 +1,9 @@
+{
+  "base_commit": "c02d5ed2a996f1d53eaff7aa56de58cc5b2e6372",
+  "result": "8 passed",
+  "scope": "SQLite account-filter-before-pagination, multiple lines per entry, stable totals, tenant account lookup; not installed runtime or full business acceptance",
+  "files": {
+    "app/services/accounting_services.py": "6a9584436ca6d5e9c853f6a96b58b6921b70d871906ebfd5d88486e2ea22e975",
+    "tests/test_application/test_monthly_ledger_database.py": "95fdfc4db14112850697893cd001f10bf0b95663cedd14bdb6eaed9dd32c4299"
+  }
+}
