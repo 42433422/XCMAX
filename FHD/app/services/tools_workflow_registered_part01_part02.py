@@ -263,7 +263,9 @@ def _registered_router_reports(
         )
     if action == "inventory_summary":
         return svc.get_inventory_report(
-            warehouse_id=params.get("warehouse_id"), category=params.get("category")
+            warehouse_id=params.get("warehouse_id"),
+            category=params.get("category"),
+            product_keyword=params.get("product_keyword"),
         )
     if action == "purchase_summary":
         return svc.get_purchase_report(

@@ -211,6 +211,13 @@ class _LLMWorkflowPlannerPart02Mixin:
                     )
                 )
         if not nodes and "reports" in tool_registry:
+            from .inventory_query_planning import inventory_query_node
+
+            inventory_node = inventory_query_node(message)
+            if inventory_node is not None:
+                intent = "inventory_query"
+                nodes.append(inventory_node)
+        if not nodes and "reports" in tool_registry:
             from .dashboard_planning import dashboard_query_node
 
             dashboard_node = dashboard_query_node(message)
