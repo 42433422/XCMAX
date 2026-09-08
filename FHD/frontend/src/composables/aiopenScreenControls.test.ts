@@ -5,12 +5,25 @@ import { initAiOpenCursor, setAiOpenCursorEnabled, aiopenCursorLogs } from './us
 
 vi.mock('@/utils/apiBase', () => ({ getApiBase: () => 'http://127.0.0.1:5000' }))
 
+function mountInput(properties: Partial<HTMLInputElement>) {
+  const input = Object.assign(document.createElement('input'), properties)
+  document.body.appendChild(input)
+  return input
+}
+
+function mountSelect(multiple = false) {
+  const select = document.createElement('select')
+  select.multiple = multiple
+  select.append(new Option('A', 'a', true, true), new Option('B', 'b'))
+  document.body.appendChild(select)
+  return select
+}
+
 describe('semantic screen controls', () => {
-  afterEach(() => { document.body.innerHTML = '' })
+  afterEach(() => { document.body.replaceChildren() })
 
   it('updates a native select and dispatches change once', async () => {
-    document.body.innerHTML = '<select><option value="a">A</option><option value="b">B</option></select>'
-    const select = document.querySelector('select')!
+    const select = mountSelect()
     const changed = vi.fn()
     select.addEventListener('change', changed)
     expect(await selectScreenOption(select, { values: ['b'] })).toEqual({ success: true, selected: ['b'] })
@@ -23,16 +36,15 @@ describe('semantic screen controls', () => {
   })
 
   it('rejects missing or disabled options without partially changing the selection', async () => {
-    document.body.innerHTML = '<select multiple><option value="a" selected>A</option><option value="b" disabled>B</option></select>'
-    const select = document.querySelector('select')!
+    const select = mountSelect(true)
+    select.options[1]!.disabled = true
     expect((await selectScreenOption(select, { values: ['a', 'b'] })).success).toBe(false)
     expect((await selectScreenOption(select, { values: ['missing'] })).success).toBe(false)
     expect(select.value).toBe('a')
   })
 
   it('sets checkbox state idempotently using the native click behavior', async () => {
-    document.body.innerHTML = '<input type="checkbox">'
-    const checkbox = document.querySelector('input')!
+    const checkbox = mountInput({ type: 'checkbox' })
     const changed = vi.fn()
     checkbox.addEventListener('change', changed)
     expect(await checkScreenControl(checkbox, { checked: true })).toEqual({ success: true, checked: true })
@@ -43,14 +55,14 @@ describe('semantic screen controls', () => {
   })
 
   it('detects a controlled checkbox rejecting the requested change', async () => {
-    document.body.innerHTML = '<input type="checkbox">'
-    const checkbox = document.querySelector('input')!
+    const checkbox = mountInput({ type: 'checkbox' })
     checkbox.addEventListener('click', (event) => event.preventDefault())
     expect((await checkScreenControl(checkbox, { checked: true })).success).toBe(false)
   })
 
   it('rejects disabled and read-only controls', async () => {
-    document.body.innerHTML = '<input type="checkbox" disabled><input readonly>'
+    mountInput({ type: 'checkbox', disabled: true })
+    mountInput({ readOnly: true })
     await expect(checkScreenControl(document.querySelector('input')!, { checked: true })).rejects.toThrow('禁用')
     await expect(pressScreenKey(document.querySelector('input[readonly]')!, { key: 'Enter' })).rejects.toThrow('只读')
   })
@@ -98,7 +110,7 @@ describe('screen transport contracts', () => {
 
   afterEach(() => {
     setAiOpenCursorEnabled(false)
-    document.body.innerHTML = ''
+    document.body.replaceChildren()
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
     vi.useRealTimers()
@@ -127,7 +139,7 @@ describe('screen transport contracts', () => {
   })
 
   it('does not return or log password values on read or type', async () => {
-    document.body.innerHTML = '<input id="password" type="password" value="old-secret">'
+    mountInput({ id: 'password', type: 'password', value: 'old-secret' })
     expect(JSON.stringify(await command('snapshot'))).not.toContain('old-secret')
     const typed = await command('type', { selector: '#password', text: 'new-secret' })
     expect(typed.success).toBe(true)
@@ -137,14 +149,18 @@ describe('screen transport contracts', () => {
   })
 
   it('rejects stale page commands before touching a control', async () => {
-    document.body.innerHTML = '<input id="field" value="unchanged">'
+    mountInput({ id: 'field', value: 'unchanged' })
     const result = await command('type', { selector: '#field', text: 'changed', expected_route: '/other' })
     expect(result.code).toBe('STALE_SCREEN')
     expect(document.querySelector<HTMLInputElement>('input')!.value).toBe('unchanged')
   })
 
   it('rejects ambiguous selectors without clicking either target', async () => {
-    document.body.innerHTML = '<button>A</button><button>B</button>'
+    for (const text of ['A', 'B']) {
+      const button = document.createElement('button')
+      button.textContent = text
+      document.body.appendChild(button)
+    }
     const clicked = vi.fn()
     document.querySelectorAll('button').forEach((button) => button.addEventListener('click', clicked))
     expect((await command('click', { selector: 'button' })).success).toBe(false)
