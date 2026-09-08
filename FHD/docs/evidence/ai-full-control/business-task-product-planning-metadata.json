@@ -1,0 +1,11 @@
+{
+  "source_sha": "9944a8d3b820f44e8c5237714c85d9115d8b5a0e",
+  "modified_sources": {
+    "app/application/workflow/product_creation.py": "be1f7885aed332a1439ace5f7c55b11ed4b362211610955f795bd92e5f2dc007",
+    "app/application/workflow/planner_llmworkflowplanner_mixin02.py": "63fbd7e66e4ccf2ef7da039ad422b289b0e1b3d38117f6a3c427d84514a72dd3"
+  },
+  "dataset_sha256": "c70d172191e4f583935302d5c5d2968524f557c3d9aadc295c15eeb72283602b",
+  "passed": 10,
+  "total": 22,
+  "scope": "Single isolated SQLite fallback trial; product model and price final DB assertions. No real-model, production approval-chain or installed-client acceptance."
+}

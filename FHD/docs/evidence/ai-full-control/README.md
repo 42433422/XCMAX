@@ -6,6 +6,12 @@
 目标是四个阶段全部完成。本目录记录当前实施证据，不代表四阶段验收通过。
 此前对话中的 20%–30% 覆盖率与工期只是未验证估计，不作为验收基线。
 
+## Labelled product creation planning
+
+Standalone 新增/添加产品 with an explicit model and optional price/measurement unit now produces only products.create, retaining medium risk and non-idempotence. Unconsumed fields or compound instructions are left for the existing planner instead of silently dropping their text. Missing identity and clarification/resume behavior remain unfinished.
+
+80 related planner tests passed, followed by 8 focused checks including additional-field preservation boundaries. Application mypy and all 10 blocking dev guards passed during this increment; Ruff passes. The isolated SQLite business trial passes 10/22, verifying product model A100 and price 25.5 in database state. This is not model, production approval-chain or installed-client acceptance. See business-task-product-planning.jsonl and measured source hashes.
+
 ## Product creation contract correction
 
 The risk action catalog, fallback registry and ToolSpec input schema now require name_or_model without requiring unit_name for products.create. This aligns the contract with the existing dispatcher: unit_name is legacy measurement-unit input, not a required customer association; the default measurement unit is 个. Write risk, permission and non-idempotent classification remain unchanged.

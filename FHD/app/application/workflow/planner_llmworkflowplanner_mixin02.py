@@ -210,6 +210,14 @@ class _LLMWorkflowPlannerPart02Mixin:
                         idempotent=True,
                     )
                 )
+        if not nodes and "products" in tool_registry:
+            from .product_creation import direct_product_create_node
+
+            product_node = direct_product_create_node(message)
+            if product_node is not None:
+                intent = "create_product"
+                todo = ["核对产品信息", "确认后创建产品", "返回创建结果"]
+                nodes.append(product_node)
         if not nodes and (
             ("添加" in message or "新增" in message or "create" in lower) and "产品" in message
         ):
