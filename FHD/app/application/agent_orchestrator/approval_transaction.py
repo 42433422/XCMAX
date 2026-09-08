@@ -1,5 +1,8 @@
 """Commit approval consumption, run state and dispatch as one durable operation."""
 
+import json
+from typing import Any
+
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.application.agent_orchestrator.approval_grant import (
@@ -8,21 +11,29 @@ from app.application.agent_orchestrator.approval_grant import (
     validate_approval_grant,
     waiting_step,
 )
-from app.application.agent_orchestrator.run_models import agent_run_from_dict, utc_now_iso
+from app.application.agent_orchestrator.run_models import AgentRun, agent_run_from_dict, utc_now_iso
+from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
 from app.application.agent_orchestrator.task_background import apply_approved_step
+from app.application.agent_orchestrator.task_execution_sql_repository import (
+    SQLAlchemyTaskExecutionRepository,
+)
 from app.db.models.agent import AgentRunRecord
 from app.db.models.agent_approval import AgentApprovalConsumption
 
 
-def approve_and_enqueue(runs, queue, *, run_id, token, principal_id, runtime_context):
-    import json
-
+def approve_and_enqueue(
+    runs: SQLAlchemyAgentRunRepository,
+    queue: SQLAlchemyTaskExecutionRepository,
+    *,
+    run_id: str,
+    token: str,
+    principal_id: str,
+    runtime_context: dict[str, Any],
+) -> AgentRun:
     jti = ""
     try:
-        runs._ensure_schema()
-        queue._ensure_schema()
-        with runs._session_scope() as db:
-            with queue._session_scope(read_only=True) as queue_db:
+        with runs.transaction() as db:
+            with queue.transaction(read_only=True) as queue_db:
                 if db.get_bind() is not queue_db.get_bind():
                     raise ApprovalGrantStorageError("审批和任务队列必须使用同一数据库")
             record = (
@@ -64,7 +75,7 @@ def approve_and_enqueue(runs, queue, *, run_id, token, principal_id, runtime_con
         # Only an existing consumption proves replay; unrelated constraints are
         # storage failures. The enclosing scope has already rolled everything back.
         try:
-            with runs._session_scope(read_only=True) as db:
+            with runs.transaction(read_only=True) as db:
                 if jti and db.get(AgentApprovalConsumption, jti) is not None:
                     raise ApprovalGrantError("审批已使用") from exc
         except SQLAlchemyError as storage_exc:

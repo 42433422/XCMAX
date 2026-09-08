@@ -276,6 +276,17 @@ class SQLAlchemyTaskExecutionRepository:
             db.query(AgentTaskExecutionRecord).delete()
 
     @contextmanager
+    def transaction(self, *, read_only: bool = False) -> Iterator[Session]:
+        """Own one initialized storage transaction for cross-repository operations.
+
+        The caller may use session-bound writes but must not commit or close the
+        session. Successful writes commit once on exit; failures roll back.
+        """
+        self._ensure_schema()
+        with self._session_scope(read_only=read_only) as db:
+            yield db
+
+    @contextmanager
     def _session_scope(self, *, read_only: bool = False) -> Iterator[Session]:
         session_factory = self._session_factory
         if session_factory is None:

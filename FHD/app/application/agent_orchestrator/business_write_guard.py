@@ -42,7 +42,7 @@ def worker_write_guard(business_db):
         yield
         return
     repository, execution, owner_id = claim
-    with repository._session_scope() as ownership_db:
+    with repository.transaction() as ownership_db:
         if ownership_db.get_bind() is business_db.get_bind():
             # Same database: acquire the lock on the business session itself.
             # A second SQLite writer connection would deadlock against it.

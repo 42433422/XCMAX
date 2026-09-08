@@ -19,6 +19,14 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- SQL run/queue repositories now expose an initialized transaction context with
+  explicit caller ownership rules. Approval and business-write guards use it
+  instead of private schema/session methods; approval's repository inputs and
+  result are typed. All 62 transaction/crash/guard/route checks passed
+  (`public-transaction-boundaries`), followed by 44 checks after adding concrete
+  type imports (`typed-approval-transaction`). This removes the recently added
+  private transaction dependency, not the wider legacy dynamic-import D3 debt.
+
 - Three task creation surfaces now share authenticated_runtime_context: run,
   unified task and observed-tool creation drop caller tenant IDs and use only the
   principal's tenant. Reinspection found earlier text incorrectly claimed the
