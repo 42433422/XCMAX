@@ -13,10 +13,17 @@ class ParaUnavailable(RuntimeError):
     pass
 
 
+def stale_window() -> int:
+    try:
+        return max(15, min(3600, int(os.environ.get("MODSTORE_MAC_CONTROL_STALE_SECONDS", "90"))))
+    except ValueError:
+        return 90
+
+
 class ParaClient:
     def __init__(self):
         self.base = os.environ.get("MODSTORE_PARA_API_BASE", "").rstrip("/")
-        token = os.environ.get("MODSTORE_PARA_AUTH_TOKEN", "")
+        token = os.environ.get("MODSTORE_PARA_CONTROL_TOKEN", "")
         if not self.base or not token:
             raise ParaUnavailable("service_identity_not_configured")
         self.client = httpx.Client(
@@ -31,6 +38,7 @@ class ParaClient:
 
     def request(self, method: str, path: str, body: dict | None = None) -> dict:
         try:
+            path = "/api/control/" + path.removeprefix("/api/")
             response = self.client.request(method, path, json=body)
             response.raise_for_status()
             result = response.json()
@@ -76,7 +84,7 @@ def age_seconds(value: str, now: float) -> float:
 
 def device_view(raw: dict, now: float) -> dict:
     caps = raw.get("capabilities") or {}
-    stale = age_seconds(raw.get("lastSeen", ""), now) > 90
+    stale = age_seconds(raw.get("lastSeen", ""), now) > stale_window()
     tools = [
         {k: t.get(k) for k in ("toolName", "status", "currentTask")}
         for t in raw.get("tools", [])
@@ -85,7 +93,11 @@ def device_view(raw: dict, now: float) -> dict:
     return {
         "id": raw.get("id"),
         "name": raw.get("name"),
-        "status": "stale" if stale else raw.get("status", "unknown"),
+        "status": (
+            "offline"
+            if raw.get("status") == "offline"
+            else "stale" if stale else raw.get("status", "unknown")
+        ),
         "last_seen": raw.get("lastSeen"),
         "tools": tools,
         "platform": caps.get("platform", "unknown"),
@@ -100,15 +112,22 @@ def choose_device(devices: list[dict], request: dict, now: float) -> tuple[dict 
     preferred = os.environ.get("MODSTORE_PARA_DEVICE_ID", "")
     target = request.get("target", "mac")
     tool = request.get("tool", "codex")
+    reason = "waiting_for_device_or_verified_tool"
     for raw in devices:
         caps = raw.get("capabilities") or {}
         if target == "mac" and raw.get("id") != preferred:
             continue
         if target == "windows" and caps.get("platform") != "windows":
             continue
+        if target == "mac" and caps.get("control_reports") is not True:
+            reason = "waiting_for_control_report_protocol"
+            continue
+        if request.get("source_sha") and caps.get("supports_exact_commit") is not True:
+            reason = "waiting_for_exact_commit_executor"
+            continue
         if caps.get("server_bridge") or raw.get("status") != "online":
             continue
-        if age_seconds(raw.get("lastSeen", ""), now) > 90:
+        if age_seconds(raw.get("lastSeen", ""), now) > stale_window():
             continue
         tools = raw.get("tools", [])
         if any(t.get("status") == "running" for t in tools):
@@ -119,7 +138,7 @@ def choose_device(devices: list[dict], request: dict, now: float) -> tuple[dict 
         if not (probe.get("ok") is True and age_seconds(probe.get("checked_at", ""), now) <= 90):
             continue
         return raw, ""
-    return None, "waiting_for_device_or_verified_tool"
+    return None, reason
 
 
 def execution_view(raw: dict) -> dict:
@@ -128,6 +147,7 @@ def execution_view(raw: dict) -> dict:
         "status": raw.get("status", "unknown"),
         "source": "para:/api/tasks",
         "merge_commit_sha": raw.get("merge_commit_sha"),
+        "reports": raw.get("reports", []),
         "subtasks": [
             {
                 k: s.get(k)

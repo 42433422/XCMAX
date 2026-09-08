@@ -46,6 +46,8 @@ def device(**overrides):
         "lastSeen": datetime.now(UTC).isoformat(),
         "capabilities": {
             "platform": "macos",
+            "control_reports": True,
+            "supports_exact_commit": True,
             "tool_preflight": {"codex": {"ok": True, "checked_at": datetime.now(UTC).isoformat()}},
         },
         "tools": [{"toolName": "codex", "status": "idle"}],
@@ -259,7 +261,7 @@ def test_two_tasks_do_not_share_device_workspace(factory, para):
 def test_no_guest_identity_is_created(monkeypatch):
     from modstore_server.mac_control_transport import ParaClient
 
-    monkeypatch.delenv("MODSTORE_PARA_AUTH_TOKEN", raising=False)
+    monkeypatch.delenv("MODSTORE_PARA_CONTROL_TOKEN", raising=False)
     with pytest.raises(ParaUnavailable, match="service_identity_not_configured"):
         ParaClient()
 
@@ -299,3 +301,31 @@ def test_windows_probe_uses_fixed_command_and_reuses_receipt(factory):
         prepare_windows_probe(db, client, devices, {"target": "windows"})
     assert client.submitted == 1
     assert devices[0]["capabilities"]["tool_preflight"]["codex"]["ok"] is True
+
+
+def test_handoff_requires_source_evidence_and_only_creates_one_child(factory):
+    import json
+
+    from modstore_server.mac_control_handoff import schedule_windows_verification
+
+    with factory() as db:
+        parent = accept(
+            db, actor="a", key="parent-key", request={**request(), "verify_on_windows": True}
+        )
+        assert schedule_windows_verification(db, parent, {"reports": []})
+        assert db.query(MacControlTask).count() == 1
+        receipt = {
+            "source": "executor_git_readback",
+            "pushed": True,
+            "commit_sha": "a" * 40,
+            "archive_sha256": "b" * 64,
+        }
+        raw = {"reports": [{"applied": 1, "status": "completed", "report": json.dumps(receipt)}]}
+        assert schedule_windows_verification(db, parent, raw) == ""
+        assert schedule_windows_verification(db, parent, raw) == ""
+        child = db.query(MacControlTask).filter(MacControlTask.id != parent.id).one()
+        spec = json.loads(child.request_json)
+        assert spec["parent_task_id"] == parent.id
+        assert spec["source_sha"] == receipt["commit_sha"]
+        assert spec["source_archive_sha256"] == receipt["archive_sha256"]
+        assert spec["target"] == "windows"

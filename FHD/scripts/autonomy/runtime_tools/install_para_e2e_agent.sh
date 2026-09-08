@@ -18,7 +18,7 @@ node --check "$AGENT_SOURCE"
 node --check "$HELPER_SOURCE"
 node --check "$QUEUE_POLICY_SOURCE"
 node --check "$RUNTIME_POLICY_SOURCE"
-for control_helper in tool_preflight.mjs control_receipt_outbox.mjs; do
+for control_helper in tool_preflight.mjs control_receipt_outbox.mjs control_git_handoff.mjs; do
   node --check "$SCRIPT_DIR/$control_helper"
 done
 node --test "$SCRIPT_DIR/e2e_agent_runtime_policy.test.mjs"
@@ -56,7 +56,7 @@ if [[ -f "$RUNTIME_POLICY_TARGET" ]]; then
 fi
 
 rollback() {
-  for control_helper in tool_preflight.mjs control_receipt_outbox.mjs; do
+  for control_helper in tool_preflight.mjs control_receipt_outbox.mjs control_git_handoff.mjs; do
     if [[ -f "$TARGET_DIR/$control_helper.backup-$BACKUP_SUFFIX" ]]; then
       cp -p "$TARGET_DIR/$control_helper.backup-$BACKUP_SUFFIX" "$TARGET_DIR/$control_helper"
     elif [[ -f "$TARGET_DIR/$control_helper" ]]; then
@@ -82,7 +82,7 @@ rollback() {
 }
 trap rollback ERR
 
-for control_helper in tool_preflight.mjs control_receipt_outbox.mjs; do
+for control_helper in tool_preflight.mjs control_receipt_outbox.mjs control_git_handoff.mjs; do
   if [[ -f "$TARGET_DIR/$control_helper" ]]; then
     cp -p "$TARGET_DIR/$control_helper" "$TARGET_DIR/$control_helper.backup-$BACKUP_SUFFIX"
   fi

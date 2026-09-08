@@ -11,7 +11,8 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
 import { probeTools } from './tool_preflight.mjs';
-import { createReceiptOutbox } from './control_receipt_outbox.mjs';
+import { createReceiptOutbox, createParaReportOutbox } from './control_receipt_outbox.mjs';
+import { sourceIdentity } from './control_git_handoff.mjs';
 import {
   describeCodexFailure,
   describeTraeFailure,
@@ -411,6 +412,10 @@ async function gitMaybe(cwd, args) {
 }
 
 async function postTaskReport(task, { progress = 0, status = 'running', content, level = 'info' }) {
+  if (paraReports.record(task, { progress, status, content })) {
+    await paraReports.drain();
+    return; // A disconnected ACK is pending delivery, never an execution failure.
+  }
   const response = await fetch(`${apiBase}/api/devices/me/task-report`, {
     method: 'POST',
     headers: {
@@ -479,8 +484,14 @@ const controlReceipts = createReceiptOutbox({
   token: process.env.XCMAX_CONTROL_RECEIPT_TOKEN,
   deviceId: process.env.XCMAX_CONTROL_DEVICE_ID,
 });
+const paraReports = createParaReportOutbox({
+  directory: join(homedir(), 'XCMAX-runtime', 'control-para-reports'),
+  url: `${apiBase}/api/devices/me/control-report`, token,
+  enabled: process.env.XCMAX_CONTROL_REPORTS_ENABLED === '1',
+});
 const send = (ws, payload) => {
   controlReceipts.record(payload);
+  if (payload.type === 'task_progress' && paraReports.record(payload, payload)) return;
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
 };
 
@@ -734,10 +745,19 @@ const defaultCapabilities = () => ({
 
 async function prepareWorkspace(task) {
   const repoUrl = (task.repo_url || '').trim();
-  const taskDir = join(workspaceRoot, safeTaskDirName(task));
-  mkdirSync(workspaceRoot, { recursive: true });
+  const root = paraReports.handles(task) ? join(homedir(), 'XCMAX-runtime', 'control-workspaces') : workspaceRoot;
+  const taskDir = join(root, safeTaskDirName(task));
+  mkdirSync(root, { recursive: true });
   cleanupWorkspace(taskDir);
   return withFailureCleanup(taskDir, async () => {
+    if (/^[0-9a-f]{40}$/.test(task.base_branch || '')) {
+      await git(process.cwd(), ['clone', '--no-checkout', '--filter=blob:none', repoUrl, taskDir]);
+      await git(taskDir, ['fetch', '--depth', '1', 'origin', task.base_branch]);
+      await git(taskDir, ['checkout', '--detach', task.base_branch]);
+      if (await git(taskDir, ['rev-parse', 'HEAD']) !== task.base_branch) throw new Error('handoff_commit_mismatch');
+      await git(taskDir, ['checkout', '-b', task.work_branch]);
+      return taskDir;
+    }
     const sourceWorkspace = await sourceWorkspaceFromTask(task);
 
     if (sourceWorkspace && await sourceWorkspaceMatchesRepo(sourceWorkspace, repoUrl)) {
@@ -917,6 +937,7 @@ async function finalizeTask(ws, task, taskDir, baseHead = '') {
     // 工作区干净但 HEAD 已移动：工具(如 trae)已自行 commit → 跳过空 commit，直接 push。
     if (await headMovedFromBase(taskDir, baseHead)) {
       const pushedCommitted = await pushBranch(taskDir, task.work_branch);
+      await reportCodeIdentity(task, taskDir, baseHead, pushedCommitted);
       send(ws, {
         type: 'task_progress',
         task_id: task.task_id,
@@ -954,6 +975,7 @@ async function finalizeTask(ws, task, taskDir, baseHead = '') {
   await git(taskDir, ['add', '-A', '--', '.']);
   await git(taskDir, ['commit', '-m', `devfleet: ${task.title}`]);
   const pushed = await pushBranch(taskDir, task.work_branch);
+  await reportCodeIdentity(task, taskDir, baseHead, pushed);
   send(ws, {
     type: 'task_progress',
     task_id: task.task_id,
@@ -974,6 +996,14 @@ async function finalizeTask(ws, task, taskDir, baseHead = '') {
     await requestMergeOnComplete(task, taskDir);
   }
   return true;
+}
+
+async function reportCodeIdentity(task, taskDir, baseHead, pushed) {
+  if (!paraReports.handles(task)) return;
+  await postTaskReport(task, { status: 'completed', progress: 100,
+    content: JSON.stringify({ ...await sourceIdentity(taskDir), base_sha: baseHead,
+      branch: task.work_branch,
+      pushed, workspace_preserved: true, delivery: 'requires_mainline_and_customer_acceptance' }) });
 }
 
 async function failTask(ws, task, content) {
@@ -1387,7 +1417,7 @@ async function handleTask(ws, task) {
   await finalizeTask(ws, task, taskDir, baseHead);
   } finally {
     // 无论成功/失败/未变更，任务结束即回收 per-task 克隆，避免 workspace 撑爆磁盘。
-    cleanupWorkspace(taskDir);
+    if (!paraReports.handles(task)) cleanupWorkspace(taskDir);
   }
 }
 
@@ -1414,6 +1444,7 @@ function enqueueTask(ws, task) {
 async function recoverPendingTask(ws) {
   if (ws.readyState !== WebSocket.OPEN) return;
   try {
+    await paraReports.drain();
     const response = await fetch(`${apiBase}/api/devices/me/pending-task`, {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -1429,9 +1460,11 @@ async function recoverPendingTask(ws) {
       task_id: pending.id,
       title: pending.title,
       tool: pending.tool,
+      attempt: pending.attempt,
       work_branch: pending.work_branch,
     };
     controlReceipts.bind(recovered);
+    paraReports.bind(recovered);
     if (enqueueTask(ws, recovered)) {
       console.log(`[e2e-agent] recovered running subtask ${pending.subtask_id}`);
     }
@@ -1445,6 +1478,13 @@ function drainToolQueue(tool) {
   const queue = taskQueuesByTool.get(tool) || [];
   const next = queue.shift();
   if (!next) return;
+  if (!paraReports.claimExecution(next.task)) {
+    paraReports.record(next.task, { status: 'running', progress: 0,
+      content: 'executor_restart_requires_reconciliation：该尝试已启动过，先核对原进程、提交及产物，未重复执行。' });
+    void paraReports.drain();
+    setImmediate(() => drainToolQueue(tool));
+    return;
+  }
   runningTools.add(tool);
   runningTaskIdsByTool.set(tool, String(next.task?.task_id || ''));
   publishToolStatus(next.ws);
@@ -1478,6 +1518,7 @@ let preflight = {};
 let preflightPending = false;
 function publishToolStatus(ws) {
   void controlReceipts.drain();
+  void paraReports.drain();
   if (!preflightPending) {
     preflightPending = true;
     probeTools({ codex: resolveCodexAgentBin(), cursor: resolveCursorAgentBin(),
@@ -1521,6 +1562,8 @@ function publishToolStatus(ws) {
       e2e_agent: true,
       platform: process.platform === 'darwin' ? 'macos' : process.platform === 'win32' ? 'windows' : process.platform,
       tool_preflight: preflight,
+      control_reports: process.env.XCMAX_CONTROL_REPORTS_ENABLED === '1',
+      supports_exact_commit: true,
       trae_cli: traeInstalled,
       cursor_agent_cli: cursorInstalled,
       codex_cli: codexInstalled,
@@ -1541,6 +1584,7 @@ function connect() {
       const msg = JSON.parse(String(raw));
       if (msg.type === 'execute_task') {
         controlReceipts.bind(msg);
+        paraReports.bind(msg);
         enqueueTask(ws, msg);
       }
     } catch (err) {

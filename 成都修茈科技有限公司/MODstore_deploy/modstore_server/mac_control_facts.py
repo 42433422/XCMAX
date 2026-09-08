@@ -6,6 +6,7 @@ import time
 
 from modstore_server.models_cs import CustomerServiceTicket
 from modstore_server.standard_delivery_api import build_standard_delivery_rows
+from modstore_server.customer_delivery_receipts import all_artifacts_running
 
 
 def redact(text):
@@ -29,6 +30,15 @@ def customer_facts(db, customer_id=None, ticket_id=None):
         except ValueError:
             evidence = {}
         resolution = evidence.get("resolution") or {}
+        generation = str(evidence.get("delivery_generation") or "")
+        receipts = [
+            receipt
+            for receipt in evidence.get("receipt_events", [])
+            if isinstance(receipt, dict)
+            and receipt.get("owner_user_id") == row.user_id
+            and str(receipt.get("generation") or "") == generation
+        ]
+        running = all_artifacts_running(row, evidence)
         tickets.append(
             {
                 "id": row.id,
@@ -52,6 +62,32 @@ def customer_facts(db, customer_id=None, ticket_id=None):
                 "receipt_counts": {
                     key: len(evidence.get(key) or [])
                     for key in ("install_receipts", "receipt_events")
+                },
+                "delivery_verification": {
+                    "source": "customer_service_delivery_completion+customer_delivery_receipts",
+                    "customer_acceptance": evidence.get("acceptance_status") or "unknown",
+                    "runtime_business_verified": running,
+                    "completed": bool(
+                        row.status == "resolved" and evidence.get("delivered_at") and running
+                    ),
+                    "delivered_at": evidence.get("delivered_at"),
+                    "generation": generation,
+                    "receipts": [
+                        {
+                            key: receipt.get(key)
+                            for key in (
+                                "receipt_id",
+                                "stage",
+                                "version",
+                                "package_sha256",
+                                "host_sha",
+                                "verified",
+                                "received_at",
+                                "verification_case_id",
+                            )
+                        }
+                        for receipt in receipts
+                    ],
                 },
             }
         )

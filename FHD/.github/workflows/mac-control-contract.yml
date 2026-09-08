@@ -1,0 +1,20 @@
+name: Mac control runtime contract
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  runtime-contract:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-2022]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test scripts/autonomy/runtime_tools/control_receipt_outbox.test.mjs scripts/autonomy/runtime_tools/control_git_handoff.test.mjs scripts/autonomy/runtime_tools/e2e_agent_runtime_policy.test.mjs

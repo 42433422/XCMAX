@@ -12,11 +12,11 @@ def _facade():
 
 
 def _register_scheduler_phase_01():
-    from modstore_server.mac_control_worker import run_mac_control_sync
+    from modstore_server.mac_control_worker import poll_period, run_mac_control_sync
 
     _facade()._scheduler.add_job(
         run_mac_control_sync,
-        _facade().IntervalTrigger(seconds=15),
+        _facade().IntervalTrigger(seconds=poll_period()),
         id="mac_control_sync",
         replace_existing=True,
         coalesce=True,

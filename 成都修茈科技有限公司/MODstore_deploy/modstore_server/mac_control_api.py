@@ -18,6 +18,7 @@ from modstore_server.db.mac_control import (
     MacControlTask,
 )
 from modstore_server.mac_control_store import TERMINAL, accept, transition, view
+from modstore_server.mac_control_transport import stale_window
 from modstore_server.models import User
 
 router = APIRouter(prefix="/api/admin/mac-control", tags=["mac-control"])
@@ -32,6 +33,7 @@ class TaskRequest(BaseModel):
     source_sha: str = Field(default="", pattern=r"^(?:[0-9a-f]{40})?$")
     ticket_id: int | None = Field(default=None, gt=0)
     customer_id: int | None = Field(default=None, gt=0)
+    verify_on_windows: bool = False
 
 
 @router.post("/tasks", status_code=202)
@@ -44,7 +46,11 @@ def create_task(
         raise HTTPException(503, "Mac 主控尚未启用，原有入口不受影响")
     if not os.environ.get("XCMAX_FACTORY_CAPABILITY_TOKEN"):
         raise HTTPException(503, "工厂执行能力尚未配置")
+    if body.verify_on_windows and (body.target != "mac" or body.mode != "code"):
+        raise HTTPException(422, "Windows 后续验证仅适用于 Mac 开发任务")
     request = body.model_dump(exclude={"request_key"})
+    if not body.verify_on_windows:
+        request.pop("verify_on_windows")  # Preserve pre-upgrade idempotency digests.
     request["source"] = "admin"
     if body.ticket_id:
         from modstore_server.models_cs import CustomerServiceTicket
@@ -93,6 +99,26 @@ def task_detail(
         .all()
     )
     payload = view(task)
+    if task.para_task_id and task.state in TERMINAL:
+        from modstore_server.mac_control_transport import (
+            ParaClient,
+            ParaUnavailable,
+            execution_view,
+        )
+
+        client = None
+        try:
+            client = ParaClient()
+            snapshot = execution_view(client.task(task.para_task_id))
+            if snapshot != payload["execution"]:
+                transition(db, task, task.state, task.reason, snapshot=snapshot)
+                payload = view(task)
+            payload["evidence_checked_at"] = time.time()
+        except ParaUnavailable as exc:
+            payload["evidence_error"] = str(exc)
+        finally:
+            if client:
+                client.close()
     request = payload["request"]
     if request.get("ticket_id") or request.get("customer_id"):
         from modstore_server.mac_control_facts import customer_facts
@@ -148,7 +174,7 @@ def fleet(user: User = Depends(require_admin), db: Session = Depends(get_db)):
         "source": "para:/api/devices",
         "observed_at": row.observed_at if row else None,
         "checked_at": row.checked_at if row else None,
-        "freshness": "missing" if age is None else "stale" if age > 90 else "fresh",
+        "freshness": "missing" if age is None else "stale" if age > stale_window() else "fresh",
         "error": row.error if row else "not_observed",
         "devices": json.loads(row.payload_json) if row and row.observed_at else [],
     }

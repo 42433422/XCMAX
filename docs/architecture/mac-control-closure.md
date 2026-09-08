@@ -19,7 +19,7 @@ Mac 保持 Para 主控，服务器持久保存受理、派发关联及回执。P
 | `MODSTORE_MAC_CONTROL_ENABLED=1` | 启用持久受理和后台同步；默认关闭 |
 | `MODSTORE_MAC_CONTROL_EMPLOYEE_DISPATCH=1` | 将现有员工派工切换至相同适配层，必须在单任务验收后启用 |
 | `MODSTORE_PARA_API_BASE` | 现有服务器到 Mac 的 Para 隧道入口 |
-| `MODSTORE_PARA_AUTH_TOKEN` | 专用服务身份；新适配层禁止 guest 登录兜底 |
+| `MODSTORE_PARA_CONTROL_TOKEN` | 专用服务身份；与旧派工凭证分开，新适配层禁止 guest 登录兜底 |
 | `XCMAX_FACTORY_CAPABILITY_TOKEN` | 现有工厂能力配置；缺失时受理失败关闭 |
 | `MODSTORE_PARA_DEVICE_ID` | Mac 首选设备，不强制覆盖 Windows 目标 |
 | `MODSTORE_PARA_REPO_URL` | 允许的工厂仓库，缺失时不能执行 |
@@ -71,3 +71,13 @@ Para 源码已找到：`https://github.com/42433422/devfleet-private` 的主线�
 Para `POST /api/devices/me/task-report` 当前没有事件幂等标识和尝试校验，重复调用会追加日志并更新子任务。新增服务器回执队列只保存关联证据，不宣称已解决 Para 权威执行状态恢复。启用前须在其正式源码补齐此契约，避免旧回执覆盖新尝试。取消接口同样需要真实停止确认能力。
 
 新派工开关保持关闭，尚未替换或重启在用 Para 代理。下一步先补齐上述 Para 契约，再完成单任务、跨设备、中断和真实交付验收，最后按精确主线提交发布。
+
+## 本轮接口依赖进展
+
+Para 依赖 PR 为 https://github.com/42433422/devfleet-private/pull/3，新增 `/api/control` 项目范围服务入口和 `/api/devices/me/control-report` 幂等回写。XCMAX 新适配使用独立 `MODSTORE_PARA_CONTROL_TOKEN`，不覆盖原派工的 `MODSTORE_PARA_AUTH_TOKEN`。旧接口兼容保留，启用前须核对受管非 guest 所有者和旧会话失效，设备 ID 与设备令牌保持不变。
+
+Mac 使用 `XCMAX_CONTROL_REPORTS_ENABLED=1` 开启权威结果补传；执行标记和待回传结果位于 `~/XCMAX-runtime/control-para-reports`，工作区位于 `~/XCMAX-runtime/control-workspaces`。代理重启遇到已启动的同一尝试先核对结果，禁止重复执行。
+
+开发任务可选 `verify_on_windows`，只有收到设备回读的已推送提交与源码包 SHA256 才建立幂等 Windows 子任务。子任务保留上游编号，检出完整 SHA 后用 `control_git_handoff.mjs` 校验同一源码包；缺少精确检出能力的旧执行器保持等待升级。源码包摘要不是安装包或客户验收证明。
+
+管理端已展示回写正文、来源、时间与当前轮次客户安装/运行/业务验证回执，并按游标补取事件。开发候选阶段的本地测试不能代替主线发布和真实设备验收。

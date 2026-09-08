@@ -29,6 +29,13 @@ def enabled() -> bool:
     return os.environ.get("MODSTORE_MAC_CONTROL_ENABLED") == "1"
 
 
+def poll_period() -> int:
+    try:
+        return max(5, min(60, int(os.environ.get("MODSTORE_MAC_CONTROL_POLL_SECONDS", "15"))))
+    except ValueError:
+        return 15
+
+
 def observe(db, client, now):
     observation = db.get(MacControlObservation, "para")
     if observation is None:
@@ -71,7 +78,22 @@ def reconcile(db, task, client):
     }.get(status, "running")
     if task.state == "cancel_requested" and state == "running":
         state = "cancel_requested"
-    transition(db, task, state, snapshot=execution_view(raw))
+    reason = ""
+    if (
+        state == "running"
+        and raw.get("subTasks")
+        and all(sub.get("status") == "pending" for sub in raw["subTasks"])
+    ):
+        state, reason = "waiting_device", "waiting_in_para_executor_queue"
+    if state == "execution_completed":
+        from modstore_server.mac_control_handoff import schedule_windows_verification
+
+        reason = schedule_windows_verification(db, task, raw)
+        if reason:
+            state = "reconciling"
+    if state == "running" and any(s.get("result_pending") for s in raw.get("subTasks", [])):
+        state, reason = "reconciling", "executor_result_pending_no_automatic_replay"
+    transition(db, task, state, reason, snapshot=execution_view(raw))
 
 
 def process(db, task, client, devices):
