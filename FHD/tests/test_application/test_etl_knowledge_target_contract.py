@@ -24,7 +24,7 @@ def test_knowledge_validation_hash_and_source_fallbacks() -> None:
     assert adapter._source_label({}, {}) == "etl-import"
 
 
-def test_documents_status_cache_success_and_shape_fallbacks() -> None:
+def test_documents_status_cache_success_and_rejects_invalid_inventory() -> None:
     adapter = knowledge.KnowledgeAdapter()
     service = MagicMock()
     service.status.return_value = {"success": True, "documents": [{"document_id": "d"}]}
@@ -50,7 +50,9 @@ def test_documents_status_cache_success_and_shape_fallbacks() -> None:
                 return_value=service,
             ),
         ):
-            assert adapter._documents({}) == []
+            with pytest.raises(EtlError) as error:
+                adapter._documents({})
+            assert error.value.code == "ETL_KNOWLEDGE_STATUS_FAILED"
 
 
 def test_preview_validation_duplicate_and_source_replacement_decisions() -> None:
@@ -143,7 +145,15 @@ def test_execute_row_rejects_untrusted_path_and_handles_service_results() -> Non
             context={"owner_user_id": 9, "run_id": "r"},
         )
 
-    service.ingest_document.return_value = {"success": True, "document": {"version": 2}}
+    expected_id = "etl-" + hashlib.sha256(b"7:abcdef").hexdigest()
+    service.status.return_value = {
+        "success": True,
+        "documents": [{"document_id": "old", "source": "s", "version": 1}],
+    }
+    service.ingest_document.return_value = {
+        "success": True,
+        "document": {"version": 2, "document_id": expected_id, "tenant_id": "7"},
+    }
     with (
         patch.object(knowledge, "tenant_id_for_write", return_value=7),
         patch.object(knowledge, "is_uploaded_document_path", return_value=True),
@@ -160,7 +170,7 @@ def test_execute_row_rejects_untrusted_path_and_handles_service_results() -> Non
             allowed_update_fields={"document_path"},
             context={"file_sha256": "abcdef", "owner_user_id": 9, "run_id": "r"},
         )
-    assert result["match_ref"] == "etl-abcdef"
+    assert result["match_ref"] == expected_id
     assert result["after"]["version"] == 2
     kwargs = service.ingest_document.call_args.kwargs
     assert kwargs["tenant_id"] == "7" and kwargs["metadata"]["etl_run_id"] == "r"
@@ -181,8 +191,8 @@ def test_rollback_row_success_and_failure() -> None:
                 None,
                 match_ref="d1",
                 before={},
-                after={},
-                context={"owner_user_id": 9},
+                after={"document_id": "d1", "version": 1, "content_hash": "sha"},
+                context={"owner_user_id": 9, "run_id": "r"},
             )
             is None
         )
@@ -200,6 +210,41 @@ def test_rollback_row_success_and_failure() -> None:
             None,
             match_ref="d1",
             before={},
-            after={},
-            context={},
+            after={"document_id": "d1", "version": 1, "content_hash": "sha"},
+            context={"run_id": "r"},
         )
+
+
+def test_rollback_without_receipt_never_calls_delete() -> None:
+    service = MagicMock()
+    with patch(
+        "app.application.dataset_rag_app_service.get_dataset_rag_app_service", return_value=service
+    ):
+        with pytest.raises(EtlError) as error:
+            knowledge.KnowledgeAdapter().rollback_row(
+                None, match_ref="d1", before={}, after={}, context={"run_id": "r"}
+            )
+    assert error.value.code == "ETL_KNOWLEDGE_ROLLBACK_RECEIPT_REQUIRED"
+    service.delete_document.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "receipt", [None, {}, {"success": True}, {"success": True, "document": {"version": 1}}]
+)
+def test_missing_write_receipt_is_not_success(receipt) -> None:
+    service = MagicMock()
+    service.status.return_value = {"success": True, "documents": []}
+    service.ingest_document.return_value = receipt
+    with patch(
+        "app.application.dataset_rag_app_service.get_dataset_rag_app_service", return_value=service
+    ):
+        with pytest.raises(EtlError) as error:
+            knowledge.KnowledgeAdapter().execute_row(
+                None,
+                {"content": "synthetic"},
+                action="new",
+                match_ref="",
+                allowed_update_fields=set(),
+                context={"run_id": "r"},
+            )
+    assert error.value.code == "ETL_KNOWLEDGE_INGEST_FAILED"

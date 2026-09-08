@@ -224,7 +224,9 @@ def try_normal_slot_read_payload(
         with tenant_scope(_facade()._request_tenant_id(request)):
             rr = _facade().route_normal_mode_message(text)
             intent = str(rr.get("intent") or "").strip()
-            if intent == "customers_query":
+            if intent == "clarify":
+                payload = _facade().build_clarify_response_dict(rr)
+            elif intent == "customers_query":
                 payload = _facade().build_customers_query_response_dict(rr, request=request)
             elif intent == "product_query":
                 payload = _facade().build_product_query_response_dict(rr)

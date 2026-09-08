@@ -28,6 +28,11 @@ New-Item -ItemType Directory -Force -Path $stageDir | Out-Null
 foreach ($modId in $ids) {
   if ($excludeAlways -contains $modId) { continue }
   $src = Join-Path $modsRoot $modId
+  $runtimeExportSrc = Join-Path (Join-Path $Root "XCAGI\mods") $modId
+  if (-not (Test-Path $src) -and (Test-Path $runtimeExportSrc)) {
+    # EXPORT_ONLY mod（mods_ssot.py）：编辑源不在 mods/，运行时副本 SSOT 在 XCAGI/mods/。
+    $src = $runtimeExportSrc
+  }
   if (-not (Test-Path $src)) {
     throw "Required profile mod not found: $modId ($src)"
   }

@@ -1212,7 +1212,7 @@ class TestProcessChatDeepErrors:
             patch.object(service, "_try_handle_dynamic_workflow", return_value=None),
             patch("app.services.get_conversation_service"),
         ):
-            result = service.process_chat("u1", "hello")
+            result = service.process_chat("u1", "随便说点什么")
         assert result["success"] is False
         assert "连接失败" in result.get("message", "") or "连接失败" in result.get("response", "")
 
@@ -1229,7 +1229,7 @@ class TestProcessChatDeepErrors:
             patch.object(service, "_try_handle_dynamic_workflow", return_value=None),
             patch("app.services.get_conversation_service"),
         ):
-            result = service.process_chat("u1", "hello")
+            result = service.process_chat("u1", "随便说点什么")
         assert result["success"] is False
         assert "超时" in result.get("message", "") or "超时" in result.get("response", "")
 
@@ -1246,7 +1246,7 @@ class TestProcessChatDeepErrors:
             patch.object(service, "_try_handle_dynamic_workflow", return_value=None),
             patch("app.services.get_conversation_service"),
         ):
-            result = service.process_chat("u1", "hello")
+            result = service.process_chat("u1", "随便说点什么")
         assert result["success"] is False
         assert "AI 服务暂时不可用" in result.get("message", "")
 
@@ -1263,7 +1263,7 @@ class TestProcessChatDeepErrors:
             patch.object(service, "_try_handle_dynamic_workflow", return_value=None),
             patch("app.services.get_conversation_service"),
         ):
-            result = service.process_chat("u1", "hello")
+            result = service.process_chat("u1", "随便说点什么")
         assert result["success"] is False
         assert "AI 服务暂时不可用" in result.get("message", "")
 
@@ -1280,7 +1280,7 @@ class TestProcessChatDeepErrors:
             patch.object(service, "_try_handle_dynamic_workflow", return_value=None),
             patch("app.services.get_conversation_service"),
         ):
-            result = service.process_chat("u1", "hello")
+            result = service.process_chat("u1", "随便说点什么")
         assert result["success"] is False
         assert "暂时不可用" in result.get("message", "") or "暂时不可用" in result.get(
             "response", ""

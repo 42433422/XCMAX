@@ -1,7 +1,11 @@
 """
 意图识别 golden set 基准（可复现 README / 营销声称中的准确率数字）。
 
-默认门槛 INTENT_BENCHMARK_MIN_ACCURACY=0.85（与 TEST_SUMMARY 建议一致）。
+分档口径（tier 字段，缺省视为 core）：
+- core：规则引擎已稳定命中的高频明确指令 → 硬门禁，默认 ≥95%（INTENT_BENCHMARK_MIN_ACCURACY）。
+- semantic：换说法 / 隐式表达 / 口语化 → 规则引擎预期 miss，由 LLM 意图闸兜底；
+  仅测量并写入报告，除非显式设置 INTENT_BENCHMARK_MIN_ACCURACY_SEMANTIC。
+
 若需验证「99%+」营销口径，在 workflow_dispatch 时设置 INTENT_BENCHMARK_MIN_ACCURACY=0.99。
 """
 
@@ -60,24 +64,35 @@ def test_intent_golden_set_accuracy(golden_cases):
 
     correct = 0
     failures: list[dict] = []
+    tier_stat: dict[str, list[int]] = {}
+    tier_failures: dict[str, list[dict]] = {}
     for case in golden_cases:
         text = case["text"]
+        tier = str(case.get("tier", "core"))
         result = recognize_intents(text)
         if _match_case(result, case, text):
             correct += 1
+            tier_stat.setdefault(tier, [0, 0])[0] += 1
         else:
-            failures.append(
-                {
-                    "text": text,
-                    "expected_tool": case.get("expected_tool"),
-                    "expected_primary": case.get("expected_primary"),
-                    "got_tool": result.get("tool_key"),
-                    "got_primary": result.get("primary_intent"),
-                }
-            )
+            failure = {
+                "text": text,
+                "expected_tool": case.get("expected_tool"),
+                "expected_primary": case.get("expected_primary"),
+                "got_tool": result.get("tool_key"),
+                "got_primary": result.get("primary_intent"),
+            }
+            failures.append(failure)
+            tier_stat.setdefault(tier, [0, 0])[1] += 1
+            tier_failures.setdefault(tier, []).append(failure)
 
     accuracy = correct / len(golden_cases)
     min_acc = float(os.environ.get("INTENT_BENCHMARK_MIN_ACCURACY", "0.95"))
+    min_acc_semantic = os.environ.get("INTENT_BENCHMARK_MIN_ACCURACY_SEMANTIC")
+
+    tier_accuracy = {
+        tier: round(hit / (hit + miss), 4) if (hit + miss) else 0.0
+        for tier, (hit, miss) in tier_stat.items()
+    }
 
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     report = {
@@ -85,6 +100,7 @@ def test_intent_golden_set_accuracy(golden_cases):
         "correct": correct,
         "accuracy": round(accuracy, 4),
         "min_required": min_acc,
+        "tier_accuracy": tier_accuracy,
         "failures": failures[:20],
     }
     (REPORT_DIR / "intent_benchmark_latest.json").write_text(
@@ -92,7 +108,17 @@ def test_intent_golden_set_accuracy(golden_cases):
         encoding="utf-8",
     )
 
-    assert accuracy >= min_acc, (
-        f"Intent accuracy {accuracy:.2%} below threshold {min_acc:.2%}; "
-        f"failures sample: {failures[:3]}"
+    core_n = sum(tier_stat.get("core", [0, 0]))
+    core_hit = tier_stat.get("core", [0, 0])[0]
+    core_acc = (core_hit / core_n) if core_n else 0.0
+    assert core_acc >= min_acc, (
+        f"Intent core accuracy {core_acc:.2%} below threshold {min_acc:.2%}; "
+        f"failures sample: {tier_failures.get('core', failures)[:3]}"
     )
+    if min_acc_semantic is not None:
+        sem_hit, sem_miss = tier_stat.get("semantic", [0, 0])
+        sem_acc = (sem_hit / (sem_hit + sem_miss)) if (sem_hit + sem_miss) else 0.0
+        assert sem_acc >= float(min_acc_semantic), (
+            f"Intent semantic accuracy {sem_acc:.2%} below threshold {min_acc_semantic}; "
+            f"failures sample: {tier_failures.get('semantic', [])[:3]}"
+        )

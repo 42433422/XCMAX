@@ -153,10 +153,63 @@ def _register_llm_port_source() -> None:
         )
 
         _self = sys.modules[__name__]
+
+        def _active_with_conversation():
+            """按会话就绪的对话服务解析活跃 provider。
+
+            真实聊天路径（``call_llm_api`` → ``get_active_provider(conversation_service=...)``）
+            会在解析前把登录 session 的平台适配器注入对话服务；这里保持同一语义，
+            避免 LLMPort/健康检查因省略 ``conversation_service`` 而漏掉已配好的平台模型
+            （表现为"配了本地平台却显示 AI 未就绪"）。
+            """
+            conversation_service = None
+            try:
+                from app.services.conversation.manager import (
+                    get_ai_conversation_service_if_ready,
+                )
+
+                conversation_service = get_ai_conversation_service_if_ready()
+            except RECOVERABLE_ERRORS:
+                conversation_service = None
+            if conversation_service is not None:
+                return _self.get_active_provider(conversation_service=conversation_service)
+
+            # 桌面端对话服务是惰性加载的：登录后首次走 AI 链路才会初始化。
+            # 未初始化时，若市场账号模块已就绪（应用已 boot，仅生产运行时成立），
+            # 直接用最新持久化的市场登录 token 构造平台适配器并注册为 modstore
+            # provider，使"已登录平台且配了模型"的应用启动即视为本地 LLM 可用
+            # （健康检查不再误报"部分 AI 能力未就绪"）。未 boot 场景直接跳过，
+            # 保持与旧行为一致。
+            import sys
+
+            if (
+                "app.fastapi_routes.market_account_part01" in sys.modules
+                or "app.fastapi_routes.market_account" in sys.modules
+            ):
+                try:
+                    from app.fastapi_routes.market_account_part01 import (
+                        latest_session_market_token,
+                    )
+
+                    token = latest_session_market_token()
+                    if token:
+                        from app.services.conversation.modstore_adapter import (
+                            ModstorePlatformAdapter,
+                        )
+
+                        adapter = ModstorePlatformAdapter()
+                        adapter.auth_token = token
+                        if adapter.is_configured:
+                            _self.get_llm_registry().register("modstore", ModstoreProvider(adapter))
+                            return _self.get_active_provider()
+                except (RECOVERABLE_ERRORS, ImportError):
+                    pass
+            return _self.get_active_provider()
+
         set_llm_provider_source(
             LLMProviderSource(
                 get_by_id=lambda provider_id: _self.get_llm_registry().get(provider_id),
-                get_active=lambda: _self.get_active_provider(),
+                get_active=_active_with_conversation,
             )
         )
     except RECOVERABLE_ERRORS:

@@ -532,7 +532,7 @@ async def test_fetch_entitled_dict_with_mod_ids_list(
         captured["method"] = method
         captured["path"] = path
         captured["authorization"] = authorization
-        return {"mod_ids": ["taiyangniao-pro", "other", ""]}
+        return {"mod_ids": ["taiyangniao-pro", "other", "", "../invalid"]}
 
     monkeypatch.setattr(
         "app.fastapi_routes.market_account._proxy_json",
@@ -543,7 +543,7 @@ async def test_fetch_entitled_dict_with_mod_ids_list(
         lambda mid: mid == "taiyangniao-pro",
     )
     out = await fetch_entitled_client_mod_ids_from_market("tok")
-    assert out == {"taiyangniao-pro"}
+    assert out == {"taiyangniao-pro", "other"}
     assert captured["method"] == "GET"
     assert captured["path"] == "/api/enterprise/entitled-mod-ids"
     # 应自动补 Bearer 前缀

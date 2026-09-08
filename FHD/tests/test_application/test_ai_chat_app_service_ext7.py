@@ -52,7 +52,7 @@ class TestProcessChatNeuroBusBranches:
                 "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_completed",
                 return_value=None,
             ):
-                result = svc.process_chat("u1", "hello")
+                result = svc.process_chat("u1", "随便说点什么")
         assert result.get("success") is True
 
     def test_neuro_completed_exception_ignored(self):
@@ -72,7 +72,7 @@ class TestProcessChatNeuroBusBranches:
                 "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_completed",
                 side_effect=RuntimeError("bus down"),
             ):
-                result = svc.process_chat("u1", "hello")
+                result = svc.process_chat("u1", "随便说点什么")
         assert result.get("success") is True
 
 
@@ -103,7 +103,7 @@ class TestProcessChatAIServiceErrors:
                 "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_completed",
                 return_value=None,
             ):
-                result = svc.process_chat("u1", "hello")
+                result = svc.process_chat("u1", "随便说点什么")
         assert "连接失败" in result["message"]
 
     def test_timeout_error(self):
@@ -116,7 +116,7 @@ class TestProcessChatAIServiceErrors:
                 "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_completed",
                 return_value=None,
             ):
-                result = svc.process_chat("u1", "hello")
+                result = svc.process_chat("u1", "随便说点什么")
         assert "超时" in result["message"]
 
     def test_recoverable_error_api_key(self):
@@ -130,7 +130,7 @@ class TestProcessChatAIServiceErrors:
                 "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_completed",
                 return_value=None,
             ):
-                result = svc.process_chat("u1", "hello")
+                result = svc.process_chat("u1", "随便说点什么")
         assert "AI 服务暂时不可用" in result["message"]
 
     def test_recoverable_error_connection(self):
@@ -144,7 +144,7 @@ class TestProcessChatAIServiceErrors:
                 "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_completed",
                 return_value=None,
             ):
-                result = svc.process_chat("u1", "hello")
+                result = svc.process_chat("u1", "随便说点什么")
         assert "AI 服务暂时不可用" in result["message"]
 
     def test_recoverable_error_other(self):
@@ -158,7 +158,7 @@ class TestProcessChatAIServiceErrors:
                 "app.neuro_bus.application_neuro_bridge.neuro_notify_chat_completed",
                 return_value=None,
             ):
-                result = svc.process_chat("u1", "hello")
+                result = svc.process_chat("u1", "随便说点什么")
         assert "暂时不可用" in result["message"]
 
     def test_excel_file_path_in_file_context(self):

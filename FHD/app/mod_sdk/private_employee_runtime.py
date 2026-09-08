@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import os
 import re
 import uuid
 from pathlib import Path
@@ -51,10 +52,18 @@ async def run_employee(request: Request, mod_id: str, payload: dict[str, Any]) -
         value = str(data.get(field) or "").strip()
         if not value:
             continue
-        candidate = Path(value)
-        candidate = candidate if candidate.is_absolute() else workspace.root / candidate
-        resolved = candidate.resolve()
-        if not resolved.is_relative_to(workspace.root.resolve()) or candidate.is_symlink():
+        root = workspace.root.resolve()
+        candidate = os.path.abspath(os.path.join(str(root), value))
+        if not candidate.startswith(str(root) + os.sep):
+            raise HTTPException(403, "员工文件必须属于当前账号工作区")
+        path = Path(candidate)
+        current = root
+        for component in path.relative_to(root).parts:
+            current = current / component
+            if current.is_symlink():
+                raise HTTPException(403, "员工文件不可使用符号链接")
+        resolved = path.resolve()
+        if not resolved.is_relative_to(root):
             raise HTTPException(403, "员工文件必须属于当前账号工作区")
         data[field] = str(resolved)
     data["workspace_root"] = str(workspace.root)

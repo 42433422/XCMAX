@@ -108,6 +108,7 @@ class __AIChatApplicationServicePart01MixinPart01Mixin:
 
         ctx = ensure_business_harness_context(context, message=message)
         ctx = self._inject_excel_vector_context(message=message, context=ctx)
+        ctx = self._inject_wechat_contact_context(message=message, context=ctx)
         chat_run = None
         chat_run_context: dict[str, _facade().Any] = {}
 
@@ -176,9 +177,11 @@ class __AIChatApplicationServicePart01MixinPart01Mixin:
                 "response": reply_text,
                 "data": {
                     "text": reply_text,
-                    "action": "deterministic_reply",
+                    "action": str(deterministic_reply.get("action") or "deterministic_reply"),
                     "data": {
-                        "intent": "deterministic_chat_reply",
+                        "intent": str(
+                            deterministic_reply.get("trace_intent") or "deterministic_chat_reply"
+                        ),
                         "thinking_steps": deterministic_reply.get("thinking_steps"),
                     },
                 },
@@ -191,7 +194,9 @@ class __AIChatApplicationServicePart01MixinPart01Mixin:
                     source=source,
                     context=ctx,
                     file_context=file_context or {},
-                    intent="deterministic_chat_reply",
+                    intent=str(
+                        deterministic_reply.get("trace_intent") or "deterministic_chat_reply"
+                    ),
                 )
             )
         self._handle_confirmation_flow(user_id, message, file_context)

@@ -38,6 +38,14 @@ jobs:
         run: |
           python -m pytest tests/benchmarks/test_intent_accuracy.py -v --tb=short
 
+      - name: Run task-level golden set benchmark (tau-bench methodology)
+        env:
+          XCAGI_SKIP_INTENT_LLM: "1"
+          TASK_BENCHMARK_RUN: "1"
+          TASK_BENCHMARK_TRIALS: "1"
+        run: |
+          python -m pytest tests/benchmarks/test_task_success.py -v --tb=short
+
       - name: Commit intent benchmark report
         if: always()
         env:
@@ -50,14 +58,17 @@ jobs:
           fi
           mkdir -p FHD/metrics
           cp FHD/test_reports/intent_benchmark_latest.json FHD/metrics/intent_benchmark_latest.json
+          if [ -f FHD/test_reports/task_benchmark_report.json ]; then
+            cp FHD/test_reports/task_benchmark_report.json FHD/metrics/task_benchmark_report.json
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add FHD/metrics/intent_benchmark_latest.json
+          git add FHD/metrics/
           if git diff --staged --quiet; then
             echo "No intent report changes"
             exit 0
           fi
-          git commit -m "chore(metrics): update intent benchmark report"
+          git commit -m "chore(metrics): update intent & task benchmark reports"
           git push
 
       - name: Upload benchmark report
@@ -65,5 +76,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: intent-benchmark-report
-          path: FHD/test_reports/intent_benchmark_latest.json
+          path: |
+            FHD/test_reports/intent_benchmark_latest.json
+            FHD/test_reports/task_benchmark_report.json
           if-no-files-found: ignore

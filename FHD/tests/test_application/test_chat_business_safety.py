@@ -140,6 +140,12 @@ def business_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, 
     ("message", "operation"),
     [
         ("我今天有没有迟到？", "attendance_read"),
+        ("先介绍考勤制度，再查询1001号员工的姓名", "personnel_read"),
+        ("请你先解释请假规则，然后帮李四登记明天事假半天", "leave_write"),
+        ("先解释员工制度；查询李四是哪个部门", "personnel_read"),
+        ("先介绍考勤规则，查询李四2026年7月13日打卡记录", "attendance_read"),
+        ("ＡＩ业务员工，查询１００１号员工的姓名", "personnel_read"),
+        ("AI-员工，查询1001号员工的姓名", "personnel_read"),
         ("研发部今天谁出勤", "attendance_read"),
         ("1001号员工叫什么名字？", "personnel_read"),
         ("请你作为AI业务员工，查询1001号员工的姓名", "personnel_read"),
@@ -168,6 +174,12 @@ def test_business_intent_covers_natural_wording(message: str, operation: str) ->
     "message",
     [
         "请解释一下考勤制度",
+        "ＡＩ业务员工，查询客户和商品",
+        "AI-员工，查询客户和商品",
+        "AI－业务－员工，查询客户和商品",
+        "数字·员工，查询客户和商品",
+        "先解释考勤制度，然后介绍请假规则",
+        "AI员工，先解释考勤制度，再查询商品库存",
         "病假和事假有什么区别",
         "如何办理请假审批流程",
         "给我讲讲迟到规则怎么计算",
@@ -907,3 +919,19 @@ def test_attendance_print_covers_query_empty_and_submit_exception(
     failed = output_safety._handle_attendance_print("打印今天考勤", intent, actor=actor)
     assert failed["execution_receipt"]["status"] == "failed"
     assert failed["execution_receipt"]["reason"].startswith("print_submit_failed:")
+
+
+@pytest.mark.parametrize("prefix", ["ＡＩ业务员工", "AI-员工", "数字·员工"])
+def test_assistant_alias_does_not_open_personnel_store(prefix, monkeypatch):
+    def unexpected_database_lookup():
+        pytest.fail("A customer/product request must not open the personnel database")
+
+    monkeypatch.setattr(safety, "_db_path", unexpected_database_lookup)
+    assert safety.try_handle_business_chat_action(f"{prefix}，查询客户和商品") is None
+
+
+def test_explanation_prefix_does_not_bypass_personnel_receipt(business_db):
+    result = safety.try_handle_business_chat_action("先介绍考勤制度，再查询1001号员工的姓名")
+    assert result is not None
+    assert "李四" in result["response"]
+    assert result["execution_receipt"]["verified"] is True

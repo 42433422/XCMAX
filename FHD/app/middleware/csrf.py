@@ -115,7 +115,8 @@ def _csrf_exempt_ops_autonomy(scope: Scope) -> bool:
     """
     path = (scope.get("path") or "").rstrip("/")
     # Also match nginx path prefix /fhd-api/api/ops/autonomy/...
-    if "/api/ops/autonomy" not in path:
+    # /api/ops/wechat 同为本机采集端机器调用（wechat_ingest._auth 校验 token）。
+    if "/api/ops/autonomy" not in path and "/api/ops/wechat" not in path:
         return False
     headers = {k: v for k, v in (scope.get("headers") or [])}
     if (headers.get(b"x-autonomy-token") or b"").strip():

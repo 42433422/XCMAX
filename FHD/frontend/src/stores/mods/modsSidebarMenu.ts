@@ -10,6 +10,7 @@ import {
   isClientErpSidebarContext,
   isHostMountedModMenuPath,
   isSelectableExtensionModId,
+  isUniversalOverlayModId,
   shouldHideAttendanceModSidebarMenu,
   shouldSuppressClientErpModMenuId,
 } from '@/constants/genericModPack'
@@ -55,6 +56,8 @@ export function useModsSidebarMenu(deps: ModsSidebarMenuDeps) {
         if (!id) return false
         if (id === active) return true
         if (isAuxEmployeePackModId(id)) return true
+        // 通用叠加能力（考勤）与任意行业共存：选中涂料等行业时侧栏仍常驻考勤入口。
+        if (isUniversalOverlayModId(id)) return true
         if (isOverlayCustomForActive(id)) return true
         return false
       })

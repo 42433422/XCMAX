@@ -12,14 +12,14 @@
         <router-link
           v-if="section === 'records' && conversionEnabled"
           class="btn btn-primary"
-          to="/mod/sunbird-attendance-custom/convert"
+          :to="{ name: 'attendance-industry-home' }"
         >
           上传考勤表
         </router-link>
         <router-link
           v-if="section === 'schedules' && conversionEnabled"
           class="btn btn-primary"
-          to="/mod/sunbird-attendance-custom/convert"
+          :to="{ name: 'attendance-industry-settings' }"
         >
           转换规则（定制）
         </router-link>
@@ -252,7 +252,7 @@
         <button v-if="isEditable" type="button" class="btn btn-primary" @click="startCreate">
           {{ section === 'personnel' ? '新增第一位人员' : '新增第一个部门' }}
         </button>
-        <router-link v-else-if="conversionEnabled" class="btn btn-primary" to="/mod/sunbird-attendance-custom/convert"
+        <router-link v-else-if="conversionEnabled" class="btn btn-primary" :to="{ name: 'attendance-industry-home' }"
           >上传考勤表</router-link
         >
       </div>

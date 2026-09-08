@@ -10,10 +10,13 @@
     >
       {{ quickBtn.label }}
     </button>
+    <ValueStatsBar class="quick-actions__stats" />
   </div>
 </template>
 
 <script setup lang="ts">
+import ValueStatsBar from '@/components/ValueStatsBar.vue'
+
 defineProps<{
   buttons: Array<{ text: string; label: string }>
 }>()

@@ -97,7 +97,7 @@
   "core_workflow_mod_id": "xcagi-workflow-visualization-bridge",
   "client_mod_policies": {
     "client_primary_erp_mod_id": "attendance-industry",
-    "suppress_generic_shell_mod_ids": ["attendance-industry", "taiyangniao-pro"],
+    "suppress_generic_shell_mod_ids": ["taiyangniao-pro"],
     "protected_ids": [
       "attendance-industry",
       "coating-industry",

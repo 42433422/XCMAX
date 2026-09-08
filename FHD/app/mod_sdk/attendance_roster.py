@@ -66,19 +66,45 @@ def initialize_roster_once(employees: list[dict]) -> bool:
         staging.unlink(missing_ok=True)
 
 
-def read_attendance_roster() -> list[tuple[str, str, str]]:
+def attendance_roster_state(request=None) -> tuple[bool, list[tuple[str, str, str]]]:
+    """Use the current main roster with explicit ownership, then an isolated private seed."""
+    if request is not None:
+        from app.infrastructure.auth.dependencies import get_logged_in_user
+        from app.mod_sdk.private_sqlite import resolve_mod_private_sqlite_path
+
+        username = str(get_logged_in_user(request).username or "").strip()
+        shared = resolve_mod_private_sqlite_path("taiyangniao_pro.db")
+        if username and shared.is_file():
+            with closing(sqlite3.connect(f"{shared.as_uri()}?mode=ro", uri=True)) as conn:
+                columns = {
+                    row[1] for row in conn.execute("PRAGMA table_info(attendance_employees)")
+                }
+                if {"id", "employee_name", "department", "position", "owner_user_id"} <= columns:
+                    rows = conn.execute(
+                        "SELECT department, position, employee_name FROM attendance_employees "
+                        "WHERE owner_user_id = ? AND TRIM(employee_name) <> '' ORDER BY id",
+                        (username,),
+                    ).fetchall()
+                    return True, _unique_roster(rows)
     path = attendance_database_path()
     if not path.is_file():
-        return []
+        return False, []
     with closing(sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)) as conn:
-        if not conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='attendance_employees'"
-        ).fetchone():
-            return []
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(attendance_employees)")}
+        if not {"id", "employee_name", "department", "position"} <= columns:
+            return False, []
         rows = conn.execute(
             "SELECT department, position, employee_name FROM attendance_employees "
             "WHERE TRIM(employee_name) <> '' ORDER BY id"
         ).fetchall()
+    return True, _unique_roster(rows)
+
+
+def read_attendance_roster(request=None) -> list[tuple[str, str, str]]:
+    return attendance_roster_state(request)[1]
+
+
+def _unique_roster(rows) -> list[tuple[str, str, str]]:
     seen: set[str] = set()
     result: list[tuple[str, str, str]] = []
     for department, position, name in rows:

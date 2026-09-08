@@ -35,6 +35,7 @@
             {{ accountUsername }}
           </div>
         </div>
+        <TopQuickNav @select="handleViewChange" />
         <div class="top-bar-actions">
           <button
             type="button"
@@ -88,6 +89,7 @@ import DocumentPreviewPictureInPicture from './DocumentPreviewPictureInPicture.v
 import PaneResizeHandle from './PaneResizeHandle.vue'
 import Sidebar from './Sidebar.vue'
 import TopAssistantFloat from './TopAssistantFloat.vue'
+import TopQuickNav from './TopQuickNav.vue'
 import TutorialOverlay from './TutorialOverlay.vue'
 import VirtualCursor from './VirtualCursor.vue'
 import OnboardingTutorial from './OnboardingTutorial.vue'

@@ -178,6 +178,23 @@ def test_signed_employee_executes_business_and_refuses_other_owner(employee_deli
         headers={"x-session-id": "mod-session-1"},
     )
     assert denied.status_code == 403
+    outside = output.parent.parent / "other-owner"
+    outside.mkdir()
+    (output.parent / "redirect").symlink_to(outside, target_is_directory=True)
+    before = output.read_bytes()
+    for field, value in (
+        ("path", str(outside / "input.json")),
+        ("output_path", str(output.parent) + "-other/output.json"),
+        ("file_path", "redirect/input.json"),
+    ):
+        refused = client.post(
+            f"/api/mod/{mid}/employee/run",
+            json={**body, field: value},
+            headers={"x-session-id": "mod-session-1"},
+        )
+        assert refused.status_code == 403
+    assert output.read_bytes() == before
+    assert list(outside.iterdir()) == []
 
 
 def test_employee_without_business_probe_is_not_packaged(employee_delivery):

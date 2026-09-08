@@ -260,6 +260,11 @@ def get_vector_store() -> VectorStorePort:
     use_sqlite_fallback = (
         os.environ.get("ENABLE_SQLITE_VECTOR_FALLBACK", "0") or "0"
     ).strip() == "1"
+    if not use_sqlite_fallback:
+        # 桌面端 DATABASE_URL 就是 SQLite；PG store 会在 SQLite 连接上执行
+        # CREATE EXTENSION vector 直接语法报错。URL 为 sqlite 时自动降级。
+        base = (os.environ.get("VECTOR_DB_URL") or os.environ.get("DATABASE_URL") or "").strip()
+        use_sqlite_fallback = base.lower().startswith("sqlite")
     if use_sqlite_fallback:
         _vector_store_instance = get_sqlite_vector_store()
     else:

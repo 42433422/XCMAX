@@ -17,6 +17,7 @@ const mockIsAuxEmployeePackModId = vi.fn((id: string) => id.startsWith('xcagi-au
 const mockIsSelectableExtensionModId = vi.fn(
   (id: string) => !id.startsWith('xcagi-') || id === 'attendance-industry' || id === 'taiyangniao-pro' || id === 'sz-qsm-pro',
 )
+const mockIsUniversalOverlayModId = vi.fn(() => false)
 const mockIsHostMountedModMenuPath = vi.fn(() => false)
 const mockShouldHideAttendanceModSidebarMenu = vi.fn(() => false)
 const mockShouldSuppressClientErpModMenuId = vi.fn(() => false)
@@ -142,6 +143,7 @@ vi.mock('@/constants/genericModPack', () => ({
   isClientErpSidebarContext: (ids: string[], active: string) => mockIsClientErpSidebarContext(ids, active),
   isHostMountedModMenuPath: (path: string, proEntry: string) => mockIsHostMountedModMenuPath(path, proEntry),
   isSelectableExtensionModId: (id: string) => mockIsSelectableExtensionModId(id),
+  isUniversalOverlayModId: (id: string) => mockIsUniversalOverlayModId(id),
   shouldHideAttendanceModSidebarMenu: (menuId: string) => mockShouldHideAttendanceModSidebarMenu(menuId),
   shouldSuppressClientErpModMenuId: (menuId: string, ids: string[], active: string) =>
     mockShouldSuppressClientErpModMenuId(menuId, ids, active),
@@ -409,6 +411,7 @@ describe('mods store – coverage 补齐', () => {
     mockIsSelectableExtensionModId.mockImplementation(
       (id: string) => !id.startsWith('xcagi-') || id === 'attendance-industry' || id === 'taiyangniao-pro' || id === 'sz-qsm-pro',
     )
+    mockIsUniversalOverlayModId.mockImplementation(() => false)
     mockIsHostMountedModMenuPath.mockReturnValue(false)
     mockShouldHideAttendanceModSidebarMenu.mockReturnValue(false)
     mockShouldSuppressClientErpModMenuId.mockReturnValue(false)
@@ -829,6 +832,37 @@ describe('mods store – coverage 补齐', () => {
 
       const menu = store.getModMenu()
       expect(menu.map((m) => m.id)).not.toContain('taiyangniao-pro-home')
+    })
+
+    it('getModMenu：选中涂料行业时通用考勤工作区仍常驻侧栏（不互斥）', () => {
+      mockIsUniversalOverlayModId.mockImplementation((id: string) => id === 'attendance-industry')
+      const store = useModsStore()
+      store.mods = [
+        {
+          id: 'attendance-industry',
+          name: '通用考勤模块',
+          version: '1.0',
+          author: '',
+          description: '',
+          primary: true,
+          menu: [{ id: 'attendance-industry-workspace', label: '考勤工作区', icon: 'fa-calendar', path: '/attendance-industry' }],
+        },
+        {
+          id: 'coating-industry',
+          name: '涂料行业包',
+          version: '1.0',
+          author: '',
+          description: '',
+          primary: true,
+          menu: [{ id: 'coating-home', label: '涂料工作台', icon: 'fa-paint-brush', path: '/coating' }],
+        },
+      ] as never[]
+      store.setActiveModId('coating-industry')
+
+      const menu = store.getModMenu()
+      const ids = menu.map((m) => m.id)
+      expect(ids).toContain('coating-home')
+      expect(ids).toContain('attendance-industry-workspace')
     })
 
     it('getModMenu 在 fromUi 为空时回退到 fromFull 并包含 aux pack', () => {

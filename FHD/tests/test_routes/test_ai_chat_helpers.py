@@ -494,7 +494,9 @@ class TestUnifiedChatSinglePayload:
                 return_value={"intent": "unknown"},
             ),
         ):
-            result = unified_chat_single_payload("你好", "user1", "127.0.0.1", "normal", None)
+            result = unified_chat_single_payload(
+                "随便说点什么", "user1", "127.0.0.1", "normal", None
+            )
             assert "success" in result
             assert "工作流" in result["response"]
             assert "no such table" not in result["response"]

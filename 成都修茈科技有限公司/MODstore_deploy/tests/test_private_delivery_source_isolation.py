@@ -136,10 +136,15 @@ def test_same_id_owners_generate_compile_sign_distinct_sources(client, monkeypat
         raw, signed = read_verified_artifact(record, owner_id=user.id, ticket_id=100 + user.id)
         records.append(record)
         with zipfile.ZipFile(io.BytesIO(raw)) as archive:
-            scope = {}
-            exec(archive.read("backend/probe.py"), scope)
-            assert scope["calculate"](5) == 5 * multipliers[user.id]
-            assert scope["verify_delivery"](None)["passed"] is True
+            import importlib.util
+
+            probe = tmp_path / f"verified-probe-{user.id}.py"
+            probe.write_bytes(archive.read("backend/probe.py"))
+            spec = importlib.util.spec_from_file_location(f"owner_probe_{user.id}", probe)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            assert module.calculate(5) == 5 * multipliers[user.id]
+            assert module.verify_delivery(None)["passed"] is True
             assert (
                 f"owner-value-{multipliers[user.id]}"
                 in archive.read("frontend/runtime/index.js").decode()

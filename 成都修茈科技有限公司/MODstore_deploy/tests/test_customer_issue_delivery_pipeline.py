@@ -763,9 +763,12 @@ def test_failed_business_probe_returns_to_original_ticket_once(client, monkeypat
                 restored.read_bytes()
                 == (tmp_path / "library" / record["id"] / "backend/probe.py").read_bytes()
             )
-            namespace = {}
-            exec(restored.read_text(), namespace)
-            assert namespace["verify_delivery"](None)["observations"]["rows"] == 2
+            import importlib.util
+
+            spec = importlib.util.spec_from_file_location("restored_delivery_probe", restored)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            assert module.verify_delivery(None)["observations"]["rows"] == 2
         missing = {**evidence, "runs": []}
         with pytest.raises(ValueError, match="可信源码记录"):
             seed_previous_delivery(

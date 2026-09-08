@@ -462,6 +462,15 @@ def get_ai_conversation_service() -> AIConversationService:
     return _ai_conversation_service
 
 
+def get_ai_conversation_service_if_ready() -> AIConversationService | None:
+    """返回已初始化的对话服务单例，未初始化时不强制构造（返回 ``None``）。
+
+    供 LLMPort 等轻量只读路径探测当前真实可路由的 provider，避免健康检查
+    触发重型对话服务初始化产生副作用。
+    """
+    return _ai_conversation_service
+
+
 def init_ai_conversation_service() -> AIConversationService:
     global _ai_conversation_service
     _ai_conversation_service = AIConversationService()

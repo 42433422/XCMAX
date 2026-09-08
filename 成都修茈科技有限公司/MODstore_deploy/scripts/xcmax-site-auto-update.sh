@@ -347,8 +347,19 @@ publish_site_static_to_live() {
   # The desktop release workflow owns this pointer and updates it atomically only
   # after platform artifacts and public URLs are verified.  A website refresh may
   # seed a missing file, but must never overwrite an already verified release.
-  if [[ ! -e "$live_site/download-release.json" && -f "$git_site/download-release.json" ]]; then
-    cp -f "$git_site/download-release.json" "$live_site/download-release.json"
+  # Seed order matters: the newest immutable release copy is authoritative, the
+  # git copy is a historical fallback that can lag behind a published release
+  # (2026-09-05 回退事故：快照轮转后从过期 git 种子播种了 1.0.0.0).
+  if [[ ! -e "$live_site/download-release.json" ]]; then
+    local seed_src
+    seed_src="$(printf '%s\n' /var/www/xcagi-v[0-9]*.*.*.*/download-release.json 2>/dev/null | sort -V | tail -1 || true)"
+    if [[ -n "$seed_src" && -f "$seed_src" ]]; then
+      cp -f "$seed_src" "$live_site/download-release.json"
+      log "download-release.json 从不可变发布副本播种: $seed_src"
+    elif [[ -f "$git_site/download-release.json" ]]; then
+      cp -f "$git_site/download-release.json" "$live_site/download-release.json"
+      log "download-release.json 从 git 副本播种（可能滞后，待 release 校准）"
+    fi
   else
     log "保留发布流程管理的 download-release.json"
   fi

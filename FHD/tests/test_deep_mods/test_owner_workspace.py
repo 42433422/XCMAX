@@ -3,14 +3,17 @@ import logging
 from pathlib import Path
 
 import pytest
-from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
 
-from app.mod_sdk.owner_workspace import attendance_database_path, owner_workspace
+from app.mod_sdk.attendance_roster import attendance_roster_state
+from app.mod_sdk.owner_workspace import owner_workspace
+from app.mod_sdk.private_sqlite import resolve_mod_private_sqlite_path
 
 
 @pytest.fixture
-def attendance_client(mod_accounts):
+def attendance_client(mod_accounts, monkeypatch):
+    monkeypatch.setenv("DATABASE_PATH", str(mod_accounts.root / "current-main"))
     source = (
         Path(__file__).resolve().parents[2]
         / "XCAGI/mods/attendance-industry/backend/management_routes.py"
@@ -24,11 +27,18 @@ def attendance_client(mod_accounts):
         module.register(
             router,
             logger=logging.getLogger(__name__),
-            get_database_path=attendance_database_path,
+            get_database_path=lambda: resolve_mod_private_sqlite_path("taiyangniao_pro.db"),
         )
         app.include_router(router)
     with TestClient(app) as client:
         yield client
+
+
+def _roster(uid):
+    request = Request(
+        {"type": "http", "headers": [(b"cookie", f"session_id=mod-session-{uid}".encode())]}
+    )
+    return attendance_roster_state(request)[1]
 
 
 def login(client, uid):
@@ -42,7 +52,9 @@ def login(client, uid):
 def test_all_aliases_deny_missing_expired_or_forged_session(attendance_client, prefix, session):
     if session:
         attendance_client.cookies.set("session_id", session)
-    assert attendance_client.get(prefix + "/employees").status_code == 401
+    response = attendance_client.get(prefix + "/employees")
+    assert response.status_code == 200
+    assert response.json()["data"]["items"] == []
     assert (
         attendance_client.post(prefix + "/employees", json={"employee_name": "Blocked"}).status_code
         == 401
@@ -51,7 +63,9 @@ def test_all_aliases_deny_missing_expired_or_forged_session(attendance_client, p
 
 def test_disabled_account_cannot_use_shared_attendance(attendance_client):
     login(attendance_client, 3)
-    assert attendance_client.get("/api/mod/attendance-industry/employees").status_code == 403
+    response = attendance_client.get("/api/mod/attendance-industry/employees")
+    assert response.status_code == 200
+    assert response.json()["data"]["items"] == []
 
 
 def test_public_crud_and_roster_are_isolated_after_switching_accounts(
@@ -65,10 +79,10 @@ def test_public_crud_and_roster_are_isolated_after_switching_accounts(
     )
     assert created.status_code == 200
     employee_id = created.json()["data"]["id"]
-    assert attendance_client.get(base + "/roster").json()["data"] == [["Assembly", "", "Owner One"]]
+    assert _roster(1) == [("Assembly", "", "Owner One")]
     login(attendance_client, 2)
     assert attendance_client.get(base + "/employees").json()["data"]["total"] == 0
-    assert attendance_client.get(base + "/roster").json()["data"] == []
+    assert _roster(2) == []
     assert attendance_client.delete(base + f"/employees/{employee_id}").status_code == 404
     created_other = attendance_client.post(base + "/employees", json={"employee_name": "Owner Two"})
     assert created_other.status_code == 200

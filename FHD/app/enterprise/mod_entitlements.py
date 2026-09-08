@@ -215,6 +215,7 @@ def _parse_mod_ids_from_market_payload(payload: Any) -> set[str]:
 
 async def fetch_entitled_client_mod_ids_from_market(market_token: str) -> set[str]:
     """从修茈市场拉取当前账号绑定的客户 Mod（不走 is_admin 全量列表）。"""
+    from app.application.delivery_entitlements import valid_entitlement_ids
     from app.fastapi_routes.market_account import _proxy_json
 
     tok = (market_token or "").strip()
@@ -233,8 +234,6 @@ async def fetch_entitled_client_mod_ids_from_market(market_token: str) -> set[st
     if isinstance(payload, dict):
         raw = payload.get("mod_ids") or payload.get("data", {}).get("mod_ids")
         if isinstance(raw, list):
-            from app.application.delivery_entitlements import valid_entitlement_ids
-
             return valid_entitlement_ids(raw)
     return _parse_mod_ids_from_market_payload(payload)
 
