@@ -102,14 +102,18 @@ def resolve_missing_field(
             )
             if not isinstance(identity, str) or not identity.strip():
                 return None
-            quantity = product.get("quantity_tins")
+            shipment_quantity = product.get("quantity_tins")
             spec = product.get("tin_spec")
-            if type(quantity) is not int or quantity <= 0:
+            if (
+                not isinstance(shipment_quantity, int)
+                or isinstance(shipment_quantity, bool)
+                or shipment_quantity <= 0
+            ):
                 return None
-            if type(spec) not in (int, float) or spec <= 0:
+            if not isinstance(spec, (int, float)) or isinstance(spec, bool) or spec <= 0:
                 return None
             try:
-                if not math.isfinite(spec) or not math.isfinite(quantity):
+                if not math.isfinite(spec) or not math.isfinite(shipment_quantity):
                     return None
             except OverflowError:
                 return None
