@@ -75,6 +75,9 @@ class InventoryCountingMixin:
                         "confirmed": False,
                         "message": "盘点待确认",
                         "data": {
+                            "ledger_id": ledger.id,
+                            "location_id": ledger.location_id,
+                            "unit": ledger.unit,
                             "product_id": product_id,
                             "warehouse_id": warehouse_id,
                             "batch_no": batch_no,
@@ -119,6 +122,9 @@ class InventoryCountingMixin:
                     "confirmed": True,
                     "message": "盘点确认成功",
                     "data": {
+                        "ledger_id": ledger.id,
+                        "location_id": ledger.location_id,
+                        "unit": ledger.unit,
                         "product_id": product_id,
                         "warehouse_id": warehouse_id,
                         "batch_no": batch_no,

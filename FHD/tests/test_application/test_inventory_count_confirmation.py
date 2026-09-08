@@ -88,6 +88,9 @@ def test_ai_count_preview_and_confirmation_only_change_selected_location(tmp_pat
         preview = _registered_router_inventory("inventory_count", params, {}, "normal", "")
     assert preview["success"] and preview["confirmed"] is False
     assert preview["data"]["diff"] == -3
+    assert preview["data"]["ledger_id"] == 2
+    assert preview["data"]["location_id"] == 2
+    assert preview["data"]["unit"] == "桶"
     with factory() as db:
         assert [
             float(row.quantity) for row in db.query(InventoryLedger).order_by(InventoryLedger.id)
@@ -98,6 +101,8 @@ def test_ai_count_preview_and_confirmation_only_change_selected_location(tmp_pat
             "inventory_count", {**params, "confirmed": True}, {}, "normal", ""
         )
     assert result["success"] and result["confirmed"] is True
+    assert result["data"]["ledger_id"] == preview["data"]["ledger_id"]
+    assert result["data"]["location_id"] == 2 and result["data"]["unit"] == "桶"
     with factory() as db:
         rows = db.query(InventoryLedger).order_by(InventoryLedger.id).all()
         assert [
