@@ -61,6 +61,15 @@ def resolve_missing_field(
             return None
     elif kind != "string":
         return None
+    if node.tool_id == "sales" and node.action == "quote" and field == "items":
+        product = node.params.get("_quote_product")
+        if (
+            isinstance(product, dict)
+            and isinstance(value, list)
+            and len(value) == 1
+            and isinstance(value[0], dict)
+        ):
+            value = [{**product, **value[0]}]
     params = {**node.params, field: value}
     if len(missing) == 1:
         if not validate_tool_call(node.tool_id, node.action, params).ok:

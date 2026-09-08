@@ -55,9 +55,23 @@ def test_sales_candidates_are_exact_tenant_bound_and_read_only(monkeypatch):
             "unpriced", "给星光的产品A100报个价", get_workflow_tool_registry()
         )
         assert [(n.tool_id, n.action) for n in incomplete.nodes] == [
-            ("clarify", "ask"), ("sales", "quote")
+            ("clarify", "ask"),
+            ("sales", "quote"),
         ]
-        assert incomplete.nodes[1].params == {"customer_id": 1}
+        assert incomplete.nodes[1].params == {
+            "customer_id": 1,
+            "_quote_product": {"product_id": 1, "unit": "个"},
+        }
+        from app.application.workflow.clarification_fields import resolve_missing_field
+
+        filled = resolve_missing_field(
+            incomplete.nodes[1],
+            {"reason": "missing_required", "field": "items", "missing_fields": ["items"]},
+            '[{"quantity": 2, "unit_price": 25.5}]',
+        )
+        assert filled == {
+            "items": [{"product_id": 1, "unit": "个", "quantity": 2, "unit_price": 25.5}]
+        }
         assert "A100" in incomplete.nodes[1].description
         assert db.query(SalesOrder).count() == 0
         assert db.query(SalesOrderItem).count() == 0

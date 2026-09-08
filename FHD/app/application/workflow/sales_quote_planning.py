@@ -70,6 +70,9 @@ def _unpriced_quote_node(message: str) -> WorkflowNode | None:
     params = {}
     if candidates["customer_unique"]:
         params["customer_id"] = candidates["customer_candidates"][0]["id"]
+    if candidates["product_unique"]:
+        product = candidates["product_candidates"][0]
+        params["_quote_product"] = {"product_id": product["id"], "unit": product["unit"]}
     return WorkflowNode(
         node_id="sales_quote",
         tool_id="sales",
