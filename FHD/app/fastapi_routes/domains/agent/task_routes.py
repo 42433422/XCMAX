@@ -233,6 +233,7 @@ def create_agent_task(
                 action=str(data.get("action") or ""),
                 params=params,
                 runtime_context=runtime_context,
+                scheduled_at=data.get("scheduled_at"),
             )
         response = run_response(result.run, principal=principal)
         response["deduplicated"] = result.deduplicated

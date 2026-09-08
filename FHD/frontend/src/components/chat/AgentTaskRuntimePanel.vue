@@ -8,6 +8,9 @@
         >调度 {{ payload.execution.state }} · 执行 {{ payload.execution.execution_count }} 次 · 恢复
         {{ payload.execution.recovery_count }} 次</span
       >
+      <span v-if="payload.execution?.available_at && payload.execution.state === 'queued'">
+        最早执行时间：{{ new Date(payload.execution.available_at).toLocaleString() }}
+      </span>
     </div>
     <div v-if="payload.workspaceId || payload.workspacePath" class="agent-task-workspace">
       <strong>{{ $t('chat.taskWorkspace') }}</strong>
@@ -92,6 +95,7 @@ type AgentTaskPayload = {
   finalOutput?: Record<string, unknown>
   artifacts?: AgentArtifact[]
   execution?: {
+    available_at?: string
     state: string
     execution_count: number
     recovery_count: number

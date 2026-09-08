@@ -17,6 +17,7 @@ from app.application.agent_orchestrator.task_execution_models import (
     _task_id_of,
 )
 from app.application.agent_orchestrator.task_models import tenant_id_of_run
+from app.application.agent_orchestrator.task_schedule import execution_available_at
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -42,6 +43,7 @@ class SQLAlchemyTaskExecutionRepository:
     ) -> AgentTaskExecution:
         self._ensure_schema()
         now = utc_now_iso()
+        available_at = execution_available_at(run, now)
         with self._session_scope() as db:
             from app.db.models.agent import AgentTaskExecutionRecord
 
@@ -54,7 +56,7 @@ class SQLAlchemyTaskExecutionRepository:
                     tenant_id=tenant_id_of_run(run),
                     state="queued",
                     priority=int(priority),
-                    available_at=now,
+                    available_at=available_at,
                     created_at=now,
                     updated_at=now,
                 )
@@ -66,7 +68,7 @@ class SQLAlchemyTaskExecutionRepository:
                 record.heartbeat_at = None
                 record.finished_at = None
             record.priority = int(priority)
-            record.available_at = now
+            record.available_at = available_at
             record.requested_by = str(requested_by or "") or None
             record.last_error_code = None
             record.updated_at = now

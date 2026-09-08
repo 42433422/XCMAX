@@ -234,6 +234,7 @@ export interface AgentTaskListResponse extends ApiResponse<AgentTaskSummary[]> {
 export interface AgentTaskResponse extends ApiResponse<AgentTaskSummary> {}
 
 export interface CreateAgentTaskPayload {
+  scheduled_at?: string
   task_id: string
   title: string
   message?: string

@@ -180,6 +180,14 @@ def build_registered_capability_tool_definition() -> dict[str, Any]:
                         "description": "该动作的业务参数。不会接受 _runtime_context 或鉴权注入字段。",
                         "additionalProperties": True,
                     },
+                    "scheduled_at": {
+                        "type": "string",
+                        "description": "用户要求定时执行时提供带时区 ISO 8601 时间；仅创建一次性任务，须在任务中心审批，不会立即执行。时间或时区不明确时先询问。",
+                    },
+                    "task_id": {
+                        "type": "string",
+                        "description": "定时任务必填的稳定请求标识，重复调用必须保持相同 ID；不能含 /。",
+                    },
                 },
                 "required": ["tool_id", "action"],
             },
@@ -294,6 +302,22 @@ def execute_registered_capability(
     resolved = resolve_registered_capability_call(args)
     if not resolved.get("success"):
         return json.dumps(resolved, ensure_ascii=False)
+
+    if args is not None and "scheduled_at" in args:
+        from fastapi import HTTPException
+
+        from app.application.tools.scheduled_capability import create_scheduled_capability
+
+        try:
+            scheduled = create_scheduled_capability(args, resolved)
+        except HTTPException:
+            scheduled = {"success": False, "message": "创建定时任务需要有效登录会话"}
+        except RECOVERABLE_ERRORS:
+            scheduled = {
+                "success": False,
+                "message": "定时任务创建失败，请检查登录状态、任务 ID 和执行时间",
+            }
+        return json.dumps(scheduled, ensure_ascii=False)
 
     from app.application.workflow.approval_gated_engine import ApprovalGatedEngine
     from app.application.workflow.engine import WorkflowEngine
