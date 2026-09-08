@@ -43,18 +43,19 @@ def _registered_router_inventory(
         return _facade().cast(
             "dict[Any, Any]", svc.delete_warehouse(int(params.get("warehouse_id") or 0))
         )
-    if action == "stock_in":
+    if action in {"stock_in", "stock_out", "transfer"}:
         import math
 
         raw_quantity = params.get("quantity")
         if raw_quantity is None:
-            return {"success": False, "message": "入库数量必须为有限正数"}
+            return {"success": False, "message": "库存操作数量必须为有限正数"}
         try:
             quantity = float(raw_quantity)
         except (TypeError, ValueError, OverflowError):
-            return {"success": False, "message": "入库数量必须为有限正数"}
+            return {"success": False, "message": "库存操作数量必须为有限正数"}
         if isinstance(raw_quantity, bool) or not math.isfinite(quantity) or quantity <= 0:
-            return {"success": False, "message": "入库数量必须为有限正数"}
+            return {"success": False, "message": "库存操作数量必须为有限正数"}
+    if action == "stock_in":
         return _facade().cast(
             "dict[Any, Any]",
             svc.inventory_in(
@@ -81,10 +82,9 @@ def _registered_router_inventory(
             svc.inventory_out(
                 product_id=params.get("product_id"),
                 warehouse_id=params.get("warehouse_id"),
-                quantity=float(params.get("quantity", 0)),
+                quantity=quantity,
                 batch_no=params.get("batch_no"),
                 location_id=params.get("location_id"),
-                unit_price=_float_or_none(params.get("unit_price")),
                 reference_type=params.get("reference_type"),
                 reference_id=params.get("reference_id"),
                 operator=params.get("operator"),
@@ -98,7 +98,7 @@ def _registered_router_inventory(
                 product_id=params.get("product_id"),
                 from_warehouse_id=params.get("from_warehouse_id"),
                 to_warehouse_id=params.get("to_warehouse_id"),
-                quantity=float(params.get("quantity", 0)),
+                quantity=quantity,
                 batch_no=params.get("batch_no"),
                 from_location_id=params.get("from_location_id"),
                 to_location_id=params.get("to_location_id"),

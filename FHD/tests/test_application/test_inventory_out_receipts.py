@@ -52,7 +52,13 @@ def test_outbound_receipt_records_selected_stock_batch_and_location(tmp_path, mo
             )
         )
     with tenant_scope(1):
-        result = InventoryService().inventory_out(1, 1, 3)
+        from app.services.tools_workflow_registered_part01_part02 import (
+            _registered_router_inventory,
+        )
+
+        result = _registered_router_inventory(
+            "stock_out", {"product_id": 1, "warehouse_id": 1, "quantity": "3"}, {}, "normal", ""
+        )
     assert result["success"], result
     with factory() as db:
         ledger = db.query(InventoryLedger).one()
@@ -61,3 +67,18 @@ def test_outbound_receipt_records_selected_stock_batch_and_location(tmp_path, mo
         assert (transaction.ledger_id, transaction.location_id, transaction.batch_no) == (1, 1, "B")
         assert (float(transaction.before_quantity), float(transaction.after_quantity)) == (10, 7)
     engine.dispose()
+
+
+@pytest.mark.parametrize("action", ["stock_out", "transfer"])
+@pytest.mark.parametrize("quantity", [True, None, "bad", "NaN", "Infinity", 0, -1])
+def test_ai_inventory_rejects_invalid_quantity_before_service(action, quantity):
+    from unittest.mock import Mock
+
+    from app.services.tools_workflow_registered_part01_part02 import _registered_router_inventory
+
+    service = Mock()
+    with patch("app.application.inventory_app_service.InventoryAppService", return_value=service):
+        result = _registered_router_inventory(action, {"quantity": quantity}, {}, "normal", "")
+    assert not result["success"]
+    service.inventory_out.assert_not_called()
+    service.inventory_transfer.assert_not_called()
