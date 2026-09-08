@@ -40,7 +40,7 @@ test('cutover preserves devices and data, protects secrets, and refuses live API
     const result = await provisionControl({ ...config, apply: true }, async () => true);
     assert.equal(result.applied, true);
     const credentials = JSON.parse(prepared);
-    const owner = database.prepare('SELECT * FROM users').get();
+    const owner = database.prepare('SELECT id,email,is_guest,password_hash FROM users LIMIT 1').get();
     assert.equal(owner.id, 'owner'); assert.equal(owner.is_guest, 0);
     assert.equal(require('bcryptjs').compareSync(credentials.password, owner.password_hash), true);
     assert.equal(database.prepare('SELECT device_token_hash FROM devices').get().device_token_hash, 'unchanged-device-hash');

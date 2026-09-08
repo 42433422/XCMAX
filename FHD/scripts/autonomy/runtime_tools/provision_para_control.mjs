@@ -29,7 +29,7 @@ export async function provisionControl(options, stopped = apiStopped) {
   const secretsPath = join(stateDir, 'control-credentials.json');
   const envPath = join(paraRoot, '.env');
   try {
-    const owner = database.prepare('SELECT * FROM users WHERE id=?').get(options.owner_id);
+    const owner = database.prepare('SELECT id,email,is_guest FROM users WHERE id=?').get(options.owner_id);
     if (!owner) throw new Error('owner_missing');
     for (const id of options.device_ids) {
       if (database.prepare('SELECT user_id FROM devices WHERE id=?').get(id)?.user_id !== owner.id) throw new Error('device_owner_mismatch');

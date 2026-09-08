@@ -3,11 +3,12 @@ import { createHash } from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
-const exec = promisify(execFile);
+// Run a fixed executable with argument arrays; never interpret a shell command.
+const execFileAsync = promisify(execFile);
 export async function sourceIdentity(directory, expectedCommit, expectedDigest = '') {
-  const state = await exec('git', ['status', '--porcelain', '--untracked-files=normal'], { cwd: directory, timeout: 10000 });
+  const state = await execFileAsync('git', ['status', '--porcelain', '--untracked-files=normal'], { cwd: directory, shell: false, timeout: 10000 });
   if (state.stdout.trim()) throw new Error('handoff_workspace_not_clean');
-  const { stdout } = await exec('git', ['rev-parse', 'HEAD'], { cwd: directory, timeout: 10000 });
+  const { stdout } = await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: directory, shell: false, timeout: 10000 });
   const commit = stdout.trim();
   if (!/^[0-9a-f]{40}$/.test(commit) || (expectedCommit && commit !== expectedCommit)) throw new Error('handoff_commit_mismatch');
   const child = spawn('git', ['archive', '--format=tar', commit], { cwd: directory, stdio: ['ignore', 'pipe', 'ignore'] });
