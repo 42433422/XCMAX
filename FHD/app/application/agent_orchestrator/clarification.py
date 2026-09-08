@@ -44,6 +44,17 @@ def apply_clarification_answer(run: AgentRun, *, step_id: str, parameters: dict[
     target.params = candidate
     step.status = "completed"
     step.output = {**step.output, "answer_confirmed": True, "requires_confirmation": False}
+    for other in run.steps:
+        detail = other.params.get("clarification") or {}
+        if (
+            other.status == "pending"
+            and (other.tool_id, other.action) == ("clarify", "ask")
+            and other.params.get("target_node_id") == target.node_id
+            and isinstance(detail, dict)
+            and detail.get("reason") == "missing_required"
+        ):
+            other.status = "completed"
+            other.output = {"answer_confirmed": True, "resolved_by_step_id": step.step_id}
     run.final_output = {}
     run.error = ""
     run.add_event(

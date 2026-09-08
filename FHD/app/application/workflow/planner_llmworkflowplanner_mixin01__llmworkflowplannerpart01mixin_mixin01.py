@@ -197,7 +197,8 @@ class __LLMWorkflowPlannerPart01MixinPart01Mixin:
         inserted: list[_facade().WorkflowNode] = []
         for item in items:
             clarify = _facade().build_clarify_node(
-                item["question"], ambient={"target_node_id": item["node_id"]}
+                item["question"],
+                ambient={"target_node_id": item["node_id"], "clarification": item},
             )
             plan.nodes.insert(0, clarify)
             inserted.append(clarify)
