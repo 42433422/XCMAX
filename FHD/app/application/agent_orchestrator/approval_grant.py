@@ -95,7 +95,7 @@ def issue_approval_grant(
     }
 
 
-def consume_approval_grant(token: str, *, run: AgentRun, principal_id: str) -> dict[str, Any]:
+def validate_approval_grant(token: str, *, run: AgentRun, principal_id: str) -> dict[str, Any]:
     if not str(token or "").strip():
         raise ApprovalGrantError("缺少 approval_grant")
     try:
@@ -124,10 +124,15 @@ def consume_approval_grant(token: str, *, run: AgentRun, principal_id: str) -> d
     if step is None or any(str(claims.get(key) or "") != value for key, value in expected.items()):
         raise ApprovalGrantError("approval_grant 与当前待审批步骤不匹配")
 
+    return claims
+
+
+def consume_approval_grant(token: str, *, run: AgentRun, principal_id: str) -> dict[str, Any]:
+    claims = validate_approval_grant(token, run=run, principal_id=principal_id)
     jti = str(claims.get("jti") or "")
     try:
         consumed = _consumption_repository().consume(
-            jti=jti, run_id=run.run_id, step_id=step.step_id
+            jti=jti, run_id=run.run_id, step_id=str(claims["step_id"])
         )
     except (SQLAlchemyError, OSError) as exc:
         logger.exception("approval consumption storage unavailable")
@@ -147,4 +152,5 @@ __all__ = [
     "clear_consumed_approval_grants_for_tests",
     "consume_approval_grant",
     "issue_approval_grant",
+    "validate_approval_grant",
 ]

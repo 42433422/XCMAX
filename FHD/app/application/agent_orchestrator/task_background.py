@@ -25,6 +25,49 @@ def task_execution_context(run: AgentRun, step: Any) -> dict[str, Any]:
     }
 
 
+def apply_approved_step(
+    run: AgentRun,
+    step: Any,
+    *,
+    approved_by: str,
+    runtime_context: dict[str, Any] | None = None,
+) -> None:
+    """Apply an already validated approval without performing storage I/O."""
+    context = dict(run.metadata.get("runtime_context") or {})
+    context.update(dict(runtime_context or {}))
+    run.metadata["runtime_context"] = context
+    apply_ai_budget_metadata(run, context)
+    step.status = "pending"
+    run.status = "queued"
+    run.error = ""
+    run.metadata["dispatch"] = {
+        "state": "queued",
+        "approved_step_id": step.step_id,
+        "approved_by": str(approved_by or ""),
+        "queued_at": utc_now_iso(),
+    }
+    run.add_event(
+        "step.approved",
+        f"步骤 {step.node_id} 已确认继续",
+        {
+            "step_id": step.step_id,
+            "node_id": step.node_id,
+            "tool_id": step.tool_id,
+            "action": step.action,
+            "approved_by": str(approved_by or ""),
+        },
+    )
+    run.add_event(
+        "task.queued",
+        "任务已进入后台执行队列",
+        {
+            "step_id": step.step_id,
+            "node_id": step.node_id,
+            "approved_by": str(approved_by or ""),
+        },
+    )
+
+
 class BackgroundTaskExecutionMixin:
     if TYPE_CHECKING:
         _apply_requested_control: Any
@@ -89,39 +132,7 @@ class BackgroundTaskExecutionMixin:
         step = self._find_waiting_step(run, approved_step_id=approved_step_id)
         if step is None:
             return cast("AgentRun | None", self._repo.save(run))
-        context = dict(run.metadata.get("runtime_context") or {})
-        context.update(dict(runtime_context or {}))
-        run.metadata["runtime_context"] = context
-        apply_ai_budget_metadata(run, context)
-        step.status = "pending"
-        run.status = "queued"
-        run.error = ""
-        run.metadata["dispatch"] = {
-            "state": "queued",
-            "approved_step_id": step.step_id,
-            "approved_by": str(approved_by or ""),
-            "queued_at": utc_now_iso(),
-        }
-        run.add_event(
-            "step.approved",
-            f"步骤 {step.node_id} 已确认继续",
-            {
-                "step_id": step.step_id,
-                "node_id": step.node_id,
-                "tool_id": step.tool_id,
-                "action": step.action,
-                "approved_by": str(approved_by or ""),
-            },
-        )
-        run.add_event(
-            "task.queued",
-            "任务已进入后台执行队列",
-            {
-                "step_id": step.step_id,
-                "node_id": step.node_id,
-                "approved_by": str(approved_by or ""),
-            },
-        )
+        apply_approved_step(run, step, approved_by=approved_by, runtime_context=runtime_context)
         return cast("AgentRun | None", self._repo.save(run))
 
     def stage_resume_run(

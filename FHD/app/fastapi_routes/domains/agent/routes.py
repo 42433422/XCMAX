@@ -17,8 +17,18 @@ from app.application.agent_orchestrator.approval_grant import (
     ApprovalGrantStorageError,
     consume_approval_grant,
 )
+from app.application.agent_orchestrator.approval_transaction import approve_and_enqueue
 from app.application.agent_orchestrator.clarification import ClarificationAnswerError
 from app.application.agent_orchestrator.run_control import run_operation_lock
+from app.application.agent_orchestrator.run_repository import get_agent_run_repository
+from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+from app.application.agent_orchestrator.task_dispatcher import notify_agent_task_dispatcher
+from app.application.agent_orchestrator.task_execution_repository import (
+    get_task_execution_repository,
+)
+from app.application.agent_orchestrator.task_execution_sql_repository import (
+    SQLAlchemyTaskExecutionRepository,
+)
 from app.fastapi_routes.domains.agent.route_support import (
     PUBLIC_APPROVAL_ERROR as _PUBLIC_APPROVAL_ERROR,
 )
@@ -286,23 +296,40 @@ def continue_agent_run(
                 return error
             if current is None:
                 return _internal_error_response("approve agent run")
-            claims = consume_approval_grant(
-                str(data.get("approval_grant") or ""),
-                run=current,
-                principal_id=principal.user_id,
-            )
-            run = orchestrator.stage_approved_run(
-                run_id,
-                approved_by=principal.user_id,
-                approved_step_id=str(claims["step_id"]),
-                runtime_context=runtime_context,
-            )
+            runs = get_agent_run_repository()
+            queue = get_task_execution_repository()
+            durable = isinstance(runs, SQLAlchemyAgentRunRepository)
+            if durable:
+                if not isinstance(queue, SQLAlchemyTaskExecutionRepository):
+                    raise ApprovalGrantStorageError("持久化审批需要持久化队列")
+                run = approve_and_enqueue(
+                    runs,
+                    queue,
+                    run_id=run_id,
+                    token=str(data.get("approval_grant") or ""),
+                    principal_id=principal.user_id,
+                    runtime_context=runtime_context,
+                )
+            else:
+                claims = consume_approval_grant(
+                    str(data.get("approval_grant") or ""),
+                    run=current,
+                    principal_id=principal.user_id,
+                )
+                run = orchestrator.stage_approved_run(
+                    run_id,
+                    approved_by=principal.user_id,
+                    approved_step_id=str(claims["step_id"]),
+                    runtime_context=runtime_context,
+                )
         if run is None:
             return JSONResponse(
                 {"success": False, "message": "agent run 不存在"},
                 status_code=404,
             )
-        if run.status == "queued":
+        if durable:
+            notify_agent_task_dispatcher()
+        elif run.status == "queued":
             _enqueue_run(run, requested_by=principal.user_id)
         return JSONResponse(_run_response(run, principal=principal), status_code=202)
     except ApprovalGrantStorageError:

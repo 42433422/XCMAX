@@ -17,6 +17,19 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- The SQL-backed HTTP approval route now revalidates the signed grant against
+  a freshly read run and commits consumption, run/task staging and enqueue in
+  one transaction. It checks the queue shares the same engine, uses row locking
+  plus a payload comparison, and notifies the dispatcher only after commit.
+  A real SQLite HTTP test injects failure after queue flush: 503, no notification,
+  no consumption or queue row, and the waiting run retained. The same grant then
+  succeeds once and replay is rejected. All 39 route/repository/transaction
+  checks passed (`atomic-http-approval-final`). In-memory test repositories retain
+  their explicit non-durable path. Forced process death, concurrent control
+  changes, post-commit response loss, stale-worker business fencing, and exact-main
+  delivery remain to be verified; private repository transaction access should
+  converge on an explicit unit-of-work interface during D3 cleanup.
+
 - Run/task persistence and queue enqueue now expose caller-owned-session methods;
   existing standalone methods use the same implementations. File-backed SQLite
   fault tests flush approval, run/task and queue writes and interrupt after each

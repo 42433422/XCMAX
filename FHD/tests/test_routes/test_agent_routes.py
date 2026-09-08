@@ -457,6 +457,76 @@ def test_approval_storage_failure_preserves_waiting_run_and_allows_retry(tmp_pat
         engine.dispose()
 
 
+def test_durable_http_approval_rolls_back_enqueue_failure_and_retries(tmp_path, monkeypatch):
+    from sqlalchemy import create_engine
+    from sqlalchemy.exc import OperationalError
+    from sqlalchemy.orm import sessionmaker
+
+    from app.application.agent_orchestrator.approval_grant import issue_approval_grant
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+    from app.application.agent_orchestrator.task_execution_sql_repository import (
+        SQLAlchemyTaskExecutionRepository,
+    )
+    from app.db.models.agent_approval import AgentApprovalConsumption
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'http-atomic.db'}")
+    factory = sessionmaker(bind=engine)
+    runs = SQLAlchemyAgentRunRepository(session_factory=factory)
+    queue = SQLAlchemyTaskExecutionRepository(session_factory=factory)
+    set_agent_run_repository_for_tests(runs)
+    set_task_execution_repository_for_tests(queue)
+    AgentApprovalConsumption.__table__.create(engine)
+    run = AgentRun(
+        user_id="owner",
+        message="approve",
+        status="waiting_user",
+        steps=[
+            AgentStep(node_id="node", tool_id="sales", action="create_order", status="waiting_user")
+        ],
+    )
+    runs.save(run)
+    token = issue_approval_grant(run, principal_id="owner")["grant"]
+    enqueue = queue.enqueue_in_session
+
+    def interrupted(db, run, **kwargs):
+        enqueue(db, run, **kwargs)
+        db.flush()
+        raise OperationalError("injected failure", {}, RuntimeError("interrupted"))
+
+    try:
+        client = _client("owner")
+        with patch(
+            "app.fastapi_routes.domains.agent.routes.notify_agent_task_dispatcher"
+        ) as notify:
+            monkeypatch.setattr(queue, "enqueue_in_session", interrupted)
+            failed = client.post(
+                f"/api/agent/runs/{run.run_id}/continue", json={"approval_grant": token}
+            )
+            assert failed.status_code == 503
+            notify.assert_not_called()
+            assert runs.get(run.run_id).status == "waiting_user"
+            assert queue.get(run.run_id) is None
+            with factory() as db:
+                assert db.query(AgentApprovalConsumption).count() == 0
+            monkeypatch.setattr(queue, "enqueue_in_session", enqueue)
+            accepted = client.post(
+                f"/api/agent/runs/{run.run_id}/continue", json={"approval_grant": token}
+            )
+            assert accepted.status_code == 202
+            notify.assert_called_once()
+            assert runs.get(run.run_id).status == "queued"
+            assert queue.get(run.run_id).state == "queued"
+            with factory() as db:
+                assert db.query(AgentApprovalConsumption).count() == 1
+            replay = client.post(
+                f"/api/agent/runs/{run.run_id}/continue", json={"approval_grant": token}
+            )
+            assert replay.status_code == 403
+            notify.assert_called_once()
+    finally:
+        engine.dispose()
+
+
 def test_create_agent_run_validates_request_body() -> None:
     get_agent_run_repository().clear()
     client = _client()
