@@ -17,6 +17,15 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Real signed grants now have process-level evidence using the default production
+  repository factory with an isolated SessionLocal: two spawned processes yield
+  one consumption and one replay rejection; a third fresh process rejects a
+  renewed token for the same action. Exactly one DB row remains. The actual
+  migration upgrade builds a usable unique-JTI table and downgrade removes it
+  in isolated SQLite. All 29 repository/HTTP checks passed
+  (`signed-approval-restart`). This does not test the full migration chain or
+  production migration, nor close the consumption/stage/enqueue crash window.
+
 - Signed approval consumption now uses the durable repository instead of Redis
   with process-local fallback. The HTTP continuation endpoint returns 503 on
   storage failure before staging or enqueueing the run. An unmigrated SQLite
