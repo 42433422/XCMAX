@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import pytest
+
 from app.application.ai_chat_app_service_aichatapplicationservice_mixin03 import (
     _AIChatApplicationServicePart03Mixin,
 )
@@ -134,10 +136,13 @@ def test_multiple_required_fields_wait_until_all_are_valid():
     service._run_workflow_with_state_updates.assert_not_called()
 
 
-def test_structured_quote_answer_requires_approval_before_execution():
+@pytest.mark.parametrize("retain_product", [False, True])
+def test_structured_quote_answer_requires_approval_before_execution(retain_product):
     node = WorkflowNode(
         node_id="quote", tool_id="sales", action="quote", params={"customer_id": 101}, risk="medium"
     )
+    if retain_product:
+        node.params["_quote_product"] = {"product_id": 201, "unit": "桶"}
     plan = PlanGraph(plan_id="quote-plan", intent="sales_quote", nodes=[node])
     pending = {
         "plan": plan,
@@ -158,16 +163,27 @@ def test_structured_quote_answer_requires_approval_before_execution():
     )
     service.approval_service.get_approval_required_nodes.return_value = [node]
     response = _AIChatApplicationServicePart03Mixin._continue_after_clarification(
-        service, "u", pending, '[{"product_id":201,"quantity":2,"unit_price":25.5}]'
+        service,
+        "u",
+        pending,
+        (
+            '[{"quantity":2,"unit_price":25.5}]'
+            if retain_product
+            else '[{"product_id":201,"quantity":2,"unit_price":25.5}]'
+        ),
     )
     assert response["data"]["action"] == "workflow_confirmation_required"
     resumed = service._pending_workflows["u"]
     assert resumed["approval_required"] is True
     assert resumed["runtime_context"]["tenant_id"] == 7
-    assert resumed["approval_nodes"][0]["params"] == {
+    expected = {
         "customer_id": 101,
         "items": [{"product_id": 201, "quantity": 2, "unit_price": 25.5}],
     }
+    if retain_product:
+        expected["_quote_product"] = {"product_id": 201, "unit": "桶"}
+        expected["items"][0]["unit"] = "桶"
+    assert resumed["approval_nodes"][0]["params"] == expected
     service._run_workflow_with_state_updates.assert_not_called()
 
 
