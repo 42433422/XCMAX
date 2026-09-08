@@ -210,6 +210,13 @@ class _LLMWorkflowPlannerPart02Mixin:
                         idempotent=True,
                     )
                 )
+        if not nodes and "sales" in tool_registry:
+            from .sales_quote_planning import explicit_sales_quote_node
+
+            quote_node = explicit_sales_quote_node(message)
+            if quote_node is not None:
+                intent = "sales_quote"
+                nodes.append(quote_node)
         if not nodes and "finance" in tool_registry:
             from .finance_query import monthly_ledger_node
 
