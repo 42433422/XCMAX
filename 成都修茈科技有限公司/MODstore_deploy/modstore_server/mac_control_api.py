@@ -124,6 +124,9 @@ def task_detail(
         from modstore_server.mac_control_facts import customer_facts
 
         payload["facts"] = customer_facts(db, request.get("customer_id"), request.get("ticket_id"))
+    from modstore_server.mac_control_delivery import delivery_trace
+
+    payload["delivery_trace"] = delivery_trace(db, task, payload.get("facts"))
     return {
         "success": True,
         "task": payload,
@@ -174,7 +177,11 @@ def fleet(user: User = Depends(require_admin), db: Session = Depends(get_db)):
         "source": "para:/api/devices",
         "observed_at": row.observed_at if row else None,
         "checked_at": row.checked_at if row else None,
-        "freshness": "missing" if age is None else "stale" if age > stale_window() else "fresh",
+        "freshness": (
+            "missing"
+            if age is None
+            else "stale" if age > stale_window() or (row and row.error) else "fresh"
+        ),
         "error": row.error if row else "not_observed",
         "devices": json.loads(row.payload_json) if row and row.observed_at else [],
     }

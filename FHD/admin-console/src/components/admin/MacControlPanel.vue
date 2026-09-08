@@ -6,7 +6,7 @@
     <p v-if="fleet?.error">连接状态：{{ fleet.error }}</p>
     <div class="devices">
       <article v-for="device in fleet?.devices || []" :key="device.id">
-        <strong>{{ device.name }}</strong><span>{{ fleet?.freshness !== 'fresh' ? '状态待核实' : deviceLabel(device.status) }}{{ device.id === fleet?.primary_device_id ? ' · 主设备' : '' }}</span>
+        <strong>{{ device.name }}</strong><span>{{ fleet?.freshness !== 'fresh' || fleet?.error ? '状态待核实' : deviceLabel(device.status) }}{{ device.id === fleet?.primary_device_id ? ' · 主设备' : '' }}</span>
         <small>设备 ID：{{ device.id }} · 最后心跳：{{ device.last_seen || '未提供' }}</small>
         <small v-for="tool in device.tools" :key="tool.toolName">{{ tool.toolName }}：{{ deviceLabel(tool.status) }} {{ tool.currentTask || '' }}</small>
       </article>
@@ -28,6 +28,7 @@
       <h4>{{ selected.request.message }}</h4><p>任务 {{ selected.id }} · Para {{ selected.para_task_id || '尚未派发' }}</p>
       <p v-if="selected.request.parent_task_id">上游任务 <button @click="inspect(selected.request.parent_task_id!)">{{ selected.request.parent_task_id }}</button> · 提交 {{ selected.request.source_sha }} · 源码包摘要 {{ selected.request.source_archive_sha256 }}</p>
       <p>执行：{{ label(selected.state) }} · 客户验收：待业务回执核对</p>
+      <section v-if="selected.delivery_trace"><h4>交付阶段与来源</h4><p>采集时间：{{ stamp(selected.delivery_trace.observed_at) }} · {{ selected.delivery_trace.freshness === 'fresh' ? '来源已核对' : '部分证据缺失或待核实' }}</p><p v-if="selected.delivery_trace.error">来源读取：{{ selected.delivery_trace.error }}</p><p v-if="selected.delivery_trace.source_commit">源码提交 {{ selected.delivery_trace.source_commit }} · 源码包摘要 {{ selected.delivery_trace.source_archive_sha256 || '未提供' }}</p><p v-if="selected.delivery_trace.runtime">运行提交 {{ selected.delivery_trace.runtime.git_sha || '未提供' }} · 发布身份 {{ selected.delivery_trace.runtime.release_id || '未提供' }} · 产物摘要 {{ selected.delivery_trace.runtime.artifact_sha256 || '未提供' }}</p><a v-if="selected.delivery_trace.pull_request" :href="selected.delivery_trace.pull_request.url" target="_blank" rel="noopener noreferrer">PR #{{ selected.delivery_trace.pull_request.number }}</a><p v-for="phase in selected.delivery_trace.stages" :key="phase.name">{{ phaseName(phase.name) }}：{{ phaseState(phase.state) }}<small> · 来源 {{ phase.source || '尚无证据' }} · {{ phase.reference }}</small></p></section>
       <p v-for="sub in selected.execution.subtasks || []" :key="sub.id">{{ sub.device_name }} · {{ sub.status }}</p>
       <section v-if="selected.execution.reports?.length"><h4>执行器答复与证据</h4><article v-for="report in selected.execution.reports.filter(r => r.report)" :key="report.event_id"><small>来源：Para 设备回写 · {{ report.received_at }} · {{ report.applied ? '已记录为当前尝试结果' : '历史回执，未推进状态' }}</small><pre class="report">{{ report.report }}</pre></article></section>
       <section v-if="selected.facts"><h4>客户工单事实</h4><p>读取时间：{{ stamp(selected.facts.observed_at) }}</p><article v-for="ticket in selected.facts.tickets" :key="ticket.id"><p v-if="ticket.error">工单 {{ ticket.id }}：证据读取失败，状态待核实。</p><p v-else>{{ ticket.title }} · 工单：{{ ticket.status }} · 交付阶段：{{ ticket.resolution.state || '待核对' }} · 安装回执 {{ ticket.receipt_counts.install_receipts }} 条</p><p v-if="!ticket.error && ticket.delivery_verification">客户验收：{{ ticket.delivery_verification.customer_acceptance === 'accepted' ? '已确认' : '待确认' }} · 运行与业务证据：{{ ticket.delivery_verification.runtime_business_verified ? '已核验' : '尚未齐全' }} · 交付：{{ ticket.delivery_verification.completed ? '业务系统已完成交付' : '尚未完成闭环' }}</p><small v-for="receipt in ticket.delivery_verification?.receipts || []" :key="receipt.receipt_id">回执 {{ receipt.receipt_id }} · {{ receipt.stage }} · 版本 {{ receipt.version }} · 宿主提交 {{ receipt.host_sha || '未提供' }}</small></article></section>
@@ -54,7 +55,9 @@ const pendingStorage = 'xcmax.mac-control.pending'
 let timer: ReturnType<typeof setInterval> | undefined
 let detailRequest = 0
 function stamp(value: number | null) { return value ? new Date(value * 1000).toLocaleString() : '尚无观测' }
-function label(state: string) { return ({ queued: '已受理', dispatching: '正在派发', running: '执行中', waiting_device: '等待设备或工具就绪', reconciling: '结果待核对', execution_completed: '执行完成，交付另行验收', failed: '执行失败', cancel_requested: '取消中，等待执行器确认', cancelled: '已取消' } as Record<string, string>)[state] || state }
+function label(state: string) { return ({ queued: '已受理', dispatching: '正在派发', running: '执行中', waiting_device: '等待设备或工具就绪', reconciling: '结果待核对', execution_completed: '执行完成，交付另行验收', failed: '执行失败', cancel_requested: '取消中，等待执行器确认', cancelled: '已取消', delivery_evidence_updated: '交付证据已更新' } as Record<string, string>)[state] || state }
+function phaseName(name: string) { return ({ code: '代码提交', tests: 'CI 测试', approval: '代码审核', merged: '主线合并', deployed: '生产部署', installed: '客户安装', business: '客户业务验收' } as Record<string, string>)[name] || name }
+function phaseState(state: string) { return ({ recorded: '已有执行器源码回执', passed: '检查通过', failed: '检查失败', pending: '等待中', approved: '已有审核通过记录', changes_requested: '审核要求修改', not_recorded: '尚无独立审核记录', verified: '来源已核验', receipt_received: '已收到回执，仍待核验', version_or_artifact_unverified: '运行版本或产物尚未对应', unknown: '待核实' } as Record<string, string>)[state] || state }
 function deviceLabel(state: string) { return ({ online: '在线', offline: '离线', stale: '状态已过期', idle: '空闲', running: '执行中', not_installed: '未安装', unknown: '待核实' } as Record<string, string>)[state] || state }
 async function refresh() {
   if (loading.value) return
@@ -107,7 +110,7 @@ form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12p
 form label:first-child { grid-column: 1 / -1; }
 form button { justify-self: start; }
 .devices { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin: 16px 0; }
-.devices article, .detail { padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; }
+.devices article, .detail { min-width: 0; overflow-wrap: anywhere; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; }
 small, .devices span, label { display: block; margin-top: 5px; }
 textarea { display: block; box-sizing: border-box; min-height: 90px; width: 100%; resize: vertical; padding: 10px; }
 input, select, textarea { border: 1px solid #cbd5e1; border-radius: 6px; background: inherit; color: inherit; }

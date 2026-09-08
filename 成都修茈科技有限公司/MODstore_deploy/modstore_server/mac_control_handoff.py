@@ -10,23 +10,7 @@ def schedule_windows_verification(db, parent, raw):
     request = json.loads(parent.request_json)
     if not request.get("verify_on_windows") or request.get("target") != "mac":
         return ""
-    evidence = None
-    for report in raw.get("reports", []):
-        if not report.get("applied") or report.get("status") != "completed":
-            continue
-        try:
-            candidate = json.loads(report.get("report", ""))
-        except (ValueError, TypeError):
-            continue
-        if (
-            isinstance(candidate, dict)
-            and candidate.get("source") == "executor_git_readback"
-            and candidate.get("pushed") is True
-            and re.fullmatch(r"[0-9a-f]{40}", str(candidate.get("commit_sha", "")))
-            and re.fullmatch(r"[0-9a-f]{64}", str(candidate.get("archive_sha256", "")))
-        ):
-            evidence = candidate
-            break
+    evidence = source_receipt(raw)
     if evidence is None:
         return "waiting_for_pushed_commit_and_source_archive_receipt"
     sha, archive = evidence["commit_sha"], evidence["archive_sha256"]
@@ -58,3 +42,22 @@ def schedule_windows_verification(db, parent, raw):
     event(db, parent, "windows_verification_queued", {"child_task_id": child.id, **evidence})
     db.commit()
     return ""
+
+
+def source_receipt(raw):
+    for report in raw.get("reports", []):
+        if not report.get("applied") or report.get("status") != "completed":
+            continue
+        try:
+            candidate = json.loads(report.get("report", ""))
+        except (ValueError, TypeError):
+            continue
+        if (
+            isinstance(candidate, dict)
+            and candidate.get("source") == "executor_git_readback"
+            and candidate.get("pushed") is True
+            and re.fullmatch(r"[0-9a-f]{40}", str(candidate.get("commit_sha", "")))
+            and re.fullmatch(r"[0-9a-f]{64}", str(candidate.get("archive_sha256", "")))
+        ):
+            return candidate
+    return None

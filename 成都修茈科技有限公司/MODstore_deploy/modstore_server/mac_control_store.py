@@ -29,16 +29,22 @@ def event(db: Session, task: MacControlTask, state: str, detail: dict) -> None:
     key = digest([task.id, task.attempt_id, state, detail])
     if db.query(MacControlEvent).filter_by(event_key=key).first():
         return
-    db.add(
-        MacControlEvent(
-            event_key=key,
-            task_id=task.id,
-            attempt_id=task.attempt_id,
-            state=state,
-            payload_json=encoded(detail),
-            created_at=time.time(),
-        )
+    record = MacControlEvent(
+        event_key=key,
+        task_id=task.id,
+        attempt_id=task.attempt_id,
+        state=state,
+        payload_json=encoded(detail),
+        created_at=time.time(),
     )
+    try:
+        with db.begin_nested():
+            db.add(record)
+            db.flush()
+    except IntegrityError:
+        if db.query(MacControlEvent).filter_by(event_key=key).first():
+            return
+        raise
     if state in {"failed", "awaiting_approval", "cancelled"}:
         enqueue(
             db,

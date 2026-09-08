@@ -9,6 +9,7 @@ export interface ControlTask {
   updated_at: number
   execution: { status?: string; merge_commit_sha?: string; subtasks?: Array<{ id: string; device_name: string; status: string }>; reports?: Array<{ event_id: string; report: string; applied: number; status: string; received_at: string }> }
   delivery: { status: string }
+  delivery_trace?: { observed_at: number | null; freshness: string; error?: string; source_commit?: string; source_archive_sha256?: string; runtime?: { git_sha?: string; release_id?: string; artifact_sha256?: string }; merge_commit_sha?: string; pull_request?: { number: number; url: string }; stages: Array<{ name: string; state: string; source: string; reference: string }> }
   facts?: { source: string; observed_at: number; tickets: Array<{ id: number; error?: string; title: string; status: string; resolution: { state?: string }; receipt_counts: { install_receipts: number; receipt_events: number }; delivery_verification?: { customer_acceptance: string; runtime_business_verified: boolean; completed: boolean; receipts: Array<{ receipt_id: string; stage: string; version: string; host_sha?: string; verified: boolean }> } }> }
 }
 export interface Fleet {

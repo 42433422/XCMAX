@@ -61,6 +61,19 @@ def customer_facts(db, customer_id=None, ticket_id=None):
             and receipt.get("owner_user_id") == row.user_id
             and str(receipt.get("generation") or "") == generation
         ]
+        host_shas = {
+            str(receipt.get("host_sha") or "")
+            for receipt in receipts
+            if re.fullmatch(r"[0-9a-f]{40}", str(receipt.get("host_sha") or ""))
+        }
+        verified_hosts = [
+            sha
+            for sha in sorted(host_shas)
+            if all_artifacts_running(
+                row,
+                {**evidence, "receipt_events": [r for r in receipts if r.get("host_sha") == sha]},
+            )
+        ]
         tickets.append(
             {
                 "id": row.id,
@@ -89,6 +102,7 @@ def customer_facts(db, customer_id=None, ticket_id=None):
                     "source": "customer_service_delivery_completion+customer_delivery_receipts",
                     "customer_acceptance": evidence.get("acceptance_status") or "unknown",
                     "runtime_business_verified": running,
+                    "verified_host_shas": verified_hosts,
                     "completed": bool(
                         row.status == "resolved" and evidence.get("delivered_at") and running
                     ),
