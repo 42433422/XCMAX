@@ -391,7 +391,7 @@ class TestCacheInvalidation:
         mock_cache = MagicMock()
         service._cache = mock_cache
         service._invalidate_single_product_cache(1)
-        mock_cache.delete.assert_called_once_with("product:1")
+        mock_cache.delete.assert_called_once_with(service._tenant_cache_key("product:1"))
 
     def test_invalidate_single_product_cache_error(self, service):
         mock_cache = MagicMock()
