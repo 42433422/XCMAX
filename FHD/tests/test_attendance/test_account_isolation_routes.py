@@ -160,7 +160,7 @@ def test_legacy_rows_belong_to_sunbird_after_migration(client):
     )
     conn.execute(
         "INSERT INTO attendance_employees (source_file, employee_name, department) "
-        "VALUES ('seed', '老数据', '综合部')"
+        "VALUES ('manual', '老数据', '综合部')"
     )
     conn.commit()
     conn.close()
@@ -169,6 +169,32 @@ def test_legacy_rows_belong_to_sunbird_after_migration(client):
     assert _employees(client) == {"老数据"}  # 迁移触发 + 归属太阳鸟
     _login(client, "wuxinghua1")
     assert _employees(client) == set()
+    # The same name must also be writable after upgrading a delivered database.
+    created = client.post(
+        "/api/mods/attendance-industry/employees",
+        json={"employee_name": "老数据", "department": "综合部"},
+    )
+    assert created.status_code == 200
+    employee_id = created.json()["data"]["id"]
+    assert (
+        client.post(
+            "/api/mods/attendance-industry/employees",
+            json={"employee_name": "老数据", "department": "综合部"},
+        ).status_code
+        == 409
+    )
+    _login(client, "SUNBIRD")
+    assert (
+        client.delete(f"/api/mods/attendance-industry/employees/{employee_id}").status_code == 404
+    )
+    assert _employees(client) == {"老数据"}
+    _login(client, "wuxinghua1")
+    assert (
+        client.delete(f"/api/mods/attendance-industry/employees/{employee_id}").status_code == 200
+    )
+    assert _employees(client) == set()
+    _login(client, "SUNBIRD")
+    assert _employees(client) == {"老数据"}
 
 
 def test_module_surface_sanity():

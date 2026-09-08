@@ -30,8 +30,7 @@ def _connect_for_write(db_path):
     """首次录入建表（含 owner_user_id），不覆盖已交付名单或历史记录。
 
     新库唯一约束包含 owner_user_id：不同账号可维护同名人员/部门。
-    已交付旧库无法 ALTER 表级约束，仍按全局唯一判定；旧库场景为太阳鸟
-    专属交付机（不会登录其它客户账号），可接受。
+    旧库在同一事务内重建唯一约束并保留数据及 schema 对象，升级后也按账号判重。
     """
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(db_path), timeout=30)
