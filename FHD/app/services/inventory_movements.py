@@ -33,6 +33,7 @@ class InventoryMovementsMixin:
         reference_id: int | None = None,
         operator: str | None = None,
         remark: str | None = None,
+        requested_unit: str | None = None,
     ) -> dict[str, Any]:
         import math
 
@@ -51,6 +52,11 @@ class InventoryMovementsMixin:
                 )
                 if not product:
                     return {"success": False, "message": "产品不存在"}
+                if requested_unit is not None and requested_unit.strip() != (product.unit or "个"):
+                    return {
+                        "success": False,
+                        "message": "入库单位与产品库存单位不一致，请先确认换算数量",
+                    }
                 warehouse = (
                     db.query(_facade().Warehouse)
                     .filter(_facade().Warehouse.id == warehouse_id)

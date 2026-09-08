@@ -68,6 +68,11 @@ def _registered_router_inventory(
                 reference_id=params.get("reference_id"),
                 operator=params.get("operator"),
                 remark=params.get("remark"),
+                **(
+                    {"requested_unit": str(params["requested_unit"])}
+                    if "requested_unit" in params
+                    else {}
+                ),
             ),
         )
     if action == "stock_out":
