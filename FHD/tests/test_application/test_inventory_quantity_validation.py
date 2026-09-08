@@ -162,7 +162,7 @@ def test_inbound_rejects_missing_and_other_tenant_warehouse(tmp_path, monkeypatc
 def test_stock_unit_never_uses_customer_name(legacy, explicit, expected):
     from types import SimpleNamespace
 
-    from app.services.product_measurement import product_measurement_unit
+    from app.application.product_measurement import product_measurement_unit
 
     assert (
         product_measurement_unit(SimpleNamespace(unit=legacy, measurement_unit=explicit))

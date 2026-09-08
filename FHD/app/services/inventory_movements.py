@@ -52,7 +52,7 @@ class InventoryMovementsMixin:
                 )
                 if not product:
                     return {"success": False, "message": "产品不存在"}
-                from app.services.product_measurement import product_measurement_unit
+                from app.application.product_measurement import product_measurement_unit
 
                 stock_unit = product_measurement_unit(product)
                 if stock_unit is None:

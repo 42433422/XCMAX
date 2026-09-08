@@ -1,0 +1,88 @@
+{
+  "base_commit": "1b19377e7b16ceda1bc6aa57f2777e61705c3c9a",
+  "change": "Move measurement resolver to application and update imports",
+  "etl_before_move": {
+    "passed": 399,
+    "skipped": 25
+  },
+  "after_move_inventory_and_workbook": {
+    "passed": 74,
+    "failed": 0
+  },
+  "dev_guards_after_move": {
+    "ok": true,
+    "guards": [
+      {
+        "name": "layer-ratchet",
+        "status": "ok",
+        "exit": 0,
+        "blocking": true
+      },
+      {
+        "name": "type-debt",
+        "status": "ok",
+        "exit": 0,
+        "blocking": true
+      },
+      {
+        "name": "raw-sql",
+        "status": "ok",
+        "exit": 0,
+        "blocking": true
+      },
+      {
+        "name": "big-files",
+        "status": "ok",
+        "exit": 0,
+        "blocking": false
+      },
+      {
+        "name": "coverage-ramp-stubs",
+        "status": "ok",
+        "exit": 0,
+        "blocking": true
+      },
+      {
+        "name": "test-bloat",
+        "status": "ok",
+        "exit": 0,
+        "blocking": true
+      },
+      {
+        "name": "requirements-lock",
+        "status": "ok",
+        "exit": 0,
+        "blocking": true
+      },
+      {
+        "name": "mods-inline-ui",
+        "status": "ok",
+        "exit": 0,
+        "blocking": true
+      },
+      {
+        "name": "utils-boundary",
+        "status": "ok",
+        "exit": 0,
+        "blocking": true
+      },
+      {
+        "name": "mod-import-boundaries",
+        "status": "ok",
+        "exit": 0,
+        "blocking": true
+      },
+      {
+        "name": "arch-fitness",
+        "status": "ok",
+        "exit": 0,
+        "blocking": true
+      }
+    ]
+  },
+  "limits": [
+    "Skipped tests not verified",
+    "CI pending",
+    "No main merge or installed acceptance"
+  ]
+}
