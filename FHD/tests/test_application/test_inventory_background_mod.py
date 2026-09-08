@@ -1,6 +1,7 @@
 """Actual registered inventory writes across host and two isolated Mod databases."""
 
 import multiprocessing
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 
@@ -39,7 +40,49 @@ def _child_stock_in(binding, results):
     results.put(_stock_in(binding))
 
 
-@pytest.mark.parametrize("worker_kind", ["thread", "process"])
+def _child_dispatch(run_id, results):
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+    from app.application.agent_orchestrator.task_dispatcher import AgentTaskDispatcher
+    from app.application.agent_orchestrator.task_execution_sql_repository import (
+        SQLAlchemyTaskExecutionRepository,
+    )
+
+    db_mod._get_test_db_manager = lambda: None
+    runs = SQLAlchemyAgentRunRepository()
+    queue = SQLAlchemyTaskExecutionRepository()
+    dispatcher = AgentTaskDispatcher(run_repository=runs, execution_repository=queue, max_workers=1)
+    dispatcher.start()
+    try:
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            execution = queue.get(run_id)
+            if execution.state in {"completed", "failed", "blocked"}:
+                run = runs.get(run_id)
+                assert run is not None
+                assert run.status == execution.state
+                output = run.tool_calls[-1].output if run.tool_calls else {}
+                results.put({"success": run.status == "completed", "state": run.status,
+                             "recovery_count": execution.recovery_count,
+                             "error_code": (output or {}).get("error_code", "")})
+                return
+            time.sleep(0.03)
+        raise AssertionError("dispatcher did not persist terminal state")
+    finally:
+        dispatcher.stop(timeout=5)
+
+
+def _child_claim_and_exit(run_id):
+    from app.application.agent_orchestrator.task_execution_sql_repository import (
+        SQLAlchemyTaskExecutionRepository,
+    )
+
+    db_mod._get_test_db_manager = lambda: None
+    claimed = SQLAlchemyTaskExecutionRepository().claim("departed-worker", lease_seconds=60)
+    assert claimed is not None and claimed.run_id == run_id
+    # Exit without finishing ownership or starting the business step.
+
+
+@pytest.mark.parametrize("worker_kind", ["thread", "process", "dispatcher", "dispatcher_recovery"])
 def test_real_inventory_writes_only_authorized_mod_and_rechecks_revocation(
     tmp_path, monkeypatch, worker_kind
 ):
@@ -71,12 +114,53 @@ def test_real_inventory_writes_only_authorized_mod_and_rechecks_revocation(
                 return pool.submit(_stock_in, binding).result(timeout=20)
         ctx = multiprocessing.get_context("spawn")
         results = ctx.Queue()
-        child = ctx.Process(target=_child_stock_in, args=(binding, results))
+        if worker_kind.startswith("dispatcher"):
+            from app.application.agent_orchestrator.run_models import AgentRun
+            from app.application.agent_orchestrator.run_sql_repository import (
+                SQLAlchemyAgentRunRepository,
+            )
+            from app.application.agent_orchestrator.task_background import apply_approved_step
+            from app.application.agent_orchestrator.task_execution_sql_repository import (
+                SQLAlchemyTaskExecutionRepository,
+            )
+
+            run = AgentRun(user_id="1", message="approved inbound", status="waiting_user")
+            step = AgentStep(node_id="stock", tool_id="inventory", action="stock_in",
+                             status="waiting_user", risk="high", idempotent=False,
+                             params={"model_number": "A100", "warehouse_name": "same warehouse", "quantity": 50})
+            run.steps = [step]
+            run.metadata["runtime_context"] = {"tenant_id": "1", "_mod_authorization": binding}
+            apply_approved_step(run, step, approved_by="1")
+            SQLAlchemyAgentRunRepository().save(run)
+            queue = SQLAlchemyTaskExecutionRepository()
+            queue.enqueue(run)
+            if worker_kind == "dispatcher_recovery":
+                from app.db.models.agent import AgentTaskExecutionRecord
+
+                departed = ctx.Process(target=_child_claim_and_exit, args=(run.run_id,))
+                departed.start()
+                departed.join(timeout=15)
+                if departed.is_alive():
+                    departed.terminate()
+                    departed.join(timeout=5)
+                    pytest.fail("old claimant did not exit")
+                assert departed.exitcode == 0
+                assert queue.get(run.run_id).lease_owner == "departed-worker"
+                # Expired ownership with no business step started is safe to resume.
+                with factories["host"].begin() as db:
+                    db.query(AgentTaskExecutionRecord).filter_by(run_id=run.run_id).update(
+                        {"lease_expires_at": "2000-01-01T00:00:00+00:00"}
+                    )
+            child = ctx.Process(target=_child_dispatch, args=(run.run_id, results))
+        else:
+            child = ctx.Process(target=_child_stock_in, args=(binding, results))
         try:
             child.start()
             result = results.get(timeout=25)
             child.join(timeout=10)
             assert child.exitcode == 0
+            if worker_kind.startswith("dispatcher"):
+                assert result["recovery_count"] == (1 if worker_kind == "dispatcher_recovery" else 0)
             return result
         finally:
             if child.is_alive():

@@ -19,6 +19,21 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- The three-database inventory test now starts the actual AgentTaskDispatcher
+  inside a new process, with default host run/queue repositories and the real
+  orchestrator/executor/business guard. An already-approved persisted task writes
+  one movement to A and records matching completed run/queue states; a new task
+  after revocation records matching failed states without extra writes. Recovery
+  additionally uses a separate process that claims and exits before business
+  execution, then advances its stored expiry deterministically. The replacement
+  dispatcher records recovery_count=1 and preserves the same result/isolation.
+  Thirty combined checks passed (`inventory-mod-dispatch-recovery`); after
+  replacing the initial simulated departed owner with a real exited claimant,
+  the recovery scenario passed (`inventory-mod-departed-claimant`). Approval JWT
+  validation is covered separately: this fixture stages already-approved work.
+  This still does not certify external side-effect reconciliation or installed
+  customer UI/release acceptance.
+
 - Registered inventory execution now has real three-database acceptance tests:
   host, authorized Mod A and unauthorized Mod B contain identical product/model
   and warehouse names. Both a fresh thread and a spawned process restore the
