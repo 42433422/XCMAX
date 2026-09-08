@@ -255,4 +255,16 @@ describe('useAgentTaskWorkspace', () => {
     expect(apiMock.listRuns).not.toHaveBeenCalled()
   })
 
+  it('does not approve an old task after the workspace is stopped', async () => {
+    const state = setup()
+    await state.workspace.refreshTasks()
+    let resolve!: (value: unknown) => void
+    apiMock.getRun.mockReturnValueOnce(new Promise((r) => { resolve = r }))
+    const pending = state.workspace.controlTask(state.taskList.value[0].id, 'approve')
+    state.workspace.stop()
+    resolve({ success: true, approval: { grant: 'old-grant' } })
+    await pending
+    expect(apiMock.continueRun).not.toHaveBeenCalled()
+  })
+
 })

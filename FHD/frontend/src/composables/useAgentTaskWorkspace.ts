@@ -129,6 +129,7 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
   }
 
   async function selectTask(task: TaskItem): Promise<void> {
+    const requestedVersion = lifecycleVersion
     options.activeTaskId.value = task.id
     if (!options.expandedTaskIds.value.includes(task.id)) {
       options.expandedTaskIds.value = [...options.expandedTaskIds.value, task.id]
@@ -137,11 +138,14 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
     const durableTaskId = String(task.payload?.taskId || '').trim()
     if (durableTaskId) {
       await agentRunsApi.markTaskRead(durableTaskId).catch(() => undefined)
+      if (requestedVersion !== lifecycleVersion) return
     }
     const conversationId = conversationIdOfTask(task)
     if (conversationId && options.onOpenConversation) {
       await options.onOpenConversation(conversationId)
+      if (requestedVersion !== lifecycleVersion) return
       await refreshTasks()
+      if (requestedVersion !== lifecycleVersion) return
       options.activeTaskId.value = task.id
       if (!options.expandedTaskIds.value.includes(task.id)) {
         options.expandedTaskIds.value = [...options.expandedTaskIds.value, task.id]
@@ -153,12 +157,14 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
   }
 
   async function controlTask(taskId: string, action: 'pause' | 'resume' | 'cancel' | 'retry' | 'approve'): Promise<void> {
+    const requestedVersion = lifecycleVersion
     const task = options.taskList.value.find((item) => item.id === taskId)
     if (!task || task.type !== 'agent_task') return
     const runId = activeRunIdOfTask(task)
     if (!runId) return
     if (action === 'approve') {
       const snapshot = await agentRunsApi.getRun(runId)
+      if (requestedVersion !== lifecycleVersion) return
       const grant = snapshot.approval?.grant
       if (!grant) throw new Error('任务当前没有可用的审批凭证')
       await agentRunsApi.continueRun(runId, { approval_grant: grant })
@@ -166,10 +172,12 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
     else if (action === 'resume') await agentRunsApi.resumeRun(runId)
     else if (action === 'retry') await agentRunsApi.retryRun(runId)
     else await agentRunsApi.cancelRun(runId)
+    if (requestedVersion !== lifecycleVersion) return
     await refreshTasks()
   }
 
   async function archiveCompletedTasks(): Promise<void> {
+    const requestedVersion = lifecycleVersion
     const completed = options.taskList.value.filter(
       (task) => task.type === 'agent_task' && ['success', 'failed', 'cancelled'].includes(task.status),
     )
@@ -179,6 +187,7 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
         if (taskId) await agentRunsApi.archiveTask(taskId)
       }),
     )
+    if (requestedVersion !== lifecycleVersion) return
     const archivedIds = new Set(completed.map((task) => task.id))
     options.taskList.value = options.taskList.value.filter((task) => !archivedIds.has(task.id))
     options.onPersist?.()
