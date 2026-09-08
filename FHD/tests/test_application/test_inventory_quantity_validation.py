@@ -153,3 +153,17 @@ def test_inbound_rejects_missing_and_other_tenant_warehouse(tmp_path, monkeypatc
                 for row in transactions
             ] == [(5, 0, 2), (6, 0, 3), (5, 2, 6)]
     engine.dispose()
+
+
+@pytest.mark.parametrize(
+    "legacy,explicit,expected",
+    [("公司A", "桶", "桶"), ("公司A", None, None), ("桶", None, "桶"), (None, None, None)],
+)
+def test_stock_unit_never_uses_customer_name(legacy, explicit, expected):
+    from types import SimpleNamespace
+    from app.services.product_measurement import product_measurement_unit
+
+    assert (
+        product_measurement_unit(SimpleNamespace(unit=legacy, measurement_unit=explicit))
+        == expected
+    )

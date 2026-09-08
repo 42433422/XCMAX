@@ -52,7 +52,12 @@ class InventoryMovementsMixin:
                 )
                 if not product:
                     return {"success": False, "message": "产品不存在"}
-                if requested_unit is not None and requested_unit.strip() != (product.unit or "个"):
+                from app.services.product_measurement import product_measurement_unit
+
+                stock_unit = product_measurement_unit(product)
+                if stock_unit is None:
+                    return {"success": False, "message": "产品计量单位尚未确认，请先补齐计量单位"}
+                if requested_unit is not None and requested_unit.strip() != stock_unit:
                     return {
                         "success": False,
                         "message": "入库单位与产品库存单位不一致，请先确认换算数量",
@@ -99,7 +104,7 @@ class InventoryMovementsMixin:
                         quantity=quantity,
                         available_quantity=quantity,
                         reserved_quantity=0,
-                        unit=product.unit or "个",
+                        unit=stock_unit,
                         in_date=now.date(),
                         created_at=now,
                         updated_at=now,

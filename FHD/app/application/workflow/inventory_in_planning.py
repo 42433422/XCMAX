@@ -37,7 +37,9 @@ def inventory_in_node(message: str) -> WorkflowNode | None:
         params = {"quantity": quantity, "requested_unit": unit}
         if len(products) == 1:
             params["product_id"] = products[0].id
-            params["_inventory_unit"] = products[0].unit or "个"
+            from app.services.product_measurement import product_measurement_unit
+
+            params["_inventory_unit"] = product_measurement_unit(products[0]) or ""
     return WorkflowNode(
         node_id="inventory_in",
         tool_id="inventory",
