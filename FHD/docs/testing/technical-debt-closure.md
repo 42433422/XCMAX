@@ -19,6 +19,14 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Current-head mutation run 34266563015 reported 262/268 kills but contained a
+  pytest unclosed-scandir/unraisable-exception traceback. It is not qualifying
+  evidence. The report gate now rejects traceback/resource/unraisable diagnostics
+  before writing quality history, even when the final score exceeds its threshold.
+  Three regressions failed before this change; all 15 report/scope tests now pass,
+  and the actual CI log is rejected with exit 2. The mutation runner cleanup
+  source and a fresh clean execution remain unresolved.
+
 - Paused runs carrying an unresolved business-result marker can no longer resume
   through direct, staged or SQL-transaction entry points. Three new regressions
   failed before the guard and pass afterward, preserving run state and creating

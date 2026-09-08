@@ -215,6 +215,22 @@ def main() -> int:
         print(f"[ERROR] cannot read --from-file: {exc}", file=sys.stderr)
         return 2
 
+    # A mutmut worker can crash while the parent still counts it as killed.
+    # Such logs cannot certify mutation quality, regardless of the final score.
+    if any(
+        marker in output
+        for marker in (
+            "Traceback (most recent call last):",
+            "PytestUnraisableExceptionWarning:",
+            "ResourceWarning:",
+        )
+    ):
+        print(
+            "[ERROR] mutation runner diagnostics invalidate this result; inspect raw log",
+            file=sys.stderr,
+        )
+        return 2
+
     counts = parse_results(output)
     kill_rate = compute_kill_rate(counts)
     kill_rate_pct = kill_rate * 100
