@@ -71,9 +71,9 @@ class TestRouteNormalModeMessageShipment:
         result = route_normal_mode_message("打单")
         assert result["intent"] == "shipment"
 
-    def test_shipment_keyword_打印(self):
+    def test_unspecified_print_is_not_assumed_to_be_a_shipment(self):
         result = route_normal_mode_message("打印一下")
-        assert result["intent"] == "shipment"
+        assert result["intent"] == "unknown"
 
     def test_shipment_number_style_order_arabic(self):
         result = route_normal_mode_message("10桶A001规格25")
@@ -269,7 +269,7 @@ class TestRouteNormalModeMessageLabelPrint:
     """route_normal_mode_message label_print 槽位分支。"""
 
     def test_label_print_keyword_标签(self):
-        """注意 '打印' 是 shipment 关键词，故用 '标签' 触发 label_print。"""
+        """裸标签请求进入标签分支并保留缺失型号。"""
         result = route_normal_mode_message("标签")
         assert result["intent"] == "label_print"
         assert result["slots"]["model_number"] == ""
@@ -282,8 +282,8 @@ class TestRouteNormalModeMessageLabelPrint:
         assert result["slots"]["model_number"] == "B002"
 
     def test_label_print_keyword_打印标签(self):
-        """'打印' 是 shipment 关键词，'打印标签' 会先命中 shipment。改用 '商标'。"""
-        result = route_normal_mode_message("商标")
+        """实际打印标签请求不得被发货单分支截获。"""
+        result = route_normal_mode_message("打印标签")
         assert result["intent"] == "label_print"
 
     def test_label_print_keyword_贴标(self):

@@ -158,7 +158,16 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
     """普通版轻量槽位提取与任务分流。"""
     text = (message or "").strip()
     lower = text.lower()
-    shipment_keywords = ("发货单", "送货单", "出货单", "开单", "打单", "打印")
+    from app.services.intent_service import is_negation
+
+    if is_negation(text, action_keywords=["打印", "标签", "贴标", "商标"]):
+        return {"intent": "unknown", "slots": {}}
+    shipment_keywords = ("发货单", "送货单", "出货单", "开单", "打单")
+    print_spec_order = (
+        "打印" in text
+        and not any(word in text for word in ("标签", "商标", "贴标"))
+        and bool(_facade().re.search(r"[0-9A-Za-z-]+\s*(?:的\s*)?规格\s*\d+", text))
+    )
     number_style_order = bool(
         _facade().re.search(
             "(?:\\d+|[一二两三四五六七八九十零〇]+)\\s*桶\\s*[0-9A-Za-z-]+\\s*规格\\s*\\d+(?:\\.\\d+)?",
@@ -169,7 +178,9 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
     template_preview = bool(
         _facade().re.search("(?:预览|看看|看下)[^，,。]{0,12}模板|模板[^，,。]{0,8}预览", text)
     )
-    if (any(k in text for k in shipment_keywords) or number_style_order) and not template_preview:
+    if (
+        any(k in text for k in shipment_keywords) or number_style_order or print_spec_order
+    ) and not template_preview:
         return {"intent": "shipment", "slots": {"number_style_order": number_style_order}}
     if template_preview:
         return {"intent": "unknown", "slots": {}}
@@ -219,7 +230,7 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
     print_label_keywords = ("标签", "打标签", "打印标签", "商标", "贴标")
     if any(k in text for k in print_label_keywords):
         model_m = _facade().re.search("([0-9A-Za-z-]{2,})", text)
-        qty_m = _facade().re.search("(\\d+)\\s*(?:张|份|个|次|条)?", text)
+        qty_m = _facade().re.search("(\\d+)\\s*(?:张|份|个|次|条)", text)
         return {
             "intent": "label_print",
             "slots": {

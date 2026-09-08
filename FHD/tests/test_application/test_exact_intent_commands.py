@@ -33,3 +33,14 @@ def test_negated_print_command_still_cannot_execute():
     result = recognize_intents("不要打印标签")
     assert result["is_negated"]
     assert result["tool_key"] is None
+
+
+def test_normal_router_keeps_label_model_separate_from_quantity():
+    from app.application.normal_chat_dispatch import route_normal_mode_message
+
+    result = route_normal_mode_message("打印标签 A9803 20张")
+    assert result == {"intent": "label_print", "slots": {"model_number": "A9803", "quantity": 20}}
+    result = route_normal_mode_message("打印标签 A9803")
+    assert result["slots"]["quantity"] == 1
+    assert route_normal_mode_message("打印9803规格28")["intent"] == "shipment"
+    assert route_normal_mode_message("不要打印标签 A9803 20张")["intent"] == "unknown"

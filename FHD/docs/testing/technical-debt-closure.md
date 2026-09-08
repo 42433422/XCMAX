@@ -19,6 +19,15 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Normal-chat routing independently treated any 打印 as shipment before reaching
+  labels. It now requires shipment words or the existing print-model/spec syntax;
+  打印标签 reaches label_print, quantity requires a count unit rather than taking
+  digits from the model, and negated printing returns unknown without routing a
+  write. Tests use actual 打印标签 instead of substituting 商标 to hide the defect;
+  the old 打印一下=shipment assertion now requires unknown for the unspecified
+  object. All 254 normal-router/intent regressions passed (`normal-label-negation`).
+  This verifies routing only, not physical printer execution or installed UI.
+
 - RuleEngine now honors complete configured quick commands before broad keyword
   matches, preventing printer-list navigation from becoming label printing and
   WeChat contacts from becoming template lookup. Longer requests still use the
