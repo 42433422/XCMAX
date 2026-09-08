@@ -19,6 +19,15 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Tool execution restored integer tenant context only for business_db, omitting
+  inventory. Inventory now restores a supplied runtime tenant before dispatch,
+  then restores the caller context afterward; invalid IDs block the tool call.
+  Integer parsing also rejects fractional IDs instead of truncating them to a
+  different tenant. All 45 executor/business-guard checks passed
+  (`inventory-runtime-tenant`). These executor tests observe the dispatch context;
+  fresh-thread real-database end-to-end tenant selection and active-Mod restoration
+  still need explicit verification, as do other SQL tool families.
+
 - Full integrated business observation retains 22/22 across three trials after
   recent mainline, routing and inventory changes (`integrated-business-trials`).
   Returned-value assertions previously equated a missing path/field with explicit

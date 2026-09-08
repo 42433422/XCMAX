@@ -5,7 +5,7 @@ from typing import Any
 from app.application.agent_orchestrator.run_models import AgentStep
 from app.application.agent_orchestrator.tool_spec import validate_tool_call, validate_tool_result
 
-_SQL_TENANT_SCOPED_TOOL_IDS = frozenset({"business_db"})
+_SQL_TENANT_SCOPED_TOOL_IDS = frozenset({"business_db", "inventory"})
 
 
 class AgentToolExecutor:
@@ -33,7 +33,7 @@ class AgentToolExecutor:
         runtime_tenant_id: int | None = None
         if step.tool_id in _SQL_TENANT_SCOPED_TOOL_IDS and runtime_tenant_raw not in (None, ""):
             try:
-                if isinstance(runtime_tenant_raw, bool):
+                if isinstance(runtime_tenant_raw, bool) or not str(runtime_tenant_raw).isdigit():
                     raise ValueError
                 runtime_tenant_id = int(runtime_tenant_raw)
                 if runtime_tenant_id <= 0:
