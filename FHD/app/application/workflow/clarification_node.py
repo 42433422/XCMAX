@@ -104,10 +104,24 @@ def _first_required(node: WorkflowNode, required: list[str]) -> str:
 
 
 def _build_missing_question(node: WorkflowNode, missing: list[str]) -> str:
-    return (
-        f"执行 {node.tool_id}.{node.action} 前需要补充必填参数："
-        f"{'、'.join(missing)}。请提供后再执行，避免误操作。"
-    )
+    labels = {
+        "name_or_model": "产品名称或型号",
+        "unit_name": "单位名称",
+        "customer_id": "客户编号",
+        "product_id": "产品编号",
+        "warehouse_id": "仓库编号",
+        "quantity": "数量",
+        "amount": "金额",
+        "order_id": "订单编号",
+        "transaction_type": "交易类型",
+        "from_warehouse_id": "调出仓库编号",
+        "to_warehouse_id": "调入仓库编号",
+    }
+    if not missing:
+        return "请补充所需信息。"
+    current = labels.get(missing[0], missing[0])
+    remaining = f"还有 {len(missing) - 1} 项信息，随后会继续询问。" if len(missing) > 1 else ""
+    return f"请先提供{current}。{remaining}信息补齐后再确认执行。"
 
 
 def _build_ambiguous_question(node: WorkflowNode, candidates: list[dict[str, Any]]) -> str:

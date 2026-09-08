@@ -6,6 +6,10 @@
 目标是四个阶段全部完成。本目录记录当前实施证据，不代表四阶段验收通过。
 此前对话中的 20%–30% 覆盖率与工期只是未验证估计，不作为验收基线。
 
+## Sequential clarification prompt alignment
+
+Missing-field questions now ask for the current first field and state how many fields remain, matching the one-reply-at-a-time continuation. Common business fields use readable labels while the structured missing_fields list remains unchanged. This wording change does not expand parsing or execution coverage; the measured business score remains 10/22.
+
 ## Sequential scalar clarification
 
 Multiple missing scalar fields can now be completed one reply at a time. Each value is checked against its field schema before storage; remaining requirements refresh the pending question without approval or execution. The final answer must pass complete tool-call validation before the existing approval recheck. Invalid replies retain previously accepted values.
