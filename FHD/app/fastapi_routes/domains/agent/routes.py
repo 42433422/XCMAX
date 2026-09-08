@@ -134,7 +134,10 @@ def list_agent_runs(
         # Public callers can only enumerate their own runs. Cross-user admin search should
         # use a separately permissioned admin route, not a caller-controlled query string.
         runs = get_agent_run_repository().list_recent(
-            user_id=principal.user_id, tenant_id=principal.tenant_id, limit=limit
+            user_id=principal.user_id,
+            tenant_id=principal.tenant_id,
+            limit=limit,
+            mod_id=str((principal.mod_authorization or {}).get("mod_id") or ""),
         )
         return _success([_public_run_dict(run) for run in runs], count=len(runs))
     except RECOVERABLE_ERRORS:

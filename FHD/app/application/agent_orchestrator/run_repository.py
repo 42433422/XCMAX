@@ -17,6 +17,7 @@ from app.application.agent_orchestrator.run_sql_repository import (
 from app.application.agent_orchestrator.task_models import (
     AgentTask,
     TaskControlCommand,
+    mod_id_of_run,
     task_from_run,
     tenant_id_of_run,
 )
@@ -31,7 +32,12 @@ class AgentRunRepository(Protocol):
     def get(self, run_id: str) -> AgentRun | None: ...
 
     def list_recent(
-        self, *, user_id: str | None = None, limit: int = 50, tenant_id: str | None = None
+        self,
+        *,
+        user_id: str | None = None,
+        limit: int = 50,
+        tenant_id: str | None = None,
+        mod_id: str | None = None,
     ) -> list[AgentRun]: ...
 
     def list_task_runs(self, *, user_id: str, task_id: str) -> list[AgentRun]: ...
@@ -106,7 +112,12 @@ class InMemoryAgentRunRepository:
             return copy.deepcopy(run) if run is not None else None
 
     def list_recent(
-        self, *, user_id: str | None = None, limit: int = 50, tenant_id: str | None = None
+        self,
+        *,
+        user_id: str | None = None,
+        limit: int = 50,
+        tenant_id: str | None = None,
+        mod_id: str | None = None,
     ) -> list[AgentRun]:
         with self._lock:
             runs = list(self._runs.values())
@@ -114,6 +125,8 @@ class InMemoryAgentRunRepository:
             runs = [run for run in runs if run.user_id == user_id]
         if tenant_id is not None:
             runs = [run for run in runs if tenant_id_of_run(run) == tenant_id]
+        if mod_id is not None:
+            runs = [run for run in runs if mod_id_of_run(run) == mod_id]
         runs.sort(key=lambda run: run.updated_at, reverse=True)
         return [copy.deepcopy(run) for run in runs[: max(0, int(limit))]]
 

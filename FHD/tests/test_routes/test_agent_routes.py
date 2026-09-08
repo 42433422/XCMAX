@@ -248,6 +248,10 @@ def test_task_collection_filters_mod_before_limit_and_stream_snapshot():
     listing = owner.get("/api/agent/tasks?limit=1").json()
     assert [task["task_id"] for task in listing["data"]] == ["visible-task"]
     assert listing["count"] == 1
+    runs = owner.get("/api/agent/runs?limit=1").json()
+    assert runs["count"] == 1
+    assert runs["data"][0]["metadata"]["task_context"]["task_id"] == "visible-task"
+    assert _client().get("/api/agent/runs").json()["data"] == []
     stream = owner.get("/api/agent/tasks/events/stream?once=true")
     assert stream.status_code == 200
     assert "visible-task" in stream.text

@@ -25,6 +25,7 @@ from app.application.agent_orchestrator.run_record_mapping import (
 from app.application.agent_orchestrator.task_models import (
     AgentTask,
     TaskControlCommand,
+    mod_id_of_run,
     task_from_run,
     tenant_id_of_run,
 )
@@ -134,7 +135,12 @@ class SQLAlchemyAgentRunRepository:
             return self._record_to_run(record) if record is not None else None
 
     def list_recent(
-        self, *, user_id: str | None = None, limit: int = 50, tenant_id: str | None = None
+        self,
+        *,
+        user_id: str | None = None,
+        limit: int = 50,
+        tenant_id: str | None = None,
+        mod_id: str | None = None,
     ) -> list[AgentRun]:
         self._ensure_schema()
         with self._session_scope(read_only=True) as db:
@@ -144,7 +150,7 @@ class SQLAlchemyAgentRunRepository:
             if user_id is not None:
                 query = query.filter(AgentRunRecord.user_id == str(user_id))
             query = query.order_by(AgentRunRecord.updated_at.desc())
-            if tenant_id is None:
+            if tenant_id is None and mod_id is None:
                 records = query.limit(max(0, int(limit))).all()
                 return [
                     run for record in records if (run := self._record_to_run(record)) is not None
@@ -156,7 +162,11 @@ class SQLAlchemyAgentRunRepository:
             # applying the public limit, without loading all rows at once.
             for record in query.yield_per(100):
                 run = self._record_to_run(record)
-                if run is not None and tenant_id_of_run(run) == tenant_id:
+                if (
+                    run is not None
+                    and (tenant_id is None or tenant_id_of_run(run) == tenant_id)
+                    and (mod_id is None or mod_id_of_run(run) == mod_id)
+                ):
                     result.append(run)
                     if len(result) >= limit:
                         break
