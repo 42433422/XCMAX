@@ -162,6 +162,18 @@ def test_structured_quote_answer_requires_approval_before_execution(retain_produ
         _run_workflow_with_state_updates=Mock(side_effect=AssertionError("must await approval")),
     )
     service.approval_service.get_approval_required_nodes.return_value = [node]
+    before = dict(node.params)
+    for incomplete_answer in ("[{}]", '[{"quantity":2}]', '[{"unit_price":25.5}]'):
+        assert (
+            _AIChatApplicationServicePart03Mixin._continue_after_clarification(
+                service, "u", pending, incomplete_answer
+            )
+            is None
+        )
+        assert node.params == before
+        assert service._pending_workflows["u"] is pending
+    service.approval_service.get_approval_required_nodes.assert_not_called()
+    service._run_workflow_with_state_updates.assert_not_called()
     response = _AIChatApplicationServicePart03Mixin._continue_after_clarification(
         service,
         "u",
