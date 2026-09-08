@@ -101,7 +101,16 @@ async def test_external_file_tools_require_session_identity(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_real_model_workflow_dispatch_reaches_owned_screen(monkeypatch):
+@pytest.mark.parametrize(
+    "action,params",
+    [
+        ("snapshot", {}),
+        ("desktop_info", {}),
+        ("desktop_auto_launch", {"enabled": False}),
+        ("desktop_update", {"operation": "check"}),
+    ],
+)
+async def test_real_model_workflow_dispatch_reaches_owned_screen(monkeypatch, action, params):
     from app.application.tools.workflow import execute_workflow_tool
 
     hub = AiOpenCursorHub()
@@ -132,12 +141,25 @@ async def test_real_model_workflow_dispatch_reaches_owned_screen(monkeypatch):
     result = await asyncio.to_thread(
         execute_workflow_tool,
         "execute_erp_capability",
-        {"tool_id": "software", "action": "snapshot", "params": {"session_id": "owner-screen"}},
+        {
+            "tool_id": "software",
+            "action": action,
+            "params": {"session_id": "owner-screen", **params},
+        },
     )
     payload = json.loads(result)
+    if action in {"desktop_auto_launch", "desktop_update"}:
+        assert payload["pending_approval"] is True and not payload["success"]
+        assert not commands
+        # Exercise the internal dispatcher separately, as used after approval;
+        # do not weaken the public workflow's existing risk gate.
+        dispatched = await asyncio.to_thread(
+            execute_software_control, action, {"session_id": "owner-screen", **params}, {}, "", ""
+        )
+        payload = {"success": dispatched["success"], "result": dispatched}
     assert payload["success"] is True, payload
     assert payload["result"]["route"] == "/customers"
-    assert commands[0]["action"] == "snapshot"
+    assert commands[0]["action"] == action
 
 
 @pytest.mark.asyncio

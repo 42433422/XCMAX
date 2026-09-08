@@ -1057,6 +1057,9 @@ class TestAiopenManifestExt:
             "ui_press",
             "ui_files",
             "ui_set_files",
+            "ui_desktop_info",
+            "ui_desktop_auto_launch",
+            "ui_desktop_update",
             "api_operations",
             "api_schema",
         }

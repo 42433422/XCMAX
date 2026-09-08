@@ -38,7 +38,15 @@ PERMISSION_OVERRIDES: dict[str, str] = {
 # --- aiopen risk ----------------------------------------------------------
 # actions that are low-risk and idempotent; everything else is medium/non-idempotent.
 AIOPEN_LOW_RISK_ACTIONS: frozenset[str] = frozenset(
-    {"api_catalog", "api_operations", "api_schema", "ui_sessions", "ui_snapshot", "ui_routes"}
+    {
+        "api_catalog",
+        "api_operations",
+        "api_schema",
+        "ui_sessions",
+        "ui_snapshot",
+        "ui_routes",
+        "ui_desktop_info",
+    }
 )
 AIOPEN_DEFAULT_RISK = "medium"
 AIOPEN_LOW_RISK = "low"

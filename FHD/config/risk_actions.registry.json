@@ -1786,6 +1786,9 @@
       "description": "控制当前登录账号的软件窗口。先 list 选择窗口，再 routes 读取所有页面（含 Mods）、snapshot 回读控件；通过 navigate/click/type/select/check/press/scroll 操作，files 列出用户在本窗口选过的文件，set_files 放入文件控件。每步写操作后回读验证，不能将交互回执当作业务完成。",
       "availability": "shared",
       "actions": {
+        "desktop_info": {"risk": "low", "idempotent": true, "required_params": []},
+        "desktop_auto_launch": {"risk": "medium", "idempotent": true, "required_params": ["enabled"]},
+        "desktop_update": {"risk": "high", "idempotent": false, "required_params": ["operation"]},
         "list": {"risk": "low", "idempotent": true, "required_params": []},
         "files": {"risk": "low", "idempotent": true, "required_params": []},
         "set_files": {"risk": "medium", "idempotent": false, "required_params": ["selector", "file_ids"]},

@@ -320,6 +320,9 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
 ]
 
 _UI_ACTIONS = {
+    "ui_desktop_info": "desktop_info",
+    "ui_desktop_auto_launch": "desktop_auto_launch",
+    "ui_desktop_update": "desktop_update",
     "ui_files": "files",
     "ui_set_files": "set_files",
     "ui_routes": "routes",

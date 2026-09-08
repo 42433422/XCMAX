@@ -2,7 +2,7 @@
   "scope": "registered workflow actions and static host dispatcher; excludes unregistered UI/API/Mods",
   "product_coverage_percent": null,
   "capability_count": 37,
-  "action_count": 194,
+  "action_count": 197,
   "missing_dispatcher": [],
   "actions": [
     {
@@ -1699,6 +1699,37 @@
       "risk": "medium",
       "required_params": [
         "selector"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "software",
+      "action": "desktop_auto_launch",
+      "risk": "medium",
+      "required_params": [
+        "enabled"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "software",
+      "action": "desktop_info",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "software",
+      "action": "desktop_update",
+      "risk": "high",
+      "required_params": [
+        "operation"
       ],
       "idempotent": false,
       "dispatcher_present": true,

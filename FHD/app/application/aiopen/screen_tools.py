@@ -27,6 +27,24 @@ def _tool(name: str, description: str, properties: dict, required: list[str]) ->
 
 SCREEN_TOOL_DEFINITIONS: list[dict[str, Any]] = [
     _tool(
+        "ui_desktop_info",
+        "读取当前桌面安装身份、更新状态和开机启动设置。浏览器窗口不支持。",
+        {},
+        [],
+    ),
+    _tool(
+        "ui_desktop_auto_launch",
+        "设置桌面开机启动并回读实际值。",
+        {"enabled": {"type": "boolean"}},
+        ["enabled"],
+    ),
+    _tool(
+        "ui_desktop_update",
+        "提交桌面更新检查、下载或安装。安装可能退出当前进程；回执仅代表请求返回，需重连后核对安装身份。",
+        {"operation": {"type": "string", "enum": ["check", "download", "install"]}},
+        ["operation"],
+    ),
+    _tool(
         "ui_files",
         "列出用户在当前窗口选过且尚未过期的文件编号。仅返回名称/大小/类型，不读取任意磁盘路径。",
         {},

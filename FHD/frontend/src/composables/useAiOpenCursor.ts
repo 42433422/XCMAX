@@ -11,6 +11,7 @@ import { nextTick, ref, watch } from 'vue'
 import type { Router } from 'vue-router'
 import { getApiBase } from '@/utils/apiBase'
 import { createScreenCommandQueue } from './aiopenCommandQueue'
+import { executeDesktopControl } from './aiopenDesktopControls'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { captureScreenFileSelection, clearScreenFiles, fileInputAvailable, listScreenFiles, setScreenFiles } from './aiopenFileControls'
 import { checkScreenControl, controlState, ensureEditable, navigateScreen, pressScreenKey, privateControl, screenRoutes, selectScreenOption } from './aiopenScreenControls'
@@ -249,6 +250,10 @@ async function executeCommand(action: string, params: Record<string, unknown>, a
     return { success: false, message: '页面已经改变，请重新获取快照', code: 'STALE_SCREEN' }
   }
   switch (action) {
+    case 'desktop_info':
+    case 'desktop_auto_launch':
+    case 'desktop_update':
+      return executeDesktopControl(action, params, assertCurrent)
     case 'snapshot':
       return execSnapshot(params)
     case 'routes':
