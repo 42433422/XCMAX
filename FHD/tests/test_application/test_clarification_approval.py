@@ -319,7 +319,8 @@ def test_inbound_conversion_waits_after_warehouse_then_approves_converted_quanti
     service._run_workflow_with_state_updates.assert_not_called()
 
 
-def test_shipment_clarification_uses_real_risk_approval_decision():
+@pytest.mark.parametrize("natural_answer", [False, True])
+def test_shipment_clarification_uses_real_risk_approval_decision(natural_answer):
     from unittest.mock import patch
 
     from app.application.workflow.approval_service import ApprovalService
@@ -356,6 +357,8 @@ def test_shipment_clarification_uses_real_risk_approval_decision():
     assert pending["clarification"]["field"] == "products"
     for text in (
         "[{}]",
+        "不要发货，编号9803，规格12，一共3桶",
+        "编号9803，规格12",
         '[{"model_number":"9803"}]',
         '[{"model_number":"9803","quantity_tins":0,"tin_spec":12}]',
         '[{"model_number":"9803","quantity_tins":true,"tin_spec":12}]',
@@ -363,11 +366,19 @@ def test_shipment_clarification_uses_real_risk_approval_decision():
         assert resume(service, "u", pending, text) is None
         assert "products" not in target.params
     response = resume(
-        service, "u", pending, '[{"model_number":"9803","quantity_tins":3,"tin_spec":12}]'
+        service,
+        "u",
+        pending,
+        "编号9803，规格12，一共3桶"
+        if natural_answer
+        else '[{"model_number":"9803","quantity_tins":3,"tin_spec":12}]',
     )
     assert response["data"]["action"] == "workflow_confirmation_required"
+    expected_product = {"model_number": "9803", "quantity_tins": 3, "tin_spec": 12}
+    if natural_answer:
+        expected_product["name"] = ""
     assert service._pending_workflows["u"]["approval_nodes"][0]["params"] == {
         "unit_name": "七彩乐园",
-        "products": [{"model_number": "9803", "quantity_tins": 3, "tin_spec": 12}],
+        "products": [expected_product],
     }
     service._run_workflow_with_state_updates.assert_not_called()

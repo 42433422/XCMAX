@@ -72,6 +72,23 @@ def resolve_missing_field(
         from .clarification_options import field_options
 
         value = field_options(node.tool_id, node.action, field).get(value, value)
+    if (
+        node.tool_id == "shipment_orders"
+        and node.action == "generate"
+        and field == "products"
+        and not value.startswith("[")
+    ):
+        from app.services.tools_execution.order_parser import _parse_order_text
+
+        if any(word in value for word in ("不要", "取消", "然后", "并且", "删除")):
+            return None
+        unit = str(node.params.get("unit_name") or "").strip()
+        if not unit:
+            return None
+        parsed = _parse_order_text(f"打印 {unit} 的发货单，{value}", allow_defaults=False)
+        if not parsed.get("success") or parsed.get("unit_name") != unit:
+            return None
+        value = json.dumps(parsed.get("products"), ensure_ascii=False)
     if kind in ("integer", "number", "boolean", "array", "object"):
         try:
             value = json.loads(value)

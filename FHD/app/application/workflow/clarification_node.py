@@ -120,6 +120,8 @@ def _build_missing_question(node: WorkflowNode, missing: list[str]) -> str:
     if not missing:
         return "请补充所需信息。"
     current = labels.get(missing[0], missing[0])
+    if node.tool_id == "shipment_orders" and node.action == "generate" and missing[0] == "products":
+        return "请提供发货产品、规格和数量，例如：编号9803，规格12，一共3桶。补齐后还需审批。"
     from .clarification_options import field_options
 
     options = field_options(node.tool_id, node.action, missing[0])
