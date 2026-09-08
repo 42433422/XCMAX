@@ -1,8 +1,8 @@
 {
   "scope": "Tracked FHD source declarations, including Mods; excludes tests, archives, package directories and build output. Counts are not unique business functions or runtime coverage.",
-  "source_sha256": "427f256385f20a6bacff461fcd23dbef54a387140d87ec19993742d1bd3d6c1b",
+  "source_sha256": "92da833dbc512cac308a01457cecd7544d3ec172fe7cd1c432130fbbe2eae5dd",
   "generator_sha256": "ceb39219815ed03f5f049188b128f7d7d2d781cae8657c677a0c35c1413af843",
-  "files_scanned": 4028,
+  "files_scanned": 4030,
   "product_coverage_percent": null,
   "remaining_denominators": [
     "native desktop/mobile commands",
@@ -15,7 +15,7 @@
   "counts": {
     "api_declarations": 1715,
     "route_declarations": 116,
-    "ui_event_bindings": 2046,
+    "ui_event_bindings": 2047,
     "file_input_candidates": 33,
     "mod_manifest_copies": 103
   },
@@ -27571,6 +27571,13 @@
         "handler": "connectOpenclawWs"
       },
       {
+        "source": "frontend/src/components/chat/AgentArtifactDownloads.vue",
+        "line": 13,
+        "tag": "button",
+        "event": "click",
+        "handler": "download(artifact)"
+      },
+      {
         "source": "frontend/src/components/chat/AgentRunTrace.vue",
         "line": 41,
         "tag": "summary",
@@ -27593,42 +27600,42 @@
       },
       {
         "source": "frontend/src/components/chat/AgentTaskRuntimePanel.vue",
-        "line": 57,
+        "line": 58,
         "tag": "button",
         "event": "click",
         "handler": "$emit('open')"
       },
       {
         "source": "frontend/src/components/chat/AgentTaskRuntimePanel.vue",
-        "line": 60,
+        "line": 61,
         "tag": "button",
         "event": "click",
         "handler": "$emit('approve')"
       },
       {
         "source": "frontend/src/components/chat/AgentTaskRuntimePanel.vue",
-        "line": 61,
+        "line": 62,
         "tag": "button",
         "event": "click",
         "handler": "$emit('retry')"
       },
       {
         "source": "frontend/src/components/chat/AgentTaskRuntimePanel.vue",
-        "line": 64,
+        "line": 65,
         "tag": "button",
         "event": "click",
         "handler": "$emit('pause')"
       },
       {
         "source": "frontend/src/components/chat/AgentTaskRuntimePanel.vue",
-        "line": 67,
+        "line": 68,
         "tag": "button",
         "event": "click",
         "handler": "$emit('resume')"
       },
       {
         "source": "frontend/src/components/chat/AgentTaskRuntimePanel.vue",
-        "line": 70,
+        "line": 71,
         "tag": "button",
         "event": "click",
         "handler": "$emit('cancel')"

@@ -43,6 +43,7 @@
       <strong>业务结果</strong>
       <p>{{ resultSummary }}</p>
     </div>
+    <AgentArtifactDownloads :artifacts="artifacts" />
     <details v-if="hasResultEvidence" class="agent-result-evidence">
       <summary>技术明细（高级）</summary>
       <pre v-if="finalOutputText">{{ finalOutputText }}</pre>
@@ -78,6 +79,7 @@
 import { computed } from 'vue'
 import type { AgentArtifact, AgentRunStep, AgentToolCall } from '@/api/agentRuns'
 import type { TaskItem } from '@/composables/useChatPersistence'
+import AgentArtifactDownloads from './AgentArtifactDownloads.vue'
 
 type AgentTaskPayload = {
   runCount?: number
