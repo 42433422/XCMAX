@@ -63,7 +63,26 @@ def test_workbook_preserves_customer_and_measurement_as_separate_columns(
         link = db.query(CustomerProductLink).one()
         assert link.product_id == product_id
         assert db.get(PurchaseUnit, link.purchase_unit_id).unit_name == "测试客户"
+    from app.infrastructure.repositories.product_repository_impl import SQLAlchemyProductRepository
+
     with tenant_scope(1):
+        repository = SQLAlchemyProductRepository()
+        domain = repository.find_by_id(product_id)
+        assert domain.to_dict()["measurement_unit"] == "桶"
+        assert domain.unit == "测试客户"
+        domain.description = "修改描述后仍保留计量单位"
+        saved = repository.save(domain)
+        assert saved.measurement_unit == "桶"
+        rows, total = repository.find_all_dict()
+        assert total == 1 and rows[0]["measurement_unit"] == "桶"
+        assert rows[0]["unit"] == "测试客户"
+        batch = repository.batch_create([
+            {"name": "第二产品", "unit": "测试客户", "measurement_unit": "箱"}
+        ])
+        assert batch["success"], batch
+        rows, total = repository.find_all_dict()
+        assert total == 2
+        assert next(row for row in rows if row["name"] == "第二产品")["measurement_unit"] == "箱"
         result = InventoryService().inventory_in(
             product_id=product_id, warehouse_id=1, quantity=3, requested_unit="桶"
         )

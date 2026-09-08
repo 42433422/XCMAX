@@ -108,6 +108,7 @@ def _make_mock_product(**overrides):
         "category": "电子",
         "brand": "品牌A",
         "unit": "个",
+        "measurement_unit": None,
         "is_active": 1,
         "created_at": datetime(2026, 1, 1),
         "updated_at": datetime(2026, 1, 2),

@@ -423,6 +423,7 @@ class TestFindAllDict:
         mock_model.category = None
         mock_model.brand = None
         mock_model.unit = None
+        mock_model.measurement_unit = None
         mock_model.is_active = None
         mock_model.created_at = None
         mock_model.updated_at = None
@@ -439,6 +440,7 @@ class TestFindAllDict:
         mock_get_db.return_value = _mock_db_ctx(mock_db)
 
         dicts, total = repo.find_all_dict(page=1, per_page=20)
+        assert dicts[0]["measurement_unit"] is None
         assert dicts[0]["model_number"] == ""
         assert dicts[0]["name"] == ""
         assert dicts[0]["price"] == 0

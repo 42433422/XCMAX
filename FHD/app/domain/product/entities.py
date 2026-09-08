@@ -22,6 +22,8 @@ class Product:
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
 
+    measurement_unit: str | None = None
+
     def __post_init__(self):
         if not self.name:
             raise ValueError("产品名称不能为空")
@@ -44,6 +46,7 @@ class Product:
             "category": self.category,
             "brand": self.brand,
             "unit": self.unit,
+            "measurement_unit": self.measurement_unit,
             "is_active": self.is_active,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
