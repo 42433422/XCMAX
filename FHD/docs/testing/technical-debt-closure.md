@@ -19,6 +19,20 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- After authentication changes, the current deterministic business run still
+  passes all 22 tasks in each of 3 trials, safety failures=0
+  (`current-business-trials`, source d84545fed). It remains observe mode,
+  gate_passed=false, and reports tracked_source_dirty=true; it is not exact-clean
+  release evidence or live-model accuracy. A three-expression synthetic live
+  router probe (`live-router-smoke-corrected`) exits 2 with two model attempts,
+  zero completions and StructuredOutputError: the isolated runtime reports no
+  OPENAI_API_KEY/DEEPSEEK_API_KEY configured. A rule-path customer expression is
+  routed to product_query before fallback. The initial smoke fixture used tool
+  labels instead of route IDs; corrected IDs were rerun, preserving the original
+  diagnostic output. No real-model acceptance is claimed. Environment files
+  were checked only for credential presence (no values printed); other installed
+  account/provider configuration still needs discovery before full live evaluation.
+
 - Password-login web tokens now optionally carry their already-created session
   ID as a signed claim; refresh preserves it. Agent Mod binding verifies the web
   access token (under the existing feature flag) and maps the claim to a current
