@@ -227,6 +227,16 @@ class InventoryMovementsMixin:
         operator: str | None = None,
         remark: str | None = None,
     ) -> dict[str, Any]:
+        import math
+
+        try:
+            valid_quantity = (
+                not isinstance(quantity, bool) and math.isfinite(quantity) and quantity > 0
+            )
+        except (TypeError, ValueError, OverflowError):
+            valid_quantity = False
+        if not valid_quantity:
+            return {"success": False, "message": "调拨数量必须为有限正数"}
         with _facade().get_db() as db:
             try:
                 from_ledger = (
@@ -235,11 +245,29 @@ class InventoryMovementsMixin:
                         _facade().InventoryLedger.product_id == product_id,
                         _facade().InventoryLedger.warehouse_id == from_warehouse_id,
                         _facade().InventoryLedger.available_quantity >= quantity,
+                        _facade().InventoryLedger.location_id == from_location_id,
+                        _facade().InventoryLedger.batch_no == batch_no,
                     )
                     .first()
                 )
                 if not from_ledger:
                     return {"success": False, "message": "源仓库库存不足"}
+                to_ledger = (
+                    db.query(_facade().InventoryLedger)
+                    .filter(
+                        _facade().InventoryLedger.product_id == product_id,
+                        _facade().InventoryLedger.warehouse_id == to_warehouse_id,
+                        _facade().InventoryLedger.batch_no == batch_no,
+                        _facade().InventoryLedger.location_id == to_location_id,
+                    )
+                    .first()
+                )
+                if to_ledger and (to_ledger.unit or "").strip() != (from_ledger.unit or "").strip():
+                    return {
+                        "success": False,
+                        "error_code": "inventory_unit_mismatch",
+                        "message": "源库存与目标库存单位不一致，请先确认换算关系",
+                    }
                 now = datetime.now()
                 from_ledger.quantity = float(from_ledger.quantity) - quantity
                 from_ledger.available_quantity = float(from_ledger.available_quantity) - quantity
@@ -261,16 +289,6 @@ class InventoryMovementsMixin:
                     created_at=now,
                 )
                 db.add(out_transaction)
-                to_ledger = (
-                    db.query(_facade().InventoryLedger)
-                    .filter(
-                        _facade().InventoryLedger.product_id == product_id,
-                        _facade().InventoryLedger.warehouse_id == to_warehouse_id,
-                        (_facade().InventoryLedger.batch_no == batch_no)
-                        | _facade().InventoryLedger.batch_no.is_(None),
-                    )
-                    .first()
-                )
                 if to_ledger:
                     to_ledger.quantity = float(to_ledger.quantity) + quantity
                     to_ledger.available_quantity = float(to_ledger.available_quantity) + quantity
