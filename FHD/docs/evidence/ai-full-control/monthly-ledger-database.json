@@ -1,0 +1,15 @@
+{
+  "source_sha": "0f48497501b1c384e84b37a5f4c1504bb154d08a",
+  "test_file": "FHD/tests/test_application/test_monthly_ledger_database.py",
+  "test_sha256": "9b3c1f1bb768ee98254f4e12d70af9859228ac98c5e3d211690d4e85cbfa6695",
+  "related_tests_passed": 7,
+  "checks": [
+    "month start included",
+    "leap-month end included",
+    "previous and next month excluded",
+    "tenant 7 and tenant 8 isolated",
+    "pagination total and result IDs",
+    "record counts unchanged"
+  ],
+  "scope": "Actual monthly node parameters and accounting service SQL against isolated SQLite; database connection provider replaced. No live model, production database, tenant-timezone resolution, account-specific lines or installed-client acceptance."
+}

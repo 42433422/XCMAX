@@ -6,6 +6,12 @@
 目标是四个阶段全部完成。本目录记录当前实施证据，不代表四阶段验收通过。
 此前对话中的 20%–30% 覆盖率与工期只是未验证估计，不作为验收基线。
 
+## Seeded monthly ledger verification
+
+A real SQLite test now feeds monthly planner parameters into the accounting ledger service with entries on January 31, February 1, leap-day February 29 and March 1, plus a separate tenant's February entry. It verifies exact returned IDs, inclusive month boundaries, tenant isolation, pagination totals and unchanged per-tenant row counts. Only the database connection provider is replaced; SQL execution is real.
+
+Seven related tests pass. See monthly-ledger-database.json for source and test identity. This is independent seeded evidence for the unfiltered-account monthly query; it does not establish account-specific line totals, tenant timezone semantics, production or installed acceptance. The 22-task benchmark was not rerun or re-scored by this test.
+
 ## Monthly ledger planning
 
 Explicit 本月/这个月账本 requests now route to finance.ledger_query with ISO month-start/month-end dates and bounded pagination. Leap-year February and December/January boundary tests pass. Compound requests remain for the existing planner. The current reference date is runtime-local; tenant-specific timezone handling remains unverified.
