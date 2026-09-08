@@ -284,6 +284,10 @@ export const agentRunsApi = {
     return api.post<AgentRunResponse>(`/api/agent/runs/${encodeURIComponent(runId)}/continue`, payload)
   },
 
+  answerClarification(runId: string, payload: { step_id: string; parameters: Record<string, unknown> }): Promise<AgentRunResponse> {
+    return api.post<AgentRunResponse>(`/api/agent/runs/${encodeURIComponent(runId)}/clarification`, payload)
+  },
+
   pauseRun(runId: string): Promise<ApiResponse<AgentRun>> {
     return api.post<ApiResponse<AgentRun>>(`/api/agent/runs/${encodeURIComponent(runId)}/pause`, {})
   },

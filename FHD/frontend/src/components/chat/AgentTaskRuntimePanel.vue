@@ -50,6 +50,7 @@
         </li>
       </ul>
     </details>
+    <AgentClarificationForm v-if="clarification && runId" :run-id="runId" :question="clarification" />
     <div class="task-actions">
       <button class="btn btn-primary btn-sm" @click="$emit('open')">
         {{ $t('chat.openTask') }}
@@ -73,6 +74,8 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import AgentClarificationForm, { type ClarificationQuestion } from './AgentClarificationForm.vue'
+import { activeRunIdOfTask } from '@/utils/agentTaskWorkspaceModel'
 import type { AgentArtifact, AgentRunStep, AgentToolCall } from '@/api/agentRuns'
 import type { TaskItem } from '@/composables/useChatPersistence'
 
@@ -101,6 +104,11 @@ type AgentTaskPayload = {
 const props = defineProps<{ task: TaskItem }>()
 defineEmits<{ open: []; approve: []; retry: []; pause: []; resume: []; cancel: [] }>()
 
+const runId = computed(() => activeRunIdOfTask(props.task))
+const clarification = computed(() => {
+  if (!steps.value.some(step => step.tool_id === 'clarify' && step.status === 'waiting_user')) return null
+  return payload.value.finalOutput?.clarification as ClarificationQuestion | undefined
+})
 const payload = computed(() => (props.task.payload ?? {}) as AgentTaskPayload)
 const steps = computed(() => (Array.isArray(payload.value.steps) ? payload.value.steps : []))
 const toolCalls = computed(() => (Array.isArray(payload.value.toolCalls) ? payload.value.toolCalls : []))
@@ -155,6 +163,7 @@ const finalOutputText = computed(() => {
 })
 const hasResultEvidence = computed(() => Boolean(finalOutputText.value || artifacts.value.length))
 function can(action: string): boolean {
+  if (action === 'approve' && clarification.value) return false
   if (payload.value.capabilities && action in payload.value.capabilities) {
     return Boolean(payload.value.capabilities[action])
   }

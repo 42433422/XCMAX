@@ -67,6 +67,30 @@ def pause_for_clarification(run: AgentRun, step: AgentStep) -> bool:
         "question": str(step.params.get("question") or "请补充执行所需的信息"),
         "target_node_id": str(step.params.get("target_node_id") or ""),
     }
+    target = next(
+        (item for item in run.steps if item.node_id == step.params.get("target_node_id")), None
+    )
+    spec = get_tool_action_spec(target.tool_id, target.action) if target else None
+    labels = {
+        "unit_name": "客户单位",
+        "name_or_model": "产品名称或型号",
+        "quantity": "数量",
+        "warehouse_id": "仓库编号",
+        "product_id": "产品编号",
+        "customer_id": "客户编号",
+        "amount": "金额",
+        "transaction_type": "收支类型",
+    }
+    properties = spec.input_schema.get("properties", {}) if spec else {}
+    step.output["fields"] = [
+        {
+            "key": key,
+            "label": properties.get(key, {}).get("title") or labels.get(key, key),
+            "type": properties.get(key, {}).get("type", "string"),
+        }
+        for key in (spec.required_params if spec else [])
+        if target is not None and target.params.get(key) in (None, "", [], {})
+    ]
     run.final_output = {"clarification": {"step_id": step.step_id, **step.output}}
     run.add_event("step.clarification_required", step.output["question"], run.final_output)
     return True
