@@ -171,6 +171,33 @@ def test_unified_task_deduplication_rejects_different_mod_scope(second_mod):
     assert same.json()["data"]["run_id"] == run_id
 
 
+@pytest.mark.parametrize(
+    "method,suffix", [("GET", ""), ("GET", "/events"), ("POST", "/cancel"), ("POST", "/pause")]
+)
+@pytest.mark.parametrize("other_mod", ["mod-b", ""])
+def test_run_access_rejects_cross_mod_scope(method, suffix, other_mod):
+    owner = _client(mod_authorization={"mod_id": "mod-a", "session_row_id": 1, "user_id": "u1"})
+    created = owner.post(
+        "/api/agent/tasks",
+        json={
+            "task_id": "private-mod-task",
+            "title": "查询产品",
+            "tool_id": "products",
+            "action": "query",
+            "params": {"keyword": "5003"},
+        },
+    )
+    assert created.status_code == 202
+    run_id = created.json()["data"]["run_id"]
+    before = get_agent_run_repository().get(run_id).to_dict()
+    other = _client(mod_authorization={"mod_id": other_mod} if other_mod else None)
+    rejected = other.request(method, f"/api/agent/runs/{run_id}{suffix}")
+    assert rejected.status_code == 403
+    assert run_id not in rejected.text
+    assert get_agent_run_repository().get(run_id).to_dict() == before
+    assert owner.get(f"/api/agent/runs/{run_id}").status_code == 200
+
+
 def _drain_background_run(run_id: str) -> AgentRun:
     queue = get_task_execution_repository()
     claimed = queue.claim("route-test-worker", lease_seconds=30)

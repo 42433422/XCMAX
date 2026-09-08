@@ -104,8 +104,13 @@ def owned_run(
         return None, JSONResponse(
             {"success": False, "message": "agent run 不存在"}, status_code=404
         )
-    if not principal.is_admin and (
-        run.user_id != principal.user_id or tenant_id_of_run(run) != principal.tenant_id
+    runtime_context = run.metadata.get("runtime_context") or {}
+    binding = runtime_context.get("_mod_authorization") or {}
+    requested_binding = principal.mod_authorization or {}
+    same_mod = binding.get("mod_id", "") == requested_binding.get("mod_id", "")
+    if not same_mod or (
+        not principal.is_admin
+        and (run.user_id != principal.user_id or tenant_id_of_run(run) != principal.tenant_id)
     ):
         return None, JSONResponse(
             {"success": False, "message": "无权访问该 agent run"}, status_code=403
