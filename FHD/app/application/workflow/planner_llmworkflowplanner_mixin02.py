@@ -210,6 +210,13 @@ class _LLMWorkflowPlannerPart02Mixin:
                         idempotent=True,
                     )
                 )
+        if not nodes and "reports" in tool_registry:
+            from .sales_report_planning import monthly_sales_report_node
+
+            report_node = monthly_sales_report_node(message)
+            if report_node is not None:
+                intent = "sales_report"
+                nodes.append(report_node)
         if not nodes and "sales" in tool_registry:
             from .sales_quote_planning import explicit_sales_quote_node
 
