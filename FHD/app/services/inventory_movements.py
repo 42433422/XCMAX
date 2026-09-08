@@ -24,8 +24,8 @@ class InventoryMovementsMixin:
 
     def inventory_in(
         self,
-        product_id: int,
-        warehouse_id: int,
+        product_id: int | None,
+        warehouse_id: int | None,
         quantity: float,
         batch_no: str | None = None,
         location_id: int | None = None,
@@ -34,6 +34,8 @@ class InventoryMovementsMixin:
         reference_id: int | None = None,
         operator: str | None = None,
         remark: str | None = None,
+        model_number: str | None = None,
+        warehouse_name: str | None = None,
     ) -> dict[str, Any]:
         if isinstance(quantity, bool):
             return {"success": False, "message": "入库数量必须是有效正数"}
@@ -45,18 +47,53 @@ class InventoryMovementsMixin:
             return {"success": False, "message": "入库数量必须是有效正数"}
         with _facade().get_db() as db:
             try:
-                product = (
-                    db.query(_facade().Product).filter(_facade().Product.id == product_id).first()
-                )
+                if product_id is None and model_number:
+                    products = (
+                        db.query(_facade().Product)
+                        .filter(_facade().Product.model_number == model_number)
+                        .limit(2)
+                        .all()
+                    )
+                    if len(products) != 1:
+                        return {
+                            "success": False,
+                            "message": "产品型号不存在或不唯一，请选择明确的产品",
+                        }
+                    product = products[0]
+                else:
+                    product = (
+                        db.query(_facade().Product)
+                        .filter(_facade().Product.id == product_id)
+                        .first()
+                    )
                 if not product:
                     return {"success": False, "message": "产品不存在"}
-                warehouse = (
-                    db.query(_facade().Warehouse)
-                    .filter(_facade().Warehouse.id == warehouse_id)
-                    .first()
-                )
+                if model_number and product.model_number != model_number:
+                    return {"success": False, "message": "产品编号与型号不符"}
+                if warehouse_id is None and warehouse_name:
+                    warehouses = (
+                        db.query(_facade().Warehouse)
+                        .filter(_facade().Warehouse.name == warehouse_name)
+                        .limit(2)
+                        .all()
+                    )
+                    if len(warehouses) != 1:
+                        return {
+                            "success": False,
+                            "message": "仓库名称不存在或不唯一，请选择明确的仓库",
+                        }
+                    warehouse = warehouses[0]
+                else:
+                    warehouse = (
+                        db.query(_facade().Warehouse)
+                        .filter(_facade().Warehouse.id == warehouse_id)
+                        .first()
+                    )
                 if warehouse is None or warehouse.status != "active":
                     return {"success": False, "message": "仓库不存在或未启用"}
+                if warehouse_name and warehouse.name != warehouse_name:
+                    return {"success": False, "message": "仓库编号与名称不符"}
+                product_id, warehouse_id = product.id, warehouse.id
                 ledger = (
                     db.query(_facade().InventoryLedger)
                     .filter(

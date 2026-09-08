@@ -424,6 +424,46 @@ class TestGetInventorySummary:
 # inventory_in
 # ---------------------------------------------------------------------------
 class TestInventoryIn:
+    @pytest.mark.parametrize(
+        "problem",
+        [None, "duplicate_product", "duplicate_warehouse", "wrong_model", "wrong_warehouse"],
+    )
+    def test_named_inbound_uses_exact_references_or_writes_nothing(self, test_session, problem):
+        db = test_session
+        product = Product(name="型号产品", model_number="A100")
+        warehouse = Warehouse(code="MAIN", name="主仓库", status="active")
+        db.add_all([product, warehouse])
+        db.commit()
+        if problem == "duplicate_product":
+            db.add(Product(name="重名型号", model_number="A100"))
+        if problem == "duplicate_warehouse":
+            db.add(Warehouse(code="OTHER", name="主仓库", status="active"))
+        db.commit()
+        params = {
+            "product_id": None,
+            "warehouse_id": None,
+            "model_number": "A100",
+            "warehouse_name": "主仓库",
+            "quantity": 50,
+        }
+        if problem == "wrong_model":
+            params.update(product_id=product.id, model_number="wrong")
+        if problem == "wrong_warehouse":
+            params.update(warehouse_id=warehouse.id, warehouse_name="wrong")
+        with patch("app.services.inventory_service.get_db", _mock_get_db(db)):
+            result = InventoryService().inventory_in(**params)
+        db.commit()
+        assert result["success"] is (problem is None)
+        assert db.query(InventoryLedger).count() == int(problem is None)
+        assert db.query(InventoryTransaction).count() == int(problem is None)
+        if problem is None:
+            ledger = db.query(InventoryLedger).one()
+            assert (ledger.product_id, ledger.warehouse_id, float(ledger.quantity)) == (
+                product.id,
+                warehouse.id,
+                50,
+            )
+
     @pytest.mark.parametrize("quantity", [0, -1, float("nan"), float("inf"), True, "bad", None])
     def test_invalid_quantity_never_opens_write_session(self, quantity):
         with patch("app.services.inventory_service.get_db") as get_db:

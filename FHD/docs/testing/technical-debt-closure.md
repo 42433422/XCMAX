@@ -17,6 +17,13 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Stock-in service/dispatcher now accept exact model and warehouse names in
+  addition to IDs, resolve them before writes, and reject duplicate names or
+  conflicting ID/name pairs. Real SQLite tests verify valid names write the
+  canonical product/warehouse IDs and quantity 50, while rejected references
+  leave both ledger and transaction tables unchanged; 148 regressions passed.
+  Tool-contract alternatives and warehouse clarification remain outstanding.
+
 - Stock-in now rejects nonpositive, nonfinite and malformed quantities before
   opening a write session, and requires an existing active destination warehouse.
   Real SQLite tests verify missing/inactive warehouses produce no ledger or

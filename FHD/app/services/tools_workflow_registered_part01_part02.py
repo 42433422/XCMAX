@@ -49,7 +49,13 @@ def _registered_router_inventory(
             svc.inventory_in(
                 product_id=params.get("product_id"),
                 warehouse_id=params.get("warehouse_id"),
-                quantity=float(params.get("quantity", 0)),
+                quantity=params.get("quantity"),
+                **({"model_number": params["model_number"]} if "model_number" in params else {}),
+                **(
+                    {"warehouse_name": params["warehouse_name"]}
+                    if "warehouse_name" in params
+                    else {}
+                ),
                 batch_no=params.get("batch_no"),
                 location_id=params.get("location_id"),
                 unit_price=_float_or_none(params.get("unit_price")),
