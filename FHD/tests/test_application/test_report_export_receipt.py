@@ -137,3 +137,29 @@ def test_export_uses_successful_query_output_and_rejects_missing_source(tmp_path
     assert list(workbook.active.values) == [("product_name", "quantity", "amount"), ("A100", 2, 51)]
     workbook.close()
     engine.dispose()
+
+
+def test_failed_sales_query_never_exports_file(tmp_path, monkeypatch):
+    from unittest.mock import patch
+
+    from app.application.workflow.engine import WorkflowEngine
+    from app.application.workflow.planner import LLMWorkflowPlanner
+    from app.services.tools_execution.registry import get_workflow_tool_registry
+
+    monkeypatch.setattr("app.application.aiopen.api_artifacts._root", lambda: tmp_path)
+    with patch("app.application.workflow.planner.get_ai_conversation_service", return_value=None):
+        planner = LLMWorkflowPlanner()
+    plan = planner._fallback_plan("failed-export", "导出本月销售报表", get_workflow_tool_registry())
+    calls = []
+
+    def dispatch(tool_id, action, params):
+        calls.append(action)
+        if action == "sales_summary":
+            return {"success": False, "message": "database unavailable", "data": [{"amount": 999}]}
+        pytest.fail("Failed query must not reach the export action")
+
+    with execution_actor_scope("7"), tenant_scope(3):
+        result = WorkflowEngine(dispatch).run(plan, max_retries=0)
+    assert not result.success
+    assert calls == ["sales_summary"]
+    assert not list(tmp_path.iterdir())
