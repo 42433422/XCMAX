@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from app.domain.neuro.action_negation import has_denied_action
 from app.domain.neuro.greeting import is_standalone_greeting
 
 from .types import PlanGraph
@@ -42,6 +43,9 @@ def no_operation_plan(plan_id: str, message: str) -> PlanGraph | None:
         reason, response = "greeting", "你好，请告诉我需要办理什么业务。"
     elif _PROHIBITION.fullmatch(text):
         reason, response = "explicit_prohibition", "收到，本次不执行业务操作。"
+    elif has_denied_action(text):
+        reason = "negated_action"
+        response = "本次未执行业务操作。请说明需要保留的操作，或确认取消本次任务。"
     else:
         return None
     return PlanGraph(

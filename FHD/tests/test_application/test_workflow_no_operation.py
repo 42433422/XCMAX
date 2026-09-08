@@ -11,7 +11,19 @@ from app.application.workflow.types import PlanGraph, WorkflowNode, validate_pla
 
 
 @pytest.mark.parametrize(
-    "message", ["你好", "hello!", "不要新建客户", "请不要删除所有数据", "不用查询客户"]
+    "message",
+    [
+        "你好",
+        "hello!",
+        "不要新建客户",
+        "请不要删除所有数据",
+        "不用查询客户",
+        "不要打印标签",
+        "别开单",
+        "暂不发货",
+        "不要打印标签，然后给客户开单",
+        "不要删除，只查询客户",
+    ],
 )
 def test_non_execution_bypasses_model_and_tools(message):
     with patch("app.application.workflow.planner.get_ai_conversation_service", return_value=None):
@@ -39,7 +51,6 @@ def test_non_execution_bypasses_model_and_tools(message):
     [
         "你好，查询客户",
         "不要新建客户，查询产品",
-        "不要删除，只查询客户",
         "查询客户不要公司",
         "不要忘记新建客户",
         "客户列表",

@@ -160,11 +160,9 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
     lower = text.lower()
     # Do not let an action noun in a denied or mixed instruction trigger a write.
     # Mixed positive/negative clauses require clarification before any execution.
-    if _facade().re.search(
-        r"(?:不要|别|不用|不需要|暂不|先不|停止|取消)[^，,。；;]{0,8}"
-        r"(?:打印|开单|打单|发货|送货|出货|删除|移除|下单|入库|出库|导入|发送)",
-        text,
-    ):
+    from app.domain.neuro.action_negation import has_denied_action
+
+    if has_denied_action(text):
         return {
             "intent": "clarify",
             "slots": {"question": "已暂停执行。请说明需要保留的操作，或确认取消本次任务。"},
