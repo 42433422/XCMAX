@@ -211,6 +211,13 @@ class _LLMWorkflowPlannerPart02Mixin:
                     )
                 )
         if not nodes and "reports" in tool_registry:
+            from .dashboard_planning import dashboard_query_node
+
+            dashboard_node = dashboard_query_node(message)
+            if dashboard_node is not None:
+                intent = "dashboard_query"
+                nodes.append(dashboard_node)
+        if not nodes and "reports" in tool_registry:
             from .sales_report_planning import monthly_sales_report_node
 
             report_node = monthly_sales_report_node(message)
