@@ -284,6 +284,10 @@ def dispatch_para_delegate(
             "ok": False,
             "error": "MODSTORE_PARA_DELEGATE_ENABLED=0",
         }
+    if _facade().os.environ.get("MODSTORE_MAC_CONTROL_EMPLOYEE_DISPATCH") == "1":
+        from modstore_server.mac_control_delegate import accept_employee
+
+        return accept_employee(task, dict(input_data or {}), employee_id)
     req = _facade()._build_request(
         task=task, input_data=dict(input_data or {}), employee_id=employee_id
     )

@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 
 import {
@@ -35,6 +37,7 @@ import {
   parseGithubRepo,
   parseReviewVerdict,
   requiredLabelsPresent,
+  requestParaSession,
   reviewDiffInChunks,
   resolveReviewWithFallback,
   runTaskQueueFairly,
@@ -682,4 +685,30 @@ test('installer repairs stale Node paths and reloads the LaunchAgent definition'
   assert.match(installer, /for attempt in 1 2 3/);
   assert.match(installer, /bootstrap_agent/);
   assert.match(installer, /trap .*EXIT/);
+});
+
+
+test('managed Para login preserves owner and never falls back to guest', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'para-merge-session-'));
+  const credentialFile = join(directory, 'credentials.json');
+  writeFileSync(credentialFile, JSON.stringify({ email: 'managed@devfleet.local', password: 'fixture-only', owner_id: 'owner-1' }), { mode: 0o600 });
+  let calls = 0;
+  try {
+    assert.equal(await requestParaSession({ credentialFile, fetchImpl: async (url, options) => {
+      calls += 1;
+      assert.ok(url.endsWith('/api/auth/login'));
+      assert.deepEqual(JSON.parse(options.body), { email: 'managed@devfleet.local', password: 'fixture-only' });
+      return { ok: true, json: async () => ({ token: 'fixture-token', user: { id: 'owner-1' } }) };
+    } }), 'fixture-token');
+    await assert.rejects(requestParaSession({ credentialFile, fetchImpl: async () => {
+      calls += 1; return { ok: false, status: 401 };
+    } }), /para auth 401/);
+    assert.equal(calls, 2);
+    await assert.rejects(requestParaSession({ credentialFile, fetchImpl: async () => ({ ok: true, json: async () => ({ token: 'wrong-owner', user: { id: 'owner-2' } }) }) }), /identity_mismatch/);
+    await assert.rejects(requestParaSession({ credentialFile: join(directory, 'missing'), fetchImpl: async () => { throw new Error('must not fetch guest'); } }), /managed_para_credentials_unavailable/);
+    assert.equal(await requestParaSession({ credentialFile: '', fetchImpl: async (url) => {
+      assert.ok(url.endsWith('/api/auth/guest'));
+      return { ok: true, json: async () => ({ token: 'legacy-fixture' }) };
+    } }), 'legacy-fixture');
+  } finally { rmSync(directory, { recursive: true, force: true }); }
 });

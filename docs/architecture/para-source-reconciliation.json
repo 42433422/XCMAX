@@ -1,0 +1,102 @@
+{
+  "source_repository": "https://github.com/42433422/devfleet-private",
+  "source_commit": "3fc0e60476275320e64011a3b39df14114b7be72",
+  "public_repository": "https://github.com/42433422/devfleet",
+  "public_commit": "b2c99fd999016a673b0eadeadf1e3e3ae2d47f24",
+  "runtime_path": "/Users/a4243342/XCMAX-runtime/para-api/devfleet",
+  "captured_on": "2026-09-08",
+  "differences": [
+    {
+      "path": "api/db/schema-upgrades.ts",
+      "source_sha256": "94e3f0c02f03187013ba36bb71eafedbf3e126137ad09fcab5a3aeda68776db1",
+      "runtime_sha256": "bc41fd546475ab8313a335c010aee1bb1f5308988030cac358086288aea44456",
+      "status": "requires_reconciliation"
+    },
+    {
+      "path": "api/db/schema.ts",
+      "source_sha256": "4e27cf90eefb936df5dccd9a5778789b837be4ddaf23cfe628d8b1be6fedc9b0",
+      "runtime_sha256": "a997797c98926fd7c22fc4177aa06d6e814cb1c12d4ff4306625f892c3cbdd9b",
+      "status": "requires_reconciliation"
+    },
+    {
+      "path": "api/db/store.ts",
+      "source_sha256": "a1f98c8790d9f870e84b0e5b2489b05dcdc48e0e2661be1bfa657d2b333affc8",
+      "runtime_sha256": "03525e27040e6a41d7e1a2b487698914cead679459030e3930691d4f8fcf746a",
+      "status": "requires_reconciliation"
+    },
+    {
+      "path": "api/lib/dispatch.ts",
+      "source_sha256": "18bad0494955b7e68526b1d7aaec1b6c387fe781572971e2265f1eebb3ec4731",
+      "runtime_sha256": "262bd8da1d2ceac514dd2064659da152eba21e5aa6e9b273f235797cedabc4e7",
+      "status": "requires_reconciliation"
+    },
+    {
+      "path": "api/routes/devices.ts",
+      "source_sha256": "b95d5a9673b4876fd545adf3d3062596ad63139e128e48e084b4365f183e67a2",
+      "runtime_sha256": "474fb3b11dbaec7ddb63576105e33785fcc6b12f5b048e023c8d18043644a460",
+      "status": "requires_reconciliation"
+    },
+    {
+      "path": "api/routes/tasks.ts",
+      "source_sha256": "ac0694ee7c6cc05c313737014e38556a371035c83fff578310170ddc61f67731",
+      "runtime_sha256": "70e144501fb1b2d4ce84c8363686e63e1c3e4a4267104234ce7677c901eecfea",
+      "status": "requires_reconciliation"
+    },
+    {
+      "path": "api/websocket/manager.ts",
+      "source_sha256": "c86668aaeb71f12ab2219f14078bfd5b8ced74788756aa0e576de24442fddd28",
+      "runtime_sha256": "ec0398a359e4885e232f88b31ddc94e1a2fe9cb218f7ac531dfe90536271263c",
+      "status": "requires_reconciliation"
+    },
+    {
+      "path": "scripts/e2e-agent.mjs",
+      "source_sha256": "158cddd586486158d8990d6fa91065afd077ea36afc4ff6474dba63e770bd220",
+      "runtime_sha256": "71eb956d793ce2db79fbbdbffdf919b69de97ee27f73fc59948915f16ff642df",
+      "status": "requires_reconciliation"
+    },
+    {
+      "path": "scripts/e2e-smoke-codex.mjs",
+      "source_sha256": "f5d7eecacee37385a105777142a26e3af916abe7136a5660ea63431a4e229fce",
+      "runtime_sha256": "617a3ab9e54294526baa4d5e535e59868b712c8ee60dfa456e99df7ea3c196ce",
+      "status": "requires_reconciliation"
+    },
+    {
+      "path": "tests/dispatch-reconnect.test.ts",
+      "source_sha256": "cc0457bec93c884a609cdc9463ab3a570c95e9818ff7c1a40858cae2b4d62fca",
+      "runtime_sha256": "e5da9bc5772764c9afc4c610f046ed864f77c485e4e75677ef7a6da159e14411",
+      "status": "requires_reconciliation"
+    },
+    {
+      "path": "tests/dispatch.test.ts",
+      "source_sha256": "5bad9b7ab8582d06bd6f7cb7521f0bb68ac7f0e9f6166ca90fb3e11b474229db",
+      "runtime_sha256": "a13a24dff55a2425e3f68b01728b914ba9020f0aec40ec8d85c1cfd08f64bee4",
+      "status": "requires_reconciliation"
+    },
+    {
+      "path": "tests/tasks-dispatch.test.ts",
+      "source_sha256": "55147c30970a07da2ccf884b7aff17a054b0e05f3f4a8c37e78f6e0463a0309d",
+      "runtime_sha256": "fefc142787103562f7f281c60f83089d16e59e3d94a5fff219ffd09b77947984",
+      "status": "requires_reconciliation"
+    },
+    {
+      "path": "api/lib/taskPreflight.ts",
+      "runtime_sha256": "0931e037af4b870030bbbaae79e335b2e4e8b446264a3ba741547732b3fc613c",
+      "status": "runtime_only"
+    },
+    {
+      "path": "api/lib/failureBuckets.ts",
+      "runtime_sha256": "d5bc676358d72221323a341971fca16eecf185485fb43101d2e6e639707f7e98",
+      "status": "runtime_only"
+    },
+    {
+      "path": "tests/scheduler-hardening.test.ts",
+      "runtime_sha256": "9ea925e55f0a490f3211641115818bc38f240c77979d97d5f1844dbb6083fe89",
+      "status": "runtime_only"
+    },
+    {
+      "path": "scripts/cleanup-expired-info.mjs",
+      "runtime_sha256": "6e756083594f3a29d5390b8b911b30ec8bfd60e7e845bbd4be79d65013cf60e0",
+      "status": "runtime_only"
+    }
+  ]
+}
