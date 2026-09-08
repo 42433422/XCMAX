@@ -311,6 +311,12 @@ class _LLMWorkflowPlannerPart02Mixin:
             if finance_node is not None:
                 intent = "finance_create_transaction"
                 nodes.append(finance_node)
+        if not nodes:
+            from .domain_query_planning import domain_query_nodes
+
+            if domain_route := domain_query_nodes(message, tool_registry):
+                intent, todo, domain_nodes = domain_route
+                nodes.extend(domain_nodes)
         if not nodes and "products" in tool_registry:
             from .product_creation import direct_product_create_node
 

@@ -8,6 +8,13 @@ _ID_RE = re.compile(r"[A-Za-z0-9]")
 _NEGATION_WORDS = ("不要", "别", "不用", "取消", "删除", "清空", "然后", "并且")
 
 
+_PRODUCT_STOCK_RE = re.compile(
+    r"^(?:产品|商品)?\s*([A-Za-z0-9][A-Za-z0-9._-]*)\s*"
+    r"(?:的)?(?:还有多少库存|还剩多少库存|库存还有多少|库存还剩多少|库存是多少|还有库存|库存)\s*"
+    r"(?:件|个|箱|桶|支|包|瓶|台|套)?[。？?\s]*$"
+)
+
+
 def inventory_query_node(message: str) -> WorkflowNode | None:
     text = message.strip().rstrip("。？?")
     if text.startswith("请"):
@@ -17,7 +24,26 @@ def inventory_query_node(message: str) -> WorkflowNode | None:
             text = text[len(prefix) :].strip()
             break
     if not text.endswith("的库存"):
-        return None
+        # 「A100 还有多少库存 / 产品 A100 库存是多少」：带产品标识的余量问法。
+        product_match = _PRODUCT_STOCK_RE.match(text)
+        if product_match is None:
+            return None
+        keyword = product_match.group(1).strip()
+        if keyword.startswith("产品") or keyword.startswith("商品"):
+            keyword = keyword[2:].strip()
+        if any(word in text for word in ("然后", "并且", "删除", "不要", "入库", "出库")):
+            return None
+        if not keyword:
+            return None
+        return WorkflowNode(
+            node_id="inventory_snapshot",
+            tool_id="reports",
+            action="inventory_summary",
+            params={"product_keyword": keyword},
+            risk="low",
+            idempotent=True,
+            description="查询指定产品的当前库存",
+        )
     keyword = text[:-3].strip()
     if keyword.startswith("产品"):
         keyword = keyword[2:].strip()

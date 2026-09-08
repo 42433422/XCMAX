@@ -2,11 +2,16 @@
 
 import math
 import re
+import uuid
 
 from app.db.session import get_db
 
 from .sales_entities import sales_entity_candidates
 from .types import WorkflowNode
+
+_BARE_QUOTE_RE = re.compile(
+    r"^(?:请|帮我)?给(?:客户)?([^，,；;。？?]{2,20}?)(?:报个价|报价)[。？?\s]*$"
+)
 
 
 def explicit_sales_quote_node(message: str) -> WorkflowNode | None:
@@ -16,7 +21,10 @@ def explicit_sales_quote_node(message: str) -> WorkflowNode | None:
         message.strip(),
     )
     if match is None:
-        return _unpriced_quote_node(message)
+        unpriced = _unpriced_quote_node(message)
+        if unpriced is not None:
+            return unpriced
+        return _bare_customer_quote_clarify(message)
     customer_name, product_name, quantity, price = match.groups()
     quantity_value, price_value = float(quantity), float(price)
     if not math.isfinite(quantity_value) or quantity_value <= 0:
@@ -81,4 +89,28 @@ def _unpriced_quote_node(message: str) -> WorkflowNode | None:
         risk="medium",
         idempotent=False,
         description=f"为{customer_name}的产品{product_name}报价；需补齐报价明细、数量和单价",
+    )
+
+
+def _bare_customer_quote_clarify(message: str) -> WorkflowNode | None:
+    """「给星光报价」：只有客户没有产品，先反问补齐，不得落到产品搜索。"""
+    text = str(message or "").strip()
+    match = _BARE_QUOTE_RE.match(text)
+    if match is None:
+        return None
+    customer_name = match.group(1).strip()
+    if not customer_name or any(word in customer_name for word in ("不要", "别", "不用", "删除")):
+        return None
+    return WorkflowNode(
+        node_id=f"clarify_{uuid.uuid4().hex[:8]}",
+        tool_id="clarify",
+        action="ask",
+        params={
+            "question": f"请问要给「{customer_name}」的哪个产品报价？请告诉我产品型号（或名称）、数量和单价。",
+            "answer_key": "confirmed",
+            "target_node_id": "",
+        },
+        risk="low",
+        idempotent=True,
+        description=f"反问澄清：为{customer_name}报价缺少产品与数量",
     )

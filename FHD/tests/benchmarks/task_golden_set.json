@@ -473,6 +473,124 @@
           {"tool_id": "business_db", "action": "write"}
         ]
       }
+    },
+    {
+      "task_id": "suppliers.query.list_029",
+      "domain": "suppliers",
+      "difficulty": "easy",
+      "instruction": "供应商列表",
+      "expect": {
+        "actions": [{"tool_id": "suppliers", "action": "query_suppliers"}],
+        "forbid_actions": [
+          {"tool_id": "products", "action": "query"},
+          {"tool_id": "business_db", "action": "write"}
+        ]
+      }
+    },
+    {
+      "task_id": "purchase.order.query_030",
+      "domain": "purchase",
+      "difficulty": "easy",
+      "instruction": "采购订单有哪些",
+      "expect": {
+        "actions": [{"tool_id": "purchase", "action": "query_orders"}],
+        "forbid_actions": [
+          {"tool_id": "products", "action": "query"},
+          {"tool_id": "business_db", "action": "write"}
+        ]
+      }
+    },
+    {
+      "task_id": "purchase.order.create_clarify_031",
+      "domain": "purchase",
+      "difficulty": "medium",
+      "instruction": "开一张采购单",
+      "expect": {
+        "actions": [{"tool_id": "clarify", "action": "ask"}],
+        "forbid_actions": [
+          {"tool_id": "products", "action": "query"},
+          {"tool_id": "purchase", "action": "create_order"},
+          {"tool_id": "business_db", "action": "write"}
+        ]
+      }
+    },
+    {
+      "task_id": "shipment.records.query_032",
+      "domain": "shipment",
+      "difficulty": "easy",
+      "instruction": "今天的发货记录",
+      "expect": {
+        "actions": [{"tool_id": "shipment_records", "action": "list"}],
+        "forbid_actions": [
+          {"tool_id": "products", "action": "query"},
+          {"tool_id": "business_db", "action": "write"}
+        ]
+      }
+    },
+    {
+      "task_id": "finance.aging.receivable_033",
+      "domain": "finance",
+      "difficulty": "easy",
+      "instruction": "查一下应收账款",
+      "expect": {
+        "actions": [{"tool_id": "finance", "action": "aging_report"}],
+        "forbid_actions": [
+          {"tool_id": "products", "action": "query"},
+          {"tool_id": "business_db", "action": "write"}
+        ]
+      }
+    },
+    {
+      "task_id": "finance.profit.report_034",
+      "domain": "finance",
+      "difficulty": "medium",
+      "instruction": "做个利润表",
+      "expect": {
+        "actions": [{"tool_id": "finance", "action": "ledger_query"}],
+        "forbid_actions": [
+          {"tool_id": "products", "action": "query"},
+          {"tool_id": "finance", "action": "create_transaction"}
+        ]
+      }
+    },
+    {
+      "task_id": "sales.report.amount_035",
+      "domain": "sales",
+      "difficulty": "easy",
+      "instruction": "这个月销售额多少",
+      "expect": {
+        "actions": [{"tool_id": "reports", "action": "sales_summary"}],
+        "forbid_actions": [
+          {"tool_id": "products", "action": "query"},
+          {"tool_id": "business_db", "action": "write"}
+        ]
+      }
+    },
+    {
+      "task_id": "inventory.query.product_stock_036",
+      "domain": "inventory",
+      "difficulty": "easy",
+      "instruction": "A100 还有多少库存",
+      "expect": {
+        "actions": [{"tool_id": "reports", "action": "inventory_summary"}],
+        "forbid_actions": [
+          {"tool_id": "products", "action": "query"},
+          {"tool_id": "business_db", "action": "write"}
+        ]
+      }
+    },
+    {
+      "task_id": "sales.quote.clarify_037",
+      "domain": "sales",
+      "difficulty": "medium",
+      "instruction": "给星光报价",
+      "expect": {
+        "actions": [{"tool_id": "clarify", "action": "ask"}],
+        "forbid_actions": [
+          {"tool_id": "products", "action": "query"},
+          {"tool_id": "business_db", "action": "write"}
+        ]
+      }
     }
   ]
 }
