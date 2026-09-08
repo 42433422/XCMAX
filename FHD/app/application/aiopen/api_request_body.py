@@ -4,7 +4,7 @@ import json
 from typing import Any
 from urllib.parse import urlencode
 
-from app.application.aiopen.api_artifacts import ApiArtifactError, read_api_export
+from app.application.aiopen import api_artifacts
 
 MAX_UPLOAD_BYTES = 64 * 1024 * 1024
 MAX_UPLOAD_FILES = 16
@@ -74,8 +74,8 @@ def api_request_body(args: dict[str, Any]) -> dict[str, Any]:
     total = 0
     for field, artifact_id in references:
         try:
-            content, metadata = read_api_export(artifact_id)
-        except ApiArtifactError as exc:
+            content, metadata = api_artifacts.read_api_export(artifact_id)
+        except api_artifacts.ApiArtifactError as exc:
             raise ApiBodyError("附件不存在、已失效或当前账号无权使用") from exc
         total += len(content)
         if total > MAX_UPLOAD_BYTES:
