@@ -42,19 +42,28 @@ class ParaClient:
             raise ParaUnavailable(type(exc).__name__) from None
 
     def devices(self) -> list[dict]:
-        return self.request("GET", "/api/devices").get("devices", [])
+        rows = self.request("GET", "/api/devices").get("devices")
+        if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+            raise ParaUnavailable("invalid_devices_response")
+        return rows
 
     def tasks(self) -> list[dict]:
-        return self.request("GET", "/api/tasks").get("tasks", [])
+        rows = self.request("GET", "/api/tasks").get("tasks")
+        if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+            raise ParaUnavailable("invalid_tasks_response")
+        return rows
 
     def task(self, task_id: str) -> dict:
         task = self.request("GET", "/api/tasks/" + quote(task_id, safe="")).get("task", {})
-        if not task.get("id") or not task.get("status"):
+        if not isinstance(task, dict) or not task.get("id") or not task.get("status"):
             raise ParaUnavailable("task_status_missing")
         return task
 
     def submit(self, body: dict) -> dict:
-        return self.request("POST", "/api/tasks", body).get("task", {})
+        task = self.request("POST", "/api/tasks", body).get("task")
+        if not isinstance(task, dict):
+            raise ParaUnavailable("invalid_submit_response")
+        return task
 
 
 def age_seconds(value: str, now: float) -> float:

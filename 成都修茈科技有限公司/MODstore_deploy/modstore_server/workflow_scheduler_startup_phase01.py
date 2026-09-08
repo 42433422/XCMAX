@@ -15,8 +15,12 @@ def _register_scheduler_phase_01():
     from modstore_server.mac_control_worker import run_mac_control_sync
 
     _facade()._scheduler.add_job(
-        run_mac_control_sync, _facade().IntervalTrigger(seconds=15),
-        id="mac_control_sync", replace_existing=True, coalesce=True, max_instances=1,
+        run_mac_control_sync,
+        _facade().IntervalTrigger(seconds=15),
+        id="mac_control_sync",
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
     )
     try:
         from modstore_server.backup_event_subscriber import (
