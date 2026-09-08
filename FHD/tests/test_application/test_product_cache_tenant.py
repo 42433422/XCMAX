@@ -108,3 +108,39 @@ def test_collection_caches_are_separate_between_tenants(method, repository_metho
         second_result = getattr(service, method)()
     assert first_result["data"] != second_result["data"]
     assert getattr(repository, repository_method).call_count == 2
+
+
+def test_switching_repository_invalidates_cached_product_details():
+    import fnmatch
+
+    old_repository = Mock()
+    old_repository.find_by_id.return_value = {"name": "旧数据"}
+    new_repository = Mock()
+    new_repository.find_by_id.return_value = {"name": "新数据"}
+    with patch(
+        "app.utils.performance.performance_initializer.get_performance_optimizer",
+        return_value=Mock(
+            redis_cache=None,
+            query_optimizer=None,
+            request_deduplicator=None,
+            performance_monitor=None,
+        ),
+    ):
+        service = ProductsService(old_repository)
+    values = {}
+    cache = Mock()
+    cache.get.side_effect = values.get
+    cache.set.side_effect = lambda key, value, **kwargs: values.update({key: value})
+
+    def clear(pattern):
+        for key in list(values):
+            if fnmatch.fnmatchcase(key, pattern):
+                del values[key]
+
+    cache.clear_pattern.side_effect = clear
+    service._cache = cache
+    with tenant_scope(1):
+        assert service.get_product(1)["data"]["name"] == "旧数据"
+        service.set_repository(new_repository)
+        assert service.get_product(1)["data"]["name"] == "新数据"
+    new_repository.find_by_id.assert_called_once_with(1)

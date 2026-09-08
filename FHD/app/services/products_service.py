@@ -366,6 +366,7 @@ class ProductsService(NeuroEventPublisherMixin):
 
         try:
             patterns = [
+                "product:*",
                 "products:list:*",
                 "product_units:*",
                 "product_names:*",
