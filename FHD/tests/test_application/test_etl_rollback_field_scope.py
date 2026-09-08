@@ -252,6 +252,8 @@ def test_failed_rollback_retry_skips_previously_restored_rows(db):
 
 
 def test_aggregate_rollback_removes_created_products_before_created_customer(db):
+    from app.db.models.customer_product_link import CustomerProductLink
+
     adapter = get_adapter("customer_products")
     receipts = []
     for model in ("CREATED-1", "CREATED-2"):
@@ -266,11 +268,13 @@ def test_aggregate_rollback_removes_created_products_before_created_customer(db)
         receipts.append({"match_ref": result["match_ref"], "before": {}, "after": result["after"]})
         db.commit()
     run, rows = persist_run(db, "customer_products", receipts)
+    assert db.query(CustomerProductLink).count() == 2
     assert db.query(Product).count() == 2
     assert db.query(PurchaseUnit).count() == 1
 
     EtlService(adviser=MagicMock()).rollback(db, run_id=run.id, owner_user_id=1)
 
+    assert db.query(CustomerProductLink).count() == 0
     assert db.query(Product).count() == 0
     assert db.query(PurchaseUnit).count() == 0
     assert [row.execution_status for row in rows] == ["rolled_back", "rolled_back"]

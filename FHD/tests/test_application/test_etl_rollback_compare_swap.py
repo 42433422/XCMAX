@@ -96,7 +96,12 @@ def commit_before_rollback_dml(store, table, mutation, edit):
 
     def before_execute(_connection, _cursor, statement, _params, _context, _many):
         prefix = f"{mutation} {'FROM ' if mutation == 'DELETE' else ''}{table} "
-        if threading.get_ident() != caller or not statement.startswith(prefix) or ready.is_set():
+        first_link_write = statement.startswith("DELETE FROM customer_product_links ")
+        if (
+            threading.get_ident() != caller
+            or not (statement.startswith(prefix) or first_link_write)
+            or ready.is_set()
+        ):
             return
         statements.append(statement)
         ready.set()
