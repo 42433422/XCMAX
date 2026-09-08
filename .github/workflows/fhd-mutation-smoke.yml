@@ -49,7 +49,9 @@ jobs:
               ''|0000000000000000000000000000000000000000) base="${head}~1" ;;
             esac
           fi
-          changed="$(git diff --name-only "$base" "$head" 2>/dev/null || true)"
+          # git diff 两个 SHA 是全树 diff，路径相对仓库根（如 FHD/app/di/...）；
+          # 先剥掉 FHD/ 前缀再匹配，同时根仓 .github/workflows/ 的改动也能命中
+          changed="$(git diff --name-only "$base" "$head" 2>/dev/null | sed 's#^FHD/##' || true)"
           if printf '%s\n' "$changed" | grep -qE '^(app/di/|app/contexts/|tests/test_di/|tests/test_contexts/|tests/test_scripts/test_mutation_kill_report\.py|scripts/dev/mutation_kill_report\.py|pyproject\.toml|\.github/workflows/mutation-smoke\.yml)'; then
             echo "run_mutation=true" >> "$GITHUB_OUTPUT"
           else
