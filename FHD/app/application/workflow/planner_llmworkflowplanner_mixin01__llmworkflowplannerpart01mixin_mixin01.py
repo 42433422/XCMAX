@@ -201,6 +201,13 @@ class __LLMWorkflowPlannerPart01MixinPart01Mixin:
             return plan
         inserted: list[_facade().WorkflowNode] = []
         for item in items:
+            if any(
+                node.tool_id == "clarify"
+                and node.params.get("target_node_id") == item["node_id"]
+                and node.params.get("question") == item["question"]
+                for node in plan.nodes
+            ):
+                continue
             clarify = _facade().build_clarify_node(
                 item["question"], ambient={"target_node_id": item["node_id"]}
             )

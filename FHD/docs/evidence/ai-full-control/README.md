@@ -6,6 +6,12 @@
 目标是四个阶段全部完成。本目录记录当前实施证据，不代表四阶段验收通过。
 此前对话中的 20%–30% 覆盖率与工期只是未验证估计，不作为验收基线。
 
+## Idempotent planner clarification decoration
+
+Repeated planner decoration now reuses an existing clarification with the same target node and question. Distinct target nodes retain separate questions. This removes duplicate planning-stage wait nodes without changing missing-field requirements or executing writes.
+
+76 related tests pass, including repeated decoration and distinct-target graph validation. Chat-entry insertion and ordinary missing-field answer handling still require follow-up; the existing answer handler primarily resolves candidate records. No business score improvement or complete clarification/resume acceptance is claimed.
+
 ## Labelled product creation planning
 
 Standalone 新增/添加产品 with an explicit model and optional price/measurement unit now produces only products.create, retaining medium risk and non-idempotence. Unconsumed fields or compound instructions are left for the existing planner instead of silently dropping their text. Missing identity and clarification/resume behavior remain unfinished.
