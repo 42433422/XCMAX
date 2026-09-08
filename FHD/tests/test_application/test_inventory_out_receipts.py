@@ -67,6 +67,7 @@ def test_outbound_receipt_records_selected_stock_batch_and_location(tmp_path, mo
     with factory() as db:
         ledger = db.query(InventoryLedger).one()
         transaction = db.query(InventoryTransaction).one()
+        assert result["data"]["transaction_id"] == transaction.id
         assert float(transaction.unit_price) == 5
         assert float(transaction.total_amount) == 15
         assert (float(ledger.quantity), float(ledger.available_quantity)) == (7, 5)

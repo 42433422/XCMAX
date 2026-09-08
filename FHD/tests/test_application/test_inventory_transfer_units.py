@@ -174,6 +174,7 @@ def test_transfer_between_locations_in_same_warehouse(tmp_path, monkeypatch):
                 for row in stocks
             ] == [(1, 7, 5, 2, "桶"), (2, 3, 3, 0, "桶")]
             receipts = db.query(InventoryTransaction).all()
+            assert {result["data"]["in_transaction_id"], result["data"]["out_transaction_id"]} == {row.id for row in receipts}
             assert all("调整拣货库位" in row.remark for row in receipts)
             assert {
                 (row.location_id, row.transaction_type, float(row.quantity)) for row in receipts

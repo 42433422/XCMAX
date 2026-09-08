@@ -155,6 +155,7 @@ class InventoryMovementsMixin:
                     "message": "入库成功",
                     "data": {
                         "ledger_id": ledger.id,
+                        "transaction_id": transaction.id,
                         "quantity": quantity,
                         "total_quantity": float(ledger.quantity),
                     },
@@ -243,6 +244,7 @@ class InventoryMovementsMixin:
                     "message": "出库成功",
                     "data": {
                         "ledger_id": ledger.id,
+                        "transaction_id": transaction.id,
                         "quantity": quantity,
                         "remaining_quantity": float(ledger.quantity),
                     },
@@ -388,6 +390,8 @@ class InventoryMovementsMixin:
                     "success": True,
                     "message": "调拨成功",
                     "data": {
+                        "out_transaction_id": out_transaction.id,
+                        "in_transaction_id": in_transaction.id,
                         "from_ledger_id": from_ledger.id,
                         "to_ledger_id": to_ledger.id,
                         "quantity": quantity,

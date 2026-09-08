@@ -101,6 +101,8 @@ def test_workbook_preserves_customer_and_measurement_as_separate_columns(
         ledger = db.query(InventoryLedger).one()
         assert ledger.unit == "桶" and float(ledger.quantity) == 5
         receipts = db.query(InventoryTransaction).order_by(InventoryTransaction.id).all()
+        assert result["data"]["transaction_id"] == receipts[0].id
+        assert repeated["data"]["transaction_id"] == receipts[1].id
         assert receipts[0].unit_price is None and receipts[0].total_amount is None
         assert float(receipts[1].unit_price) == 0 and float(receipts[1].total_amount) == 0
     engine.dispose()
