@@ -14,6 +14,22 @@ Customer customization belongs in versioned Mods with account-scoped entitlement
 
 Read-only reviews, design proposals, and requests explicitly limited to a draft do not require merging or releasing.
 
+## Audit standards
+
+For a new XCMAX capability, maturity, or competitive audit, read
+`FHD/config/audit_benchmark_ssot.json` and its generated reading view
+`FHD/docs/AUDIT_BENCHMARK_SSOT.md` before assigning scores. Use all 18 domains,
+three commercial references per domain for the 90-point anchor, and the selected
+open-source reference for the 60-point qualification anchor. Apply the catalog's
+scope mappings, evidence requirements, unknown-state rules, and version policy.
+
+The catalog is the sole maintained source for this standard; generate the reading
+view with `python scripts/dev/audit_benchmark_ssot.py generate` from `FHD/`.
+Run `python scripts/dev/ssot_cli.py check audit-benchmark` after changes.
+Catalog validation does not mean the product passed an audit. Keep historical
+reports immutable: the old 73.3 and 77.1 internal-review scores cannot be converted
+into the new external-anchor scale without a new evidence-backed assessment.
+
 ## Mandatory end-of-task cleanup
 
 Before reporting a task complete:
