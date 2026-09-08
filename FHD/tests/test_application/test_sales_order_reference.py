@@ -56,3 +56,58 @@ def test_reference_confirmation_is_registered_and_requires_source():
         result = _registered_router_sales("confirm_from_result", {"order_id": 7}, {}, "normal", "")
     assert not result["success"]
     service.confirm.assert_not_called()
+
+
+def test_quote_then_confirm_updates_only_created_order(tmp_path, monkeypatch):
+    from contextlib import contextmanager
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.application.sales_app_service import SalesAppService
+    from app.application.workflow.engine import WorkflowEngine
+    from app.application.workflow.sales_order_planning import sales_order_nodes
+    from app.application.workflow.types import PlanGraph
+    from app.db.base import Base
+    from app.db.models import Customer, Product, SalesOrder
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'orders.sqlite'}")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+    with factory.begin() as db:
+        db.add(Customer(id=1, tenant_id=1, customer_name="星光"))
+        db.add(Product(id=1, tenant_id=1, name="A100", model_number="A100", price=25.5))
+        db.add(SalesOrder(id=10, tenant_id=2, order_no="other", state="quote", total_amount=99))
+
+    with factory.begin() as db, tenant_scope(1):
+
+        @contextmanager
+        def database():
+            yield db
+
+        monkeypatch.setattr("app.application.workflow.sales_order_planning.get_db", database)
+        nodes = sales_order_nodes("给客户星光下订单，产品A100，数量10")
+        actual = SalesAppService()
+        adapter = Mock()
+        adapter.quote.side_effect = lambda params: actual.quote(params, db=db)
+        adapter.confirm.side_effect = lambda ident: actual.confirm(ident, db=db)
+
+        def dispatch(tool_id, action, params):
+            return _registered_router_sales(
+                action, params, params["_runtime_context"], "normal", ""
+            )
+
+        with patch("app.application.sales_app_service.SalesAppService", return_value=adapter):
+            result = WorkflowEngine(dispatch).run(
+                PlanGraph(plan_id="order", intent="sales_order", nodes=nodes)
+            )
+        assert result.success, result.message
+        created = db.query(SalesOrder).one()
+        assert created.state == "confirmed" and float(created.total_amount) == 255
+        assert created.customer_id == 1
+        adapter.confirm.assert_called_once_with(created.id)
+    with factory() as db, tenant_scope(2):
+        other = db.get(SalesOrder, 10)
+        assert other.state == "quote" and float(other.total_amount) == 99
+    engine.dispose()
