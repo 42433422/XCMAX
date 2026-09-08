@@ -3,7 +3,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.application.workflow.sales_entities import sales_entity_candidates
 from app.db.base import Base
-from app.db.models import Customer, Product
+from app.db.models import Customer, Product, SalesOrder, SalesOrderItem
 from app.infrastructure.tenant_scope import tenant_scope
 
 
@@ -49,6 +49,16 @@ def test_sales_candidates_are_exact_tenant_bound_and_read_only(monkeypatch):
             "items": [{"product_id": 1, "quantity": 2.0, "unit_price": 25.5, "unit": "个"}],
         }
         assert not plan.nodes[0].idempotent
+        from app.application.sales_app_service import SalesAppService
+
+        saved = SalesAppService().quote(plan.nodes[0].params, db=db)
+        assert saved["success"], saved
+        order = db.query(SalesOrder).one()
+        line = db.query(SalesOrderItem).one()
+        assert order.customer_id == 1 and order.state == "quote"
+        assert line.product_id == 1 and float(line.quantity) == 2
+        assert float(line.unit_price) == 25.5 and float(order.total_amount) == 51
+
         missing = sales_entity_candidates(db, customer_name="星", product_name="A10")
         assert missing["customer_candidates"] == missing["product_candidates"] == []
         assert db.query(Customer).count() == db.query(Product).count() == 1
