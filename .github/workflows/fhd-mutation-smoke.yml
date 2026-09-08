@@ -68,24 +68,22 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install uv
-        if: github.event_name == 'schedule' || steps.paths.outputs.run_mutation == 'true'
-        run: pip install uv
-
-      - name: Sync dependencies
+      - name: Install dependencies
         if: github.event_name == 'schedule' || steps.paths.outputs.run_mutation == 'true'
         working-directory: FHD
-        run: uv sync --frozen --extra server-api --group dev
-
-      - name: Install mutmut
-        if: github.event_name == 'schedule' || steps.paths.outputs.run_mutation == 'true'
-        working-directory: FHD
-        run: uv pip install mutmut
+        # 与 backend-test 同口径（pip + requirements 锁文件）。
+        # 2026-09-08：原 `uv sync --group dev` 引用了 pyproject 不存在的 dev 组，
+        # 且 N01 路径修复前该分支从未真实执行，命令错误一直未被暴露。
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-server-api.txt
+          pip install -r deploy/requirements-dev.txt
+          pip install mutmut
 
       - name: Run mutmut
         if: github.event_name == 'schedule' || steps.paths.outputs.run_mutation == 'true'
         working-directory: FHD
-        run: uv run mutmut run 2>&1 | tee mutmut-run.log
+        run: mutmut run 2>&1 | tee mutmut-run.log
 
       - name: Generate kill report
         if: github.event_name == 'schedule' || steps.paths.outputs.run_mutation == 'true'
