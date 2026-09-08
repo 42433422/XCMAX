@@ -1,6 +1,7 @@
 """Add explicit customer product associations without rewriting legacy units."""
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "2026_09_09_customer_links"
