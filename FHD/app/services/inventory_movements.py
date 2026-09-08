@@ -265,6 +265,24 @@ class InventoryMovementsMixin:
                 )
                 if not from_ledger:
                     return {"success": False, "message": "源仓库库存不足"}
+                destination = (
+                    db.query(_facade().Warehouse)
+                    .filter(_facade().Warehouse.id == to_warehouse_id)
+                    .first()
+                )
+                if not destination:
+                    return {"success": False, "message": "目标仓库不存在或不可访问"}
+                if to_location_id is not None:
+                    location = (
+                        db.query(_facade().StorageLocation)
+                        .filter(
+                            _facade().StorageLocation.id == to_location_id,
+                            _facade().StorageLocation.warehouse_id == to_warehouse_id,
+                        )
+                        .first()
+                    )
+                    if not location:
+                        return {"success": False, "message": "目标库位不存在或不属于目标仓库"}
                 to_ledger = (
                     db.query(_facade().InventoryLedger)
                     .filter(

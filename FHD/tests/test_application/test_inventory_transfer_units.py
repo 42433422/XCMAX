@@ -50,6 +50,15 @@ def test_transfer_preserves_units_and_selects_exact_batch(tmp_path, monkeypatch,
                 )
             )
     with tenant_scope(1):
+        missing = InventoryService().inventory_transfer(1, 1, 999, 3, batch_no="B")
+        assert not missing["success"]
+        wrong_location = InventoryService().inventory_transfer(
+            1, 1, 2, 3, batch_no="B", to_location_id=999
+        )
+        assert not wrong_location["success"]
+        with factory() as db:
+            assert all(float(row.quantity) == 10 for row in db.query(InventoryLedger))
+            assert db.query(InventoryTransaction).count() == 0
         result = InventoryService().inventory_transfer(1, 1, 2, 3, batch_no="B")
     with factory() as db:
         quantities = {row.id: float(row.quantity) for row in db.query(InventoryLedger)}
