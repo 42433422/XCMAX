@@ -1,0 +1,34 @@
+{
+  "source_sha": "62ee8dcc8bc5ffe9bde20e9b7fa3aca54e3b978d",
+  "test_files": [
+    "FHD/tests/test_application/test_ai_chat_app_service.py",
+    "FHD/tests/test_application/test_ai_chat_app_service_branch_cov.py",
+    "FHD/tests/test_application/test_ai_chat_app_service_branch_cov2.py",
+    "FHD/tests/test_application/test_ai_chat_app_service_branch_cov3.py",
+    "FHD/tests/test_application/test_ai_chat_app_service_ext.py",
+    "FHD/tests/test_application/test_ai_chat_app_service_ext2.py",
+    "FHD/tests/test_application/test_ai_chat_app_service_ext3.py",
+    "FHD/tests/test_application/test_ai_chat_app_service_ext4.py",
+    "FHD/tests/test_application/test_ai_chat_app_service_ext5.py",
+    "FHD/tests/test_application/test_ai_chat_app_service_ext6.py",
+    "FHD/tests/test_application/test_ai_chat_app_service_ext7.py",
+    "FHD/tests/test_application/test_ai_chat_rag_integration.py",
+    "FHD/tests/test_application/test_ai_chat_rag_integration_zero.py",
+    "FHD/tests/test_application/test_clarification_approval.py",
+    "FHD/tests/test_application/test_clarification_plan_idempotence.py",
+    "FHD/tests/test_application/test_clarification_retry_prompt.py",
+    "FHD/tests/test_application/test_workflow_clarification.py"
+  ],
+  "test_count": 1296,
+  "passed": 1296,
+  "failed": 0,
+  "duration_seconds": 4.72,
+  "test_log_sha256": "111647e16740c0ba618674e963c1251b9fbe61a5350ac3307c7984d67fbd123b",
+  "environment_correction": "PYTHONPATH points to this checkout FHD and all six vendored LangGraph package directories. Shared virtualenv retained; vendored assertion not disabled. Temporary data and TMPDIR removed after test process.",
+  "initial_attempt": {
+    "passed": 797,
+    "failed": 499,
+    "cause": "Shared virtualenv loaded LangGraph from /Users/Shared/XCMAX/FHD rather than current worktree; vendored source assertion failed."
+  },
+  "scope": "Application regression tests, many with mocks; not real-model, production approval execution or installed-client acceptance."
+}

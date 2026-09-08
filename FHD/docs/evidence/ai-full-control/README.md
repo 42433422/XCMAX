@@ -6,6 +6,12 @@
 目标是四个阶段全部完成。本目录记录当前实施证据，不代表四阶段验收通过。
 此前对话中的 20%–30% 覆盖率与工期只是未验证估计，不作为验收基线。
 
+## Broader chat regression verification
+
+All 1296 tests across 17 AI-chat, dynamic-workflow and clarification files pass on source 62ee8dcc8. The first attempt had 499 initialization failures because the shared virtualenv imported vendored LangGraph from another checkout. Rerunning with PYTHONPATH selecting this worktree's six vendored packages resolves those failures; no source-path assertion was disabled and no business code changed for this result.
+
+The temporary test data directory was removed after completion. See chat-regression-current-packages.json for source, selected tests and log hash. This is broader application regression evidence, with mocks in the suite; real-model/business approval/installed acceptance and the full four-stage goal remain open. The last business trial remains 10/22.
+
 ## Clarification retry context
 
 An unresolved clarification reply now repeats the original question and returns the pending reason, field, missing fields and candidate list. Missing ordinary fields no longer get an unrelated instruction to select a record ID. The pending entry remains available for another reply.
