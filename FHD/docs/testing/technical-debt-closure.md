@@ -17,6 +17,17 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- SQL dispatcher workers now receive a claim-bound run repository. Every run
+  save conditionally locks the queue row using claimed state, owner, execution
+  count and unexpired lease in the same transaction as run/task persistence.
+  Failure receipts use the same guarded repository; lease-loss errors do not
+  trigger an unguarded failed-run overwrite. SQLite tests verify expiry before
+  replacement, takeover with a reused owner string, preservation of the new
+  paused state, and rejection of saving another run. All 37 dispatcher/repository/
+  route checks passed (`worker-run-fencing`). This guards run/task saves only;
+  multi-process stale-save contention, control-command writes and actual tool
+  business transactions still require coverage and fencing before D4 closes.
+
 - Spawned-process approval tests now call the actual transaction service and use
   os._exit after flushing the queue before commit, or immediately after commit
   before response/notification. Verified exit codes distinguish both crash sites.

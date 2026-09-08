@@ -188,10 +188,21 @@ class AgentTaskDispatcher:
                         current.last_heartbeat = now
 
     def _execute_claim(self, execution: AgentTaskExecution, owner_id: str) -> None:
+        from app.application.agent_orchestrator.run_sql_repository import (
+            SQLAlchemyAgentRunRepository,
+        )
+        from app.application.agent_orchestrator.worker_repository import (
+            ClaimedRunRepository,
+            WorkerLeaseLost,
+        )
+
+        repository = self._run_repo
+        if isinstance(repository, SQLAlchemyAgentRunRepository):
+            repository = ClaimedRunRepository(repository, execution, owner_id)
         error_code = ""
         state = "failed"
         try:
-            orchestrator = self._orchestrator_factory(self._run_repo)
+            orchestrator = self._orchestrator_factory(repository)
             run = orchestrator.execute_dispatched_run(
                 execution.run_id,
                 recovered=execution.recovery_count > 0,
@@ -209,13 +220,16 @@ class AgentTaskDispatcher:
                 }.get(run.status, "failed")
                 if state == "failed" and run.status != "failed":
                     error_code = "worker_incomplete_state"
+        except WorkerLeaseLost:
+            error_code = "worker_lease_lost"
+            logger.info("worker stopped after lease loss for run %s", execution.run_id)
         except (
             RECOVERABLE_ERRORS
         ):  # thread boundary: preserve the worker pool and persist safe evidence
             logger.exception("agent task worker failed for run %s", execution.run_id)
             error_code = "worker_execution_failed"
             try:
-                self._orchestrator_factory(self._run_repo).fail_dispatched_run(execution.run_id)
+                self._orchestrator_factory(repository).fail_dispatched_run(execution.run_id)
             except RECOVERABLE_ERRORS:
                 logger.exception("agent task failure receipt could not be persisted")
         finally:

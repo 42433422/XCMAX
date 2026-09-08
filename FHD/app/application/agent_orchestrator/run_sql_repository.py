@@ -51,6 +51,31 @@ class SQLAlchemyAgentRunRepository:
             self.save_in_session(db, run)
         return self.get(run.run_id) or copy.deepcopy(run)
 
+    def save_claimed(self, run: AgentRun, *, owner_id: str, execution_count: int) -> AgentRun:
+        from app.application.agent_orchestrator.worker_repository import WorkerLeaseLost
+        from app.db.models.agent import AgentTaskExecutionRecord
+
+        self._ensure_schema()
+        with self._session_scope() as db:
+            # A conditional write holds the queue-row lock through run persistence.
+            # Checking the lease in a separate SELECT would allow takeover between
+            # the check and save. Execution count also fences reused owner IDs.
+            owned = (
+                db.query(AgentTaskExecutionRecord)
+                .filter(
+                    AgentTaskExecutionRecord.run_id == run.run_id,
+                    AgentTaskExecutionRecord.state == "claimed",
+                    AgentTaskExecutionRecord.lease_owner == owner_id,
+                    AgentTaskExecutionRecord.execution_count == execution_count,
+                    AgentTaskExecutionRecord.lease_expires_at > utc_now_iso(),
+                )
+                .update({AgentTaskExecutionRecord.lease_owner: owner_id}, synchronize_session=False)
+            )
+            if owned != 1:
+                raise WorkerLeaseLost("worker lease expired or replaced")
+            self.save_in_session(db, run)
+        return copy.deepcopy(run)
+
     def save_in_session(self, db: Session, run: AgentRun) -> None:
         """Persist into the caller's transaction without committing or closing it."""
         from app.application.agent_orchestrator.business_harness import (
