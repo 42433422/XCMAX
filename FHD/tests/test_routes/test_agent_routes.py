@@ -318,6 +318,12 @@ def _client(
     app = FastAPI()
     app.include_router(router)
     if user_id is not None:
+        from app.infrastructure.auth.agent_stream import require_stream_authorizer
+
+        async def test_authorized():
+            return True
+
+        app.dependency_overrides[require_stream_authorizer] = lambda: test_authorized
         app.dependency_overrides[require_agent_principal] = lambda: AgentPrincipal(
             user_id=user_id,
             tenant_id=tenant_id,

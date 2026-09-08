@@ -63,7 +63,7 @@ def _bind_mod(
 
 def _from_user(user: Any) -> AgentPrincipal | None:
     user_id = getattr(user, "id", None)
-    if user_id is None:
+    if user_id is None or not getattr(user, "is_active", True):
         return None
     tier = str(getattr(user, "tier", "") or "").strip().lower()
     role = str(getattr(user, "role", "") or "").strip().lower()

@@ -25,6 +25,7 @@ from app.fastapi_routes.domains.agent.route_support import (
 )
 from app.fastapi_routes.domains.agent.task_routes import router
 from app.infrastructure.auth.agent_principal import AgentPrincipal, require_agent_principal
+from app.infrastructure.auth.agent_stream import StreamAuthorizer, require_stream_authorizer
 from app.utils.json_safe import json_safe
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -51,6 +52,7 @@ async def stream_agent_run_events(
     run_id: str,
     after_event_id: str | None = Query(default=None),
     principal: AgentPrincipal = Depends(require_agent_principal),
+    authorize: StreamAuthorizer = Depends(require_stream_authorizer),
 ) -> StreamingResponse | JSONResponse:
     orchestrator = AgentOrchestrator()
     _, error = _owned_run(orchestrator, run_id, principal)
@@ -62,9 +64,17 @@ async def stream_agent_run_events(
         deadline = time.monotonic() + 60.0
         terminal = {"completed", "failed", "cancelled"}
         while time.monotonic() < deadline:
+            if not await authorize():
+                break
             current_orchestrator = AgentOrchestrator()
+            _, error = _owned_run(current_orchestrator, run_id, principal)
+            if error is not None:
+                break
             events = current_orchestrator.list_events(run_id, after_event_id=cursor)
             for event in events:
+                if not await authorize():
+                    yield "event: stream.closed\ndata: {}\n\n"
+                    return
                 cursor = event.event_id
                 yield f"id: {event.event_id}\nevent: {event.event_type}\ndata: {json.dumps(json_safe(_public_event_dict(event)), ensure_ascii=False)}\n\n"
             current = current_orchestrator.get_run(run_id)

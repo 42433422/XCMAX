@@ -39,6 +39,7 @@ from app.fastapi_routes.domains.agent.route_support import (
     task_scope_matches,
 )
 from app.infrastructure.auth.agent_principal import AgentPrincipal, require_agent_principal
+from app.infrastructure.auth.agent_stream import StreamAuthorizer, require_stream_authorizer
 from app.utils.json_safe import json_safe
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -266,11 +267,14 @@ def create_agent_task(
 async def stream_agent_tasks(
     once: bool = Query(default=False),
     principal: AgentPrincipal = Depends(require_agent_principal),
+    authorize: StreamAuthorizer = Depends(require_stream_authorizer),
 ) -> StreamingResponse:
     async def event_stream():
         previous = ""
         deadline = time.monotonic() + 60.0
         while time.monotonic() < deadline:
+            if not await authorize():
+                break
             orchestrator = AgentOrchestrator()
             tasks = scoped_tasks(
                 orchestrator,
@@ -282,6 +286,8 @@ async def stream_agent_tasks(
             snapshot = [_task_stream_envelope(task, executions) for task in tasks]
             encoded = json.dumps(json_safe(snapshot), ensure_ascii=False, sort_keys=True)
             if encoded != previous:
+                if not await authorize():
+                    break
                 previous = encoded
                 yield f"event: task.snapshot\ndata: {encoded}\n\n"
             if once:

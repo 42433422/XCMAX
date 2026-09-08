@@ -19,6 +19,16 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Agent task snapshots and run-event streams now re-resolve the original request's
+  authenticated principal before reads and before releasing data. Session expiry,
+  account/tenant/admin/Mod scope changes or validation failure close the stream;
+  run ownership is also rechecked each polling cycle. A disabled ordinary-session
+  user was previously accepted by Agent principal conversion; a failing regression
+  now passes after the conversion rejects inactive users. The combined stream,
+  route and Mod authorization suite passes 92 tests (`stream-account-revocation`),
+  including revocation between read and send. Existing route fixture identities
+  explicitly override the stream authorizer; dedicated tests exercise revalidation.
+  Real-device expiry/revocation and streaming-load acceptance remain outstanding.
 - Mainline `73861ed71` (#1806 Mac control) is included at `e42c48808`; the only
   merge conflict was the changelog, resolved by preserving both entries. At that
   checkpoint, all 47 changed backend test files pass together: 1034 passed and
