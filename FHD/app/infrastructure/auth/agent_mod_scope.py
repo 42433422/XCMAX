@@ -43,7 +43,13 @@ def bind_agent_mod_scope(*, session_id: str, user_id: str, mod_id: str) -> dict[
     with HostSessionLocal() as db:
         row = db.query(UserSession).filter(UserSession.session_id == session_id).first()
         _check_row(row, user_id=user_id, mod_id=normalized)
-        return {"session_row_id": row.id, "user_id": user_id, "mod_id": normalized}
+        return {
+            "session_row_id": row.id,
+            "user_id": user_id,
+            "mod_id": normalized,
+            "account_tenant_id": str(row.user.tenant_id or ""),
+            "account_role": str(row.user.role or ""),
+        }
 
 
 @contextmanager
@@ -69,7 +75,12 @@ def agent_mod_execution_scope(binding: dict[str, Any] | None):
     ):
         raise AgentModAuthorizationError("任务 Mod 授权上下文无效")
     with HostSessionLocal() as db:
-        _check_row(db.get(UserSession, row_id), user_id=user_id, mod_id=mod_id)
+        row = db.get(UserSession, row_id)
+        _check_row(row, user_id=user_id, mod_id=mod_id)
+        if binding.get("account_tenant_id") != str(row.user.tenant_id or "") or binding.get(
+            "account_role"
+        ) != str(row.user.role or ""):
+            raise AgentModAuthorizationError("任务绑定的账号范围已变化，请重新授权")
     token = set_request_active_mod_id(mod_id)
     try:
         yield

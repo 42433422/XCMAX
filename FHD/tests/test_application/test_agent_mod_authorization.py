@@ -295,3 +295,17 @@ def test_web_token_and_refresh_bind_persisted_mod_session(mod_session, monkeypat
     with pytest.raises(HTTPException) as error:
         require_agent_principal(request, x_user_id=None)
     assert error.value.status_code == 403
+
+
+@pytest.mark.parametrize("field,value", [("tenant_id", 7), ("role", "admin")])
+def test_background_binding_rejects_account_scope_changes(mod_session, field, value):
+    from app.infrastructure.auth.agent_mod_scope import agent_mod_execution_scope
+
+    binding = bind_agent_mod_scope(
+        session_id="secret-session", user_id="1", mod_id="test-private-mod"
+    )
+    with mod_session.begin() as db:
+        setattr(db.get(User, 1), field, value)
+    with pytest.raises(AgentModAuthorizationError):
+        with agent_mod_execution_scope(binding):
+            pytest.fail("changed account scope must not execute")

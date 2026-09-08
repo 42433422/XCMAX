@@ -19,6 +19,13 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Durable Mod bindings now snapshot the account tenant and role at authorization.
+  Execution revalidates both against the host account, rejecting changes and legacy
+  bindings missing this snapshot. Two negative cases reproduced execution after
+  account changes before repair; 23 authorization/background-Mod regressions pass.
+  Existing durable task inventory and an explicit reauthorization/migration path
+  remain required before production activation; this is not migration closure.
+
 - Mainline reconciliation on September 9: merged `75d09beff` (#1814 audit
   standard catalog) without conflicts. Architecture fitness and audit-benchmark
   SSOT validation pass; catalog validity is not product audit acceptance.
