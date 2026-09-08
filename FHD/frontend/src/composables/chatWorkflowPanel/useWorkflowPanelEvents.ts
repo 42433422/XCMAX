@@ -145,7 +145,15 @@ export function useWorkflowPanelEvents(deps: WorkflowPanelEventsDeps) {
     const modInstalled = isCoreWorkflowModInstalled(modsStore.modsForUi)
     dispatchCoreWorkflowModRun(modInstalled, 'label_print', { action: 'signal_ack', ...d })
     upsertWorkflowEmployeeTask('label_print', buildLabelPrintHostUpdate(d))
-    const result = await runLabelPrintSideEffect(d)
+    let result: Awaited<ReturnType<typeof runLabelPrintSideEffect>>
+    try {
+      result = await runLabelPrintSideEffect(d)
+    } catch {
+      result = { status: 'failed', message: '标签生成未取得有效回执，请检查任务状态后重试' }
+    }
+    if (!result || typeof result.message !== 'string') {
+      result = { status: 'failed', message: '标签生成未取得有效回执，请检查任务状态后重试' }
+    }
     if (sequence !== labelRequest || account !== productReadAccountEpoch.value
       || !readWorkflowEmployeeEnabledMap().label_print
       || !taskList.value.some(t => t.id === 'workflow_emp_label_print')) return

@@ -194,6 +194,17 @@ describe('useWorkflowPanelEvents', () => {
     expect(deps.emitAssistantPush).toHaveBeenCalledWith(expect.objectContaining({ title: '标签打印待配置', description: '请选择模板' }))
   })
 
+  it.each(['missing', 'rejected'])('reports an invalid label receipt: %s', async (kind) => {
+    if (kind === 'missing') runLabelPrintSideEffect.mockResolvedValueOnce(undefined as never)
+    else runLabelPrintSideEffect.mockRejectedValueOnce(new Error('transport failed'))
+    const { deps, taskList } = makeDeps()
+    taskList.value = [{ id: 'workflow_emp_label_print' } as TaskItem]
+    mountedApi(deps)
+    dispatch('xcagi:workflow-label-print-signal', {})
+    await flushPromises()
+    expect(deps.emitAssistantPush).toHaveBeenCalledWith(expect.objectContaining({ title: '标签生成失败' }))
+  })
+
   it('标签打印信号：未启用或无常驻项时短路', async () => {
     const { deps } = makeDeps()
     deps.readWorkflowEmployeeEnabledMap = () => ({ label_print: false })

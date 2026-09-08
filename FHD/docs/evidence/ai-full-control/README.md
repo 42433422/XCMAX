@@ -6,6 +6,10 @@
 目标是四个阶段全部完成。本目录记录当前实施证据，不代表四阶段验收通过。
 此前对话中的 20%–30% 覆盖率与工期只是未验证估计，不作为验收基线。
 
+## Follow-up CI repair
+
+The prior head's frontend run passed 9869 assertions but failed on an unhandled label-event rejection when the side-effect result was undefined. The handler now reports an invalid receipt or rejected request as failure, retaining account/sequence checks before publishing results. 19 event tests, full frontend build typecheck and ESLint pass locally. The architecture check also mistook a historical CI check name in this report for a new source-of-truth claim; wording was clarified and docs lint reports zero conflicts. Remote reruns remain required.
+
 ## Live intent evaluation and MiMo short-response repair
 
 With the user's server-configuration selection, read only the current fhd-full.service process configuration on 119.27.178.147. Credentials remained in process memory and are absent from evidence. The evaluation executes this local branch against the configured real model, not the installed client or production business tools.
@@ -24,7 +28,7 @@ The download endpoint now returns the explicitly requested public Catalog ZIP af
 
 290 related tests passed using real temporary Ed25519 ZIPs, isolated SQL/login, HTTP and AI export readback. Catalog transport is simulated; this is not live Catalog or installed-client acceptance. Runtime inventory: 5 tests passed, 1013 unique readable operations, no duplicate or detected static shadow. Application mypy, Ruff and all 10 blocking dev guards passed. Rating, deletion, remaining capabilities and full four-stage acceptance remain outstanding.
 
-Mainline sync included be51a83a2 (#1810, two metric JSON files only). PR #1804 remains unmerged. The prior head CI reports failures in SSOT Drift Gate and backend-smoke; both traced to the manifest version comparison refactor removing the current_version anchor. Restored the named version assignment without changing its value or comparison behavior; the exact version-anchor checker and workflow-copy verification now pass locally. New remote checks remain pending.
+Mainline sync included be51a83a2 (#1810, two metric JSON files only). PR #1804 remains unmerged. The prior head CI reports failures in the version-drift check and backend-smoke; both traced to the manifest version comparison refactor removing the current_version anchor. Restored the named version assignment without changing its value or comparison behavior; the exact version-anchor checker and workflow-copy verification now pass locally. New remote checks remain pending.
 
 ## 实测与本次改动
 
