@@ -1,0 +1,1788 @@
+{
+  "schema_version": 1,
+  "standard_version": "1.0.0",
+  "scoring_version": "external-anchors-v1",
+  "effective_date": "2026-09-08",
+  "owner": "XCMAX 审计与质量治理",
+  "commercial_anchor_score": 90,
+  "open_source_pass_score": 60,
+  "domain_count": 18,
+  "review_interval_days": 90,
+  "measurement_status": "anchors_defined_not_benchmarked",
+  "legacy_scores_not_convertible": [
+    73.3,
+    77.1
+  ],
+  "axes": [
+    {
+      "id": "structure",
+      "name": "结构与可演进性",
+      "weight": 25
+    },
+    {
+      "id": "contracts",
+      "name": "契约与业务闭环",
+      "weight": 20
+    },
+    {
+      "id": "correctness",
+      "name": "正确性与防错",
+      "weight": 20
+    },
+    {
+      "id": "verification",
+      "name": "验证与运行证据",
+      "weight": 25
+    },
+    {
+      "id": "maintenance",
+      "name": "文档与维护",
+      "weight": 10
+    }
+  ],
+  "policies": [
+    {
+      "title": "适用与唯一维护源",
+      "rule": "本标准响应用户设定：18 个领域各选 3 个商业标杆构成 90 分锚点，各选 1 个开源标杆构成 60 分合格锚点。FHD/config/audit_benchmark_ssot.json 是规范数据唯一维护源；本文由脚本生成，不手工改写。此标准不授予任何项目既定分数。"
+    },
+    {
+      "title": "如何解释“最好”",
+      "rule": "“本版商业 Top 3 / 首选开源”是针对 XCMAX 业务范围的标杆选择，不是公认全球排名。依次按场景适配、企业能力覆盖、可靠性/治理的公开证据、可测试性与可维护性选择；不按价格、星数、营销排名或品牌大小直接判分。每个条目的 role 与 scope_note 给出取舍。当前未付费部署或实测全部参考产品，不声称完成了全球竞品筛选。"
+    },
+    {
+      "title": "90 与 60 的含义",
+      "rule": "90=达到本领域三个商业标杆经范围适配后的联合必选目标；60=达到首选开源标杆经范围适配后的必选基线。开源项目不是能力上限 60，满足商业级证据同样可以获 90；商业产品也可能不合格。不得把许可证类型直接计入质量分。"
+    },
+    {
+      "title": "新旧分数隔离",
+      "rule": "本版 scoring_version=external-anchors-v1。旧报告 73.3、77.1 属于 internal-review-v1，禁止直接换算、沿用或混合平均；按新协议实际重评后才产生新分数。历史报告只作为缺陷输入，保持原文和原证据。"
+    },
+    {
+      "title": "公平比较与必选目标",
+      "rule": "每次审计先冻结任务集、账号范围、并发量、数据量、平台、故障场景、预算、模型、版本和指标方向，再测试 XCMAX、开源参考及三个商业参考。三个 anchor_90 条目分别对应商业条目 1/2/3，全部为必选；不是挑其中最弱一家。与产品目的无关的能力可事前书面排除，但必须升标准版本，不能测后删项。"
+    },
+    {
+      "title": "定量参照",
+      "rule": "成功率、延迟、成本、恢复时间等只采用同协议实测的参照值：60 使用固定开源版本；90 使用三个商业版本同口径样本的中位数，并同时满足本域联合能力和全部安全不变量。按指标方向判不劣，误差区间和容差在测试前登记；没有参照实测时，只能标“锚点已定义，数值未校准”，不得用厂商广告数值补齐。"
+    },
+    {
+      "title": "五轴判分",
+      "rule": "结构/可演进性 25，契约/业务闭环 20，正确性与防错 20，验证与运行证据 25，文档维护 10。每轴按同一任务范围判为 0/30/60/75/90/100：已证失败或缺失/部分基线/完整开源基线/完整基线且部分商业目标/完整商业目标/事前登记指标上超过商业参照且其他必选无退步。领域分=sum(轴权重×轴等级)/100；18 领域等权，最后一步四舍五入到 1 位。"
+    },
+    {
+      "title": "合格门槛与缺失证据",
+      "rule": "任一必选基线失败，领域最终分上限 59；未通过全部商业必选项，最高 89。已确认越权、跨租户泄露、重复扣款或不可恢复数据破坏直接不合格，不能被其他轴抵消。合格线必选证据或所声称等级所需证据未知/跳过/不可访问时，领域正式分为 null、状态 UNRATED；可另列已测项与证据覆盖率，不把未知填成零或通过。任一领域 UNRATED 时不出正式 18 域总分；任一领域低于 60 时整体合格状态为 false，即使平均超过 60。"
+    },
+    {
+      "title": "采样与运行窗口下限",
+      "rule": "以下下限由本审计协议规定，不是厂商宣称或既有实测结果。普通任务每域至少 30 个预先冻结用例（含至少 10 个负向/恢复用例），每个用例重复 3 次；涉及并发至少覆盖 2 个独立 worker 和 20 个重复/竞争请求。AI 意图/编码/客服类至少 100 个独立留出任务并重复 3 次，记录模型版本与预算；不得用训练集作留出集。90 分的 E4 观察窗口至少连续 30 个自然日，期间所有采样缺失和故障均记录；现有生产自治更严格的 90 天等门槛继续适用，不因本标准降低。性能比较记录原始样本、分位数和置信区间，容差必须事前登记。"
+    },
+    {
+      "title": "证据分级",
+      "rule": "E0=官方资料，只用于选择参考和定义能力；E1=源码/静态证据；E2=隔离单测/集成；E3=真实软件环境或真机的完整任务与故障恢复；E4=目标部署下持续运行/客户验收。60 至少有 E2 且核心用户任务达到 E3；90 还需参考产品同协议实测、目标平台 E3 和事前约定观察窗口的 E4。文档、绿 CI 或模拟 LLM 都不能替代 E3/E4。"
+    },
+    {
+      "title": "闭源与同技术栈边界",
+      "rule": "闭源产品只审公开架构、可配置契约和实际可观察行为，不推定内部代码。商业支付服务不必用 Java；移动端历史 Flutter 案例不证明当前所有模块仍使用 Flutter；框架/平台/应用只在 scope_note 定义的交集比较。不能为了表面同技术栈牺牲任务可比性。"
+    },
+    {
+      "title": "版本与来源",
+      "rule": "资料核对日期 2026-09-08。商业 SaaS 固定产品、套餐、区域、测试日期与可见版本；开源条目保存本次仓库源码 SHA 和许可证边界（不是声称该 SHA 为稳定发行）。正式实测选择受支持稳定版本并将确切 tag/SHA 写入审计记录；如改变锚点版本，更新本标准并保留差异。"
+    },
+    {
+      "title": "变更治理",
+      "rule": "至少每 90 天或发生停服、重命名、许可证/套餐变化时复核标杆。替换参考、调整权重/必选项/阈值必须经同一个审计标准 PR，提升版本并记录原因，不得通过降低标准提高 XCMAX 分数。普通链接修复也保留核验日期。"
+    },
+    {
+      "title": "真实交付与公开声称",
+      "rule": "源码评分、main 集成、构建产物、已安装身份、生产运行、客户效果分别报告。公开报告需列标准版本、源码 SHA、参考版本与套餐、证据级别、未知项及原始文件哈希；未完成对标实测不能宣称超过某商业产品、行业排名或第三方认证。"
+    }
+  ],
+  "required_audit_record_fields": [
+    "standard_version",
+    "scoring_version",
+    "source_sha",
+    "main_sha",
+    "artifact_sha256",
+    "installed_git_sha",
+    "reference_versions_editions_regions",
+    "dataset_hash",
+    "task_protocol",
+    "predeclared_metrics_and_tolerances",
+    "model_and_budget",
+    "environment",
+    "evidence_ids",
+    "observed_results",
+    "unknowns",
+    "axis_levels",
+    "domain_status",
+    "score",
+    "auditor",
+    "observed_at"
+  ],
+  "common_experiments": [
+    "正常业务任务与预期账/文件/状态核对",
+    "账号切换与跨租户负向验证",
+    "并发重复请求、超时、断网和进程重启",
+    "坏输入、版本升级和恢复/补偿",
+    "测试/门禁负向样例，确认错误确实被拦截"
+  ],
+  "domains": [
+    {
+      "id": "architecture",
+      "number": 1,
+      "name": "依赖注入与分层",
+      "xcmax_scope": "FHD/app/di/",
+      "commercial_90": [
+        {
+          "id": "sap-btp",
+          "name": "SAP BTP",
+          "source_url": "https://help.sap.com/docs/btp/sap-business-technology-platform/developing-applications-and-services",
+          "role": "应用与服务的边界、扩展和生命周期",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "mendix",
+          "name": "Mendix Platform",
+          "source_url": "https://www.mendix.com/evaluation-guide/architecture/openness-extensibility/",
+          "role": "可替换扩展、API 与工程工具集成",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "outsystems",
+          "name": "OutSystems",
+          "source_url": "https://www.outsystems.com/blog/posts/building-composable-architecture",
+          "role": "可组合应用和复用模块",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        }
+      ],
+      "open_source_60": {
+        "archived": false,
+        "branch": "main",
+        "license": "Apache-2.0",
+        "repo": "spring-projects/spring-framework",
+        "url": "https://github.com/spring-projects/spring-framework",
+        "source_commit": "572850bdcf125bdc306f30fd74709897540bf62b",
+        "name": "Spring Framework",
+        "license_scope": "仅仓库开源核心，第三方组件按各自许可证；付费企业目录/服务不纳入 60 分参考。",
+        "metadata_license_url": "https://api.github.com/repos/spring-projects/spring-framework/license?ref=572850bdcf125bdc306f30fd74709897540bf62b",
+        "measurement_status": "not_run",
+        "checked_on": "2026-09-08"
+      },
+      "anchor_60": [
+        {
+          "id": "architecture-B1",
+          "requirement": "明确组合根与生命周期，替换适配器无需修改业务核心",
+          "mandatory": true
+        },
+        {
+          "id": "architecture-B2",
+          "requirement": "领域边界和接口契约可自动验证",
+          "mandatory": true
+        },
+        {
+          "id": "architecture-B3",
+          "requirement": "依赖初始化、并发访问和释放失败可定位",
+          "mandatory": true
+        }
+      ],
+      "anchor_90": [
+        {
+          "id": "architecture-C1",
+          "requirement": "建立可独立演进的应用/服务边界并验证兼容升级",
+          "reference_id": "sap-btp",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "architecture-C2",
+          "requirement": "扩展接口在替换实现、版本升级和故障时保持兼容",
+          "reference_id": "mendix",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "architecture-C3",
+          "requirement": "跨业务复用组件保持单向依赖，变更影响面可量化",
+          "reference_id": "outsystems",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        }
+      ],
+      "scope_note": "闭源平台比较公开架构和扩展契约；不猜测内部 DI 实现，也不要求使用同一种语言。"
+    },
+    {
+      "id": "erp",
+      "number": 2,
+      "name": "ERP 订单与资金闭环",
+      "xcmax_scope": "FHD/app/application/",
+      "commercial_90": [
+        {
+          "id": "sap-erp",
+          "name": "SAP S/4HANA Cloud Public Edition",
+          "source_url": "https://www.sap.com/products/erp/s4hana.html",
+          "role": "订单、采购、库存与财务的一体化流程",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "oracle-erp",
+          "name": "Oracle Fusion Cloud ERP",
+          "source_url": "https://www.oracle.com/erp/",
+          "role": "财务与跨业务域 ERP 闭环",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "dynamics-finance",
+          "name": "Microsoft Dynamics 365 Finance",
+          "source_url": "https://www.microsoft.com/en-us/dynamics-365/products/finance",
+          "role": "财务操作、分析与业务控制",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        }
+      ],
+      "open_source_60": {
+        "archived": false,
+        "branch": "develop",
+        "license": "GPL-3.0",
+        "repo": "frappe/erpnext",
+        "url": "https://github.com/frappe/erpnext",
+        "source_commit": "e0d6d797d7086b214f74bf29e2ffbd75894e7b74",
+        "name": "ERPNext",
+        "license_scope": "仅仓库开源核心，第三方组件按各自许可证；付费企业目录/服务不纳入 60 分参考。",
+        "metadata_license_url": "https://api.github.com/repos/frappe/erpnext/license?ref=e0d6d797d7086b214f74bf29e2ffbd75894e7b74",
+        "measurement_status": "not_run",
+        "checked_on": "2026-09-08"
+      },
+      "anchor_60": [
+        {
+          "id": "erp-B1",
+          "requirement": "订单、库存、应收与收付款在同一任务中保持一致",
+          "mandatory": true
+        },
+        {
+          "id": "erp-B2",
+          "requirement": "多租户、金额精度、退款/撤销有明确业务约束",
+          "mandatory": true
+        },
+        {
+          "id": "erp-B3",
+          "requirement": "对重复请求、部分失败和导出账表做回归",
+          "mandatory": true
+        }
+      ],
+      "anchor_90": [
+        {
+          "id": "erp-C1",
+          "requirement": "验证订单到收款与采购到付款跨模块完整流程",
+          "reference_id": "sap-erp",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "erp-C2",
+          "requirement": "跨组织、币种和期间的对账与异常处理有可复核证据",
+          "reference_id": "oracle-erp",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "erp-C3",
+          "requirement": "角色职责分离、审批与审计可追到实际账务结果",
+          "reference_id": "dynamics-finance",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        }
+      ],
+      "scope_note": "只比较 XCMAX 已声明业务范围；不把全球税务、本地化数量或客户规模当作已测能力。"
+    },
+    {
+      "id": "agent-orchestration",
+      "number": 3,
+      "name": "Agent 编排与审批",
+      "xcmax_scope": "FHD/app/application/agent_orchestrator/",
+      "commercial_90": [
+        {
+          "id": "copilot-studio",
+          "name": "Microsoft Copilot Studio",
+          "source_url": "https://www.microsoft.com/en-us/microsoft-365-copilot/microsoft-copilot-studio",
+          "role": "企业 Agent 创建与动作编排",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "agentforce",
+          "name": "Salesforce Agentforce",
+          "source_url": "https://www.salesforce.com/agentforce/",
+          "role": "业务上下文、权限与企业 Agent",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "maestro",
+          "name": "UiPath Maestro",
+          "source_url": "https://www.uipath.com/product/maestro",
+          "role": "人、Agent 和自动化流程的编排",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        }
+      ],
+      "open_source_60": {
+        "archived": false,
+        "branch": "main",
+        "license": "MIT",
+        "repo": "langchain-ai/langgraph",
+        "url": "https://github.com/langchain-ai/langgraph",
+        "source_commit": "81bf17b23123e4ef8b9d5f49fa09a0122fc2edd1",
+        "name": "LangGraph OSS",
+        "license_scope": "仅仓库开源核心，第三方组件按各自许可证；付费企业目录/服务不纳入 60 分参考。",
+        "metadata_license_url": "https://api.github.com/repos/langchain-ai/langgraph/license?ref=81bf17b23123e4ef8b9d5f49fa09a0122fc2edd1",
+        "measurement_status": "not_run",
+        "checked_on": "2026-09-08"
+      },
+      "anchor_60": [
+        {
+          "id": "agent-orchestration-B1",
+          "requirement": "任务/步骤状态持久化，暂停后可恢复",
+          "mandatory": true
+        },
+        {
+          "id": "agent-orchestration-B2",
+          "requirement": "工具输入校验、权限和人工审批绑定实际动作",
+          "mandatory": true
+        },
+        {
+          "id": "agent-orchestration-B3",
+          "requirement": "超时、重试、取消及恢复不重复产生副作用",
+          "mandatory": true
+        }
+      ],
+      "anchor_90": [
+        {
+          "id": "agent-orchestration-C1",
+          "requirement": "多步骤 Agent 在配置、版本切换和工具故障后可靠恢复",
+          "reference_id": "copilot-studio",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "agent-orchestration-C2",
+          "requirement": "主体、数据权限与动作授权贯穿每个工具调用",
+          "reference_id": "agentforce",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "agent-orchestration-C3",
+          "requirement": "人、Agent 与确定性流程协作有端到端执行回执",
+          "reference_id": "maestro",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        }
+      ],
+      "scope_note": "LangGraph OSS 与付费平台能力分开；真实模型和跨 worker 场景必须另验。"
+    },
+    {
+      "id": "etl",
+      "number": 4,
+      "name": "ETL 与业务文件处理",
+      "xcmax_scope": "FHD/app/application/etl/",
+      "commercial_90": [
+        {
+          "id": "informatica",
+          "name": "Informatica IDMC",
+          "source_url": "https://www.informatica.com/platform.html",
+          "role": "数据集成、质量与治理",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "talend",
+          "name": "Qlik Talend Cloud",
+          "source_url": "https://www.qlik.com/us/products/qlik-talend-cloud",
+          "role": "数据集成和数据质量",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "fabric-df",
+          "name": "Microsoft Fabric Data Factory",
+          "source_url": "https://learn.microsoft.com/en-us/fabric/data-factory/data-factory-overview",
+          "role": "数据管道、连接与转换",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        }
+      ],
+      "open_source_60": {
+        "archived": false,
+        "branch": "main",
+        "license": "Apache-2.0",
+        "repo": "apache/nifi",
+        "url": "https://github.com/apache/nifi",
+        "source_commit": "7d29d839c9d956e4530adb570e42c8c6833a5bfb",
+        "name": "Apache NiFi",
+        "license_scope": "仅仓库开源核心，第三方组件按各自许可证；付费企业目录/服务不纳入 60 分参考。",
+        "metadata_license_url": "https://api.github.com/repos/apache/nifi/license?ref=7d29d839c9d956e4530adb570e42c8c6833a5bfb",
+        "measurement_status": "not_run",
+        "checked_on": "2026-09-08"
+      },
+      "anchor_60": [
+        {
+          "id": "etl-B1",
+          "requirement": "输入校验、字段映射、预览和错误定位可复现",
+          "mandatory": true
+        },
+        {
+          "id": "etl-B2",
+          "requirement": "可追踪处理来源并安全重试，不覆盖后续人工编辑",
+          "mandatory": true
+        },
+        {
+          "id": "etl-B3",
+          "requirement": "客户/产品关联、租户隔离与输出文件一致",
+          "mandatory": true
+        }
+      ],
+      "anchor_90": [
+        {
+          "id": "etl-C1",
+          "requirement": "从连接、转换到质量规则的全链路来源与影响分析可查",
+          "reference_id": "informatica",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "etl-C2",
+          "requirement": "脏数据、重复、漂移和冲突有治理、隔离与纠正流程",
+          "reference_id": "talend",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "etl-C3",
+          "requirement": "调度、增量处理和故障恢复在同等任务下通过压力验证",
+          "reference_id": "fabric-df",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        }
+      ],
+      "scope_note": "NiFi 的数据流能力不直接等同于 ERP 撤销；撤销与业务关联是 XCMAX 额外必选约束。"
+    },
+    {
+      "id": "intent-routing",
+      "number": 5,
+      "name": "AI 意图与工具路由",
+      "xcmax_scope": "FHD/app/application/chat_business_safety_core.py",
+      "commercial_90": [
+        {
+          "id": "dialogflow",
+          "name": "Google Dialogflow CX",
+          "source_url": "https://docs.cloud.google.com/dialogflow/cx/docs",
+          "role": "多轮对话、流程、实体及测试",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "lex",
+          "name": "Amazon Lex V2",
+          "source_url": "https://docs.aws.amazon.com/lexv2/latest/dg/what-is.html",
+          "role": "意图、槽位与业务函数履行",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "watsonx",
+          "name": "IBM watsonx Orchestrate（助手能力）",
+          "source_url": "https://www.ibm.com/products/watsonx-orchestrate",
+          "role": "企业对话助手与工具协作；原 assistant 产品页重定向至此",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        }
+      ],
+      "open_source_60": {
+        "archived": false,
+        "branch": "3.6.x",
+        "license": "Apache-2.0",
+        "repo": "RasaHQ/rasa",
+        "url": "https://github.com/RasaHQ/rasa",
+        "source_commit": "60a3cff9c08183760355b07bd60f5223d8916d6b",
+        "name": "Rasa Open Source",
+        "license_scope": "仅仓库开源核心，第三方组件按各自许可证；付费企业目录/服务不纳入 60 分参考。",
+        "metadata_license_url": "https://api.github.com/repos/RasaHQ/rasa/license?ref=60a3cff9c08183760355b07bd60f5223d8916d6b",
+        "measurement_status": "not_run",
+        "checked_on": "2026-09-08"
+      },
+      "anchor_60": [
+        {
+          "id": "intent-routing-B1",
+          "requirement": "固定中文跨域意图集，统计混淆矩阵和误触发",
+          "mandatory": true
+        },
+        {
+          "id": "intent-routing-B2",
+          "requirement": "槽位校验、歧义澄清与拒绝执行有稳定行为",
+          "mandatory": true
+        },
+        {
+          "id": "intent-routing-B3",
+          "requirement": "规则/模型回退不绕过动作白名单与审批",
+          "mandatory": true
+        }
+      ],
+      "anchor_90": [
+        {
+          "id": "intent-routing-C1",
+          "requirement": "多轮、未知意图和上下文切换在独立留出集稳定",
+          "reference_id": "dialogflow",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "intent-routing-C2",
+          "requirement": "槽位和业务履行正确率与延迟在同协议下达到参考水平",
+          "reference_id": "lex",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "intent-routing-C3",
+          "requirement": "对话、企业工具与权限协作有真实模型多次试验",
+          "reference_id": "watsonx",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        }
+      ],
+      "scope_note": "采用 Rasa OSS 3.6 系列代码快照，不把 Rasa Pro 算作开源；模型自报置信度不等于准确率。"
+    },
+    {
+      "id": "event-kernel",
+      "number": 6,
+      "name": "NeuroBus 事件内核",
+      "xcmax_scope": "FHD/app/neuro_bus/",
+      "commercial_90": [
+        {
+          "id": "confluent",
+          "name": "Confluent Cloud",
+          "source_url": "https://docs.confluent.io/cloud/current/overview.html",
+          "role": "托管事件流、连接与治理",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "solace",
+          "name": "Solace Event Broker",
+          "source_url": "https://solace.com/products/event-broker/",
+          "role": "企业事件路由与事件网格",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "eventbridge",
+          "name": "Amazon EventBridge",
+          "source_url": "https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-what-is.html",
+          "role": "事件总线、目标路由与集成",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        }
+      ],
+      "open_source_60": {
+        "archived": false,
+        "branch": "trunk",
+        "license": "Apache-2.0",
+        "repo": "apache/kafka",
+        "url": "https://github.com/apache/kafka",
+        "source_commit": "a6d66b7403389bc77ac00651c2fead6fee141b04",
+        "name": "Apache Kafka",
+        "license_scope": "仅仓库开源核心，第三方组件按各自许可证；付费企业目录/服务不纳入 60 分参考。",
+        "metadata_license_url": "https://api.github.com/repos/apache/kafka/license?ref=a6d66b7403389bc77ac00651c2fead6fee141b04",
+        "measurement_status": "not_run",
+        "checked_on": "2026-09-08"
+      },
+      "anchor_60": [
+        {
+          "id": "event-kernel-B1",
+          "requirement": "事件契约与顺序/投递语义明确且测试覆盖",
+          "mandatory": true
+        },
+        {
+          "id": "event-kernel-B2",
+          "requirement": "重复投递、消费失败、积压与死信有处理",
+          "mandatory": true
+        },
+        {
+          "id": "event-kernel-B3",
+          "requirement": "进程重启后可恢复，有丢失和延迟观测",
+          "mandatory": true
+        }
+      ],
+      "anchor_90": [
+        {
+          "id": "event-kernel-C1",
+          "requirement": "契约演进、隔离与事件治理在多服务下可操作",
+          "reference_id": "confluent",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "event-kernel-C2",
+          "requirement": "跨服务路由和故障隔离经过网络分区/恢复验证",
+          "reference_id": "solace",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "event-kernel-C3",
+          "requirement": "路由目标重试、重放与交付状态可追溯",
+          "reference_id": "eventbridge",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        }
+      ],
+      "scope_note": "Kafka 是持久事件流基线，内存总线不直接按吞吐对比；先对齐持久化和确认语义。"
+    },
+    {
+      "id": "mod-sdk",
+      "number": 7,
+      "name": "Mod SDK 与行业模块",
+      "xcmax_scope": "FHD/app/mod_sdk/",
+      "commercial_90": [
+        {
+          "id": "salesforce-platform",
+          "name": "Salesforce Platform（官网现称 Headless 360）",
+          "source_url": "https://www.salesforce.com/platform/",
+          "role": "平台扩展、组织数据和可管理的应用能力",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "forge",
+          "name": "Atlassian Forge",
+          "source_url": "https://developer.atlassian.com/platform/forge/",
+          "role": "应用运行环境与平台权限",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "shopify-apps",
+          "name": "Shopify App Platform",
+          "source_url": "https://help.shopify.com/en/partners/build-integrate/making-apps",
+          "role": "应用开发、安装分发和商业化",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        }
+      ],
+      "open_source_60": {
+        "archived": false,
+        "branch": "19.0",
+        "license": "LGPL-3.0",
+        "repo": "odoo/odoo",
+        "url": "https://github.com/odoo/odoo",
+        "source_commit": "a51ca77c825d2dba326dd540e2b4c04ef6c2385d",
+        "name": "Odoo Community",
+        "license_scope": "Odoo Community LGPLv3；不含 Enterprise，捆绑第三方许可证另核。",
+        "metadata_license_url": "https://api.github.com/repos/odoo/odoo/license?ref=a51ca77c825d2dba326dd540e2b4c04ef6c2385d",
+        "measurement_status": "not_run",
+        "checked_on": "2026-09-08"
+      },
+      "anchor_60": [
+        {
+          "id": "mod-sdk-B1",
+          "requirement": "模块清单、依赖、生命周期和卸载边界稳定",
+          "mandatory": true
+        },
+        {
+          "id": "mod-sdk-B2",
+          "requirement": "共享宿主下各账号只加载其授权模块和数据",
+          "mandatory": true
+        },
+        {
+          "id": "mod-sdk-B3",
+          "requirement": "升级保留模块配置，并可查看运行版本",
+          "mandatory": true
+        }
+      ],
+      "anchor_90": [
+        {
+          "id": "mod-sdk-C1",
+          "requirement": "平台版本与扩展版本独立演进，组织权限完整",
+          "reference_id": "salesforce-platform",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "mod-sdk-C2",
+          "requirement": "扩展权限、运行隔离与平台接口变更可验证",
+          "reference_id": "forge",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "mod-sdk-C3",
+          "requirement": "从开发、签名、授权到客户安装升级形成交付回执",
+          "reference_id": "shopify-apps",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        }
+      ],
+      "scope_note": "只取 Odoo Community LGPL 范围，不纳入 Enterprise；签名和账号交付是 XCMAX 必选要求。"
+    },
+    {
+      "id": "desktop",
+      "number": 8,
+      "name": "桌面壳与更新恢复",
+      "xcmax_scope": "FHD/desktop/",
+      "commercial_90": [
+        {
+          "id": "teams",
+          "name": "Microsoft Teams 桌面客户端",
+          "source_url": "https://learn.microsoft.com/en-us/microsoftteams/teams-client-desktop-admin",
+          "role": "企业安装、跨平台部署与更新管理",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "slack",
+          "name": "Slack 桌面客户端",
+          "source_url": "https://slack.com/help/articles/212475728-Deploy-Slack-for-Windows",
+          "role": "企业部署、更新和用户数据迁移",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "idea",
+          "name": "JetBrains IntelliJ IDEA 商业订阅",
+          "source_url": "https://www.jetbrains.com/help/idea/update.html",
+          "role": "桌面版本更新与维护；不比较 IDE 功能",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        }
+      ],
+      "open_source_60": {
+        "archived": false,
+        "branch": "main",
+        "license": "MIT",
+        "repo": "microsoft/vscode",
+        "url": "https://github.com/microsoft/vscode",
+        "source_commit": "4603a7f7b9102fb602967c9518ac60acddd735a6",
+        "name": "Code - OSS",
+        "license_scope": "仅仓库开源核心，第三方组件按各自许可证；付费企业目录/服务不纳入 60 分参考。",
+        "metadata_license_url": "https://api.github.com/repos/microsoft/vscode/license?ref=4603a7f7b9102fb602967c9518ac60acddd735a6",
+        "measurement_status": "not_run",
+        "checked_on": "2026-09-08"
+      },
+      "anchor_60": [
+        {
+          "id": "desktop-B1",
+          "requirement": "桌面安装、启动、升级和卸载可重复",
+          "mandatory": true
+        },
+        {
+          "id": "desktop-B2",
+          "requirement": "进程、IPC、凭据与本地数据边界受控",
+          "mandatory": true
+        },
+        {
+          "id": "desktop-B3",
+          "requirement": "更新失败保留数据并给出可操作恢复入口",
+          "mandatory": true
+        }
+      ],
+      "anchor_90": [
+        {
+          "id": "desktop-C1",
+          "requirement": "Windows/macOS 管理部署、更新状态与诊断可查",
+          "reference_id": "teams",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "desktop-C2",
+          "requirement": "安装方式/旧数据迁移和批量更新在目标设备验证",
+          "reference_id": "slack",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "desktop-C3",
+          "requirement": "版本更新及恢复有确切 artifact、运行身份和回归证据",
+          "reference_id": "idea",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        }
+      ],
+      "scope_note": "Code - OSS 为 MIT 源码，不包括 Microsoft VS Code 专有发行、市场服务；不比较聊天或 IDE 功能。"
+    },
+    {
+      "id": "business-frontend",
+      "number": 9,
+      "name": "FHD 前端与用户任务",
+      "xcmax_scope": "FHD/frontend/",
+      "commercial_90": [
+        {
+          "id": "fiori",
+          "name": "SAP Fiori（商业 ERP 应用体验）",
+          "source_url": "https://www.sap.com/products/technology-platform/fiori.html",
+          "role": "角色与任务导向的企业操作界面",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "business-central",
+          "name": "Microsoft Dynamics 365 Business Central",
+          "source_url": "https://www.microsoft.com/en-us/dynamics-365/products/business-central",
+          "role": "中小企业 ERP 的日常操作流程",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "netsuite",
+          "name": "Oracle NetSuite ERP",
+          "source_url": "https://www.netsuite.com/portal/products/erp.shtml",
+          "role": "统一 ERP 工作台与业务可见性",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        }
+      ],
+      "open_source_60": {
+        "archived": false,
+        "branch": "develop",
+        "license": "GPL-3.0",
+        "repo": "frappe/erpnext",
+        "url": "https://github.com/frappe/erpnext",
+        "source_commit": "e0d6d797d7086b214f74bf29e2ffbd75894e7b74",
+        "name": "ERPNext Desk",
+        "license_scope": "仅仓库开源核心，第三方组件按各自许可证；付费企业目录/服务不纳入 60 分参考。",
+        "metadata_license_url": "https://api.github.com/repos/frappe/erpnext/license?ref=e0d6d797d7086b214f74bf29e2ffbd75894e7b74",
+        "measurement_status": "not_run",
+        "checked_on": "2026-09-08"
+      },
+      "anchor_60": [
+        {
+          "id": "business-frontend-B1",
+          "requirement": "登录后能完成核心业务任务，输入校验和空状态清晰",
+          "mandatory": true
+        },
+        {
+          "id": "business-frontend-B2",
+          "requirement": "加载、失败、健康和结果状态来自真实服务",
+          "mandatory": true
+        },
+        {
+          "id": "business-frontend-B3",
+          "requirement": "筛选、编辑、导入与导出语义保持一致",
+          "mandatory": true
+        }
+      ],
+      "anchor_90": [
+        {
+          "id": "business-frontend-C1",
+          "requirement": "角色导向任务流、可访问性和跨页面状态一致",
+          "reference_id": "fiori",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "business-frontend-C2",
+          "requirement": "真实企业用户在日常 ERP 流程中完成任务并可恢复错误",
+          "reference_id": "business-central",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "business-frontend-C3",
+          "requirement": "跨模块工作台可追踪业务结果与异常，而非只有统计卡片",
+          "reference_id": "netsuite",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        }
+      ],
+      "scope_note": "比较完整任务与交互，不按页面数、UI 框架或截图美观度直接给分。"
+    },
+    {
+      "id": "marketplace-ui",
+      "number": 10,
+      "name": "商城前端与工作流 UI",
+      "xcmax_scope": "成都修茈科技有限公司/MODstore_deploy/market/",
+      "commercial_90": [
+        {
+          "id": "shopify-admin",
+          "name": "Shopify Admin",
+          "source_url": "https://help.shopify.com/en/manual/shopify-admin",
+          "role": "商品、订单与后台操作体验",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "agentexchange",
+          "name": "Salesforce AgentExchange（原 AppExchange）",
+          "source_url": "https://www.salesforce.com/eu/solutions/appexchange/apps/",
+          "role": "企业应用发现、安装与管理；原页面现提示品牌迁移",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "atlassian-marketplace",
+          "name": "Atlassian Marketplace",
+          "source_url": "https://developer.atlassian.com/platform/marketplace/",
+          "role": "应用目录、开发者分发与市场管理",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        }
+      ],
+      "open_source_60": {
+        "archived": false,
+        "branch": "main",
+        "license": "BSD-3-Clause",
+        "repo": "saleor/saleor-dashboard",
+        "url": "https://github.com/saleor/saleor-dashboard",
+        "source_commit": "66d28330ed0ad22a4c307049e69ed9c49ffc85cf",
+        "name": "Saleor Dashboard",
+        "license_scope": "仅仓库开源核心，第三方组件按各自许可证；付费企业目录/服务不纳入 60 分参考。",
+        "metadata_license_url": "https://api.github.com/repos/saleor/saleor-dashboard/license?ref=66d28330ed0ad22a4c307049e69ed9c49ffc85cf",
+        "measurement_status": "not_run",
+        "checked_on": "2026-09-08"
+      },
+      "anchor_60": [
+        {
+          "id": "marketplace-ui-B1",
+          "requirement": "目录、搜索、订单/授权和后台状态一致",
+          "mandatory": true
+        },
+        {
+          "id": "marketplace-ui-B2",
+          "requirement": "权限不足、付款失败和交付等待均可解释",
+          "mandatory": true
+        },
+        {
+          "id": "marketplace-ui-B3",
+          "requirement": "用户操作可以追到实际授权与运行版本",
+          "mandatory": true
+        }
+      ],
+      "anchor_90": [
+        {
+          "id": "marketplace-ui-C1",
+          "requirement": "后台商品/订单操作在复杂状态下可用且一致",
+          "reference_id": "shopify-admin",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "marketplace-ui-C2",
+          "requirement": "应用发现、授权安装和组织管理流程可实际完成",
+          "reference_id": "agentexchange",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "marketplace-ui-C3",
+          "requirement": "开发者上架、版本与用户管理有连续可验证体验",
+          "reference_id": "atlassian-marketplace",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        }
+      ],
+      "scope_note": "Saleor Dashboard 仅是管理 UI 能力基线；插件授权和运行回执需加 XCMAX 适配测试。"
+    },
+    {
+      "id": "commerce-backend",
+      "number": 11,
+      "name": "商城交易与交付后端",
+      "xcmax_scope": "成都修茈科技有限公司/MODstore_deploy/modstore_server/",
+      "commercial_90": [
+        {
+          "id": "shopify-plus",
+          "name": "Shopify Plus",
+          "source_url": "https://www.shopify.com/plus",
+          "role": "企业交易、订单与可扩展商业平台",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "adobe-commerce",
+          "name": "Adobe Commerce",
+          "source_url": "https://business.adobe.com/products/magento/magento-commerce.html",
+          "role": "企业电商交易与业务管理",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "commercetools",
+          "name": "commercetools Composable Commerce",
+          "source_url": "https://commercetools.com/composable-commerce",
+          "role": "API 化、可组合的商业后端",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        }
+      ],
+      "open_source_60": {
+        "archived": false,
+        "branch": "main",
+        "license": "BSD-3-Clause",
+        "repo": "saleor/saleor",
+        "url": "https://github.com/saleor/saleor",
+        "source_commit": "75226b584dee0150e35f0a8f573c5f4063d7e341",
+        "name": "Saleor Core",
+        "license_scope": "仅仓库开源核心，第三方组件按各自许可证；付费企业目录/服务不纳入 60 分参考。",
+        "metadata_license_url": "https://api.github.com/repos/saleor/saleor/license?ref=75226b584dee0150e35f0a8f573c5f4063d7e341",
+        "measurement_status": "not_run",
+        "checked_on": "2026-09-08"
+      },
+      "anchor_60": [
+        {
+          "id": "commerce-backend-B1",
+          "requirement": "订单、价格、付款状态与交付事务保持一致",
+          "mandatory": true
+        },
+        {
+          "id": "commerce-backend-B2",
+          "requirement": "幂等请求、Webhook 重放和退款不产生重复效果",
+          "mandatory": true
+        },
+        {
+          "id": "commerce-backend-B3",
+          "requirement": "账号隔离、库存/授权变更与审计可追溯",
+          "mandatory": true
+        }
+      ],
+      "anchor_90": [
+        {
+          "id": "commerce-backend-C1",
+          "requirement": "交易高峰与支付故障下订单和交付仍一致",
+          "reference_id": "shopify-plus",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "commerce-backend-C2",
+          "requirement": "复杂业务规则、退款与多组织管理可复核",
+          "reference_id": "adobe-commerce",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "commerce-backend-C3",
+          "requirement": "API 契约和独立业务组件支持安全演进与恢复",
+          "reference_id": "commercetools",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        }
+      ],
+      "scope_note": "实体商品交易与数字 Mod 授权不同；映射订单到授权交付，不假设参考平台自带 Mod 签名。"
+    },
+    {
+      "id": "autonomy",
+      "number": 12,
+      "name": "自治与维护执行",
+      "xcmax_scope": "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_subprocess.py",
+      "commercial_90": [
+        {
+          "id": "servicenow-itom",
+          "name": "ServiceNow ITOM",
+          "source_url": "https://www.servicenow.com/products/it-operations-management.html",
+          "role": "运维事件、服务可见性和自动化",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "pagerduty",
+          "name": "PagerDuty Runbook Automation",
+          "source_url": "https://www.pagerduty.com/platform/automation/runbook/",
+          "role": "受控运行手册和运维任务执行",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "uipath-cloud",
+          "name": "UiPath Automation Cloud",
+          "source_url": "https://www.uipath.com/product/automation-cloud",
+          "role": "自动化任务管理与企业运行平台",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        }
+      ],
+      "open_source_60": {
+        "archived": false,
+        "branch": "main",
+        "license": "Apache-2.0",
+        "repo": "rundeck/rundeck",
+        "url": "https://github.com/rundeck/rundeck",
+        "source_commit": "1b944fd3ab24b2cedbe96de8e3cb3847113cd01e",
+        "name": "Rundeck Community",
+        "license_scope": "仅仓库开源核心，第三方组件按各自许可证；付费企业目录/服务不纳入 60 分参考。",
+        "metadata_license_url": "https://api.github.com/repos/rundeck/rundeck/license?ref=1b944fd3ab24b2cedbe96de8e3cb3847113cd01e",
+        "measurement_status": "not_run",
+        "checked_on": "2026-09-08"
+      },
+      "anchor_60": [
+        {
+          "id": "autonomy-B1",
+          "requirement": "运维动作有白名单、执行权限、时间与资源上限",
+          "mandatory": true
+        },
+        {
+          "id": "autonomy-B2",
+          "requirement": "真实子进程超时、截断和取消可回收后代进程",
+          "mandatory": true
+        },
+        {
+          "id": "autonomy-B3",
+          "requirement": "任务记录、重试、审批与人工接管可追溯",
+          "mandatory": true
+        }
+      ],
+      "anchor_90": [
+        {
+          "id": "autonomy-C1",
+          "requirement": "告警到诊断、处理和服务恢复有因果证据",
+          "reference_id": "servicenow-itom",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "autonomy-C2",
+          "requirement": "受限运行手册可跨节点执行并控制凭据、审批与审计",
+          "reference_id": "pagerduty",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "autonomy-C3",
+          "requirement": "任务队列、运行容量、失败恢复和持续运行效果可核验",
+          "reference_id": "uipath-cloud",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        }
+      ],
+      "scope_note": "Rundeck 开源部分和 PagerDuty 商业产品区分；生产自主写入仍受现有自治风险门槛约束。"
+    },
+    {
+      "id": "java-payment",
+      "number": 13,
+      "name": "Java 支付服务",
+      "xcmax_scope": "成都修茈科技有限公司/MODstore_deploy/java_payment_service/",
+      "commercial_90": [
+        {
+          "id": "stripe",
+          "name": "Stripe Payments",
+          "source_url": "https://docs.stripe.com/payments",
+          "role": "支付状态、集成与支付业务协议",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "adyen",
+          "name": "Adyen",
+          "source_url": "https://docs.adyen.com/",
+          "role": "支付接口与渠道集成",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "braintree",
+          "name": "PayPal Braintree",
+          "source_url": "https://developer.paypal.com/braintree/docs/",
+          "role": "支付集成、服务端 SDK 与交易流程",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        }
+      ],
+      "open_source_60": {
+        "archived": false,
+        "branch": "master",
+        "license": "Apache-2.0",
+        "repo": "killbill/killbill",
+        "url": "https://github.com/killbill/killbill",
+        "source_commit": "cb60779c171391be558cd7aebb1eafea60ad2b82",
+        "name": "Kill Bill",
+        "license_scope": "仅仓库开源核心，第三方组件按各自许可证；付费企业目录/服务不纳入 60 分参考。",
+        "metadata_license_url": "https://api.github.com/repos/killbill/killbill/license?ref=cb60779c171391be558cd7aebb1eafea60ad2b82",
+        "measurement_status": "not_run",
+        "checked_on": "2026-09-08"
+      },
+      "anchor_60": [
+        {
+          "id": "java-payment-B1",
+          "requirement": "金额精度、币种、支付状态机和幂等键正确",
+          "mandatory": true
+        },
+        {
+          "id": "java-payment-B2",
+          "requirement": "回调验签、重放、退款和对账在沙箱通过",
+          "mandatory": true
+        },
+        {
+          "id": "java-payment-B3",
+          "requirement": "凭据隔离、事务并发和异常恢复可复核",
+          "mandatory": true
+        }
+      ],
+      "anchor_90": [
+        {
+          "id": "java-payment-C1",
+          "requirement": "支付意图/交易生命周期、重试和退款形成一致账务",
+          "reference_id": "stripe",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "java-payment-C2",
+          "requirement": "渠道异常、异步通知与对账差异可完整定位处理",
+          "reference_id": "adyen",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "java-payment-C3",
+          "requirement": "服务端 SDK 与支付业务流程有跨版本和异常验收",
+          "reference_id": "braintree",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        }
+      ],
+      "scope_note": "按支付业务协议比较；不声称 Stripe/Adyen/Braintree 的内部服务用 Java，也不要求复制收单牌照业务。"
+    },
+    {
+      "id": "flutter-mobile",
+      "number": 14,
+      "name": "Flutter 移动端",
+      "xcmax_scope": "FHD/mobile-flutter-poc/",
+      "commercial_90": [
+        {
+          "id": "bmw",
+          "name": "My BMW App",
+          "source_url": "https://flutter.dev/showcase/bmw",
+          "role": "Flutter 跨平台一致性及多变体交付的历史官方案例",
+          "source_kind": "historical_official_case_study",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "nubank",
+          "name": "Nubank 移动应用",
+          "source_url": "https://flutter.dev/showcase/nubank",
+          "role": "Flutter 工程规模化与跨端一致性的历史官方案例",
+          "source_kind": "historical_official_case_study",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "ebay",
+          "name": "eBay Motors",
+          "source_url": "https://flutter.dev/showcase/ebay",
+          "role": "Flutter 商业移动应用的历史官方案例",
+          "source_kind": "historical_official_case_study",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        }
+      ],
+      "open_source_60": {
+        "archived": false,
+        "branch": "main",
+        "license": "AGPL-3.0",
+        "repo": "AppFlowy-IO/AppFlowy",
+        "url": "https://github.com/AppFlowy-IO/AppFlowy",
+        "source_commit": "5cf3a365dec0d59f64bad1ee4bb1050471a39b93",
+        "name": "AppFlowy（开源 Flutter 客户端）",
+        "license_scope": "仅仓库开源核心，第三方组件按各自许可证；付费企业目录/服务不纳入 60 分参考。",
+        "metadata_license_url": "https://api.github.com/repos/AppFlowy-IO/AppFlowy/license?ref=5cf3a365dec0d59f64bad1ee4bb1050471a39b93",
+        "measurement_status": "not_run",
+        "checked_on": "2026-09-08"
+      },
+      "anchor_60": [
+        {
+          "id": "flutter-mobile-B1",
+          "requirement": "固定 Flutter 版本构建 iOS/Android，真机核心任务一致",
+          "mandatory": true
+        },
+        {
+          "id": "flutter-mobile-B2",
+          "requirement": "凭据、后台切换、断网和恢复不丢状态",
+          "mandatory": true
+        },
+        {
+          "id": "flutter-mobile-B3",
+          "requirement": "跨设备布局与同步冲突有可复核测试",
+          "mandatory": true
+        }
+      ],
+      "anchor_90": [
+        {
+          "id": "flutter-mobile-C1",
+          "requirement": "跨系统、设备和发布变体的一致性与构建链可证实",
+          "reference_id": "bmw",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "flutter-mobile-C2",
+          "requirement": "特性扩展、测试与团队交付效率有量化证据",
+          "reference_id": "nubank",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "flutter-mobile-C3",
+          "requirement": "商业核心任务在真实设备上具备稳定体验和性能",
+          "reference_id": "ebay",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        }
+      ],
+      "scope_note": "三个商业引用是历史 Flutter 官方案例，未实测其当前版本；AppFlowy 只映射客户端/同步，不映射金融或车辆业务。"
+    },
+    {
+      "id": "shared-engine",
+      "number": 15,
+      "name": "Retort 共享引擎",
+      "xcmax_scope": "packages/retort_engine/",
+      "commercial_90": [
+        {
+          "id": "temporal-cloud",
+          "name": "Temporal Cloud",
+          "source_url": "https://docs.temporal.io/cloud",
+          "role": "持久工作流、执行历史与恢复",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "camunda",
+          "name": "Camunda 8 SaaS",
+          "source_url": "https://docs.camunda.io/docs/components/saas/",
+          "role": "流程执行、运营与管理",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "step-functions",
+          "name": "AWS Step Functions",
+          "source_url": "https://docs.aws.amazon.com/step-functions/latest/dg/welcome.html",
+          "role": "状态机、重试和工作流执行",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        }
+      ],
+      "open_source_60": {
+        "archived": false,
+        "branch": "main",
+        "license": "MIT",
+        "repo": "temporalio/temporal",
+        "url": "https://github.com/temporalio/temporal",
+        "source_commit": "990081baf768f664f98f734e3599f4c718895151",
+        "name": "Temporal OSS",
+        "license_scope": "仅仓库开源核心，第三方组件按各自许可证；付费企业目录/服务不纳入 60 分参考。",
+        "metadata_license_url": "https://api.github.com/repos/temporalio/temporal/license?ref=990081baf768f664f98f734e3599f4c718895151",
+        "measurement_status": "not_run",
+        "checked_on": "2026-09-08"
+      },
+      "anchor_60": [
+        {
+          "id": "shared-engine-B1",
+          "requirement": "共享执行协议、状态持久化和插件接口稳定",
+          "mandatory": true
+        },
+        {
+          "id": "shared-engine-B2",
+          "requirement": "重放、超时与恢复不虚报完成或重做副作用",
+          "mandatory": true
+        },
+        {
+          "id": "shared-engine-B3",
+          "requirement": "执行证据与输入、版本、产物哈希绑定",
+          "mandatory": true
+        }
+      ],
+      "anchor_90": [
+        {
+          "id": "shared-engine-C1",
+          "requirement": "长期执行、版本演进和历史恢复可证明",
+          "reference_id": "temporal-cloud",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "shared-engine-C2",
+          "requirement": "流程运行与运维可观察，异常可人工处置",
+          "reference_id": "camunda",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "shared-engine-C3",
+          "requirement": "状态机的重试、补偿与失败状态可复现",
+          "reference_id": "step-functions",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        }
+      ],
+      "scope_note": "映射 Retort 的执行/恢复/证据底座；这些产品不是 Retort 吸收算法的直接竞品，能力吸收真实性仍单独验证。"
+    },
+    {
+      "id": "coding-sandbox",
+      "number": 16,
+      "name": "Vibe 编码与沙箱",
+      "xcmax_scope": "成都修茈科技有限公司/vibe-coding/",
+      "commercial_90": [
+        {
+          "id": "github-copilot",
+          "name": "GitHub Copilot Enterprise",
+          "source_url": "https://docs.github.com/en/copilot",
+          "role": "编码辅助、Agent 和企业管理",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "cursor",
+          "name": "Cursor Enterprise",
+          "source_url": "https://cursor.com/enterprise",
+          "role": "代码上下文、Agent 工作流与企业控制",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "replit",
+          "name": "Replit Agent",
+          "source_url": "https://docs.replit.com/features/agent/overview",
+          "role": "应用生成、执行与迭代",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        }
+      ],
+      "open_source_60": {
+        "archived": false,
+        "branch": "main",
+        "license": "MIT",
+        "repo": "OpenHands/OpenHands",
+        "url": "https://github.com/OpenHands/OpenHands",
+        "source_commit": "f7fb0c4b21f5ed726edbba8a6309634ef434b004",
+        "name": "OpenHands OSS",
+        "license_scope": "仅仓库开源核心，第三方组件按各自许可证；付费企业目录/服务不纳入 60 分参考。",
+        "metadata_license_url": "https://api.github.com/repos/OpenHands/OpenHands/license?ref=f7fb0c4b21f5ed726edbba8a6309634ef434b004",
+        "measurement_status": "not_run",
+        "checked_on": "2026-09-08"
+      },
+      "anchor_60": [
+        {
+          "id": "coding-sandbox-B1",
+          "requirement": "生成补丁可审查、测试和撤销",
+          "mandatory": true
+        },
+        {
+          "id": "coding-sandbox-B2",
+          "requirement": "文件/命令/网络权限受控，阻断逃逸与秘密泄露",
+          "mandatory": true
+        },
+        {
+          "id": "coding-sandbox-B3",
+          "requirement": "真实编码任务以测试和可运行产物判成败",
+          "mandatory": true
+        }
+      ],
+      "anchor_90": [
+        {
+          "id": "coding-sandbox-C1",
+          "requirement": "仓库上下文、代码修改和企业策略在同一任务中验证",
+          "reference_id": "github-copilot",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "coding-sandbox-C2",
+          "requirement": "多文件 Agent 修改质量与沙箱策略有留出任务评测",
+          "reference_id": "cursor",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "coding-sandbox-C3",
+          "requirement": "从需求到运行产物的迭代有检查点、恢复与人工控制",
+          "reference_id": "replit",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        }
+      ],
+      "scope_note": "只取开源授权部分；禁止用模型自评分、演示视频或同实现镜像测试替代任务结果。"
+    },
+    {
+      "id": "customer-service",
+      "number": 17,
+      "name": "客来来独立子系统",
+      "xcmax_scope": "成都修茈科技有限公司/MODstore_deploy/market/src/domain/客来来/",
+      "commercial_90": [
+        {
+          "id": "zendesk",
+          "name": "Zendesk Suite",
+          "source_url": "https://support.zendesk.com/hc/en-us/articles/4408838041370-Welcome-to-the-Zendesk-Suite",
+          "role": "多渠道客服、知识与工单",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "intercom",
+          "name": "Intercom / Fin",
+          "source_url": "https://fin.ai/",
+          "role": "客服 Agent、知识回答与业务处理",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "service-cloud",
+          "name": "Salesforce Service Cloud",
+          "source_url": "https://www.salesforce.com/service/",
+          "role": "客服流程、客户上下文与企业服务",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        }
+      ],
+      "open_source_60": {
+        "archived": false,
+        "branch": "develop",
+        "license": "MIT",
+        "repo": "chatwoot/chatwoot",
+        "url": "https://github.com/chatwoot/chatwoot",
+        "source_commit": "b227f8042738a124fea7bf65ac413e4dc9c8196a",
+        "name": "Chatwoot Community",
+        "license_scope": "仅非 enterprise/ 的 MIT 核心；enterprise/LICENSE 另行授权。",
+        "metadata_license_url": "https://api.github.com/repos/chatwoot/chatwoot/license?ref=b227f8042738a124fea7bf65ac413e4dc9c8196a",
+        "measurement_status": "not_run",
+        "checked_on": "2026-09-08"
+      },
+      "anchor_60": [
+        {
+          "id": "customer-service-B1",
+          "requirement": "客户、会话、工单/线索归属按账号隔离",
+          "mandatory": true
+        },
+        {
+          "id": "customer-service-B2",
+          "requirement": "多渠道接入与人工交接保留上下文",
+          "mandatory": true
+        },
+        {
+          "id": "customer-service-B3",
+          "requirement": "发送状态和失败重试以渠道回执为准",
+          "mandatory": true
+        }
+      ],
+      "anchor_90": [
+        {
+          "id": "customer-service-C1",
+          "requirement": "跨渠道工单、知识和服务指标有完整客户流程",
+          "reference_id": "zendesk",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "customer-service-C2",
+          "requirement": "Agent 回答、执行和人工接管有真实结果评估",
+          "reference_id": "intercom",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "customer-service-C3",
+          "requirement": "服务流程、客户信息与权限联动可追踪",
+          "reference_id": "service-cloud",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        }
+      ],
+      "scope_note": "Chatwoot 仅取非 enterprise/ 的 MIT 核心；真实发送须另获业务授权，本任务只定义协议。"
+    },
+    {
+      "id": "ci-release",
+      "number": 18,
+      "name": "CI、发布与治理",
+      "xcmax_scope": "FHD/scripts/",
+      "commercial_90": [
+        {
+          "id": "github-enterprise",
+          "name": "GitHub Enterprise Cloud",
+          "source_url": "https://github.com/enterprise",
+          "role": "代码协作、自动化、安全与治理",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "gitlab",
+          "name": "GitLab Ultimate",
+          "source_url": "https://about.gitlab.com/pricing/",
+          "role": "企业软件交付、安全和治理能力组合",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        },
+        {
+          "id": "harness",
+          "name": "Harness CI/CD",
+          "source_url": "https://www.harness.io/products/continuous-integration",
+          "role": "可复用交付流水线与企业 CI",
+          "source_kind": "official_product_or_documentation",
+          "checked_on": "2026-09-08",
+          "measurement_status": "not_run",
+          "edition_rule": "审计记录中锁定实际套餐、区域和版本；不得用另一套餐能力补分。"
+        }
+      ],
+      "open_source_60": {
+        "archived": false,
+        "branch": "master",
+        "license": "MIT",
+        "repo": "jenkinsci/jenkins",
+        "url": "https://github.com/jenkinsci/jenkins",
+        "source_commit": "2701fc6c4e75540703fd68205d9f2e87189a6d71",
+        "name": "Jenkins",
+        "license_scope": "仅仓库开源核心，第三方组件按各自许可证；付费企业目录/服务不纳入 60 分参考。",
+        "metadata_license_url": "https://api.github.com/repos/jenkinsci/jenkins/license?ref=2701fc6c4e75540703fd68205d9f2e87189a6d71",
+        "measurement_status": "not_run",
+        "checked_on": "2026-09-08"
+      },
+      "anchor_60": [
+        {
+          "id": "ci-release-B1",
+          "requirement": "流水线可从固定源码与锁文件重建产物",
+          "mandatory": true
+        },
+        {
+          "id": "ci-release-B2",
+          "requirement": "失败检查真实拦截，测试/覆盖率/报告与 SHA 一致",
+          "mandatory": true
+        },
+        {
+          "id": "ci-release-B3",
+          "requirement": "凭据、权限和部署操作有最小权限与审计",
+          "mandatory": true
+        }
+      ],
+      "anchor_90": [
+        {
+          "id": "ci-release-C1",
+          "requirement": "代码、安全检查、artifact 和发布身份形成完整链路",
+          "reference_id": "github-enterprise",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "ci-release-C2",
+          "requirement": "质量/安全/审批政策覆盖实际变更并有负向用例",
+          "reference_id": "gitlab",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        },
+        {
+          "id": "ci-release-C3",
+          "requirement": "可复用流水线、部署验证和失败恢复在目标环境验收",
+          "reference_id": "harness",
+          "mandatory": true,
+          "evidence_rule": "本条是 XCMAX 适配后的规范性验收目标；role 来源不等于该厂商已在本任务实测通过。"
+        }
+      ],
+      "scope_note": "Jenkins 插件版本与许可证单独锁定；不以 CI 项目数、绿灯数量或历史覆盖率作为当前质量。"
+    }
+  ]
+}
