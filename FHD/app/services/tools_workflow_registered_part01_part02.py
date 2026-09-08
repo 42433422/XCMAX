@@ -44,12 +44,21 @@ def _registered_router_inventory(
             "dict[Any, Any]", svc.delete_warehouse(int(params.get("warehouse_id") or 0))
         )
     if action == "stock_in":
+        import math
+
+        raw_quantity = params.get("quantity")
+        try:
+            quantity = float(raw_quantity)
+        except (TypeError, ValueError, OverflowError):
+            return {"success": False, "message": "入库数量必须为有限正数"}
+        if isinstance(raw_quantity, bool) or not math.isfinite(quantity) or quantity <= 0:
+            return {"success": False, "message": "入库数量必须为有限正数"}
         return _facade().cast(
             "dict[Any, Any]",
             svc.inventory_in(
                 product_id=params.get("product_id"),
                 warehouse_id=params.get("warehouse_id"),
-                quantity=float(params.get("quantity", 0)),
+                quantity=quantity,
                 batch_no=params.get("batch_no"),
                 location_id=params.get("location_id"),
                 unit_price=_float_or_none(params.get("unit_price")),
