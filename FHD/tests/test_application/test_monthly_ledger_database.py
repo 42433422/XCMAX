@@ -78,7 +78,20 @@ def test_account_ledger_paginates_matching_lines_before_limiting(tmp_path, monke
                     journal_date=date(2024, 2, entry_id),
                 )
             )
+        db.add(ChartOfAccount(id=2, tenant_id=8, code="1001", name="另一租户现金"))
+        db.add(JournalEntry(id=4, tenant_id=8, entry_no="OTHER", journal_date=date(2024, 2, 4)))
         db.flush()
+        db.add(
+            JournalEntryLine(
+                id=5, tenant_id=8, entry_id=4, account_id=2, account_code="1001", debit=99
+            )
+        )
+        # A malformed cross-tenant reference must not leak either entity.
+        db.add(
+            JournalEntryLine(
+                id=6, tenant_id=8, entry_id=2, account_id=2, account_code="1001", debit=98
+            )
+        )
         for line_id, entry_id, code in [
             (1, 1, "1001"),
             (2, 2, "1001"),
@@ -112,4 +125,7 @@ def test_account_ledger_paginates_matching_lines_before_limiting(tmp_path, monke
                 assert [line["debit"] for line in result["data"]] == expected
     with tenant_scope(8):
         assert not accounting_services.query_financial_ledger(account_id=1)["success"]
+        other = accounting_services.query_financial_ledger(account_code="1001")
+        assert other["total"] == 1
+        assert [line["debit"] for line in other["data"]] == [99.0]
     engine.dispose()
