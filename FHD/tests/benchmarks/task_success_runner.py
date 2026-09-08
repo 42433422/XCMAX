@@ -222,7 +222,7 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
                     from app.db import SessionLocal
                     from tests.benchmarks.task_fixtures import seed_initial_state
 
-                    with SessionLocal.begin() as db:
+                    with SessionLocal() as db, db.begin():
                         seed_initial_state(db, task["initial_state"], tenant_id=1)
                 plan = planner.plan("bench-user", task["instruction"], registry)
                 nodes = list(plan.nodes) if plan else []

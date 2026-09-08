@@ -163,6 +163,10 @@
       "domain": "sales",
       "difficulty": "medium",
       "instruction": "给客户星光贸易下订单，产品A100，数量10",
+      "initial_state": [
+        {"entity": "customers", "values": {"id": 101, "customer_name": "星光贸易"}},
+        {"entity": "products", "values": {"id": 201, "name": "A100", "model_number": "A100", "price": 25.5}}
+      ],
       "expect": {
         "actions_any_of": [
           [{"tool_id": "sales", "action": "confirm"}],
@@ -178,6 +182,10 @@
       "domain": "sales",
       "difficulty": "medium",
       "instruction": "给星光贸易的产品A100报个价",
+      "initial_state": [
+        {"entity": "customers", "values": {"id": 101, "customer_name": "星光贸易"}},
+        {"entity": "products", "values": {"id": 201, "name": "A100", "model_number": "A100", "price": 25.5}}
+      ],
       "expect": {
         "actions": [{"tool_id": "sales", "action": "quote"}],
         "forbid_actions": [
