@@ -1,6 +1,8 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { AuthenticatedEventStream } from './authenticatedEventStream'
-vi.mock('@/utils/apiBase', () => ({ getActiveExtensionModHeaders: () => ({ 'X-XCAGI-Active-Mod-Id': 'mod-a' }) }))
+const scopeState = vi.hoisted(() => ({ mod: 'mod-a', user: 'u1' }))
+vi.mock('@/utils/apiBase', () => ({ getActiveExtensionModHeaders: () => ({ 'X-XCAGI-Active-Mod-Id': scopeState.mod }) }))
+vi.mock('@/utils/tenantStorageScopeRuntime', () => ({ getRuntimeTenantStorageScopeInput: () => ({ localUserId: scopeState.user }) }))
 vi.mock('@/utils/clientShell', () => ({ clientShellRequestHeaders: () => ({ 'X-XCMAX-Client-Shell': 'enterprise' }) }))
 afterEach(() => vi.unstubAllGlobals())
 it('carries scope and decodes fragmented UTF-8 and CRLF', async () => {
@@ -28,4 +30,22 @@ it('suppresses late snapshots and errors after close', async () => {
   resolve(new Response('event: task.snapshot\ndata: []\n\n'))
   await new Promise((r) => setTimeout(r, 10))
   expect(seen).not.toHaveBeenCalled()
+})
+
+it.each(['mod', 'user'] as const)('rejects late snapshots after %s changes', async (field) => {
+  scopeState.mod = 'mod-a'
+  scopeState.user = 'u1'
+  let controller!: ReadableStreamDefaultController<Uint8Array>
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(new ReadableStream<Uint8Array>({ start(c) { controller = c } }))))
+  const stream = new AuthenticatedEventStream('/api/agent/tasks/events/stream')
+  const seen = vi.fn()
+  const reconnect = vi.fn()
+  stream.addEventListener('task.snapshot', seen)
+  stream.onerror = reconnect
+  await Promise.resolve()
+  scopeState[field] = 'changed'
+  controller.enqueue(new TextEncoder().encode('event: task.snapshot\ndata: ["old scope"]\n\n'))
+  await vi.waitFor(() => expect(reconnect).toHaveBeenCalledTimes(1))
+  expect(seen).not.toHaveBeenCalled()
+  stream.close()
 })

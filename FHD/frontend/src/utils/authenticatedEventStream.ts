@@ -1,3 +1,4 @@
+import { getRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 import { getActiveExtensionModHeaders } from '@/utils/apiBase'
 import { clientShellRequestHeaders } from '@/utils/clientShell'
 
@@ -16,6 +17,14 @@ export class AuthenticatedEventStream extends EventTarget {
   }
 
   private async read(url: string): Promise<void> {
+    const scope = () => JSON.stringify([getRuntimeTenantStorageScopeInput(), clientShellRequestHeaders(), getActiveExtensionModHeaders(url)])
+    const initialScope = scope()
+    const scopeMatches = () => {
+      if (scope() === initialScope) return true
+      this.close()
+      this.onerror?.()
+      return false
+    }
     try {
       const response = await fetch(url, {
         credentials: 'include',
@@ -31,14 +40,14 @@ export class AuthenticatedEventStream extends EventTarget {
       try {
         while (!this.controller.signal.aborted) {
           const chunk = await reader.read()
-          if (chunk.done) break
+          if (this.controller.signal.aborted || !scopeMatches() || chunk.done) break
           buffer += decoder.decode(chunk.value, { stream: true })
           let newline: number
           while ((newline = buffer.indexOf('\n')) >= 0) {
             const line = buffer.slice(0, newline).replace(/\r$/, '')
             buffer = buffer.slice(newline + 1)
             if (!line) {
-              if (data.length && !this.controller.signal.aborted) {
+              if (data.length && !this.controller.signal.aborted && scopeMatches()) {
                 this.dispatchEvent(new MessageEvent(event, { data: data.join('\n') }))
               }
               event = 'message'
