@@ -433,6 +433,30 @@
           {"tool_id": "products", "action": "query"}
         ]
       }
+    },
+    {
+      "task_id": "inventory.stock_out.explicit_027",
+      "domain": "inventory",
+      "difficulty": "medium",
+      "instruction": "产品 A100 出库 50 件",
+      "initial_state": [
+        {"entity": "products", "values": {"id": 201, "name": "A100", "model_number": "A100", "price": 25.5}},
+        {"entity": "warehouses", "values": {"id": 401, "code": "WH01", "name": "主仓库", "status": "active"}},
+        {"entity": "inventory_ledger", "values": {"id": 501, "product_id": 201, "warehouse_id": 401, "quantity": 100.0, "available_quantity": 100.0, "unit": "件"}}
+      ],
+      "expect": {
+        "actions": [
+          {"tool_id": "inventory", "action": "stock_out"}
+        ],
+        "db_state": [
+          {"entity": "inventory_ledger", "op": "exists", "where": {"product_id": 201, "warehouse_id": 401, "quantity": 50.0}}
+        ],
+        "forbid_actions": [
+          {"tool_id": "products", "action": "query"},
+          {"tool_id": "business_db", "action": "write"},
+          {"tool_id": "inventory", "action": "stock_in"}
+        ]
+      }
     }
   ]
 }

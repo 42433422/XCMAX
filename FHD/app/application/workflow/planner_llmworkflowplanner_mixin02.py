@@ -160,13 +160,22 @@ class _LLMWorkflowPlannerPart02Mixin:
                     )
                 )
         if not nodes and "inventory" in tool_registry:
-            from .inventory_stock_in_planning import inventory_stock_in_nodes
+            from .inventory_stock_in_planning import (
+                inventory_stock_in_nodes,
+                inventory_stock_out_nodes,
+            )
 
             stock_in_nodes = inventory_stock_in_nodes(message)
             if stock_in_nodes:
                 intent = "inventory_stock_in"
                 todo = ["核对入库产品与仓库", "确认后执行库存入库", "返回入库结果"]
                 nodes.extend(stock_in_nodes)
+            else:
+                stock_out_nodes = inventory_stock_out_nodes(message)
+                if stock_out_nodes:
+                    intent = "inventory_stock_out"
+                    todo = ["核对出库产品与仓库", "确认后执行库存出库", "返回出库结果"]
+                    nodes.extend(stock_out_nodes)
         if (
             not nodes
             and _facade()._looks_like_business_db_write(message, lower)

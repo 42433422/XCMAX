@@ -14,7 +14,7 @@ import uuid
 from .types import WorkflowNode
 
 _TRIGGER_RE = re.compile(r"发货单|送货单|出货单")
-_VERB_RE = re.compile(r"打印|生成|开|打|做|出")
+_VERB_RE = re.compile(r"打印|生成|创建|开|打|做|出")
 _NAME_RE = re.compile(r"([^\s，,。；]{2,})\s*的\s*(?:发货单|送货单|出货单)")
 _MODEL_RE = re.compile(r"(?:编号|型号|货号)\s*[:：]?\s*([A-Za-z0-9._-]+)")
 _SPEC_RE = re.compile(r"规格\s*[:：]?\s*(\d+(?:\.\d+)?)")

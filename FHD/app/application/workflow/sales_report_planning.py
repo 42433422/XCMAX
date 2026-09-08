@@ -28,10 +28,14 @@ def monthly_sales_report_node(message: str, *, today: date | None = None) -> Wor
         "销售报表",
         "销售情况",
         "销售怎么样",
+        "销售排名",
+        "销售排行",
         "的销售汇总",
         "的销售报表",
         "的销售情况",
         "的销售怎么样",
+        "的销售排名",
+        "的销售排行",
     }:
         return None
     current = today or date.today()

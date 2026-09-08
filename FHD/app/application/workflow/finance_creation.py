@@ -13,7 +13,7 @@ def direct_finance_create_node(message: str) -> WorkflowNode | None:
     kinds = "|".join(re.escape(k) for k in options)
     match = re.fullmatch(
         rf"(?:请帮我|帮我|请)?\s*记(?:录)?一笔\s*({kinds})\s*"
-        r"(\d+(?:\.\d+)?)\s*元(?:[，,]\s*来自\s*([^，,；;。\n]+))?[。\s]*",
+        r"(\d+(?:\.\d+)?)\s*(?:元|块|块钱)?(?:[，,]\s*来自\s*([^，,；;。\n]+))?[。\s]*",
         str(message or "").strip(),
     )
     if match is None:

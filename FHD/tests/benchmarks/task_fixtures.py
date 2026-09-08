@@ -5,13 +5,14 @@ from typing import Any
 
 def seed_initial_state(db: Any, records: list[dict[str, Any]], tenant_id: int) -> None:
     """Seed only declared business entities; caller owns the transaction."""
-    from app.db.models import Customer, Product, PurchaseUnit, Warehouse
+    from app.db.models import Customer, InventoryLedger, Product, PurchaseUnit, Warehouse
 
     models = {
         "customers": Customer,
         "products": Product,
         "purchase_units": PurchaseUnit,
         "warehouses": Warehouse,
+        "inventory_ledger": InventoryLedger,
     }
     for record in records:
         entity = record["entity"]
