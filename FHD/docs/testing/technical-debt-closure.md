@@ -19,6 +19,19 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Password-login web tokens now optionally carry their already-created session
+  ID as a signed claim; refresh preserves it. Agent Mod binding verifies the web
+  access token (under the existing feature flag) and maps the claim to a current
+  host session, persisting only its row ID. Web identity lookup now uses host DB
+  explicitly rather than Active-Mod business routing. Actual signed initial and
+  refreshed tokens bind through host user lookup and deny after rights revocation.
+  All 68 JWT/binding/Agent-route tests pass (`web-mod-binding`) and 75 auth-login
+  regressions pass (`web-login-regression`). Legacy tokens without a session
+  claim retain ordinary stateless authentication but need renewed login/session
+  credentials for durable Mod authorization; no session is guessed by user ID.
+  Real browser/mobile runtime acceptance and refresh-token replay durability
+  remain distinct unverified requirements.
+
 - Mobile Agent authentication now resolves the verified JWT session against the
   host database and reads the current active user's tenant, username and role.
   It no longer derives missing tenant scope or stale administrator access from

@@ -200,6 +200,7 @@ async def auth_login(request: _facade().Request, body: dict = _facade().Body(def
                     user_id=int(_u["id"]),
                     username=str(_u.get("username") or ""),
                     account_kind=str(result.get("account_kind") or "enterprise"),
+                    session_id=str(result.get("session_id") or ""),
                 )
             except _facade().INFRA_TRANSIENT:
                 _facade().logger.exception("issue web tokens failed")

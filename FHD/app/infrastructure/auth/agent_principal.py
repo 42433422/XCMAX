@@ -34,10 +34,19 @@ def _bind_mod(
     mod_id = parse_active_mod_header(request.headers)
     if not mod_id:
         return principal
+    session_id = (verified_session_id if verified_session_id is not None
+                  else session_id_from_request(request))
+    if verified_session_id is None:
+        from app.security.web_jwt import verify_web_jwt, web_jwt_auth_enabled
+
+        if web_jwt_auth_enabled():
+            payload = verify_web_jwt(session_id)
+            if (payload and payload.get("typ") == "access"
+                    and str(payload.get("user_id")) == principal.user_id):
+                session_id = str(payload.get("session_id") or "")
     try:
         binding = bind_agent_mod_scope(
-            session_id=(verified_session_id if verified_session_id is not None
-                        else session_id_from_request(request)),
+            session_id=session_id,
             user_id=principal.user_id, mod_id=mod_id,
         )
     except AgentModAuthorizationError as exc:

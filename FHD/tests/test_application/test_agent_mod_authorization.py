@@ -206,3 +206,32 @@ def test_mobile_host_task_also_requires_current_session(mod_session, monkeypatch
     with pytest.raises(HTTPException) as error:
         require_agent_principal(request, x_user_id=None)
     assert error.value.status_code == 401
+
+
+def test_web_token_and_refresh_bind_persisted_mod_session(mod_session, monkeypatch):
+    from app.security.web_jwt import (
+        issue_web_tokens,
+        refresh_web_access_token,
+        resolve_user_from_web_jwt,
+    )
+
+    monkeypatch.setenv("SECRET_KEY", "isolated-web-agent-test-secret-" * 2)
+    monkeypatch.setenv("XCAGI_WEB_JWT_AUTH", "1")
+    monkeypatch.setattr("app.infrastructure.auth.agent_principal.resolve_session_user",
+                        lambda request: resolve_user_from_web_jwt(request.headers["authorization"][7:]))
+    tokens = issue_web_tokens(user_id=1, session_id="secret-session")
+    refreshed = refresh_web_access_token(tokens["refresh_token"])
+    assert refreshed is not None
+    for token in (tokens["access_token"], refreshed["access_token"]):
+        request = Request({"type": "http", "headers": [
+            (b"authorization", f"Bearer {token}".encode()),
+            (b"x-xcagi-active-mod-id", b"test-private-mod"),
+        ]})
+        principal = require_agent_principal(request, x_user_id=None)
+        assert principal.mod_authorization["mod_id"] == "test-private-mod"
+        assert "secret-session" not in str(principal.mod_authorization)
+    with mod_session.begin() as db:
+        db.query(UserSession).filter_by(session_id="secret-session").one().entitled_mod_ids_json = "[]"
+    with pytest.raises(HTTPException) as error:
+        require_agent_principal(request, x_user_id=None)
+    assert error.value.status_code == 403
