@@ -1,5 +1,6 @@
 <template>
   <div class="delivery-center page-content" id="view-delivery-center">
+    <MacControlPanel />
     <header class="delivery-hero">
       <div>
         <p class="delivery-eyebrow">CUSTOMER DELIVERY CONTROL</p>
@@ -210,6 +211,7 @@
 </template>
 
 <script setup lang="ts">
+import MacControlPanel from '../components/admin/MacControlPanel.vue'
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import DeliveryCommercePanel from '../components/admin/DeliveryCommercePanel.vue'
 import EnterpriseCustomerRoster from '../components/admin/EnterpriseCustomerRoster.vue'
