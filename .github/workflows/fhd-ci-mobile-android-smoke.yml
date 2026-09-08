@@ -87,7 +87,9 @@ jobs:
           profile: pixel_6
           disable-animations: true
           disable-spellchecker: true
-          emulator-options: -no-snapshot-save -gpu swiftshader_indirect -noaudio -no-boot-anim
+          # 三跑教训：本输入会整体覆盖 action 默认项，漏掉 -no-window 会让
+          # emulator 37.x 在无显示的 runner 上初始化 Qt xcb 插件直接 abort。
+          emulator-options: -no-window -no-snapshot-save -gpu swiftshader_indirect -noaudio -no-boot-anim
           emulator-boot-timeout: 900
           working-directory: FHD/mobile-flutter-poc
           script: |
@@ -103,6 +105,8 @@ jobs:
               exit 1
             fi
             adb exec-out screencap -p > /tmp/android-smoke-screen.png
+        env:
+          QT_QPA_PLATFORM: offscreen
 
       - name: Upload smoke evidence
         if: always()
