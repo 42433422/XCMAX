@@ -127,10 +127,14 @@ def release_facts(receipt, github, runtime):
         return result
     result["merge_commit_sha"] = merge_sha
     stages["merged"].update(state="verified", source="github_main_ancestry", reference=merge_sha)
+    release_id = str(runtime.get("release_id") or "")
+    identity_matches = release_id == merge_sha or bool(
+        re.fullmatch(r"xcagi-[0-9A-Za-z][0-9A-Za-z._+-]*-" + merge_sha, release_id)
+    )
     deployed = (
         runtime.get("deploy_tier") == "production"
         and runtime.get("git_sha") == merge_sha
-        and runtime.get("release_id") == merge_sha
+        and identity_matches
         and re.fullmatch(r"[0-9a-f]{64}", str(runtime.get("artifact_sha256") or ""))
     )
     stages["deployed"].update(

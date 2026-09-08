@@ -21,7 +21,7 @@ RUNTIME = {
     "deploy_tier": "production",
     "git_sha": MERGED,
     "artifact_sha256": "d" * 64,
-    "release_id": MERGED,
+    "release_id": "xcagi-1.0.0.1-" + MERGED,
 }
 
 
@@ -91,6 +91,20 @@ def test_release_stages_require_exact_source_main_ancestry_and_runtime_artifact(
         states(delivery.release_facts(RECEIPT, github, {**RUNTIME, "release_id": "other"}))[
             "deployed"
         ]
+        != "verified"
+    )
+    assert (
+        states(delivery.release_facts(RECEIPT, github, {**RUNTIME, "release_id": MERGED}))[
+            "deployed"
+        ]
+        == "verified"
+    )
+    assert (
+        states(
+            delivery.release_facts(
+                RECEIPT, github, {**RUNTIME, "release_id": "xcagi-1.0.0.1-" + SOURCE}
+            )
+        )["deployed"]
         != "verified"
     )
     github.ancestry = "ahead"

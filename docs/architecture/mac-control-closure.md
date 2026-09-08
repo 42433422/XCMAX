@@ -58,11 +58,11 @@ Para 当前删除接口不能证明执行器停止；运行任务的取消保留
 | 0 基线 | 独立工作区、生产身份及逐文件运行差异已检查；Para API 差异已适配 | 两仓库主线及运行版本核对 |
 | 1 全局可见 | 设备快照、来源时间、工单与交付事实接口、管理面板 | 生产启用及真实客户逐条核对 |
 | 2 单任务 | 持久受理、租约、丢响应核对、回答正文和来源展示 | 受管身份启用及真实 Mac 执行 |
-| 3 跨设备 | 能力选择、固定预检、幂等子任务、精确提交和源码包摘要交接已实现 | 精确主线 Windows 安装包及实机验证 |
+| 3 跨设备 | 能力选择、固定预检、幂等子任务、精确提交和源码包摘要交接已实现 | Windows 主线包安装及实机验证 |
 | 4 恢复 | Para 权威回写、服务器关联回执、旧尝试隔离和 Mac 本地补传已实现 | 真实中断演练；Windows 原生进程重启恢复仍需验证 |
 | 5 交付 | 精确源码关联 PR、CI、代码审核、主线祖先校验、运行身份及客户回执；业务账本只读 | 按发布门禁启用后核对真实完整交付实例 |
 
-Para 源码已找到：`https://github.com/42433422/devfleet-private` 的主线为 `3fc0e60476275320e64011a3b39df14114b7be72`；公开仓库 `https://github.com/42433422/devfleet` 也含源码，主线为 `b2c99fd999016a673b0eadeadf1e3e3ae2d47f24`。两条主线已经分叉，公开仓库不是私有主线的完整后继，不能按最近更新时间替换。
+Para 源码基线已核对（以下为对接前快照）：`https://github.com/42433422/devfleet-private` 的主线为 `3fc0e60476275320e64011a3b39df14114b7be72`；公开仓库 `https://github.com/42433422/devfleet` 也含源码，主线为 `b2c99fd999016a673b0eadeadf1e3e3ae2d47f24`。两条主线已经分叉，公开仓库不是私有主线的完整后继，不能按最近更新时间替换。
 
 运行目录 `/Users/a4243342/XCMAX-runtime/para-api/devfleet` 不含 Git 元数据。与私有主线比对 api/scripts/src/tests 范围，124 个已跟踪文件相同、12 个不同，另有 4 个运行端新增源码或测试文件，详见 `para-source-reconciliation.json` 的逐文件 SHA256。差异包括任务预检、失败分类、自动合并队列和 WebSocket 心跳处理，已经逐项适配到 Para 依赖 PR；运行数据库、凭证和旧代理脚本未复制到源码。
 
@@ -74,7 +74,7 @@ Para 源码已找到：`https://github.com/42433422/devfleet-private` 的主线�
 
 ## 本轮接口依赖进展
 
-Para 依赖 PR 为 https://github.com/42433422/devfleet-private/pull/3，新增 `/api/control` 项目范围服务入口和 `/api/devices/me/control-report` 幂等回写。XCMAX 新适配使用独立 `MODSTORE_PARA_CONTROL_TOKEN`，不覆盖原派工的 `MODSTORE_PARA_AUTH_TOKEN`。旧接口兼容保留，启用前须核对受管非 guest 所有者和旧会话失效，设备 ID 与设备令牌保持不变。
+Para 依赖 PR https://github.com/42433422/devfleet-private/pull/3 已合并至 `b4e1d6478e06c51b792a22185f081bd0a8060ecc`；该主线的 Mac API 与 Windows 安装包已构建，尚未替换运行设备。新增 `/api/control` 项目范围服务入口和 `/api/devices/me/control-report` 幂等回写。XCMAX 新适配使用独立 `MODSTORE_PARA_CONTROL_TOKEN`，不覆盖原派工的 `MODSTORE_PARA_AUTH_TOKEN`。旧接口兼容保留，启用前须核对受管非 guest 所有者和旧会话失效，设备 ID 与设备令牌保持不变。
 
 Mac 使用 `XCMAX_CONTROL_REPORTS_ENABLED=1` 开启权威结果补传；执行标记和待回传结果位于 `~/XCMAX-runtime/control-para-reports`，工作区位于 `~/XCMAX-runtime/control-workspaces`。代理重启遇到已启动的同一尝试先核对结果，禁止重复执行。
 
@@ -94,7 +94,7 @@ Mac 使用 `XCMAX_CONTROL_REPORTS_ENABLED=1` 开启权威结果补传；执行�
 
 ## 交付来源聚合
 
-任务详情以设备回读的已推送提交及源码包摘要为关联起点，限定查询 `42433422/XCMAX` 的 GitHub PR、check runs 和代码审核记录。PR 必须唯一且 HEAD 与源码回执一致；已合并提交须由 GitHub compare 证实在 main 上。生产阶段仅在运行提交、发布身份与该主线提交一致且产物摘要完整时显示已核验；更新到其他提交时保持待核对，不猜测包含关系。
+任务详情以设备回读的已推送提交及源码包摘要为关联起点，限定查询 `42433422/XCMAX` 的 GitHub PR、check runs 和代码审核记录。PR 必须唯一且 HEAD 与源码回执一致；已合并提交须由 GitHub compare 证实在 main 上。生产阶段核对实际发布脚本使用的 `xcagi-版本-SHA` 身份（兼容旧清单纯 SHA），仅在运行提交、发布身份与该主线提交一致且产物摘要完整时显示已核验；更新到其他提交时保持待核对，不猜测包含关系。
 
 `MODSTORE_MAC_CONTROL_GITHUB_TOKEN` 可配置仓库只读身份，兼容既有 `GITHUB_TOKEN`；缺失时仅尝试公开仓库查询，限流和读取错误明确显示不可用。来源观察保存在原持久观察表，120 秒内复用；变化写入关联事件，原始响应和凭证不入库。客户安装及业务验收仍以同账号、同轮次的既有业务校验为准，且任务阶段必须匹配本次合并提交的宿主回执，不能继承历史版本验收，缺失回执、检查跳过、多个候选 PR 或源不可达不能显示完成。
 
