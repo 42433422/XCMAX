@@ -1,0 +1,14 @@
+{
+  "base_sha": "19615348a",
+  "change": "HTTP AI approval request requires persistence; failure rolls back in-memory request rather than reporting success.",
+  "tests_passed": 7,
+  "coverage": [
+    "TestClient HTTP failure with actual ApprovalService and injected persistence failure; pending maps empty.",
+    "Missing trusted identity fails request creation.",
+    "Existing mocked success and malformed request checks."
+  ],
+  "limitations": [
+    "Success HTTP path still mocks approval service; authenticated real persistence HTTP acceptance remains outstanding.",
+    "Background finance and approval-gated engine callers still need review."
+  ]
+}

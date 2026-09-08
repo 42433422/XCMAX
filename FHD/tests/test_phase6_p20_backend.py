@@ -1131,6 +1131,28 @@ class TestShipmentConfigApprovalRoute:
 
 
 class TestShipmentApprovalRequestRoute:
+    def test_persistence_failure_does_not_create_memory_only_request(self, shipment_client):
+        from app.application.workflow.approval_service import ApprovalService
+
+        service = ApprovalService()
+        with (
+            patch("app.application.workflow.get_approval_service", return_value=service),
+            patch.object(service, "_persist_request_to_db", return_value=None),
+        ):
+            response = shipment_client.post(
+                "/api/ai/approval/request",
+                json={
+                    "plan_id": "p1",
+                    "node_id": "n1",
+                    "tool_id": "shipment_orders",
+                    "action": "generate",
+                },
+            )
+        assert response.status_code == 500
+        assert response.json()["success"] is False
+        assert service._pending_requests == {}
+        assert service._pending_workflows == {}
+
     def test_request_missing_plan_id(self, shipment_client: TestClient):
         r = shipment_client.post("/api/ai/approval/request", json={"node_id": "n1"})
         assert r.status_code == 400

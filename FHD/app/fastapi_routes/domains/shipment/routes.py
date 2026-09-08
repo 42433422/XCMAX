@@ -138,7 +138,9 @@ def ai_approval_request(body: dict = Body(default_factory=dict)):
 
         approval_service = get_approval_service()
         node = WorkflowNode(node_id=node_id, tool_id=tool_id, action=action, params=params)
-        approval_req = approval_service.create_approval_request(plan_id=plan_id, node=node)
+        approval_req = approval_service.create_approval_request(
+            plan_id=plan_id, node=node, require_persistence=True
+        )
         return _trace_approval_route(
             {
                 "success": True,
