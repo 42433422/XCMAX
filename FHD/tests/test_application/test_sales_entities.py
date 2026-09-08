@@ -27,6 +27,7 @@ def test_sales_candidates_are_exact_tenant_bound_and_read_only(monkeypatch):
         assert [p["id"] for p in result["product_candidates"]] == [1]
         from contextlib import contextmanager
         from unittest.mock import patch
+
         from app.application.workflow.planner import LLMWorkflowPlanner
         from app.services.tools_execution.registry import get_workflow_tool_registry
 
@@ -58,3 +59,17 @@ def test_sales_candidates_are_exact_tenant_bound_and_read_only(monkeypatch):
         assert [c["id"] for c in ambiguous["customer_candidates"]] == [1, 3]
         db.rollback()
     engine.dispose()
+
+
+def test_invalid_quote_numbers_do_not_query_entities():
+    from unittest.mock import patch
+
+    from app.application.workflow.sales_quote_planning import explicit_sales_quote_node
+
+    with patch("app.application.workflow.sales_quote_planning.get_db") as db:
+        for quantity, price in [("0", "25"), ("9" * 400, "25"), ("1", "9" * 400)]:
+            assert (
+                explicit_sales_quote_node(f"给星光报价，产品A100，数量{quantity}，单价{price}")
+                is None
+            )
+        db.assert_not_called()

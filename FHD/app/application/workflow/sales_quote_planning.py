@@ -1,5 +1,6 @@
 """Plan explicitly priced quotations using read-only entity resolution."""
 
+import math
 import re
 
 from app.db.session import get_db
@@ -17,6 +18,11 @@ def explicit_sales_quote_node(message: str) -> WorkflowNode | None:
     if match is None:
         return None
     customer_name, product_name, quantity, price = match.groups()
+    quantity_value, price_value = float(quantity), float(price)
+    if not math.isfinite(quantity_value) or quantity_value <= 0:
+        return None
+    if not math.isfinite(price_value):
+        return None
     with get_db() as db:
         candidates = sales_entity_candidates(
             db, customer_name=customer_name, product_name=product_name
@@ -29,8 +35,8 @@ def explicit_sales_quote_node(message: str) -> WorkflowNode | None:
         params["items"] = [
             {
                 "product_id": product["id"],
-                "quantity": float(quantity),
-                "unit_price": float(price),
+                "quantity": quantity_value,
+                "unit_price": price_value,
                 "unit": product["unit"],
             }
         ]
