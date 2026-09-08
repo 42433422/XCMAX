@@ -108,18 +108,18 @@ def is_path_whitelisted(path: str, whitelist: dict[str, bool] | None = None) -> 
     target = _facade().normalize_api_path(path)
     if not target:
         return False
-    if bool(wl.get(target, False)):
-        return True
     matched_len = -1
+    permitted = False
     for prefix, enabled in wl.items():
-        if not enabled:
-            continue
         p = _facade().normalize_api_path(str(prefix or ""))
         if not p:
             continue
         if target == p or target.startswith(p + "/"):
-            matched_len = max(matched_len, len(p))
-    return matched_len >= 0
+            if len(p) > matched_len:
+                matched_len, permitted = len(p), bool(enabled)
+            elif len(p) == matched_len:
+                permitted = permitted and bool(enabled)
+    return permitted
 
 
 def seed_capability_whitelist(
@@ -155,11 +155,21 @@ def _tool_api_catalog() -> dict[str, _facade().Any]:
 
 
 def _tool_api_call(app: _facade().Any, args: dict[str, _facade().Any]) -> dict[str, _facade().Any]:
+    from contextlib import closing
+    from http.cookies import SimpleCookie
+
     from starlette.testclient import TestClient
+
+    from app.application.agent_orchestrator.task_mod_scope import TaskModScopeError
+    from app.application.aiopen.api_execution import (
+        ApiExecutionError,
+        authorized_api_request,
+        local_api_path,
+    )
 
     raw_path = str(args.get("path") or "").strip()
     method = str(args.get("method") or "GET").upper()
-    body = args.get("body") if isinstance(args.get("body"), dict) else {}
+    body = args.get("body", {})
     if not raw_path:
         return {"success": False, "message": "path 不能为空"}
     if method not in _facade()._API_CALL_METHODS:
@@ -168,47 +178,70 @@ def _tool_api_call(app: _facade().Any, args: dict[str, _facade().Any]) -> dict[s
             "message": f"不支持的 method：{method}",
             "code": "METHOD_NOT_ALLOWED",
         }
-    if not _facade().is_path_whitelisted(raw_path):
+    try:
+        _facade().json.dumps(body, allow_nan=False)
+    except (TypeError, ValueError):
+        return {"success": False, "code": "INVALID_API_BODY", "message": "body 必须是有效 JSON"}
+    try:
+        routing_path = local_api_path(raw_path)
+    except ValueError:
         return {
             "success": False,
-            "message": f"路由 {_facade().normalize_api_path(raw_path)} 未在 AIOPEN 白名单启用",
+            "code": "INVALID_API_PATH",
+            "message": "API 路径无效或包含目录跳转",
+        }
+    if not _facade().is_path_whitelisted(routing_path):
+        return {
+            "success": False,
+            "message": f"路由 {routing_path} 未在 AIOPEN 白名单启用",
             "code": "ROUTE_NOT_WHITELISTED",
         }
     try:
-        client = TestClient(app)
-        headers: dict[str, str] = {"X-AIOPEN-Internal": "1"}
-        if method in {"POST", "PUT", "PATCH", "DELETE"}:
+        with (
+            authorized_api_request(args) as (headers, scope),
+            closing(TestClient(app, follow_redirects=False)) as client,
+        ):
+            if "Cookie" in headers:
+                cookies = SimpleCookie(headers.pop("Cookie"))
+                for key, value in cookies.items():
+                    client.cookies.set(key, value.value)
+            if method in {"POST", "PUT", "PATCH", "DELETE"}:
+                client.get("/api/aiopen/manifest", headers=headers)
+                csrf = client.cookies.get("csrf_token")
+                if csrf:
+                    headers["X-CSRF-Token"] = str(csrf)
+            if method == "GET" and "body" not in args:
+                resp = client.get(raw_path, headers=headers)
+            elif method == "DELETE" and "body" not in args:
+                resp = client.delete(raw_path, headers=headers)
+            elif body is None:
+                resp = client.request(
+                    method,
+                    raw_path,
+                    content=b"null",
+                    headers={**headers, "Content-Type": "application/json"},
+                )
+            else:
+                resp = client.request(method, raw_path, json=body, headers=headers)
             try:
-                client.get("/api/aiopen/manifest")
-            except _facade().RECOVERABLE_ERRORS:
-                pass
-            csrf = client.cookies.get("csrf_token")
-            if csrf:
-                headers["X-CSRF-Token"] = str(csrf)
-        if method == "GET":
-            resp = client.get(raw_path, headers=headers)
-        elif method == "DELETE":
-            resp = client.delete(raw_path, headers=headers)
-        else:
-            payload = dict(body or {})
-            payload.setdefault("source", "aiopen")
-            resp = client.request(method, raw_path, json=payload, headers=headers)
-        try:
-            data = resp.json()
-        except (ValueError, TypeError):
-            data = {"raw": resp.text[:2000]}
-        try:
-            status_code = int(resp.status_code)
-        except (TypeError, ValueError):
-            status_code = 599
-        return {
-            "success": 200 <= status_code < 300
-            and not (isinstance(data, dict) and data.get("success") is False),
-            "path": raw_path,
-            "method": method,
-            "status_code": status_code,
-            "data": data,
-        }
+                data = resp.json()
+            except (ValueError, TypeError):
+                data = {"raw": resp.text[:2000]}
+            try:
+                status_code = int(resp.status_code)
+            except (TypeError, ValueError):
+                status_code = 599
+            return {
+                "success": 200 <= status_code < 300
+                and not (isinstance(data, dict) and data.get("success") is False),
+                "path": raw_path,
+                "method": method,
+                "status_code": status_code,
+                "data": data,
+                "execution_scope": scope,
+            }
+    except (ApiExecutionError, TaskModScopeError) as exc:
+        return {"success": False, "code": "API_IDENTITY_REQUIRED", "message": str(exc)}
     except _facade().RECOVERABLE_ERRORS:
         return {"success": False, "path": raw_path, "method": method, "message": "请求执行失败"}
 

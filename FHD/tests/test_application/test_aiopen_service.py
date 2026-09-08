@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -776,3 +777,17 @@ class TestConstants:
         assert "openclaw_base" in AIOPEN_STATE
         assert "remote_control_enabled" in AIOPEN_STATE
         assert "runtime_keys" in AIOPEN_STATE
+
+
+@pytest.fixture(autouse=True)
+def _authenticated_transport_fixture(monkeypatch):
+    # These legacy tests isolate transport/formatting and route selection.
+    # Real SQL session/permission/Mod checks live in test_aiopen_api_execution.
+    @contextmanager
+    def identity(args):
+        yield (
+            {"X-Session-ID": "unit-test-session"},
+            {"owner_id": "3", "tenant_id": "7", "mod_id": ""},
+        )
+
+    monkeypatch.setattr("app.application.aiopen.api_execution.authorized_api_request", identity)

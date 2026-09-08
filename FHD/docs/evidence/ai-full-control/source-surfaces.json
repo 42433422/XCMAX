@@ -1,8 +1,8 @@
 {
   "scope": "Tracked FHD source declarations, including Mods; excludes tests, archives, package directories and build output. Counts are not unique business functions or runtime coverage.",
-  "source_sha256": "5a3b91afc6dae8901f70c669d2bd140686dc79123e72c2be1a9e89c231573696",
+  "source_sha256": "41100e791018fc5f5e541b5e00a17b9e0fff102d50cb975e8d6692f6f96fcaa1",
   "generator_sha256": "ceb39219815ed03f5f049188b128f7d7d2d781cae8657c677a0c35c1413af843",
-  "files_scanned": 4025,
+  "files_scanned": 4026,
   "product_coverage_percent": null,
   "remaining_denominators": [
     "native desktop/mobile commands",

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -95,3 +97,17 @@ def test_whitelist_seed_and_loop_verify(client):
 def test_manifest_includes_capability_loop(client):
     names = {t["name"] for t in client.get("/api/aiopen/manifest").json()["tools"]}
     assert "capability_loop" in names
+
+
+@pytest.fixture(autouse=True)
+def _authenticated_transport_fixture(monkeypatch):
+    # These legacy tests isolate transport/formatting and route selection.
+    # Real SQL session/permission/Mod checks live in test_aiopen_api_execution.
+    @contextmanager
+    def identity(args):
+        yield (
+            {"X-Session-ID": "unit-test-session"},
+            {"owner_id": "3", "tenant_id": "7", "mod_id": ""},
+        )
+
+    monkeypatch.setattr("app.application.aiopen.api_execution.authorized_api_request", identity)

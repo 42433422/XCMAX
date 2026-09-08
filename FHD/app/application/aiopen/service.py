@@ -169,7 +169,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     },
     {
         "name": "api_call",
-        "description": "调用白名单内的 XCAGI 业务 API。path 支持精确匹配或已启用前缀的子路径（如启用 /api/products 则可调 /api/products/list）。method 支持 GET/POST/PUT/PATCH/DELETE。",
+        "description": "使用当前登录会话或账号连接口令调用白名单内的业务 API，保留接口权限检查。path 必须是本机路径；method 支持 GET/POST/PUT/PATCH/DELETE，Mod 需有当前账号权益。",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -182,7 +182,13 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                     "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"],
                     "default": "GET",
                 },
-                "body": {"type": "object", "description": "请求体（JSON，非 GET/DELETE 时使用）"},
+                "body": {
+                    "description": "JSON 请求体，按接口协议原样发送；支持对象、数组及 JSON 标量，不自动添加业务字段。",
+                },
+                "mod_id": {
+                    "type": "string",
+                    "description": "目标 Mod；省略继承当前请求，空字符串选择宿主。执行前重新验证账号权益。",
+                },
             },
             "required": ["path"],
         },
