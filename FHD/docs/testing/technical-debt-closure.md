@@ -19,6 +19,14 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Label slots now have a focused parser that removes count/specification spans
+  before model extraction. Requests with only 20张 or 28规格 preserve a missing
+  model; reversed count/model order extracts the actual model, and multiple
+  models do not silently select the first. Existing compact model/spec syntax
+  remains supported. All 243 normal-router checks passed
+  (`label-model-boundaries`). This is input extraction evidence, not printer
+  side-effect or multi-product printing acceptance.
+
 - Normal-chat routing independently treated any 打印 as shipment before reaching
   labels. It now requires shipment words or the existing print-model/spec syntax;
   打印标签 reaches label_print, quantity requires a count unit rather than taking

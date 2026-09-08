@@ -229,14 +229,11 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
         return {"intent": "inventory_alert", "slots": {}}
     print_label_keywords = ("标签", "打标签", "打印标签", "商标", "贴标")
     if any(k in text for k in print_label_keywords):
-        model_m = _facade().re.search("([0-9A-Za-z-]{2,})", text)
-        qty_m = _facade().re.search("(\\d+)\\s*(?:张|份|个|次|条)", text)
+        from app.application.label_print_inputs import extract_label_print_slots
+
         return {
             "intent": "label_print",
-            "slots": {
-                "model_number": (model_m.group(1) if model_m else "").strip().upper(),
-                "quantity": int(qty_m.group(1)) if qty_m else 1,
-            },
+            "slots": extract_label_print_slots(text),
         }
     material_keywords = ("物料", "原材料", "材料")
     if any(k in text for k in material_keywords):

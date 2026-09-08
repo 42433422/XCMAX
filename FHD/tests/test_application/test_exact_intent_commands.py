@@ -44,3 +44,22 @@ def test_normal_router_keeps_label_model_separate_from_quantity():
     assert result["slots"]["quantity"] == 1
     assert route_normal_mode_message("打印9803规格28")["intent"] == "shipment"
     assert route_normal_mode_message("不要打印标签 A9803 20张")["intent"] == "unknown"
+
+
+@pytest.mark.parametrize(
+    "text,model,quantity",
+    [
+        ("打印20张标签", "", 20),
+        ("28规格的要贴标，打20张", "", 20),
+        ("打印20张 A9803标签", "A9803", 20),
+        ("打印标签9803规格28，20张", "9803", 20),
+        ("标签A9803和B200各20张", "", 20),
+    ],
+)
+def test_label_quantity_or_specification_does_not_supply_missing_model(text, model, quantity):
+    from app.application.normal_chat_dispatch import route_normal_mode_message
+
+    assert route_normal_mode_message(text) == {
+        "intent": "label_print",
+        "slots": {"model_number": model, "quantity": quantity},
+    }
