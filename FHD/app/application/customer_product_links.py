@@ -1,5 +1,7 @@
 """Tenant-checked association writes inside the caller's transaction."""
 
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from app.db.models.customer_product_link import CustomerProductLink
@@ -39,20 +41,22 @@ def ensure_customer_product_link(
     )
     if customer is None or product is None:
         raise ValueError("客户或产品不存在于当前租户或已停用")
-    existing = (
-        db.query(CustomerProductLink)
-        .filter_by(
-            tenant_id=tenant,
-            purchase_unit_id=purchase_unit_id,
-            product_id=product_id,
+    dialect = db.get_bind().dialect.name
+    if dialect not in {"sqlite", "postgresql"}:
+        raise ValueError("客户产品关联暂不支持当前数据库类型")
+    statement = (
+        (
+            sqlite_insert(CustomerProductLink)
+            if dialect == "sqlite"
+            else pg_insert(CustomerProductLink)
         )
-        .first()
+        .values(tenant_id=tenant, purchase_unit_id=purchase_unit_id, product_id=product_id)
+        .on_conflict_do_nothing(index_elements=["tenant_id", "purchase_unit_id", "product_id"])
     )
-    if existing is not None:
-        return existing, False
-    link = CustomerProductLink(
-        tenant_id=tenant, purchase_unit_id=purchase_unit_id, product_id=product_id
+    inserted_id = db.execute(statement.returning(CustomerProductLink.id)).scalar_one_or_none()
+    link = (
+        db.query(CustomerProductLink)
+        .filter_by(tenant_id=tenant, purchase_unit_id=purchase_unit_id, product_id=product_id)
+        .one()
     )
-    db.add(link)
-    db.flush()
-    return link, True
+    return link, inserted_id is not None

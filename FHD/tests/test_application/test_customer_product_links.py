@@ -44,3 +44,37 @@ def test_link_write_is_scoped_idempotent_and_caller_transactional():
         assert db.get(CustomerProductLink, link_id).tenant_id == 1
         assert db.get(Product, 1).unit == "桶"
     engine.dispose()
+
+
+def test_parallel_link_requests_share_one_committed_row(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    engine = create_engine("sqlite:///" + str(tmp_path / "links.sqlite3"))
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+    with factory() as db:
+        db.add_all(
+            [
+                PurchaseUnit(id=1, tenant_id=1, unit_name="A"),
+                Product(id=1, tenant_id=1, name="P", unit="桶"),
+            ]
+        )
+        db.commit()
+    ready = Barrier(2)
+
+    def create():
+        with factory() as db, tenant_scope(1):
+            ready.wait(timeout=5)
+            link, created = ensure_customer_product_link(db, 1, 1)
+            result = (link.id, created)
+            db.commit()
+            return result
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: create(), range(2)))
+    assert results[0][0] == results[1][0]
+    assert sorted(row[1] for row in results) == [False, True]
+    with factory() as db:
+        assert db.query(CustomerProductLink).count() == 1
+    engine.dispose()
