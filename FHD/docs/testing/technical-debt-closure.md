@@ -17,6 +17,13 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Agent report export now stores spreadsheet bytes as a task artifact rather than
+  embedding binary data in its JSON receipt. The download endpoint checks the run
+  owner and content hash. An HTTP test opens the downloaded workbook and verifies
+  its product/amount cells, rejects another owner and rejects tampered bytes;
+  124 related tests passed. Planner export wiring, seeded report-to-file benchmark
+  and the visible download action remain outstanding.
+
 - Explicit revenue/expense recording now plans the finance tool with the canonical
   transaction type and preserved amount/counterparty. The revenue scenario uses
   exact scripted approval and asserts one committed row with revenue, 5000 and

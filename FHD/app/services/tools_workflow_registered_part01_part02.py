@@ -276,11 +276,34 @@ def _registered_router_reports(
     if action == "dashboard":
         return svc.get_dashboard_summary()
     if action == "export":
-        return svc.export_to_excel(
-            report_type=str(params.get("report_type") or "report"),
-            data=params.get("data") or [],
+        report_type = str(params.get("report_type") or "report")
+        rows = params.get("data")
+        if rows is None and report_type == "sales":
+            report = svc.get_sales_report(
+                start_date=params.get("start_date"),
+                end_date=params.get("end_date"),
+                group_by=str(params.get("group_by") or "product"),
+            )
+            if not report.get("success"):
+                return report
+            rows = report.get("data") or []
+        exported = svc.export_to_excel(
+            report_type=report_type,
+            data=rows or [],
             filename=str(params.get("filename") or "report"),
         )
+        run_id = str(runtime_context.get("run_id") or "")
+        if run_id and exported.get("success"):
+            from app.application.agent_orchestrator.artifact_files import store_spreadsheet
+
+            artifact = store_spreadsheet(run_id, exported["data"], name=exported["filename"])
+            return {
+                "success": True,
+                "message": "报表文件已生成",
+                "row_count": len(rows or []),
+                "artifacts": [artifact],
+            }
+        return exported
     return {"success": False, "message": f"未注册的 reports 动作: {action}"}
 
 

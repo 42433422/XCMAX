@@ -56,7 +56,7 @@ def store_spreadsheet(
     }
 
 
-def verified_spreadsheet_path(run_id: str, artifact: dict[str, Any]) -> Path:
+def read_verified_spreadsheet(run_id: str, artifact: dict[str, Any]) -> bytes:
     path = artifact_path(run_id, artifact["artifact_id"])
     content = path.read_bytes()
     metadata = artifact.get("metadata") or {}
@@ -64,4 +64,9 @@ def verified_spreadsheet_path(run_id: str, artifact: dict[str, Any]) -> Path:
         content
     ).hexdigest() != metadata.get("sha256"):
         raise ValueError("artifact checksum mismatch")
-    return path
+    return content
+
+
+def verified_spreadsheet_path(run_id: str, artifact: dict[str, Any]) -> Path:
+    read_verified_spreadsheet(run_id, artifact)
+    return artifact_path(run_id, artifact["artifact_id"])

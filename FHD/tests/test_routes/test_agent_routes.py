@@ -943,3 +943,37 @@ def test_clarification_answer_is_bound_validated_and_does_not_approve_write():
     assert resumed.status == "waiting_user"
     repeated = _client().post(url, json={"step_id": step_id, "parameters": {"unit_name": "客户乙"}})
     assert repeated.status_code == 400
+
+
+def test_exported_spreadsheet_download_checks_owner_and_file_content(tmp_path, monkeypatch):
+    import json
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    from app.application.agent_orchestrator.artifact_files import artifact_path
+    from app.application.agent_orchestrator.run_models import artifact_from_dict
+    from app.services.tools_workflow_registered_part01_part02 import _registered_router_reports
+
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+    run = AgentRun(user_id="u1", message="导出销售报表", status="completed")
+    exported = _registered_router_reports(
+        "export",
+        {"report_type": "sales", "data": [{"product_name": "产品甲", "amount": 125.5}]},
+        {"run_id": run.run_id},
+        "pro_default",
+        run.message,
+    )
+    assert exported["success"] and exported["row_count"] == 1
+    json.dumps(exported)
+    run.artifacts = [artifact_from_dict(item) for item in exported["artifacts"]]
+    get_agent_run_repository().save(run)
+    artifact = run.artifacts[0]
+    response = _client().get(artifact.uri)
+    assert response.status_code == 200
+    workbook = load_workbook(BytesIO(response.content), read_only=True, data_only=True)
+    assert list(workbook.active.values) == [("product_name", "amount"), ("产品甲", 125.5)]
+    workbook.close()
+    assert _client("someone-else").get(artifact.uri).status_code in {403, 404}
+    artifact_path(run.run_id, artifact.artifact_id).write_bytes(b"corrupt")
+    assert _client().get(artifact.uri).status_code == 410
