@@ -458,12 +458,20 @@ async def aiopen_screen_ws(ws: WebSocket):
 
         session_id = "screen_" + uuid.uuid4().hex[:12]
     label = str(ws.query_params.get("label") or "").strip()
-    await aiopen_cursor_hub.connect(session_id, ws, meta={"label": label or "XCAGI 前端"})
+    from app.application.aiopen.software_control import request_screen_owner
+
+    owner = request_screen_owner(ws)
+    await aiopen_cursor_hub.connect(
+        session_id,
+        ws,
+        meta={"label": label or "XCAGI 前端", **owner},
+        authorize=(lambda: request_screen_owner(ws) == owner) if owner else None,
+    )
     try:
         await ws.send_json({"type": "hello", "session_id": session_id})
         while True:
             raw = await ws.receive_text()
-            handled = aiopen_cursor_hub.handle_client_message(raw)
+            handled = aiopen_cursor_hub.handle_client_message(raw, session_id=session_id)
             if not handled:
                 logger.debug("aiopen ws unhandled message: %s", raw[:200])
     except WebSocketDisconnect:

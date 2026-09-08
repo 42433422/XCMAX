@@ -24,6 +24,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+from app.application.aiopen.api_contracts import API_CONTRACT_TOOLS
+from app.application.aiopen.screen_tools import SCREEN_TOOL_DEFINITIONS
 from app.infrastructure.aiopen.cursor_hub import aiopen_cursor_hub
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -220,7 +222,12 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "session_id": {"type": "string", "description": "目标会话，缺省取第一个在线会话"}
+                "session_id": {"type": "string", "description": "目标会话，缺省取第一个在线会话"},
+                "offset": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "分页起点；使用上次快照 next_offset 读取剩余控件。",
+                },
             },
         },
     },
@@ -258,7 +265,11 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "type": "object",
             "properties": {
                 "selector": {"type": "string", "description": "输入框 CSS 选择器"},
-                "text": {"type": "string", "description": "要输入的文本"},
+                "text": {
+                    "type": "string",
+                    "minLength": 0,
+                    "description": "要输入的文本；空字符串清空输入框。",
+                },
                 "session_id": {"type": "string"},
             },
             "required": ["selector", "text"],
@@ -279,11 +290,24 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
 ]
 
 _UI_ACTIONS = {
+    "ui_routes": "routes",
+    "ui_select": "select",
+    "ui_check": "check",
+    "ui_press": "press",
     "ui_snapshot": "snapshot",
     "ui_navigate": "navigate",
     "ui_click": "click",
     "ui_type": "type",
     "ui_scroll": "scroll",
 }
+
+TOOL_DEFINITIONS.extend(SCREEN_TOOL_DEFINITIONS)
+TOOL_DEFINITIONS.extend(API_CONTRACT_TOOLS)
+for _screen_tool in TOOL_DEFINITIONS:
+    if _screen_tool["name"] in _UI_ACTIONS:
+        _screen_tool["inputSchema"]["properties"].setdefault(
+            "expected_route",
+            {"type": "string", "description": "最近快照 route；页面变化时拒绝操作。"},
+        )
 
 _API_CALL_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE"})

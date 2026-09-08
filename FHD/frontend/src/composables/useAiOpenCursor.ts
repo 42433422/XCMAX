@@ -10,6 +10,8 @@
 import { ref } from 'vue'
 import type { Router } from 'vue-router'
 import { getApiBase } from '@/utils/apiBase'
+import { createScreenCommandQueue } from './aiopenCommandQueue'
+import { checkScreenControl, controlState, ensureEditable, pressScreenKey, privateControl, screenRoutes, selectScreenOption } from './aiopenScreenControls'
 
 const STORAGE_KEY = 'xcagi_aiopen_remote_control'
 const MAX_LOGS = 100
@@ -58,14 +60,15 @@ function isVisible(el: Element): boolean {
 }
 
 function buildSelector(el: Element): string {
-  if (el.id) return `#${CSS.escape(el.id)}`
+  if (el.id && document.querySelectorAll(`#${CSS.escape(el.id)}`).length === 1) return `#${CSS.escape(el.id)}`
   const parts: string[] = []
   let node: Element | null = el
-  let depth = 0
-  while (node && node !== document.body && depth < 6) {
+  let anchored = false
+  while (node && node !== document.body) {
     let part = node.tagName.toLowerCase()
-    if (node.id) {
+    if (node.id && document.querySelectorAll(`#${CSS.escape(node.id)}`).length === 1) {
       parts.unshift(`#${CSS.escape(node.id)}`)
+      anchored = true
       break
     }
     const parent: Element | null = node.parentElement
@@ -77,12 +80,12 @@ function buildSelector(el: Element): string {
     }
     parts.unshift(part)
     node = parent
-    depth += 1
   }
-  return parts.join(' > ')
+  return (anchored ? '' : 'body > ') + parts.join(' > ')
 }
 
 function elementText(el: Element): string {
+  if (privateControl(el)) return el.getAttribute('aria-label') || el.getAttribute('placeholder') || '[私密输入]'
   const raw =
     (el as HTMLElement).innerText || (el as HTMLInputElement).value || el.getAttribute('aria-label') || el.getAttribute('placeholder') || ''
   return raw.replace(/\s+/g, ' ').trim().slice(0, 80)
@@ -91,18 +94,21 @@ function elementText(el: Element): string {
 function findElement(selector?: string, text?: string): HTMLElement | null {
   if (selector) {
     try {
-      const el = document.querySelector(selector)
+      const matches = document.querySelectorAll(selector)
+      if (matches.length > 1) throw new Error('选择器匹配多个元素，请重新获取快照并选择唯一元素')
+      const el = matches[0]
       if (el) return el as HTMLElement
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && !(error instanceof DOMException)) throw error
       /* invalid selector → fall through to text match */
     }
   }
   if (text) {
     const needle = text.trim()
     const candidates = document.querySelectorAll('button, a, [role="button"], input, label, .app-launcher')
-    for (const el of Array.from(candidates)) {
-      if (isVisible(el) && elementText(el).includes(needle)) return el as HTMLElement
-    }
+    const matches = Array.from(candidates).filter((el) => isVisible(el) && elementText(el).includes(needle))
+    if (matches.length > 1) throw new Error('文本匹配多个元素，请使用快照中的唯一选择器')
+    if (matches[0]) return matches[0] as HTMLElement
   }
   return null
 }
@@ -123,16 +129,18 @@ async function animateCursorTo(x: number, y: number, label: string): Promise<voi
   await sleep(CURSOR_MOVE_MS + 60)
 }
 
-async function execSnapshot(): Promise<Record<string, unknown>> {
-  const selectorList = 'button, a[href], input, textarea, select, [role="button"], [role="tab"], [role="menuitem"]'
+async function execSnapshot(params: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
+  const selectorList = 'button, a[href], input, textarea, select, [contenteditable="true"], [role="button"], [role="tab"], [role="menuitem"], [role="option"], [role="checkbox"], [role="switch"], [role="radio"], [role="combobox"], [role="slider"], [role="treeitem"]'
   const elements: Array<Record<string, unknown>> = []
-  for (const el of Array.from(document.querySelectorAll(selectorList))) {
-    if (!isVisible(el)) continue
+  const visible = Array.from(document.querySelectorAll(selectorList)).filter(isVisible)
+  const offset = Number.isSafeInteger(params.offset) && Number(params.offset) >= 0 ? Number(params.offset) : 0
+  for (const el of visible.slice(offset, offset + SNAPSHOT_MAX_ELEMENTS)) {
     const rect = (el as HTMLElement).getBoundingClientRect()
     elements.push({
       selector: buildSelector(el),
       tag: el.tagName.toLowerCase(),
       text: elementText(el),
+      ...controlState(el),
       rect: {
         x: Math.round(rect.x),
         y: Math.round(rect.y),
@@ -140,7 +148,6 @@ async function execSnapshot(): Promise<Record<string, unknown>> {
         h: Math.round(rect.height),
       },
     })
-    if (elements.length >= SNAPSHOT_MAX_ELEMENTS) break
   }
   return {
     success: true,
@@ -149,6 +156,8 @@ async function execSnapshot(): Promise<Record<string, unknown>> {
     title: document.title,
     viewport: { width: window.innerWidth, height: window.innerHeight },
     elements,
+    total_elements: visible.length,
+    next_offset: offset + elements.length < visible.length ? offset + elements.length : null,
   }
 }
 
@@ -166,6 +175,7 @@ async function execClick(params: Record<string, unknown>): Promise<Record<string
   const text = params.text ? String(params.text) : undefined
   const el = findElement(selector, text)
   if (!el) return { success: false, message: `未找到元素：${selector || text || '(空)'}` }
+  ensureEditable(el)
   el.scrollIntoView({ block: 'center', behavior: 'smooth' })
   await sleep(260)
   const rect = el.getBoundingClientRect()
@@ -183,6 +193,10 @@ async function execType(params: Record<string, unknown>): Promise<Record<string,
   const text = String(params.text ?? '')
   const el = findElement(selector)
   if (!el) return { success: false, message: `未找到输入框：${selector}` }
+  ensureEditable(el)
+  if (!el.matches('input:not([type="file"]):not([type="checkbox"]):not([type="radio"]), textarea, [contenteditable="true"]')) {
+    return { success: false, message: '目标不是文本输入控件' }
+  }
   el.scrollIntoView({ block: 'center', behavior: 'smooth' })
   await sleep(260)
   const rect = el.getBoundingClientRect()
@@ -192,15 +206,17 @@ async function execType(params: Record<string, unknown>): Promise<Record<string,
   // 经原型 setter 写值，确保 Vue v-model 等响应式绑定能收到 input 事件
   const proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
   const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set
-  if (setter) {
+  if (el.getAttribute('contenteditable') === 'true') {
+    el.textContent = text
+  } else if (setter) {
     setter.call(input, text)
   } else {
     input.value = text
   }
   input.dispatchEvent(new Event('input', { bubbles: true }))
   input.dispatchEvent(new Event('change', { bubbles: true }))
-  pushLog(`type → ${selector}（${text.slice(0, 30)}）`)
-  return { success: true, selector, typed: text }
+  pushLog(`type → ${selector}`)
+  return { success: true, selector, typed: privateControl(el) ? '[私密输入]' : text }
 }
 
 async function execScroll(params: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -220,9 +236,23 @@ async function execScroll(params: Record<string, unknown>): Promise<Record<strin
 }
 
 async function executeCommand(action: string, params: Record<string, unknown>): Promise<Record<string, unknown>> {
+  if (params.expected_route && params.expected_route !== routerRef?.currentRoute.value.fullPath) {
+    return { success: false, message: '页面已经改变，请重新获取快照', code: 'STALE_SCREEN' }
+  }
   switch (action) {
     case 'snapshot':
-      return execSnapshot()
+      return execSnapshot(params)
+    case 'routes':
+      return screenRoutes(routerRef)
+    case 'select':
+    case 'check':
+    case 'press': {
+      const el = findElement(String(params.selector || ''))
+      if (!el) return { success: false, message: '未找到目标控件' }
+      if (action === 'select') return selectScreenOption(el, params)
+      if (action === 'check') return checkScreenControl(el, params)
+      return pressScreenKey(el, params)
+    }
     case 'navigate':
       return execNavigate(params)
     case 'click':
@@ -249,6 +279,8 @@ function connect() {
     scheduleReconnect()
     return
   }
+  const connection = ws
+  const enqueue = createScreenCommandQueue()
   ws.onopen = () => {
     aiopenCursorConnected.value = true
     pushLog('已连接 AIOPEN 操控通道')
@@ -270,12 +302,12 @@ function connect() {
       const action = String(msg.action || '')
       const params = (msg.params && typeof msg.params === 'object' ? msg.params : {}) as Record<string, unknown>
       pushLog(`收到指令：${action}`)
-      let result: Record<string, unknown>
-      try {
-        result = await executeCommand(action, params)
-      } catch (err) {
-        result = { success: false, message: String((err as Error)?.message || err) }
-      }
+      const result = await enqueue(String(msg.id || ''), async () => {
+        if (ws !== connection || !aiopenCursorEnabled.value) {
+          return { success: false, code: 'SCREEN_CONNECTION_CLOSED' }
+        }
+        return executeCommand(action, params)
+      })
       if (action !== 'snapshot') {
         // 快照不收光标；操作类指令完成后短暂保留再淡出
         window.setTimeout(() => {
@@ -284,7 +316,7 @@ function connect() {
         }, 1500)
       }
       try {
-        ws?.send(JSON.stringify({ type: 'result', id: msg.id, result }))
+        connection.send(JSON.stringify({ type: 'result', id: msg.id, result }))
       } catch {
         /* 连接已断，无法回执 */
       }

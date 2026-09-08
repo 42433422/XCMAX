@@ -9,6 +9,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any, cast
 
+from app.application.aiopen.software_control import execute_software_control
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -193,6 +194,7 @@ _RECENT_BUSINESS_DB_TARGETS: dict[str, dict[str, Any]] = {}
 
 _REGISTERED_WORKFLOW_ROUTERS: dict[str, Callable[..., dict]] = _WorkflowRouterMap(
     {
+        "software": execute_software_control,
         "normal_slot_dispatch": _registered_router_normal_slot_dispatch,
         "customers": _registered_router_customers,
         "products": _registered_router_products,

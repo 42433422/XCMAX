@@ -1,8 +1,8 @@
 {
   "scope": "registered workflow actions and static host dispatcher; excludes unregistered UI/API/Mods",
   "product_coverage_percent": null,
-  "capability_count": 36,
-  "action_count": 180,
+  "capability_count": 37,
+  "action_count": 190,
   "missing_dispatcher": [
     "wechat"
   ],
@@ -1665,6 +1665,112 @@
       "risk": "medium",
       "required_params": [
         "id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "software",
+      "action": "check",
+      "risk": "medium",
+      "required_params": [
+        "selector",
+        "checked"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "software",
+      "action": "click",
+      "risk": "medium",
+      "required_params": [
+        "selector"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "software",
+      "action": "list",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "software",
+      "action": "navigate",
+      "risk": "medium",
+      "required_params": [
+        "path"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "software",
+      "action": "press",
+      "risk": "medium",
+      "required_params": [
+        "selector",
+        "key"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "software",
+      "action": "routes",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "software",
+      "action": "scroll",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "software",
+      "action": "select",
+      "risk": "medium",
+      "required_params": [
+        "selector",
+        "values"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "software",
+      "action": "snapshot",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "software",
+      "action": "type",
+      "risk": "medium",
+      "required_params": [
+        "selector",
+        "text"
       ],
       "idempotent": false,
       "dispatcher_present": true,

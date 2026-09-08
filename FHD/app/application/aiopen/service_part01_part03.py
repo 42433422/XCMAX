@@ -16,6 +16,10 @@ async def invoke_tool(
     """统一工具执行入口（MCP tools/call 与 REST invoke 共用）。"""
     args = args if isinstance(args, dict) else {}
     name = str(name or "").strip()
+    if name in {"api_operations", "api_schema"}:
+        from app.application.aiopen.api_contracts import api_operations, api_schema
+
+        return api_operations(app, args) if name == "api_operations" else api_schema(app, args)
     if name == "api_catalog":
         return _facade()._tool_api_catalog()
     if name == "api_call":

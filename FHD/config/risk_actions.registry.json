@@ -1783,6 +1783,22 @@
         }
       }
     },
+    "software": {
+      "description": "控制当前登录账号的软件窗口。先 list 选择窗口，再 routes 读取所有页面（含 Mods）、snapshot 回读控件；通过 navigate/click/type/select/check/press/scroll 操作。每步写操作后回读验证，不能将点击回执当作业务完成。",
+      "availability": "shared",
+      "actions": {
+        "list": {"risk": "low", "idempotent": true, "required_params": []},
+        "routes": {"risk": "low", "idempotent": true, "required_params": []},
+        "snapshot": {"risk": "low", "idempotent": true, "required_params": []},
+        "navigate": {"risk": "medium", "idempotent": false, "required_params": ["path"]},
+        "click": {"risk": "medium", "idempotent": false, "required_params": ["selector"]},
+        "type": {"risk": "medium", "idempotent": false, "required_params": ["selector", "text"]},
+        "select": {"risk": "medium", "idempotent": false, "required_params": ["selector", "values"]},
+        "check": {"risk": "medium", "idempotent": false, "required_params": ["selector", "checked"]},
+        "press": {"risk": "medium", "idempotent": false, "required_params": ["selector", "key"]},
+        "scroll": {"risk": "low", "idempotent": false, "required_params": []}
+      }
+    },
     "unit_products_import": {
       "description": "从已分析的 unit_products .db 文件导入客户和产品。写入业务数据库前必须经过 AgentRun 确认。",
       "availability": "shared",

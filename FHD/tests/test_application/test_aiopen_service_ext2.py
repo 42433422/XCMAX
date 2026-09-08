@@ -627,7 +627,7 @@ class TestToolApiCallExt:
             finally:
                 AIOPEN_STATE["whitelist"] = saved_whitelist
 
-    def test_status_code_499_returns_success_true(self):
+    def test_status_code_499_returns_success_false(self):
         mock_resp = MagicMock()
         mock_resp.status_code = 499
         mock_resp.json.return_value = {"error": "client error"}
@@ -638,8 +638,8 @@ class TestToolApiCallExt:
             AIOPEN_STATE["whitelist"] = {"/api/products": True}
             try:
                 result = _tool_api_call(MagicMock(), {"path": "/api/products"})
-                assert result["success"] is True
                 assert result["status_code"] == 499
+                assert result["success"] is False
             finally:
                 AIOPEN_STATE["whitelist"] = saved_whitelist
 
@@ -1043,6 +1043,12 @@ class TestAiopenManifestExt:
             "ui_click",
             "ui_type",
             "ui_scroll",
+            "ui_routes",
+            "ui_select",
+            "ui_check",
+            "ui_press",
+            "api_operations",
+            "api_schema",
         }
         assert names == expected
 

@@ -233,7 +233,18 @@ def resolve_registered_capability_call(args: dict[str, Any] | None) -> dict[str,
             "available_actions": sorted(actions) if isinstance(actions, dict) else [],
         }
     required = [str(key) for key in spec.get("required_params") or [] if str(key)]
-    missing = [key for key in required if not _has_value(params.get(key))]
+    # Clearing a text field or a multiple-select is an intentional empty value.
+    empty_screen_fields = {"type": "text", "select": "values"}
+    missing = [
+        key
+        for key in required
+        if not _has_value(params.get(key))
+        and not (
+            tool_id == "software"
+            and empty_screen_fields.get(action) == key
+            and (params.get(key) == "" or params.get(key) == [])
+        )
+    ]
     if missing:
         return {
             "success": False,
@@ -315,6 +326,13 @@ def execute_registered_capability(
         "workspace_root": workspace_root,
         "message": str(params.get("user_request") or params.get("message") or ""),
     }
+    if tool_id == "software":
+        from app.application.aiopen.software_control import request_screen_owner
+        from app.infrastructure.request_context import get_current_request
+
+        owner = request_screen_owner(get_current_request())
+        if owner:
+            runtime_context.update(local_user_id=owner["owner_id"], tenant_id=owner["tenant_id"])
     try:
         decision, run_result = ApprovalGatedEngine(
             WorkflowEngine(tool_dispatcher=_dispatch_registered_tool)

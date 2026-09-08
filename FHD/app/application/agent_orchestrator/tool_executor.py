@@ -47,7 +47,12 @@ class AgentToolExecutor:
                     "action": action,
                 }
 
-        if runtime_tenant_id is None:
+        if step.tool_id == "software":
+            from app.application.aiopen.software_control import screen_actor_scope
+
+            with screen_actor_scope(runtime_context):
+                result = execute_registered_workflow_tool(step.tool_id, action, params)
+        elif runtime_tenant_id is None:
             result = execute_registered_workflow_tool(step.tool_id, action, params)
         else:
             # Durable/background Agent runs execute outside the originating HTTP
