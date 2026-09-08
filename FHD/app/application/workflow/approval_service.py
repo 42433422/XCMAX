@@ -50,10 +50,13 @@ class ApprovalService:
         try:
             from resources.config.risk_actions_loader import (
                 get_action_approval,
+                get_action_risk,
                 requires_write_approval,
             )
 
             if get_action_approval(node.tool_id, node.action) in {"always", "interactive"}:
+                return True
+            if get_action_risk(node.tool_id, node.action) == "high":
                 return True
             if requires_write_approval(node.tool_id, node.action):
                 return True

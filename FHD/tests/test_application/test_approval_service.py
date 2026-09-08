@@ -597,3 +597,26 @@ class TestIsApprovalEnabled:
         svc = ApprovalService()
         svc._config = MagicMock(enabled=False)
         assert svc.is_approval_enabled() is False
+
+
+def test_all_registered_high_risk_actions_require_default_approval():
+    from unittest.mock import patch
+
+    from resources.config.approval_config import ApprovalConfig
+    from resources.config.risk_actions_loader import get_workflow_tools_from_registry
+
+    with patch(
+        "app.application.workflow.approval_service.get_approval_config",
+        return_value=ApprovalConfig(rules=[], enabled=True),
+    ):
+        service = ApprovalService()
+    checked = []
+    for tool, spec in get_workflow_tools_from_registry().items():
+        for action, metadata in spec.get("actions", {}).items():
+            if metadata.get("risk") != "high":
+                continue
+            # Model-supplied low risk cannot downgrade trusted registry policy.
+            node = WorkflowNode(node_id="audit", tool_id=tool, action=action, risk="low", params={})
+            assert service.check_node_requires_approval(node), (tool, action)
+            checked.append((tool, action))
+    assert len(checked) > 20
