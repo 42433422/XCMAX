@@ -133,6 +133,10 @@ def test_approval_migration_upgrade_and_downgrade(tmp_path, monkeypatch):
         assert not repository.consume(jti="migration", run_id="run", step_id="step")
         with engine.begin() as connection:
             monkeypatch.setattr(migration, "op", Operations(MigrationContext.configure(connection)))
+            migration.upgrade()
+        assert not repository.consume(jti="migration", run_id="run", step_id="step")
+        with engine.begin() as connection:
+            monkeypatch.setattr(migration, "op", Operations(MigrationContext.configure(connection)))
             migration.downgrade()
             assert "agent_approval_consumptions" not in inspect(connection).get_table_names()
     finally:

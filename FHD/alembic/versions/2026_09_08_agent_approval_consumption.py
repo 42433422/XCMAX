@@ -11,6 +11,10 @@ depends_on = None
 
 
 def upgrade():
+    # Baseline metadata creation and desktop bootstrap may already have made
+    # this table. Preserve existing one-use approval receipts in that case.
+    if sa.inspect(op.get_bind()).has_table("agent_approval_consumptions"):
+        return
     op.create_table(
         "agent_approval_consumptions",
         sa.Column("jti", sa.String(64), primary_key=True),

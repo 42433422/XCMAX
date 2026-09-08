@@ -19,6 +19,17 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Full fresh-SQLite Alembic upgrade reproduced a migration failure: the baseline
+  creates current metadata, so the approval-consumption table existed before its
+  new migration. Upgrade now preserves an existing table rather than recreating
+  it. Full upgrade head and alembic check both pass with no new operations
+  (`alembic-integration-fixed`); four approval repository/migration tests pass,
+  including repeat-upgrade preservation of consumed-token replay rejection
+  (`approval-migration-idempotent`). Single-head, layer ratchet, source governance,
+  operational-error and broad-exception gates also pass locally. Remote checks
+  for 8501466be were still queued when observed; this does not substitute for
+  their eventual result or PostgreSQL/live migration qualification.
+
 - Integration draft PR #1815 is now the single remote review channel:
   https://github.com/42433422/XCMAX/pull/1815 . Mainline be51a83a2 (#1810 metrics
   only) was merged at 5c9a3d5a1 without conflicts or other-worktree edits.
