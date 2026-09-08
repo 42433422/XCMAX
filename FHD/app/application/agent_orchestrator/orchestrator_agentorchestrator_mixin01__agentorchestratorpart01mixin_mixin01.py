@@ -351,7 +351,12 @@ class __AgentOrchestratorPart01MixinPart01Mixin:
         self._refresh_artifact_metadata(run)
         run.status = "running" if run.steps else "blocked"
         if not run.steps:
-            run.error = "planner returned no executable steps"
+            from app.application.workflow.sql_execution_policy import REFUSAL_CODE, REFUSAL_MESSAGE
+
+            refused = plan_metadata.get("refusal_code") == REFUSAL_CODE
+            run.error = REFUSAL_CODE if refused else "planner returned no executable steps"
+            if refused:
+                run.final_output = {"message": REFUSAL_MESSAGE, "refusal_code": REFUSAL_CODE}
             run.add_event("planner.blocked", "计划没有可执行节点")
 
     @staticmethod
@@ -388,6 +393,8 @@ class __AgentOrchestratorPart01MixinPart01Mixin:
         runtime_context: dict[str, _facade().Any],
         approved_step_id: str = "",
     ) -> None:
+        if not run.steps:
+            return
         approved = str(approved_step_id or "").strip()
         completed_node_ids: set[str] = {
             step.node_id for step in run.steps if step.status == "completed"

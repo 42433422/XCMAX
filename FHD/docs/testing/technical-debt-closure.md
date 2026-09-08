@@ -17,6 +17,12 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Explicit destructive SQL execution requests are rejected before planning tools.
+  Empty blocked plans no longer become completed merely because the executor's
+  step loop is empty. The raw-SQL scenario was blocked with zero tool calls in
+  all three trials; 53 related tests passed. The observation is now 9/22, and this
+  narrow policy test is not a comprehensive security audit. Evidence: `sql-refusal-trials`.
+
 - Named customer creation now enters the guarded write path without requiring
   database terminology. Both customer-create scenarios include explicit,
   parameter-bound scripted approvals and verify committed customer/contact data.

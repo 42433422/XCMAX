@@ -54,6 +54,11 @@ class _LLMWorkflowPlannerPart02Mixin:
     ) -> _facade().PlanGraph:
         from app.application.normal_chat_dispatch import route_normal_mode_message
 
+        from app.application.workflow.sql_execution_policy import rejected_sql_plan
+
+        rejected = rejected_sql_plan(message, plan_id)
+        if rejected is not None:
+            return rejected
         lower = (message or "").lower()
         nodes: list[_facade().WorkflowNode] = []
         todo = ["理解用户目标", "执行可用工具", "输出执行结果"]
