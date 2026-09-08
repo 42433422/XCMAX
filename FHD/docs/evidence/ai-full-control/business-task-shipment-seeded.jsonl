@@ -1,0 +1,1 @@
+{"task_id": "shipment.generate.full_slots_017", "domain": "shipment", "difficulty": "medium", "trial": 0, "routing_pass": true, "exec_pass": false, "db_pass": null, "db_assertion_count": 0, "pass": false, "failure": "shipment_orders.generate 执行失败: 未找到客户：七彩乐园", "executed": [{"tool_id": "shipment_orders", "action": "generate", "success": false, "message": "未找到客户：七彩乐园"}]}

@@ -5,9 +5,9 @@ from typing import Any
 
 def seed_initial_state(db: Any, records: list[dict[str, Any]], tenant_id: int) -> None:
     """Seed only declared business entities; caller owns the transaction."""
-    from app.db.models import Customer, Product
+    from app.db.models import Customer, Product, PurchaseUnit
 
-    models = {"customers": Customer, "products": Product}
+    models = {"customers": Customer, "products": Product, "purchase_units": PurchaseUnit}
     for record in records:
         entity = record["entity"]
         if entity not in models:
