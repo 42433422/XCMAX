@@ -209,14 +209,25 @@ class _AIChatApplicationServicePart03Mixin:
         target = next((n for n in plan.nodes if n.node_id == item["node_id"]), None)
         if target is None:
             return None
-        clarify_node = build_clarify_node(
-            item.get("question") or "请确认目标后再执行写操作。",
-            ambient={
-                "target_node_id": target.node_id,
-                "answer_key": item.get("field") or "confirmed",
-            },
+        question = item.get("question") or "请确认目标后再执行写操作。"
+        clarify_node = next(
+            (
+                node
+                for node in plan.nodes
+                if node.tool_id == "clarify"
+                and node.action == "ask"
+                and node.params.get("target_node_id") == target.node_id
+                and node.params.get("question") == question
+            ),
+            None,
         )
-        insert_clarify_node(plan, clarify_node)
+        if clarify_node is None:
+            clarify_node = build_clarify_node(
+                question,
+                ambient={"target_node_id": target.node_id},
+            )
+            insert_clarify_node(plan, clarify_node)
+        clarify_node.params["answer_key"] = item.get("field") or "confirmed"
         runtime_context["_clarify_node_id"] = clarify_node.node_id
         self.workflow_engine.run(
             plan=plan,

@@ -6,6 +6,12 @@
 目标是四个阶段全部完成。本目录记录当前实施证据，不代表四阶段验收通过。
 此前对话中的 20%–30% 覆盖率与工期只是未验证估计，不作为验收基线。
 
+## Chat clarification node reuse
+
+Chat entry now reuses a matching planned clarify.ask node (same target and question), updates its answer key to the missing field, and stores that same node ID in runtime context and pending state. If no matching node exists, it creates one as before.
+
+22 related tests pass. The new test runs the actual chat gate and workflow engine with a dispatch trap, verifying that no business tool executes while clarification is pending and that node/pending identities agree. Persistence is mocked in this check; ordinary field-answer parsing and approval-gated continuation remain incomplete. No change to the previously measured 10/22 business score is claimed.
+
 ## Idempotent planner clarification decoration
 
 Repeated planner decoration now reuses an existing clarification with the same target node and question. Distinct target nodes retain separate questions. This removes duplicate planning-stage wait nodes without changing missing-field requirements or executing writes.
