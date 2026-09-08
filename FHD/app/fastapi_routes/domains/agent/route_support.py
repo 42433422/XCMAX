@@ -118,6 +118,22 @@ def owned_run(
     return run, None
 
 
+def task_scope_matches(
+    orchestrator: AgentOrchestrator, task: Any, principal: AgentPrincipal
+) -> bool:
+    if task.user_id != principal.user_id or task.tenant_id != principal.tenant_id:
+        return False
+    runs = [
+        run
+        for run in orchestrator.list_task_runs(user_id=task.user_id, task_id=task.task_id)
+        if tenant_id_of_run(run) == task.tenant_id
+    ]
+    if not runs:
+        # Legacy tasks without execution records have no authenticated Mod binding.
+        return not principal.mod_authorization
+    return all(owned_run(orchestrator, run.run_id, principal)[1] is None for run in runs)
+
+
 def enqueue_run(run: Any, *, requested_by: str) -> None:
     get_task_execution_repository().enqueue(run, requested_by=requested_by)
     notify_agent_task_dispatcher()

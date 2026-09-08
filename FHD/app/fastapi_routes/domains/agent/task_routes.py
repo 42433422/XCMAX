@@ -31,6 +31,7 @@ from app.fastapi_routes.domains.agent.route_support import (
     public_run_dict,
     run_response,
     success,
+    task_scope_matches,
 )
 from app.infrastructure.auth.agent_principal import AgentPrincipal, require_agent_principal
 from app.utils.json_safe import json_safe
@@ -290,7 +291,7 @@ def get_agent_task(
             task_id=task_id,
             tenant_id=principal.tenant_id,
         )
-        if task is None:
+        if task is None or not task_scope_matches(orchestrator, task, principal):
             return JSONResponse({"success": False, "message": "任务不存在"}, status_code=404)
         return success(_task_envelope(orchestrator, task))
     except RECOVERABLE_ERRORS:
@@ -310,7 +311,7 @@ def mark_agent_task_read(
             task_id=task_id,
             tenant_id=principal.tenant_id,
         )
-        if task is None:
+        if task is None or not task_scope_matches(orchestrator, task, principal):
             return JSONResponse({"success": False, "message": "工作区不存在"}, status_code=404)
         if task.attention_state == "result_unread":
             task.attention_state = ""
@@ -333,7 +334,7 @@ def archive_agent_task(
             task_id=task_id,
             tenant_id=principal.tenant_id,
         )
-        if owned is None:
+        if owned is None or not task_scope_matches(orchestrator, owned, principal):
             return JSONResponse({"success": False, "message": "任务不存在"}, status_code=404)
         if owned.status not in {"completed", "failed", "cancelled"}:
             return JSONResponse(
