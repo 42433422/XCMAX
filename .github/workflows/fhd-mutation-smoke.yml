@@ -9,6 +9,8 @@
 #   所有 mutmut 步骤条件均不满足，整条流水线静默跳过。现 dispatch 强制跑。
 #   同时修复 N01 同类路径 bug：根仓 git diff 输出带 FHD/ 前缀，剥掉后再匹配 FHD 目录口径，
 #   否则 PR/push 的路径检测永远不命中、变异测试在 gate 上也一直在静默跳过。
+#   另修 uv sync 配置错误：`--group dev` 应为 `--extra dev`（dev 是 optional-dependencies
+#   extra，非 dependency-group）。因路径检测从未命中，此错误配置此前从未被执行到。
 name: mutation-smoke
 
 on:
@@ -83,7 +85,7 @@ jobs:
       - name: Sync dependencies
         if: github.event_name == 'schedule' || steps.paths.outputs.run_mutation == 'true'
         working-directory: FHD
-        run: uv sync --frozen --extra server-api --group dev
+        run: uv sync --frozen --extra server-api --extra dev
 
       - name: Install mutmut
         if: github.event_name == 'schedule' || steps.paths.outputs.run_mutation == 'true'
