@@ -1,0 +1,14 @@
+{
+  "base_sha": "d4cfbc3be",
+  "tests_passed": 24,
+  "scope": "Real local NeuroBus async queue, real finance handler, ApprovalService and file-backed SQLite. Outbound notification capture mocked.",
+  "verified": [
+    "Matching publisher/applicant writes exactly one pending approval in tenant 1 for actor 71.",
+    "Forged applicant 72 fails and creates no extra approval.",
+    "Correct success and failure event kinds emitted."
+  ],
+  "limitations": [
+    "Foreign keys not explicitly enabled.",
+    "No HTTP authentication, remote queue authorization, approval completion or inventory status update in this test."
+  ]
+}
