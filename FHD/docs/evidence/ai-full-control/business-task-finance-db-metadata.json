@@ -1,0 +1,14 @@
+{
+  "source_sha": "d37324eb6e7aefdd83f2b31ca20001dadb0e756a",
+  "runner_sha256": "dc90bc2c6e49d92a3e2a3f958984c6d3fe61b27b2be751ac6e99bc9ee8af8951",
+  "dataset_sha256": "d591a51c06121699eb09a09ed10dea908cc08d2cc70418965a7112b7cbb376a1",
+  "passed": 11,
+  "total": 22,
+  "db_passed": 5,
+  "negative_control": {
+    "wrong_expected_amount": 5001,
+    "pass": false,
+    "db_pass": false
+  },
+  "scope": "Isolated SQLite fallback trial with strengthened finance assertion. Not production approval, accounting-ledger reconciliation or installed acceptance."
+}

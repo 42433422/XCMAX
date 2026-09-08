@@ -6,6 +6,12 @@
 目标是四个阶段全部完成。本目录记录当前实施证据，不代表四阶段验收通过。
 此前对话中的 20%–30% 覆盖率与工期只是未验证估计，不作为验收基线。
 
+## Financial entry database evidence
+
+The benchmark now supports test-only financial_transactions state assertions without expanding production business_db entities. The finance entry case requires exactly one tenant-scoped transaction and matching revenue type, amount 5000, counterparty 星光贸易 and CNY currency.
+
+A fresh isolated SQLite trial passes 11/22, now with five database-assertion passes. A separate negative control changes only the expected amount to 5001; it fails the database assertion and overall task as intended. Dataset and runner hashes are recorded in business-task-finance-db-metadata.json. This strengthens result evidence; it is not production approval, ledger reconciliation or installed-client acceptance.
+
 ## Direct financial entry planning
 
 Explicit single-entry requests such as 记一笔收入 5000 元，来自星光贸易 now produce finance.create_transaction with preserved amount and counterparty. Full-input matching leaves unsupported extra clauses for the existing planner. The node retains medium risk and non-idempotence.

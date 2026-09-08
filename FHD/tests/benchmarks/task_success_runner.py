@@ -116,7 +116,12 @@ def _check_db_state(expect: dict[str, Any]) -> tuple[bool, str]:
         for spec in assertions:
             entity = spec["entity"]
             try:
-                model, field_map, _selector = _model_config(entity)
+                if entity == "financial_transactions":
+                    from app.db.models.finance import FinancialTransaction
+
+                    model, field_map = FinancialTransaction, {}
+                else:
+                    model, field_map, _selector = _model_config(entity)
             except ValueError:
                 return False, f"db_state 断言不支持实体 {entity}"
             query = db.query(model).filter(model.tenant_id == tenant_id)
