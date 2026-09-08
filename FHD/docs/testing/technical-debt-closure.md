@@ -19,6 +19,22 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Mainline reconciliation on September 9: merged `75d09beff` (#1814 audit
+  standard catalog) without conflicts. Architecture fitness and audit-benchmark
+  SSOT validation pass; catalog validity is not product audit acceptance.
+- Mod boundaries now cover task deduplication, run/task reads and controls,
+  task/run collections before public limits, task streams and runtime counts.
+  Backend integration at `631b1d1b0`: 960 passed / 2 opt-in benchmarks skipped,
+  across 41 changed test files; 116 changed Python files pass Ruff and formatting.
+- Native EventSource omitted active-Mod headers. Task streams now use credentialed
+  fetch with explicit Mod/shell headers and discard events after runtime identity
+  changes. Global and chat task lifecycles reset on account/tenant/Mod changes;
+  delayed detail/read/control/archive responses are fenced before later actions
+  and UI updates. Full frontend at `003c9fec0`: 621 files / 9818 tests passed,
+  with 4 live-backend smoke tests skipped. Subsequent chat lifecycle changes have
+  focused regression and build-type-check evidence, not a new full-suite result.
+  Real browser interaction and installed-client identity remain unverified.
+
 - CI run 34242372615 exposed formatting and architecture failures. Applied
   formatter to the 13 reported files; extracted tool fixture generation, market
   entitlement retrieval, SQL record decoding, and artifact download routing by
