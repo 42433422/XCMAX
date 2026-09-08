@@ -55,6 +55,13 @@ if [[ -f "$RUNTIME_POLICY_TARGET" ]]; then
   cp -p "$RUNTIME_POLICY_TARGET" "$RUNTIME_POLICY_BACKUP"
 fi
 
+# Snapshot every existing helper before any install can trigger rollback.
+for control_helper in tool_preflight.mjs control_receipt_outbox.mjs control_git_handoff.mjs; do
+  if [[ -f "$TARGET_DIR/$control_helper" ]]; then
+    cp -p "$TARGET_DIR/$control_helper" "$TARGET_DIR/$control_helper.backup-$BACKUP_SUFFIX"
+  fi
+done
+
 rollback() {
   for control_helper in tool_preflight.mjs control_receipt_outbox.mjs control_git_handoff.mjs; do
     if [[ -f "$TARGET_DIR/$control_helper.backup-$BACKUP_SUFFIX" ]]; then
@@ -83,9 +90,6 @@ rollback() {
 trap rollback ERR
 
 for control_helper in tool_preflight.mjs control_receipt_outbox.mjs control_git_handoff.mjs; do
-  if [[ -f "$TARGET_DIR/$control_helper" ]]; then
-    cp -p "$TARGET_DIR/$control_helper" "$TARGET_DIR/$control_helper.backup-$BACKUP_SUFFIX"
-  fi
   install -m 0644 "$SCRIPT_DIR/$control_helper" "$TARGET_DIR/$control_helper.next"
   mv "$TARGET_DIR/$control_helper.next" "$TARGET_DIR/$control_helper"
   cmp "$SCRIPT_DIR/$control_helper" "$TARGET_DIR/$control_helper"
