@@ -156,6 +156,8 @@ temp_excel/
 shipment_outputs/
 saved_analyses/
 user_memory/
+!app/domain/user_memory/
+!app/domain/user_memory/*.py
 labels/
 test_labels/
 output/

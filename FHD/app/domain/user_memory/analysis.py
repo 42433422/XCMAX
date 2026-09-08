@@ -3,7 +3,7 @@
 from collections import defaultdict
 from typing import Any
 
-from app.utils.user_memory_models import UserMemory
+from app.domain.user_memory.models import UserMemory
 
 
 def feedback_stats(memory: UserMemory | None) -> dict[str, Any]:

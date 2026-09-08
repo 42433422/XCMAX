@@ -12,27 +12,26 @@ def combined_optimization(
     dedup_window: int = 0,
     circuit_failures: int = 0,
     retry_times: int = 0,
+    *,
+    policies: Callable[[], dict[str, Callable]],
 ):
     """Compose only the optimization policies enabled by positive values."""
 
     def decorator(func: Callable) -> Callable:
-        # Resolve through the compatibility module so callers can patch or
-        # extend any individual decorator without changing composition.
-        from app.utils import decorators
-
+        resolved = policies()
         decorated = func
         if retry_times > 0:
-            decorated = decorators.retry(max_retries=retry_times)(decorated)
+            decorated = resolved["retry"](max_retries=retry_times)(decorated)
         if circuit_failures > 0:
-            decorated = decorators.circuit_breaker(failure_threshold=circuit_failures)(decorated)
+            decorated = resolved["circuit_breaker"](failure_threshold=circuit_failures)(decorated)
         if dedup_window > 0:
-            decorated = decorators.deduplicated(window_seconds=dedup_window)(decorated)
+            decorated = resolved["deduplicated"](window_seconds=dedup_window)(decorated)
         if rate_limit > 0:
-            decorated = decorators.rate_limited(max_requests=rate_limit)(decorated)
+            decorated = resolved["rate_limited"](max_requests=rate_limit)(decorated)
         if cache_ttl > 0:
-            decorated = decorators.cached(ttl=cache_ttl)(decorated)
+            decorated = resolved["cached"](ttl=cache_ttl)(decorated)
         if monitor_slow_ms > 0:
-            decorated = decorators.monitored(slow_threshold_ms=monitor_slow_ms)(decorated)
+            decorated = resolved["monitored"](slow_threshold_ms=monitor_slow_ms)(decorated)
         return decorated
 
     return decorator

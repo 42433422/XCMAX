@@ -19,6 +19,14 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- The four utils-boundary warnings are resolved without adding whitelist entries:
+  user-memory values/pure analysis now live in `app/domain/user_memory`, and
+  optimizer discovery/composition live in `app/utils/performance`. Public
+  `user_memory` and `decorators` entry points remain; performance composition
+  receives explicit policy/provider inputs instead of importing its outer facade.
+  A late-policy replacement regression preserves lazy extension behavior. All
+  247 decorator/memory tests and ten blocking dev guards pass; the utils boundary
+  check now reports no warnings (`utility-domain-final`, `dev-guards-utility-domains`).
 - Agent task snapshots and run-event streams now re-resolve the original request's
   authenticated principal before reads and before releasing data. Session expiry,
   account/tenant/admin/Mod scope changes or validation failure close the stream;
