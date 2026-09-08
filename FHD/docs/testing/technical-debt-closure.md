@@ -17,6 +17,13 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Named customer creation now enters the guarded write path without requiring
+  database terminology. Both customer-create scenarios include explicit,
+  parameter-bound scripted approvals and verify committed customer/contact data.
+  Three trials passed both writes; the full observation is now 8/22. Thirty
+  benchmark/intent/orchestrator regressions passed. This does not certify other
+  business domains or HTTP approval durability. Evidence: `customer-write-trials`.
+
 - Customer read fallback now preserves customer routing and search terms instead
   of defaulting to products. 56 targeted regressions passed. Three full trials
   now score 6/22 under the existing assertions, still not acceptance: the named

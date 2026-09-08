@@ -19,6 +19,7 @@
       "domain": "customers",
       "difficulty": "easy",
       "instruction": "请把客户 星光贸易 写入数据库",
+      "approvals": [{"tool_id": "business_db", "action": "write", "params": {"entity": "customers", "operation": "upsert", "payload": {"unit_name": "星光贸易", "customer_name": "星光贸易"}}}],
       "expect": {
         "actions_any_of": [
           [{"tool_id": "business_db", "action": "write"}],
@@ -37,6 +38,7 @@
       "domain": "customers",
       "difficulty": "medium",
       "instruction": "新增客户 蓝天科技，联系人张三，电话13800000001",
+      "approvals": [{"tool_id": "business_db", "action": "write", "params": {"entity": "customers", "operation": "upsert", "payload": {"unit_name": "蓝天科技", "customer_name": "蓝天科技", "contact_person": "张三", "contact_phone": "13800000001"}}}],
       "expect": {
         "actions_any_of": [
           [{"tool_id": "business_db", "action": "write"}],
