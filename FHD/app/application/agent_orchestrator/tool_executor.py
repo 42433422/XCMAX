@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
 from typing import Any
 
 from app.application.agent_orchestrator.run_models import AgentStep
@@ -23,6 +24,7 @@ _SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
         "shipment_orders",
         "excel_import",
         "unit_products_import",
+        "employee",
     }
 )
 
@@ -68,8 +70,9 @@ class AgentToolExecutor:
                     "action": action,
                 }
 
-        if step.tool_id == "memory_v2":
+        if step.tool_id in {"memory_v2", "employee"}:
             from app.application.agent_orchestrator.execution_identity import execution_actor_scope
+            from app.infrastructure.tenant_scope import tenant_scope
 
             actor = str(
                 runtime_context.get("local_user_id")
@@ -77,7 +80,10 @@ class AgentToolExecutor:
                 or runtime_context.get("user_id")
                 or ""
             )
-            with execution_actor_scope(actor):
+            with (
+                execution_actor_scope(actor),
+                tenant_scope(runtime_tenant_id) if runtime_tenant_id is not None else nullcontext(),
+            ):
                 result = execute_registered_workflow_tool(step.tool_id, action, params)
         elif step.tool_id == "software":
             from app.application.aiopen.software_control import screen_actor_scope

@@ -7,7 +7,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 from collections.abc import Callable
@@ -19,14 +18,9 @@ logger = logging.getLogger(__name__)
 
 
 def _run_async(coro):
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(coro)
-    import concurrent.futures
+    from app.application.employee_runtime.async_bridge import run_employee_coroutine
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        return pool.submit(asyncio.run, coro).result()
+    return run_employee_coroutine(coro)
 
 
 def _resolve_employee_llm_config() -> dict[str, str | None]:

@@ -2183,6 +2183,13 @@ class TestPrintRouterSavePrinterSelection:
 
 
 class TestEmployeeRouter:
+    @pytest.fixture(autouse=True)
+    def authenticated_employee_scope(self):
+        from app.application.agent_orchestrator.execution_identity import execution_actor_scope
+
+        with execution_actor_scope("17"):
+            yield
+
     def test_list_action(self):
         with patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status") as mock_build:
             mock_build.return_value = {"registered_tool_count": 3}
