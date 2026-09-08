@@ -20,6 +20,8 @@ MOD_BACKEND = (
 
 
 def _load_owner_scope():
+    if str(MOD_BACKEND) not in sys.path:
+        sys.path.insert(0, str(MOD_BACKEND))
     spec = importlib.util.spec_from_file_location("att_owner_scope", MOD_BACKEND / "owner_scope.py")
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)

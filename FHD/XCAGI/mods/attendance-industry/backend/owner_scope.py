@@ -18,6 +18,11 @@ from pathlib import Path
 
 from app.mod_sdk.errors import RECOVERABLE_ERRORS
 
+try:
+    from .owner_schema import upgrade_unique_constraints
+except ImportError:  # The Mod loader also supports top-level backend imports.
+    from owner_schema import upgrade_unique_constraints
+
 # 历史存量数据的归属账号：考勤侧库的数据全部来自太阳鸟交付 seed。
 LEGACY_OWNER_USERNAME = "SUNBIRD"
 
@@ -27,7 +32,6 @@ _TABLES = (
     "attendance_daily_records",
 )
 
-_MIGRATED_PATHS: set[str] = set()
 _MIGRATE_LOCK = threading.Lock()
 
 
@@ -47,15 +51,17 @@ def owner_from_request(request) -> str:
 
 
 def migrate_owner_column(db_path: Path) -> None:
-    """幂等迁移：三张表补 owner_user_id 列，存量行归属太阳鸟。"""
-    key = str(db_path)
+    """原子升级归属列和唯一约束；每次重查，支持同路径恢复旧数据库。"""
     with _MIGRATE_LOCK:
-        if key in _MIGRATED_PATHS:
-            return
         if not db_path.is_file():
             return
         conn = sqlite3.connect(str(db_path), timeout=30)
         try:
+            # SQLite's documented table-rebuild sequence: disable FK actions before
+            # BEGIN, then verify references before committing the complete upgrade.
+            conn.execute("PRAGMA foreign_keys=OFF")
+            conn.execute("PRAGMA legacy_alter_table=ON")
+            conn.execute("BEGIN IMMEDIATE")
             for table in _TABLES:
                 has_table = (
                     conn.execute(
@@ -75,7 +81,12 @@ def migrate_owner_column(db_path: Path) -> None:
                         f"UPDATE {table} SET owner_user_id = ? WHERE owner_user_id = ''",
                         (LEGACY_OWNER_USERNAME,),
                     )
+                upgrade_unique_constraints(conn, table)
+            if conn.execute("PRAGMA foreign_key_check").fetchone() is not None:
+                raise sqlite3.IntegrityError("attendance owner upgrade: invalid foreign key")
             conn.commit()
-            _MIGRATED_PATHS.add(key)
+        except sqlite3.Error:
+            conn.rollback()
+            raise
         finally:
             conn.close()
