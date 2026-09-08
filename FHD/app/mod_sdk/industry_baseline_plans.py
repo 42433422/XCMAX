@@ -73,6 +73,7 @@ def build_industry_baseline_plan(
 ) -> dict[str, Any]:
     """Assemble installation readiness for one industry and account."""
     from app.mod_sdk import industry_baseline as facade
+    from app.mod_sdk.customer_delivery import delivery_for_account_custom_mod
 
     document = facade.load_industry_baseline_document()
     labels = {
@@ -129,14 +130,31 @@ def build_industry_baseline_plan(
                 resolved_label = facade._label_for_custom_mod(mod_id, industry_key, labels)
             else:
                 resolved_label = facade._label_for_mod(mod_id, industry_key, labels)
-        return {
+        delivery = (
+            delivery_for_account_custom_mod(mod_id, industry_key)
+            if tier == "account_custom"
+            else None
+        )
+        private_runtime = (
+            str(delivery.get("runtime_mod_id") or "").strip()
+            if delivery and delivery.get("delivery_mode") == "private_mod"
+            else None
+        )
+        entry = {
             "mod_id": mod_id,
             "label": resolved_label,
             "tier": tier,
             "required": required,
-            "installed": facade._mod_installed(mod_id, installed),
+            "installed": (
+                bool(private_runtime and private_runtime in installed)
+                if private_runtime is not None
+                else facade._mod_installed(mod_id, installed)
+            ),
             "show_mod_id": visible_id,
         }
+        if private_runtime is not None:
+            entry["runtime_mod_id"] = private_runtime
+        return entry
 
     custom_hint, _ = facade._custom_line_spec(
         industry_package_group_mod_ids[0] if industry_package_group_mod_ids else ""
@@ -241,7 +259,15 @@ def build_industry_baseline_plan(
         )
         if not package:
             continue
-        seed_packages.append({"mod_id": mod_id, **package})
+        delivery = delivery_for_account_custom_mod(mod_id, industry_key)
+        seed_mod_id = (
+            str(delivery.get("runtime_mod_id") or "").strip()
+            if delivery and delivery.get("delivery_mode") == "private_mod"
+            else mod_id
+        )
+        if not seed_mod_id:
+            continue
+        seed_packages.append({**package, "mod_id": seed_mod_id})
         for entry in flat_items:
             if entry.get("mod_id") == mod_id:
                 entry["delivery_seed_package"] = dict(package)

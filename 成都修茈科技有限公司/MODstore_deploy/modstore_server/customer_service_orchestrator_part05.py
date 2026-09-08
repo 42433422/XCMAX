@@ -5,6 +5,11 @@ from __future__ import annotations
 
 import importlib
 
+from modstore_server.customer_issue_delivery_contract import (
+    record_team_progress,
+    team_succeeded,
+)
+
 
 def _facade():
     return importlib.import_module("modstore_server.customer_service_orchestrator")
@@ -63,7 +68,7 @@ def apply_customer_ticket_incident_progress(
     """把 AI 员工 / incident team 执行结果回写到已有客服工单。
 
     复用现有 ``CustomerServiceMessage`` / ``CustomerServiceAction`` / ``audit``，
-    不新建旁路表：推进到「有结果」（processing+approved），全员成功时可结案。
+    不新建旁路表：员工结果只推进到待正式交付，终态由客户运行回执判定。
     """
     ticket = (
         db.query(_facade().CustomerServiceTicket)
@@ -77,6 +82,34 @@ def apply_customer_ticket_incident_progress(
         ev = {}
     delivery_managed = _facade().delivery_policy.is_delivery_managed(ticket.intent, ev)
     rows = [r for r in team_rows or [] if isinstance(r, dict)]
+    team_ok = bool(team_ok) and team_succeeded(rows)
+    from modstore_server.customer_delivery_receipts import canonical_sha256
+
+    progress_digest = canonical_sha256(
+        {
+            "event_id": int(event_id),
+            "team_ok": team_ok,
+            "rows": [
+                {key: row.get(key) for key in ("role", "employee_id", "ok", "status")}
+                for row in rows
+            ],
+        }
+    )
+    if ticket.status in {"resolved", "closed"} or any(
+        report.get("progress_sha256") == progress_digest
+        for report in ev.get("employee_reports", [])
+        if isinstance(report, dict)
+    ):
+        return {
+            "ok": True,
+            "replayed": True,
+            "ticket_id": int(ticket.id),
+            "team_ok": team_ok,
+        }
+    resolution = record_team_progress(ticket, ev, event_id=event_id, rows=rows)
+    if not team_ok:
+        resolution["state"] = "repair_failed"
+        resolution["repair_verified"] = False
     progress = _facade()._summarize_incident_team_rows(rows)
     hint = str(summary_hint or ticket.summary or ticket.title or "").strip()[:120]
     if team_ok:
@@ -122,6 +155,7 @@ def apply_customer_ticket_incident_progress(
     reports.append(
         {
             "type": "incident_team",
+            "progress_sha256": progress_digest,
             "event_id": int(event_id or 0),
             "team_ok": bool(team_ok),
             "progress": progress[:500],

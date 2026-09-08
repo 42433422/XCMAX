@@ -10,6 +10,7 @@ retry-with-terminal-failed-state).
 from __future__ import annotations
 
 import importlib
+from threading import Event
 
 import pytest
 from sqlalchemy import create_engine
@@ -195,12 +196,15 @@ def test_drain_handles_dispatcher_exception(fresh_db):
     assert "connection refused" in pending[0].last_error
 
 
-def test_worker_start_stop_idempotent():
+def test_worker_start_stop_idempotent(monkeypatch):
     """The default worker must start once and stop cleanly under tests."""
 
+    drained = Event()
+    monkeypatch.setattr(db_outbox, "drain", lambda **_kwargs: drained.set())
     worker = db_outbox.OutboxDispatcherWorker(interval_seconds=10.0)
     worker.start()
     worker.start()
+    assert drained.wait(timeout=2), "worker must execute the drain loop"
     worker.stop()
     worker.stop()
 

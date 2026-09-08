@@ -184,6 +184,7 @@ async def create_custom_delivery(
         runs = [row for row in active_evidence.get("runs", []) if isinstance(row, dict)]
         try:
             run = await _start_custom_delivery_run(
+                ticket_id=int(active_initial.id),
                 user_id=int(user.id),
                 evidence=active_evidence,
                 attempt=len(runs) + 1,
@@ -359,12 +360,18 @@ async def create_custom_delivery(
         ticket.ticket_no,
         {"ticket_id": int(ticket.id), "ticket_no": ticket.ticket_no, "kind": body.kind},
     )
+    from modstore_server.customer_issue_intake import enqueue_issue
+
+    enqueue_issue(db, ticket, revision="initial")
     db.commit()
 
     if pricing_mode == "initial_included":
         try:
             run = await _start_custom_delivery_run(
-                user_id=int(user.id), evidence=evidence, attempt=1
+                ticket_id=int(ticket.id),
+                user_id=int(user.id),
+                evidence=evidence,
+                attempt=1,
             )
             evidence["runs"] = [run]
         except RECOVERABLE_ERRORS as exc:

@@ -11,11 +11,11 @@ from app.enterprise import private_delivery_binding as binding
 from app.mod_sdk import customer_delivery, customer_features
 
 
-def test_integrated_delivery_keeps_customer_identity_and_retired_runtime():
+def test_private_delivery_keeps_customer_identity_and_separate_runtime():
     assert "taiyangniao-pro" in customer_delivery.list_account_custom_mod_ids()
     row = customer_delivery.delivery_for_account("SUNBIRD")
-    assert row["delivery_mode"] == "integrated_feature"
-    assert row["runtime_mod_id"] == "attendance-industry"
+    assert row["delivery_mode"] == "private_mod"
+    assert row["runtime_mod_id"] == "sunbird-attendance-custom"
     assert (
         customer_delivery.account_custom_mod_ids_for_industry("饰品包装", {"attendance-industry"})
         == []
@@ -29,9 +29,20 @@ def test_integrated_delivery_keeps_customer_identity_and_retired_runtime():
         )
         is None
     )
-    assert customer_delivery.delivery_seed_package_for_mod("taiyangniao-pro") is None
+    assert (
+        customer_delivery.delivery_seed_package_for_mod(
+            "attendance-industry", account_username="SUNBIRD"
+        )
+        is None
+    )
     assert customer_delivery.delivery_seed_package_for_mod(
-        "attendance-industry", account_username="SUNBIRD"
+        "sunbird-attendance-custom", account_username="SUNBIRD"
+    )
+    assert (
+        customer_delivery.delivery_seed_package_for_mod(
+            "sunbird-attendance-custom", account_username="OTHER"
+        )
+        is None
     )
 
 
@@ -144,6 +155,12 @@ def test_shared_runtime_conversion_routes_are_all_guarded(monkeypatch, tmp_path)
     )
     monkeypatch.setattr(customer_features, "get_logged_in_user", lambda _: object())
     monkeypatch.setattr(customer_features, "load_session_private_delivery_binding", lambda _: {})
+    monkeypatch.setattr(
+        "app.infrastructure.auth.dependencies.get_logged_in_user", lambda _: SimpleNamespace(id=99)
+    )
+    monkeypatch.setattr(
+        "app.infrastructure.mods.install_receipts.read_verified_install", lambda _: None
+    )
     router = APIRouter()
     module.register(
         router,
@@ -168,7 +185,9 @@ def test_shared_runtime_conversion_routes_are_all_guarded(monkeypatch, tmp_path)
 
 
 @pytest.mark.asyncio
-async def test_private_delivery_uses_existing_identity_and_shared_install(monkeypatch, tmp_path):
+async def test_private_delivery_does_not_count_shared_install_as_custom_delivery(
+    monkeypatch, tmp_path
+):
     __import__("app.fastapi_routes.mod_store_routes")
     from starlette.requests import Request
 
@@ -202,16 +221,16 @@ async def test_private_delivery_uses_existing_identity_and_shared_install(monkey
     response = await routes.mod_store_private_delivery(Request({"type": "http", "headers": []}))
     project = response.data["projects"][0]
     assert project["mod_id"] == "taiyangniao-pro"
-    assert project["runtime_mod_id"] == "attendance-industry"
-    assert project["installed"] is True
-    assert project["update_source"] == "shared_runtime"
+    assert project["runtime_mod_id"] == "sunbird-attendance-custom"
+    assert project["installed"] is False
+    assert project["update_source"] == "unavailable"
     assert project["update_available"] is False
     assert project["overall_status"] != "delivered"
     assert "attendance-convert" in str(project["track_nodes"])
 
 
 @pytest.mark.asyncio
-async def test_integrated_delivery_cannot_reinstall_retired_private_mod(monkeypatch):
+async def test_legacy_entitlement_updates_only_the_separate_owner_bound_runtime(monkeypatch):
     __import__("app.fastapi_routes.mod_store_routes")
     from starlette.requests import Request
 
@@ -223,6 +242,29 @@ async def test_integrated_delivery_cannot_reinstall_retired_private_mod(monkeypa
     monkeypatch.setattr(
         routes, "_private_mod_context", AsyncMock(return_value={"mod_ids": {"taiyangniao-pro"}})
     )
-    with pytest.raises(HTTPException) as caught:
-        await routes.mod_store_private_mod_update(Request({"type": "http", "headers": []}))
-    assert caught.value.status_code == 409
+    monkeypatch.setattr(
+        "app.infrastructure.auth.dependencies.get_logged_in_user", lambda _: SimpleNamespace(id=99)
+    )
+    monkeypatch.setattr(
+        "app.infrastructure.auth.dependencies.session_id_from_request", lambda _: "fixture-session"
+    )
+    monkeypatch.setattr(
+        "app.application.tenant_workspace_prefs.resolve_workspace_owner_id",
+        lambda *_: "tenant:fixture",
+    )
+    monkeypatch.setattr(
+        "app.fastapi_routes.market_account.resolve_valid_market_access_token",
+        AsyncMock(return_value="fixture-token"),
+    )
+    update = AsyncMock(return_value={"success": True, "message": "已安装"})
+    monkeypatch.setattr(
+        "app.application.private_mod_delivery_app.update_private_mod_from_library", update
+    )
+    result = await routes.mod_store_private_mod_update(Request({"type": "http", "headers": []}))
+    assert result.success is True
+    update.assert_awaited_once_with(
+        "sunbird-attendance-custom",
+        "fixture-token",
+        expected_version="",
+        owner_scope="tenant:fixture",
+    )

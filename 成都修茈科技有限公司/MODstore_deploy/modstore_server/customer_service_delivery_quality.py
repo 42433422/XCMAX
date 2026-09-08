@@ -10,6 +10,34 @@ def custom_delivery_gate(snapshot: dict[str, Any]) -> tuple[bool, str]:
         return False, str(snapshot.get("error") or "生产尚未完成")
     raw_artifact = snapshot.get("artifact")
     artifact: dict[str, Any] = raw_artifact if isinstance(raw_artifact, dict) else {}
+    verified = snapshot.get("verified_artifacts") or []
+    if not verified:
+        return False, "产物尚未完成 runtime 前端编译、业务探针与正式签包"
+    from modstore_server.customer_delivery_build import read_verified_artifact
+    from modstore_server.operational_errors import BOUNDARY_ERRORS
+
+    try:
+        identities = set()
+        for row in verified:
+            _, signed = read_verified_artifact(
+                row,
+                owner_id=int(row.get("owner_user_id") or 0),
+                ticket_id=int(row.get("ticket_id") or 0),
+            )
+            probe = signed["manifest"].get("delivery_verification") or {}
+            if probe.get("handler") != "verify_delivery" or probe.get("case_id") != row.get(
+                "verification_case_id"
+            ):
+                return False, "签名产物缺少绑定业务探针"
+            identities.add(row["id"])
+        if any(
+            str(artifact[key]) not in identities
+            for key in ("mod_id", "pack_id")
+            if artifact.get(key)
+        ):
+            return False, "组合产物尚未全部完成正式签包"
+    except BOUNDARY_ERRORS as exc:
+        return False, f"正式签名产物校验失败：{exc}"
     intent = str(snapshot.get("intent") or "")
     if intent == "mod":
         raw_validation = artifact.get("validation_summary")

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import json
+import hashlib
 import logging
 import re
 import tempfile
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 import httpx
 
@@ -83,18 +83,28 @@ async def install_custom_delivery_artifact(
     market_token: str,
     ticket_id: int,
     artifact_kind: str,
+    *,
+    owner_scope: str = "",
+    artifact_id: str = "",
 ) -> dict[str, Any]:
     """下载已验收的账号私有产物，安装成功后再回写交付回执。"""
     token = str(market_token or "").strip()
     kind = str(artifact_kind or "").strip()
+    requested_id = str(artifact_id or "").strip()
     if kind not in {"module", "employee"}:
         raise ValueError("artifact_kind 必须是 module 或 employee")
+    if not token:
+        raise PermissionError("缺少市场登录凭证")
+    if not owner_scope:
+        raise ValueError("定制产物安装必须绑定当前工作空间")
     from app.fastapi_routes.market_account import _market_base_url
 
     url = (
         f"{_market_base_url()}/api/customer-service/custom-deliveries/"
         f"{int(ticket_id)}/artifacts/{kind}/download"
     )
+    if requested_id:
+        url += "?" + urlencode({"artifact_id": requested_id})
     tmp = tempfile.NamedTemporaryFile(prefix="xcagi-custom-delivery-", suffix=".zip", delete=False)
     tmp_path = Path(tmp.name)
     tmp.close()
@@ -117,12 +127,41 @@ async def install_custom_delivery_artifact(
         receipt_token = str(response.headers.get("X-Delivery-Receipt-Token") or "").strip()
         if len(receipt_token) < 16:
             raise RuntimeError("定制产物缺少安装回执凭证")
+        package_sha256 = hashlib.sha256(response.content).hexdigest()
+        expected_sha256 = str(response.headers.get("X-Delivery-Artifact-SHA256") or "").strip()
+        expected_version = str(response.headers.get("X-Delivery-Artifact-Version") or "").strip()
+        if package_sha256 != expected_sha256 or not expected_version:
+            raise RuntimeError("定制产物摘要或版本凭证缺失、不匹配")
         tmp_path.write_bytes(response.content)
         if not response.content:
             raise RuntimeError("定制产物包为空")
 
         artifact_id = ""
         installed_version = ""
+        from app.infrastructure.mods.package_signing import verify_signed_package_bytes
+
+        signed = verify_signed_package_bytes(response.content)
+        manifest = signed["manifest"]
+        artifact_id = str(manifest.get("id") or "").strip()
+        installed_version = str(manifest.get("version") or "").strip()
+        if not artifact_id or installed_version != expected_version:
+            raise RuntimeError("定制产物身份或版本与下载凭证不匹配")
+        if requested_id and artifact_id != requested_id:
+            raise RuntimeError("定制产物身份与所选交付项目不匹配")
+        from app.application.mod_delivery_receipt_outbox import record_installed_delivery
+
+        def persist_grant() -> str:
+            return record_installed_delivery(
+                owner=owner_scope,
+                ticket_id=ticket_id,
+                artifact_kind=kind,
+                artifact_id=artifact_id,
+                version=installed_version,
+                package_sha256=package_sha256,
+                receipt_token=receipt_token,
+            )
+
+        receipt_id = ""
         if kind == "employee":
             from app.infrastructure.mods.artifact_constants import ARTIFACT_EMPLOYEE_PACK
             from app.infrastructure.mods.artifact_package import peek_artifact
@@ -135,12 +174,6 @@ async def install_custom_delivery_artifact(
             )
             if not ok:
                 raise RuntimeError(message)
-            import zipfile
-
-            with zipfile.ZipFile(tmp_path) as archive:
-                manifest = json.loads(archive.read("manifest.json").decode("utf-8"))
-            artifact_id = str(manifest.get("id") or "").strip()
-            installed_version = str(manifest.get("version") or "").strip()
         else:
             from app.infrastructure.mods.mod_manager import get_mod_manager
             from app.infrastructure.mods.package import ModPackage
@@ -151,8 +184,13 @@ async def install_custom_delivery_artifact(
                 )
             artifact_id = str(manifest.get("id") or "").strip()
             installed_version = str(manifest.get("version") or "").strip()
+            if installed_version != expected_version:
+                raise RuntimeError("定制产物版本与下载凭证不匹配")
+            # Persist the grant before mutation; the sender separately verifies
+            # the actual installation, including recovery after process death.
+            receipt_id = persist_grant()
             ok, message, metadata = get_mod_manager().install_mod_package(
-                str(tmp_path), verify_signature=True, activate=True
+                str(tmp_path), verify_signature=True, activate=True, owner_scope=owner_scope
             )
             if not ok:
                 raise RuntimeError(message)
@@ -166,25 +204,19 @@ async def install_custom_delivery_artifact(
         if not artifact_id:
             raise ValueError("定制产物缺少 ID")
 
-        receipt = await custom_delivery_remote_json(
-            token,
-            f"/api/customer-service/custom-deliveries/{int(ticket_id)}/installed",
-            method="POST",
-            payload={
-                "artifact_kind": kind,
-                "artifact_id": artifact_id,
-                "installed_version": installed_version,
-                "host": "XCAGI Desktop",
-                "receipt_token": receipt_token,
-            },
-        )
+        if installed_version != expected_version:
+            raise RuntimeError("定制产物版本与下载凭证不匹配")
+        if not receipt_id:
+            receipt_id = persist_grant()
         return {
             "success": True,
             "artifact_kind": kind,
             "artifact_id": artifact_id,
             "installed_version": installed_version,
-            "message": "定制产物已安装并回写交付回执",
-            "delivery": receipt,
+            "package_sha256": package_sha256,
+            "receipt_id": receipt_id,
+            "runtime_verified": False,
+            "message": "定制产物已安装，等待运行与业务验证回执",
         }
     finally:
         try:
@@ -230,11 +262,15 @@ async def update_private_mod_from_library(
     market_token: str,
     *,
     expected_version: str = "",
+    owner_scope: str = "",
+    require_account_scope: bool = False,
 ) -> dict[str, Any]:
     """从账号私有 Mod 库下载并安装最新 Mod。"""
     mid = str(mod_id or "").strip()
     if not mid or "/" in mid or "\\" in mid:
         raise ValueError("非法客户 Mod id")
+    if not owner_scope:
+        raise ValueError("私有 Mod 更新必须绑定当前工作空间")
     rows = await fetch_private_mod_library(market_token)
     remote = _library_row_by_id(rows, mid)
     if not remote:
@@ -270,11 +306,31 @@ async def update_private_mod_from_library(
     tmp_path = Path(tmp.name)
     tmp.close()
     try:
-        await catalog_download_to(
-            f"/v1/mod-sync/export-zip/{quote(mid, safe='')}",
-            tmp_path,
-            headers={"Authorization": _auth_header(token)},
+        download_headers = httpx.Headers(
+            await catalog_download_to(
+                f"/v1/mod-sync/export-zip/{quote(mid, safe='')}",
+                tmp_path,
+                headers={"Authorization": _auth_header(token)},
+            )
         )
+        expected_digest = str(remote.get("package_sha256") or remote.get("sha256") or "").strip()
+        if (
+            not re.fullmatch(r"[0-9a-f]{64}", expected_digest)
+            or hashlib.sha256(tmp_path.read_bytes()).hexdigest() != expected_digest
+        ):
+            raise ValueError("私有 Mod 包摘要与私有目录不一致")
+        receipt_token = download_headers.get("X-Delivery-Receipt-Token", "")
+        ticket_id = int(download_headers.get("X-Delivery-Ticket-ID", "0"))
+        if (
+            ticket_id <= 0
+            or len(receipt_token) < 16
+            or download_headers.get("X-Delivery-Artifact-SHA256") != expected_digest
+            or download_headers.get("X-Delivery-Artifact-Version") != remote_version
+        ):
+            raise ValueError("私有 Mod 更新缺少匹配的工单交付凭证")
+        declared_ticket = remote.get("delivery_ticket_id")
+        if declared_ticket is not None and int(declared_ticket) != ticket_id:
+            raise ValueError("私有 Mod 更新工单与私有目录不一致")
         from app.infrastructure.mods.package import ModPackage
 
         with tempfile.TemporaryDirectory(prefix="xcagi-private-mod-check-") as check_dir:
@@ -287,16 +343,34 @@ async def update_private_mod_from_library(
             raise ValueError("私有 Mod 包身份校验失败")
         if manifest_version and manifest_version != remote_version:
             raise ValueError("私有 Mod 包版本与私有目录不一致")
+        if require_account_scope and manifest.get("scope") != "account":
+            raise ValueError("自动私有交付只能安装声明账号作用域的签名包")
 
+        from app.application.mod_delivery_receipt_outbox import record_installed_delivery
+
+        receipt_id = record_installed_delivery(
+            owner=owner_scope,
+            ticket_id=ticket_id,
+            artifact_kind="module",
+            artifact_id=mid,
+            version=manifest_version,
+            package_sha256=expected_digest,
+            receipt_token=receipt_token,
+        )
         ok, message, metadata = manager.install_mod_package(
-            str(tmp_path), verify_signature=True, activate=True
+            str(tmp_path), verify_signature=True, activate=True, owner_scope=owner_scope
         )
         if not ok:
             raise RuntimeError(message)
+        from app.infrastructure.mods.install_receipts import read_verified_install
+
+        receipt = read_verified_install(mid, mods_root=manager.mods_root)
+        restart = bool(receipt and receipt.get("requires_restart"))
         try:
             from app.infrastructure.mods.mod_manager import ensure_mod_api_ready
 
-            ensure_mod_api_ready(mid)
+            if not restart:
+                ensure_mod_api_ready(mid)
         except RECOVERABLE_ERRORS:
             logger.warning("私有 Mod %s API 路由刷新失败", mid, exc_info=True)
         return {
@@ -306,6 +380,10 @@ async def update_private_mod_from_library(
             "previous_version": local_version,
             "current_version": str(getattr(metadata, "version", "") or remote_version),
             "latest_version": remote_version,
+            "requires_restart": restart,
+            "runtime_status": "restart_required" if restart else "installed",
+            "receipt_id": receipt_id,
+            "delivery_ticket_id": ticket_id,
             "message": message,
         }
     finally:

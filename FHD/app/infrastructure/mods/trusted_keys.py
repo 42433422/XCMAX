@@ -32,8 +32,12 @@ logger = logging.getLogger(__name__)
 # 受信 MOD 发布公钥（Ed25519, SubjectPublicKeyInfo / PEM）。
 #
 # 列表语义：用于密钥轮换——验签时只要 *任意一把* 受信公钥能通过即视为可信。
-# 当前内置的是开发/测试签名根；对应私钥不在仓库内（见模块 docstring）。
+# 内置生产发布根，并保留旧根以验证已有安装；私钥均不在仓库内。
 TRUSTED_MOD_PUBLIC_KEYS_PEM: tuple[str, ...] = (
+    # Production release root, 2026-09-06. Private key is held outside source.
+    "-----BEGIN PUBLIC KEY-----\n"
+    "MCowBQYDK2VwAyEAXmH3iWEihdH+G5AY81JlffHLXLV5NSrLFEXvFKHonio=\n"
+    "-----END PUBLIC KEY-----\n",
     # dev/test root (Ed25519) — 对应私钥仅用于本地/CI 签名，不入仓库。
     "-----BEGIN PUBLIC KEY-----\n"
     "MCowBQYDK2VwAyEAxgfLfVzvARnEmLfFjQtb/9F1NASdbUl5YaPDIvqE+BI=\n"

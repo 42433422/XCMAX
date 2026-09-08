@@ -12,8 +12,14 @@ def _facade():
 
 class __ModManagerPart01MixinPart01Mixin:
     def __init__(self, mods_root: str | None = None):
+        self._explicit_mods_root = mods_root is not None
         if mods_root is None:
             mods_root = _facade()._default_mods_root()
+        else:
+            if not _facade().os.fspath(mods_root).strip():
+                raise ValueError("Explicit mods_root must not be empty")
+            mods_root = _facade().os.path.abspath(mods_root)
+            _facade().os.makedirs(mods_root, exist_ok=True)
         self.mods_root = mods_root
         self._loaded_mods: list[str] = []
         self._mod_import_cache: dict = {}
@@ -54,10 +60,14 @@ class __ModManagerPart01MixinPart01Mixin:
 
     def _refresh_mods_root_if_needed(self) -> None:
         """
-        同步 mods_root：优先采用有效的 XCAGI_MODS_ROOT / XCAGI_MODS_DIR；
+        显式指定的目录始终固定，创建失败时向调用方报告，禁止回退到其它库。
+        未指定目录时：优先采用有效的 XCAGI_MODS_ROOT / XCAGI_MODS_DIR；
         若当前路径不存在则重新 _default_mods_root()。
         避免进程早期 import 顺序或 cwd 导致单例锁死在空目录，之后即使用户改环境变量也无法加载。
         """
+        if self._explicit_mods_root:
+            _facade().os.makedirs(self.mods_root, exist_ok=True)
+            return
         env_raw = (
             _facade().os.environ.get("XCAGI_MODS_ROOT")
             or _facade().os.environ.get("XCAGI_MODS_DIR")
@@ -327,6 +337,11 @@ class __ModManagerPart01MixinPart01Mixin:
                 )
                 self._loaded_mods.append(mod_id)
             return True
+        from app.infrastructure.mods.install_receipts import activate_pending_install
+
+        if not activate_pending_install(mod_id, mods_root=self.mods_root):
+            self._record_load_failure(mod_id, "restart_required", "Mod 更新需要重启后加载")
+            return False
         mod_path = self.resolve_mod_directory(mod_id)
         _facade().logger.info("[ModManager] Mod path: %s", mod_path)
         if not mod_path:
@@ -373,6 +388,9 @@ class __ModManagerPart01MixinPart01Mixin:
             effective_id = (metadata.id or mod_id).strip()
             self._load_mod_backend(effective_id, mod_path, metadata)
             registry.register_mod(metadata)
+            from app.infrastructure.mods.install_receipts import mark_runtime_loaded
+
+            mark_runtime_loaded(effective_id, mods_root=self.mods_root)
             if effective_id not in self._loaded_mods:
                 self._loaded_mods.append(effective_id)
             _facade().logger.info(

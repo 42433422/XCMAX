@@ -199,15 +199,15 @@ def test_metadata_to_api_dict(isolated_mods) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_list_all_mods_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_list_all_mods_disabled(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("XCAGI_DISABLE_MODS", "1")
-    manager = ModManager(mods_root="/tmp/whatever")
+    manager = ModManager(mods_root=str(tmp_path / "mods"))
     assert manager.list_all_mods() == []
 
 
-def test_get_routes_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_routes_disabled(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("XCAGI_DISABLE_MODS", "true")
-    manager = ModManager(mods_root="/tmp/whatever")
+    manager = ModManager(mods_root=str(tmp_path / "mods"))
     assert manager.get_routes() == []
 
 

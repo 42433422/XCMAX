@@ -165,7 +165,10 @@ def test_industry_baseline_legacy_sunbird_entitlement_does_not_restore_retired_m
 
 
 @pytest.mark.parametrize("employee_tools_installed", [False, True])
-def test_sunbird_packaging_industry_keeps_integrated_custom_conversion(employee_tools_installed):
+@pytest.mark.parametrize("private_runtime_installed", [False, True])
+def test_sunbird_packaging_industry_requires_separate_custom_runtime(
+    employee_tools_installed, private_runtime_installed
+):
     employee_tools = [
         "xcagi-core-workflow-employees",
         "xcagi-office-employee-pack-bridge",
@@ -182,7 +185,8 @@ def test_sunbird_packaging_industry_keeps_integrated_custom_conversion(employee_
             "accessories-packaging-industry",
             "attendance-industry",
         ]
-        + (employee_tools if employee_tools_installed else []),
+        + (employee_tools if employee_tools_installed else [])
+        + (["sunbird-attendance-custom"] if private_runtime_installed else []),
         entitled_mod_ids={"taiyangniao-pro"},
         account_username="SUNBIRD",
     )
@@ -196,17 +200,33 @@ def test_sunbird_packaging_industry_keeps_integrated_custom_conversion(employee_
     assert data["capability_mod_ids"] == ["attendance-industry"]
     module_group = next(g for g in data["groups"] if g["id"] == "business_modules")
     assert module_group["items"][0]["label"] == "通用考勤模块"
-    # Conversion remains account-scoped even though the retired runtime package
-    # was merged into attendance-industry. Preserve that delivery identity.
+    # Public attendance and the retired package's alias cannot stand in for the
+    # independently installed private conversion package. Keep the entitlement ID.
     custom_group = next(g for g in data["groups"] if g["id"] == "account_custom")
     conversion = next(it for it in custom_group["items"] if it["mod_id"] == "taiyangniao-pro")
-    assert conversion["installed"] is True  # shared runtime is already present
+    assert conversion["installed"] is private_runtime_installed
+    assert conversion["runtime_mod_id"] == "sunbird-attendance-custom"
     assert data["account_custom_mod_ids"] == ["taiyangniao-pro", *employee_tools]
     assert data["missing_account_custom_mod_ids"] == (
-        [] if employee_tools_installed else employee_tools
+        ([] if private_runtime_installed else ["taiyangniao-pro"])
+        + ([] if employee_tools_installed else employee_tools)
     )
-    assert data["account_delivery_seed_packages"][0]["mod_id"] == "attendance-industry"
-    assert data["full_stack_ready"] is employee_tools_installed
+    assert data["account_delivery_seed_packages"][0]["mod_id"] == "sunbird-attendance-custom"
+    assert data["full_stack_ready"] is (employee_tools_installed and private_runtime_installed)
+
+
+@pytest.mark.parametrize("entitled", [set(), {"attendance-industry"}, {"sz-qsm-pro"}])
+def test_public_attendance_or_other_customer_entitlement_does_not_grant_sunbird(entitled):
+    data = build_industry_baseline_plan(
+        "饰品包装",
+        installed_mod_ids=["attendance-industry", "sunbird-attendance-custom"],
+        entitled_mod_ids=entitled,
+        account_username="SUNBIRD",
+    )
+    assert data["capability_mod_ids"] == ["attendance-industry"]
+    assert data["account_custom_mod_ids"] == []
+    assert not any(group["id"] == "account_custom" for group in data["groups"])
+    assert data["account_delivery_seed_packages"] == []
 
 
 def test_onboarding_catalog_open_industries_stay_selectable_unrelated_entitlement():

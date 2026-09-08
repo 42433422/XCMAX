@@ -246,6 +246,24 @@ def _task_for_role(
         f"你是事故处理小组的 {role}。事件类型：{event_type}。问题摘要：{summary}。\n"
         "回复必须说人话：先给结论/状态，再说原因，再说下一步；不要直接倾倒 JSON、内部字段或英文模板。"
     )
+    resolution = payload.get("resolution")
+    if isinstance(resolution, dict) and resolution.get("route") in {
+        "shared_core",
+        "private_mod",
+    }:
+        base += (
+            f"\n原工单 {payload.get('ticket_no')}，账号 {payload.get('user_id')}，"
+            f"来源 {resolution.get('source_ref')}，交付路线 {resolution['route']}。"
+            "所有修复、验证和交付证据必须保留原工单关联。"
+        )
+        if resolution["route"] == "private_mod":
+            base += (
+                f"目标私有模块 {payload.get('target_mod_id') or resolution.get('target_mod_id') or '待确认'}。"
+                "客户需求落入该模块；平台能力不足时先提交共享主线能力前置任务，再交付私有模块。"
+                "禁止创建客户专用宿主分支或把客户业务数据并入共享代码。"
+            )
+        else:
+            base += "共享修复须进入主线并正式发布；仍须等待此账号客户端运行该修复版本的回执。fix 岗必须使用现有 EmployeeChangeRequest 工具提交代码，在真实执行结果保留 change_request_id；验证岗核对该变更的实际测试结果。没有真实 CR、合并与 CI 证据不得声明修复完成。"
     ownership_text = ""
     if isinstance(code_ownership, dict) and code_ownership:
         files = [

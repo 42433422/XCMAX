@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from modstore_server.customer_service_tools import json_loads
+from modstore_server.customer_service_tools import json_dumps, json_loads
 from modstore_server.models_cs import CustomerServiceTicket
 
 
@@ -30,6 +30,13 @@ class CustomDeliveryInstallReceiptBody(BaseModel):
     installed_version: str = Field(default="", max_length=64)
     host: str = Field(default="XCAGI", max_length=128)
     receipt_token: str = Field(..., min_length=16, max_length=128)
+    receipt_id: str = Field(default="", max_length=128)
+    stage: Literal["installed", "running", "verification_failed"] = "installed"
+    package_sha256: str = Field(default="", max_length=64)
+    client_instance_id: str = Field(default="", max_length=128)
+    host_sha: str = Field(default="", max_length=40)
+    runtime_files_sha256: str = Field(default="", max_length=64)
+    business_verification: dict[str, Any] = Field(default_factory=dict)
 
 
 class CustomDeliveryPaymentCheckoutBody(BaseModel):
@@ -132,7 +139,12 @@ def custom_delivery_brief(evidence: dict[str, Any], rework_note: str = "") -> st
         f"需求说明：{str(evidence.get('requirements') or '').strip()}",
         f"验收标准：{str(evidence.get('acceptance_criteria') or '').strip()}",
         "产物必须通过工作台内置的沙箱、工作流和质量门，不得用占位实现冒充交付。",
+        "Mod 前端须提供 frontend/src/index.js，export mount(container, sdk)，使用宿主参数 sdk.version=1、sdk.modId、sdk.route、sdk.signal、sdk.request(path,init)、sdk.navigate(path)，返回卸载函数，禁止外部 import；manifest.frontend.runtime 声明 sdk_version=1、source=frontend/src/index.js、entry=frontend/runtime/index.js。禁止依赖宿主编译 glob 的 Vue 路由。",
+        "每个产物须声明 manifest.delivery_verification={handler:'verify_delivery',case_id:'固定业务用例标识'}；在 backend_entry_module 实现 verify_delivery(request)，用隔离样例验证原业务并返回 passed 和非空 observations，禁止写客户数据或返回占位成功。正式交付必须通过共享编译器和受信 Ed25519 签包器。",
+        "私有员工源仍为 employee_pack，必须提供 backend/employees 下明确的 run(payload,ctx)，以 ctx.workspace_root/owner_id/user_id 访问当前账号工作区；不得依赖全局员工安装、进程全局名单或启动触发器。业务探针须在临时目录实际执行该 run 并核对输出内容，不能只核对导入、路由或健康。正式交付会保留员工源并封装为账号绑定 Mod，由相同安装与业务回执闭环验证。",
     ]
     if rework_note:
         parts.append(f"本轮返工意见：{rework_note.strip()}")
+    if evidence.get("runtime_failure"):
+        parts.append(f"客户宿主真实验证失败证据：{json_dumps(evidence['runtime_failure'])[:6000]}")
     return "\n\n".join(parts)

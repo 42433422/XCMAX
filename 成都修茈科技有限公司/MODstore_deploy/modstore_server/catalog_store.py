@@ -6,14 +6,37 @@ import hashlib
 import json
 import os
 import shutil
+import tempfile
 import threading
 import zipfile
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
+from modstore_server.catalog_publication_policy import stable_version
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 _lock = threading.Lock()
+
+
+class PackageConflictError(ValueError):
+    """A published version cannot be replaced or moved backwards."""
+
+
+@contextmanager
+def catalog_write_lock():
+    """Serialize catalog mutations across workers, not only one Python process."""
+    import fcntl
+
+    with _lock:
+        root = default_catalog_dir()
+        root.mkdir(parents=True, exist_ok=True)
+        with (root / ".catalog-write.lock").open("a+b") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 def norm_pkg_id(v: Any) -> str:
@@ -108,9 +131,15 @@ def load_store() -> Dict[str, Any]:
 def save_store(data: Dict[str, Any]) -> None:
     p = packages_path()
     p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    tmp.replace(p)
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=p.parent, delete=False) as f:
+        tmp = Path(f.name)
+        try:
+            f.write(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+            tmp.replace(p)
+        finally:
+            tmp.unlink(missing_ok=True)
 
 
 def sha256_file(path: Path) -> str:
@@ -287,22 +316,32 @@ def promote_draft_to_stable(id_: str, from_version: str) -> Dict[str, Any]:
         raise ValueError("id 与 from_version 必填")
     if not src_ver.startswith("draft-"):
         raise ValueError("from_version 必须以 draft- 开头")
-    src = get_package(pid, src_ver)
-    if not src:
-        raise ValueError("源版本不存在")
-    base_target = src_ver[len("draft-") :].strip() or "1.0.0"
-    target = base_target
-    bump = 1
-    while get_package(pid, target) is not None:
-        bump += 1
-        target = f"{base_target}+{bump}"
-    rec = dict(src)
-    rec["version"] = target
-    rec["release_channel"] = "stable"
-    rec.pop("created_at", None)
-    with _lock:
+    with catalog_write_lock():
         data = load_store()
         pkgs = list(data.get("packages") or [])
+        src = next(
+            (
+                r
+                for r in pkgs
+                if norm_pkg_id(r.get("id")) == pid and norm_version(r.get("version")) == src_ver
+            ),
+            None,
+        )
+        if not src:
+            raise ValueError("源版本不存在")
+        base_target = src_ver[len("draft-") :].strip() or "1.0.0"
+        target = base_target
+        bump = 1
+        existing_versions = {
+            norm_version(r.get("version")) for r in pkgs if norm_pkg_id(r.get("id")) == pid
+        }
+        while target in existing_versions:
+            bump += 1
+            target = f"{base_target}+{bump}"
+        rec = dict(src)
+        rec["version"] = target
+        rec["release_channel"] = "stable"
+        rec.pop("created_at", None)
         pkgs.append(rec)
         data["packages"] = pkgs
         save_store(data)
@@ -310,43 +349,78 @@ def promote_draft_to_stable(id_: str, from_version: str) -> Dict[str, Any]:
 
 
 def append_package(record: Dict[str, Any], src_file: Path | None) -> Dict[str, Any]:
-    """写入记录；若提供 src_file 则复制到 files/ 并填写 download_path / sha256。"""
-    pid = str(record.get("id") or "").strip()
-    ver = str(record.get("version") or "").strip()
+    """Commit immutable package bytes before atomically exposing their catalog row."""
+    pid = norm_pkg_id(record.get("id"))
+    ver = norm_version(record.get("version"))
     if not pid or not ver:
         raise ValueError("id 与 version 必填")
-
-    rec = dict(record)
+    rec = dict(record, id=pid, version=ver)
     rec.setdefault("artifact", "mod")
-    rec.setdefault(
-        "commerce",
-        {"mode": "free", "product_id": None, "sku": None},
-    )
+    rec.setdefault("commerce", {"mode": "free", "product_id": None, "sku": None})
     rec.setdefault("license", {"type": "none", "verify_url": None})
-
-    if src_file is not None and src_file.is_file():
-        fd = files_dir()
-        ext = src_file.suffix.lower() or ".xcmod"
-        if ext not in {".xcemp", ".xcmod", ".zip"}:
-            ext = ".xcmod"
-        storage_id = hashlib.sha256(f"{pid}\0{ver}".encode("utf-8")).hexdigest()
-        dest = fd / f"package_{storage_id}{ext}"
-        shutil.copy2(src_file, dest)
-        rec["sha256"] = sha256_file(dest)
-        rec["file_size"] = dest.stat().st_size
-        rec["stored_filename"] = dest.name
-
-    with _lock:
-        data = load_store()
-        pkgs = [
-            x
-            for x in data.get("packages") or []
-            if not (str(x.get("id")) == pid and str(x.get("version")) == ver)
-        ]
-        pkgs.append(rec)
-        data["packages"] = pkgs
-        save_store(data)
-    return rec
+    staged: Path | None = None
+    dest: Path | None = None
+    created = False
+    try:
+        if src_file is not None:
+            # An isolated copy makes the digest stable even if the caller later
+            # edits its upload file. No live published path is ever overwritten.
+            with tempfile.NamedTemporaryFile(dir=files_dir(), delete=False) as f:
+                staged = Path(f.name)
+                with src_file.open("rb") as source:
+                    shutil.copyfileobj(source, f)
+                f.flush()
+                os.fsync(f.fileno())
+            rec["sha256"] = sha256_file(staged)
+            rec["file_size"] = staged.stat().st_size
+            ext = src_file.suffix.lower()
+            if ext not in {".xcemp", ".xcmod", ".zip"}:
+                ext = ".xcmod"
+            storage_id = hashlib.sha256(f"{pid}\0{ver}\0{rec['sha256']}".encode()).hexdigest()
+            dest = files_dir() / f"package_{storage_id}{ext}"
+            rec["stored_filename"] = dest.name
+        with catalog_write_lock():
+            path = packages_path()
+            data = (
+                json.loads(path.read_text(encoding="utf-8")) if path.exists() else {"packages": []}
+            )
+            if not isinstance(data, dict) or not isinstance(data.get("packages"), list):
+                raise ValueError("Catalog 格式损坏，拒绝覆盖已有发布记录")
+            packages = list(data["packages"])
+            same_id = [r for r in packages if norm_pkg_id(r.get("id")) == pid]
+            existing = next((r for r in same_id if norm_version(r.get("version")) == ver), None)
+            if existing is not None:
+                if not rec.get("sha256") or existing.get("sha256") != rec["sha256"]:
+                    raise PackageConflictError(
+                        "已发布 version 不可覆盖；源码变更须提升 manifest.version"
+                    )
+                return dict(existing)  # Preserve the original source attestation.
+            if rec.get("automation_provenance"):
+                candidate = stable_version(ver)
+                for row in same_id:
+                    if str(row.get("version") or "").startswith("draft-"):
+                        continue
+                    if stable_version(row.get("version")) >= candidate:
+                        raise PackageConflictError("自动发布 version 必须严格高于已有版本")
+            if staged is not None and dest is not None:
+                if dest.exists():
+                    if sha256_file(dest) != rec["sha256"]:
+                        raise PackageConflictError("制品摘要路径冲突，拒绝覆盖")
+                else:
+                    staged.replace(dest)
+                    created = True
+            packages.append(rec)
+            data["packages"] = packages
+            try:
+                save_store(data)
+            except (OSError, TypeError, ValueError):
+                if created and dest is not None:
+                    dest.unlink(missing_ok=True)
+                raise
+        return rec
+    finally:
+        if staged is not None:
+            staged.unlink(missing_ok=True)
 
 
 def remove_package(pkg_id: str, version: str | None = None) -> int:
@@ -360,7 +434,7 @@ def remove_package(pkg_id: str, version: str | None = None) -> int:
         return 0
     ver_filter = norm_version(version) if version is not None else None
     removed = 0
-    with _lock:
+    with catalog_write_lock():
         data = load_store()
         pkgs = list(data.get("packages") or [])
         new_pkgs: List[Dict[str, Any]] = []

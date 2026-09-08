@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 
 const hostStub = {
+  SharedIssueAcceptancePanel: true,
   HostModBridgeView: {
     props: ['modId', 'view', 'title'],
     template: '<div class="host-bridge" :data-mod="modId" :data-view="view" />',
