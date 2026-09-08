@@ -118,6 +118,7 @@ def test_invalid_runtime_closes_resources_and_can_retry(wiring, monkeypatch):
         (SimpleNamespace(risk="low", idempotent=False), False),
         (SimpleNamespace(risk=None, idempotent=True), False),
         (SimpleNamespace(risk="low"), False),
+        (SimpleNamespace(idempotent=True), False),
         (None, False),
     ],
 )
@@ -159,3 +160,22 @@ def test_checkpointer_first_and_reload_release_previous_resources(wiring, monkey
     finally:
         container.close_workflow_resources()
     assert closed == [entered[1], entered[0], entered[3], entered[2]]
+
+
+def test_serving_runtime_can_publish_status_events(wiring, monkeypatch):
+    _, _, builds, *_ = wiring
+    bus = SimpleNamespace(is_running=True, publish=Mock(return_value=True))
+    monkeypatch.setattr("app.infrastructure.workflow.neuro_bus_bridge.get_neuro_bus", lambda: bus)
+    monkeypatch.setenv("XCAGI_LG_RUNTIME", "primary")
+    container = ServiceContainer()
+    try:
+        _ = container.workflow_runtime
+        publisher = builds[0][0]["state_event_publisher"]
+        publisher.publish({"node_id": "node-7", "status": "completed"})
+        bus.publish.assert_called_once()
+        event = bus.publish.call_args.args[0]
+        assert event.event_type == "state.update"
+        assert event.payload["node_id"] == "node-7"
+        assert event.payload["status"] == "completed"
+    finally:
+        container.close_workflow_resources()
