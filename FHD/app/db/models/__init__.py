@@ -1,3 +1,4 @@
+from app.db.models.customer_product_link import CustomerProductLink
 from app.db.models.agent import (
     AgentRunRecord,
     AgentTaskCommandRecord,
