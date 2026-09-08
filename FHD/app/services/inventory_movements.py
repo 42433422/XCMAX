@@ -34,6 +34,16 @@ class InventoryMovementsMixin:
         operator: str | None = None,
         remark: str | None = None,
     ) -> dict[str, Any]:
+        import math
+
+        try:
+            valid_quantity = (
+                not isinstance(quantity, bool) and math.isfinite(quantity) and quantity > 0
+            )
+        except (TypeError, ValueError, OverflowError):
+            valid_quantity = False
+        if not valid_quantity:
+            return {"success": False, "message": "入库数量必须为有限正数"}
         with _facade().get_db() as db:
             try:
                 product = (
