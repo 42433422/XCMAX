@@ -92,21 +92,12 @@ jobs:
           emulator-options: -no-window -no-snapshot-save -gpu swiftshader_indirect -noaudio -no-boot-anim
           emulator-boot-timeout: 900
           working-directory: FHD/mobile-flutter-poc
-          script: |
-            APK=$(find build/app/outputs/flutter-apk -name 'app-debug.apk' | head -1)
-            test -n "$APK"
-            adb install -r -g "$APK"
-            # 冷启动主 Activity，等待首帧渲染
-            adb shell monkey -p "$APP_PACKAGE" -c android.intent.category.LAUNCHER 1
-            sleep 15
-            # 存活断言：进程仍在 = 启动路径（含 MethodChannel/插件初始化）未崩溃
-            if ! adb shell pidof "$APP_PACKAGE" > /dev/null; then
-              echo "::error::app process not alive after launch"
-              exit 1
-            fi
-            adb exec-out screencap -p > /tmp/android-smoke-screen.png
+          # 四跑教训：本 action 把 script: 逐行拆成独立 sh 进程执行，
+          # 跨行变量与多行 if 块必然丢失/碎裂，故冒烟逻辑落盘为脚本。
+          script: bash ../scripts/ci/android_smoke.sh
         env:
           QT_QPA_PLATFORM: offscreen
+          APP_PACKAGE: com.xiuci.xcagi.mobile.enterprise
 
       - name: Upload smoke evidence
         if: always()
