@@ -159,6 +159,13 @@ class _LLMWorkflowPlannerPart02Mixin:
                     )
                 )
         if not nodes:
+            from app.application.workflow.shipment_plan import shipment_document_node
+
+            shipment_node = shipment_document_node(message, tool_registry)
+            if shipment_node is not None:
+                nodes.append(shipment_node)
+                intent = "shipment_generate"
+        if not nodes:
             from app.application.workflow.inventory_write_plan import stock_in_node
 
             inventory_node = stock_in_node(message, tool_registry)

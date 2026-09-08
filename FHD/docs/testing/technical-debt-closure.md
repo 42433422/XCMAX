@@ -17,6 +17,17 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Explicit shipment-document requests now use the existing order parser rather
+  than falling back to product search. Bare requests pause with zero tool calls;
+  their deferred generation node is distinguished from actual execution. Three
+  trials pass that interaction, observation 21/22 (`shipment-routing-trials`).
+  The full generation case now has explicit parameter-bound approval and seeded
+  customer/product records. It exposes `DetachedInstanceError` for ShipmentRecord
+  during real generation (`seeded-shipment-trials`), and remains failed. Parser
+  preservation and no-parser/no-LLM behavior for bare requests passed focused
+  tests. File contents, download, structured missing-product answers and the
+  detached-session defect still require completion.
+
 - Named stock-in now enters the inventory tool before generic database-write
   fallback, preserving model and quantity. Contracts accept IDs or exact names;
   absent warehouse names are requested through the existing form and answering

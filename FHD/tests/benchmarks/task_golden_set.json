@@ -285,6 +285,8 @@
       "domain": "shipment",
       "difficulty": "medium",
       "instruction": "打印 七彩乐园 的发货单，编号9803，规格12，一共3桶",
+      "fixtures": [{"entity": "customers", "values": {"unit_name": "七彩乐园"}}, {"entity": "products", "values": {"name": "发货测试产品", "model_number": "9803", "specification": "12", "price": 25}}],
+      "approvals": [{"tool_id": "shipment_orders", "action": "generate", "params": {"unit_name": "七彩乐园", "products": [{"name": "", "model_number": "9803", "quantity_tins": 3, "tin_spec": 12}]}}],
       "expect": {
         "actions": [{"tool_id": "shipment_orders", "action": "generate"}],
         "forbid_actions": [
@@ -298,10 +300,9 @@
       "difficulty": "hard",
       "instruction": "打个发货单",
       "expect": {
-        "actions": [{"tool_id": "clarify", "action": "ask"}],
-        "forbid_actions": [
-          {"tool_id": "shipment_orders", "action": "generate"}
-        ]
+        "run_status": "waiting_user",
+        "no_tool_calls": true,
+        "actions": [{"tool_id": "clarify", "action": "ask"}, {"tool_id": "shipment_orders", "action": "generate"}]
       }
     },
     {
