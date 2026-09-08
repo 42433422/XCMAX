@@ -1,6 +1,8 @@
 # Technical debt closure acceptance
 
 Baseline: origin/main `d7a90a8e599afa391e60ec2fef9cce9828a06cd5`.
+Mainline reconciliation: merged `a114e4b4c` (including #1809 and #1808) into
+this branch at `848023134`, without conflicts or changes to other worktrees.
 This work implements the five areas discussed in the developer assessment.
 Completion requires each item below to have current evidence; local green tests alone are insufficient.
 
@@ -16,6 +18,15 @@ Completion requires each item below to have current evidence; local green tests 
 Existing work must be preserved. PR #1809 owns attendance upgrades and the missing live intent evaluator; PR #1804 owns AI control expansion; PR #1806 owns Mac/Para control. Their unfinished branches are not silently merged here. Mainline inclusion or a reviewed adaptation will be recorded when relevant to acceptance.
 
 ## Current evidence and remaining defects
+
+- Latest main includes #1809's real-model evaluator and attendance upgrade work;
+  the previously missing evaluator is now present, not an outstanding branch
+  dependency. All 88 selected intent/security/approval/fencing route regressions
+  passed after merging (`mainline-reconciliation`). A direct rule CLI run reports
+  core 24/24 and semantic 19/73 with an OK ratchet, but also encountered unavailable
+  localhost PostgreSQL while resolving purchase units. Its report
+  `mainline-intent-rules.json` is diagnostic only, not clean-environment acceptance
+  or real-model accuracy. Isolated rule rerun and actual model evidence remain.
 
 - A spawned stale worker now reads a run and waits while another process expires
   its lease, claims the task and saves a new paused state. Releasing the old worker
