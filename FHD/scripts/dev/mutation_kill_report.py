@@ -12,8 +12,8 @@
   - mutmut 3.x progress：``🎉 67 🫥 0  ⏰ 0  🤔 0  🙁 23``
   - mutmut 3.x ``results``：``    key: survived``（默认跳过 killed，需 ``--all``）
 * 仅用标准库。
-* 加权杀死率 = ``killed / (killed + survived + timeout)``；
-  ``no_tests`` / ``skipped`` 不计入分母。
+* 加权杀死率 = ``killed / (killed + survived + timeout + no_tests)``；
+  ``no_tests`` / ``skipped`` 作为未检测变异计入分母。
 
 退出码
 ------
@@ -163,8 +163,8 @@ def parse_results(output: str) -> dict:
 
 
 def compute_kill_rate(counts: dict) -> float:
-    """计算加权杀死率：``killed / (killed + survived + timeout)``。"""
-    denom = counts["killed"] + counts["survived"] + counts["timeout"]
+    """计算加权杀死率：``killed / (killed + survived + timeout + no_tests)``。"""
+    denom = counts["killed"] + counts["survived"] + counts["timeout"] + counts.get("no_tests", 0)
     if denom == 0:
         return 0.0
     return counts["killed"] / denom
@@ -220,6 +220,7 @@ def main() -> int:
         **counts,
         "kill_rate": round(kill_rate, 4),
         "threshold": args.threshold,
+        "score_policy": "all_reported_mutants_v2",
     }
 
     print(

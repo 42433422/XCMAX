@@ -47,3 +47,21 @@ def test_parse_legacy_killed_survived():
     assert c["killed"] == 10
     assert c["survived"] == 2
     assert c["timeout"] == 1
+
+
+def test_uncovered_mutants_cannot_inflate_gate_score(tmp_path, monkeypatch):
+    mod = _load()
+    log = tmp_path / "mutations.log"
+    log.write_text("268/268  🎉 94 🫥 168  ⏰ 0  🤔 0  🙁 6  🔇 0  🧙 0\n")
+    monkeypatch.setattr(
+        "sys.argv",
+        ["mutation_kill_report", "--threshold", "80", "--from-file", str(log), "--dry-run"],
+    )
+    assert (
+        abs(
+            mod.compute_kill_rate({"killed": 94, "survived": 6, "timeout": 0, "no_tests": 168})
+            - 94 / 268
+        )
+        < 1e-9
+    )
+    assert mod.main() == 1

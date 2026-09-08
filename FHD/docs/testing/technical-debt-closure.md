@@ -19,6 +19,13 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Remote mutation run 34250327038 executed 268 reported mutants: 94 killed,
+  6 survived, 168 without tests. The old 94% gate excluded uncovered mutants.
+  Policy `all_reported_mutants_v2` now includes them in the denominator; replaying
+  that exact log yields 35.07% and fails the unchanged 80% threshold. Regression
+  tests pass. Covering the untested targets and obtaining a qualifying remote
+  result remain D1 blockers; historical scores retain their original meaning.
+
 - Read-only local desktop inventory examined 24 candidate host/Mod SQLite files.
   Only `Application Support/XCAGI/data/xcagi.db` contained Agent runs: 1750 total,
   1733 terminal and 17 waiting_user. All 17 lack Mod bindings and recorded tool
