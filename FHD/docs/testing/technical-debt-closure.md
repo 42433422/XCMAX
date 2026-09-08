@@ -19,6 +19,14 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- SQL tenant-list regression now seeds two older target runs behind 205 newer
+  same-user/other-tenant runs, plus an unscoped legacy run and a different user's
+  target-tenant run. A fresh repository returns the correct target records at
+  limits 1/2 across streaming batches, isolates empty tenants, and handles zero
+  limit/missing tenants. All 39 route/repository checks passed
+  (`sql-tenant-streaming`). This establishes filtering correctness, not indexed
+  query performance on production-scale historical data.
+
 - Non-admin run access now checks both user and persisted tenant. Seven HTTP
   regressions reject same-user cross-tenant detail/events/control/approval access
   without mutation or content disclosure. The public run list filters by tenant

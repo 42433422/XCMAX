@@ -18,6 +18,45 @@ from app.application.agent_orchestrator import (
 )
 
 
+def test_sql_tenant_filter_precedes_limit_across_streaming_batches(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'tenant-list.db'}")
+    factory = sessionmaker(bind=engine)
+    repo = SQLAlchemyAgentRunRepository(session_factory=factory)
+    expected = []
+    try:
+        # Desired records are older than more than two streaming batches of
+        # another tenant's records belonging to the same user.
+        for index in range(2):
+            run = AgentRun(user_id="owner", message=f"target-{index}")
+            run.metadata["runtime_context"] = {"tenant_id": "target"}
+            repo.save(run)
+            expected.insert(0, run.run_id)
+        with factory.begin() as db:
+            for index in range(205):
+                run = AgentRun(user_id="owner", message=f"other-{index}")
+                run.metadata["runtime_context"] = {"tenant_id": "other"}
+                repo.save_in_session(db, run)
+        legacy = AgentRun(user_id="owner", message="no tenant")
+        repo.save(legacy)
+        outsider = AgentRun(user_id="different-user", message="same tenant other user")
+        outsider.metadata["runtime_context"] = {"tenant_id": "target"}
+        repo.save(outsider)
+        fresh = SQLAlchemyAgentRunRepository(session_factory=factory, auto_create=False)
+        assert [
+            run.run_id for run in fresh.list_recent(user_id="owner", tenant_id="target", limit=2)
+        ] == expected
+        assert [
+            run.run_id for run in fresh.list_recent(user_id="owner", tenant_id="target", limit=1)
+        ] == expected[:1]
+        assert fresh.list_recent(user_id="owner", tenant_id="missing", limit=2) == []
+        assert fresh.list_recent(user_id="owner", tenant_id="target", limit=0) == []
+        assert [
+            run.run_id for run in fresh.list_recent(user_id="owner", tenant_id="", limit=2)
+        ] == [legacy.run_id]
+    finally:
+        engine.dispose()
+
+
 def test_sqlalchemy_agent_run_repository_persists_runs_across_instances(tmp_path) -> None:
     engine = create_engine(f"sqlite:///{tmp_path / 'agent-runs.db'}")
     session_factory = sessionmaker(bind=engine)
