@@ -119,6 +119,17 @@ class BackgroundTaskExecutionMixin:
             return cast("AgentRun | None", run)
         control = run.metadata.get("control")
         resume_status = str(control.get("resume_status") or "") if isinstance(control, dict) else ""
+        previous_approval = str((run.metadata.get("dispatch") or {}).get("approved_step_id") or "")
+        resume_approval = next(
+            (
+                step.step_id
+                for step in run.steps
+                if step.step_id == previous_approval
+                and step.status == "pending"
+                and step.output.get("error_code") == "tool_wait_interrupted"
+            ),
+            "",
+        )
         command = self._repo.request_task_control(run_id, "resume", requested_by=requested_by)
         context = dict(run.metadata.get("runtime_context") or {})
         context.update(dict(runtime_context or {}))
@@ -132,7 +143,7 @@ class BackgroundTaskExecutionMixin:
         if run.status == "queued":
             run.metadata["dispatch"] = {
                 "state": "queued",
-                "approved_step_id": "",
+                "approved_step_id": resume_approval,
                 "requested_by": requested_by,
                 "queued_at": utc_now_iso(),
             }

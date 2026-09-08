@@ -23,7 +23,7 @@ from app.db.models.wechat_refresh import WechatRefreshRequest
 from app.db.models.wechat_sync import WechatContact, WechatMessage
 from app.fastapi_routes import wechat_ingest
 from app.infrastructure.tenant_scope import tenant_scope
-from app.services import tools_wechat_control as control
+from app.application import wechat_control as control
 
 
 @pytest.fixture()
@@ -278,3 +278,124 @@ def test_refresh_migration_is_idempotent_and_matches_model(tmp_path):
         }
         assert columns == set(WechatRefreshRequest.__table__.columns.keys())
     engine.dispose()
+
+
+@pytest.mark.parametrize("command", ["", "pause", "cancel", "expire"])
+def test_background_late_receipt_and_durable_controls(system, monkeypatch, command):
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+    from app.application.agent_orchestrator.tool_wait import current_wait_control
+
+    _, factory = system
+    repository = SQLAlchemyAgentRunRepository(session_factory=factory)
+    orchestrator = AgentOrchestrator(repository=repository)
+    step = AgentStep(
+        node_id="refresh",
+        tool_id="wechat",
+        action="refresh_contact_cache",
+        risk="medium",
+        idempotent=True,
+    )
+    run = AgentRun(user_id="17", message="刷新微信", status="queued", steps=[step])
+    run.metadata.update(
+        {"runtime_context": {"tenant_id": 7}, "dispatch": {"approved_step_id": step.step_id}}
+    )
+    repository.save(run)
+    charges = []
+    refunds = []
+    monkeypatch.setattr(
+        orchestrator,
+        "_record_tool_usage_entry",
+        lambda run, call: charges.append(call.call_id) or True,
+    )
+    monkeypatch.setattr(
+        orchestrator,
+        "_record_tool_usage_refund",
+        lambda run, call, **kwargs: refunds.append(call.call_id),
+    )
+    now = [1000.0]
+    monkeypatch.setattr(refresh, "time", SimpleNamespace(time=lambda: now[0]))
+    requests = []
+
+    def sleep(_):
+        now[0] += 901 if command == "expire" else 20
+        if command == "expire":
+            return
+        if command:
+            repository.request_task_control(run.run_id, command, requested_by="17")
+        else:
+            claim = refresh.claim_refresh(7)
+            assert claim is not None
+            requests.append(claim["request_id"])
+            assert refresh.finish_refresh(
+                7, claim["request_id"], claim["lease_token"], {"success": True, "contacts": 1}
+            )
+
+    monkeypatch.setattr(
+        control,
+        "time",
+        SimpleNamespace(
+            time=lambda: now[0],
+            monotonic=lambda: now[0],
+            sleep=sleep,
+        ),
+    )
+    with tenant_scope(None):
+        result = orchestrator.execute_dispatched_run(run.run_id)
+    assert current_wait_control() is None
+    saved = SQLAlchemyAgentRunRepository(session_factory=factory).get(run.run_id)
+    assert saved.status == result.status
+    assert len(charges) == 1
+    if command == "expire":
+        assert saved.status == "failed"
+        assert saved.steps[0].output["data"]["state"] == "expired"
+        assert len(refunds) == 1
+    elif not command:
+        assert saved.status == "completed"
+        assert saved.steps[0].output["data"]["completed"] is True
+        assert len(requests) == 1 and not refunds
+    else:
+        assert saved.status == ("paused" if command == "pause" else "cancelled")
+        state = saved.steps[0].output["data"]["state"]
+        assert state == ("paused" if command == "pause" else "cancelled")
+        assert refresh.claim_refresh(7) is None
+        assert len(refunds) == 1
+        if command == "pause":
+            orchestrator.stage_resume_run(run.run_id, requested_by="17")
+
+            def finish_after_resume(_):
+                claim = refresh.claim_refresh(7)
+                assert claim is not None
+                assert refresh.finish_refresh(
+                    7, claim["request_id"], claim["lease_token"], {"success": True}
+                )
+
+            monkeypatch.setattr(
+                control,
+                "time",
+                SimpleNamespace(
+                    time=lambda: now[0],
+                    monotonic=lambda: now[0],
+                    sleep=finish_after_resume,
+                ),
+            )
+            resumed = orchestrator.execute_dispatched_run(run.run_id)
+            assert resumed.status == "completed"
+            assert resumed.steps[0].error == ""
+            assert len(charges) - len(refunds) == 1
+
+
+def test_paused_active_collection_cannot_be_reclaimed(system, monkeypatch):
+    now = [1000.0]
+    monkeypatch.setattr(refresh, "time", SimpleNamespace(time=lambda: now[0]))
+    row = refresh.request_refresh(7, "17", "refresh_contact_cache", "active")
+    claim = refresh.claim_refresh(7)
+    refresh.control_refresh(7, "17", row["request_id"], "pause")
+    assert refresh.get_refresh(7, "17", row["request_id"])["state"] == "pausing"
+    now[0] += 301
+    assert refresh.claim_refresh(7) is None
+    assert not refresh.finish_refresh(7, row["request_id"], claim["lease_token"], {"success": True})
+    resumed = refresh.request_refresh(7, "17", "refresh_contact_cache", "active")
+    assert resumed["request_id"] == row["request_id"]
+    assert refresh.claim_refresh(7) is not None

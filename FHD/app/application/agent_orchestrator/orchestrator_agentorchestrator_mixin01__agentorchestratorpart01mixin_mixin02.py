@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import importlib
 
+from app.application.agent_orchestrator.tool_wait import background_tool_wait
+
 
 def _facade():
     return importlib.import_module("app.application.agent_orchestrator.orchestrator")
@@ -22,6 +24,8 @@ class __AgentOrchestratorPart01MixinPart02Mixin:
         started = _facade().time.perf_counter()
         step.attempt_count += 1
         step.status = "running"
+        step.error = ""
+        step.finished_at = ""
         step.started_at = _facade().utc_now_iso()
         run.status = "running"
         attempt_count = step.attempt_count
@@ -90,7 +94,18 @@ class __AgentOrchestratorPart01MixinPart02Mixin:
             }
         else:
             try:
-                output = self._tool_executor.execute(step, runtime_context=ctx)
+
+                def poll_control() -> str:
+                    command = self._repo.latest_task_control(run.run_id)
+                    if command is not None and command.status == "requested":
+                        return str(command.action)
+                    return ""
+
+                dispatch = run.metadata.get("dispatch") or {}
+                with background_tool_wait(
+                    poll_control if dispatch.get("state") == "running" else None
+                ):
+                    output = self._tool_executor.execute(step, runtime_context=ctx)
             except _facade().RECOVERABLE_ERRORS:
                 _facade().logger.exception("agent tool execution failed")
                 output = {
@@ -111,7 +126,12 @@ class __AgentOrchestratorPart01MixinPart02Mixin:
             extra_metadata={"step_id": step.step_id, "call_id": tool_call.call_id},
         )
         success = bool(step.output.get("success", False))
-        observation = self._record_observation(run, step, tool_call=tool_call, success=success)
+        interrupted = step.output.get("error_code") == "tool_wait_interrupted"
+        observation = (
+            {}
+            if interrupted
+            else self._record_observation(run, step, tool_call=tool_call, success=success)
+        )
         if success:
             step.status = "completed"
             tool_call.status = "completed"
@@ -132,6 +152,10 @@ class __AgentOrchestratorPart01MixinPart02Mixin:
             )
             return
         step.status = "failed"
+        if interrupted:
+            # The outer checkpoint applies the durable pause/cancel command. A
+            # resumed refresh must reuse this step's existing idempotency key.
+            step.status = "pending"
         step.error = str(step.output.get("message") or step.output.get("error") or "tool failed")
         tool_call.status = "failed"
         tool_call.error = step.error
@@ -139,8 +163,10 @@ class __AgentOrchestratorPart01MixinPart02Mixin:
             self._record_tool_usage_refund(run, tool_call, reason=step.error)
         self._refresh_run_cost_metadata(run)
         run.add_event(
-            "tool.failed",
-            f"{step.tool_id}.{step.action} 执行失败",
+            "tool.interrupted" if interrupted else "tool.failed",
+            f"{step.tool_id}.{step.action} 等待已中断"
+            if interrupted
+            else f"{step.tool_id}.{step.action} 执行失败",
             {
                 "step_id": step.step_id,
                 "node_id": step.node_id,

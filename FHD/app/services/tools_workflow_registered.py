@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Any, cast
 
 from app.application.aiopen.software_control import execute_software_control
-from app.services.tools_wechat_control import execute_wechat_control
+from app.application.wechat_control import execute_wechat_control
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

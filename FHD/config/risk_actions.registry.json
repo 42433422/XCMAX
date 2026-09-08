@@ -1394,12 +1394,14 @@
         "refresh_contact_cache": {
           "risk": "medium",
           "idempotent": true,
+          "timeout_seconds": 900,
           "required_params": [],
           "availability": "shared"
         },
         "refresh_messages_cache": {
           "risk": "medium",
           "idempotent": true,
+          "timeout_seconds": 900,
           "required_params": [],
           "availability": "shared"
         }

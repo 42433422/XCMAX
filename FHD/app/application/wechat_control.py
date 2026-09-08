@@ -5,15 +5,22 @@ from __future__ import annotations
 import time
 import uuid
 
-from app.application.agent_orchestrator.execution_identity import current_execution_actor
 from app.application.wechat_ingest_service import build_contact_context, list_wechat_contacts
-from app.application.wechat_refresh_service import ACTIONS, get_refresh, request_refresh
+from app.application.wechat_refresh_service import (
+    ACTIONS,
+    control_refresh,
+    get_refresh,
+    request_refresh,
+)
 from app.infrastructure.tenant_scope import current_tenant_id
 
 
 def execute_wechat_control(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
+    from app.application.agent_orchestrator.execution_identity import current_execution_actor
+    from app.application.agent_orchestrator.tool_wait import current_wait_control
+
     actor = current_execution_actor()
     tenant = current_tenant_id()
     if not actor or tenant is None or tenant <= 0:
@@ -54,8 +61,19 @@ def execute_wechat_control(
         result = request_refresh(tenant, actor, action, key)
     except ValueError as exc:
         return {"success": False, "error_code": "refresh_conflict", "message": str(exc)}
-    deadline = time.monotonic() + 10
+    poll_control = current_wait_control()
+    wait_seconds = min(900, max(0, result["expires_at"] - time.time())) if poll_control else 10
+    deadline = time.monotonic() + wait_seconds
     while result["state"] in {"pending", "running"} and time.monotonic() < deadline:
+        command = poll_control() if poll_control else ""
+        if command in {"pause", "cancel"}:
+            control_refresh(tenant, actor, result["request_id"], command)
+            return {
+                "success": False,
+                "error_code": "tool_wait_interrupted",
+                "message": "已响应任务暂停或取消；不再等待采集端",
+                "data": get_refresh(tenant, actor, result["request_id"]),
+            }
         time.sleep(0.2)
         result = get_refresh(tenant, actor, result["request_id"]) or result
     if result["completed"]:

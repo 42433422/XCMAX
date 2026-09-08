@@ -8,7 +8,7 @@ import time
 import uuid
 from typing import Any
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import case, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.db.models.wechat_refresh import WechatRefreshRequest as Record
@@ -24,7 +24,7 @@ def _open_session():
 
 def _view(row: Record, now: float) -> dict[str, Any]:
     state = row.state
-    if state in {"pending", "running"} and row.expires_at <= now:
+    if state in {"pending", "running", "paused", "pausing"} and row.expires_at <= now:
         state = "expired"
     return {
         "request_id": row.request_id,
@@ -65,7 +65,41 @@ def request_refresh(tenant_id: int, actor_id: str, action: str, request_key: str
                     raise
         if row.action != action:
             raise ValueError("refresh request key already used for another action")
+        if row.state in {"paused", "pausing"} and row.expires_at > now:
+            session.execute(
+                update(Record)
+                .where(Record.request_id == request_id, Record.state.in_(["paused", "pausing"]))
+                .values(state=case((Record.state == "pausing", "running"), else_="pending"))
+            )
+            session.commit()
+            session.refresh(row)
         return _view(row, now)
+
+
+def control_refresh(tenant_id: int, actor_id: str, request_id: str, action: str) -> None:
+    if action not in {"pause", "cancel"}:
+        raise ValueError("invalid refresh control")
+    # A running collector cannot be stopped remotely. Pause prevents unclaimed
+    # work; cancel invalidates its receipt without claiming to undo collection.
+    states = (
+        ["pending", "running"] if action == "pause" else ["pending", "running", "paused", "pausing"]
+    )
+    with _open_session() as session:
+        session.execute(
+            update(Record)
+            .where(
+                Record.request_id == request_id,
+                Record.tenant_id == tenant_id,
+                Record.actor_id == actor_id,
+                Record.state.in_(states),
+            )
+            .values(
+                state=case((Record.state == "running", "pausing"), else_="paused")
+                if action == "pause"
+                else "cancelled"
+            )
+        )
+        session.commit()
 
 
 def get_refresh(tenant_id: int, actor_id: str, request_id: str) -> dict[str, Any] | None:
@@ -126,7 +160,7 @@ def finish_refresh(
             .where(
                 Record.request_id == request_id,
                 Record.tenant_id == tenant_id,
-                Record.state == "running",
+                Record.state.in_(["running", "pausing"]),
                 Record.lease_token == lease_token,
                 Record.lease_until > now,
                 Record.expires_at > now,
