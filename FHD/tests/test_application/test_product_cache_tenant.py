@@ -168,3 +168,29 @@ def test_product_name_cache_distinguishes_all_from_literal_all():
         assert service.get_product_names()["data"] == ["全部产品"]
         assert service.get_product_names("all")["data"] == ["all"]
     assert repository.find_names.call_count == 2
+
+
+def test_list_cache_distinguishes_delimiters_inside_filter_values():
+    repository = Mock()
+    repository.find_all.side_effect = [([{"name": "A"}], 1), ([{"name": "B"}], 1)]
+    with patch(
+        "app.utils.performance.performance_initializer.get_performance_optimizer",
+        return_value=Mock(
+            redis_cache=None,
+            query_optimizer=None,
+            request_deduplicator=None,
+            performance_monitor=None,
+        ),
+    ):
+        service = ProductsService(repository)
+    values = {}
+    cache = Mock()
+    cache.get.side_effect = values.get
+    cache.set.side_effect = lambda key, value, **kwargs: values.update({key: value})
+    service._cache = cache
+    with tenant_scope(1):
+        first = service.get_products(unit_name="A:B", model_number="C")
+        second = service.get_products(unit_name="A", model_number="B:C")
+    assert first["data"] == [{"name": "A"}]
+    assert second["data"] == [{"name": "B"}]
+    assert repository.find_all.call_count == 2
