@@ -290,6 +290,13 @@ class _LLMWorkflowPlannerPart02Mixin:
             )
             nodes.append(purchase_node)
         if not nodes:
+            from app.application.workflow.read_query_plan import customer_read_node
+
+            read_node = customer_read_node(message, route, tool_registry)
+            if read_node is not None:
+                nodes.append(read_node)
+                intent = "customers_query"
+        if not nodes:
             if "products" in tool_registry:
                 nodes.append(
                     _facade().WorkflowNode(
