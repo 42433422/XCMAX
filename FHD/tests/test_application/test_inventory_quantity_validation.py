@@ -41,3 +41,30 @@ def test_tool_adapter_accepts_numeric_quantity_string():
         )
     assert result["success"]
     assert service.inventory_in.call_args.kwargs["quantity"] == 2.5
+
+
+def test_inbound_rejects_missing_and_other_tenant_warehouse(tmp_path, monkeypatch):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.db.base import Base
+    from app.db.models import InventoryLedger, InventoryTransaction, Product, Warehouse
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'inventory.sqlite'}")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+    with factory.begin() as db:
+        db.add(Product(id=1, tenant_id=1, name="A100"))
+        db.add(Warehouse(id=2, tenant_id=2, name="其他租户", code="other"))
+    monkeypatch.setattr("app.db.session.SessionLocal", factory)
+    with tenant_scope(1):
+        for warehouse_id in (2, 999):
+            result = InventoryService().inventory_in(
+                product_id=1, warehouse_id=warehouse_id, quantity=5
+            )
+            assert not result["success"]
+        with factory() as db:
+            assert db.query(InventoryLedger).count() == 0
+            assert db.query(InventoryTransaction).count() == 0
+    engine.dispose()

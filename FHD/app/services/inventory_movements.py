@@ -51,6 +51,13 @@ class InventoryMovementsMixin:
                 )
                 if not product:
                     return {"success": False, "message": "产品不存在"}
+                warehouse = (
+                    db.query(_facade().Warehouse)
+                    .filter(_facade().Warehouse.id == warehouse_id)
+                    .first()
+                )
+                if not warehouse:
+                    return {"success": False, "message": "仓库不存在或不可访问"}
                 ledger = (
                     db.query(_facade().InventoryLedger)
                     .filter(
