@@ -122,7 +122,7 @@ def test_multiple_required_fields_wait_until_all_are_valid():
     )
     service.approval_service.get_approval_required_nodes.return_value = [node]
     method = _AIChatApplicationServicePart03Mixin._continue_after_clarification
-    assert method(service, "u", pending, "revenue") is None
+    assert method(service, "u", pending, "收入") is None
     assert node.params == {"transaction_type": "revenue"}
     assert pending["clarification"]["missing_fields"] == ["amount"]
     service.approval_service.get_approval_required_nodes.assert_not_called()

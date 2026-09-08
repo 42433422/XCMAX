@@ -28,6 +28,10 @@ def resolve_missing_field(
     value: Any = str(text or "").strip()
     if not value:
         return None
+    if kind == "string" and isinstance(schema.get("enum"), list):
+        from .clarification_options import field_options
+
+        value = field_options(node.tool_id, node.action, field).get(value, value)
     if kind in ("integer", "number", "boolean"):
         try:
             value = json.loads(value)

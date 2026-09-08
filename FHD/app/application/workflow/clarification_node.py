@@ -120,6 +120,11 @@ def _build_missing_question(node: WorkflowNode, missing: list[str]) -> str:
     if not missing:
         return "请补充所需信息。"
     current = labels.get(missing[0], missing[0])
+    from .clarification_options import field_options
+
+    options = field_options(node.tool_id, node.action, missing[0])
+    if options:
+        current += "（" + "、".join(options) + "）"
     remaining = f"还有 {len(missing) - 1} 项信息，随后会继续询问。" if len(missing) > 1 else ""
     return f"请先提供{current}。{remaining}信息补齐后再确认执行。"
 

@@ -6,6 +6,12 @@
 目标是四个阶段全部完成。本目录记录当前实施证据，不代表四阶段验收通过。
 此前对话中的 20%–30% 覆盖率与工期只是未验证估计，不作为验收基线。
 
+## Business-language clarification options
+
+Finance transaction-type clarification now displays and accepts seven explicit Chinese options using one scoped mapping shared by prompt and parser. Canonical protocol values remain accepted, and the mapped value still passes the existing enum/schema validation. Unknown options leave parameters untouched; unrelated string fields are not translated.
+
+32 related tests pass, including every displayed option and the actual continuation sequence using 收入 before amount and pending approval. Approval/persistence remain mocked in that sequence. This does not expand other domains or prove full financial execution; the measured business score remains 10/22.
+
 ## Sequential clarification prompt alignment
 
 Missing-field questions now ask for the current first field and state how many fields remain, matching the one-reply-at-a-time continuation. Common business fields use readable labels while the structured missing_fields list remains unchanged. This wording change does not expand parsing or execution coverage; the measured business score remains 10/22.
