@@ -26,7 +26,7 @@ describe('native screen commands', () => {
     const invoke = vi.fn(async (channel: string) => {
       if (channel === 'xcagi:get-app-identity') return { version: 'installed-version' }
       if (channel === 'xcagi:get-auto-launch') return true
-      if (channel === 'xcagi:get-update-status') return { type: 'update-not-available' }
+      if (channel === 'xcagi:get-update-observation') return { type: 'update-not-available', observedAt: 'now' }
       throw new Error(`unexpected IPC ${channel}`)
     })
     const electron = {
@@ -38,7 +38,7 @@ describe('native screen commands', () => {
     }).outputText
     runInNewContext(code, { exports: {}, require: () => electron, process: { platform: 'darwin', versions: {} }, window: { addEventListener: vi.fn() } })
     expect(await executeDesktopControl('desktop_info', {}, () => {})).toMatchObject({ success: true, auto_launch: true, identity: { version: 'installed-version' } })
-    expect(invoke.mock.calls.map(([channel]) => channel)).toEqual(['xcagi:get-app-identity', 'xcagi:get-update-status', 'xcagi:get-auto-launch'])
+    expect(invoke.mock.calls.map(([channel]) => channel)).toEqual(['xcagi:get-app-identity', 'xcagi:get-update-observation', 'xcagi:get-auto-launch'])
   })
   it('reads actual native state and rejects browser windows', async () => {
     vi.stubGlobal('xcagiDesktop', undefined)
@@ -73,5 +73,11 @@ describe('native screen commands', () => {
     api.downloadUpdate.mockRejectedValue(new Error('download failed'))
     await expect(executeDesktopControl('desktop_update', { operation: 'download' }, () => {})).rejects.toThrow('download failed')
     await expect(executeDesktopControl('desktop_update', { operation: 'secureGet' }, () => {})).rejects.toThrow()
+  })
+  it('reports skipped checks as not executed and marks legacy status incomplete', async () => {
+    const api = bridge()
+    api.checkForUpdates.mockResolvedValue({ skipped: true, reason: 'dev-mode' })
+    expect(await executeDesktopControl('desktop_update', { operation: 'check' }, () => {})).toMatchObject({ success: false, code: 'UPDATE_SKIPPED', verification: 'not_executed' })
+    expect(await executeDesktopControl('desktop_info', {}, () => {})).toMatchObject({ update: { observation_complete: false } })
   })
 })

@@ -363,3 +363,52 @@ describe('updater — available update error replay', () => {
     ).toBe('retry failed')
   })
 })
+
+describe('updater — explicit observation for AI readback', () => {
+  afterEach(() => { vi.unstubAllEnvs(); vi.useRealTimers() })
+
+  it('distinguishes unobserved, checking, no update, downloaded and error', async () => {
+    vi.useFakeTimers()
+    vi.resetModules()
+    updaterMocks.autoUpdater.on = vi.fn()
+    const updater = await import('./updater.js')
+    const { getUpdateObservation } = await import('./update-observation.js')
+    updater.__resetUpdateDownloadedForTest()
+    expect(getUpdateObservation()).toEqual({ type: 'not-observed', observedAt: null })
+    updater.configureUpdater({ isDestroyed: () => false, webContents: { send: vi.fn() } } as never)
+    const emit = (name: string, value?: unknown) => {
+      const callback = updaterMocks.autoUpdater.on.mock.calls.find(call => call[0] === name)?.[1] as ((arg?: unknown) => void) | undefined
+      expect(callback).toBeTypeOf('function')
+      callback?.(value)
+    }
+    emit('checking-for-update')
+    expect(getUpdateObservation().type).toBe('checking-for-update')
+    emit('update-not-available', { version: '1.0' })
+    expect(updater.getUpdateStatus()).toBeNull()
+    expect(getUpdateObservation().type).toBe('update-not-available')
+    expect(getUpdateObservation().observedAt).not.toBeNull()
+    emit('update-downloaded', { version: '2.0', buildSha: 'target-sha' })
+    expect(updater.getDownloadedUpdateState()).toMatchObject({ downloaded: true, version: '2.0', buildSha: 'target-sha' })
+    emit('error', new Error('network failed'))
+    expect(getUpdateObservation()).toMatchObject({ type: 'error', data: { message: 'network failed' } })
+  })
+
+  it('records skipped checks and rejected check promises', async () => {
+    vi.resetModules()
+    vi.stubEnv('XCAGI_UPDATE_URL', '')
+    vi.stubEnv('XCAGI_UPDATE_ED25519_PUBLIC_KEY', '')
+    const updater = await import('./updater.js')
+    const { getUpdateObservation } = await import('./update-observation.js')
+    updater.__resetUpdateDownloadedForTest()
+    expect(await updater.checkForUpdates()).toMatchObject({ skipped: true })
+    expect(getUpdateObservation().type).toBe('check-skipped')
+    vi.stubEnv('XCAGI_UPDATE_URL', 'https://example.invalid')
+    updaterMocks.autoUpdater.checkForUpdates.mockRejectedValueOnce(new Error('synthetic check failure'))
+    await expect(updater.checkForUpdates()).rejects.toThrow('synthetic check failure')
+    expect(getUpdateObservation()).toMatchObject({ type: 'error', data: { phase: 'check' } })
+    const { session } = await import('electron')
+    vi.mocked(session.defaultSession.resolveProxy).mockRejectedValueOnce(new Error('proxy failed'))
+    await expect(updater.runUpdateCheckWithDirectNet()).rejects.toThrow('proxy failed')
+    expect(getUpdateObservation()).toMatchObject({ type: 'error', data: { phase: 'network_check' } })
+  })
+})

@@ -2,6 +2,7 @@
 type DesktopBridge = {
   getAppIdentity?: () => Promise<unknown>
   getUpdateStatus?: () => Promise<unknown>
+  getUpdateObservation?: () => Promise<unknown>
   getAutoLaunch?: () => Promise<boolean>
   setAutoLaunch?: (enabled: boolean) => Promise<unknown>
   checkForUpdates?: () => Promise<unknown>
@@ -23,7 +24,9 @@ export async function executeDesktopControl(action: string, params: Record<strin
     }
     const identity = await bridge.getAppIdentity()
     assertCurrent()
-    const update = await bridge.getUpdateStatus()
+    const update = bridge.getUpdateObservation
+      ? await bridge.getUpdateObservation()
+      : { legacy_status: await bridge.getUpdateStatus(), observation_complete: false }
     assertCurrent()
     const autoLaunch = await bridge.getAutoLaunch()
     assertCurrent()
@@ -48,6 +51,9 @@ export async function executeDesktopControl(action: string, params: Record<strin
     assertCurrent()
     if (rejected(result)) {
       return { success: false, operation, result, verification: 'native_rejected' }
+    }
+    if (result && typeof result === 'object' && 'skipped' in result && result.skipped === true) {
+      return { success: false, code: 'UPDATE_SKIPPED', operation, result, verification: 'not_executed' }
     }
     return { success: true, operation, result, verification: 'native_request_returned', requires_followup: true }
   }
