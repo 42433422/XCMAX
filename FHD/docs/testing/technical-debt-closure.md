@@ -17,6 +17,15 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- A spawned stale worker now reads a run and waits while another process expires
+  its lease, claims the task and saves a new paused state. Releasing the old worker
+  rejects its failed-state write; fresh readback retains paused state and the
+  replacement owner. All 10 queue/dispatcher/fencing tests passed
+  (`process-worker-fencing`). Business session inspection confirms SessionLocal
+  resolves the active Mod database, so business fencing must preserve that data
+  boundary rather than assume the queue table exists in every business database.
+  Actual business commit fencing remains unimplemented.
+
 - SQL dispatcher workers now receive a claim-bound run repository. Every run
   save conditionally locks the queue row using claimed state, owner, execution
   count and unexpired lease in the same transaction as run/task persistence.
