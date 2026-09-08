@@ -55,10 +55,14 @@ def resolve_wechat_chat_context(
 
         ctx = context if isinstance(context, dict) else {}
         tenant_raw = ctx.get("tenant_id")
+        if isinstance(tenant_raw, (bool, float)):
+            return None
         try:
             tenant_id = int(tenant_raw) if tenant_raw not in (None, "") else None
         except (TypeError, ValueError):
-            tenant_id = None
+            return None
+        if tenant_id is None or tenant_id <= 0:
+            return None
 
         contact_key = str(ctx.get("wechat_contact_key") or "").strip()
         matched_by = "explicit"
