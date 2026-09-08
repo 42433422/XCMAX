@@ -382,3 +382,19 @@ it.each(['scope', 'selection'])('discards detail response after %s changes', asy
   expect(store.selectedTask).toBeNull()
   expect(store.selectedTaskId).toBe('')
 })
+
+it('does not submit an approval fetched before a scope switch', async () => {
+  setActivePinia(createPinia())
+  vi.clearAllMocks()
+  apiMock.getTask.mockResolvedValue({ success: true, data: task })
+  let resolve!: (value: unknown) => void
+  apiMock.getRun.mockReturnValueOnce(new Promise((r) => { resolve = r }))
+  const store = useAgentTaskCenterStore()
+  await store.openTask('task-1')
+  const pending = store.control('approve')
+  store.restartForScope()
+  resolve({ success: true, approval: { grant: 'old-grant' } })
+  await pending
+  expect(apiMock.continueRun).not.toHaveBeenCalled()
+  expect(store.actionPending).toBe('')
+})

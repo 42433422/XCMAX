@@ -128,11 +128,13 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
     return runs.find((run) => run.run_id === task.active_run_id) || runs[runs.length - 1] || null
   }
 
-  async function applyControl(task: AgentTaskSummary, action: TaskControlAction): Promise<void> {
+  async function applyControl(task: AgentTaskSummary, action: TaskControlAction, requestedScopeVersion: number): Promise<void> {
+    if (requestedScopeVersion !== scopeVersion) return
     const runId = activeRunOf(task)?.run_id || task.active_run_id
     if (!runId) throw new Error('工作区当前没有可控制的运行')
     if (action === 'approve') {
       const snapshot = await agentRunsApi.getRun(runId)
+      if (requestedScopeVersion !== scopeVersion) return
       const grant = snapshot.approval?.grant
       if (!grant) throw new Error('任务当前没有可用的审批凭证')
       await agentRunsApi.continueRun(runId, { approval_grant: grant })
@@ -145,47 +147,57 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
   async function controlTask(taskId: string, action: TaskControlAction): Promise<void> {
     const id = String(taskId || '').trim()
     if (!id || actionPending.value) return
+    const requestedScopeVersion = scopeVersion
     actionPending.value = action
     try {
       const response = await agentRunsApi.getTask(id)
+      if (requestedScopeVersion !== scopeVersion) return
       const task = response.data
       if (!task) throw new Error('工作区任务不存在')
-      await applyControl(task, action)
+      await applyControl(task, action, requestedScopeVersion)
+      if (requestedScopeVersion !== scopeVersion) return
       await Promise.all([refresh(), selectedTaskId.value ? refreshDetail() : Promise.resolve()])
     } catch (reason) {
+      if (requestedScopeVersion !== scopeVersion) return
       error.value = errorMessage(reason)
     } finally {
-      actionPending.value = ''
+      if (requestedScopeVersion === scopeVersion) actionPending.value = ''
     }
   }
 
   async function control(action: TaskControlAction): Promise<void> {
     const task = selectedTask.value
     if (!task || actionPending.value) return
+    const requestedScopeVersion = scopeVersion
     actionPending.value = action
     try {
-      await applyControl(task, action)
+      await applyControl(task, action, requestedScopeVersion)
+      if (requestedScopeVersion !== scopeVersion) return
       await Promise.all([refresh(), refreshDetail()])
     } catch (reason) {
+      if (requestedScopeVersion !== scopeVersion) return
       error.value = errorMessage(reason)
     } finally {
-      actionPending.value = ''
+      if (requestedScopeVersion === scopeVersion) actionPending.value = ''
     }
   }
 
   async function archiveSelected(): Promise<void> {
     const task = selectedTask.value
     if (!task || !TERMINAL_STATES.has(task.status) || actionPending.value) return
+    const requestedScopeVersion = scopeVersion
     actionPending.value = 'archive'
     try {
       await agentRunsApi.archiveTask(task.task_id)
+      if (requestedScopeVersion !== scopeVersion) return
       selectedTask.value = null
       selectedTaskId.value = ''
       await refresh()
     } catch (reason) {
+      if (requestedScopeVersion !== scopeVersion) return
       error.value = errorMessage(reason)
     } finally {
-      actionPending.value = ''
+      if (requestedScopeVersion === scopeVersion) actionPending.value = ''
     }
   }
 
@@ -250,6 +262,7 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
     const shouldRestart = started
     stop()
     scopeVersion += 1
+    actionPending.value = ''
     tasks.value = []
     selectedTask.value = null
     selectedTaskId.value = ''
