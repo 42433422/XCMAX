@@ -110,10 +110,10 @@ def _check_db_state(expect: dict[str, Any]) -> tuple[bool, str]:
     assertions = expect.get("db_state") or []
     if not assertions:
         return True, ""
-    from app.application.business_db_write_verification import _model_config
     from app.db import SessionLocal, engine
     from app.db.base import Base
     from app.infrastructure.tenant_scope import current_tenant_id
+    from scripts.dev.task_benchmark_assertions import assertion_model_config as _model_config
 
     engine.dispose()  # 刷新连接池：旧连接持有 WAL 旧快照会看不到已提交写入
     Base.metadata.create_all(engine, checkfirst=True)

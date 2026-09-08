@@ -247,7 +247,9 @@
       "domain": "finance",
       "difficulty": "medium",
       "instruction": "记一笔收入 5000 元，来自星光贸易",
+      "approvals": [{"tool_id": "finance", "action": "create_transaction", "params": {"transaction_type": "revenue", "amount": 5000, "currency": "CNY", "counterparty_name": "星光贸易"}}],
       "expect": {
+        "db_state": [{"entity": "financial_transactions", "op": "count", "count": 1}, {"entity": "financial_transactions", "op": "exists", "where": {"transaction_type": "revenue", "amount": 5000, "counterparty_name": "星光贸易"}}],
         "actions": [{"tool_id": "finance", "action": "create_transaction"}],
         "forbid_actions": [
           {"tool_id": "finance", "action": "delete_transaction"}

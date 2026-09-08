@@ -191,3 +191,13 @@ def seed_inventory_quantities(rows: list[dict]) -> None:
                 )
             )
         db.commit()
+
+
+def assertion_model_config(entity: str):
+    if entity == "financial_transactions":
+        from app.db.models.finance import FinancialTransaction
+
+        return FinancialTransaction, {}, ()
+    from app.application.business_db_write_verification import _model_config
+
+    return _model_config(entity)

@@ -17,6 +17,13 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Explicit revenue/expense recording now plans the finance tool with the canonical
+  transaction type and preserved amount/counterparty. The revenue scenario uses
+  exact scripted approval and asserts one committed row with revenue, 5000 and
+  the named counterparty. Three trials passed, along with 26 related tests; the
+  observation is 16/22. Evidence: `finance-revenue-trials`. The earlier incorrect
+  income enum was rejected without a write and is retained in `finance-write-trials`.
+
 - Model-specific inventory lookup routes to the inventory report with an exact
   model filter. The fixture contains A100=50 and B200=77; three trials returned
   only A100 with total/available quantity=50. All 132 report/tool/benchmark tests

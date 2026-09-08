@@ -169,6 +169,13 @@ class _LLMWorkflowPlannerPart02Mixin:
                 intent = "business_db_write"
                 todo = ["识别业务实体与写入字段", "通过受控业务服务写入数据库", "返回写入结果"]
                 nodes.append(node)
+        if not nodes:
+            from app.application.workflow.finance_write_plan import finance_transaction_node
+
+            finance_node = finance_transaction_node(message, tool_registry)
+            if finance_node is not None:
+                nodes.append(finance_node)
+                intent = "finance_write"
         route = route_normal_mode_message(message)
         if (
             not nodes
