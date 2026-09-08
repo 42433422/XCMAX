@@ -527,6 +527,44 @@ def test_durable_http_approval_rolls_back_enqueue_failure_and_retries(tmp_path, 
         engine.dispose()
 
 
+def test_approval_cannot_replace_persisted_tenant_and_does_not_consume_grant():
+    from app.application.agent_orchestrator.approval_grant import issue_approval_grant
+
+    run = AgentRun(
+        user_id="owner",
+        message="inbound",
+        status="waiting_user",
+        steps=[
+            AgentStep(
+                node_id="in",
+                tool_id="inventory",
+                action="stock_in",
+                status="waiting_user",
+                params={"product_id": 1, "warehouse_id": 1, "quantity": 50},
+            )
+        ],
+    )
+    run.metadata["runtime_context"] = {"tenant_id": "1"}
+    get_agent_run_repository().save(run)
+    token = issue_approval_grant(run, principal_id="owner")["grant"]
+    client = _client("owner", tenant_id="1")
+    with patch("app.fastapi_routes.domains.agent.routes._enqueue_run") as enqueue:
+        response = client.post(
+            f"/api/agent/runs/{run.run_id}/continue",
+            json={"approval_grant": token, "runtime_context": {"tenant_id": "2"}},
+        )
+        assert response.status_code == 400
+        enqueue.assert_not_called()
+        stored = get_agent_run_repository().get(run.run_id)
+        assert stored.status == "waiting_user"
+        assert stored.metadata["runtime_context"]["tenant_id"] == "1"
+        retry = client.post(
+            f"/api/agent/runs/{run.run_id}/continue", json={"approval_grant": token}
+        )
+        assert retry.status_code == 202
+        enqueue.assert_called_once()
+
+
 def test_create_agent_run_validates_request_body() -> None:
     get_agent_run_repository().clear()
     client = _client()

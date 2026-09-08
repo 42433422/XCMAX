@@ -19,6 +19,16 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Approval continuation previously merged client runtime_context over persisted
+  tenant identity. HTTP now rejects a differing tenant before consumption, and
+  approval-state mutation repeats the check inside the durable transaction. A
+  route regression verifies no staging/enqueue/consumption after tampering and
+  a valid retry with the same grant. Task creation also drops client tenant IDs
+  when the authenticated principal has no tenant. All 38 route/recovery checks
+  passed (`approval-tenant-binding`). Resume/retry and other runtime-context
+  mutation paths, full principal/run tenant checks, and active-Mod identity binding
+  still require audit; this does not certify every authorization boundary.
+
 - A fresh thread now exercises the real inventory tool executor/registered router
   against SQLite with two tenants' identical product models and warehouse names.
   Runtime tenant 2 writes only its own canonical IDs and one 50-unit movement;

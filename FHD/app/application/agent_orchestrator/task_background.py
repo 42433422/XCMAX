@@ -34,6 +34,12 @@ def apply_approved_step(
 ) -> None:
     """Apply an already validated approval without performing storage I/O."""
     context = dict(run.metadata.get("runtime_context") or {})
+    if (
+        runtime_context
+        and "tenant_id" in runtime_context
+        and str(runtime_context["tenant_id"] or "") != str(context.get("tenant_id") or "")
+    ):
+        raise ValueError("不能更改任务的租户范围")
     context.update(dict(runtime_context or {}))
     run.metadata["runtime_context"] = context
     apply_ai_budget_metadata(run, context)

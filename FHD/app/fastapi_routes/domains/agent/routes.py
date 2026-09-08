@@ -96,6 +96,8 @@ def create_agent_run(
     runtime_context = dict(runtime_context_raw)
     if principal.tenant_id:
         runtime_context["tenant_id"] = principal.tenant_id
+    else:
+        runtime_context.pop("tenant_id", None)
 
     try:
         orchestrator = AgentOrchestrator()
@@ -296,6 +298,13 @@ def continue_agent_run(
                 return error
             if current is None:
                 return _internal_error_response("approve agent run")
+            original_context = current.metadata.get("runtime_context") or {}
+            if "tenant_id" in runtime_context and str(runtime_context["tenant_id"] or "") != str(
+                original_context.get("tenant_id") or ""
+            ):
+                return JSONResponse(
+                    {"success": False, "message": "不能更改任务的租户范围"}, status_code=400
+                )
             runs = get_agent_run_repository()
             queue = get_task_execution_repository()
             durable = isinstance(runs, SQLAlchemyAgentRunRepository)
