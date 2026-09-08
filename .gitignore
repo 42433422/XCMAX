@@ -215,3 +215,6 @@ FHD/admin-console/.vite-bak/
 
 # 本地审计报告工作区（222MB+，永不入库；锚定根目录，避免误伤 FHD/docs/reports/）
 /reports/
+
+# mod 安装运行时收据（安装器/测试生成，不入库；mods SSOT 只认 mods_ssot 清单）
+FHD/mods/.install-receipts/

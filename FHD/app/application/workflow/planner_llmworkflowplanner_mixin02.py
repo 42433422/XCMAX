@@ -38,6 +38,273 @@ def _first_onboarding_quoted_slot(text: str, prefixes: tuple[str, ...]) -> str |
     return None
 
 
+_RAW_SQL_RE = _facade().re.compile(
+    r"\b(delete|drop|truncate|insert|update|alter)\b[^。；;]{0,60}\b(from|into|table|database)\b",
+    _facade().re.I,
+)
+
+_PRODUCT_QUANTIFIERS = ("一个", "一款", "一种", "这个", "那个", "某个")
+
+
+def _looks_like_raw_sql_request(message: str) -> bool:
+    """Detect "在数据库里执行 DELETE FROM customers" style raw-SQL requests.
+
+    Raw SQL must never enter a write plan; the planner refuses it outright and
+    the user is pointed at the controlled business tools instead.
+    """
+    value = str(message or "")
+    if not value:
+        return False
+    return bool(_RAW_SQL_RE.search(value))
+
+
+def _domain_business_plan(
+    message: str, route: dict[str, _facade().Any], tool_registry: dict[str, _facade().Any]
+) -> tuple[str, list[str], list[_facade().WorkflowNode]] | None:
+    """Route recognized business-domain requests to their own tools.
+
+    Without this layer the terminal fallback sends *everything* (customer
+    lists, quotes, ledgers, dashboards) to ``products.query`` — the cross-domain
+    misrouting this method exists to fix. Returns ``(intent, todo, nodes)`` or
+    ``None`` when no domain rule matches.
+    """
+    re_mod = _facade().re
+    text = str(message or "")
+    route_intent = str(route.get("intent") or "")
+    wf = _facade().WorkflowNode
+
+    # 1) Sales: quoting / ordering must not fall into the customer or product
+    #    query path just because a customer name appears in the sentence.
+    if "sales" in tool_registry and (
+        route_intent == "sales_query"
+        or any(k in text for k in ("报价", "报个价", "询价", "下订单", "下单"))
+    ):
+        seg = re_mod.search(r"[给为](?:客户)?([^，,。；\s]+?)(?:下订单|下单|报)", text)
+        customer = seg.group(1) if seg else ""
+        if customer.startswith("客户"):
+            customer = customer[len("客户") :]
+        customer = customer.split("的")[0].strip("，,。； ")
+        model_m = re_mod.search(r"(?:产品|商品)\s*[:：]?\s*([A-Za-z0-9._-]+)", text)
+        qty_m = re_mod.search(r"数量\s*[:：]?\s*(\d+(?:\.\d+)?)", text)
+        items = [
+            {
+                "product_name": model_m.group(1) if model_m else "",
+                "model_number": (model_m.group(1) if model_m else "").upper(),
+                "quantity": float(qty_m.group(1)) if qty_m else 1,
+            }
+        ]
+        return (
+            "sales_quote",
+            ["识别客户与产品明细", "生成销售报价单", "返回报价结果"],
+            [
+                wf(
+                    node_id="sales_quote",
+                    tool_id="sales",
+                    action="quote",
+                    params={"customer_name": customer, "items": items},
+                    risk="medium",
+                    description=f"为 {customer or '客户'} 报价",
+                    idempotent=True,
+                )
+            ],
+        )
+
+    # 2) Finance: bookkeeping entries and ledger queries.
+    if "finance" in tool_registry:
+        if any(k in text for k in ("记一笔", "记一笔收入", "记一笔支出")):
+            amount_m = re_mod.search(r"(\d+(?:\.\d+)?)\s*(?:元|块)", text)
+            txn_type = "expense" if "支出" in text else "income"
+            party_m = re_mod.search(r"(?:来自|付给|给)\s*([^\s，,。；]+)", text)
+            params: dict[str, _facade().Any] = {
+                "transaction_type": txn_type,
+                "amount": float(amount_m.group(1)) if amount_m else 0.0,
+                "description": text,
+            }
+            if party_m:
+                params["counterparty_name"] = party_m.group(1)
+            return (
+                "finance_transaction",
+                ["识别收支类型与金额", "创建财务凭证", "返回记账结果"],
+                [
+                    wf(
+                        node_id="create_finance_transaction",
+                        tool_id="finance",
+                        action="create_transaction",
+                        params=params,
+                        risk="high",
+                        description="记一笔财务收支",
+                        idempotent=False,
+                    )
+                ],
+            )
+        if route_intent == "finance_query" or any(
+            k in text for k in ("账本", "总账", "对账", "流水")
+        ):
+            return (
+                "finance_ledger",
+                ["确定账本查询范围", "查询总账", "返回账本结果"],
+                [
+                    wf(
+                        node_id="query_finance_ledger",
+                        tool_id="finance",
+                        action="ledger_query",
+                        params={},
+                        risk="low",
+                        description="查询财务账本",
+                        idempotent=True,
+                    )
+                ],
+            )
+
+    # 3) Reports: dashboards, summaries and exports.
+    if "reports" in tool_registry and (
+        route_intent == "reports_query"
+        or any(k in text for k in ("报表", "汇总", "看板", "统计"))
+        or route_intent == "inventory_alert"
+    ):
+        if "看板" in text:
+            return (
+                "reports_dashboard",
+                ["打开运营看板", "返回看板数据"],
+                [
+                    wf(
+                        node_id="reports_dashboard",
+                        tool_id="reports",
+                        action="dashboard",
+                        params={},
+                        risk="low",
+                        description="查看运营看板",
+                        idempotent=True,
+                    )
+                ],
+            )
+        if "导出" in text:
+            report_type = "inventory" if "库存" in text else (
+                "purchase" if "采购" in text else "sales"
+            )
+            return (
+                "reports_export",
+                ["确定报表类型", "导出报表文件", "返回下载信息"],
+                [
+                    wf(
+                        node_id="reports_export",
+                        tool_id="reports",
+                        action="export",
+                        params={
+                            "report_type": report_type,
+                            "data": [],
+                            "filename": f"{report_type}_report",
+                        },
+                        risk="low",
+                        description="导出业务报表",
+                        idempotent=True,
+                    )
+                ],
+            )
+        if "库存" in text:
+            return (
+                "reports_inventory",
+                ["汇总库存数据", "返回库存报表"],
+                [
+                    wf(
+                        node_id="reports_inventory_summary",
+                        tool_id="reports",
+                        action="inventory_summary",
+                        params={"group_by": "product"},
+                        risk="low",
+                        description="库存汇总",
+                        idempotent=True,
+                    )
+                ],
+            )
+        return (
+            "reports_sales",
+            ["确定统计口径", "汇总销售数据", "返回销售报表"],
+            [
+                wf(
+                    node_id="reports_sales_summary",
+                    tool_id="reports",
+                    action="sales_summary",
+                    params={"group_by": "product"},
+                    risk="low",
+                    description="销售汇总",
+                    idempotent=True,
+                )
+            ],
+        )
+
+    # 4) Inventory queries (no registered inventory.query action; the report
+    #    summary is the read surface for "查一下 A100 的库存" style asks).
+    if route_intent == "inventory_alert" and "reports" in tool_registry:
+        return _domain_business_plan(text, {"intent": "reports_query"}, tool_registry)
+
+    # 5) Customer queries must hit the customer tool, not the product library.
+    if route_intent == "customers_query" and "customers" in tool_registry:
+        keyword = _facade()._extract_business_db_read_keyword(text, "customers")
+        return (
+            "customers_query",
+            ["识别查询关键词", "查询客户", "返回客户列表"],
+            [
+                wf(
+                    node_id="query_customers",
+                    tool_id="customers",
+                    action="query",
+                    params={"keyword": keyword},
+                    risk="low",
+                    description="查询客户",
+                    idempotent=True,
+                )
+            ],
+        )
+
+    # 6) Shipment documents: full slots generate, missing slots ask first.
+    if route_intent == "shipment" and "shipment_orders" in tool_registry:
+        unit_m = re_mod.search(
+            r"(?:打印|生成|开|打)\s*(?:一下)?\s*([^\s，,。；的]{2,}?)\s*的?\s*(?:发货单|送货单|出货单)",
+            text,
+        )
+        unit_name = (unit_m.group(1) if unit_m else "").strip()
+        model_m = re_mod.search(r"(?:编号|型号|model)\s*[:：]?\s*([A-Za-z0-9._-]+)", text, re_mod.I)
+        spec_m = re_mod.search(r"规格\s*[:：]?\s*(\d+(?:\.\d+)?)", text)
+        qty_m = re_mod.search(r"(\d+(?:\.\d+)?)\s*桶", text)
+        if unit_name and (model_m or spec_m or qty_m):
+            product: dict[str, _facade().Any] = {"name": model_m.group(1) if model_m else ""}
+            if model_m:
+                product["model_number"] = model_m.group(1).upper()
+            if spec_m:
+                product["specification"] = float(spec_m.group(1))
+                product["tin_spec"] = float(spec_m.group(1))
+            if qty_m:
+                product["quantity_tins"] = int(float(qty_m.group(1)))
+            return (
+                "shipment_generate",
+                ["解析客户与产品明细", "生成发货单文档", "返回单据结果"],
+                [
+                    wf(
+                        node_id="generate_shipment",
+                        tool_id="shipment_orders",
+                        action="generate",
+                        params={"unit_name": unit_name, "products": [product]},
+                        risk="medium",
+                        description=f"为 {unit_name} 生成发货单",
+                        idempotent=False,
+                    )
+                ],
+            )
+        return (
+            "shipment_clarify",
+            ["确认客户与产品明细", "反问缺失信息"],
+            [
+                _facade().build_clarify_node(
+                    "请告诉我要给哪个客户开发货单，以及产品型号（编号）、规格和数量。",
+                    ambient={"target_node_id": ""},
+                )
+            ],
+        )
+
+    return None
+
+
 def _onboarding_first_order_slots(message: str) -> tuple[str, str] | None:
     """Extract the two seeded records from the deterministic onboarding prompt."""
     text = str(message or "")

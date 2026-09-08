@@ -209,6 +209,16 @@ def is_negation_intent(message: str) -> bool:
     return is_negation(message)
 
 
+# 具有真实副作用的写入类工具（生成单据/发送消息/打印/导入）。
+# 拒绝类护栏（coordinator）据此在否定语境下拦截执行，查询类不拦。
+WRITE_TOOL_INTENTS = frozenset({"shipment_generate", "wechat_send", "print_label", "upload_file"})
+
+
+def is_write_intent(tool_key: str | None) -> bool:
+    """判断工具是否为写入类（有真实副作用）"""
+    return bool(tool_key) and tool_key in WRITE_TOOL_INTENTS
+
+
 QUICK_COMMAND_MAP = {
     "开单": "shipment_generate",
     "开发货单": "shipment_generate",

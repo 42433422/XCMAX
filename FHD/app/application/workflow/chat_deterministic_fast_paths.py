@@ -158,6 +158,19 @@ def try_deterministic_chat_reply(
     if smalltalk is not None:
         return smalltalk
 
+    # 拒绝类写请求：明确不生成/不执行任何写入计划，直接确认取消。
+    from app.application.chat_tool_intent import looks_like_refused_write
+
+    if looks_like_refused_write(text):
+        reply = "好的，已取消，不会执行该操作。需要时再告诉我。"
+        return {
+            "response": reply,
+            "text": reply,
+            "thinking_steps": "[拒绝守卫：未生成写入计划]",
+            "action": "refused_write",
+            "trace_intent": "refused_write",
+        }
+
     numeric_only = _wants_numeric_only(text)
 
     if _PRODUCT_COUNT_RE.search(text):

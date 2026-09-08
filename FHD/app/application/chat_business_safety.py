@@ -44,6 +44,13 @@ def try_handle_business_chat_action(
 ) -> dict[str, Any] | None:
     """Execute a protected business action or return ``None`` for normal chat."""
 
+    from app.application.chat_tool_intent import looks_like_refused_write
+
+    # 拒绝类写请求（「不要给李四请假」）不进入受保护写操作；
+    # 考勤域销假表达（「不用请假了」）由守卫内部的豁免规则放行，仍是合法取消写入。
+    if looks_like_refused_write(message):
+        return None
+
     intent = classify_business_chat_intent(message)
     if intent is None:
         return None

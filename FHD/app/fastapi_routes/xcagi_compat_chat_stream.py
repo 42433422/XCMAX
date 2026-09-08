@@ -58,6 +58,17 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
             )
         )
     ):
+        from app.application.chat_tool_intent import looks_like_refused_write
+
+        if not has_pending_workflow and looks_like_refused_write(str(body.message or "")):
+            # 拒绝类写请求：不进入 planner，不生成任何写入计划。
+            refusal_reply = "好的，已取消，不会执行该操作。需要时再告诉我。"
+            yield _facade()._sse_event_line({"type": "token", "text": refusal_reply})
+            payload = _facade()._xcagi_compat_reply_payload(
+                refusal_reply, runtime_context_update=runtime_context
+            )
+            yield _facade()._sse_event_line({"type": "done", "result": payload})
+            return
         with tenant_scope(authenticated_tenant_id):
             payload = chat_service.process_chat(
                 user_id=scoped_user_id,

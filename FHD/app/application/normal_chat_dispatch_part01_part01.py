@@ -158,6 +158,11 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
     """普通版轻量槽位提取与任务分流。"""
     text = (message or "").strip()
     lower = text.lower()
+    # 拒绝类写请求（「不要开发货单」「别删除客户」）不得进入任何写入分流。
+    from app.application.chat_tool_intent import looks_like_refused_write
+
+    if looks_like_refused_write(text):
+        return {"intent": "refused_write", "slots": {}}
     shipment_keywords = ("发货单", "送货单", "出货单", "开单", "打单", "打印")
     number_style_order = bool(
         _facade().re.search(
