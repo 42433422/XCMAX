@@ -181,7 +181,7 @@ class _LLMWorkflowPlannerPart02Mixin:
             quote_node = sales_quote_node(message, tool_registry)
             if quote_node is not None:
                 nodes.append(quote_node)
-                intent = "sales_quote"
+                intent = f"sales_{quote_node.action}"
         route = route_normal_mode_message(message)
         if (
             not nodes

@@ -33,14 +33,14 @@ def apply_clarification_answer(run: AgentRun, *, step_id: str, parameters: dict[
         for key in (spec.required_params if spec else [])
         if target.params.get(key) in (None, "", [], {})
     }
-    if (target.tool_id, target.action) == ("sales", "quote"):
+    if target.tool_id == "sales" and target.action in {"quote", "create_order"}:
         from app.application.sales_quote_inputs import missing_quote_fields
 
         missing = set(missing_quote_fields(target.params))
     if not parameters or not set(parameters) <= missing:
         raise ClarificationAnswerError("答案只能补充当前目标缺失的必填参数")
     candidate = {**deepcopy(target.params), **deepcopy(parameters)}
-    if (target.tool_id, target.action) == ("sales", "quote"):
+    if target.tool_id == "sales" and target.action in {"quote", "create_order"}:
         from app.application.sales_quote_inputs import quote_answer_candidate
 
         candidate = quote_answer_candidate(target.params, parameters)
@@ -102,7 +102,7 @@ def pause_for_clarification(run: AgentRun, step: AgentStep) -> bool:
     }
     properties = spec.input_schema.get("properties", {}) if spec else {}
     required_fields = spec.required_params if spec else []
-    if target and (target.tool_id, target.action) == ("sales", "quote"):
+    if target and target.tool_id == "sales" and target.action in {"quote", "create_order"}:
         from app.application.sales_quote_inputs import missing_quote_fields
 
         required_fields = missing_quote_fields(target.params)
@@ -115,7 +115,7 @@ def pause_for_clarification(run: AgentRun, step: AgentStep) -> bool:
         for key in required_fields
         if target is not None and target.params.get(key) in (None, "", [], {})
     ]
-    if target and (target.tool_id, target.action) == ("sales", "quote"):
+    if target and target.tool_id == "sales" and target.action in {"quote", "create_order"}:
         from app.application.sales_quote_inputs import quote_question_fields
 
         step.output["fields"] = quote_question_fields(target.params)

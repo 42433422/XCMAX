@@ -180,7 +180,7 @@ def resolve_registered_capability_call(args: dict[str, Any] | None) -> dict[str,
             "action": action,
             "required_params": required,
         }
-    if (tool_id, action) == ("sales", "quote"):
+    if tool_id == "sales" and action in {"quote", "create_order"}:
         from app.application.sales_quote_inputs import validated_quote_request
 
         try:

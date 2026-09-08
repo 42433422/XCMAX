@@ -17,6 +17,17 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Order requests now use an approved `sales.create_order` action that composes
+  existing quote/confirm services in one DB transaction. Missing price is asked
+  explicitly without replacing the supplied quantity. The golden order case now
+  requires confirmed state, one item, quantity 10, price 50 and amount 500; merely
+  creating a quote no longer qualifies. Three full trials passed, observation
+  19/22 (`confirmed-order-trials`), with 122 related checks. A separate file-backed
+  SQLite fault test forces confirmation failure after quote creation and verifies
+  fresh sessions see zero orders, items or newly bridged customers; 142 sales and
+  existing end-to-end regressions passed. This action is non-idempotent and does
+  not claim automatic recovery after an unknown commit result.
+
 - Named quotation requests now preserve the customer/model and ask only for
   missing per-item quantity/price fields. Answers cannot replace known values,
   invalid answers leave the task unchanged, and resumption stops at independent

@@ -565,6 +565,46 @@ def _seed_quote_owner_db(db):
 class TestQuoteCallerOwnedSession:
     """quote 在调用方会话内执行：不 commit/rollback/close，跨会话可见性受调用方事务控制。"""
 
+    @pytest.mark.parametrize("confirmation_fails", [False, True])
+    def test_create_confirmed_order_commits_all_or_rolls_back(
+        self, _facade_file_db, monkeypatch, confirmation_fails
+    ):
+        from app.application.sales_order_creation import create_confirmed_order
+        from app.db.models import PurchaseUnit, SalesOrderItem
+
+        db = _facade_file_db
+        monkeypatch.setattr("app.db.session.SessionLocal", db.info["session_factory"])
+        with tenant_scope(1):
+            db.add(PurchaseUnit(unit_name="下单客户"))
+            db.add(Product(name="订单产品", model_number="ORDER"))
+            db.commit()
+            if confirmation_fails:
+                monkeypatch.setattr(
+                    SalesAppService,
+                    "confirm",
+                    lambda *_args, **_kwargs: {"success": False, "message": "确认失败测试"},
+                )
+            result = create_confirmed_order(
+                {
+                    "customer_name": "下单客户",
+                    "items": [
+                        {"model_number": "ORDER", "quantity": 10, "unit_price": 50},
+                    ],
+                }
+            )
+            assert result["success"] is not confirmation_fails
+            fresh = db.info["session_factory"]()
+            try:
+                expected = 0 if confirmation_fails else 1
+                assert fresh.query(SalesOrder).count() == expected
+                assert fresh.query(SalesOrderItem).count() == expected
+                assert fresh.query(Customer).count() == expected
+                if expected:
+                    assert fresh.query(SalesOrder).one().state == "confirmed"
+                    assert float(fresh.query(SalesOrder).one().total_amount) == 500
+            finally:
+                fresh.close()
+
     @pytest.mark.parametrize("valid_product", [True, False])
     def test_purchase_unit_bridge_is_written_only_with_valid_quote(
         self, _facade_file_db, valid_product

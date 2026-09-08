@@ -656,6 +656,13 @@
           "required_params": [],
           "availability": "shared"
         },
+        "create_order": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": ["items"],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        },
         "quote": {
           "risk": "medium",
           "idempotent": false,

@@ -209,6 +209,10 @@ def _registered_router_sales(
     from app.application.sales_app_service import SalesAppService
 
     svc = SalesAppService()
+    if action == "create_order":
+        from app.application.sales_order_creation import create_confirmed_order
+
+        return create_confirmed_order(dict(params or {}))
     if action in ("query", "list", "get_orders"):
         return svc.query(
             status=params.get("status"),
