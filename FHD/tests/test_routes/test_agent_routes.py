@@ -82,6 +82,53 @@ def _isolated_agent_task_repositories(tmp_path, monkeypatch):
     engine.dispose()
 
 
+@pytest.mark.parametrize("method,path", [
+    ("GET", "/api/agent/tasks/private-task"),
+    ("POST", "/api/agent/tasks/private-task/read"),
+    ("POST", "/api/agent/tasks/private-task/archive"),
+])
+def test_empty_tenant_cannot_access_scoped_task(method, path):
+    from app.application.agent_orchestrator.task_models import AgentTask
+
+    repo = get_agent_run_repository()
+    task = AgentTask(task_id="private-task", user_id="u1", tenant_id="other",
+                     title="private tenant result", status="completed",
+                     attention_state="result_unread")
+    repo.save_task(task)
+    before = repo.get_task(user_id="u1", task_id=task.task_id, tenant_id="other").to_dict()
+    response = _client().request(method, path)
+    assert response.status_code == 404
+    assert "private tenant result" not in response.text
+    assert repo.get_task(user_id="u1", task_id=task.task_id, tenant_id="other").to_dict() == before
+
+
+@pytest.mark.parametrize("path", ["/api/agent/tasks", "/api/agent/tasks/events/stream?once=true"])
+def test_empty_tenant_task_feeds_exclude_scoped_tasks(path):
+    from app.application.agent_orchestrator.task_models import AgentTask
+
+    repo = get_agent_run_repository()
+    repo.save_task(AgentTask(task_id="private-task", user_id="u1", tenant_id="other",
+                             title="private tenant result"))
+    repo.save_task(AgentTask(task_id="public-task", user_id="u1", title="own unscoped task"))
+    response = _client().get(path)
+    assert response.status_code == 200
+    assert "private tenant result" not in response.text
+    assert "own unscoped task" in response.text
+
+
+def test_empty_tenant_does_not_deduplicate_another_tenants_task():
+    body = {"task_id": "same-id", "title": "查询产品", "tool_id": "products",
+            "action": "query", "params": {"keyword": "5003"}}
+    scoped = _client(tenant_id="other").post("/api/agent/tasks", json=body)
+    unscoped = _client().post("/api/agent/tasks", json=body)
+    assert scoped.status_code == unscoped.status_code == 202
+    assert unscoped.json()["deduplicated"] is False
+    assert scoped.json()["data"]["run_id"] != unscoped.json()["data"]["run_id"]
+    repeated = _client().post("/api/agent/tasks", json=body)
+    assert repeated.json()["deduplicated"] is True
+    assert repeated.json()["data"]["run_id"] == unscoped.json()["data"]["run_id"]
+
+
 def _drain_background_run(run_id: str) -> AgentRun:
     queue = get_task_execution_repository()
     claimed = queue.claim("route-test-worker", lease_seconds=30)

@@ -19,6 +19,18 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Unified-task HTTP endpoints no longer translate an authenticated empty tenant
+  into the repository's unrestricted None selector. Detail/read/archive, lists,
+  stream and runtime task summaries pass the exact scope; legacy run backfill
+  filters before limit. Unified creation also scopes deduplication and its
+  fallback run lookup. Five negative HTTP tests first reproduced disclosure or
+  mutation (`empty-task-tenant-before`); the corrected suite passes 47 checks,
+  including separate same-ID scoped/unscoped creation and same-scope replay
+  (`empty-task-tenant-final-corrected`). The first new creation test incorrectly
+  expected 200 although this tool requires approval (202); its expectation was
+  corrected without changing approval policy. Full Mod entitlement restoration
+  remains pending; this closes another authenticated-tenant entry-point gap.
+
 - Default run, queue and approval-consumption repositories now use
   HostSessionLocal explicitly. A real two-SQLite regression first reproduced a
   Mod request enqueue that a fresh background thread could not claim

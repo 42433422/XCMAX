@@ -10,7 +10,7 @@ from typing import Any, cast
 from fastapi import APIRouter, Body, Depends, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from app.application.agent_orchestrator import AgentOrchestrator
+from app.application.agent_orchestrator import AgentOrchestrator, get_agent_run_repository
 from app.application.agent_orchestrator.run_control import run_operation_lock
 from app.application.agent_orchestrator.run_models import utc_now_iso
 from app.application.agent_orchestrator.task_dispatcher import get_agent_task_dispatcher
@@ -134,9 +134,9 @@ def list_agent_tasks(
 ) -> dict[str, Any] | JSONResponse:
     try:
         orchestrator = AgentOrchestrator()
-        for run in orchestrator.list_runs(user_id=principal.user_id, limit=limit):
-            if principal.tenant_id and tenant_id_of_run(run) != principal.tenant_id:
-                continue
+        for run in get_agent_run_repository().list_recent(
+            user_id=principal.user_id, tenant_id=principal.tenant_id, limit=limit
+        ):
             context = run.metadata.get("task_context")
             task_id = str(context.get("task_id") or "") if isinstance(context, dict) else ""
             if not task_id:
@@ -144,13 +144,13 @@ def list_agent_tasks(
             existing = orchestrator.get_task(
                 user_id=principal.user_id,
                 task_id=task_id,
-                tenant_id=principal.tenant_id or None,
+                tenant_id=principal.tenant_id,
             )
             if existing is None:
                 orchestrator.save_task(task_from_run(run))
         tasks = orchestrator.list_tasks(
             user_id=principal.user_id,
-            tenant_id=principal.tenant_id or None,
+            tenant_id=principal.tenant_id,
             limit=limit,
             include_archived=include_archived,
         )
@@ -179,7 +179,7 @@ def get_agent_task_runtime(
         snapshot = get_agent_task_dispatcher().snapshot()
         tasks = AgentOrchestrator().list_tasks(
             user_id=principal.user_id,
-            tenant_id=principal.tenant_id or None,
+            tenant_id=principal.tenant_id,
             limit=200,
             include_archived=False,
         )
@@ -256,7 +256,7 @@ async def stream_agent_tasks(
             orchestrator = AgentOrchestrator()
             tasks = orchestrator.list_tasks(
                 user_id=principal.user_id,
-                tenant_id=principal.tenant_id or None,
+                tenant_id=principal.tenant_id,
                 limit=200,
                 include_archived=False,
             )
@@ -288,7 +288,7 @@ def get_agent_task(
         task = orchestrator.get_task(
             user_id=principal.user_id,
             task_id=task_id,
-            tenant_id=principal.tenant_id or None,
+            tenant_id=principal.tenant_id,
         )
         if task is None:
             return JSONResponse({"success": False, "message": "任务不存在"}, status_code=404)
@@ -308,7 +308,7 @@ def mark_agent_task_read(
         task = orchestrator.get_task(
             user_id=principal.user_id,
             task_id=task_id,
-            tenant_id=principal.tenant_id or None,
+            tenant_id=principal.tenant_id,
         )
         if task is None:
             return JSONResponse({"success": False, "message": "工作区不存在"}, status_code=404)
@@ -331,7 +331,7 @@ def archive_agent_task(
         owned = orchestrator.get_task(
             user_id=principal.user_id,
             task_id=task_id,
-            tenant_id=principal.tenant_id or None,
+            tenant_id=principal.tenant_id,
         )
         if owned is None:
             return JSONResponse({"success": False, "message": "任务不存在"}, status_code=404)
@@ -343,7 +343,7 @@ def archive_agent_task(
         archived = orchestrator.archive_task(
             user_id=principal.user_id,
             task_id=task_id,
-            tenant_id=principal.tenant_id or None,
+            tenant_id=principal.tenant_id,
         )
         return success(archived.to_dict() if archived is not None else owned.to_dict())
     except RECOVERABLE_ERRORS:

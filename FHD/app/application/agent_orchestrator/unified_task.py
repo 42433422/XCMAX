@@ -84,7 +84,7 @@ def create_unified_task(
     task = orchestrator.get_task(
         user_id=user_id,
         task_id=normalized_task_id,
-        tenant_id=tenant_id or None,
+        tenant_id=tenant_id,
     )
     if task is not None:
         previous_fingerprint = str(task.metadata.get("task_request_fingerprint") or "")
@@ -92,7 +92,11 @@ def create_unified_task(
             raise UnifiedTaskConflictError("task_id 已绑定到不同的任务内容")
         previous = orchestrator.get_run(task.active_run_id)
         if previous is None:
-            task_runs = orchestrator.list_task_runs(user_id=user_id, task_id=normalized_task_id)
+            task_runs = [
+                run for run in orchestrator.list_task_runs(
+                    user_id=user_id, task_id=normalized_task_id
+                ) if tenant_id_of_run(run) == tenant_id
+            ]
             previous = task_runs[-1] if task_runs else None
         if previous is None:
             raise UnifiedTaskError("任务账本缺少执行记录")
