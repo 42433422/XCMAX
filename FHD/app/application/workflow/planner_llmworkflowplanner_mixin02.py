@@ -179,6 +179,34 @@ class _LLMWorkflowPlannerPart02Mixin:
         route = route_normal_mode_message(message)
         if (
             not nodes
+            and "shipment_orders" in tool_registry
+            and any(word in message for word in ("发货单", "送货单", "出货单"))
+            and route.get("intent") == "shipment"
+            and message.strip().startswith(("打印", "打个", "生成", "开个", "帮我生成", "帮我打印"))
+            and not any(
+                word in message for word in ("不要", "别", "删除", "清空", "然后", "并且", "模板")
+            )
+        ):
+            from app.services.tools_execution.order_parser import _parse_order_text
+
+            parsed = _parse_order_text(message, allow_defaults=False)
+            params = {}
+            if parsed.get("success"):
+                params = {"unit_name": parsed["unit_name"], "products": parsed["products"]}
+            nodes.append(
+                _facade().WorkflowNode(
+                    node_id="generate_shipment",
+                    tool_id="shipment_orders",
+                    action="generate",
+                    params=params,
+                    risk="high",
+                    idempotent=False,
+                    description="生成发货单；信息不足时先补齐，审批后生成",
+                )
+            )
+            intent = "shipment_generate"
+        if (
+            not nodes
             and "sales" in tool_registry
             and (str(route.get("intent") or "") == "sales_write")
             and (str(route.get("action") or "") == "execute_closed_loop")

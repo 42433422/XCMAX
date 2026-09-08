@@ -29,7 +29,7 @@ _ORDER_SCHEMA = {
 }
 
 
-def _parse_order_text(order_text: str) -> dict:
+def _parse_order_text(order_text: str, *, allow_defaults: bool = True) -> dict:
     try:
         # The parser handles short, human-entered order sentences. Bounding the
         # input and every regex repetition keeps malformed payloads from turning
@@ -476,7 +476,7 @@ def _parse_order_text(order_text: str) -> dict:
             logger.warning("AI 结构化抽取兜底失败，回退规则流程: %s", ai_err)
 
         parts = text.split()
-        if len(parts) >= 2:
+        if allow_defaults and len(parts) >= 2:
             unit_name = parts[0].strip()
             return {
                 "success": True,
