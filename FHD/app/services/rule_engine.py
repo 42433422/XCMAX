@@ -92,6 +92,26 @@ class RuleEngine:
         matches = []
         tool_intents = self._config.get("tool_intents", [])
 
+        # Exact configured commands express a complete intent. Broad substrings
+        # such as 打印 or 联系人 must not turn navigation into another action.
+        command_map = self._config.get("quick_rules", {}).get("command_map", {})
+        exact_tool = next(
+            (tool for command, tool in command_map.items() if command.casefold() == msg.casefold()),
+            None,
+        )
+        if exact_tool:
+            definition = next((item for item in tool_intents if item["id"] == exact_tool), {})
+            return [
+                {
+                    "id": exact_tool,
+                    "tool_key": definition.get("tool_key", exact_tool),
+                    "priority": definition.get("priority", 0),
+                    "block_if_negated": definition.get("block_if_negated", True),
+                    "keywords": [msg],
+                    "captured": None,
+                }
+            ]
+
         for intent_def in tool_intents:
             matched, captured = self.match_tool_intent(msg, intent_def)
             if matched:

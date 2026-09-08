@@ -19,6 +19,16 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- RuleEngine now honors complete configured quick commands before broad keyword
+  matches, preventing printer-list navigation from becoming label printing and
+  WeChat contacts from becoming template lookup. Longer requests still use the
+  existing rule path and negated printing remains blocked. Thirty-two focused
+  and 179 existing intent-service checks passed. An isolated full rule CLI run
+  retains core 24/24 and improves semantic 19/73 to 26/73
+  (`exact-command-rules.json` and log), with the complete failure report retained.
+  This fixes command precedence, not the remaining semantic cases or live-model
+  acceptance; benchmark labels and thresholds were not changed.
+
 - Isolated rule CLI rerun used a temporary SQLite database with the real
   PurchaseUnit schema and an empty customer fixture. No ERROR/WARNING/Traceback
   occurred; core remains 24/24 and semantic 19/73 (`isolated-intent-rules.json`,
