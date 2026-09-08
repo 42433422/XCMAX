@@ -6,6 +6,14 @@
 目标是四个阶段全部完成。本目录记录当前实施证据，不代表四阶段验收通过。
 此前对话中的 20%–30% 覆盖率与工期只是未验证估计，不作为验收基线。
 
+## Sync structured-call HTTP lifecycle repair
+
+Synchronous structured calls now create an isolated HTTP-client scope. OpenAI-compatible adapters (including MiMo) reuse a client within that call and close it before the temporary event loop exits. The adapter's long-lived asynchronous pools remain untouched. Worker-thread calls copy ContextVars so account/request context is preserved. The no-running-loop path now honors timeout_seconds and cancels the timed-out coroutine before closing its scoped clients.
+
+A real local HTTP/1.1 keepalive server verifies repeated and concurrent calls, closed clients, preserved asynchronous pools, thread-context propagation, intra-call reuse, failure cleanup and synchronous deadline cancellation. Related regressions total 64 passing tests; full application mypy and all 10 blocking dev guards passed. This fixes the reproduced sync OpenAI-compatible path; it is not evidence for every provider's custom connection lifecycle, business acceptance or installed deployment.
+
+Live server-config rerun: 38/45 structured calls completed, versus 23/45 before the lifecycle fix. No event_loop_closed was recorded; seven structured calls still failed, including one observed ConnectError. All 38 responses had nonempty content and finish_reason=stop. The 97-case routing result is 14/24 core and 23/73 semantic, still unavailable_or_partial with exit 2. This is improved transport reliability, not accepted intent accuracy or full functionality. Remaining timeout/provider diagnostics and semantic routing gaps stay open. See intent-routing-loop-fixed.json (measured modified-source hashes included; later adapter import formatting has no behavioral change).
+
 ## Remaining live model failures diagnosed
 
 A full 97-case rerun with current server process configuration still has 23 successful structured responses and 22 failures. All 23 actual responses finished with stop and nonempty content; the other calls failed before returning a provider response. A separate three-call live probe of the same synthetic input reproduced two successes and one Event loop is closed failure. This confirms an event-loop lifecycle failure in this sync/pooled-HTTP path; it does not prove every remaining failure has the same cause.

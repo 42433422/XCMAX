@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, cast
 
 import httpx
 
+from app.infrastructure.llm.http_client_scope import scoped_http_client
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -210,6 +211,16 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
 
     async def _get_client(self) -> httpx.AsyncClient:
         """获取/创建异步HTTP客户端（用于同步请求）"""
+        scoped = scoped_http_client(
+            self,
+            "normal",
+            lambda: httpx.AsyncClient(
+                timeout=httpx.Timeout(30.0, connect=10.0),
+                limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
+            ),
+        )
+        if scoped is not None:
+            return scoped
         if self._client is None or self._client.is_closed:
             self._client = httpx.AsyncClient(
                 timeout=httpx.Timeout(30.0, connect=10.0),
@@ -219,6 +230,16 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
 
     async def _get_stream_client(self) -> httpx.AsyncClient:
         """获取/创建流式HTTP客户端"""
+        scoped = scoped_http_client(
+            self,
+            "stream",
+            lambda: httpx.AsyncClient(
+                timeout=httpx.Timeout(connect=15.0, read=300.0, write=60.0, pool=30.0),
+                limits=httpx.Limits(max_keepalive_connections=200, max_connections=1000),
+            ),
+        )
+        if scoped is not None:
+            return scoped
         if self._stream_client is None or self._stream_client.is_closed:
             self._stream_client = httpx.AsyncClient(
                 timeout=httpx.Timeout(connect=15.0, read=300.0, write=60.0, pool=30.0),

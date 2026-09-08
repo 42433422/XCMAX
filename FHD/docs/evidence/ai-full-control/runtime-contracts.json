@@ -9135,7 +9135,7 @@
     }
   ],
   "registration_profile": "register_all_routes; legacy compatibility enabled; pytest isolated environment; no lifespan",
-  "source_sha256": "b8cd76bb40c71d0ed515ff265ca14d4945cbe446b9a07452c1fe957c4cddc3d9",
+  "source_sha256": "27b3cd725ab8390f752c178299fb24d0011b97a1333cf1c07b58c2d64ab215e8",
   "source_hash_definition": "SHA256 sorted FHD/app Python paths + NUL + file bytes + NUL",
   "auditor_sha256": "45a6b055d938b8f274e9da89c9f78ec0572c7fce162396fb0c144564db7f639e"
 }

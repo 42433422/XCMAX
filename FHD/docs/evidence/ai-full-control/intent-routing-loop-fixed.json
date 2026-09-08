@@ -1,0 +1,732 @@
+{
+  "total": 97,
+  "source_sha": "db8d2425e0ba7c39d6c7bc69b447ad8bad0f7ca5",
+  "dataset_sha256": "afb0b3fb77280e73facfd206f462fb6c943383b886009d900cdd2d7ff6b472a5",
+  "measured_at": "2026-09-08T14:43:45.970737+00:00",
+  "rule": {
+    "layer": "rule",
+    "counts": {
+      "core": {
+        "correct": 24,
+        "total": 24
+      },
+      "semantic": {
+        "correct": 19,
+        "total": 73
+      }
+    },
+    "accuracy": {
+      "core": 1.0,
+      "semantic": 0.2603
+    },
+    "failures": {
+      "semantic": [
+        {
+          "text": "做一张出货单",
+          "got": {
+            "tool_key": "shipments",
+            "primary_intent": "shipments"
+          },
+          "expected_tool": "shipment_generate",
+          "expected_primary": "shipment_generate"
+        },
+        {
+          "text": "打印机列表",
+          "got": {
+            "tool_key": "print_label",
+            "primary_intent": "print_label"
+          },
+          "expected_tool": "printer_list",
+          "expected_primary": "printer_list"
+        },
+        {
+          "text": "系统设置",
+          "got": {
+            "tool_key": null,
+            "primary_intent": null
+          },
+          "expected_tool": "settings",
+          "expected_primary": "settings"
+        },
+        {
+          "text": "微信联系人",
+          "got": {
+            "tool_key": "shipment_template",
+            "primary_intent": "shipment_template"
+          },
+          "expected_tool": "wechat",
+          "expected_primary": "wechat"
+        },
+        {
+          "text": "模板预览",
+          "got": {
+            "tool_key": "shipment_template",
+            "primary_intent": "shipment_template"
+          },
+          "expected_tool": "template_preview",
+          "expected_primary": "template_preview"
+        },
+        {
+          "text": "提取模板",
+          "got": {
+            "tool_key": "shipment_template",
+            "primary_intent": "shipment_template"
+          },
+          "expected_tool": "template_extract",
+          "expected_primary": "template_extract"
+        },
+        {
+          "text": "分解Excel",
+          "got": {
+            "tool_key": null,
+            "primary_intent": null
+          },
+          "expected_tool": "excel_decompose",
+          "expected_primary": "excel_decompose"
+        },
+        {
+          "text": "导出客户列表",
+          "got": {
+            "tool_key": "customers",
+            "primary_intent": "customers"
+          },
+          "expected_tool": "customer_export",
+          "expected_primary": "customer_export"
+        },
+        {
+          "text": "AI生态",
+          "got": {
+            "tool_key": null,
+            "primary_intent": null
+          },
+          "expected_tool": "ai_ecosystem",
+          "expected_primary": "ai_ecosystem"
+        },
+        {
+          "text": "老规矩给七彩乐园出一单",
+          "got": {
+            "tool_key": null,
+            "primary_intent": null
+          },
+          "expected_tool": "shipment_generate",
+          "expected_primary": "shipment_generate"
+        },
+        {
+          "text": "客户催着要货，先把单子做出来",
+          "got": {
+            "tool_key": "customers",
+            "primary_intent": "customers"
+          },
+          "expected_tool": "shipment_generate",
+          "expected_primary": "shipment_generate"
+        },
+        {
+          "text": "帮我给李总那边安排20L的5桶",
+          "got": {
+            "tool_key": "products",
+            "primary_intent": "products"
+          },
+          "expected_tool": "shipment_generate",
+          "expected_primary": "shipment_generate"
+        },
+        {
+          "text": "木工部那批货该出库了",
+          "got": {
+            "tool_key": null,
+            "primary_intent": null
+          },
+          "expected_tool": "shipment_generate",
+          "expected_primary": "shipment_generate"
+        },
+        {
+          "text": "上次买过9803的那家是谁",
+          "got": {
+            "tool_key": null,
+            "primary_intent": null
+          },
+          "expected_tool": "customers",
+          "expected_primary": "customers"
+        },
+        {
+          "text": "谁订了太阳鸟的货",
+          "got": {
+            "tool_key": null,
+            "primary_intent": null
+          },
+          "expected_tool": "customers",
+          "expected_primary": "customers"
+        },
+        {
+          "text": "王总那家公司的电话是多少",
+          "got": {
+            "tool_key": null,
+            "primary_intent": null
+          },
+          "expected_tool": "customers",
+          "expected_primary": "customers"
+        },
+        {
+          "text": "咱们卖得最贵的是哪款",
+          "got": {
+            "tool_key": null,
+            "primary_intent": null
+          },
+          "expected_tool": "products",
+          "expected_primary": "products"
+        },
+        {
+          "text": "一桶酒吧零三是什么东西",
+          "got": {
+            "tool_key": null,
+            "primary_intent": null
+          },
+          "expected_tool": "products",
+          "expected_primary": "products"
+        },
+        {
+          "text": "上个月发了多少货",
+          "got": {
+            "tool_key": null,
+            "primary_intent": null
+          },
+          "expected_tool": "shipments",
+          "expected_primary": "shipments"
+        },
+        {
+          "text": "太阳鸟那批走了没有",
+          "got": {
+            "tool_key": null,
+            "primary_intent": null
+          },
+          "expected_tool": "shipments",
+          "expected_primary": "shipments"
+        },
+        {
+          "text": "昨天开的那张单子还在吗",
+          "got": {
+            "tool_key": null,
+            "primary_intent": null
+          },
+          "expected_tool": "shipments",
+          "expected_primary": "shipments"
+        },
+        {
+          "text": "用微信通知李四明天到货",
+          "got": {
+            "tool_key": null,
+            "primary_intent": null
+          },
+          "expected_tool": "wechat_send",
+          "expected_primary": "wechat_send"
+        },
+        {
+          "text": "给张三发个消息说货发了",
+          "got": {
+            "tool_key": null,
+            "primary_intent": null
+          },
+          "expected_tool": "wechat_send",
+          "expected_primary": "wechat_send"
+        },
+        {
+          "text": "把发货信息微信同步给王总",
+          "got": {
+            "tool_key": "shipments",
+            "primary_intent": "shipments"
+          },
+          "expected_tool": "wechat_send",
+          "expected_primary": "wechat_send"
+        },
+        {
+          "text": "提醒一下客户去收快递",
+          "got": {
+            "tool_key": "customers",
+            "primary_intent": "customers"
+          },
+          "expected_tool": "wechat_send",
+          "expected_primary": "wechat_send"
+        },
+        {
+          "text": "微信上跟太阳鸟对一下数量",
+          "got": {
+            "tool_key": null,
+            "primary_intent": null
+          },
+          "expected_tool": "wechat_send",
+          "expected_primary": "wechat_send"
+        },
+        {
+          "text": "28规格的要贴标，打20张",
+          "got": {
+            "tool_key": "products",
+            "primary_intent": "products"
+          },
+          "expected_tool": "print_label",
+          "expected_primary": "print_label"
+        },
+        {
+          "text": "我传个表格你帮我看看",
+          "got": {
+            "tool_key": null,
+            "primary_intent": null
+          },
+          "expected_tool": "upload_file",
+          "expected_primary": "upload_file"
+        },
+        {
+          "text": "这份对账单录进去",
+          "got": {
+            "tool_key": null,
+            "primary_intent": null
+          },
+          "expected_tool": "upload_file",
+          "expected_primary": "upload_file"
+        },
+        {
+          "text": "把这个Excel里的产品扒出来",
+          "got": {
+            "tool_key": "products",
+            "primary_intent": "products"
+          },
+          "expected_tool": "upload_file",
+          "expected_primary": "upload_file"
+        }
+      ]
+    }
+  },
+  "llm": {
+    "layer": "normal_router_with_llm",
+    "counts": {
+      "core": {
+        "correct": 14,
+        "total": 24
+      },
+      "semantic": {
+        "correct": 23,
+        "total": 73
+      }
+    },
+    "accuracy": {
+      "core": 0.5833,
+      "semantic": 0.3151
+    },
+    "failures": {
+      "core": [
+        {
+          "text": "查询库存",
+          "got": {
+            "intent": "inventory_alert",
+            "slots": {}
+          },
+          "expected_tool": "materials",
+          "expected_primary": "materials"
+        },
+        {
+          "text": "原材料库存",
+          "got": {
+            "intent": "inventory_alert",
+            "slots": {}
+          },
+          "expected_tool": "materials",
+          "expected_primary": "materials"
+        },
+        {
+          "text": "查订单",
+          "got": {
+            "intent": "product_query",
+            "slots": {
+              "keyword": "订单"
+            }
+          },
+          "expected_tool": "shipments",
+          "expected_primary": "shipments"
+        },
+        {
+          "text": "发微信给张三",
+          "got": {
+            "intent": "unknown",
+            "slots": {}
+          },
+          "expected_tool": "wechat_send",
+          "expected_primary": "wechat_send"
+        },
+        {
+          "text": "打印标签",
+          "got": {
+            "intent": "shipment",
+            "slots": {
+              "number_style_order": false
+            }
+          },
+          "expected_tool": "print_label",
+          "expected_primary": "print_label"
+        },
+        {
+          "text": "上传Excel",
+          "got": {
+            "intent": "unknown",
+            "slots": {}
+          },
+          "expected_tool": "upload_file",
+          "expected_primary": "upload_file"
+        },
+        {
+          "text": "帮助",
+          "got": {
+            "intent": "unknown",
+            "slots": {}
+          },
+          "check": "help"
+        },
+        {
+          "text": "你能做什么",
+          "got": {
+            "intent": "knowledge_query",
+            "slots": {},
+            "llm_routed": true,
+            "confidence": 0.85
+          },
+          "check": "help"
+        },
+        {
+          "text": "不要打印标签",
+          "got": {
+            "intent": "shipment",
+            "slots": {
+              "number_style_order": false
+            }
+          }
+        },
+        {
+          "text": "别开单",
+          "got": {
+            "intent": "goodbye"
+          }
+        }
+      ],
+      "semantic": [
+        {
+          "text": "打印机列表",
+          "got": {
+            "intent": "shipment",
+            "slots": {
+              "number_style_order": false
+            }
+          },
+          "expected_tool": "printer_list",
+          "expected_primary": "printer_list"
+        },
+        {
+          "text": "系统设置",
+          "got": {
+            "intent": "unknown",
+            "slots": {}
+          },
+          "expected_tool": "settings",
+          "expected_primary": "settings"
+        },
+        {
+          "text": "微信联系人",
+          "got": {
+            "intent": "unknown",
+            "slots": {}
+          },
+          "expected_tool": "wechat",
+          "expected_primary": "wechat"
+        },
+        {
+          "text": "模板预览",
+          "got": {
+            "intent": "unknown",
+            "slots": {}
+          },
+          "expected_tool": "template_preview",
+          "expected_primary": "template_preview"
+        },
+        {
+          "text": "提取模板",
+          "got": {
+            "intent": "unknown",
+            "slots": {}
+          },
+          "expected_tool": "template_extract",
+          "expected_primary": "template_extract"
+        },
+        {
+          "text": "分解Excel",
+          "got": {
+            "intent": "unknown",
+            "slots": {}
+          },
+          "expected_tool": "excel_decompose",
+          "expected_primary": "excel_decompose"
+        },
+        {
+          "text": "导出客户列表",
+          "got": {
+            "intent": "customers_query",
+            "slots": {
+              "keyword": ""
+            }
+          },
+          "expected_tool": "customer_export",
+          "expected_primary": "customer_export"
+        },
+        {
+          "text": "AI生态",
+          "got": {
+            "intent": "unknown",
+            "slots": {}
+          },
+          "expected_tool": "ai_ecosystem",
+          "expected_primary": "ai_ecosystem"
+        },
+        {
+          "text": "客户催着要货，先把单子做出来",
+          "got": {
+            "intent": "customers_query",
+            "slots": {
+              "keyword": ""
+            }
+          },
+          "expected_tool": "shipment_generate",
+          "expected_primary": "shipment_generate"
+        },
+        {
+          "text": "帮我给李总那边安排20L的5桶",
+          "got": {
+            "intent": "unknown",
+            "slots": {}
+          },
+          "expected_tool": "shipment_generate",
+          "expected_primary": "shipment_generate"
+        },
+        {
+          "text": "木工部那批货该出库了",
+          "got": {
+            "intent": "unknown",
+            "slots": {}
+          },
+          "expected_tool": "shipment_generate",
+          "expected_primary": "shipment_generate"
+        },
+        {
+          "text": "一桶酒吧零三是什么东西",
+          "got": {
+            "intent": "unknown",
+            "slots": {}
+          },
+          "expected_tool": "products",
+          "expected_primary": "products"
+        },
+        {
+          "text": "昨天开的那张单子还在吗",
+          "got": {
+            "intent": "unknown",
+            "slots": {}
+          },
+          "expected_tool": "shipments",
+          "expected_primary": "shipments"
+        },
+        {
+          "text": "这个月出货总额是多少",
+          "got": {
+            "intent": "reports_query",
+            "slots": {},
+            "llm_routed": true,
+            "confidence": 0.9
+          },
+          "expected_tool": "shipments",
+          "expected_primary": "shipments"
+        },
+        {
+          "text": "用微信通知李四明天到货",
+          "got": {
+            "intent": "unknown",
+            "slots": {}
+          },
+          "expected_tool": "wechat_send",
+          "expected_primary": "wechat_send"
+        },
+        {
+          "text": "给张三发个消息说货发了",
+          "got": {
+            "intent": "unknown",
+            "slots": {}
+          },
+          "expected_tool": "wechat_send",
+          "expected_primary": "wechat_send"
+        },
+        {
+          "text": "把发货信息微信同步给王总",
+          "got": {
+            "intent": "unknown",
+            "slots": {}
+          },
+          "expected_tool": "wechat_send",
+          "expected_primary": "wechat_send"
+        },
+        {
+          "text": "提醒一下客户去收快递",
+          "got": {
+            "intent": "customers_query",
+            "slots": {
+              "keyword": ""
+            }
+          },
+          "expected_tool": "wechat_send",
+          "expected_primary": "wechat_send"
+        },
+        {
+          "text": "微信上跟太阳鸟对一下数量",
+          "got": {
+            "intent": "shipment_records_query",
+            "slots": {
+              "keyword": "太阳鸟"
+            },
+            "llm_routed": true,
+            "confidence": 0.75
+          },
+          "expected_tool": "wechat_send",
+          "expected_primary": "wechat_send"
+        },
+        {
+          "text": "我传个表格你帮我看看",
+          "got": {
+            "intent": "product_query",
+            "slots": {
+              "keyword": "我传个表格你"
+            }
+          },
+          "expected_tool": "upload_file",
+          "expected_primary": "upload_file"
+        },
+        {
+          "text": "这份对账单录进去",
+          "got": {
+            "intent": "finance_query",
+            "slots": {}
+          },
+          "expected_tool": "upload_file",
+          "expected_primary": "upload_file"
+        },
+        {
+          "text": "把这个Excel里的产品扒出来",
+          "got": {
+            "intent": "unknown",
+            "slots": {}
+          },
+          "expected_tool": "upload_file",
+          "expected_primary": "upload_file"
+        },
+        {
+          "text": "客户发来的报价表帮我导入",
+          "got": {
+            "intent": "customers_query",
+            "slots": {
+              "keyword": ""
+            }
+          },
+          "expected_tool": "upload_file",
+          "expected_primary": "upload_file"
+        },
+        {
+          "text": "库存够不够下周生产",
+          "got": {
+            "intent": "inventory_alert",
+            "slots": {}
+          },
+          "expected_tool": "materials",
+          "expected_primary": "materials"
+        },
+        {
+          "text": "原料要不要补货了",
+          "got": {
+            "intent": "replenishment_suggest",
+            "slots": {}
+          },
+          "expected_tool": "materials",
+          "expected_primary": "materials"
+        },
+        {
+          "text": "出货单长什么样，给我看看版式",
+          "got": {
+            "intent": "shipment",
+            "slots": {
+              "number_style_order": false
+            }
+          },
+          "expected_tool": "template_preview",
+          "expected_primary": "template_preview"
+        },
+        {
+          "text": "发货单格式想改一下",
+          "got": {
+            "intent": "shipment",
+            "slots": {
+              "number_style_order": false
+            }
+          },
+          "expected_tool": "shipment_template",
+          "expected_primary": "shipment_template"
+        },
+        {
+          "text": "把这份表的表头结构扒下来",
+          "got": {
+            "intent": "unknown",
+            "slots": {}
+          },
+          "expected_tool": "template_extract",
+          "expected_primary": "template_extract"
+        },
+        {
+          "text": "这个Excel的词条提取一下",
+          "got": {
+            "intent": "unknown",
+            "slots": {}
+          },
+          "expected_tool": "excel_decompose",
+          "expected_primary": "excel_decompose"
+        },
+        {
+          "text": "跟客户系统对接一下数据",
+          "got": {
+            "intent": "customers_query",
+            "slots": {
+              "keyword": ""
+            }
+          },
+          "expected_tool": "business_docking",
+          "expected_primary": "business_docking"
+        }
+      ]
+    },
+    "model_calls": {
+      "attempted": 45,
+      "completed": 38,
+      "errors": {
+        "StructuredOutputError": 7
+      },
+      "models": [
+        "mimo-v2.5-pro"
+      ],
+      "seconds": 294.819,
+      "responses": {
+        "total": 38,
+        "empty_content": 0,
+        "finish_reasons": {
+          "stop": 38
+        },
+        "errors": {
+          "ConnectError": 1
+        }
+      }
+    },
+    "measurement_status": "unavailable_or_partial"
+  },
+  "source_modifications": {
+    "app/infrastructure/llm/structured_output.py": "a33136db349a8910b803dee68181929d9b75fa48ecc9d18647bb8795b240b954",
+    "app/infrastructure/llm/http_client_scope.py": "1568dd22c5641b58cefd1360eff2e7906fde17562890a77115329497921dfc2d",
+    "app/services/conversation/llm_adapter.py": "44667b888599da72b2cbb6b0f8575921397772346159db11a9fd73080203feef"
+  }
+}
