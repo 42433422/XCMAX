@@ -239,6 +239,26 @@ class _LLMWorkflowPlannerPart02Mixin:
                     )
                 )
                 intent = "product_create"
+        if (
+            not nodes
+            and "products" in tool_registry
+            and _facade().re.fullmatch(
+                r"(?:请)?(?:帮我)?\s*(?:新增|添加)\s*(?:一个|一款|一种)?\s*产品[。！!]?",
+                message.strip(),
+            )
+        ):
+            nodes.append(
+                _facade().WorkflowNode(
+                    node_id="create_product",
+                    tool_id="products",
+                    action="create",
+                    params={},
+                    risk="medium",
+                    idempotent=False,
+                    description="新增产品资料",
+                )
+            )
+            intent = "product_create"
         if not nodes and (
             ("添加" in message or "新增" in message or "create" in lower) and "产品" in message
         ):

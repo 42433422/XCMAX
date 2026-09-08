@@ -24,3 +24,18 @@ def test_customer_reads_preserve_entity_and_keyword(message, keyword):
 )
 def test_customer_mentions_do_not_replace_other_business_intents(message):
     assert customer_read_node(message, {"intent": "customers_query"}, {"customers": {}}) is None
+
+
+@pytest.mark.parametrize("message", ["帮我新增一个产品", "请添加一款产品", "新增产品"])
+def test_incomplete_catalog_creation_asks_without_creating_customer(message):
+    from app.application.workflow.planner import LLMWorkflowPlanner
+    from app.services.tools_execution.registry import get_workflow_tool_registry
+
+    planner = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
+    plan = planner._fallback_plan("missing-product", message, get_workflow_tool_registry())
+    assert [(node.tool_id, node.action) for node in plan.nodes] == [
+        ("clarify", "ask"),
+        ("products", "create"),
+    ]
+    assert plan.nodes[0].params["clarification"]["missing_fields"] == ["name_or_model"]
+    assert plan.nodes[1].params == {}

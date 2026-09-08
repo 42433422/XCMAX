@@ -17,6 +17,13 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Underspecified standalone product creation now plans only clarification and the
+  deferred product step, without a customer-creation dependency. The critical
+  scenario explicitly requires waiting_user, zero actual tool calls and zero
+  product records; planned future creation is distinguished from execution.
+  All three trials passed this scenario, with 33 related tests passing and an
+  11/22 full observation. Evidence: `product-missing-trials`.
+
 - Standalone model-based product creation preserves model/price and requires only
   the product name/model. The current service creates catalog products without
   customer ownership; mandatory customer `unit_name` was an obsolete contract in

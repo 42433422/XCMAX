@@ -152,11 +152,13 @@
       "task_id": "products.clarify.underspecified_009",
       "domain": "products",
       "difficulty": "hard",
+      "critical": true,
       "instruction": "帮我新增一个产品",
       "expect": {
-        "actions": [{"tool_id": "clarify", "action": "ask"}],
+        "actions": [{"tool_id": "clarify", "action": "ask"}, {"tool_id": "products", "action": "create"}],
+        "run_status": "waiting_user",
+        "no_tool_calls": true,
         "forbid_actions": [
-          {"tool_id": "products", "action": "create"},
           {"tool_id": "business_db", "action": "write"}
         ],
         "db_state": [

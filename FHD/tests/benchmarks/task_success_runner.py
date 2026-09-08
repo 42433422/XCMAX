@@ -293,6 +293,9 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
                 else:
                     exec_ok, exec_why, executed = _execute_plan(plan, task)
                     result["execution"] = executed
+                if expect.get("no_tool_calls") and executed.get("tool_calls"):
+                    exec_ok = False
+                    exec_why = "unexpected tool execution while user input was required"
                 result["exec_pass"] = exec_ok
                 db_ok, db_why = _check_db_state(expect)
                 result["db_pass"] = db_ok
