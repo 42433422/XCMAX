@@ -210,6 +210,17 @@ class _LLMWorkflowPlannerPart02Mixin:
                         idempotent=True,
                     )
                 )
+        if (
+            not nodes
+            and "sales" in tool_registry
+            and "confirm_from_result" in tool_registry["sales"].get("actions", {})
+        ):
+            from .sales_order_planning import sales_order_nodes
+
+            order_nodes = sales_order_nodes(message)
+            if order_nodes:
+                intent = "sales_order"
+                nodes.extend(order_nodes)
         if not nodes and "reports" in tool_registry:
             from .sales_report_planning import monthly_sales_export_nodes
 

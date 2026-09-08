@@ -36,6 +36,7 @@ def test_sales_candidates_are_exact_tenant_bound_and_read_only(monkeypatch):
             yield db
 
         monkeypatch.setattr("app.application.workflow.sales_quote_planning.get_db", planning_db)
+        monkeypatch.setattr("app.application.workflow.sales_order_planning.get_db", planning_db)
         with patch(
             "app.application.workflow.planner.get_ai_conversation_service", return_value=None
         ):
@@ -75,6 +76,18 @@ def test_sales_candidates_are_exact_tenant_bound_and_read_only(monkeypatch):
         assert "A100" in incomplete.nodes[1].description
         assert db.query(SalesOrder).count() == 0
         assert db.query(SalesOrderItem).count() == 0
+        order_plan = planner._fallback_plan(
+            "order", "给客户星光下订单，产品A100，数量10", get_workflow_tool_registry()
+        )
+        assert [(n.tool_id, n.action) for n in order_plan.nodes] == [
+            ("sales", "quote"),
+            ("sales", "confirm_from_result"),
+        ]
+        assert order_plan.nodes[0].params["items"] == [
+            {"product_id": 1, "unit": "个", "quantity": 10.0, "unit_price": 25.5}
+        ]
+        assert order_plan.nodes[1].depends_on == [order_plan.nodes[0].node_id]
+        assert db.query(SalesOrder).count() == 0
         saved = SalesAppService().quote(plan.nodes[0].params, db=db)
         assert saved["success"], saved
         order = db.query(SalesOrder).one()
