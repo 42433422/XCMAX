@@ -13,6 +13,28 @@ from .types import WorkflowNode
 def resolve_missing_field(
     node: WorkflowNode, item: dict[str, Any], text: str
 ) -> dict[str, Any] | None:
+    if item.get("reason") == "report_scope" and item.get("field") == "日期范围":
+        if node.tool_id != "reports" or node.action not in {"sales_summary", "purchase_summary"}:
+            return None
+        from datetime import date
+
+        from .sales_report_planning import monthly_sales_report_node
+
+        answer = text.strip()
+        if answer in {"本月", "这个月"}:
+            monthly = monthly_sales_report_node("本月销售汇总")
+            assert monthly is not None
+            return {key: monthly.params[key] for key in ("start_date", "end_date")}
+        parts = answer.split("至")
+        if len(parts) != 2:
+            return None
+        try:
+            start, end = (date.fromisoformat(part.strip()) for part in parts)
+        except ValueError:
+            return None
+        if start > end:
+            return None
+        return {"start_date": start.isoformat(), "end_date": end.isoformat() + " 23:59:59.999999"}
     if item.get("reason") != "missing_required" or node.tool_id == "business_db":
         return None
     missing = item.get("missing_fields")

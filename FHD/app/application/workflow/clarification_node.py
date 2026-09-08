@@ -297,7 +297,7 @@ def detect_erp_clarification(
                         node.node_id,
                         "report_scope",
                         "日期范围",
-                        "报表口径未指定日期范围，请确认统计起止日期后我再汇总。",
+                        "请确认统计日期范围，可回复“本月”或“2024-02-01至2024-02-29”这样的起止日期。",
                         severity="medium",
                     )
                 )

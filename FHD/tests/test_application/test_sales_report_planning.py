@@ -69,3 +69,26 @@ def test_month_end_order_included_and_next_month_excluded(monkeypatch):
         assert report["success"]
         assert report["summary"] == {"total_quantity": 1.0, "total_amount": 10.0}
     engine.dispose()
+
+
+def test_unspecified_export_waits_for_valid_report_dates():
+    from app.application.workflow.clarification_fields import resolve_missing_field
+
+    with patch("app.application.workflow.planner.get_ai_conversation_service", return_value=None):
+        planner = LLMWorkflowPlanner()
+    registry = get_workflow_tool_registry()
+    plan = planner._fallback_plan("export", "导出销售报表", registry)
+    assert [(n.tool_id, n.action) for n in plan.nodes] == [
+        ("clarify", "ask"),
+        ("reports", "sales_summary"),
+        ("reports", "export"),
+    ]
+    report = plan.nodes[1]
+    item = {"reason": "report_scope", "field": "日期范围"}
+    for answer in ("不要导出", "2024-03-01至2024-02-01", "2024-02-30至2024-03-01"):
+        assert resolve_missing_field(report, item, answer) is None
+    updates = resolve_missing_field(report, item, "2024-02-01至2024-02-29")
+    assert updates == {"start_date": "2024-02-01", "end_date": "2024-02-29 23:59:59.999999"}
+    assert "start_date" not in report.params
+    report.params.update(updates)
+    assert resolve_missing_field(report, item, "本月")["start_date"].endswith("-01")

@@ -38,6 +38,16 @@ def monthly_sales_export_nodes(message: str) -> list[WorkflowNode]:
     for prefix in ("请导出", "帮我导出", "导出"):
         if text.startswith(prefix):
             report = monthly_sales_report_node(text[len(prefix) :].strip())
+            if report is None and text[len(prefix) :].strip() in {"销售报表", "销售汇总"}:
+                report = WorkflowNode(
+                    node_id="sales_report",
+                    tool_id="reports",
+                    action="sales_summary",
+                    params={"group_by": "product"},
+                    risk="low",
+                    idempotent=True,
+                    description="按产品汇总销售，等待确认日期范围",
+                )
             if report is None:
                 return []
             return [
