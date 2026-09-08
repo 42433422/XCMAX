@@ -66,6 +66,12 @@ class __SalesAppServicePart01MixinPart01Mixin:
             return {"success": False, "message": "缺少 customer_id"}
         if not isinstance(items_data, list) or not items_data:
             return {"success": False, "message": "缺少 items 明细"}
+        from app.application.sales_quote_inputs import validated_quote_items
+
+        try:
+            items_data = validated_quote_items(items_data)
+        except ValueError as exc:
+            return {"success": False, "message": str(exc)}
         idempotency_key = str(data.get("idempotency_key") or "").strip() or None
         idem_marker = f"idempotency:sales_quote:{idempotency_key}" if idempotency_key else None
         owned = db is None

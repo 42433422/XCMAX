@@ -17,6 +17,15 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Sales quote creation previously converted missing/invalid quantities or prices
+  into zero and could write an order. A dedicated input validator now checks all
+  rows before touching the session: finite positive quantities and explicitly
+  supplied finite nonnegative prices are required. File-backed SQLite tests
+  commit after rejecting a later invalid row and verify no partial order exists;
+  explicit zero-price quotes remain supported without mutating caller inputs.
+  228 sales/tool regressions passed, followed by 53 facade checks including the
+  zero-price case. Natural-language order/quote planning is still outstanding.
+
 - Sales export now plans `reports.export` and reads persisted sales before writing
   an artifact. Unspecified periods are described as all recorded sales; explicit
   current-month requests preserve month boundaries. The golden export case now

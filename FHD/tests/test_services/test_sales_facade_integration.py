@@ -565,6 +565,43 @@ def _seed_quote_owner_db(db):
 class TestQuoteCallerOwnedSession:
     """quote 在调用方会话内执行：不 commit/rollback/close，跨会话可见性受调用方事务控制。"""
 
+    def test_explicit_zero_price_is_preserved(self, _facade_file_db):
+        db = _facade_file_db
+        customer, product = _seed_quote_owner_db(db)
+        item = {"product_id": product.id, "quantity": "2.5", "unit_price": 0}
+        result = SalesAppService().quote({"customer_id": customer.id, "items": [item]}, db=db)
+        assert result["success"] is True
+        assert result["data"]["total_amount"] == 0
+        db.commit()
+        assert db.query(SalesOrder).count() == 1
+        assert item == {"product_id": product.id, "quantity": "2.5", "unit_price": 0}
+
+    @pytest.mark.parametrize(
+        "bad_item",
+        [
+            {"quantity": 2},
+            {"unit_price": 10},
+            {"quantity": 0, "unit_price": 10},
+            {"quantity": -1, "unit_price": 10},
+            {"quantity": "NaN", "unit_price": 10},
+            {"quantity": 1, "unit_price": "Infinity"},
+            {"quantity": True, "unit_price": 10},
+            {"quantity": 1, "unit_price": "bad"},
+            {"quantity": 1, "unit_price": -10},
+            None,
+        ],
+    )
+    def test_invalid_later_item_does_not_leave_partial_order(self, _facade_file_db, bad_item):
+        db = _facade_file_db
+        customer, product = _seed_quote_owner_db(db)
+        valid = {"product_id": product.id, "quantity": 2, "unit_price": 50}
+        result = SalesAppService().quote(
+            {"customer_id": customer.id, "items": [valid, bad_item]}, db=db
+        )
+        assert result["success"] is False
+        db.commit()  # Caller may commit unrelated work after a rejected request.
+        assert db.query(SalesOrder).count() == 0
+
     def test_quote_visible_after_flush_only_after_caller_commit(self, _facade_file_db):
         db = _facade_file_db
         customer, product = _seed_quote_owner_db(db)
