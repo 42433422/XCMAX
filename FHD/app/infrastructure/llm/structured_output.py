@@ -119,6 +119,7 @@ async def complete_structured(
     max_tokens: int = 2000,
     conversation_service: Any | None = None,
     provider: Any | None = None,
+    reasoning_enabled: bool | None = None,
 ) -> StructuredResult:
     """调用 LLM 并保证返回通过 schema 校验的 dict；失败带反馈重试。"""
     repairs = _max_repairs_default() if max_repairs is None else max(0, max_repairs)
@@ -131,6 +132,8 @@ async def complete_structured(
         routing["conversation_service"] = conversation_service
     if provider is not None:
         routing["provider"] = provider
+    if reasoning_enabled is not None:
+        routing["reasoning_enabled"] = reasoning_enabled
 
     for attempt in range(1, total_attempts + 1):
         try:

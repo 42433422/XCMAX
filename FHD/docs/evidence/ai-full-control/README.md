@@ -6,6 +6,18 @@
 目标是四个阶段全部完成。本目录记录当前实施证据，不代表四阶段验收通过。
 此前对话中的 20%–30% 覆盖率与工期只是未验证估计，不作为验收基线。
 
+## Live intent evaluation and MiMo short-response repair
+
+With the user's server-configuration selection, read only the current fhd-full.service process configuration on 119.27.178.147. Credentials remained in process memory and are absent from evidence. The evaluation executes this local branch against the configured real model, not the installed client or production business tools.
+
+Before repair, 45 structured calls completed only 1 usable response (mimo-v2.5-pro). A two-call synthetic probe established the cause for one failure: with a 160-token cap, default reasoning ended with length and zero content; disabling reasoning ended with stop and 56 content characters. Structured output now forwards an optional reasoning setting through the existing provider adapter; intent classification disables reasoning. Other structured callers keep their default, and only the existing Xiaomi adapter emits the thinking parameter.
+
+After repair, the same 97-case dataset completed 23/45 structured calls, with 22 StructuredOutputError failures. The benchmark still exits 2 (unavailable_or_partial). Routing outcomes changed from 12/24 core + 10/73 semantic to 13/24 + 18/73, but these partial results are not an accepted model accuracy score. Remaining provider/format failures and routing vocabulary gaps require further diagnosis. Rule-only results remain 24/24 core and 19/73 semantic.
+
+The separate deterministic business trial exposed incorrect product-query fallback across multiple domains. Two cases previously passed despite unrelated product queries for a greeting and a negative-only request. Their expectations now require no business nodes; the same 22 tasks pass only 3. This is one isolated SQLite trial with no live model, seeded compound business data or approval-engine/installed-client validation. The raw-SQL case failed the plan rejection assertion before tool execution; it is not evidence that deletion occurred. Full four-stage acceptance is not achieved.
+
+40 focused structured/intent/benchmark tests plus 228 normal-routing regressions passed. Application mypy, Ruff and all 10 blocking dev guards passed. See intent-routing-current.json, intent-routing-server-config.json, intent-routing-server-fixed.json and intent-business-evaluation.json for measured scope and source identities. No production deployment or installed-host change occurred.
+
 ## Verified catalog download increment
 
 The download endpoint now returns the explicitly requested public Catalog ZIP after package, trusted signature and identity verification. Login and workspace identity are required. The shared fetch is bounded to 64 MiB and 30 seconds; temporary files are removed on success and rejection. No install or initialization occurs. AI api_call exports the ZIP into the current account's private artifact store; another account cannot read it.

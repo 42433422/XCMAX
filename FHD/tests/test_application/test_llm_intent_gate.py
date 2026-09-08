@@ -174,3 +174,14 @@ def test_cache_prevents_second_llm_call(monkeypatch):
     assert gate.llm_route_message(msg) is not None
     assert gate.llm_route_message(msg) is not None
     assert calls["n"] == 1
+
+
+def test_short_intent_requests_disable_reasoning(monkeypatch):
+    from app.infrastructure.llm import structured_output
+
+    call = Mock(return_value=_Structured({"intent": "customers", "confidence": 0.9, "slots": {}}))
+    monkeypatch.setattr(structured_output, "complete_structured_sync", call)
+    result = gate._classify("customer details")
+    assert result["intent"] == "customers_query"
+    assert call.call_args.kwargs["reasoning_enabled"] is False
+    assert call.call_args.kwargs["max_tokens"] == 160

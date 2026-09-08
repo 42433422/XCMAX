@@ -88,6 +88,7 @@
       "difficulty": "hard",
       "instruction": "不要新建客户",
       "expect": {
+        "no_actions": true,
         "forbid_actions": [
           {"tool_id": "business_db", "action": "write"},
           {"tool_id": "customers", "action": "create"},
@@ -325,6 +326,7 @@
       "difficulty": "easy",
       "instruction": "你好",
       "expect": {
+        "no_actions": true,
         "forbid_actions": [
           {"tool_id": "business_db", "action": "write"},
           {"tool_id": "business_db", "action": "delete"},
