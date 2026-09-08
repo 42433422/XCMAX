@@ -68,8 +68,11 @@ def check_returned_records(execution: dict[str, Any], assertions: list[dict]) ->
         accepted = False
         for step in matching:
             value = step.get("output")
+            missing = object()
             for key in assertion.get("path", ["data"]):
-                value = value.get(key) if isinstance(value, dict) else None
+                value = value.get(key, missing) if isinstance(value, dict) else missing
+            if value is missing:
+                continue
             if "equals" in assertion:
                 expected_value = assertion["equals"]
                 if value == expected_value and isinstance(value, bool) == isinstance(
@@ -88,7 +91,12 @@ def check_returned_records(execution: dict[str, Any], assertions: list[dict]) ->
             if all(
                 any(
                     isinstance(row, dict)
-                    and all(row.get(key) == field for key, field in item.items())
+                    and all(
+                        key in row
+                        and row[key] == field
+                        and isinstance(row[key], bool) == isinstance(field, bool)
+                        for key, field in item.items()
+                    )
                     for row in value
                 )
                 for item in expected

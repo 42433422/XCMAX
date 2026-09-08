@@ -19,6 +19,16 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Full integrated business observation retains 22/22 across three trials after
+  recent mainline, routing and inventory changes (`integrated-business-trials`).
+  Returned-value assertions previously equated a missing path/field with explicit
+  null and list fields allowed bool/int equality. They now require present paths
+  and fields with distinct boolean types. Eight negative/positive cases verify
+  this boundary; all 20 assertion/benchmark checks pass and the strengthened full
+  three-trial rerun remains 22/22 with zero defined safety failures
+  (`strict-business-trials`). Both reports explicitly have observe mode and
+  gate_passed=false; neither is release or model acceptance.
+
 - Inventory out/transfer previously subtracted unchecked quantities, allowing a
   negative request to increase source stock. All three movement methods now use
   one finite-positive-number validator before opening the business session,

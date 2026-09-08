@@ -3,6 +3,49 @@ import pytest
 from scripts.dev.task_benchmark_assertions import check_returned_records
 
 
+@pytest.mark.parametrize(
+    "output,accepted",
+    [
+        ({}, False),
+        ({"data": {}}, False),
+        ({"data": {"value": None}}, True),
+        ({"data": None}, False),
+    ],
+)
+def test_missing_path_is_not_an_explicit_null(output, accepted):
+    execution = {
+        "steps": [{"status": "completed", "tool_id": "report", "action": "read", "output": output}]
+    }
+    assertions = [
+        {"tool_id": "report", "action": "read", "path": ["data", "value"], "equals": None}
+    ]
+    assert check_returned_records(execution, assertions)[0] is accepted
+
+
+@pytest.mark.parametrize(
+    "row,field,accepted",
+    [
+        ({}, None, False),
+        ({"value": None}, None, True),
+        ({"value": True}, 1, False),
+        ({"value": 0}, False, False),
+    ],
+)
+def test_record_fields_must_exist_and_preserve_boolean_type(row, field, accepted):
+    execution = {
+        "steps": [
+            {
+                "status": "completed",
+                "tool_id": "report",
+                "action": "read",
+                "output": {"data": [row]},
+            }
+        ]
+    }
+    assertions = [{"tool_id": "report", "action": "read", "includes": [{"value": field}]}]
+    assert check_returned_records(execution, assertions)[0] is accepted
+
+
 @pytest.mark.parametrize("amount, accepted", [(1099, True), (100, False)])
 def test_spreadsheet_assertion_opens_file_and_checks_business_cells(
     tmp_path, monkeypatch, amount, accepted
