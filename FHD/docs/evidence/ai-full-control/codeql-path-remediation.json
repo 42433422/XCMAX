@@ -1,0 +1,8 @@
+{
+  "check_id": 102184770428,
+  "head_sha": "bcd1ab1eb636945d6f37792fa1876d6ab51921aa",
+  "conclusion": "success",
+  "completed_at": "2026-09-08T18:24:20Z",
+  "summary": "[View all branch alerts](/42433422/XCMAX/security/code-scanning?query=pr%3A1804+tool%3ACodeQL+is%3Aopen).",
+  "scope": "CodeQL check success for scanned PR revision. Separate security gate, release gate, business and installed acceptance remain pending."
+}
