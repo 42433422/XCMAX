@@ -20,7 +20,7 @@ import type { usePhoneAgentPolling } from './usePhoneAgentPolling'
 
 export type WorkflowEmployeeTaskUpdate = {
   lastWechat?: { at: number; line: string }
-  lastLabelPrint?: { at: number; line: string }
+  lastLabelPrint?: { at: number; line: string; jobId?: string }
   lastShipmentAudit?: { at: number; line: string; detail?: string }
   lastReceiptFeedback?: { at: number; line: string; detail?: string }
   monitor?: WorkflowMonitorPayload | null

@@ -1,7 +1,7 @@
 import type { CoreWorkflowEmployeeId } from '@/constants/coreWorkflowMod'
 import { printApi } from '@/api/print'
 import { tryPostCoreWorkflowEmployeeRun } from '@/utils/coreWorkflowEmployeeApi'
-import type { CoreWorkflowAuditLine, CoreWorkflowTimestampLine } from '@/workflow/coreWorkflowTypes'
+import type { CoreWorkflowAuditLine, CoreWorkflowLabelLine } from '@/workflow/coreWorkflowTypes'
 
 export const CORE_WORKFLOW_HOST_EVENTS = {
   labelPrintSignal: 'xcagi:workflow-label-print-signal',
@@ -33,6 +33,7 @@ export type LabelPrintSignalDetail = {
   template_id?: string
   paper_width_mm?: number
   paper_height_mm?: number
+  jobId?: string
 }
 
 export type ReceiptFeedbackSignalDetail = {
@@ -52,10 +53,11 @@ export type WechatStarPolledDetail = {
 }
 
 export function buildLabelPrintHostUpdate(detail: LabelPrintSignalDetail): {
-  lastLabelPrint: CoreWorkflowTimestampLine
+  lastLabelPrint: CoreWorkflowLabelLine
 } {
   const line = String(detail.line || '').trim() || '标签/打印类消息'
-  return { lastLabelPrint: { at: Number(detail.at) || Date.now(), line } }
+  const jobId = typeof detail.jobId === 'string' && /^[a-f0-9]{32}$/.test(detail.jobId) ? detail.jobId : undefined
+  return { lastLabelPrint: { at: Number(detail.at) || Date.now(), line, ...(jobId ? { jobId } : {}) } }
 }
 
 export function buildReceiptFeedbackHostUpdate(detail: ReceiptFeedbackSignalDetail): {

@@ -149,7 +149,7 @@ export function useWorkflowPanelEvents(deps: WorkflowPanelEventsDeps) {
     if (sequence !== labelRequest || account !== productReadAccountEpoch.value
       || !readWorkflowEmployeeEnabledMap().label_print
       || !taskList.value.some(t => t.id === 'workflow_emp_label_print')) return
-    upsertWorkflowEmployeeTask('label_print', buildLabelPrintHostUpdate({ ...d, line: result.message }))
+    upsertWorkflowEmployeeTask('label_print', buildLabelPrintHostUpdate({ ...d, line: result.message, jobId: result.jobId }))
     emitAssistantPush({
       title: result.status === 'generated' ? '标签预览已生成' : result.status === 'needs_configuration' ? '标签打印待配置' : '标签生成失败',
       description: result.message,

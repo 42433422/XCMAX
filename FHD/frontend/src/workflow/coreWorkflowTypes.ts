@@ -10,11 +10,12 @@ export type WorkflowMonitorPayload = {
 }
 
 export type CoreWorkflowTimestampLine = { at: number; line: string }
+export type CoreWorkflowLabelLine = CoreWorkflowTimestampLine & { jobId?: string }
 export type CoreWorkflowAuditLine = { at: number; line: string; detail?: string }
 
 export type CoreWorkflowEmployeeCtx = {
   lastWechat?: CoreWorkflowTimestampLine
-  lastLabelPrint?: CoreWorkflowTimestampLine
+  lastLabelPrint?: CoreWorkflowLabelLine
   lastShipmentAudit?: CoreWorkflowAuditLine
   lastReceiptFeedback?: CoreWorkflowAuditLine
 }
