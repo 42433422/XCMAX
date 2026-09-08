@@ -74,6 +74,7 @@ class InventoryMovementsMixin:
                     .filter(
                         _facade().InventoryLedger.product_id == product_id,
                         _facade().InventoryLedger.warehouse_id == warehouse_id,
+                        _facade().InventoryLedger.location_id == location_id,
                         _facade().InventoryLedger.batch_no == batch_no,
                     )
                     .first()
