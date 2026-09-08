@@ -1,9 +1,8 @@
-"""Validate one missing scalar field before resuming a clarified operation."""
+"""Validate one missing schema-defined field before resuming a clarified operation."""
 
 from __future__ import annotations
 
 import json
-import math
 from typing import Any
 
 from app.application.agent_orchestrator.tool_spec import get_tool_action_spec, validate_tool_call
@@ -32,12 +31,11 @@ def resolve_missing_field(
         from .clarification_options import field_options
 
         value = field_options(node.tool_id, node.action, field).get(value, value)
-    if kind in ("integer", "number", "boolean"):
+    if kind in ("integer", "number", "boolean", "array", "object"):
         try:
             value = json.loads(value)
+            json.dumps(value, allow_nan=False)
         except (ValueError, TypeError):
-            return None
-        if isinstance(value, float) and not math.isfinite(value):
             return None
     elif kind != "string":
         return None
