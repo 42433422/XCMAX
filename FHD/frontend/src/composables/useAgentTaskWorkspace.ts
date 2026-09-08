@@ -22,6 +22,7 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
   let reconnectTimer: number | null = null
   let taskStream: AuthenticatedEventStream | null = null
   let refreshInFlight = false
+  let lifecycleVersion = 0
 
   function applyTaskItems(serverTasks: TaskItem[]): void {
     const localTasks = options.taskList.value.filter((task) => !['agent_task', 'agent_run'].includes(task.type))
@@ -50,16 +51,20 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
   async function refreshTasks(): Promise<void> {
     if (refreshInFlight) return
     refreshInFlight = true
+    const requestedVersion = lifecycleVersion
     try {
       let serverTasks: TaskItem[]
       try {
         const response = await agentRunsApi.listTasks({ limit: 200 })
+        if (requestedVersion !== lifecycleVersion) return
         const tasks = Array.isArray(response?.data) ? response.data : []
         applyFirstTaskCompletionEvidence(tasks)
         serverTasks = taskSummariesToTaskItems(tasks)
       } catch {
+        if (requestedVersion !== lifecycleVersion) return
         // Compatibility with an older backend during rolling desktop upgrades.
         const response = await agentRunsApi.listRuns({ limit: 200 })
+        if (requestedVersion !== lifecycleVersion) return
         const runs = Array.isArray(response?.data) ? response.data : []
         runs.forEach((run) => completeFirstAiTaskFromRun(run))
         serverTasks = groupAgentRunsIntoTasks(runs)
@@ -68,7 +73,7 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
     } catch {
       // Keep the last durable snapshot in the panel while offline.
     } finally {
-      refreshInFlight = false
+      if (requestedVersion === lifecycleVersion) refreshInFlight = false
     }
   }
 
@@ -113,6 +118,8 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
   }
 
   function stop(): void {
+    lifecycleVersion += 1
+    refreshInFlight = false
     if (refreshTimer !== null) window.clearInterval(refreshTimer)
     if (reconnectTimer !== null) window.clearTimeout(reconnectTimer)
     taskStream?.close()

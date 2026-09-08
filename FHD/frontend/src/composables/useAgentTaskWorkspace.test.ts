@@ -243,4 +243,16 @@ describe('useAgentTaskWorkspace', () => {
     state.workspace.stop()
     expect(FakeEventSource.instances[0]?.closed).toBe(true)
   })
+  it('discards an in-flight refresh after the workspace stops', async () => {
+    let resolve!: (value: unknown) => void
+    apiMock.listTasks.mockReturnValueOnce(new Promise((r) => { resolve = r }))
+    const state = setup()
+    const pending = state.workspace.refreshTasks()
+    state.workspace.stop()
+    resolve({ success: true, data: [serverTask()] })
+    await pending
+    expect(state.taskList.value).toEqual([])
+    expect(apiMock.listRuns).not.toHaveBeenCalled()
+  })
+
 })
