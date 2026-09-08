@@ -909,9 +909,9 @@ def test_clarification_answer_is_bound_validated_and_does_not_approve_write():
             build_clarify_node("请提供客户", ambient={"target_node_id": "create"}),
             WorkflowNode(
                 node_id="create",
-                tool_id="products",
+                tool_id="customers",
                 action="create",
-                params={"name_or_model": "A100"},
+                params={},
             ),
         ],
     )
@@ -938,7 +938,7 @@ def test_clarification_answer_is_bound_validated_and_does_not_approve_write():
         resumed = _drain_background_run(run.run_id)
         execute.assert_not_called()
     assert resumed.steps[0].status == "completed"
-    assert resumed.steps[1].params == {"name_or_model": "A100", "unit_name": "客户甲"}
+    assert resumed.steps[1].params == {"unit_name": "客户甲"}
     assert resumed.steps[1].status == "waiting_user"
     assert resumed.status == "waiting_user"
     repeated = _client().post(url, json={"step_id": step_id, "parameters": {"unit_name": "客户乙"}})

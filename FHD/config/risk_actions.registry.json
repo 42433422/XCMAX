@@ -318,8 +318,7 @@
           "risk": "medium",
           "idempotent": false,
           "required_params": [
-            "name_or_model",
-            "unit_name"
+            "name_or_model"
           ],
           "availability": "shared",
           "action_class": "business_db.write"

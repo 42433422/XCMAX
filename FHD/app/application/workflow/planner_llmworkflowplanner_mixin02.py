@@ -210,6 +210,35 @@ class _LLMWorkflowPlannerPart02Mixin:
                         idempotent=True,
                     )
                 )
+        if (
+            not nodes
+            and "products" in tool_registry
+            and any(word in message for word in ("新增产品", "添加产品"))
+        ):
+            parsed = _facade()._extract_business_db_write_node(message)
+            payload = parsed.params.get("payload", {}) if parsed is not None else {}
+            if payload.get("model_number") and not any(
+                word in message for word in ("客户", "购买单位")
+            ):
+                params = {
+                    "name_or_model": payload["model_number"],
+                    "model_number": payload["model_number"],
+                }
+                for key in ("price", "specification", "unit"):
+                    if key in payload:
+                        params[key] = payload[key]
+                nodes.append(
+                    _facade().WorkflowNode(
+                        node_id="create_product",
+                        tool_id="products",
+                        action="create",
+                        params=params,
+                        risk="medium",
+                        idempotent=False,
+                        description="新增产品资料",
+                    )
+                )
+                intent = "product_create"
         if not nodes and (
             ("添加" in message or "新增" in message or "create" in lower) and "产品" in message
         ):

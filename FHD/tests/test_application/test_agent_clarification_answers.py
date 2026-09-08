@@ -17,7 +17,7 @@ def test_answer_resolves_duplicate_missing_inputs_but_preserves_other_confirmati
     ]
     nodes.append(
         WorkflowNode(
-            node_id="write", tool_id="products", action="create", params={"name_or_model": "A100"}
+            node_id="write", tool_id="customers", action="create", params={}
         )
     )
     run = AgentOrchestrator(repository=InMemoryAgentRunRepository()).start_run_from_plan(
@@ -29,7 +29,7 @@ def test_answer_resolves_duplicate_missing_inputs_but_preserves_other_confirmati
         run, step_id=run.steps[0].step_id, parameters={"unit_name": "客户甲"}
     )
     assert [step.status for step in run.steps] == ["completed", "completed", "pending", "pending"]
-    assert run.steps[3].params == {"name_or_model": "A100", "unit_name": "客户甲"}
+    assert run.steps[3].params == {"unit_name": "客户甲"}
 
 
 def test_clarification_metadata_does_not_share_mutable_candidates():

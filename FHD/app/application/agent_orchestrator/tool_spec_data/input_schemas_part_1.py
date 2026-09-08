@@ -74,7 +74,7 @@ SPECIAL_INPUT_SCHEMAS_PART_1: dict[tuple[str, str], dict[str, Any]] = {
     },
     ("products", "create"): {
         "type": "object",
-        "required": ["name_or_model", "unit_name"],
+        "required": ["name_or_model"],
         "properties": {
             "name_or_model": {"type": "string"},
             "unit_name": {"type": "string"},

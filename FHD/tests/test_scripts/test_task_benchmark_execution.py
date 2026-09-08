@@ -128,9 +128,9 @@ def test_scripted_answer_resumes_but_does_not_approve_business_write(execute_pla
             build_clarify_node("请提供客户", ambient={"target_node_id": "create"}),
             WorkflowNode(
                 node_id="create",
-                tool_id="products",
+                tool_id="customers",
                 action="create",
-                params={"name_or_model": "A100"},
+                params={},
             ),
         ],
     )
@@ -139,7 +139,7 @@ def test_scripted_answer_resumes_but_does_not_approve_business_write(execute_pla
         {
             "instruction": "新增产品",
             "answers": [
-                {"tool_id": "products", "action": "create", "parameters": {"unit_name": "客户甲"}},
+                {"tool_id": "customers", "action": "create", "parameters": {"unit_name": "客户甲"}},
             ],
             "expect": {"run_status": "waiting_user"},
         },

@@ -17,6 +17,16 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Standalone model-based product creation preserves model/price and requires only
+  the product name/model. The current service creates catalog products without
+  customer ownership; mandatory customer `unit_name` was an obsolete contract in
+  three registry/schema locations. Those definitions now agree. The product
+  scenario passed three real database trials; 121 tool/registry/benchmark tests
+  passed and the full observation is 10/22. Clarification tests now use a customer
+  creation with a truly missing customer name. Legacy explicit customer-product
+  binding plans still require separate product-flow review. Evidence:
+  `product-contract-trials` (the earlier `product-create-trials` failed and is retained).
+
 - Explicit destructive SQL execution requests are rejected before planning tools.
   Empty blocked plans no longer become completed merely because the executor's
   step loop is empty. The raw-SQL scenario was blocked with zero tool calls in

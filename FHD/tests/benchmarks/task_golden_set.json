@@ -109,6 +109,7 @@
       "domain": "products",
       "difficulty": "medium",
       "instruction": "新增产品 型号A100，单价25.5",
+      "approvals": [{"tool_id": "products", "action": "create", "params": {"name_or_model": "A100", "model_number": "A100", "price": 25.5}}],
       "expect": {
         "actions": [{"tool_id": "products", "action": "create"}],
         "db_state": [
