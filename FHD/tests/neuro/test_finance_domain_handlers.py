@@ -171,6 +171,25 @@ class TestResolvePurchaseService:
 
 class TestHandleApprovalRequested:
     @pytest.mark.asyncio
+    async def test_persistence_failure_publishes_failure_without_memory_request(self, monkeypatch):
+        from app.application.workflow.approval_service import ApprovalService
+
+        service = ApprovalService()
+        monkeypatch.setattr(service, "_persist_request_to_db", lambda *args, **kwargs: None)
+        monkeypatch.setattr(fdh, "get_approval_service", lambda: service)
+        published = []
+        monkeypatch.setattr(
+            fdh,
+            "_publish_event",
+            lambda event_type, payload, **kwargs: published.append(event_type),
+        )
+        result = await handle_approval_requested(_make_approval_event())
+        assert not result["success"]
+        assert published == ["finance.approval_failed"]
+        assert service._pending_requests == {}
+        assert service._pending_workflows == {}
+
+    @pytest.mark.asyncio
     async def test_happy_path_publishes_approval_created(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -213,7 +232,7 @@ class TestHandleApprovalRequested:
 
         captured_nodes: list = []
 
-        def _capture_create(plan_id, node):
+        def _capture_create(plan_id, node, **kwargs):
             captured_nodes.append(node)
             return request
 
@@ -243,7 +262,7 @@ class TestHandleApprovalRequested:
         monkeypatch.setattr(fdh, "get_approval_service", factory)
 
         captured_nodes: list = []
-        svc.create_approval_request.side_effect = lambda pid, node: (
+        svc.create_approval_request.side_effect = lambda pid, node, **kwargs: (
             captured_nodes.append(node) or request
         )
 
