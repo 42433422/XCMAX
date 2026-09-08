@@ -72,6 +72,12 @@ class CustomerProductsAdapter(CustomerProductPreviewMixin, TargetAdapter):
             required=True,
             aliases=("品名", "产品", "产品名称", "名称"),
         ),
+        TargetField(
+            "measurement_unit",
+            "计量单位",
+            aliases=("计量单位", "数量单位", "库存单位"),
+            updatable=True,
+        ),
         TargetField("specification", "规格", aliases=("规格", "规格型号"), updatable=True),
         TargetField(
             "price",
@@ -88,6 +94,7 @@ class CustomerProductsAdapter(CustomerProductPreviewMixin, TargetAdapter):
     _customer_fields = frozenset(CUSTOMER_MODEL_FIELDS)
     _product_fields = frozenset(
         {
+            "measurement_unit",
             "specification",
             "price",
             "category",
@@ -106,6 +113,7 @@ class CustomerProductsAdapter(CustomerProductPreviewMixin, TargetAdapter):
     def _product_data(data: dict[str, Any]) -> dict[str, Any]:
         return {
             "unit": str(data.get("customer_name") or "").strip(),
+            "measurement_unit": data.get("measurement_unit"),
             "model_number": data.get("model_number"),
             "name": data.get("name"),
             "specification": data.get("specification"),
@@ -300,6 +308,7 @@ class CustomerProductsAdapter(CustomerProductPreviewMixin, TargetAdapter):
             product = Product(
                 tenant_id=tenant_id_for_write(),
                 unit=str(product_data["unit"]),
+                measurement_unit=optional_text(product_data.get("measurement_unit")),
                 model_number=optional_text(product_data.get("model_number")),
                 name=str(product_data.get("name") or ""),
                 specification=optional_text(product_data.get("specification")),

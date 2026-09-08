@@ -298,3 +298,35 @@ def test_aggregate_rollback_preserves_preexisting_explicit_link(db):
     assert db.query(CustomerProductLink).count() == 1
     assert product.price == Decimal("10")
     assert customer.contact_phone == "100"
+
+
+def test_customer_product_measurement_import_and_rollback_keep_customer_label(db):
+    customer, product = seed_business_rows(db)
+    product.measurement_unit = "桶"
+    db.commit()
+    adapter = get_adapter("customer_products")
+    data = {
+        "customer_name": customer.unit_name,
+        "name": product.name,
+        "model_number": product.model_number,
+        "measurement_unit": "箱",
+    }
+    preview = adapter.preview(db, data, allowed_update_fields={"measurement_unit"}, context={})
+    assert preview.action == "update"
+    result = adapter.execute_row(
+        db,
+        data,
+        action="update",
+        match_ref=preview.match_ref,
+        allowed_update_fields={"measurement_unit"},
+        context={},
+    )
+    db.commit()
+    assert product.measurement_unit == "箱"
+    assert product.unit == customer.unit_name
+    adapter.rollback_row(
+        db, match_ref=result["match_ref"], before=preview.before, after=result["after"], context={}
+    )
+    db.commit()
+    assert product.measurement_unit == "桶"
+    assert product.unit == customer.unit_name
