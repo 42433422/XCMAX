@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
+from uuid import uuid4
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -223,8 +224,12 @@ class CustomerTransferMixin:
             session = self._get_session()
             try:
                 from app.db.models.purchase_unit import PurchaseUnit as PurchaseUnitModel
+                from app.infrastructure.tenant_scope import tenant_id_for_write
 
-                query = session.query(PurchaseUnitModel).filter(PurchaseUnitModel.is_active == True)
+                query = session.query(PurchaseUnitModel).filter(
+                    PurchaseUnitModel.is_active == True,
+                    PurchaseUnitModel.tenant_id == tenant_id_for_write(),
+                )
 
                 if keyword:
                     pattern = f"%{keyword}%"
@@ -244,7 +249,7 @@ class CustomerTransferMixin:
                 ]
 
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = f"customers_{timestamp}.xlsx"
+                filename = f"customers_{timestamp}_{uuid4().hex}.xlsx"
 
                 export_dir = os.path.join(get_data_dir(), "exports")
                 os.makedirs(export_dir, exist_ok=True)
@@ -269,6 +274,17 @@ class CustomerTransferMixin:
                                 template_path = candidate_path
                     except RECOVERABLE_ERRORS:
                         template_path = None
+
+                if template_id and not template_path:
+                    return {"success": False, "message": "所选客户模板不存在或不可用，请重新选择"}
+
+                # Business values are text, never executable spreadsheet formulas.
+                for record in records:
+                    for key, value in record.items():
+                        if isinstance(value, str) and value.lstrip().startswith(
+                            ("=", "+", "-", "@")
+                        ):
+                            record[key] = "'" + value
 
                 if template_path:
                     header_alias = {
@@ -301,7 +317,10 @@ class CustomerTransferMixin:
                             ]
                         )
 
-                wb.save(file_path)
+                try:
+                    wb.save(file_path)
+                finally:
+                    wb.close()
 
                 return {
                     "success": True,

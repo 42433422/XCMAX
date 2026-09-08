@@ -11,6 +11,7 @@ from importlib import import_module
 from typing import Any
 
 _EXPORTS: dict[str, tuple[str, str]] = {
+    "customer_exchange_router": ("app.fastapi_routes.domains.customer.exchange", "router"),
     "AccessRequestPayload": ("app.fastapi_routes.lan_routes", "AccessRequestPayload"),
     "AccessRequestReview": ("app.fastapi_routes.lan_admin_routes", "AccessRequestReview"),
     "ActivateRequest": ("app.fastapi_routes.lan_routes", "ActivateRequest"),

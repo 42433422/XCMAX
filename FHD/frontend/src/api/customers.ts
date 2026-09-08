@@ -7,6 +7,11 @@ function erpBase(): string {
   return resolveErpApiBase()
 }
 
+export interface CustomerImportPreview {
+  run_id: string
+  requires_confirmation: true
+}
+
 export const customersApi = {
   getCustomers(params: Record<string, unknown> = {}): Promise<ApiResponse<Customer[]>> {
     return api.get<ApiResponse<Customer[]>>(`${erpBase()}/customers/list`, params)
@@ -40,8 +45,8 @@ export const customersApi = {
     return api.download(`${erpBase()}/customers/export`, params)
   },
 
-  importCustomersExcel(formData: FormData): Promise<ApiResponse<unknown>> {
-    return api.post<ApiResponse<unknown>>(`${erpBase()}/customers/import`, formData)
+  importCustomersExcel(formData: FormData): Promise<ApiResponse<CustomerImportPreview>> {
+    return api.post<ApiResponse<CustomerImportPreview>>(`${erpBase()}/customers/import`, formData)
   },
 }
 

@@ -1,8 +1,8 @@
 {
   "scope": "Tracked FHD source declarations, including Mods; excludes tests, archives, package directories and build output. Counts are not unique business functions or runtime coverage.",
-  "source_sha256": "97114b5b1174e1aced5f9b229b2529c922b7601ee5cd4e6681480680c1e4c8af",
+  "source_sha256": "39f055acc65834e15a6b92022212cf00d7bb5c422fedfc99d89b345511d25323",
   "generator_sha256": "ceb39219815ed03f5f049188b128f7d7d2d781cae8657c677a0c35c1413af843",
-  "files_scanned": 4031,
+  "files_scanned": 4032,
   "product_coverage_percent": null,
   "remaining_denominators": [
     "native desktop/mobile commands",
@@ -4233,8 +4233,56 @@
       "ai_execution": "unverified"
     },
     {
+      "source": "app/fastapi_routes/domains/customer/exchange.py",
+      "line": 23,
+      "handler": "customers_import",
+      "method": "POST",
+      "declared_path": "/customers/import",
+      "local_prefix": "",
+      "local_path": "/customers/import",
+      "dynamic": false,
+      "mount_status": "unverified",
+      "ai_execution": "unverified"
+    },
+    {
+      "source": "app/fastapi_routes/domains/customer/exchange.py",
+      "line": 28,
+      "handler": "customers_import",
+      "method": "POST",
+      "declared_path": "/customers/import/",
+      "local_prefix": "",
+      "local_path": "/customers/import/",
+      "dynamic": false,
+      "mount_status": "unverified",
+      "ai_execution": "unverified"
+    },
+    {
+      "source": "app/fastapi_routes/domains/customer/exchange.py",
+      "line": 60,
+      "handler": "customers_export",
+      "method": "GET",
+      "declared_path": "/customers/export",
+      "local_prefix": "",
+      "local_path": "/customers/export",
+      "dynamic": false,
+      "mount_status": "unverified",
+      "ai_execution": "unverified"
+    },
+    {
+      "source": "app/fastapi_routes/domains/customer/exchange.py",
+      "line": 61,
+      "handler": "customers_export",
+      "method": "GET",
+      "declared_path": "/customers/export/",
+      "local_prefix": "",
+      "local_path": "/customers/export/",
+      "dynamic": false,
+      "mount_status": "unverified",
+      "ai_execution": "unverified"
+    },
+    {
       "source": "app/fastapi_routes/domains/customer/routes.py",
-      "line": 128,
+      "line": 131,
       "handler": "customers_all",
       "method": "GET",
       "declared_path": "/customers",
@@ -4246,7 +4294,7 @@
     },
     {
       "source": "app/fastapi_routes/domains/customer/routes.py",
-      "line": 129,
+      "line": 132,
       "handler": "customers_all",
       "method": "GET",
       "declared_path": "/customers/",
@@ -4258,7 +4306,7 @@
     },
     {
       "source": "app/fastapi_routes/domains/customer/routes.py",
-      "line": 146,
+      "line": 149,
       "handler": "customers_match",
       "method": "GET",
       "declared_path": "/customers/match",
@@ -4270,7 +4318,7 @@
     },
     {
       "source": "app/fastapi_routes/domains/customer/routes.py",
-      "line": 147,
+      "line": 150,
       "handler": "customers_match",
       "method": "GET",
       "declared_path": "/customers/match/",
@@ -4282,7 +4330,7 @@
     },
     {
       "source": "app/fastapi_routes/domains/customer/routes.py",
-      "line": 191,
+      "line": 194,
       "handler": "customers_list",
       "method": "GET",
       "declared_path": "/customers/list",
@@ -4294,7 +4342,7 @@
     },
     {
       "source": "app/fastapi_routes/domains/customer/routes.py",
-      "line": 263,
+      "line": 266,
       "handler": "customers_get_one",
       "method": "GET",
       "declared_path": "/customers/{customer_id}",
@@ -4306,7 +4354,7 @@
     },
     {
       "source": "app/fastapi_routes/domains/customer/routes.py",
-      "line": 264,
+      "line": 267,
       "handler": "customers_get_one",
       "method": "GET",
       "declared_path": "/customers/{customer_id}/",
@@ -4318,7 +4366,7 @@
     },
     {
       "source": "app/fastapi_routes/domains/customer/routes.py",
-      "line": 282,
+      "line": 285,
       "handler": "customers_create",
       "method": "POST",
       "declared_path": "/customers",
@@ -4330,7 +4378,7 @@
     },
     {
       "source": "app/fastapi_routes/domains/customer/routes.py",
-      "line": 283,
+      "line": 286,
       "handler": "customers_create",
       "method": "POST",
       "declared_path": "/customers/",
@@ -4342,7 +4390,7 @@
     },
     {
       "source": "app/fastapi_routes/domains/customer/routes.py",
-      "line": 331,
+      "line": 334,
       "handler": "customers_update",
       "method": "PUT",
       "declared_path": "/customers/{customer_id}",
@@ -4354,7 +4402,7 @@
     },
     {
       "source": "app/fastapi_routes/domains/customer/routes.py",
-      "line": 332,
+      "line": 335,
       "handler": "customers_update",
       "method": "PUT",
       "declared_path": "/customers/{customer_id}/",
@@ -4366,7 +4414,7 @@
     },
     {
       "source": "app/fastapi_routes/domains/customer/routes.py",
-      "line": 369,
+      "line": 372,
       "handler": "customers_delete",
       "method": "DELETE",
       "declared_path": "/customers/{customer_id}",
@@ -4378,7 +4426,7 @@
     },
     {
       "source": "app/fastapi_routes/domains/customer/routes.py",
-      "line": 370,
+      "line": 373,
       "handler": "customers_delete",
       "method": "DELETE",
       "declared_path": "/customers/{customer_id}/",
@@ -4390,7 +4438,7 @@
     },
     {
       "source": "app/fastapi_routes/domains/customer/routes.py",
-      "line": 395,
+      "line": 398,
       "handler": "customers_batch_delete",
       "method": "POST",
       "declared_path": "/customers/batch-delete",
@@ -4402,60 +4450,12 @@
     },
     {
       "source": "app/fastapi_routes/domains/customer/routes.py",
-      "line": 396,
+      "line": 399,
       "handler": "customers_batch_delete",
       "method": "POST",
       "declared_path": "/customers/batch-delete/",
       "local_prefix": "",
       "local_path": "/customers/batch-delete/",
-      "dynamic": false,
-      "mount_status": "unverified",
-      "ai_execution": "unverified"
-    },
-    {
-      "source": "app/fastapi_routes/domains/customer/routes.py",
-      "line": 410,
-      "handler": "customers_import",
-      "method": "POST",
-      "declared_path": "/customers/import",
-      "local_prefix": "",
-      "local_path": "/customers/import",
-      "dynamic": false,
-      "mount_status": "unverified",
-      "ai_execution": "unverified"
-    },
-    {
-      "source": "app/fastapi_routes/domains/customer/routes.py",
-      "line": 411,
-      "handler": "customers_import",
-      "method": "POST",
-      "declared_path": "/customers/import/",
-      "local_prefix": "",
-      "local_path": "/customers/import/",
-      "dynamic": false,
-      "mount_status": "unverified",
-      "ai_execution": "unverified"
-    },
-    {
-      "source": "app/fastapi_routes/domains/customer/routes.py",
-      "line": 431,
-      "handler": "customers_export_stub",
-      "method": "GET",
-      "declared_path": "/customers/export",
-      "local_prefix": "",
-      "local_path": "/customers/export",
-      "dynamic": false,
-      "mount_status": "unverified",
-      "ai_execution": "unverified"
-    },
-    {
-      "source": "app/fastapi_routes/domains/customer/routes.py",
-      "line": 432,
-      "handler": "customers_export_stub",
-      "method": "GET",
-      "declared_path": "/customers/export/",
-      "local_prefix": "",
-      "local_path": "/customers/export/",
       "dynamic": false,
       "mount_status": "unverified",
       "ai_execution": "unverified"
@@ -37316,11 +37316,11 @@
     {
       "source": "XCAGI/mods/xcagi-erp-domain-bridge/manifest.json",
       "mod_id": "xcagi-erp-domain-bridge",
-      "version": "1.0.0.0",
+      "version": "1.0.0.1",
       "manifest": {
         "id": "xcagi-erp-domain-bridge",
         "name": "XCAGI 通用业务领域门面 Mod",
-        "version": "1.0.0.0",
+        "version": "1.0.0.1",
         "author": "成都修茈科技有限公司",
         "description": "通用业务 API 门面 + Repository 可插拔 + Mod 业务页（K+/O+ 物理视图；L 仓储边界）。",
         "primary": false,
@@ -51046,11 +51046,11 @@
     {
       "source": "mods/xcagi-erp-domain-bridge/manifest.json",
       "mod_id": "xcagi-erp-domain-bridge",
-      "version": "1.0.0.0",
+      "version": "1.0.0.1",
       "manifest": {
         "id": "xcagi-erp-domain-bridge",
         "name": "XCAGI 通用业务领域门面 Mod",
-        "version": "1.0.0.0",
+        "version": "1.0.0.1",
         "author": "成都修茈科技有限公司",
         "description": "通用业务 API 门面 + Repository 可插拔 + Mod 业务页（K+/O+ 物理视图；L 仓储边界）。",
         "primary": false,

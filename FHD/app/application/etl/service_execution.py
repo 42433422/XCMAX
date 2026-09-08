@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from contextvars import copy_context
 from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import or_
@@ -128,7 +129,7 @@ class ExecutionServiceMixin(RollbackServiceMixin):
                 with SUBMITTED_LOCK:
                     SUBMITTED.discard(run_id)
 
-        EXECUTOR.submit(work)
+        EXECUTOR.submit(copy_context().run, work)
 
     def _execute_worker(
         self,

@@ -28,21 +28,26 @@ def etl_app(export_app, application, host, monkeypatch, tmp_path):
     app, content = export_app
     _, factories = application
     factory = factories["host-business"]
-    engine = factory.kw["bind"]
-    Base.metadata.create_all(
-        engine,
-        tables=[
-            table
-            for name, table in Base.metadata.tables.items()
-            if name.startswith("etl_") or name in {"products", "shipment_records", "sales_orders"}
-        ],
-    )
+    for scoped_factory in factories.values():
+        engine = scoped_factory.kw["bind"]
+        Base.metadata.create_all(
+            engine,
+            tables=[
+                table
+                for name, table in Base.metadata.tables.items()
+                if name.startswith("etl_")
+                or name in {"products", "shipment_records", "sales_orders"}
+            ],
+        )
     with host.begin() as db:
         for owner in (3, 4, 5):
             db.get(User, owner).role = "admin"
     monkeypatch.setenv("FHD_ETL_CENTER_ENABLED", "1")
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
-    monkeypatch.setattr("app.application.etl.service.SessionLocal", factory)
+    from app.request_active_mod_ctx import get_request_active_mod_id
+
+    selected_factory = lambda: factories[get_request_active_mod_id() or "host-business"]
+    monkeypatch.setattr("app.application.etl.service.SessionLocal", lambda: selected_factory()())
     monkeypatch.setattr(
         "app.application.etl.service_uploads.get_app_data_dir", lambda: str(tmp_path / "etl-data")
     )
@@ -51,7 +56,7 @@ def etl_app(export_app, application, host, monkeypatch, tmp_path):
     monkeypatch.setitem(AIOPEN_STATE["whitelist"], "/api/etl", True)
 
     def database():
-        with factory() as db:
+        with selected_factory()() as db:
             try:
                 yield db
                 db.commit()

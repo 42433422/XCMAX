@@ -407,20 +407,16 @@ def test_compat_customer_update_via_service(compat_customer_client: TestClient) 
     upd.assert_called_once()
 
 
-def test_compat_customer_export_not_implemented() -> None:
-    from fastapi import HTTPException
+def test_compat_customer_export_requires_login() -> None:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
 
-    from app.fastapi_routes.domains.customer.routes import customers_export_stub
+    from app.fastapi_routes.domains.customer.routes import router
 
-    with pytest.raises(HTTPException) as exc:
-        customers_export_stub()
-    assert exc.value.status_code == 501
-    assert "尚未" in str(exc.value.detail)
-
-
-# ---------------------------------------------------------------------------
-# tools
-# ---------------------------------------------------------------------------
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        assert client.get("/customers/export").status_code == 401
 
 
 def test_legacy_tools_execute_route(tools_client: TestClient) -> None:

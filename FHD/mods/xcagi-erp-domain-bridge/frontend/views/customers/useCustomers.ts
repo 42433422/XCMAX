@@ -1,8 +1,11 @@
 import { ref, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import customersApi from '@/api/customers'
 import ordersApi from '@/api/orders'
 import templatePreviewApi from '@/api/templatePreview'
 import { appAlert } from '@/utils/appDialog'
+import { downloadBlob } from '@/utils'
 import { useCoreNavLabel } from '@/composables/useCoreNavLabel'
 import type { CustomerCreateDTO, CustomerUpdateDTO } from '@/types/customer'
 
@@ -78,6 +81,7 @@ interface ExportTemplatesResponse {
 // 拆分自 CustomersView.vue script（原第 200–508 行）；逻辑逐字迁移，行为不变。
 // DataTable / ConfirmDialog 组件仍在入口 SFC 中导入。
 export function useCustomers() {
+  const router = useRouter();
   const pageNavTitle = useCoreNavLabel('customers');
   const productsNavLabel = useCoreNavLabel('products');
   const shipmentNavLabel = useCoreNavLabel('shipment-records');
@@ -302,20 +306,15 @@ export function useCustomers() {
   };
 
   const exportCustomers = async () => {
-    if (!selectedTemplateId.value) {
-      await appAlert('请先选择导出模板');
-      return;
-    }
+    const epoch = productReadAccountEpoch.value;
     try {
-      const response = await customersApi.exportCustomersXlsx(selectedTemplateId.value);
+      const response = await customersApi.exportCustomersXlsx(selectedTemplateId.value || undefined);
+      if (productReadAccountEpoch.value !== epoch) return;
       const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = '购买单位列表.xlsx';
-      a.click();
-      URL.revokeObjectURL(url);
+      if (productReadAccountEpoch.value !== epoch) return;
+      downloadBlob(blob, '购买单位列表.xlsx');
     } catch (e) {
+      if (productReadAccountEpoch.value !== epoch) return;
       console.error('导出失败:', e);
       await appAlert('导出失败: ' + (e as { message?: string }).message || '未知错误');
     }
@@ -351,15 +350,18 @@ export function useCustomers() {
     const file = (e.target as HTMLInputElement).files?.[0];
     if (!file) return;
 
+    const epoch = productReadAccountEpoch.value;
     try {
       const formData = new FormData();
       formData.append('file', file);
       const data = await customersApi.importCustomersExcel(formData);
-      if (data.success) {
-        await appAlert('导入成功！');
-        await loadCustomers({ reset: true });
+      if (productReadAccountEpoch.value !== epoch) return;
+      if (!data.success || !data.data?.requires_confirmation || !data.data.run_id) {
+        throw new Error(data.message || '未取得客户导入预演，请重试');
       }
+      await router.push({ path: '/business-docking', query: { run_id: data.data.run_id } });
     } catch (e) {
+      if (productReadAccountEpoch.value !== epoch) return;
       console.error('导入失败:', e);
       await appAlert('导入失败: ' + ((e as { message?: string }).message || '未知错误'));
     } finally {

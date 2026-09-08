@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import logging
 import time
+from contextvars import copy_context
 from typing import TYPE_CHECKING, Any
 
 from app.application.etl.operation_owner import (
@@ -52,7 +53,7 @@ class PreviewWorkerMixin:
                 with _facade().SUBMITTED_LOCK:
                     _facade().SUBMITTED.discard(run_id)
 
-        _facade().EXECUTOR.submit(work)
+        _facade().EXECUTOR.submit(copy_context().run, work)
 
     def _preview_worker(
         self, run_id: str, owner_user_id: int, *, operation_token: str | None = None
