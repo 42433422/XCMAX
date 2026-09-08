@@ -30,11 +30,13 @@ def test_clarification_is_waiting_and_never_business_completion(
     monkeypatch.setattr(
         tools_facade, "execute_registered_workflow_tool", lambda *args: calls.append(args)
     )
+    from app.application.workflow.clarification_node import build_clarify_node
+
     plan = PlanGraph(
         plan_id="clarify",
         intent="create",
         nodes=[
-            WorkflowNode(node_id="ask", tool_id="clarify", action="ask"),
+            build_clarify_node("请提供客户名称", ambient={"target_node_id": "write"}),
             WorkflowNode(
                 node_id="write",
                 tool_id="customers",
@@ -48,6 +50,7 @@ def test_clarification_is_waiting_and_never_business_completion(
     )
     assert ok is passes
     assert receipt["status"] == "waiting_user"
+    assert receipt["final_output"]["clarification"]["question"] == "请提供客户名称"
     assert not calls and not receipt["tool_calls"]
     assert bool(reason) is (not passes)
 

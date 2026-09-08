@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import importlib
 
+from app.application.agent_orchestrator.clarification import pause_for_clarification
+
 
 def _facade():
     return importlib.import_module("app.application.agent_orchestrator.orchestrator")
@@ -400,6 +402,8 @@ class __AgentOrchestratorPart01MixinPart01Mixin:
                 return
             if step.status == "completed":
                 continue
+            if pause_for_clarification(run, step):
+                return
             if any(dep not in completed_node_ids for dep in step.depends_on):
                 run.status = "blocked"
                 step.status = "skipped"

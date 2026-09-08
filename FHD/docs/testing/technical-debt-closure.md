@@ -28,11 +28,12 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
   consecutive successes. Observation is explicitly not acceptance. The earlier
   direct-tool baseline was 5/22; those numbers measure different execution paths
   and must not be described as a product regression without further diagnosis.
-- The actual planner marks clarification nodes low-risk/idempotent, and the
-  orchestrator consequently attempts an unregistered `clarify.ask` tool. The
-  synthetic clarification regression currently exercises non-idempotent waiting;
-  a planner-generated clarification integration test and lifecycle fix remain
-  required. Do not claim clarification is fully repaired from the synthetic test.
+- The actual planner marks clarification nodes low-risk/idempotent. A dedicated
+  interaction handler now pauses these nodes before tool execution and exposes
+  the question and target node in the run result. The regression uses the real
+  planner node builder; 26 evaluator/orchestrator tests passed. Answer submission,
+  target-parameter validation and resumption still require implementation and
+  end-to-end verification before clarification can be called complete.
 - SQL queue completion now performs ownership and lease checks in the UPDATE,
   not an earlier SELECT; expired owners cannot renew. Three queue tests passed,
   including a simultaneous claim by two spawned processes and expiration before
