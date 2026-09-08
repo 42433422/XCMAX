@@ -413,7 +413,12 @@ async def sync_entitlements_for_session(session_id: str, *, force: bool = False)
         and last_sync > 0
         and time.monotonic() - last_sync < _entitlement_sync_ttl_seconds()
     ):
-        return set(cached_now)
+        # The TTL belongs to this session; the process cache may belong to the
+        # last account that made a request. Reload this session before reuse.
+        if not restore_entitlements_from_session_row(sid):
+            clear_session_entitlements()
+            return set()
+        return set(get_cached_entitled_client_mod_ids() or set())
     try:
         from app.fastapi_routes.market_account import resolve_valid_market_access_token
 
@@ -440,7 +445,9 @@ async def sync_entitlements_for_session(session_id: str, *, force: bool = False)
                 _reloaded_entitlement_ids_by_session[sid] = entitlement_fingerprint
             _entitlement_sync_at_by_session[sid] = time.monotonic()
             return client_ids
-        restore_entitlements_from_session_row(sid)
+        if not restore_entitlements_from_session_row(sid):
+            clear_session_entitlements()
+            return set()
         cached = _augment_entitled_for_username(
             local_username, get_cached_entitled_client_mod_ids() or set()
         )
@@ -456,7 +463,9 @@ async def sync_entitlements_for_session(session_id: str, *, force: bool = False)
         return cached
     except RECOVERABLE_ERRORS:
         logger.exception("sync_entitlements_for_session failed")
-        restore_entitlements_from_session_row(sid)
+        if not restore_entitlements_from_session_row(sid):
+            clear_session_entitlements()
+            return set()
         local_username = _session_username_for_entitlements(sid)
         cached = _augment_entitled_for_username(
             local_username, get_cached_entitled_client_mod_ids() or set()

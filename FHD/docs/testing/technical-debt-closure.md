@@ -19,6 +19,17 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Entitlement sync's session-keyed TTL previously returned the last account's
+  process-global entitlement set. TTL reuse now restores the requested session
+  row; missing/failed restoration in TTL and both market fallback paths clears
+  stale state and returns no rights. Three tests reproduced wrong-account rights
+  before the fix (`entitlement-session-before`). A real SQLite test alternates
+  A/B session rows and verifies a persisted revocation overrides an unexpired
+  TTL; all 55 entitlement tests pass (`entitlement-session-real-db`). This fixes
+  sequential cache reuse and failed-restore fallback only. Global state under
+  concurrent requests, session expiry validation, and durable task-to-Mod
+  authorization binding remain unresolved and are not certified by these tests.
+
 - Unified-task HTTP endpoints no longer translate an authenticated empty tenant
   into the repository's unrestricted None selector. Detail/read/archive, lists,
   stream and runtime task summaries pass the exact scope; legacy run backfill
