@@ -172,7 +172,7 @@ class InventoryMovementsMixin:
         operator: str | None = None,
         remark: str | None = None,
     ) -> dict[str, Any]:
-        with _facade().get_db() as db:
+        with _facade().get_db() as db, worker_write_guard(db):
             try:
                 query = db.query(_facade().InventoryLedger).filter(
                     _facade().InventoryLedger.product_id == product_id,
@@ -235,7 +235,7 @@ class InventoryMovementsMixin:
         operator: str | None = None,
         remark: str | None = None,
     ) -> dict[str, Any]:
-        with _facade().get_db() as db:
+        with _facade().get_db() as db, worker_write_guard(db):
             try:
                 from_ledger = (
                     db.query(_facade().InventoryLedger)

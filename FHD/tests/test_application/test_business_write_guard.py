@@ -161,8 +161,9 @@ def test_takeover_cannot_cross_inventory_commit(
 
 @pytest.mark.parametrize("separate_mod_database", [False, True])
 @pytest.mark.parametrize("expired", [False, True])
+@pytest.mark.parametrize("operation", ["in", "out", "transfer"])
 def test_inventory_commit_requires_live_claim_without_rerouting_mod_data(
-    tmp_path, monkeypatch, separate_mod_database, expired
+    tmp_path, monkeypatch, separate_mod_database, expired, operation
 ):
     ownership_engine = create_engine(f"sqlite:///{tmp_path / 'queue.db'}")
     business_engine = (
@@ -186,6 +187,24 @@ def test_inventory_commit_requires_live_claim_without_rerouting_mod_data(
                 Warehouse(code="MAIN", name="主仓库", status="active"),
             ]
         )
+    with business_factory.begin() as db:
+        product_id = db.query(Product).one().id
+        warehouse_id = db.query(Warehouse).one().id
+        destination = Warehouse(code="SECOND", name="副仓库", status="active")
+        db.add(destination)
+        db.flush()
+        destination_id = destination.id
+        if operation != "in":
+            db.add(
+                InventoryLedger(
+                    product_id=product_id,
+                    warehouse_id=warehouse_id,
+                    quantity=100,
+                    available_quantity=100,
+                    reserved_quantity=0,
+                    unit="个",
+                )
+            )
     if expired:
         with owner_factory.begin() as db:
             db.query(AgentTaskExecutionRecord).filter_by(run_id=run.run_id).update(
@@ -203,6 +222,12 @@ def test_inventory_commit_requires_live_claim_without_rerouting_mod_data(
         with worker_claim_scope(runs, execution, "worker"):
 
             def inbound():
+                if operation == "out":
+                    return InventoryService().inventory_out(product_id, warehouse_id, 50)
+                if operation == "transfer":
+                    return InventoryService().inventory_transfer(
+                        product_id, warehouse_id, destination_id, 50
+                    )
                 return InventoryService().inventory_in(
                     product_id=None,
                     warehouse_id=None,
@@ -217,10 +242,19 @@ def test_inventory_commit_requires_live_claim_without_rerouting_mod_data(
             else:
                 assert inbound()["success"]
         with business_factory() as db:
-            assert db.query(InventoryTransaction).count() == (0 if expired else 1)
-            assert db.query(InventoryLedger).count() == (0 if expired else 1)
-            if not expired:
-                assert float(db.query(InventoryLedger).one().quantity) == 50
+            expected_movements = 0 if expired else (2 if operation == "transfer" else 1)
+            assert db.query(InventoryTransaction).count() == expected_movements
+            ledgers = {
+                row.warehouse_id: float(row.quantity) for row in db.query(InventoryLedger).all()
+            }
+            expected = (
+                ({} if operation == "in" else {warehouse_id: 100})
+                if expired
+                else {warehouse_id: 50}
+            )
+            if operation == "transfer" and not expired:
+                expected[destination_id] = 50
+            assert ledgers == expected
     finally:
         business_engine.dispose()
         ownership_engine.dispose()

@@ -19,6 +19,15 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Inventory out and transfer now use the same worker ownership guard as inbound.
+  Real SQLite checks cover all three operations with active/expired claims in
+  shared and separate Mod databases: expired operations preserve initial ledgers
+  with zero new movements; valid out reduces 100 to 50, transfer produces two
+  50-unit warehouse balances and two movements. All 73 guard/inventory/dispatcher
+  checks passed (`inventory-all-movement-fences`). Only inbound currently has
+  abrupt-process and concurrent takeover tests; other tools and business receipts
+  remain outstanding, so this is not full D4 acceptance.
+
 - Inbound crash coverage now exits the child with os._exit(73) immediately after
   successful business commit, leaving the persisted step running without a result.
   A replacement claim invokes the real orchestrator recovery with an optimistic
