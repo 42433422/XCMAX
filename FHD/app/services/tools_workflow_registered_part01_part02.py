@@ -221,7 +221,22 @@ def _registered_router_sales(
     if action == "quote":
         return svc.quote(dict(params or {}))
     if action == "confirm":
-        return svc.confirm(int(params.get("order_id") or 0))
+        order_id = params.get("order_id")
+        source_id = params.get("order_node_id")
+        if source_id:
+            source = (runtime_context.get("node_outputs") or {}).get(str(source_id))
+            data = source.get("data") if isinstance(source, dict) else None
+            resolved = data.get("id") if isinstance(data, dict) else None
+            if (
+                not isinstance(source, dict)
+                or source.get("success") is not True
+                or type(resolved) is not int
+                or resolved <= 0
+                or (order_id is not None and str(order_id) != str(resolved))
+            ):
+                return {"success": False, "message": "前序订单结果不可用或订单编号不一致"}
+            order_id = resolved
+        return svc.confirm(int(order_id or 0))
     if action == "deliver":
         return svc.deliver(
             int(params.get("order_id") or 0),
