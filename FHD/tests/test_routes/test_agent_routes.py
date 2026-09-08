@@ -348,6 +348,19 @@ def test_retry_rejects_recovery_state_without_legacy_non_retryable_flag():
     assert len(repository.list_recent()) == 1
 
 
+def test_resume_explains_unreconciled_result_without_state_changes():
+    repository = get_agent_run_repository()
+    run = AgentRun(user_id="u1", message="uncertain write", status="paused")
+    run.metadata["recovery"] = {"state": "manual_reconciliation_required"}
+    repository.save(run)
+    before = repository.get(run.run_id).to_dict()
+    response = _client().post(f"/api/agent/runs/{run.run_id}/resume", json={})
+    assert response.status_code == 409
+    assert "核对" in response.json()["message"]
+    assert repository.get(run.run_id).to_dict() == before
+    assert repository.latest_task_control(run.run_id) is None
+
+
 def _planner_fallback_patches():
     return (
         patch("app.application.workflow.planner.get_ai_conversation_service"),

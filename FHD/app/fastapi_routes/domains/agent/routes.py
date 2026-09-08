@@ -345,9 +345,14 @@ def _control_agent_run(
     def apply_control() -> dict[str, Any] | JSONResponse:
         orchestrator = AgentOrchestrator()
         durable_resume = False
-        _, error = _owned_run(orchestrator, run_id, principal)
+        current, error = _owned_run(orchestrator, run_id, principal)
         if error is not None:
             return error
+        if action == "resume" and requires_retry_reconciliation(current):
+            return JSONResponse(
+                {"success": False, "message": "任务执行结果需要人工核对，暂不能恢复"},
+                status_code=409,
+            )
         if action == "pause":
             run = orchestrator.pause_run(run_id, requested_by=principal.user_id)
         elif action == "cancel":
