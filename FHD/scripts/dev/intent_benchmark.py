@@ -15,10 +15,13 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import subprocess
 import sys
 from collections import defaultdict
+from datetime import UTC, datetime
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -38,9 +41,24 @@ BASELINE_PATH = METRICS_DIR / "intent_benchmark_baseline.json"
 CORE_TOLERANCE = 0.02
 
 
-def _load_cases() -> list[dict]:
-    cases = json.loads(GOLDEN_PATH.read_text(encoding="utf-8"))
-    assert isinstance(cases, list) and len(cases) >= 50, "golden set 规模异常"
+def _load_cases(path: Path = GOLDEN_PATH) -> list[dict]:
+    cases = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(cases, list) or not cases:
+        raise ValueError("golden set must be a non-empty list")
+    for case in cases:
+        if not isinstance(case, dict) or not isinstance(case.get("text"), str):
+            raise ValueError("each benchmark case needs text")
+        if not any(
+            case.get(key)
+            for key in (
+                "check",
+                "expect_negated",
+                "expected_route",
+                "expected_tool",
+                "expected_primary",
+            )
+        ):
+            raise ValueError("each benchmark case needs an expected outcome")
     return cases
 
 
@@ -58,6 +76,8 @@ def _match_rule(case: dict, text: str) -> bool:
         return bool(r.get("is_negated") or r.get("is_negation_intent"))
     exp_tool = case.get("expected_tool")
     exp_primary = case.get("expected_primary")
+    if exp_tool is None and exp_primary is None:
+        return False
     if exp_tool is not None and r.get("tool_key") != exp_tool:
         return False
     if exp_primary is not None and r.get("primary_intent") != exp_primary:
@@ -65,33 +85,40 @@ def _match_rule(case: dict, text: str) -> bool:
     return True
 
 
-def _run_layer(name: str, cases: list[dict], matcher) -> dict:
+def _run_layer(name: str, cases: list[dict], matcher, observer=None) -> dict:
     stat = defaultdict(lambda: [0, 0])
     failures: dict[str, list[dict]] = defaultdict(list)
     for case in cases:
         text = case["text"]
         tier = str(case.get("tier", "core"))
+        got = {}
+        error = None
         try:
-            ok = bool(matcher(case, text))
+            if observer is not None:
+                got = observer(text)
+                ok = bool(matcher(case, got))
+            else:
+                ok = bool(matcher(case, text))
         except BOUNDARY_ERRORS as exc:  # 评测隔离边界：单条异常记为 miss，不中断整场评测
             ok = False
-            failures[tier].append({"text": text, "error": str(exc)[:120]})
+            error = type(exc).__name__
         stat[tier][1] += 1
         if ok:
             stat[tier][0] += 1
         else:
-            got = {}
             try:
                 from app.services.intent_service import recognize_intents
 
-                r = recognize_intents(text)
-                got = {"tool_key": r.get("tool_key"), "primary_intent": r.get("primary_intent")}
+                if observer is None:
+                    r = recognize_intents(text)
+                    got = {"tool_key": r.get("tool_key"), "primary_intent": r.get("primary_intent")}
             except BOUNDARY_ERRORS:  # 评测隔离边界：对照组失败记为空观测
                 pass
             failures[tier].append(
                 {
                     "text": text,
                     "got": got,
+                    **({"error": error} if error else {}),
                     **{
                         k: case.get(k)
                         for k in ("expected_tool", "expected_primary", "check")
@@ -108,9 +135,9 @@ def _run_layer(name: str, cases: list[dict], matcher) -> dict:
     }
 
 
-def _record(result: dict) -> None:
-    METRICS_DIR.mkdir(parents=True, exist_ok=True)
-    LATEST_PATH.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+def _record(result: dict, path: Path = LATEST_PATH) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _check_ratchet(result: dict) -> int:
@@ -141,19 +168,49 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--check", action="store_true", help="棘轮门禁模式")
     ap.add_argument("--record", action="store_true", help="把本次跑分写为基线")
     ap.add_argument("--llm", action="store_true", help="同时评测 LLM 兜底层（需平台模型配置）")
+    ap.add_argument(
+        "--cases", type=Path, default=GOLDEN_PATH, help="独立脱敏留出集（不自动写回基线）"
+    )
+    ap.add_argument("--output", type=Path, default=LATEST_PATH)
+    ap.add_argument("--min-routing-accuracy", type=float, help="显式的模型路由验收门槛（0..1）")
     args = ap.parse_args(argv)
+    if args.min_routing_accuracy is not None and (
+        not args.llm or not 0 <= args.min_routing_accuracy <= 1
+    ):
+        ap.error("--min-routing-accuracy requires --llm and a value in [0,1]")
 
     os.environ.setdefault("XCAGI_SKIP_INTENT_LLM", "1")
     sys.path.insert(0, str(REPO))
 
-    cases = _load_cases()
-    result: dict = {"total": len(cases)}
+    if args.record and (args.llm or args.cases != GOLDEN_PATH):
+        ap.error("--record only accepts the default rule regression set")
+    if args.check and args.cases != GOLDEN_PATH:
+        ap.error("--check requires the baseline's original dataset")
+    cases = _load_cases(args.cases)
+    identity = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=REPO, capture_output=True, text=True, check=True
+    )
+    result: dict = {
+        "total": len(cases),
+        "source_sha": identity.stdout.strip(),
+        "dataset_sha256": hashlib.sha256(args.cases.read_bytes()).hexdigest(),
+        "measured_at": datetime.now(UTC).isoformat(),
+    }
     result["rule"] = _run_layer("rule", cases, _match_rule)
 
     if args.llm:
-        from scripts.dev.intent_benchmark_llm import match_llm  # type: ignore[import-not-found]
+        from scripts.dev.intent_benchmark_llm import match_prediction, observe_model_calls, predict
 
-        result["llm"] = _run_layer("llm", cases, match_llm)
+        with observe_model_calls() as evidence:
+            result["llm"] = _run_layer(
+                "normal_router_with_llm", cases, match_prediction, observer=predict
+            )
+        result["llm"]["model_calls"] = evidence
+        result["llm"]["measurement_status"] = (
+            "measured"
+            if evidence["completed"] and not evidence["errors"]
+            else "unavailable_or_partial"
+        )
 
     for layer in ("rule", "llm"):
         if layer in result:
@@ -162,7 +219,19 @@ def main(argv: list[str] | None = None) -> int:
             )
             print(f"[{layer}] {accs}  (n={result[layer]['counts']})")
 
-    _record(result)
+    _record(result, args.output)
+    if args.llm and result["llm"]["measurement_status"] != "measured":
+        print(
+            "LLM measurement incomplete: see model_calls; this is not a passing acceptance result"
+        )
+        return 2
+    if args.min_routing_accuracy is not None:
+        counts = result["llm"]["counts"].values()
+        correct = sum(item["correct"] for item in counts)
+        accuracy = correct / len(cases)
+        if accuracy < args.min_routing_accuracy:
+            print(f"Routing acceptance failed: {accuracy:.2%} < {args.min_routing_accuracy:.2%}")
+            return 1
     if args.record:
         BASELINE_PATH.write_text(
             json.dumps(

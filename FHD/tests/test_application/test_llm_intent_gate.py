@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import Mock
+
 import pytest
 
 from app.application import llm_intent_gate as gate
@@ -139,14 +141,16 @@ def test_unknown_intent_returns_none(monkeypatch):
     assert gate.llm_route_message("给我讲个笑话") is None
 
 
-def test_mutation_message_never_calls_llm(monkeypatch):
+@pytest.mark.parametrize(
+    "message", ["删除侯雪梅这条记录", "新增一个客户", "把价格改成50", "导入人员名单"]
+)
+def test_mutation_message_never_calls_llm(monkeypatch, message):
     monkeypatch.setenv("XCAGI_LLM_INTENT_GATE", "1")
 
-    def boom(*a, **k):
-        raise AssertionError("写操作消息不应调用 LLM")
-
-    monkeypatch.setattr("app.infrastructure.llm.structured_output.complete_structured_sync", boom)
-    assert gate.llm_route_message("删除侯雪梅这条记录") is None
+    model = Mock(return_value=_Structured({"intent": "customers", "confidence": 0.99}))
+    monkeypatch.setattr("app.infrastructure.llm.structured_output.complete_structured_sync", model)
+    assert gate.llm_route_message(message) is None
+    model.assert_not_called()
 
 
 def test_llm_failure_fails_open(monkeypatch):
