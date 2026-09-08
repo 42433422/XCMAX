@@ -19,6 +19,20 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Default run, queue and approval-consumption repositories now use
+  HostSessionLocal explicitly. A real two-SQLite regression first reproduced a
+  Mod request enqueue that a fresh background thread could not claim
+  (`host-storage-before`); after the change that thread reads/claims the run,
+  replay consumption remains denied outside Mod context, and the Mod database
+  contains no scheduling/approval tables. Business SessionLocal still selects
+  the Mod database. All 67 approval/crash/guard/route regressions passed
+  (`host-storage-regressions`), plus 12 initial repository checks. Explicitly
+  injected repository factories remain supported. Before production activation,
+  inventory and reconcile any historical scheduling/approval rows in Mod
+  databases; no legacy rows were moved or discarded here. Verified Mod entitlement
+  restoration for actual business execution is still pending, so this is not
+  acceptance of the complete customer-Mod workflow.
+
 - SQL run/queue repositories now expose an initialized transaction context with
   explicit caller ownership rules. Approval and business-write guards use it
   instead of private schema/session methods; approval's repository inputs and

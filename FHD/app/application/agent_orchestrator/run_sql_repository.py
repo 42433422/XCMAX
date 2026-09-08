@@ -382,9 +382,10 @@ class SQLAlchemyAgentRunRepository:
     def _session_scope(self, *, read_only: bool = False) -> Iterator[Session]:
         session_factory = self._session_factory
         if session_factory is None:
-            from app.db import SessionLocal
+            from app.db import HostSessionLocal
 
-            session_factory = SessionLocal
+            # Scheduling state must be visible outside the originating Mod request.
+            session_factory = HostSessionLocal
         db = session_factory()
         try:
             yield db

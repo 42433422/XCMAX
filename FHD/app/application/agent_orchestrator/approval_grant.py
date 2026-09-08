@@ -35,9 +35,9 @@ def _consumption_repository():
     from app.application.agent_orchestrator.approval_consumption_repository import (
         SQLAlchemyApprovalConsumptionRepository,
     )
-    from app.db import SessionLocal
+    from app.db import HostSessionLocal
 
-    return SQLAlchemyApprovalConsumptionRepository(SessionLocal)
+    return SQLAlchemyApprovalConsumptionRepository(HostSessionLocal)
 
 
 def _secret() -> str:

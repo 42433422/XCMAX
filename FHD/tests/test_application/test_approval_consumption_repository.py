@@ -42,7 +42,7 @@ def _consume_signed_in_process(url, token, ready, start, results):
     )
 
     engine = create_engine(url)
-    app.db.SessionLocal = sessionmaker(bind=engine)
+    app.db.HostSessionLocal = sessionmaker(bind=engine)
     try:
         ready.put(True)
         if not start.wait(15):
