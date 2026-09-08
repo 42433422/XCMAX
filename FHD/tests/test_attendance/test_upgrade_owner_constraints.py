@@ -102,6 +102,20 @@ def test_database_replaced_at_same_path_is_rechecked(migration, tmp_path):
         }
 
 
+def test_empty_legacy_table_keeps_deleted_id_high_water_mark(migration, tmp_path):
+    path = tmp_path / "empty.sqlite"
+    legacy_database(path)
+    with sqlite3.connect(path) as db:
+        db.execute("DELETE FROM attendance_daily_records")
+        db.execute("DELETE FROM attendance_employees")
+    migration.migrate_owner_column(path)
+    with sqlite3.connect(path) as db:
+        db.execute(
+            "INSERT INTO attendance_employees(employee_name,owner_user_id) VALUES ('New','owner')"
+        )
+        assert db.execute("SELECT id FROM attendance_employees").fetchone()[0] == 101
+
+
 def test_two_migration_instances_serialize_on_database(tmp_path, migration):
     path = tmp_path / "concurrent.sqlite"
     legacy_database(path)

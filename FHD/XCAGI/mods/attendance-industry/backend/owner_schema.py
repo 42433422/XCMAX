@@ -67,6 +67,8 @@ def upgrade_unique_constraints(conn: sqlite3.Connection, table: str) -> None:
     for name, sql in objects:
         conn.execute(_scope_columns(sql, legacy) if name in legacy_indexes else sql)
     if sequence:
-        conn.execute(
+        changed = conn.execute(
             "UPDATE sqlite_sequence SET seq=MAX(seq, ?) WHERE name=?", (sequence[0], table)
         )
+        if changed.rowcount == 0:
+            conn.execute("INSERT INTO sqlite_sequence(name,seq) VALUES (?,?)", (table, sequence[0]))
