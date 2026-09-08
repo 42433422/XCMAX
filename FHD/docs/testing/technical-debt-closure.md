@@ -19,6 +19,19 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- ModContextMiddleware now opens an empty, ContextVar-backed entitlement scope
+  for each HTTP request and resets it on normal/error exit. Identity, rights,
+  administrator checks, persistence and sync use the current immutable snapshot;
+  scoped set/clear cannot overwrite another request's state. Non-HTTP startup
+  retains legacy process-cache behavior. A barrier-driven overlapping A-admin /
+  B-normal request test verifies separate identities, Mod sets and admin flags,
+  A failure/clear cannot clear B, AnyIO synchronous handlers inherit the correct
+  request identity, and the enclosing startup state is restored unchanged. All
+  259 entitlement/middleware/Agent-route tests pass
+  (`entitlement-concurrency-final`). This establishes HTTP context isolation;
+  new detached background workers still require explicit authenticated Mod
+  binding and revalidation, and legacy non-HTTP global consumers remain to audit.
+
 - Session-row entitlement restoration now requires expires_at strictly after
   UTC now, matching persisted UTC-naive session timestamps and denying the exact
   expiry boundary. Real SQLite tests reproduced expired and exactly-expired

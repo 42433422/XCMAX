@@ -1,3 +1,4 @@
+import asyncio
 import time
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock
@@ -11,6 +12,62 @@ from app.db.models.user import Session as UserSession
 from app.db.models.user import User
 from app.enterprise import mod_entitlements as entitlements
 from app.utils.time import utc_now_naive
+
+
+@pytest.mark.asyncio
+async def test_middleware_isolates_overlapping_accounts_and_resets_after_failure():
+    from app.infrastructure.mods.mod_auth import ModContextMiddleware
+
+    entitlements.set_session_entitlements(
+        market_user_id=99, market_username="startup", entitled_client_mod_ids={"startup"},
+    )
+    ready = {name: asyncio.Event() for name in ("a", "b")}
+    observations = {}
+
+    async def application(scope, receive, send):
+        name = scope["path"].strip("/")
+        assert entitlements.get_cached_entitled_client_mod_ids() == set()
+        entitlements.set_session_entitlements(
+            market_user_id=1 if name == "a" else 2, market_username=name,
+            entitled_client_mod_ids={f"mod-{name}"},
+            account_kind="admin" if name == "a" else "enterprise",
+            market_is_admin=name == "a",
+        )
+        ready[name].set()
+        await asyncio.wait_for(ready["b" if name == "a" else "a"].wait(), timeout=5)
+        observations[name] = (
+            entitlements.get_cached_market_identity(),
+            entitlements.get_cached_entitled_client_mod_ids(),
+            entitlements.is_admin_account_session(),
+        )
+        # FastAPI runs synchronous handlers with a copied async request context.
+        import anyio
+
+        assert await anyio.to_thread.run_sync(
+            entitlements.get_cached_market_identity
+        ) == observations[name][0]
+        if name == "a":
+            entitlements.clear_session_entitlements()
+            raise RuntimeError("request terminated")
+        await asyncio.sleep(0)
+        assert entitlements.get_cached_entitled_client_mod_ids() == {"mod-b"}
+
+    async def unused(*args):
+        return {"type": "http.disconnect"}
+
+    middleware = ModContextMiddleware(application)
+    results = await asyncio.gather(*(
+        middleware({"type": "http", "path": f"/{name}", "headers": [], "method": "GET"}, unused, unused)
+        for name in ("a", "b")
+    ), return_exceptions=True)
+    assert isinstance(results[0], RuntimeError)
+    assert results[1] is None
+    assert observations == {
+        "a": ((1, "a"), {"mod-a"}, True),
+        "b": ((2, "b"), {"mod-b"}, False),
+    }
+    assert entitlements.get_cached_market_identity() == (99, "startup")
+    assert entitlements.get_cached_entitled_client_mod_ids() == {"startup"}
 
 
 @pytest.fixture(autouse=True)

@@ -160,7 +160,12 @@ class ModContextMiddleware:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
+        from app.enterprise.mod_entitlements import request_entitlement_scope
 
+        with request_entitlement_scope():
+            await self._dispatch(scope, receive, send)
+
+    async def _dispatch(self, scope: Scope, receive: Receive, send: Send) -> None:
         request = StarletteRequest(scope, receive)
         mod_context = ModContext()
         token = None
