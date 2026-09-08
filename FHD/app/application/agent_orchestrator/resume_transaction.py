@@ -39,6 +39,23 @@ def resume_and_enqueue(
         )
         if execution is not None and execution.state == "claimed":
             raise ApprovalGrantError("任务执行器仍持有执行权，请等待结果核对")
+        if execution is not None:
+            # SQLite ignores FOR UPDATE. A conditional write both rechecks the
+            # observation and holds the queue row through run/command updates.
+            fenced = (
+                db.query(AgentTaskExecutionRecord)
+                .filter(
+                    AgentTaskExecutionRecord.run_id == run_id,
+                    AgentTaskExecutionRecord.state == execution.state,
+                    AgentTaskExecutionRecord.execution_count == execution.execution_count,
+                )
+                .update(
+                    {AgentTaskExecutionRecord.updated_at: execution.updated_at},
+                    synchronize_session=False,
+                )
+            )
+            if fenced != 1:
+                raise ApprovalGrantError("任务执行权已变化，请刷新后重试")
         record = db.query(AgentRunRecord).filter_by(run_id=run_id).with_for_update().one_or_none()
         if record is None:
             return None

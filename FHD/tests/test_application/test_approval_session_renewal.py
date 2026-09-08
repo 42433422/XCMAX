@@ -251,3 +251,63 @@ def test_http_resume_renews_session_without_bypassing_approval(waiting_task, mon
         == 2
     )
     assert queue.get(run.run_id) is None
+
+
+def test_worker_claim_between_resume_read_and_write_prevents_resume(waiting_task, monkeypatch):
+    from contextlib import contextmanager
+
+    from app.application.agent_orchestrator.resume_transaction import resume_and_enqueue
+    from app.db.models.agent import AgentTaskExecutionRecord
+
+    runs, queue, _, original, previous, _ = waiting_task
+    run = runs.get(original.run_id)
+    run.status = "paused"
+    run.steps[0].status = "pending"
+    runs.save(run)
+    queue.enqueue(run)
+    before = runs.get(run.run_id).to_dict()
+    transaction = runs.transaction
+
+    @contextmanager
+    def interleaved_transaction(**kwargs):
+        with transaction(**kwargs) as db:
+            query = db.query
+
+            class InterleavedQuery:
+                def __init__(self, inner):
+                    self.inner = inner
+
+                def filter_by(self, **values):
+                    self.inner = self.inner.filter_by(**values)
+                    return self
+
+                def with_for_update(self):
+                    self.inner = self.inner.with_for_update()
+                    return self
+
+                def one_or_none(self):
+                    observed = self.inner.one_or_none()
+                    assert queue.claim("interleaved-worker", lease_seconds=30) is not None
+                    db.query = query
+                    return observed
+
+            db.query = lambda model: (
+                InterleavedQuery(query(model))
+                if model is AgentTaskExecutionRecord
+                else query(model)
+            )
+            yield db
+
+    monkeypatch.setattr(runs, "transaction", interleaved_transaction)
+    with pytest.raises(ApprovalGrantError):
+        resume_and_enqueue(
+            runs,
+            queue,
+            run_id=run.run_id,
+            principal_id="owner",
+            runtime_context={},
+            authenticated_binding={**previous, "session_row_id": 2},
+        )
+    assert runs.get(run.run_id).to_dict() == before
+    assert runs.latest_task_control(run.run_id) is None
+    assert queue.get(run.run_id).lease_owner == "interleaved-worker"

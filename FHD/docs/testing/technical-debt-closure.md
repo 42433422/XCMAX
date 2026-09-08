@@ -19,6 +19,13 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- A deterministic SQLite interleaving exposed a claim race after resume's queue
+  read: FOR UPDATE is ignored by SQLite. Resume now conditionally updates the
+  observed queue state/execution count before changing the run, acquiring the
+  database write lock and rejecting an intervening worker claim. The regression
+  failed before the fix and passes afterward; 94 combined renewal/route/approval/
+  background tests pass (`resume-fenced-regressions`). PostgreSQL concurrency
+  qualification remains separate.
 - Durable paused-run resume now commits session renewal, the applied control
   command, run state and queue together. Queue ownership is checked before run
   mutation; outstanding worker claims and running steps require reconciliation.
