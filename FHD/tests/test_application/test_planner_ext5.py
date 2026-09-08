@@ -925,9 +925,9 @@ class TestFallbackPlanBranches:
         planner = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
         registry = get_tool_registry()
         plan = planner._fallback_plan("p1", "添加产品", registry)
-        assert plan.intent == "add_product_to_unit"
+        assert plan.intent == "create_product"
         assert len(plan.nodes) >= 1
-        assert any(n.tool_id == "customers" for n in plan.nodes)
+        assert not any(n.tool_id == "customers" for n in plan.nodes)
 
     def test_create_product_intent(self):
         from app.application.workflow.planner import LLMWorkflowPlanner, get_tool_registry
@@ -935,16 +935,16 @@ class TestFallbackPlanBranches:
         planner = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
         registry = get_tool_registry()
         plan = planner._fallback_plan("p1", "新增产品", registry)
-        assert plan.intent == "add_product_to_unit"
+        assert plan.intent == "create_product"
 
     def test_english_create_intent(self):
         from app.application.workflow.planner import LLMWorkflowPlanner, get_tool_registry
 
         planner = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
         registry = get_tool_registry()
-        # Source matches "create" (English) AND "产品" (Chinese) for add_product_to_unit intent.
+        # Source matches "create" (English) AND "产品" (Chinese) for create_product intent.
         plan = planner._fallback_plan("p1", "create 产品", registry)
-        assert plan.intent == "add_product_to_unit"
+        assert plan.intent == "create_product"
 
     def test_generic_fallback_with_products(self):
         from app.application.workflow.planner import LLMWorkflowPlanner, get_tool_registry

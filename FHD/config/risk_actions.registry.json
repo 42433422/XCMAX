@@ -318,8 +318,7 @@
           "risk": "medium",
           "idempotent": false,
           "required_params": [
-            "name_or_model",
-            "unit_name"
+            "name_or_model"
           ],
           "availability": "shared",
           "action_class": "business_db.write"
@@ -659,11 +658,18 @@
         },
         "quote": {
           "risk": "medium",
-          "idempotent": true,
+          "idempotent": false,
           "required_params": [
             "customer_id",
             "items"
           ],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        },
+        "confirm_from_result": {
+          "risk": "medium",
+          "idempotent": true,
+          "required_params": ["order_node_id"],
           "availability": "shared",
           "action_class": "business_db.write"
         },

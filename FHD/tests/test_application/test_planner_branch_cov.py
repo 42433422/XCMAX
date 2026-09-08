@@ -1044,28 +1044,29 @@ class TestFallbackPlanBranches:
         result = planner._fallback_plan("pid", "查数据库里的产品", _sample_registry())
         assert result.intent == "business_db_read"
 
-    def test_add_product_intent_with_customers_and_products(self) -> None:
-        """添加产品意图且注册表含 customers+products 时生成两节点。"""
+    def test_add_product_intent_without_customer_dependency(self) -> None:
+        """添加产品不得隐式创建客户（跨业务误路由修复）。"""
         planner = _make_planner()
         result = planner._fallback_plan("pid", "添加新产品", _sample_registry())
-        assert result.intent == "add_product_to_unit"
-        assert any(n.tool_id == "customers" for n in result.nodes)
+        assert result.intent == "create_product"
+        assert not any(n.tool_id == "customers" for n in result.nodes)
         assert any(n.tool_id == "products" for n in result.nodes)
 
-    def test_add_product_intent_with_depends_on(self) -> None:
-        """添加产品意图时 create_product 节点依赖 check_or_create_unit。"""
+    def test_add_product_create_node_has_no_unit_dependency(self) -> None:
+        """添加产品意图时 create_product 节点不依赖 check_or_create_unit。"""
         planner = _make_planner()
         result = planner._fallback_plan("pid", "新增产品", _sample_registry())
         create_nodes = [n for n in result.nodes if n.tool_id == "products"]
-        if create_nodes:
-            assert "check_or_create_unit" in (create_nodes[0].depends_on or [])
+        assert create_nodes
+        assert "check_or_create_unit" not in (create_nodes[0].depends_on or [])
+        assert not any(n.tool_id == "customers" for n in result.nodes)
 
     def test_add_product_intent_without_customers(self) -> None:
         """添加产品意图但注册表无 customers 时只生成 products 节点。"""
         planner = _make_planner()
         reg = {"products": _sample_registry()["products"]}
         result = planner._fallback_plan("pid", "添加产品", reg)
-        assert result.intent == "add_product_to_unit"
+        assert result.intent == "create_product"
         assert not any(n.tool_id == "customers" for n in result.nodes)
 
     def test_default_fallback_to_products_query(self) -> None:
@@ -1094,11 +1095,11 @@ class TestFallbackPlanBranches:
         result = planner._fallback_plan("pid", "call employee to help", _sample_registry())
         assert result.intent == "employee_dispatch"
 
-    def test_create_english_keyword_triggers_add_product(self) -> None:
-        """英文 create 关键词触发添加产品意图。"""
+    def test_create_english_keyword_triggers_create_product(self) -> None:
+        """英文 create 关键词触发创建产品意图（不再隐式建客户）。"""
         planner = _make_planner()
         result = planner._fallback_plan("pid", "create 产品", _sample_registry())
-        assert result.intent == "add_product_to_unit"
+        assert result.intent == "create_product"
 
     def test_risk_level_low_when_all_low(self) -> None:
         """所有节点 low 风险时 risk_level=low。"""

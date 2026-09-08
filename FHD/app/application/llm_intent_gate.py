@@ -230,6 +230,7 @@ def _classify(text: str) -> dict[str, Any]:
             profile="intent",
             temperature=0.1,
             max_tokens=160,
+            reasoning_enabled=False,
             timeout_seconds=10.0,
         )
     except BOUNDARY_ERRORS as exc:  # 闸层是适配器隔离边界：任何 LLM 失败都回退规则语义

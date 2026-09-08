@@ -153,3 +153,33 @@ class TestWorkflowParallel:
         assert max_active == 1
         assert "n1" in result.final_context["node_outputs"]
         assert "n2" in result.final_context["node_outputs"]
+
+
+def test_parallel_nodes_inherit_identity_without_sharing_context_mutations():
+    from app.application.agent_orchestrator.execution_identity import (
+        current_execution_actor,
+        execution_actor_scope,
+    )
+    from app.infrastructure.tenant_scope import current_tenant_id, tenant_scope
+
+    barrier = threading.Barrier(2)
+
+    def dispatch(tool_id, action, params):
+        assert current_execution_actor() == "7"
+        assert current_tenant_id() == 3
+        marker = params["marker"]
+        with execution_actor_scope(marker), tenant_scope(int(marker)):
+            barrier.wait(timeout=5)
+            assert current_execution_actor() == marker
+            assert current_tenant_id() == int(marker)
+        assert current_execution_actor() == "7"
+        assert current_tenant_id() == 3
+        return {"success": True}
+
+    with execution_actor_scope("7"), tenant_scope(3):
+        result = _engine_with_dispatch(dispatch).run(
+            _plan([_read_node("a", "11"), _read_node("b", "12")])
+        )
+        assert result.success
+        assert current_execution_actor() == "7"
+        assert current_tenant_id() == 3

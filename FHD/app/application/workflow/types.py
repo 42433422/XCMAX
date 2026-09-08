@@ -297,6 +297,10 @@ def validate_plan_graph(plan: PlanGraph) -> str | None:
         return "plan_id 不能为空"
     if not plan.intent:
         return "intent 不能为空"
+    if plan.intent == "no_operation":
+        if plan.nodes or plan.risk_level != "low":
+            return "no_operation 必须为空节点且低风险"
+        return None
     if not plan.nodes:
         return "nodes 不能为空"
 

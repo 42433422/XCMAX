@@ -52,6 +52,11 @@ class _LLMWorkflowPlannerPart02Mixin:
     def _fallback_plan(
         self, plan_id: str, message: str, tool_registry: dict[str, _facade().Any]
     ) -> _facade().PlanGraph:
+        from .no_operation import no_operation_plan
+
+        no_operation = no_operation_plan(plan_id, message)
+        if no_operation is not None:
+            return no_operation
         from app.application.normal_chat_dispatch import route_normal_mode_message
 
         lower = (message or "").lower()
@@ -154,6 +159,14 @@ class _LLMWorkflowPlannerPart02Mixin:
                         idempotent=True,
                     )
                 )
+        if not nodes and "inventory" in tool_registry:
+            from .inventory_stock_in_planning import inventory_stock_in_nodes
+
+            stock_in_nodes = inventory_stock_in_nodes(message)
+            if stock_in_nodes:
+                intent = "inventory_stock_in"
+                todo = ["核对入库产品与仓库", "确认后执行库存入库", "返回入库结果"]
+                nodes.extend(stock_in_nodes)
         if (
             not nodes
             and _facade()._looks_like_business_db_write(message, lower)
@@ -205,40 +218,124 @@ class _LLMWorkflowPlannerPart02Mixin:
                         idempotent=True,
                     )
                 )
+        if (
+            not nodes
+            and "sales" in tool_registry
+            and "confirm_from_result" in tool_registry["sales"].get("actions", {})
+        ):
+            from .sales_order_planning import sales_order_nodes
+
+            order_nodes = sales_order_nodes(message)
+            if order_nodes:
+                intent = "sales_order"
+                nodes.extend(order_nodes)
+        if not nodes and "reports" in tool_registry:
+            from .sales_report_planning import monthly_sales_export_nodes
+
+            export_nodes = monthly_sales_export_nodes(message)
+            if export_nodes:
+                intent = "sales_report_export"
+                nodes.extend(export_nodes)
+        if not nodes and "reports" in tool_registry:
+            from .inventory_query_planning import inventory_query_node
+
+            inventory_node = inventory_query_node(message)
+            if inventory_node is not None:
+                intent = "inventory_query"
+                nodes.append(inventory_node)
+        if not nodes and "reports" in tool_registry:
+            from .dashboard_planning import dashboard_query_node
+
+            dashboard_node = dashboard_query_node(message)
+            if dashboard_node is not None:
+                intent = "dashboard_query"
+                nodes.append(dashboard_node)
+        if not nodes and "reports" in tool_registry:
+            from .sales_report_planning import monthly_sales_report_node
+
+            report_node = monthly_sales_report_node(message)
+            if report_node is not None:
+                intent = "sales_report"
+                nodes.append(report_node)
+        if not nodes and "sales" in tool_registry:
+            from .sales_quote_planning import explicit_sales_quote_node
+
+            quote_node = explicit_sales_quote_node(message)
+            if quote_node is not None:
+                intent = "sales_quote"
+                nodes.append(quote_node)
+        if not nodes and "finance" in tool_registry:
+            from .finance_query import monthly_ledger_node
+
+            ledger_node = monthly_ledger_node(message)
+            if ledger_node is not None:
+                intent = "finance_ledger_query"
+                nodes.append(ledger_node)
+        if not nodes and "finance" in tool_registry:
+            from .finance_creation import direct_finance_create_node
+
+            finance_node = direct_finance_create_node(message)
+            if finance_node is not None:
+                intent = "finance_create_transaction"
+                nodes.append(finance_node)
+        if not nodes and "products" in tool_registry:
+            from .product_creation import direct_product_create_node
+
+            product_node = direct_product_create_node(message)
+            if product_node is not None:
+                intent = "create_product"
+                todo = ["核对产品信息", "确认后创建产品", "返回创建结果"]
+                nodes.append(product_node)
         if not nodes and (
             ("添加" in message or "新增" in message or "create" in lower) and "产品" in message
         ):
-            intent = "add_product_to_unit"
-            todo = [
-                "意图分析：识别产品新增任务",
-                "全局检查单位是否存在",
-                "单位不存在则先创建",
-                "新增产品并绑定单位",
-                "返回执行明细",
-            ]
-            if "customers" in tool_registry:
-                nodes.append(
-                    _facade().WorkflowNode(
-                        node_id="check_or_create_unit",
-                        tool_id="customers",
-                        action="ensure_exists",
-                        params={},
-                        risk="medium",
-                        description="确保客户存在",
+            if "产品到" in message.replace(" ", ""):
+                # 「新增产品到X」：先确保单位存在，再创建产品并绑定。
+                intent = "add_product_to_unit"
+                todo = [
+                    "意图分析：识别产品新增任务",
+                    "全局检查单位是否存在",
+                    "单位不存在则先创建",
+                    "新增产品并绑定单位",
+                    "返回执行明细",
+                ]
+                if "customers" in tool_registry:
+                    nodes.append(
+                        _facade().WorkflowNode(
+                            node_id="check_or_create_unit",
+                            tool_id="customers",
+                            action="ensure_exists",
+                            params={},
+                            risk="medium",
+                            description="确保客户存在",
+                        )
                     )
-                )
-            if "products" in tool_registry:
-                nodes.append(
-                    _facade().WorkflowNode(
-                        node_id="create_product",
-                        tool_id="products",
-                        action="create",
-                        params={},
-                        risk="medium",
-                        description="创建产品",
-                        depends_on=["check_or_create_unit"] if nodes else [],
+                if "products" in tool_registry:
+                    nodes.append(
+                        _facade().WorkflowNode(
+                            node_id="create_product",
+                            tool_id="products",
+                            action="create",
+                            params={},
+                            risk="medium",
+                            description="创建产品",
+                            depends_on=["check_or_create_unit"] if nodes else [],
+                        )
                     )
-                )
+            else:
+                intent = "create_product"
+                todo = ["补齐产品信息", "确认后新增产品", "返回执行结果"]
+                if "products" in tool_registry:
+                    nodes.append(
+                        _facade().WorkflowNode(
+                            node_id="create_product",
+                            tool_id="products",
+                            action="create",
+                            params={},
+                            risk="medium",
+                            description="创建产品",
+                        )
+                    )
         if not nodes and any(k in message for k in ("删除", "移除", "删掉", "delete", "del")):
             entity = _facade()._infer_business_db_entity(message)
             keyword = _facade()._extract_business_db_read_keyword(message, entity)
@@ -289,6 +386,38 @@ class _LLMWorkflowPlannerPart02Mixin:
                 )
             )
             nodes.append(purchase_node)
+        if not nodes and "shipment_orders" in tool_registry:
+            from .shipment_planning import shipment_plan_nodes
+
+            shipment_nodes = shipment_plan_nodes(message)
+            if shipment_nodes:
+                intent = "shipment_generate"
+                todo = ["核对发货客户与产品明细", "确认后生成发货单", "返回发货单结果"]
+                nodes.extend(shipment_nodes)
+        if not nodes and route.get("intent") == "customers_query":
+            customer_spec = tool_registry.get("customers", {})
+            actions = customer_spec.get("actions", {}) if isinstance(customer_spec, dict) else {}
+            query = actions.get("query", {}) if isinstance(actions, dict) else {}
+            if (
+                isinstance(query, dict)
+                and query.get("risk") == "low"
+                and query.get("idempotent") is True
+            ):
+                slots = route.get("slots") or {}
+                keyword = slots.get("keyword") if isinstance(slots, dict) else None
+                if isinstance(keyword, str):
+                    intent = "customers_query"
+                    nodes.append(
+                        _facade().WorkflowNode(
+                            node_id="query_customers",
+                            tool_id="customers",
+                            action="query",
+                            params={"keyword": keyword, "page": 1, "per_page": 50},
+                            risk="low",
+                            idempotent=True,
+                            description="查询客户",
+                        )
+                    )
         if not nodes:
             if "products" in tool_registry:
                 nodes.append(

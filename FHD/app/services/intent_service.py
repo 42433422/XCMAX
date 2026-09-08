@@ -21,6 +21,7 @@ import logging
 import re
 from typing import Any
 
+from app.domain.neuro.greeting import is_standalone_greeting
 from app.domain.neuro.reflex_arc import ReflexType, get_reflex_arc
 from app.services.intent_recognition_pipeline import (
     recognize_intents_impl as _recognize_intents_impl,
@@ -131,7 +132,7 @@ def _reflex_basic_intents(message: str) -> dict[str, bool]:
     msg_lower = (message or "").strip().lower()
     result = {
         "is_greeting": (rr.reflex_type == ReflexType.GREETING and rr.triggered)
-        or any(w in msg_lower for w in ("你好", "您好", "hello", "hi", "嗨", "哈喽", "哈罗")),
+        or is_standalone_greeting(message),
         "is_goodbye": (rr.reflex_type == ReflexType.EMERGENCY_STOP and rr.triggered)
         or any(w in msg_lower for w in ("再见", "拜拜", "bye", "先这样", "明天再说", "下班了")),
         "is_help": (rr.reflex_type == ReflexType.HELP and rr.triggered)
@@ -166,12 +167,11 @@ def is_negation(message: str, action_keywords: list[str] | None = None) -> bool:
 
 
 def is_greeting(message: str) -> bool:
-    """判断是否为问候语"""
+    """Match a standalone salutation without discarding business content."""
     rr = _reflex_arc.process(message)
-    if rr.reflex_type == ReflexType.GREETING and rr.triggered:
-        return True
-    msg_lower = (message or "").lower()
-    return any(w in msg_lower for w in ("你好", "您好", "hello", "hi", "嗨", "哈喽", "哈罗"))
+    return (rr.reflex_type == ReflexType.GREETING and rr.triggered) or is_standalone_greeting(
+        message
+    )
 
 
 def is_goodbye(message: str) -> bool:

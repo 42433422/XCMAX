@@ -5,6 +5,25 @@ from typing import Any
 _BUSINESS_ENTITIES = ["customers", "products", "materials", "shipment_records"]
 
 SPECIAL_INPUT_SCHEMAS_PART_2: dict[tuple[str, str], dict[str, Any]] = {
+    ("sales", "quote"): {
+        "type": "object",
+        "required": ["customer_id", "items"],
+        "properties": {
+            "customer_id": {"type": "integer"},
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "required": ["quantity", "unit_price"],
+                    "properties": {
+                        "product_id": {"type": "integer"},
+                        "quantity": {"type": "number"},
+                        "unit_price": {"type": "number"},
+                    },
+                },
+            },
+        },
+    },
     ("shipment_records", "create"): {
         "type": "object",
         "required": ["unit_name"],

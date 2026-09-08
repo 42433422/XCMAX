@@ -185,9 +185,11 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
     unit_model_signal = bool(
         _facade().re.search("([^\\s，,。]{2,})\\s*的\\s*([0-9A-Za-z-]{2,})", text)
     )
-    customer_entity_markers = ("客户", "购买单位", "买家")
-    if any(k in text for k in customer_entity_markers):
-        return {"intent": "customers_query", "slots": {"keyword": ""}}
+    from app.application.customer_query_intent import customer_query_slots
+
+    customer_slots = customer_query_slots(text)
+    if customer_slots is not None:
+        return {"intent": "customers_query", "slots": customer_slots}
     delete_keywords = ("删除", "移除", "删掉", "删了")
     if any(k in text for k in delete_keywords):
         del_target = ""

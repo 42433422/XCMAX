@@ -209,14 +209,25 @@ class _AIChatApplicationServicePart03Mixin:
         target = next((n for n in plan.nodes if n.node_id == item["node_id"]), None)
         if target is None:
             return None
-        clarify_node = build_clarify_node(
-            item.get("question") or "请确认目标后再执行写操作。",
-            ambient={
-                "target_node_id": target.node_id,
-                "answer_key": item.get("field") or "confirmed",
-            },
+        question = item.get("question") or "请确认目标后再执行写操作。"
+        clarify_node = next(
+            (
+                node
+                for node in plan.nodes
+                if node.tool_id == "clarify"
+                and node.action == "ask"
+                and node.params.get("target_node_id") == target.node_id
+                and node.params.get("question") == question
+            ),
+            None,
         )
-        insert_clarify_node(plan, clarify_node)
+        if clarify_node is None:
+            clarify_node = build_clarify_node(
+                question,
+                ambient={"target_node_id": target.node_id},
+            )
+            insert_clarify_node(plan, clarify_node)
+        clarify_node.params["answer_key"] = item.get("field") or "confirmed"
         runtime_context["_clarify_node_id"] = clarify_node.node_id
         self.workflow_engine.run(
             plan=plan,
@@ -288,7 +299,11 @@ class _AIChatApplicationServicePart03Mixin:
             self._pending_workflows.pop(user_id, None)
             return None
         candidates = item.get("candidates") or []
-        confirmed = resolve_confirmed_target(text, candidates)
+        from app.application.workflow.clarification_fields import resolve_missing_field
+
+        confirmed = resolve_missing_field(target, item, text) if not candidates else None
+        if confirmed is None:
+            confirmed = resolve_confirmed_target(text, candidates)
         if confirmed is None and target.tool_id == "business_db" and (not candidates):
             from app.services.tools_workflow_registered import prepare_business_db_write_target
 
@@ -320,9 +335,35 @@ class _AIChatApplicationServicePart03Mixin:
             target.params["payload"] = payload
         else:
             target.params.update(confirmed)
+        if item.get("reason") == "missing_required" and len(item.get("missing_fields") or []) > 1:
+            from app.application.workflow.clarification_node import needs_clarification
+            from app.services.tools_execution.registry import get_workflow_tool_registry
+
+            remaining = [
+                entry
+                for entry in needs_clarification(plan, get_workflow_tool_registry())
+                if entry["node_id"] == target.node_id
+            ]
+            if remaining:
+                pending["clarification"] = remaining[0]
+                for node in plan.nodes:
+                    if node.node_id == clarify_node_id:
+                        node.params["question"] = remaining[0]["question"]
+                        node.params["answer_key"] = remaining[0]["field"]
+                self._persist_plan_state(plan, runtime_ctx, status="pending_awaiting")
+                return None
         target.params.pop("candidates", None)
         target.params.pop("_candidates", None)
         runtime_ctx["_clarify_answers"] = {clarify_node_id: {"confirmed": True, **confirmed}}
+        from app.application.workflow.clarification_approval import (
+            require_approval_after_clarification,
+        )
+
+        approval_response = require_approval_after_clarification(
+            self, user_id, plan, runtime_ctx, str(pending.get("thinking_steps") or "")
+        )
+        if approval_response is not None:
+            return approval_response
         self._pending_workflows.pop(user_id, None)
         (run_result, state_updates) = self._run_workflow_with_state_updates(
             plan=plan, runtime_context=runtime_ctx, max_retries=1, resume=True

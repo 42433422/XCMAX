@@ -29,6 +29,16 @@ class __WorkflowEnginePart01MixinPart01Mixin:
         checkpointer: _facade().Any | None = None,
         state_event_callback: _facade().Any | None = None,
     ) -> _facade().WorkflowRunResult:
+        if plan.intent == "no_operation":
+            from .types import validate_plan_graph
+
+            error = validate_plan_graph(plan)
+            return _facade().WorkflowRunResult(
+                plan_id=plan.plan_id,
+                success=error is None,
+                message=error or str(plan.metadata.get("response") or "本次无需执行业务操作"),
+                final_context=dict(runtime_context or {}),
+            )
         previous_callback = self._state_event_callback
         if state_event_callback is not None:
             self._state_event_callback = state_event_callback
@@ -286,11 +296,17 @@ class __WorkflowEnginePart01MixinPart01Mixin:
                 runtime_context.setdefault("parallel_batches", []).append(
                     {"node_ids": [node.node_id for node in read_nodes], "max_workers": max_workers}
                 )
+            from contextvars import copy_context
+
             with _facade().ThreadPoolExecutor(max_workers=max_workers) as executor:
                 read_map = {node.node_id: node for node in read_nodes}
                 future_map = {
                     node_id: executor.submit(
-                        self._run_node, node, runtime_context, max_retries=max_retries
+                        copy_context().run,
+                        self._run_node,
+                        node,
+                        runtime_context,
+                        max_retries=max_retries,
                     )
                     for node_id, node in read_map.items()
                 }

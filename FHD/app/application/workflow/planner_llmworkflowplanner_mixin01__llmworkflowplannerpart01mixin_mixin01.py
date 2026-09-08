@@ -28,6 +28,11 @@ class __LLMWorkflowPlannerPart01MixinPart01Mixin:
             if session_key
             else f"wp-{_facade().uuid.uuid4().hex}"
         )
+        from .no_operation import no_operation_plan
+
+        no_operation = no_operation_plan(plan_id, message)
+        if no_operation is not None:
+            return no_operation
         from app.application.normal_chat_dispatch import resolve_tool_execution_profile
 
         profile = resolve_tool_execution_profile(context)
@@ -196,6 +201,13 @@ class __LLMWorkflowPlannerPart01MixinPart01Mixin:
             return plan
         inserted: list[_facade().WorkflowNode] = []
         for item in items:
+            if any(
+                node.tool_id == "clarify"
+                and node.params.get("target_node_id") == item["node_id"]
+                and node.params.get("question") == item["question"]
+                for node in plan.nodes
+            ):
+                continue
             clarify = _facade().build_clarify_node(
                 item["question"], ambient={"target_node_id": item["node_id"]}
             )

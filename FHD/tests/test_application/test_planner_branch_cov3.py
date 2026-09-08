@@ -3246,20 +3246,21 @@ class TestFallbackPlanAdditional:
         result = planner._fallback_plan("pid", "查数据库里的产品", _sample_registry())
         assert result.intent == "business_db_read"
 
-    def test_add_product_intent_with_depends_on(self) -> None:
-        """添加产品意图时 create_product 节点依赖 check_or_create_unit。"""
+    def test_add_product_intent_without_customer_dependency(self) -> None:
+        """添加产品不应创建客户依赖。"""
         planner = _make_planner()
         result = planner._fallback_plan("pid", "新增产品", _sample_registry())
         create_nodes = [n for n in result.nodes if n.tool_id == "products"]
-        if create_nodes:
-            assert "check_or_create_unit" in (create_nodes[0].depends_on or [])
+        assert create_nodes
+        assert "check_or_create_unit" not in create_nodes[0].depends_on
+        assert not any(n.tool_id == "customers" for n in result.nodes)
 
     def test_add_product_intent_without_customers(self) -> None:
         """添加产品意图但注册表无 customers 时只生成 products 节点。"""
         planner = _make_planner()
         reg = {"products": _sample_registry()["products"]}
         result = planner._fallback_plan("pid", "添加产品", reg)
-        assert result.intent == "add_product_to_unit"
+        assert result.intent == "create_product"
         assert not any(n.tool_id == "customers" for n in result.nodes)
 
     def test_default_fallback_to_customers_when_no_products(self) -> None:
@@ -3286,7 +3287,7 @@ class TestFallbackPlanAdditional:
         """英文 create 关键词触发添加产品意图。"""
         planner = _make_planner()
         result = planner._fallback_plan("pid", "create 产品", _sample_registry())
-        assert result.intent == "add_product_to_unit"
+        assert result.intent == "create_product"
 
     def test_risk_level_low_when_all_low(self) -> None:
         """所有节点 low 风险时 risk_level=low。"""
@@ -3335,7 +3336,7 @@ class TestFallbackPlanAdditional:
         reg = {"customers": _sample_registry()["customers"]}
         result = planner._fallback_plan("pid", "新增产品", reg)
         # 无 products 工具，但 intent 仍是 add_product_to_unit
-        assert result.intent == "add_product_to_unit"
+        assert result.intent == "create_product"
         # 不生成 products 节点；写操作缺必填参数会插入 clarify 反问节点，其余均为 customers 节点
         assert not any(n.tool_id == "products" for n in result.nodes)
         assert all(n.tool_id in ("customers", "clarify") for n in result.nodes)

@@ -162,21 +162,18 @@ class TestRouteNormalModeMessageCustomersQuery:
         assert result["intent"] == "customers_query"
         assert result["slots"]["keyword"] == ""
 
-    def test_customer_named_ask_does_not_regex_extract_keyword(self):
-        """指名句也不再靠正则抽 keyword；由 Agent 工具参数决定过滤。"""
+    def test_ambiguous_customer_relation_is_not_an_unfiltered_list(self):
         result = route_normal_mode_message("七彩乐园的客户")
-        assert result["intent"] == "customers_query"
-        assert result["slots"]["keyword"] == ""
+        assert result["intent"] == "unknown"
 
     def test_customer_without_keyword_match_empty_slot(self):
         result = route_normal_mode_message("客户")
         assert result["intent"] == "customers_query"
         assert result["slots"]["keyword"] == ""
 
-    def test_customer_entity_route_keeps_keyword_empty(self):
+    def test_unparsed_customer_reference_is_not_an_unfiltered_list(self):
         result = route_normal_mode_message("七彩乐园客户")
-        assert result["intent"] == "customers_query"
-        assert result["slots"]["keyword"] == ""
+        assert result["intent"] == "unknown"
 
     def test_try_normal_slot_read_payload_customers(self):
         from app.application.normal_chat_dispatch import try_normal_slot_read_payload
