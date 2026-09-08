@@ -69,3 +69,17 @@ def test_ai_measurement_update_persists_through_product_service(tmp_path, monkey
     with factory() as db, tenant_scope(2):
         assert db.get(Product, 2).measurement_unit == "箱"
     engine.dispose()
+
+
+@pytest.mark.parametrize("field", ["measure_unit", "unit", "measurement_unit"])
+def test_ai_product_create_retains_explicit_measurement(field):
+    service = Mock()
+    service.create_product.return_value = {"success": True}
+    with patch("app.services.get_products_service", return_value=service):
+        result = _registered_router_products(
+            "create", {"name_or_model": "测试产品", field: "桶"}, {}, "normal", ""
+        )
+    assert result["success"]
+    payload = service.create_product.call_args.args[0]
+    assert payload["unit"] == "桶"
+    assert payload["measurement_unit"] == "桶"

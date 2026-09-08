@@ -137,7 +137,9 @@ def _registered_router_products(
         from app.services import get_products_service
 
         svc = get_products_service()
-    explicit_measure_unit = str(params.get("unit") or params.get("measure_unit") or "").strip()
+    explicit_measure_unit = str(
+        params.get("measurement_unit") or params.get("unit") or params.get("measure_unit") or ""
+    ).strip()
     legacy_unit_name = str(params.get("unit_name") or "").strip()
     try:
         from app.infrastructure.repositories.product_query_helpers import TRIVIAL_MEASURE_UNITS
