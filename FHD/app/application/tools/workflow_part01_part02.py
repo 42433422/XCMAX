@@ -84,6 +84,13 @@ def execute_workflow_tool(
             args = {}
     if not isinstance(args, dict):
         args = {}
+    from app.application.tools.registered_capabilities import (
+        ERP_DISCOVERY_TOOL_NAME,
+        discover_registered_capabilities,
+    )
+
+    if name == ERP_DISCOVERY_TOOL_NAME:
+        return discover_registered_capabilities(args)
     if name == _facade().ERP_CAPABILITY_TOOL_NAME:
         return _facade().execute_registered_capability(args, workspace_root=workspace_root)
     try:

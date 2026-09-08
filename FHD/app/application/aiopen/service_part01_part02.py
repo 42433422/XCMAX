@@ -198,7 +198,8 @@ def _tool_api_call(app: _facade().Any, args: dict[str, _facade().Any]) -> dict[s
         except (TypeError, ValueError):
             status_code = 599
         return {
-            "success": status_code < 500,
+            "success": 200 <= status_code < 300
+            and not (isinstance(data, dict) and data.get("success") is False),
             "path": raw_path,
             "method": method,
             "status_code": status_code,

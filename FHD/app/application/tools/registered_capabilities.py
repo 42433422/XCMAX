@@ -17,6 +17,64 @@ from app.application.workflow.types import normalize_workflow_risk
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 ERP_CAPABILITY_TOOL_NAME = "execute_erp_capability"
+ERP_DISCOVERY_TOOL_NAME = "discover_erp_capabilities"
+
+
+def discover_registered_capabilities(args: dict[str, Any] | None = None) -> str:
+    """Inspect contracts without executing business operations or returning secrets."""
+    from app.application.agent_orchestrator.tool_spec import build_tool_specs_v2
+
+    payload = dict(args or {})
+    query = str(payload.get("query") or "").strip().casefold()
+    tool_id = str(payload.get("tool_id") or "").strip()
+    registry = _workflow_registry()
+    specs = build_tool_specs_v2()
+    rows = []
+    for registered_id, tool in sorted(registry.items()):
+        if tool_id and registered_id != tool_id:
+            continue
+        for action, meta in sorted(tool.get("actions", {}).items()):
+            description = str(tool.get("description") or "")
+            if query and query not in f"{registered_id} {action} {description}".casefold():
+                continue
+            spec = specs.get((registered_id, action))
+            rows.append(
+                {
+                    "tool_id": registered_id,
+                    "action": action,
+                    "description": description,
+                    "risk": meta.get("risk", "medium"),
+                    "idempotent": bool(meta.get("idempotent", False)),
+                    "input_schema": spec.input_schema if spec else {},
+                    "output_schema": spec.output_schema if spec else {},
+                    "permission": spec.permission if spec else "",
+                    "availability": spec.availability if spec else "unknown",
+                }
+            )
+    return json.dumps(
+        {"success": True, "action_count": len(rows), "actions": rows}, ensure_ascii=False
+    )
+
+
+def build_capability_discovery_definition() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": ERP_DISCOVERY_TOOL_NAME,
+            "description": "检索软件能力及完整参数、返回值、权限协议。执行能力前先查询其 tool_id；缺少业务参数时询问用户，不得编造 ID、文件路径或业务数据。空参数列出全部已登记动作，登记不代表已通过业务验收。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "能力名称、动作或描述的子串。"},
+                    "tool_id": {
+                        "type": "string",
+                        "description": "精确能力 ID；返回其全部动作协议。",
+                    },
+                },
+                "additionalProperties": False,
+            },
+        },
+    }
 
 
 def _workflow_registry() -> dict[str, Any]:
@@ -133,7 +191,11 @@ def extend_workflow_tool_registry(registry: list[dict[str, Any]]) -> list[dict[s
     """Append the product capability tool without making a second hard-coded catalog."""
 
     try:
-        return [*registry, build_registered_capability_tool_definition()]
+        return [
+            *registry,
+            build_capability_discovery_definition(),
+            build_registered_capability_tool_definition(),
+        ]
     except RECOVERABLE_ERRORS:
         return registry
 
@@ -143,7 +205,7 @@ def resolve_registered_capability_call(args: dict[str, Any] | None) -> dict[str,
 
     payload = dict(args or {})
     tool_id = str(payload.get("tool_id") or payload.get("capability_id") or "").strip()
-    params = payload.get("params")
+    params = payload.get("params", {})
     if not isinstance(params, dict):
         return {"success": False, "error": "params 必须是 JSON 对象"}
     params = dict(params)
@@ -179,6 +241,17 @@ def resolve_registered_capability_call(args: dict[str, Any] | None) -> dict[str,
             "tool_id": tool_id,
             "action": action,
             "required_params": required,
+        }
+    from app.application.agent_orchestrator.tool_spec import validate_tool_call
+
+    validation = validate_tool_call(tool_id, action, params)
+    if not validation.ok:
+        return {
+            "success": False,
+            "error": validation.message,
+            "error_code": validation.error_code,
+            "tool_id": tool_id,
+            "action": action,
         }
     return {
         "success": True,
