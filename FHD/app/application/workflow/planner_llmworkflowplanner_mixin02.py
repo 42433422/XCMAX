@@ -177,6 +177,19 @@ class _LLMWorkflowPlannerPart02Mixin:
                 todo = ["识别业务实体与写入字段", "通过受控业务服务写入数据库", "返回写入结果"]
                 nodes.append(node)
         route = route_normal_mode_message(message)
+        if not nodes and route.get("intent") == "printer_list" and "printer_list" in tool_registry:
+            intent = "printer_list"
+            nodes.append(
+                _facade().WorkflowNode(
+                    node_id="query_printers",
+                    tool_id="printer_list",
+                    action="query",
+                    params={},
+                    risk="low",
+                    idempotent=True,
+                    description="查询打印机及默认配置",
+                )
+            )
         if (
             not nodes
             and "shipment_orders" in tool_registry

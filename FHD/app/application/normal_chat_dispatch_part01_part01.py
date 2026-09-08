@@ -168,6 +168,12 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
             "slots": {"question": "已暂停执行。请说明需要保留的操作，或确认取消本次任务。"},
             "reason": "negated_action",
         }
+    if (
+        "打印机" in text
+        and any(word in text for word in ("列表", "查询", "查看", "看看", "哪台", "哪些"))
+        and not any(word in text for word in ("更换", "换成", "设置", "删除", "添加"))
+    ):
+        return {"intent": "printer_list", "slots": {}}
     shipment_keywords = ("发货单", "送货单", "出货单", "开单", "打单", "打印")
     number_style_order = bool(
         _facade().re.search(
