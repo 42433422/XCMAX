@@ -88,3 +88,12 @@ def test_ai_inventory_rejects_invalid_quantity_before_service(action, quantity):
     assert not result["success"]
     service.inventory_out.assert_not_called()
     service.inventory_transfer.assert_not_called()
+
+
+@pytest.mark.parametrize("method", ["inventory_in", "inventory_out"])
+@pytest.mark.parametrize("price", [-1, True, float("nan"), float("inf"), "bad"])
+def test_stock_movement_invalid_price_does_not_open_database(method, price):
+    with patch("app.services.inventory_service.get_db") as database:
+        result = getattr(InventoryService(), method)(1, 1, 3, unit_price=price)
+    assert not result["success"]
+    database.assert_not_called()

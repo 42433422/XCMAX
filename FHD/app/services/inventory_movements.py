@@ -45,6 +45,17 @@ class InventoryMovementsMixin:
             valid_quantity = False
         if not valid_quantity:
             return {"success": False, "message": "入库数量必须为有限正数"}
+        if unit_price is not None:
+            try:
+                valid_price = (
+                    not isinstance(unit_price, bool)
+                    and math.isfinite(unit_price)
+                    and unit_price >= 0
+                )
+            except (TypeError, ValueError, OverflowError):
+                valid_price = False
+            if not valid_price:
+                return {"success": False, "message": "库存单价必须为有限非负数"}
         with _facade().get_db() as db:
             try:
                 product = (
@@ -175,6 +186,17 @@ class InventoryMovementsMixin:
             valid_quantity = False
         if not valid_quantity:
             return {"success": False, "message": "出库数量必须为有限正数"}
+        if unit_price is not None:
+            try:
+                valid_price = (
+                    not isinstance(unit_price, bool)
+                    and math.isfinite(unit_price)
+                    and unit_price >= 0
+                )
+            except (TypeError, ValueError, OverflowError):
+                valid_price = False
+            if not valid_price:
+                return {"success": False, "message": "库存单价必须为有限非负数"}
         with _facade().get_db() as db:
             try:
                 query = db.query(_facade().InventoryLedger).filter(
