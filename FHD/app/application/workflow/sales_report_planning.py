@@ -23,7 +23,8 @@ def monthly_sales_report_node(message: str, *, today: date | None = None) -> Wor
             "start_date": current.replace(day=1).isoformat(),
             "end_date": current.replace(
                 day=calendar.monthrange(current.year, current.month)[1]
-            ).isoformat(),
+            ).isoformat()
+            + " 23:59:59.999999",
             "group_by": "product",
         },
         risk="low",
