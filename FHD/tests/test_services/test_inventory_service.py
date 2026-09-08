@@ -424,6 +424,40 @@ class TestGetInventorySummary:
 # inventory_in
 # ---------------------------------------------------------------------------
 class TestInventoryIn:
+    @pytest.mark.parametrize("quantity", [0, -1, float("nan"), float("inf"), True, "bad", None])
+    def test_invalid_quantity_never_opens_write_session(self, quantity):
+        with patch("app.services.inventory_service.get_db") as get_db:
+            assert (
+                InventoryService().inventory_in(product_id=1, warehouse_id=1, quantity=quantity)[
+                    "success"
+                ]
+                is False
+            )
+            get_db.assert_not_called()
+
+    @pytest.mark.parametrize("warehouse_status", [None, "inactive", "active"])
+    def test_real_inbound_requires_active_warehouse(self, test_session, warehouse_status):
+        db = test_session
+        product = Product(name="入库测试产品", model_number="IN-TEST")
+        db.add(product)
+        warehouse = None
+        if warehouse_status is not None:
+            warehouse = Warehouse(code="IN-WH", name="入库仓库", status=warehouse_status)
+            db.add(warehouse)
+        db.commit()
+        with patch("app.services.inventory_service.get_db", _mock_get_db(db)):
+            result = InventoryService().inventory_in(
+                product_id=product.id, warehouse_id=warehouse.id if warehouse else 999, quantity=50
+            )
+        db.commit()
+        valid = warehouse_status == "active"
+        assert result["success"] is valid
+        assert db.query(InventoryLedger).count() == int(valid)
+        assert db.query(InventoryTransaction).count() == int(valid)
+        if valid:
+            assert float(db.query(InventoryLedger).one().quantity) == 50
+            assert float(db.query(InventoryTransaction).one().after_quantity) == 50
+
     @patch("app.services.inventory_service.get_db")
     def test_product_not_found(self, mock_get_db):
         mock_db = MagicMock()

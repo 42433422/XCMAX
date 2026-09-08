@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import logging
+import math
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
@@ -34,6 +35,14 @@ class InventoryMovementsMixin:
         operator: str | None = None,
         remark: str | None = None,
     ) -> dict[str, Any]:
+        if isinstance(quantity, bool):
+            return {"success": False, "message": "入库数量必须是有效正数"}
+        try:
+            quantity = float(quantity)
+        except (TypeError, ValueError, OverflowError):
+            return {"success": False, "message": "入库数量必须是有效正数"}
+        if not math.isfinite(quantity) or quantity <= 0:
+            return {"success": False, "message": "入库数量必须是有效正数"}
         with _facade().get_db() as db:
             try:
                 product = (
@@ -41,6 +50,13 @@ class InventoryMovementsMixin:
                 )
                 if not product:
                     return {"success": False, "message": "产品不存在"}
+                warehouse = (
+                    db.query(_facade().Warehouse)
+                    .filter(_facade().Warehouse.id == warehouse_id)
+                    .first()
+                )
+                if warehouse is None or warehouse.status != "active":
+                    return {"success": False, "message": "仓库不存在或未启用"}
                 ledger = (
                     db.query(_facade().InventoryLedger)
                     .filter(

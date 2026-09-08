@@ -17,6 +17,13 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Stock-in now rejects nonpositive, nonfinite and malformed quantities before
+  opening a write session, and requires an existing active destination warehouse.
+  Real SQLite tests verify missing/inactive warehouses produce no ledger or
+  transaction rows and valid quantity 50 is reflected in both. 143 inventory/tool
+  regressions passed. Natural-language model resolution and warehouse selection
+  remain outstanding; the stock-in golden case is not yet accepted.
+
 - Order requests now use an approved `sales.create_order` action that composes
   existing quote/confirm services in one DB transaction. Missing price is asked
   explicitly without replacing the supplied quantity. The golden order case now
