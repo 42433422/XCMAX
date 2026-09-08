@@ -71,6 +71,21 @@ def test_inbound_rejects_missing_and_other_tenant_warehouse(tmp_path, monkeypatc
         db.add(StorageLocation(id=6, tenant_id=1, warehouse_id=3, code="B"))
     monkeypatch.setattr("app.db.session.SessionLocal", factory)
     with tenant_scope(1):
+        from app.application.workflow.planner import LLMWorkflowPlanner
+        from app.services.tools_execution.registry import get_workflow_tool_registry
+
+        with patch(
+            "app.application.workflow.planner.get_ai_conversation_service", return_value=None
+        ):
+            planner = LLMWorkflowPlanner()
+        plan = planner._fallback_plan(
+            "inbound", "产品 A100 入库 50 件", get_workflow_tool_registry()
+        )
+        assert [(node.tool_id, node.action) for node in plan.nodes] == [
+            ("clarify", "ask"),
+            ("inventory", "stock_in"),
+        ]
+        assert plan.nodes[1].params == {"product_id": 1, "quantity": 50.0, "requested_unit": "件"}
         for warehouse_id in (2, 999):
             result = InventoryService().inventory_in(
                 product_id=1, warehouse_id=warehouse_id, quantity=5

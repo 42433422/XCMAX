@@ -63,6 +63,13 @@ class _LLMWorkflowPlannerPart02Mixin:
         nodes: list[_facade().WorkflowNode] = []
         todo = ["理解用户目标", "执行可用工具", "输出执行结果"]
         intent = "generic_workflow"
+        if "inventory" in tool_registry:
+            from .inventory_in_planning import inventory_in_node
+
+            inbound = inventory_in_node(message)
+            if inbound is not None:
+                nodes.append(inbound)
+                intent = "inventory_in"
         first_order_slots = _onboarding_first_order_slots(message)
         if first_order_slots and "business_db" in tool_registry:
             customer, product = first_order_slots
