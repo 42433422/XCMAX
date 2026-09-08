@@ -457,6 +457,22 @@
           {"tool_id": "inventory", "action": "stock_in"}
         ]
       }
+    },
+    {
+      "task_id": "customers.export_028",
+      "domain": "customers",
+      "difficulty": "easy",
+      "instruction": "导出客户报表",
+      "expect": {
+        "actions": [
+          {"tool_id": "customers", "action": "query"},
+          {"tool_id": "reports", "action": "export"}
+        ],
+        "forbid_actions": [
+          {"tool_id": "products", "action": "query"},
+          {"tool_id": "business_db", "action": "write"}
+        ]
+      }
     }
   ]
 }

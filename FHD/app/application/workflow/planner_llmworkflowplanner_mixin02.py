@@ -245,6 +245,14 @@ class _LLMWorkflowPlannerPart02Mixin:
             if export_nodes:
                 intent = "sales_report_export"
                 nodes.extend(export_nodes)
+        if not nodes and "reports" in tool_registry and "customers" in tool_registry:
+            from .customer_export_planning import customer_export_nodes
+
+            customer_export = customer_export_nodes(message)
+            if customer_export:
+                intent = "customer_export"
+                todo = ["查询客户列表", "导出为 Excel", "返回下载结果"]
+                nodes.extend(customer_export)
         if not nodes and "reports" in tool_registry:
             from .inventory_query_planning import general_inventory_query_node, inventory_query_node
 
