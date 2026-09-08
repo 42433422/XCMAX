@@ -51,6 +51,16 @@ def test_sales_candidates_are_exact_tenant_bound_and_read_only(monkeypatch):
         assert not plan.nodes[0].idempotent
         from app.application.sales_app_service import SalesAppService
 
+        incomplete = planner._fallback_plan(
+            "unpriced", "给星光的产品A100报个价", get_workflow_tool_registry()
+        )
+        assert [(n.tool_id, n.action) for n in incomplete.nodes] == [
+            ("clarify", "ask"), ("sales", "quote")
+        ]
+        assert incomplete.nodes[1].params == {"customer_id": 1}
+        assert "A100" in incomplete.nodes[1].description
+        assert db.query(SalesOrder).count() == 0
+        assert db.query(SalesOrderItem).count() == 0
         saved = SalesAppService().quote(plan.nodes[0].params, db=db)
         assert saved["success"], saved
         order = db.query(SalesOrder).one()
