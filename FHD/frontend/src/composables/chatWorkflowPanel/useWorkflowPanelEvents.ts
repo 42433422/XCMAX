@@ -2,6 +2,7 @@
  * useChatWorkflowPanel 拆分：工作流面板事件监听与挂载/卸载生命周期。
  */
 import { watch, type Ref } from 'vue'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import {
   buildLabelPrintHostUpdate,
   buildReceiptFeedbackHostUpdate,
@@ -132,15 +133,28 @@ export function useWorkflowPanelEvents(deps: WorkflowPanelEventsDeps) {
     })
   }
 
+  let labelRequest = 0
+  let stopLabelScopeWatch: (() => void) | undefined
   async function onWorkflowLabelPrintSignal(evt: Event) {
     const d = (evt as CustomEvent).detail || {}
     const enabled = readWorkflowEmployeeEnabledMap()
     if (!enabled.label_print) return
     if (!taskList.value.some((t) => t.id === 'workflow_emp_label_print')) return
+    const sequence = ++labelRequest
+    const account = productReadAccountEpoch.value
     const modInstalled = isCoreWorkflowModInstalled(modsStore.modsForUi)
     dispatchCoreWorkflowModRun(modInstalled, 'label_print', { action: 'signal_ack', ...d })
     upsertWorkflowEmployeeTask('label_print', buildLabelPrintHostUpdate(d))
-    await runLabelPrintSideEffect(d)
+    const result = await runLabelPrintSideEffect(d)
+    if (sequence !== labelRequest || account !== productReadAccountEpoch.value
+      || !readWorkflowEmployeeEnabledMap().label_print
+      || !taskList.value.some(t => t.id === 'workflow_emp_label_print')) return
+    upsertWorkflowEmployeeTask('label_print', buildLabelPrintHostUpdate({ ...d, line: result.message }))
+    emitAssistantPush({
+      title: result.status === 'generated' ? '标签预览已生成' : result.status === 'needs_configuration' ? '标签打印待配置' : '标签生成失败',
+      description: result.message,
+      feature: 'assistant',
+    })
   }
 
   /** 星标微信命中收货/对账类意图时，写入收货确认工作流 */
@@ -246,6 +260,12 @@ export function useWorkflowPanelEvents(deps: WorkflowPanelEventsDeps) {
   }
 
   function mountWorkflowPanel() {
+    stopLabelScopeWatch?.()
+    stopLabelScopeWatch = watch(
+      () => [productReadAccountEpoch.value, modsStore.activeModId],
+      () => { labelRequest++ },
+      { flush: 'sync' },
+    )
     window.addEventListener('xcagi:wechat-ai-task-enqueue', onWechatAiTaskEnqueue)
     window.addEventListener('xcagi:wechat-shipment-preview-task', onWechatShipmentPreviewTask)
     window.addEventListener('xcagi:workflow-label-print-signal', onWorkflowLabelPrintSignal)
@@ -261,6 +281,8 @@ export function useWorkflowPanelEvents(deps: WorkflowPanelEventsDeps) {
   }
 
   function unmountWorkflowPanel() {
+    labelRequest++
+    stopLabelScopeWatch?.()
     window.removeEventListener('xcagi:wechat-ai-task-enqueue', onWechatAiTaskEnqueue)
     window.removeEventListener('xcagi:wechat-shipment-preview-task', onWechatShipmentPreviewTask)
     window.removeEventListener('xcagi:workflow-label-print-signal', onWorkflowLabelPrintSignal)

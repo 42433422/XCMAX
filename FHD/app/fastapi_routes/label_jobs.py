@@ -54,6 +54,7 @@ def generate_label(body: GenerateLabel, owner=Depends(_owner)):
 
 
 @compat_router.post("/api/print/pdf_labels")
+@compat_router.post("/api/print/single_label")
 def compat_print_pdf_labels(body: GenerateLabel, owner=Depends(_owner)):
     """Generate an owned preview; physical printing uses the label confirmation flow."""
     result = generate_label(body, owner)

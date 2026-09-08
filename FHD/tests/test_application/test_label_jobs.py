@@ -114,7 +114,10 @@ def create(env):
     return response.json()["job"]
 
 
-def test_compat_pdf_labels_generates_real_preview_then_uses_confirmed_job_flow(env, monkeypatch):
+@pytest.mark.parametrize("endpoint", ["pdf_labels", "single_label"])
+def test_compat_pdf_labels_generates_real_preview_then_uses_confirmed_job_flow(
+    env, monkeypatch, endpoint
+):
     from app.fastapi_routes import ai_assistant
 
     env.app.include_router(ai_assistant.router)
@@ -124,7 +127,7 @@ def test_compat_pdf_labels_generates_real_preview_then_uses_confirmed_job_flow(e
         "app.application.facades.print_facade.printer_service.get_label_printer",
         lambda: "Sample printer",
     )
-    response = env.client.post("/api/print/pdf_labels", json=PAYLOAD)
+    response = env.client.post(f"/api/print/{endpoint}", json=PAYLOAD)
     assert response.status_code == 200, response.text
     receipt = response.json()
     assert receipt["success"] and receipt["requires_confirmation"]
@@ -142,10 +145,10 @@ def test_compat_pdf_labels_generates_real_preview_then_uses_confirmed_job_flow(e
     assert submit.status_code == 200 and submit.json()["job"]["status"] == "submitted"
     dispatch.assert_called_once()
     assert (
-        env.client.post("/api/print/pdf_labels", json={"model_number": "guess"}).status_code == 422
+        env.client.post(f"/api/print/{endpoint}", json={"model_number": "guess"}).status_code == 422
     )
     env.app.dependency_overrides.clear()
-    assert env.client.post("/api/print/pdf_labels", json=PAYLOAD).status_code == 401
+    assert env.client.post(f"/api/print/{endpoint}", json=PAYLOAD).status_code == 401
 
 
 @pytest.mark.parametrize("source,target", [("", "erp"), ("erp", ""), ("erp", "other")])

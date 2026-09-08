@@ -6,6 +6,7 @@ import {
   dispatchCoreWorkflowModRun,
   runLabelPrintSideEffect,
 } from './coreWorkflowDispatcher'
+import { printApi } from '@/api/print'
 import * as employeeApi from '@/utils/coreWorkflowEmployeeApi'
 
 describe('coreWorkflowDispatcher deep', () => {
@@ -69,18 +70,31 @@ describe('coreWorkflowDispatcher deep', () => {
     expect(out.monitor.pollOk).toBe(false)
   })
 
-  it('runLabelPrintSideEffect no-ops without model number', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    await runLabelPrintSideEffect({ quantity: 2 })
-    expect(warn).not.toHaveBeenCalled()
+  const label = { product_id: 2, template_id: 'db:42', quantity: 3, paper_width_mm: 90, paper_height_mm: 60 }
+
+  it.each([{ model_number: 'M-1', quantity: 2 }, { ...label, quantity: 0 }, { ...label, quantity: 101 }, { ...label, paper_width_mm: NaN }])('reports missing/invalid configuration without submitting %s', async (detail) => {
+    const call = vi.spyOn(printApi, 'printSingleLabel')
+    expect((await runLabelPrintSideEffect(detail)).status).toBe('needs_configuration')
+    expect(call).not.toHaveBeenCalled()
   })
 
-  it('runLabelPrintSideEffect calls printApi on success', async () => {
-    const printApi = { printSingleLabel: vi.fn().mockResolvedValue({ success: true }) }
-    vi.doMock('@/api', () => ({ printApi }))
-    const mod = await import('./coreWorkflowDispatcher')
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    await mod.runLabelPrintSideEffect({ model_number: 'M-1', quantity: 3 })
-    warn.mockRestore()
+  it('generates a preview with the explicit selection and never confirms automatically', async () => {
+    const call = vi.spyOn(printApi, 'printSingleLabel').mockResolvedValue({ success: true, job: { id: 'job-1', status: 'generated' } } as Awaited<ReturnType<typeof printApi.printSingleLabel>>)
+    const confirm = vi.spyOn(printApi, 'confirmLabelJob')
+    const submit = vi.spyOn(printApi, 'submitLabelJob')
+    expect(await runLabelPrintSideEffect(label)).toMatchObject({ status: 'generated', jobId: 'job-1' })
+    expect(call).toHaveBeenCalledWith({ product_id: 2, template_id: 'db:42', copies: 3, paper_width_mm: 90, paper_height_mm: 60 })
+    expect(confirm).not.toHaveBeenCalled()
+    expect(submit).not.toHaveBeenCalled()
+  })
+
+  it('does not report success without a generated job receipt', async () => {
+    vi.spyOn(printApi, 'printSingleLabel').mockResolvedValue({ success: true } as Awaited<ReturnType<typeof printApi.printSingleLabel>>)
+    expect((await runLabelPrintSideEffect(label)).status).toBe('failed')
+  })
+
+  it('returns failures for visible workflow feedback', async () => {
+    vi.spyOn(printApi, 'printSingleLabel').mockRejectedValue(new Error('offline'))
+    expect(await runLabelPrintSideEffect(label)).toEqual({ status: 'failed', message: 'offline' })
   })
 })

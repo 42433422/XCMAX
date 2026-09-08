@@ -51,34 +51,17 @@ def test_audit_typed_converter_does_not_falsely_shadow_static_name():
     assert report["counts"]["schema_status_by_unique_operation"] == {"available": 2}
 
 
-def test_print_dispatch_reaches_label_handler_not_file_catchall(monkeypatch):
-    from unittest.mock import MagicMock
-
+def test_print_dispatch_reaches_authenticated_label_handler_not_file_catchall():
     from fastapi.testclient import TestClient
 
     from app.fastapi_routes import ai_assistant
 
-    printer = MagicMock()
-    printer.print_single_label.return_value = {"success": True}
-    products = MagicMock()
-    products.search_products.return_value = {"data": [{"name": "Sample", "unit": "pcs"}]}
-    monkeypatch.setattr(
-        "app.application.print_app_service.get_print_application_service", lambda: printer
-    )
-    monkeypatch.setattr("app.application.get_product_app_service", lambda: products)
-    monkeypatch.setattr(ai_assistant, "_trace_ai_assistant_route", lambda result, **kwargs: result)
     app = FastAPI()
     app.include_router(ai_assistant.router)
     with TestClient(app) as client:
-        response = client.post(
-            "/api/print/single_label", json={"model_number": "sample", "quantity": 2}
-        )
-        assert response.status_code == 200 and response.json()["success"]
-        assert client.post("/api/print/pdf_labels").status_code == 401
+        for endpoint in ("single_label", "pdf_labels"):
+            assert client.post(f"/api/print/{endpoint}", json={}).status_code == 401
         assert client.post("/api/print/missing.pdf", json={}).status_code in {400, 404}
-    printer.print_single_label.assert_called_once_with(
-        product_name="Sample", model_number="sample", specification=None, unit="pcs", quantity=2
-    )
 
 
 def test_settings_dispatch_has_one_canonical_owner(monkeypatch):

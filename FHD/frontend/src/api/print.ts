@@ -90,8 +90,8 @@ export const printApi = {
     return api.get<ApiResponse<unknown[]>>('/api/print/list_labels')
   },
 
-  printSingleLabel(data: unknown): Promise<ApiResponse<unknown>> {
-    return api.post<ApiResponse<unknown>>('/api/print/single_label', data)
+  printSingleLabel(data: unknown): Promise<LabelJobResponse> {
+    return api.post<LabelJobResponse>('/api/print/single_label', data)
   },
 
   printByFilename(filename: string): Promise<ApiResponse<unknown>> {

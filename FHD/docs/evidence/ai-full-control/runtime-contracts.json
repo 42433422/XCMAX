@@ -7676,6 +7676,15 @@
       "schema_status": "available"
     },
     {
+      "path": "/api/print/single_label",
+      "method": "POST",
+      "handler": "app.fastapi_routes.label_jobs.compat_print_pdf_labels",
+      "hidden_from_public_schema": false,
+      "static_path_shadowed_by": [],
+      "registrations": 1,
+      "schema_status": "available"
+    },
+    {
       "path": "/api/print/pdf_labels",
       "method": "POST",
       "handler": "app.fastapi_routes.label_jobs.compat_print_pdf_labels",
@@ -7814,15 +7823,6 @@
       "path": "/api/print-last",
       "method": "POST",
       "handler": "app.fastapi_routes.ai_assistant.compat_print_last",
-      "hidden_from_public_schema": false,
-      "static_path_shadowed_by": [],
-      "registrations": 1,
-      "schema_status": "available"
-    },
-    {
-      "path": "/api/print/single_label",
-      "method": "POST",
-      "handler": "app.fastapi_routes.ai_assistant.compat_print_single_label",
       "hidden_from_public_schema": false,
       "static_path_shadowed_by": [],
       "registrations": 1,
@@ -9135,7 +9135,7 @@
     }
   ],
   "registration_profile": "register_all_routes; legacy compatibility enabled; pytest isolated environment; no lifespan",
-  "source_sha256": "2d74947e1af6b6e56d7eeb1ea2447416fe86443dfe4c00fb2ee4a83d6f4dbf79",
+  "source_sha256": "c648943cbfec298dffc91fecfe4bcee7251b2746593db425a16a00de8ab090cd",
   "source_hash_definition": "SHA256 sorted FHD/app Python paths + NUL + file bytes + NUL",
   "auditor_sha256": "45a6b055d938b8f274e9da89c9f78ec0572c7fce162396fb0c144564db7f639e"
 }

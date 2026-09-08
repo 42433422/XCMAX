@@ -816,42 +816,6 @@ def test_ai_generate_with_template_name(
     assert svc.generate_shipment_document.call_args.kwargs["template_name"] == "default.docx"
 
 
-def test_ai_single_label_success(ai_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    product_svc = MagicMock()
-    product_svc.search_products.return_value = [
-        {"name": "底漆", "specification": "25kg", "unit": "桶"},
-    ]
-    print_app = MagicMock()
-    print_app.print_single_label.return_value = {"success": True, "message": "printed"}
-    monkeypatch.setattr("app.application.get_product_app_service", lambda: product_svc)
-    monkeypatch.setattr(
-        "app.application.print_app_service.get_print_application_service",
-        lambda: print_app,
-    )
-    # /api/print/{filename:path} is registered before /api/print/single_label — call handler directly.
-    r = ai_routes_mod.compat_print_single_label({"model_number": "9803", "quantity": 2})
-    assert r.status_code == 200
-    print_app.print_single_label.assert_called_once()
-
-
-def test_ai_single_label_product_lookup_fail(
-    ai_client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(
-        "app.application.get_product_app_service",
-        lambda: (_ for _ in ()).throw(RuntimeError("product svc down")),
-    )
-    print_app = MagicMock()
-    print_app.print_single_label.return_value = {"success": True}
-    monkeypatch.setattr(
-        "app.application.print_app_service.get_print_application_service",
-        lambda: print_app,
-    )
-    r = ai_routes_mod.compat_print_single_label({"model_number": "X99", "quantity": 0})
-    assert r.status_code == 200
-    assert print_app.print_single_label.call_args.kwargs["quantity"] == 1
-
-
 def test_ai_print_file_failure(
     ai_client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
