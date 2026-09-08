@@ -1,43 +1,27 @@
-# ruff: noqa: E402, F401
-"""Excel import pipeline mixin for AIChatExcelImportMixin."""
+"""Excel import pipeline mixin for AIChatExcelImportMixin（组装器：平级叶子 mixin 组合）。"""
 
 from __future__ import annotations
 
-import json
-import logging
-import math
 import re
-import uuid
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import httpx
-
-from app.application.ai_chat.excel_import_policy import (
-    _EXCEL_IMPORT_MEASURE_UNIT_TOKENS,
-    _EXCEL_IMPORT_QTY_MEASURE_RE,
-    _enrich_confirmation_inner,
+from app.application.ai_chat.excel_import_pipeline_agent_run import ExcelImportAgentRunMixin
+from app.application.ai_chat.excel_import_pipeline_columns_fallback import (
+    ExcelImportColumnFallbackMixin,
 )
-from app.application.chat_tool_intent import looks_like_explicit_workflow_tool_intent
-
-logger = logging.getLogger(__name__)
-
-from app.application.ai_chat.excel_import_pipeline_aichatexcelimportmixin_mixin01 import (
-    _AIChatExcelImportMixinPart01Mixin,
+from app.application.ai_chat.excel_import_pipeline_columns_infer import (
+    ExcelImportColumnInferMixin,
 )
-from app.application.ai_chat.excel_import_pipeline_aichatexcelimportmixin_mixin02 import (
-    _AIChatExcelImportMixinPart02Mixin,
-)
-from app.application.ai_chat.excel_import_pipeline_aichatexcelimportmixin_mixin03 import (
-    _AIChatExcelImportMixinPart03Mixin,
-)
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.application.ai_chat.excel_import_pipeline_extract import ExcelImportExtractMixin
+from app.application.ai_chat.excel_import_pipeline_resolve import ExcelImportResolveMixin
 
 
 class AIChatExcelImportMixin(
-    _AIChatExcelImportMixinPart01Mixin,
-    _AIChatExcelImportMixinPart02Mixin,
-    _AIChatExcelImportMixinPart03Mixin,
+    ExcelImportResolveMixin,
+    ExcelImportColumnFallbackMixin,
+    ExcelImportColumnInferMixin,
+    ExcelImportExtractMixin,
+    ExcelImportAgentRunMixin,
 ):
     if TYPE_CHECKING:
         _is_number_text: Any
