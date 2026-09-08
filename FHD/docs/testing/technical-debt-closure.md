@@ -19,6 +19,15 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Three task creation surfaces now share authenticated_runtime_context: run,
+  unified task and observed-tool creation drop caller tenant IDs and use only the
+  principal's tenant. Reinspection found earlier text incorrectly claimed the
+  unified-task removal had landed; it had not, and this change actually wires it.
+  Two HTTP cases verify forged tenant removal/override while preserving source;
+  all 38 route checks passed (`authenticated-task-context`). Active-Mod middleware
+  only normalizes the header, so it cannot alone serve as an entitlement proof
+  for durable Mod restoration; that authorization path remains pending.
+
 - SQL tenant-list regression now seeds two older target runs behind 205 newer
   same-user/other-tenant runs, plus an unscoped legacy run and a different user's
   target-tenant run. A fresh repository returns the correct target records at

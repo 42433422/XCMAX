@@ -621,6 +621,26 @@ def test_run_list_filters_tenant_before_limit():
     assert [item["message"] for item in response.json()["data"]] == ["tenant-a"]
 
 
+@pytest.mark.parametrize("tenant", ["", "verified"])
+def test_create_task_uses_authenticated_tenant_only(tenant):
+    response = _client("owner", tenant_id=tenant).post(
+        "/api/agent/tasks",
+        json={
+            "task_id": "tenant-binding",
+            "title": "客户查询",
+            "tool_id": "customers",
+            "action": "query",
+            "params": {"keyword": "示例"},
+            "runtime_context": {"tenant_id": "forged", "source": "test"},
+        },
+    )
+    assert response.status_code == 202
+    run = get_agent_run_repository().get(response.json()["data"]["run_id"])
+    context = run.metadata["runtime_context"]
+    assert context.get("tenant_id", "") == tenant
+    assert context["source"] == "test"
+
+
 def test_create_agent_run_validates_request_body() -> None:
     get_agent_run_repository().clear()
     client = _client()

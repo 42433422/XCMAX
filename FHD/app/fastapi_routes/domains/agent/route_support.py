@@ -26,6 +26,14 @@ PUBLIC_APPROVAL_ERROR = "approval_grant 无效、过期或与当前步骤不匹�
 _INTERNAL_ERROR_KEYS = frozenset({"error", "exception", "stack_trace", "traceback"})
 
 
+def authenticated_runtime_context(raw: dict[str, Any], principal: AgentPrincipal) -> dict[str, Any]:
+    context = dict(raw)
+    context.pop("tenant_id", None)
+    if principal.tenant_id:
+        context["tenant_id"] = principal.tenant_id
+    return context
+
+
 def success(data: Any, **extra: Any) -> dict[str, Any]:
     payload: dict[str, Any] = {"success": True, "data": json_safe(data)}
     payload.update(extra)

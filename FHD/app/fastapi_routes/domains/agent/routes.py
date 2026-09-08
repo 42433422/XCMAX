@@ -34,6 +34,9 @@ from app.fastapi_routes.domains.agent.route_support import (
     PUBLIC_APPROVAL_ERROR as _PUBLIC_APPROVAL_ERROR,
 )
 from app.fastapi_routes.domains.agent.route_support import (
+    authenticated_runtime_context,
+)
+from app.fastapi_routes.domains.agent.route_support import (
     enqueue_run as _enqueue_run,
 )
 from app.fastapi_routes.domains.agent.route_support import (
@@ -94,11 +97,7 @@ def create_agent_run(
             {"success": False, "message": "runtime_context 必须是对象"},
             status_code=400,
         )
-    runtime_context = dict(runtime_context_raw)
-    if principal.tenant_id:
-        runtime_context["tenant_id"] = principal.tenant_id
-    else:
-        runtime_context.pop("tenant_id", None)
+    runtime_context = authenticated_runtime_context(runtime_context_raw, principal)
 
     try:
         orchestrator = AgentOrchestrator()
@@ -162,9 +161,7 @@ def record_observed_tool_run(
             {"success": False, "message": "runtime_context 必须是对象"},
             status_code=400,
         )
-    runtime_context = dict(runtime_context_raw)
-    if principal.tenant_id:
-        runtime_context["tenant_id"] = principal.tenant_id
+    runtime_context = authenticated_runtime_context(runtime_context_raw, principal)
 
     from app.application.agent_orchestrator.observed_tool_trace import (
         create_observed_tool_trace_run,

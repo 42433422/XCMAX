@@ -26,6 +26,7 @@ from app.application.agent_orchestrator.unified_task import (
     task_capabilities,
 )
 from app.fastapi_routes.domains.agent.route_support import (
+    authenticated_runtime_context,
     internal_error_response,
     public_run_dict,
     run_response,
@@ -207,10 +208,8 @@ def create_agent_task(
             {"success": False, "message": "params 与 runtime_context 必须是对象"},
             status_code=400,
         )
-    runtime_context = dict(runtime_context_raw)
+    runtime_context = authenticated_runtime_context(runtime_context_raw, principal)
     try:
-        if principal.tenant_id:
-            runtime_context["tenant_id"] = principal.tenant_id
         task_id = str(data.get("task_id") or "").strip()
         if not task_id or len(task_id) > 160 or "/" in task_id:
             return JSONResponse(
