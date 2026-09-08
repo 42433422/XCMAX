@@ -163,6 +163,7 @@ class InventoryMovementsMixin:
         reference_id: int | None = None,
         operator: str | None = None,
         remark: str | None = None,
+        unit_price: float | None = None,
     ) -> dict[str, Any]:
         import math
 
@@ -200,6 +201,8 @@ class InventoryMovementsMixin:
                     location_id=ledger.location_id,
                     batch_no=ledger.batch_no,
                     quantity=-quantity,
+                    unit_price=unit_price,
+                    total_amount=quantity * unit_price if unit_price is not None else None,
                     before_quantity=float(ledger.quantity) + quantity,
                     after_quantity=float(ledger.quantity),
                     reference_type=reference_type,

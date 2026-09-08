@@ -83,6 +83,7 @@ def _registered_router_inventory(
                 product_id=params.get("product_id"),
                 warehouse_id=params.get("warehouse_id"),
                 quantity=quantity,
+                unit_price=_float_or_none(params.get("unit_price")),
                 batch_no=params.get("batch_no"),
                 location_id=params.get("location_id"),
                 reference_type=params.get("reference_type"),

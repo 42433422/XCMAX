@@ -57,12 +57,18 @@ def test_outbound_receipt_records_selected_stock_batch_and_location(tmp_path, mo
         )
 
         result = _registered_router_inventory(
-            "stock_out", {"product_id": 1, "warehouse_id": 1, "quantity": "3"}, {}, "normal", ""
+            "stock_out",
+            {"product_id": 1, "warehouse_id": 1, "quantity": "3", "unit_price": "5"},
+            {},
+            "normal",
+            "",
         )
     assert result["success"], result
     with factory() as db:
         ledger = db.query(InventoryLedger).one()
         transaction = db.query(InventoryTransaction).one()
+        assert float(transaction.unit_price) == 5
+        assert float(transaction.total_amount) == 15
         assert (float(ledger.quantity), float(ledger.available_quantity)) == (7, 5)
         assert (transaction.ledger_id, transaction.location_id, transaction.batch_no) == (1, 1, "B")
         assert (float(transaction.before_quantity), float(transaction.after_quantity)) == (10, 7)
