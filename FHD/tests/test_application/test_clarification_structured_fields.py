@@ -17,7 +17,18 @@ def test_quote_items_answer_is_validated_without_mutating_pending_node():
 
 
 @pytest.mark.parametrize(
-    "answer", ["{}", '"items"', "not json", '[{"quantity":NaN}]', '[{"quantity":1e999}]']
+    "answer",
+    [
+        "{}",
+        '"items"',
+        "not json",
+        "[]",
+        "[{}]",
+        '[{"quantity":2}]',
+        '[{"quantity":true,"unit_price":5}]',
+        '[{"quantity":NaN}]',
+        '[{"quantity":1e999}]',
+    ],
 )
 def test_invalid_structured_answer_keeps_pending_params(answer):
     node = WorkflowNode(

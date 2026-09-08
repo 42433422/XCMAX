@@ -113,6 +113,10 @@ def _sample_value_for_property(key: str, prop: dict[str, Any]) -> Any:
         return enum_values[0]
 
     expected_type = str(prop.get("type") or "").strip()
+    if expected_type == "array" and isinstance(prop.get("items"), dict):
+        return [_sample_value_for_property("item", prop["items"])]
+    if expected_type == "object" and prop.get("properties"):
+        return _sample_payload_from_schema(prop)
     if key == "success":
         return True
     if key in {"ids", "records", "artifacts", "data"} and expected_type == "array":

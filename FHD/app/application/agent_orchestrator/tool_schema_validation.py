@@ -62,6 +62,21 @@ def _validate_schema_payload(
         expected_type = str(prop.get("type") or "").strip()
         if expected_type and not _type_matches(payload.get(key), expected_type):
             return False, f"{subject} 字段 {key} 类型错误，应为 {expected_type}"
+        value = payload.get(key)
+        if isinstance(value, dict):
+            valid, error = _validate_schema_payload(prop, value, subject=f"{subject}.{key}")
+            if not valid:
+                return False, error
+        item_schema = prop.get("items")
+        if isinstance(value, list) and isinstance(item_schema, dict):
+            for index, item in enumerate(value):
+                valid, error = _validate_schema_payload(
+                    {"type": "object", "properties": {"item": item_schema}, "required": ["item"]},
+                    {"item": item},
+                    subject=f"{subject}.{key}[{index}]",
+                )
+                if not valid:
+                    return False, error
         enum_values = prop.get("enum")
         if isinstance(enum_values, list) and enum_values and payload.get(key) not in enum_values:
             return False, f"{subject} 字段 {key} 不在允许范围内"
