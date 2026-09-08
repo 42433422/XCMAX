@@ -41,6 +41,7 @@ class Product(IntegerPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, Base):
     category: Mapped[Optional[str]] = mapped_column(String)
     brand: Mapped[Optional[str]] = mapped_column(String)
     unit: Mapped[str] = mapped_column(String, default="个")
+    measurement_unit: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     # 基准计量单位（Odoo 吸收）：指向 uom_units 主记录（base 单位 factor=1）
     base_uom_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("uom_units.id"), nullable=True, index=True
