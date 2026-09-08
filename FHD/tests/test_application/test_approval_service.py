@@ -465,13 +465,16 @@ def test_ai_workflow_approval_persists_valid_actor_flow_and_audit(monkeypatch, t
             },
         )
         plan = _make_plan([node])
-        request = svc.create_approval_request(
-            "plan-crud",
-            node,
-            runtime_context={"user_id": str(user_id)},
-            plan=plan,
-            require_persistence=True,
-        )
+        from app.application.agent_orchestrator.execution_identity import execution_actor_scope
+
+        with execution_actor_scope(str(user_id)):
+            request = svc.create_approval_request(
+                "plan-crud",
+                node,
+                runtime_context={"user_id": str(user_id)},
+                plan=plan,
+                require_persistence=True,
+            )
         metadata = svc.get_request_metadata(request.request_id)
         assert metadata is not None
         assert metadata["applicant_id"] == user_id

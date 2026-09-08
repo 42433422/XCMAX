@@ -1,0 +1,15 @@
+{
+  "base_sha": "ae96c1d0c",
+  "tests_passed": 82,
+  "change": "Applicant requires current_execution_actor from host/session; all supplied ownership aliases must agree. Active user resolved by trusted numeric ID.",
+  "verified": [
+    "Missing actor rejected despite supplied local_user_id.",
+    "Other account and conflicting actor aliases rejected.",
+    "Matching actor and omitted aliases resolve active user.",
+    "Actual persistence and independent-process recovery regression pass."
+  ],
+  "limitations": [
+    "All background submission callers have not yet been audited for host identity propagation.",
+    "HTTP approval authorizer and restored execution authorization remain separate."
+  ]
+}

@@ -118,40 +118,18 @@ def _is_valid_plan_for_snapshot(plan: PlanGraph | None) -> bool:
 
 
 def _resolve_applicant(db, runtime_context: dict[str, Any] | None):
+    from app.application.agent_orchestrator.execution_identity import current_execution_actor
     from app.db.models.user import User
 
-    context = runtime_context or {}
-    raw = next(
-        (
-            context.get(key)
-            for key in ("local_user_id", "actor_id", "user_id")
-            if context.get(key) not in (None, "")
-        ),
-        None,
-    )
-    if raw is None:
+    actor = current_execution_actor()
+    if not actor.isdigit() or int(actor) <= 0:
         return None
-    text_value = str(raw).strip()
-    if text_value.isdigit():
-        return db.query(User).filter(User.id == int(text_value), User.is_active == True).first()  # noqa: E712
-
-    user = (
-        db.query(User)
-        .filter(User.username == text_value, User.is_active == True)  # noqa: E712
-        .first()
-    )
-    if user is not None:
-        return user
-    matches = (
-        db.query(User)
-        .filter(
-            (User.email == text_value) | (User.display_name == text_value),
-            User.is_active == True,  # noqa: E712
-        )
-        .limit(2)
-        .all()
-    )
-    return matches[0] if len(matches) == 1 else None
+    context = runtime_context or {}
+    for key in ("local_user_id", "actor_id", "user_id"):
+        value = context.get(key)
+        if value not in (None, "") and str(value).strip() != actor:
+            return None
+    return db.query(User).filter(User.id == int(actor), User.is_active == True).first()  # noqa: E712
 
 
 def persist_agent_run_link(

@@ -511,6 +511,7 @@ def test_real_shipment_request_survives_service_recreation(tmp_path, monkeypatch
     import sys
     from pathlib import Path
 
+    from app.application.agent_orchestrator.execution_identity import execution_actor_scope
     from app.application.workflow.approval_service import ApprovalService
     from app.application.workflow.types import PlanGraph, WorkflowNode
     from app.db.models.user import User
@@ -567,7 +568,7 @@ Path(os.environ['TEST_OUTPUT']).write_text(json.dumps(data))
         },
     )
     plan = PlanGraph(plan_id="shipment-durable", intent="shipment_generate", nodes=[node])
-    with tenant_scope(1):
+    with tenant_scope(1), execution_actor_scope("71"):
         service = ApprovalService()
         request = service.create_approval_request(
             plan.plan_id,
@@ -603,3 +604,25 @@ Path(os.environ['TEST_OUTPUT']).write_text(json.dumps(data))
         assert fresh.load_durable_workflow_snapshot(request.request_id) is None
         assert read_in_fresh_process(request.request_id) is None
     engine.dispose()
+
+
+def test_applicant_identity_cannot_be_supplied_by_runtime_parameters(db):
+    from app.application.agent_orchestrator.execution_identity import execution_actor_scope
+    from app.application.workflow.approval_persistence import _resolve_applicant
+    from app.db.models.user import User
+
+    with db() as session, session.begin():
+        session.add_all(
+            [
+                User(id=71, username="actor", password="test-only", is_active=True),
+                User(id=72, username="other", password="test-only", is_active=True),
+            ]
+        )
+    with db() as session:
+        with execution_actor_scope(""):
+            assert _resolve_applicant(session, {"local_user_id": 71}) is None
+        with execution_actor_scope("71"):
+            assert _resolve_applicant(session, {"local_user_id": 72}) is None
+            assert _resolve_applicant(session, {"local_user_id": 71, "actor_id": 72}) is None
+            assert _resolve_applicant(session, {"local_user_id": 71}).id == 71
+            assert _resolve_applicant(session, {}).id == 71
