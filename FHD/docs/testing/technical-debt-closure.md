@@ -17,6 +17,14 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Added a durable approval-consumption table and atomic insert repository, with
+  migration `2026_09_08_agent_approval` after the verified single migration head.
+  Two spawned processes compete for the same JTI: exactly one commits, and a new
+  repository after process exit still rejects replay. Missing storage raises an
+  error rather than permission; both tests passed. This is not yet the production
+  approval guard: wiring, migration execution, grant-level restart coverage and
+  queue/run persistence coordination remain required.
+
 - Generated shipment spreadsheets now become hash-verified run artifacts exposed
   through the existing owned-task download endpoint and UI action. Only generated
   `.xlsx` paths inside the shipment output directory are copied. The golden case
