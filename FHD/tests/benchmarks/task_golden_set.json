@@ -288,6 +288,7 @@
       "fixtures": [{"entity": "customers", "values": {"unit_name": "七彩乐园"}}, {"entity": "products", "values": {"name": "发货测试产品", "model_number": "9803", "specification": "12", "price": 25}}],
       "approvals": [{"tool_id": "shipment_orders", "action": "generate", "params": {"unit_name": "七彩乐园", "products": [{"name": "", "model_number": "9803", "quantity_tins": 3, "tin_spec": 12}]}}],
       "expect": {
+        "spreadsheets": [{"sheet": "发货单", "cells": {"A5": "9803", "D5": "发货测试产品", "E5": 3, "F5": 12, "G5": 36, "D7": 900}}],
         "returned_records": [{"tool_id": "shipment_orders", "action": "generate", "path": ["total_amount"], "equals": 900}, {"tool_id": "shipment_orders", "action": "generate", "path": ["total_quantity"], "equals": 36}],
         "db_state": [{"entity": "shipment_records", "op": "count", "count": 1, "where": {"purchase_unit": "七彩乐园", "model_number": "9803", "quantity_tins": 3, "tin_spec": 12, "quantity_kg": 36, "amount": 900}}],
         "actions": [{"tool_id": "shipment_orders", "action": "generate"}],

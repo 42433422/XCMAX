@@ -977,3 +977,69 @@ def test_exported_spreadsheet_download_checks_owner_and_file_content(tmp_path, m
     assert _client("someone-else").get(artifact.uri).status_code in {403, 404}
     artifact_path(run.run_id, artifact.artifact_id).write_bytes(b"corrupt")
     assert _client().get(artifact.uri).status_code == 410
+
+
+def test_generated_shipment_download_contains_real_business_cells(tmp_path, monkeypatch):
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.application.agent_orchestrator.run_models import artifact_from_dict
+    from app.db.base import Base
+    from app.db.models import Product, PurchaseUnit
+    from app.infrastructure.tenant_scope import tenant_scope
+    from app.services.tools_workflow_registered_part02_part01 import (
+        _registered_router_shipment_orders,
+    )
+
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path / "data"))
+    engine = create_engine(f"sqlite:///{tmp_path / 'shipment.db'}")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+    monkeypatch.setattr("app.db.session.SessionLocal", factory)
+    monkeypatch.setattr("app.db.SessionLocal", factory)
+    try:
+        with tenant_scope(1):
+            with factory() as db:
+                db.add(PurchaseUnit(unit_name="下载测试客户"))
+                db.add(
+                    Product(name="下载测试产品", model_number="9803", price=25, specification="12")
+                )
+                db.commit()
+            run = AgentRun(user_id="u1", message="生成发货单", status="completed")
+            result = _registered_router_shipment_orders(
+                "generate",
+                {
+                    "unit_name": "下载测试客户",
+                    "products": [
+                        {"model_number": "9803", "quantity_tins": 3, "tin_spec": 12},
+                    ],
+                },
+                {"run_id": run.run_id},
+                "pro_default",
+                run.message,
+            )
+            assert result["success"]
+            run.artifacts = [artifact_from_dict(item) for item in result["artifacts"]]
+            get_agent_run_repository().save(run)
+            response = _client().get(run.artifacts[0].uri)
+            assert response.status_code == 200
+            workbook = load_workbook(BytesIO(response.content), read_only=True, data_only=True)
+            try:
+                sheet = workbook["发货单"]
+                assert "下载测试客户" in sheet["A2"].value
+                assert [sheet[cell].value for cell in ["A5", "D5", "E5", "F5", "G5", "D7"]] == [
+                    "9803",
+                    "下载测试产品",
+                    3,
+                    12,
+                    36,
+                    900,
+                ]
+            finally:
+                workbook.close()
+            assert _client("another-user").get(run.artifacts[0].uri).status_code in {403, 404}
+    finally:
+        engine.dispose()

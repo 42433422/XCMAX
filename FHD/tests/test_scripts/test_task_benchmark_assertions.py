@@ -27,6 +27,13 @@ def test_spreadsheet_assertion_opens_file_and_checks_business_cells(
     ]
     execution = {"run_id": "run_test", "artifacts": [artifact]}
     assert check_spreadsheets(execution, assertions)[0] is accepted
+    assert (
+        check_spreadsheets(
+            execution, [{"sheet": "sales", "cells": {"A2": "测试产品", "B2": 1099}}]
+        )[0]
+        is accepted
+    )
+    assert check_spreadsheets(execution, [{"sheet": "sales", "cells": {"C99": 1099}}])[0] is False
     assert check_spreadsheets({"run_id": "run_test", "artifacts": []}, assertions)[0] is False
 
 

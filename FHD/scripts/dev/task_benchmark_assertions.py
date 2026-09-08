@@ -22,6 +22,17 @@ def check_spreadsheets(execution: dict[str, Any], assertions: list[dict]) -> tup
             try:
                 if assertion["sheet"] not in workbook.sheetnames:
                     continue
+                if "cells" in assertion:
+                    cells = assertion["cells"]
+                    if not cells:
+                        raise ValueError("spreadsheet cell assertions must not be empty")
+                    sheet = workbook[assertion["sheet"]]
+                    accepted = all(
+                        sheet[address].value == expected for address, expected in cells.items()
+                    )
+                    if accepted:
+                        break
+                    continue
                 rows = list(workbook[assertion["sheet"]].values)
                 if not rows or len(rows) - 1 != assertion["count"]:
                     continue

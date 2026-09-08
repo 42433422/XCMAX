@@ -17,6 +17,15 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Generated shipment spreadsheets now become hash-verified run artifacts exposed
+  through the existing owned-task download endpoint and UI action. Only generated
+  `.xlsx` paths inside the shipment output directory are copied. The golden case
+  opens the stored workbook and asserts model/name/3 tins/spec 12/36 total/900
+  amount in actual cells; all three trials retain 22/22 (`shipment-workbook-trials`).
+  A real generation-to-HTTP-download test checks customer and all business cells
+  and rejects another user; 35 route/assertion checks passed. Rendered installed
+  UI and exact-main delivery remain pending, alongside D3/D4.
+
 - Shipment record IDs are now copied while the DB session is open, avoiding
   DetachedInstanceError after the context's final commit/close. A real expiring
   SQLAlchemy-session test verifies the returned ID reads the persisted record.
