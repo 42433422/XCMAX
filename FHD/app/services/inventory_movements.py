@@ -51,6 +51,7 @@ class InventoryMovementsMixin:
                     not isinstance(unit_price, bool)
                     and math.isfinite(unit_price)
                     and unit_price >= 0
+                    and math.isfinite(quantity * unit_price)
                 )
             except (TypeError, ValueError, OverflowError):
                 valid_price = False
@@ -192,6 +193,7 @@ class InventoryMovementsMixin:
                     not isinstance(unit_price, bool)
                     and math.isfinite(unit_price)
                     and unit_price >= 0
+                    and math.isfinite(quantity * unit_price)
                 )
             except (TypeError, ValueError, OverflowError):
                 valid_price = False

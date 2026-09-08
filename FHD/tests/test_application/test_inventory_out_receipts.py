@@ -97,3 +97,11 @@ def test_stock_movement_invalid_price_does_not_open_database(method, price):
         result = getattr(InventoryService(), method)(1, 1, 3, unit_price=price)
     assert not result["success"]
     database.assert_not_called()
+
+
+@pytest.mark.parametrize("method", ["inventory_in", "inventory_out"])
+def test_stock_movement_rejects_overflowing_total_before_database(method):
+    with patch("app.services.inventory_service.get_db") as database:
+        result = getattr(InventoryService(), method)(1, 1, 1e200, unit_price=1e200)
+    assert not result["success"]
+    database.assert_not_called()
