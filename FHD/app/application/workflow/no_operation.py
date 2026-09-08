@@ -16,9 +16,29 @@ _PROHIBITION = re.compile(
 )
 
 
+_RAW_SQL = re.compile(
+    r"\b(?:delete\s+from|insert\s+into|update\s+[\w.]+\s+set|"
+    r"(?:drop|alter|truncate)\s+table|select\s+.+?\s+from)\b",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _requests_raw_sql(text: str) -> bool:
+    match = _RAW_SQL.search(text)
+    if match is None:
+        return False
+    prefix = text[: match.start()].strip(" `\n\t")
+    return not prefix or bool(re.search(r"执行|运行|\b(?:execute|run)\b", prefix, re.IGNORECASE))
+
+
 def no_operation_plan(plan_id: str, message: str) -> PlanGraph | None:
     text = str(message or "").strip()
-    if is_standalone_greeting(text):
+    if _requests_raw_sql(text):
+        reason = "unsupported_raw_sql"
+        response = (
+            "当前业务工作流不执行原始 SQL。请说明具体业务操作和目标记录，本次未执行数据库操作。"
+        )
+    elif is_standalone_greeting(text):
         reason, response = "greeting", "你好，请告诉我需要办理什么业务。"
     elif _PROHIBITION.fullmatch(text):
         reason, response = "explicit_prohibition", "收到，本次不执行业务操作。"

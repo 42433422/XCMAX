@@ -1,0 +1,10 @@
+{
+  "source_sha": "a306e7267ed83c7f759989e16bb73537704b4681",
+  "modified_sources": {
+    "app/application/workflow/no_operation.py": "b0a9b684b76a5a0f2564f76f695c0b5b4320f5da5d08271fa6b85c7cf9e8b52b"
+  },
+  "dataset_sha256": "c70d172191e4f583935302d5c5d2968524f557c3d9aadc295c15eeb72283602b",
+  "passed": 9,
+  "total": 22,
+  "scope": "Single isolated SQLite fallback trial. Raw SQL routing rejection, not complete SQL syntax security or production/installed acceptance."
+}

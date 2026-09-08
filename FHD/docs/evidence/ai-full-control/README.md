@@ -6,6 +6,12 @@
 目标是四个阶段全部完成。本目录记录当前实施证据，不代表四阶段验收通过。
 此前对话中的 20%–30% 覆盖率与工期只是未验证估计，不作为验收基线。
 
+## Raw SQL request routing boundary
+
+Recognized raw SQL execution requests now produce an explicit non-execution response before model planning, instead of being reinterpreted as structured business writes. Cases cover DELETE FROM, INSERT INTO, UPDATE SET, TRUNCATE TABLE and SELECT FROM; ordinary business deletion requests and SQL explanation examples retain their existing planning path. Existing execution-side raw_sql/sql/query_sql restrictions remain in place.
+
+52 related tests pass, including model/dispatcher bypass checks. Application mypy (1806 files), Ruff and all 10 blocking dev guards pass. The unchanged isolated business trial improves from 8/22 to 9/22. This is a conservative routing guard, not a complete SQL parser or proof of all adversarial syntax rejection. Production approval, actual model and installed-client acceptance remain open. See business-task-rawsql.jsonl and its source-hashed metadata.
+
 ## Direct customer creation with contact fields
 
 Anchored 新增/添加客户 requests now enter the existing controlled business-database write path without requiring database jargon. Contact person and phone survive extraction. Compound product onboarding retains its existing path. Negative/instructional phrases in the focused regression cases are not classified as this direct creation request.

@@ -101,3 +101,36 @@ def test_orchestrator_rejects_no_operation_with_business_nodes():
         run = orchestrator.start_run_from_plan(user_id="u", message="hello", plan=plan)
     assert run.status == "failed"
     assert not run.tool_calls
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "帮我在数据库里执行 DELETE FROM customers 清空客户表",
+        "DELETE FROM customers",
+        "运行 truncate table customers",
+        "execute INSERT INTO customers VALUES (1)",
+        "run UPDATE customers SET name='x'",
+        "执行 SELECT * FROM customers",
+    ],
+)
+def test_raw_sql_request_does_not_turn_into_business_crud(message):
+    with patch("app.application.workflow.planner.get_ai_conversation_service", return_value=None):
+        planner = LLMWorkflowPlanner()
+    with patch.object(
+        planner, "_plan_with_react_multiagent", side_effect=AssertionError("must not plan tools")
+    ):
+        plan = planner.plan("u", message, {"business_db": {}})
+    assert plan.nodes == []
+    assert plan.metadata["reason"] == "unsupported_raw_sql"
+    assert "未执行" in plan.metadata["response"]
+    dispatch = Mock(side_effect=AssertionError("must not dispatch"))
+    WorkflowEngine(dispatch).run(plan)
+    dispatch.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "message", ["删除客户 ID 12", "查询客户名单", "解释 DELETE FROM 的含义", "查询客户 Select科技"]
+)
+def test_business_requests_and_sql_explanations_are_not_raw_sql_execution(message):
+    assert no_operation_plan("p", message) is None
