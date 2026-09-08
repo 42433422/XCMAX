@@ -139,7 +139,7 @@ class InventoryMovementsMixin:
                     before_quantity=float(ledger.quantity) - quantity,
                     after_quantity=float(ledger.quantity),
                     unit_price=unit_price,
-                    total_amount=quantity * unit_price if unit_price else None,
+                    total_amount=quantity * unit_price if unit_price is not None else None,
                     reference_type=reference_type,
                     reference_id=reference_id,
                     transaction_date=now,

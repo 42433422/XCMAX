@@ -32,7 +32,13 @@ def test_workbook_preserves_customer_and_measurement_as_separate_columns(
     from sqlalchemy.orm import sessionmaker
 
     from app.db.base import Base
-    from app.db.models import InventoryLedger, Product, PurchaseUnit, Warehouse
+    from app.db.models import (
+        InventoryLedger,
+        InventoryTransaction,
+        Product,
+        PurchaseUnit,
+        Warehouse,
+    )
     from app.db.models.customer_product_link import CustomerProductLink
     from app.infrastructure.tenant_scope import tenant_scope
     from app.services.inventory_service import InventoryService
@@ -88,10 +94,13 @@ def test_workbook_preserves_customer_and_measurement_as_separate_columns(
         )
         assert result["success"], result
         repeated = InventoryService().inventory_in(
-            product_id=product_id, warehouse_id=1, quantity=2, requested_unit="桶"
+            product_id=product_id, warehouse_id=1, quantity=2, requested_unit="桶", unit_price=0
         )
         assert repeated["success"], repeated
     with factory() as db:
         ledger = db.query(InventoryLedger).one()
         assert ledger.unit == "桶" and float(ledger.quantity) == 5
+        receipts = db.query(InventoryTransaction).order_by(InventoryTransaction.id).all()
+        assert receipts[0].unit_price is None and receipts[0].total_amount is None
+        assert float(receipts[1].unit_price) == 0 and float(receipts[1].total_amount) == 0
     engine.dispose()
