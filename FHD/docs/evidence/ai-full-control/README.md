@@ -6,6 +6,14 @@
 目标是四个阶段全部完成。本目录记录当前实施证据，不代表四阶段验收通过。
 此前对话中的 20%–30% 覆盖率与工期只是未验证估计，不作为验收基线。
 
+## Verified catalog download increment
+
+The download endpoint now returns the explicitly requested public Catalog ZIP after package, trusted signature and identity verification. Login and workspace identity are required. The shared fetch is bounded to 64 MiB and 30 seconds; temporary files are removed on success and rejection. No install or initialization occurs. AI api_call exports the ZIP into the current account's private artifact store; another account cannot read it.
+
+290 related tests passed using real temporary Ed25519 ZIPs, isolated SQL/login, HTTP and AI export readback. Catalog transport is simulated; this is not live Catalog or installed-client acceptance. Runtime inventory: 5 tests passed, 1013 unique readable operations, no duplicate or detected static shadow. Application mypy, Ruff and all 10 blocking dev guards passed. Rating, deletion, remaining capabilities and full four-stage acceptance remain outstanding.
+
+Mainline sync included be51a83a2 (#1810, two metric JSON files only). PR #1804 remains unmerged. The prior head CI reports failures in SSOT Drift Gate and backend-smoke; both traced to the manifest version comparison refactor removing the current_version anchor. Restored the named version assignment without changing its value or comparison behavior; the exact version-anchor checker and workflow-copy verification now pass locally. New remote checks remain pending.
+
 ## 实测与本次改动
 
 构建身份回读增量：原生 get-app-identity 分别读取桌面 build-info.json 与 backend/build-info.json，返回来源、有效性、完整 SHA 和产品版本，分别判断 SHA/版本一致性。缺失不借用另一组件身份，损坏、超限和相互冲突的 SHA 别名明确无效；开发环境身份单独标记。AI 既有 desktop_info 接收完整身份对象。真实临时文件覆盖一致、不一致、缺失、损坏和开发模式，相关桌面回归 82 项与 TypeScript 类型检查通过，工程 10 项阻断守卫通过。该信息仅是随包元数据声明，不证明签名可信、正在运行的后端身份、安装升级完成或实际客户端验收。

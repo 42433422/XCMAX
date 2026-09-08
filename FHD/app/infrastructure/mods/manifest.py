@@ -240,7 +240,8 @@ def validate_dependencies(
 def _check_xcagi_version(version_spec: str) -> bool:
     from .version_constraints import version_satisfies
 
-    return version_satisfies("1.0.0.1", version_spec)
+    current_version = "1.0.0.1"
+    return version_satisfies(current_version, version_spec)
 
 
 def _compare_versions(v1: str, v2: str) -> int:
