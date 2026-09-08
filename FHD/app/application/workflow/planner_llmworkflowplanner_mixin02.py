@@ -235,25 +235,8 @@ class _LLMWorkflowPlannerPart02Mixin:
         if not nodes and (
             ("添加" in message or "新增" in message or "create" in lower) and "产品" in message
         ):
-            intent = "add_product_to_unit"
-            todo = [
-                "意图分析：识别产品新增任务",
-                "全局检查单位是否存在",
-                "单位不存在则先创建",
-                "新增产品并绑定单位",
-                "返回执行明细",
-            ]
-            if "customers" in tool_registry:
-                nodes.append(
-                    _facade().WorkflowNode(
-                        node_id="check_or_create_unit",
-                        tool_id="customers",
-                        action="ensure_exists",
-                        params={},
-                        risk="medium",
-                        description="确保客户存在",
-                    )
-                )
+            intent = "create_product"
+            todo = ["补齐产品信息", "确认后新增产品", "返回执行结果"]
             if "products" in tool_registry:
                 nodes.append(
                     _facade().WorkflowNode(
@@ -263,7 +246,6 @@ class _LLMWorkflowPlannerPart02Mixin:
                         params={},
                         risk="medium",
                         description="创建产品",
-                        depends_on=["check_or_create_unit"] if nodes else [],
                     )
                 )
         if not nodes and any(k in message for k in ("删除", "移除", "删掉", "delete", "del")):

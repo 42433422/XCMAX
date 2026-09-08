@@ -34,3 +34,14 @@ def test_labelled_product_creates_no_customer(text):
 )
 def test_incomplete_or_compound_requests_remain_for_planning(text):
     assert direct_product_create_node(text) is None
+
+
+def test_incomplete_product_request_has_no_customer_write_dependency():
+    with patch("app.application.workflow.planner.get_ai_conversation_service", return_value=None):
+        planner = LLMWorkflowPlanner()
+    plan = planner._fallback_plan("p", "帮我新增一个产品", get_workflow_tool_registry())
+    assert validate_plan_graph(plan) is None
+    assert all(node.tool_id != "customers" for node in plan.nodes)
+    products = [node for node in plan.nodes if node.tool_id == "products"]
+    assert len(products) == 1 and products[0].action == "create"
+    assert any(node.tool_id == "clarify" for node in plan.nodes)
