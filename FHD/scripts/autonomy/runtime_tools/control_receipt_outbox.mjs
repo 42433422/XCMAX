@@ -1,6 +1,6 @@
 /** Minimal progress spool. Remove only after the server acknowledges the event. */
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const canonical = (row) => JSON.stringify(Object.fromEntries(Object.entries(row).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)));
@@ -98,4 +98,26 @@ export function createParaReportOutbox({ directory, url, token, enabled, fetcher
     } finally { draining = false; }
   }
   return { bind, handles, record, drain, claimExecution };
+}
+
+
+/** Local managed login for legacy merge paths; credentials never enter model prompts. */
+export async function requestManagedParaSession({ apiBase, credentialFile, fetchImpl = fetch }) {
+  let credentials;
+  try {
+    if (statSync(credentialFile).mode & 0o077) throw new Error('permissions');
+    credentials = JSON.parse(readFileSync(credentialFile, 'utf8'));
+    if (!credentials.email || !credentials.password || !credentials.owner_id) throw new Error('identity');
+  } catch { throw new Error('managed_para_credentials_unavailable'); }
+  const response = await fetchImpl(`${apiBase}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: credentials.email, password: credentials.password }),
+  });
+  if (!response.ok) throw new Error(`para auth ${response.status}`);
+  const body = await response.json();
+  if (!body?.token || typeof body.token !== 'string' || body.user?.id !== credentials.owner_id) {
+    throw new Error('para_session_identity_mismatch');
+  }
+  return body.token;
 }

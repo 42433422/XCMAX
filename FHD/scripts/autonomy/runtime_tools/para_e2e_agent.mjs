@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
 import { probeTools } from './tool_preflight.mjs';
-import { createReceiptOutbox, createParaReportOutbox } from './control_receipt_outbox.mjs';
+import { createReceiptOutbox, createParaReportOutbox, requestManagedParaSession } from './control_receipt_outbox.mjs';
 import { sourceIdentity } from './control_git_handoff.mjs';
 import {
   describeCodexFailure,
@@ -438,11 +438,18 @@ async function postTaskReport(task, { progress = 0, status = 'running', content,
 }
 
 // 任务完成后，把 workspace_path 上报给 Para API，让 merge-worker 能找到工作区入队 merge。
-// 用 guest token 调 /api/tasks/:id/request-merge（device token 只能调 /me/* 路径）。
+// 受管部署用所有者登录；仅旧环境保留 guest（设备令牌不能申请合并）。
 let cachedGuestToken = '';
 let cachedGuestTokenAt = 0;
 async function getGuestToken() {
   if (cachedGuestToken && Date.now() - cachedGuestTokenAt < 5 * 60 * 1000) return cachedGuestToken;
+  if (process.env.DEVFLEET_PARA_CREDENTIALS_FILE) {
+    cachedGuestToken = await requestManagedParaSession({
+      apiBase, credentialFile: process.env.DEVFLEET_PARA_CREDENTIALS_FILE,
+    });
+    cachedGuestTokenAt = Date.now();
+    return cachedGuestToken;
+  }
   const resp = await fetch(`${apiBase}/api/auth/guest`, { method: 'POST' });
   if (!resp.ok) throw new Error(`guest auth failed: ${resp.status}`);
   const body = await resp.json();
