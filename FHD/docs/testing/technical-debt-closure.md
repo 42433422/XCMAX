@@ -19,6 +19,17 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Mobile access JWTs already carry a signed session_id. Agent Mod binding now
+  receives that field only after verify_mobile_jwt/access-type validation rather
+  than treating the full Bearer JWT as a database session key. A signed-token
+  regression reproduced the prior valid-token 403 (`mobile-mod-before`). Valid
+  token-only mobile Mod requests now bind; refresh-as-access, tampered signature,
+  signed owner/session mismatch and expired session deny. No token is persisted
+  in the binding. All 61 mobile binding/route/real Mod dispatcher checks pass
+  (`mobile-mod-final`). Web stateless tokens have no equivalent session claim;
+  their durable authorization contract and mobile tenant derivation remain to
+  complete before claiming full client compatibility.
+
 - The three-database inventory test now starts the actual AgentTaskDispatcher
   inside a new process, with default host run/queue repositories and the real
   orchestrator/executor/business guard. An already-approved persisted task writes

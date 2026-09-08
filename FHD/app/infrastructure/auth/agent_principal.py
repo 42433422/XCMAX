@@ -21,7 +21,9 @@ class AgentPrincipal:
     mod_authorization: dict[str, Any] | None = None
 
 
-def _bind_mod(request: Request, principal: AgentPrincipal) -> AgentPrincipal:
+def _bind_mod(
+    request: Request, principal: AgentPrincipal, *, verified_session_id: str | None = None
+) -> AgentPrincipal:
     from app.infrastructure.auth.agent_mod_scope import (
         AgentModAuthorizationError,
         bind_agent_mod_scope,
@@ -34,7 +36,9 @@ def _bind_mod(request: Request, principal: AgentPrincipal) -> AgentPrincipal:
         return principal
     try:
         binding = bind_agent_mod_scope(
-            session_id=session_id_from_request(request), user_id=principal.user_id, mod_id=mod_id
+            session_id=(verified_session_id if verified_session_id is not None
+                        else session_id_from_request(request)),
+            user_id=principal.user_id, mod_id=mod_id,
         )
     except AgentModAuthorizationError as exc:
         raise HTTPException(status_code=403, detail={"code": "MOD_NOT_ENTITLED", "message": str(exc)}) from exc
@@ -94,7 +98,7 @@ def require_agent_principal(
                 username=str(payload.get("username") or ""),
                 tenant_id=str(payload.get("tenant_id") or ""),
                 is_admin=str(payload.get("account_kind") or "").lower() == "admin",
-            ))
+            ), verified_session_id=str(payload.get("session_id") or ""))
 
     # Explicitly test-only. Production cannot trust a caller-controlled identity header.
     if _test_header_enabled() and str(x_user_id or "").strip():
