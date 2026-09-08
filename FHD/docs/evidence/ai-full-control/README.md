@@ -6,6 +6,12 @@
 目标是四个阶段全部完成。本目录记录当前实施证据，不代表四阶段验收通过。
 此前对话中的 20%–30% 覆盖率与工期只是未验证估计，不作为验收基线。
 
+## Approval recheck after candidate clarification
+
+After candidate selection resolves an operation target, chat continuation now rechecks the configured approval service. Required approvals create a normal pending workflow with resolved parameters and clarification answers, rather than immediately resuming the engine. Selection of a record is no longer treated as approval of the operation. When policy reports no approval requirement, the existing continuation remains available.
+
+24 related tests pass, including the actual continuation method with a trapped execution call and a controlled approval policy. Application mypy (1808 files), Ruff and all 10 blocking dev guards pass. This verifies the transition to pending approval, not the entire approval round trip or production persistence; those services are mocked in this check. Ordinary missing-field parsing and full approval/resume acceptance remain open. Business score remains the prior measured 10/22.
+
 ## Chat clarification node reuse
 
 Chat entry now reuses a matching planned clarify.ask node (same target and question), updates its answer key to the missing field, and stores that same node ID in runtime context and pending state. If no matching node exists, it creates one as before.

@@ -334,6 +334,15 @@ class _AIChatApplicationServicePart03Mixin:
         target.params.pop("candidates", None)
         target.params.pop("_candidates", None)
         runtime_ctx["_clarify_answers"] = {clarify_node_id: {"confirmed": True, **confirmed}}
+        from app.application.workflow.clarification_approval import (
+            require_approval_after_clarification,
+        )
+
+        approval_response = require_approval_after_clarification(
+            self, user_id, plan, runtime_ctx, str(pending.get("thinking_steps") or "")
+        )
+        if approval_response is not None:
+            return approval_response
         self._pending_workflows.pop(user_id, None)
         (run_result, state_updates) = self._run_workflow_with_state_updates(
             plan=plan, runtime_context=runtime_ctx, max_retries=1, resume=True
