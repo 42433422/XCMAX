@@ -216,6 +216,7 @@ def _registered_router_products(
                 "unit_price": price,
                 "price": price,
                 "unit": measure_unit,
+                "measurement_unit": measure_unit,
             }
         )
         if create_result.get("success"):

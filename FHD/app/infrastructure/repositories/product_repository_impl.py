@@ -222,6 +222,7 @@ class SQLAlchemyProductRepository(ProductRepository, ProductExportMixin):
                     category=item.get("category"),
                     brand=item.get("brand"),
                     unit=item.get("unit", "个"),
+                    measurement_unit=item.get("measurement_unit"),
                     is_active=item.get("is_active", 1),
                     created_at=datetime.now(),
                     updated_at=datetime.now(),
@@ -275,6 +276,9 @@ class SQLAlchemyProductRepository(ProductRepository, ProductExportMixin):
                     has_update = True
                 if "unit" in data:
                     product.unit = data["unit"]
+                    has_update = True
+                if "measurement_unit" in data:
+                    product.measurement_unit = data["measurement_unit"]
                     has_update = True
                 if "is_active" in data:
                     product.is_active = data["is_active"]
