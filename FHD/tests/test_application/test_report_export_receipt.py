@@ -62,12 +62,46 @@ def test_export_without_identity_never_generates_file():
 
 
 def test_export_uses_successful_query_output_and_rejects_missing_source(tmp_path, monkeypatch):
+    from datetime import datetime
     from unittest.mock import patch
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
 
     from app.application.workflow.engine import WorkflowEngine
     from app.application.workflow.planner import LLMWorkflowPlanner
+    from app.db.base import Base
+    from app.db.models import SalesOrder, SalesOrderItem
     from app.services.tools_execution.registry import get_workflow_tool_registry
 
+    engine = create_engine(f"sqlite:///{tmp_path / 'sales.sqlite'}")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+    with factory.begin() as db:
+        for ident, tenant, amount in [(1, 3, 51), (2, 4, 900)]:
+            db.add(
+                SalesOrder(
+                    id=ident,
+                    tenant_id=tenant,
+                    order_no=str(ident),
+                    created_at=datetime.now(),
+                    total_amount=amount,
+                    state="confirmed",
+                )
+            )
+            db.flush()
+            db.add(
+                SalesOrderItem(
+                    tenant_id=tenant, order_id=ident, product_name="A100", quantity=2, amount=amount
+                )
+            )
+
+    @contextmanager
+    def database():
+        with factory() as db:
+            yield db
+
+    monkeypatch.setattr("app.services.report_service.get_db", database)
     monkeypatch.setattr("app.application.aiopen.api_artifacts._root", lambda: tmp_path)
     with patch("app.application.workflow.planner.get_ai_conversation_service", return_value=None):
         planner = LLMWorkflowPlanner()
@@ -86,8 +120,6 @@ def test_export_uses_successful_query_output_and_rejects_missing_source(tmp_path
         assert current_execution_actor() == "7"
         assert current_tenant_id() == 3
         calls.append(action)
-        if action == "sales_summary":
-            return {"success": True, "data": [{"product": "A100", "amount": 51}]}
         return _registered_router_reports(action, params, params["_runtime_context"], "normal", "")
 
     with execution_actor_scope("7"), tenant_scope(3):
@@ -102,5 +134,6 @@ def test_export_uses_successful_query_output_and_rejects_missing_source(tmp_path
     service.export_to_excel.assert_not_called()
     payload = next(tmp_path.glob("*.bin")).read_bytes()
     workbook = load_workbook(BytesIO(payload))
-    assert list(workbook.active.values) == [("product", "amount"), ("A100", 51)]
+    assert list(workbook.active.values) == [("product_name", "quantity", "amount"), ("A100", 2, 51)]
     workbook.close()
+    engine.dispose()
