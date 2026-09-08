@@ -3,7 +3,6 @@
 import hashlib
 import json
 import mimetypes
-import os
 import re
 import time
 import uuid
@@ -138,15 +137,12 @@ def read_api_export(artifact_id: str) -> tuple[bytes, dict[str, Any]]:
     if not re.fullmatch(r"[a-f0-9]{32}", artifact_id):
         raise ApiArtifactError("导出文件不存在或已失效")
     root = _root()
-    root_path = os.path.abspath(root)
-    manifest_path = os.path.abspath(os.path.join(root_path, f"{artifact_id}.json"))
-    payload_path = os.path.abspath(os.path.join(root_path, f"{artifact_id}.bin"))
-    if (
-        os.path.commonpath([root_path, manifest_path]) != root_path
-        or os.path.commonpath([root_path, payload_path]) != root_path
-    ):
+    # Resolve only paths enumerated from the private directory. The supplied
+    # identifier is compared as data and never becomes part of a filesystem path.
+    manifest = next((path for path in root.glob("*.json") if path.stem == artifact_id), None)
+    payload = next((path for path in root.glob("*.bin") if path.stem == artifact_id), None)
+    if manifest is None or payload is None:
         raise ApiArtifactError("导出文件不存在或已失效")
-    manifest, payload = Path(manifest_path), Path(payload_path)
     if manifest.is_symlink() or payload.is_symlink():
         raise ApiArtifactError("导出文件不可用")
     try:
