@@ -171,10 +171,10 @@ def _tool_api_call(app: _facade().Any, args: dict[str, _facade().Any]) -> dict[s
         authorized_api_request,
         local_api_path,
     )
+    from app.application.aiopen.api_request_body import ApiBodyError, api_request_body
 
     raw_path = str(args.get("path") or "").strip()
     method = str(args.get("method") or "GET").upper()
-    body = args.get("body", {})
     if not raw_path:
         return {"success": False, "message": "path 不能为空"}
     if method not in _facade()._API_CALL_METHODS:
@@ -183,10 +183,6 @@ def _tool_api_call(app: _facade().Any, args: dict[str, _facade().Any]) -> dict[s
             "message": f"不支持的 method：{method}",
             "code": "METHOD_NOT_ALLOWED",
         }
-    try:
-        _facade().json.dumps(body, allow_nan=False)
-    except (TypeError, ValueError):
-        return {"success": False, "code": "INVALID_API_BODY", "message": "body 必须是有效 JSON"}
     try:
         routing_path = local_api_path(raw_path)
     except ValueError:
@@ -215,19 +211,14 @@ def _tool_api_call(app: _facade().Any, args: dict[str, _facade().Any]) -> dict[s
                 csrf = client.cookies.get("csrf_token")
                 if csrf:
                     headers["X-CSRF-Token"] = str(csrf)
-            if method == "GET" and "body" not in args:
-                resp = client.get(raw_path, headers=headers)
-            elif method == "DELETE" and "body" not in args:
-                resp = client.delete(raw_path, headers=headers)
-            elif body is None:
-                resp = client.request(
-                    method,
-                    raw_path,
-                    content=b"null",
-                    headers={**headers, "Content-Type": "application/json"},
-                )
+            options = api_request_body(args)
+            request_headers = {**headers, **options.pop("headers", {})}
+            if not options and method == "GET":
+                resp = client.get(raw_path, headers=request_headers)
+            elif not options and method == "DELETE":
+                resp = client.delete(raw_path, headers=request_headers)
             else:
-                resp = client.request(method, raw_path, json=body, headers=headers)
+                resp = client.request(method, raw_path, headers=request_headers, **options)
             try:
                 status_code = int(resp.status_code)
             except (TypeError, ValueError):
@@ -256,6 +247,8 @@ def _tool_api_call(app: _facade().Any, args: dict[str, _facade().Any]) -> dict[s
                 "data": data,
                 "execution_scope": scope,
             }
+    except ApiBodyError as exc:
+        return {"success": False, "code": "INVALID_API_BODY", "message": str(exc)}
     except ApiArtifactError as exc:
         return {"success": False, "code": "API_EXPORT_FAILED", "message": str(exc)}
     except (ApiExecutionError, TaskModScopeError) as exc:

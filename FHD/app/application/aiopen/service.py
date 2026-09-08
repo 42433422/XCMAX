@@ -185,6 +185,30 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 "body": {
                     "description": "JSON 请求体，按接口协议原样发送；支持对象、数组及 JSON 标量，不自动添加业务字段。",
                 },
+                "form": {
+                    "type": "object",
+                    "description": "表单字段，值为字符串或字符串列表；保留重复字段和空值。与 body 互斥。",
+                    "additionalProperties": {
+                        "anyOf": [
+                            {"type": "string"},
+                            {"type": "array", "items": {"type": "string"}},
+                        ],
+                    },
+                },
+                "files": {
+                    "type": "array",
+                    "maxItems": 16,
+                    "description": "multipart 附件：使用本账号有效导出回执的 artifact_id；重新核验源 Mod 权益。总大小最多 64 MiB，不接受本机路径、URL 或内容。与 body 互斥。",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "field": {"type": "string", "minLength": 1},
+                            "artifact_id": {"type": "string", "pattern": "^[a-f0-9]{32}$"},
+                        },
+                        "required": ["field", "artifact_id"],
+                        "additionalProperties": False,
+                    },
+                },
                 "mod_id": {
                     "type": "string",
                     "description": "目标 Mod；省略继承当前请求，空字符串选择宿主。执行前重新验证账号权益。",
