@@ -905,7 +905,10 @@ class TestPublishWithRedisBridge:
         ev = _make_event()
         bus.publish(ev)
         await asyncio.sleep(0.05)
-        fake_bridge.publish_remote.assert_called_once_with(ev)
+        fake_bridge.publish_remote.assert_called_once()
+        published = fake_bridge.publish_remote.call_args.args[0]
+        assert published is not ev  # Each local queue entry owns its identity.
+        assert published.to_dict() == ev.to_dict()
         bus._redis_bridge = None  # remove before stop to avoid stop() calling .stop()
         await bus.stop()
 

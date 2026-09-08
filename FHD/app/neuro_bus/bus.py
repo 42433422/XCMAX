@@ -334,60 +334,9 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
             self._rel_tracer.end_span(sid, SpanStatus.ERROR if any_failed else SpanStatus.OK)
 
     async def _call_handler(self, subscription: HandlerSubscription, event: NeuroEvent) -> bool:
-        """调用处理器；返回是否成功（无异常）。"""
-        if self._rel_circuit is not None and not self._rel_circuit.can_execute():
-            logger.warning("NeuroBus circuit open; skipping handler for %s", event.event_type)
-            return False
+        from app.neuro_bus.bus_dispatch import call_handler
 
-        async def _invoke() -> None:
-            if subscription.is_async:
-                await subscription.handler(event)
-            else:
-                from contextvars import copy_context
-
-                await asyncio.get_running_loop().run_in_executor(
-                    self._executor, copy_context().run, subscription.handler, event
-                )
-
-        retry_count = 0
-        try:
-            if self._rel_retry_handler is not None:
-                domain = event.metadata.domain or "default"
-                retry_handler = self._rel_retry_handler.get_handler(domain)
-                try:
-                    await retry_handler.execute(
-                        _invoke,
-                        operation_name=getattr(subscription.handler, "__name__", "handler"),
-                    )
-                except RECOVERABLE_ERRORS:
-                    retry_count = retry_handler._config.max_retries  # noqa: SLF001
-                    raise
-            else:
-                await _invoke()
-            subscription.record_call(success=True)
-            if self._rel_circuit is not None:
-                self._rel_circuit.record_success()
-
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("Handler error for event %s: %s", event, e)
-            subscription.record_call(success=False)
-            self._error_count += 1
-            if self._rel_circuit is not None:
-                self._rel_circuit.record_failure()
-            if self._dlq_integration is not None:
-                try:
-                    self._dlq_integration.handle_failure(
-                        event,
-                        e,
-                        retry_count=retry_count,
-                        handler_name=getattr(subscription.handler, "__name__", None),
-                    )
-                    record_delivery_metric(self._enable_metrics, "dead_lettered")
-                except RECOVERABLE_ERRORS as dlq_exc:
-                    logger.exception("NeuroBus DLQ enqueue failed: %s", dlq_exc)
-                    record_delivery_metric(self._enable_metrics, "lost")
-            return False
-        return True
+        return await call_handler(self, subscription, event)
 
     def _preflight_publish(self, event: NeuroEvent) -> bool:
         if self._rel_dedup is not None:
