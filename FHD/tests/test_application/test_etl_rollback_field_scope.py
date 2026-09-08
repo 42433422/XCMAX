@@ -278,3 +278,23 @@ def test_aggregate_rollback_removes_created_products_before_created_customer(db)
     assert db.query(Product).count() == 0
     assert db.query(PurchaseUnit).count() == 0
     assert [row.execution_status for row in rows] == ["rolled_back", "rolled_back"]
+
+
+def test_aggregate_rollback_preserves_preexisting_explicit_link(db):
+    from app.application.customer_product_links import ensure_customer_product_link
+    from app.db.models.customer_product_link import CustomerProductLink
+
+    customer, product = seed_business_rows(db)
+    link, created = ensure_customer_product_link(db, customer.id, product.id)
+    assert created
+    link_id = link.id
+    db.commit()
+    receipt = apply_import(db, "customer_products", customer)
+    assert receipt["after"]["_etl"]["link_created"] is False
+    assert receipt["after"]["_etl"]["link_id"] == link_id
+    get_adapter("customer_products").rollback_row(db, **receipt)
+    db.commit()
+    assert db.get(CustomerProductLink, link_id) is not None
+    assert db.query(CustomerProductLink).count() == 1
+    assert product.price == Decimal("10")
+    assert customer.contact_phone == "100"
