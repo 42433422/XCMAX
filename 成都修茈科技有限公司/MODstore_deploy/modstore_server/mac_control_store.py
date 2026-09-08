@@ -83,18 +83,14 @@ def accept(db: Session, *, actor: str, key: str, request: dict) -> MacControlTas
         db.commit()
     except IntegrityError:
         db.rollback()
-        existing = (
-            db.query(MacControlTask).filter_by(actor=actor, request_key=key).one()
-        )
+        existing = db.query(MacControlTask).filter_by(actor=actor, request_key=key).one()
         if existing.request_digest != checksum:
             raise ValueError("相同请求标识不能提交不同内容") from None
         return existing
     return task
 
 
-def acquire(
-    db: Session, task_id: str, now: float | None = None
-) -> MacControlTask | None:
+def acquire(db: Session, task_id: str, now: float | None = None) -> MacControlTask | None:
     now = time.time() if now is None else now
     changed = (
         db.query(MacControlTask)

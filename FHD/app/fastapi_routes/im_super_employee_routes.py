@@ -55,8 +55,13 @@ async def codex_super_employee_invoke(
         if denied is not None:
             return denied
         if isinstance(body.get("durable_request"), dict):
+            from app.application.execution_scope import CapabilityGrant
             from app.fastapi_routes.mac_control_proxy import proxy
 
+            if not CapabilityGrant.resolve(_facade().factory_context()).is_factory:
+                return _facade().JSONResponse(
+                    {"success": False, "message": "工厂执行能力尚未配置"}, status_code=403
+                )
             payload = dict(body["durable_request"])
             payload["message"] = str(body.get("message") or "").strip()
             return await proxy(request, "POST", "tasks", payload)

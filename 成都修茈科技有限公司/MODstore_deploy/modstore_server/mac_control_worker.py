@@ -50,9 +50,7 @@ def observe(db, client, now):
 def reconcile(db, task, client):
     if not task.para_task_id:
         marker = f"[xcmax:{task.id}:{task.attempt_id}]"
-        found = [
-            t for t in client.tasks() if str(t.get("title", "")).startswith(marker)
-        ]
+        found = [t for t in client.tasks() if str(t.get("title", "")).startswith(marker)]
         if len(found) != 1:
             transition(
                 db,
@@ -85,8 +83,9 @@ def process(db, task, client, devices):
         return
     request = json.loads(task.request_json)
     from modstore_server.mac_control_facts import context_facts
+    from modstore_server.mac_control_preflight import prepare_windows_probe
 
-    facts = context_facts(db, request)
+    prepare_windows_probe(db, client, devices, request)
     device, reason = choose_device(devices, request, time.time())
     if not device:
         transition(db, task, "waiting_device", reason)
@@ -105,6 +104,7 @@ def process(db, task, client, devices):
     if busy:
         transition(db, task, "waiting_device", "workspace_reserved")
         return
+    facts = context_facts(db, request)
     task.device_id, task.attempt_id = device["id"], uuid.uuid4().hex
     transition(db, task, "dispatching")  # commit before network mutation
     marker = f"[xcmax:{task.id}:{task.attempt_id}]"
@@ -122,8 +122,7 @@ def process(db, task, client, devices):
             "你是 XCMAX 的 Mac 主控执行助手。以下是已授权请求和来源上下文。"
             "仅在隔离工作区工作，先核实事实；执行到现有审批点，禁止绕过审批、"
             "自动合并、生产发布、对外发送消息或改变客户授权。"
-            "结果须区分代码、测试、主线、发布和客户验收，缺少证据明确标记。\n"
-            + encoded(context)
+            "结果须区分代码、测试、主线、发布和客户验收，缺少证据明确标记。\n" + encoded(context)
         ),
         "repo_url": os.environ.get("MODSTORE_PARA_REPO_URL", ""),
         "branch": request.get("source_sha") or "main",
@@ -168,9 +167,9 @@ def run_mac_control_sync():
         return _sync(factory)
     finally:
         with factory() as db:
-            db.query(MacControlSyncLease).filter_by(
-                id="dispatcher", owner=owner
-            ).update({"until": 0})
+            db.query(MacControlSyncLease).filter_by(id="dispatcher", owner=owner).update(
+                {"until": 0}
+            )
             db.commit()
 
 
@@ -179,9 +178,7 @@ def _sync(factory):
         client = ParaClient()
     except ParaUnavailable as exc:
         with factory() as db:
-            row = db.get(MacControlObservation, "para") or MacControlObservation(
-                id="para"
-            )
+            row = db.get(MacControlObservation, "para") or MacControlObservation(id="para")
             row.checked_at, row.error = time.time(), str(exc)
             db.add(row)
             db.commit()

@@ -9,6 +9,7 @@ export interface ControlTask {
   updated_at: number
   execution: { status?: string; merge_commit_sha?: string; subtasks?: Array<{ id: string; device_name: string; status: string }> }
   delivery: { status: string }
+  facts?: { source: string; observed_at: number; tickets: Array<{ id: number; title: string; status: string; resolution: { state?: string }; receipt_counts: { install_receipts: number; receipt_events: number } }> }
 }
 export interface Fleet {
   enabled: boolean
@@ -32,9 +33,9 @@ export const readTasks = () => json<{ tasks: ControlTask[] }>(`${base}/tasks`)
 export const readTask = (id: string) => json<{ task: ControlTask; events: Array<{ id: number; state: string; created_at: number }> }>(`${base}/tasks/${encodeURIComponent(id)}`)
 export const readCustomerFacts = (id: number) => json<{ source: string; observed_at: number; deliveries: unknown[] }>(`${base}/facts?customer_id=${id}`)
 export const cancelTask = (id: string) => json(`${base}/tasks/${encodeURIComponent(id)}/cancel`, { method: 'POST' })
-export const submitControlTask = (message: string, requestKey: string, target: string, mode: string) => json<{ task: ControlTask }>(
+export const submitControlTask = (message: string, requestKey: string, target: string, mode: string, ticketId?: number) => json<{ task: ControlTask }>(
   '/api/admin/codex-super-employee/messages', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, durable_request: { request_key: requestKey, target, mode } }),
+    body: JSON.stringify({ message, durable_request: { request_key: requestKey, target, mode, ticket_id: ticketId } }),
   },
 )

@@ -48,9 +48,7 @@ class ParaClient:
         return self.request("GET", "/api/tasks").get("tasks", [])
 
     def task(self, task_id: str) -> dict:
-        task = self.request("GET", "/api/tasks/" + quote(task_id, safe="")).get(
-            "task", {}
-        )
+        task = self.request("GET", "/api/tasks/" + quote(task_id, safe="")).get("task", {})
         if not task.get("id") or not task.get("status"):
             raise ParaUnavailable("task_status_missing")
         return task
@@ -89,9 +87,7 @@ def device_view(raw: dict, now: float) -> dict:
     }
 
 
-def choose_device(
-    devices: list[dict], request: dict, now: float
-) -> tuple[dict | None, str]:
+def choose_device(devices: list[dict], request: dict, now: float) -> tuple[dict | None, str]:
     preferred = os.environ.get("MODSTORE_PARA_DEVICE_ID", "")
     target = request.get("target", "mac")
     tool = request.get("tool", "codex")
@@ -108,15 +104,10 @@ def choose_device(
         tools = raw.get("tools", [])
         if any(t.get("status") == "running" for t in tools):
             continue
-        if not any(
-            t.get("toolName") == tool and t.get("status") == "idle" for t in tools
-        ):
+        if not any(t.get("toolName") == tool and t.get("status") == "idle" for t in tools):
             continue
         probe = (caps.get("tool_preflight") or {}).get(tool, {})
-        if not (
-            probe.get("ok") is True
-            and age_seconds(probe.get("checked_at", ""), now) <= 90
-        ):
+        if not (probe.get("ok") is True and age_seconds(probe.get("checked_at", ""), now) <= 90):
             continue
         return raw, ""
     return None, "waiting_for_device_or_verified_tool"

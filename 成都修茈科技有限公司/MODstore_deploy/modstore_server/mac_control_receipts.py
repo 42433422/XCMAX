@@ -29,13 +29,9 @@ class DeviceProgress(BaseModel):
 
 
 @router.post("/receipts")
-def receipt(
-    body: DeviceProgress, authorization: str = Header(""), db: Session = Depends(get_db)
-):
+def receipt(body: DeviceProgress, authorization: str = Header(""), db: Session = Depends(get_db)):
     try:
-        identities = json.loads(
-            os.environ.get("MODSTORE_MAC_CONTROL_DEVICE_TOKENS", "{}")
-        )
+        identities = json.loads(os.environ.get("MODSTORE_MAC_CONTROL_DEVICE_TOKENS", "{}"))
     except ValueError:
         identities = {}
     expected = identities.get(body.device_id, "")

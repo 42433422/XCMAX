@@ -42,6 +42,8 @@ def create_task(
 ):
     if os.environ.get("MODSTORE_MAC_CONTROL_ENABLED") != "1":
         raise HTTPException(503, "Mac 主控尚未启用，原有入口不受影响")
+    if not os.environ.get("XCMAX_FACTORY_CAPABILITY_TOKEN"):
+        raise HTTPException(503, "工厂执行能力尚未配置")
     request = body.model_dump(exclude={"request_key"})
     request["source"] = "admin"
     if body.ticket_id:
@@ -54,9 +56,7 @@ def create_task(
             raise HTTPException(409, "工单与客户不匹配")
         request["customer_id"] = ticket.user_id
     try:
-        task = accept(
-            db, actor=f"admin:{user.id}", key=body.request_key, request=request
-        )
+        task = accept(db, actor=f"admin:{user.id}", key=body.request_key, request=request)
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from None
     return {"success": True, "task": view(task), "accepted": True}
@@ -64,9 +64,7 @@ def create_task(
 
 @router.get("/tasks")
 def list_tasks(user: User = Depends(require_admin), db: Session = Depends(get_db)):
-    rows = (
-        db.query(MacControlTask).order_by(MacControlTask.created_at.desc()).limit(100)
-    )
+    rows = db.query(MacControlTask).order_by(MacControlTask.created_at.desc()).limit(100)
     return {
         "success": True,
         "tasks": [view(r) for r in rows],
@@ -94,9 +92,15 @@ def task_detail(
         .limit(200)
         .all()
     )
+    payload = view(task)
+    request = payload["request"]
+    if request.get("ticket_id") or request.get("customer_id"):
+        from modstore_server.mac_control_facts import customer_facts
+
+        payload["facts"] = customer_facts(db, request.get("customer_id"), request.get("ticket_id"))
     return {
         "success": True,
-        "task": view(task),
+        "task": payload,
         "events": [
             {
                 "id": e.id,
@@ -112,9 +116,7 @@ def task_detail(
 
 
 @router.post("/tasks/{task_id}/cancel")
-def cancel_task(
-    task_id: str, user: User = Depends(require_admin), db: Session = Depends(get_db)
-):
+def cancel_task(task_id: str, user: User = Depends(require_admin), db: Session = Depends(get_db)):
     task = db.query(MacControlTask).filter_by(id=task_id).with_for_update().first()
     if task is None:
         raise HTTPException(404, "任务不存在")

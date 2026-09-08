@@ -28,10 +28,9 @@ def factory(monkeypatch):
     factory = sessionmaker(bind=engine)
     monkeypatch.setattr(worker, "get_session_factory", lambda: factory)
     monkeypatch.setenv("MODSTORE_MAC_CONTROL_ENABLED", "1")
+    monkeypatch.setenv("XCMAX_FACTORY_CAPABILITY_TOKEN", "fixture-only")
     monkeypatch.setenv("MODSTORE_PARA_DEVICE_ID", "mac")
-    monkeypatch.setenv(
-        "MODSTORE_PARA_REPO_URL", "https://github.com/42433422/XCMAX.git"
-    )
+    monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "https://github.com/42433422/XCMAX.git")
     yield factory
     engine.dispose()
 
@@ -47,9 +46,7 @@ def device(**overrides):
         "lastSeen": datetime.now(UTC).isoformat(),
         "capabilities": {
             "platform": "macos",
-            "tool_preflight": {
-                "codex": {"ok": True, "checked_at": datetime.now(UTC).isoformat()}
-            },
+            "tool_preflight": {"codex": {"ok": True, "checked_at": datetime.now(UTC).isoformat()}},
         },
         "tools": [{"toolName": "codex", "status": "idle"}],
     }
@@ -96,9 +93,7 @@ class FakePara:
 def para(monkeypatch):
     from modstore_server import mac_control_facts
 
-    monkeypatch.setattr(
-        mac_control_facts, "context_facts", lambda db, req: {"sources": []}
-    )
+    monkeypatch.setattr(mac_control_facts, "context_facts", lambda db, req: {"sources": []})
     fake = FakePara()
     fake.records = []
     monkeypatch.setattr(worker, "ParaClient", lambda: fake)
@@ -109,13 +104,9 @@ def test_accept_survives_restart_and_deduplicates(factory):
     with factory() as db:
         first = accept(db, actor="admin:1", key="stable-key", request=request()).id
     with factory() as db:
-        assert (
-            accept(db, actor="admin:1", key="stable-key", request=request()).id == first
-        )
+        assert accept(db, actor="admin:1", key="stable-key", request=request()).id == first
         with pytest.raises(ValueError):
-            accept(
-                db, actor="admin:1", key="stable-key", request={"message": "different"}
-            )
+            accept(db, actor="admin:1", key="stable-key", request={"message": "different"})
         assert db.query(MacControlTask).count() == 1
         assert db.query(MacControlEvent).count() == 1
 
@@ -194,23 +185,18 @@ def test_cancel_and_events(factory):
     first = client.post("/api/admin/mac-control/tasks", json=body)
     assert first.status_code == 202, first.text
     task_id = first.json()["task"]["id"]
-    assert (
-        client.post("/api/admin/mac-control/tasks", json=body).json()["task"]["id"]
-        == task_id
-    )
+    assert client.post("/api/admin/mac-control/tasks", json=body).json()["task"]["id"] == task_id
 
     assert (
-        client.post(f"/api/admin/mac-control/tasks/{task_id}/cancel").json()["task"][
-            "state"
-        ]
+        client.post(f"/api/admin/mac-control/tasks/{task_id}/cancel").json()["task"]["state"]
         == "cancelled"
     )
     detail = client.get(f"/api/admin/mac-control/tasks/{task_id}").json()
     assert len(detail["events"]) == 2
     assert (
-        client.get(
-            f"/api/admin/mac-control/tasks/{task_id}?after={detail['cursor']}"
-        ).json()["events"]
+        client.get(f"/api/admin/mac-control/tasks/{task_id}?after={detail['cursor']}").json()[
+            "events"
+        ]
         == []
     )
 
@@ -244,28 +230,20 @@ def test_device_receipts_are_bound_and_never_complete_delivery(factory, monkeypa
     }
     payload["event_id"] = digest(payload)
     client = TestClient(app)
-    assert (
-        client.post("/api/internal/mac-control/receipts", json=payload).status_code
-        == 401
-    )
+    assert client.post("/api/internal/mac-control/receipts", json=payload).status_code == 401
     headers = {"Authorization": "Bearer fixture-token"}
-    result = client.post(
-        "/api/internal/mac-control/receipts", json=payload, headers=headers
-    )
+    result = client.post("/api/internal/mac-control/receipts", json=payload, headers=headers)
     assert result.status_code == 200, result.text
     assert result.json()["stale_attempt"] is True
     assert (
-        client.post(
-            "/api/internal/mac-control/receipts", json=payload, headers=headers
-        ).json()["duplicate"]
+        client.post("/api/internal/mac-control/receipts", json=payload, headers=headers).json()[
+            "duplicate"
+        ]
         is True
     )
     with factory() as db:
         assert db.get(MacControlTask, task_id).state == "queued"
-        assert (
-            db.query(MacControlEvent).filter_by(state="late_device_evidence").count()
-            == 1
-        )
+        assert db.query(MacControlEvent).filter_by(state="late_device_evidence").count() == 1
 
 
 def test_two_tasks_do_not_share_device_workspace(factory, para):
@@ -284,3 +262,29 @@ def test_no_guest_identity_is_created(monkeypatch):
     monkeypatch.delenv("MODSTORE_PARA_AUTH_TOKEN", raising=False)
     with pytest.raises(ParaUnavailable, match="service_identity_not_configured"):
         ParaClient()
+
+
+def test_windows_probe_uses_fixed_command_and_reuses_receipt(factory):
+    from modstore_server.mac_control_preflight import prepare_windows_probe
+
+    class Client:
+        submitted = 0
+
+        def request(self, method, path, body=None):
+            if method == "POST":
+                self.submitted += 1
+                assert (
+                    body["script"]
+                    == "$ErrorActionPreference = 'Stop'; & codex --version; if ($LASTEXITCODE -ne 0) { exit 1 }"
+                )
+                return {"command": {"id": "probe-1"}}
+            return {"command": {"id": "probe-1", "status": "completed", "exit_code": 0}}
+
+    client = Client()
+    devices = [device(id="win", capabilities={"platform": "windows"})]
+    with factory() as db:
+        prepare_windows_probe(db, client, devices, {"target": "windows"})
+        prepare_windows_probe(db, client, devices, {"target": "windows"})
+        prepare_windows_probe(db, client, devices, {"target": "windows"})
+    assert client.submitted == 1
+    assert devices[0]["capabilities"]["tool_preflight"]["codex"]["ok"] is True

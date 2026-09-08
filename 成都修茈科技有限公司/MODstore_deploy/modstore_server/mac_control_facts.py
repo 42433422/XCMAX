@@ -57,9 +57,7 @@ def customer_facts(db, customer_id=None, ticket_id=None):
         )
     deliveries = build_standard_delivery_rows(db)
     if customer_id:
-        deliveries = [
-            r for r in deliveries if (r.get("account") or {}).get("id") == customer_id
-        ]
+        deliveries = [r for r in deliveries if (r.get("account") or {}).get("id") == customer_id]
     return {
         "source": "customer_service_tickets+standard_delivery_api",
         "observed_at": time.time(),
@@ -89,15 +87,11 @@ def context_facts(db, request):
             }
         )
     except RECOVERABLE_ERRORS as exc:
-        result["sources"].append(
-            {"source": "modstore:health", "error": type(exc).__name__}
-        )
+        result["sources"].append({"source": "modstore:health", "error": type(exc).__name__})
     try:
         from modstore_server.xiaoc_cs_ssot import retrieve_knowledge_for_mode
 
-        chunks = retrieve_knowledge_for_mode(
-            request.get("message", ""), mode="admin", top_k=3
-        )
+        chunks = retrieve_knowledge_for_mode(request.get("message", ""), mode="admin", top_k=3)
         result["sources"].append(
             {
                 "source": "persy",
