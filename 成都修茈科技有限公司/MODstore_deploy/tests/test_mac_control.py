@@ -334,17 +334,28 @@ def test_handoff_requires_source_evidence_and_only_creates_one_child(factory):
 @pytest.mark.parametrize("raw", ["[]", '{"receipt_events":null}', '{"resolution":42}', "invalid"])
 def test_corrupt_customer_evidence_is_unavailable_not_verified(factory, monkeypatch, raw):
     from modstore_server import mac_control_facts
-    from modstore_server.models_cs import CustomerServiceTicket
+    from modstore_server.models_cs import CustomerServiceSession, CustomerServiceTicket
 
     monkeypatch.setattr(mac_control_facts, "build_standard_delivery_rows", lambda db: [])
     with factory() as db:
+        db.connection().exec_driver_sql("PRAGMA foreign_keys=ON")
+        assert db.connection().exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
+        user = User(username="evidence-fixture", password_hash="fixture")
+        db.add(user)
+        db.flush()
+        session = CustomerServiceSession(user_id=user.id)
+        db.add(session)
+        db.flush()
         db.add(
             CustomerServiceTicket(
-                session_id=1, user_id=1, ticket_no="evidence-fixture", evidence_json=raw
+                session_id=session.id,
+                user_id=user.id,
+                ticket_no="evidence-fixture",
+                evidence_json=raw,
             )
         )
         db.commit()
-        row = mac_control_facts.customer_facts(db, customer_id=1)["tickets"][0]
+        row = mac_control_facts.customer_facts(db, customer_id=user.id)["tickets"][0]
         assert row["error"] == "invalid_delivery_evidence"
         assert row["delivery_verification"]["runtime_business_verified"] is None
         assert row["delivery_verification"]["completed"] is False
