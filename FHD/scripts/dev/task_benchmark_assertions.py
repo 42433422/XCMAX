@@ -5,6 +5,46 @@ from __future__ import annotations
 from typing import Any
 
 
+def check_spreadsheets(execution: dict[str, Any], assertions: list[dict]) -> tuple[bool, str]:
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    from app.application.agent_orchestrator.artifact_files import read_verified_spreadsheet
+
+    for assertion in assertions:
+        accepted = False
+        for artifact in execution.get("artifacts", []):
+            if artifact.get("artifact_type") != "file":
+                continue
+            content = read_verified_spreadsheet(execution["run_id"], artifact)
+            workbook = load_workbook(BytesIO(content), read_only=True, data_only=True)
+            try:
+                if assertion["sheet"] not in workbook.sheetnames:
+                    continue
+                rows = list(workbook[assertion["sheet"]].values)
+                if not rows or len(rows) - 1 != assertion["count"]:
+                    continue
+                records = [dict(zip(rows[0], row)) for row in rows[1:]]
+                expected = assertion["includes"]
+                if not expected:
+                    raise ValueError("spreadsheet assertions require expected cell values")
+                accepted = all(
+                    any(
+                        all(key in row and row[key] == value for key, value in item.items())
+                        for row in records
+                    )
+                    for item in expected
+                )
+                if accepted:
+                    break
+            finally:
+                workbook.close()
+        if not accepted:
+            return False, f"spreadsheet content differs: {assertion['sheet']}"
+    return True, ""
+
+
 def check_returned_records(execution: dict[str, Any], assertions: list[dict]) -> tuple[bool, str]:
     for assertion in assertions:
         matching = [

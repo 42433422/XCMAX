@@ -17,6 +17,16 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Sales export now plans `reports.export` and reads persisted sales before writing
+  an artifact. Unspecified periods are described as all recorded sales; explicit
+  current-month requests preserve month boundaries. The golden export case now
+  requires a real workbook, opens its verified bytes and checks one product row,
+  quantity 3 and amount 1099 across three seeded sales. Three full trials passed
+  this case, raising the development observation to 17/22; 31 focused regressions
+  passed, including wrong-amount and missing-artifact rejection. Evidence:
+  `sales-export-trials`. Actual rendered download and released-runtime acceptance
+  remain pending.
+
 - Agent report export now stores spreadsheet bytes as a task artifact rather than
   embedding binary data in its JSON receipt. The download endpoint checks the run
   owner and content hash. An HTTP test opens the downloaded workbook and verifies
@@ -24,8 +34,8 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
   124 related tests passed. The task panel now exposes an authenticated download
   action outside technical details, permits retry after failure, and only offers
   artifacts belonging to its active run. Eighteen frontend tests and the build
-  type check passed. Planner export wiring, seeded report-to-file benchmark and
-  rendered runtime acceptance remain outstanding.
+  type check passed. The subsequent seeded export trials above verify planner
+  wiring and file contents; rendered runtime acceptance remains outstanding.
 
 - Explicit revenue/expense recording now plans the finance tool with the canonical
   transaction type and preserved amount/counterparty. The revenue scenario uses

@@ -92,3 +92,33 @@ def report_read_node(message: str, registry: dict[str, Any], *, today=None) -> W
         idempotent=True,
         description="查询业务报表",
     )
+
+
+def sales_export_node(message: str, registry: dict[str, Any], *, today=None) -> WorkflowNode | None:
+    """Export explicit sales requests; an omitted period means all recorded sales."""
+    from calendar import monthrange
+    from datetime import date
+
+    match = re.fullmatch(
+        r"(?:请|帮我)?\s*导出\s*(本月|这个月|全部|所有)?\s*销售报表[。！!]?", message.strip()
+    )
+    if not match or "reports" not in registry:
+        return None
+    params: dict[str, Any] = {"report_type": "sales", "group_by": "product", "filename": "销售报表"}
+    current_month = match.group(1) in {"本月", "这个月"}
+    if current_month:
+        current = today or date.today()
+        params["start_date"] = current.replace(day=1).isoformat()
+        params["end_date"] = (
+            current.replace(day=monthrange(current.year, current.month)[1]).isoformat()
+            + " 23:59:59.999999"
+        )
+    return WorkflowNode(
+        node_id="export_sales",
+        tool_id="reports",
+        action="export",
+        params=params,
+        risk="low",
+        idempotent=True,
+        description="按产品导出本月销售报表" if current_month else "按产品导出全部已记录销售报表",
+    )

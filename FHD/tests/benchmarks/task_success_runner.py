@@ -227,6 +227,7 @@ def _execute_plan(plan: Any, task: dict[str, Any]) -> tuple[bool, str, dict[str,
         reason,
         {
             "run_id": run.run_id,
+            "artifacts": [artifact.to_dict() for artifact in run.artifacts],
             "status": run.status,
             "steps": [step.to_dict() for step in run.steps],
             "tool_calls": [call.to_dict() for call in run.tool_calls],
@@ -246,6 +247,7 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
     from app.services.tools_execution.registry import get_workflow_tool_registry
     from scripts.dev.task_benchmark_assertions import (
         check_returned_records,
+        check_spreadsheets,
         seed_inventory_quantities,
         seed_ledger_period_entries,
         seed_records,
@@ -312,11 +314,19 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
                     executed, expect.get("returned_records") or []
                 )
                 result["output_pass"] = output_ok
+                artifact_ok, artifact_why = check_spreadsheets(
+                    executed, expect.get("spreadsheets") or []
+                )
+                result["artifact_pass"] = artifact_ok
                 result["failure"] = (
-                    "; ".join(reason for reason in (why, exec_why, db_why, output_why) if reason)
+                    "; ".join(
+                        reason
+                        for reason in (why, exec_why, db_why, output_why, artifact_why)
+                        if reason
+                    )
                     or None
                 )
-                result["pass"] = ok and exec_ok and db_ok and output_ok
+                result["pass"] = ok and exec_ok and db_ok and output_ok and artifact_ok
             except _TRIAL_BOUNDARY_ERRORS as exc:
                 result["failure"] = f"{type(exc).__name__}: {exc}"
             out.write(json.dumps(result, ensure_ascii=False) + "\n")

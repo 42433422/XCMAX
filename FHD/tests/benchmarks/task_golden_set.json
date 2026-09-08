@@ -314,11 +314,10 @@
       "domain": "reports",
       "difficulty": "easy",
       "instruction": "导出销售报表",
+      "sales_period_orders": [{"at": "month_start", "amount": 25}, {"at": "month_end", "amount": 75}, {"at": "previous_month_end", "amount": 999}],
       "expect": {
-        "actions_any_of": [
-          [{"tool_id": "reports", "action": "export"}],
-          [{"tool_id": "reports", "action": "sales_summary"}]
-        ],
+        "actions": [{"tool_id": "reports", "action": "export"}],
+        "spreadsheets": [{"sheet": "sales", "count": 1, "includes": [{"product_name": "月报测试产品", "quantity": 3, "amount": 1099}]}],
         "forbid_actions": [
           {"tool_id": "business_db", "action": "write"}
         ]

@@ -53,7 +53,6 @@ class _LLMWorkflowPlannerPart02Mixin:
         self, plan_id: str, message: str, tool_registry: dict[str, _facade().Any]
     ) -> _facade().PlanGraph:
         from app.application.normal_chat_dispatch import route_normal_mode_message
-
         from app.application.workflow.sql_execution_policy import rejected_sql_plan
 
         rejected = rejected_sql_plan(message, plan_id)
@@ -358,9 +357,11 @@ class _LLMWorkflowPlannerPart02Mixin:
                 nodes.append(read_node)
                 intent = "customers_query"
         if not nodes:
-            from app.application.workflow.read_query_plan import report_read_node
+            from app.application.workflow.read_query_plan import report_read_node, sales_export_node
 
-            read_node = report_read_node(message, tool_registry)
+            read_node = sales_export_node(message, tool_registry) or report_read_node(
+                message, tool_registry
+            )
             if read_node is not None:
                 nodes.append(read_node)
                 intent = f"{read_node.tool_id}_query"

@@ -67,6 +67,19 @@ def test_report_export_is_not_downgraded_to_read():
     assert report_read_node("导出销售报表", {"reports": {}}) is None
 
 
+def test_sales_export_preserves_month_scope_and_leap_day():
+    from datetime import date
+
+    from app.application.workflow.read_query_plan import sales_export_node
+
+    node = sales_export_node("请导出本月销售报表", {"reports": {}}, today=date(2024, 2, 10))
+    assert node.action == "export"
+    assert node.params["start_date"] == "2024-02-01"
+    assert node.params["end_date"] == "2024-02-29 23:59:59.999999"
+    assert sales_export_node("不要导出销售报表", {"reports": {}}) is None
+    assert sales_export_node("导出去年销售报表", {"reports": {}}) is None
+
+
 @pytest.mark.parametrize("action", ["dashboard", "inventory_summary"])
 def test_snapshot_reports_do_not_request_unsupported_period_or_grouping(action):
     from app.application.workflow.clarification_node import detect_erp_clarification

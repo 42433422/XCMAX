@@ -3,6 +3,33 @@ import pytest
 from scripts.dev.task_benchmark_assertions import check_returned_records
 
 
+@pytest.mark.parametrize("amount, accepted", [(1099, True), (100, False)])
+def test_spreadsheet_assertion_opens_file_and_checks_business_cells(
+    tmp_path, monkeypatch, amount, accepted
+):
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    from app.application.agent_orchestrator.artifact_files import store_spreadsheet
+    from scripts.dev.task_benchmark_assertions import check_spreadsheets
+
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+    workbook = Workbook()
+    workbook.active.title = "sales"
+    workbook.active.append(["product_name", "amount"])
+    workbook.active.append(["测试产品", amount])
+    stream = BytesIO()
+    workbook.save(stream)
+    artifact = store_spreadsheet("run_test", stream.getvalue())
+    assertions = [
+        {"sheet": "sales", "count": 1, "includes": [{"product_name": "测试产品", "amount": 1099}]}
+    ]
+    execution = {"run_id": "run_test", "artifacts": [artifact]}
+    assert check_spreadsheets(execution, assertions)[0] is accepted
+    assert check_spreadsheets({"run_id": "run_test", "artifacts": []}, assertions)[0] is False
+
+
 @pytest.mark.parametrize(
     "records, status, expected",
     [
