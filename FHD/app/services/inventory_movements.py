@@ -250,6 +250,8 @@ class InventoryMovementsMixin:
             valid_quantity = False
         if not valid_quantity:
             return {"success": False, "message": "调拨数量必须为有限正数"}
+        if from_warehouse_id == to_warehouse_id and from_location_id == to_location_id:
+            return {"success": False, "message": "源仓库和库位与目标相同，无需调拨"}
         with _facade().get_db() as db:
             try:
                 from_ledger = (

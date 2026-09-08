@@ -91,3 +91,13 @@ def test_transfer_preserves_units_and_selects_exact_batch(tmp_path, monkeypatch,
             assert quantities == {1: 10, 2: 10, 3: 10, 4: 10}
             assert transactions == []
     engine.dispose()
+
+
+@pytest.mark.parametrize("location", [None, 1])
+def test_transfer_to_same_stock_location_does_not_open_database(location):
+    with patch("app.services.inventory_service.get_db") as database:
+        result = InventoryService().inventory_transfer(
+            1, 2, 2, 3, from_location_id=location, to_location_id=location
+        )
+    assert not result["success"]
+    database.assert_not_called()
