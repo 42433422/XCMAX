@@ -14,26 +14,25 @@ class __ModManagerPart01MixinPart02Mixin:
     def _load_mod_backend(self, mod_id: str, mod_path: str, metadata: _facade().ModMetadata):
         backend_path = _facade()._trusted_child_path(mod_path, "backend", directory=True)
         if backend_path is None:
+            if metadata.backend_entry or metadata.backend_init:
+                raise ValueError("Declared Mod backend directory is missing")
             _facade().logger.debug("No backend directory for mod: %s", mod_id)
             return
         if backend_path not in _facade().sys.path:
             _facade().sys.path.insert(0, backend_path)
+        if metadata.backend_init and not metadata.backend_entry:
+            raise ValueError("Declared Mod initialization hook requires a backend entry")
         if metadata.backend_entry:
             try:
                 module = _facade().import_mod_backend_py(mod_path, mod_id, metadata.backend_entry)
+                if metadata.backend_init:
+                    init_fn = getattr(module, metadata.backend_init, None)
+                    if not callable(init_fn):
+                        raise ValueError(
+                            "Declared Mod initialization hook is missing or not callable"
+                        )
+                    _facade()._invoke_mod_init_hook(init_fn, mod_id=mod_id)
                 self._backend_entry_modules[mod_id] = module
-                if hasattr(module, metadata.backend_init):
-                    init_fn = getattr(module, metadata.backend_init)
-                    if callable(init_fn):
-                        try:
-                            _facade()._invoke_mod_init_hook(init_fn, mod_id=mod_id)
-                        except TypeError as exc:
-                            _facade().logger.warning(
-                                "mod init hook %s for %s failed: %s",
-                                metadata.backend_init,
-                                mod_id,
-                                exc,
-                            )
             except _facade().RECOVERABLE_ERRORS as e:
                 _facade().logger.error(
                     "Failed to load backend entry for %s: %s", mod_id, e, exc_info=True

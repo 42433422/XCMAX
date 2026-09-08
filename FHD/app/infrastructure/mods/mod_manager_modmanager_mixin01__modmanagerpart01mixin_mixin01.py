@@ -403,7 +403,7 @@ class __ModManagerPart01MixinPart01Mixin:
                 f" (requested {mod_id})" if effective_id != mod_id else "",
             )
             return True
-        except _facade().RECOVERABLE_ERRORS as e:
+        except (*_facade().RECOVERABLE_ERRORS, TypeError) as e:
             _facade().logger.error(
                 "[ModManager] Failed to load mod %s: %s", mod_id, e, exc_info=True
             )
