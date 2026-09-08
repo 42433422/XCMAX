@@ -1,0 +1,10 @@
+{
+  "base_sha": "a0d3f987b",
+  "tests_passed": 631,
+  "change": "get_pending_workflow returns deep copy rather than mutable internal plan/context.",
+  "verified": "Mutating returned nested quantity/context does not modify next read; approval workspace, routes, gated engine and persistence suites pass.",
+  "limitations": [
+    "Other request getters and creation return values remain outside this change.",
+    "Tests do not constitute full authenticated approval-to-business execution or installed acceptance."
+  ]
+}

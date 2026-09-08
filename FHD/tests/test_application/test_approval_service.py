@@ -649,3 +649,8 @@ def test_pending_approval_freezes_nested_plan_and_runtime_values():
     pending = service.get_pending_workflow(request.request_id)
     assert pending["plan"].nodes[0].params["products"][0]["quantity_tins"] == 3
     assert pending["runtime_context"]["selection"]["warehouse_id"] == 1
+    pending["plan"].nodes[0].params["products"][0]["quantity_tins"] = 999
+    pending["runtime_context"]["selection"]["warehouse_id"] = 999
+    reread = service.get_pending_workflow(request.request_id)
+    assert reread["plan"].nodes[0].params["products"][0]["quantity_tins"] == 3
+    assert reread["runtime_context"]["selection"]["warehouse_id"] == 1

@@ -178,7 +178,8 @@ class ApprovalService:
         return dict(metadata) if metadata is not None else None
 
     def get_pending_workflow(self, request_id: str) -> dict[str, Any] | None:
-        return self._pending_workflows.get(request_id)
+        pending = self._pending_workflows.get(request_id)
+        return deepcopy(pending) if pending is not None else None
 
     def load_durable_workflow_snapshot(self, request_id: str) -> dict[str, Any] | None:
         """从 DB 加载绑定 ``request_no`` 的可靠工作流快照（获批后可据此重建/续跑）。
