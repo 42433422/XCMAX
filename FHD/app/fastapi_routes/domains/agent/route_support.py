@@ -29,8 +29,11 @@ _INTERNAL_ERROR_KEYS = frozenset({"error", "exception", "stack_trace", "tracebac
 def authenticated_runtime_context(raw: dict[str, Any], principal: AgentPrincipal) -> dict[str, Any]:
     context = dict(raw)
     context.pop("tenant_id", None)
+    context.pop("_mod_authorization", None)
     if principal.tenant_id:
         context["tenant_id"] = principal.tenant_id
+    if principal.mod_authorization:
+        context["_mod_authorization"] = dict(principal.mod_authorization)
     return context
 
 

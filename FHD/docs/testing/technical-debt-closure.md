@@ -19,6 +19,20 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Agent session-authenticated Mod selection now binds a host session row ID,
+  actor ID and entitled Mod ID into reserved runtime context. Creation strips
+  caller-supplied bindings; continuation rejects binding replacement. Before
+  each registered tool call, the executor rechecks the host session's owner,
+  expiry, active user and current entitlement/public bundled catalog, restores
+  Mod context, and resets it after execution. No login credential is persisted.
+  Actual SQLite tests cover owner/Mod mismatch, API-principal binding, fresh
+  worker context/reset, revocation with zero further tool calls, expiry,
+  disabled user and deleted session. All 71 relevant checks pass
+  (`agent-mod-binding-final`). This is a session-backed implementation, not full
+  acceptance: token-only Mod clients need a durable reauthorization contract,
+  aliases/admin entitlement policy need compatibility review, and real business
+  writes into the restored Mod DB plus process-restart/customer acceptance remain.
+
 - ModContextMiddleware now opens an empty, ContextVar-backed entitlement scope
   for each HTTP request and resets it on normal/error exit. Identity, rights,
   administrator checks, persistence and sync use the current immutable snapshot;

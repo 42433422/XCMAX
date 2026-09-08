@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from fastapi import Header, HTTPException, Request
@@ -18,6 +18,27 @@ class AgentPrincipal:
     username: str = ""
     tenant_id: str = ""
     is_admin: bool = False
+    mod_authorization: dict[str, Any] | None = None
+
+
+def _bind_mod(request: Request, principal: AgentPrincipal) -> AgentPrincipal:
+    from app.infrastructure.auth.agent_mod_scope import (
+        AgentModAuthorizationError,
+        bind_agent_mod_scope,
+    )
+    from app.infrastructure.auth.dependencies import session_id_from_request
+    from app.request_active_mod_ctx import parse_active_mod_header
+
+    mod_id = parse_active_mod_header(request.headers)
+    if not mod_id:
+        return principal
+    try:
+        binding = bind_agent_mod_scope(
+            session_id=session_id_from_request(request), user_id=principal.user_id, mod_id=mod_id
+        )
+    except AgentModAuthorizationError as exc:
+        raise HTTPException(status_code=403, detail={"code": "MOD_NOT_ENTITLED", "message": str(exc)}) from exc
+    return replace(principal, mod_authorization=binding)
 
 
 def _from_user(user: Any) -> AgentPrincipal | None:
@@ -56,24 +77,24 @@ def require_agent_principal(
         if getattr(request.state, "tutorial_active", False) is True:
             tutorial_tenant = getattr(request.state, "tenant_id", None)
             if tutorial_tenant is not None:
-                return AgentPrincipal(
+                return _bind_mod(request, AgentPrincipal(
                     user_id=principal.user_id,
                     username=principal.username,
                     tenant_id=str(int(tutorial_tenant)),
                     is_admin=principal.is_admin,
-                )
-        return principal
+                ))
+        return _bind_mod(request, principal)
 
     authorization = request.headers.get("authorization", "")
     if authorization.startswith("Bearer "):
         payload = verify_mobile_jwt(authorization[7:].strip())
         if payload and payload.get("typ") == "access" and payload.get("user_id") is not None:
-            return AgentPrincipal(
+            return _bind_mod(request, AgentPrincipal(
                 user_id=str(payload["user_id"]),
                 username=str(payload.get("username") or ""),
                 tenant_id=str(payload.get("tenant_id") or ""),
                 is_admin=str(payload.get("account_kind") or "").lower() == "admin",
-            )
+            ))
 
     # Explicitly test-only. Production cannot trust a caller-controlled identity header.
     if _test_header_enabled() and str(x_user_id or "").strip():

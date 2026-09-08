@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
 from typing import Any
 
 from app.application.agent_orchestrator.run_models import AgentStep
@@ -47,18 +48,25 @@ class AgentToolExecutor:
                     "action": action,
                 }
 
-        if runtime_tenant_id is None:
-            result = execute_registered_workflow_tool(step.tool_id, action, params)
-        else:
+        from app.infrastructure.auth.agent_mod_scope import (
+            AgentModAuthorizationError,
+            agent_mod_execution_scope,
+        )
+        from app.infrastructure.tenant_scope import tenant_scope
+
+        try:
             # Durable/background Agent runs execute outside the originating HTTP
             # request. Restore the authenticated integer tenant recorded in
             # runtime_context so repository/raw-SQL boundaries keep their fail-closed
             # isolation. Dataset/document tools deliberately keep their own opaque
             # string tenant keys and must not be coerced here.
-            from app.infrastructure.tenant_scope import tenant_scope
-
-            with tenant_scope(runtime_tenant_id):
+            with agent_mod_execution_scope(params["_runtime_context"].get("_mod_authorization")), (
+                tenant_scope(runtime_tenant_id) if runtime_tenant_id is not None else nullcontext()
+            ):
                 result = execute_registered_workflow_tool(step.tool_id, action, params)
+        except AgentModAuthorizationError as exc:
+            return {"success": False, "error_code": "mod_authorization_invalid",
+                    "message": str(exc), "tool_id": validation.tool_id, "action": action}
         if not isinstance(result, dict):
             return {
                 "success": False,
