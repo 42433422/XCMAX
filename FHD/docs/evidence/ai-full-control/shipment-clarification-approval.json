@@ -1,0 +1,12 @@
+{
+  "base_sha": "4ac8b484e",
+  "finding": "High risk metadata alone did not require approval with enabled empty-rule ApprovalConfig; real decision test reached execution before fix.",
+  "fix": "shipment_orders.generate explicitly declares interactive approval; invalid product clarification rejected.",
+  "tests_passed": 82,
+  "approval_test": "Actual planner, clarification continuation, ApprovalService and risk registry. Enabled empty-rule config supplied; persistence and runner mocked.",
+  "limitations": [
+    "No persisted approval request or approve-and-resume test here.",
+    "Approval-disabled administrator configuration remains unchanged.",
+    "Direct generation entrypoint validation and installed UI not proven by clarification tests."
+  ]
+}

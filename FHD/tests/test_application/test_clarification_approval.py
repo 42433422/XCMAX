@@ -317,3 +317,57 @@ def test_inbound_conversion_waits_after_warehouse_then_approves_converted_quanti
     assert "入库500个" in node.description and "待审批" in node.description
     assert needs_clarification(plan) == []
     service._run_workflow_with_state_updates.assert_not_called()
+
+
+def test_shipment_clarification_uses_real_risk_approval_decision():
+    from unittest.mock import patch
+
+    from app.application.workflow.approval_service import ApprovalService
+    from app.application.workflow.clarification_node import needs_clarification
+    from app.application.workflow.planner import LLMWorkflowPlanner
+    from app.services.tools_execution.registry import get_workflow_tool_registry
+    from resources.config.approval_config import ApprovalConfig
+
+    with patch("app.application.workflow.planner.get_ai_conversation_service", return_value=None):
+        plan = LLMWorkflowPlanner()._fallback_plan(
+            "shipment", "打个发货单", get_workflow_tool_registry()
+        )
+    clarify, target = plan.nodes
+    with patch(
+        "app.application.workflow.approval_service.get_approval_config",
+        return_value=ApprovalConfig(rules=[], enabled=True),
+    ):
+        approval = ApprovalService()
+    pending = {
+        "plan": plan,
+        "target_node_id": target.node_id,
+        "clarify_node_id": clarify.node_id,
+        "clarification": needs_clarification(plan, get_workflow_tool_registry())[0],
+        "runtime_context": {},
+    }
+    service = SimpleNamespace(
+        _pending_workflows={"u": pending},
+        approval_service=approval,
+        _persist_plan_state=Mock(),
+        _run_workflow_with_state_updates=Mock(side_effect=AssertionError("await approval")),
+    )
+    resume = _AIChatApplicationServicePart03Mixin._continue_after_clarification
+    assert resume(service, "u", pending, "七彩乐园") is None
+    assert pending["clarification"]["field"] == "products"
+    for text in (
+        "[{}]",
+        '[{"model_number":"9803"}]',
+        '[{"model_number":"9803","quantity_tins":0,"tin_spec":12}]',
+        '[{"model_number":"9803","quantity_tins":true,"tin_spec":12}]',
+    ):
+        assert resume(service, "u", pending, text) is None
+        assert "products" not in target.params
+    response = resume(
+        service, "u", pending, '[{"model_number":"9803","quantity_tins":3,"tin_spec":12}]'
+    )
+    assert response["data"]["action"] == "workflow_confirmation_required"
+    assert service._pending_workflows["u"]["approval_nodes"][0]["params"] == {
+        "unit_name": "七彩乐园",
+        "products": [{"model_number": "9803", "quantity_tins": 3, "tin_spec": 12}],
+    }
+    service._run_workflow_with_state_updates.assert_not_called()

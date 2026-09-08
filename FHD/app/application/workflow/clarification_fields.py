@@ -89,6 +89,30 @@ def resolve_missing_field(
             and isinstance(value[0], dict)
         ):
             value = [{**product, **value[0]}]
+    if node.tool_id == "shipment_orders" and node.action == "generate" and field == "products":
+        import math
+
+        if not isinstance(value, list) or not value:
+            return None
+        for product in value:
+            if not isinstance(product, dict):
+                return None
+            identity = (
+                product.get("model_number") or product.get("name") or product.get("product_name")
+            )
+            if not isinstance(identity, str) or not identity.strip():
+                return None
+            quantity = product.get("quantity_tins")
+            spec = product.get("tin_spec")
+            if type(quantity) is not int or quantity <= 0:
+                return None
+            if type(spec) not in (int, float) or spec <= 0:
+                return None
+            try:
+                if not math.isfinite(spec) or not math.isfinite(quantity):
+                    return None
+            except OverflowError:
+                return None
     params = {**node.params, field: value}
     if len(missing) == 1:
         if not validate_tool_call(node.tool_id, node.action, params).ok:

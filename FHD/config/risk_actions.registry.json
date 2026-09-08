@@ -1026,6 +1026,7 @@
       "actions": {
         "generate": {
           "risk": "high",
+          "approval": "interactive",
           "idempotent": false,
           "required_params": [
             "unit_name",
