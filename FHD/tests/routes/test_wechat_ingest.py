@@ -57,8 +57,9 @@ def _ingest_payload() -> dict:
     }
 
 
-def test_manual_link_scopes_contact_and_customer(client_and_session_factory):
-    _, factory = client_and_session_factory
+def test_manual_link_scopes_contact_and_customer(client_and_session_factory, monkeypatch):
+    client, factory = client_and_session_factory
+    monkeypatch.setattr(wechat_ingest, "_auth", lambda *args, **kwargs: None)
     from sqlalchemy import select
 
     with factory() as session:
@@ -71,7 +72,9 @@ def test_manual_link_scopes_contact_and_customer(client_and_session_factory):
 
     denied = wechat_ingest_service.link_wechat_contact("same", customer_id, tenant_id=7)
     assert denied["success"] is False
-    accepted = wechat_ingest_service.link_wechat_contact("same", customer_id, tenant_id=8)
+    accepted = client.post(
+        "/api/ops/wechat/contacts/same/link", json={"customer_id": customer_id, "tenant_id": 8}
+    ).json()
     assert accepted["success"] is True
     with factory() as session:
         contacts = session.scalars(

@@ -584,6 +584,7 @@ class TestExecuteRegisteredWorkflowTool:
             "memory_v2",
             "system_maintenance",
             "software",
+            "wechat",
         }
         assert set(_REGISTERED_WORKFLOW_ROUTERS.keys()) == expected_keys
 

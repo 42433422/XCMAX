@@ -3,9 +3,7 @@
   "product_coverage_percent": null,
   "capability_count": 37,
   "action_count": 192,
-  "missing_dispatcher": [
-    "wechat"
-  ],
+  "missing_dispatcher": [],
   "actions": [
     {
       "tool_id": "business_db",
@@ -1970,7 +1968,7 @@
       "risk": "low",
       "required_params": [],
       "idempotent": true,
-      "dispatcher_present": false,
+      "dispatcher_present": true,
       "business_acceptance": "not_measured"
     },
     {
@@ -1979,7 +1977,7 @@
       "risk": "low",
       "required_params": [],
       "idempotent": true,
-      "dispatcher_present": false,
+      "dispatcher_present": true,
       "business_acceptance": "not_measured"
     },
     {
@@ -1988,7 +1986,7 @@
       "risk": "medium",
       "required_params": [],
       "idempotent": true,
-      "dispatcher_present": false,
+      "dispatcher_present": true,
       "business_acceptance": "not_measured"
     },
     {
@@ -1997,7 +1995,7 @@
       "risk": "medium",
       "required_params": [],
       "idempotent": true,
-      "dispatcher_present": false,
+      "dispatcher_present": true,
       "business_acceptance": "not_measured"
     },
     {
@@ -2006,7 +2004,7 @@
       "risk": "low",
       "required_params": [],
       "idempotent": true,
-      "dispatcher_present": false,
+      "dispatcher_present": true,
       "business_acceptance": "not_measured"
     }
   ]

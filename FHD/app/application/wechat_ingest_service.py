@@ -38,9 +38,9 @@ def _sys(stmt: Select) -> Select:
 
 
 def _open_session():
-    from app.db import SessionLocal
+    from app.db import HostSessionLocal
 
-    return SessionLocal()
+    return HostSessionLocal()
 
 
 def _parse_ts(value: Any) -> datetime | None:

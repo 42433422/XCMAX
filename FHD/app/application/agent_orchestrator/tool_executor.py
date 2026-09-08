@@ -25,6 +25,7 @@ _SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
         "excel_import",
         "unit_products_import",
         "employee",
+        "wechat",
     }
 )
 
@@ -75,6 +76,12 @@ class AgentToolExecutor:
         action = validation.action or step.action
         runtime_tenant_raw = params["_runtime_context"].get("tenant_id")
         runtime_tenant_id: int | None = None
+        if step.tool_id == "wechat" and runtime_tenant_raw in (None, ""):
+            return {
+                "success": False,
+                "error_code": "invalid_tenant_context",
+                "message": "微信后台任务缺少租户上下文",
+            }
         if step.tool_id in _SQL_TENANT_SCOPED_TOOL_IDS and runtime_tenant_raw not in (None, ""):
             try:
                 if isinstance(runtime_tenant_raw, bool) or not isinstance(
@@ -93,7 +100,7 @@ class AgentToolExecutor:
                     "action": action,
                 }
 
-        if step.tool_id in {"memory_v2", "employee"}:
+        if step.tool_id in {"memory_v2", "employee", "wechat"}:
             from app.application.agent_orchestrator.execution_identity import execution_actor_scope
             from app.infrastructure.tenant_scope import tenant_scope
 

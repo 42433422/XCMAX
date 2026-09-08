@@ -124,6 +124,9 @@ def _collect_payload(
     limit: int,
     tenant_id: int | None,
     state: dict[str, Any],
+    *,
+    contacts_only: bool = False,
+    force_contacts: bool = False,
 ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
     """采集本批上行 payload；返回 (payload|None, new_state)。不落盘。"""
     from wechat_db_read import (
@@ -135,7 +138,10 @@ def _collect_payload(
     data_dir = get_default_wechat_data_dir() or (
         r"C:\xwechat_files" if os.path.isdir(r"C:\xwechat_files") else None
     )
-    names = _extract_contact_names(get_contact_list_from_db(wechat_data_dir=data_dir))
+    listing = get_contact_list_from_db(wechat_data_dir=data_dir)
+    if not listing.get("success"):
+        raise RuntimeError("wechat contact collection failed")
+    names = _extract_contact_names(listing)
     if contact_filter:
         wanted = {n for n in contact_filter}
         names = [n for n in names if n in wanted] + [n for n in contact_filter if n not in names]
@@ -146,6 +152,9 @@ def _collect_payload(
     new_state = json.loads(json.dumps(state, ensure_ascii=False))
 
     for name in names:
+        if contacts_only:
+            contacts_payload.append({"contact_key": name, "display_name": name})
+            continue
         entry = state.get(name) or {"seen": {}, "next_seq": 1}
         seen: dict[str, int] = dict(entry.get("seen") or {})
         next_seq = int(entry.get("next_seq") or 1)
@@ -153,7 +162,7 @@ def _collect_payload(
             name, wechat_data_dir=data_dir, limit=limit, only_other=False
         )
         if not out.get("success"):
-            continue
+            raise RuntimeError("wechat message collection failed")
         messages = out.get("messages") or []
         # DB 按时间倒序返回；先转时间正序，保证 client_seq 随对话推进单调递增
         chronological = list(reversed(messages))
@@ -190,7 +199,7 @@ def _collect_payload(
             )
             next_seq += 1
             fresh += 1
-        if fresh or name not in state:
+        if force_contacts or fresh or name not in state:
             contacts_payload.append({"contact_key": name, "display_name": name})
         # 截断 seen，防止无限膨胀
         if len(seen) > _SEEN_CAP:
@@ -206,12 +215,19 @@ def _collect_payload(
     return payload, new_state
 
 
-def _post_json(url: str, token: str, body: dict[str, Any], timeout: int = 60) -> dict[str, Any]:
+def _post_json(
+    url: str,
+    token: str,
+    body: dict[str, Any],
+    timeout: int = 60,
+    *,
+    path: str = "/api/ops/wechat/ingest",
+) -> dict[str, Any]:
     import urllib.error
     import urllib.request
 
     req = urllib.request.Request(
-        url.rstrip("/") + "/api/ops/wechat/ingest",
+        url.rstrip("/") + path,
         data=json.dumps(body).encode("utf-8"),
         headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
         method="POST",
@@ -228,12 +244,26 @@ def sync_once(
     limit: int = 50,
     tenant_id: int | None = None,
     dry_run: bool = False,
+    refresh_action: str = "",
 ) -> dict[str, Any]:
     """单轮同步：采集 → 上行 → 回流写缓存。返回结果摘要。"""
     state = _load_state()
-    payload, new_state = _collect_payload(contact_filter, limit, tenant_id, state)
+    payload, new_state = _collect_payload(
+        contact_filter,
+        limit,
+        tenant_id,
+        state,
+        contacts_only=refresh_action == "refresh_contact_cache",
+        force_contacts=bool(refresh_action),
+    )
     if payload is None:
-        return {"success": True, "skipped": True, "message": "无新消息"}
+        return {
+            "success": True,
+            "contacts": 0,
+            "inserted": 0,
+            "skipped": 0,
+            "message": "采集成功，无新增数据",
+        }
     if dry_run:
         preview = json.dumps(payload, ensure_ascii=False)
         return {"success": True, "dry_run": True, "preview": preview[:1200]}
@@ -260,6 +290,52 @@ def sync_once(
         "skipped": result.get("messages_skipped"),
         "context_cache": CONTEXT_CACHE_PATH,
     }
+
+
+def poll_refresh(settings: dict[str, Any]) -> dict[str, Any] | None:
+    """Claim one scoped request, execute real collection, then acknowledge its lease."""
+    from urllib.parse import quote
+
+    tenant_id = settings.get("tenant_id")
+    if not isinstance(tenant_id, int) or isinstance(tenant_id, bool) or tenant_id <= 0:
+        return None
+    server_url, token = settings["server_url"], settings["token"]
+    response = _post_json(
+        server_url,
+        token,
+        {},
+        timeout=15,
+        path=f"/api/ops/wechat/refresh/claim?tenant_id={tenant_id}",
+    )
+    if not response.get("success"):
+        raise RuntimeError("wechat refresh claim failed")
+    request = response.get("request")
+    if not request:
+        return None
+    if request.get("action") not in {"refresh_contact_cache", "refresh_messages_cache"}:
+        result: dict[str, Any] = {"success": False}
+    else:
+        try:
+            result = sync_once(
+                server_url=server_url,
+                token=token,
+                tenant_id=tenant_id,
+                contact_filter=settings["contact_filter"],
+                limit=settings["limit"],
+                refresh_action=request["action"],
+            )
+        except _GUARD_ERRORS:
+            result = {"success": False}
+    receipt = _post_json(
+        server_url,
+        token,
+        {"lease_token": request["lease_token"], "receipt": result},
+        timeout=15,
+        path=f"/api/ops/wechat/refresh/{quote(request['request_id'], safe='')}/receipt?tenant_id={tenant_id}",
+    )
+    if not receipt.get("success"):
+        raise RuntimeError("wechat refresh receipt not accepted")
+    return {"request_id": request["request_id"], **result}
 
 
 def _resolve_settings(args: argparse.Namespace) -> dict[str, Any]:
@@ -376,7 +452,23 @@ def main() -> int:
             _append_log(line, log_path)
         if not args.loop:
             return 0 if out.get("success") else 1
-        time.sleep(settings["interval"])
+        next_sync = time.monotonic() + settings["interval"]
+        while time.monotonic() < next_sync:
+            if not args.dry_run:
+                try:
+                    refresh = poll_refresh(settings)
+                    if refresh is not None:
+                        line = json.dumps(refresh, ensure_ascii=False)
+                        print(line)
+                        if log_path:
+                            _append_log(line, log_path)
+                except _GUARD_ERRORS:
+                    # A failed poll must not stop normal collection or leak token/URLs to logs.
+                    if log_path:
+                        _append_log(
+                            '{"success":false,"error_code":"refresh_poll_failed"}', log_path
+                        )
+            time.sleep(min(2, max(0, next_sync - time.monotonic())))
 
 
 if __name__ == "__main__":
