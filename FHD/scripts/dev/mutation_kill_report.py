@@ -56,7 +56,9 @@ _PROGRESS_RE = re.compile(
     r"🫥\s*(?P<no_tests>\d+).*?"
     r"⏰\s*(?P<timeout>\d+).*?"
     r"🤔\s*(?P<suspicious>\d+).*?"
-    r"🙁\s*(?P<survived>\d+)",
+    r"🙁\s*(?P<survived>\d+)"
+    r"(?:[^\r\n\S]*🔇\s*(?P<skipped>\d+))?"
+    r"(?:[^\r\n\S]*🧙\s*(?P<type_checked>\d+))?",
     re.DOTALL,
 )
 
@@ -108,6 +110,8 @@ def parse_results(output: str) -> dict:
         counts["survived"] = int(m.group("survived"))
         counts["timeout"] = int(m.group("timeout"))
         counts["no_tests"] = int(m.group("no_tests"))
+        counts["no_tests"] += int(m.group("skipped") or 0)
+        counts["timeout"] += int(m.group("type_checked") or 0)
         # suspicious 保守并入 survived
         counts["survived"] += int(m.group("suspicious"))
         return counts

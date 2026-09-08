@@ -49,6 +49,14 @@ def test_parse_legacy_killed_survived():
     assert c["timeout"] == 1
 
 
+def test_progress_includes_skipped_and_type_check_results_in_denominator():
+    mod = _load()
+    counts = mod.parse_results("100/100 🎉 70 🫥 0 ⏰ 0 🤔 0 🙁 0 🔇 20 🧙 10\n")
+    assert mod.compute_kill_rate(counts) == 0.7
+    assert counts["no_tests"] == 20
+    assert counts["timeout"] == 10
+
+
 def test_uncovered_mutants_cannot_inflate_gate_score(tmp_path, monkeypatch):
     mod = _load()
     log = tmp_path / "mutations.log"

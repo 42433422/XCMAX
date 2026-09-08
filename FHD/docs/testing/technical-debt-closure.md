@@ -19,6 +19,14 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- A forced rerun of all 268 mutants after adding serving-event publication and
+  missing-risk rejection tests reports 255 killed / 13 survived (95.15%). It
+  still contains a pytest scandir cleanup exception, so it is not a qualifying
+  replacement for clean CI evidence. Log: `mutation-composition-forced-run.log`.
+  Progress parsing now also includes skipped and type-check results, consistently
+  with results-line parsing; a 70/100 regression previously misreported 100% and
+  now reports 70%. The five report tests pass. CI artifacts now retain the raw
+  mutation run log alongside the history receipt for independent diagnosis.
 - Local composition coverage adds mode selection, serving/shadow store isolation,
   unsafe-dispatch rejection, failure cleanup and reload tests. The selected DI/
   context suite passes 103 tests with 84% statement/branch coverage. A real local
