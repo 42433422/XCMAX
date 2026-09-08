@@ -19,6 +19,19 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Registered inventory execution now has real three-database acceptance tests:
+  host, authorized Mod A and unauthorized Mod B contain identical product/model
+  and warehouse names. Both a fresh thread and a spawned process restore the
+  persisted session binding and use the actual executor/router/InventoryService
+  and normal database routing to write exactly one 50-unit movement/ledger into
+  A, leaving host/B untouched. Revoking the session's rights then starting another
+  worker denies execution without extra writes. No business tool/session factory
+  is mocked; test DB-manager bypass only selects the isolated fixture URLs.
+  Both scenarios pass (`inventory-real-mod`) and all 30 related scope/guard/
+  fencing tests pass (`inventory-mod-regression`). The spawned process exercises
+  persisted authorization and real business execution, not full dispatcher
+  crash/requeue/UI acceptance; those broader delivery requirements remain.
+
 - Agent session-authenticated Mod selection now binds a host session row ID,
   actor ID and entitled Mod ID into reserved runtime context. Creation strips
   caller-supplied bindings; continuation rejects binding replacement. Before
