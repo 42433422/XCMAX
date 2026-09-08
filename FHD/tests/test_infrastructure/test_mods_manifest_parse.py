@@ -281,7 +281,8 @@ class TestValidateDependencies:
 
     def test_satisfied(self) -> None:
         m = self._m({"other": "^1.0"})
-        assert validate_dependencies(m, ["other"]) is True
+        assert validate_dependencies(m, {"other": "1.2.0"}) is True
+        assert validate_dependencies(m, ["other"]) is False
 
     def test_missing_dep(self, caplog) -> None:
         m = self._m({"other": "^1.0"})
@@ -396,8 +397,7 @@ class TestCheckXcagiVersion:
     def test_version_lt_required(self) -> None:
         assert _check_xcagi_version(">=99.0.0") is False
 
-    def test_no_prefix_returns_true(self) -> None:
-        # Anything not matching >=N.N.N is treated as "no constraint" → True
+    def test_caret_and_unconstrained_versions(self) -> None:
         assert _check_xcagi_version("^1.0") is True
         assert _check_xcagi_version("") is True
 

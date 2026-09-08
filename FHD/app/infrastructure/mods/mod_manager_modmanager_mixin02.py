@@ -234,7 +234,13 @@ class _ModManagerPart02Mixin:
                 pass
             _facade().logger.info("[ModManager] Checking dependencies for mod: %s", metadata.id)
             if metadata.dependencies:
-                deps_satisfied = _facade().validate_dependencies(metadata, loaded)
+                registry = _facade().get_mod_registry()
+                versions = {
+                    mid: item.version
+                    for mid in registry.list_mod_ids()
+                    if (item := registry.get_mod_metadata(mid)) is not None
+                }
+                deps_satisfied = _facade().validate_dependencies(metadata, versions)
                 if not deps_satisfied:
                     _facade().logger.warning(
                         "[ModManager] Skipping mod %s due to unsatisfied dependencies", metadata.id

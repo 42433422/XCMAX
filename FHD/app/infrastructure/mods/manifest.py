@@ -5,6 +5,7 @@ Mod Manifest Definition and Parsing
 import json
 import logging
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -198,7 +199,9 @@ def parse_manifest(mod_path: str) -> ModMetadata | None:
         return None
 
 
-def validate_dependencies(metadata: ModMetadata, loaded_mods: list[str]) -> bool:
+def validate_dependencies(
+    metadata: ModMetadata, loaded_mods: list[str] | Mapping[str, str]
+) -> bool:
     # Normalize defensively: most metadata flows through ``from_dict`` (already a
     # dict), but a ``ModMetadata`` constructed directly may still carry a list.
     for dep_id, version_spec in _normalize_dependencies(metadata.dependencies).items():
@@ -218,28 +221,29 @@ def validate_dependencies(metadata: ModMetadata, loaded_mods: list[str]) -> bool
                 version_spec,
             )
             return False
+        elif version_spec not in {"", "*"}:
+            from .version_constraints import version_satisfies
+
+            if not isinstance(loaded_mods, Mapping) or not version_satisfies(
+                loaded_mods[dep_id], version_spec
+            ):
+                logger.warning(
+                    "Mod %s dependency %s version is missing or incompatible with %s",
+                    metadata.id,
+                    dep_id,
+                    version_spec,
+                )
+                return False
     return True
 
 
 def _check_xcagi_version(version_spec: str) -> bool:
-    import re
+    from .version_constraints import version_satisfies
 
-    current_version = "1.0.0.1"
-
-    match = re.match(r">=([\d.]+)", version_spec)
-    if match:
-        required = match.group(1)
-        return _compare_versions(current_version, required) >= 0
-
-    return True
+    return version_satisfies("1.0.0.1", version_spec)
 
 
 def _compare_versions(v1: str, v2: str) -> int:
-    parts1 = [int(x) for x in v1.split(".")]
-    parts2 = [int(x) for x in v2.split(".")]
-    for p1, p2 in zip(parts1, parts2):
-        if p1 > p2:
-            return 1
-        elif p1 < p2:
-            return -1
-    return 0
+    from .version_constraints import compare_versions
+
+    return compare_versions(v1, v2)

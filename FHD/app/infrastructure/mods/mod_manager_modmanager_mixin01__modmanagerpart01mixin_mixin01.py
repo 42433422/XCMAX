@@ -374,7 +374,11 @@ class __ModManagerPart01MixinPart01Mixin:
                 return True
             _facade().logger.warning("[ModManager] Bundle %s register_mod returned False", mod_id)
             return True
-        deps = registry.list_mod_ids()
+        deps = {
+            mid: item.version
+            for mid in registry.list_mod_ids()
+            if (item := registry.get_mod_metadata(mid)) is not None
+        }
         _facade().logger.info("[ModManager] Current loaded mods for dependency check: %s", deps)
         if not _facade().validate_dependencies(metadata, deps):
             _facade().logger.warning("[ModManager] Dependencies not satisfied for mod: %s", mod_id)
