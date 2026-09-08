@@ -19,6 +19,16 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Independent validation at `fd9cb14b3` launches each of all 268 generated
+  mutants in a fresh Python process with its own temporary database/directory.
+  The unmutated baseline passes 105 tests. Results: 253 assertion/test failures,
+  13 survivors and two teardown errors caused by mutated resource-stack values;
+  zero timeouts, no-tests cases or ResourceWarning logs. Conservatively excluding
+  both teardown errors from killed gives 253/268 = 94.40%, above the unchanged
+  80% threshold. This removes the forked pytest resource-warning ambiguity from
+  the local evidence; current-head remote CI is still required. Per-mutant logs,
+  result rows and SHA/hash-bound receipt are in `isolated-mutants/` under the task
+  evidence directory. No real-model or delivery qualification is implied.
 - A forced rerun of all 268 mutants after adding serving-event publication and
   missing-risk rejection tests reports 255 killed / 13 survived (95.15%). It
   still contains a pytest scandir cleanup exception, so it is not a qualifying
