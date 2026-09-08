@@ -43,6 +43,10 @@ jobs:
           XCAGI_SKIP_INTENT_LLM: "1"
           TASK_BENCHMARK_RUN: "1"
           TASK_BENCHMARK_TRIALS: "1"
+          # N03（2026-09-08）：业务成功率硬门禁。0.2 按规则引擎口径校准
+          # （2026-09-08 实测 pass^1=0.2273，5/22）；显式设 0 才是只报告模式。
+          # 棘轮只升不降：规则/模型能力提升后应同步上调此值。
+          TASK_BENCHMARK_MIN_PASS: "0.2"
         run: |
           python -m pytest tests/benchmarks/test_task_success.py -v --tb=short
 
@@ -52,18 +56,21 @@ jobs:
           GH_TOKEN: ${{ secrets.CI_COMMIT_TOKEN || github.token }}
         run: |
           set -euo pipefail
-          if [ ! -f FHD/test_reports/intent_benchmark_latest.json ]; then
+          # N02（2026-09-08）修复：defaults.run.working-directory 已是 FHD，
+          # shell 相对路径不能再带 FHD/ 前缀（否则解析成 FHD/FHD/...）。
+          # upload-artifact 的 path 按工作区根解释，仍用 FHD/ 前缀，两处口径不同属正常。
+          if [ ! -f test_reports/intent_benchmark_latest.json ]; then
             echo "No intent report produced; skipping commit"
             exit 0
           fi
-          mkdir -p FHD/metrics
-          cp FHD/test_reports/intent_benchmark_latest.json FHD/metrics/intent_benchmark_latest.json
-          if [ -f FHD/test_reports/task_benchmark_report.json ]; then
-            cp FHD/test_reports/task_benchmark_report.json FHD/metrics/task_benchmark_report.json
+          mkdir -p metrics
+          cp test_reports/intent_benchmark_latest.json metrics/intent_benchmark_latest.json
+          if [ -f test_reports/task_benchmark_report.json ]; then
+            cp test_reports/task_benchmark_report.json metrics/task_benchmark_report.json
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add FHD/metrics/
+          git add metrics/
           if git diff --staged --quiet; then
             echo "No intent report changes"
             exit 0
