@@ -233,15 +233,17 @@ def _registered_router_products(
             payload["price"] = payload.pop("unit_price")
         if "product_code" in payload and "model_number" not in payload:
             payload["model_number"] = payload.pop("product_code")
-        if "measure_unit" in payload and "unit" not in payload:
-            payload["unit"] = payload.pop("measure_unit")
+        if "measure_unit" in payload:
+            payload.setdefault("measurement_unit", payload.pop("measure_unit"))
         legacy_update_unit = str(payload.pop("unit_name", "") or "").strip()
-        if legacy_update_unit and "unit" not in payload:
-            payload["unit"] = (
-                legacy_update_unit
-                if legacy_update_unit in {"个", "件", "桶", "箱", "kg", "公斤", "吨", "米", "升"}
-                else "个"
-            )
+        if legacy_update_unit:
+            if legacy_update_unit not in {"个", "件", "桶", "箱", "kg", "公斤", "吨", "米", "升"}:
+                return {
+                    "success": False,
+                    "error_code": "customer_product_link_unsupported",
+                    "message": "客户关联需要独立处理，本次未修改产品。",
+                }
+            payload.setdefault("measurement_unit", legacy_update_unit)
         return _facade().cast("dict[Any, Any]", svc.update_product(product_id, payload))
     if action == "delete":
         return _facade().cast("dict[Any, Any]", svc.delete_product(int(params.get("id") or 0)))
