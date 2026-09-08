@@ -261,6 +261,38 @@ def test_task_collection_filters_mod_before_limit_and_stream_snapshot():
     assert _client().get("/api/agent/tasks").json()["data"] == []
 
 
+def test_runtime_active_count_excludes_other_accounts_and_mods():
+    repository = get_agent_run_repository()
+    active = []
+    for user, mod, tenant in [
+        ("u1", "a", ""),
+        ("u1", "b", ""),
+        ("u2", "a", ""),
+        ("u1", "a", "other"),
+    ]:
+        run = AgentRun(user_id=user, message="active")
+        run.metadata["runtime_context"] = {
+            "tenant_id": tenant,
+            "_mod_authorization": {"mod_id": mod},
+        }
+        repository.save(run)
+        active.append({"run_id": run.run_id})
+    dispatcher = MagicMock()
+    dispatcher.snapshot.return_value = {
+        "running": True,
+        "max_workers": 4,
+        "active_count": 4,
+        "active": active,
+    }
+    with patch(
+        "app.fastapi_routes.domains.agent.task_routes.get_agent_task_dispatcher",
+        return_value=dispatcher,
+    ):
+        response = _client(mod_authorization={"mod_id": "a"}).get("/api/agent/task-runtime")
+    assert response.status_code == 200
+    assert response.json()["data"]["active_count"] == 1
+
+
 def _drain_background_run(run_id: str) -> AgentRun:
     queue = get_task_execution_repository()
     claimed = queue.claim("route-test-worker", lease_seconds=30)

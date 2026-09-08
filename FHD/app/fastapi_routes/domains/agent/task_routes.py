@@ -17,7 +17,11 @@ from app.application.agent_orchestrator.task_dispatcher import get_agent_task_di
 from app.application.agent_orchestrator.task_execution_repository import (
     get_task_execution_repository,
 )
-from app.application.agent_orchestrator.task_models import task_from_run, tenant_id_of_run
+from app.application.agent_orchestrator.task_models import (
+    mod_id_of_run,
+    task_from_run,
+    tenant_id_of_run,
+)
 from app.application.agent_orchestrator.task_progress import task_progress_snapshot
 from app.application.agent_orchestrator.unified_task import (
     UnifiedTaskConflictError,
@@ -179,6 +183,18 @@ def get_agent_task_runtime(
 ) -> dict[str, Any] | JSONResponse:
     try:
         snapshot = get_agent_task_dispatcher().snapshot()
+        orchestrator = AgentOrchestrator()
+        active_count = 0
+        for item in cast(list[dict[str, Any]], snapshot["active"]):
+            run = orchestrator.get_run(str(item["run_id"]))
+            if (
+                run is not None
+                and run.user_id == principal.user_id
+                and tenant_id_of_run(run) == principal.tenant_id
+                and mod_id_of_run(run)
+                == str((principal.mod_authorization or {}).get("mod_id") or "")
+            ):
+                active_count += 1
         tasks = scoped_tasks(
             AgentOrchestrator(),
             principal=principal,
@@ -189,7 +205,7 @@ def get_agent_task_runtime(
             {
                 "running": bool(snapshot["running"]),
                 "max_workers": int(cast(Any, snapshot["max_workers"])),
-                "active_count": int(cast(Any, snapshot["active_count"])),
+                "active_count": active_count,
                 "progress": _task_progress_overview(tasks),
             }
         )
