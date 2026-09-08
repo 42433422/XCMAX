@@ -84,17 +84,17 @@ def test_inbound_rejects_missing_and_other_tenant_warehouse(tmp_path, monkeypatc
         with factory() as db:
             assert db.query(InventoryLedger).count() == 0
             assert db.query(InventoryTransaction).count() == 0
-        for location_id, quantity in [(5, 2), (6, 3)]:
+        for location_id, quantity in [(5, 2), (6, 3), (5, 4)]:
             result = InventoryService().inventory_in(
                 product_id=1, warehouse_id=3, location_id=location_id, quantity=quantity
             )
             assert result["success"], result
         with factory() as db:
             ledgers = db.query(InventoryLedger).order_by(InventoryLedger.location_id).all()
-            assert [(row.location_id, float(row.quantity)) for row in ledgers] == [(5, 2), (6, 3)]
+            assert [(row.location_id, float(row.quantity)) for row in ledgers] == [(5, 6), (6, 3)]
             transactions = db.query(InventoryTransaction).order_by(InventoryTransaction.id).all()
             assert [
                 (row.location_id, float(row.before_quantity), float(row.after_quantity))
                 for row in transactions
-            ] == [(5, 0, 2), (6, 0, 3)]
+            ] == [(5, 0, 2), (6, 0, 3), (5, 2, 6)]
     engine.dispose()
