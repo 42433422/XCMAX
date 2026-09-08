@@ -1,0 +1,17 @@
+{
+  "base_sha": "16bd23a20",
+  "tests_passed": 26,
+  "scope": "File-backed SQLite, real ApprovalService persistence, four independent Python reader processes.",
+  "verified": [
+    "Pending request not executable in new process.",
+    "Approved request restores exact plan ID and shipment products.",
+    "Other tenant denied in independent process.",
+    "Terminal request cannot replay in independent process."
+  ],
+  "limitations": [
+    "Parent creator process remains alive; no forced crash during transaction.",
+    "SQLite foreign-key enforcement not explicitly enabled.",
+    "Approval transition helper invoked directly; HTTP reviewer authorization not exercised.",
+    "No actual shipment execution after restoration or installed desktop UI restart."
+  ]
+}

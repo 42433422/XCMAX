@@ -505,11 +505,52 @@ class TestAtomicTerminalStateNotOverwrittenByStaleSession:
             session_a.close()
 
 
-def test_real_shipment_request_survives_service_recreation(db):
+def test_real_shipment_request_survives_service_recreation(tmp_path, monkeypatch):
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
     from app.application.workflow.approval_service import ApprovalService
     from app.application.workflow.types import PlanGraph, WorkflowNode
     from app.db.models.user import User
     from app.infrastructure.tenant_scope import tenant_scope
+
+    url = "sqlite:///" + str(tmp_path / "approval.sqlite3")
+    engine = create_engine(url)
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine)
+    monkeypatch.setattr("app.db.session.SessionLocal", db)
+
+    def read_in_fresh_process(request_id, tenant=1):
+        output = tmp_path / "child-result.json"
+        output.unlink(missing_ok=True)
+        env = dict(os.environ)
+        env.update(
+            DATABASE_URL=url,
+            VECTOR_DB_URL=url,
+            PYTHONPATH=str(Path(__file__).resolve().parents[2]),
+            XCAGI_DATA_DIR=str(tmp_path),
+            XCAGI_DESKTOP_DATA_DIR=str(tmp_path),
+            REQUEST_ID=request_id,
+            TEST_TENANT=str(tenant),
+            TEST_OUTPUT=str(output),
+        )
+        code = """
+import json, os
+from pathlib import Path
+from app.application.workflow.approval_service import ApprovalService
+from app.infrastructure.tenant_scope import tenant_scope
+with tenant_scope(int(os.environ['TEST_TENANT'])):
+    snapshot = ApprovalService().load_durable_workflow_snapshot(os.environ['REQUEST_ID'])
+    data = None if snapshot is None else {'plan_id':snapshot['plan'].plan_id,'params':snapshot['plan'].nodes[0].params}
+Path(os.environ['TEST_OUTPUT']).write_text(json.dumps(data))
+"""
+        result = subprocess.run(
+            [sys.executable, "-c", code], env=env, capture_output=True, text=True, timeout=30
+        )
+        assert result.returncode == 0, result.stderr[-2000:]
+        return json.loads(output.read_text())
 
     with db() as session, session.begin():
         session.add(
@@ -538,6 +579,7 @@ def test_real_shipment_request_survives_service_recreation(db):
         assert service.get_request_metadata(request.request_id)["applicant_id"] == 71
         fresh = ApprovalService()
         assert fresh.get_pending_workflow(request.request_id) is None
+        assert read_in_fresh_process(request.request_id) is None
         # Public service recovery only exposes approved requests.
         assert fresh.load_durable_workflow_snapshot(request.request_id) is None
         snapshot = load_durable_workflow_snapshot(request.request_id, allow_terminal=False)
@@ -548,9 +590,16 @@ def test_real_shipment_request_survives_service_recreation(db):
             assert fresh.load_durable_workflow_snapshot(request.request_id) is None
         approved = mark_durable_request_approved_and_load(request.request_id)
         assert approved is not None
+        assert read_in_fresh_process(request.request_id) == {
+            "plan_id": plan.plan_id,
+            "params": node.params,
+        }
+        assert read_in_fresh_process(request.request_id, tenant=2) is None
         recovered = fresh.load_durable_workflow_snapshot(request.request_id)
         assert recovered is not None and recovered["plan"].nodes[0].params == node.params
         with tenant_scope(2):
             assert fresh.load_durable_workflow_snapshot(request.request_id) is None
         mark_durable_outcome(request.request_id, success=True)
         assert fresh.load_durable_workflow_snapshot(request.request_id) is None
+        assert read_in_fresh_process(request.request_id) is None
+    engine.dispose()
