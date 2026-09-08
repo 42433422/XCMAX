@@ -40,6 +40,10 @@ def apply_clarification_answer(run: AgentRun, *, step_id: str, parameters: dict[
     if not parameters or not set(parameters) <= missing:
         raise ClarificationAnswerError("答案只能补充当前目标缺失的必填参数")
     candidate = {**deepcopy(target.params), **deepcopy(parameters)}
+    if (target.tool_id, target.action) == ("sales", "quote"):
+        from app.application.sales_quote_inputs import quote_answer_candidate
+
+        candidate = quote_answer_candidate(target.params, parameters)
     validation = validate_tool_call(target.tool_id, target.action, candidate)
     if not validation.ok:
         raise ClarificationAnswerError(validation.message)
@@ -111,6 +115,10 @@ def pause_for_clarification(run: AgentRun, step: AgentStep) -> bool:
         for key in required_fields
         if target is not None and target.params.get(key) in (None, "", [], {})
     ]
+    if target and (target.tool_id, target.action) == ("sales", "quote"):
+        from app.application.sales_quote_inputs import quote_question_fields
+
+        step.output["fields"] = quote_question_fields(target.params)
     run.final_output = {"clarification": {"step_id": step.step_id, **step.output}}
     run.add_event("step.clarification_required", step.output["question"], run.final_output)
     return True

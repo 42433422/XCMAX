@@ -17,6 +17,20 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Named quotation requests now preserve the customer/model and ask only for
+  missing per-item quantity/price fields. Answers cannot replace known values,
+  invalid answers leave the task unchanged, and resumption stops at independent
+  write approval. The real benchmark seeds the customer-management PurchaseUnit
+  and product, supplies explicit answers and parameter-bound approval, then checks
+  exactly one quote and item with quantity 2, price 50 and amount 100. Sales quote
+  now bridges the existing PurchaseUnit into the sales Customer model only after
+  all product references validate; rejected products leave no bridge/order rows.
+  Three full trials passed this case, observation 18/22. 104 backend checks and
+  three form tests passed. Evidence: `named-quote-bridge-trials`; the preceding
+  failed `named-quote-trials` records exposed the customer-model mismatch.
+  This does not certify order confirmation, multi-product natural-language
+  parsing, ambiguous-customer selection or installed-runtime behavior.
+
 - Quote input contracts now accept either customer ID or customer name, with
   shared domain validation used by the service, capability entry and Agent tool
   validator. The registry requires items while domain validation enforces the

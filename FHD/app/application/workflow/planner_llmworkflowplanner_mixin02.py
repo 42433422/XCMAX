@@ -175,6 +175,13 @@ class _LLMWorkflowPlannerPart02Mixin:
             if finance_node is not None:
                 nodes.append(finance_node)
                 intent = "finance_write"
+        if not nodes:
+            from app.application.workflow.sales_quote_plan import sales_quote_node
+
+            quote_node = sales_quote_node(message, tool_registry)
+            if quote_node is not None:
+                nodes.append(quote_node)
+                intent = "sales_quote"
         route = route_normal_mode_message(message)
         if (
             not nodes

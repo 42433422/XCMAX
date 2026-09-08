@@ -4,6 +4,52 @@ from app.application.workflow.clarification_node import build_clarify_node
 from app.application.workflow.types import PlanGraph, WorkflowNode
 
 
+def test_quote_missing_price_preserves_quantity_and_requires_approval():
+    from copy import deepcopy
+
+    import pytest
+
+    from app.application.agent_orchestrator.clarification import ClarificationAnswerError
+    from app.application.workflow.planner import LLMWorkflowPlanner
+    from app.services.tools_execution.registry import get_workflow_tool_registry
+
+    planner = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
+    plan = planner._fallback_plan(
+        "quote-input", "给客户甲的产品A100报个价，数量2", get_workflow_tool_registry()
+    )
+    orchestrator = AgentOrchestrator(repository=InMemoryAgentRunRepository())
+    run = orchestrator.start_run_from_plan(user_id="owner", message="报价", plan=plan)
+    assert run.status == "waiting_user"
+    assert run.final_output["clarification"]["fields"] == [
+        {"key": "items.0.unit_price", "label": "A100 · 单价", "type": "number"}
+    ]
+    before = deepcopy(run.to_dict())
+    with pytest.raises(ClarificationAnswerError):
+        apply_clarification_answer(
+            run,
+            step_id=run.steps[0].step_id,
+            parameters={"items.0.quantity": 99, "items.0.unit_price": 50},
+        )
+    assert run.to_dict() == before
+    with pytest.raises(ClarificationAnswerError):
+        apply_clarification_answer(
+            run, step_id=run.steps[0].step_id, parameters={"items.0.unit_price": -1}
+        )
+    assert run.to_dict() == before
+    orchestrator.stage_clarification_answer(
+        run.run_id,
+        step_id=run.steps[0].step_id,
+        parameters={"items.0.unit_price": 50},
+        requested_by="owner",
+    )
+    continued = orchestrator.execute_dispatched_run(run.run_id)
+    assert continued.status == "waiting_user"
+    assert continued.tool_calls == []
+    assert continued.steps[-1].params["items"] == [
+        {"model_number": "A100", "quantity": 2, "unit_price": 50}
+    ]
+
+
 def test_named_quote_answer_stops_at_write_approval():
     params = {"items": [{"model_number": "A100", "quantity": 2, "unit_price": 50}]}
     question = build_clarify_node(

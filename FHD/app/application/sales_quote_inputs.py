@@ -1,5 +1,6 @@
 """Validate quote quantities and prices before any order is added to a session."""
 
+from copy import deepcopy
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -10,7 +11,48 @@ def missing_quote_fields(data: dict[str, Any]) -> list[str]:
         missing.append("customer_name")
     if data.get("items") in (None, [], {}):
         missing.append("items")
+    elif isinstance(data.get("items"), list):
+        for index, item in enumerate(data["items"]):
+            if isinstance(item, dict):
+                for field in ("quantity", "unit_price"):
+                    if item.get(field) in (None, ""):
+                        missing.append(f"items.{index}.{field}")
     return missing
+
+
+def quote_answer_candidate(data: dict[str, Any], answers: dict[str, Any]) -> dict[str, Any]:
+    if not answers or not set(answers) <= set(missing_quote_fields(data)):
+        raise ValueError("只能补充当前报价缺失的字段")
+    candidate = deepcopy(data)
+    for key, value in answers.items():
+        if key.startswith("items."):
+            _, index, field = key.split(".")
+            candidate["items"][int(index)][field] = deepcopy(value)
+        else:
+            candidate[key] = deepcopy(value)
+    return candidate
+
+
+def quote_question_fields(data: dict[str, Any]) -> list[dict[str, str]]:
+    fields = []
+    for key in missing_quote_fields(data):
+        if key.startswith("items."):
+            _, index, field = key.split(".")
+            item = data["items"][int(index)]
+            product = (
+                item.get("model_number") or item.get("product_name") or f"第 {int(index) + 1} 项"
+            )
+            label = "数量" if field == "quantity" else "单价"
+            fields.append({"key": key, "label": f"{product} · {label}", "type": "number"})
+        else:
+            fields.append(
+                {
+                    "key": key,
+                    "label": "客户名称" if key == "customer_name" else "报价明细",
+                    "type": "string" if key == "customer_name" else "array",
+                }
+            )
+    return fields
 
 
 def validated_quote_request(data: dict[str, Any]) -> list[dict[str, Any]]:

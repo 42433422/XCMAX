@@ -16,9 +16,34 @@ def resolve_quote_references(
             raise ValueError("客户编号不存在或与客户名称不符")
     else:
         matches = db.query(Customer).filter(Customer.customer_name == name).limit(2).all()
-        if len(matches) != 1:
+        if len(matches) > 1:
             raise ValueError("客户名称不存在或存在重名，请选择明确的客户")
-        customer = matches[0]
+        if matches:
+            customer = matches[0]
+        else:
+            from app.db.models.purchase_unit import PurchaseUnit
+            from app.infrastructure.tenant_scope import current_tenant_id
+
+            tenant_id = current_tenant_id()
+            if not tenant_id:
+                raise ValueError("缺少客户所属租户")
+            units = (
+                db.query(PurchaseUnit)
+                .filter(PurchaseUnit.tenant_id == tenant_id, PurchaseUnit.unit_name == name)
+                .limit(2)
+                .all()
+            )
+            if len(units) != 1:
+                raise ValueError("客户名称不存在或存在重名，请选择明确的客户")
+            unit = units[0]
+            # Keep the bridge transient until all product references are valid.
+            customer = Customer(
+                customer_name=unit.unit_name,
+                contact_person=unit.contact_person,
+                contact_phone=unit.contact_phone,
+                contact_address=unit.address,
+                tenant_id=tenant_id,
+            )
     resolved = []
     for item in items:
         product_id = item.get("product_id")

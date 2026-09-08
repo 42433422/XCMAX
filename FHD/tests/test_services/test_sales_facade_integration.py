@@ -565,6 +565,37 @@ def _seed_quote_owner_db(db):
 class TestQuoteCallerOwnedSession:
     """quote 在调用方会话内执行：不 commit/rollback/close，跨会话可见性受调用方事务控制。"""
 
+    @pytest.mark.parametrize("valid_product", [True, False])
+    def test_purchase_unit_bridge_is_written_only_with_valid_quote(
+        self, _facade_file_db, valid_product
+    ):
+        from app.db.models import PurchaseUnit
+
+        db = _facade_file_db
+        with tenant_scope(1):
+            db.add(PurchaseUnit(unit_name="客户管理客户", contact_person="联系人甲"))
+            db.add(Product(model_number="BRIDGE", name="桥接产品"))
+            db.commit()
+            result = SalesAppService().quote(
+                {
+                    "customer_name": "客户管理客户",
+                    "items": [
+                        {
+                            "model_number": "BRIDGE" if valid_product else "missing",
+                            "quantity": 2,
+                            "unit_price": 50,
+                        },
+                    ],
+                },
+                db=db,
+            )
+            db.commit()
+            assert result["success"] is valid_product
+            assert db.query(Customer).count() == int(valid_product)
+            assert db.query(SalesOrder).count() == int(valid_product)
+            if valid_product:
+                assert db.query(Customer).one().contact_person == "联系人甲"
+
     def test_quote_resolves_exact_customer_and_model(self, _facade_file_db):
         from app.db.models import SalesOrderItem
 

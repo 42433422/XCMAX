@@ -100,6 +100,9 @@ class __SalesAppServicePart01MixinPart01Mixin:
                 customer, resolved_items = resolve_quote_references(ctx, data, items_data)
             except (ValueError, TypeError) as exc:
                 return {"success": False, "message": str(exc)}
+            if customer.id is None:
+                ctx.add(customer)
+                ctx.flush()
             total_amount = _facade().Decimal("0")
             order_no = data.get("order_no") or self._generate_order_no()
             order = _facade().SalesOrder(
