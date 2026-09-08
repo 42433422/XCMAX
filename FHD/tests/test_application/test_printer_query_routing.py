@@ -2,7 +2,10 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from app.application.normal_chat_dispatch import route_normal_mode_message
+from app.application.normal_chat_dispatch import (
+    route_normal_mode_message,
+    try_normal_slot_read_payload,
+)
 from app.application.printer_query_response import build_printer_query_response
 from app.application.workflow.planner import LLMWorkflowPlanner
 
@@ -21,7 +24,7 @@ def test_printer_query_reaches_registered_capability(message):
         "default_printer": {"success": True, "printer": "Office"},
     }
     with patch("app.services.get_system_service", return_value=service):
-        response = build_printer_query_response()
+        response = try_normal_slot_read_payload(message)
     assert response["success"]
     assert response["data"]["printers"] == ["Office"]
     assert "默认打印机：Office。" in response["response"]
