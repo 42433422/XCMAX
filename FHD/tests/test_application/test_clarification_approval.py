@@ -95,3 +95,40 @@ def test_invalid_missing_integer_does_not_mutate_node():
         assert resolve_missing_field(node, item, value) is None
     assert node.params == {}
     assert resolve_missing_field(node, item, "42") == {"id": 42}
+
+
+def test_multiple_required_fields_wait_until_all_are_valid():
+    from app.application.workflow.clarification_node import needs_clarification
+    from app.services.tools_execution.registry import get_workflow_tool_registry
+
+    node = WorkflowNode(
+        node_id="create", tool_id="finance", action="create_transaction", params={}, risk="medium"
+    )
+    plan = PlanGraph(plan_id="p", intent="finance", nodes=[node])
+    item = needs_clarification(plan, get_workflow_tool_registry())[0]
+    pending = {
+        "kind": "clarification",
+        "plan": plan,
+        "target_node_id": "create",
+        "clarify_node_id": "clarify",
+        "runtime_context": {},
+        "clarification": item,
+    }
+    service = SimpleNamespace(
+        _pending_workflows={"u": pending},
+        approval_service=Mock(),
+        _persist_plan_state=Mock(),
+        _run_workflow_with_state_updates=Mock(side_effect=AssertionError("must not execute")),
+    )
+    service.approval_service.get_approval_required_nodes.return_value = [node]
+    method = _AIChatApplicationServicePart03Mixin._continue_after_clarification
+    assert method(service, "u", pending, "revenue") is None
+    assert node.params == {"transaction_type": "revenue"}
+    assert pending["clarification"]["missing_fields"] == ["amount"]
+    service.approval_service.get_approval_required_nodes.assert_not_called()
+    assert method(service, "u", pending, "invalid") is None
+    assert node.params == {"transaction_type": "revenue"}
+    result = method(service, "u", pending, "125.5")
+    assert result["data"]["action"] == "workflow_confirmation_required"
+    assert node.params == {"transaction_type": "revenue", "amount": 125.5}
+    service._run_workflow_with_state_updates.assert_not_called()

@@ -17,7 +17,7 @@ def resolve_missing_field(
     if item.get("reason") != "missing_required" or node.tool_id == "business_db":
         return None
     missing = item.get("missing_fields")
-    if not isinstance(missing, list) or len(missing) != 1 or missing[0] != item.get("field"):
+    if not isinstance(missing, list) or not missing or missing[0] != item.get("field"):
         return None
     field = missing[0]
     spec = get_tool_action_spec(node.tool_id, node.action)
@@ -38,6 +38,19 @@ def resolve_missing_field(
     elif kind != "string":
         return None
     params = {**node.params, field: value}
-    if not validate_tool_call(node.tool_id, node.action, params).ok:
-        return None
+    if len(missing) == 1:
+        if not validate_tool_call(node.tool_id, node.action, params).ok:
+            return None
+    else:
+        from app.application.agent_orchestrator.tool_schema_validation import (
+            _validate_schema_payload,
+        )
+
+        valid, _ = _validate_schema_payload(
+            {"type": "object", "required": [field], "properties": {field: schema}},
+            {field: value},
+            subject="澄清回答",
+        )
+        if not valid:
+            return None
     return {field: value}

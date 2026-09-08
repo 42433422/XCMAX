@@ -6,6 +6,12 @@
 目标是四个阶段全部完成。本目录记录当前实施证据，不代表四阶段验收通过。
 此前对话中的 20%–30% 覆盖率与工期只是未验证估计，不作为验收基线。
 
+## Sequential scalar clarification
+
+Multiple missing scalar fields can now be completed one reply at a time. Each value is checked against its field schema before storage; remaining requirements refresh the pending question without approval or execution. The final answer must pass complete tool-call validation before the existing approval recheck. Invalid replies retain previously accepted values.
+
+27 related tests pass, including the actual continuation method resolving finance transaction type then amount, rejecting an invalid amount and requiring approval only after completion. Application mypy (1809 files), Ruff and all 10 blocking dev guards pass. Policy/persistence are mocked in this scenario; structured objects, natural-language enum interpretation, full approval execution and installed acceptance remain open. The last measured business trial remains 10/22.
+
 ## Broader chat regression verification
 
 All 1296 tests across 17 AI-chat, dynamic-workflow and clarification files pass on source 62ee8dcc8. The first attempt had 499 initialization failures because the shared virtualenv imported vendored LangGraph from another checkout. Rerunning with PYTHONPATH selecting this worktree's six vendored packages resolves those failures; no source-path assertion was disabled and no business code changed for this result.

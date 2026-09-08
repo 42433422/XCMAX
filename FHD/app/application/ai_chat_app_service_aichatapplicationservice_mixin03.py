@@ -335,6 +335,23 @@ class _AIChatApplicationServicePart03Mixin:
             target.params["payload"] = payload
         else:
             target.params.update(confirmed)
+        if item.get("reason") == "missing_required" and len(item.get("missing_fields") or []) > 1:
+            from app.application.workflow.clarification_node import needs_clarification
+            from app.services.tools_execution.registry import get_workflow_tool_registry
+
+            remaining = [
+                entry
+                for entry in needs_clarification(plan, get_workflow_tool_registry())
+                if entry["node_id"] == target.node_id
+            ]
+            if remaining:
+                pending["clarification"] = remaining[0]
+                for node in plan.nodes:
+                    if node.node_id == clarify_node_id:
+                        node.params["question"] = remaining[0]["question"]
+                        node.params["answer_key"] = remaining[0]["field"]
+                self._persist_plan_state(plan, runtime_ctx, status="pending_awaiting")
+                return None
         target.params.pop("candidates", None)
         target.params.pop("_candidates", None)
         runtime_ctx["_clarify_answers"] = {clarify_node_id: {"confirmed": True, **confirmed}}
