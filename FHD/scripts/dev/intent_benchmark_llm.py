@@ -47,10 +47,36 @@ def match_llm(case: dict, text: str) -> bool:
 @contextmanager
 def observe_model_calls():
     """Instrument the real provider boundary; never replace model responses."""
-    from app.infrastructure.llm import structured_output
+    from app.infrastructure.llm import invoke, structured_output
 
     original = structured_output.complete_structured_sync
     evidence = {"attempted": 0, "completed": 0, "errors": {}, "models": [], "seconds": 0.0}
+    original_invoke = invoke.chat_completion_openai_format
+    evidence["responses"] = {"total": 0, "empty_content": 0, "finish_reasons": {}, "errors": {}}
+
+    async def observed_invoke(*args, **kwargs):
+        stats = evidence["responses"]
+        try:
+            result = await original_invoke(*args, **kwargs)
+        except BOUNDARY_ERRORS as exc:
+            category = type(exc).__name__
+            if isinstance(exc, RuntimeError) and str(exc) == "Event loop is closed":
+                category = "event_loop_closed"
+            stats["errors"][category] = stats["errors"].get(category, 0) + 1
+            raise
+        stats["total"] += 1
+        choices = result.get("choices") if isinstance(result, dict) else None
+        choice = choices[0] if isinstance(choices, list) and choices else {}
+        choice = choice if isinstance(choice, dict) else {}
+        message = choice.get("message")
+        content = message.get("content") if isinstance(message, dict) else None
+        stats["empty_content"] += not bool(content)
+        reason = choice.get("finish_reason")
+        # Provider text, credentials, prompts and arbitrary reason strings stay out of reports.
+        reason = reason if reason in ("stop", "length", "content_filter", "tool_calls") else "other"
+        stats["finish_reasons"][reason] = stats["finish_reasons"].get(reason, 0) + 1
+        return result
+
     previous = os.environ.get("XCAGI_LLM_INTENT_GATE")
     previous_cache = gate._cache.copy()
     os.environ["XCAGI_LLM_INTENT_GATE"] = "1"
@@ -74,7 +100,10 @@ def observe_model_calls():
             evidence["seconds"] = round(evidence["seconds"] + time.monotonic() - started, 3)
 
     try:
-        with patch.object(structured_output, "complete_structured_sync", observed):
+        with (
+            patch.object(structured_output, "complete_structured_sync", observed),
+            patch.object(invoke, "chat_completion_openai_format", observed_invoke),
+        ):
             yield evidence
     finally:
         if previous is None:

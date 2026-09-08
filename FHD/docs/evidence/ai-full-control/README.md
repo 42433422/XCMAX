@@ -6,6 +6,12 @@
 目标是四个阶段全部完成。本目录记录当前实施证据，不代表四阶段验收通过。
 此前对话中的 20%–30% 覆盖率与工期只是未验证估计，不作为验收基线。
 
+## Remaining live model failures diagnosed
+
+A full 97-case rerun with current server process configuration still has 23 successful structured responses and 22 failures. All 23 actual responses finished with stop and nonempty content; the other calls failed before returning a provider response. A separate three-call live probe of the same synthetic input reproduced two successes and one Event loop is closed failure. This confirms an event-loop lifecycle failure in this sync/pooled-HTTP path; it does not prove every remaining failure has the same cause.
+
+Added transparent diagnostics around the real provider boundary: bounded finish-reason categories, empty-content counts and exception-type counts. No raw provider content, prompt, credential or arbitrary finish-reason string is recorded; results and exceptions are preserved. The runtime lifecycle fix remains outstanding. Files: intent-routing-diagnostics.json and intent-loop-probe.json. These are local source evaluations with server credentials, not production business execution or installed-client acceptance.
+
 ## Follow-up CI repair
 
 The prior head's frontend run passed 9869 assertions but failed on an unhandled label-event rejection when the side-effect result was undefined. The handler now reports an invalid receipt or rejected request as failure, retaining account/sequence checks before publishing results. 19 event tests, full frontend build typecheck and ESLint pass locally. The architecture check also mistook a historical CI check name in this report for a new source-of-truth claim; wording was clarified and docs lint reports zero conflicts. Remote reruns remain required.
