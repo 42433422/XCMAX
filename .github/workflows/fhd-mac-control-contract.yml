@@ -25,3 +25,15 @@ jobs:
         with:
           node-version: '22'
       - run: node --test scripts/autonomy/runtime_tools/control_receipt_outbox.test.mjs scripts/autonomy/runtime_tools/control_git_handoff.test.mjs scripts/autonomy/runtime_tools/e2e_agent_runtime_policy.test.mjs
+      - uses: actions/checkout@v4
+        if: matrix.os == 'ubuntu-latest'
+        with:
+          repository: 42433422/devfleet
+          ref: b2c99fd999016a673b0eadeadf1e3e3ae2d47f24
+          path: para-test-deps
+      - run: npm ci --prefix ../para-test-deps
+        if: matrix.os == 'ubuntu-latest'
+      - run: node --test scripts/autonomy/runtime_tools/provision_para_control.test.mjs
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          PARA_TEST_PACKAGE_ROOT: ${{ github.workspace }}/para-test-deps
