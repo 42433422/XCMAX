@@ -19,6 +19,18 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Mobile Agent authentication now resolves the verified JWT session against the
+  host database and reads the current active user's tenant, username and role.
+  It no longer derives missing tenant scope or stale administrator access from
+  token claims. A signed-token regression first reproduced empty tenant scope
+  (`mobile-account-before`); current tenant 7/current normal role now win over an
+  older admin token. Disabled users and expired/deleted sessions deny even without
+  an Active-Mod header. Owner/session mismatch now returns authentication 401
+  before Mod authorization. Sixty-two binding/route/real-dispatch checks pass
+  (`mobile-account-after`), and the final 60-test route/binding suite includes
+  the additional no-Mod expiry/deletion cases (`mobile-account-final`). Web
+  stateless entitlement binding and full client runtime acceptance remain open.
+
 - Mobile access JWTs already carry a signed session_id. Agent Mod binding now
   receives that field only after verify_mobile_jwt/access-type validation rather
   than treating the full Bearer JWT as a database session key. A signed-token

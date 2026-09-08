@@ -143,7 +143,7 @@ def test_mobile_token_binds_only_verified_access_session(mod_session, monkeypatc
         assert tokens[token_kind] not in str(principal.mod_authorization)
 
 
-@pytest.mark.parametrize("invalidity,expected_status", [("wrong_owner", 403), ("signature", 401), ("expired_session", 403)])
+@pytest.mark.parametrize("invalidity,expected_status", [("wrong_owner", 401), ("signature", 401), ("expired_session", 401)])
 def test_mobile_mod_scope_rejects_invalid_proof(mod_session, monkeypatch, invalidity, expected_status):
     from app.security.mobile_jwt import issue_mobile_tokens
 
@@ -166,3 +166,43 @@ def test_mobile_mod_scope_rejects_invalid_proof(mod_session, monkeypatch, invali
     with pytest.raises(HTTPException) as error:
         require_agent_principal(request, x_user_id=None)
     assert error.value.status_code == expected_status
+
+
+def test_mobile_principal_uses_current_account_tenant_and_role(mod_session, monkeypatch):
+    from app.security.mobile_jwt import issue_mobile_tokens
+
+    monkeypatch.setenv("SECRET_KEY", "isolated-mobile-agent-test-secret-" * 2)
+    monkeypatch.setattr("app.infrastructure.auth.agent_principal.resolve_session_user", lambda request: None)
+    token = issue_mobile_tokens(user_id=1, session_id="secret-session", account_kind="admin")["access_token"]
+    request = Request({"type": "http", "headers": [(b"authorization", f"Bearer {token}".encode())]})
+    with mod_session.begin() as db:
+        user = db.get(User, 1)
+        user.tenant_id = 7
+        user.role = "user"
+    principal = require_agent_principal(request, x_user_id=None)
+    assert principal.tenant_id == "7"
+    assert principal.is_admin is False
+    with mod_session.begin() as db:
+        db.get(User, 1).is_active = False
+    with pytest.raises(HTTPException) as error:
+        require_agent_principal(request, x_user_id=None)
+    assert error.value.status_code == 401
+
+
+@pytest.mark.parametrize("invalidity", ["expired", "deleted"])
+def test_mobile_host_task_also_requires_current_session(mod_session, monkeypatch, invalidity):
+    from app.security.mobile_jwt import issue_mobile_tokens
+
+    monkeypatch.setenv("SECRET_KEY", "isolated-mobile-agent-test-secret-" * 2)
+    monkeypatch.setattr("app.infrastructure.auth.agent_principal.resolve_session_user", lambda request: None)
+    token = issue_mobile_tokens(user_id=1, session_id="secret-session")["access_token"]
+    with mod_session.begin() as db:
+        row = db.query(UserSession).filter_by(session_id="secret-session").one()
+        if invalidity == "expired":
+            row.expires_at = utc_now_naive() - timedelta(seconds=1)
+        else:
+            db.delete(row)
+    request = Request({"type": "http", "headers": [(b"authorization", f"Bearer {token}".encode())]})
+    with pytest.raises(HTTPException) as error:
+        require_agent_principal(request, x_user_id=None)
+    assert error.value.status_code == 401

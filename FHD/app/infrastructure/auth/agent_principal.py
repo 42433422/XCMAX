@@ -67,6 +67,26 @@ def _test_header_enabled() -> bool:
     }
 
 
+def _mobile_principal(payload: dict[str, Any]) -> AgentPrincipal:
+    from app.db import HostSessionLocal
+    from app.db.models.user import Session as UserSession
+    from app.utils.time import utc_now_naive
+
+    with HostSessionLocal() as db:
+        row = db.query(UserSession).filter(
+            UserSession.session_id == str(payload.get("session_id") or ""),
+            UserSession.expires_at > utc_now_naive(),
+        ).first()
+        if (row is not None and str(row.user_id) == str(payload["user_id"])
+                and row.user is not None and row.user.is_active):
+            principal = _from_user(row.user)
+            if principal is not None:
+                return principal
+    raise HTTPException(status_code=401, detail={
+        "code": "UNAUTHORIZED", "message": "登录会话已失效，请重新登录",
+    })
+
+
 def require_agent_principal(
     request: Request,
     x_user_id: str | None = Header(default=None, alias="X-User-ID"),
@@ -93,12 +113,8 @@ def require_agent_principal(
     if authorization.startswith("Bearer "):
         payload = verify_mobile_jwt(authorization[7:].strip())
         if payload and payload.get("typ") == "access" and payload.get("user_id") is not None:
-            return _bind_mod(request, AgentPrincipal(
-                user_id=str(payload["user_id"]),
-                username=str(payload.get("username") or ""),
-                tenant_id=str(payload.get("tenant_id") or ""),
-                is_admin=str(payload.get("account_kind") or "").lower() == "admin",
-            ), verified_session_id=str(payload.get("session_id") or ""))
+            return _bind_mod(request, _mobile_principal(payload),
+                             verified_session_id=str(payload.get("session_id") or ""))
 
     # Explicitly test-only. Production cannot trust a caller-controlled identity header.
     if _test_header_enabled() and str(x_user_id or "").strip():
