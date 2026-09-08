@@ -142,14 +142,20 @@ def _check_db_state(expect: dict[str, Any]) -> tuple[bool, str]:
 
 
 def _execute_nodes(nodes: list[Any]) -> tuple[bool, str, list[dict[str, Any]]]:
-    """逐节点执行计划。clarify.ask 是交互节点，跳过执行只算路由。"""
+    """Execute the current turn only; unanswered clarification suspends the plan.
+
+    This direct-tool evaluator does not simulate user answers or approval. A
+    future business node must never execute merely because it exists in a plan.
+    """
     from app.services.tools_workflow_registered import execute_registered_workflow_tool
 
     executed: list[dict[str, Any]] = []
     for node in nodes:
         if node.tool_id == "clarify":
-            executed.append({"tool_id": node.tool_id, "action": node.action, "skipped": True})
-            continue
+            executed.append(
+                {"tool_id": node.tool_id, "action": node.action, "waiting_user": True}
+            )
+            return True, "", executed
         params = {k: v for k, v in (node.params or {}).items() if k != "_runtime_context"}
         try:
             result = execute_registered_workflow_tool(node.tool_id, node.action, dict(params))

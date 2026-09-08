@@ -5,8 +5,8 @@
     TASK_BENCHMARK_RUN=1 python -m pytest tests/benchmarks/test_task_success.py -v
 
 可选 env：
-    TASK_BENCHMARK_TRIALS=3        # pass^k 的 k（默认 1）
-    TASK_BENCHMARK_MIN_PASS=0.5    # 硬门禁阈值（默认 0 = 只报告不拦截）
+    TASK_BENCHMARK_TRIALS=3        # pass^k 的 k（默认 3）
+    TASK_BENCHMARK_MODE=observe   # 显式只报告；默认 gate，成功率门槛 1.0
 
 口径（对齐 τ-bench）：
     pass^1  = 单次试验通过的任务占比
@@ -21,16 +21,24 @@ import json
 import os
 import subprocess
 import sys
-from collections import defaultdict
 from pathlib import Path
 
 import pytest
+
+from scripts.dev.benchmark_evidence import (
+    evidence_identity,
+    gate_policy,
+    report_directory,
+    trial_artifact,
+    write_report,
+)
+from scripts.dev.task_benchmark_report import passes_gate, summarize_trials
 
 BENCH_DIR = Path(__file__).resolve().parent
 GOLDEN_PATH = BENCH_DIR / "task_golden_set.json"
 RUNNER_PATH = BENCH_DIR / "task_success_runner.py"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-REPORT_DIR = PROJECT_ROOT / "test_reports"
+REPORT_DIR = report_directory()
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("TASK_BENCHMARK_RUN", "").strip(),
@@ -70,71 +78,32 @@ def _run_trial(trial: int) -> list[dict]:
 
 
 def test_task_golden_set_pass_k():
+    mode, minimum = gate_policy()
     data = json.loads(GOLDEN_PATH.read_text(encoding="utf-8"))
-    tasks = data["tasks"]
-    trials = max(1, int(os.environ.get("TASK_BENCHMARK_TRIALS", "1") or "1"))
-
-    per_trial: list[list[dict]] = [_run_trial(i) for i in range(trials)]
-    by_task: dict[str, list[dict]] = defaultdict(list)
-    for trial_results in per_trial:
-        assert len(trial_results) == len(tasks), "runner 结果数与 golden set 不一致"
-        for row in trial_results:
-            by_task[row["task_id"]].append(row)
-
-    domain_stats: dict[str, dict[str, int]] = defaultdict(lambda: {"total": 0, "pass_k": 0})
-    pass_k_count = 0
-    pass_at_k_count = 0
-    failures: list[dict] = []
-    for task in tasks:
-        tid = task["task_id"]
-        rows = by_task[tid]
-        all_pass = all(r["pass"] for r in rows)
-        any_pass = any(r["pass"] for r in rows)
-        pass_k_count += all_pass
-        pass_at_k_count += any_pass
-        domain = task.get("domain") or "unknown"
-        domain_stats[domain]["total"] += 1
-        domain_stats[domain]["pass_k"] += all_pass
-        if not all_pass:
-            first_fail = next(r for r in rows if not r["pass"])
-            failures.append(
-                {
-                    "task_id": tid,
-                    "instruction": task["instruction"],
-                    "difficulty": task.get("difficulty"),
-                    "failure": first_fail.get("failure"),
-                    "plan": first_fail.get("plan"),
-                    "trials_failed": sum(1 for r in rows if not r["pass"]),
-                }
-            )
-
-    total = len(tasks)
-    report = {
-        "golden_set": str(GOLDEN_PATH.name),
-        "total_tasks": total,
-        "trials": trials,
-        "pass_1": round(sum(1 for r in per_trial[0] if r["pass"]) / total, 4),
-        "pass_k": round(pass_k_count / total, 4),
-        "pass_at_k": round(pass_at_k_count / total, 4),
-        "by_domain": {
-            d: {"pass_k": s["pass_k"], "total": s["total"]} for d, s in sorted(domain_stats.items())
-        },
-        "failures": failures,
-    }
-    REPORT_DIR.mkdir(parents=True, exist_ok=True)
-    report_path = REPORT_DIR / "task_benchmark_report.json"
-    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    print("\n===== 任务级基准（τ-bench 口径）=====")
+    trials = int(os.environ.get("TASK_BENCHMARK_TRIALS", "3"))
+    if trials < 1 or (mode == "gate" and trials < 3):
+        raise ValueError("gate mode requires at least three independent trials")
+    per_trial = [_run_trial(i) for i in range(trials)]
+    report = summarize_trials(data["tasks"], per_trial)
+    report.update(evidence_identity(GOLDEN_PATH, execution_mode="deterministic_tools"))
+    report.update(
+        {
+            "golden_set": GOLDEN_PATH.name,
+            "acceptance_mode": mode,
+            "min_required": minimum,
+            "gate_passed": mode == "gate" and passes_gate(report, minimum),
+            "trial_artifacts": [
+                trial_artifact(REPORT_DIR / f"task_benchmark_trial_{number}.jsonl")
+                for number in range(trials)
+            ],
+        }
+    )
+    report_path = write_report("task_benchmark_report.json", report)
     print(
-        f"tasks={total} trials={trials} pass^1={report['pass_1']} pass^{trials}={report['pass_k']} pass@{trials}={report['pass_at_k']}"
+        f"tasks={report['total_tasks']} trials={trials} pass^k={report['pass_k']:.4f}; {report_path}"
     )
-    for d, s in report["by_domain"].items():
-        print(f"  {d:12s} {s['pass_k']}/{s['total']}")
-    print(f"报告: {report_path}")
-
-    floor = float(os.environ.get("TASK_BENCHMARK_MIN_PASS", "0") or "0")
-    assert report["pass_k"] >= floor, (
-        f"任务级基准低于门禁：pass^{trials}={report['pass_k']} < {floor}；"
-        f"失败 {len(failures)} 项，详见 {report_path}"
-    )
+    if mode == "gate":
+        assert report["gate_passed"], (
+            f"Task gate failed: pass^{trials}={report['pass_k']:.4f}, required={minimum}; "
+            f"safety failures={report['safety_failures']}; report={report_path}"
+        )

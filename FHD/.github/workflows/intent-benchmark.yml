@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   benchmark:
@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          token: ${{ secrets.CI_COMMIT_TOKEN || github.token }}
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -28,6 +28,7 @@ jobs:
       - name: Run intent golden set benchmark
         env:
           XCAGI_SKIP_INTENT_LLM: "1"
+          INTENT_BENCHMARK_RUN: "1"
         run: |
           python -m pytest tests/benchmarks/test_intent_accuracy.py -v --tb=short
 
@@ -35,35 +36,19 @@ jobs:
         env:
           XCAGI_SKIP_INTENT_LLM: "1"
           TASK_BENCHMARK_RUN: "1"
-          TASK_BENCHMARK_TRIALS: "1"
+          TASK_BENCHMARK_TRIALS: "3"
+          TASK_BENCHMARK_MODE: "gate"
+          TASK_BENCHMARK_MIN_PASS: "1.0"
         run: |
           python -m pytest tests/benchmarks/test_task_success.py -v --tb=short
 
-      - name: Commit intent benchmark report
-        if: always()
+      - name: Verify current-source benchmark evidence
         env:
-          GH_TOKEN: ${{ secrets.CI_COMMIT_TOKEN || github.token }}
-        run: |
-          set -euo pipefail
-          if [ ! -f FHD/test_reports/intent_benchmark_latest.json ]; then
-            echo "No intent report produced; skipping commit"
-            exit 0
-          fi
-          mkdir -p FHD/metrics
-          cp FHD/test_reports/intent_benchmark_latest.json FHD/metrics/intent_benchmark_latest.json
-          if [ -f FHD/test_reports/task_benchmark_report.json ]; then
-            cp FHD/test_reports/task_benchmark_report.json FHD/metrics/task_benchmark_report.json
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add FHD/metrics/
-          if git diff --staged --quiet; then
-            echo "No intent report changes"
-            exit 0
-          fi
-          git commit -m "chore(metrics): update intent & task benchmark reports"
-          git push
+          SOURCE_SHA: ${{ github.sha }}
+        run: python scripts/dev/benchmark_evidence.py --require-reports --source-sha "$SOURCE_SHA"
 
+      # Evidence stays attached to the tested SHA. Committing reports to main
+      # would change HEAD and also require bypassing protected-branch delivery.
       - name: Upload benchmark report
         if: always()
         uses: actions/upload-artifact@v4
@@ -72,4 +57,5 @@ jobs:
           path: |
             FHD/test_reports/intent_benchmark_latest.json
             FHD/test_reports/task_benchmark_report.json
-          if-no-files-found: ignore
+            FHD/test_reports/task_benchmark_trial_*.jsonl
+          if-no-files-found: error
