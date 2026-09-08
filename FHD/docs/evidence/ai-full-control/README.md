@@ -6,6 +6,10 @@
 目标是四个阶段全部完成。本目录记录当前实施证据，不代表四阶段验收通过。
 此前对话中的 20%–30% 覆盖率与工期只是未验证估计，不作为验收基线。
 
+## Secret-scan finding investigation
+
+The PR-range gitleaks failure identified a 64-character source hash at intent-routing-loop-fixed.json:729, introduced by 6340e51b1. Recomputing SHA-256 over that commit's http_client_scope.py exactly matches the reported value. It is source provenance, not a credential. Added one exact historical finding fingerprint to .gitleaksignore; scanner rules and path coverage are unchanged. The local same-range rerun result is recorded in secret-scan-hash-exception.json. Remote CI must still rerun on the resulting commit; integration and installed delivery remain open.
+
 ## Explicit non-execution outcome
 
 Pure greetings and conservatively recognized standalone prohibitions now return an explicit no_operation plan before model planning or tool probes. This plan must contain zero nodes and low risk; ordinary empty business plans remain invalid. Both workflow engine modes bypass dispatch, and the agent orchestrator records completion instead of blocking on missing steps. Chat formatting includes the non-execution response. A forged no_operation plan containing business nodes is rejected by validation, engine and orchestrator.
