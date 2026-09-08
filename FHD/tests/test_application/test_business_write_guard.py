@@ -1,4 +1,5 @@
 import multiprocessing
+import os
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta, timezone
 
@@ -20,7 +21,9 @@ from app.db.models.agent import AgentTaskExecutionRecord
 from app.services.inventory_service import InventoryService
 
 
-def _inbound_paused_before_commit(owner_url, business_url, ready, release, result):
+def _inbound_paused_before_commit(
+    owner_url, business_url, ready, release, result, crash_after_commit=False
+):
     import app.services.inventory_service as facade
     from app.infrastructure.tenant_scope import tenant_scope
 
@@ -58,6 +61,9 @@ def _inbound_paused_before_commit(owner_url, business_url, ready, release, resul
                 warehouse_name="主仓库",
                 quantity=50,
             )
+        if crash_after_commit:
+            assert response["success"], response
+            os._exit(73)
         result.put(response)
     finally:
         business_engine.dispose()
@@ -65,7 +71,10 @@ def _inbound_paused_before_commit(owner_url, business_url, ready, release, resul
 
 
 @pytest.mark.parametrize("separate_mod_database", [False, True])
-def test_takeover_cannot_cross_inventory_commit(tmp_path, separate_mod_database):
+@pytest.mark.parametrize("crash_after_commit", [False, True])
+def test_takeover_cannot_cross_inventory_commit(
+    tmp_path, separate_mod_database, crash_after_commit
+):
     owner_url = f"sqlite:///{tmp_path / 'owner.db'}"
     business_url = f"sqlite:///{tmp_path / 'mod.db'}" if separate_mod_database else owner_url
     owner_engine = create_engine(owner_url, connect_args={"timeout": 0.1})
@@ -76,6 +85,18 @@ def test_takeover_cannot_cross_inventory_commit(tmp_path, separate_mod_database)
     runs = SQLAlchemyAgentRunRepository(session_factory=owner_factory)
     queue = SQLAlchemyTaskExecutionRepository(session_factory=owner_factory)
     run = AgentRun(user_id="owner", message="inbound", status="queued")
+    from app.application.agent_orchestrator.run_models import AgentStep
+
+    run.status = "running"
+    run.steps = [
+        AgentStep(
+            node_id="inbound",
+            tool_id="inventory",
+            action="stock_in",
+            status="running",
+            idempotent=True,
+        )
+    ]
     runs.save(run)
     queue.enqueue(run)
     with business_factory.begin() as db:
@@ -88,7 +109,8 @@ def test_takeover_cannot_cross_inventory_commit(tmp_path, separate_mod_database)
     ctx = multiprocessing.get_context("spawn")
     ready, result, release = ctx.Queue(), ctx.Queue(), ctx.Event()
     process = ctx.Process(
-        target=_inbound_paused_before_commit, args=(owner_url, business_url, ready, release, result)
+        target=_inbound_paused_before_commit,
+        args=(owner_url, business_url, ready, release, result, crash_after_commit),
     )
     # Advance the claimant clock beyond expiry without a timing-dependent sleep.
     after_expiry = (datetime.now(UTC) + timedelta(minutes=5)).isoformat()
@@ -101,12 +123,28 @@ def test_takeover_cannot_cross_inventory_commit(tmp_path, separate_mod_database)
         with business_factory() as db:
             assert db.query(InventoryTransaction).count() == 0
         release.set()
-        response = result.get(timeout=20)
-        assert response["success"], response
+        if not crash_after_commit:
+            response = result.get(timeout=20)
+            assert response["success"], response
         process.join(timeout=20)
-        assert process.exitcode == 0
+        assert process.exitcode == (73 if crash_after_commit else 0)
         replacement = queue.claim("replacement", lease_seconds=60, now=after_expiry)
         assert replacement is not None and replacement.recovery_count == 1
+        if crash_after_commit:
+            from unittest.mock import Mock
+
+            from app.application.agent_orchestrator import AgentOrchestrator
+            from app.application.agent_orchestrator.worker_repository import ClaimedRunRepository
+
+            executor = Mock()
+            recovered = AgentOrchestrator(
+                repository=ClaimedRunRepository(runs, replacement, "replacement"),
+                tool_executor=executor,
+            ).execute_dispatched_run(run.run_id, recovered=True)
+            assert recovered.status == "blocked"
+            assert recovered.metadata["recovery"]["state"] == "manual_reconciliation_required"
+            executor.execute.assert_not_called()
+
         with business_factory() as db:
             assert db.query(InventoryTransaction).count() == 1
             assert float(db.query(InventoryLedger).one().quantity) == 50

@@ -19,6 +19,16 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Inbound crash coverage now exits the child with os._exit(73) immediately after
+  successful business commit, leaving the persisted step running without a result.
+  A replacement claim invokes the real orchestrator recovery with an optimistic
+  historical idempotent flag: current inventory registry prevents replay and
+  marks manual_reconciliation_required, with zero executor calls. Fresh business
+  sessions retain exactly one movement and quantity 50 for shared/Mod databases.
+  All 13 guard/dispatcher checks passed (`inbound-commit-lost-receipt`). This proves
+  no automatic duplicate write on unknown completion; it does not implement
+  durable business-result lookup or automatic successful reconciliation.
+
 - Spawned inbound workers now pause after flushing an actual 50-unit ledger and
   one inventory transaction, before commit. A separate connection with a clock
   beyond lease expiry cannot take over while that transaction is held; after
