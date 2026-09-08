@@ -259,12 +259,25 @@ async function maybeSelfUpdate(nowMs = Date.now()) {
   return true;
 }
 
-async function guestToken() {
+export async function requestParaSession({
+  credentialFile = process.env.MERGE_WORKER_PARA_CREDENTIALS_FILE || '',
+  fetchImpl = fetch,
+} = {}) {
+  if (credentialFile) {
+    // Legacy self-update may precede adapter installation; only managed mode needs the helper.
+    const { requestManagedParaSession } = await import('./control_receipt_outbox.mjs');
+    return requestManagedParaSession({ apiBase: API_BASE, credentialFile, fetchImpl });
+  }
+  const response = await fetchImpl(`${API_BASE}/api/auth/guest`, { method: 'POST' });
+  if (!response.ok) throw new Error(`para auth ${response.status}`);
+  const body = await response.json();
+  if (!body?.token || typeof body.token !== 'string') throw new Error('para_session_identity_mismatch');
+  return body.token;
+}
+
+async function paraToken() {
   if (cachedToken && Date.now() - cachedTokenAt < TOKEN_TTL_MS) return cachedToken;
-  const resp = await fetch(`${API_BASE}/api/auth/guest`, { method: 'POST' });
-  if (!resp.ok) throw new Error(`guest auth ${resp.status}`);
-  const body = await resp.json();
-  cachedToken = body.token;
+  cachedToken = await requestParaSession();
   cachedTokenAt = Date.now();
   return cachedToken;
 }
@@ -1895,7 +1908,7 @@ async function main() {
       log(`合并扫描 watchdog 异常：${String(err).slice(0, 300)}`);
     }
     try {
-      const token = await guestToken();
+      const token = await paraToken();
       await reconcileMergedDeployments(token, state);
       const queue = await fetchMergeQueue(token);
       const queueById = new Map(queue.map((task) => [String(task?.id || ''), task]));

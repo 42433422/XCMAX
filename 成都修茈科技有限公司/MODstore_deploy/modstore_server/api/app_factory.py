@@ -91,6 +91,8 @@ _FULL_OPTIONAL_MODULES = (
     "modstore_server.update_installation_api",
     "modstore_server.asset_installation_api",
     "modstore_server.standard_delivery_api",
+    "modstore_server.mac_control_api",
+    "modstore_server.mac_control_receipts",
     "modstore_server.admin_commerce_api",
     "modstore_server.admin_entitlement_fast_lane_api",
     "modstore_server.ops_api",
