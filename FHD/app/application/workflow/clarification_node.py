@@ -269,9 +269,7 @@ def detect_erp_clarification(
     for node in plan.nodes or []:
         if node.tool_id == "reports" and node.action in (
             "sales_summary",
-            "inventory_summary",
             "purchase_summary",
-            "dashboard",
         ):
             params = node.params or {}
             if not params.get("start_date") or not params.get("end_date"):

@@ -17,6 +17,15 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Sales-month summaries, ledger queries and operational dashboards now route to
+  their own read tools; month boundaries include the final day. Snapshot report
+  tools no longer ask for date/grouping parameters their handlers do not accept.
+  Sales summaries declare the existing product grouping default. Seventy-four
+  related tests passed and three trials now score 14/22 under current assertions.
+  These new report scenarios still need seeded nonzero figures and output-field
+  assertions before business correctness is certified. Evidence:
+  `report-contract-trials`; the preceding `report-read-trials` failures are retained.
+
 - Underspecified standalone product creation now plans only clarification and the
   deferred product step, without a customer-creation dependency. The critical
   scenario explicitly requires waiting_user, zero actual tool calls and zero

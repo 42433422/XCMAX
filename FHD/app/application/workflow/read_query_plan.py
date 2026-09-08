@@ -48,3 +48,40 @@ def customer_read_node(
         idempotent=True,
         description="查询客户信息",
     )
+
+
+def report_read_node(message: str, registry: dict[str, Any], *, today=None) -> WorkflowNode | None:
+    from calendar import monthrange
+    from datetime import date
+
+    if re.search(r"新增|添加|删除|修改|更新|写入|导出|记一笔", message):
+        return None
+    tool, action = "", ""
+    if re.search(r"(?:运营|经营|数据)看板", message):
+        tool, action = "reports", "dashboard"
+    elif re.search(r"销售(?:汇总|报表|统计)", message):
+        tool, action = "reports", "sales_summary"
+    elif re.search(r"(?:查询|查看|查一下|看下).*(?:账本|总账)", message):
+        tool, action = "finance", "ledger_query"
+    if not tool or tool not in registry:
+        return None
+    params: dict[str, Any] = {}
+    if action != "dashboard" and re.search(r"本月|这个月", message):
+        current = today or date.today()
+        first = current.replace(day=1).isoformat()
+        last = current.replace(day=monthrange(current.year, current.month)[1]).isoformat()
+        params = {
+            "start_date": first,
+            "end_date": last if tool == "finance" else last + " 23:59:59.999999",
+        }
+    if action == "sales_summary":
+        params["group_by"] = "product"
+    return WorkflowNode(
+        node_id=f"{tool}_{action}",
+        tool_id=tool,
+        action=action,
+        params=params,
+        risk="low",
+        idempotent=True,
+        description="查询业务报表",
+    )

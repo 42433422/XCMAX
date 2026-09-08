@@ -39,3 +39,42 @@ def test_incomplete_catalog_creation_asks_without_creating_customer(message):
     ]
     assert plan.nodes[0].params["clarification"]["missing_fields"] == ["name_or_model"]
     assert plan.nodes[1].params == {}
+
+
+@pytest.mark.parametrize(
+    "message, tool, action",
+    [
+        ("看下运营看板", "reports", "dashboard"),
+        ("本月销售汇总", "reports", "sales_summary"),
+        ("查询这个月的账本", "finance", "ledger_query"),
+    ],
+)
+def test_report_and_ledger_reads_use_correct_tool_and_month(message, tool, action):
+    from datetime import date
+
+    from app.application.workflow.read_query_plan import report_read_node
+
+    node = report_read_node(message, {tool: {}}, today=date(2024, 2, 15))
+    assert node and (node.tool_id, node.action) == (tool, action)
+    if action != "dashboard":
+        assert node.params["start_date"] == "2024-02-01"
+        assert node.params["end_date"].startswith("2024-02-29")
+
+
+def test_report_export_is_not_downgraded_to_read():
+    from app.application.workflow.read_query_plan import report_read_node
+
+    assert report_read_node("导出销售报表", {"reports": {}}) is None
+
+
+@pytest.mark.parametrize("action", ["dashboard", "inventory_summary"])
+def test_snapshot_reports_do_not_request_unsupported_period_or_grouping(action):
+    from app.application.workflow.clarification_node import detect_erp_clarification
+    from app.application.workflow.types import PlanGraph, WorkflowNode
+
+    plan = PlanGraph(
+        plan_id="snapshot",
+        intent="report",
+        nodes=[WorkflowNode(node_id="read", tool_id="reports", action=action)],
+    )
+    assert detect_erp_clarification(plan) == []
