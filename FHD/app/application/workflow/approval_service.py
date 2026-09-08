@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from copy import deepcopy
 from datetime import datetime
 from typing import Any
 
@@ -127,15 +128,15 @@ class ApprovalService:
             node_id=node.node_id,
             tool_id=node.tool_id,
             action=node.action,
-            params=node.params.copy() if node.params else {},
+            params=deepcopy(node.params) if node.params else {},
             status=ApprovalStatus.PENDING,
             created_at=datetime.now(),
         )
         self._pending_requests[request_id] = request
         if plan is not None:
             self._pending_workflows[request_id] = {
-                "plan": plan,
-                "runtime_context": runtime_context or {},
+                "plan": deepcopy(plan),
+                "runtime_context": deepcopy(runtime_context or {}),
                 "plan_id": plan_id,
             }
         logger.info("创建审批请求: %s for %s.%s", request_id, node.tool_id, node.action)

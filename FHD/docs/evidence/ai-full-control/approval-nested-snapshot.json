@@ -1,0 +1,10 @@
+{
+  "base_sha": "088829e7f",
+  "tests_passed": 149,
+  "change": "Deep copy request params, pending plan and runtime context during approval creation.",
+  "verified": "Changing original nested quantity 3 to 300 and warehouse 1 to 2 leaves request and pending snapshot unchanged.",
+  "limitations": [
+    "New mutation regression mocks persistence metadata; existing real persistence suite also passed.",
+    "Getters still expose internal objects; full immutable approval authorization/execution contract not established by this change."
+  ]
+}

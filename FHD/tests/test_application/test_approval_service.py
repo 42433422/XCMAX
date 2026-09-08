@@ -623,3 +623,29 @@ def test_all_registered_high_risk_actions_require_default_approval():
             assert service.check_node_requires_approval(node), (tool, action)
             checked.append((tool, action))
     assert len(checked) > 20
+
+
+def test_pending_approval_freezes_nested_plan_and_runtime_values():
+    from unittest.mock import patch
+
+    service = ApprovalService()
+    node = _make_node(
+        tool_id="shipment_orders",
+        action="generate",
+        params={
+            "unit_name": "七彩乐园",
+            "products": [{"model_number": "9803", "quantity_tins": 3, "tin_spec": 12}],
+        },
+    )
+    plan = _make_plan([node])
+    context = {"selection": {"warehouse_id": 1}}
+    with patch.object(service, "_persist_request_to_db", return_value={"request_no": "test"}):
+        request = service.create_approval_request(
+            plan.plan_id, node, runtime_context=context, plan=plan, require_persistence=True
+        )
+    node.params["products"][0]["quantity_tins"] = 300
+    context["selection"]["warehouse_id"] = 2
+    assert request.params["products"][0]["quantity_tins"] == 3
+    pending = service.get_pending_workflow(request.request_id)
+    assert pending["plan"].nodes[0].params["products"][0]["quantity_tins"] == 3
+    assert pending["runtime_context"]["selection"]["warehouse_id"] == 1
