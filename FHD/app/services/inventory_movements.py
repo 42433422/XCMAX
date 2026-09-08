@@ -92,6 +92,12 @@ class InventoryMovementsMixin:
                 )
                 now = datetime.now()
                 if ledger:
+                    if (ledger.unit or "").strip() != stock_unit:
+                        return {
+                            "success": False,
+                            "error_code": "inventory_unit_mismatch",
+                            "message": "现有库存台账单位与产品计量单位不一致，请先核实并完成库存单位换算",
+                        }
                     ledger.quantity = float(ledger.quantity or 0) + quantity
                     ledger.available_quantity = float(ledger.available_quantity or 0) + quantity
                     ledger.updated_at = now

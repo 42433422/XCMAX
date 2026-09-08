@@ -161,9 +161,56 @@ def test_inbound_rejects_missing_and_other_tenant_warehouse(tmp_path, monkeypatc
 )
 def test_stock_unit_never_uses_customer_name(legacy, explicit, expected):
     from types import SimpleNamespace
+
     from app.services.product_measurement import product_measurement_unit
 
     assert (
         product_measurement_unit(SimpleNamespace(unit=legacy, measurement_unit=explicit))
         == expected
     )
+
+
+@pytest.mark.parametrize("ledger_unit", ["箱", "旧客户名称", ""])
+def test_inbound_never_adds_different_units_to_existing_ledger(tmp_path, monkeypatch, ledger_unit):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.db.base import Base
+    from app.db.models import InventoryLedger, InventoryTransaction, Product, Warehouse
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'units.sqlite'}")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+    monkeypatch.setattr("app.db.session.SessionLocal", factory)
+    with factory.begin() as db:
+        db.add(Product(id=1, tenant_id=1, name="产品", unit="客户", measurement_unit="桶"))
+        db.add(Warehouse(id=1, tenant_id=1, name="仓库", code="UNIT"))
+        db.flush()
+        db.add(
+            InventoryLedger(
+                tenant_id=1,
+                product_id=1,
+                warehouse_id=1,
+                quantity=10,
+                available_quantity=8,
+                reserved_quantity=2,
+                unit=ledger_unit,
+            )
+        )
+    with tenant_scope(1):
+        result = InventoryService().inventory_in(
+            product_id=1, warehouse_id=1, quantity=3, requested_unit="桶"
+        )
+    assert not result["success"]
+    assert result["error_code"] == "inventory_unit_mismatch"
+    with factory() as db:
+        ledger = db.query(InventoryLedger).one()
+        assert ledger.unit == ledger_unit
+        assert (
+            float(ledger.quantity),
+            float(ledger.available_quantity),
+            float(ledger.reserved_quantity),
+        ) == (10, 8, 2)
+        assert db.query(InventoryTransaction).count() == 0
+    engine.dispose()

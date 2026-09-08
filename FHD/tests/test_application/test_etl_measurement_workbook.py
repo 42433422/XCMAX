@@ -76,9 +76,9 @@ def test_workbook_preserves_customer_and_measurement_as_separate_columns(
         rows, total = repository.find_all_dict()
         assert total == 1 and rows[0]["measurement_unit"] == "桶"
         assert rows[0]["unit"] == "测试客户"
-        batch = repository.batch_create([
-            {"name": "第二产品", "unit": "测试客户", "measurement_unit": "箱"}
-        ])
+        batch = repository.batch_create(
+            [{"name": "第二产品", "unit": "测试客户", "measurement_unit": "箱"}]
+        )
         assert batch["success"], batch
         rows, total = repository.find_all_dict()
         assert total == 2
@@ -87,7 +87,11 @@ def test_workbook_preserves_customer_and_measurement_as_separate_columns(
             product_id=product_id, warehouse_id=1, quantity=3, requested_unit="桶"
         )
         assert result["success"], result
+        repeated = InventoryService().inventory_in(
+            product_id=product_id, warehouse_id=1, quantity=2, requested_unit="桶"
+        )
+        assert repeated["success"], repeated
     with factory() as db:
         ledger = db.query(InventoryLedger).one()
-        assert ledger.unit == "桶" and float(ledger.quantity) == 3
+        assert ledger.unit == "桶" and float(ledger.quantity) == 5
     engine.dispose()
