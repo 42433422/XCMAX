@@ -2982,6 +2982,19 @@ def _run_memory_v2_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
         }
         with ExitStack() as stack:
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
+            stack.enter_context(
+                patch(
+                    "app.infrastructure.auth.agent_principal.resolve_session_user",
+                    return_value=SimpleNamespace(
+                        id=user_id,
+                        tenant_id=7,
+                        username=user_id,
+                        is_active=True,
+                        role="user",
+                        tier="enterprise",
+                    ),
+                )
+            )
             stack.enter_context(patch.object(memory_mod, "MEMORY_DIR", str(memory_dir)))
             stack.enter_context(
                 patch.object(memory_mod, "JSON_MEMORY_PATH", str(memory_dir / "memory_store.json"))
