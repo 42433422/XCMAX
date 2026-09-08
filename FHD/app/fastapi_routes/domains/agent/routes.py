@@ -17,6 +17,7 @@ from app.application.agent_orchestrator.approval_grant import (
 from app.application.agent_orchestrator.approval_transaction import approve_and_enqueue
 from app.application.agent_orchestrator.clarification import ClarificationAnswerError
 from app.application.agent_orchestrator.run_control import run_operation_lock
+from app.application.agent_orchestrator.run_lifecycle import requires_retry_reconciliation
 from app.application.agent_orchestrator.run_repository import get_agent_run_repository
 from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
 from app.application.agent_orchestrator.runtime_context import RuntimeContextOwnershipError
@@ -463,9 +464,12 @@ def retry_agent_run(
                 {"success": False, "message": "只有失败、取消或阻塞的任务可以重试"},
                 status_code=409,
             )
-        if run.metadata.get("non_retryable"):
+        if requires_retry_reconciliation(run):
+            message = "任务执行结果需要人工核对，暂不能重试"
+            if run.metadata.get("trace_mode") == "desktop_observed_tool":
+                message = "该观察记录不能作为执行任务重试"
             return JSONResponse(
-                {"success": False, "message": "该观察记录不能作为执行任务重试"},
+                {"success": False, "message": message},
                 status_code=409,
             )
         try:

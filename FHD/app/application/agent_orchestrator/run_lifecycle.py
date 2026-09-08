@@ -7,6 +7,13 @@ from app.application.agent_orchestrator.run_models import AgentRun, utc_now_iso
 from app.application.agent_orchestrator.runtime_context import merge_runtime_context
 
 
+def requires_retry_reconciliation(run: AgentRun) -> bool:
+    recovery = run.metadata.get("recovery")
+    return bool(run.metadata.get("non_retryable")) or (
+        isinstance(recovery, dict) and recovery.get("state") == "manual_reconciliation_required"
+    )
+
+
 class RunLifecycleMixin(DurableExecutionLeaseMixin):
     """Cooperative pause, resume, and cancellation for an agent orchestrator."""
 
@@ -132,6 +139,8 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
         previous = self._repo.get(run_id)
         if previous is None:
             return None
+        if requires_retry_reconciliation(previous):
+            raise ValueError("任务执行结果尚需人工核对，不能创建重试任务")
         for event in reversed(previous.events):
             if event.event_type != "run.retry_created":
                 continue

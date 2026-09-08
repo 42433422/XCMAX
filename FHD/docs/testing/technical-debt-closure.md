@@ -19,6 +19,14 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Retry reconciliation is now enforced inside the orchestrator, not only the
+  HTTP route. Both `non_retryable` and `manual_reconciliation_required` prevent
+  creation of another execution attempt before any planning or persistence.
+  Two internal-call regressions failed before the fix; the HTTP legacy-marker
+  case also remains 409 without mutations. The combined retry/route/background
+  suite passes 73 tests (`unreconciled-retry-final-fixed`), preserving the
+  observation-specific user message. This blocks replay; it does not establish
+  that an unknown external business result has been reconciled.
 - Real isolated PostgreSQL 16 validation passes 18 renewal/approval/resume tests;
   only the SQLite-specific interleaving is skipped. A competing connection gets
   PostgreSQL lock error 55P03 during resume, then claims exactly once after commit.

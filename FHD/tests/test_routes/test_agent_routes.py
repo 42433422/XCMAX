@@ -332,6 +332,22 @@ def _client(
     return TestClient(app, raise_server_exceptions=False)
 
 
+def test_retry_rejects_recovery_state_without_legacy_non_retryable_flag():
+    repository = get_agent_run_repository()
+    run = AgentRun(
+        user_id="u1",
+        message="uncertain external write",
+        status="blocked",
+        metadata={"recovery": {"state": "manual_reconciliation_required"}},
+    )
+    repository.save(run)
+    before = repository.get(run.run_id).to_dict()
+    response = _client().post(f"/api/agent/runs/{run.run_id}/retry")
+    assert response.status_code == 409
+    assert repository.get(run.run_id).to_dict() == before
+    assert len(repository.list_recent()) == 1
+
+
 def _planner_fallback_patches():
     return (
         patch("app.application.workflow.planner.get_ai_conversation_service"),
