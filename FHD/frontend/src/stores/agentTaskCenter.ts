@@ -99,8 +99,10 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
   async function markTaskRead(taskId: string): Promise<void> {
     const id = String(taskId || '').trim()
     if (!id) return
+    const requestedScopeVersion = scopeVersion
     try {
       const response = await agentRunsApi.markTaskRead(id)
+      if (requestedScopeVersion !== scopeVersion) return
       const updated = response.data
       if (updated) {
         tasks.value = tasks.value.map((task) => (task.task_id === id ? { ...task, ...updated } : task))
@@ -108,6 +110,7 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
       }
       error.value = ''
     } catch (reason) {
+      if (requestedScopeVersion !== scopeVersion) return
       error.value = errorMessage(reason)
     }
   }
@@ -205,24 +208,30 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
     if (!started || typeof window === 'undefined' || typeof fetch === 'undefined') return
     stream?.close()
     stream = new AuthenticatedEventStream(buildFullApiUrl(agentRunsApi.taskEventStreamPath()))
+    const connection = stream
+    const requestedScopeVersion = scopeVersion
+    const isCurrent = () => started && stream === connection && requestedScopeVersion === scopeVersion
     stream.addEventListener('task.snapshot', (event) => {
+      if (!isCurrent()) return
       try {
         replaceTasks(JSON.parse((event as MessageEvent).data) as AgentTaskSummary[])
         connected.value = true
         error.value = ''
         if (drawerOpen.value && selectedTaskId.value) void refreshDetail()
         void agentRunsApi.getTaskRuntime().then((response) => {
-          if (response.data) runtime.value = response.data
-        })
+          if (isCurrent() && response.data) runtime.value = response.data
+        }).catch(() => { /* Polling retains the last scoped runtime snapshot. */ })
       } catch {
         error.value = '任务快照格式无效'
       }
     })
     stream.addEventListener('stream.closed', () => {
+      if (!isCurrent()) return
       connected.value = false
       scheduleReconnect()
     })
     stream.onerror = () => {
+      if (!isCurrent()) return
       connected.value = false
       stream?.close()
       scheduleReconnect()

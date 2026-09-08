@@ -398,3 +398,17 @@ it('does not submit an approval fetched before a scope switch', async () => {
   expect(apiMock.continueRun).not.toHaveBeenCalled()
   expect(store.actionPending).toBe('')
 })
+
+it('does not apply an old read receipt to a same-id task in a new scope', async () => {
+  setActivePinia(createPinia())
+  let resolve!: (value: unknown) => void
+  apiMock.markTaskRead.mockReturnValueOnce(new Promise((r) => { resolve = r }))
+  const store = useAgentTaskCenterStore()
+  const pending = store.markTaskRead('task-1')
+  store.restartForScope()
+  store.tasks = [{ ...task, title: 'new scope', attention_state: 'result_unread' }]
+  resolve({ success: true, data: { ...task, title: 'old scope', attention_state: '' } })
+  await pending
+  expect(store.tasks[0].title).toBe('new scope')
+  expect(store.tasks[0].attention_state).toBe('result_unread')
+})
