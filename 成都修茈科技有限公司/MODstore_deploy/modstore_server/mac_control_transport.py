@@ -119,7 +119,7 @@ def choose_device(devices: list[dict], request: dict, now: float) -> tuple[dict 
             continue
         if target == "windows" and caps.get("platform") != "windows":
             continue
-        if target == "mac" and caps.get("control_reports") is not True:
+        if caps.get("control_reports") is not True:
             reason = "waiting_for_control_report_protocol"
             continue
         if request.get("source_sha") and caps.get("supports_exact_commit") is not True:

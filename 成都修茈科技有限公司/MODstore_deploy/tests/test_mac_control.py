@@ -359,3 +359,14 @@ def test_corrupt_customer_evidence_is_unavailable_not_verified(factory, monkeypa
         assert row["error"] == "invalid_delivery_evidence"
         assert row["delivery_verification"]["runtime_business_verified"] is None
         assert row["delivery_verification"]["completed"] is False
+
+
+def test_windows_requires_durable_control_report_protocol():
+    row = device(id="win")
+    row["capabilities"]["platform"] = "windows"
+    row["capabilities"].pop("control_reports")
+    selected, reason = choose_device([row], {"target": "windows"}, time.time())
+    assert selected is None
+    assert reason == "waiting_for_control_report_protocol"
+    row["capabilities"]["control_reports"] = True
+    assert choose_device([row], {"target": "windows"}, time.time()) == (row, "")
