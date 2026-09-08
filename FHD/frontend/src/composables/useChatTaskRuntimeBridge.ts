@@ -31,11 +31,13 @@ export function useChatTaskRuntimeBridge(options: UseChatTaskRuntimeBridgeOption
   const mods = useModsStore()
   const account = useAccountProfileStore()
   let started = false
+  let scopeVersion = 0
   function start(): void { started = true; workspace.start() }
-  function stop(): void { started = false; workspace.stop() }
+  function stop(): void { scopeVersion += 1; started = false; workspace.stop() }
   watch(
     () => [mods.activeModId, account.tenantId, account.localUserId, account.marketUserId, account.impersonatingMarketUserId, account.accountKind],
     () => {
+      scopeVersion += 1
       workspace.stop()
       options.taskList.value = []
       options.activeTaskId.value = ''
@@ -46,7 +48,9 @@ export function useChatTaskRuntimeBridge(options: UseChatTaskRuntimeBridgeOption
   )
 
   async function loadSession(conversationId: string): Promise<void> {
+    const requestedVersion = scopeVersion
     await options.loadConversation(conversationId)
+    if (requestedVersion !== scopeVersion) return
     await workspace.refreshTasks()
   }
 
@@ -66,7 +70,9 @@ export function useChatTaskRuntimeBridge(options: UseChatTaskRuntimeBridgeOption
   }
 
   async function clearTaskHistory(): Promise<void> {
+    const requestedVersion = scopeVersion
     await workspace.archiveCompletedTasks()
+    if (requestedVersion !== scopeVersion) return
     options.clearLocalHistory()
   }
 
