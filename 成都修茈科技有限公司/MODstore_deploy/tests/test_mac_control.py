@@ -264,6 +264,17 @@ def test_no_guest_identity_is_created(monkeypatch):
         ParaClient()
 
 
+@pytest.mark.parametrize("method", ["devices", "tasks", "task", "submit"])
+def test_missing_para_result_is_unavailable_not_empty(monkeypatch, method):
+    from modstore_server.mac_control_transport import ParaClient
+
+    client = object.__new__(ParaClient)
+    monkeypatch.setattr(client, "request", lambda *args: {})
+    args = ("task-1",) if method == "task" else ({},) if method == "submit" else ()
+    with pytest.raises(ParaUnavailable):
+        getattr(client, method)(*args)
+
+
 def test_windows_probe_uses_fixed_command_and_reuses_receipt(factory):
     from modstore_server.mac_control_preflight import prepare_windows_probe
 
