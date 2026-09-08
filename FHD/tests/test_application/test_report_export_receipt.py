@@ -59,3 +59,48 @@ def test_export_without_identity_never_generates_file():
         result = export_report_receipt(service, {"owner_id": "7"})
     assert result["code"] == "REPORT_IDENTITY_REQUIRED"
     service.export_to_excel.assert_not_called()
+
+
+def test_export_uses_successful_query_output_and_rejects_missing_source(tmp_path, monkeypatch):
+    from unittest.mock import patch
+
+    from app.application.workflow.engine import WorkflowEngine
+    from app.application.workflow.planner import LLMWorkflowPlanner
+    from app.services.tools_execution.registry import get_workflow_tool_registry
+
+    monkeypatch.setattr("app.application.aiopen.api_artifacts._root", lambda: tmp_path)
+    with patch("app.application.workflow.planner.get_ai_conversation_service", return_value=None):
+        planner = LLMWorkflowPlanner()
+    plan = planner._fallback_plan("export", "导出本月销售报表", get_workflow_tool_registry())
+    assert [(n.tool_id, n.action) for n in plan.nodes] == [
+        ("reports", "sales_summary"),
+        ("reports", "export"),
+    ]
+    assert plan.nodes[1].depends_on == [plan.nodes[0].node_id]
+    calls = []
+
+    def dispatch(tool_id, action, params):
+        from app.application.agent_orchestrator.execution_identity import current_execution_actor
+        from app.infrastructure.tenant_scope import current_tenant_id
+
+        assert current_execution_actor() == "7"
+        assert current_tenant_id() == 3
+        calls.append(action)
+        if action == "sales_summary":
+            return {"success": True, "data": [{"product": "A100", "amount": 51}]}
+        return _registered_router_reports(action, params, params["_runtime_context"], "normal", "")
+
+    with execution_actor_scope("7"), tenant_scope(3):
+        result = WorkflowEngine(dispatch).run(plan)
+        service = Mock()
+        missing = export_report_receipt(
+            service, {"data_node_id": "missing", "data": [{"fake": 1}]}, {}
+        )
+    assert result.success
+    assert calls == ["sales_summary", "export"]
+    assert missing["code"] == "REPORT_SOURCE_UNAVAILABLE"
+    service.export_to_excel.assert_not_called()
+    payload = next(tmp_path.glob("*.bin")).read_bytes()
+    workbook = load_workbook(BytesIO(payload))
+    assert list(workbook.active.values) == [("product", "amount"), ("A100", 51)]
+    workbook.close()

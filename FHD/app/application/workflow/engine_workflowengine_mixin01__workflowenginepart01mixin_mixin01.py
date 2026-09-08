@@ -296,11 +296,17 @@ class __WorkflowEnginePart01MixinPart01Mixin:
                 runtime_context.setdefault("parallel_batches", []).append(
                     {"node_ids": [node.node_id for node in read_nodes], "max_workers": max_workers}
                 )
+            from contextvars import copy_context
+
             with _facade().ThreadPoolExecutor(max_workers=max_workers) as executor:
                 read_map = {node.node_id: node for node in read_nodes}
                 future_map = {
                     node_id: executor.submit(
-                        self._run_node, node, runtime_context, max_retries=max_retries
+                        copy_context().run,
+                        self._run_node,
+                        node,
+                        runtime_context,
+                        max_retries=max_retries,
                     )
                     for node_id, node in read_map.items()
                 }

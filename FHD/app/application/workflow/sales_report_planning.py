@@ -31,3 +31,30 @@ def monthly_sales_report_node(message: str, *, today: date | None = None) -> Wor
         idempotent=True,
         description="查询本月销售汇总",
     )
+
+
+def monthly_sales_export_nodes(message: str) -> list[WorkflowNode]:
+    text = message.strip().rstrip("。？?")
+    for prefix in ("请导出", "帮我导出", "导出"):
+        if text.startswith(prefix):
+            report = monthly_sales_report_node(text[len(prefix) :].strip())
+            if report is None:
+                return []
+            return [
+                report,
+                WorkflowNode(
+                    node_id="sales_report_export",
+                    tool_id="reports",
+                    action="export",
+                    params={
+                        "report_type": "sales",
+                        "filename": "销售汇总",
+                        "data_node_id": report.node_id,
+                    },
+                    depends_on=[report.node_id],
+                    risk="low",
+                    idempotent=True,
+                    description="将销售查询结果导出为 Excel",
+                ),
+            ]
+    return []

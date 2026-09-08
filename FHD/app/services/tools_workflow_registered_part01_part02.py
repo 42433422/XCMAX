@@ -278,7 +278,7 @@ def _registered_router_reports(
     if action == "export":
         from app.application.workflow.report_export_receipt import export_report_receipt
 
-        return export_report_receipt(svc, params)
+        return export_report_receipt(svc, params, runtime_context)
     return {"success": False, "message": f"未注册的 reports 动作: {action}"}
 
 

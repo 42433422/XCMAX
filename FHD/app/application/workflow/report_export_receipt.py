@@ -9,7 +9,9 @@ from app.application.aiopen.api_artifacts import save_api_export
 from app.infrastructure.tenant_scope import current_tenant_id
 
 
-def export_report_receipt(service: Any, params: dict[str, Any]) -> dict[str, Any]:
+def export_report_receipt(
+    service: Any, params: dict[str, Any], runtime_context: dict[str, Any] | None = None
+) -> dict[str, Any]:
     from app.application.agent_orchestrator.task_mod_scope import capture_task_mod_scope
 
     owner = current_execution_actor()
@@ -21,9 +23,25 @@ def export_report_receipt(service: Any, params: dict[str, Any]) -> dict[str, Any
             "message": "导出报表需要已登录账号与租户身份",
         }
     mod_scope = capture_task_mod_scope(owner, str(tenant)) or {}
+    data = params.get("data") or []
+    source_id = params.get("data_node_id")
+    if source_id:
+        source = ((runtime_context or {}).get("node_outputs") or {}).get(str(source_id))
+        if (
+            not isinstance(source, dict)
+            or source.get("success") is not True
+            or not isinstance(source.get("data"), list)
+        ):
+            return {
+                "success": False,
+                "code": "REPORT_SOURCE_UNAVAILABLE",
+                "message": "报表查询结果尚未成功生成，未导出文件",
+            }
+        data = source["data"]
+
     result = service.export_to_excel(
         report_type=str(params.get("report_type") or "report"),
-        data=params.get("data") or [],
+        data=data,
         filename=str(params.get("filename") or "report"),
     )
     if not result.get("success"):

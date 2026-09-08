@@ -211,6 +211,13 @@ class _LLMWorkflowPlannerPart02Mixin:
                     )
                 )
         if not nodes and "reports" in tool_registry:
+            from .sales_report_planning import monthly_sales_export_nodes
+
+            export_nodes = monthly_sales_export_nodes(message)
+            if export_nodes:
+                intent = "sales_report_export"
+                nodes.extend(export_nodes)
+        if not nodes and "reports" in tool_registry:
             from .inventory_query_planning import inventory_query_node
 
             inventory_node = inventory_query_node(message)
