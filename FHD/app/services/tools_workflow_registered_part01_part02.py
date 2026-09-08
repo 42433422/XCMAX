@@ -122,16 +122,23 @@ def _registered_router_inventory(
     if action == "inventory_count":
         from app.services.inventory_service import InventoryService
 
+        raw_quantity = params.get("actual_quantity")
+        try:
+            actual_quantity = (
+                float(raw_quantity) if not isinstance(raw_quantity, bool) else raw_quantity
+            )
+        except (TypeError, ValueError, OverflowError):
+            return {"success": False, "message": "盘点数量必须为有限非负数"}
         inv_svc = InventoryService()
         return inv_svc.inventory_count(
             product_id=int(params.get("product_id") or 0),
             warehouse_id=int(params.get("warehouse_id") or 0),
-            actual_quantity=float(params.get("actual_quantity", 0)),
+            actual_quantity=actual_quantity,
             batch_no=params.get("batch_no"),
             location_id=params.get("location_id"),
             operator=params.get("operator"),
             remark=params.get("remark"),
-            confirmed=bool(params.get("confirmed", False)),
+            confirmed=params.get("confirmed", False),
         )
     if action == "query_transactions":
         from app.services.inventory_service import InventoryService

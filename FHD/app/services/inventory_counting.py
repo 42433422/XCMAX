@@ -38,6 +38,20 @@ class InventoryCountingMixin:
         - confirmed=False：仅返回差异供对话层反问确认，不实际改动库存。
         - confirmed=True：按实际数量调整台账并写入一条 transaction_type="count" 流水。
         """
+        import math
+
+        if not isinstance(confirmed, bool):
+            return {"success": False, "message": "盘点确认必须为布尔值"}
+        try:
+            valid = (
+                not isinstance(actual_quantity, bool)
+                and math.isfinite(actual_quantity)
+                and actual_quantity >= 0
+            )
+        except (TypeError, ValueError, OverflowError):
+            valid = False
+        if not valid:
+            return {"success": False, "message": "盘点数量必须为有限非负数"}
         with _facade().get_db() as db:
             try:
                 ledger = (
@@ -46,6 +60,7 @@ class InventoryCountingMixin:
                         _facade().InventoryLedger.product_id == product_id,
                         _facade().InventoryLedger.warehouse_id == warehouse_id,
                         _facade().InventoryLedger.batch_no == batch_no,
+                        _facade().InventoryLedger.location_id == location_id,
                     )
                     .first()
                 )
@@ -72,8 +87,6 @@ class InventoryCountingMixin:
                 before_quantity = book_quantity
                 ledger.quantity = actual_quantity
                 ledger.available_quantity = float(ledger.available_quantity or 0) + diff
-                if location_id:
-                    ledger.location_id = location_id
                 ledger.updated_at = now
                 db.flush()
                 transaction = _facade().InventoryTransaction(
