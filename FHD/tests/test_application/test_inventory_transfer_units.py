@@ -101,3 +101,79 @@ def test_transfer_to_same_stock_location_does_not_open_database(location):
         )
     assert not result["success"]
     database.assert_not_called()
+
+
+def test_transfer_between_locations_in_same_warehouse(tmp_path, monkeypatch):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.db.base import Base
+    from app.db.models import (
+        InventoryLedger,
+        InventoryTransaction,
+        Product,
+        StorageLocation,
+        Warehouse,
+    )
+    from app.infrastructure.tenant_scope import tenant_scope
+    from app.services.tools_workflow_registered_part01_part02 import _registered_router_inventory
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'locations.sqlite'}")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+    monkeypatch.setattr("app.db.session.SessionLocal", factory)
+    with factory.begin() as db:
+        db.add(Product(id=1, tenant_id=1, name="产品", measurement_unit="桶"))
+        db.add(Warehouse(id=1, tenant_id=1, name="仓库", code="W"))
+        db.flush()
+        db.add_all(
+            [StorageLocation(id=i, tenant_id=1, warehouse_id=1, code=str(i)) for i in (1, 2)]
+        )
+        db.flush()
+        db.add(
+            InventoryLedger(
+                product_id=1,
+                tenant_id=1,
+                warehouse_id=1,
+                location_id=1,
+                batch_no="B",
+                quantity=10,
+                available_quantity=8,
+                reserved_quantity=2,
+                unit="桶",
+            )
+        )
+    with tenant_scope(1):
+        result = _registered_router_inventory(
+            "transfer",
+            {
+                "product_id": 1,
+                "from_warehouse_id": 1,
+                "to_warehouse_id": 1,
+                "from_location_id": 1,
+                "to_location_id": 2,
+                "batch_no": "B",
+                "quantity": "3",
+            },
+            {},
+            "normal",
+            "",
+        )
+        assert result["success"], result
+        with factory() as db:
+            stocks = db.query(InventoryLedger).order_by(InventoryLedger.location_id).all()
+            assert [
+                (
+                    row.location_id,
+                    float(row.quantity),
+                    float(row.available_quantity),
+                    float(row.reserved_quantity),
+                    row.unit,
+                )
+                for row in stocks
+            ] == [(1, 7, 5, 2, "桶"), (2, 3, 3, 0, "桶")]
+            receipts = db.query(InventoryTransaction).all()
+            assert {
+                (row.location_id, row.transaction_type, float(row.quantity)) for row in receipts
+            } == {(1, "transfer_out", -3), (2, "transfer_in", 3)}
+    engine.dispose()
