@@ -47,6 +47,8 @@ def _registered_router_inventory(
         import math
 
         raw_quantity = params.get("quantity")
+        if raw_quantity is None:
+            return {"success": False, "message": "入库数量必须为有限正数"}
         try:
             quantity = float(raw_quantity)
         except (TypeError, ValueError, OverflowError):
