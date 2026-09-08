@@ -1,5 +1,8 @@
 """Session renewal shares the durable approval transaction and preserves identity."""
 
+import os
+import uuid
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -18,9 +21,36 @@ from app.db.models.agent_approval import AgentApprovalConsumption
 
 
 @pytest.fixture
-def waiting_task(tmp_path, monkeypatch):
+def renewal_engine(tmp_path):
+    postgres_url = os.environ.get("XCAGI_TEST_AGENT_POSTGRES_URL")
+    admin = None
+    schema = "agent_test_" + uuid.uuid4().hex
+    if postgres_url:
+        admin = create_engine(postgres_url)
+        with admin.begin() as db:
+            db.exec_driver_sql(f'CREATE SCHEMA "{schema}"')
+        engine = create_engine(
+            postgres_url,
+            connect_args={
+                "options": f"-csearch_path={schema} -clock_timeout=3000 -cstatement_timeout=10000",
+            },
+        )
+    else:
+        engine = create_engine(f"sqlite:///{tmp_path / 'renewal.db'}")
+    try:
+        yield engine
+    finally:
+        engine.dispose()
+        if admin is not None:
+            with admin.begin() as db:
+                db.exec_driver_sql(f'DROP SCHEMA "{schema}" CASCADE')
+            admin.dispose()
+
+
+@pytest.fixture
+def waiting_task(renewal_engine, monkeypatch):
     monkeypatch.setenv("SECRET_KEY", "session-renewal-test-" * 4)
-    engine = create_engine(f"sqlite:///{tmp_path / 'renewal.db'}")
+    engine = renewal_engine
     factory = sessionmaker(bind=engine)
     runs = SQLAlchemyAgentRunRepository(session_factory=factory)
     queue = SQLAlchemyTaskExecutionRepository(session_factory=factory)
@@ -260,6 +290,9 @@ def test_worker_claim_between_resume_read_and_write_prevents_resume(waiting_task
     from app.db.models.agent import AgentTaskExecutionRecord
 
     runs, queue, _, original, previous, _ = waiting_task
+    with runs.transaction(read_only=True) as db:
+        if db.get_bind().dialect.name != "sqlite":
+            pytest.skip("SQLite-specific FOR UPDATE interleaving; PostgreSQL holds the row lock")
     run = runs.get(original.run_id)
     run.status = "paused"
     run.steps[0].status = "pending"
@@ -311,3 +344,43 @@ def test_worker_claim_between_resume_read_and_write_prevents_resume(waiting_task
     assert runs.get(run.run_id).to_dict() == before
     assert runs.latest_task_control(run.run_id) is None
     assert queue.get(run.run_id).lease_owner == "interleaved-worker"
+
+
+def test_postgres_resume_holds_queue_lock_until_commit(waiting_task, monkeypatch):
+    from sqlalchemy.exc import OperationalError
+
+    from app.application.agent_orchestrator.resume_transaction import resume_and_enqueue
+
+    runs, queue, _, original, previous, _ = waiting_task
+    with runs.transaction(read_only=True) as db:
+        if db.get_bind().dialect.name != "postgresql":
+            pytest.skip("Requires explicit isolated PostgreSQL test URL")
+    run = runs.get(original.run_id)
+    run.status = "paused"
+    run.steps[0].status = "pending"
+    runs.save(run)
+    queue.enqueue(run)
+    save = runs.save_in_session
+    attempts = []
+
+    def save_with_competing_claim(db, updated):
+        with pytest.raises(OperationalError) as caught:
+            queue.claim("competing-worker", lease_seconds=30)
+        assert getattr(caught.value.orig, "sqlstate", None) == "55P03"
+        attempts.append("blocked_by_resume_transaction")
+        return save(db, updated)
+
+    monkeypatch.setattr(runs, "save_in_session", save_with_competing_claim)
+    result = resume_and_enqueue(
+        runs,
+        queue,
+        run_id=run.run_id,
+        principal_id="owner",
+        runtime_context={},
+        authenticated_binding={**previous, "session_row_id": 2},
+    )
+    assert result.status == "queued"
+    assert attempts == ["blocked_by_resume_transaction"]
+    claimed = queue.claim("after-commit-worker", lease_seconds=30)
+    assert claimed is not None and claimed.run_id == run.run_id
+    assert claimed.execution_count == 1

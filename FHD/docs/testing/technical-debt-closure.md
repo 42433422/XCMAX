@@ -19,6 +19,16 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Real isolated PostgreSQL 16 validation passes 18 renewal/approval/resume tests;
+  only the SQLite-specific interleaving is skipped. A competing connection gets
+  PostgreSQL lock error 55P03 during resume, then claims exactly once after commit.
+  SQLite validation separately passes 18 tests, skipping only the PostgreSQL lock
+  case. Each PostgreSQL test uses a unique schema and removes it; inspection
+  confirms zero remaining test schemas. The task-owned tmpfs database container
+  is stopped after validation. CI/CD now includes the PostgreSQL transaction job
+  with a healthy PostgreSQL service, explicit test URL and retained JUnit results.
+  Local logs: `postgres-agent-locking`, `sqlite-renewal-after-postgres-fixture`.
+  Remote execution of the new job and production acceptance remain pending.
 - The four utils-boundary warnings are resolved without adding whitelist entries:
   user-memory values/pure analysis now live in `app/domain/user_memory`, and
   optimizer discovery/composition live in `app/utils/performance`. Public
