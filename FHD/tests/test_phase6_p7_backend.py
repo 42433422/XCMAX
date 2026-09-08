@@ -732,14 +732,8 @@ def test_compat_print_last_returns_501() -> None:
     assert "print-last" in body["message"]
 
 
-def test_compat_print_pdf_labels_returns_501() -> None:
-    # 注意：``/api/print/pdf_labels`` 路由被先注册的 ``/api/print/{filename:path}``
-    # 路径参数路由遮蔽，无法通过 HTTP 触发；这里直接调用函数以覆盖其函数体。
-    resp = ai_assistant.compat_print_pdf_labels()
-    assert resp.status_code == 501
-    body = resp.body.decode() if hasattr(resp, "body") else ""
-    assert "pdf_labels" in body
-    assert "false" in body.lower()
+def test_compat_print_pdf_labels_requires_login() -> None:
+    assert _ai_assistant_client().post("/api/print/pdf_labels", json={}).status_code == 401
 
 
 def test_compat_print_shipment_file_not_found_returns_404(

@@ -114,6 +114,40 @@ def create(env):
     return response.json()["job"]
 
 
+def test_compat_pdf_labels_generates_real_preview_then_uses_confirmed_job_flow(env, monkeypatch):
+    from app.fastapi_routes import ai_assistant
+
+    env.app.include_router(ai_assistant.router)
+    dispatch = MagicMock(return_value={"submission_state": "submitted", "run_id": "sample"})
+    monkeypatch.setattr(label_jobs, "run_print_agent", dispatch)
+    monkeypatch.setattr(
+        "app.application.facades.print_facade.printer_service.get_label_printer",
+        lambda: "Sample printer",
+    )
+    response = env.client.post("/api/print/pdf_labels", json=PAYLOAD)
+    assert response.status_code == 200, response.text
+    receipt = response.json()
+    assert receipt["success"] and receipt["requires_confirmation"]
+    assert receipt["job"]["status"] == "generated"
+    preview = env.client.get(receipt["preview_url"])
+    assert preview.status_code == 200 and preview.content.startswith(b"%PDF-")
+    assert preview.headers["cache-control"] == "private, no-store"
+    dispatch.assert_not_called()
+    confirmation = env.client.post(receipt["confirmation_url"])
+    assert confirmation.status_code == 200
+    dispatch.assert_not_called()
+    submit = env.client.post(
+        receipt["submit_url"], json={"confirm_token": confirmation.json()["confirm_token"]}
+    )
+    assert submit.status_code == 200 and submit.json()["job"]["status"] == "submitted"
+    dispatch.assert_called_once()
+    assert (
+        env.client.post("/api/print/pdf_labels", json={"model_number": "guess"}).status_code == 422
+    )
+    env.app.dependency_overrides.clear()
+    assert env.client.post("/api/print/pdf_labels", json=PAYLOAD).status_code == 401
+
+
 @pytest.mark.parametrize("source,target", [("", "erp"), ("erp", ""), ("erp", "other")])
 def test_label_artifact_and_confirmation_cannot_cross_mod_scope(env, source, target):
     token = set_request_active_mod_id(source)

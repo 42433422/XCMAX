@@ -868,10 +868,8 @@ def test_ai_print_file_failure(
     assert "offline" not in r.text
 
 
-def test_ai_print_pdf_labels_501(ai_client: TestClient) -> None:
-    # Same path-param shadow as single_label — invoke compat handler directly.
-    r = ai_routes_mod.compat_print_pdf_labels()
-    assert r.status_code == 501
+def test_ai_print_pdf_labels_requires_login(ai_client: TestClient) -> None:
+    assert ai_client.post("/api/print/pdf_labels", json={}).status_code == 401
 
 
 def test_ai_tts_success(ai_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:

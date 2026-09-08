@@ -12,7 +12,7 @@
 
 LAN 配置只由 lan_settings_routes 注册 HTTP 入口；保留旧函数供 SDK 调用。/api/health 由健康挂载统一提供，旧 /health 别名保留。通用文件打印路径排在具体标签动作之后，不再抢先匹配 single_label 和 pdf_labels。
 
-真实 HTTP 分发验证 single_label 到达标签服务（打印机使用替身，没有发送实际打印任务）；pdf_labels 正确返回既有 501 未实现状态，不再变成文件不存在。这项 PDF 标签业务能力仍待完成。
+真实 HTTP 分发验证 single_label 到达标签服务（打印机使用替身，没有发送实际打印任务）。后续 pdf_labels 已接到现有标签任务服务，明确产品、模板、份数和尺寸后生成预览，再走独立确认和提交；使用真实登录会话的 AI API 调用已验证生成与完整 PDF 回读。物理出纸和安装端仍待验收，single_label 旧流程也仍需完善。
 
 ## 重现
 

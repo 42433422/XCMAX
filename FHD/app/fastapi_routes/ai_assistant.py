@@ -21,6 +21,7 @@ from app.build_identity import build_identity
 from app.fastapi_routes.ai_assistant_responses import fail as _fail
 from app.fastapi_routes.ai_assistant_responses import ok as _ok
 from app.fastapi_routes.ai_assistant_tts import router as tts_router
+from app.fastapi_routes.label_jobs import compat_router as label_compat_router
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.security.safe_download_path import (
     UnsafeDownloadPathError,
@@ -31,6 +32,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["ai-assistant-compat"])
 router.include_router(tts_router)
+router.include_router(label_compat_router)
 
 _TRACE_MAX_STRING = 500
 _TRACE_SECRET_KEYS = {"audiobase64", "audio_base64", "key", "token", "password", "secret"}
@@ -396,11 +398,6 @@ def compat_print_last():
         "XCAGI 未实现 print-last（请通过 /api/print/<filename> 打印指定文件）",
         501,
     )
-
-
-@router.post("/api/print/pdf_labels")
-def compat_print_pdf_labels():
-    return _fail("XCAGI 暂未实现 pdf_labels（请使用现有打印功能）", 501)
 
 
 @router.post("/api/print/single_label")

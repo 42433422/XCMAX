@@ -13,6 +13,7 @@ from app.fastapi_routes.print_agent_helpers import run_print_agent
 from app.infrastructure.auth.dependencies import get_logged_in_user
 
 router = APIRouter(prefix="/label-jobs", tags=["print-label-jobs"])
+compat_router = APIRouter(tags=["print-label-jobs"])
 
 
 class GenerateLabel(BaseModel):
@@ -50,6 +51,20 @@ def _call(function, *args):
 @router.post("")
 def generate_label(body: GenerateLabel, owner=Depends(_owner)):
     return {"success": True, "job": _call(_service().generate, owner, body.model_dump())}
+
+
+@compat_router.post("/api/print/pdf_labels")
+def compat_print_pdf_labels(body: GenerateLabel, owner=Depends(_owner)):
+    """Generate an owned preview; physical printing uses the label confirmation flow."""
+    result = generate_label(body, owner)
+    base = f"/api/print/label-jobs/{result['job']['id']}"
+    return {
+        **result,
+        "requires_confirmation": True,
+        "preview_url": base + "/file",
+        "confirmation_url": base + "/confirmation",
+        "submit_url": base + "/submit",
+    }
 
 
 @router.get("/products")

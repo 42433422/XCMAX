@@ -74,7 +74,7 @@ def test_print_dispatch_reaches_label_handler_not_file_catchall(monkeypatch):
             "/api/print/single_label", json={"model_number": "sample", "quantity": 2}
         )
         assert response.status_code == 200 and response.json()["success"]
-        assert client.post("/api/print/pdf_labels").status_code == 501
+        assert client.post("/api/print/pdf_labels").status_code == 401
         assert client.post("/api/print/missing.pdf", json={}).status_code in {400, 404}
     printer.print_single_label.assert_called_once_with(
         product_name="Sample", model_number="sample", specification=None, unit="pcs", quantity=2
