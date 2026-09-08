@@ -86,6 +86,16 @@ def test_inbound_rejects_missing_and_other_tenant_warehouse(tmp_path, monkeypatc
             ("inventory", "stock_in"),
         ]
         assert plan.nodes[1].params == {"product_id": 1, "quantity": 50.0, "requested_unit": "件"}
+        from app.application.workflow.clarification_fields import resolve_missing_field
+
+        item = {
+            "reason": "missing_required",
+            "field": "warehouse_id",
+            "missing_fields": ["warehouse_id"],
+        }
+        assert resolve_missing_field(plan.nodes[1], item, "3") == {"warehouse_id": 3}
+        for answer in ("true", "3.5", "仓库", "{}"):
+            assert resolve_missing_field(plan.nodes[1], item, answer) is None
         for warehouse_id in (2, 999):
             result = InventoryService().inventory_in(
                 product_id=1, warehouse_id=warehouse_id, quantity=5
