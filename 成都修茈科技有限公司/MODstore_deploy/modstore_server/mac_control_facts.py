@@ -4,9 +4,9 @@ import json
 import re
 import time
 
+from modstore_server.customer_delivery_receipts import all_artifacts_running
 from modstore_server.models_cs import CustomerServiceTicket
 from modstore_server.standard_delivery_api import build_standard_delivery_rows
-from modstore_server.customer_delivery_receipts import all_artifacts_running
 
 
 def redact(text):
