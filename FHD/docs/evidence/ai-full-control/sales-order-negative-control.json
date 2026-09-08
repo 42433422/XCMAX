@@ -1,0 +1,31 @@
+{
+  "source_commit": "545c943700c9fbb7a2b942b8df4e066fb85a10be",
+  "negative_control": "Only expected sales order total_amount changed from 255 to 256; routing and execution succeed but DB and overall acceptance fail.",
+  "result": {
+    "task_id": "sales.order.create_010",
+    "domain": "sales",
+    "difficulty": "medium",
+    "trial": 0,
+    "routing_pass": true,
+    "exec_pass": true,
+    "db_pass": false,
+    "db_assertion_count": 4,
+    "pass": false,
+    "failure": "DB 终态缺失：sales_orders {'customer_id': 101, 'state': 'confirmed', 'total_amount': 256}",
+    "executed": [
+      {
+        "tool_id": "sales",
+        "action": "quote",
+        "success": true,
+        "message": "报价单已创建: SO20260909035459"
+      },
+      {
+        "tool_id": "sales",
+        "action": "confirm_from_result",
+        "success": true,
+        "message": "销售订单 SO20260909035459 已推进至 confirmed"
+      }
+    ]
+  },
+  "scope": "Isolated SQLite direct tool execution, not live model or approval acceptance."
+}
