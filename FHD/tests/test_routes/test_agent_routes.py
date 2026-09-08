@@ -565,6 +565,24 @@ def test_approval_cannot_replace_persisted_tenant_and_does_not_consume_grant():
         enqueue.assert_called_once()
 
 
+def test_resume_rejects_tenant_change_without_control_command():
+    run = AgentRun(user_id="owner", message="paused", status="paused")
+    run.metadata["runtime_context"] = {"tenant_id": "1"}
+    repository = get_agent_run_repository()
+    repository.save(run)
+    before = repository.get(run.run_id).to_dict()
+    with patch("app.fastapi_routes.domains.agent.routes._enqueue_run") as enqueue:
+        response = _client("owner", tenant_id="1").post(
+            f"/api/agent/runs/{run.run_id}/resume",
+            json={"runtime_context": {"tenant_id": "2"}},
+        )
+        assert response.status_code == 400
+        assert response.json()["message"] == "不能更改任务的租户范围"
+        enqueue.assert_not_called()
+    assert repository.get(run.run_id).to_dict() == before
+    assert repository.latest_task_control(run.run_id) is None
+
+
 def test_create_agent_run_validates_request_body() -> None:
     get_agent_run_repository().clear()
     client = _client()

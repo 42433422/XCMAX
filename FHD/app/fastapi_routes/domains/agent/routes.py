@@ -22,6 +22,7 @@ from app.application.agent_orchestrator.clarification import ClarificationAnswer
 from app.application.agent_orchestrator.run_control import run_operation_lock
 from app.application.agent_orchestrator.run_repository import get_agent_run_repository
 from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+from app.application.agent_orchestrator.runtime_context import RuntimeContextOwnershipError
 from app.application.agent_orchestrator.task_dispatcher import notify_agent_task_dispatcher
 from app.application.agent_orchestrator.task_execution_repository import (
     get_task_execution_repository,
@@ -426,12 +427,17 @@ def resume_agent_run(
         return JSONResponse(
             {"success": False, "message": "runtime_context 必须是对象"}, status_code=400
         )
-    return _control_agent_run(
-        run_id,
-        action="resume",
-        principal=principal,
-        runtime_context=runtime_context,
-    )
+    try:
+        return _control_agent_run(
+            run_id,
+            action="resume",
+            principal=principal,
+            runtime_context=runtime_context,
+        )
+    except RuntimeContextOwnershipError:
+        return JSONResponse(
+            {"success": False, "message": "不能更改任务的租户范围"}, status_code=400
+        )
 
 
 @router.post("/api/agent/runs/{run_id}/retry", response_model=None)

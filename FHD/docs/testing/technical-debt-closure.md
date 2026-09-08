@@ -19,6 +19,14 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Runtime ownership changes now raise a distinct exception. The resume HTTP
+  endpoint translates it to a public 400 response instead of an unhandled server
+  error. Its route test verifies unchanged full task state, no enqueue and no
+  control command; all 31 route/context checks passed (`resume-tenant-http`).
+  Retry HTTP accepts no runtime-context body, while its underlying lifecycle
+  retains the ownership check. Principal/run tenant matching and active-Mod
+  binding remain separate pending authorization work.
+
 - Approval, synchronous/background resume and retry now share runtime-context
   tenant binding. Resume validates before creating its control command, so
   rejected tenant changes leave no command or run mutation; retry creates no new
