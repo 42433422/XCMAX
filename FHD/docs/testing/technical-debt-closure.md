@@ -31,9 +31,12 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 - The actual planner marks clarification nodes low-risk/idempotent. A dedicated
   interaction handler now pauses these nodes before tool execution and exposes
   the question and target node in the run result. The regression uses the real
-  planner node builder; 26 evaluator/orchestrator tests passed. Answer submission,
-  target-parameter validation and resumption still require implementation and
-  end-to-end verification before clarification can be called complete.
+  planner node builder. The owned-run clarification endpoint now accepts missing
+  required parameters, rejects changes to existing parameters and stale answers,
+  and queues resumption without approving the business step. 51 related tests
+  passed, including HTTP ownership, invalid-answer immutability, queue draining,
+  and the separate write-approval boundary. The user interface, ambiguity answers,
+  multi-question cases and final business-effect acceptance remain outstanding.
 - SQL queue completion now performs ownership and lease checks in the UPDATE,
   not an earlier SELECT; expired owners cannot renew. Three queue tests passed,
   including a simultaneous claim by two spawned processes and expiration before

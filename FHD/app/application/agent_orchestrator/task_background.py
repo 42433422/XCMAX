@@ -32,6 +32,25 @@ class BackgroundTaskExecutionMixin:
         _find_waiting_step: Any
     _repo: Any
 
+    def stage_clarification_answer(
+        self, run_id: str, *, step_id: str, parameters: dict[str, Any], requested_by: str
+    ) -> AgentRun | None:
+        from app.application.agent_orchestrator.clarification import apply_clarification_answer
+
+        run = self._repo.get(run_id)
+        if run is None:
+            return None
+        apply_clarification_answer(run, step_id=step_id, parameters=parameters)
+        run.status = "queued"
+        run.metadata["dispatch"] = {
+            "state": "queued",
+            "approved_step_id": "",
+            "requested_by": str(requested_by),
+            "queued_at": utc_now_iso(),
+        }
+        run.add_event("task.queued", "已补充信息，任务等待继续执行")
+        return cast("AgentRun", self._repo.save(run))
+
     def stage_run_for_dispatch(
         self,
         run_id: str,

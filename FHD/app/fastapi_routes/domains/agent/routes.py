@@ -16,6 +16,7 @@ from app.application.agent_orchestrator.approval_grant import (
     ApprovalGrantError,
     consume_approval_grant,
 )
+from app.application.agent_orchestrator.clarification import ClarificationAnswerError
 from app.application.agent_orchestrator.run_control import run_operation_lock
 from app.fastapi_routes.domains.agent.route_support import (
     PUBLIC_APPROVAL_ERROR as _PUBLIC_APPROVAL_ERROR,
@@ -195,6 +196,36 @@ def get_agent_run(
         return response
     except RECOVERABLE_ERRORS:
         return _internal_error_response("get agent run")
+
+
+@router.post("/api/agent/runs/{run_id}/clarification", response_model=None)
+def answer_agent_clarification(
+    run_id: str,
+    body: dict[str, Any] = Body(default_factory=dict),
+    principal: AgentPrincipal = Depends(require_agent_principal),
+) -> dict[str, Any] | JSONResponse:
+    step_id, parameters = body.get("step_id"), body.get("parameters")
+    if not isinstance(step_id, str) or not step_id.strip() or not isinstance(parameters, dict):
+        return JSONResponse(
+            {"success": False, "message": "请提供 step_id 和参数对象"}, status_code=400
+        )
+    try:
+        with run_operation_lock(run_id):
+            orchestrator = AgentOrchestrator()
+            _, error = _owned_run(orchestrator, run_id, principal)
+            if error is not None:
+                return error
+            run = orchestrator.stage_clarification_answer(
+                run_id, step_id=step_id, parameters=parameters, requested_by=principal.user_id
+            )
+        if run is None:
+            return JSONResponse({"success": False, "message": "agent run 不存在"}, status_code=404)
+        _enqueue_run(run, requested_by=principal.user_id)
+        return JSONResponse(_run_response(run, principal=principal), status_code=202)
+    except ClarificationAnswerError as exc:
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
+    except RECOVERABLE_ERRORS:
+        return _internal_error_response("answer agent clarification")
 
 
 @router.post("/api/agent/runs/{run_id}/continue", response_model=None)

@@ -896,3 +896,50 @@ def test_task_control_command_survives_process_local_control_reset() -> None:
     persisted = repository.get(run.run_id)
     assert persisted is not None
     assert persisted.status == "paused"
+
+
+def test_clarification_answer_is_bound_validated_and_does_not_approve_write():
+    from app.application.workflow.clarification_node import build_clarify_node
+    from app.application.workflow.types import PlanGraph, WorkflowNode
+
+    plan = PlanGraph(
+        plan_id="input",
+        intent="create",
+        nodes=[
+            build_clarify_node("请提供客户", ambient={"target_node_id": "create"}),
+            WorkflowNode(
+                node_id="create",
+                tool_id="products",
+                action="create",
+                params={"name_or_model": "A100"},
+            ),
+        ],
+    )
+    run = AgentOrchestrator().start_run_from_plan(user_id="u1", message="新增产品", plan=plan)
+    step_id = run.steps[0].step_id
+    url = f"/api/agent/runs/{run.run_id}/clarification"
+    original = get_agent_run_repository().get(run.run_id).to_dict()
+    for parameters in (
+        {},
+        {"unit_name": ""},
+        {"name_or_model": "changed"},
+        {"_runtime_context": {"tenant_id": 99}},
+    ):
+        response = _client().post(url, json={"step_id": step_id, "parameters": parameters})
+        assert response.status_code == 400
+        assert get_agent_run_repository().get(run.run_id).to_dict() == original
+    denied = _client("someone-else").post(
+        url, json={"step_id": step_id, "parameters": {"unit_name": "客户甲"}}
+    )
+    assert denied.status_code in {403, 404}
+    response = _client().post(url, json={"step_id": step_id, "parameters": {"unit_name": "客户甲"}})
+    assert response.status_code == 202, response.text
+    with patch("app.application.facades.tools_facade.execute_registered_workflow_tool") as execute:
+        resumed = _drain_background_run(run.run_id)
+        execute.assert_not_called()
+    assert resumed.steps[0].status == "completed"
+    assert resumed.steps[1].params == {"name_or_model": "A100", "unit_name": "客户甲"}
+    assert resumed.steps[1].status == "waiting_user"
+    assert resumed.status == "waiting_user"
+    repeated = _client().post(url, json={"step_id": step_id, "parameters": {"unit_name": "客户乙"}})
+    assert repeated.status_code == 400
