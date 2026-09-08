@@ -111,3 +111,35 @@ def test_quote_then_confirm_updates_only_created_order(tmp_path, monkeypatch):
         other = db.get(SalesOrder, 10)
         assert other.state == "quote" and float(other.total_amount) == 99
     engine.dispose()
+
+
+def test_default_session_confirmation_is_committed(tmp_path, monkeypatch):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.application.sales_app_service import SalesAppService
+    from app.db.base import Base
+    from app.db.models import Customer, Product, SalesOrder
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'committed.sqlite'}")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+    with factory.begin() as db:
+        db.add(Customer(id=1, tenant_id=1, customer_name="星光"))
+        db.add(Product(id=1, tenant_id=1, name="A100"))
+    monkeypatch.setattr("app.db.session.SessionLocal", factory)
+    with tenant_scope(1):
+        service = SalesAppService()
+        quote = service.quote(
+            {"customer_id": 1, "items": [{"product_id": 1, "quantity": 10, "unit_price": 25.5}]}
+        )
+        assert quote["success"]
+        ident = quote["data"]["id"]
+        confirmed = service.confirm(ident)
+        assert confirmed["success"]
+        with factory() as fresh:
+            order = fresh.get(SalesOrder, ident)
+            assert order.state == "confirmed"
+            assert float(order.total_amount) == 255
+    engine.dispose()
