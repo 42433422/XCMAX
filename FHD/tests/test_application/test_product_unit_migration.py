@@ -65,3 +65,35 @@ def test_database_inspection_is_tenant_local_and_does_not_flush():
             inspect_product_units(db)
         db.rollback()
     engine.dispose()
+
+
+def test_backfill_is_idempotent_scoped_and_preserves_legacy_unit():
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.application.etl.product_unit_migration import backfill_product_links
+    from app.db.base import Base
+    from app.db.models.customer_product_link import CustomerProductLink
+    from app.db.models.product import Product
+    from app.db.models.purchase_unit import PurchaseUnit
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    with sessionmaker(bind=engine)() as db, tenant_scope(1):
+        db.add_all(
+            [
+                PurchaseUnit(id=1, tenant_id=1, unit_name="公司A"),
+                Product(id=1, tenant_id=1, name="旧产品", unit="公司A"),
+                Product(id=2, tenant_id=2, name="其他租户", unit="公司A"),
+                Product(id=3, tenant_id=1, name="普通产品", unit="桶"),
+            ]
+        )
+        db.commit()
+        results = backfill_product_links(db, [1, 2, 3, 1])
+        assert [r["status"] for r in results] == ["created", "unavailable", "needs_review"]
+        assert backfill_product_links(db, [1])[0]["status"] == "existing"
+        assert db.get(Product, 1).unit == "公司A"
+        db.rollback()
+        assert db.query(CustomerProductLink).count() == 0
+    engine.dispose()

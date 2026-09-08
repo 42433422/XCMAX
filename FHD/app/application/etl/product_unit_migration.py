@@ -70,3 +70,49 @@ def inspect_product_units(db) -> list[dict]:
             .all()
         ]
     return classify_product_units(products, customers)
+
+
+def backfill_product_links(db, product_ids: list[int]) -> list[dict]:
+    """Backfill selected relationships in the caller transaction; leave units intact."""
+    from app.application.customer_product_links import ensure_customer_product_link
+    from app.db.models.product import Product
+    from app.db.models.purchase_unit import PurchaseUnit
+    from app.infrastructure.tenant_scope import TenantScopeError, current_tenant_id
+
+    tenant = current_tenant_id()
+    if tenant is None or tenant <= 0:
+        raise TenantScopeError("产品关联回填需要明确租户")
+    if any(
+        isinstance(value, bool) or not isinstance(value, int) or value <= 0 for value in product_ids
+    ):
+        raise ValueError("产品 ID 必须为正整数")
+    results = []
+    for product_id in dict.fromkeys(product_ids):
+        product = (
+            db.query(Product).filter_by(id=product_id, tenant_id=tenant).with_for_update().first()
+        )
+        if product is None:
+            results.append({"product_id": product_id, "status": "unavailable"})
+            continue
+        customers = (
+            db.query(PurchaseUnit)
+            .filter_by(tenant_id=tenant, unit_name=product.unit, is_active=True)
+            .with_for_update()
+            .all()
+        )
+        classification = classify_product_units(
+            [{"id": product.id, "tenant_id": tenant, "unit": product.unit}],
+            [{"id": row.id, "tenant_id": tenant, "unit_name": row.unit_name} for row in customers],
+        )[0]
+        if classification["classification"] != "customer_link_requires_measurement":
+            results.append({**classification, "status": "needs_review"})
+            continue
+        link, created = ensure_customer_product_link(db, customers[0].id, product.id)
+        results.append(
+            {
+                "product_id": product_id,
+                "link_id": link.id,
+                "status": "created" if created else "existing",
+            }
+        )
+    return results
