@@ -62,6 +62,16 @@ def test_ai_measurement_update_persists_through_product_service(tmp_path, monkey
         assert product.unit == "客户公司"
         assert product.to_dict()["measurement_unit"] == "桶"
         assert product_measurement_unit(product) == "桶"
+        created = _registered_router_products(
+            "create", {"name_or_model": "新产品", field: "桶"}, {}, "normal", ""
+        )
+        assert created["success"], created
+        created_id = created["raw"]["product_id"]
+        new_product = repository.find_by_id(created_id)
+        assert new_product.name == "新产品"
+        assert new_product.measurement_unit == "桶"
+        assert product_measurement_unit(new_product) == "桶"
+
         foreign = _registered_router_products("update", {"id": 2, field: "桶"}, {}, "normal", "")
         assert not foreign["success"]
     with factory() as db, tenant_scope(1):
