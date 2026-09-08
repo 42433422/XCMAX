@@ -27,8 +27,31 @@ def customer_facts(db, customer_id=None, ticket_id=None):
     for row in query.order_by(CustomerServiceTicket.updated_at.desc()).limit(50):
         try:
             evidence = json.loads(row.evidence_json or "{}")
-        except ValueError:
-            evidence = {}
+            if (
+                not isinstance(evidence, dict)
+                or any(
+                    key in evidence and not isinstance(evidence[key], list)
+                    for key in ("receipt_events", "install_receipts", "delivery_artifacts")
+                )
+                or not isinstance(evidence.get("resolution") or {}, dict)
+            ):
+                raise ValueError("invalid_evidence_shape")
+            running = all_artifacts_running(row, evidence)
+        except (ValueError, TypeError):
+            tickets.append(
+                {
+                    "id": row.id,
+                    "customer_id": row.user_id,
+                    "source": f"customer_service_tickets:{row.id}",
+                    "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+                    "error": "invalid_delivery_evidence",
+                    "delivery_verification": {
+                        "completed": False,
+                        "runtime_business_verified": None,
+                    },
+                }
+            )
+            continue
         resolution = evidence.get("resolution") or {}
         generation = str(evidence.get("delivery_generation") or "")
         receipts = [
@@ -38,7 +61,6 @@ def customer_facts(db, customer_id=None, ticket_id=None):
             and receipt.get("owner_user_id") == row.user_id
             and str(receipt.get("generation") or "") == generation
         ]
-        running = all_artifacts_running(row, evidence)
         tickets.append(
             {
                 "id": row.id,

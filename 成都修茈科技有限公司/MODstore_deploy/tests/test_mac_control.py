@@ -329,3 +329,22 @@ def test_handoff_requires_source_evidence_and_only_creates_one_child(factory):
         assert spec["source_sha"] == receipt["commit_sha"]
         assert spec["source_archive_sha256"] == receipt["archive_sha256"]
         assert spec["target"] == "windows"
+
+
+@pytest.mark.parametrize("raw", ["[]", '{"receipt_events":null}', '{"resolution":42}', "invalid"])
+def test_corrupt_customer_evidence_is_unavailable_not_verified(factory, monkeypatch, raw):
+    from modstore_server import mac_control_facts
+    from modstore_server.models_cs import CustomerServiceTicket
+
+    monkeypatch.setattr(mac_control_facts, "build_standard_delivery_rows", lambda db: [])
+    with factory() as db:
+        db.add(
+            CustomerServiceTicket(
+                session_id=1, user_id=1, ticket_no="evidence-fixture", evidence_json=raw
+            )
+        )
+        db.commit()
+        row = mac_control_facts.customer_facts(db, customer_id=1)["tickets"][0]
+        assert row["error"] == "invalid_delivery_evidence"
+        assert row["delivery_verification"]["runtime_business_verified"] is None
+        assert row["delivery_verification"]["completed"] is False
