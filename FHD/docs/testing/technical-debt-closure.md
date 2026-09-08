@@ -19,6 +19,16 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- A fresh thread now exercises the real inventory tool executor/registered router
+  against SQLite with two tenants' identical product models and warehouse names.
+  Runtime tenant 2 writes only its own canonical IDs and one 50-unit movement;
+  tenant 1 remains untouched. Reusing that thread without a tenant fails without
+  inheriting the previous scope or adding a second movement. The end-to-end test
+  passed (`inventory-background-tenant-final`). Warehouse codes remain globally
+  unique in the current schema: the initial duplicate-code fixture failed and
+  distinct codes retain same-name resolution coverage; this does not claim
+  tenant-scoped code uniqueness or active-Mod background restoration.
+
 - Tool execution restored integer tenant context only for business_db, omitting
   inventory. Inventory now restores a supplied runtime tenant before dispatch,
   then restores the caller context afterward; invalid IDs block the tool call.
