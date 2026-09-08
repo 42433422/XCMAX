@@ -12,7 +12,7 @@ const { parse: parseTemplate } = require('@vue/compiler-dom')
 const input = []
 for await (const chunk of process.stdin) input.push(chunk)
 const files = JSON.parse(Buffer.concat(input).toString('utf8'))
-const result = { routes: [], events: [], file_inputs: [], errors: [] }
+const result = { routes: [], events: [], file_inputs: [], native_ipc: [], preload_apis: [], errors: [] }
 for (const file of files) {
   const source = readFileSync(resolve(root, file), 'utf8')
   let scripts = [{ content: source, offset: 0 }]
@@ -48,7 +48,43 @@ for (const file of files) {
   for (const script of scripts) {
     const tree = ts.createSourceFile(file, script.content, ts.ScriptTarget.Latest, true, file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS)
     if (tree.parseDiagnostics.length) result.errors.push({ source: file, reason: 'script_parse_error' })
+    const electronNames = new Map()
+    for (const statement of tree.statements) {
+      if (!ts.isImportDeclaration(statement) || statement.moduleSpecifier.text !== 'electron') continue
+      const bindings = statement.importClause?.namedBindings
+      if (bindings && ts.isNamedImports(bindings)) {
+        for (const binding of bindings.elements) electronNames.set(binding.name.text, binding.propertyName?.text ?? binding.name.text)
+      } else if (bindings && ts.isNamespaceImport(bindings)) {
+        for (const name of ['ipcMain', 'ipcRenderer', 'contextBridge']) electronNames.set(`${bindings.name.text}.${name}`, name)
+      }
+    }
     const visit = (node) => {
+      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+        const receiver = electronNames.get(node.expression.expression.getText(tree))
+        const method = node.expression.name.text
+        const argument = node.arguments[0]
+        const literal = argument && ts.isStringLiteralLike(argument)
+        const common = {
+          source: file,
+          line: source.slice(0, script.offset + node.getStart(tree)).split('\n').length,
+          dynamic: !literal,
+          runtime_status: 'unverified',
+          ai_execution: 'unverified',
+        }
+        if ((receiver === 'ipcMain' && ['handle', 'handleOnce', 'on', 'once'].includes(method)) ||
+            (receiver === 'ipcRenderer' && ['invoke', 'send', 'sendSync', 'postMessage', 'on', 'once'].includes(method))) {
+          result.native_ipc.push({ ...common, receiver, method, channel: literal ? argument.text : null, expression: argument?.getText(tree) ?? '' })
+        }
+        if (receiver === 'contextBridge' && method === 'exposeInMainWorld') {
+          const api = node.arguments[1]
+          const object = api && ts.isObjectLiteralExpression(api)
+          result.preload_apis.push({
+            ...common, global_name: literal ? argument.text : null,
+            members: object ? api.properties.filter(prop => prop.name).map(prop => prop.name.getText(tree)) : [],
+            members_dynamic: !object || api.properties.some(prop => ts.isSpreadAssignment(prop) || (prop.name && ts.isComputedPropertyName(prop.name))),
+          })
+        }
+      }
       if (ts.isObjectLiteralExpression(node)) {
         const properties = new Map(node.properties.filter(ts.isPropertyAssignment).map(prop => [prop.name.getText(tree).replace(/^['"]|['"]$/g, ''), prop.initializer]))
         const path = properties.get('path')

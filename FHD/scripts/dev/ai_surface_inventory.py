@@ -115,7 +115,7 @@ def inventory(root: Path) -> dict:
     files = [
         path
         for path in candidates
-        if Path(path).suffix in {".py", ".ts", ".tsx", ".js", ".vue"}
+        if Path(path).suffix in {".py", ".ts", ".tsx", ".js", ".mjs", ".cjs", ".vue"}
         or Path(path).name == "manifest.json"
     ]
     digest = hashlib.sha256()
@@ -150,7 +150,9 @@ def inventory(root: Path) -> dict:
             except (ValueError, AttributeError):
                 errors.append({"source": filename, "reason": "manifest_parse_error"})
     frontend_files = [
-        path for path in scanned if Path(path).suffix in {".ts", ".tsx", ".js", ".vue"}
+        path
+        for path in scanned
+        if Path(path).suffix in {".ts", ".tsx", ".js", ".mjs", ".cjs", ".vue"}
     ]
     frontend = json.loads(
         subprocess.check_output(
@@ -169,7 +171,7 @@ def inventory(root: Path) -> dict:
         "files_scanned": len(scanned),
         "product_coverage_percent": None,
         "remaining_denominators": [
-            "native desktop/mobile commands",
+            "native IPC runtime registration and execution; mobile commands",
             "external Modstore and admin applications",
             "first-party package entrypoints",
             "dynamic route mounts and downloaded Mods",
@@ -182,6 +184,8 @@ def inventory(root: Path) -> dict:
             "ui_event_bindings": len(frontend["events"]),
             "file_input_candidates": len(frontend["file_inputs"]),
             "mod_manifest_copies": len(mods),
+            "native_ipc_declarations": len(frontend["native_ipc"]),
+            "preload_api_declarations": len(frontend["preload_apis"]),
         },
         "api_declarations": apis,
         "frontend": frontend,

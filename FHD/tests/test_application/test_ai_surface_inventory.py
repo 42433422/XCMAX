@@ -93,3 +93,35 @@ const routes = [{ path: '/real', component: View }, { path: computedPath, compon
     assert len(result["file_inputs"]) == 1
     assert result["file_inputs"][0]["line"] == 3
     assert [row["event"] for row in result["events"]] == ["change", "click"]
+
+
+def test_native_ipc_aliases_dynamic_channels_and_preload_members(tmp_path):
+    root = Path(__file__).resolve().parents[2]
+    if not shutil.which("node") or not (root / "frontend/node_modules/typescript").exists():
+        pytest.skip("Requires the frontend Node/compiler dependencies")
+    path = tmp_path / "native.mjs"
+    path.write_text("""import { ipcMain as main, contextBridge } from 'electron'
+import * as electron from 'electron'
+// main.handle('fake', () => {})
+main.handle('real', async () => 1)
+main.on(channelName, () => {})
+electron.ipcRenderer.invoke('real')
+other.handle('not-electron', () => {})
+contextBridge.exposeInMainWorld('desktop', { open: () => {}, version, ...extra })
+""")
+    result = json.loads(
+        subprocess.check_output(
+            ["node", str(root / "scripts/dev/ai_surface_frontend.mjs")],
+            input=json.dumps([str(path)]).encode(),
+            cwd=root,
+        )
+    )
+    assert not result["errors"]
+    rows = result["native_ipc"]
+    assert [row["channel"] for row in rows] == ["real", None, "real"]
+    assert [row["line"] for row in rows] == [4, 5, 6]
+    assert rows[1]["dynamic"] and rows[1]["expression"] == "channelName"
+    assert all(row["ai_execution"] == row["runtime_status"] == "unverified" for row in rows)
+    api = result["preload_apis"][0]
+    assert api["global_name"] == "desktop" and api["members"] == ["open", "version"]
+    assert api["members_dynamic"] is True

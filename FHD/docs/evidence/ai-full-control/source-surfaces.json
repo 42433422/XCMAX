@@ -1,11 +1,11 @@
 {
   "scope": "Tracked FHD source declarations, including Mods; excludes tests, archives, package directories and build output. Counts are not unique business functions or runtime coverage.",
-  "source_sha256": "807f66cc70bc1ba0b76f55de948f539fb593f7831c712be54edd65065567e9d1",
-  "generator_sha256": "ceb39219815ed03f5f049188b128f7d7d2d781cae8657c677a0c35c1413af843",
-  "files_scanned": 4033,
+  "source_sha256": "57a993d0fae67b6366e3954ed4a547c96ed03c695e7b2c8dad9d80f11169dd44",
+  "generator_sha256": "c7cf44200f3bfe4ca83a27bb584c1f38b8274091412ebb9180bcf17352bc9a6a",
+  "files_scanned": 4070,
   "product_coverage_percent": null,
   "remaining_denominators": [
-    "native desktop/mobile commands",
+    "native IPC runtime registration and execution; mobile commands",
     "external Modstore and admin applications",
     "first-party package entrypoints",
     "dynamic route mounts and downloaded Mods",
@@ -15,9 +15,11 @@
   "counts": {
     "api_declarations": 1711,
     "route_declarations": 116,
-    "ui_event_bindings": 2047,
+    "ui_event_bindings": 2051,
     "file_input_candidates": 33,
-    "mod_manifest_copies": 103
+    "mod_manifest_copies": 103,
+    "native_ipc_declarations": 56,
+    "preload_api_declarations": 1
   },
   "api_declarations": [
     {
@@ -106,7 +108,7 @@
     },
     {
       "source": "XCAGI/mods/attendance-industry/backend/management_routes.py",
-      "line": 95,
+      "line": 94,
       "handler": "schedules_get",
       "method": "GET",
       "declared_path": "/schedules",
@@ -118,7 +120,7 @@
     },
     {
       "source": "XCAGI/mods/attendance-industry/backend/management_routes.py",
-      "line": 130,
+      "line": 129,
       "handler": "list_employees",
       "method": "GET",
       "declared_path": "/employees",
@@ -130,7 +132,7 @@
     },
     {
       "source": "XCAGI/mods/attendance-industry/backend/management_routes.py",
-      "line": 176,
+      "line": 175,
       "handler": "create_employee",
       "method": "POST",
       "declared_path": "/employees",
@@ -142,7 +144,7 @@
     },
     {
       "source": "XCAGI/mods/attendance-industry/backend/management_routes.py",
-      "line": 230,
+      "line": 229,
       "handler": "update_employee",
       "method": "PUT",
       "declared_path": "/employees/{employee_id}",
@@ -154,7 +156,7 @@
     },
     {
       "source": "XCAGI/mods/attendance-industry/backend/management_routes.py",
-      "line": 289,
+      "line": 288,
       "handler": "delete_employee",
       "method": "DELETE",
       "declared_path": "/employees/{employee_id}",
@@ -166,7 +168,7 @@
     },
     {
       "source": "XCAGI/mods/attendance-industry/backend/management_routes.py",
-      "line": 318,
+      "line": 317,
       "handler": "list_departments",
       "method": "GET",
       "declared_path": "/departments",
@@ -178,7 +180,7 @@
     },
     {
       "source": "XCAGI/mods/attendance-industry/backend/management_routes.py",
-      "line": 366,
+      "line": 365,
       "handler": "create_department",
       "method": "POST",
       "declared_path": "/departments",
@@ -190,7 +192,7 @@
     },
     {
       "source": "XCAGI/mods/attendance-industry/backend/management_routes.py",
-      "line": 416,
+      "line": 415,
       "handler": "update_department",
       "method": "PUT",
       "declared_path": "/departments/{department_id}",
@@ -202,7 +204,7 @@
     },
     {
       "source": "XCAGI/mods/attendance-industry/backend/management_routes.py",
-      "line": 480,
+      "line": 479,
       "handler": "delete_department",
       "method": "DELETE",
       "declared_path": "/departments/{department_id}",
@@ -214,7 +216,7 @@
     },
     {
       "source": "XCAGI/mods/attendance-industry/backend/management_routes.py",
-      "line": 530,
+      "line": 529,
       "handler": "list_attendance_records",
       "method": "GET",
       "declared_path": "/records",
@@ -2050,7 +2052,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 133,
+      "line": 135,
       "handler": "compat_health",
       "method": "GET",
       "declared_path": "/health",
@@ -2062,7 +2064,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 146,
+      "line": 148,
       "handler": "compat_ai_generate",
       "method": "POST",
       "declared_path": "/api/generate",
@@ -2074,7 +2076,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 222,
+      "line": 224,
       "handler": "compat_shipment_records_units",
       "method": "GET",
       "declared_path": "/api/shipment-records/units",
@@ -2086,7 +2088,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 229,
+      "line": 231,
       "handler": "compat_shipment_records_records",
       "method": "GET",
       "declared_path": "/api/shipment-records/records",
@@ -2098,7 +2100,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 236,
+      "line": 238,
       "handler": "compat_units_alias",
       "method": "GET",
       "declared_path": "/api/units",
@@ -2110,7 +2112,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 244,
+      "line": 246,
       "handler": "compat_purchase_units_create",
       "method": "POST",
       "declared_path": "/api/purchase_units",
@@ -2122,7 +2124,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 283,
+      "line": 285,
       "handler": "compat_purchase_units_update",
       "method": "PUT",
       "declared_path": "/api/purchase_units/{unit_id}",
@@ -2134,7 +2136,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 310,
+      "line": 312,
       "handler": "compat_purchase_units_delete",
       "method": "DELETE",
       "declared_path": "/api/purchase_units/{unit_id}",
@@ -2146,7 +2148,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 326,
+      "line": 328,
       "handler": "compat_purchase_units_by_name",
       "method": "GET",
       "declared_path": "/api/purchase_units/by_name/{unit_name}",
@@ -2158,7 +2160,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 337,
+      "line": 339,
       "handler": "compat_product_names",
       "method": "GET",
       "declared_path": "/api/product_names",
@@ -2170,7 +2172,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 343,
+      "line": 345,
       "handler": "compat_product_names_search",
       "method": "GET",
       "declared_path": "/api/product_names/search",
@@ -2182,7 +2184,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 349,
+      "line": 351,
       "handler": "compat_product_names_by_unit",
       "method": "GET",
       "declared_path": "/api/product_names/by_unit/{unit_id}",
@@ -2194,7 +2196,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 355,
+      "line": 357,
       "handler": "compat_product_by_unit_and_name",
       "method": "GET",
       "declared_path": "/api/product_names/by_unit_and_name",
@@ -2206,7 +2208,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 368,
+      "line": 370,
       "handler": "compat_printers",
       "method": "GET",
       "declared_path": "/api/printers",
@@ -2218,7 +2220,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 383,
+      "line": 385,
       "handler": "compat_print_diagnose",
       "method": "GET",
       "declared_path": "/api/print/diagnose",
@@ -2230,7 +2232,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 393,
+      "line": 395,
       "handler": "compat_print_last",
       "method": "POST",
       "declared_path": "/api/print-last",
@@ -2242,31 +2244,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 401,
-      "handler": "compat_print_pdf_labels",
-      "method": "POST",
-      "declared_path": "/api/print/pdf_labels",
-      "local_prefix": "",
-      "local_path": "/api/print/pdf_labels",
-      "dynamic": false,
-      "mount_status": "unverified",
-      "ai_execution": "unverified"
-    },
-    {
-      "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 406,
-      "handler": "compat_print_single_label",
-      "method": "POST",
-      "declared_path": "/api/print/single_label",
-      "local_prefix": "",
-      "local_path": "/api/print/single_label",
-      "dynamic": false,
-      "mount_status": "unverified",
-      "ai_execution": "unverified"
-    },
-    {
-      "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 471,
+      "line": 404,
       "handler": "compat_print_shipment_file",
       "method": "POST",
       "declared_path": "/api/print/{filename:path}",
@@ -8194,7 +8172,7 @@
     },
     {
       "source": "app/fastapi_routes/label_jobs.py",
-      "line": 50,
+      "line": 63,
       "handler": "generate_label",
       "method": "POST",
       "declared_path": "",
@@ -8206,7 +8184,31 @@
     },
     {
       "source": "app/fastapi_routes/label_jobs.py",
-      "line": 55,
+      "line": 68,
+      "handler": "compat_print_pdf_labels",
+      "method": "POST",
+      "declared_path": "/api/print/pdf_labels",
+      "local_prefix": "",
+      "local_path": "/api/print/pdf_labels",
+      "dynamic": false,
+      "mount_status": "unverified",
+      "ai_execution": "unverified"
+    },
+    {
+      "source": "app/fastapi_routes/label_jobs.py",
+      "line": 69,
+      "handler": "compat_print_pdf_labels",
+      "method": "POST",
+      "declared_path": "/api/print/single_label",
+      "local_prefix": "",
+      "local_path": "/api/print/single_label",
+      "dynamic": false,
+      "mount_status": "unverified",
+      "ai_execution": "unverified"
+    },
+    {
+      "source": "app/fastapi_routes/label_jobs.py",
+      "line": 83,
       "handler": "label_products",
       "method": "GET",
       "declared_path": "/products",
@@ -8218,7 +8220,7 @@
     },
     {
       "source": "app/fastapi_routes/label_jobs.py",
-      "line": 65,
+      "line": 93,
       "handler": "get_label_job",
       "method": "GET",
       "declared_path": "/{job_id}",
@@ -8230,7 +8232,7 @@
     },
     {
       "source": "app/fastapi_routes/label_jobs.py",
-      "line": 70,
+      "line": 98,
       "handler": "download_label",
       "method": "GET",
       "declared_path": "/{job_id}/file",
@@ -8242,7 +8244,7 @@
     },
     {
       "source": "app/fastapi_routes/label_jobs.py",
-      "line": 81,
+      "line": 109,
       "handler": "confirm_label",
       "method": "POST",
       "declared_path": "/{job_id}/confirmation",
@@ -8254,7 +8256,7 @@
     },
     {
       "source": "app/fastapi_routes/label_jobs.py",
-      "line": 91,
+      "line": 119,
       "handler": "submit_label",
       "method": "POST",
       "declared_path": "/{job_id}/submit",
@@ -10258,7 +10260,7 @@
     },
     {
       "source": "app/fastapi_routes/mod_store_route_handlers_part02.py",
-      "line": 114,
+      "line": 119,
       "handler": "mod_store_updates",
       "method": "GET",
       "declared_path": "/updates",
@@ -10270,7 +10272,7 @@
     },
     {
       "source": "app/fastapi_routes/mod_store_route_handlers_part02.py",
-      "line": 171,
+      "line": 176,
       "handler": "mod_store_dependencies",
       "method": "GET",
       "declared_path": "/dependencies",
@@ -10282,7 +10284,7 @@
     },
     {
       "source": "app/fastapi_routes/mod_store_route_handlers_part02.py",
-      "line": 184,
+      "line": 186,
       "handler": "mod_store_rate",
       "method": "POST",
       "declared_path": "/mod/{mod_id}/rate",
@@ -10294,7 +10296,7 @@
     },
     {
       "source": "app/fastapi_routes/mod_store_route_handlers_part02.py",
-      "line": 193,
+      "line": 195,
       "handler": "mod_store_download",
       "method": "GET",
       "declared_path": "/package/{package_file:path}/download",
@@ -10306,7 +10308,7 @@
     },
     {
       "source": "app/fastapi_routes/mod_store_route_handlers_part02.py",
-      "line": 198,
+      "line": 200,
       "handler": "mod_store_delete_package",
       "method": "DELETE",
       "declared_path": "/package/{package_file:path}",
@@ -10318,7 +10320,7 @@
     },
     {
       "source": "app/fastapi_routes/mod_store_route_handlers_part02.py",
-      "line": 210,
+      "line": 212,
       "handler": "mod_store_rebuild_index",
       "method": "POST",
       "declared_path": "/index/rebuild",
@@ -10330,7 +10332,7 @@
     },
     {
       "source": "app/fastapi_routes/mod_store_route_handlers_part02.py",
-      "line": 304,
+      "line": 306,
       "handler": "mod_store_install_host_foundation",
       "method": "POST",
       "declared_path": "/install-host-foundation",
@@ -10342,7 +10344,7 @@
     },
     {
       "source": "app/fastapi_routes/mod_store_route_handlers_part02.py",
-      "line": 321,
+      "line": 323,
       "handler": "mod_store_bootstrap_edition_pack",
       "method": "POST",
       "declared_path": "/bootstrap-edition-pack",
@@ -10354,7 +10356,7 @@
     },
     {
       "source": "app/fastapi_routes/mod_store_route_handlers_part02.py",
-      "line": 368,
+      "line": 370,
       "handler": "mod_store_sync_modstore_library",
       "method": "POST",
       "declared_path": "/sync-modstore-library",
@@ -13174,7 +13176,7 @@
     },
     {
       "source": "app/fastapi_routes/xcagi_compat_product.py",
-      "line": 257,
+      "line": 258,
       "handler": "products_units",
       "method": "GET",
       "declared_path": "/products/units",
@@ -13186,7 +13188,7 @@
     },
     {
       "source": "app/fastapi_routes/xcagi_compat_product.py",
-      "line": 263,
+      "line": 264,
       "handler": "shipment_records_units",
       "method": "GET",
       "declared_path": "/shipment/shipment-records/units",
@@ -13198,7 +13200,7 @@
     },
     {
       "source": "app/fastapi_routes/xcagi_compat_product.py",
-      "line": 264,
+      "line": 265,
       "handler": "shipment_records_units",
       "method": "GET",
       "declared_path": "/shipment/shipment-records/units/",
@@ -13210,7 +13212,7 @@
     },
     {
       "source": "app/fastapi_routes/xcagi_compat_product.py",
-      "line": 269,
+      "line": 270,
       "handler": "taiyangniao_shipment_records_units_host_alias",
       "method": "GET",
       "declared_path": "/mod/taiyangniao-pro/shipment/shipment-records/units",
@@ -13222,7 +13224,7 @@
     },
     {
       "source": "app/fastapi_routes/xcagi_compat_product.py",
-      "line": 270,
+      "line": 271,
       "handler": "taiyangniao_shipment_records_units_host_alias",
       "method": "GET",
       "declared_path": "/mod/taiyangniao-pro/shipment/shipment-records/units/",
@@ -13234,7 +13236,7 @@
     },
     {
       "source": "app/fastapi_routes/xcagi_compat_product.py",
-      "line": 279,
+      "line": 280,
       "handler": "purchase_units_list",
       "method": "GET",
       "declared_path": "/purchase_units",
@@ -13246,7 +13248,7 @@
     },
     {
       "source": "app/fastapi_routes/xcagi_compat_product.py",
-      "line": 280,
+      "line": 281,
       "handler": "purchase_units_list",
       "method": "GET",
       "declared_path": "/purchase_units/",
@@ -13258,7 +13260,7 @@
     },
     {
       "source": "app/fastapi_routes/xcagi_compat_product.py",
-      "line": 285,
+      "line": 286,
       "handler": "products_list",
       "method": "GET",
       "declared_path": "/products/list",
@@ -13270,7 +13272,7 @@
     },
     {
       "source": "app/fastapi_routes/xcagi_compat_product.py",
-      "line": 336,
+      "line": 337,
       "handler": "products_get_by_id",
       "method": "GET",
       "declared_path": "/products/{product_id:int}",
@@ -13282,7 +13284,7 @@
     },
     {
       "source": "app/fastapi_routes/xcagi_compat_product.py",
-      "line": 337,
+      "line": 338,
       "handler": "products_get_by_id",
       "method": "GET",
       "declared_path": "/products/{product_id:int}/",
@@ -13294,7 +13296,7 @@
     },
     {
       "source": "app/fastapi_routes/xcagi_compat_product.py",
-      "line": 358,
+      "line": 359,
       "handler": "products_resolve_name_hints",
       "method": "POST",
       "declared_path": "/products/resolve-name-hints",
@@ -13306,7 +13308,7 @@
     },
     {
       "source": "app/fastapi_routes/xcagi_compat_product.py",
-      "line": 359,
+      "line": 360,
       "handler": "products_resolve_name_hints",
       "method": "POST",
       "declared_path": "/products/resolve-name-hints/",
@@ -13318,7 +13320,7 @@
     },
     {
       "source": "app/fastapi_routes/xcagi_compat_product.py",
-      "line": 382,
+      "line": 386,
       "handler": "products_update",
       "method": "POST",
       "declared_path": "/products/update",
@@ -13330,7 +13332,7 @@
     },
     {
       "source": "app/fastapi_routes/xcagi_compat_product.py",
-      "line": 383,
+      "line": 387,
       "handler": "products_update",
       "method": "POST",
       "declared_path": "/products/update/",
@@ -13342,7 +13344,7 @@
     },
     {
       "source": "app/fastapi_routes/xcagi_compat_product.py",
-      "line": 398,
+      "line": 402,
       "handler": "products_add",
       "method": "POST",
       "declared_path": "/products/add",
@@ -13354,7 +13356,7 @@
     },
     {
       "source": "app/fastapi_routes/xcagi_compat_product.py",
-      "line": 399,
+      "line": 403,
       "handler": "products_add",
       "method": "POST",
       "declared_path": "/products/add/",
@@ -13366,7 +13368,7 @@
     },
     {
       "source": "app/fastapi_routes/xcagi_compat_product.py",
-      "line": 414,
+      "line": 418,
       "handler": "products_delete",
       "method": "POST",
       "declared_path": "/products/delete",
@@ -13378,7 +13380,7 @@
     },
     {
       "source": "app/fastapi_routes/xcagi_compat_product.py",
-      "line": 415,
+      "line": 419,
       "handler": "products_delete",
       "method": "POST",
       "declared_path": "/products/delete/",
@@ -13390,7 +13392,7 @@
     },
     {
       "source": "app/fastapi_routes/xcagi_compat_product.py",
-      "line": 430,
+      "line": 434,
       "handler": "products_batch_delete",
       "method": "POST",
       "declared_path": "/products/batch-delete",
@@ -13402,7 +13404,7 @@
     },
     {
       "source": "app/fastapi_routes/xcagi_compat_product.py",
-      "line": 431,
+      "line": 435,
       "handler": "products_batch_delete",
       "method": "POST",
       "declared_path": "/products/batch-delete/",
@@ -13414,7 +13416,7 @@
     },
     {
       "source": "app/fastapi_routes/xcagi_compat_product.py",
-      "line": 448,
+      "line": 452,
       "handler": "products_price_list_export",
       "method": "GET",
       "declared_path": "/products/price-list-export",
@@ -13426,7 +13428,7 @@
     },
     {
       "source": "app/fastapi_routes/xcagi_compat_product.py",
-      "line": 449,
+      "line": 453,
       "handler": "products_price_list_export",
       "method": "GET",
       "declared_path": "/products/price-list-export/",
@@ -13438,7 +13440,7 @@
     },
     {
       "source": "app/fastapi_routes/xcagi_compat_product.py",
-      "line": 463,
+      "line": 467,
       "handler": "products_export_docx",
       "method": "GET",
       "declared_path": "/products/export.docx",
@@ -13450,7 +13452,7 @@
     },
     {
       "source": "app/fastapi_routes/xcagi_compat_product.py",
-      "line": 464,
+      "line": 468,
       "handler": "products_export_docx",
       "method": "GET",
       "declared_path": "/products/export.docx/",
@@ -13462,7 +13464,7 @@
     },
     {
       "source": "app/fastapi_routes/xcagi_compat_product.py",
-      "line": 478,
+      "line": 482,
       "handler": "products_price_list_template_preview",
       "method": "GET",
       "declared_path": "/products/price-list-template-preview",
@@ -13474,7 +13476,7 @@
     },
     {
       "source": "app/fastapi_routes/xcagi_compat_product.py",
-      "line": 479,
+      "line": 483,
       "handler": "products_price_list_template_preview",
       "method": "GET",
       "declared_path": "/products/price-list-template-preview/",
@@ -23345,91 +23347,91 @@
       },
       {
         "source": "XCAGI/mods/xcagi-erp-domain-bridge/frontend/views/PrintView.vue",
-        "line": 7,
+        "line": 9,
         "tag": "button",
         "event": "click",
         "handler": "loadOptions"
       },
       {
         "source": "XCAGI/mods/xcagi-erp-domain-bridge/frontend/views/PrintView.vue",
-        "line": 8,
+        "line": 10,
         "tag": "button",
         "event": "click",
         "handler": "loadTemplates"
       },
       {
         "source": "XCAGI/mods/xcagi-erp-domain-bridge/frontend/views/PrintView.vue",
-        "line": 11,
+        "line": 13,
         "tag": "input",
         "event": "keyup",
         "handler": "loadProducts(true)"
       },
       {
         "source": "XCAGI/mods/xcagi-erp-domain-bridge/frontend/views/PrintView.vue",
-        "line": 12,
+        "line": 14,
         "tag": "button",
         "event": "click",
         "handler": "loadProducts(true)"
       },
       {
         "source": "XCAGI/mods/xcagi-erp-domain-bridge/frontend/views/PrintView.vue",
-        "line": 19,
+        "line": 21,
         "tag": "button",
         "event": "click",
         "handler": "loadProducts(false)"
       },
       {
         "source": "XCAGI/mods/xcagi-erp-domain-bridge/frontend/views/PrintView.vue",
-        "line": 30,
+        "line": 32,
         "tag": "button",
         "event": "click",
         "handler": "loadTemplate"
       },
       {
         "source": "XCAGI/mods/xcagi-erp-domain-bridge/frontend/views/PrintView.vue",
-        "line": 37,
+        "line": 39,
         "tag": "input",
         "event": "input",
         "handler": "updateHeight"
       },
       {
         "source": "XCAGI/mods/xcagi-erp-domain-bridge/frontend/views/PrintView.vue",
-        "line": 42,
+        "line": 44,
         "tag": "button",
         "event": "click",
         "handler": "generate"
       },
       {
         "source": "XCAGI/mods/xcagi-erp-domain-bridge/frontend/views/PrintView.vue",
-        "line": 52,
+        "line": 54,
         "tag": "button",
         "event": "click",
         "handler": "loadPreview"
       },
       {
         "source": "XCAGI/mods/xcagi-erp-domain-bridge/frontend/views/PrintView.vue",
-        "line": 56,
+        "line": 58,
         "tag": "button",
         "event": "click",
         "handler": "preparePrint"
       },
       {
         "source": "XCAGI/mods/xcagi-erp-domain-bridge/frontend/views/PrintView.vue",
-        "line": 57,
+        "line": 59,
         "tag": "button",
         "event": "click",
         "handler": "refreshStatus"
       },
       {
         "source": "XCAGI/mods/xcagi-erp-domain-bridge/frontend/views/PrintView.vue",
-        "line": 60,
+        "line": 62,
         "tag": "button",
         "event": "click",
         "handler": "submitPrint"
       },
       {
         "source": "XCAGI/mods/xcagi-erp-domain-bridge/frontend/views/PrintView.vue",
-        "line": 61,
+        "line": 63,
         "tag": "button",
         "event": "click",
         "handler": "confirmation = null"
@@ -26746,6 +26748,34 @@
         "handler": "handleConfirm"
       },
       {
+        "source": "frontend/src/components/LabelJobReview.vue",
+        "line": 11,
+        "tag": "button",
+        "event": "click",
+        "handler": "prepare"
+      },
+      {
+        "source": "frontend/src/components/LabelJobReview.vue",
+        "line": 14,
+        "tag": "button",
+        "event": "click",
+        "handler": "submit"
+      },
+      {
+        "source": "frontend/src/components/LabelJobReview.vue",
+        "line": 15,
+        "tag": "button",
+        "event": "click",
+        "handler": "confirmation = null"
+      },
+      {
+        "source": "frontend/src/components/LabelJobReview.vue",
+        "line": 18,
+        "tag": "button",
+        "event": "click",
+        "handler": "reload"
+      },
+      {
         "source": "frontend/src/components/MainLayout.vue",
         "line": 3,
         "tag": "div",
@@ -28168,70 +28198,70 @@
       },
       {
         "source": "frontend/src/components/chat/ChatTaskPanel.vue",
-        "line": 227,
+        "line": 228,
         "tag": "AgentTaskRuntimePanel",
         "event": "open",
         "handler": "openWorkspace(task)"
       },
       {
         "source": "frontend/src/components/chat/ChatTaskPanel.vue",
-        "line": 227,
+        "line": 228,
         "tag": "AgentTaskRuntimePanel",
         "event": "approve",
         "handler": "$emit('approve-task', task.id)"
       },
       {
         "source": "frontend/src/components/chat/ChatTaskPanel.vue",
-        "line": 227,
+        "line": 228,
         "tag": "AgentTaskRuntimePanel",
         "event": "retry",
         "handler": "$emit('retry-task', task.id)"
       },
       {
         "source": "frontend/src/components/chat/ChatTaskPanel.vue",
-        "line": 227,
+        "line": 228,
         "tag": "AgentTaskRuntimePanel",
         "event": "pause",
         "handler": "$emit('pause-task', task.id)"
       },
       {
         "source": "frontend/src/components/chat/ChatTaskPanel.vue",
-        "line": 227,
+        "line": 228,
         "tag": "AgentTaskRuntimePanel",
         "event": "resume",
         "handler": "$emit('resume-task', task.id)"
       },
       {
         "source": "frontend/src/components/chat/ChatTaskPanel.vue",
-        "line": 227,
+        "line": 228,
         "tag": "AgentTaskRuntimePanel",
         "event": "cancel",
         "handler": "$emit('cancel-task-by-id', task.id)"
       },
       {
         "source": "frontend/src/components/chat/ChatTaskPanel.vue",
-        "line": 232,
+        "line": 233,
         "tag": "button",
         "event": "click",
         "handler": "$emit('open-shipment-records')"
       },
       {
         "source": "frontend/src/components/chat/ChatTaskPanel.vue",
-        "line": 238,
+        "line": 239,
         "tag": "button",
         "event": "click",
         "handler": "$emit('jump-to-task-message', task)"
       },
       {
         "source": "frontend/src/components/chat/ChatTaskPanel.vue",
-        "line": 256,
+        "line": 257,
         "tag": "button",
         "event": "click",
         "handler": "$emit('copy-assistant-push')"
       },
       {
         "source": "frontend/src/components/chat/ChatTaskPanel.vue",
-        "line": 259,
+        "line": 260,
         "tag": "button",
         "event": "click",
         "handler": "$emit('open-assistant-float')"
@@ -33726,91 +33756,91 @@
       },
       {
         "source": "mods/xcagi-erp-domain-bridge/frontend/views/PrintView.vue",
-        "line": 7,
+        "line": 9,
         "tag": "button",
         "event": "click",
         "handler": "loadOptions"
       },
       {
         "source": "mods/xcagi-erp-domain-bridge/frontend/views/PrintView.vue",
-        "line": 8,
+        "line": 10,
         "tag": "button",
         "event": "click",
         "handler": "loadTemplates"
       },
       {
         "source": "mods/xcagi-erp-domain-bridge/frontend/views/PrintView.vue",
-        "line": 11,
+        "line": 13,
         "tag": "input",
         "event": "keyup",
         "handler": "loadProducts(true)"
       },
       {
         "source": "mods/xcagi-erp-domain-bridge/frontend/views/PrintView.vue",
-        "line": 12,
+        "line": 14,
         "tag": "button",
         "event": "click",
         "handler": "loadProducts(true)"
       },
       {
         "source": "mods/xcagi-erp-domain-bridge/frontend/views/PrintView.vue",
-        "line": 19,
+        "line": 21,
         "tag": "button",
         "event": "click",
         "handler": "loadProducts(false)"
       },
       {
         "source": "mods/xcagi-erp-domain-bridge/frontend/views/PrintView.vue",
-        "line": 30,
+        "line": 32,
         "tag": "button",
         "event": "click",
         "handler": "loadTemplate"
       },
       {
         "source": "mods/xcagi-erp-domain-bridge/frontend/views/PrintView.vue",
-        "line": 37,
+        "line": 39,
         "tag": "input",
         "event": "input",
         "handler": "updateHeight"
       },
       {
         "source": "mods/xcagi-erp-domain-bridge/frontend/views/PrintView.vue",
-        "line": 42,
+        "line": 44,
         "tag": "button",
         "event": "click",
         "handler": "generate"
       },
       {
         "source": "mods/xcagi-erp-domain-bridge/frontend/views/PrintView.vue",
-        "line": 52,
+        "line": 54,
         "tag": "button",
         "event": "click",
         "handler": "loadPreview"
       },
       {
         "source": "mods/xcagi-erp-domain-bridge/frontend/views/PrintView.vue",
-        "line": 56,
+        "line": 58,
         "tag": "button",
         "event": "click",
         "handler": "preparePrint"
       },
       {
         "source": "mods/xcagi-erp-domain-bridge/frontend/views/PrintView.vue",
-        "line": 57,
+        "line": 59,
         "tag": "button",
         "event": "click",
         "handler": "refreshStatus"
       },
       {
         "source": "mods/xcagi-erp-domain-bridge/frontend/views/PrintView.vue",
-        "line": 60,
+        "line": 62,
         "tag": "button",
         "event": "click",
         "handler": "submitPrint"
       },
       {
         "source": "mods/xcagi-erp-domain-bridge/frontend/views/PrintView.vue",
-        "line": 61,
+        "line": 63,
         "tag": "button",
         "event": "click",
         "handler": "confirmation = null"
@@ -35899,6 +35929,668 @@
         "certainty": "native_file_input"
       }
     ],
+    "native_ipc": [
+      {
+        "source": "desktop/ipc-handlers.ts",
+        "line": 45,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcMain",
+        "method": "handle",
+        "channel": "xcagi:pairing-qr",
+        "expression": "'xcagi:pairing-qr'"
+      },
+      {
+        "source": "desktop/ipc-handlers.ts",
+        "line": 68,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcMain",
+        "method": "handle",
+        "channel": "xcagi:get-data-dir",
+        "expression": "'xcagi:get-data-dir'"
+      },
+      {
+        "source": "desktop/ipc-handlers.ts",
+        "line": 69,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcMain",
+        "method": "handle",
+        "channel": "xcagi:consume-bootstrap-session-hint",
+        "expression": "'xcagi:consume-bootstrap-session-hint'"
+      },
+      {
+        "source": "desktop/ipc-handlers.ts",
+        "line": 74,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcMain",
+        "method": "handle",
+        "channel": "xcagi:get-app-identity",
+        "expression": "'xcagi:get-app-identity'"
+      },
+      {
+        "source": "desktop/ipc-handlers.ts",
+        "line": 80,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcMain",
+        "method": "handle",
+        "channel": "xcagi:open-kellai-desktop",
+        "expression": "'xcagi:open-kellai-desktop'"
+      },
+      {
+        "source": "desktop/ipc-handlers.ts",
+        "line": 81,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcMain",
+        "method": "handle",
+        "channel": "xcagi:export-support-bundle",
+        "expression": "'xcagi:export-support-bundle'"
+      },
+      {
+        "source": "desktop/ipc-handlers.ts",
+        "line": 82,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcMain",
+        "method": "handle",
+        "channel": "xcagi:check-for-updates",
+        "expression": "'xcagi:check-for-updates'"
+      },
+      {
+        "source": "desktop/ipc-handlers.ts",
+        "line": 83,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcMain",
+        "method": "handle",
+        "channel": "xcagi:get-update-status",
+        "expression": "'xcagi:get-update-status'"
+      },
+      {
+        "source": "desktop/ipc-handlers.ts",
+        "line": 84,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcMain",
+        "method": "handle",
+        "channel": "xcagi:download-update",
+        "expression": "'xcagi:download-update'"
+      },
+      {
+        "source": "desktop/ipc-handlers.ts",
+        "line": 88,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcMain",
+        "method": "handle",
+        "channel": "xcagi:install-update",
+        "expression": "'xcagi:install-update'"
+      },
+      {
+        "source": "desktop/ipc-handlers.ts",
+        "line": 93,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcMain",
+        "method": "handle",
+        "channel": "xcagi:set-badge",
+        "expression": "'xcagi:set-badge'"
+      },
+      {
+        "source": "desktop/ipc-handlers.ts",
+        "line": 104,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcMain",
+        "method": "handle",
+        "channel": "xcagi:show-notification",
+        "expression": "'xcagi:show-notification'"
+      },
+      {
+        "source": "desktop/ipc-handlers.ts",
+        "line": 126,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcMain",
+        "method": "handle",
+        "channel": "xcagi:offline-query",
+        "expression": "'xcagi:offline-query'"
+      },
+      {
+        "source": "desktop/ipc-handlers.ts",
+        "line": 140,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcMain",
+        "method": "handle",
+        "channel": "xcagi:secure-get",
+        "expression": "'xcagi:secure-get'"
+      },
+      {
+        "source": "desktop/ipc-handlers.ts",
+        "line": 141,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcMain",
+        "method": "handle",
+        "channel": "xcagi:secure-set",
+        "expression": "'xcagi:secure-set'"
+      },
+      {
+        "source": "desktop/ipc-handlers.ts",
+        "line": 144,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcMain",
+        "method": "handle",
+        "channel": "xcagi:secure-delete",
+        "expression": "'xcagi:secure-delete'"
+      },
+      {
+        "source": "desktop/ipc-handlers.ts",
+        "line": 145,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcMain",
+        "method": "handle",
+        "channel": "xcagi:secure-list",
+        "expression": "'xcagi:secure-list'"
+      },
+      {
+        "source": "desktop/ipc-handlers.ts",
+        "line": 148,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcMain",
+        "method": "handle",
+        "channel": "xcagi:clipboard-read-text",
+        "expression": "'xcagi:clipboard-read-text'"
+      },
+      {
+        "source": "desktop/ipc-handlers.ts",
+        "line": 149,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcMain",
+        "method": "handle",
+        "channel": "xcagi:clipboard-write-text",
+        "expression": "'xcagi:clipboard-write-text'"
+      },
+      {
+        "source": "desktop/ipc-handlers.ts",
+        "line": 154,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcMain",
+        "method": "handle",
+        "channel": "xcagi:open-path",
+        "expression": "'xcagi:open-path'"
+      },
+      {
+        "source": "desktop/ipc-handlers.ts",
+        "line": 162,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcMain",
+        "method": "handle",
+        "channel": "xcagi:get-auto-launch",
+        "expression": "'xcagi:get-auto-launch'"
+      },
+      {
+        "source": "desktop/ipc-handlers.ts",
+        "line": 163,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcMain",
+        "method": "handle",
+        "channel": "xcagi:set-auto-launch",
+        "expression": "'xcagi:set-auto-launch'"
+      },
+      {
+        "source": "desktop/ipc-handlers.ts",
+        "line": 168,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcMain",
+        "method": "handle",
+        "channel": "xcagi:consume-deep-link",
+        "expression": "'xcagi:consume-deep-link'"
+      },
+      {
+        "source": "desktop/ipc-handlers.ts",
+        "line": 175,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcMain",
+        "method": "handle",
+        "channel": "xcagi:report-error",
+        "expression": "'xcagi:report-error'"
+      },
+      {
+        "source": "desktop/ipc-handlers.ts",
+        "line": 191,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcMain",
+        "method": "handle",
+        "channel": "xcagi:consume-release-notes",
+        "expression": "'xcagi:consume-release-notes'"
+      },
+      {
+        "source": "desktop/ipc-handlers.ts",
+        "line": 194,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcMain",
+        "method": "handle",
+        "channel": "xcagi:capture-screenshot",
+        "expression": "'xcagi:capture-screenshot'"
+      },
+      {
+        "source": "desktop/preload.ts",
+        "line": 6,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcRenderer",
+        "method": "invoke",
+        "channel": "xcagi:get-data-dir",
+        "expression": "'xcagi:get-data-dir'"
+      },
+      {
+        "source": "desktop/preload.ts",
+        "line": 7,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcRenderer",
+        "method": "invoke",
+        "channel": "xcagi:consume-bootstrap-session-hint",
+        "expression": "'xcagi:consume-bootstrap-session-hint'"
+      },
+      {
+        "source": "desktop/preload.ts",
+        "line": 8,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcRenderer",
+        "method": "invoke",
+        "channel": "xcagi:export-support-bundle",
+        "expression": "'xcagi:export-support-bundle'"
+      },
+      {
+        "source": "desktop/preload.ts",
+        "line": 9,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcRenderer",
+        "method": "invoke",
+        "channel": "xcagi:check-for-updates",
+        "expression": "'xcagi:check-for-updates'"
+      },
+      {
+        "source": "desktop/preload.ts",
+        "line": 10,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcRenderer",
+        "method": "invoke",
+        "channel": "xcagi:get-update-status",
+        "expression": "'xcagi:get-update-status'"
+      },
+      {
+        "source": "desktop/preload.ts",
+        "line": 11,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcRenderer",
+        "method": "invoke",
+        "channel": "xcagi:download-update",
+        "expression": "'xcagi:download-update'"
+      },
+      {
+        "source": "desktop/preload.ts",
+        "line": 12,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcRenderer",
+        "method": "invoke",
+        "channel": "xcagi:install-update",
+        "expression": "'xcagi:install-update'"
+      },
+      {
+        "source": "desktop/preload.ts",
+        "line": 13,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcRenderer",
+        "method": "invoke",
+        "channel": "xcagi:pairing-qr",
+        "expression": "'xcagi:pairing-qr'"
+      },
+      {
+        "source": "desktop/preload.ts",
+        "line": 14,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcRenderer",
+        "method": "invoke",
+        "channel": "xcagi:open-kellai-desktop",
+        "expression": "'xcagi:open-kellai-desktop'"
+      },
+      {
+        "source": "desktop/preload.ts",
+        "line": 15,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcRenderer",
+        "method": "invoke",
+        "channel": "xcagi:set-badge",
+        "expression": "'xcagi:set-badge'"
+      },
+      {
+        "source": "desktop/preload.ts",
+        "line": 17,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcRenderer",
+        "method": "invoke",
+        "channel": "xcagi:show-notification",
+        "expression": "'xcagi:show-notification'"
+      },
+      {
+        "source": "desktop/preload.ts",
+        "line": 18,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcRenderer",
+        "method": "invoke",
+        "channel": "xcagi:offline-query",
+        "expression": "'xcagi:offline-query'"
+      },
+      {
+        "source": "desktop/preload.ts",
+        "line": 19,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcRenderer",
+        "method": "invoke",
+        "channel": "xcagi:secure-get",
+        "expression": "'xcagi:secure-get'"
+      },
+      {
+        "source": "desktop/preload.ts",
+        "line": 20,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcRenderer",
+        "method": "invoke",
+        "channel": "xcagi:secure-set",
+        "expression": "'xcagi:secure-set'"
+      },
+      {
+        "source": "desktop/preload.ts",
+        "line": 21,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcRenderer",
+        "method": "invoke",
+        "channel": "xcagi:secure-delete",
+        "expression": "'xcagi:secure-delete'"
+      },
+      {
+        "source": "desktop/preload.ts",
+        "line": 22,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcRenderer",
+        "method": "invoke",
+        "channel": "xcagi:secure-list",
+        "expression": "'xcagi:secure-list'"
+      },
+      {
+        "source": "desktop/preload.ts",
+        "line": 23,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcRenderer",
+        "method": "invoke",
+        "channel": "xcagi:clipboard-read-text",
+        "expression": "'xcagi:clipboard-read-text'"
+      },
+      {
+        "source": "desktop/preload.ts",
+        "line": 24,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcRenderer",
+        "method": "invoke",
+        "channel": "xcagi:clipboard-write-text",
+        "expression": "'xcagi:clipboard-write-text'"
+      },
+      {
+        "source": "desktop/preload.ts",
+        "line": 25,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcRenderer",
+        "method": "invoke",
+        "channel": "xcagi:open-path",
+        "expression": "'xcagi:open-path'"
+      },
+      {
+        "source": "desktop/preload.ts",
+        "line": 26,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcRenderer",
+        "method": "invoke",
+        "channel": "xcagi:get-auto-launch",
+        "expression": "'xcagi:get-auto-launch'"
+      },
+      {
+        "source": "desktop/preload.ts",
+        "line": 27,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcRenderer",
+        "method": "invoke",
+        "channel": "xcagi:set-auto-launch",
+        "expression": "'xcagi:set-auto-launch'"
+      },
+      {
+        "source": "desktop/preload.ts",
+        "line": 28,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcRenderer",
+        "method": "invoke",
+        "channel": "xcagi:consume-deep-link",
+        "expression": "'xcagi:consume-deep-link'"
+      },
+      {
+        "source": "desktop/preload.ts",
+        "line": 30,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcRenderer",
+        "method": "invoke",
+        "channel": "xcagi:report-error",
+        "expression": "'xcagi:report-error'"
+      },
+      {
+        "source": "desktop/preload.ts",
+        "line": 31,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcRenderer",
+        "method": "invoke",
+        "channel": "xcagi:consume-release-notes",
+        "expression": "'xcagi:consume-release-notes'"
+      },
+      {
+        "source": "desktop/preload.ts",
+        "line": 32,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcRenderer",
+        "method": "invoke",
+        "channel": "xcagi:capture-screenshot",
+        "expression": "'xcagi:capture-screenshot'"
+      },
+      {
+        "source": "desktop/preload.ts",
+        "line": 35,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcRenderer",
+        "method": "on",
+        "channel": "xcagi:deep-link",
+        "expression": "'xcagi:deep-link'"
+      },
+      {
+        "source": "desktop/preload.ts",
+        "line": 41,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcRenderer",
+        "method": "on",
+        "channel": "xcagi:screenshot-captured",
+        "expression": "'xcagi:screenshot-captured'"
+      },
+      {
+        "source": "desktop/preload.ts",
+        "line": 46,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcRenderer",
+        "method": "on",
+        "channel": "xcagi:voice-invoke",
+        "expression": "'xcagi:voice-invoke'"
+      },
+      {
+        "source": "desktop/preload.ts",
+        "line": 51,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcRenderer",
+        "method": "on",
+        "channel": "xcagi:update-event",
+        "expression": "'xcagi:update-event'"
+      },
+      {
+        "source": "desktop/preload.ts",
+        "line": 59,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "receiver": "ipcRenderer",
+        "method": "invoke",
+        "channel": "xcagi:report-error",
+        "expression": "'xcagi:report-error'"
+      }
+    ],
+    "preload_apis": [
+      {
+        "source": "desktop/preload.ts",
+        "line": 3,
+        "dynamic": false,
+        "runtime_status": "unverified",
+        "ai_execution": "unverified",
+        "global_name": "xcagiDesktop",
+        "members": [
+          "platform",
+          "versions",
+          "getDataDir",
+          "consumeBootstrapSessionHint",
+          "exportSupportBundle",
+          "checkForUpdates",
+          "getUpdateStatus",
+          "downloadUpdate",
+          "installUpdate",
+          "getPairingQrPayload",
+          "openKellaiDesktop",
+          "setBadge",
+          "showNotification",
+          "offlineQuery",
+          "secureGet",
+          "secureSet",
+          "secureDelete",
+          "secureList",
+          "clipboardReadText",
+          "clipboardWriteText",
+          "openPath",
+          "getAutoLaunch",
+          "setAutoLaunch",
+          "consumeDeepLink",
+          "reportError",
+          "consumeReleaseNotes",
+          "captureScreenshot",
+          "onDeepLink",
+          "onScreenshotCaptured",
+          "onVoiceInvoke",
+          "onUpdateEvent"
+        ],
+        "members_dynamic": false
+      }
+    ],
     "errors": []
   },
   "mods": [
@@ -36219,11 +36911,11 @@
     {
       "source": "XCAGI/mods/attendance-industry/manifest.json",
       "mod_id": "attendance-industry",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "manifest": {
         "id": "attendance-industry",
         "name": "通用考勤模块",
-        "version": "1.0.0",
+        "version": "1.0.1",
         "author": "XCAGI",
         "description": "主系统共享考勤工作区：部门、人员、排班资源与考勤记录；客户模板转换按账号定制权益开放。",
         "primary": true,
@@ -37268,11 +37960,11 @@
     {
       "source": "XCAGI/mods/xcagi-erp-domain-bridge/manifest.json",
       "mod_id": "xcagi-erp-domain-bridge",
-      "version": "1.0.0.1",
+      "version": "1.0.0.2",
       "manifest": {
         "id": "xcagi-erp-domain-bridge",
         "name": "XCAGI 通用业务领域门面 Mod",
-        "version": "1.0.0.1",
+        "version": "1.0.0.2",
         "author": "成都修茈科技有限公司",
         "description": "通用业务 API 门面 + Repository 可插拔 + Mod 业务页（K+/O+ 物理视图；L 仓储边界）。",
         "primary": false,
@@ -50998,11 +51690,11 @@
     {
       "source": "mods/xcagi-erp-domain-bridge/manifest.json",
       "mod_id": "xcagi-erp-domain-bridge",
-      "version": "1.0.0.1",
+      "version": "1.0.0.2",
       "manifest": {
         "id": "xcagi-erp-domain-bridge",
         "name": "XCAGI 通用业务领域门面 Mod",
-        "version": "1.0.0.1",
+        "version": "1.0.0.2",
         "author": "成都修茈科技有限公司",
         "description": "通用业务 API 门面 + Repository 可插拔 + Mod 业务页（K+/O+ 物理视图；L 仓储边界）。",
         "primary": false,
