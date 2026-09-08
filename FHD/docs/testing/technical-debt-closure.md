@@ -19,6 +19,17 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- SQL dispatcher execution now carries a scoped ownership context. Inventory-in
+  acquires a conditional ownership write lock before business queries/writes:
+  same-engine uses the business transaction, separate Mod engines hold the queue
+  transaction while the existing business commit occurs without rerouting data.
+  Four real SQLite cases verify active/expired ownership with shared/separate
+  databases: valid writes one ledger/transaction at 50, expired writes neither.
+  All 61 inventory/dispatcher checks passed (`inventory-worker-fence`). This is
+  inbound-only: concurrent takeover during commit, abrupt cross-database process
+  failure, out/transfer and other tools still require work. The ownership lock
+  is not a distributed atomic commit or replay-safe business receipt.
+
 - Label slots now have a focused parser that removes count/specification spans
   before model extraction. Requests with only 20张 or 28规格 preserve a missing
   model; reversed count/model order extracts the actual model, and multiple

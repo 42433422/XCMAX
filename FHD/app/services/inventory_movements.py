@@ -8,6 +8,7 @@ import math
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
+from app.application.agent_orchestrator.business_write_guard import worker_write_guard
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger("app.services.inventory_service")
@@ -45,7 +46,7 @@ class InventoryMovementsMixin:
             return {"success": False, "message": "入库数量必须是有效正数"}
         if not math.isfinite(quantity) or quantity <= 0:
             return {"success": False, "message": "入库数量必须是有效正数"}
-        with _facade().get_db() as db:
+        with _facade().get_db() as db, worker_write_guard(db):
             try:
                 if product_id is None and model_number:
                     products = (

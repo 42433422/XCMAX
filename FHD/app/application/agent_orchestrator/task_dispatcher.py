@@ -188,6 +188,9 @@ class AgentTaskDispatcher:
                         current.last_heartbeat = now
 
     def _execute_claim(self, execution: AgentTaskExecution, owner_id: str) -> None:
+        from contextlib import nullcontext
+
+        from app.application.agent_orchestrator.business_write_guard import worker_claim_scope
         from app.application.agent_orchestrator.run_sql_repository import (
             SQLAlchemyAgentRunRepository,
         )
@@ -203,10 +206,16 @@ class AgentTaskDispatcher:
         state = "failed"
         try:
             orchestrator = self._orchestrator_factory(repository)
-            run = orchestrator.execute_dispatched_run(
-                execution.run_id,
-                recovered=execution.recovery_count > 0,
+            scope = (
+                worker_claim_scope(self._run_repo, execution, owner_id)
+                if isinstance(self._run_repo, SQLAlchemyAgentRunRepository)
+                else nullcontext()
             )
+            with scope:
+                run = orchestrator.execute_dispatched_run(
+                    execution.run_id,
+                    recovered=execution.recovery_count > 0,
+                )
             if run is None:
                 error_code = "worker_run_unavailable"
             else:
