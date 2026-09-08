@@ -44,3 +44,22 @@ def test_internal_retry_cannot_replay_unreconciled_work(monkeypatch, metadata):
     start.assert_not_called()
     assert repository.get(run.run_id).to_dict() == before
     assert len(repository.list_recent()) == 1
+
+
+@pytest.mark.parametrize("method", ["resume_run", "stage_resume_run"])
+def test_paused_unreconciled_run_cannot_resume(monkeypatch, method):
+    from unittest.mock import Mock
+
+    repository = InMemoryAgentRunRepository()
+    run = AgentRun(user_id="owner", message="unknown write", status="paused")
+    run.metadata["recovery"] = {"state": "manual_reconciliation_required"}
+    repository.save(run)
+    before = repository.get(run.run_id).to_dict()
+    orchestrator = AgentOrchestrator(repository=repository)
+    execute = Mock()
+    monkeypatch.setattr(orchestrator, "_execute_with_durable_lease", execute)
+    with pytest.raises(ValueError, match="核对"):
+        getattr(orchestrator, method)(run.run_id, requested_by="owner")
+    execute.assert_not_called()
+    assert repository.get(run.run_id).to_dict() == before
+    assert repository.latest_task_control(run.run_id) is None

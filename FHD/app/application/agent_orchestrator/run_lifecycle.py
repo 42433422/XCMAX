@@ -105,6 +105,8 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
             return None
         if run.status != "paused":
             return cast("AgentRun | None", run)
+        if requires_retry_reconciliation(run):
+            raise ValueError("任务执行结果尚需人工核对，不能恢复执行")
         control = run.metadata.get("control")
         resume_status = str(control.get("resume_status") or "") if isinstance(control, dict) else ""
         context = merge_runtime_context(run, runtime_context)

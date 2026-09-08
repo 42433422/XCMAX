@@ -6,7 +6,10 @@ from typing import TYPE_CHECKING, Any, cast
 
 from app.application.agent_orchestrator.artifact_attachment import ArtifactAttachmentMixin
 from app.application.agent_orchestrator.budget import apply_ai_budget_metadata
-from app.application.agent_orchestrator.run_lifecycle import RunLifecycleMixin
+from app.application.agent_orchestrator.run_lifecycle import (
+    RunLifecycleMixin,
+    requires_retry_reconciliation,
+)
 from app.application.agent_orchestrator.run_models import AgentRun, utc_now_iso
 from app.application.agent_orchestrator.runtime_context import merge_runtime_context
 from app.application.agent_orchestrator.task_plan import UnifiedTaskPlanMixin
@@ -152,6 +155,8 @@ class BackgroundTaskExecutionMixin:
         run = self._repo.get(run_id)
         if run is None or run.status != "paused":
             return cast("AgentRun | None", run)
+        if requires_retry_reconciliation(run):
+            raise ValueError("任务执行结果尚需人工核对，不能恢复执行")
         from app.application.agent_orchestrator.session_renewal import renew_approval_session
 
         renew_approval_session(

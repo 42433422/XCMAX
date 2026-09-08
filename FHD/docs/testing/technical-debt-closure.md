@@ -19,6 +19,14 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Paused runs carrying an unresolved business-result marker can no longer resume
+  through direct, staged or SQL-transaction entry points. Three new regressions
+  failed before the guard and pass afterward, preserving run state and creating
+  neither a control command nor queue entry. Combined context, renewal and route
+  validation passes 90 tests with the PostgreSQL-only case skipped on SQLite
+  (`resume-reconciliation-after`). This prevents replay; actual external-result
+  reconciliation and current-head CI remain required.
+
 - Retry reconciliation is now enforced inside the orchestrator, not only the
   HTTP route. Both `non_retryable` and `manual_reconciliation_required` prevent
   creation of another execution attempt before any planning or persistence.

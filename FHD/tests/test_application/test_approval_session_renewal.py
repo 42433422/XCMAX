@@ -384,3 +384,27 @@ def test_postgres_resume_holds_queue_lock_until_commit(waiting_task, monkeypatch
     claimed = queue.claim("after-commit-worker", lease_seconds=30)
     assert claimed is not None and claimed.run_id == run.run_id
     assert claimed.execution_count == 1
+
+
+def test_durable_resume_rejects_unreconciled_result(waiting_task):
+    from app.application.agent_orchestrator.resume_transaction import resume_and_enqueue
+
+    runs, queue, factory, original, previous, _ = waiting_task
+    run = runs.get(original.run_id)
+    run.status = "paused"
+    run.steps[0].status = "pending"
+    run.metadata["recovery"] = {"state": "manual_reconciliation_required"}
+    runs.save(run)
+    before = runs.get(run.run_id).to_dict()
+    with pytest.raises(ApprovalGrantError, match="核对"):
+        resume_and_enqueue(
+            runs,
+            queue,
+            run_id=run.run_id,
+            principal_id="owner",
+            runtime_context={},
+            authenticated_binding=previous,
+        )
+    assert runs.get(run.run_id).to_dict() == before
+    assert runs.latest_task_control(run.run_id) is None
+    assert queue.get(run.run_id) is None

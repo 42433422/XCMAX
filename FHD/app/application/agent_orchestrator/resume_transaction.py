@@ -7,6 +7,7 @@ from app.application.agent_orchestrator.approval_grant import (
     ApprovalGrantError,
     ApprovalGrantStorageError,
 )
+from app.application.agent_orchestrator.run_lifecycle import requires_retry_reconciliation
 from app.application.agent_orchestrator.run_models import AgentRun, agent_run_from_dict, utc_now_iso
 from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
 from app.application.agent_orchestrator.runtime_context import merge_runtime_context
@@ -63,6 +64,8 @@ def resume_and_enqueue(
         run = agent_run_from_dict(json.loads(old_payload))
         if run.status != "paused":
             return run
+        if requires_retry_reconciliation(run):
+            raise ApprovalGrantError("任务执行结果尚需人工核对，不能恢复执行")
         if any(step.status == "running" for step in run.steps):
             raise ApprovalGrantError("任务存在执行结果未确认的步骤，需要先核对")
         renew_approval_session(
