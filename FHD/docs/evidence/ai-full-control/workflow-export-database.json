@@ -1,0 +1,5 @@
+{
+  "source_commit": "dd2bd5a1fdb64057c5a8a4f4620e22b7b5bb3743",
+  "tests_passed": 4,
+  "scope": "Actual file-backed SQLite SalesOrder and SalesOrderItem queries through parallel WorkflowEngine and registered reports router, followed by real XLSX reopening: tenant 3 amount 51 exported, tenant 4 amount 900 excluded. Failed query prevents export even when failure payload includes data. Download authorization tests use a stubbed authorization scope; live HTTP login, installed UI, and unspecified-date export remain open."
+}
