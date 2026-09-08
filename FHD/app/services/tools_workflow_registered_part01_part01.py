@@ -192,6 +192,12 @@ def _registered_router_products(
         if str(runtime_context.get("service_source") or "") == "fastapi_product_route":
             payload = dict(params or {})
             return _facade().cast("dict[Any, Any]", svc.create_product(payload))
+        if legacy_unit_name and not legacy_measure_unit:
+            return {
+                "success": False,
+                "error_code": "customer_product_link_unsupported",
+                "message": "当前产品创建能力尚不支持客户关联，本次未创建产品。",
+            }
         name_or_model = str(params.get("name_or_model") or product_name or model_number).strip()
         if not name_or_model:
             return {"success": False, "message": "缺少 name_or_model"}

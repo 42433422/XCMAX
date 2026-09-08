@@ -1,0 +1,7 @@
+{
+  "base_sha": "8053ac9c4",
+  "finding": "Product.unit is measurement unit; registered create previously discarded non-measure unit_name.",
+  "change": "Return customer_product_link_unsupported before creation instead of silently discarding requested linkage.",
+  "tests_passed": 1,
+  "remaining": "Explicit customer-product relationship model, tenant-safe link capability and actual persistence acceptance still required."
+}
