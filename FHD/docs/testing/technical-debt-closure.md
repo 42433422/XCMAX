@@ -19,6 +19,17 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Session-row entitlement restoration now requires expires_at strictly after
+  UTC now, matching persisted UTC-naive session timestamps and denying the exact
+  expiry boundary. Real SQLite tests reproduced expired and exactly-expired
+  grants despite a fresh entitlement TTL (`entitlement-expiry-before`); both now
+  deny and clear cached rights, while a future expiry retains access and all
+  session rows remain intact. The expanded 158-test suite passes
+  (`entitlement-expiry-final`). Legacy tests now retain real ORM column
+  definitions instead of replacing the Session model with MagicMock. This
+  verifies row restoration, not every remote-token authentication path or
+  concurrent/global-cache access; those and durable Mod task binding remain.
+
 - Entitlement sync's session-keyed TTL previously returned the last account's
   process-global entitlement set. TTL reuse now restores the requested session
   row; missing/failed restoration in TTL and both market fallback paths clears

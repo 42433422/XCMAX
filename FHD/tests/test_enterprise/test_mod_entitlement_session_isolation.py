@@ -10,6 +10,7 @@ from app.db.base import Base
 from app.db.models.user import Session as UserSession
 from app.db.models.user import User
 from app.enterprise import mod_entitlements as entitlements
+from app.utils.time import utc_now_naive
 
 
 @pytest.fixture(autouse=True)
@@ -78,5 +79,40 @@ async def test_interleaved_sessions_restore_their_own_persisted_ids(tmp_path, mo
             row = db.query(UserSession).filter_by(session_id="session-a").one()
             row.entitled_mod_ids_json = "[]"
         assert await entitlements.sync_entitlements_for_session("session-a") == set()
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("remaining_seconds", [-1, 0, 60])
+async def test_session_expiry_applies_even_with_fresh_entitlement_ttl(
+    tmp_path, monkeypatch, remaining_seconds
+):
+    engine = create_engine(f"sqlite:///{tmp_path / 'session-expiry.db'}")
+    factory = sessionmaker(bind=engine)
+    Base.metadata.create_all(engine)
+    now = utc_now_naive()
+    monkeypatch.setattr("app.utils.time.utc_now_naive", lambda: now)
+    monkeypatch.setattr(entitlements, "_session_row_db_context", factory)
+    try:
+        with factory.begin() as db:
+            db.add(User(id=1, username="expiry-owner", password="unused"))
+            db.flush()
+            db.add(UserSession(
+                session_id="expiry-session", user_id=1, market_user_id=1,
+                expires_at=now + timedelta(seconds=remaining_seconds),
+                entitled_mod_ids_json='["private-mod"]',
+            ))
+        entitlements.set_session_entitlements(
+            market_user_id=1, market_username="expiry-owner",
+            entitled_client_mod_ids={"private-mod"},
+        )
+        entitlements._entitlement_sync_at_by_session["expiry-session"] = time.monotonic()
+        expected = {"private-mod"} if remaining_seconds > 0 else set()
+        assert await entitlements.sync_entitlements_for_session("expiry-session") == expected
+        assert entitlements.get_cached_entitled_client_mod_ids() == expected
+        # Authorization checks do not delete the historical session record.
+        with factory() as db:
+            assert db.query(UserSession).filter_by(session_id="expiry-session").count() == 1
     finally:
         engine.dispose()

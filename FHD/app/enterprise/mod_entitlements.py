@@ -335,9 +335,13 @@ def restore_entitlements_from_session_row(session_id: str) -> bool:
         return False
     try:
         from app.db.models.user import Session as UserSession
+        from app.utils.time import utc_now_naive
 
         with _session_row_db_context() as db:
-            row = db.query(UserSession).filter(UserSession.session_id == sid).first()
+            row = db.query(UserSession).filter(
+                UserSession.session_id == sid,
+                UserSession.expires_at > utc_now_naive(),
+            ).first()
             if row is None:
                 clear_session_entitlements()
                 return False
