@@ -169,3 +169,42 @@ def test_structured_quote_answer_requires_approval_before_execution():
         "items": [{"product_id": 201, "quantity": 2, "unit_price": 25.5}],
     }
     service._run_workflow_with_state_updates.assert_not_called()
+
+
+def test_report_dates_resume_original_export_dependency():
+    from unittest.mock import patch
+
+    from app.application.workflow.planner import LLMWorkflowPlanner
+    from app.services.tools_execution.registry import get_workflow_tool_registry
+
+    with patch("app.application.workflow.planner.get_ai_conversation_service", return_value=None):
+        planner = LLMWorkflowPlanner()
+    plan = planner._fallback_plan("export", "导出销售报表", get_workflow_tool_registry())
+    clarify, report, export = plan.nodes
+    pending = {
+        "plan": plan,
+        "target_node_id": report.node_id,
+        "clarify_node_id": clarify.node_id,
+        "runtime_context": {"message": "导出销售报表"},
+        "clarification": {"reason": "report_scope", "field": "日期范围"},
+    }
+    service = SimpleNamespace(
+        _pending_workflows={"u": pending},
+        approval_service=Mock(),
+        _persist_plan_state=Mock(),
+        _run_workflow_with_state_updates=Mock(return_value=("result", [])),
+        _format_workflow_run_response=Mock(return_value={"success": True}),
+    )
+    service.approval_service.get_approval_required_nodes.return_value = []
+    response = _AIChatApplicationServicePart03Mixin._continue_after_clarification(
+        service, "u", pending, "2024-02-01至2024-02-29"
+    )
+    assert response["success"]
+    call = service._run_workflow_with_state_updates.call_args.kwargs
+    assert call["plan"] is plan and call["resume"]
+    assert report.params["start_date"] == "2024-02-01"
+    assert report.params["end_date"] == "2024-02-29 23:59:59.999999"
+    assert export.depends_on == [report.node_id]
+    assert export.params["data_node_id"] == report.node_id
+    assert call["runtime_context"]["_clarify_answers"][clarify.node_id]["confirmed"]
+    assert "u" not in service._pending_workflows
