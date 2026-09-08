@@ -46,8 +46,15 @@ def web_jwt_auth_enabled() -> bool:
     return (os.environ.get("XCAGI_WEB_JWT_AUTH") or "").strip().lower() in ("1", "true", "yes")
 
 
-def _issue(*, user_id: int, username: str, account_kind: str, ttl_hours: int, typ: str,
-           session_id: str = "") -> str:
+def _issue(
+    *,
+    user_id: int,
+    username: str,
+    account_kind: str,
+    ttl_hours: int,
+    typ: str,
+    session_id: str = "",
+) -> str:
     now = int(time.time())
     payload = {
         "aud": WEB_JWT_AUD,

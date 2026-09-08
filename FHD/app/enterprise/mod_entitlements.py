@@ -60,9 +60,11 @@ def _current_entitlements() -> _EntitlementState:
         return scoped
     # Preserve non-request startup/desktop compatibility. HTTP never falls back.
     return _EntitlementState(
-        _cached_market_user_id, _cached_market_username,
+        _cached_market_user_id,
+        _cached_market_username,
         frozenset(_cached_entitled_client_mod_ids or ()),
-        _cached_account_kind, _cached_market_is_admin,
+        _cached_account_kind,
+        _cached_market_is_admin,
     )
 
 
@@ -124,11 +126,15 @@ def set_session_entitlements(
     global _cached_market_user_id, _cached_market_username, _cached_entitled_client_mod_ids
     global _cached_account_kind, _cached_market_is_admin
     if _request_entitlements.get() is not None:
-        _request_entitlements.set(_EntitlementState(
-            market_user_id, (market_username or "").strip(),
-            frozenset(entitled_client_mod_ids),
-            (account_kind or "enterprise").strip() or "enterprise", bool(market_is_admin),
-        ))
+        _request_entitlements.set(
+            _EntitlementState(
+                market_user_id,
+                (market_username or "").strip(),
+                frozenset(entitled_client_mod_ids),
+                (account_kind or "enterprise").strip() or "enterprise",
+                bool(market_is_admin),
+            )
+        )
         return
     _cached_market_user_id = market_user_id
     _cached_market_username = (market_username or "").strip()
@@ -390,10 +396,14 @@ def restore_entitlements_from_session_row(session_id: str) -> bool:
         from app.utils.time import utc_now_naive
 
         with _session_row_db_context() as db:
-            row = db.query(UserSession).filter(
-                UserSession.session_id == sid,
-                UserSession.expires_at > utc_now_naive(),
-            ).first()
+            row = (
+                db.query(UserSession)
+                .filter(
+                    UserSession.session_id == sid,
+                    UserSession.expires_at > utc_now_naive(),
+                )
+                .first()
+            )
             if row is None:
                 clear_session_entitlements()
                 return False

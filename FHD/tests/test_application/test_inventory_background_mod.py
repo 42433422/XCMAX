@@ -24,8 +24,12 @@ from app.utils.time import utc_now_naive
 def _stock_in(binding):
     assert current_tenant_id() is None
     assert get_request_active_mod_id() == ""
-    step = AgentStep(node_id="stock", tool_id="inventory", action="stock_in",
-                     params={"model_number": "A100", "warehouse_name": "same warehouse", "quantity": 50})
+    step = AgentStep(
+        node_id="stock",
+        tool_id="inventory",
+        action="stock_in",
+        params={"model_number": "A100", "warehouse_name": "same warehouse", "quantity": 50},
+    )
     result = AgentToolExecutor().execute(
         step, runtime_context={"tenant_id": "1", "_mod_authorization": binding}
     )
@@ -61,9 +65,14 @@ def _child_dispatch(run_id, results):
                 assert run is not None
                 assert run.status == execution.state
                 output = run.tool_calls[-1].output if run.tool_calls else {}
-                results.put({"success": run.status == "completed", "state": run.status,
-                             "recovery_count": execution.recovery_count,
-                             "error_code": (output or {}).get("error_code", "")})
+                results.put(
+                    {
+                        "success": run.status == "completed",
+                        "state": run.status,
+                        "recovery_count": execution.recovery_count,
+                        "error_code": (output or {}).get("error_code", ""),
+                    }
+                )
                 return
             time.sleep(0.03)
         raise AssertionError("dispatcher did not persist terminal state")
@@ -103,9 +112,14 @@ def test_real_inventory_writes_only_authorized_mod_and_rechecks_revocation(
     with factories["host"].begin() as db:
         db.add(User(id=1, username="owner", password="unused", is_active=True))
         db.flush()
-        db.add(UserSession(session_id="private-session", user_id=1,
-                           expires_at=utc_now_naive() + timedelta(hours=1),
-                           entitled_mod_ids_json='["private-a"]'))
+        db.add(
+            UserSession(
+                session_id="private-session",
+                user_id=1,
+                expires_at=utc_now_naive() + timedelta(hours=1),
+                entitled_mod_ids_json='["private-a"]',
+            )
+        )
     binding = bind_agent_mod_scope(session_id="private-session", user_id="1", mod_id="private-a")
 
     def execute():
@@ -125,9 +139,15 @@ def test_real_inventory_writes_only_authorized_mod_and_rechecks_revocation(
             )
 
             run = AgentRun(user_id="1", message="approved inbound", status="waiting_user")
-            step = AgentStep(node_id="stock", tool_id="inventory", action="stock_in",
-                             status="waiting_user", risk="high", idempotent=False,
-                             params={"model_number": "A100", "warehouse_name": "same warehouse", "quantity": 50})
+            step = AgentStep(
+                node_id="stock",
+                tool_id="inventory",
+                action="stock_in",
+                status="waiting_user",
+                risk="high",
+                idempotent=False,
+                params={"model_number": "A100", "warehouse_name": "same warehouse", "quantity": 50},
+            )
             run.steps = [step]
             run.metadata["runtime_context"] = {"tenant_id": "1", "_mod_authorization": binding}
             apply_approved_step(run, step, approved_by="1")
@@ -160,7 +180,9 @@ def test_real_inventory_writes_only_authorized_mod_and_rechecks_revocation(
             child.join(timeout=10)
             assert child.exitcode == 0
             if worker_kind.startswith("dispatcher"):
-                assert result["recovery_count"] == (1 if worker_kind == "dispatcher_recovery" else 0)
+                assert result["recovery_count"] == (
+                    1 if worker_kind == "dispatcher_recovery" else 0
+                )
             return result
         finally:
             if child.is_alive():
@@ -172,7 +194,9 @@ def test_real_inventory_writes_only_authorized_mod_and_rechecks_revocation(
         response = execute()
         assert response["success"], response
         with factories["host"].begin() as db:
-            db.query(UserSession).filter_by(session_id="private-session").one().entitled_mod_ids_json = "[]"
+            db.query(UserSession).filter_by(
+                session_id="private-session"
+            ).one().entitled_mod_ids_json = "[]"
         denied = execute()
         assert denied["error_code"] == "mod_authorization_invalid"
         for name, factory in factories.items():

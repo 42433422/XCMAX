@@ -59,9 +59,14 @@ def agent_mod_execution_scope(binding: dict[str, Any] | None):
     row_id = binding.get("session_row_id")
     mod_id = binding.get("mod_id")
     user_id = binding.get("user_id")
-    if (type(row_id) is not int or row_id <= 0 or not isinstance(user_id, str)
-            or not isinstance(mod_id, str) or not mod_id
-            or normalize_active_mod_id(mod_id) != mod_id):
+    if (
+        type(row_id) is not int
+        or row_id <= 0
+        or not isinstance(user_id, str)
+        or not isinstance(mod_id, str)
+        or not mod_id
+        or normalize_active_mod_id(mod_id) != mod_id
+    ):
         raise AgentModAuthorizationError("任务 Mod 授权上下文无效")
     with HostSessionLocal() as db:
         _check_row(db.get(UserSession, row_id), user_id=user_id, mod_id=mod_id)

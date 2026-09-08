@@ -53,7 +53,8 @@ def test_mod_request_task_is_claimable_by_fresh_host_worker(tmp_path, monkeypatc
 
     with ThreadPoolExecutor(max_workers=1) as executor:
         assert executor.submit(claim_from_new_thread).result(timeout=20) == (
-            run.run_id, run.message
+            run.run_id,
+            run.message,
         )
     # Leaving the Mod must not turn a consumed approval into a fresh permission.
     assert not _consumption_repository().consume(
@@ -61,9 +62,11 @@ def test_mod_request_task_is_claimable_by_fresh_host_worker(tmp_path, monkeypatc
     )
     assert "agent_runs" in inspect(db_mod.get_host_engine()).get_table_names()
     assert "agent_runs" not in inspect(db_mod._get_engine_for_url(mod_url)).get_table_names()
-    assert "agent_approval_consumptions" not in inspect(
-        db_mod._get_engine_for_url(mod_url)
-    ).get_table_names()
-    assert "agent_task_executions" not in inspect(
-        db_mod._get_engine_for_url(mod_url)
-    ).get_table_names()
+    assert (
+        "agent_approval_consumptions"
+        not in inspect(db_mod._get_engine_for_url(mod_url)).get_table_names()
+    )
+    assert (
+        "agent_task_executions"
+        not in inspect(db_mod._get_engine_for_url(mod_url)).get_table_names()
+    )

@@ -311,14 +311,19 @@ class TestRouteNormalModeMessageLabelPrint:
 class TestRouteNormalModeMessageProductQuery:
     """route_normal_mode_message product_query 槽位分支。"""
 
-    @pytest.mark.parametrize("message", [
-        "翻翻往来的单位，找出名字里带测试甲的那个",
-        "帮我找一下昨天没处理完的事情",
-        "看看我还能用哪些功能",
-    ])
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "翻翻往来的单位，找出名字里带测试甲的那个",
+            "帮我找一下昨天没处理完的事情",
+            "看看我还能用哪些功能",
+        ],
+    )
     def test_generic_query_defers_to_intent_gate(self, message):
         predicted = {"intent": "clarify", "slots": {}, "question": "请说明查询对象"}
-        with patch("app.application.llm_intent_gate.llm_route_message", return_value=predicted) as gate:
+        with patch(
+            "app.application.llm_intent_gate.llm_route_message", return_value=predicted
+        ) as gate:
             assert route_normal_mode_message(message) == predicted
         gate.assert_called_once_with(message)
 

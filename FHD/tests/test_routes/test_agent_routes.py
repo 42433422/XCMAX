@@ -82,18 +82,26 @@ def _isolated_agent_task_repositories(tmp_path, monkeypatch):
     engine.dispose()
 
 
-@pytest.mark.parametrize("method,path", [
-    ("GET", "/api/agent/tasks/private-task"),
-    ("POST", "/api/agent/tasks/private-task/read"),
-    ("POST", "/api/agent/tasks/private-task/archive"),
-])
+@pytest.mark.parametrize(
+    "method,path",
+    [
+        ("GET", "/api/agent/tasks/private-task"),
+        ("POST", "/api/agent/tasks/private-task/read"),
+        ("POST", "/api/agent/tasks/private-task/archive"),
+    ],
+)
 def test_empty_tenant_cannot_access_scoped_task(method, path):
     from app.application.agent_orchestrator.task_models import AgentTask
 
     repo = get_agent_run_repository()
-    task = AgentTask(task_id="private-task", user_id="u1", tenant_id="other",
-                     title="private tenant result", status="completed",
-                     attention_state="result_unread")
+    task = AgentTask(
+        task_id="private-task",
+        user_id="u1",
+        tenant_id="other",
+        title="private tenant result",
+        status="completed",
+        attention_state="result_unread",
+    )
     repo.save_task(task)
     before = repo.get_task(user_id="u1", task_id=task.task_id, tenant_id="other").to_dict()
     response = _client().request(method, path)
@@ -107,8 +115,11 @@ def test_empty_tenant_task_feeds_exclude_scoped_tasks(path):
     from app.application.agent_orchestrator.task_models import AgentTask
 
     repo = get_agent_run_repository()
-    repo.save_task(AgentTask(task_id="private-task", user_id="u1", tenant_id="other",
-                             title="private tenant result"))
+    repo.save_task(
+        AgentTask(
+            task_id="private-task", user_id="u1", tenant_id="other", title="private tenant result"
+        )
+    )
     repo.save_task(AgentTask(task_id="public-task", user_id="u1", title="own unscoped task"))
     response = _client().get(path)
     assert response.status_code == 200
@@ -117,8 +128,13 @@ def test_empty_tenant_task_feeds_exclude_scoped_tasks(path):
 
 
 def test_empty_tenant_does_not_deduplicate_another_tenants_task():
-    body = {"task_id": "same-id", "title": "查询产品", "tool_id": "products",
-            "action": "query", "params": {"keyword": "5003"}}
+    body = {
+        "task_id": "same-id",
+        "title": "查询产品",
+        "tool_id": "products",
+        "action": "query",
+        "params": {"keyword": "5003"},
+    }
     scoped = _client(tenant_id="other").post("/api/agent/tasks", json=body)
     unscoped = _client().post("/api/agent/tasks", json=body)
     assert scoped.status_code == unscoped.status_code == 202
@@ -131,9 +147,16 @@ def test_empty_tenant_does_not_deduplicate_another_tenants_task():
 
 @pytest.mark.parametrize("second_mod", ["mod-b", ""])
 def test_unified_task_deduplication_rejects_different_mod_scope(second_mod):
-    body = {"task_id": "same-mod-task-id", "title": "查询产品", "tool_id": "products",
-            "action": "query", "params": {"keyword": "5003"}}
-    first_client = _client(mod_authorization={"mod_id": "mod-a", "session_row_id": 1, "user_id": "u1"})
+    body = {
+        "task_id": "same-mod-task-id",
+        "title": "查询产品",
+        "tool_id": "products",
+        "action": "query",
+        "params": {"keyword": "5003"},
+    }
+    first_client = _client(
+        mod_authorization={"mod_id": "mod-a", "session_row_id": 1, "user_id": "u1"}
+    )
     first = first_client.post("/api/agent/tasks", json=body)
     assert first.status_code == 202
     run_id = first.json()["data"]["run_id"]
@@ -167,7 +190,9 @@ def _drain_background_run(run_id: str) -> AgentRun:
     return run
 
 
-def _client(user_id: str | None = "u1", *, tenant_id: str = "", mod_authorization=None) -> TestClient:
+def _client(
+    user_id: str | None = "u1", *, tenant_id: str = "", mod_authorization=None
+) -> TestClient:
     app = FastAPI()
     app.include_router(router)
     if user_id is not None:

@@ -34,23 +34,30 @@ def _bind_mod(
     mod_id = parse_active_mod_header(request.headers)
     if not mod_id:
         return principal
-    session_id = (verified_session_id if verified_session_id is not None
-                  else session_id_from_request(request))
+    session_id = (
+        verified_session_id if verified_session_id is not None else session_id_from_request(request)
+    )
     if verified_session_id is None:
         from app.security.web_jwt import verify_web_jwt, web_jwt_auth_enabled
 
         if web_jwt_auth_enabled():
             payload = verify_web_jwt(session_id)
-            if (payload and payload.get("typ") == "access"
-                    and str(payload.get("user_id")) == principal.user_id):
+            if (
+                payload
+                and payload.get("typ") == "access"
+                and str(payload.get("user_id")) == principal.user_id
+            ):
                 session_id = str(payload.get("session_id") or "")
     try:
         binding = bind_agent_mod_scope(
             session_id=session_id,
-            user_id=principal.user_id, mod_id=mod_id,
+            user_id=principal.user_id,
+            mod_id=mod_id,
         )
     except AgentModAuthorizationError as exc:
-        raise HTTPException(status_code=403, detail={"code": "MOD_NOT_ENTITLED", "message": str(exc)}) from exc
+        raise HTTPException(
+            status_code=403, detail={"code": "MOD_NOT_ENTITLED", "message": str(exc)}
+        ) from exc
     return replace(principal, mod_authorization=binding)
 
 
@@ -82,18 +89,30 @@ def _mobile_principal(payload: dict[str, Any]) -> AgentPrincipal:
     from app.utils.time import utc_now_naive
 
     with HostSessionLocal() as db:
-        row = db.query(UserSession).filter(
-            UserSession.session_id == str(payload.get("session_id") or ""),
-            UserSession.expires_at > utc_now_naive(),
-        ).first()
-        if (row is not None and str(row.user_id) == str(payload["user_id"])
-                and row.user is not None and row.user.is_active):
+        row = (
+            db.query(UserSession)
+            .filter(
+                UserSession.session_id == str(payload.get("session_id") or ""),
+                UserSession.expires_at > utc_now_naive(),
+            )
+            .first()
+        )
+        if (
+            row is not None
+            and str(row.user_id) == str(payload["user_id"])
+            and row.user is not None
+            and row.user.is_active
+        ):
             principal = _from_user(row.user)
             if principal is not None:
                 return principal
-    raise HTTPException(status_code=401, detail={
-        "code": "UNAUTHORIZED", "message": "登录会话已失效，请重新登录",
-    })
+    raise HTTPException(
+        status_code=401,
+        detail={
+            "code": "UNAUTHORIZED",
+            "message": "登录会话已失效，请重新登录",
+        },
+    )
 
 
 def require_agent_principal(
@@ -110,20 +129,26 @@ def require_agent_principal(
         if getattr(request.state, "tutorial_active", False) is True:
             tutorial_tenant = getattr(request.state, "tenant_id", None)
             if tutorial_tenant is not None:
-                return _bind_mod(request, AgentPrincipal(
-                    user_id=principal.user_id,
-                    username=principal.username,
-                    tenant_id=str(int(tutorial_tenant)),
-                    is_admin=principal.is_admin,
-                ))
+                return _bind_mod(
+                    request,
+                    AgentPrincipal(
+                        user_id=principal.user_id,
+                        username=principal.username,
+                        tenant_id=str(int(tutorial_tenant)),
+                        is_admin=principal.is_admin,
+                    ),
+                )
         return _bind_mod(request, principal)
 
     authorization = request.headers.get("authorization", "")
     if authorization.startswith("Bearer "):
         payload = verify_mobile_jwt(authorization[7:].strip())
         if payload and payload.get("typ") == "access" and payload.get("user_id") is not None:
-            return _bind_mod(request, _mobile_principal(payload),
-                             verified_session_id=str(payload.get("session_id") or ""))
+            return _bind_mod(
+                request,
+                _mobile_principal(payload),
+                verified_session_id=str(payload.get("session_id") or ""),
+            )
 
     # Explicitly test-only. Production cannot trust a caller-controlled identity header.
     if _test_header_enabled() and str(x_user_id or "").strip():

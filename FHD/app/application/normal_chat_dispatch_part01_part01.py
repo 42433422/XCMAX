@@ -293,12 +293,18 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
     if any(k in text for k in knowledge_keywords):
         return {"intent": "knowledge_query", "slots": {}}
     product_subject = any(word in text for word in ("产品", "商品", "货品"))
-    model_token = bool(_facade().re.search(
-        r"(?<![0-9A-Za-z])(?:[A-Za-z][A-Za-z0-9-]*\d[A-Za-z0-9-]*|\d{3,6})(?![0-9A-Za-z])",
-        text,
-    ))
-    if (any(k in text for k in query_keywords) and (product_subject or model_token)
-            or model_signal or unit_model_signal):
+    model_token = bool(
+        _facade().re.search(
+            r"(?<![0-9A-Za-z])(?:[A-Za-z][A-Za-z0-9-]*\d[A-Za-z0-9-]*|\d{3,6})(?![0-9A-Za-z])",
+            text,
+        )
+    )
+    if (
+        any(k in text for k in query_keywords)
+        and (product_subject or model_token)
+        or model_signal
+        or unit_model_signal
+    ):
         slots: dict[str, _facade().Any] = {}
         m_unit_model = _facade().re.search("([^\\s，,。]{2,})\\s*的\\s*([0-9A-Za-z-]{2,})", text)
         if m_unit_model:

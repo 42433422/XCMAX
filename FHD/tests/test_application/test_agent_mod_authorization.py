@@ -36,15 +36,22 @@ def mod_session(tmp_path, monkeypatch):
     with factory.begin() as db:
         db.add(User(id=1, username="mod-owner", password="unused", is_active=True))
         db.flush()
-        db.add(UserSession(session_id="secret-session", user_id=1,
-                           expires_at=utc_now_naive() + timedelta(hours=1),
-                           entitled_mod_ids_json='["test-private-mod"]'))
+        db.add(
+            UserSession(
+                session_id="secret-session",
+                user_id=1,
+                expires_at=utc_now_naive() + timedelta(hours=1),
+                entitled_mod_ids_json='["test-private-mod"]',
+            )
+        )
     yield factory
     engine.dispose()
 
 
 def test_background_mod_scope_revalidates_revocation_and_restores_thread(mod_session, monkeypatch):
-    binding = bind_agent_mod_scope(session_id="secret-session", user_id="1", mod_id="test-private-mod")
+    binding = bind_agent_mod_scope(
+        session_id="secret-session", user_id="1", mod_id="test-private-mod"
+    )
     assert "secret-session" not in str(binding)
     seen = []
 
@@ -52,8 +59,12 @@ def test_background_mod_scope_revalidates_revocation_and_restores_thread(mod_ses
         seen.append(get_request_active_mod_id())
         return {"success": True, "data": []}
 
-    monkeypatch.setattr("app.application.facades.tools_facade.execute_registered_workflow_tool", execute)
-    step = AgentStep(node_id="query", tool_id="products", action="query", params={"keyword": "5003"})
+    monkeypatch.setattr(
+        "app.application.facades.tools_facade.execute_registered_workflow_tool", execute
+    )
+    step = AgentStep(
+        node_id="query", tool_id="products", action="query", params={"keyword": "5003"}
+    )
 
     def run():
         assert get_request_active_mod_id() == ""
@@ -64,7 +75,9 @@ def test_background_mod_scope_revalidates_revocation_and_restores_thread(mod_ses
     with ThreadPoolExecutor(max_workers=1) as pool:
         assert pool.submit(run).result(timeout=10)["success"]
         with mod_session.begin() as db:
-            db.query(UserSession).filter_by(session_id="secret-session").one().entitled_mod_ids_json = "[]"
+            db.query(UserSession).filter_by(
+                session_id="secret-session"
+            ).one().entitled_mod_ids_json = "[]"
         assert pool.submit(run).result(timeout=10)["error_code"] == "mod_authorization_invalid"
     assert seen == ["test-private-mod"]
 
@@ -87,13 +100,22 @@ def test_client_cannot_supply_or_replace_mod_authorization():
     assert merge_runtime_context(run, {"source": "resume"})["_mod_authorization"] == forged
 
 
-def test_authenticated_request_binds_server_session_without_persisting_token(mod_session, monkeypatch):
-    monkeypatch.setattr("app.infrastructure.auth.agent_principal.resolve_session_user",
-                        lambda request: SimpleNamespace(id=1, username="mod-owner", tenant_id=7))
-    request = Request({"type": "http", "headers": [
-        (b"x-session-id", b"secret-session"),
-        (b"x-xcagi-active-mod-id", b"test-private-mod"),
-    ]})
+def test_authenticated_request_binds_server_session_without_persisting_token(
+    mod_session, monkeypatch
+):
+    monkeypatch.setattr(
+        "app.infrastructure.auth.agent_principal.resolve_session_user",
+        lambda request: SimpleNamespace(id=1, username="mod-owner", tenant_id=7),
+    )
+    request = Request(
+        {
+            "type": "http",
+            "headers": [
+                (b"x-session-id", b"secret-session"),
+                (b"x-xcagi-active-mod-id", b"test-private-mod"),
+            ],
+        }
+    )
     principal = require_agent_principal(request)
     context = authenticated_runtime_context({"_mod_authorization": {"forged": True}}, principal)
     assert context["tenant_id"] == "7"
@@ -106,7 +128,9 @@ def test_authenticated_request_binds_server_session_without_persisting_token(mod
 def test_background_mod_binding_rejects_invalidated_session(mod_session, invalidity):
     from app.infrastructure.auth.agent_mod_scope import agent_mod_execution_scope
 
-    binding = bind_agent_mod_scope(session_id="secret-session", user_id="1", mod_id="test-private-mod")
+    binding = bind_agent_mod_scope(
+        session_id="secret-session", user_id="1", mod_id="test-private-mod"
+    )
     with mod_session.begin() as db:
         row = db.query(UserSession).filter_by(session_id="secret-session").one()
         if invalidity == "expired":
@@ -126,12 +150,19 @@ def test_mobile_token_binds_only_verified_access_session(mod_session, monkeypatc
     from app.security.mobile_jwt import issue_mobile_tokens
 
     monkeypatch.setenv("SECRET_KEY", "isolated-mobile-agent-test-secret-" * 2)
-    monkeypatch.setattr("app.infrastructure.auth.agent_principal.resolve_session_user", lambda request: None)
+    monkeypatch.setattr(
+        "app.infrastructure.auth.agent_principal.resolve_session_user", lambda request: None
+    )
     tokens = issue_mobile_tokens(user_id=1, session_id="secret-session", username="mod-owner")
-    request = Request({"type": "http", "headers": [
-        (b"authorization", f"Bearer {tokens[token_kind]}".encode()),
-        (b"x-xcagi-active-mod-id", b"test-private-mod"),
-    ]})
+    request = Request(
+        {
+            "type": "http",
+            "headers": [
+                (b"authorization", f"Bearer {tokens[token_kind]}".encode()),
+                (b"x-xcagi-active-mod-id", b"test-private-mod"),
+            ],
+        }
+    )
     if token_kind == "refresh_token":
         with pytest.raises(HTTPException) as error:
             require_agent_principal(request, x_user_id=None)
@@ -143,12 +174,19 @@ def test_mobile_token_binds_only_verified_access_session(mod_session, monkeypatc
         assert tokens[token_kind] not in str(principal.mod_authorization)
 
 
-@pytest.mark.parametrize("invalidity,expected_status", [("wrong_owner", 401), ("signature", 401), ("expired_session", 401)])
-def test_mobile_mod_scope_rejects_invalid_proof(mod_session, monkeypatch, invalidity, expected_status):
+@pytest.mark.parametrize(
+    "invalidity,expected_status",
+    [("wrong_owner", 401), ("signature", 401), ("expired_session", 401)],
+)
+def test_mobile_mod_scope_rejects_invalid_proof(
+    mod_session, monkeypatch, invalidity, expected_status
+):
     from app.security.mobile_jwt import issue_mobile_tokens
 
     monkeypatch.setenv("SECRET_KEY", "isolated-mobile-agent-test-secret-" * 2)
-    monkeypatch.setattr("app.infrastructure.auth.agent_principal.resolve_session_user", lambda request: None)
+    monkeypatch.setattr(
+        "app.infrastructure.auth.agent_principal.resolve_session_user", lambda request: None
+    )
     token = issue_mobile_tokens(
         user_id=2 if invalidity == "wrong_owner" else 1, session_id="secret-session"
     )["access_token"]
@@ -158,11 +196,18 @@ def test_mobile_mod_scope_rejects_invalid_proof(mod_session, monkeypatch, invali
         token = ".".join(parts)
     if invalidity == "expired_session":
         with mod_session.begin() as db:
-            db.query(UserSession).filter_by(session_id="secret-session").one().expires_at = utc_now_naive() - timedelta(seconds=1)
-    request = Request({"type": "http", "headers": [
-        (b"authorization", f"Bearer {token}".encode()),
-        (b"x-xcagi-active-mod-id", b"test-private-mod"),
-    ]})
+            db.query(UserSession).filter_by(session_id="secret-session").one().expires_at = (
+                utc_now_naive() - timedelta(seconds=1)
+            )
+    request = Request(
+        {
+            "type": "http",
+            "headers": [
+                (b"authorization", f"Bearer {token}".encode()),
+                (b"x-xcagi-active-mod-id", b"test-private-mod"),
+            ],
+        }
+    )
     with pytest.raises(HTTPException) as error:
         require_agent_principal(request, x_user_id=None)
     assert error.value.status_code == expected_status
@@ -172,8 +217,12 @@ def test_mobile_principal_uses_current_account_tenant_and_role(mod_session, monk
     from app.security.mobile_jwt import issue_mobile_tokens
 
     monkeypatch.setenv("SECRET_KEY", "isolated-mobile-agent-test-secret-" * 2)
-    monkeypatch.setattr("app.infrastructure.auth.agent_principal.resolve_session_user", lambda request: None)
-    token = issue_mobile_tokens(user_id=1, session_id="secret-session", account_kind="admin")["access_token"]
+    monkeypatch.setattr(
+        "app.infrastructure.auth.agent_principal.resolve_session_user", lambda request: None
+    )
+    token = issue_mobile_tokens(user_id=1, session_id="secret-session", account_kind="admin")[
+        "access_token"
+    ]
     request = Request({"type": "http", "headers": [(b"authorization", f"Bearer {token}".encode())]})
     with mod_session.begin() as db:
         user = db.get(User, 1)
@@ -194,7 +243,9 @@ def test_mobile_host_task_also_requires_current_session(mod_session, monkeypatch
     from app.security.mobile_jwt import issue_mobile_tokens
 
     monkeypatch.setenv("SECRET_KEY", "isolated-mobile-agent-test-secret-" * 2)
-    monkeypatch.setattr("app.infrastructure.auth.agent_principal.resolve_session_user", lambda request: None)
+    monkeypatch.setattr(
+        "app.infrastructure.auth.agent_principal.resolve_session_user", lambda request: None
+    )
     token = issue_mobile_tokens(user_id=1, session_id="secret-session")["access_token"]
     with mod_session.begin() as db:
         row = db.query(UserSession).filter_by(session_id="secret-session").one()
@@ -217,21 +268,30 @@ def test_web_token_and_refresh_bind_persisted_mod_session(mod_session, monkeypat
 
     monkeypatch.setenv("SECRET_KEY", "isolated-web-agent-test-secret-" * 2)
     monkeypatch.setenv("XCAGI_WEB_JWT_AUTH", "1")
-    monkeypatch.setattr("app.infrastructure.auth.agent_principal.resolve_session_user",
-                        lambda request: resolve_user_from_web_jwt(request.headers["authorization"][7:]))
+    monkeypatch.setattr(
+        "app.infrastructure.auth.agent_principal.resolve_session_user",
+        lambda request: resolve_user_from_web_jwt(request.headers["authorization"][7:]),
+    )
     tokens = issue_web_tokens(user_id=1, session_id="secret-session")
     refreshed = refresh_web_access_token(tokens["refresh_token"])
     assert refreshed is not None
     for token in (tokens["access_token"], refreshed["access_token"]):
-        request = Request({"type": "http", "headers": [
-            (b"authorization", f"Bearer {token}".encode()),
-            (b"x-xcagi-active-mod-id", b"test-private-mod"),
-        ]})
+        request = Request(
+            {
+                "type": "http",
+                "headers": [
+                    (b"authorization", f"Bearer {token}".encode()),
+                    (b"x-xcagi-active-mod-id", b"test-private-mod"),
+                ],
+            }
+        )
         principal = require_agent_principal(request, x_user_id=None)
         assert principal.mod_authorization["mod_id"] == "test-private-mod"
         assert "secret-session" not in str(principal.mod_authorization)
     with mod_session.begin() as db:
-        db.query(UserSession).filter_by(session_id="secret-session").one().entitled_mod_ids_json = "[]"
+        db.query(UserSession).filter_by(
+            session_id="secret-session"
+        ).one().entitled_mod_ids_json = "[]"
     with pytest.raises(HTTPException) as error:
         require_agent_principal(request, x_user_id=None)
     assert error.value.status_code == 403

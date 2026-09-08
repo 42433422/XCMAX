@@ -60,13 +60,19 @@ class AgentToolExecutor:
             # runtime_context so repository/raw-SQL boundaries keep their fail-closed
             # isolation. Dataset/document tools deliberately keep their own opaque
             # string tenant keys and must not be coerced here.
-            with agent_mod_execution_scope(params["_runtime_context"].get("_mod_authorization")), (
-                tenant_scope(runtime_tenant_id) if runtime_tenant_id is not None else nullcontext()
+            with (
+                agent_mod_execution_scope(params["_runtime_context"].get("_mod_authorization")),
+                tenant_scope(runtime_tenant_id) if runtime_tenant_id is not None else nullcontext(),
             ):
                 result = execute_registered_workflow_tool(step.tool_id, action, params)
         except AgentModAuthorizationError as exc:
-            return {"success": False, "error_code": "mod_authorization_invalid",
-                    "message": str(exc), "tool_id": validation.tool_id, "action": action}
+            return {
+                "success": False,
+                "error_code": "mod_authorization_invalid",
+                "message": str(exc),
+                "tool_id": validation.tool_id,
+                "action": action,
+            }
         if not isinstance(result, dict):
             return {
                 "success": False,

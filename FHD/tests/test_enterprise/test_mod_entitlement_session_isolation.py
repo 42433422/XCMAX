@@ -19,7 +19,9 @@ async def test_middleware_isolates_overlapping_accounts_and_resets_after_failure
     from app.infrastructure.mods.mod_auth import ModContextMiddleware
 
     entitlements.set_session_entitlements(
-        market_user_id=99, market_username="startup", entitled_client_mod_ids={"startup"},
+        market_user_id=99,
+        market_username="startup",
+        entitled_client_mod_ids={"startup"},
     )
     ready = {name: asyncio.Event() for name in ("a", "b")}
     observations = {}
@@ -28,7 +30,8 @@ async def test_middleware_isolates_overlapping_accounts_and_resets_after_failure
         name = scope["path"].strip("/")
         assert entitlements.get_cached_entitled_client_mod_ids() == set()
         entitlements.set_session_entitlements(
-            market_user_id=1 if name == "a" else 2, market_username=name,
+            market_user_id=1 if name == "a" else 2,
+            market_username=name,
             entitled_client_mod_ids={f"mod-{name}"},
             account_kind="admin" if name == "a" else "enterprise",
             market_is_admin=name == "a",
@@ -43,9 +46,10 @@ async def test_middleware_isolates_overlapping_accounts_and_resets_after_failure
         # FastAPI runs synchronous handlers with a copied async request context.
         import anyio
 
-        assert await anyio.to_thread.run_sync(
-            entitlements.get_cached_market_identity
-        ) == observations[name][0]
+        assert (
+            await anyio.to_thread.run_sync(entitlements.get_cached_market_identity)
+            == observations[name][0]
+        )
         if name == "a":
             entitlements.clear_session_entitlements()
             raise RuntimeError("request terminated")
@@ -56,10 +60,15 @@ async def test_middleware_isolates_overlapping_accounts_and_resets_after_failure
         return {"type": "http.disconnect"}
 
     middleware = ModContextMiddleware(application)
-    results = await asyncio.gather(*(
-        middleware({"type": "http", "path": f"/{name}", "headers": [], "method": "GET"}, unused, unused)
-        for name in ("a", "b")
-    ), return_exceptions=True)
+    results = await asyncio.gather(
+        *(
+            middleware(
+                {"type": "http", "path": f"/{name}", "headers": [], "method": "GET"}, unused, unused
+            )
+            for name in ("a", "b")
+        ),
+        return_exceptions=True,
+    )
     assert isinstance(results[0], RuntimeError)
     assert results[1] is None
     assert observations == {
@@ -106,8 +115,14 @@ async def test_failed_restore_never_returns_other_accounts_cache(monkeypatch, ma
     )
     monkeypatch.setattr(entitlements, "restore_entitlements_from_session_row", lambda sid: False)
     monkeypatch.setattr(entitlements, "_session_username_for_entitlements", lambda sid: "")
-    resolver = AsyncMock(side_effect=RuntimeError("unavailable")) if market_failure else AsyncMock(return_value=None)
-    monkeypatch.setattr("app.fastapi_routes.market_account.resolve_valid_market_access_token", resolver)
+    resolver = (
+        AsyncMock(side_effect=RuntimeError("unavailable"))
+        if market_failure
+        else AsyncMock(return_value=None)
+    )
+    monkeypatch.setattr(
+        "app.fastapi_routes.market_account.resolve_valid_market_access_token", resolver
+    )
     assert await entitlements.sync_entitlements_for_session("session-a") == set()
 
 
@@ -122,11 +137,15 @@ async def test_interleaved_sessions_restore_their_own_persisted_ids(tmp_path, mo
             for index, name in enumerate(("a", "b"), start=1):
                 db.add(User(id=index, username=name, password="unused"))
                 db.flush()
-                db.add(UserSession(
-                    session_id=f"session-{name}", user_id=index, market_user_id=index,
-                    expires_at=datetime.now() + timedelta(hours=1),
-                    entitled_mod_ids_json=f'["mod-{name}"]',
-                ))
+                db.add(
+                    UserSession(
+                        session_id=f"session-{name}",
+                        user_id=index,
+                        market_user_id=index,
+                        expires_at=datetime.now() + timedelta(hours=1),
+                        entitled_mod_ids_json=f'["mod-{name}"]',
+                    )
+                )
         for name in ("a", "b", "a", "b"):
             entitlements._entitlement_sync_at_by_session[f"session-{name}"] = time.monotonic()
             assert await entitlements.sync_entitlements_for_session(f"session-{name}") == {
@@ -155,13 +174,18 @@ async def test_session_expiry_applies_even_with_fresh_entitlement_ttl(
         with factory.begin() as db:
             db.add(User(id=1, username="expiry-owner", password="unused"))
             db.flush()
-            db.add(UserSession(
-                session_id="expiry-session", user_id=1, market_user_id=1,
-                expires_at=now + timedelta(seconds=remaining_seconds),
-                entitled_mod_ids_json='["private-mod"]',
-            ))
+            db.add(
+                UserSession(
+                    session_id="expiry-session",
+                    user_id=1,
+                    market_user_id=1,
+                    expires_at=now + timedelta(seconds=remaining_seconds),
+                    entitled_mod_ids_json='["private-mod"]',
+                )
+            )
         entitlements.set_session_entitlements(
-            market_user_id=1, market_username="expiry-owner",
+            market_user_id=1,
+            market_username="expiry-owner",
             entitled_client_mod_ids={"private-mod"},
         )
         entitlements._entitlement_sync_at_by_session["expiry-session"] = time.monotonic()
