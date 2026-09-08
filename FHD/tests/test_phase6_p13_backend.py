@@ -1556,10 +1556,12 @@ class TestLLMWorkflowPlannerFallback:
         assert len(plan.nodes) >= 1
 
     def test_fallback_create_product_chinese(self) -> None:
+        # Bare 「添加产品」 (no 到X target) now routes to create_product with a
+        # clarification gate; only 「添加产品到X」 keeps the unit-binding intent.
         planner = self._make_planner()
         reg = get_tool_registry()
         plan = planner._fallback_plan("p1", "添加产品", reg)
-        assert plan.intent == "add_product_to_unit"
+        assert plan.intent == "create_product"
 
     def test_fallback_generic(self) -> None:
         planner = self._make_planner()

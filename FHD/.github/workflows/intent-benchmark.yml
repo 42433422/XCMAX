@@ -39,7 +39,8 @@ jobs:
           # N03（2026-09-08）：业务成功率硬门禁。0.2 按规则引擎口径校准
           # （2026-09-08 实测 pass^1=0.2273，5/22）；显式设 0 才是只报告模式。
           # 棘轮只升不降：规则/模型能力提升后应同步上调此值。
-          TASK_BENCHMARK_MIN_PASS: "0.2"
+          # 2026-09-09 跨业务误路由修复后实测 26/26 全对，上调至 0.8 锁定能力。
+          TASK_BENCHMARK_MIN_PASS: "0.8"
         run: |
           python -m pytest tests/benchmarks/test_task_success.py -v --tb=short
 

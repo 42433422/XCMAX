@@ -237,9 +237,11 @@ class _LLMWorkflowPlannerPart02Mixin:
                 intent = "sales_report_export"
                 nodes.extend(export_nodes)
         if not nodes and "reports" in tool_registry:
-            from .inventory_query_planning import inventory_query_node
+            from .inventory_query_planning import general_inventory_query_node, inventory_query_node
 
             inventory_node = inventory_query_node(message)
+            if inventory_node is None:
+                inventory_node = general_inventory_query_node(message)
             if inventory_node is not None:
                 intent = "inventory_query"
                 nodes.append(inventory_node)
@@ -257,6 +259,13 @@ class _LLMWorkflowPlannerPart02Mixin:
             if report_node is not None:
                 intent = "sales_report"
                 nodes.append(report_node)
+        if not nodes and "reports" in tool_registry:
+            from .sales_report_planning import sales_report_query_node
+
+            bare_report_node = sales_report_query_node(message)
+            if bare_report_node is not None:
+                intent = "sales_report"
+                nodes.append(bare_report_node)
         if not nodes and "sales" in tool_registry:
             from .sales_quote_planning import explicit_sales_quote_node
 
@@ -264,6 +273,13 @@ class _LLMWorkflowPlannerPart02Mixin:
             if quote_node is not None:
                 intent = "sales_quote"
                 nodes.append(quote_node)
+        if not nodes and "sales" in tool_registry:
+            from .sales_order_query_planning import sales_order_query_node
+
+            order_query_node = sales_order_query_node(message)
+            if order_query_node is not None:
+                intent = "sales_order_query"
+                nodes.append(order_query_node)
         if not nodes and "finance" in tool_registry:
             from .finance_query import monthly_ledger_node
 

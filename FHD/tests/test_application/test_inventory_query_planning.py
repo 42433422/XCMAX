@@ -65,3 +65,26 @@ def test_inventory_query_rejects_negative_or_compound_commands():
         "查询 A100，B200 的库存",
     ):
         assert inventory_query_node(message) is None
+
+
+def test_general_inventory_phrasings_route_to_overview():
+    from app.application.workflow.inventory_query_planning import general_inventory_query_node
+
+    for message in ("库存有多少", "看下库存", "查库存", "仓库里还有多少货", "存货情况"):
+        node = general_inventory_query_node(message)
+        assert node is not None, message
+        assert (node.tool_id, node.action) == ("reports", "inventory_summary")
+        assert node.params == {}
+
+
+def test_general_inventory_defers_to_specific_and_rejects_compound():
+    from app.application.workflow.inventory_query_planning import general_inventory_query_node
+
+    for message in (
+        "查一下 A100 的库存",  # 具体型号交给精确口径
+        "库存不够了要采购",  # 采购建议由 inventory_purchase 分支处理
+        "不要查库存",
+        "删除库存记录",
+        "你好",
+    ):
+        assert general_inventory_query_node(message) is None, message

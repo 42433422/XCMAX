@@ -92,3 +92,20 @@ def test_unspecified_export_waits_for_valid_report_dates():
     assert "start_date" not in report.params
     report.params.update(updates)
     assert resolve_missing_field(report, item, "本月")["start_date"].endswith("-01")
+
+
+def test_bare_sales_report_phrasings_route_to_summary_not_products():
+    from app.application.workflow.sales_report_planning import sales_report_query_node
+
+    for message in ("销售报表", "看下销售", "销售情况", "查一下销售汇总"):
+        assert sales_report_query_node(message) is not None, message
+        node = sales_report_query_node(message)
+        assert (node.tool_id, node.action) == ("reports", "sales_summary")
+    for message in ("本月销售汇总", "导出销售报表", "销售订单列表", "你好"):
+        assert sales_report_query_node(message) is None, message
+
+
+def test_monthly_report_accepts_variants_and_rejects_bare():
+    assert monthly_sales_report_node("本月销售怎么样") is not None
+    assert monthly_sales_report_node("看下这个月的销售报表") is not None
+    assert monthly_sales_report_node("销售报表") is None

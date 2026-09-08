@@ -13,3 +13,8 @@ def test_explicit_dashboard_routes_without_business_writes():
     assert plan.nodes[0].risk == "low" and plan.nodes[0].idempotent
     for text in ("不要打开运营看板", "打开运营看板然后删除客户", "修改经营看板"):
         assert dashboard_query_node(text) is None
+
+
+def test_dashboard_alias_phrasings():
+    assert dashboard_query_node("仪表盘数据") is not None
+    assert dashboard_query_node("看下仪表盘") is not None

@@ -371,6 +371,68 @@
           {"tool_id": "finance", "action": "create_transaction"}
         ]
       }
+    },
+    {
+      "task_id": "inventory.query.general_023",
+      "domain": "inventory",
+      "difficulty": "easy",
+      "instruction": "库存有多少",
+      "expect": {
+        "actions_any_of": [
+          [{"tool_id": "reports", "action": "inventory_summary"}],
+          [{"tool_id": "inventory", "action": "query"}],
+          [{"tool_id": "inventory", "action": "list"}]
+        ],
+        "forbid_actions": [
+          {"tool_id": "products", "action": "query"},
+          {"tool_id": "business_db", "action": "write"}
+        ]
+      }
+    },
+    {
+      "task_id": "finance.ledger.general_024",
+      "domain": "finance",
+      "difficulty": "easy",
+      "instruction": "这个月花了多少钱",
+      "expect": {
+        "actions_any_of": [
+          [{"tool_id": "finance", "action": "ledger_query"}]
+        ],
+        "forbid_actions": [
+          {"tool_id": "products", "action": "query"},
+          {"tool_id": "finance", "action": "create_transaction"}
+        ]
+      }
+    },
+    {
+      "task_id": "sales.order.query_025",
+      "domain": "sales",
+      "difficulty": "easy",
+      "instruction": "销售订单列表",
+      "expect": {
+        "actions_any_of": [
+          [{"tool_id": "sales", "action": "query"}]
+        ],
+        "forbid_actions": [
+          {"tool_id": "products", "action": "query"},
+          {"tool_id": "sales", "action": "quote"}
+        ]
+      }
+    },
+    {
+      "task_id": "sales.report.bare_026",
+      "domain": "sales",
+      "difficulty": "easy",
+      "instruction": "销售报表",
+      "expect": {
+        "actions_any_of": [
+          [{"tool_id": "clarify", "action": "ask"}, {"tool_id": "reports", "action": "sales_summary"}],
+          [{"tool_id": "reports", "action": "sales_summary"}]
+        ],
+        "forbid_actions": [
+          {"tool_id": "products", "action": "query"}
+        ]
+      }
     }
   ]
 }

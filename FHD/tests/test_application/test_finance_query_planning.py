@@ -33,3 +33,16 @@ def test_fallback_uses_ledger_instead_of_products():
 
 def test_compound_instruction_not_silently_dropped():
     assert monthly_ledger_node("查询这个月的账本，然后导出") is None
+
+
+@pytest.mark.parametrize(
+    "message",
+    ["查一下账本", "财务流水", "本月账目", "打开总账", "这个月花了多少钱", "本月支出多少"],
+)
+def test_generalized_ledger_phrasings(message):
+    assert monthly_ledger_node(message) is not None
+
+
+def test_non_ledger_money_phrasings_not_claimed():
+    for message in ("这个月销售汇总", "产品A100卖了多少钱", "查一下客户", "收入5000元记一笔"):
+        assert monthly_ledger_node(message) is None

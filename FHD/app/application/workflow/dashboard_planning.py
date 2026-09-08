@@ -19,7 +19,7 @@ def dashboard_query_node(message: str) -> WorkflowNode | None:
         if text.startswith(prefix):
             text = text[len(prefix) :].strip()
             break
-    if text not in {"运营看板", "经营看板", "业务看板", "经营概览"}:
+    if text not in {"运营看板", "经营看板", "业务看板", "经营概览", "仪表盘", "仪表盘数据"}:
         return None
     return WorkflowNode(
         node_id="business_dashboard",
