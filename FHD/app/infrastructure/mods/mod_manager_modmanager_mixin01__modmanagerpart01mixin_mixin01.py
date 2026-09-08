@@ -339,7 +339,14 @@ class __ModManagerPart01MixinPart01Mixin:
             return True
         from app.infrastructure.mods.install_receipts import activate_pending_install
 
-        if not activate_pending_install(mod_id, mods_root=self.mods_root):
+        try:
+            activated = activate_pending_install(mod_id, mods_root=self.mods_root)
+        except (*_facade().RECOVERABLE_ERRORS, _facade().ModSignatureError) as exc:
+            self._record_load_failure(
+                mod_id, "install_activation", _facade()._short_exc_message(exc)
+            )
+            return False
+        if not activated:
             self._record_load_failure(mod_id, "restart_required", "Mod 更新需要重启后加载")
             return False
         mod_path = self.resolve_mod_directory(mod_id)
