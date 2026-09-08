@@ -17,6 +17,13 @@ param(
 
 $ErrorActionPreference = "SilentlyContinue"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+# Force UTF-8 both ways: [Console]::OutputEncoding decodes curl stdout (KB JSON),
+# $OutputEncoding encodes args/stdin we hand to curl (push JSON with Chinese text).
+# Without this, PS 5.1 on zh-CN uses GBK (CP936) and corrupts all non-ASCII text.
+try {
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    $OutputEncoding = [System.Text.Encoding]::UTF8
+} catch { }
 $Jar = Join-Path $env:TEMP "shared-brain-csrf.jar"
 $StateFile = Join-Path $MemoryDir ".shared-brain-state.json"
 $MirrorFile = Join-Path $MemoryDir "shared_brain_kb.md"
@@ -37,7 +44,9 @@ function Get-Csrf {
 function Invoke-KbPost([string]$Url, [string]$Json) {
     $csrf = Get-Csrf
     if (-not $csrf) { return $null }
-    curl.exe -s -m 25 --noproxy "*" -X POST $Url -H "X-CSRF-Token: $csrf" -b $Jar -H "Content-Type: application/json" @HArgs -d $Json
+    $out = curl.exe -s -m 25 --noproxy "*" -X POST $Url -H "X-CSRF-Token: $csrf" -b $Jar -H "Content-Type: application/json" @HArgs -d $Json
+    if ($null -eq $out) { return $null }
+    return ($out -join "`n")
 }
 
 function Get-HashOf([string]$Text) {
