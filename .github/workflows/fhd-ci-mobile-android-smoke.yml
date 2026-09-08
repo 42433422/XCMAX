@@ -6,7 +6,11 @@
 # 「构建产物在真实 Android 运行时上能装、能起、进程存活」，覆盖
 # MethodChannel 注册、插件初始化等纯 JVM/Widget 测试触不到的启动路径。
 #
-# 依赖 GitHub ubuntu-latest runner 的 KVM 嵌套虚拟化支持。
+# 2026-09-08 首跑教训：
+# - 禁止 rm -rf /usr/local/lib/android —— 那是 ANDROID_HOME，删了 emulator
+#   runner 重装 SDK 会因 root 属主 EACCES 直接失败（磁盘本就不紧张）。
+# - ubuntu-latest 的 /dev/kvm 默认非 runner 用户可读写，必须显式开权限，
+#   否则 x86_64 镜像纯软件模拟必然 boot timeout。
 name: ci-mobile-android-smoke
 
 on:
@@ -62,10 +66,13 @@ jobs:
         working-directory: FHD/mobile-flutter-poc
         run: flutter build apk --debug
 
-      - name: Free runner disk for emulator image
+      - name: Enable KVM group perms
         run: |
-          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/share/dotnet /usr/local/share/powershell || true
-          df -h /
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
 
       - name: Boot headless emulator (API 34 x86_64) + install + launch
         uses: reactivecircus/android-emulator-runner@v2
@@ -75,6 +82,8 @@ jobs:
           profile: pixel_6
           disable-animations: true
           disable-spellchecker: true
+          emulator-options: -no-snapshot-save -gpu swiftshader_indirect -noaudio -no-boot-anim
+          boot-timeout: 900
           working-directory: FHD/mobile-flutter-poc
           script: |
             APK=$(find build/app/outputs/flutter-apk -name 'app-debug.apk' | head -1)
@@ -96,7 +105,7 @@ jobs:
         with:
           name: android-smoke-evidence
           path: /tmp/android-smoke-screen.png
-          if-no-files-found: ignore
+          if-no-files-found: error
 
       - name: Crash log dump
         if: failure()
