@@ -19,6 +19,17 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Generic query verbs no longer force product_query. Product routing now requires
+  product subject/model evidence; other query expressions reach the intent gate
+  and remain unknown if it cannot resolve them. Three expression regressions
+  verify fallback delegation, while existing explicit product/model/list cases
+  still pass. Legacy tests that required bare 查询/找/看看 and 查询API to query
+  products were corrected to require unknown. All 275 routing/Agent checks pass
+  (`generic-query-routing`), and the 22 real business cases pass all 3 trials,
+  safety=0 (`query-routing-business`, observe/gate_passed=false). This removes
+  premature product routing; it does not claim the unavailable live model can
+  correctly classify the deferred expressions, nor a universal model-ID grammar.
+
 - After authentication changes, the current deterministic business run still
   passes all 22 tasks in each of 3 trials, safety failures=0
   (`current-business-trials`, source d84545fed). It remains observe mode,

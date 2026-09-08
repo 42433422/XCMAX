@@ -311,46 +311,57 @@ class TestRouteNormalModeMessageLabelPrint:
 class TestRouteNormalModeMessageProductQuery:
     """route_normal_mode_message product_query 槽位分支。"""
 
+    @pytest.mark.parametrize("message", [
+        "翻翻往来的单位，找出名字里带测试甲的那个",
+        "帮我找一下昨天没处理完的事情",
+        "看看我还能用哪些功能",
+    ])
+    def test_generic_query_defers_to_intent_gate(self, message):
+        predicted = {"intent": "clarify", "slots": {}, "question": "请说明查询对象"}
+        with patch("app.application.llm_intent_gate.llm_route_message", return_value=predicted) as gate:
+            assert route_normal_mode_message(message) == predicted
+        gate.assert_called_once_with(message)
+
     def test_product_query_with_query_keyword(self):
-        """'查询' 单独出现时，清理后 keyword 为空，slots 可能为空。"""
+        """单独的查询动词没有产品依据，应保持未知。"""
         result = route_normal_mode_message("查询")
-        assert result["intent"] == "product_query"
+        assert result["intent"] == "unknown"
 
     def test_product_query_with_查一下_keyword(self):
         result = route_normal_mode_message("查一下")
-        assert result["intent"] == "product_query"
+        assert result["intent"] == "unknown"
 
     def test_product_query_with_查下_keyword(self):
         result = route_normal_mode_message("查下")
-        assert result["intent"] == "product_query"
+        assert result["intent"] == "unknown"
 
     def test_product_query_with_查_keyword(self):
         result = route_normal_mode_message("查")
-        assert result["intent"] == "product_query"
+        assert result["intent"] == "unknown"
 
     def test_product_query_with_看看_keyword(self):
         result = route_normal_mode_message("看看")
-        assert result["intent"] == "product_query"
+        assert result["intent"] == "unknown"
 
     def test_product_query_with_看下_keyword(self):
         result = route_normal_mode_message("看下")
-        assert result["intent"] == "product_query"
+        assert result["intent"] == "unknown"
 
     def test_product_query_with_搜索_keyword(self):
         result = route_normal_mode_message("搜索")
-        assert result["intent"] == "product_query"
+        assert result["intent"] == "unknown"
 
     def test_product_query_with_找下_keyword(self):
         result = route_normal_mode_message("找下")
-        assert result["intent"] == "product_query"
+        assert result["intent"] == "unknown"
 
     def test_product_query_with_找_keyword(self):
         result = route_normal_mode_message("找")
-        assert result["intent"] == "product_query"
+        assert result["intent"] == "unknown"
 
     def test_product_query_with_检索_keyword(self):
         result = route_normal_mode_message("检索")
-        assert result["intent"] == "product_query"
+        assert result["intent"] == "unknown"
 
     def test_product_query_keyword_stripped_to_nonempty(self):
         """泛化的产品列表问法必须查询全量，而不是把“产品”当筛选词。"""
@@ -406,29 +417,29 @@ class TestRouteNormalModeMessageProductQuery:
 
     def test_product_query_tail_model_excludes_api_keyword(self):
         result = route_normal_mode_message("查询API")
-        assert result["intent"] == "product_query"
+        assert result["intent"] == "unknown"
         # API 应该被排除
         assert result["slots"].get("model_number") != "API"
 
     def test_product_query_tail_model_excludes_http_keyword(self):
         result = route_normal_mode_message("查询HTTP")
-        assert result["intent"] == "product_query"
+        assert result["intent"] == "unknown"
         assert result["slots"].get("model_number") != "HTTP"
 
     def test_product_query_tail_model_excludes_json_keyword(self):
         result = route_normal_mode_message("查询JSON")
-        assert result["intent"] == "product_query"
+        assert result["intent"] == "unknown"
         assert result["slots"].get("model_number") != "JSON"
 
     def test_product_query_tail_model_excludes_xml_keyword(self):
         result = route_normal_mode_message("查询XML")
-        assert result["intent"] == "product_query"
+        assert result["intent"] == "unknown"
         assert result["slots"].get("model_number") != "XML"
 
     def test_product_query_no_keyword_no_unit_no_model(self):
-        """查询关键词但提取后 keyword 为空。"""
+        """没有查询对象时不能默认查产品。"""
         result = route_normal_mode_message("查询")
-        assert result["intent"] == "product_query"
+        assert result["intent"] == "unknown"
 
 
 # ---------------------------------------------------------------------------
