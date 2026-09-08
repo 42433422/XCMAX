@@ -127,6 +127,13 @@ def test_ai_count_preview_and_confirmation_only_change_selected_location(tmp_pat
         assert readback["success"] and readback["total"] == 1
         row = readback["data"][0]
         assert row["transaction_type"] == "count"
+        from datetime import datetime
+
+        today = datetime.now().date().isoformat()
+        dated = _registered_router_inventory(
+            "query_transactions", {"start_date": today, "end_date": today}, {}, "normal", ""
+        )
+        assert dated["success"] and dated["total"] == 1
         assert row["location_id"] == 2 and row["batch_no"] == "B"
         assert float(row["quantity"]) == -3
         unrelated = _registered_router_inventory(
@@ -143,3 +150,20 @@ def test_ai_count_preview_and_confirmation_only_change_selected_location(tmp_pat
         )
         assert foreign["success"] and foreign["total"] == 0
     engine.dispose()
+
+
+@pytest.mark.parametrize(
+    "dates",
+    [
+        {"start_date": "bad"},
+        {"end_date": "2026-02-30"},
+        {"start_date": "2026-09-10", "end_date": "2026-09-09"},
+    ],
+)
+def test_ai_transaction_dates_rejected_before_database(dates):
+    from app.services.tools_workflow_registered_part01_part02 import _registered_router_inventory
+
+    with patch("app.services.inventory_service.get_db") as database:
+        result = _registered_router_inventory("query_transactions", dates, {}, "normal", "")
+    assert not result["success"]
+    database.assert_not_called()

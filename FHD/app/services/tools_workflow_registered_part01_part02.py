@@ -141,15 +141,37 @@ def _registered_router_inventory(
             confirmed=params.get("confirmed", False),
         )
     if action == "query_transactions":
+        from datetime import datetime, time
+
         from app.services.inventory_service import InventoryService
 
+        def parse_date(value, *, end=False):
+            if value is None or value == "":
+                return None
+            if isinstance(value, datetime):
+                return value
+            parsed = datetime.fromisoformat(str(value))
+            if end and len(str(value)) == 10:
+                parsed = datetime.combine(parsed.date(), time.max)
+            return parsed
+
+        try:
+            start_date = parse_date(params.get("start_date"))
+            end_date = parse_date(params.get("end_date"), end=True)
+            if start_date and end_date and start_date > end_date:
+                raise ValueError("reversed range")
+        except (TypeError, ValueError, OverflowError):
+            return {
+                "success": False,
+                "message": "流水查询日期无效，请使用有效日期且开始时间不晚于结束时间",
+            }
         inv_svc = InventoryService()
         return inv_svc.query_transactions(
             product_id=params.get("product_id"),
             warehouse_id=params.get("warehouse_id"),
             transaction_type=params.get("transaction_type"),
-            start_date=params.get("start_date"),
-            end_date=params.get("end_date"),
+            start_date=start_date,
+            end_date=end_date,
             page=int(params.get("page") or 1),
             per_page=int(params.get("per_page") or 20),
         )
