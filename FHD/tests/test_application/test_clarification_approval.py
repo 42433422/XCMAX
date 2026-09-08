@@ -132,3 +132,40 @@ def test_multiple_required_fields_wait_until_all_are_valid():
     assert result["data"]["action"] == "workflow_confirmation_required"
     assert node.params == {"transaction_type": "revenue", "amount": 125.5}
     service._run_workflow_with_state_updates.assert_not_called()
+
+
+def test_structured_quote_answer_requires_approval_before_execution():
+    node = WorkflowNode(
+        node_id="quote", tool_id="sales", action="quote", params={"customer_id": 101}, risk="medium"
+    )
+    plan = PlanGraph(plan_id="quote-plan", intent="sales_quote", nodes=[node])
+    pending = {
+        "plan": plan,
+        "target_node_id": "quote",
+        "clarify_node_id": "clarify",
+        "runtime_context": {"tenant_id": 7},
+        "clarification": {
+            "reason": "missing_required",
+            "field": "items",
+            "missing_fields": ["items"],
+        },
+    }
+    service = SimpleNamespace(
+        _pending_workflows={"u": pending},
+        approval_service=Mock(),
+        _persist_plan_state=Mock(),
+        _run_workflow_with_state_updates=Mock(side_effect=AssertionError("must await approval")),
+    )
+    service.approval_service.get_approval_required_nodes.return_value = [node]
+    response = _AIChatApplicationServicePart03Mixin._continue_after_clarification(
+        service, "u", pending, '[{"product_id":201,"quantity":2,"unit_price":25.5}]'
+    )
+    assert response["data"]["action"] == "workflow_confirmation_required"
+    resumed = service._pending_workflows["u"]
+    assert resumed["approval_required"] is True
+    assert resumed["runtime_context"]["tenant_id"] == 7
+    assert resumed["approval_nodes"][0]["params"] == {
+        "customer_id": 101,
+        "items": [{"product_id": 201, "quantity": 2, "unit_price": 25.5}],
+    }
+    service._run_workflow_with_state_updates.assert_not_called()
