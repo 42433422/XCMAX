@@ -152,4 +152,56 @@
 
 ---
 
-*证据生成：2026-09-01，由 `acceptance-macos.sh` 引导 + 人工整理。*
+## 9. 复检记录（2026-09-09，脚本 `acceptance-macos.sh --version 1.0.0.1 --skip-launch` 重跑）
+
+> 原第 1–8 节为 2026-09-01 快照，保持原文不改；本节为增量复检。
+
+### 9.1 制品完整性：P0 复现并升级
+
+同一 URL `https://xiu-ci.com/xcagi-v1.0.0.1/enterprise/XCAGI-Enterprise-1.0.0.1-mac-arm64.dmg` 的字节内容在三次独立观测中互不相同：
+
+| 观测时间 | 字节数 | SHA256（前 16 位） | 来源 |
+|---|---|---|---|
+| 2026-09-01（第 2 节） | 292,930,436 | `a36a92cdc052df22` | 脚本实测（两轮一致） |
+| 当前 manifest 记录 | 290,432,409 | `7ab4fdc1de1974e6` | `xcagi-v1.0.0.1/manifest.json` |
+| 2026-09-09（本次） | 293,401,820 | `c39bed60b92ce32d` | 脚本实测 → **SHA256 不一致，验收按 fail-closed 中止** |
+
+结论：**下载 manifest 与线上实际制品脱节**——manifest 声称的 sha256 既不等于 9/1 实测值，也不等于今日实测值。脚本的门禁行为正确（发现不一致即停止），但暴露发布流程缺陷：制品被替换后 manifest 未同步再生。
+
+### 9.2 制品身份漂移：D-02 恶化
+
+同一产品版本 `1.0.0.1` 现观测到 **5 个不同构建 gitSha** 并存：
+
+| gitSha | 身份载体 | 与 main 关系 |
+|---|---|---|
+| `0df6e1a0…` | 9/1 dmg 内 build-info + 当时 latest-mac.yml | 9/1 快照，已被后续构建覆盖 |
+| `2e6f03bf…` | 当前下载 manifest `git_sha` 字段 | main 祖先（compare 状态 ahead） |
+| `99854233…` | 当前 dmg 内 build-info + 当前 latest-mac.yml `buildSha` | main 祖先（ahead） |
+| `1532f843…` | 本机 `/Applications/XCAGI.app` build-info | **diverged（已不在 main 历史）** |
+| `383c7b13…` | 9/1 本机安装记录（第 6 节 D-02） | 历史批次 |
+
+### 9.3 通道一致性：OTA feed 与制品一致（PASS）
+
+- `latest-mac.yml`：`productVersion=1.0.0.1`、`buildSha=99854233…`、含 `signature: ed25519:7AX0…`（非空）；
+- 实际 dmg 内 build-info `gitSha=99854233…` —— **OTA 通道与线上制品身份一致**；
+- dmg 内 app：`codesign --verify --deep --strict` **PASS**；`spctl -a -t execute` → **accepted / source=Notarized Developer ID / Developer ID Application: jialong Li (G26WSH472M)**。
+
+### 9.4 本机安装状态（新增异常）
+
+`/Applications/XCAGI.app`（1.0.0.1 / build 1532f843）`codesign --verify --deep --strict` **FAIL**：`a sealed resource is missing or invalid`——本机安装副本在签名后被开发过程改动，不能作为发布制品验收对象；发布 dmg 本身校验通过（9.3）。
+
+### 9.5 缺陷状态更新
+
+| # | 状态变化 |
+|---|---|
+| D-01 | **部分修复**：`xcagi-v1.0.0.1/manifest.json` 已发布（不再 404），但 `git_sha/sha256` 与实际制品不符（9.1） |
+| D-02 | **恶化**：同版本并存构建 2→5 个（9.2） |
+| D-03 | **未修复**：`releases/stable/enterprise/latest.yml`（Windows）仍为 `productVersion=1.0.0.0 / buildSha=656db7b7…`（2026-07-13），Windows 真机验收仍被阻塞 |
+
+### 9.6 收敛路径（R03 结论）
+
+**当前"优化提交 / 主线 / 安装运行"三者不一致，R03 不能判 PASS。** 唯一收敛方式：PR#1826 合并后，以冻结的 main SHA 走一次完整 `Release Orchestrator`（security-preflight 双扫描 → verify-version-anchors → 单一构建批次），同批再生 OTA feed、下载 manifest 与 dmg/zip 制品，使所有身份载体绑定同一 `git_sha`；随后 Mac 端重跑本脚本（冷启动需先退出本机现有实例）+ Windows 端补 D-03 工件后验收。
+
+---
+
+*证据生成：2026-09-01；复检追加：2026-09-09（脚本 `acceptance-macos.sh` 重跑 + 通道/制品交叉取证）。*
