@@ -16,7 +16,10 @@ from app.neuro_bus.events.base import NeuroEvent
 
 
 @pytest.mark.asyncio
-async def test_local_queue_persists_actor_and_rejects_forged_applicant(tmp_path, monkeypatch):
+@pytest.mark.parametrize("disable_before_consumption", [False, True])
+async def test_local_queue_persists_actor_and_rejects_forged_applicant(
+    tmp_path, monkeypatch, disable_before_consumption
+):
     engine = create_engine("sqlite:///" + str(tmp_path / "finance.sqlite3"))
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine)
@@ -57,17 +60,29 @@ async def test_local_queue_persists_actor_and_rejects_forged_applicant(tmp_path,
                     )
                 )
 
+        # No await since publishing: the consumer cannot run before this commit.
+        if disable_before_consumption:
+            with factory() as db, db.begin():
+                db.get(User, 71).is_active = False
+
         async def wait():
             while len(completed) < 2:
                 await asyncio.sleep(0.01)
 
         await asyncio.wait_for(wait(), timeout=5)
-        assert [r["success"] for r in completed] == [True, False]
-        assert published == ["finance.approval_created", "finance.approval_failed"]
+        assert [r["success"] for r in completed] == [not disable_before_consumption, False]
+        assert published == [
+            "finance.approval_failed" if disable_before_consumption else "finance.approval_created",
+            "finance.approval_failed",
+        ]
         with tenant_scope(1), factory() as db:
             rows = db.query(ApprovalRequest).all()
-            assert len(rows) == 1 and rows[0].applicant_id == 71
-            assert rows[0].tenant_id == 1 and rows[0].status == "pending"
+            if disable_before_consumption:
+                assert rows == []
+                assert service._pending_requests == {}
+            else:
+                assert len(rows) == 1 and rows[0].applicant_id == 71
+                assert rows[0].tenant_id == 1 and rows[0].status == "pending"
     finally:
         await bus.stop()
         engine.dispose()
