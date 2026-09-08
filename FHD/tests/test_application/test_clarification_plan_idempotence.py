@@ -62,16 +62,8 @@ def test_chat_gate_reuses_planned_node_and_pauses_without_dispatch():
     with patch("app.application.workflow.planner.get_ai_conversation_service", return_value=None):
         planner = LLMWorkflowPlanner()
     registry = get_workflow_tool_registry()
-    plan = PlanGraph(
-        plan_id="p",
-        intent="create_product",
-        nodes=[
-            WorkflowNode(
-                node_id="create", tool_id="products", action="create", params={}, risk="medium"
-            )
-        ],
-    )
-    planner._apply_clarify_rules(plan, registry)
+    plan = planner._fallback_plan("p", "帮我新增一个产品", registry)
+    assert not any(n.tool_id == "customers" for n in plan.nodes)
     existing = next(n for n in plan.nodes if n.tool_id == "clarify")
     dispatch = Mock(side_effect=AssertionError("must wait for clarification"))
     service = SimpleNamespace(

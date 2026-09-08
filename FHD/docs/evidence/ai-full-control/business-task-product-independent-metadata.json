@@ -1,0 +1,7 @@
+{
+  "source_commit": "cfbfc585a69b08da6993056fd52cc10d8f8fd5cb",
+  "passed": 12,
+  "total": 22,
+  "scope": "Isolated fallback trial only, no real model or installed acceptance",
+  "dataset_sha256": "69879205b4357a426468eda671be7bc9f012d2e9b60948cc7a0fb96e2f2d18b6"
+}
