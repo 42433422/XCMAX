@@ -1,0 +1,15 @@
+{
+  "base_sha": "db6760beb",
+  "tests_passed": 239,
+  "guards": "10 blocking guards passed",
+  "verified": [
+    "Seven denied or mixed action inputs return clarification and a user-facing followup.",
+    "Two label commands reach label_print.",
+    "Two affirmative shipment commands still reach shipment."
+  ],
+  "limits": [
+    "Normal-chat route and response tests only.",
+    "Workflow planner, multi-turn cancellation, real-model recheck and installed execution remain unverified.",
+    "Printer settings and full software capability coverage remain incomplete."
+  ]
+}

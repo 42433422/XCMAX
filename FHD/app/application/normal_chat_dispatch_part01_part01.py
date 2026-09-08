@@ -158,6 +158,18 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
     """普通版轻量槽位提取与任务分流。"""
     text = (message or "").strip()
     lower = text.lower()
+    # Do not let an action noun in a denied or mixed instruction trigger a write.
+    # Mixed positive/negative clauses require clarification before any execution.
+    if _facade().re.search(
+        r"(?:不要|别|不用|不需要|暂不|先不|停止|取消)[^，,。；;]{0,8}"
+        r"(?:打印|开单|打单|发货|送货|出货|删除|移除|下单|入库|出库|导入|发送)",
+        text,
+    ):
+        return {
+            "intent": "clarify",
+            "slots": {"question": "已暂停执行。请说明需要保留的操作，或确认取消本次任务。"},
+            "reason": "negated_action",
+        }
     shipment_keywords = ("发货单", "送货单", "出货单", "开单", "打单", "打印")
     number_style_order = bool(
         _facade().re.search(
@@ -169,7 +181,11 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
     template_preview = bool(
         _facade().re.search("(?:预览|看看|看下)[^，,。]{0,12}模板|模板[^，,。]{0,8}预览", text)
     )
-    if (any(k in text for k in shipment_keywords) or number_style_order) and not template_preview:
+    if (
+        (any(k in text for k in shipment_keywords) or number_style_order)
+        and not template_preview
+        and not any(word in text for word in ("标签", "商标", "贴标", "打印机"))
+    ):
         return {"intent": "shipment", "slots": {"number_style_order": number_style_order}}
     if template_preview:
         return {"intent": "unknown", "slots": {}}
