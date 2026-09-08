@@ -1,0 +1,21 @@
+{
+  "base_sha": "2e1c3210c",
+  "source_changes": [
+    "tests/benchmarks/task_success_runner.py",
+    "tests/benchmarks/task_golden_set.json"
+  ],
+  "scope": "Isolated SQLite deterministic fallback, real document generation; direct tools bypass approval engine.",
+  "passed": 17,
+  "total": 22,
+  "shipment_checks": [
+    "One persisted record",
+    "Customer, model, tins, spec and kg in record",
+    "Generated XLSX can be opened and contains expected customer, model, name and quantities"
+  ],
+  "negative_control": "Added nonexistent workbook value causes exec_pass false despite tool success and db_pass true.",
+  "limits": [
+    "Workbook assertions test value presence, not exact cell layout or formulas.",
+    "Generated files were inspected inside temporary trial and not retained as delivery artifacts.",
+    "No live model, full chat approval, physical print or installed-runtime acceptance."
+  ]
+}

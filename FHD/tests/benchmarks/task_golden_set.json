@@ -278,7 +278,16 @@
       "domain": "shipment",
       "difficulty": "medium",
       "instruction": "打印 七彩乐园 的发货单，编号9803，规格12，一共3桶",
+      "initial_state": [
+        {"entity": "purchase_units", "values": {"id": 101, "unit_name": "七彩乐园"}},
+        {"entity": "products", "values": {"id": 201, "name": "测试涂料", "model_number": "9803", "price": 25.5, "unit": "桶"}}
+      ],
       "expect": {
+        "db_state": [
+          {"entity": "shipment_records", "op": "count", "count": 1},
+          {"entity": "shipment_records", "op": "exists", "where": {"purchase_unit": "七彩乐园", "model_number": "9803", "quantity_tins": 3, "tin_spec": 12, "quantity_kg": 36}}
+        ],
+        "xlsx_state": [{"node_id": "generate_shipment", "values": ["9803", "测试涂料", "3", "12", "36"], "contains": ["购货单位：七彩乐园"]}],
         "actions": [{"tool_id": "shipment_orders", "action": "generate"}],
         "forbid_actions": [
           {"tool_id": "shipment_orders", "action": "clear_shipment"}

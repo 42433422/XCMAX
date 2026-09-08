@@ -151,7 +151,9 @@ def _check_db_state(expect: dict[str, Any]) -> tuple[bool, str]:
     return True, ""
 
 
-def _execute_nodes(nodes: list[Any]) -> tuple[bool, str, list[dict[str, Any]]]:
+def _execute_nodes(
+    nodes: list[Any], expect: dict[str, Any] | None = None
+) -> tuple[bool, str, list[dict[str, Any]]]:
     """逐节点执行计划；传递成功结果，未回答的澄清阻止后续执行。"""
     from app.services.tools_workflow_registered import execute_registered_workflow_tool
 
@@ -184,6 +186,30 @@ def _execute_nodes(nodes: list[Any]) -> tuple[bool, str, list[dict[str, Any]]]:
                 executed,
             )
         outputs[node.node_id] = result
+    for assertion in (expect or {}).get("xlsx_state", []):
+        from openpyxl import load_workbook
+
+        result = outputs.get(assertion["node_id"], {})
+        path = Path(str(result.get("file_path") or ""))
+        if not path.is_file():
+            return False, "生成的工作簿不存在", executed
+        workbook = load_workbook(path, read_only=True, data_only=True)
+        try:
+            values = [
+                str(value)
+                for sheet in workbook
+                for row in sheet.values
+                for value in row
+                if value is not None
+            ]
+        finally:
+            workbook.close()
+        for value in assertion.get("values", []):
+            if str(value) not in values:
+                return False, f"工作簿缺少预期值：{value}", executed
+        for text in assertion.get("contains", []):
+            if not any(text in value for value in values):
+                return False, f"工作簿缺少预期文本：{text}", executed
     return True, "", executed
 
 
@@ -248,7 +274,7 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
                 else:
                     has_db_assert = bool(expect.get("db_state"))
                     if nodes:
-                        exec_ok, exec_why, executed = _execute_nodes(nodes)
+                        exec_ok, exec_why, executed = _execute_nodes(nodes, expect)
                         result["exec_pass"] = exec_ok
                         result["executed"] = executed
                         if not exec_ok:

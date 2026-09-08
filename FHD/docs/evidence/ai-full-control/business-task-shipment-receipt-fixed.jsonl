@@ -1,0 +1,1 @@
+{"task_id": "shipment.generate.full_slots_017", "domain": "shipment", "difficulty": "medium", "trial": 0, "routing_pass": true, "exec_pass": true, "db_pass": null, "db_assertion_count": 0, "pass": true, "failure": null, "executed": [{"tool_id": "shipment_orders", "action": "generate", "success": true, "message": "发货单生成成功"}]}
