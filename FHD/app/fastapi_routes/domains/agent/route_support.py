@@ -13,6 +13,7 @@ from app.application.agent_orchestrator.task_dispatcher import notify_agent_task
 from app.application.agent_orchestrator.task_execution_repository import (
     get_task_execution_repository,
 )
+from app.application.agent_orchestrator.task_models import tenant_id_of_run
 from app.application.agent_orchestrator.unified_task import task_capabilities
 from app.infrastructure.auth.agent_principal import AgentPrincipal
 from app.utils.json_safe import json_safe
@@ -92,7 +93,9 @@ def owned_run(
         return None, JSONResponse(
             {"success": False, "message": "agent run 不存在"}, status_code=404
         )
-    if not principal.is_admin and run.user_id != principal.user_id:
+    if not principal.is_admin and (
+        run.user_id != principal.user_id or tenant_id_of_run(run) != principal.tenant_id
+    ):
         return None, JSONResponse(
             {"success": False, "message": "无权访问该 agent run"}, status_code=403
         )

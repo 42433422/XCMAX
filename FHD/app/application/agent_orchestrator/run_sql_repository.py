@@ -134,7 +134,9 @@ class SQLAlchemyAgentRunRepository:
             record = db.get(AgentRunRecord, str(run_id or ""))
             return self._record_to_run(record) if record is not None else None
 
-    def list_recent(self, *, user_id: str | None = None, limit: int = 50) -> list[AgentRun]:
+    def list_recent(
+        self, *, user_id: str | None = None, limit: int = 50, tenant_id: str | None = None
+    ) -> list[AgentRun]:
         self._ensure_schema()
         with self._session_scope(read_only=True) as db:
             from app.db.models.agent import AgentRunRecord
@@ -142,10 +144,24 @@ class SQLAlchemyAgentRunRepository:
             query = db.query(AgentRunRecord)
             if user_id is not None:
                 query = query.filter(AgentRunRecord.user_id == str(user_id))
-            records = (
-                query.order_by(AgentRunRecord.updated_at.desc()).limit(max(0, int(limit))).all()
-            )
-            return [run for record in records if (run := self._record_to_run(record)) is not None]
+            query = query.order_by(AgentRunRecord.updated_at.desc())
+            if tenant_id is None:
+                records = query.limit(max(0, int(limit))).all()
+                return [
+                    run for record in records if (run := self._record_to_run(record)) is not None
+                ]
+            result = []
+            if limit <= 0:
+                return result
+            # Older rows store tenant only in their JSON payload. Filter before
+            # applying the public limit, without loading all rows at once.
+            for record in query.yield_per(100):
+                run = self._record_to_run(record)
+                if run is not None and tenant_id_of_run(run) == tenant_id:
+                    result.append(run)
+                    if len(result) >= limit:
+                        break
+            return result
 
     def list_task_runs(self, *, user_id: str, task_id: str) -> list[AgentRun]:
         """Resolve a durable task without relying on a recent-run window.

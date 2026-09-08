@@ -583,6 +583,44 @@ def test_resume_rejects_tenant_change_without_control_command():
     assert repository.latest_task_control(run.run_id) is None
 
 
+@pytest.mark.parametrize(
+    "method,path",
+    [
+        ("get", ""),
+        ("get", "/events"),
+        ("post", "/pause"),
+        ("post", "/cancel"),
+        ("post", "/resume"),
+        ("post", "/retry"),
+        ("post", "/continue"),
+    ],
+)
+def test_same_user_cannot_access_run_from_another_tenant(method, path):
+    run = AgentRun(user_id="owner", message="private task", status="paused")
+    run.metadata["runtime_context"] = {"tenant_id": "tenant-a"}
+    repository = get_agent_run_repository()
+    repository.save(run)
+    before = repository.get(run.run_id).to_dict()
+    response = getattr(_client("owner", tenant_id="tenant-b"), method)(
+        f"/api/agent/runs/{run.run_id}{path}"
+    )
+    assert response.status_code == 403
+    assert "private task" not in response.text
+    assert repository.get(run.run_id).to_dict() == before
+    assert repository.latest_task_control(run.run_id) is None
+
+
+def test_run_list_filters_tenant_before_limit():
+    repository = get_agent_run_repository()
+    for tenant in ("tenant-a", "tenant-b"):
+        run = AgentRun(user_id="owner", message=tenant)
+        run.metadata["runtime_context"] = {"tenant_id": tenant}
+        repository.save(run)
+    response = _client("owner", tenant_id="tenant-a").get("/api/agent/runs?limit=1")
+    assert response.status_code == 200
+    assert [item["message"] for item in response.json()["data"]] == ["tenant-a"]
+
+
 def test_create_agent_run_validates_request_body() -> None:
     get_agent_run_repository().clear()
     client = _client()

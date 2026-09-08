@@ -19,6 +19,15 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Non-admin run access now checks both user and persisted tenant. Seven HTTP
+  regressions reject same-user cross-tenant detail/events/control/approval access
+  without mutation or content disclosure. The public run list filters by tenant
+  before limit; repositories accept a tenant filter, with SQL streaming legacy
+  JSON-backed identities until enough matching rows are found. All 38 route/run
+  repository checks passed (`tenant-run-access-final`). Dedicated SQL tenant-list
+  pagination coverage and indexing/performance remain to verify; administrator
+  access retains its existing explicit exception.
+
 - Runtime ownership changes now raise a distinct exception. The resume HTTP
   endpoint translates it to a public 400 response instead of an unhandled server
   error. Its route test verifies unchanged full task state, no enqueue and no
