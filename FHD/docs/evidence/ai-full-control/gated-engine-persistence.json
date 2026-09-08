@@ -1,0 +1,15 @@
+{
+  "base_sha": "c785a148b",
+  "tests_passed": 66,
+  "change": "ApprovalGatedEngine requires persisted approval requests before strategy evaluation.",
+  "verified": [
+    "Injected persistence failure stops interactive, auto and reject strategies.",
+    "Pending request and workflow maps are empty after failure.",
+    "Underlying engine does not execute."
+  ],
+  "limitations": [
+    "Success strategy tests simulate persistence metadata.",
+    "Real authenticated end-to-end gated execution not covered.",
+    "Finance event handler remains an outstanding caller for trusted identity propagation and persistence enforcement."
+  ]
+}

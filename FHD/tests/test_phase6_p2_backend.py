@@ -93,9 +93,9 @@ def _make_engine() -> ApprovalGatedEngine:
         ],
         message="工作流执行完成",
     )
-    # ApprovalService 用独立实例（避免进程级单例串扰），持久化到 DB 的部分被吞掉。
+    # ApprovalService 用独立实例；策略单测模拟持久化成功，真实失败单独验证。
     svc = ApprovalService()
-    svc._persist_request_to_db = lambda *a, **k: None
+    svc._persist_request_to_db = lambda *a, **k: {"request_no": a[0].request_id}
     engine = ApprovalGatedEngine(
         engine=mock_engine,
         risk_gate=None,  # 使用真实 HybridRiskGate
@@ -1108,3 +1108,14 @@ def test_intent_predict_batch_recoverable_error_returns_500(
 
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+@pytest.mark.parametrize("strategy", ["interactive", "auto", "reject"])
+def test_gate_stops_before_decision_or_execution_when_persistence_fails(strategy):
+    engine = _make_engine()
+    engine._approval_service._persist_request_to_db = lambda *a, **k: None
+    with pytest.raises(RuntimeError, match="未能持久化"):
+        engine.evaluate_plan(_make_plan(), runtime_context={}, strategy=strategy)
+    assert engine._approval_service._pending_requests == {}
+    assert engine._approval_service._pending_workflows == {}
+    engine._engine.run.assert_not_called()
