@@ -19,7 +19,13 @@ def test_transfer_preserves_units_and_selects_exact_batch(tmp_path, monkeypatch,
     from sqlalchemy.orm import sessionmaker
 
     from app.db.base import Base
-    from app.db.models import InventoryLedger, InventoryTransaction, Product, Warehouse
+    from app.db.models import (
+        InventoryLedger,
+        InventoryTransaction,
+        Product,
+        StorageLocation,
+        Warehouse,
+    )
     from app.infrastructure.tenant_scope import tenant_scope
 
     engine = create_engine(f"sqlite:///{tmp_path / 'transfer.sqlite'}")
@@ -29,7 +35,10 @@ def test_transfer_preserves_units_and_selects_exact_batch(tmp_path, monkeypatch,
     with factory.begin() as db:
         db.add(Product(id=1, tenant_id=1, name="产品", measurement_unit="桶"))
         db.add_all([Warehouse(id=i, tenant_id=1, name=str(i), code=str(i)) for i in (1, 2)])
+        db.add(Warehouse(id=3, tenant_id=2, name="其他租户", code="OTHER"))
         db.flush()
+        db.add(StorageLocation(id=1, tenant_id=1, warehouse_id=1, code="SOURCE"))
+        db.add(StorageLocation(id=2, tenant_id=2, warehouse_id=3, code="FOREIGN"))
         for ident, warehouse, batch, unit in [
             (1, 1, None, "桶"),
             (2, 1, "B", "桶"),
@@ -56,6 +65,13 @@ def test_transfer_preserves_units_and_selects_exact_batch(tmp_path, monkeypatch,
             1, 1, 2, 3, batch_no="B", to_location_id=999
         )
         assert not wrong_location["success"]
+        foreign = InventoryService().inventory_transfer(1, 1, 3, 3, batch_no="B")
+        assert not foreign["success"]
+        for location_id in (1, 2):
+            wrong_owner = InventoryService().inventory_transfer(
+                1, 1, 2, 3, batch_no="B", to_location_id=location_id
+            )
+            assert not wrong_owner["success"]
         with factory() as db:
             assert all(float(row.quantity) == 10 for row in db.query(InventoryLedger))
             assert db.query(InventoryTransaction).count() == 0
