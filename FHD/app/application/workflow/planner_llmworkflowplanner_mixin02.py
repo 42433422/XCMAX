@@ -52,6 +52,11 @@ class _LLMWorkflowPlannerPart02Mixin:
     def _fallback_plan(
         self, plan_id: str, message: str, tool_registry: dict[str, _facade().Any]
     ) -> _facade().PlanGraph:
+        from .no_operation import no_operation_plan
+
+        no_operation = no_operation_plan(plan_id, message)
+        if no_operation is not None:
+            return no_operation
         from app.application.normal_chat_dispatch import route_normal_mode_message
 
         lower = (message or "").lower()

@@ -28,6 +28,8 @@ class DurableExecutionLeaseMixin:
         runtime_context: dict[str, Any],
         approved_step_id: str = "",
     ) -> None:
+        if run.intent == "no_operation" and run.status == "completed" and not run.steps:
+            return
         execution = dict(run.metadata.get("execution") or {})
         execution.update(
             {

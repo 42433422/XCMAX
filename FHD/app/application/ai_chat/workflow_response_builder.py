@@ -63,6 +63,8 @@ class AIChatWorkflowResponseMixin:
             lines.append("TODO:")
             lines.extend([f"- {x}" for x in plan.todo_steps])
         lines.append("执行结果:")
+        if plan.intent == "no_operation" and not plan.nodes and agent_run.status == "completed":
+            lines.append(str(plan.metadata.get("response") or "本次无需执行业务操作"))
 
         node_params_by_id = {
             str(getattr(node, "node_id", "")): (getattr(node, "params", None) or {})

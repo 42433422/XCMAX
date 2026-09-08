@@ -6,6 +6,12 @@
 目标是四个阶段全部完成。本目录记录当前实施证据，不代表四阶段验收通过。
 此前对话中的 20%–30% 覆盖率与工期只是未验证估计，不作为验收基线。
 
+## Explicit non-execution outcome
+
+Pure greetings and conservatively recognized standalone prohibitions now return an explicit no_operation plan before model planning or tool probes. This plan must contain zero nodes and low risk; ordinary empty business plans remain invalid. Both workflow engine modes bypass dispatch, and the agent orchestrator records completion instead of blocking on missing steps. Chat formatting includes the non-execution response. A forged no_operation plan containing business nodes is rejected by validation, engine and orchestrator.
+
+17 focused tests verify no model/dispatch calls, mixed business instructions remaining eligible for planning, both engine modes and the actual in-memory orchestrator path. Related planner, engine and orchestrator regressions pass; application mypy (1806 files), Ruff and all 10 blocking dev guards pass. The unchanged isolated 22-task business trial now passes 7/22, up from 5/22. This is not a live-model, production persistence/approval-chain or installed-client acceptance result. Recognition of complex negation, remaining business domains and four-stage delivery are still incomplete. See business-task-no-operation.jsonl and source-hashed metadata.
+
 ## Customer query routing and fallback
 
 Customer list and explicit name queries now retain their customer intent and keyword through normal routing and fallback planning. The fallback requires an available low-risk, idempotent customers.query contract. Ambiguous relationship text and customer writes no longer silently become an unfiltered customer list. Quoted literal customer names are preserved.

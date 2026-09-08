@@ -29,6 +29,16 @@ class __WorkflowEnginePart01MixinPart01Mixin:
         checkpointer: _facade().Any | None = None,
         state_event_callback: _facade().Any | None = None,
     ) -> _facade().WorkflowRunResult:
+        if plan.intent == "no_operation":
+            from .types import validate_plan_graph
+
+            error = validate_plan_graph(plan)
+            return _facade().WorkflowRunResult(
+                plan_id=plan.plan_id,
+                success=error is None,
+                message=error or str(plan.metadata.get("response") or "本次无需执行业务操作"),
+                final_context=dict(runtime_context or {}),
+            )
         previous_callback = self._state_event_callback
         if state_event_callback is not None:
             self._state_event_callback = state_event_callback
