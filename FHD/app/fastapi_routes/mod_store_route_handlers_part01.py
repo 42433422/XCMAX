@@ -42,7 +42,8 @@ async def _install_from_catalog(
     if not version and not download_path:
         headers = {"Authorization": authorization} if authorization else None
         versions = await _facade().catalog_get_json(
-            f"/packages/by-id/{_facade().quote(pkg_id, safe='')}/versions", headers=headers
+            f"/packages/by-id/{_facade().quote(pkg_id, safe='')}/versions",
+            headers=headers,
         )
         rows = versions.get("versions") or []
         if isinstance(rows, list) and rows:
@@ -164,7 +165,10 @@ async def mod_store_popular(
     limit: int = _facade().Query(10, ge=1, le=200),
 ) -> _facade().ModStoreListResponse:
     rows, _installed = await _facade()._combined_rows()
-    rows.sort(key=lambda r: r.get("total_downloads") or r.get("download_count") or 0, reverse=True)
+    rows.sort(
+        key=lambda r: r.get("total_downloads") or r.get("download_count") or 0,
+        reverse=True,
+    )
     return _facade().ModStoreListResponse(data=rows[:limit])
 
 
@@ -257,7 +261,8 @@ async def mod_store_upload(
                 total_size += len(chunk)
                 if total_size > MAX_UPLOAD_SIZE:
                     raise _facade().HTTPException(
-                        status_code=413, detail=f"文件过大（>{MAX_UPLOAD_SIZE // (1024 * 1024)}MB）"
+                        status_code=413,
+                        detail=f"文件过大（>{MAX_UPLOAD_SIZE // (1024 * 1024)}MB）",
                     )
                 out.write(chunk)
         if total_size == 0:
@@ -294,14 +299,20 @@ async def mod_store_upload(
 
 
 @_facade().router.post("/install", response_model=_facade().ModStoreInstallResult)
-async def mod_store_install(request: _facade().Request) -> _facade().ModStoreInstallResult:
+async def mod_store_install(
+    request: _facade().Request,
+) -> _facade().ModStoreInstallResult:
     payload = await _facade()._request_payload(request)
     pkg_id = _facade()._safe_text(payload.get("pkg_id") or payload.get("mod_id"))
     version = _facade()._safe_text(payload.get("version"))
     if not pkg_id:
         pkg_id, parsed_version = _facade()._split_package_file(payload.get("package_file") or "")
         version = version or parsed_version
-    activate = str(payload.get("activate") or "true").lower() not in {"0", "false", "no"}
+    activate = str(payload.get("activate") or "true").lower() not in {
+        "0",
+        "false",
+        "no",
+    }
     return await _facade()._install_from_catalog(pkg_id, version, activate=activate)
 
 
@@ -320,7 +331,9 @@ async def mod_store_install_industry_seed(
 
     data = await install_industry_seed_with_fallback(raw)
     return _facade().ModStoreInstallResult(
-        success=bool(data.get("success")), message=str(data.get("message") or ""), data=data
+        success=bool(data.get("success")),
+        message=str(data.get("message") or ""),
+        data=data,
     )
 
 
@@ -379,11 +392,14 @@ async def mod_store_install_customer_delivery_seed(
     from app.mod_sdk.customer_delivery_seed import install_customer_delivery_seed_package
 
     data = await install_customer_delivery_seed_package(
+        request=request,
         mod_id=mod_id,
         industry_id=industry_id,
         market_token=market_token,
         account_username=account_username,
     )
     return _facade().ModStoreInstallResult(
-        success=bool(data.get("success")), message=str(data.get("message") or ""), data=data
+        success=bool(data.get("success")),
+        message=str(data.get("message") or ""),
+        data=data,
     )

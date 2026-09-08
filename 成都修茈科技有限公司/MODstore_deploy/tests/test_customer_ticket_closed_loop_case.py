@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import types
 import uuid
 from pathlib import Path
@@ -72,7 +73,7 @@ def case_ticket_payload():
 
 
 def test_case_a_publish_enrich_then_intake_plan_then_routing_dispatch(
-    monkeypatch, case_ticket_payload
+    monkeypatch, case_ticket_payload, tmp_path
 ):
     from modstore_server import customer_service_api
     from modstore_server.duty_workforce_contracts import (
@@ -89,9 +90,44 @@ def test_case_a_publish_enrich_then_intake_plan_then_routing_dispatch(
     assert enriched["ticket"]["knowledge_sources"]
     assert "对比度" in enriched["requests"][0]["text"]
 
+    # Commit the canonical ticket and its durable dispatch in the same isolated DB.
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from modstore_server.customer_issue_intake import enqueue_issue
+    from modstore_server.eventing import db_outbox
+    from modstore_server.models import Base, OutboxEvent, User
+    from modstore_server.models_cs import CustomerServiceSession, CustomerServiceTicket
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'case.db'}")
+    Base.metadata.create_all(engine)
+    sessions = sessionmaker(bind=engine)
+    monkeypatch.setattr(db_outbox, "get_session_factory", lambda: sessions)
+    with sessions.begin() as db:
+        db.add(User(id=42, username="isolated-case-owner", password_hash="unused"))
+        db.add(CustomerServiceSession(id=1001, user_id=42))
+        ticket = CustomerServiceTicket(
+            id=case_ticket_payload["ticket_id"],
+            ticket_no=case_ticket_payload["ticket_no"],
+            session_id=1001,
+            user_id=42,
+            title=case_ticket_payload["title"],
+            summary=case_ticket_payload["summary"],
+            intent="product_issue",
+            status="processing",
+            evidence_json=json.dumps({"issue_domain": "website"}),
+        )
+        db.add(ticket)
+        db.flush()
+        enqueue_issue(db, ticket)
+    with sessions() as db:
+        event = db.query(OutboxEvent).one()
+        assert event.status == "pending"
+        assert json.loads(event.payload_json)["ticket_id"] == case_ticket_payload["ticket_id"]
+
     published: list[dict] = []
 
-    def _capture_publish(event_type, payload, source="unit", fingerprint=None):
+    def _capture_publish(event_type, payload, source="unit", fingerprint=None, dedupe_minutes=0):
         published.append({"event_type": event_type, "payload": dict(payload), "source": source})
         return True
 
@@ -101,6 +137,14 @@ def test_case_a_publish_enrich_then_intake_plan_then_routing_dispatch(
     )
     customer_service_api._publish_customer_ticket_incident(dict(case_ticket_payload))
     assert published and published[0]["event_type"] == "ops.intake.customer_ticket"
+    assert published[0]["payload"]["ticket_id"] == case_ticket_payload["ticket_id"]
+    assert published[0]["payload"]["user_id"] == 42
+    with sessions() as db:
+        assert db.query(OutboxEvent).one().status == "dispatched"
+        assert db.get(CustomerServiceTicket, case_ticket_payload["ticket_id"]).user_id == 42
+    customer_service_api._publish_customer_ticket_incident(dict(case_ticket_payload))
+    assert len(published) == 1  # A second wake cannot dispatch an already drained event.
+    engine.dispose()
     assert published[0]["payload"].get("requests")
     assert published[0]["payload"].get("ticket", {}).get("knowledge_sources")
 

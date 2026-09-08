@@ -232,7 +232,11 @@ class TestModManagerRefreshModsRoot:
     def test_env_updates_root(self, tmp_path):
         new_root = str(tmp_path / "new_mods")
         os.makedirs(new_root)
-        mm = ModManager(mods_root=str(tmp_path / "old_mods"))
+        with patch(
+            "app.infrastructure.mods.mod_manager._default_mods_root",
+            return_value=str(tmp_path / "old_mods"),
+        ):
+            mm = ModManager()
         with patch.dict("os.environ", {"XCAGI_MODS_ROOT": new_root}):
             mm._refresh_mods_root_if_needed()
         assert mm.mods_root == new_root
@@ -244,10 +248,11 @@ class TestModManagerRefreshModsRoot:
         assert mm.mods_root == str(tmp_path)
 
     def test_current_missing_re_resolves(self, tmp_path):
-        mm = ModManager(mods_root=str(tmp_path / "missing_dir"))
         with patch(
-            "app.infrastructure.mods.mod_manager._default_mods_root", return_value=str(tmp_path)
+            "app.infrastructure.mods.mod_manager._default_mods_root",
+            side_effect=[str(tmp_path / "missing_dir"), str(tmp_path)],
         ):
+            mm = ModManager()
             mm._refresh_mods_root_if_needed()
         assert mm.mods_root == str(tmp_path)
 
@@ -785,6 +790,61 @@ class TestModManagerMetadataToApiDict:
 # ========================= ModManager - install_mod_package ===============
 
 
+def _signed_manager_fixture(tmp_path, monkeypatch, *, installed=False, loaded=False):
+    """Real retained archives; only registry/runtime activation are isolated."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    from app.infrastructure.mods import trusted_keys
+    from app.infrastructure.mods.package import ModPackage
+
+    key = Ed25519PrivateKey.generate()
+    secret = tmp_path / "synthetic-signing.pem"
+    secret.write_bytes(
+        key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+    )
+    public = (
+        key.public_key()
+        .public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)
+        .decode()
+    )
+    monkeypatch.setattr(trusted_keys, "TRUSTED_MOD_PUBLIC_KEYS_PEM", (public,))
+    monkeypatch.delenv("XCAGI_MOD_PUBLIC_KEY", raising=False)
+    monkeypatch.setenv("XCAGI_REQUIRE_SIGNED_MODS", "1")
+    mods = tmp_path / "installed-mods"
+    mods.mkdir()
+    manager = ModManager(mods_root=str(mods))
+    registry = MagicMock()
+    registry.get_mod_metadata.return_value = None
+    monkeypatch.setattr("app.infrastructure.mods.mod_manager.get_mod_registry", lambda: registry)
+
+    def package(version="2.0.0", content="new", *, signed=True):
+        source = tmp_path / ("source-" + version)
+        source.mkdir(exist_ok=True)
+        (source / "manifest.json").write_text(
+            json.dumps({"id": "fixture-mod", "name": "Fixture", "version": version})
+        )
+        (source / "logic.py").write_text(content)
+        return ModPackage(str(source)).create_package(
+            str(tmp_path / "packages"),
+            include_signature=signed,
+            private_key=str(secret) if signed else None,
+        )
+
+    if installed:
+        assert manager.install_mod_package(package("1.0.0", "old"), activate=False)[0]
+        registry.get_mod_metadata.return_value = ModMetadata(
+            id="fixture-mod", name="Fixture", version="1.0.0", mod_path=str(mods / "fixture-mod")
+        )
+    if loaded:
+        manager._loaded_mods.append("fixture-mod")
+    return manager, package, registry
+
+
 class TestModManagerInstallModPackage:
     def test_signature_error(self, tmp_path):
         mm = ModManager(mods_root=str(tmp_path))
@@ -835,34 +895,19 @@ class TestModManagerInstallModPackage:
             result = mm.install_mod_package("/fake/path.xcmod")
         assert result[0] is False
 
-    def test_activate_false(self, tmp_path):
-        mm = ModManager(mods_root=str(tmp_path))
-        # Create a separate extract directory (not under mods_root) to avoid
-        # shutil.rmtree(target_path) removing the extract source.
-        extract_dir = tmp_path / "extract" / "test_mod"
-        extract_dir.mkdir(parents=True)
-        (extract_dir / "manifest.json").write_text(
-            '{"id": "test_mod", "name": "Test", "version": "1.0"}'
-        )
-        with (
-            patch(
-                "app.infrastructure.mods.mod_manager.ModPackage.extract_package",
-                return_value=(
-                    str(extract_dir),
-                    {"id": "test_mod", "name": "Test", "version": "1.0"},
-                ),
-            ),
-            patch(
-                "app.infrastructure.mods.mod_manager.parse_manifest",
-                return_value=ModMetadata(
-                    id="test_mod", name="Test", version="1.0", mod_path=str(extract_dir)
-                ),
-            ),
-            patch.object(mm, "_refresh_mods_root_if_needed"),
-        ):
-            result = mm.install_mod_package("/fake/path.xcmod", activate=False)
+    def test_activate_false(self, tmp_path, monkeypatch):
+        from app.infrastructure.mods.install_receipts import read_verified_install
+
+        mm, package, _ = _signed_manager_fixture(tmp_path, monkeypatch)
+        with patch.object(mm, "load_mod") as load:
+            result = mm.install_mod_package(package(), activate=False)
         assert result[0] is True
         assert "未激活" in result[1]
+        assert result[2].version == "2.0.0"
+        load.assert_not_called()
+        receipt = read_verified_install("fixture-mod", mods_root=mm.mods_root)
+        assert receipt["signature_verified"] is True
+        assert receipt["runtime_status"] == "installed"
 
     def test_generic_exception(self, tmp_path):
         mm = ModManager(mods_root=str(tmp_path))
@@ -943,34 +988,26 @@ class TestModManagerUpdateMod:
         assert result[0] is False
         assert "未安装" in result[1]
 
-    def test_update_was_loaded(self, tmp_path):
-        mm = ModManager(mods_root=str(tmp_path))
-        mm._loaded_mods = ["test_mod"]
-        mock_registry = Mock()
-        mock_meta = Mock()
-        mock_meta.version = "1.0"
-        mock_registry.get_mod_metadata.return_value = mock_meta
-        # Create a separate extract directory (not under mods_root) for copytree source
-        extract_dir = tmp_path / "extract" / "test_mod"
-        extract_dir.mkdir(parents=True)
-        (extract_dir / "manifest.json").write_text('{"id": "test_mod", "version": "2.0"}')
-        mock_pkg = Mock()
-        mock_pkg.manifest = {"id": "test_mod", "version": "2.0"}
-        with (
-            patch(
-                "app.infrastructure.mods.mod_manager.get_mod_registry", return_value=mock_registry
-            ),
-            patch("app.infrastructure.mods.mod_manager.ModPackage", return_value=mock_pkg),
-            patch(
-                "app.infrastructure.mods.mod_manager.ModPackage.extract_package",
-                return_value=(str(extract_dir), {"id": "test_mod", "version": "2.0"}),
-            ),
-            patch.object(mm, "unload_mod", return_value=True),
-            patch.object(mm, "load_mod", return_value=True),
-            patch("app.infrastructure.mods.mod_manager.parse_manifest", return_value=Mock()),
-        ):
-            result = mm.update_mod("test_mod", "/fake/path.xcmod")
-        assert result[0] is True
+    def test_update_was_loaded(self, tmp_path, monkeypatch):
+        from app.infrastructure.mods import install_receipts as receipts
+
+        mm, package, _ = _signed_manager_fixture(tmp_path, monkeypatch, installed=True, loaded=True)
+        with patch.object(mm, "unload_mod") as unload, patch.object(mm, "load_mod") as load:
+            result = mm.update_mod("fixture-mod", package())
+        assert result[0] is True and "重启后生效" in result[1]
+        assert (Path(mm.mods_root) / "fixture-mod/logic.py").read_text() == "old"
+        unload.assert_not_called()
+        load.assert_not_called()
+        assert (
+            receipts.read_verified_install("fixture-mod", mods_root=mm.mods_root)[
+                "requires_restart"
+            ]
+            is True
+        )
+        assert receipts.activate_pending_install("fixture-mod", mods_root=mm.mods_root) is False
+        monkeypatch.setattr(receipts, "PROCESS_ID", "fixture-new-process")
+        assert receipts.activate_pending_install("fixture-mod", mods_root=mm.mods_root) is True
+        assert (Path(mm.mods_root) / "fixture-mod/logic.py").read_text() == "new"
 
     def test_update_extract_error_rollback(self, tmp_path):
         mm = ModManager(mods_root=str(tmp_path))

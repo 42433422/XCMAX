@@ -17,11 +17,42 @@ publisher = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(publisher)
 
 
-def _package(path: Path) -> str:
+@pytest.fixture
+def signing_key(tmp_path, monkeypatch):
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    from app.infrastructure.mods import trusted_keys
+
+    key = Ed25519PrivateKey.generate()
+    path = tmp_path / "synthetic-signing.pem"
+    path.write_bytes(
+        key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+    )
+    monkeypatch.setattr(
+        trusted_keys,
+        "TRUSTED_MOD_PUBLIC_KEYS_PEM",
+        (
+            key.public_key()
+            .public_bytes(
+                serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
+            )
+            .decode(),
+        ),
+    )
+    return path
+
+
+def _package(path: Path, private_key: Path) -> str:
     manifest = {
         "id": "receipt-verifier",
         "name": "Receipt Verifier",
         "version": "1.2.3",
+        "public_listing": True,
         "backend": {"entry": "blueprints", "init": "mod_init"},
         "frontend": {"routes": "routes"},
     }
@@ -29,6 +60,14 @@ def _package(path: Path) -> str:
         archive.writestr("manifest.json", json.dumps(manifest))
         archive.writestr("backend/blueprints.py", "# route\n")
         archive.writestr("frontend/routes.js", "export default []\n")
+    from app.infrastructure.mods.package_signing import sign_members
+
+    with zipfile.ZipFile(path) as archive:
+        signature = sign_members(
+            [(name, archive.read(name)) for name in archive.namelist()], manifest, private_key
+        )
+    with zipfile.ZipFile(path, "a") as archive:
+        archive.writestr("META-INF/signature.json", signature)
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
@@ -47,9 +86,9 @@ class _Response:
         return self._raw
 
 
-def test_publish_verifies_review_listing_and_download(tmp_path: Path) -> None:
+def test_publish_verifies_review_listing_and_download(tmp_path: Path, signing_key) -> None:
     package = tmp_path / "receipt-verifier-1.2.3.xcmod"
-    digest = _package(package)
+    digest = _package(package, signing_key)
     calls: list[tuple[str, str]] = []
 
     def opener(request, timeout=0):
@@ -104,9 +143,9 @@ def test_publish_verifies_review_listing_and_download(tmp_path: Path) -> None:
     assert [method for method, _ in calls] == ["POST", "GET", "GET", "GET"]
 
 
-def test_publish_fails_closed_when_public_listing_is_missing(tmp_path: Path) -> None:
+def test_publish_fails_closed_when_public_listing_is_missing(tmp_path: Path, signing_key) -> None:
     package = tmp_path / "receipt-verifier-1.2.3.xcmod"
-    digest = _package(package)
+    digest = _package(package, signing_key)
 
     def opener(request, timeout=0):
         del timeout
@@ -134,9 +173,9 @@ def test_publish_fails_closed_when_public_listing_is_missing(tmp_path: Path) -> 
         )
 
 
-def test_http_error_does_not_echo_token(tmp_path: Path) -> None:
+def test_http_error_does_not_echo_token(tmp_path: Path, signing_key) -> None:
     package = tmp_path / "receipt-verifier-1.2.3.xcmod"
-    _package(package)
+    _package(package, signing_key)
 
     def opener(request, timeout=0):
         del request, timeout
@@ -162,3 +201,54 @@ def test_duty_roster_parser_finds_nested_ids(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     assert publisher._duty_employee_ids(roster) == {"internal-one", "top-level"}
+
+
+@pytest.mark.parametrize(
+    "classification",
+    [
+        {},
+        {"public_listing": False},
+        {"public_listing": True, "owner_user_id": 5},
+        {"public_listing": True, "artifact": "customer_delivery_seed"},
+        {"public_listing": True, "visibility": "private"},
+    ],
+)
+def test_unclassified_and_private_packages_never_send_a_request(tmp_path, classification):
+    package = tmp_path / "private.xcmod"
+    with zipfile.ZipFile(package, "w") as archive:
+        archive.writestr(
+            "manifest.json", json.dumps({"id": "private-mod", "version": "1.0.0", **classification})
+        )
+    calls = []
+    with pytest.raises(publisher.PublishError):
+        publisher.publish_package(
+            package,
+            base_url="https://store.example",
+            token="test",
+            source_repository="owner/repo",
+            source_sha="a" * 40,
+            workflow_run_id="1",
+            opener=lambda *a, **k: calls.append(a),
+        )
+    assert calls == []
+
+
+def test_public_package_without_signature_never_uploads(tmp_path):
+    package = tmp_path / "unsigned.xcmod"
+    with zipfile.ZipFile(package, "w") as archive:
+        archive.writestr(
+            "manifest.json",
+            json.dumps({"id": "public", "version": "1.0.0", "public_listing": True}),
+        )
+    calls = []
+    with pytest.raises(publisher.PublishError, match="signed package required"):
+        publisher.publish_package(
+            package,
+            base_url="https://store.example",
+            token="test",
+            source_repository="owner/repo",
+            source_sha="a" * 40,
+            workflow_run_id="1",
+            opener=lambda *a, **k: calls.append(a),
+        )
+    assert calls == []

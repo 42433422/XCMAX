@@ -41,7 +41,9 @@ def get_desktop_data_dir(data_dir: str | os.PathLike[str] | None = None) -> Path
     return Path(raw).expanduser().resolve() if raw else _default_user_data_dir().resolve()
 
 
-def ensure_desktop_dirs(data_dir: str | os.PathLike[str] | None = None) -> dict[str, Path]:
+def ensure_desktop_dirs(
+    data_dir: str | os.PathLike[str] | None = None,
+) -> dict[str, Path]:
     root = get_desktop_data_dir(data_dir)
     dirs = {
         "root": root,
@@ -63,7 +65,9 @@ def sqlite_database_url(data_dir: str | os.PathLike[str] | None = None) -> str:
     return "sqlite:///" + dirs["data"].joinpath("xcagi.db").as_posix()
 
 
-def configure_desktop_environment(data_dir: str | os.PathLike[str] | None = None) -> Path:
+def configure_desktop_environment(
+    data_dir: str | os.PathLike[str] | None = None,
+) -> Path:
     """Set process environment defaults for the local desktop runtime.
 
     Delivery default is SQLite under userData. Optional ``config/database.json``
@@ -147,12 +151,5 @@ def configure_desktop_environment(data_dir: str | os.PathLike[str] | None = None
         refresh_installed_industry_mods_from_bundle(mods_root=dirs["mods"])
     except RECOVERABLE_ERRORS as exc:
         logging.getLogger(__name__).warning("Desktop industry mod refresh skipped: %s", exc)
-
-    try:
-        from app.desktop_runtime.sunbird_delivery_seed import apply_sunbird_roster_seed_if_needed
-
-        apply_sunbird_roster_seed_if_needed(root)
-    except RECOVERABLE_ERRORS as exc:
-        logging.getLogger(__name__).warning("Sunbird roster seed skipped: %s", exc)
 
     return root

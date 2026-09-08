@@ -4,6 +4,7 @@ from app.mod_sdk.customer_delivery import (
     delivery_for_account,
     delivery_for_account_custom_mod,
     delivery_for_industry_mod,
+    delivery_for_runtime_mod,
     industry_id_for_account,
     list_customer_deliveries,
 )
@@ -38,20 +39,27 @@ def test_canonical_mod_id_for_industry():
 
 
 def test_customer_delivery_has_brand_not_in_baseline():
-    row = delivery_for_industry_mod("attendance-industry")
+    assert delivery_for_industry_mod("attendance-industry") is None
+    row = delivery_for_industry_mod("sunbird-attendance-custom")
     assert row is not None
     assert row.get("customer_brand") == "太阳鸟 PRO"
     assert row.get("industry_id") == "饰品包装"
     assert row.get("industry_mod_id") == "accessories-packaging-industry"
-    assert row.get("runtime_mod_id") == "attendance-industry"
+    assert row.get("runtime_mod_id") == "sunbird-attendance-custom"
+    assert row.get("delivery_mode") == "private_mod"
     deliveries = list_customer_deliveries()
     assert any(d.get("industry_mod_id") == "coating-industry" for d in deliveries)
 
 
-def test_customer_delivery_custom_mod_accepts_industry_mod_id():
-    row = delivery_for_account_custom_mod("taiyangniao-pro", "attendance-industry")
+def test_customer_delivery_custom_mod_resolves_private_runtime_not_public_attendance():
+    assert delivery_for_account_custom_mod("taiyangniao-pro", "attendance-industry") is None
+    row = delivery_for_account_custom_mod("taiyangniao-pro", "sunbird-attendance-custom")
     assert row is not None
     assert row.get("delivery_seed_package", {}).get("pkg_id") == "sunbird-delivery-seed"
+    assert row == delivery_for_account_custom_mod("taiyangniao-pro", "饰品包装")
+    assert row == delivery_for_runtime_mod("sunbird-attendance-custom", account_username="sunbird")
+    assert delivery_for_runtime_mod("sunbird-attendance-custom", account_username="OTHER") is None
+    assert delivery_for_runtime_mod("sunbird-attendance-custom") is None
 
 
 def test_sunbird_account_industry_comes_from_delivery_ssot():

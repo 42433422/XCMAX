@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, cast
 
+from fastapi import HTTPException
+
 from app.application.session_account_meta import AccountKind
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+_DELIVERY_ERRORS: tuple[type[Exception], ...] = RECOVERABLE_ERRORS + (HTTPException,)
 
 logger = logging.getLogger(__name__)
 
@@ -254,4 +259,16 @@ async def finalize_enterprise_login(
         )
 
         result["delivery_receipt"] = await report_desktop_login_delivery_receipt(market_token)
+        try:
+            from app.application.mod_delivery_receipt_outbox import (
+                retry_delivery_receipts_for_session,
+            )
+
+            async with asyncio.timeout(3):
+                result["mod_delivery_receipts"] = await retry_delivery_receipts_for_session(
+                    str(session_id),
+                    market_token,
+                )
+        except _DELIVERY_ERRORS:
+            logger.warning("Mod delivery receipts deferred until the next authenticated retry")
     return result

@@ -54,19 +54,9 @@ _require_admin = require_admin
 def _publish_customer_ticket_incident(payload: Dict[str, Any]) -> None:
     """Fire-and-forget：工单事件派发可能跑员工编排/LLM，绝不能阻塞 /chat 响应。"""
     try:
-        from modstore_server.duty_workforce_contracts import (
-            enrich_customer_ticket_publish_payload,
-        )
-        from modstore_server.incident_bus import publish as publish_incident
+        from modstore_server.customer_issue_intake import dispatch_pending_issue_events
 
-        # Publish boundary: never send bare ticket_id/summary into bindings.
-        enriched = enrich_customer_ticket_publish_payload(dict(payload or {}))
-        publish_incident(
-            "ops.intake.customer_ticket",
-            enriched,
-            source="customer-service-api",
-            fingerprint=None,
-        )
+        dispatch_pending_issue_events(int(payload.get("ticket_id") or 0))
     except RECOVERABLE_ERRORS:
         logger.exception("customer-service ticket incident publish failed")
 
@@ -136,63 +126,22 @@ async def customer_service_chat(
         session_id=body.session_id,
         context=ctx,
     )
-    db.commit()
     t = result.get("ticket") if isinstance(result.get("ticket"), dict) else {}
     if t:
-        evidence = t.get("evidence") if isinstance(t.get("evidence"), dict) else {}
-        followups = evidence.get("followups") if isinstance(evidence, dict) else None
-        last_followup = followups[-1] if isinstance(followups, list) and followups else None
-        issue_domain = str(t.get("issue_domain") or "")[:32]
-        summary_text = str(t.get("summary") or "")[:2000]
-        title_text = str(t.get("title") or "")[:500]
-        # 官网/首页类问题走 website scope，便于 unified orchestrator / website_runner 接单
-        blob = f"{issue_domain} {title_text} {summary_text}".lower()
-        if any(
-            token in blob
-            for token in (
-                "website",
-                "官网",
-                "首页",
-                "landing",
-                "xiu-ci",
-                "xiuci",
-            )
-        ) or issue_domain in {"website", "官网"}:
-            scope = "website"
-        elif issue_domain in {"desktop", "android", "fhd", "modstore"}:
-            scope = issue_domain
-        else:
-            scope = "global"
-        _schedule_customer_ticket_incident(
-            {
-                "subject_id": str(t.get("ticket_no") or t.get("id") or ""),
-                "ticket_id": int(t.get("id") or 0),
-                "ticket_no": str(t.get("ticket_no") or "")[:128],
-                "title": title_text,
-                "intent": str(t.get("intent") or "")[:64],
-                "issue_domain": issue_domain,
-                "issue_domain_label": str(t.get("issue_domain_label") or "")[:32],
-                "user_confirmed_domain": str(
-                    (evidence or {}).get("user_confirmed_domain") or t.get("issue_domain") or ""
-                )[:32],
-                "user_followup": str(
-                    (last_followup or {}).get("text") if isinstance(last_followup, dict) else ""
-                )[:200],
-                "status": str(t.get("status") or "")[:32],
-                "summary": summary_text,
-                "user_id": int(user.id or 0),
-                "session_id": int((result.get("session") or {}).get("id") or 0),
-                "scope": scope,
-                # 供 intake-dispatcher skill-intake-normalize 识别为客服工单
-                "source": "customer_ticket",
-                "raw": {
-                    "title": title_text,
-                    "body": summary_text,
-                    "issue_domain": issue_domain,
-                    "ticket_no": str(t.get("ticket_no") or "")[:128],
-                },
-            }
-        )
+        from modstore_server.customer_issue_intake import enqueue_issue
+
+        ticket = db.get(CustomerServiceTicket, int(t.get("id") or 0))
+        if ticket is not None:
+            import hashlib
+
+            revision = hashlib.sha256(
+                json_dumps({"message": message, "evidence": t.get("evidence")}).encode()
+            ).hexdigest()[:24]
+            enqueue_issue(db, ticket, revision=revision)
+            result["ticket"] = ticket_payload(ticket)
+    db.commit()
+    if t:
+        _schedule_customer_ticket_incident({"ticket_id": int(t.get("id") or 0)})
     return result
 
 
@@ -461,3 +410,7 @@ router.include_router(custom_delivery_router)
 router.include_router(custom_delivery_crm_router)
 router.include_router(custom_delivery_create_router)
 router.include_router(custom_delivery_payment_router)
+
+from modstore_server.customer_issue_api import router as customer_issue_router
+
+router.include_router(customer_issue_router)

@@ -3,6 +3,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from fastapi import HTTPException
 
 from app.application.desktop_delivery_receipt import (
     desktop_installation_id,
@@ -60,7 +61,10 @@ async def test_login_receipt_does_not_block_without_market_token():
 
 
 @pytest.mark.asyncio
-async def test_desktop_login_finalize_reports_delivery_receipt():
+@pytest.mark.parametrize(
+    "retry_error", [None, HTTPException(401, "session unavailable"), ConnectionError("offline")]
+)
+async def test_desktop_login_finalize_reports_delivery_receipt(retry_error):
     from app.application.enterprise_login_finalize import finalize_enterprise_login
 
     receipt = {"reported": True, "duplicate": False, "source": "desktop_login"}
@@ -101,6 +105,12 @@ async def test_desktop_login_finalize_reports_delivery_receipt():
             new_callable=AsyncMock,
             return_value=receipt,
         ) as report,
+        patch(
+            "app.application.mod_delivery_receipt_outbox.retry_delivery_receipts_for_session",
+            new_callable=AsyncMock,
+            return_value={"installed_reported": 0, "runtime_reported": 0, "pending": 0},
+            side_effect=retry_error,
+        ) as retry,
     ):
         result = await finalize_enterprise_login(
             result={"success": True, "user": {"id": 25}},
@@ -118,3 +128,5 @@ async def test_desktop_login_finalize_reports_delivery_receipt():
 
     report.assert_awaited_once_with("market-token")
     assert result["delivery_receipt"] == receipt
+    retry.assert_awaited_once_with("session-id", "market-token")
+    assert result["success"] is True

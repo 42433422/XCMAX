@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, Set
 
+from modstore_server.catalog_publication_policy import is_private_package
 from modstore_server.catalog_store import load_store, norm_pkg_id, norm_version
 from modstore_server.duty_roster import (
     all_planned_employee_ids,
@@ -49,7 +50,7 @@ def package_row_eligible_for_public_index(
         return False
     ver = norm_version(row.get("version"))
     artifact = str(row.get("artifact") or "mod").strip().lower()
-    if artifact == "customer_delivery_seed":
+    if is_private_package(row):
         return False
 
     if pid in all_planned_employee_ids() or is_planned_duty_employee_pack(pid, artifact):

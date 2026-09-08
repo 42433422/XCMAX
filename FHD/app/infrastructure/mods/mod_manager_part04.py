@@ -175,6 +175,9 @@ def _register_single_mod_http_routes(
                     _facade().logger.info("WebSocket routes registered for mod: %s", mid)
         if registered:
             mod_manager._http_routes_registered.add(mid)
+            from app.infrastructure.mods.install_receipts import mark_runtime_loaded
+
+            mark_runtime_loaded(mid, mods_root=mod_manager.mods_root, api_registered=True)
             return True
         _facade().logger.info("Mod %s has no HTTP route registrar, skip", mid)
         return False

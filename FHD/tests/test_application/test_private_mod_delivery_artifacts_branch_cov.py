@@ -1,18 +1,17 @@
 """分支覆盖测试：app.application.private_mod_delivery_artifacts 模块。
 
 策略：
-- 用 patch 隔离 httpx.AsyncClient（网络）、catalog_client、market_account、
-  mods.employee_registry / mod_manager / artifact_package / package。
+- 网络、账号和运行激活隔离；包使用真实 Ed25519 签名、解压、Mod/员工安装和持久回执。
 - 异步测试依赖 pyproject 的 asyncio_mode=auto，无需手写 asyncio marker。
 - 覆盖每个公共函数 / 纯函数 / 条件分支 / 异常路径 / 成功路径。
 """
 
 from __future__ import annotations
 
-import io
+import hashlib
 import json
 import zipfile
-from contextlib import ExitStack
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -22,15 +21,6 @@ from app.application import private_mod_delivery_artifacts as mod
 from app.infrastructure.mods.artifact_constants import ARTIFACT_EMPLOYEE_PACK
 
 BASE = "app.application.private_mod_delivery_artifacts"
-
-
-def _zip_bytes(manifest: dict, extra: dict | None = None) -> bytes:
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w") as z:
-        z.writestr("manifest.json", json.dumps(manifest))
-        for name, data in (extra or {}).items():
-            z.writestr(name, data)
-    return buf.getvalue()
 
 
 def _async_client(
@@ -254,335 +244,405 @@ def httpx_connect_error():
 # ---------------------------------------------------------------------------
 
 
-class TestInstallCustomDeliveryArtifact:
-    def _patch_common(self, client):
+@pytest.fixture
+def delivery(tmp_path, monkeypatch):
+    """Real signature, extraction, installation and outbox; isolated network/runtime."""
+    import httpx
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    from app.infrastructure.mods import mod_manager, trusted_keys
+    from app.infrastructure.mods.employee_registry import EmployeeRegistry
+    from app.infrastructure.mods.package import ModPackage
+
+    key = Ed25519PrivateKey.generate()
+    secret = tmp_path / "synthetic-signing.pem"
+    secret.write_bytes(
+        key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+    )
+    public = (
+        key.public_key()
+        .public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)
+        .decode()
+    )
+    monkeypatch.setattr(trusted_keys, "TRUSTED_MOD_PUBLIC_KEYS_PEM", (public,))
+    monkeypatch.delenv("XCAGI_MOD_PUBLIC_KEY", raising=False)
+    monkeypatch.setenv("XCAGI_REQUIRE_SIGNED_MODS", "1")
+    private_tmp = tmp_path / "temporary"
+    private_tmp.mkdir()
+    monkeypatch.setattr(mod.tempfile, "tempdir", str(private_tmp))
+    data = tmp_path / "data"
+    data.mkdir()
+    monkeypatch.setattr("app.utils.path_io.path_utils.get_app_data_dir", lambda: str(data))
+    monkeypatch.setattr(
+        "app.application.desktop_delivery_receipt.desktop_installation_id",
+        lambda: "synthetic-desktop-instance-123456",
+    )
+    monkeypatch.setattr("app.build_identity.build_identity", lambda: {"git_sha": "a" * 40})
+    mods_root = tmp_path / "mods"
+    mods_root.mkdir()
+    manager = mod_manager.ModManager(mods_root=str(mods_root))
+    assert Path(manager.mods_root) == mods_root
+    registry = MagicMock()
+    registry.get_mod_metadata.return_value = None
+    monkeypatch.setattr(mod_manager, "get_mod_registry", lambda: registry)
+    monkeypatch.setattr(mod_manager, "get_mod_manager", lambda: manager)
+    # Activation itself is a boundary: no arbitrary Mod code or HTTP routes execute.
+    activation = MagicMock(return_value=True)
+    monkeypatch.setattr(manager, "load_mod", activation)
+    install = MagicMock(wraps=manager.install_mod_package)
+    monkeypatch.setattr(manager, "install_mod_package", install)
+    api_ready = MagicMock(return_value=False)
+    monkeypatch.setattr(mod_manager, "ensure_mod_api_ready", api_ready)
+    employees = EmployeeRegistry(manager.mods_root)
+    employee_install = MagicMock(wraps=employees.install_from_package)
+    monkeypatch.setattr(employees, "install_from_package", employee_install)
+    monkeypatch.setattr(
+        "app.infrastructure.mods.employee_registry.get_employee_registry",
+        lambda: employees,
+    )
+    monkeypatch.setattr("app.mod_sdk.employee_runtime.refresh_employee_pack_runtime", MagicMock())
+    monkeypatch.setattr(
+        "app.fastapi_routes.market_account._market_base_url",
+        lambda: "https://synthetic-market.invalid",
+    )
+    client = _async_client()
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: client)
+    counter = 0
+
+    def package(
+        *,
+        kind="module",
+        mid="fixture-mod",
+        version="2.0.0",
+        signed=True,
+        content="fixture code",
+    ):
+        nonlocal counter
+        counter += 1
+        source = tmp_path / ("source-" + str(counter))
+        source.mkdir()
+        manifest = {"id": mid, "name": "Fixture", "version": version}
+        if kind == "employee":
+            manifest.update(
+                artifact=ARTIFACT_EMPLOYEE_PACK,
+                scope="global",
+                employee={"id": "fixture-employee"},
+            )
+        (source / "manifest.json").write_text(json.dumps(manifest))
+        (source / "logic.py").write_text(content)
+        path = ModPackage(str(source)).create_package(
+            str(tmp_path / ("packages-" + str(counter))),
+            include_signature=signed,
+            private_key=str(secret) if signed else None,
+        )
+        return Path(path).read_bytes()
+
+    def response(raw, *, version="2.0.0", headers=None):
+        values = {
+            "X-Delivery-Receipt-Token": "synthetic-delivery-grant-123456",
+            "X-Delivery-Artifact-SHA256": hashlib.sha256(raw).hexdigest(),
+            "X-Delivery-Artifact-Version": version,
+        }
+        values.update(headers or {})
+        return httpx.Response(200, content=raw, headers=values)
+
+    def outbox_rows():
         return [
-            patch("httpx.AsyncClient", return_value=client),
-            patch(
-                "app.fastapi_routes.market_account._market_base_url",
-                return_value="https://m.example.com",
-            ),
+            json.loads(path.read_text()) for path in data.glob("mod-delivery-receipts/*/*.json")
         ]
 
-    def _enter(self, stack: ExitStack, client, *extra):
-        for cm in self._patch_common(client):
-            stack.enter_context(cm)
-        for cm in extra:
-            stack.enter_context(cm)
+    return SimpleNamespace(
+        root=tmp_path,
+        data=data,
+        manager=manager,
+        install=install,
+        activation=activation,
+        api_ready=api_ready,
+        employees=employees,
+        employee_install=employee_install,
+        client=client,
+        package=package,
+        response=response,
+        outbox_rows=outbox_rows,
+    )
 
-    def _extract_mod(self, manifest):
-        ModPackage = __import__(
-            "app.infrastructure.mods.package", fromlist=["ModPackage"]
-        ).ModPackage
-        return patch.object(
-            ModPackage,
-            "extract_package",
-            classmethod(lambda cls, *a, **k: ("/tmp/x", manifest)),
-        )
 
+class TestInstallCustomDeliveryArtifact:
     async def test_invalid_kind(self):
-        with pytest.raises(ValueError):
-            await mod.install_custom_delivery_artifact("tok", 1, "bundle")
+        with pytest.raises(ValueError, match="artifact_kind"):
+            await mod.install_custom_delivery_artifact("tok", 1, "bundle", owner_scope="tenant:1")
 
-    async def test_download_request_error(self):
-        client = _async_client(get_error=httpx_connect_error())
-        with ExitStack() as stack:
-            self._enter(stack, client)
-            with pytest.raises(ConnectionError):
-                await mod.install_custom_delivery_artifact("tok", 1, "module")
+    async def test_owner_is_required_before_download(self, delivery):
+        with pytest.raises(ValueError, match="工作空间"):
+            await mod.install_custom_delivery_artifact("tok", 1, "module")
+        delivery.client.get.assert_not_awaited()
+        delivery.install.assert_not_called()
 
-    async def test_http_error_with_detail(self):
-        client = _async_client(get_resp=_resp(404, body={"detail": "gone"}))
-        with ExitStack() as stack:
-            self._enter(stack, client)
-            with pytest.raises(RuntimeError) as ei:
-                await mod.install_custom_delivery_artifact("tok", 1, "module")
-        assert "gone" in str(ei.value)
+    async def test_token_required_before_download(self, delivery):
+        with pytest.raises(PermissionError):
+            await mod.install_custom_delivery_artifact("", 1, "module", owner_scope="tenant:1")
+        delivery.client.get.assert_not_awaited()
+        delivery.install.assert_not_called()
 
-    async def test_http_error_json_decode_fallback(self):
-        resp = _resp(500, body=None)
-        resp.json.side_effect = ValueError("bad")
-        client = _async_client(get_resp=resp)
-        with ExitStack() as stack:
-            self._enter(stack, client)
-            with pytest.raises(RuntimeError) as ei:
-                await mod.install_custom_delivery_artifact("tok", 1, "module")
-        assert "500" in str(ei.value)
+    async def test_download_request_error(self, delivery):
+        delivery.client.get.side_effect = httpx_connect_error()
+        with pytest.raises(ConnectionError):
+            await mod.install_custom_delivery_artifact("tok", 1, "module", owner_scope="tenant:1")
+        delivery.install.assert_not_called()
+        assert delivery.outbox_rows() == []
 
-    async def test_missing_receipt_token(self):
-        resp = _resp(200, content=b"data", headers={})
-        client = _async_client(get_resp=resp)
-        with ExitStack() as stack:
-            self._enter(stack, client)
-            with pytest.raises(RuntimeError) as ei:
-                await mod.install_custom_delivery_artifact("tok", 1, "module")
-        assert "回执凭证" in str(ei.value)
+    @pytest.mark.parametrize("invalid_json", [False, True])
+    async def test_http_error_preserves_detail_or_status(self, delivery, invalid_json):
+        response = _resp(404, body={"detail": "gone"})
+        if invalid_json:
+            response.json.side_effect = ValueError("bad")
+        delivery.client.get.return_value = response
+        with pytest.raises(RuntimeError, match="404" if invalid_json else "gone"):
+            await mod.install_custom_delivery_artifact("tok", 1, "module", owner_scope="tenant:1")
+        delivery.install.assert_not_called()
 
-    async def test_empty_content(self):
-        resp = _resp(200, content=b"", headers={"X-Delivery-Receipt-Token": "a" * 20})
-        client = _async_client(get_resp=resp)
-        with ExitStack() as stack:
-            self._enter(stack, client)
-            with pytest.raises(RuntimeError) as ei:
-                await mod.install_custom_delivery_artifact("tok", 1, "module")
-        assert "为空" in str(ei.value)
-
-    async def test_employee_success(self):
-        token = "a" * 20
-        download = _resp(
-            200,
-            content=_zip_bytes({"id": "emp-1", "version": "1.2.3"}),
-            headers={"X-Delivery-Receipt-Token": token},
+    async def test_missing_receipt_token(self, delivery):
+        delivery.client.get.return_value = delivery.response(
+            delivery.package(), headers={"X-Delivery-Receipt-Token": ""}
         )
-        receipt = _resp(200, body={"ok": True, "id": 99})
-        client = _async_client(get_resp=download, request_resp=receipt)
-        registry = MagicMock()
-        registry.install_from_package.return_value = (True, "ok")
-        with ExitStack() as stack:
-            self._enter(
-                stack,
-                client,
-                patch(
-                    "app.infrastructure.mods.artifact_package.peek_artifact",
-                    return_value=ARTIFACT_EMPLOYEE_PACK,
-                ),
-                patch(
-                    "app.infrastructure.mods.employee_registry.get_employee_registry",
-                    return_value=registry,
-                ),
+        with pytest.raises(RuntimeError, match="回执凭证"):
+            await mod.install_custom_delivery_artifact("tok", 1, "module", owner_scope="tenant:1")
+        delivery.install.assert_not_called()
+
+    async def test_empty_content(self, delivery):
+        delivery.client.get.return_value = delivery.response(b"")
+        with pytest.raises(RuntimeError, match="为空"):
+            await mod.install_custom_delivery_artifact("tok", 1, "module", owner_scope="tenant:1")
+        delivery.install.assert_not_called()
+
+    @pytest.mark.parametrize("kind", ["module", "employee"])
+    @pytest.mark.parametrize(
+        "headers",
+        [
+            {"X-Delivery-Artifact-SHA256": "0" * 64},
+            {"X-Delivery-Artifact-SHA256": ""},
+            {"X-Delivery-Artifact-Version": ""},
+            {"X-Delivery-Artifact-Version": "9.9.9"},
+        ],
+    )
+    async def test_bad_digest_or_version_never_installs(self, delivery, kind, headers):
+        raw = delivery.package(kind=kind)
+        delivery.client.get.return_value = delivery.response(raw, headers=headers)
+        with pytest.raises(RuntimeError, match="摘要|版本"):
+            await mod.install_custom_delivery_artifact("tok", 7, kind, owner_scope="tenant:1")
+        delivery.install.assert_not_called()
+        delivery.employee_install.assert_not_called()
+        assert delivery.outbox_rows() == []
+        assert not (delivery.root / "mods" / "fixture-mod").exists()
+        assert not (delivery.root / "mods" / "_employees" / "fixture-mod").exists()
+
+    async def test_selected_artifact_is_in_download_url_and_must_match_signed_manifest(
+        self, delivery
+    ):
+        raw = delivery.package()
+        delivery.client.get.return_value = delivery.response(raw)
+        with pytest.raises(RuntimeError, match="身份"):
+            await mod.install_custom_delivery_artifact(
+                "tok", 7, "module", owner_scope="tenant:1", artifact_id="another-module"
             )
-            result = await mod.install_custom_delivery_artifact("tok", 7, "employee")
+        assert "artifact_id=another-module" in delivery.client.get.await_args.args[0]
+        delivery.install.assert_not_called()
+        assert delivery.outbox_rows() == []
+
+    @pytest.mark.parametrize("kind", ["module", "employee"])
+    async def test_signed_success_persists_installed_not_verified(self, delivery, kind):
+        raw = delivery.package(kind=kind)
+        delivery.client.get.return_value = delivery.response(raw)
+        result = await mod.install_custom_delivery_artifact("tok", 7, kind, owner_scope="tenant:1")
         assert result["success"] is True
-        assert result["artifact_id"] == "emp-1"
-        assert result["installed_version"] == "1.2.3"
-        assert result["delivery"]["ok"] is True
-        registry.install_from_package.assert_called_once()
-        client.request.assert_awaited_once()
-
-    async def test_employee_wrong_artifact_kind(self):
-        token = "a" * 20
-        download = _resp(200, content=b"x", headers={"X-Delivery-Receipt-Token": token})
-        client = _async_client(get_resp=download)
-        with ExitStack() as stack:
-            self._enter(
-                stack,
-                client,
-                patch(
-                    "app.infrastructure.mods.artifact_package.peek_artifact",
-                    return_value="mod_pack",
-                ),
-            )
-            with pytest.raises(ValueError) as ei:
-                await mod.install_custom_delivery_artifact("tok", 7, "employee")
-        assert "期望 AI 员工包" in str(ei.value)
-
-    async def test_employee_install_fail(self):
-        token = "a" * 20
-        download = _resp(
-            200,
-            content=_zip_bytes({"id": "emp-1", "version": "1.2.3"}),
-            headers={"X-Delivery-Receipt-Token": token},
-        )
-        client = _async_client(get_resp=download)
-        registry = MagicMock()
-        registry.install_from_package.return_value = (False, "install boom")
-        with ExitStack() as stack:
-            self._enter(
-                stack,
-                client,
-                patch(
-                    "app.infrastructure.mods.artifact_package.peek_artifact",
-                    return_value=ARTIFACT_EMPLOYEE_PACK,
-                ),
-                patch(
-                    "app.infrastructure.mods.employee_registry.get_employee_registry",
-                    return_value=registry,
-                ),
-            )
-            with pytest.raises(RuntimeError) as ei:
-                await mod.install_custom_delivery_artifact("tok", 7, "employee")
-        assert "install boom" in str(ei.value)
-
-    async def test_employee_missing_id(self):
-        token = "a" * 20
-        download = _resp(
-            200,
-            content=_zip_bytes({"version": "1.0.0"}),
-            headers={"X-Delivery-Receipt-Token": token},
-        )
-        client = _async_client(get_resp=download)
-        registry = MagicMock()
-        registry.install_from_package.return_value = (True, "ok")
-        with ExitStack() as stack:
-            self._enter(
-                stack,
-                client,
-                patch(
-                    "app.infrastructure.mods.artifact_package.peek_artifact",
-                    return_value=ARTIFACT_EMPLOYEE_PACK,
-                ),
-                patch(
-                    "app.infrastructure.mods.employee_registry.get_employee_registry",
-                    return_value=registry,
-                ),
-            )
-            with pytest.raises(ValueError) as ei:
-                await mod.install_custom_delivery_artifact("tok", 7, "employee")
-        assert "缺少 ID" in str(ei.value)
-
-    async def test_module_success(self):
-        token = "a" * 20
-        download = _resp(200, content=b"modbytes", headers={"X-Delivery-Receipt-Token": token})
-        receipt = _resp(200, body={"ok": True})
-        client = _async_client(get_resp=download, request_resp=receipt)
-        manager = MagicMock()
-        manager.install_mod_package.return_value = (
-            True,
-            "installed",
-            SimpleNamespace(version="2.0.0"),
-        )
-        with ExitStack() as stack:
-            self._enter(
-                stack,
-                client,
-                patch(
-                    "app.infrastructure.mods.mod_manager.get_mod_manager",
-                    return_value=manager,
-                ),
-                patch(
-                    "app.infrastructure.mods.mod_manager.ensure_mod_api_ready",
-                    return_value=True,
-                ),
-                self._extract_mod({"id": "mod-1", "version": "2.0.0"}),
-            )
-            result = await mod.install_custom_delivery_artifact("tok", 9, "module")
-        assert result["success"] is True
-        assert result["artifact_id"] == "mod-1"
+        assert result["artifact_id"] == "fixture-mod"
         assert result["installed_version"] == "2.0.0"
-        manager.install_mod_package.assert_called_once()
+        assert result["package_sha256"] == hashlib.sha256(raw).hexdigest()
+        assert result["runtime_verified"] is False
+        (row,) = delivery.outbox_rows()
+        assert row["owner"] == "tenant:1"
+        assert row["payload"]["stage"] == "installed"
+        assert row["payload"]["package_sha256"] == result["package_sha256"]
+        assert row["installed_reported"] is False
+        assert row["runtime_reported"] is False
+        assert row["payload"]["receipt_id"] == result["receipt_id"] + ":installed"
+        delivery.client.request.assert_not_awaited()
+        if kind == "module":
+            from app.infrastructure.mods.install_receipts import read_verified_install
 
-    async def test_module_install_fail(self):
-        token = "a" * 20
-        download = _resp(200, content=b"modbytes", headers={"X-Delivery-Receipt-Token": token})
-        client = _async_client(get_resp=download)
-        manager = MagicMock()
-        manager.install_mod_package.return_value = (False, "mod install boom", None)
-        with ExitStack() as stack:
-            self._enter(
-                stack,
-                client,
-                patch(
-                    "app.infrastructure.mods.mod_manager.get_mod_manager",
-                    return_value=manager,
-                ),
-                self._extract_mod({"id": "mod-1", "version": "2.0.0"}),
+            receipt = read_verified_install("fixture-mod", mods_root=delivery.manager.mods_root)
+            assert receipt["owner_scope"] == "tenant:1"
+            assert receipt["signature_verified"] is True
+            assert receipt["package_sha256"] == result["package_sha256"]
+            archive = (
+                delivery.root
+                / "mods/.install-receipts/fixture-mod"
+                / (result["package_sha256"] + ".zip")
             )
-            with pytest.raises(RuntimeError) as ei:
-                await mod.install_custom_delivery_artifact("tok", 9, "module")
-        assert "mod install boom" in str(ei.value)
+            assert archive.read_bytes() == raw
+            with zipfile.ZipFile(archive) as stored:
+                assert "META-INF/signature.json" in stored.namelist()
+            assert delivery.install.call_args.kwargs == {
+                "verify_signature": True,
+                "activate": True,
+                "owner_scope": "tenant:1",
+            }
+        else:
+            receipt = json.loads(
+                (
+                    delivery.root / "mods/_employees/fixture-mod/.xcagi-install-receipt.json"
+                ).read_text()
+            )
+            assert receipt["signature_verified"] is True
+            assert delivery.employee_install.call_args.kwargs["verify_signature"] is True
 
-    async def test_module_metadata_version_empty_falls_back(self):
-        token = "a" * 20
-        download = _resp(200, content=b"modbytes", headers={"X-Delivery-Receipt-Token": token})
-        receipt = _resp(200, body={"ok": True})
-        client = _async_client(get_resp=download, request_resp=receipt)
-        manager = MagicMock()
-        manager.install_mod_package.return_value = (True, "ok", SimpleNamespace(version=""))
-        with ExitStack() as stack:
-            self._enter(
-                stack,
-                client,
-                patch(
-                    "app.infrastructure.mods.mod_manager.get_mod_manager",
-                    return_value=manager,
-                ),
-                patch(
-                    "app.infrastructure.mods.mod_manager.ensure_mod_api_ready",
-                    return_value=True,
-                ),
-                self._extract_mod({"id": "mod-1", "version": "0.9.0"}),
-            )
-            result = await mod.install_custom_delivery_artifact("tok", 9, "module")
-        assert result["installed_version"] == "0.9.0"
+    async def test_employee_wrong_artifact_kind(self, delivery):
+        delivery.client.get.return_value = delivery.response(delivery.package())
+        with pytest.raises(ValueError, match="期望 AI 员工包"):
+            await mod.install_custom_delivery_artifact("tok", 7, "employee", owner_scope="tenant:1")
+        delivery.employee_install.assert_not_called()
 
-    async def test_module_api_ready_recoverable_error_logged(self):
-        token = "a" * 20
-        download = _resp(200, content=b"modbytes", headers={"X-Delivery-Receipt-Token": token})
-        receipt = _resp(200, body={"ok": True})
-        client = _async_client(get_resp=download, request_resp=receipt)
-        manager = MagicMock()
-        manager.install_mod_package.return_value = (True, "ok", SimpleNamespace(version="2.0.0"))
-        with ExitStack() as stack:
-            self._enter(
-                stack,
-                client,
-                patch(
-                    "app.infrastructure.mods.mod_manager.get_mod_manager",
-                    return_value=manager,
-                ),
-                patch(
-                    "app.infrastructure.mods.mod_manager.ensure_mod_api_ready",
-                    side_effect=RuntimeError("flush failed"),
-                ),
-                self._extract_mod({"id": "mod-1", "version": "2.0.0"}),
+    @pytest.mark.parametrize("kind", ["module", "employee"])
+    async def test_install_failure_keeps_module_grant_pending_without_claiming_installed(
+        self, delivery, kind
+    ):
+        delivery.client.get.return_value = delivery.response(delivery.package(kind=kind))
+        if kind == "module":
+            delivery.install.return_value = (False, "install boom", None)
+        else:
+            delivery.employee_install.return_value = (False, "install boom")
+        with pytest.raises(RuntimeError, match="install boom"):
+            await mod.install_custom_delivery_artifact("tok", 7, kind, owner_scope="tenant:1")
+        rows = delivery.outbox_rows()
+        if kind == "module":
+            assert len(rows) == 1
+            assert rows[0]["installed_reported"] is False
+            assert rows[0]["runtime_reported"] is False
+        else:
+            assert rows == []
+
+    @pytest.mark.parametrize("signed", [False, True])
+    async def test_unsigned_or_wrong_key_never_installs(self, delivery, monkeypatch, signed):
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+        from app.infrastructure.mods.package import ModSignatureError
+
+        raw = delivery.package(signed=signed)
+        if signed:
+            monkeypatch.setattr(
+                "app.infrastructure.mods.trusted_keys.load_trusted_public_keys",
+                lambda: [Ed25519PrivateKey.generate().public_key()],
             )
-            result = await mod.install_custom_delivery_artifact("tok", 9, "module")
+        delivery.client.get.return_value = delivery.response(raw)
+        with pytest.raises(ModSignatureError):
+            await mod.install_custom_delivery_artifact("tok", 7, "module", owner_scope="tenant:1")
+        delivery.install.assert_not_called()
+        assert delivery.outbox_rows() == []
+
+    async def test_module_api_ready_failure_does_not_claim_running(self, delivery):
+        delivery.client.get.return_value = delivery.response(delivery.package())
+        delivery.api_ready.side_effect = RuntimeError("flush failed")
+        result = await mod.install_custom_delivery_artifact(
+            "tok", 9, "module", owner_scope="tenant:1"
+        )
         assert result["success"] is True
+        assert result["runtime_verified"] is False
+        assert delivery.outbox_rows()[0]["runtime_reported"] is False
 
-    async def test_module_missing_id(self):
-        token = "a" * 20
-        download = _resp(200, content=b"modbytes", headers={"X-Delivery-Receipt-Token": token})
-        client = _async_client(get_resp=download)
-        manager = MagicMock()
-        manager.install_mod_package.return_value = (True, "ok", SimpleNamespace(version="1.0.0"))
-        with ExitStack() as stack:
-            self._enter(
-                stack,
-                client,
-                patch(
-                    "app.infrastructure.mods.mod_manager.get_mod_manager",
-                    return_value=manager,
-                ),
-                self._extract_mod({"version": "1.0.0"}),
+    async def test_download_response_loss_retries_without_duplicate_activation(self, delivery):
+        raw = delivery.package()
+        delivery.client.get.side_effect = [
+            httpx_connect_error(),
+            delivery.response(raw),
+        ]
+        with pytest.raises(ConnectionError):
+            await mod.install_custom_delivery_artifact("tok", 9, "module", owner_scope="tenant:1")
+        delivery.activation.assert_not_called()
+        delivery.install.assert_not_called()
+        assert delivery.outbox_rows() == []
+        result = await mod.install_custom_delivery_artifact(
+            "tok", 9, "module", owner_scope="tenant:1"
+        )
+        assert result["runtime_verified"] is False
+        assert delivery.client.get.await_count == 2
+        delivery.activation.assert_called_once_with("fixture-mod")
+        assert delivery.install.call_count == 1
+        assert len(delivery.outbox_rows()) == 1
+
+    async def test_receipt_response_loss_retries_saved_body_without_reinstall(
+        self, delivery, monkeypatch
+    ):
+        import copy
+
+        from fastapi import Request
+
+        from app.application import mod_delivery_receipt_outbox as outbox
+        from app.infrastructure.mods.install_receipts import read_verified_install
+
+        delivery.client.get.return_value = delivery.response(delivery.package())
+        await mod.install_custom_delivery_artifact("tok", 9, "module", owner_scope="tenant:1")
+        monkeypatch.setattr(
+            "app.infrastructure.auth.dependencies.get_logged_in_user",
+            lambda request: SimpleNamespace(id=1),
+        )
+        monkeypatch.setattr(
+            "app.application.tenant_workspace_prefs.resolve_workspace_owner_id",
+            lambda request, user: "tenant:1",
+        )
+        monkeypatch.setattr(
+            "app.infrastructure.mods.install_receipts.read_verified_install",
+            lambda mid: read_verified_install(mid, mods_root=delivery.manager.mods_root),
+        )
+        sent = []
+
+        async def post(token, path, *, method, payload):
+            assert token == "current-token"
+            sent.append(copy.deepcopy(payload))
+            if len(sent) == 1:
+                raise ConnectionError("receipt response lost")
+            return {"record": {"verified": False}}
+
+        monkeypatch.setattr(mod, "custom_delivery_remote_json", post)
+        request = Request({"type": "http", "headers": []})
+        assert (await outbox.retry_delivery_receipts(request, "current-token"))["pending"] == 1
+        summary = await outbox.retry_delivery_receipts(request, "current-token")
+        assert summary["installed_reported"] == 1
+        assert summary["runtime_reported"] == 0
+        assert sent[0] == sent[1]
+        assert sent[0]["stage"] == "installed"
+        delivery.activation.assert_called_once_with("fixture-mod")
+        assert delivery.install.call_count == 1
+        assert delivery.client.get.await_count == 1
+        assert delivery.outbox_rows()[0]["runtime_reported"] is False
+
+    async def test_finally_unlink_oserror_does_not_change_install_result(
+        self, delivery, monkeypatch
+    ):
+        raw = delivery.package()
+        delivery.client.get.return_value = delivery.response(raw)
+        real_unlink = Path.unlink
+        failed_paths = []
+
+        def unlink(path, *args, **kwargs):
+            if path.name.startswith("xcagi-custom-delivery-"):
+                failed_paths.append(path)
+                raise OSError("busy")
+            return real_unlink(path, *args, **kwargs)
+
+        with monkeypatch.context() as scoped:
+            scoped.setattr(Path, "unlink", unlink)
+            result = await mod.install_custom_delivery_artifact(
+                "tok", 9, "module", owner_scope="tenant:1"
             )
-            with pytest.raises(ValueError) as ei:
-                await mod.install_custom_delivery_artifact("tok", 9, "module")
-        assert "缺少 ID" in str(ei.value)
-
-    async def test_finally_unlink_oserror_swallowed(self, monkeypatch):
-        token = "a" * 20
-        download = _resp(200, content=b"modbytes", headers={"X-Delivery-Receipt-Token": token})
-        client = _async_client(get_resp=download, request_resp=_resp(200, body={"ok": True}))
-        manager = MagicMock()
-        manager.install_mod_package.return_value = (True, "ok", SimpleNamespace(version="1.0.0"))
-
-        import pathlib
-
-        real_unlink = pathlib.Path.unlink
-
-        def _boom_unlink(self, *a, **k):
-            raise OSError("busy")
-
-        monkeypatch.setattr(pathlib.Path, "unlink", _boom_unlink)
-        try:
-            with ExitStack() as stack:
-                self._enter(
-                    stack,
-                    client,
-                    patch(
-                        "app.infrastructure.mods.mod_manager.get_mod_manager",
-                        return_value=manager,
-                    ),
-                    patch(
-                        "app.infrastructure.mods.mod_manager.ensure_mod_api_ready",
-                        return_value=True,
-                    ),
-                    self._extract_mod({"id": "mod-1", "version": "1.0.0"}),
-                )
-                result = await mod.install_custom_delivery_artifact("tok", 9, "module")
-            assert result["success"] is True
-        finally:
-            monkeypatch.setattr(pathlib.Path, "unlink", real_unlink)
+        assert result["success"] is True
+        assert failed_paths
+        for path in failed_paths:
+            real_unlink(path, missing_ok=True)
 
 
 # ---------------------------------------------------------------------------
@@ -643,250 +703,220 @@ class TestFetchPrivateModLibrary:
 
 
 class TestUpdatePrivateModFromLibrary:
-    def _manager(self, scan_rows=None, install_result=None):
-        manager = MagicMock()
-        manager.scan_mods.return_value = scan_rows or []
-        manager.install_mod_package.return_value = install_result or (
-            True,
-            "ok",
-            SimpleNamespace(version="2.0.0"),
-        )
-        return manager
+    @pytest.fixture
+    def library(self, delivery, monkeypatch):
+        raw = delivery.package()
+        rows = [
+            {
+                "id": "fixture-mod",
+                "version": "2.0.0",
+                "sha256": hashlib.sha256(raw).hexdigest(),
+                "delivery_ticket_id": 9,
+            }
+        ]
+        export_headers = dict(delivery.response(raw).headers)
+        export_headers["x-delivery-ticket-id"] = "9"
+        fetch = AsyncMock(return_value=rows)
 
-    def _extract(self, manifest):
-        ModPackage = __import__(
-            "app.infrastructure.mods.package", fromlist=["ModPackage"]
-        ).ModPackage
-        return patch.object(
-            ModPackage,
-            "extract_package",
-            classmethod(lambda cls, *a, **k: ("/tmp/x", manifest)),
+        async def download(path, destination, *, headers):
+            assert path == "/v1/mod-sync/export-zip/fixture-mod"
+            assert headers == {"Authorization": "Bearer tok"}
+            destination.write_bytes(raw)
+            return dict(export_headers)
+
+        download_mock = AsyncMock(side_effect=download)
+        monkeypatch.setattr(mod, "fetch_private_mod_library", fetch)
+        monkeypatch.setattr(mod, "catalog_download_to", download_mock)
+        return SimpleNamespace(
+            raw=raw,
+            rows=rows,
+            headers=export_headers,
+            fetch=fetch,
+            download=download_mock,
         )
 
     async def test_invalid_id(self):
         for bad in ("", None, "a/b", "a\\b"):
             with pytest.raises(ValueError):
-                await mod.update_private_mod_from_library(bad, "tok")
+                await mod.update_private_mod_from_library(bad, "tok", owner_scope="tenant:1")
 
-    async def test_remote_not_found(self):
-        with patch(f"{BASE}.fetch_private_mod_library", AsyncMock(return_value=[{"id": "other"}])):
-            with pytest.raises(LookupError):
-                await mod.update_private_mod_from_library("m1", "tok")
+    async def test_owner_required_before_fetch(self, delivery, library):
+        with pytest.raises(ValueError, match="工作空间|owner"):
+            await mod.update_private_mod_from_library("fixture-mod", "tok")
+        library.fetch.assert_not_awaited()
+        library.download.assert_not_awaited()
+        delivery.install.assert_not_called()
 
-    async def test_remote_version_missing(self):
-        with patch(
-            f"{BASE}.fetch_private_mod_library",
-            AsyncMock(return_value=[{"id": "m1", "version": "  "}]),
-        ):
-            with pytest.raises(ValueError):
-                await mod.update_private_mod_from_library("m1", "tok")
+    async def test_background_install_rejects_a_signed_global_package(self, delivery, library):
+        with pytest.raises(ValueError):
+            await mod.update_private_mod_from_library(
+                "fixture-mod", "tok", owner_scope="tenant:1", require_account_scope=True
+            )
+        delivery.install.assert_not_called()
+        delivery.activation.assert_not_called()
+        assert delivery.outbox_rows() == []
 
-    async def test_expected_version_mismatch(self):
-        with patch(
-            f"{BASE}.fetch_private_mod_library",
-            AsyncMock(return_value=[{"id": "m1", "version": "2.0.0"}]),
-        ):
-            with pytest.raises(ValueError):
-                await mod.update_private_mod_from_library("m1", "tok", expected_version="1.0.0")
+    async def test_remote_not_found(self, delivery, library):
+        library.rows.clear()
+        with pytest.raises(LookupError):
+            await mod.update_private_mod_from_library("fixture-mod", "tok", owner_scope="tenant:1")
+        library.download.assert_not_awaited()
 
-    async def test_already_latest_local(self):
-        with (
-            patch(
-                f"{BASE}.fetch_private_mod_library",
-                AsyncMock(return_value=[{"id": "m1", "version": "1.0.0"}]),
-            ),
-            patch(
-                "app.infrastructure.mods.mod_manager.get_mod_manager",
-                return_value=self._manager(scan_rows=[SimpleNamespace(id="m1", version="1.0.0")]),
-            ),
-        ):
-            result = await mod.update_private_mod_from_library("m1", "tok")
+    async def test_remote_version_missing(self, delivery, library):
+        library.rows[0]["version"] = " "
+        with pytest.raises(ValueError):
+            await mod.update_private_mod_from_library("fixture-mod", "tok", owner_scope="tenant:1")
+        delivery.install.assert_not_called()
+
+    async def test_expected_version_mismatch(self, delivery, library):
+        with pytest.raises(ValueError):
+            await mod.update_private_mod_from_library(
+                "fixture-mod", "tok", expected_version="1.0.0", owner_scope="tenant:1"
+            )
+        library.download.assert_not_awaited()
+
+    async def test_already_latest_local(self, delivery, library):
+        await mod.update_private_mod_from_library("fixture-mod", "tok", owner_scope="tenant:1")
+        library.download.reset_mock()
+        delivery.install.reset_mock()
+        result = await mod.update_private_mod_from_library(
+            "fixture-mod", "tok", owner_scope="tenant:1"
+        )
         assert result["success"] is True
         assert result["updated"] is False
+        library.download.assert_not_awaited()
+        delivery.install.assert_not_called()
+        delivery.activation.assert_called_once_with("fixture-mod")
 
-    async def test_empty_token_raises_permission(self):
-        with (
-            patch(
-                f"{BASE}.fetch_private_mod_library",
-                AsyncMock(return_value=[{"id": "m1", "version": "2.0.0"}]),
-            ),
-            patch(
-                "app.infrastructure.mods.mod_manager.get_mod_manager",
-                return_value=self._manager(scan_rows=[]),
-            ),
-        ):
-            with pytest.raises(PermissionError):
-                await mod.update_private_mod_from_library("m1", "")
+    async def test_empty_token_raises_permission(self, delivery, library):
+        with pytest.raises(PermissionError):
+            await mod.update_private_mod_from_library("fixture-mod", "", owner_scope="tenant:1")
+        delivery.install.assert_not_called()
 
-    async def test_successful_update(self):
-        manager = self._manager(
-            scan_rows=[], install_result=(True, "installed", SimpleNamespace(version="2.0.0"))
+    async def test_successful_update_preserves_signed_bytes_and_owner(self, delivery, library):
+        from app.infrastructure.mods.install_receipts import read_verified_install
+
+        result = await mod.update_private_mod_from_library(
+            "fixture-mod", "tok", owner_scope="tenant:1"
         )
-        with (
-            patch(
-                f"{BASE}.fetch_private_mod_library",
-                AsyncMock(return_value=[{"id": "m1", "version": "2.0.0"}]),
-            ),
-            patch(
-                f"{BASE}.catalog_download_to",
-                AsyncMock(return_value=None),
-            ),
-            patch(
-                "app.infrastructure.mods.mod_manager.get_mod_manager",
-                return_value=manager,
-            ),
-            patch(
-                "app.infrastructure.mods.mod_manager.ensure_mod_api_ready",
-                return_value=True,
-            ),
-            self._extract({"id": "m1", "version": "2.0.0"}),
-        ):
-            result = await mod.update_private_mod_from_library("m1", "tok")
         assert result["success"] is True
         assert result["updated"] is True
         assert result["current_version"] == "2.0.0"
-        manager.install_mod_package.assert_called_once()
-        _, kwargs = manager.install_mod_package.call_args
-        assert kwargs["verify_signature"] is True
-
-    async def test_verify_signature_env_enabled(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_REQUIRE_SIGNED_MODS", "1")
-        manager = self._manager(
-            scan_rows=[], install_result=(True, "ok", SimpleNamespace(version="2.0.0"))
+        receipt = read_verified_install("fixture-mod", mods_root=delivery.manager.mods_root)
+        assert receipt["signature_verified"] is True
+        assert receipt["owner_scope"] == "tenant:1"
+        assert receipt["package_sha256"] == hashlib.sha256(library.raw).hexdigest()
+        archive = (
+            delivery.root
+            / "mods/.install-receipts/fixture-mod"
+            / (receipt["package_sha256"] + ".zip")
         )
-        with (
-            patch(
-                f"{BASE}.fetch_private_mod_library",
-                AsyncMock(return_value=[{"id": "m1", "version": "2.0.0"}]),
-            ),
-            patch(
-                f"{BASE}.catalog_download_to",
-                AsyncMock(return_value=None),
-            ),
-            patch(
-                "app.infrastructure.mods.mod_manager.get_mod_manager",
-                return_value=manager,
-            ),
-            patch(
-                "app.infrastructure.mods.mod_manager.ensure_mod_api_ready",
-                return_value=True,
-            ),
-            self._extract({"id": "m1", "version": "2.0.0"}),
-        ):
-            await mod.update_private_mod_from_library("m1", "tok")
-        _, kwargs = manager.install_mod_package.call_args
-        assert kwargs["verify_signature"] is True
+        assert archive.read_bytes() == library.raw
+        (row,) = delivery.outbox_rows()
+        assert row["ticket_id"] == result["delivery_ticket_id"] == 9
+        assert row["payload"]["receipt_id"] == result["receipt_id"] + ":installed"
+        assert row["owner"] == "tenant:1"
+        assert row["payload"]["stage"] == "installed"
+        assert row["payload"]["receipt_token"] == library.headers["x-delivery-receipt-token"]
+        assert row["payload"]["package_sha256"] == receipt["package_sha256"]
+        assert row["runtime_reported"] is False
+        assert delivery.install.call_args.kwargs == {
+            "verify_signature": True,
+            "activate": True,
+            "owner_scope": "tenant:1",
+        }
 
-    async def test_manifest_id_mismatch(self):
-        with (
-            patch(
-                f"{BASE}.fetch_private_mod_library",
-                AsyncMock(return_value=[{"id": "m1", "version": "2.0.0"}]),
-            ),
-            patch(
-                f"{BASE}.catalog_download_to",
-                AsyncMock(return_value=None),
-            ),
-            patch(
-                "app.infrastructure.mods.mod_manager.get_mod_manager",
-                return_value=self._manager(scan_rows=[]),
-            ),
-            self._extract({"id": "OTHER", "version": "2.0.0"}),
-        ):
-            with pytest.raises(ValueError) as ei:
-                await mod.update_private_mod_from_library("m1", "tok")
-        assert "身份校验失败" in str(ei.value)
+    @pytest.mark.parametrize(
+        "header,value",
+        [
+            ("x-delivery-receipt-token", ""),
+            ("x-delivery-artifact-sha256", "0" * 64),
+            ("x-delivery-artifact-version", "9.9.9"),
+            ("x-delivery-ticket-id", ""),
+            ("x-delivery-ticket-id", "10"),
+        ],
+    )
+    async def test_export_grant_must_match_before_install(self, delivery, library, header, value):
+        library.headers[header] = value
+        with pytest.raises((ValueError, RuntimeError)):
+            await mod.update_private_mod_from_library("fixture-mod", "tok", owner_scope="tenant:1")
+        delivery.install.assert_not_called()
+        delivery.activation.assert_not_called()
+        assert delivery.outbox_rows() == []
 
-    async def test_manifest_version_mismatch(self):
-        with (
-            patch(
-                f"{BASE}.fetch_private_mod_library",
-                AsyncMock(return_value=[{"id": "m1", "version": "2.0.0"}]),
-            ),
-            patch(
-                f"{BASE}.catalog_download_to",
-                AsyncMock(return_value=None),
-            ),
-            patch(
-                "app.infrastructure.mods.mod_manager.get_mod_manager",
-                return_value=self._manager(scan_rows=[]),
-            ),
-            self._extract({"id": "m1", "version": "9.9.9"}),
-        ):
-            with pytest.raises(ValueError) as ei:
-                await mod.update_private_mod_from_library("m1", "tok")
-        assert "不一致" in str(ei.value)
+    @pytest.mark.parametrize("digest", ["", "0" * 64])
+    async def test_catalog_digest_missing_or_wrong_never_installs(self, delivery, library, digest):
+        library.rows[0]["sha256"] = digest
+        with pytest.raises((ValueError, RuntimeError), match="摘要|digest|SHA"):
+            await mod.update_private_mod_from_library("fixture-mod", "tok", owner_scope="tenant:1")
+        delivery.install.assert_not_called()
 
-    async def test_install_fail(self):
-        manager = self._manager(scan_rows=[], install_result=(False, "boom", None))
-        with (
-            patch(
-                f"{BASE}.fetch_private_mod_library",
-                AsyncMock(return_value=[{"id": "m1", "version": "2.0.0"}]),
-            ),
-            patch(
-                f"{BASE}.catalog_download_to",
-                AsyncMock(return_value=None),
-            ),
-            patch(
-                "app.infrastructure.mods.mod_manager.get_mod_manager",
-                return_value=manager,
-            ),
-            self._extract({"id": "m1", "version": "2.0.0"}),
-        ):
-            with pytest.raises(RuntimeError):
-                await mod.update_private_mod_from_library("m1", "tok")
+    @pytest.mark.parametrize("identity", [{"mid": "other"}, {"version": "9.9.9"}])
+    async def test_signed_manifest_must_match_catalog(self, delivery, library, identity):
+        raw = delivery.package(**identity)
+        library.rows[0]["sha256"] = hashlib.sha256(raw).hexdigest()
+        library.headers["x-delivery-artifact-sha256"] = hashlib.sha256(raw).hexdigest()
 
-    async def test_api_ready_recoverable_error_logged(self):
-        manager = self._manager(
-            scan_rows=[], install_result=(True, "ok", SimpleNamespace(version="2.0.0"))
+        async def download(path, destination, *, headers):
+            destination.write_bytes(raw)
+            return dict(library.headers)
+
+        library.download.side_effect = download
+        with pytest.raises(ValueError, match="身份校验|不一致"):
+            await mod.update_private_mod_from_library("fixture-mod", "tok", owner_scope="tenant:1")
+        delivery.install.assert_not_called()
+
+    async def test_install_fail(self, delivery, library):
+        delivery.install.return_value = (False, "boom", None)
+        with pytest.raises(RuntimeError, match="boom"):
+            await mod.update_private_mod_from_library("fixture-mod", "tok", owner_scope="tenant:1")
+        rows = delivery.outbox_rows()
+        assert len(rows) == 1
+        assert rows[0]["installed_reported"] is False
+        assert rows[0]["runtime_reported"] is False
+
+    async def test_api_ready_recoverable_error_logged(self, delivery, library):
+        delivery.api_ready.side_effect = RuntimeError("flush failed")
+        result = await mod.update_private_mod_from_library(
+            "fixture-mod", "tok", owner_scope="tenant:1"
         )
-        with (
-            patch(
-                f"{BASE}.fetch_private_mod_library",
-                AsyncMock(return_value=[{"id": "m1", "version": "2.0.0"}]),
-            ),
-            patch(
-                f"{BASE}.catalog_download_to",
-                AsyncMock(return_value=None),
-            ),
-            patch(
-                "app.infrastructure.mods.mod_manager.get_mod_manager",
-                return_value=manager,
-            ),
-            patch(
-                "app.infrastructure.mods.mod_manager.ensure_mod_api_ready",
-                side_effect=RuntimeError("flush failed"),
-            ),
-            self._extract({"id": "m1", "version": "2.0.0"}),
-        ):
-            result = await mod.update_private_mod_from_library("m1", "tok")
         assert result["updated"] is True
 
-    async def test_previous_version_from_local(self):
-        manager = self._manager(
-            scan_rows=[SimpleNamespace(id="m1", version="1.0.0")],
-            install_result=(True, "ok", SimpleNamespace(version="2.0.0")),
+    async def test_previous_version_from_local(self, delivery, library):
+        old = delivery.package(version="1.0.0", content="old")
+        path = delivery.root / "old.zip"
+        path.write_bytes(old)
+        assert delivery.manager.install_mod_package(
+            str(path), activate=False, owner_scope="tenant:1"
+        )[0]
+        result = await mod.update_private_mod_from_library(
+            "fixture-mod", "tok", owner_scope="tenant:1"
         )
-        with (
-            patch(
-                f"{BASE}.fetch_private_mod_library",
-                AsyncMock(return_value=[{"id": "m1", "version": "2.0.0"}]),
-            ),
-            patch(
-                f"{BASE}.catalog_download_to",
-                AsyncMock(return_value=None),
-            ),
-            patch(
-                "app.infrastructure.mods.mod_manager.get_mod_manager",
-                return_value=manager,
-            ),
-            patch(
-                "app.infrastructure.mods.mod_manager.ensure_mod_api_ready",
-                return_value=True,
-            ),
-            self._extract({"id": "m1", "version": "2.0.0"}),
-        ):
-            result = await mod.update_private_mod_from_library("m1", "tok")
         assert result["previous_version"] == "1.0.0"
         assert result["current_version"] == "2.0.0"
+
+    async def test_active_update_keeps_old_code_until_restart(self, delivery, library):
+        from app.infrastructure.mods.install_receipts import read_verified_install
+
+        old = delivery.package(version="1.0.0", content="old running code")
+        old_path = delivery.root / "old.zip"
+        old_path.write_bytes(old)
+        assert delivery.manager.install_mod_package(
+            str(old_path), activate=False, owner_scope="tenant:1"
+        )[0]
+        delivery.manager._loaded_mods.append("fixture-mod")
+        delivery.install.reset_mock()
+        result = await mod.update_private_mod_from_library(
+            "fixture-mod", "tok", owner_scope="tenant:1"
+        )
+        assert result["updated"] is True
+        assert result["requires_restart"] is True
+        assert result["runtime_status"] == "restart_required"
+        assert (delivery.root / "mods/fixture-mod/logic.py").read_text() == "old running code"
+        receipt = read_verified_install("fixture-mod", mods_root=delivery.manager.mods_root)
+        assert receipt["package_sha256"] == hashlib.sha256(library.raw).hexdigest()
+        assert receipt["package_version"] == "2.0.0"
+        assert receipt["requires_restart"] is True
+        assert (Path(receipt["installed_root"]) / "logic.py").read_text() == "fixture code"
+        delivery.api_ready.assert_not_called()
+        delivery.activation.assert_not_called()

@@ -161,7 +161,11 @@ class TestRefreshModsRootIfNeeded:
 
         new_root = tmp_path / "new_mods"
         new_root.mkdir()
-        mgr = ModManager(mods_root=str(tmp_path / "old"))
+        with patch(
+            "app.infrastructure.mods.mod_manager._default_mods_root",
+            return_value=str(tmp_path / "old"),
+        ):
+            mgr = ModManager()
         with patch.dict("os.environ", {"XCAGI_MODS_ROOT": str(new_root)}):
             mgr._refresh_mods_root_if_needed()
             assert mgr.mods_root == str(new_root)
@@ -170,11 +174,16 @@ class TestRefreshModsRootIfNeeded:
         from app.infrastructure.mods.mod_manager import ModManager
 
         bad_root = str(tmp_path / "nonexistent_dir_xyz")
-        mgr = ModManager(mods_root=bad_root)
-        with patch.dict("os.environ", {"XCAGI_MODS_ROOT": "", "XCAGI_MODS_DIR": ""}, clear=False):
+        with (
+            patch.dict("os.environ", {"XCAGI_MODS_ROOT": "", "XCAGI_MODS_DIR": ""}, clear=False),
+            patch(
+                "app.infrastructure.mods.mod_manager._default_mods_root",
+                side_effect=[bad_root, str(tmp_path)],
+            ),
+        ):
+            mgr = ModManager()
             mgr._refresh_mods_root_if_needed()
-            # Should have re-resolved to default
-            assert mgr.mods_root != bad_root or os.path.isdir(mgr.mods_root)
+            assert mgr.mods_root == str(tmp_path)
 
 
 # ---------------------------------------------------------------------------

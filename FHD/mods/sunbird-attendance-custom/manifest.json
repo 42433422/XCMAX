@@ -1,0 +1,25 @@
+{
+  "id": "sunbird-attendance-custom",
+  "name": "太阳鸟考勤转换",
+  "version": "1.0.0",
+  "author": "XCAGI",
+  "description": "在公共考勤工作区上提供太阳鸟账号专属模板、班制规则和考勤文件转换。",
+  "artifact": "mod",
+  "scope": "account",
+  "public_listing": false,
+  "entitlement_mod_id": "taiyangniao-pro",
+  "dependencies": { "xcagi": ">=1.0.0.1", "attendance-industry": ">=1.0.0" },
+  "backend": { "entry": "blueprints", "init": "mod_init" },
+  "frontend": {
+    "menu": [{ "id": "sunbird-attendance-convert", "label": "考勤转换（定制）", "path": "/mod/sunbird-attendance-custom/convert", "icon": "fa-file-excel-o" }],
+    "runtime": {
+      "sdk_version": 1,
+      "source": "frontend/src/index.js",
+      "entry": "frontend/runtime/index.js",
+      "routes": [
+        { "path": "/mod/sunbird-attendance-custom/convert", "title": "太阳鸟考勤转换" }
+      ]
+    }
+  },
+  "delivery_verification": { "handler": "verify_delivery", "case_id": "sunbird-owner-conversion-v1" }
+}

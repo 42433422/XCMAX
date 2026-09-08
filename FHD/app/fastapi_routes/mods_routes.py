@@ -40,6 +40,9 @@ def get_mods_router() -> Any:
 
         router = APIRouter(prefix="/api/mods", tags=["mods"])
         _register_mods_endpoints(router)
+        from app.fastapi_routes.mod_runtime_frontend import router as runtime_router
+
+        router.include_router(runtime_router)
     return router
 
 
@@ -180,14 +183,18 @@ def _register_mods_endpoints(router) -> None:
             from app.infrastructure.mods.mod_manager import get_mod_manager
 
             mm = get_mod_manager()
-            etag_src = mm._mods_scan_fingerprint()
+            from app.infrastructure.auth.dependencies import session_id_from_request
+            from app.mod_sdk.runtime_frontend import visible_mod_rows
+
+            mods = visible_mod_rows(request, mm.list_all_mods())
+            # Rights or owner changes must not reuse a previous private menu body.
+            etag_src = json.dumps(
+                mods, sort_keys=True, ensure_ascii=False
+            ) + session_id_from_request(request)
             etag = hashlib.sha256(etag_src.encode("utf-8")).hexdigest()[:32]
             inm = (request.headers.get("if-none-match") or "").strip().strip('"')
             if inm and inm == etag:
                 return Response(status_code=304, headers={"ETag": f'"{etag}"'})
-            # 侧栏菜单/图标需要实时反映 manifest 变更，默认也走磁盘扫描。
-            # 保留 ?all=1 兼容旧调用方；当前两者行为一致。
-            mods = mm.list_all_mods()
             body = {"success": True, "data": mods}
             return JSONResponse(
                 content=body,
@@ -203,13 +210,32 @@ def _register_mods_endpoints(router) -> None:
             }
 
     @router.get("/routes")
-    async def list_routes():
+    async def list_routes(request: Request):
         """Get mod routes for frontend registration"""
         try:
             from app.infrastructure.mods.mod_manager import get_mod_manager
 
             mm = get_mod_manager()
             routes = mm.get_routes()
+            from fastapi import HTTPException
+
+            from app.mod_sdk.runtime_frontend import runtime_metadata, visible_mod_rows
+
+            # Built-in loaders remain available; independently installed UI is
+            # exposed only after the normal session and signed-package checks.
+            rows = visible_mod_rows(request, mm.list_all_mods())
+            allowed_ids = {str(row.get("id") or "") for row in rows}
+            routes = [entry for entry in routes if entry.get("mod_id") in allowed_ids]
+            for row in rows:
+                mid = str(row.get("id") or "")
+                if not mid:
+                    continue
+                try:
+                    runtime = runtime_metadata(request, mid)
+                except HTTPException:
+                    continue
+                routes = [entry for entry in routes if entry.get("mod_id") != mid]
+                routes.append({"mod_id": mid, "routes_path": "", "runtime": runtime})
             return {"success": True, "data": routes}
         except RECOVERABLE_ERRORS:
             logger.exception("list_routes failed")
@@ -285,6 +311,16 @@ def _register_mods_endpoints(router) -> None:
             if not mod:
                 return JSONResponse({"success": False, "error": "Mod not found"}, status_code=404)
 
+            from app.mod_sdk.runtime_frontend import visible_mod_rows
+
+            candidate = {
+                "id": mod.id,
+                "scope": getattr(mod, "scope", "global"),
+                "frontend": {"runtime": getattr(mod, "frontend_runtime", {})},
+            }
+            if not visible_mod_rows(request, [candidate]):
+                return JSONResponse({"success": False, "error": "Mod not found"}, status_code=404)
+
             return {
                 "success": True,
                 "data": {
@@ -310,7 +346,10 @@ def _register_mods_endpoints(router) -> None:
 
             if is_mods_disabled():
                 return JSONResponse(
-                    {"success": False, "message": "扩展已全局关闭（XCAGI_DISABLE_MODS）"},
+                    {
+                        "success": False,
+                        "message": "扩展已全局关闭（XCAGI_DISABLE_MODS）",
+                    },
                     status_code=403,
                 )
             mid = (mod_id or "").strip()

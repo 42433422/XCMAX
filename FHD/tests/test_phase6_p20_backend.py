@@ -2724,243 +2724,71 @@ class TestGetSystemService:
 # ===========================================================================
 
 
-class TestRosterCandidates:
-    def test_returns_two_paths(self, tmp_dir):
-        from app.desktop_runtime.sunbird_delivery_seed import _roster_candidates
+class TestRetiredOwnerlessSunbirdSeed:
+    @pytest.mark.parametrize("config_location", ["root", "parent"])
+    def test_legacy_roster_and_database_are_untouched(self, tmp_path, config_location):
+        import sqlite3
 
-        root = Path(tmp_dir)
-        candidates = _roster_candidates(root)
-        assert len(candidates) >= 2
-        assert candidates[0] == (root / "config" / "sunbird-roster.json").resolve()
-        assert candidates[1] == (root.parent / "config" / "sunbird-roster.json").resolve()
-
-
-class TestMarkerPath:
-    def test_returns_correct_path(self, tmp_dir):
-        from app.desktop_runtime.sunbird_delivery_seed import _marker_path
-
-        root = Path(tmp_dir)
-        marker = _marker_path(root)
-        assert marker == (root / "config" / "sunbird-roster.applied").resolve()
-
-
-@pytest.fixture
-def isolated_sunbird_seed(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keep roster branch tests independent of repo seed files and real schemas."""
-    monkeypatch.setattr(
-        "app.desktop_runtime.sunbird_delivery_seed.sync_sunbird_delivery_files",
-        lambda _root: 0,
-    )
-    monkeypatch.setattr(
-        "app.db.init_db.ensure_sqlite_enterprise_business_bootstrap",
-        lambda **_kwargs: None,
-    )
-
-
-@pytest.mark.usefixtures("isolated_sunbird_seed")
-class TestApplySunbirdRosterSeedIfNeeded:
-    def test_none_data_root_no_paths_module(self):
         from app.desktop_runtime.sunbird_delivery_seed import (
             apply_sunbird_roster_seed_if_needed,
+            sync_sunbird_delivery_files,
+        )
+
+        root = tmp_path / "data"
+        root.mkdir()
+        config = (root if config_location == "root" else tmp_path) / "config"
+        config.mkdir()
+        (config / "sunbird-roster.json").write_text(
+            json.dumps({"employees": [{"name": "Alice", "dept": "Eng"}]}), encoding="utf-8"
+        )
+        (config / "sunbird-template.xlsx").write_bytes(b"existing-owner-template")
+        database = root / "user_data.db"
+        with sqlite3.connect(database) as connection:
+            connection.execute("CREATE TABLE products (name TEXT)")
+            connection.execute("INSERT INTO products VALUES ('existing product')")
+        before = {
+            p.relative_to(tmp_path): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()
+        }
+        with (
+            patch(
+                "app.db.session.get_db", side_effect=AssertionError("ownerless database access")
+            ) as get_db,
+            patch(
+                "app.db.init_db.ensure_sqlite_enterprise_business_bootstrap",
+                side_effect=AssertionError("ownerless bootstrap"),
+            ) as bootstrap,
+        ):
+            assert sync_sunbird_delivery_files(root) == 0
+            assert apply_sunbird_roster_seed_if_needed(root) is False
+        get_db.assert_not_called()
+        bootstrap.assert_not_called()
+        after = {
+            p.relative_to(tmp_path): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()
+        }
+        assert after == before
+        assert not (root / "config" / "sunbird-roster.applied").exists()
+
+    def test_missing_root_does_not_create_files(self, tmp_path):
+        from app.desktop_runtime.sunbird_delivery_seed import (
+            apply_sunbird_roster_seed_if_needed,
+            sync_sunbird_delivery_files,
+        )
+
+        missing = tmp_path / "not-created"
+        assert sync_sunbird_delivery_files(missing) == 0
+        assert apply_sunbird_roster_seed_if_needed(missing) is False
+        assert not missing.exists()
+
+    def test_default_entry_does_not_resolve_an_implicit_user_directory(self):
+        from app.desktop_runtime.sunbird_delivery_seed import (
+            apply_sunbird_roster_seed_if_needed,
+            sync_sunbird_delivery_files,
         )
 
         with patch(
             "app.desktop_runtime.paths.get_desktop_data_dir",
-            side_effect=ImportError("no module"),
-        ):
-            result = apply_sunbird_roster_seed_if_needed(None)
-        assert result is False
-
-    def test_already_applied_marker(self, tmp_dir):
-        from app.desktop_runtime.sunbird_delivery_seed import (
-            apply_sunbird_roster_seed_if_needed,
-        )
-
-        root = Path(tmp_dir)
-        config_dir = root / "config"
-        config_dir.mkdir()
-        (config_dir / "sunbird-roster.applied").write_text("applied", encoding="utf-8")
-        result = apply_sunbird_roster_seed_if_needed(root)
-        assert result is False
-
-    def test_no_roster_file(self, tmp_dir):
-        from app.desktop_runtime.sunbird_delivery_seed import (
-            apply_sunbird_roster_seed_if_needed,
-        )
-
-        root = Path(tmp_dir)
-        with patch(
-            "app.desktop_runtime.sunbird_delivery_seed.sync_sunbird_delivery_files",
-            return_value=0,
-        ):
-            result = apply_sunbird_roster_seed_if_needed(root)
-        assert result is False
-
-    def test_invalid_json_roster(self, tmp_dir):
-        from app.desktop_runtime.sunbird_delivery_seed import (
-            apply_sunbird_roster_seed_if_needed,
-        )
-
-        root = Path(tmp_dir)
-        config_dir = root / "config"
-        config_dir.mkdir()
-        (config_dir / "sunbird-roster.json").write_text("not json", encoding="utf-8")
-        result = apply_sunbird_roster_seed_if_needed(root)
-        assert result is False
-
-    def test_empty_employees(self, tmp_dir):
-        from app.desktop_runtime.sunbird_delivery_seed import (
-            apply_sunbird_roster_seed_if_needed,
-        )
-
-        root = Path(tmp_dir)
-        config_dir = root / "config"
-        config_dir.mkdir()
-        (config_dir / "sunbird-roster.json").write_text(
-            json.dumps({"employees": []}), encoding="utf-8"
-        )
-        result = apply_sunbird_roster_seed_if_needed(root)
-        assert result is False
-
-    def test_no_employees_key(self, tmp_dir):
-        from app.desktop_runtime.sunbird_delivery_seed import (
-            apply_sunbird_roster_seed_if_needed,
-        )
-
-        root = Path(tmp_dir)
-        config_dir = root / "config"
-        config_dir.mkdir()
-        (config_dir / "sunbird-roster.json").write_text(
-            json.dumps({"other": "data"}), encoding="utf-8"
-        )
-        result = apply_sunbird_roster_seed_if_needed(root)
-        assert result is False
-
-    def test_db_import_error(self, tmp_dir):
-        from app.desktop_runtime.sunbird_delivery_seed import (
-            apply_sunbird_roster_seed_if_needed,
-        )
-
-        root = Path(tmp_dir)
-        config_dir = root / "config"
-        config_dir.mkdir()
-        (config_dir / "sunbird-roster.json").write_text(
-            json.dumps({"employees": [{"name": "n1"}]}), encoding="utf-8"
-        )
-        with patch("builtins.__import__", side_effect=ImportError("no db")):
-            result = apply_sunbird_roster_seed_if_needed(root)
-        assert result is False
-
-    def test_products_already_present_skips(self, tmp_dir):
-        from app.desktop_runtime.sunbird_delivery_seed import (
-            apply_sunbird_roster_seed_if_needed,
-        )
-
-        root = Path(tmp_dir)
-        config_dir = root / "config"
-        config_dir.mkdir()
-        (config_dir / "sunbird-roster.json").write_text(
-            json.dumps({"employees": [{"name": "n1"}]}), encoding="utf-8"
-        )
-        fake_db = MagicMock()
-        fake_db.__enter__ = MagicMock(return_value=fake_db)
-        fake_db.__exit__ = MagicMock(return_value=None)
-        fake_db.query.return_value.filter.return_value.count.return_value = 5
-        with (
-            patch("app.db.session.get_db", return_value=fake_db),
-            patch("app.db.models.product.Product", create=True),
-            patch("app.db.models.customer.Customer", create=True),
-        ):
-            result = apply_sunbird_roster_seed_if_needed(root)
-        assert result is False
-        # Marker should be written with skip reason
-        assert (config_dir / "sunbird-roster.applied").is_file()
-
-    def test_successful_seed(self, tmp_dir):
-        from app.desktop_runtime.sunbird_delivery_seed import (
-            apply_sunbird_roster_seed_if_needed,
-        )
-
-        root = Path(tmp_dir)
-        config_dir = root / "config"
-        config_dir.mkdir()
-        roster = {
-            "employees": [
-                {"name": "Alice", "dept": "Eng", "group": "G1"},
-                {"name": "Bob", "dept": "Eng"},  # same dept, no new customer
-                {"name": "Carol"},  # no dept
-                {"name": ""},  # skipped
-                "not a dict",  # skipped
-            ]
-        }
-        (config_dir / "sunbird-roster.json").write_text(json.dumps(roster), encoding="utf-8")
-        fake_db = MagicMock()
-        fake_db.__enter__ = MagicMock(return_value=fake_db)
-        fake_db.__exit__ = MagicMock(return_value=None)
-        fake_db.query.return_value.filter.return_value.count.return_value = 0
-        with (
-            patch("app.db.session.get_db", return_value=fake_db),
-            patch("app.db.models.product.Product", create=True) as mock_product_cls,
-            patch("app.db.models.customer.Customer", create=True) as mock_customer_cls,
-        ):
-            result = apply_sunbird_roster_seed_if_needed(root)
-        assert result is True
-        # 3 valid employees (Alice, Bob, Carol)
-        assert fake_db.add.call_count >= 3
-        fake_db.commit.assert_called_once()
-        # Marker written
-        marker = config_dir / "sunbird-roster.applied"
-        assert marker.is_file()
-        marker_data = json.loads(marker.read_text(encoding="utf-8"))
-        assert marker_data["products"] == 3
-        assert marker_data["customers"] == 1  # only Eng dept
-
-    def test_db_write_error_returns_false(self, tmp_dir):
-        from app.desktop_runtime.sunbird_delivery_seed import (
-            apply_sunbird_roster_seed_if_needed,
-        )
-
-        root = Path(tmp_dir)
-        config_dir = root / "config"
-        config_dir.mkdir()
-        (config_dir / "sunbird-roster.json").write_text(
-            json.dumps({"employees": [{"name": "n1"}]}), encoding="utf-8"
-        )
-        fake_db = MagicMock()
-        fake_db.__enter__ = MagicMock(return_value=fake_db)
-        fake_db.__exit__ = MagicMock(return_value=None)
-        fake_db.query.return_value.filter.return_value.count.return_value = 0
-        fake_db.commit.side_effect = RuntimeError("commit fail")
-        with (
-            patch("app.db.session.get_db", return_value=fake_db),
-            patch("app.db.models.product.Product", create=True),
-            patch("app.db.models.customer.Customer", create=True),
-        ):
-            result = apply_sunbird_roster_seed_if_needed(root)
-        assert result is False
-
-    def test_roster_in_parent_config(self, tmp_dir):
-        """Roster file in parent/config is also found."""
-        from app.desktop_runtime.sunbird_delivery_seed import (
-            apply_sunbird_roster_seed_if_needed,
-        )
-
-        root = Path(tmp_dir) / "data"
-        root.mkdir()
-        parent_config = root.parent / "config"
-        parent_config.mkdir()
-        (parent_config / "sunbird-roster.json").write_text(
-            json.dumps({"employees": [{"name": "n1", "dept": "d1"}]}),
-            encoding="utf-8",
-        )
-        fake_db = MagicMock()
-        fake_db.__enter__ = MagicMock(return_value=fake_db)
-        fake_db.__exit__ = MagicMock(return_value=None)
-        fake_db.query.return_value.filter.return_value.count.return_value = 0
-        with (
-            patch("app.db.session.get_db", return_value=fake_db),
-            patch("app.db.models.product.Product", create=True),
-            patch("app.db.models.customer.Customer", create=True),
-        ):
-            result = apply_sunbird_roster_seed_if_needed(root)
-        assert result is True
+            side_effect=AssertionError("implicit ownerless directory access"),
+        ) as resolve_root:
+            assert sync_sunbird_delivery_files() == 0
+            assert apply_sunbird_roster_seed_if_needed() is False
+        resolve_root.assert_not_called()

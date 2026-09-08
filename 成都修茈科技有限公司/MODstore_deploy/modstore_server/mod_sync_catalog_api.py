@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
 from typing import List, Optional
 
@@ -199,15 +200,74 @@ def api_v1_mod_sync_list_mods(
     if auth.user.is_admin:
         rows = list_mods(lib)
     else:
-        allowed = set(get_user_mod_ids(auth.user.id))
+        from modstore_server.customer_delivery_catalog import authorized_runtime_ids
+
+        allowed = authorized_runtime_ids(auth.user.id)
         rows = [r for r in list_mods(lib) if r.get("id") in allowed]
-    return {"data": rows}
+    from modstore_server.customer_delivery_catalog import private_release_rows
+
+    releases = private_release_rows(int(auth.user.id), lib)
+    result = []
+    for row in rows:
+        release = releases.pop(str(row.get("id") or ""), None)
+        result.append(
+            {
+                **row,
+                "source_version": row.get("version"),
+                "installable": False,
+                "publication_status": "source_only",
+                **(release or {}),
+            }
+        )
+    result.extend(releases.values())
+    return {
+        "data": [
+            {key: value for key, value in row.items() if not key.startswith("_")} for row in result
+        ]
+    }
 
 
 @router.get("/export-zip/{mod_id}", summary="下载 Mod zip（供本机 modman remote-deploy）")
 def api_v1_mod_sync_export_zip(
     mod_id: str,
     authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    auth = _require_mod_sync_auth(authorization)
+    from modstore_server.customer_delivery_catalog import (
+        authorized_runtime_ids,
+        issue_release_download,
+        private_release_rows,
+        read_catalog_release,
+    )
+
+    mid = (mod_id or "").strip()
+    if not mid or "/" in mid or "\\" in mid:
+        raise HTTPException(400, "非法 mod id")
+    record = private_release_rows(int(auth.user.id), _lib()).get(mid)
+    if not record:
+        if mid not in authorized_runtime_ids(int(auth.user.id)):
+            raise HTTPException(403, "当前账号未授权此私有运行包")
+        raise HTTPException(409, "此 Mod 尚无本账号已验收的正式签名发布包")
+    try:
+        raw = read_catalog_release(record)
+        delivery_headers = issue_release_download(record, raw)
+    except (OSError, ValueError, RuntimeError) as exc:
+        raise HTTPException(409, "正式发布包校验失败") from exc
+    return StreamingResponse(
+        BytesIO(raw),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{mid}-{record["version"]}.xcmod"',
+            "X-Artifact-SHA256": record["package_sha256"],
+            "X-Artifact-Version": record["version"],
+            **delivery_headers,
+        },
+    )
+
+
+@router.get("/export-source-zip/{mod_id}", summary="导出源码 ZIP（不作为运行包发布）")
+def api_v1_mod_sync_export_source_zip(
+    mod_id: str, authorization: Optional[str] = Header(None, alias="Authorization")
 ):
     auth = _require_mod_sync_auth(authorization)
     mid = _assert_sync_can_read_mod(auth, mod_id)

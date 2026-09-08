@@ -2,6 +2,7 @@
 
 import json
 import os
+import runpy
 from pathlib import Path
 
 import setuptools
@@ -55,14 +56,14 @@ for item in [
 ]:
     datas.extend(add_data(item))
 
-_staged_mods = (os.environ.get("XCAGI_STAGED_MODS_DIR") or "").strip()
-if _staged_mods and Path(_staged_mods).is_dir():
-    datas.append((str(Path(_staged_mods).resolve()), "mods"))
-    _sku_file = Path(_staged_mods).parent.parent / "build" / "product-sku.json"
-    if _sku_file.is_file():
-        datas.append((str(_sku_file.resolve()), "."))
-else:
-    datas.extend(add_data("mods"))
+_bundle_policy = runpy.run_path(str(ROOT / "scripts/package/bundled_mod_policy.py"))
+_staged_mods = _bundle_policy["validated_staged_mods"](
+    (os.environ.get("XCAGI_STAGED_MODS_DIR") or "").strip()
+)
+datas.append((str(_staged_mods), "mods"))
+_sku_file = _staged_mods.parent.parent / "build" / "product-sku.json"
+if _sku_file.is_file():
+    datas.append((str(_sku_file.resolve()), "."))
 
 # PyInstaller flattens vendored Python packages into its signed ``_MEIPASS``
 # runtime tree. Preserve the audited provenance records separately so the

@@ -38,6 +38,25 @@ async def mod_store_private_delivery_status(request: Request) -> ModStoreSimpleR
     context = await _private_mod_context(request)
     if mod_id not in context["mod_ids"]:
         raise HTTPException(status_code=403, detail="当前账号未授权该客户私有 Mod")
+    from app.application.private_mod_delivery_app import (
+        STAGES,
+        TRACKS,
+        account_projects,
+        assert_stage_transition,
+        normalize_track,
+    )
+
+    track = normalize_track(track)
+    if track not in TRACKS or status not in STAGES:
+        raise HTTPException(status_code=400, detail="未知交付轨道或阶段")
+    scope_key = _enterprise_delivery_scope(context, {mod_id})
+    prior = account_projects(scope_key, {mod_id})[0]
+    track_row = (prior.get("tracks") or {}).get(track) or {}
+    target_row = (track_row.get("nodes") or {}).get(node_id) or {} if node_id else track_row
+    try:
+        assert_stage_transition(str(target_row.get("status") or "production"), status)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     # 返工必须写明问题，并走现有客服变更工单（不新造工单系统）
     rework_ticket: dict[str, Any] | None = None
     if status == "rework":
@@ -49,28 +68,32 @@ async def mod_store_private_delivery_status(request: Request) -> ModStoreSimpleR
             uid = 0
         if uid <= 0:
             raise HTTPException(status_code=401, detail="转返工须已绑定市场账号身份")
-        from app.application.user_cs_change_request_app import create_change_request
+        from app.application.customer_issue_intake_app import submit_private_rework
+        from app.fastapi_routes.private_mod_delivery_context import (
+            _private_delivery_market_token,
+        )
+        from app.mod_sdk.customer_delivery import delivery_for_account_custom_mod
 
-        node_label = node_id or track
+        runtime_id = str(
+            (delivery_for_account_custom_mod(mod_id) or {}).get("runtime_mod_id") or mod_id
+        )
+        local_row = _private_mod_local_rows({runtime_id}).get(runtime_id, {})
         try:
-            rework_ticket = create_change_request(
-                uid,
-                change_type="bug_fix",
-                title=f"定制交付返工 · {mod_id} · {node_label}",
-                description=(
-                    f"来源：企业端私有交付返工\n"
-                    f"Mod：{mod_id}\n"
-                    f"轨道：{track}\n"
-                    f"节点：{node_id or '整轨'}\n"
-                    f"问题：{note}"
-                ),
-                priority=_safe_text(payload.get("priority")) or "normal",
+            rework_ticket = await submit_private_rework(
+                market_user_id=uid,
+                token=await _private_delivery_market_token(request),
+                mod_id=mod_id,
+                track=track,
+                node_id=node_id,
+                note=note,
+                version=_safe_text(local_row.get("version")),
                 username=_safe_text(context.get("username")),
-                source="private_mod_rework",
             )
-            ticket_no = _safe_text(rework_ticket.get("ticket_no") or rework_ticket.get("id"))
-            if ticket_no:
-                note = f"[客服工单 {ticket_no}] {note}"
+            note = f"[客服工单 {rework_ticket['ticket_no']}] {note}"
+        except PermissionError as exc:
+            raise HTTPException(status_code=401, detail=str(exc)) from exc
+        except (ConnectionError, RuntimeError) as exc:
+            raise HTTPException(status_code=502, detail=f"返工未成功受理，可重试：{exc}") from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -139,7 +162,9 @@ async def mod_store_private_delivery_status(request: Request) -> ModStoreSimpleR
 async def mod_store_private_mod_update(request: Request) -> ModStoreInstallResult:
     payload = await _request_payload(request)
     mod_id = _safe_text(payload.get("mod_id"))
-    expected_version = _safe_text(payload.get("latest_version") or payload.get("version"))
+    expected_version = _safe_text(
+        payload.get("expected_version") or payload.get("latest_version") or payload.get("version")
+    )
     if not mod_id:
         raise HTTPException(status_code=400, detail="缺少 mod_id")
     context = await _private_mod_context(request)
@@ -153,8 +178,16 @@ async def mod_store_private_mod_update(request: Request) -> ModStoreInstallResul
             status_code=409,
             detail="该定制功能集成于共享工作区，请更新标准客户端；不安装独立客户 Mod",
         )
+    from app.application.tenant_workspace_prefs import resolve_workspace_owner_id
+    from app.infrastructure.auth.dependencies import get_logged_in_user
+
+    owner_scope = resolve_workspace_owner_id(request, get_logged_in_user(request))
+    if not owner_scope:
+        raise HTTPException(status_code=401, detail="无法确定当前工作空间")
     try:
-        from app.application.private_mod_delivery_app import update_private_mod_from_library
+        from app.application.private_mod_delivery_app import (
+            update_private_mod_from_library,
+        )
         from app.fastapi_routes.market_account import resolve_valid_market_access_token
         from app.infrastructure.auth.dependencies import session_id_from_request
 
@@ -163,10 +196,22 @@ async def mod_store_private_mod_update(request: Request) -> ModStoreInstallResul
         if not token:
             raise PermissionError("缺少市场登录凭证，无法更新客户私有 Mod")
         data = await update_private_mod_from_library(
-            mod_id,
+            _safe_text(delivery.get("runtime_mod_id")) or mod_id,
             token,
             expected_version=expected_version,
+            owner_scope=owner_scope,
         )
+        from app.application.mod_delivery_receipt_outbox import (
+            retry_delivery_receipts_best_effort,
+        )
+
+        if data.get("success"):
+            from app.application.delivery_entitlements import (
+                refresh_delivery_entitlements,
+            )
+
+            data["entitlements_refreshed"] = await refresh_delivery_entitlements(request, token)
+            data["receipts"] = await retry_delivery_receipts_best_effort(request, token)
         return ModStoreInstallResult(
             success=bool(data.get("success")),
             message=str(data.get("message") or "私有 Mod 更新完成"),

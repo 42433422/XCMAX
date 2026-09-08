@@ -532,7 +532,7 @@ async def test_fetch_entitled_dict_with_mod_ids_list(
         captured["method"] = method
         captured["path"] = path
         captured["authorization"] = authorization
-        return {"mod_ids": ["taiyangniao-pro", "other", ""]}
+        return {"mod_ids": ["taiyangniao-pro", "other", "", "../invalid"]}
 
     monkeypatch.setattr(
         "app.fastapi_routes.market_account._proxy_json",
@@ -543,7 +543,7 @@ async def test_fetch_entitled_dict_with_mod_ids_list(
         lambda mid: mid == "taiyangniao-pro",
     )
     out = await fetch_entitled_client_mod_ids_from_market("tok")
-    assert out == {"taiyangniao-pro"}
+    assert out == {"taiyangniao-pro", "other"}
     assert captured["method"] == "GET"
     assert captured["path"] == "/api/enterprise/entitled-mod-ids"
     # 应自动补 Bearer 前缀
@@ -1592,9 +1592,6 @@ def test_list_mods_etag_304() -> None:
     mock_mm = MagicMock()
     mock_mm._mods_scan_fingerprint.return_value = "fp-1"
     mock_mm.list_all_mods.return_value = []
-    import hashlib
-
-    expected_etag = hashlib.sha256(b"fp-1").hexdigest()[:32]
     with (
         patch(
             "app.infrastructure.mods.mod_manager.get_mod_manager",
@@ -1606,7 +1603,26 @@ def test_list_mods_etag_304() -> None:
         ),
     ):
         client = TestClient(app)
-        resp = client.get("/api/mods/", headers={"if-none-match": expected_etag})
+        headers = {"x-session-id": "owner-a"}
+        initial = client.get("/api/mods/", headers=headers)
+        assert initial.status_code == 200
+        assert initial.json()["data"] == []
+        expected_etag = initial.headers["etag"]
+        resp = client.get("/api/mods/", headers={**headers, "if-none-match": expected_etag})
+        assert resp.status_code == 304
+        assert resp.content == b""
+        assert resp.headers["etag"] == expected_etag
+        other_session = client.get(
+            "/api/mods/",
+            headers={"x-session-id": "owner-b", "if-none-match": expected_etag},
+        )
+        assert other_session.status_code == 200
+        assert other_session.headers["etag"] != expected_etag
+        mock_mm.list_all_mods.return_value = [{"id": "m1", "scope": "global"}]
+        changed_rows = client.get("/api/mods/", headers={**headers, "if-none-match": expected_etag})
+        assert changed_rows.status_code == 200
+        assert changed_rows.json()["data"] == [{"id": "m1", "scope": "global"}]
+        assert changed_rows.headers["etag"] != expected_etag
     assert resp.status_code == 304
 
 
@@ -1636,7 +1652,12 @@ def test_list_mods_recoverable_error() -> None:
 def test_list_routes_happy_path() -> None:
     app = _build_mods_app()
     mock_mm = MagicMock()
-    mock_mm.get_routes.return_value = [{"path": "/x"}]
+    route = {"mod_id": "m1", "routes_path": "frontend/routes.js"}
+    mock_mm.get_routes.return_value = [route, {"mod_id": "private", "routes_path": "secret.js"}]
+    mock_mm.list_all_mods.return_value = [
+        {"id": "m1", "scope": "global"},
+        {"id": "private", "scope": "private"},
+    ]
     with patch(
         "app.infrastructure.mods.mod_manager.get_mod_manager",
         return_value=mock_mm,
@@ -1645,7 +1666,7 @@ def test_list_routes_happy_path() -> None:
         resp = client.get("/api/mods/routes")
     body = resp.json()
     assert body["success"] is True
-    assert body["data"] == [{"path": "/x"}]
+    assert body["data"] == [route]
 
 
 def test_list_routes_recoverable_error() -> None:
@@ -1816,6 +1837,8 @@ def test_get_mod_detail_happy_path() -> None:
     mock_mod.version = "1.0.0"
     mock_mod.author = "author"
     mock_mod.description = "desc"
+    mock_mod.scope = "global"
+    mock_mod.frontend_runtime = {}
     mock_mod.frontend_menu = {}
     mock_mod.frontend_menu_overrides = {}
     mock_mod.comms_exports = []
