@@ -144,3 +144,27 @@ def test_switching_repository_invalidates_cached_product_details():
         service.set_repository(new_repository)
         assert service.get_product(1)["data"]["name"] == "新数据"
     new_repository.find_by_id.assert_called_once_with(1)
+
+
+def test_product_name_cache_distinguishes_all_from_literal_all():
+    repository = Mock()
+    repository.find_names.side_effect = [["全部产品"], ["all"]]
+    with patch(
+        "app.utils.performance.performance_initializer.get_performance_optimizer",
+        return_value=Mock(
+            redis_cache=None,
+            query_optimizer=None,
+            request_deduplicator=None,
+            performance_monitor=None,
+        ),
+    ):
+        service = ProductsService(repository)
+    values = {}
+    cache = Mock()
+    cache.get.side_effect = values.get
+    cache.set.side_effect = lambda key, value, **kwargs: values.update({key: value})
+    service._cache = cache
+    with tenant_scope(1):
+        assert service.get_product_names()["data"] == ["全部产品"]
+        assert service.get_product_names("all")["data"] == ["all"]
+    assert repository.find_names.call_count == 2

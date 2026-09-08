@@ -9,6 +9,7 @@
 - 异步批量操作
 """
 
+import json
 import logging
 import time
 from typing import Any, cast
@@ -100,7 +101,8 @@ class ProductsService(NeuroEventPublisherMixin):
 
         start_time = time.perf_counter()
         cache_key = self._tenant_cache_key(
-            f"products:list:{unit_name}:{model_number}:{keyword}:{page}:{per_page}"
+            "products:list:"
+            + json.dumps([unit_name, model_number, keyword, page, per_page], ensure_ascii=False)
         )
 
         # 尝试从缓存获取（仅对第一页和简单查询启用缓存）
@@ -312,7 +314,9 @@ class ProductsService(NeuroEventPublisherMixin):
             logger.error("ProductRepository 未注入")
             return {"success": False, "message": "服务未正确初始化", "data": [], "count": 0}
 
-        cache_key = self._tenant_cache_key(f"product_names:{keyword or 'all'}")
+        cache_key = self._tenant_cache_key(
+            "product_names:" + json.dumps(keyword, ensure_ascii=False)
+        )
 
         if self._cache:
             cached = self._cache.get(cache_key)
