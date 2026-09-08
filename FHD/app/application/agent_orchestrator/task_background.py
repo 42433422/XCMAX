@@ -8,6 +8,7 @@ from app.application.agent_orchestrator.artifact_attachment import ArtifactAttac
 from app.application.agent_orchestrator.budget import apply_ai_budget_metadata
 from app.application.agent_orchestrator.run_lifecycle import RunLifecycleMixin
 from app.application.agent_orchestrator.run_models import AgentRun, utc_now_iso
+from app.application.agent_orchestrator.runtime_context import merge_runtime_context
 from app.application.agent_orchestrator.task_plan import UnifiedTaskPlanMixin
 
 _WORKER_EXECUTION_FAILED = "worker_execution_failed"
@@ -33,14 +34,7 @@ def apply_approved_step(
     runtime_context: dict[str, Any] | None = None,
 ) -> None:
     """Apply an already validated approval without performing storage I/O."""
-    context = dict(run.metadata.get("runtime_context") or {})
-    if (
-        runtime_context
-        and "tenant_id" in runtime_context
-        and str(runtime_context["tenant_id"] or "") != str(context.get("tenant_id") or "")
-    ):
-        raise ValueError("不能更改任务的租户范围")
-    context.update(dict(runtime_context or {}))
+    context = merge_runtime_context(run, runtime_context)
     run.metadata["runtime_context"] = context
     apply_ai_budget_metadata(run, context)
     step.status = "pending"
@@ -153,9 +147,8 @@ class BackgroundTaskExecutionMixin:
             return cast("AgentRun | None", run)
         control = run.metadata.get("control")
         resume_status = str(control.get("resume_status") or "") if isinstance(control, dict) else ""
+        context = merge_runtime_context(run, runtime_context)
         command = self._repo.request_task_control(run_id, "resume", requested_by=requested_by)
-        context = dict(run.metadata.get("runtime_context") or {})
-        context.update(dict(runtime_context or {}))
         run.metadata["runtime_context"] = context
         run.metadata["control"] = {
             "state": "queued",

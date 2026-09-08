@@ -19,6 +19,15 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Approval, synchronous/background resume and retry now share runtime-context
+  tenant binding. Resume validates before creating its control command, so
+  rejected tenant changes leave no command or run mutation; retry creates no new
+  run. Three direct lifecycle tests assert unchanged full persisted state, no
+  command and no extra run; all 35 route/lifecycle/dispatcher checks passed
+  (`continuation-tenant-binding`). Task creation's second API also drops unverified
+  client tenant IDs. HTTP error presentation for resume/retry and principal/Mod
+  ownership across all endpoints remain to be completed.
+
 - Approval continuation previously merged client runtime_context over persisted
   tenant identity. HTTP now rejects a differing tenant before consumption, and
   approval-state mutation repeats the check inside the durable transaction. A

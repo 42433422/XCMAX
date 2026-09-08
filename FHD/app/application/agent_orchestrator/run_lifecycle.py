@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from app.application.agent_orchestrator.execution_lease import DurableExecutionLeaseMixin
 from app.application.agent_orchestrator.run_models import AgentRun, utc_now_iso
+from app.application.agent_orchestrator.runtime_context import merge_runtime_context
 
 
 class RunLifecycleMixin(DurableExecutionLeaseMixin):
@@ -99,9 +100,8 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
             return cast("AgentRun | None", run)
         control = run.metadata.get("control")
         resume_status = str(control.get("resume_status") or "") if isinstance(control, dict) else ""
+        context = merge_runtime_context(run, runtime_context)
         command = self._repo.request_task_control(run_id, "resume", requested_by=requested_by)
-        context = dict(run.metadata.get("runtime_context") or {})
-        context.update(dict(runtime_context or {}))
         run.metadata["runtime_context"] = context
         run.metadata["control"] = {
             "state": "running",
@@ -144,8 +144,7 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
 
         previous_task = previous.metadata.get("task_context")
         task = dict(previous_task) if isinstance(previous_task, dict) else {}
-        context = dict(previous.metadata.get("runtime_context") or {})
-        context.update(dict(runtime_context or {}))
+        context = merge_runtime_context(previous, runtime_context)
         context.update(
             {
                 "task_id": task.get("task_id") or context.get("task_id"),
