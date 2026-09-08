@@ -7,8 +7,14 @@ from app.application.agent_orchestrator.run_models import AgentRun
 
 
 def renew_approval_session(
-    run: AgentRun, *, principal_id: str, authenticated_binding: dict[str, Any] | None
+    run: AgentRun,
+    *,
+    principal_id: str,
+    authenticated_binding: dict[str, Any] | None,
+    operation: str = "approval",
 ) -> None:
+    if operation not in {"approval", "resume"}:
+        raise ApprovalGrantError("无效的会话续期操作")
     context = dict(run.metadata.get("runtime_context") or {})
     previous = context.get("_mod_authorization")
     if not previous and not authenticated_binding:
@@ -33,12 +39,13 @@ def renew_approval_session(
             raise ApprovalGrantError("任务会话绑定无效")
     if previous == authenticated_binding:
         return
-    if run.status != "waiting_user" or any(step.status == "running" for step in run.steps):
+    expected_status = "waiting_user" if operation == "approval" else "paused"
+    if run.status != expected_status or any(step.status == "running" for step in run.steps):
         raise ApprovalGrantError("任务执行状态不允许更新会话")
     context["_mod_authorization"] = dict(authenticated_binding)
     run.metadata["runtime_context"] = context
     run.add_event(
         "task.session_renewed",
-        "确认步骤时更新了同一账号范围的登录会话",
+        "更新了同一账号范围的登录会话",
         {"requested_by": principal_id},
     )

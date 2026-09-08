@@ -136,3 +136,118 @@ def test_legacy_incomplete_binding_requires_reconciliation(waiting_task, missing
     assert queue.get(original.run_id) is None
     with factory() as db:
         assert db.query(AgentApprovalConsumption).count() == 0
+
+
+@pytest.mark.parametrize("waiting", [True, False])
+@pytest.mark.parametrize("fail_enqueue", [True, False])
+def test_resume_session_and_queue_commit_together(waiting_task, monkeypatch, waiting, fail_enqueue):
+    from app.application.agent_orchestrator.resume_transaction import resume_and_enqueue
+
+    runs, queue, factory, original, previous, _ = waiting_task
+    run = runs.get(original.run_id)
+    run.status = "paused"
+    run.steps[0].status = "waiting_user" if waiting else "pending"
+    run.metadata["control"] = {"resume_status": "running"}
+    runs.save(run)
+    before = runs.get(run.run_id).to_dict()
+    enqueue = queue.enqueue_in_session
+
+    def fail(db, run, **kwargs):
+        enqueue(db, run, **kwargs)
+        db.flush()
+        raise RuntimeError("interrupted resume")
+
+    if fail_enqueue:
+        monkeypatch.setattr(queue, "enqueue_in_session", fail)
+
+    def resume():
+        return resume_and_enqueue(
+            runs,
+            queue,
+            run_id=run.run_id,
+            principal_id="owner",
+            runtime_context={},
+            authenticated_binding={**previous, "session_row_id": 2},
+        )
+
+    if fail_enqueue and not waiting:
+        with pytest.raises(RuntimeError, match="interrupted resume"):
+            resume()
+        assert runs.get(run.run_id).to_dict() == before
+        assert runs.latest_task_control(run.run_id) is None
+        assert queue.get(run.run_id) is None
+        monkeypatch.setattr(queue, "enqueue_in_session", enqueue)
+    result = resume()
+    assert result.status == ("waiting_user" if waiting else "queued")
+    assert result.metadata["runtime_context"]["_mod_authorization"]["session_row_id"] == 2
+    assert (queue.get(run.run_id) is None) == waiting
+    assert runs.latest_task_control(run.run_id).status == "applied"
+    with factory() as db:
+        assert db.query(AgentApprovalConsumption).count() == 0
+
+
+def test_resume_cannot_replace_an_outstanding_worker_claim(waiting_task):
+    from app.application.agent_orchestrator.resume_transaction import resume_and_enqueue
+
+    runs, queue, _, original, previous, _ = waiting_task
+    queue.enqueue(original)
+    claim = queue.claim("worker", lease_seconds=30)
+    assert claim is not None
+    run = runs.get(original.run_id)
+    run.status = "paused"
+    runs.save(run)
+    before = runs.get(run.run_id).to_dict()
+    with pytest.raises(ApprovalGrantError, match="执行权"):
+        resume_and_enqueue(
+            runs,
+            queue,
+            run_id=run.run_id,
+            principal_id="owner",
+            runtime_context={},
+            authenticated_binding={**previous, "session_row_id": 2},
+        )
+    assert runs.get(run.run_id).to_dict() == before
+    assert runs.latest_task_control(run.run_id) is None
+    assert queue.get(run.run_id).lease_owner == "worker"
+
+
+def test_http_resume_renews_session_without_bypassing_approval(waiting_task, monkeypatch):
+    from types import SimpleNamespace
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.fastapi_routes.domains.agent import route_support, routes
+    from app.infrastructure.auth.agent_principal import AgentPrincipal, require_agent_principal
+
+    runs, queue, _, original, previous, _ = waiting_task
+    run = runs.get(original.run_id)
+    run.status = "paused"
+    run.metadata["control"] = {"resume_status": "running"}
+    runs.save(run)
+    monkeypatch.setattr(routes, "get_agent_run_repository", lambda: runs)
+    monkeypatch.setattr(routes, "get_task_execution_repository", lambda: queue)
+    monkeypatch.setattr(route_support, "get_task_execution_repository", lambda: queue)
+    monkeypatch.setattr(
+        routes,
+        "AgentOrchestrator",
+        lambda: SimpleNamespace(
+            get_run=runs.get,
+            latest_task_control=runs.latest_task_control,
+        ),
+    )
+    app = FastAPI()
+    app.include_router(routes.router)
+    app.dependency_overrides[require_agent_principal] = lambda: AgentPrincipal(
+        user_id="owner",
+        tenant_id="tenant",
+        mod_authorization={**previous, "session_row_id": 2},
+    )
+    response = TestClient(app).post(f"/api/agent/runs/{run.run_id}/resume", json={})
+    assert response.status_code == 200
+    assert runs.get(run.run_id).status == "waiting_user"
+    assert (
+        runs.get(run.run_id).metadata["runtime_context"]["_mod_authorization"]["session_row_id"]
+        == 2
+    )
+    assert queue.get(run.run_id) is None

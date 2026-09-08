@@ -344,6 +344,7 @@ def _control_agent_run(
 ) -> dict[str, Any] | JSONResponse:
     def apply_control() -> dict[str, Any] | JSONResponse:
         orchestrator = AgentOrchestrator()
+        durable_resume = False
         _, error = _owned_run(orchestrator, run_id, principal)
         if error is not None:
             return error
@@ -352,18 +353,39 @@ def _control_agent_run(
         elif action == "cancel":
             run = orchestrator.cancel_run(run_id, requested_by=principal.user_id)
         else:
-            run = orchestrator.stage_resume_run(
-                run_id,
-                requested_by=principal.user_id,
-                runtime_context=runtime_context,
-            )
+            runs = get_agent_run_repository()
+            queue = get_task_execution_repository()
+            if isinstance(runs, SQLAlchemyAgentRunRepository):
+                from app.application.agent_orchestrator.resume_transaction import resume_and_enqueue
+
+                if not isinstance(queue, SQLAlchemyTaskExecutionRepository):
+                    raise ApprovalGrantStorageError("持久化恢复需要持久化队列")
+                run = resume_and_enqueue(
+                    runs,
+                    queue,
+                    run_id=run_id,
+                    principal_id=principal.user_id,
+                    runtime_context=runtime_context or {},
+                    authenticated_binding=principal.mod_authorization,
+                )
+                durable_resume = True
+            else:
+                run = orchestrator.stage_resume_run(
+                    run_id,
+                    requested_by=principal.user_id,
+                    runtime_context=runtime_context,
+                    authenticated_binding=principal.mod_authorization,
+                )
         if run is None:
             return JSONResponse(
                 {"success": False, "message": "agent run 不存在"},
                 status_code=404,
             )
         if run.status == "queued":
-            _enqueue_run(run, requested_by=principal.user_id)
+            if durable_resume:
+                notify_agent_task_dispatcher()
+            else:
+                _enqueue_run(run, requested_by=principal.user_id)
         else:
             _sync_execution_terminal_state(run)
         response = _run_response(run, principal=principal)
@@ -418,6 +440,12 @@ def resume_agent_run(
         return JSONResponse(
             {"success": False, "message": "不能更改任务的租户范围"}, status_code=400
         )
+    except ApprovalGrantError:
+        return JSONResponse(
+            {"success": False, "message": "任务授权或状态已变化，请先核对"}, status_code=403
+        )
+    except RECOVERABLE_ERRORS:
+        return _internal_error_response("resume agent run")
 
 
 @router.post("/api/agent/runs/{run_id}/retry", response_model=None)

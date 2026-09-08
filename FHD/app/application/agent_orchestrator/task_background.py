@@ -147,10 +147,19 @@ class BackgroundTaskExecutionMixin:
         *,
         requested_by: str = "",
         runtime_context: dict[str, Any] | None = None,
+        authenticated_binding: dict[str, Any] | None = None,
     ) -> AgentRun | None:
         run = self._repo.get(run_id)
         if run is None or run.status != "paused":
             return cast("AgentRun | None", run)
+        from app.application.agent_orchestrator.session_renewal import renew_approval_session
+
+        renew_approval_session(
+            run,
+            principal_id=requested_by,
+            authenticated_binding=authenticated_binding,
+            operation="resume",
+        )
         control = run.metadata.get("control")
         resume_status = str(control.get("resume_status") or "") if isinstance(control, dict) else ""
         context = merge_runtime_context(run, runtime_context)
@@ -161,7 +170,10 @@ class BackgroundTaskExecutionMixin:
             "requested_by": requested_by,
             "command_id": command.command_id,
         }
-        run.status = "waiting_user" if resume_status == "waiting_user" else "queued"
+        needs_approval = resume_status == "waiting_user" or any(
+            step.status == "waiting_user" for step in run.steps
+        )
+        run.status = "waiting_user" if needs_approval else "queued"
         if run.status == "queued":
             run.metadata["dispatch"] = {
                 "state": "queued",

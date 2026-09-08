@@ -19,6 +19,17 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Durable paused-run resume now commits session renewal, the applied control
+  command, run state and queue together. Queue ownership is checked before run
+  mutation; outstanding worker claims and running steps require reconciliation.
+  Waiting approval steps remain waiting even if older control metadata says
+  running, and are not enqueued. The HTTP resume path uses this transaction;
+  memory resume shares the session identity rules. The combined renewal, HTTP,
+  ownership, background-Mod and approval transaction suite passes 93 tests
+  (`resume-complete-regressions`). Fault injection confirms resume rollback leaves
+  the original run/session and no command or queue item, then permits retry.
+  Historical missing bindings, real session/device acceptance and production
+  database concurrency qualification remain outstanding.
 - Explicit approval now accepts a renewed server-authenticated session only when
   user, Mod, account tenant and role exactly match the persisted binding. The
   session update, approval consumption and enqueue share the durable transaction;
