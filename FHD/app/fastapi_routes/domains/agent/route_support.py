@@ -134,6 +134,30 @@ def task_scope_matches(
     return all(owned_run(orchestrator, run.run_id, principal)[1] is None for run in runs)
 
 
+def scoped_tasks(
+    orchestrator: AgentOrchestrator,
+    *,
+    principal: AgentPrincipal,
+    limit: int,
+    include_archived: bool = False,
+) -> list[Any]:
+    result: list[Any] = []
+    offset = 0
+    while len(result) < limit:
+        page = orchestrator.list_tasks(
+            user_id=principal.user_id,
+            tenant_id=principal.tenant_id,
+            limit=100,
+            offset=offset,
+            include_archived=include_archived,
+        )
+        result.extend(task for task in page if task_scope_matches(orchestrator, task, principal))
+        if len(page) < 100:
+            break
+        offset += len(page)
+    return result[:limit]
+
+
 def enqueue_run(run: Any, *, requested_by: str) -> None:
     get_task_execution_repository().enqueue(run, requested_by=requested_by)
     notify_agent_task_dispatcher()

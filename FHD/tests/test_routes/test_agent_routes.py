@@ -226,6 +226,37 @@ def test_task_access_rejects_cross_mod_scope(method, suffix, other_mod):
     assert owner.get("/api/agent/tasks/private-mod-task").status_code == 200
 
 
+def test_task_collection_filters_mod_before_limit_and_stream_snapshot():
+    owner = _client(mod_authorization={"mod_id": "mod-a", "session_row_id": 1, "user_id": "u1"})
+    other = _client(mod_authorization={"mod_id": "mod-b", "session_row_id": 2, "user_id": "u1"})
+    body = {
+        "title": "查询产品",
+        "tool_id": "products",
+        "action": "query",
+        "params": {"keyword": "5003"},
+    }
+    assert (
+        owner.post("/api/agent/tasks", json={**body, "task_id": "visible-task"}).status_code == 202
+    )
+    for index in range(101):
+        assert (
+            other.post(
+                "/api/agent/tasks", json={**body, "task_id": f"hidden-task-{index}"}
+            ).status_code
+            == 202
+        )
+    listing = owner.get("/api/agent/tasks?limit=1").json()
+    assert [task["task_id"] for task in listing["data"]] == ["visible-task"]
+    assert listing["count"] == 1
+    stream = owner.get("/api/agent/tasks/events/stream?once=true")
+    assert stream.status_code == 200
+    assert "visible-task" in stream.text
+    assert "hidden-task" not in stream.text
+    runtime = owner.get("/api/agent/task-runtime").json()
+    assert runtime["data"]["progress"]["task_count"] == 1
+    assert _client().get("/api/agent/tasks").json()["data"] == []
+
+
 def _drain_background_run(run_id: str) -> AgentRun:
     queue = get_task_execution_repository()
     claimed = queue.claim("route-test-worker", lease_seconds=30)

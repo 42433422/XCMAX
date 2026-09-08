@@ -49,6 +49,7 @@ class AgentRunRepository(Protocol):
         tenant_id: str | None = None,
         limit: int = 50,
         include_archived: bool = False,
+        offset: int = 0,
     ) -> list[AgentTask]: ...
 
     def archive_task(
@@ -160,6 +161,7 @@ class InMemoryAgentRunRepository:
         tenant_id: str | None = None,
         limit: int = 50,
         include_archived: bool = False,
+        offset: int = 0,
     ) -> list[AgentTask]:
         with self._lock:
             tasks = [task for (_, owner, _), task in self._tasks.items() if owner == str(user_id)]
@@ -168,7 +170,10 @@ class InMemoryAgentRunRepository:
         if not include_archived:
             tasks = [task for task in tasks if not task.archived_at]
         tasks.sort(key=lambda task: (task.updated_at, task.task_id), reverse=True)
-        return [copy.deepcopy(task) for task in tasks[: max(0, int(limit))]]
+        return [
+            copy.deepcopy(task)
+            for task in tasks[max(0, int(offset)) : max(0, int(offset)) + max(0, int(limit))]
+        ]
 
     def archive_task(
         self,

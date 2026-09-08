@@ -30,6 +30,7 @@ from app.fastapi_routes.domains.agent.route_support import (
     internal_error_response,
     public_run_dict,
     run_response,
+    scoped_tasks,
     success,
     task_scope_matches,
 )
@@ -149,9 +150,9 @@ def list_agent_tasks(
             )
             if existing is None:
                 orchestrator.save_task(task_from_run(run))
-        tasks = orchestrator.list_tasks(
-            user_id=principal.user_id,
-            tenant_id=principal.tenant_id,
+        tasks = scoped_tasks(
+            orchestrator,
+            principal=principal,
             limit=limit,
             include_archived=include_archived,
         )
@@ -178,9 +179,9 @@ def get_agent_task_runtime(
 ) -> dict[str, Any] | JSONResponse:
     try:
         snapshot = get_agent_task_dispatcher().snapshot()
-        tasks = AgentOrchestrator().list_tasks(
-            user_id=principal.user_id,
-            tenant_id=principal.tenant_id,
+        tasks = scoped_tasks(
+            AgentOrchestrator(),
+            principal=principal,
             limit=200,
             include_archived=False,
         )
@@ -255,9 +256,9 @@ async def stream_agent_tasks(
         deadline = time.monotonic() + 60.0
         while time.monotonic() < deadline:
             orchestrator = AgentOrchestrator()
-            tasks = orchestrator.list_tasks(
-                user_id=principal.user_id,
-                tenant_id=principal.tenant_id,
+            tasks = scoped_tasks(
+                orchestrator,
+                principal=principal,
                 limit=200,
                 include_archived=False,
             )

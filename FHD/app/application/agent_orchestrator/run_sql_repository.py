@@ -225,6 +225,7 @@ class SQLAlchemyAgentRunRepository:
         tenant_id: str | None = None,
         limit: int = 50,
         include_archived: bool = False,
+        offset: int = 0,
     ) -> list[AgentTask]:
         self._ensure_schema()
         with self._session_scope(read_only=True) as db:
@@ -239,6 +240,7 @@ class SQLAlchemyAgentRunRepository:
                 )
             records = (
                 query.order_by(AgentTaskRecord.updated_at.desc(), AgentTaskRecord.task_id.desc())
+                .offset(max(0, int(offset)))
                 .limit(max(0, int(limit)))
                 .all()
             )
