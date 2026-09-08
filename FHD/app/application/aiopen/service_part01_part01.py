@@ -34,29 +34,67 @@ def verify_api_key(provided: str | None) -> bool:
         return False
     if env_key and _facade().secrets.compare_digest(got, env_key):
         return True
-    return got in runtime_keys
+    meta = runtime_keys.get(got)
+    if not isinstance(meta, dict):
+        return False
+    if "screen_grant" in meta:
+        from app.application.aiopen.screen_identity import validate_screen_grant
+
+        return bool(validate_screen_grant(meta["screen_grant"]))
+    return True
 
 
-def generate_api_key(label: str = "") -> dict[str, _facade().Any]:
+def generate_api_key(label: str = "", *, request=None) -> dict[str, _facade().Any]:
+    from app.application.aiopen.screen_identity import capture_screen_grant
+
+    grant = capture_screen_grant(request) if request is not None else None
     key = "aiopen_" + _facade().secrets.token_urlsafe(24)
     entry = {"label": (label or "").strip() or "未命名", "created_at": _facade().time.time()}
+    if grant is not None:
+        entry["screen_grant"] = grant
     _facade().AIOPEN_STATE.setdefault("runtime_keys", {})[key] = entry
-    return {"key": key, **entry}
+    return {
+        "key": key,
+        "label": entry["label"],
+        "created_at": entry["created_at"],
+        **({"expires_at": grant["expires_at"]} if grant else {}),
+    }
 
 
-def revoke_api_key(key: str) -> bool:
+def revoke_api_key(key: str, *, request=None) -> bool:
+    if request is not None:
+        from app.application.aiopen.software_control import request_screen_owner
+
+        identity = request_screen_owner(request)
+        grant = (
+            _facade()
+            .AIOPEN_STATE.get("runtime_keys", {})
+            .get((key or "").strip(), {})
+            .get("screen_grant", {})
+        )
+        if not identity or any(grant.get(k) != v for k, v in identity.items()):
+            return False
     return (
         _facade().AIOPEN_STATE.setdefault("runtime_keys", {}).pop((key or "").strip(), None)
         is not None
     )
 
 
-def list_api_keys() -> list[dict[str, _facade().Any]]:
+def list_api_keys(*, request=None) -> list[dict[str, _facade().Any]]:
     """脱敏列出 Key（仅前 12 位 + label）。"""
     out: list[dict[str, _facade().Any]] = []
-    if _facade()._env_api_key():
+    identity = None
+    if request is not None:
+        from app.application.aiopen.software_control import request_screen_owner
+
+        identity = request_screen_owner(request)
+        if not identity:
+            return []
+    if request is None and _facade()._env_api_key():
         out.append({"key_preview": "env:AIOPEN_API_KEY", "label": "环境变量", "created_at": None})
     for key, meta in _facade().AIOPEN_STATE.get("runtime_keys", {}).items():
+        if identity and any(meta.get("screen_grant", {}).get(k) != v for k, v in identity.items()):
+            continue
         out.append(
             {
                 "key_preview": key[:12] + "…",

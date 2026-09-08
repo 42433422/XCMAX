@@ -29,12 +29,21 @@ async def invoke_tool(
     if name == "capability_loop":
         return _facade()._tool_capability_loop(app, args)
     if name == "ui_sessions":
+        from app.application.aiopen.screen_identity import external_screen_identity
+
+        identity = external_screen_identity()
+        if not identity:
+            return {
+                "success": False,
+                "code": "SCREEN_IDENTITY_REQUIRED",
+                "message": "请使用当前账号生成的连接口令",
+            }
         return {
             "success": True,
             "remote_control_enabled": bool(
                 _facade().AIOPEN_STATE.get("remote_control_enabled", False)
             ),
-            "sessions": _facade().aiopen_cursor_hub.sessions_info(),
+            "sessions": _facade().aiopen_cursor_hub.sessions_info(**identity),
         }
     if name in _facade()._UI_ACTIONS:
         if not _facade().AIOPEN_STATE.get("remote_control_enabled", False):
@@ -45,18 +54,15 @@ async def invoke_tool(
             }
         session_id = str(args.get("session_id") or "") or None
         params = {k: v for k, v in args.items() if k != "session_id"}
-        identity = {}
-        if name in {"ui_files", "ui_set_files"}:
-            from app.application.aiopen.software_control import request_screen_owner
-            from app.infrastructure.request_context import get_current_request
+        from app.application.aiopen.screen_identity import external_screen_identity
 
-            identity = request_screen_owner(get_current_request())
-            if not identity.get("owner_id") or not identity.get("tenant_id"):
-                return {
-                    "success": False,
-                    "code": "SCREEN_IDENTITY_REQUIRED",
-                    "message": "文件操作需要当前账号会话，通用 AIOPEN 令牌不授予文件访问权限",
-                }
+        identity = external_screen_identity()
+        if not identity:
+            return {
+                "success": False,
+                "code": "SCREEN_IDENTITY_REQUIRED",
+                "message": "请使用当前账号生成的连接口令",
+            }
         return await _facade().aiopen_cursor_hub.dispatch(
             _facade()._UI_ACTIONS[name],
             params,

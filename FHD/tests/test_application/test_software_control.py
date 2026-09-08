@@ -30,6 +30,9 @@ def test_screen_identity_comes_from_validated_session(monkeypatch):
         None,
         SimpleNamespace(id=3, tenant_id=7, is_active=False),
         SimpleNamespace(id=3, tenant_id=None),
+        SimpleNamespace(id=True, tenant_id=7),
+        SimpleNamespace(id=3, tenant_id=0),
+        SimpleNamespace(id=3, tenant_id=-1),
     ],
 )
 def test_missing_or_inactive_identity_cannot_own_a_screen(monkeypatch, user):
@@ -81,14 +84,14 @@ async def test_external_file_tools_require_session_identity(monkeypatch):
     dispatch = AsyncMock(return_value={"success": True})
     monkeypatch.setattr(aiopen_cursor_hub, "dispatch", dispatch)
     monkeypatch.setattr(
-        "app.application.aiopen.software_control.request_screen_owner", lambda request: {}
+        "app.application.aiopen.screen_identity.external_screen_identity", lambda: {}
     )
     denied = await invoke_tool("ui_files", {"owner_id": "other", "tenant_id": "8"}, None)
     assert denied["code"] == "SCREEN_IDENTITY_REQUIRED"
     dispatch.assert_not_called()
     monkeypatch.setattr(
-        "app.application.aiopen.software_control.request_screen_owner",
-        lambda request: {"owner_id": "3", "tenant_id": "7"},
+        "app.application.aiopen.screen_identity.external_screen_identity",
+        lambda: {"owner_id": "3", "tenant_id": "7"},
     )
     await invoke_tool(
         "ui_set_files", {"selector": "#file", "file_ids": ["selected"], "owner_id": "other"}, None

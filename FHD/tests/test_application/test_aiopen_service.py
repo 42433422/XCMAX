@@ -641,7 +641,11 @@ class TestInvokeTool:
 
     @pytest.mark.asyncio
     async def test_ui_sessions(self):
-        result = await invoke_tool("ui_sessions", {}, MagicMock())
+        with patch(
+            "app.application.aiopen.screen_identity.external_screen_identity",
+            return_value={"owner_id": "3", "tenant_id": "7"},
+        ):
+            result = await invoke_tool("ui_sessions", {}, MagicMock())
         assert result["success"] is True
         assert "sessions" in result
 
@@ -661,7 +665,13 @@ class TestInvokeTool:
         saved = AIOPEN_STATE.get("remote_control_enabled")
         AIOPEN_STATE["remote_control_enabled"] = True
         try:
-            with patch("app.application.aiopen.service.aiopen_cursor_hub") as mock_hub:
+            with (
+                patch("app.application.aiopen.service.aiopen_cursor_hub") as mock_hub,
+                patch(
+                    "app.application.aiopen.screen_identity.external_screen_identity",
+                    return_value={"owner_id": "3", "tenant_id": "7"},
+                ),
+            ):
                 mock_hub.dispatch = AsyncMock(return_value={"success": True})
                 result = await invoke_tool(
                     "ui_click", {"selector": "#btn", "session_id": "s1"}, MagicMock()

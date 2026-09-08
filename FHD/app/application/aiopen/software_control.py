@@ -36,7 +36,7 @@ def request_screen_owner(request: Any) -> dict[str, str]:
         return {}
     actor = getattr(user, "id", None)
     tenant = getattr(user, "tenant_id", None)
-    if actor is None or tenant is None:
+    if type(actor) is not int or actor <= 0 or type(tenant) is not int or tenant <= 0:
         return {}
     return {"owner_id": str(actor), "tenant_id": str(tenant)}
 

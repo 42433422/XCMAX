@@ -776,6 +776,13 @@ class TestToolChatExt:
 
 
 class TestInvokeToolExt:
+    @pytest.fixture(autouse=True)
+    def screen_owner(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.application.aiopen.screen_identity.external_screen_identity",
+            lambda: {"owner_id": "3", "tenant_id": "7"},
+        )
+
     @pytest.mark.asyncio
     async def test_ui_action_with_session_id_extracts_it(self):
         saved = AIOPEN_STATE.get("remote_control_enabled")
@@ -1047,6 +1054,8 @@ class TestAiopenManifestExt:
             "ui_select",
             "ui_check",
             "ui_press",
+            "ui_files",
+            "ui_set_files",
             "api_operations",
             "api_schema",
         }
