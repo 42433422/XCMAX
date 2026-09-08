@@ -264,7 +264,6 @@ class LegacyShipmentDocumentGenerator(ShipmentDocumentGeneratorPort):
     def __init__(self):
         # 模板/外部资源统一放在 XCAGI/resources 下，避免依赖项目外目录
         # 兼容期：如果 resources 下不存在，再回退到 XCAGI/AI助手/uploads（仍在项目内）
-        from app.utils.path_io.path_utils import get_resource_path
 
         resources_template_dir = get_resource_path("ai_assistant", "uploads")
         legacy_template_dir = os.path.join(get_base_dir(), "AI助手", "uploads")
@@ -348,7 +347,9 @@ class LegacyShipmentDocumentGenerator(ShipmentDocumentGeneratorPort):
         # 5) 调用 legacy 生成逻辑
         from app.db.init_db import get_db_path
 
-        generator = ShipmentDocumentGenerator(db_path=get_db_path("products.db"))
+        generator = ShipmentDocumentGenerator(
+            db_path=get_db_path("products.db"), output_dir=self.output_dir
+        )
         doc = generator.generate_document(
             order_text="",
             parsed_data=parsed_data,
@@ -372,7 +373,7 @@ class LegacyShipmentDocumentGenerator(ShipmentDocumentGeneratorPort):
             total_quantity = getattr(doc, "total_quantity", None)
 
         # 6) 生成标签图片
-        labels_dir = get_resource_path("ai_assistant", "商标导出")
+        labels_dir = os.path.join(self.output_dir, "labels")
         label_generator = SimpleLabelGenerator(labels_dir)
         generated_labels = label_generator.generate_labels_for_order(
             order_number=order_number or filename.replace(".xlsx", ""), products=parsed_products

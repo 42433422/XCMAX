@@ -17,6 +17,19 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Shipment record IDs are now copied while the DB session is open, avoiding
+  DetachedInstanceError after the context's final commit/close. A real expiring
+  SQLAlchemy-session test verifies the returned ID reads the persisted record.
+  The legacy generator accepts an explicit output directory; the app now puts
+  workbooks and labels beneath its writable data directory instead of resources.
+  Three full trials reach 22/22 with shipment record assertions for 3 tins, spec
+  12, quantity 36 and amount 900 (`shipment-output-scope-trials`); 18 focused checks
+  passed. This remains a development observation: workbook cell/content and
+  authenticated task download acceptance are pending, as are D3/D4/D5. Earlier
+  `shipment-session-trials` outputs under this worktree's resources must be
+  archived/removed as task-owned evidence during final cleanup, not confused
+  with current app-data outputs.
+
 - Explicit shipment-document requests now use the existing order parser rather
   than falling back to product search. Bare requests pause with zero tool calls;
   their deferred generation node is distinguished from actual execution. Three

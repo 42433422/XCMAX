@@ -185,10 +185,12 @@ class ShipmentDocumentGenerator:
     OUTPUT_FOLDER = os.path.join(SCRIPT_DIR, "outputs")
     DEFAULT_TEMPLATE = "尹玉华1.xlsx"
 
-    def __init__(self, db_path: str = None):
+    def __init__(self, db_path: str = None, output_dir: str = None):
         """初始化"""
         # 获取脚本所在目录
         self.base_dir = os.path.dirname(os.path.abspath(__file__))
+        if output_dir is not None:
+            self.OUTPUT_FOLDER = os.path.abspath(output_dir)
         logger.info(f"发货单生成器运行目录: {self.base_dir}")
 
         # 使用当前目录中的数据库文件
