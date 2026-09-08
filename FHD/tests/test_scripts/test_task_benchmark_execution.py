@@ -115,3 +115,37 @@ def test_scripted_approval_requires_exact_pending_parameters(execute_plan, monke
     )
     assert not ok and "does not match" in reason
     assert not calls and not receipt["tool_calls"]
+
+
+def test_scripted_answer_resumes_but_does_not_approve_business_write(execute_plan):
+    from app.application.workflow.clarification_node import build_clarify_node
+    from app.application.workflow.types import PlanGraph, WorkflowNode
+
+    plan = PlanGraph(
+        plan_id="answer",
+        intent="create",
+        nodes=[
+            build_clarify_node("请提供客户", ambient={"target_node_id": "create"}),
+            WorkflowNode(
+                node_id="create",
+                tool_id="products",
+                action="create",
+                params={"name_or_model": "A100"},
+            ),
+        ],
+    )
+    ok, reason, receipt = execute_plan(
+        plan,
+        {
+            "instruction": "新增产品",
+            "answers": [
+                {"tool_id": "products", "action": "create", "parameters": {"unit_name": "客户甲"}},
+            ],
+            "expect": {"run_status": "waiting_user"},
+        },
+    )
+    assert ok and not reason
+    assert receipt["steps"][0]["status"] == "completed"
+    assert receipt["steps"][1]["status"] == "waiting_user"
+    assert receipt["steps"][1]["params"]["unit_name"] == "客户甲"
+    assert not receipt["tool_calls"]

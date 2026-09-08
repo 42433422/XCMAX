@@ -164,7 +164,38 @@ def _execute_plan(plan: Any, task: dict[str, Any]) -> tuple[bool, str, dict[str,
         user_id="bench-user", message=task["instruction"], plan=plan, runtime_context=context
     )
     approval_error = ""
+    for answer in task.get("answers") or []:
+        waiting = next((step for step in run.steps if step.status == "waiting_user"), None)
+        target = next(
+            (
+                step
+                for step in run.steps
+                if waiting is not None and step.node_id == waiting.params.get("target_node_id")
+            ),
+            None,
+        )
+        if (
+            waiting is None
+            or waiting.tool_id != "clarify"
+            or target is None
+            or _action_sig(target) != {"tool_id": answer["tool_id"], "action": answer["action"]}
+        ):
+            approval_error = "scripted answer does not match the pending clarification target"
+            break
+        orchestrator.stage_clarification_answer(
+            run.run_id,
+            step_id=waiting.step_id,
+            parameters=answer["parameters"],
+            requested_by="bench-user",
+        )
+        continued = orchestrator.execute_dispatched_run(run.run_id)
+        if continued is None:
+            approval_error = "answered run disappeared"
+            break
+        run = continued
     for approval in task.get("approvals") or []:
+        if approval_error:
+            break
         waiting = next((step for step in run.steps if step.status == "waiting_user"), None)
         if (
             run.status != "waiting_user"
