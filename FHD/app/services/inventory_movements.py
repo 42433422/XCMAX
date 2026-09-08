@@ -164,6 +164,16 @@ class InventoryMovementsMixin:
         operator: str | None = None,
         remark: str | None = None,
     ) -> dict[str, Any]:
+        import math
+
+        try:
+            valid_quantity = (
+                not isinstance(quantity, bool) and math.isfinite(quantity) and quantity > 0
+            )
+        except (TypeError, ValueError, OverflowError):
+            valid_quantity = False
+        if not valid_quantity:
+            return {"success": False, "message": "出库数量必须为有限正数"}
         with _facade().get_db() as db:
             try:
                 query = db.query(_facade().InventoryLedger).filter(
@@ -171,9 +181,9 @@ class InventoryMovementsMixin:
                     _facade().InventoryLedger.warehouse_id == warehouse_id,
                     _facade().InventoryLedger.available_quantity >= quantity,
                 )
-                if batch_no:
+                if batch_no is not None:
                     query = query.filter(_facade().InventoryLedger.batch_no == batch_no)
-                if location_id:
+                if location_id is not None:
                     query = query.filter(_facade().InventoryLedger.location_id == location_id)
                 ledger = query.first()
                 if not ledger:
@@ -187,8 +197,8 @@ class InventoryMovementsMixin:
                     transaction_type="out",
                     product_id=product_id,
                     warehouse_id=warehouse_id,
-                    location_id=location_id,
-                    batch_no=batch_no,
+                    location_id=ledger.location_id,
+                    batch_no=ledger.batch_no,
                     quantity=-quantity,
                     before_quantity=float(ledger.quantity) + quantity,
                     after_quantity=float(ledger.quantity),
