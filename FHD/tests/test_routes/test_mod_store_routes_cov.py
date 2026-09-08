@@ -1408,20 +1408,20 @@ class TestRateRoute:
 
 
 # ===========================================================================
-# 27. GET /package/{path}/download  →  404
+# 27. GET /package/{path}/download  →  401
 # ===========================================================================
 
 
 class TestDownloadRoute:
-    def test_returns_404(self):
+    def test_returns_401(self):
         with _make_client() as client:
             resp = client.get("/package/some-mod:1.0/download")
-        assert resp.status_code == 404
+        assert resp.status_code == 401
 
-    def test_deep_path_returns_404(self):
+    def test_deep_path_returns_401(self):
         with _make_client() as client:
             resp = client.get("/package/a/b/c/download")
-        assert resp.status_code == 404
+        assert resp.status_code == 401
 
 
 # ===========================================================================

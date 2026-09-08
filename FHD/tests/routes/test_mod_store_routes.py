@@ -685,9 +685,9 @@ class TestModStoreRate:
 
 
 class TestModStoreDownload:
-    def test_not_implemented(self, client: TestClient) -> None:
+    def test_requires_login(self, client: TestClient) -> None:
         resp = client.get("/package/test-pkg/download")
-        assert resp.status_code == 404
+        assert resp.status_code == 401
 
 
 class TestModStoreDeletePackage:

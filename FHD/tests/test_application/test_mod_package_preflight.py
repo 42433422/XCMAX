@@ -198,3 +198,45 @@ def test_ai_api_bridge_returns_verified_preflight_and_rejects_bad_package(
         assert result["data"]["data"]["signature_verified"]
         state["id"] = "wrong-package"
         assert not _tool_api_call(app, args)["success"]
+
+
+def test_download_returns_signed_zip_without_installing(package_source):
+    app, state, downloads, local = package_source
+    path = "/api/mod-store/package/candidate:1.0.0/download"
+    with TestClient(app) as client:
+        assert client.get(path).status_code == 401
+        assert not downloads
+        result = client.get(path, headers={"X-Session-ID": "login-3"})
+        assert result.status_code == 200, result.text
+        assert result.headers["content-type"] == "application/zip"
+        assert result.headers["cache-control"] == "no-store"
+        assert "candidate-1.0.0.zip" in result.headers["content-disposition"]
+        with zipfile.ZipFile(io.BytesIO(result.content)) as archive:
+            assert json.loads(archive.read("manifest.json"))["id"] == "candidate"
+            assert "META-INF/signature.json" in archive.namelist()
+        assert local.get_mod_metadata("candidate") is None
+        state["id"] = "wrong"
+        assert client.get(path, headers={"X-Session-ID": "login-3"}).status_code == 422
+        state["id"] = "candidate"
+        state["_unsigned"] = True
+        assert client.get(path, headers={"X-Session-ID": "login-3"}).status_code == 422
+    assert all(not file.parent.exists() for file in downloads)
+
+
+def test_ai_download_exports_verified_package_to_current_owner(package_source, monkeypatch):
+    from app.application.aiopen import api_artifacts
+
+    app, _, downloads, _ = package_source
+    monkeypatch.setitem(AIOPEN_STATE["whitelist"], "/api/mod-store", True)
+    with caller({"X-Session-ID": "login-3"}):
+        result = _tool_api_call(
+            app, {"method": "GET", "path": "/api/mod-store/package/candidate:1.0.0/download"}
+        )
+        assert result["success"], result
+        content, _ = api_artifacts.read_api_export(result["artifacts"][0]["artifact_id"])
+        with zipfile.ZipFile(io.BytesIO(content)) as archive:
+            assert json.loads(archive.read("manifest.json"))["version"] == "1.0.0"
+    with caller({"X-Session-ID": "login-4"}):
+        with pytest.raises(api_artifacts.ApiArtifactError):
+            api_artifacts.read_api_export(result["artifacts"][0]["artifact_id"])
+    assert all(not file.parent.exists() for file in downloads)

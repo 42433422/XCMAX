@@ -57,7 +57,9 @@ def dependency_report(manifest: dict[str, Any], versions: dict[str, str]) -> dic
     }
 
 
-async def inspect_catalog_package(package_file: str, versions: dict[str, str]) -> dict[str, Any]:
+async def download_verified_catalog_package(
+    package_file: str,
+) -> tuple[bytes, dict[str, Any], dict[str, Any]]:
     # This is a catalog identity, never a local path, URL or arbitrary download path.
     match = re.fullmatch(
         r"([A-Za-z0-9][A-Za-z0-9_.-]{0,127}):([0-9]+(?:\.[0-9]+){0,7})", package_file
@@ -85,17 +87,23 @@ async def inspect_catalog_package(package_file: str, versions: dict[str, str]) -
             raise HTTPException(422, f"包验证失败：{message}")
         # Require a trusted release even when developer unsigned-package switches are on.
         try:
-            verified = verify_signed_package_bytes(package.read_bytes())
+            content = package.read_bytes()
+            verified = verify_signed_package_bytes(content)
         except (ModPackageError, ModSignatureError, ValueError, KeyError) as exc:
             raise HTTPException(422, "包签名或清单验证失败") from exc
         manifest = verified["manifest"]
         if manifest.get("id") != mod_id or manifest.get("version") != version:
             raise HTTPException(422, "下载包身份与请求的编号或版本不一致")
-        dependencies = dependency_report(manifest, versions)
-        return {
-            **details,
-            "package_sha256": verified["package_sha256"],
-            "signature_verified": True,
-            "dependency_check": dependencies,
-            "installed": False,
-        }
+        return content, verified, details
+
+
+async def inspect_catalog_package(package_file: str, versions: dict[str, str]) -> dict[str, Any]:
+    _, verified, details = await download_verified_catalog_package(package_file)
+    dependencies = dependency_report(verified["manifest"], versions)
+    return {
+        **details,
+        "package_sha256": verified["package_sha256"],
+        "signature_verified": True,
+        "dependency_check": dependencies,
+        "installed": False,
+    }

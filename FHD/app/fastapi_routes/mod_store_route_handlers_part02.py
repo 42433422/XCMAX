@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import importlib
 
+from starlette.responses import Response
+
 
 def _facade():
     return importlib.import_module("app.fastapi_routes.mod_store_routes")
@@ -193,8 +195,27 @@ async def mod_store_rate(mod_id: str) -> _facade().ModStoreNotImplementedRespons
 
 
 @_facade().router.get("/package/{package_file:path}/download")
-async def mod_store_download(package_file: str) -> None:
-    raise _facade().HTTPException(status_code=404, detail="包下载未实现")
+async def mod_store_download(request: _facade().Request, package_file: str) -> Response:
+    """Download a verified public catalog release without installing or activating it."""
+    from app.application.mod_package_preflight import download_verified_catalog_package
+    from app.application.tenant_workspace_prefs import resolve_workspace_owner_id
+    from app.infrastructure.auth.dependencies import get_logged_in_user
+
+    user = get_logged_in_user(request)
+    if not resolve_workspace_owner_id(request, user):
+        raise _facade().HTTPException(status_code=401, detail="无法确定当前工作空间")
+    content, verified, _ = await download_verified_catalog_package(package_file)
+    manifest = verified["manifest"]
+    filename = f"{manifest['id']}-{manifest['version']}.zip"
+    return Response(
+        content,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @_facade().router.delete(
