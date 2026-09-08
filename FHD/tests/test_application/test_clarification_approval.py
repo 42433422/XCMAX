@@ -236,3 +236,39 @@ def test_report_dates_resume_original_export_dependency():
     assert export.params["data_node_id"] == report.node_id
     assert call["runtime_context"]["_clarify_answers"][clarify.node_id]["confirmed"]
     assert "u" not in service._pending_workflows
+
+
+def test_inbound_warehouse_answer_requires_approval():
+    node = WorkflowNode(
+        node_id="inbound",
+        tool_id="inventory",
+        action="stock_in",
+        params={"product_id": 1, "quantity": 50, "requested_unit": "件"},
+        risk="high",
+    )
+    plan = PlanGraph(plan_id="inbound-plan", intent="inventory_in", nodes=[node])
+    pending = {
+        "plan": plan,
+        "target_node_id": node.node_id,
+        "clarify_node_id": "clarify",
+        "runtime_context": {"tenant_id": 7},
+        "clarification": {
+            "reason": "missing_required",
+            "field": "warehouse_id",
+            "missing_fields": ["warehouse_id"],
+        },
+    }
+    service = SimpleNamespace(
+        _pending_workflows={"u": pending},
+        approval_service=Mock(),
+        _persist_plan_state=Mock(),
+        _run_workflow_with_state_updates=Mock(side_effect=AssertionError("must await approval")),
+    )
+    service.approval_service.get_approval_required_nodes.return_value = [node]
+    response = _AIChatApplicationServicePart03Mixin._continue_after_clarification(
+        service, "u", pending, "3"
+    )
+    assert response["data"]["action"] == "workflow_confirmation_required"
+    params = service._pending_workflows["u"]["approval_nodes"][0]["params"]
+    assert params == {"product_id": 1, "warehouse_id": 3, "quantity": 50, "requested_unit": "件"}
+    service._run_workflow_with_state_updates.assert_not_called()
