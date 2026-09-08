@@ -6,6 +6,12 @@
 目标是四个阶段全部完成。本目录记录当前实施证据，不代表四阶段验收通过。
 此前对话中的 20%–30% 覆盖率与工期只是未验证估计，不作为验收基线。
 
+## Customer query routing and fallback
+
+Customer list and explicit name queries now retain their customer intent and keyword through normal routing and fallback planning. The fallback requires an available low-risk, idempotent customers.query contract. Ambiguous relationship text and customer writes no longer silently become an unfiltered customer list. Quoted literal customer names are preserved.
+
+314 related tests pass, including seeded SQLite execution proving named/list results, tenant isolation and unchanged record counts. Ruff, application mypy and all 10 blocking dev guards passed. The isolated deterministic business trial improves from 3/22 to 5/22; this remains insufficient acceptance. See business-task-customer-query.jsonl and its metadata for base commit, modified-source hashes and scope. No live-model rerun, production approval-chain execution or installed-client acceptance is claimed for this increment. Remaining writes, negation, other domains and full delivery stay open.
+
 ## Standalone greeting boundary
 
 Default greeting paths now share a full-utterance pattern. A salutation followed by business text continues to business intent recognition; the substring hi inside shipping or Hitachi no longer marks a request as greeting. Explicit custom reflex rules remain supported. Changes cover the service helper/basic flags and both default reflex implementations.

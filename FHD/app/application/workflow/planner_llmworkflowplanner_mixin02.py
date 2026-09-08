@@ -289,6 +289,30 @@ class _LLMWorkflowPlannerPart02Mixin:
                 )
             )
             nodes.append(purchase_node)
+        if not nodes and route.get("intent") == "customers_query":
+            customer_spec = tool_registry.get("customers", {})
+            actions = customer_spec.get("actions", {}) if isinstance(customer_spec, dict) else {}
+            query = actions.get("query", {}) if isinstance(actions, dict) else {}
+            if (
+                isinstance(query, dict)
+                and query.get("risk") == "low"
+                and query.get("idempotent") is True
+            ):
+                slots = route.get("slots") or {}
+                keyword = slots.get("keyword") if isinstance(slots, dict) else None
+                if isinstance(keyword, str):
+                    intent = "customers_query"
+                    nodes.append(
+                        _facade().WorkflowNode(
+                            node_id="query_customers",
+                            tool_id="customers",
+                            action="query",
+                            params={"keyword": keyword, "page": 1, "per_page": 50},
+                            risk="low",
+                            idempotent=True,
+                            description="查询客户",
+                        )
+                    )
         if not nodes:
             if "products" in tool_registry:
                 nodes.append(

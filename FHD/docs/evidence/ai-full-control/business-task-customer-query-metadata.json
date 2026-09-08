@@ -1,0 +1,12 @@
+{
+  "source_sha": "e49c42047f094eff63a149863acb2e6de710868d",
+  "dataset_sha256": "c70d172191e4f583935302d5c5d2968524f557c3d9aadc295c15eeb72283602b",
+  "total": 22,
+  "passed": 5,
+  "scope": "Single isolated SQLite fallback trial. No live model, production API approval chain or installed client. Query results verified separately using seeded tenant data.",
+  "modified_sources": {
+    "app/application/customer_query_intent.py": "ea8bdef3193e0271261833a5e543be86522bac2d4cfcbeba8546a4e3cf9ca0be",
+    "app/application/normal_chat_dispatch_part01_part01.py": "e770767932f687502e22e1bc2638432b89ec97f881e33ca01bc9d0d4cea1e16b",
+    "app/application/workflow/planner_llmworkflowplanner_mixin02.py": "3c2428f7256462de9c01a05e6d524355b1b2b7fc8a7fa5b80b864e093711ba36"
+  }
+}
