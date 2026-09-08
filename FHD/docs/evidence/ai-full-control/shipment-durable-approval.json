@@ -1,0 +1,19 @@
+{
+  "base_sha": "cd7f8f7c6",
+  "tests_passed": 26,
+  "new_scenario": "Create real shipment approval through ApprovalService with require_persistence, then construct a new service instance with empty memory.",
+  "verified": [
+    "Applicant metadata is persisted for seeded active user.",
+    "Pending request cannot load through approved-execution recovery API.",
+    "Pending snapshot persists exact plan and product parameters.",
+    "After durable status approval a new service loads exact plan.",
+    "Different tenant cannot load approved snapshot.",
+    "Marked execution terminal cannot load again."
+  ],
+  "limitations": [
+    "In-memory SQLite with foreign keys disabled by existing fixture.",
+    "Service recreation simulates memory loss; no actual operating-system process restart.",
+    "Status transition helper called directly, not HTTP reviewer authorization.",
+    "Terminal outcome written by test without executing shipment tool; full approval-to-generation chain remains unverified."
+  ]
+}

@@ -503,3 +503,54 @@ class TestAtomicTerminalStateNotOverwrittenByStaleSession:
             assert load_durable_workflow_snapshot("req-atomic-ok", allow_terminal=False) is None
         finally:
             session_a.close()
+
+
+def test_real_shipment_request_survives_service_recreation(db):
+    from app.application.workflow.approval_service import ApprovalService
+    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.db.models.user import User
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    with db() as session, session.begin():
+        session.add(
+            User(id=71, username="shipment-approval-test", password="test-only", is_active=True)
+        )
+    node = WorkflowNode(
+        node_id="generate_shipment",
+        tool_id="shipment_orders",
+        action="generate",
+        risk="high",
+        params={
+            "unit_name": "七彩乐园",
+            "products": [{"model_number": "9803", "quantity_tins": 3, "tin_spec": 12}],
+        },
+    )
+    plan = PlanGraph(plan_id="shipment-durable", intent="shipment_generate", nodes=[node])
+    with tenant_scope(1):
+        service = ApprovalService()
+        request = service.create_approval_request(
+            plan.plan_id,
+            node,
+            runtime_context={"local_user_id": 71},
+            plan=plan,
+            require_persistence=True,
+        )
+        assert service.get_request_metadata(request.request_id)["applicant_id"] == 71
+        fresh = ApprovalService()
+        assert fresh.get_pending_workflow(request.request_id) is None
+        # Public service recovery only exposes approved requests.
+        assert fresh.load_durable_workflow_snapshot(request.request_id) is None
+        snapshot = load_durable_workflow_snapshot(request.request_id, allow_terminal=False)
+        assert snapshot is not None
+        assert snapshot["plan"].nodes[0].params == node.params
+        assert snapshot["plan"].plan_id == plan.plan_id
+        with tenant_scope(2):
+            assert fresh.load_durable_workflow_snapshot(request.request_id) is None
+        approved = mark_durable_request_approved_and_load(request.request_id)
+        assert approved is not None
+        recovered = fresh.load_durable_workflow_snapshot(request.request_id)
+        assert recovered is not None and recovered["plan"].nodes[0].params == node.params
+        with tenant_scope(2):
+            assert fresh.load_durable_workflow_snapshot(request.request_id) is None
+        mark_durable_outcome(request.request_id, success=True)
+        assert fresh.load_durable_workflow_snapshot(request.request_id) is None
