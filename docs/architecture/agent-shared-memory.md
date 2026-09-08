@@ -1,7 +1,26 @@
 # Agent 共享记忆协议（四设备统一）
 
-> 状态：v1（2026-09-09 由 Windows 端 Trae 建立，首条记忆已验证写入+检索闭环）
-> 存储位置：生产 FHD 知识库 `persy-knowledge` 数据集（管理端 知识库 页面可见）
+> 状态：v2（2026-09-09 由 Windows 端 Trae 建立；v2 新增自动共享大脑守护）
+> 存储位置：生产 FHD 知识库 `persy-knowledge` 数据集（管理端知识库页面可见）
+
+## 自动共享大脑（v2 核心，推荐默认开启）
+
+拉模式（开工查/收工写）有滞后窗口，认知会分叉。两端守护进程把本地记忆与知识库**双向自动搬运**：
+
+- **推（本地 → KB）**：每 90 秒检查本地记忆文件（project_memory.md + 最新 topics.md，截断 3600 字），
+  变更即切 8 个 ≤480 字槽位文档 `agent-auto-<device>-part1..8`（metadata.type=agent-auto-sync）。
+  单分块文档可被 `metadata_filter` 100% 精确回读（API 每文档只返回 1 块，故必须单分块）。
+- **拉（KB → 本地）**：每 90 秒列出数据集全部 agent-shared-memory / agent-auto-sync 文档，
+  逐文档 `metadata_filter` 取回全文（排除本设备回声），重组写入本地镜像文件
+  （Windows：`~/.trae-cn/memory/projects/<项目>/shared_brain_kb.md`；
+  Mac：`~/.trae/memory/shared_brain_kb.md`）。智能体每次会话经本地记忆入口自动读到它。
+
+安装：
+- Windows：`powershell -File scripts/dev/shared-brain-sync.ps1`（建议计划任务登录自启，前台 run 模式内置 90s 循环）
+- Mac：`bash scripts/dev/shared-brain-sync-mac.sh install`（LaunchAgent `com.xcmax.shared-brain-sync`，KeepAlive 常驻）
+
+约定：自动同步走 `agent-auto-<device>-partN` 命名空间；人工/会话沉淀仍按下方手写协议
+（每篇尽量 ≤480 字，单分块保证可精确回读）。
 
 ## 目的
 
