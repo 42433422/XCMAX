@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.application import wechat_control as control
 from app.application import wechat_ingest_service as ingest
 from app.application import wechat_refresh_service as refresh
 from app.application.agent_orchestrator.execution_identity import execution_actor_scope
@@ -23,7 +24,6 @@ from app.db.models.wechat_refresh import WechatRefreshRequest
 from app.db.models.wechat_sync import WechatContact, WechatMessage
 from app.fastapi_routes import wechat_ingest
 from app.infrastructure.tenant_scope import tenant_scope
-from app.application import wechat_control as control
 
 
 @pytest.fixture()
