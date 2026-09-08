@@ -1,0 +1,21 @@
+{
+  "source_commit": "788af2b1d0476c0d1c97b23057f797efc1284778",
+  "finding": "Sales benchmark tasks run against reset empty schema, but quote requires customer_id and items and writes a quotation. Routing-only substitution cannot prove business acceptance.",
+  "affected_tasks": [
+    "sales.order.create_010",
+    "sales.quote.by_name_011"
+  ],
+  "required_acceptance": [
+    "Seed tenant-owned customer and product fixtures before planning",
+    "Resolve customer and product identity; ambiguous or absent matches must clarify",
+    "Obtain missing quantity and preserve requested price context",
+    "Enforce approval for quotation creation and never equate quotation with confirmed order",
+    "Assert persisted customer, item, quantity, price, status and tenant; verify no duplicate or cross-tenant writes"
+  ],
+  "unchanged_result": "12/22; no new business passes claimed",
+  "source_hashes": {
+    "FHD/tests/benchmarks/task_success_runner.py": "dc90bc2c6e49d92a3e2a3f958984c6d3fe61b27b2be751ac6e99bc9ee8af8951",
+    "FHD/tests/benchmarks/task_golden_set.json": "d591a51c06121699eb09a09ed10dea908cc08d2cc70418965a7112b7cbb376a1",
+    "FHD/app/application/sales_app_service_salesappservice_mixin01__salesappservicepart01mixin_mixin01.py": "ccb9b03ca1d6c8615383b4f63bd7248f9dfa414d338d8f5c250381ebad64b7fb"
+  }
+}
