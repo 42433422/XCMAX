@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import type { AgentTaskSummary } from '@/api/agentRuns'
+import RecurringSchedulePanel from './RecurringSchedulePanel.vue'
 import { useAgentTaskCenterStore } from '@/stores/agentTaskCenter'
 import { useTutorialV2Store } from '@/stores/tutorialV2'
 import { taskNeedsApproval, taskProgressPercent, taskStatusLabel, taskUnreadCount } from '@/utils/taskWorkspacePresentation'
@@ -106,6 +107,8 @@ watch(tutorialScopeKey, (next, previous) => {
             </div>
             <button class="task-center-close" type="button" aria-label="关闭" @click="store.closeDrawer()">×</button>
           </header>
+
+          <RecurringSchedulePanel :key="tutorialScopeKey" />
 
           <div v-if="error" class="task-center-error">
             <span>{{ error }}</span

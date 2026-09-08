@@ -244,7 +244,27 @@ export interface CreateAgentTaskPayload {
   runtime_context?: Record<string, unknown>
 }
 
+export interface AgentSchedule {
+  schedule_id: string
+  state: 'active' | 'paused' | 'cancelled'
+  next_run_at: string
+  last_task_id: string
+  last_error: string
+  payload: {
+    title: string
+    recurrence: { kind: 'interval' | 'daily'; seconds?: number; hour?: number; minute?: number; timezone?: string }
+    approval_policy: string
+  }
+}
+
 export const agentRunsApi = {
+  listSchedules(): Promise<ApiResponse<AgentSchedule[]>> {
+    return api.get<ApiResponse<AgentSchedule[]>>('/api/agent/schedules')
+  },
+
+  controlSchedule(scheduleId: string, action: 'pause' | 'resume' | 'cancel'): Promise<ApiResponse<unknown>> {
+    return api.post<ApiResponse<unknown>>(`/api/agent/schedules/${encodeURIComponent(scheduleId)}/${action}`, {})
+  },
   createRun(payload: CreateAgentRunPayload): Promise<ApiResponse<AgentRun>> {
     return api.post<ApiResponse<AgentRun>>('/api/agent/runs', payload)
   },

@@ -41,6 +41,10 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(tags=["agent"])
 
+from app.fastapi_routes.domains.agent.schedule_routes import router as schedule_router
+
+router.include_router(schedule_router)
+
 
 def _task_envelope(
     orchestrator: AgentOrchestrator,

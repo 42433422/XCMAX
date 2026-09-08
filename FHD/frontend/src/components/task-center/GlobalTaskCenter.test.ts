@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import GlobalTaskCenter from './GlobalTaskCenter.vue'
 
 const apiMock = vi.hoisted(() => ({
+  listSchedules: vi.fn(async () => ({ success: true, data: [] })),
+  controlSchedule: vi.fn(),
   listTasks: vi.fn(),
   getTaskRuntime: vi.fn(),
   getTask: vi.fn(),

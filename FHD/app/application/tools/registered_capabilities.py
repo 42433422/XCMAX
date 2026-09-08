@@ -188,6 +188,18 @@ def build_registered_capability_tool_definition() -> dict[str, Any]:
                         "type": "string",
                         "description": "定时任务必填的稳定请求标识，重复调用必须保持相同 ID；不能含 /。",
                     },
+                    "recurrence": {
+                        "type": "object",
+                        "description": "周期执行：interval 使用 seconds（至少 60）；daily 使用 hour、minute 和 IANA timezone。必须同时提供首次 scheduled_at 与稳定 task_id。每次生成任务仍须审批。",
+                        "properties": {
+                            "kind": {"type": "string", "enum": ["interval", "daily"]},
+                            "seconds": {"type": "integer", "minimum": 60},
+                            "hour": {"type": "integer", "minimum": 0, "maximum": 23},
+                            "minute": {"type": "integer", "minimum": 0, "maximum": 59},
+                            "timezone": {"type": "string"},
+                        },
+                        "required": ["kind"],
+                    },
                 },
                 "required": ["tool_id", "action"],
             },
@@ -199,8 +211,11 @@ def extend_workflow_tool_registry(registry: list[dict[str, Any]]) -> list[dict[s
     """Append the product capability tool without making a second hard-coded catalog."""
 
     try:
+        from app.application.tools.scheduled_capability import schedule_management_definition
+
         return [
             *registry,
+            schedule_management_definition(),
             build_capability_discovery_definition(),
             build_registered_capability_tool_definition(),
         ]
@@ -303,7 +318,7 @@ def execute_registered_capability(
     if not resolved.get("success"):
         return json.dumps(resolved, ensure_ascii=False)
 
-    if args is not None and "scheduled_at" in args:
+    if args is not None and ("scheduled_at" in args or "recurrence" in args):
         from fastapi import HTTPException
 
         from app.application.tools.scheduled_capability import create_scheduled_capability

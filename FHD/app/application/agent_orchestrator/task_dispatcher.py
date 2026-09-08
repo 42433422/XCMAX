@@ -8,7 +8,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
 from app.application.agent_orchestrator.run_repository import (
@@ -23,6 +23,11 @@ from app.application.agent_orchestrator.task_execution_repository import (
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from app.application.agent_orchestrator.recurring_schedule_service import (
+        RecurringScheduleService,
+    )
 
 
 @dataclass
@@ -71,6 +76,8 @@ class AgentTaskDispatcher:
         self._wake = threading.Event()
         self._stop = threading.Event()
         self._coordinator: threading.Thread | None = None
+        self._schedule_tick_at = 0.0
+        self._schedule_service: RecurringScheduleService | None = None
 
     @property
     def instance_id(self) -> str:
@@ -127,6 +134,9 @@ class AgentTaskDispatcher:
         while not self._stop.is_set():
             try:
                 self._dispatch_available()
+                if time.monotonic() >= self._schedule_tick_at:
+                    self._schedule_tick_at = time.monotonic() + 1.0
+                    self._publish_schedule_occurrence()
             except RECOVERABLE_ERRORS:
                 # Database startup, migration, or a transient outage must not
                 # escape the daemon thread as an unhandled exception.
@@ -135,6 +145,17 @@ class AgentTaskDispatcher:
             else:
                 self._wake.wait(timeout=self._poll_seconds)
             self._wake.clear()
+
+    def _publish_schedule_occurrence(self) -> None:
+        from app.application.agent_orchestrator.recurring_schedule_service import (
+            RecurringScheduleService,
+        )
+
+        if self._schedule_service is None:
+            self._schedule_service = RecurringScheduleService(
+                orchestrator=self._orchestrator_factory(self._run_repo)
+            )
+        self._schedule_service.tick(self._instance_id)
 
     def _dispatch_available(self) -> None:
         self._prune_and_heartbeat()
