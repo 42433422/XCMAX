@@ -107,8 +107,13 @@ async def mod_store_update(
 
 
 @_facade().router.get("/validate", response_model=_facade().ModStoreSimpleResponse)
-async def mod_store_validate() -> _facade().ModStoreSimpleResponse:
-    return _facade().ModStoreSimpleResponse(success=False, message="未实现", data=None)
+async def mod_store_validate(
+    request: _facade().Request, package_file: str = ""
+) -> _facade().ModStoreSimpleResponse:
+    from app.fastapi_routes.mod_store_preflight import package_preflight
+
+    data = await package_preflight(request, package_file)
+    return _facade().ModStoreSimpleResponse(success=True, message="包验证通过，尚未安装", data=data)
 
 
 @_facade().router.get("/updates", response_model=_facade().ModStoreUpdatesResponse)
@@ -169,16 +174,13 @@ async def mod_store_updates(
 
 
 @_facade().router.get("/dependencies", response_model=_facade().ModStoreDependenciesResponse)
-async def mod_store_dependencies() -> _facade().ModStoreDependenciesResponse:
-    return _facade().ModStoreDependenciesResponse(
-        data={
-            "mod_id": "",
-            "dependencies": [],
-            "satisfied": [],
-            "missing": [],
-            "can_install": True,
-        }
-    )
+async def mod_store_dependencies(
+    request: _facade().Request, package_file: str = ""
+) -> _facade().ModStoreDependenciesResponse:
+    from app.fastapi_routes.mod_store_preflight import package_preflight
+
+    data = await package_preflight(request, package_file)
+    return _facade().ModStoreDependenciesResponse(data=data["dependency_check"])
 
 
 @_facade().router.post(

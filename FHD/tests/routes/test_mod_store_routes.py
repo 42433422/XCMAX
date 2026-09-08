@@ -648,11 +648,9 @@ class TestModStoreUpdate:
 
 
 class TestModStoreValidate:
-    def test_not_implemented(self, client: TestClient) -> None:
+    def test_requires_login(self, client: TestClient) -> None:
         resp = client.get("/validate")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["success"] is False
+        assert resp.status_code == 401
 
 
 class TestModStoreUpdates:
@@ -673,11 +671,9 @@ class TestModStoreUpdates:
 
 
 class TestModStoreDependencies:
-    def test_empty_dependencies(self, client: TestClient) -> None:
+    def test_dependencies_require_login(self, client: TestClient) -> None:
         resp = client.get("/dependencies")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["data"]["can_install"] is True
+        assert resp.status_code == 401
 
 
 class TestModStoreRate:

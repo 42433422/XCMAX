@@ -1370,11 +1370,10 @@ class TestUpdateRoute:
 
 
 class TestSimpleGetRoutes:
-    def test_validate_returns_not_implemented(self):
+    def test_validate_requires_login(self):
         with _make_client() as client:
             resp = client.get("/validate")
-        assert resp.status_code == 200
-        assert resp.json()["success"] is False
+        assert resp.status_code == 401
 
     def test_updates_returns_empty_list_only_after_all_sources_checked(self, update_catalog):
         rows, headers = update_catalog
@@ -1389,11 +1388,10 @@ class TestSimpleGetRoutes:
             "source_errors": {},
         }
 
-    def test_dependencies_returns_structure(self):
+    def test_dependencies_require_login(self):
         with _make_client() as client:
             resp = client.get("/dependencies")
-        assert resp.status_code == 200
-        assert resp.json()["data"]["can_install"] is True
+        assert resp.status_code == 401
 
 
 # ===========================================================================
