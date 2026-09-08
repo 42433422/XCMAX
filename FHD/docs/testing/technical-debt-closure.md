@@ -17,6 +17,11 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Ledger-month acceptance seeds balanced 25 and 75 vouchers at the month's edges
+  plus a prior-month 999 voucher. Three trials returned exactly the two current
+  vouchers with matching debit/credit totals and balanced=true; 18 related tests
+  passed. Evidence: `seeded-ledger-trials`.
+
 - Sales-month evidence now seeds 25 at the first instant of the month, 75 at the
   final instant, and 999 immediately before the month. All three trials returned
   total_amount=100 and quantity=2 with the expected product detail; 45 related

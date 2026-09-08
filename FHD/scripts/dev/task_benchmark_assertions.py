@@ -112,3 +112,49 @@ def seed_sales_period_orders(rows: list[dict]) -> None:
                 )
             )
         db.commit()
+
+
+def seed_ledger_period_entries(rows: list[dict]) -> None:
+    from calendar import monthrange
+    from datetime import date, timedelta
+    from decimal import Decimal
+
+    from app.db import SessionLocal
+    from app.db.models.accounting import JournalEntry, JournalEntryLine
+    from app.infrastructure.tenant_scope import current_tenant_id
+
+    first = date.today().replace(day=1)
+    dates = {
+        "month_start": first,
+        "month_end": first.replace(day=monthrange(first.year, first.month)[1]),
+        "previous_month_end": first - timedelta(days=1),
+    }
+    with SessionLocal() as db:
+        for index, row in enumerate(rows):
+            amount = Decimal(str(row["amount"]))
+            entry = JournalEntry(
+                tenant_id=current_tenant_id(),
+                entry_no=f"BENCH-LEDGER-{index}",
+                journal_date=dates[row["at"]],
+                status="posted",
+                debit_total=amount,
+                credit_total=amount,
+            )
+            entry.lines = [
+                JournalEntryLine(
+                    tenant_id=current_tenant_id(),
+                    account_code="1001",
+                    account_name="库存现金",
+                    debit=amount,
+                    credit=0,
+                ),
+                JournalEntryLine(
+                    tenant_id=current_tenant_id(),
+                    account_code="6001",
+                    account_name="主营业务收入",
+                    debit=0,
+                    credit=amount,
+                ),
+            ]
+            db.add(entry)
+        db.commit()

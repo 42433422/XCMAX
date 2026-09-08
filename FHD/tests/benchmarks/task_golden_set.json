@@ -257,7 +257,9 @@
       "domain": "finance",
       "difficulty": "easy",
       "instruction": "查询这个月的账本",
+      "ledger_period_entries": [{"at": "month_start", "amount": 25}, {"at": "month_end", "amount": 75}, {"at": "previous_month_end", "amount": 999}],
       "expect": {
+        "returned_records": [{"tool_id": "finance", "action": "ledger_query", "count": 2, "includes": [{"entry_no": "BENCH-LEDGER-0", "debit_total": 25, "credit_total": 25, "balanced": true}, {"entry_no": "BENCH-LEDGER-1", "debit_total": 75, "credit_total": 75, "balanced": true}]}],
         "actions": [{"tool_id": "finance", "action": "ledger_query"}],
         "forbid_actions": [
           {"tool_id": "finance", "action": "create_transaction"},
