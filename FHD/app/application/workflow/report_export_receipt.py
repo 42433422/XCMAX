@@ -2,15 +2,18 @@
 
 from email.message import Message
 from types import SimpleNamespace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.application.agent_orchestrator.execution_identity import current_execution_actor
 from app.application.aiopen.api_artifacts import save_api_export
 from app.infrastructure.tenant_scope import current_tenant_id
 
+if TYPE_CHECKING:
+    from app.services.report_service import ReportService
+
 
 def export_report_receipt(
-    service: Any, params: dict[str, Any], runtime_context: dict[str, Any] | None = None
+    service: "ReportService", params: dict[str, Any], runtime_context: dict[str, Any] | None = None
 ) -> dict[str, Any]:
     from app.application.agent_orchestrator.task_mod_scope import capture_task_mod_scope
 
