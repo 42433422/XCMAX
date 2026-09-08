@@ -84,16 +84,34 @@ def test_inbound_rejects_missing_and_other_tenant_warehouse(tmp_path, monkeypatc
         with factory() as db:
             assert db.query(InventoryLedger).count() == 0
             assert db.query(InventoryTransaction).count() == 0
-        mismatch = InventoryService().inventory_in(
-            product_id=1, warehouse_id=3, quantity=50, requested_unit="桶"
+        from app.services.tools_workflow_registered_part01_part02 import (
+            _registered_router_inventory,
+        )
+
+        mismatch = _registered_router_inventory(
+            "stock_in",
+            {"product_id": 1, "warehouse_id": 3, "quantity": 50, "requested_unit": "桶"},
+            {},
+            "normal",
+            "",
         )
         assert not mismatch["success"]
         with factory() as db:
             assert db.query(InventoryLedger).count() == 0
             assert db.query(InventoryTransaction).count() == 0
         for location_id, quantity in [(5, 2), (6, 3), (5, 4)]:
-            result = InventoryService().inventory_in(
-                product_id=1, warehouse_id=3, location_id=location_id, quantity=quantity
+            result = _registered_router_inventory(
+                "stock_in",
+                {
+                    "product_id": 1,
+                    "warehouse_id": 3,
+                    "location_id": location_id,
+                    "quantity": quantity,
+                    "requested_unit": "个",
+                },
+                {},
+                "normal",
+                "",
             )
             assert result["success"], result
         with factory() as db:
