@@ -376,6 +376,13 @@ def _validate_schema_payload(
 
 
 def _validate_input_schema(spec: ToolActionSpecV2, params: dict[str, Any]) -> tuple[bool, str]:
+    if (spec.tool_id, spec.action) == ("inventory", "stock_in"):
+        from app.application.inventory_inputs import validate_stock_in_request
+
+        try:
+            validate_stock_in_request(params)
+        except ValueError as exc:
+            return False, str(exc)
     if spec.tool_id == "sales" and spec.action in {"quote", "create_order"}:
         from app.application.sales_quote_inputs import validated_quote_request
 

@@ -234,6 +234,10 @@ def seed_inventory_quantities(rows: list[dict]) -> None:
 
 
 def assertion_model_config(entity: str):
+    if entity in {"inventory_ledgers", "inventory_transactions"}:
+        from app.db.models import InventoryLedger, InventoryTransaction
+
+        return (InventoryLedger if entity == "inventory_ledgers" else InventoryTransaction), {}, ()
     if entity in {"sales_orders", "sales_order_items"}:
         from app.db.models.sales import SalesOrder, SalesOrderItem
 

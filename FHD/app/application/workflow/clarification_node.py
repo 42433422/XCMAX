@@ -52,7 +52,7 @@ _WRITE_REQUIRED_FALLBACK: dict[tuple[str, str], list[str]] = {
         "to_warehouse_id",
         "quantity",
     ],
-    ("inventory", "stock_in"): ["product_id", "warehouse_id", "quantity"],
+    ("inventory", "stock_in"): ["quantity"],
     ("inventory", "stock_out"): ["product_id", "warehouse_id", "quantity"],
     ("business_db", "write"): ["entity", "operation", "payload"],
     # ERP 工具（吸收 Odoo 18，Task 5/6）
@@ -195,6 +195,10 @@ def needs_clarification(
             continue
 
         missing = _missing_fields(params, required)
+        if (node.tool_id, node.action) == ("inventory", "stock_in"):
+            from app.application.inventory_inputs import missing_stock_in_fields
+
+            missing = missing_stock_in_fields(params)
         if node.tool_id == "sales" and node.action in {"quote", "create_order"}:
             from app.application.sales_quote_inputs import missing_quote_fields
 

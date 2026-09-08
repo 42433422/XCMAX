@@ -69,7 +69,7 @@ REQUIRED_PARAMS_BY_TOOL_ACTION = {
     ("inventory", "update_storage_location"): ["location_id"],
     ("inventory", "delete_warehouse"): ["warehouse_id"],
     ("inventory", "update_warehouse"): ["warehouse_id"],
-    ("inventory", "stock_in"): ["product_id", "warehouse_id", "quantity"],
+    ("inventory", "stock_in"): ["quantity"],
     ("inventory", "stock_out"): ["product_id", "warehouse_id", "quantity"],
     ("inventory", "transfer"): ["product_id", "from_warehouse_id", "to_warehouse_id", "quantity"],
     ("purchase", "update_supplier"): ["supplier_id"],

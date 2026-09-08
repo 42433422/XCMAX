@@ -17,6 +17,15 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Named stock-in now enters the inventory tool before generic database-write
+  fallback, preserving model and quantity. Contracts accept IDs or exact names;
+  absent warehouse names are requested through the existing form and answering
+  still stops at independent high-risk approval. The real golden case starts
+  with stock 10, approves inbound 50 and verifies one ledger at 60 plus one `in`
+  transaction with before=10/after=60. Three full trials passed, observation 20/22
+  (`named-inbound-trials`), and 197 contract/interaction/inventory checks passed.
+  These tests do not certify concurrent stock updates or installed-runtime use.
+
 - Stock-in service/dispatcher now accept exact model and warehouse names in
   addition to IDs, resolve them before writes, and reject duplicate names or
   conflicting ID/name pairs. Real SQLite tests verify valid names write the

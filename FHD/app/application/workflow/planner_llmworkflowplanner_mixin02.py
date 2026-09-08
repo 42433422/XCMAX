@@ -158,6 +158,13 @@ class _LLMWorkflowPlannerPart02Mixin:
                         idempotent=True,
                     )
                 )
+        if not nodes:
+            from app.application.workflow.inventory_write_plan import stock_in_node
+
+            inventory_node = stock_in_node(message, tool_registry)
+            if inventory_node is not None:
+                nodes.append(inventory_node)
+                intent = "inventory_stock_in"
         if (
             not nodes
             and _facade()._looks_like_business_db_write(message, lower)

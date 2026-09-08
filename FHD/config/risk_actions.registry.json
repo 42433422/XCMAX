@@ -507,8 +507,6 @@
           "risk": "high",
           "idempotent": false,
           "required_params": [
-            "product_id",
-            "warehouse_id",
             "quantity"
           ],
           "availability": "shared"

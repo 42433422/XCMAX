@@ -221,8 +221,12 @@
       "domain": "inventory",
       "difficulty": "medium",
       "instruction": "产品 A100 入库 50 件",
+      "inventory_quantities": [{"model_number": "A100", "quantity": 10}],
+      "answers": [{"tool_id": "inventory", "action": "stock_in", "parameters": {"warehouse_name": "测试仓库"}}],
+      "approvals": [{"tool_id": "inventory", "action": "stock_in", "params": {"model_number": "A100", "quantity": 50, "warehouse_name": "测试仓库"}}],
       "expect": {
-        "actions": [{"tool_id": "inventory", "action": "stock_in"}],
+        "actions": [{"tool_id": "clarify", "action": "ask"}, {"tool_id": "inventory", "action": "stock_in"}],
+        "db_state": [{"entity": "inventory_ledgers", "op": "count", "count": 1, "where": {"quantity": 60, "available_quantity": 60}}, {"entity": "inventory_transactions", "op": "count", "count": 1, "where": {"transaction_type": "in", "quantity": 50, "before_quantity": 10, "after_quantity": 60}}],
         "forbid_actions": [
           {"tool_id": "inventory", "action": "delete_warehouse"}
         ]

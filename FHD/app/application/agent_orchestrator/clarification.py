@@ -37,6 +37,10 @@ def apply_clarification_answer(run: AgentRun, *, step_id: str, parameters: dict[
         from app.application.sales_quote_inputs import missing_quote_fields
 
         missing = set(missing_quote_fields(target.params))
+    if (target.tool_id, target.action) == ("inventory", "stock_in"):
+        from app.application.inventory_inputs import missing_stock_in_fields
+
+        missing = set(missing_stock_in_fields(target.params))
     if not parameters or not set(parameters) <= missing:
         raise ClarificationAnswerError("答案只能补充当前目标缺失的必填参数")
     candidate = {**deepcopy(target.params), **deepcopy(parameters)}
@@ -106,6 +110,10 @@ def pause_for_clarification(run: AgentRun, step: AgentStep) -> bool:
         from app.application.sales_quote_inputs import missing_quote_fields
 
         required_fields = missing_quote_fields(target.params)
+    if target and (target.tool_id, target.action) == ("inventory", "stock_in"):
+        from app.application.inventory_inputs import missing_stock_in_fields
+
+        required_fields = missing_stock_in_fields(target.params)
     step.output["fields"] = [
         {
             "key": key,

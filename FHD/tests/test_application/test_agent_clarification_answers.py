@@ -4,6 +4,36 @@ from app.application.workflow.clarification_node import build_clarify_node
 from app.application.workflow.types import PlanGraph, WorkflowNode
 
 
+def test_stock_in_asks_warehouse_name_then_requires_approval():
+    from app.application.workflow.planner import LLMWorkflowPlanner
+    from app.services.tools_execution.registry import get_workflow_tool_registry
+
+    planner = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
+    plan = planner._fallback_plan("inbound", "产品 A100 入库 50 件", get_workflow_tool_registry())
+    orchestrator = AgentOrchestrator(repository=InMemoryAgentRunRepository())
+    run = orchestrator.start_run_from_plan(user_id="owner", message="入库", plan=plan)
+    assert run.status == "waiting_user"
+    assert run.final_output["clarification"]["fields"] == [
+        {"key": "warehouse_name", "label": "入库仓库名称", "type": "string"}
+    ]
+    assert run.tool_calls == []
+    orchestrator.stage_clarification_answer(
+        run.run_id,
+        step_id=run.steps[0].step_id,
+        parameters={"warehouse_name": "主仓库"},
+        requested_by="owner",
+    )
+    continued = orchestrator.execute_dispatched_run(run.run_id)
+    assert continued.status == "waiting_user"
+    assert continued.steps[-1].status == "waiting_user"
+    assert continued.steps[-1].params == {
+        "model_number": "A100",
+        "quantity": 50,
+        "warehouse_name": "主仓库",
+    }
+    assert continued.tool_calls == []
+
+
 def test_quote_missing_price_preserves_quantity_and_requires_approval():
     from copy import deepcopy
 
