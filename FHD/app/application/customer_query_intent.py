@@ -8,7 +8,7 @@ _PREFIX = re.compile(
     r"^(?:(?:请|帮我|给我|查看|查询|查一下|查下|查|看看|看下|看|搜索|找下|找|列出|显示)\s*)*"
     r"(?:(?:所有|全部|现有|当前)\s*)?(?:客户|购买单位|买家)\s*(.*)$"
 )
-_LIST = {"", "列表", "名单", "清单", "信息", "资料", "有多少", "有多少个", "有多少家"}
+_LIST = {"", "列表", "名单", "清单", "信息", "资料", "有多少", "有多少个", "有多少家", "有哪些"}
 
 
 def customer_query_slots(message: str) -> dict[str, str] | None:
@@ -22,6 +22,13 @@ def customer_query_slots(message: str) -> dict[str, str] | None:
         text,
     ):
         return {"keyword": ""}
+    named = re.fullmatch(
+        r"(?:查询|查看|查一下|搜索)\s*(.+?)\s*的(?:客户|购买单位|买家)[?？。\s]*",
+        text,
+    )
+    if named:
+        # Reuse the same keyword validation as the customer-first phrasing.
+        text = "查询客户 " + named.group(1)
     match = _PREFIX.fullmatch(text)
     if not match:
         return None

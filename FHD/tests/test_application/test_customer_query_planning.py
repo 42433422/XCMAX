@@ -19,6 +19,8 @@ from app.services.tools_execution.registry import get_workflow_tool_registry
     "text, keyword",
     [
         ("客户列表", ""),
+        ("客户有哪些", ""),
+        ("查询甲公司的客户", "甲公司"),
         ("查询客户「星光产品公司」的信息", "星光产品公司"),
         ("查询所有客户", ""),
         ("你好，客户列表", ""),
@@ -31,7 +33,15 @@ def test_query_slots(text, keyword):
 
 
 @pytest.mark.parametrize(
-    "text", ["新增客户星光", "不要查客户", "给客户星光下订单", "客户星光的产品"]
+    "text",
+    [
+        "新增客户星光",
+        "不要查客户",
+        "给客户星光下订单",
+        "客户星光的产品",
+        "查询删除甲公司的客户",
+        "查询甲公司，新增乙公司的客户",
+    ],
 )
 def test_other_actions_are_not_customer_queries(text):
     assert customer_query_slots(text) is None
