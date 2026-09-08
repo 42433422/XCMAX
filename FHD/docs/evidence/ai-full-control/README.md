@@ -6,6 +6,12 @@
 目标是四个阶段全部完成。本目录记录当前实施证据，不代表四阶段验收通过。
 此前对话中的 20%–30% 覆盖率与工期只是未验证估计，不作为验收基线。
 
+## Standalone greeting boundary
+
+Default greeting paths now share a full-utterance pattern. A salutation followed by business text continues to business intent recognition; the substring hi inside shipping or Hitachi no longer marks a request as greeting. Explicit custom reflex rules remain supported. Changes cover the service helper/basic flags and both default reflex implementations.
+
+249 related tests pass, including all default entry points, mixed greeting/business text and actual rule recognition preserving the same customer/product/shipment-record tool as the unprefixed request. Application mypy, Ruff and all 10 blocking dev guards passed. The unchanged 97-case rule benchmark passes its ratchet: 24/24 core and 20/73 semantic (previously 19/73 semantic). Local business-name database lookup was unavailable and fell back as before; this is rule-routing evidence, not live-model or business execution acceptance. Planner fallback, remaining domains and full four-stage delivery remain incomplete.
+
 ## Sync structured-call HTTP lifecycle repair
 
 Synchronous structured calls now create an isolated HTTP-client scope. OpenAI-compatible adapters (including MiMo) reuse a client within that call and close it before the temporary event loop exits. The adapter's long-lived asynchronous pools remain untouched. Worker-thread calls copy ContextVars so account/request context is preserved. The no-running-loop path now honors timeout_seconds and cancels the timed-out coroutine before closing its scoped clients.
