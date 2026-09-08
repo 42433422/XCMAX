@@ -2,7 +2,7 @@
   "scope": "registered workflow actions and static host dispatcher; excludes unregistered UI/API/Mods",
   "product_coverage_percent": null,
   "capability_count": 37,
-  "action_count": 192,
+  "action_count": 194,
   "missing_dispatcher": [],
   "actions": [
     {
@@ -1706,6 +1706,15 @@
     },
     {
       "tool_id": "software",
+      "action": "files",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "software",
       "action": "list",
       "risk": "low",
       "required_params": [],
@@ -1761,6 +1770,18 @@
       "required_params": [
         "selector",
         "values"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "software",
+      "action": "set_files",
+      "risk": "medium",
+      "required_params": [
+        "selector",
+        "file_ids"
       ],
       "idempotent": false,
       "dispatcher_present": true,

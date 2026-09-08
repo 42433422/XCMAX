@@ -53,7 +53,11 @@ def test_model_supplied_identity_is_not_trusted():
 def test_screen_contract_allows_clearing_controls_but_requires_field_presence():
     from app.application.tools.registered_capabilities import resolve_registered_capability_call
 
-    for action, field, value in [("type", "text", ""), ("select", "values", [])]:
+    for action, field, value in [
+        ("type", "text", ""),
+        ("select", "values", []),
+        ("set_files", "file_ids", []),
+    ]:
         result = resolve_registered_capability_call(
             {
                 "tool_id": "software",
@@ -66,6 +70,31 @@ def test_screen_contract_allows_clearing_controls_but_requires_field_presence():
             {"tool_id": "software", "action": action, "params": {"selector": "#input"}}
         )
         assert missing["success"] is False
+
+
+@pytest.mark.asyncio
+async def test_external_file_tools_require_session_identity(monkeypatch):
+    from app.application.aiopen.service import AIOPEN_STATE, invoke_tool
+    from app.infrastructure.aiopen.cursor_hub import aiopen_cursor_hub
+
+    monkeypatch.setitem(AIOPEN_STATE, "remote_control_enabled", True)
+    dispatch = AsyncMock(return_value={"success": True})
+    monkeypatch.setattr(aiopen_cursor_hub, "dispatch", dispatch)
+    monkeypatch.setattr(
+        "app.application.aiopen.software_control.request_screen_owner", lambda request: {}
+    )
+    denied = await invoke_tool("ui_files", {"owner_id": "other", "tenant_id": "8"}, None)
+    assert denied["code"] == "SCREEN_IDENTITY_REQUIRED"
+    dispatch.assert_not_called()
+    monkeypatch.setattr(
+        "app.application.aiopen.software_control.request_screen_owner",
+        lambda request: {"owner_id": "3", "tenant_id": "7"},
+    )
+    await invoke_tool(
+        "ui_set_files", {"selector": "#file", "file_ids": ["selected"], "owner_id": "other"}, None
+    )
+    assert dispatch.call_args.kwargs["owner_id"] == "3"
+    assert dispatch.call_args.kwargs["tenant_id"] == "7"
 
 
 @pytest.mark.asyncio

@@ -750,8 +750,8 @@ class TestConstants:
         assert MCP_DEFAULT_PROTOCOL_VERSION in MCP_PROTOCOL_VERSIONS
 
     def test_tool_definitions_count(self):
-        assert len(TOOL_DEFINITIONS) == 16
-        assert len({tool["name"] for tool in TOOL_DEFINITIONS}) == 16
+        assert len(TOOL_DEFINITIONS) == 18
+        assert len({tool["name"] for tool in TOOL_DEFINITIONS}) == 18
         assert any(t["name"] == "capability_loop" for t in TOOL_DEFINITIONS)
 
     def test_ui_actions_mapping(self):

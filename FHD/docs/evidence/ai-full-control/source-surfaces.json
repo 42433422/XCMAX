@@ -1,8 +1,8 @@
 {
   "scope": "Tracked FHD source declarations, including Mods; excludes tests, archives, package directories and build output. Counts are not unique business functions or runtime coverage.",
-  "source_sha256": "7d58db6846384cd4ce5a1bdff949c4e5d301c83a8b455285dc96d8c162a29726",
+  "source_sha256": "8c058af69ef141265160c415f2e9757ca278463c96d3bcaabd6346c04408f4bc",
   "generator_sha256": "ceb39219815ed03f5f049188b128f7d7d2d781cae8657c677a0c35c1413af843",
-  "files_scanned": 4023,
+  "files_scanned": 4024,
   "product_coverage_percent": null,
   "remaining_denominators": [
     "native desktop/mobile commands",
@@ -20831,7 +20831,7 @@
       },
       {
         "source": "frontend/src/composables/aiopenScreenControls.ts",
-        "line": 42,
+        "line": 48,
         "declared_path": "route.path",
         "dynamic": true,
         "mount_status": "unverified"

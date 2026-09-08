@@ -21,6 +21,12 @@ export function controlState(el: Element): Result {
     sensitive: secret,
   }
   if (!secret && 'value' in el) state.value = field.value
+  if (!secret && el instanceof HTMLInputElement && el.type === 'file') {
+    state.accept = el.accept
+    state.multiple = el.multiple
+    state.input_type = 'file'
+    state.files = Array.from(el.files ?? [], file => ({ name: file.name, size: file.size, type: file.type }))
+  }
   if (el.matches('input[type="checkbox"], input[type="radio"]')) state.checked = field.checked
   for (const key of ['checked', 'expanded', 'selected', 'invalid']) {
     if (el.hasAttribute(`aria-${key}`)) state[key] = el.getAttribute(`aria-${key}`)

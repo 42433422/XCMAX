@@ -45,10 +45,23 @@ async def invoke_tool(
             }
         session_id = str(args.get("session_id") or "") or None
         params = {k: v for k, v in args.items() if k != "session_id"}
+        identity = {}
+        if name in {"ui_files", "ui_set_files"}:
+            from app.application.aiopen.software_control import request_screen_owner
+            from app.infrastructure.request_context import get_current_request
+
+            identity = request_screen_owner(get_current_request())
+            if not identity.get("owner_id") or not identity.get("tenant_id"):
+                return {
+                    "success": False,
+                    "code": "SCREEN_IDENTITY_REQUIRED",
+                    "message": "文件操作需要当前账号会话，通用 AIOPEN 令牌不授予文件访问权限",
+                }
         return await _facade().aiopen_cursor_hub.dispatch(
             _facade()._UI_ACTIONS[name],
             params,
             session_id=session_id,
             timeout=_facade()._UI_TOOL_TIMEOUT_SECONDS,
+            **identity,
         )
     return {"success": False, "message": f"未知工具：{name}", "code": "UNKNOWN_TOOL"}

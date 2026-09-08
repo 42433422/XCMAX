@@ -257,7 +257,7 @@ def resolve_registered_capability_call(args: dict[str, Any] | None) -> dict[str,
         }
     required = [str(key) for key in spec.get("required_params") or [] if str(key)]
     # Clearing a text field or a multiple-select is an intentional empty value.
-    empty_screen_fields = {"type": "text", "select": "values"}
+    empty_screen_fields = {"type": "text", "select": "values", "set_files": "file_ids"}
     missing = [
         key
         for key in required

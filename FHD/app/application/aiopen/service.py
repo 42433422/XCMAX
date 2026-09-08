@@ -290,6 +290,8 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
 ]
 
 _UI_ACTIONS = {
+    "ui_files": "files",
+    "ui_set_files": "set_files",
     "ui_routes": "routes",
     "ui_select": "select",
     "ui_check": "check",

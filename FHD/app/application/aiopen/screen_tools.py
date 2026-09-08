@@ -27,6 +27,26 @@ def _tool(name: str, description: str, properties: dict, required: list[str]) ->
 
 SCREEN_TOOL_DEFINITIONS: list[dict[str, Any]] = [
     _tool(
+        "ui_files",
+        "列出用户在当前窗口选过且尚未过期的文件编号。仅返回名称/大小/类型，不读取任意磁盘路径。",
+        {},
+        [],
+    ),
+    _tool(
+        "ui_set_files",
+        "将 ui_files 中的文件放入快照中的文件控件；空数组清空选择。上传和导入结果需要另行回读。",
+        {
+            "selector": {"type": "string"},
+            "file_ids": {
+                "type": "array",
+                "items": {"type": "string"},
+                "minItems": 0,
+                "maxItems": 32,
+            },
+        },
+        ["selector", "file_ids"],
+    ),
+    _tool(
         "ui_routes",
         "读取当前窗口实际挂载的全部页面目录，包括已加载的 Mods。页面访问仍由账号权限检查。",
         {},

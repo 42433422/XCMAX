@@ -12,6 +12,7 @@ import type { Router } from 'vue-router'
 import { getApiBase } from '@/utils/apiBase'
 import { createScreenCommandQueue } from './aiopenCommandQueue'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
+import { captureScreenFileSelection, clearScreenFiles, fileInputAvailable, listScreenFiles, setScreenFiles } from './aiopenFileControls'
 import { checkScreenControl, controlState, ensureEditable, navigateScreen, pressScreenKey, privateControl, screenRoutes, selectScreenOption } from './aiopenScreenControls'
 
 const STORAGE_KEY = 'xcagi_aiopen_remote_control'
@@ -34,6 +35,9 @@ let ws: WebSocket | null = null
 let routerRef: Router | null = null
 let reconnectTimer: number | null = null
 let stopAccountWatch: (() => void) | null = null
+const onFileSelection = (event: Event) => {
+  if (aiopenCursorEnabled.value) captureScreenFileSelection(event)
+}
 
 function pushLog(text: string) {
   const ts = new Date().toLocaleTimeString('zh-CN', { hour12: false })
@@ -134,7 +138,7 @@ async function animateCursorTo(x: number, y: number, label: string): Promise<voi
 async function execSnapshot(params: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
   const selectorList = 'button, a[href], input, textarea, select, [contenteditable="true"], [role="button"], [role="tab"], [role="menuitem"], [role="option"], [role="checkbox"], [role="switch"], [role="radio"], [role="combobox"], [role="slider"], [role="treeitem"]'
   const elements: Array<Record<string, unknown>> = []
-  const visible = Array.from(document.querySelectorAll(selectorList)).filter(isVisible)
+  const visible = Array.from(document.querySelectorAll(selectorList)).filter(el => isVisible(el) || fileInputAvailable(el))
   const offset = Number.isSafeInteger(params.offset) && Number(params.offset) >= 0 ? Number(params.offset) : 0
   for (const el of visible.slice(offset, offset + SNAPSHOT_MAX_ELEMENTS)) {
     const rect = (el as HTMLElement).getBoundingClientRect()
@@ -249,6 +253,13 @@ async function executeCommand(action: string, params: Record<string, unknown>, a
       return execSnapshot(params)
     case 'routes':
       return screenRoutes(routerRef)
+    case 'files':
+      return listScreenFiles()
+    case 'set_files': {
+      const el = findElement(String(params.selector || ''))
+      if (!el) return { success: false, message: '未找到文件控件' }
+      return setScreenFiles(el, params, assertCurrent)
+    }
     case 'select':
     case 'check':
     case 'press': {
@@ -397,6 +408,7 @@ export function setAiOpenCursorEnabled(enabled: boolean) {
     pushLog('远程操控已开启')
     connect()
   } else {
+    clearScreenFiles()
     pushLog('远程操控已关闭')
     disconnect()
   }
@@ -405,8 +417,11 @@ export function setAiOpenCursorEnabled(enabled: boolean) {
 /** App.vue 内 VirtualCursorOverlay 调用：注入 router 并按持久化状态自动连接。 */
 export function initAiOpenCursor(router: Router) {
   routerRef = router
+  document.removeEventListener('change', onFileSelection, true)
+  document.addEventListener('change', onFileSelection, true)
   stopAccountWatch?.()
   stopAccountWatch = watch(productReadAccountEpoch, () => {
+    clearScreenFiles()
     disconnect()
     aiopenCursorLogs.value = []
     cursorClicking.value = false
