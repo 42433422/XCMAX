@@ -423,6 +423,43 @@ class TestGetInventorySummary:
 # ---------------------------------------------------------------------------
 # inventory_in
 # ---------------------------------------------------------------------------
+@pytest.mark.parametrize("operation", ["in", "out", "transfer"])
+@pytest.mark.parametrize("quantity", [-50, 0, True, None, "bad", float("nan"), float("inf"), "-3"])
+def test_invalid_movement_quantity_preserves_stock(test_session, operation, quantity):
+    db = test_session
+    product = Product(name="受保护产品", model_number="SAFE")
+    source = Warehouse(code="SOURCE", name="源仓库", status="active")
+    destination = Warehouse(code="DEST", name="目标仓库", status="active")
+    db.add_all([product, source, destination])
+    db.flush()
+    db.add(
+        InventoryLedger(
+            product_id=product.id,
+            warehouse_id=source.id,
+            quantity=100,
+            available_quantity=100,
+            reserved_quantity=0,
+            unit="个",
+        )
+    )
+    db.commit()
+    service = InventoryService()
+    with patch("app.services.inventory_service.get_db", _mock_get_db(db)) as get_db:
+        if operation == "in":
+            result = service.inventory_in(product.id, source.id, quantity)
+        elif operation == "out":
+            result = service.inventory_out(product.id, source.id, quantity)
+        else:
+            result = service.inventory_transfer(product.id, source.id, destination.id, quantity)
+    assert result["success"] is False
+    db.commit()
+    db.expire_all()
+    assert db.query(InventoryTransaction).count() == 0
+    assert db.query(InventoryLedger).count() == 1
+    assert float(db.query(InventoryLedger).one().quantity) == 100
+    assert float(db.query(InventoryLedger).one().available_quantity) == 100
+
+
 class TestInventoryIn:
     @pytest.mark.parametrize(
         "problem",

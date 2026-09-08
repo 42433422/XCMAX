@@ -19,6 +19,15 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Inventory out/transfer previously subtracted unchecked quantities, allowing a
+  negative request to increase source stock. All three movement methods now use
+  one finite-positive-number validator before opening the business session,
+  preserving inbound's existing public error. Real DB tests cover eight invalid
+  values across in/out/transfer and verify stock/available remain 100 with zero
+  movement rows after commit/readback. All 92 inventory/ownership checks passed
+  (`inventory-quantity-contracts`). Warehouse validity and concurrent stock-update
+  invariants remain separate from quantity validation and lease fencing.
+
 - Inventory out and transfer now use the same worker ownership guard as inbound.
   Real SQLite checks cover all three operations with active/expired claims in
   shared and separate Mod databases: expired operations preserve initial ledgers

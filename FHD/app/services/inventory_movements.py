@@ -18,6 +18,18 @@ def _facade():
     return importlib.import_module("app.services.inventory_service")
 
 
+def _positive_movement_quantity(value: Any) -> float:
+    if isinstance(value, bool):
+        raise ValueError("库存变动数量必须是有效正数")
+    try:
+        quantity = float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("库存变动数量必须是有效正数") from exc
+    if not math.isfinite(quantity) or quantity <= 0:
+        raise ValueError("库存变动数量必须是有效正数")
+    return quantity
+
+
 class InventoryMovementsMixin:
     if TYPE_CHECKING:
 
@@ -38,13 +50,9 @@ class InventoryMovementsMixin:
         model_number: str | None = None,
         warehouse_name: str | None = None,
     ) -> dict[str, Any]:
-        if isinstance(quantity, bool):
-            return {"success": False, "message": "入库数量必须是有效正数"}
         try:
-            quantity = float(quantity)
-        except (TypeError, ValueError, OverflowError):
-            return {"success": False, "message": "入库数量必须是有效正数"}
-        if not math.isfinite(quantity) or quantity <= 0:
+            quantity = _positive_movement_quantity(quantity)
+        except ValueError:
             return {"success": False, "message": "入库数量必须是有效正数"}
         with _facade().get_db() as db, worker_write_guard(db):
             try:
@@ -172,6 +180,10 @@ class InventoryMovementsMixin:
         operator: str | None = None,
         remark: str | None = None,
     ) -> dict[str, Any]:
+        try:
+            quantity = _positive_movement_quantity(quantity)
+        except ValueError:
+            return {"success": False, "message": "出库数量必须是有效正数"}
         with _facade().get_db() as db, worker_write_guard(db):
             try:
                 query = db.query(_facade().InventoryLedger).filter(
@@ -235,6 +247,10 @@ class InventoryMovementsMixin:
         operator: str | None = None,
         remark: str | None = None,
     ) -> dict[str, Any]:
+        try:
+            quantity = _positive_movement_quantity(quantity)
+        except ValueError:
+            return {"success": False, "message": "调拨数量必须是有效正数"}
         with _facade().get_db() as db, worker_write_guard(db):
             try:
                 from_ledger = (
