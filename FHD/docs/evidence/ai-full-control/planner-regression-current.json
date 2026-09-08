@@ -1,0 +1,23 @@
+{
+  "source_sha": "b669ac8b3",
+  "tests": 527,
+  "passed": 525,
+  "failed": 2,
+  "failures": [
+    {
+      "test": "test_workflow_planner.py::TestLLMWorkflowPlanner::test_fallback_plan_products",
+      "message": "添加产品到公司A",
+      "expected": "add_product_to_unit",
+      "actual": "create_product"
+    },
+    {
+      "test": "test_workflow_planner_cov.py::TestFallbackPlan::test_fallback_add_product_to_unit",
+      "message": "添加新产品到客户单位",
+      "expected": "add_product_to_unit",
+      "actual": "create_product"
+    }
+  ],
+  "mypy": "4 recent changed source files passed",
+  "next_action": "Inspect customer-product linkage semantics before changing implementation or expectations.",
+  "acceptance": "Not passed; these failures remain open."
+}
