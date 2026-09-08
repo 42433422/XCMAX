@@ -1,0 +1,5 @@
+{
+  "source_commit": "e8f032199d4a1b518fc13ba79c820b18b6bc40ae",
+  "tests_passed": 383,
+  "scope": "Registered sales adapter resolves successful prior result ID and rejects missing, failed, invalid or conflicting IDs. Sales service is mocked in reference tests. Current sales.confirm protocol still requires order_id; reference-aware protocol validation, planner dependency generation, approval and real database confirmation remain outstanding."
+}
