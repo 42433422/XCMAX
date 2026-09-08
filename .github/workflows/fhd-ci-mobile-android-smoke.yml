@@ -1,0 +1,103 @@
+# CI SSOT: generated from FHD/.github/workflows/ci-mobile-android-smoke.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+# 真机冒烟验证：Android 模拟器安装并启动企业版 APK。
+#
+# 与 ci-mobile-flutter.yml（编译 + 单元/Widget 测试）互补：本工作流验证
+# 「构建产物在真实 Android 运行时上能装、能起、进程存活」，覆盖
+# MethodChannel 注册、插件初始化等纯 JVM/Widget 测试触不到的启动路径。
+#
+# 依赖 GitHub ubuntu-latest runner 的 KVM 嵌套虚拟化支持。
+name: ci-mobile-android-smoke
+
+on:
+  push:
+    paths:
+      - "FHD/mobile-flutter-poc/**"
+      - ".github/workflows/fhd-ci-mobile-android-smoke.yml"
+  pull_request:
+    paths:
+      - "FHD/mobile-flutter-poc/**"
+      - ".github/workflows/fhd-ci-mobile-android-smoke.yml"
+  schedule:
+    # 每日 09:00 UTC
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-mobile-android-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  emulator-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      APP_PACKAGE: com.xiuci.xcagi.mobile.enterprise
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Flutter pub get
+        working-directory: FHD/mobile-flutter-poc
+        run: flutter pub get
+
+      - name: Build debug APK
+        working-directory: FHD/mobile-flutter-poc
+        run: flutter build apk --debug
+
+      - name: Free runner disk for emulator image
+        run: |
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/share/dotnet /usr/local/share/powershell || true
+          df -h /
+
+      - name: Boot headless emulator (API 34 x86_64) + install + launch
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          disable-spellchecker: true
+          working-directory: FHD/mobile-flutter-poc
+          script: |
+            APK=$(find build/app/outputs/flutter-apk -name 'app-debug.apk' | head -1)
+            test -n "$APK"
+            adb install -r -g "$APK"
+            # 冷启动主 Activity，等待首帧渲染
+            adb shell monkey -p "$APP_PACKAGE" -c android.intent.category.LAUNCHER 1
+            sleep 15
+            # 存活断言：进程仍在 = 启动路径（含 MethodChannel/插件初始化）未崩溃
+            if ! adb shell pidof "$APP_PACKAGE" > /dev/null; then
+              echo "::error::app process not alive after launch"
+              exit 1
+            fi
+            adb exec-out screencap -p > /tmp/android-smoke-screen.png
+
+      - name: Upload smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-smoke-evidence
+          path: /tmp/android-smoke-screen.png
+          if-no-files-found: ignore
+
+      - name: Crash log dump
+        if: failure()
+        run: adb logcat -d -t 800 || true
