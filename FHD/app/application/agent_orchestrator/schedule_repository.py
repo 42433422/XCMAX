@@ -30,7 +30,16 @@ class ScheduleRepository:
             with self._lock:
                 bind = db.get_bind()
                 if bind is not self._bind:
+                    from app.db.models.schedule_authorization import (
+                        ScheduleAuthorizationRecord,
+                        ScheduleAuthorizationUseRecord,
+                    )
+
                     cast(Table, Record.__table__).create(bind, checkfirst=True)
+                    cast(Table, ScheduleAuthorizationRecord.__table__).create(bind, checkfirst=True)
+                    cast(Table, ScheduleAuthorizationUseRecord.__table__).create(
+                        bind, checkfirst=True
+                    )
                     self._bind = bind
             yield db
             db.commit()
@@ -95,6 +104,15 @@ class ScheduleRepository:
                 .all()
             )
             return [self._data(row) for row in rows]
+
+    def get_owned(self, schedule_id: str, user_id: str, tenant_id: str) -> dict[str, Any] | None:
+        with self.session() as db:
+            row = (
+                db.query(Record)
+                .filter_by(schedule_id=schedule_id, user_id=user_id, tenant_id=tenant_id)
+                .one_or_none()
+            )
+            return self._data(row) if row else None
 
     def control(self, schedule_id: str, user_id: str, tenant_id: str, action: str) -> bool:
         states = {"pause": "paused", "resume": "active", "cancel": "cancelled"}

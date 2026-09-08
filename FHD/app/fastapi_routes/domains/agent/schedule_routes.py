@@ -33,14 +33,75 @@ def create_schedule(
 @router.get("/api/agent/schedules", response_model=None)
 def list_schedules(principal: AgentPrincipal = Depends(require_agent_principal)):
     try:
-        rows = RecurringScheduleService().repository.list_owned(
-            principal.user_id, principal.tenant_id
-        )
+        from app.application.agent_orchestrator.schedule_authorization import ScheduleAuthorizations
+
+        repository = RecurringScheduleService().repository
+        rows = repository.list_owned(principal.user_id, principal.tenant_id)
+        authorizations = ScheduleAuthorizations(repository).list_active(principal)
         for row in rows:
             row.pop("lease_owner", None)
+            row["authorization"] = authorizations.get(row["schedule_id"])
         return success(rows)
     except RECOVERABLE_ERRORS:
         return internal_error_response("list recurring schedules")
+
+
+@router.get("/api/agent/schedules/{schedule_id}/authorization", response_model=None)
+def inspect_schedule_authorization(
+    schedule_id: str, principal: AgentPrincipal = Depends(require_agent_principal)
+):
+    from app.application.agent_orchestrator.schedule_authorization import ScheduleAuthorizations
+
+    try:
+        return success(ScheduleAuthorizations().inspect(schedule_id, principal))
+    except ValueError:
+        return JSONResponse(
+            {"success": False, "message": "计划不存在或操作已变化"}, status_code=404
+        )
+    except RECOVERABLE_ERRORS:
+        return internal_error_response("inspect schedule authorization")
+
+
+@router.post("/api/agent/schedules/{schedule_id}/authorization", response_model=None)
+def authorize_schedule(
+    schedule_id: str,
+    body: dict[str, Any] = Body(default_factory=dict),
+    principal: AgentPrincipal = Depends(require_agent_principal),
+):
+    from app.application.agent_orchestrator.schedule_authorization import ScheduleAuthorizations
+
+    try:
+        expires_at, max_runs = body.get("expires_at"), body.get("max_runs")
+        if not isinstance(expires_at, str) or type(max_runs) is not int:
+            raise ValueError("必须提供授权到期时间和次数")
+        authorization = ScheduleAuthorizations().grant(
+            schedule_id,
+            principal,
+            expires_at=expires_at,
+            max_runs=max_runs,
+            expected_scope_hash=str(body.get("scope_hash") or ""),
+        )
+        RecurringScheduleService().activate_pending(schedule_id, principal)
+        return success(authorization)
+    except ValueError:
+        return JSONResponse(
+            {"success": False, "message": "授权范围、到期时间或次数无效，请重新查看计划"},
+            status_code=400,
+        )
+    except RECOVERABLE_ERRORS:
+        return internal_error_response("authorize recurring schedule")
+
+
+@router.delete("/api/agent/schedules/{schedule_id}/authorization", response_model=None)
+def revoke_schedule_authorization(
+    schedule_id: str, principal: AgentPrincipal = Depends(require_agent_principal)
+):
+    from app.application.agent_orchestrator.schedule_authorization import ScheduleAuthorizations
+
+    try:
+        return success({"revoked": ScheduleAuthorizations().revoke(schedule_id, principal)})
+    except RECOVERABLE_ERRORS:
+        return internal_error_response("revoke recurring schedule authorization")
 
 
 @router.post("/api/agent/schedules/{schedule_id}/{action}", response_model=None)
@@ -48,9 +109,7 @@ def control_schedule(
     schedule_id: str, action: str, principal: AgentPrincipal = Depends(require_agent_principal)
 ):
     try:
-        changed = RecurringScheduleService().repository.control(
-            schedule_id, principal.user_id, principal.tenant_id, action
-        )
+        changed = RecurringScheduleService().control(schedule_id, principal, action)
         if not changed:
             return JSONResponse(
                 {"success": False, "message": "调度不存在或已取消"}, status_code=404
@@ -59,7 +118,7 @@ def control_schedule(
             {
                 "schedule_id": schedule_id,
                 "action": action,
-                "message": "控制影响后续触发；已生成的任务请在任务中心单独暂停或取消。",
+                "message": "暂停或取消也阻止未开始的自动任务；已开始的任务请在工作区查看和控制。",
             }
         )
     except ValueError:

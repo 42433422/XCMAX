@@ -153,7 +153,8 @@ class AgentTaskDispatcher:
 
         if self._schedule_service is None:
             self._schedule_service = RecurringScheduleService(
-                orchestrator=self._orchestrator_factory(self._run_repo)
+                orchestrator=self._orchestrator_factory(self._run_repo),
+                execution_repository=self._execution_repo,
             )
         self._schedule_service.tick(self._instance_id)
 

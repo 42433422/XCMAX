@@ -190,7 +190,7 @@ def build_registered_capability_tool_definition() -> dict[str, Any]:
                     },
                     "recurrence": {
                         "type": "object",
-                        "description": "周期执行：interval 使用 seconds（至少 60）；daily 使用 hour、minute 和 IANA timezone。必须同时提供首次 scheduled_at 与稳定 task_id。每次生成任务仍须审批。",
+                        "description": "周期执行：interval 使用 seconds（至少 60）；daily 使用 hour、minute 和 IANA timezone。必须同时提供首次 scheduled_at 与稳定 task_id。默认逐次审批，用户可在任务中心确认限时限次自动执行授权。",
                         "properties": {
                             "kind": {"type": "string", "enum": ["interval", "daily"]},
                             "seconds": {"type": "integer", "minimum": 60},

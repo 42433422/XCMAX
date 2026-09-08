@@ -31,7 +31,7 @@ def create_scheduled_capability(args: dict[str, Any], resolved: dict[str, Any]) 
             "next_run_at": row["next_run_at"],
             "deduplicated": row["deduplicated"],
             "approval_policy": "each_occurrence",
-            "message": "周期计划已保存，每次生成的任务须在任务中心审批；不自动累积未完成任务。",
+            "message": "周期计划已保存，默认逐次审批；可在任务中心查看操作并确认限时限次自动执行授权。不累积未完成任务。",
         }
     task_id = str(args.get("task_id") or "").strip()
     if not task_id or not args.get("scheduled_at"):
@@ -101,15 +101,22 @@ def manage_schedule(args: dict[str, Any]) -> str:
         principal = require_agent_principal(request)
         repository = ScheduleRepository()
         if args.get("action") == "list":
+            from app.application.agent_orchestrator.schedule_authorization import (
+                ScheduleAuthorizations,
+            )
+
             rows = repository.list_owned(principal.user_id, principal.tenant_id)
+            authorizations = ScheduleAuthorizations(repository).list_active(principal)
             for row in rows:
                 row.pop("lease_owner", None)
+                row["authorization"] = authorizations.get(row["schedule_id"])
             return json.dumps({"success": True, "schedules": rows}, ensure_ascii=False)
-        changed = repository.control(
-            str(args.get("schedule_id") or ""),
-            principal.user_id,
-            principal.tenant_id,
-            str(args.get("action") or ""),
+        from app.application.agent_orchestrator.recurring_schedule_service import (
+            RecurringScheduleService,
+        )
+
+        changed = RecurringScheduleService(repository=repository).control(
+            str(args.get("schedule_id") or ""), principal, str(args.get("action") or "")
         )
         return json.dumps(
             {"success": changed, "message": "控制仅影响后续触发；已生成任务保留。"},

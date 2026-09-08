@@ -245,6 +245,7 @@ export interface CreateAgentTaskPayload {
 }
 
 export interface AgentSchedule {
+  authorization?: null | { state: string; expires_at: string; max_runs: number; reserved_runs: number }
   schedule_id: string
   state: 'active' | 'paused' | 'cancelled'
   next_run_at: string
@@ -257,7 +258,24 @@ export interface AgentSchedule {
   }
 }
 
+export interface ScheduleConsent {
+  scope_hash: string
+  operation: { tool_id: string; action: string; params: Record<string, unknown> }
+  authorization: null | { state: string; expires_at: string; max_runs: number; reserved_runs: number }
+}
+
 export const agentRunsApi = {
+  inspectScheduleConsent(id: string): Promise<ApiResponse<ScheduleConsent>> {
+    return api.get<ApiResponse<ScheduleConsent>>(`/api/agent/schedules/${encodeURIComponent(id)}/authorization`)
+  },
+
+  authorizeSchedule(id: string, payload: { scope_hash: string; expires_at: string; max_runs: number }): Promise<ApiResponse<unknown>> {
+    return api.post<ApiResponse<unknown>>(`/api/agent/schedules/${encodeURIComponent(id)}/authorization`, payload)
+  },
+
+  revokeScheduleConsent(id: string): Promise<ApiResponse<unknown>> {
+    return api.delete<ApiResponse<unknown>>(`/api/agent/schedules/${encodeURIComponent(id)}/authorization`)
+  },
   listSchedules(): Promise<ApiResponse<AgentSchedule[]>> {
     return api.get<ApiResponse<AgentSchedule[]>>('/api/agent/schedules')
   },

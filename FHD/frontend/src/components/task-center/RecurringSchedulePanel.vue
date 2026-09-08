@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import agentRunsApi, { type AgentSchedule } from '@/api/agentRuns'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
+import ScheduleConsentPanel from './ScheduleConsentPanel.vue'
 
 const schedules = ref<AgentSchedule[]>([])
 const error = ref('')
@@ -59,12 +60,17 @@ onBeforeUnmount(() => { ++generation })
 <template>
   <details class="recurring-plans">
     <summary>周期计划（{{ schedules.length }}）</summary>
-    <p>可在对话中创建周期计划。每次任务仍须审批；暂停或取消计划只影响后续触发。</p>
+    <p>可在对话中创建周期计划，默认逐次审批。也可查看具体操作后授权限时、限次自动执行。</p>
     <button type="button" :disabled="busy" @click="refresh">刷新计划</button>
     <p v-if="error" role="alert">{{ error }}</p>
     <p v-else-if="!busy && !schedules.length">当前账号没有周期计划。</p>
     <article v-for="row in schedules" :key="row.schedule_id">
       <strong>{{ row.payload.title }}</strong>
+      <span v-if="row.authorization">
+        {{ row.authorization.state === 'active' ? '已授权自动执行' : row.authorization.state === 'expired' ? '自动授权已过期' : '自动批准次数已用完' }}
+        · 已批准 {{ row.authorization.reserved_runs }}/{{ row.authorization.max_runs }} 次
+      </span>
+      <span v-else>逐次审批</span>
       <span>{{ { active: '已启用', paused: '已暂停', cancelled: '已取消' }[row.state] }} · {{ ruleText(row) }}</span>
       <span v-if="row.state !== 'cancelled'">下次触发：{{ new Date(row.next_run_at).toLocaleString() }}</span>
       <span v-if="row.last_error" role="alert">上次触发失败，请检查最近任务和计划状态。</span>
@@ -73,6 +79,7 @@ onBeforeUnmount(() => { ++generation })
         <button v-if="row.state === 'paused'" type="button" :disabled="busy" @click="control(row.schedule_id, 'resume')">恢复</button>
         <button v-if="row.state !== 'cancelled'" type="button" :disabled="busy" @click="control(row.schedule_id, 'cancel')">取消计划</button>
       </div>
+      <ScheduleConsentPanel v-if="row.state !== 'cancelled'" :schedule-id="row.schedule_id" @changed="refresh" />
     </article>
   </details>
 </template>
