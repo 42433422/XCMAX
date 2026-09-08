@@ -1,0 +1,26 @@
+{
+  "base_sha": "72b29bcac",
+  "worktree_change": "Normalize actual default-printer service result",
+  "response": {
+    "success": true,
+    "response": "检测到 1 台打印机，默认打印机：Canon_TS3700_series。",
+    "data": {
+      "intent": "printer_list",
+      "printers": [
+        {
+          "name": "Canon_TS3700_series",
+          "status": "就绪",
+          "is_default": true
+        }
+      ],
+      "default_printer": "Canon_TS3700_series"
+    },
+    "normal_slot_dispatch": true
+  },
+  "os_default_matches": true,
+  "tests_passed": 5,
+  "limits": [
+    "Local source process on macOS, not installed XCAGI UI.",
+    "Read-only query; no physical print or printer setting changes."
+  ]
+}

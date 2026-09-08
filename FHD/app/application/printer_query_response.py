@@ -12,14 +12,17 @@ def build_printer_query_response() -> dict:
             "normal_slot_dispatch": True,
         }
     printers = result.get("printers") or []
-    default = str(result.get("default_printer") or "未设置")
+    default_value = result.get("default_printer")
+    if isinstance(default_value, dict):
+        default_value = default_value.get("printer") if default_value.get("success") else None
+    default = str(default_value or "未设置")
     return {
         "success": True,
         "response": f"检测到 {len(printers)} 台打印机，默认打印机：{default}。",
         "data": {
             "intent": "printer_list",
             "printers": printers,
-            "default_printer": result.get("default_printer"),
+            "default_printer": default_value,
         },
         "normal_slot_dispatch": True,
     }
