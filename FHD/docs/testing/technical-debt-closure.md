@@ -19,6 +19,19 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Frontend build type-check and all local Vitest tests pass: 620 files / 9808
+  tests, with 2 live-backend smoke files / 4 tests skipped by configuration
+  (`integration-frontend-all`); the focused Agent API/clarification/runtime suite
+  separately passes 21 tests. These are local component/unit results, not browser
+  or installed-client acceptance. Remote mutation-smoke run 34241687010 failed
+  before executing mutations: uv --group dev named a nonexistent dependency
+  group (dev is an optional extra). Workflow now uses --extra dev and --no-sync
+  when invoking the separately installed mutmut. Frozen Python 3.11 dependency
+  dry-run resolves successfully without changing the shared venv, workflow
+  publication parity passes, and 7 scope regressions pass
+  (`mutation-config-regression`). Actual remote mutation kill-rate result is
+  still pending; no threshold or failure handling was weakened.
+
 - Full fresh-SQLite Alembic upgrade reproduced a migration failure: the baseline
   creates current metadata, so the approval-consumption table existed before its
   new migration. Upgrade now preserves an existing table rather than recreating

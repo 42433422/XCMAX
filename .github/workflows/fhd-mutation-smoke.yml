@@ -61,7 +61,7 @@ jobs:
       - name: Sync dependencies
         if: steps.paths.outputs.run_mutation == 'true'
         working-directory: FHD
-        run: uv sync --frozen --extra server-api --group dev
+        run: uv sync --frozen --extra server-api --extra dev
 
       - name: Install mutmut
         if: steps.paths.outputs.run_mutation == 'true'
@@ -71,7 +71,7 @@ jobs:
       - name: Run mutmut
         if: steps.paths.outputs.run_mutation == 'true'
         working-directory: FHD
-        run: uv run mutmut run 2>&1 | tee mutmut-run.log
+        run: uv run --no-sync mutmut run 2>&1 | tee mutmut-run.log
 
       - name: Generate kill report
         if: steps.paths.outputs.run_mutation == 'true'
