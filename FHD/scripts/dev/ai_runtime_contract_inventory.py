@@ -49,7 +49,7 @@ def inventory(app: Any) -> dict[str, Any]:
             results[path, method] = (
                 "available" if schema.get("success") else str(schema.get("code") or "unknown")
             )
-        except Exception as exc:  # noqa: BLE001 - collect each schema failure as audit evidence
+        except (ValueError, TypeError, LookupError, RuntimeError) as exc:
             # Diagnostic boundary only: do not turn schema exceptions into a
             # fabricated contract or persist arbitrary exception payloads.
             results[path, method] = "error:" + type(exc).__name__

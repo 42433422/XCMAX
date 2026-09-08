@@ -19,6 +19,7 @@ from app.fastapi_routes import label_jobs, print_routes
 from app.infrastructure.auth.dependencies import get_logged_in_user
 from app.infrastructure.printing import label_pdf_printer as pdf_printer
 from app.middleware.csrf import CSRFMiddleware
+from app.request_active_mod_ctx import reset_request_active_mod_id, set_request_active_mod_id
 
 OWNER = (11, 7)
 PAYLOAD = {
@@ -111,6 +112,59 @@ def create(env):
     response = env.client.post("/api/print/label-jobs", json=PAYLOAD)
     assert response.status_code == 200, response.text
     return response.json()["job"]
+
+
+@pytest.mark.parametrize("source,target", [("", "erp"), ("erp", ""), ("erp", "other")])
+def test_label_artifact_and_confirmation_cannot_cross_mod_scope(env, source, target):
+    token = set_request_active_mod_id(source)
+    try:
+        job = create(env)
+        confirmation = env.service.confirmation(OWNER, job["id"], "LabelPrinter")
+        path = env.service.file(OWNER, job["id"])
+        original = path.read_bytes()
+        assert len(PdfReader(path).pages) == PAYLOAD["copies"]
+        dispatch = MagicMock(return_value={"submission_state": "submitted"})
+        switched = set_request_active_mod_id(target)
+        try:
+            base = f"/api/print/label-jobs/{job['id']}"
+            assert env.client.get(base).status_code == 404
+            assert env.client.get(base + "/file").status_code == 404
+            assert (
+                env.client.post(
+                    base + "/submit", json={"confirm_token": confirmation["confirm_token"]}
+                ).status_code
+                == 404
+            )
+            with pytest.raises(jobs.LabelJobError) as error:
+                env.service.confirmation(OWNER, job["id"], "LabelPrinter")
+            assert error.value.status == 404
+            with pytest.raises(jobs.LabelJobError):
+                env.service.submit(OWNER, job["id"], confirmation["confirm_token"], dispatch)
+            dispatch.assert_not_called()
+        finally:
+            reset_request_active_mod_id(switched)
+        restarted = jobs.LabelJobService(env.service.root)
+        assert restarted.file(OWNER, job["id"]).read_bytes() == original
+        assert (
+            restarted.submit(OWNER, job["id"], confirmation["confirm_token"], dispatch)["status"]
+            == "submitted"
+        )
+        dispatch.assert_called_once()
+    finally:
+        reset_request_active_mod_id(token)
+
+
+def test_legacy_label_manifest_requires_regeneration_without_deleting_artifact(env):
+    job = create(env)
+    directory, manifest = env.service._read(OWNER, job["id"])
+    original = (directory / "labels.pdf").read_bytes()
+    del manifest["mod_id"]
+    env.service._write(directory, manifest)
+    base = f"/api/print/label-jobs/{job['id']}"
+    assert env.client.get(base).status_code == 409
+    assert env.client.get(base + "/file").status_code == 409
+    assert env.client.post(base + "/submit", json={"confirm_token": "x" * 32}).status_code == 409
+    assert (directory / "labels.pdf").read_bytes() == original
 
 
 def test_real_product_id_selected_template_content_pages_and_physical_size(env):

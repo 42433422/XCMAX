@@ -56,13 +56,11 @@ def etl_app(export_app, application, host, monkeypatch, tmp_path):
     monkeypatch.setitem(AIOPEN_STATE["whitelist"], "/api/etl", True)
 
     def database():
+        # Session.close rolls back on errors; ETL may commit and start a new
+        # transaction during the request, so do not pin one begin() context.
         with selected_factory()() as db:
-            try:
-                yield db
-                db.commit()
-            except Exception:
-                db.rollback()
-                raise
+            yield db
+            db.commit()
 
     app.dependency_overrides[get_db_dependency] = database
     app.include_router(etl.router)
