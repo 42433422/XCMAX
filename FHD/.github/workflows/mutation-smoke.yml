@@ -62,16 +62,16 @@ jobs:
         working-directory: FHD
         run: uv pip install mutmut
 
-      - name: Run mutmut
+      - name: Generate mutants and test mapping
         if: steps.paths.outputs.run_mutation == 'true'
         working-directory: FHD
         run: uv run --no-sync mutmut run 2>&1 | tee mutmut-run.log
 
-      - name: Generate kill report
+      - name: Verify mutants in isolated interpreters
         if: steps.paths.outputs.run_mutation == 'true'
         working-directory: FHD
-        # mutmut 3.x ``results`` 默认跳过 killed；优先解析 run 日志里的 progress 摘要
-        run: python scripts/dev/mutation_kill_report.py --threshold 80 --from-file mutmut-run.log
+        # Forked mutmut outcomes are diagnostic only; recheck every generated mutant.
+        run: uv run --no-sync python scripts/dev/mutation_isolated.py --mutants mutants --output mutation-isolated --threshold 80
 
       - name: Upload mutation history
         if: always()
@@ -81,4 +81,5 @@ jobs:
           path: |
             FHD/metrics/mutation-history.jsonl
             FHD/mutmut-run.log
+            FHD/mutation-isolated/
           if-no-files-found: warn

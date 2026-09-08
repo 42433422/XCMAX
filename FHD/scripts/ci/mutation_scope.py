@@ -16,6 +16,8 @@ FILES = frozenset(
     {
         "FHD/pyproject.toml",
         "FHD/scripts/dev/mutation_kill_report.py",
+        "FHD/scripts/dev/mutation_isolated.py",
+        "FHD/tests/test_scripts/test_mutation_isolated.py",
         "FHD/scripts/ci/mutation_scope.py",
         "FHD/tests/test_scripts/test_mutation_kill_report.py",
         "FHD/tests/test_scripts/test_mutation_scope.py",

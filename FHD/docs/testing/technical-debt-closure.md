@@ -19,6 +19,16 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Independent-interpreter verifier portability run completes all 268 existing
+  mutants: 253 killed, 13 survived, two mutation-caused teardown errors, zero
+  timeouts/no-tests/resource-warning logs. The conservative rate is 253/268 =
+  94.40%; errors remain in the denominator. All outcome log hashes verify and
+  baseline passes 105 tests. These inputs are an earlier generated snapshot,
+  so this verifies the runner, not latest-head mutation qualification. Real
+  subprocess tests also verify baseline failure aborts before score publication.
+  CI now rechecks generated mutants independently and retains per-case logs;
+  original mutmut output is diagnostic only. Fresh remote qualification remains.
+
 - Current-head mutation run 34266563015 reported 262/268 kills but contained a
   pytest unclosed-scandir/unraisable-exception traceback. It is not qualifying
   evidence. The report gate now rejects traceback/resource/unraisable diagnostics
