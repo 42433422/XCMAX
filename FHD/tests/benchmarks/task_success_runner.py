@@ -213,6 +213,7 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
     from app.db.base import Base
     from app.infrastructure.tenant_scope import tenant_scope
     from app.services.tools_execution.registry import get_workflow_tool_registry
+    from scripts.dev.task_benchmark_assertions import check_returned_records, seed_records
 
     Base.metadata.create_all(engine, checkfirst=True)
 
@@ -245,6 +246,7 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
                 "failure": None,
             }
             try:
+                seed_records(task.get("fixtures") or [])
                 plan = planner.plan("bench-user", task["instruction"], registry)
                 nodes = list(plan.nodes) if plan else []
                 ok, why = _check_no_actions(nodes, expect)
@@ -254,6 +256,7 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
                     ok, why = _check_forbid(nodes, expect)
                 result["routing_pass"] = ok
                 result["plan"] = [_action_sig(n) for n in nodes]
+                executed = {}
                 if plan is None:
                     exec_ok, exec_why = False, "planner returned no plan"
                 else:
@@ -262,10 +265,15 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
                 result["exec_pass"] = exec_ok
                 db_ok, db_why = _check_db_state(expect)
                 result["db_pass"] = db_ok
-                result["failure"] = (
-                    "; ".join(reason for reason in (why, exec_why, db_why) if reason) or None
+                output_ok, output_why = check_returned_records(
+                    executed, expect.get("returned_records") or []
                 )
-                result["pass"] = ok and exec_ok and db_ok
+                result["output_pass"] = output_ok
+                result["failure"] = (
+                    "; ".join(reason for reason in (why, exec_why, db_why, output_why) if reason)
+                    or None
+                )
+                result["pass"] = ok and exec_ok and db_ok and output_ok
             except _TRIAL_BOUNDARY_ERRORS as exc:
                 result["failure"] = f"{type(exc).__name__}: {exc}"
             out.write(json.dumps(result, ensure_ascii=False) + "\n")

@@ -20,10 +20,14 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 - Customer read fallback now preserves customer routing and search terms instead
   of defaulting to products. 56 targeted regressions passed. Three full trials
   now score 6/22 under the existing assertions, still not acceptance: the named
-  customer case currently returns an empty list because it has no fixture.
-  Seed known records and assert returned identity/content before treating this
-  as evidence of successful customer lookup. Raw outputs are retained under
+  customer case initially returned an empty list because it had no fixture.
+  Dataset v2 now seeds two customers and asserts exact returned counts and
+  customer/contact contents. All three trials passed both customer scenarios;
+  five negative/positive assertion tests reject empty, wrong, extra and failed
+  results. Full business acceptance is still outstanding. Raw outputs are retained under
   `customer-routing-trials` in the task evidence directory.
+  The strengthened outcome trials are in `seeded-customer-trials`; their receipts
+  describe a development observation, not mainline or installed-product acceptance.
 
 - Checkpoint `97df226b5` fixes mutation scope, enabled benchmark execution,
   acceptance thresholds, and source/data-bound receipts. Its targeted regression
