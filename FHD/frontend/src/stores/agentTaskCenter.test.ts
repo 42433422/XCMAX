@@ -1,3 +1,4 @@
+vi.mock('@/utils/authenticatedEventStream', () => ({ AuthenticatedEventStream: class { constructor(url: string) { return new EventSource(url) } } }))
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 

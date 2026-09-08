@@ -1,3 +1,4 @@
+import { AuthenticatedEventStream } from '@/utils/authenticatedEventStream'
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import agentRunsApi from '@/api/agentRuns'
@@ -22,7 +23,7 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
   const connected = ref(false)
   const error = ref('')
   const runtime = ref<AgentTaskRuntime>({ running: false, max_workers: 4, active_count: 0 })
-  let stream: EventSource | null = null
+  let stream: AuthenticatedEventStream | null = null
   let reconnectTimer: number | null = null
   let fallbackTimer: number | null = null
   let started = false
@@ -182,11 +183,9 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
   }
 
   function connectStream(): void {
-    if (!started || typeof window === 'undefined' || typeof EventSource === 'undefined') return
+    if (!started || typeof window === 'undefined' || typeof fetch === 'undefined') return
     stream?.close()
-    stream = new EventSource(buildFullApiUrl(agentRunsApi.taskEventStreamPath()), {
-      withCredentials: true,
-    })
+    stream = new AuthenticatedEventStream(buildFullApiUrl(agentRunsApi.taskEventStreamPath()))
     stream.addEventListener('task.snapshot', (event) => {
       try {
         replaceTasks(JSON.parse((event as MessageEvent).data) as AgentTaskSummary[])

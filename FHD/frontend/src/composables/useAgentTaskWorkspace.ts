@@ -1,3 +1,4 @@
+import { AuthenticatedEventStream } from '@/utils/authenticatedEventStream'
 import type { Ref } from 'vue'
 import agentRunsApi from '@/api/agentRuns'
 import type { AgentTaskSummary } from '@/api/agentRuns'
@@ -19,7 +20,7 @@ export interface UseAgentTaskWorkspaceOptions {
 export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
   let refreshTimer: number | null = null
   let reconnectTimer: number | null = null
-  let taskStream: EventSource | null = null
+  let taskStream: AuthenticatedEventStream | null = null
   let refreshInFlight = false
 
   function applyTaskItems(serverTasks: TaskItem[]): void {
@@ -80,10 +81,10 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
   }
 
   function connectTaskStream(): void {
-    if (typeof window === 'undefined' || typeof EventSource === 'undefined') return
+    if (typeof window === 'undefined' || typeof fetch === 'undefined') return
     if (typeof agentRunsApi.taskEventStreamPath !== 'function') return
     taskStream?.close()
-    taskStream = new EventSource(buildFullApiUrl(agentRunsApi.taskEventStreamPath()), { withCredentials: true })
+    taskStream = new AuthenticatedEventStream(buildFullApiUrl(agentRunsApi.taskEventStreamPath()))
     taskStream.addEventListener('task.snapshot', (event) => {
       try {
         const snapshot = JSON.parse((event as MessageEvent).data)

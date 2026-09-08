@@ -1,3 +1,4 @@
+vi.mock('@/utils/authenticatedEventStream', () => ({ AuthenticatedEventStream: class { constructor(url: string) { return new EventSource(url) } } }))
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 import type { AgentRun } from '@/api/agentRuns'
