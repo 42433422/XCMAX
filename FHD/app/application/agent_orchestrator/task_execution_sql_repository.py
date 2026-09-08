@@ -41,36 +41,42 @@ class SQLAlchemyTaskExecutionRepository:
         priority: int = 100,
     ) -> AgentTaskExecution:
         self._ensure_schema()
-        now = utc_now_iso()
         with self._session_scope() as db:
-            from app.db.models.agent import AgentTaskExecutionRecord
-
-            record = db.get(AgentTaskExecutionRecord, run.run_id)
-            if record is None:
-                record = AgentTaskExecutionRecord(
-                    run_id=run.run_id,
-                    task_id=_task_id_of(run),
-                    user_id=run.user_id,
-                    tenant_id=tenant_id_of_run(run),
-                    state="queued",
-                    priority=int(priority),
-                    available_at=now,
-                    created_at=now,
-                    updated_at=now,
-                )
-                db.add(record)
-            elif record.state != "claimed":
-                record.state = "queued"
-                record.lease_owner = None
-                record.lease_expires_at = None
-                record.heartbeat_at = None
-                record.finished_at = None
-            record.priority = int(priority)
-            record.available_at = now
-            record.requested_by = str(requested_by or "") or None
-            record.last_error_code = None
-            record.updated_at = now
+            self.enqueue_in_session(db, run, requested_by=requested_by, priority=priority)
         return self.get(run.run_id)  # type: ignore[return-value]
+
+    def enqueue_in_session(
+        self, db: Session, run: AgentRun, *, requested_by: str = "", priority: int = 100
+    ) -> None:
+        """Stage queue state in the caller's transaction; never publish it early."""
+        now = utc_now_iso()
+        from app.db.models.agent import AgentTaskExecutionRecord
+
+        record = db.get(AgentTaskExecutionRecord, run.run_id)
+        if record is None:
+            record = AgentTaskExecutionRecord(
+                run_id=run.run_id,
+                task_id=_task_id_of(run),
+                user_id=run.user_id,
+                tenant_id=tenant_id_of_run(run),
+                state="queued",
+                priority=int(priority),
+                available_at=now,
+                created_at=now,
+                updated_at=now,
+            )
+            db.add(record)
+        elif record.state != "claimed":
+            record.state = "queued"
+            record.lease_owner = None
+            record.lease_expires_at = None
+            record.heartbeat_at = None
+            record.finished_at = None
+        record.priority = int(priority)
+        record.available_at = now
+        record.requested_by = str(requested_by or "") or None
+        record.last_error_code = None
+        record.updated_at = now
 
     def get(self, run_id: str) -> AgentTaskExecution | None:
         self._ensure_schema()

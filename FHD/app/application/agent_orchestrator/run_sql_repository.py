@@ -47,6 +47,12 @@ class SQLAlchemyAgentRunRepository:
 
     def save(self, run: AgentRun) -> AgentRun:
         self._ensure_schema()
+        with self._session_scope() as db:
+            self.save_in_session(db, run)
+        return self.get(run.run_id) or copy.deepcopy(run)
+
+    def save_in_session(self, db: Session, run: AgentRun) -> None:
+        """Persist into the caller's transaction without committing or closing it."""
         from app.application.agent_orchestrator.business_harness import (
             ensure_terminal_business_result,
         )
@@ -54,48 +60,46 @@ class SQLAlchemyAgentRunRepository:
         ensure_terminal_business_result(run)
         run.touch()
         payload = json.dumps(run.to_dict(), ensure_ascii=False, default=str)
-        with self._session_scope() as db:
-            from app.db.models.agent import AgentRunRecord, AgentTaskRecord
+        from app.db.models.agent import AgentRunRecord, AgentTaskRecord
 
-            record = db.get(AgentRunRecord, run.run_id)
-            if record is None:
-                record = AgentRunRecord(
-                    run_id=run.run_id,
-                    user_id=run.user_id,
-                    status=run.status,
-                    intent=run.intent or None,
-                    plan_id=run.plan_id or None,
-                    message=run.message,
-                    payload_json=payload,
-                    created_at=run.created_at,
-                    updated_at=run.updated_at,
-                )
-                db.add(record)
-            else:
-                record.user_id = run.user_id
-                record.status = run.status
-                record.intent = run.intent or None
-                record.plan_id = run.plan_id or None
-                record.message = run.message
-                record.payload_json = payload
-                record.created_at = run.created_at
-                record.updated_at = run.updated_at
-            existing_task_record = (
-                db.query(AgentTaskRecord)
-                .filter(
-                    AgentTaskRecord.tenant_id == tenant_id_of_run(run),
-                    AgentTaskRecord.user_id == run.user_id,
-                    AgentTaskRecord.task_id == self._run_task_id(run),
-                )
-                .one_or_none()
+        record = db.get(AgentRunRecord, run.run_id)
+        if record is None:
+            record = AgentRunRecord(
+                run_id=run.run_id,
+                user_id=run.user_id,
+                status=run.status,
+                intent=run.intent or None,
+                plan_id=run.plan_id or None,
+                message=run.message,
+                payload_json=payload,
+                created_at=run.created_at,
+                updated_at=run.updated_at,
             )
-            existing_task = (
-                self._task_record_to_model(existing_task_record)
-                if existing_task_record is not None
-                else None
+            db.add(record)
+        else:
+            record.user_id = run.user_id
+            record.status = run.status
+            record.intent = run.intent or None
+            record.plan_id = run.plan_id or None
+            record.message = run.message
+            record.payload_json = payload
+            record.created_at = run.created_at
+            record.updated_at = run.updated_at
+        existing_task_record = (
+            db.query(AgentTaskRecord)
+            .filter(
+                AgentTaskRecord.tenant_id == tenant_id_of_run(run),
+                AgentTaskRecord.user_id == run.user_id,
+                AgentTaskRecord.task_id == self._run_task_id(run),
             )
-            self._save_task_record(db, task_from_run(run, existing=existing_task))
-        return self.get(run.run_id) or copy.deepcopy(run)
+            .one_or_none()
+        )
+        existing_task = (
+            self._task_record_to_model(existing_task_record)
+            if existing_task_record is not None
+            else None
+        )
+        self._save_task_record(db, task_from_run(run, existing=existing_task))
 
     def get(self, run_id: str) -> AgentRun | None:
         self._ensure_schema()

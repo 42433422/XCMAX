@@ -17,6 +17,16 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Run/task persistence and queue enqueue now expose caller-owned-session methods;
+  existing standalone methods use the same implementations. File-backed SQLite
+  fault tests flush approval, run/task and queue writes and interrupt after each
+  stage: fresh sessions observe no approval/queue and the original waiting run
+  and task. Before commit a separate connection sees no dispatch; on successful
+  commit the worker can claim the run. Nine transaction/repository checks passed
+  (`shared-approval-transaction`). This is transaction infrastructure only: the
+  HTTP approval endpoint still needs to use a shared transaction, with fresh
+  state validation and post-commit dispatcher notification.
+
 - Real signed grants now have process-level evidence using the default production
   repository factory with an isolated SessionLocal: two spawned processes yield
   one consumption and one replay rejection; a third fresh process rejects a
