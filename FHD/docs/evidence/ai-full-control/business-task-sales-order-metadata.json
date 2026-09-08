@@ -1,0 +1,7 @@
+{
+  "source_commit": "4d28b4ee16b0ca2d78c93c0967b83d97ff1f89ff",
+  "passed": 15,
+  "total": 22,
+  "scope": "Isolated SQLite fallback trial; no live model, approval or installed-runtime acceptance.",
+  "dataset_sha256": "69879205b4357a426468eda671be7bc9f012d2e9b60948cc7a0fb96e2f2d18b6"
+}

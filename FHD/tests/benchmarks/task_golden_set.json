@@ -168,9 +168,12 @@
         {"entity": "products", "values": {"id": 201, "name": "A100", "model_number": "A100", "price": 25.5}}
       ],
       "expect": {
-        "actions_any_of": [
-          [{"tool_id": "sales", "action": "confirm"}],
-          [{"tool_id": "sales", "action": "quote"}]
+        "actions": [{"tool_id": "sales", "action": "quote"}, {"tool_id": "sales", "action": "confirm_from_result"}],
+        "db_state": [
+          {"entity": "sales_orders", "op": "count", "count": 1},
+          {"entity": "sales_orders", "op": "exists", "where": {"customer_id": 101, "state": "confirmed", "total_amount": 255}},
+          {"entity": "sales_order_items", "op": "count", "count": 1},
+          {"entity": "sales_order_items", "op": "exists", "where": {"product_id": 201, "quantity": 10, "unit_price": 25.5, "amount": 255}}
         ],
         "forbid_actions": [
           {"tool_id": "business_db", "action": "delete"}

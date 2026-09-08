@@ -120,6 +120,11 @@ def _check_db_state(expect: dict[str, Any]) -> tuple[bool, str]:
                     from app.db.models.finance import FinancialTransaction
 
                     model, field_map = FinancialTransaction, {}
+                elif entity in {"sales_orders", "sales_order_items"}:
+                    from app.db.models import SalesOrder, SalesOrderItem
+
+                    model = SalesOrder if entity == "sales_orders" else SalesOrderItem
+                    field_map = {}
                 else:
                     model, field_map, _selector = _model_config(entity)
             except ValueError:
@@ -147,15 +152,19 @@ def _check_db_state(expect: dict[str, Any]) -> tuple[bool, str]:
 
 
 def _execute_nodes(nodes: list[Any]) -> tuple[bool, str, list[dict[str, Any]]]:
-    """逐节点执行计划。clarify.ask 是交互节点，跳过执行只算路由。"""
+    """逐节点执行计划；传递成功结果，未回答的澄清阻止后续执行。"""
     from app.services.tools_workflow_registered import execute_registered_workflow_tool
 
     executed: list[dict[str, Any]] = []
+    outputs: dict[str, Any] = {}
     for node in nodes:
         if node.tool_id == "clarify":
             executed.append({"tool_id": node.tool_id, "action": node.action, "skipped": True})
-            continue
+            return False, "需要用户澄清，尚未完成执行", executed
+        if any(dep not in outputs for dep in node.depends_on):
+            return False, "前序节点未完成，禁止执行依赖动作", executed
         params = {k: v for k, v in (node.params or {}).items() if k != "_runtime_context"}
+        params["_runtime_context"] = {"node_outputs": outputs}
         try:
             result = execute_registered_workflow_tool(node.tool_id, node.action, dict(params))
         except _TRIAL_BOUNDARY_ERRORS as exc:
@@ -174,6 +183,7 @@ def _execute_nodes(nodes: list[Any]) -> tuple[bool, str, list[dict[str, Any]]]:
                 f"{node.tool_id}.{node.action} 执行失败: {result.get('message') or result.get('error')}",
                 executed,
             )
+        outputs[node.node_id] = result
     return True, "", executed
 
 
