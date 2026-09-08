@@ -368,3 +368,17 @@ describe('agent task center store', () => {
     vi.useRealTimers()
   })
 })
+
+it.each(['scope', 'selection'])('discards detail response after %s changes', async (change) => {
+  setActivePinia(createPinia())
+  let resolve!: (value: unknown) => void
+  apiMock.getTask.mockReturnValueOnce(new Promise((r) => { resolve = r }))
+  const store = useAgentTaskCenterStore()
+  const pending = store.openTask('old-task')
+  if (change === 'scope') store.restartForScope()
+  else store.showTaskList()
+  resolve({ success: true, data: { ...task, task_id: 'old-task' } })
+  await pending
+  expect(store.selectedTask).toBeNull()
+  expect(store.selectedTaskId).toBe('')
+})

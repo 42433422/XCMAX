@@ -28,6 +28,7 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
   let fallbackTimer: number | null = null
   let started = false
   let scopeVersion = 0
+  let detailRequestVersion = 0
 
   const attentionCount = computed(() => tasks.value.filter((task) => ['waiting_user', 'blocked', 'failed'].includes(task.status)).length)
   const unreadCount = computed(() =>
@@ -73,11 +74,17 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
 
   async function refreshDetail(): Promise<void> {
     if (!selectedTaskId.value) return
+    const requestedTaskId = selectedTaskId.value
+    const requestedScopeVersion = scopeVersion
+    const requestVersion = ++detailRequestVersion
+    const isCurrent = () => requestedScopeVersion === scopeVersion && requestedTaskId === selectedTaskId.value && requestVersion === detailRequestVersion
     try {
-      const response = await agentRunsApi.getTask(selectedTaskId.value)
+      const response = await agentRunsApi.getTask(requestedTaskId)
+      if (!isCurrent()) return
       selectedTask.value = response.data || null
       error.value = ''
     } catch (reason) {
+      if (!isCurrent()) return
       error.value = errorMessage(reason)
     }
   }
