@@ -23,3 +23,45 @@ def test_classification_keeps_tenants_and_ambiguous_units_separate():
     assert result[0]["candidate_customer_ids"] == [1]
     assert result[-1]["candidate_customer_ids"] == []
     assert rows[0]["unit"] == "公司A"
+
+
+def test_database_inspection_is_tenant_local_and_does_not_flush():
+    import pytest
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.application.etl.product_unit_migration import inspect_product_units
+    from app.db.base import Base
+    from app.db.models.product import Product
+    from app.db.models.purchase_unit import PurchaseUnit
+    from app.infrastructure.tenant_scope import TenantScopeError, tenant_scope
+
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    with sessionmaker(bind=engine)() as db:
+        db.add_all(
+            [
+                PurchaseUnit(id=1, tenant_id=1, unit_name="公司A"),
+                PurchaseUnit(id=2, tenant_id=2, unit_name="公司A"),
+                Product(id=1, tenant_id=1, name="产品A", unit="公司A"),
+                Product(id=2, tenant_id=2, name="产品B", unit="公司A"),
+            ]
+        )
+        db.commit()
+        pending = Product(tenant_id=1, name="尚未提交", unit="公司A")
+        db.add(pending)
+        with tenant_scope(1):
+            report = inspect_product_units(db)
+        assert report == [
+            {
+                "product_id": 1,
+                "tenant_id": 1,
+                "classification": "customer_link_requires_measurement",
+                "candidate_customer_ids": [1],
+            }
+        ]
+        assert pending.id is None and pending in db.new
+        with tenant_scope(None), pytest.raises(TenantScopeError):
+            inspect_product_units(db)
+        db.rollback()
+    engine.dispose()

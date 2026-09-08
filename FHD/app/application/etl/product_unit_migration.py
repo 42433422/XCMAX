@@ -39,3 +39,34 @@ def classify_product_units(products: list[dict], customers: list[dict]) -> list[
             }
         )
     return result
+
+
+def inspect_product_units(db) -> list[dict]:
+    """Inspect persisted rows for the current tenant without flushing pending writes."""
+    from app.db.models.product import Product
+    from app.db.models.purchase_unit import PurchaseUnit
+    from app.infrastructure.tenant_scope import TenantScopeError, current_tenant_id
+
+    tenant = current_tenant_id()
+    if tenant is None or tenant <= 0:
+        raise TenantScopeError("产品单位迁移检查需要明确租户")
+    with db.no_autoflush:
+        customers = [
+            {
+                "id": row.id,
+                "tenant_id": tenant,
+                "unit_name": row.unit_name,
+                "is_active": row.is_active,
+            }
+            for row in db.query(PurchaseUnit.id, PurchaseUnit.unit_name, PurchaseUnit.is_active)
+            .filter(PurchaseUnit.tenant_id == tenant)
+            .all()
+        ]
+        products = [
+            {"id": row.id, "tenant_id": tenant, "unit": row.unit}
+            for row in db.query(Product.id, Product.unit)
+            .filter(Product.tenant_id == tenant)
+            .order_by(Product.id)
+            .all()
+        ]
+    return classify_product_units(products, customers)
