@@ -1,0 +1,5 @@
+{
+  "source_commit": "9c7d3a823fe4706548b3138ba83d0332923ca351",
+  "tests_passed": 254,
+  "scope": "Inventory service and workflow adapter reject zero, negative, nonfinite, boolean and malformed inbound quantities before service/database work; numeric strings accepted at adapter. Service compatibility regression passed. Natural-language stock-in, warehouse/unit clarification and real inventory ledger/transaction acceptance remain outstanding."
+}
