@@ -125,6 +125,7 @@ class BackgroundTaskExecutionMixin:
         approved_by: str,
         approved_step_id: str,
         runtime_context: dict[str, Any] | None = None,
+        authenticated_binding: dict[str, Any] | None = None,
     ) -> AgentRun | None:
         run = self._repo.get(run_id)
         if run is None:
@@ -132,6 +133,11 @@ class BackgroundTaskExecutionMixin:
         step = self._find_waiting_step(run, approved_step_id=approved_step_id)
         if step is None:
             return cast("AgentRun | None", self._repo.save(run))
+        from app.application.agent_orchestrator.session_renewal import renew_approval_session
+
+        renew_approval_session(
+            run, principal_id=approved_by, authenticated_binding=authenticated_binding
+        )
         apply_approved_step(run, step, approved_by=approved_by, runtime_context=runtime_context)
         return cast("AgentRun | None", self._repo.save(run))
 

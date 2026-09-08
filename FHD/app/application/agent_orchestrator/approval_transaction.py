@@ -13,6 +13,7 @@ from app.application.agent_orchestrator.approval_grant import (
 )
 from app.application.agent_orchestrator.run_models import AgentRun, agent_run_from_dict, utc_now_iso
 from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+from app.application.agent_orchestrator.session_renewal import renew_approval_session
 from app.application.agent_orchestrator.task_background import apply_approved_step
 from app.application.agent_orchestrator.task_execution_sql_repository import (
     SQLAlchemyTaskExecutionRepository,
@@ -29,6 +30,7 @@ def approve_and_enqueue(
     token: str,
     principal_id: str,
     runtime_context: dict[str, Any],
+    authenticated_binding: dict[str, Any] | None = None,
 ) -> AgentRun:
     jti = ""
     try:
@@ -44,6 +46,9 @@ def approve_and_enqueue(
             old_payload = record.payload_json
             run = agent_run_from_dict(json.loads(old_payload))
             claims = validate_approval_grant(token, run=run, principal_id=principal_id)
+            renew_approval_session(
+                run, principal_id=principal_id, authenticated_binding=authenticated_binding
+            )
             jti = str(claims["jti"])
             db.add(
                 AgentApprovalConsumption(

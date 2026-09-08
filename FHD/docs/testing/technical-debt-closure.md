@@ -19,6 +19,17 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Explicit approval now accepts a renewed server-authenticated session only when
+  user, Mod, account tenant and role exactly match the persisted binding. The
+  session update, approval consumption and enqueue share the durable transaction;
+  HTTP failure injection proves rollback retains the old binding and the same
+  grant can retry. Memory dispatch uses the same identity validation before grant
+  consumption. Session fields cannot be supplied through client runtime context.
+  Eleven renewal tests and two HTTP transaction variants pass; the broader
+  approval/route/background regression passes 84 tests before the final added
+  legacy cases. Incomplete historical bindings remain rejected without mutation.
+  Paused-run renewal, historical reconciliation and installed acceptance remain
+  outstanding; this does not close the complete authorization lifecycle.
 - Independent validation at `fd9cb14b3` launches each of all 268 generated
   mutants in a fresh Python process with its own temporary database/directory.
   The unmutated baseline passes 105 tests. Results: 253 assertion/test failures,

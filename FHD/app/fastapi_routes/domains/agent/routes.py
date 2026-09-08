@@ -288,8 +288,18 @@ def continue_agent_run(
                     token=str(data.get("approval_grant") or ""),
                     principal_id=principal.user_id,
                     runtime_context=runtime_context,
+                    authenticated_binding=principal.mod_authorization,
                 )
             else:
+                from app.application.agent_orchestrator.session_renewal import (
+                    renew_approval_session,
+                )
+
+                renew_approval_session(
+                    current,
+                    principal_id=principal.user_id,
+                    authenticated_binding=principal.mod_authorization,
+                )
                 claims = consume_approval_grant(
                     str(data.get("approval_grant") or ""),
                     run=current,
@@ -300,6 +310,7 @@ def continue_agent_run(
                     approved_by=principal.user_id,
                     approved_step_id=str(claims["step_id"]),
                     runtime_context=runtime_context,
+                    authenticated_binding=principal.mod_authorization,
                 )
         if run is None:
             return JSONResponse(

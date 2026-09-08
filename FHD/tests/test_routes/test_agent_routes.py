@@ -671,7 +671,10 @@ def test_approval_storage_failure_preserves_waiting_run_and_allows_retry(tmp_pat
         engine.dispose()
 
 
-def test_durable_http_approval_rolls_back_enqueue_failure_and_retries(tmp_path, monkeypatch):
+@pytest.mark.parametrize("renew_session", [False, True])
+def test_durable_http_approval_rolls_back_enqueue_failure_and_retries(
+    tmp_path, monkeypatch, renew_session
+):
     from sqlalchemy import create_engine
     from sqlalchemy.exc import OperationalError
     from sqlalchemy.orm import sessionmaker
@@ -698,6 +701,15 @@ def test_durable_http_approval_rolls_back_enqueue_failure_and_retries(tmp_path, 
             AgentStep(node_id="node", tool_id="sales", action="create_order", status="waiting_user")
         ],
     )
+    previous_binding = {
+        "session_row_id": 1,
+        "user_id": "owner",
+        "mod_id": "sales",
+        "account_tenant_id": "",
+        "account_role": "user",
+    }
+    if renew_session:
+        run.metadata["runtime_context"] = {"_mod_authorization": previous_binding}
     runs.save(run)
     token = issue_approval_grant(run, principal_id="owner")["grant"]
     enqueue = queue.enqueue_in_session
@@ -708,7 +720,8 @@ def test_durable_http_approval_rolls_back_enqueue_failure_and_retries(tmp_path, 
         raise OperationalError("injected failure", {}, RuntimeError("interrupted"))
 
     try:
-        client = _client("owner")
+        replacement = {**previous_binding, "session_row_id": 2} if renew_session else None
+        client = _client("owner", mod_authorization=replacement)
         with patch(
             "app.fastapi_routes.domains.agent.routes.notify_agent_task_dispatcher"
         ) as notify:
@@ -719,6 +732,11 @@ def test_durable_http_approval_rolls_back_enqueue_failure_and_retries(tmp_path, 
             assert failed.status_code == 503
             notify.assert_not_called()
             assert runs.get(run.run_id).status == "waiting_user"
+            if renew_session:
+                assert (
+                    runs.get(run.run_id).metadata["runtime_context"]["_mod_authorization"]
+                    == previous_binding
+                )
             assert queue.get(run.run_id) is None
             with factory() as db:
                 assert db.query(AgentApprovalConsumption).count() == 0
@@ -729,6 +747,11 @@ def test_durable_http_approval_rolls_back_enqueue_failure_and_retries(tmp_path, 
             assert accepted.status_code == 202
             notify.assert_called_once()
             assert runs.get(run.run_id).status == "queued"
+            if renew_session:
+                assert (
+                    runs.get(run.run_id).metadata["runtime_context"]["_mod_authorization"]
+                    == replacement
+                )
             assert queue.get(run.run_id).state == "queued"
             with factory() as db:
                 assert db.query(AgentApprovalConsumption).count() == 1
