@@ -99,7 +99,9 @@ class ProductsService(NeuroEventPublisherMixin):
             return {"success": False, "message": "服务未正确初始化", "data": [], "total": 0}
 
         start_time = time.perf_counter()
-        cache_key = self._tenant_cache_key(f"products:list:{unit_name}:{model_number}:{keyword}:{page}:{per_page}")
+        cache_key = self._tenant_cache_key(
+            f"products:list:{unit_name}:{model_number}:{keyword}:{page}:{per_page}"
+        )
 
         # 尝试从缓存获取（仅对第一页和简单查询启用缓存）
         use_cache = (page == 1 and not model_number) or (keyword is None)
@@ -378,7 +380,7 @@ class ProductsService(NeuroEventPublisherMixin):
             logger.warning("清除产品缓存失败: %s", e)
 
     def _invalidate_single_product_cache(self, product_id: int):
-        """清除单个产品的缓存"""
+        """清除产品详情及包含它的列表、名称和单位缓存。"""
         if not self._cache:
             return
 
@@ -387,6 +389,7 @@ class ProductsService(NeuroEventPublisherMixin):
             self._cache.delete(cache_key)
         except RECOVERABLE_ERRORS as e:
             logger.warning("清除单产品缓存失败 [%s]: %s", product_id, e)
+        self._invalidate_product_cache()
 
 
 from app.neuro_bus.neuro_service_instrumentation import instrument_service_layer_class
