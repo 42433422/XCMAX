@@ -116,4 +116,30 @@ def test_ai_count_preview_and_confirmation_only_change_selected_location(tmp_pat
             float(receipt.after_quantity),
             float(receipt.quantity),
         ) == (10, 7, -3)
+    with tenant_scope(1):
+        readback = _registered_router_inventory(
+            "query_transactions",
+            {"product_id": 1, "warehouse_id": 1, "transaction_type": "count"},
+            {},
+            "normal",
+            "",
+        )
+        assert readback["success"] and readback["total"] == 1
+        row = readback["data"][0]
+        assert row["transaction_type"] == "count"
+        assert row["location_id"] == 2 and row["batch_no"] == "B"
+        assert float(row["quantity"]) == -3
+        unrelated = _registered_router_inventory(
+            "query_transactions",
+            {"product_id": 1, "warehouse_id": 1, "transaction_type": "out"},
+            {},
+            "normal",
+            "",
+        )
+        assert unrelated["success"] and unrelated["total"] == 0
+    with tenant_scope(2):
+        foreign = _registered_router_inventory(
+            "query_transactions", {"product_id": 1}, {}, "normal", ""
+        )
+        assert foreign["success"] and foreign["total"] == 0
     engine.dispose()

@@ -147,6 +147,7 @@ def _registered_router_inventory(
         return inv_svc.query_transactions(
             product_id=params.get("product_id"),
             warehouse_id=params.get("warehouse_id"),
+            transaction_type=params.get("transaction_type"),
             start_date=params.get("start_date"),
             end_date=params.get("end_date"),
             page=int(params.get("page") or 1),
