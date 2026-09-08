@@ -1,0 +1,10 @@
+{
+  "source_sha": "c50a97b6590d60a58837aca9b168323069fc566a",
+  "modified_sources": {
+    "app/application/chat_tool_intent.py": "4c83a627dd8b3ac35e4160a7364d052c2320a1583a16cf7466112f58f008938e"
+  },
+  "dataset_sha256": "c70d172191e4f583935302d5c5d2968524f557c3d9aadc295c15eeb72283602b",
+  "passed": 8,
+  "total": 22,
+  "scope": "Single isolated SQLite fallback trial; verifies customer name, contact person and phone in final database. No production approval-chain, real-model or installed-client acceptance."
+}

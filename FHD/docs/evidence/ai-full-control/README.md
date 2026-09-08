@@ -6,6 +6,12 @@
 目标是四个阶段全部完成。本目录记录当前实施证据，不代表四阶段验收通过。
 此前对话中的 20%–30% 覆盖率与工期只是未验证估计，不作为验收基线。
 
+## Direct customer creation with contact fields
+
+Anchored 新增/添加客户 requests now enter the existing controlled business-database write path without requiring database jargon. Contact person and phone survive extraction. Compound product onboarding retains its existing path. Negative/instructional phrases in the focused regression cases are not classified as this direct creation request.
+
+97 related tests pass, including three customer phrasing variants and existing database/planner regressions. The unchanged isolated SQLite business trial now passes 8/22 (previously 7/22); the added passing task verifies the persisted customer name, contact person and phone. Application mypy (1806 files), Ruff and all 10 blocking dev guards pass. This is local source and database evidence; production approval round trips, real-model and installed-client acceptance remain open. The parser is not complete for every compound instruction or customer name containing another business-domain word. See business-task-customer-create.jsonl and source-hashed metadata.
+
 ## Secret-scan finding investigation
 
 The PR-range gitleaks failure identified a 64-character source hash at intent-routing-loop-fixed.json:729, introduced by 6340e51b1. Recomputing SHA-256 over that commit's http_client_scope.py exactly matches the reported value. It is source provenance, not a credential. Added one exact historical finding fingerprint to .gitleaksignore; scanner rules and path coverage are unchanged. The local same-range rerun result is recorded in secret-scan-hash-exception.json. Remote CI must still rerun on the resulting commit; integration and installed delivery remain open.
