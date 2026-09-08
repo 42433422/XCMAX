@@ -19,6 +19,15 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Local composition coverage adds mode selection, serving/shadow store isolation,
+  unsafe-dispatch rejection, failure cleanup and reload tests. The selected DI/
+  context suite passes 103 tests with 84% statement/branch coverage. A real local
+  mutmut 3.7.0 run reports 251 killed and 17 survived out of 268, with zero
+  no-tests mutants (93.66% under the corrected denominator). Two pytest scandir
+  cleanup exceptions appear in its raw log, so this is provisional evidence,
+  pending exception diagnosis and independent CI verification. No gate threshold
+  or mutation source scope was reduced. Raw log: `mutation-composition-run.log`
+  in the task evidence directory.
 - Remote mutation run 34250327038 executed 268 reported mutants: 94 killed,
   6 survived, 168 without tests. The old 94% gate excluded uncovered mutants.
   Policy `all_reported_mutants_v2` now includes them in the denominator; replaying

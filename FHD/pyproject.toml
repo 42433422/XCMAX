@@ -357,7 +357,7 @@ show_contexts = true
 # 用法：mutmut run && python scripts/dev/mutation_kill_report.py --threshold 80
 [tool.mutmut]
 source_paths = ["app/di", "app/contexts"]
-also_copy = ["app", "resources", "tests", "conftest.py"]
+also_copy = ["app", "resources", "tests", "conftest.py", "packages"]
 pytest_add_cli_args = ["-q", "-p", "no:cacheprovider", "--no-header"]
 pytest_add_cli_args_test_selection = [
     "tests/test_di",
