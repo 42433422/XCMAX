@@ -1,8 +1,8 @@
 {
   "scope": "Tracked FHD source declarations, including Mods; excludes tests, archives, package directories and build output. Counts are not unique business functions or runtime coverage.",
-  "source_sha256": "41100e791018fc5f5e541b5e00a17b9e0fff102d50cb975e8d6692f6f96fcaa1",
+  "source_sha256": "427f256385f20a6bacff461fcd23dbef54a387140d87ec19993742d1bd3d6c1b",
   "generator_sha256": "ceb39219815ed03f5f049188b128f7d7d2d781cae8657c677a0c35c1413af843",
-  "files_scanned": 4026,
+  "files_scanned": 4028,
   "product_coverage_percent": null,
   "remaining_denominators": [
     "native desktop/mobile commands",
@@ -13,7 +13,7 @@
     "account and deployment availability"
   ],
   "counts": {
-    "api_declarations": 1714,
+    "api_declarations": 1715,
     "route_declarations": 116,
     "ui_event_bindings": 2046,
     "file_input_candidates": 33,
@@ -2614,7 +2614,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_open.py",
-      "line": 132,
+      "line": 134,
       "handler": "aiopen_manifest_route",
       "method": "GET",
       "declared_path": "/api/aiopen/manifest",
@@ -2626,7 +2626,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_open.py",
-      "line": 137,
+      "line": 139,
       "handler": "aiopen_guide_route",
       "method": "GET",
       "declared_path": "/api/aiopen/guide",
@@ -2638,7 +2638,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_open.py",
-      "line": 155,
+      "line": 157,
       "handler": "aiopen_install_route",
       "method": "GET",
       "declared_path": "/api/aiopen/install",
@@ -2650,7 +2650,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_open.py",
-      "line": 174,
+      "line": 176,
       "handler": "aiopen_invoke",
       "method": "POST",
       "declared_path": "/api/aiopen/invoke",
@@ -2662,7 +2662,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_open.py",
-      "line": 228,
+      "line": 230,
       "handler": "aiopen_mcp_get",
       "method": "GET",
       "declared_path": "/api/aiopen/mcp",
@@ -2674,7 +2674,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_open.py",
-      "line": 248,
+      "line": 250,
       "handler": "aiopen_mcp",
       "method": "POST",
       "declared_path": "/api/aiopen/mcp",
@@ -2686,7 +2686,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_open.py",
-      "line": 302,
+      "line": 304,
       "handler": "aiopen_keys_list",
       "method": "GET",
       "declared_path": "/api/aiopen/keys",
@@ -2698,7 +2698,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_open.py",
-      "line": 307,
+      "line": 309,
       "handler": "aiopen_keys_create",
       "method": "POST",
       "declared_path": "/api/aiopen/keys",
@@ -2710,7 +2710,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_open.py",
-      "line": 320,
+      "line": 322,
       "handler": "aiopen_keys_revoke",
       "method": "DELETE",
       "declared_path": "/api/aiopen/keys",
@@ -2722,7 +2722,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_open.py",
-      "line": 341,
+      "line": 343,
       "handler": "aiopen_panel",
       "method": "GET",
       "declared_path": "/api/aiopen/panel",
@@ -2734,7 +2734,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_open.py",
-      "line": 372,
+      "line": 374,
       "handler": "aiopen_whitelist",
       "method": "POST",
       "declared_path": "/api/aiopen/whitelist",
@@ -2746,7 +2746,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_open.py",
-      "line": 387,
+      "line": 389,
       "handler": "aiopen_whitelist_seed",
       "method": "POST",
       "declared_path": "/api/aiopen/whitelist/seed",
@@ -2758,7 +2758,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_open.py",
-      "line": 401,
+      "line": 403,
       "handler": "aiopen_loop_verify",
       "method": "POST",
       "declared_path": "/api/aiopen/loop/verify",
@@ -2770,7 +2770,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_open.py",
-      "line": 410,
+      "line": 412,
       "handler": "aiopen_config",
       "method": "POST",
       "declared_path": "/api/aiopen/config",
@@ -2782,7 +2782,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_open.py",
-      "line": 424,
+      "line": 426,
       "handler": "aiopen_control",
       "method": "POST",
       "declared_path": "/api/aiopen/control",
@@ -2794,7 +2794,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_open.py",
-      "line": 436,
+      "line": 438,
       "handler": "aiopen_openclaw_chat",
       "method": "POST",
       "declared_path": "/api/aiopen/openclaw/chat",
@@ -2806,7 +2806,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_open.py",
-      "line": 465,
+      "line": 467,
       "handler": "aiopen_screen_ws",
       "method": "WEBSOCKET",
       "declared_path": "/api/aiopen/ws",
@@ -2956,6 +2956,18 @@
       "declared_path": "/surface-page",
       "local_prefix": "/api/xcmax/aibiz",
       "local_path": "/api/xcmax/aibiz/surface-page",
+      "dynamic": false,
+      "mount_status": "unverified",
+      "ai_execution": "unverified"
+    },
+    {
+      "source": "app/fastapi_routes/aiopen_artifacts.py",
+      "line": 9,
+      "handler": "aiopen_artifact_download",
+      "method": "GET",
+      "declared_path": "/api/aiopen/artifacts/{artifact_id}",
+      "local_prefix": "",
+      "local_path": "/api/aiopen/artifacts/{artifact_id}",
       "dynamic": false,
       "mount_status": "unverified",
       "ai_execution": "unverified"

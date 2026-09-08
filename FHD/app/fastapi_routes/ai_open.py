@@ -43,6 +43,7 @@ from app.application.aiopen.service import (
     seed_capability_whitelist,
     verify_api_key,
 )
+from app.fastapi_routes.aiopen_artifacts import router as artifacts_router
 from app.fastapi_routes.aiopen_route_support import (
     handle_mcp_message,
     safe_control_payload,
@@ -67,6 +68,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["aiopen"])
+router.include_router(artifacts_router)
 
 AiOpenKeyHeader = Annotated[str | None, Header(alias="X-AIOPEN-Key")]
 

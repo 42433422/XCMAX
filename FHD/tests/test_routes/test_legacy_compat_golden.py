@@ -117,6 +117,7 @@ def test_confirmed_label_workflow_is_mounted_once(legacy_app: FastAPI):
 def test_critical_early_mount_paths_present(legacy_app: FastAPI):
     """Paths that must mount early (before xcagi_compat / SPA fallback)."""
     paths = _paths(legacy_app)
+    assert "/api/aiopen/artifacts/{artifact_id}" in paths
     # market_account must mount before xcagi_compat (per docstring L30-31)
     assert any(p.startswith("/api/market") for p in paths), (
         "market_account must mount early to own /api/market/*"

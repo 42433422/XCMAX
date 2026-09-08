@@ -38,6 +38,9 @@ def trace_tool_call(
     try:
         trace_args = dict(args or {})
         trace_result = dict(result or {})
+        scope = result.get("execution_scope")
+        if isinstance(scope, dict):
+            user_id = str(scope.get("owner_id") or "")
         # The tracing server cannot determine whether the selected field is
         # private. Do not persist any UI typing contents in observational logs.
         if tool == "ui_type":
@@ -71,6 +74,11 @@ def trace_tool_call(
                 "source": "aiopen",
                 "tool": tool,
                 "protocol": "mcp" if channel == "aiopen_mcp" else "rest",
+                **(
+                    {"tenant_id": scope.get("tenant_id"), "active_mod_id": scope.get("mod_id", "")}
+                    if isinstance(scope, dict)
+                    else {}
+                ),
             },
             user_id=user_id or str(args.get("user_id") or args.get("userId") or "aiopen"),
             source="aiopen",

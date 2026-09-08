@@ -161,6 +161,11 @@ def _tool_api_call(app: _facade().Any, args: dict[str, _facade().Any]) -> dict[s
     from starlette.testclient import TestClient
 
     from app.application.agent_orchestrator.task_mod_scope import TaskModScopeError
+    from app.application.aiopen.api_artifacts import (
+        ApiArtifactError,
+        is_export_response,
+        save_api_export,
+    )
     from app.application.aiopen.api_execution import (
         ApiExecutionError,
         authorized_api_request,
@@ -224,13 +229,24 @@ def _tool_api_call(app: _facade().Any, args: dict[str, _facade().Any]) -> dict[s
             else:
                 resp = client.request(method, raw_path, json=body, headers=headers)
             try:
-                data = resp.json()
-            except (ValueError, TypeError):
-                data = {"raw": resp.text[:2000]}
-            try:
                 status_code = int(resp.status_code)
             except (TypeError, ValueError):
                 status_code = 599
+            if 200 <= status_code < 300 and is_export_response(resp):
+                artifact = save_api_export(resp, scope)
+                return {
+                    "success": True,
+                    "path": raw_path,
+                    "method": method,
+                    "status_code": status_code,
+                    "execution_scope": scope,
+                    "data": {"artifact": artifact},
+                    "artifacts": [artifact],
+                }
+            try:
+                data = resp.json()
+            except (ValueError, TypeError):
+                data = {"raw": resp.text[:2000]}
             return {
                 "success": 200 <= status_code < 300
                 and not (isinstance(data, dict) and data.get("success") is False),
@@ -240,6 +256,8 @@ def _tool_api_call(app: _facade().Any, args: dict[str, _facade().Any]) -> dict[s
                 "data": data,
                 "execution_scope": scope,
             }
+    except ApiArtifactError as exc:
+        return {"success": False, "code": "API_EXPORT_FAILED", "message": str(exc)}
     except (ApiExecutionError, TaskModScopeError) as exc:
         return {"success": False, "code": "API_IDENTITY_REQUIRED", "message": str(exc)}
     except _facade().RECOVERABLE_ERRORS:
