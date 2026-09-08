@@ -55,6 +55,21 @@ def _registered_router_inventory(
             return {"success": False, "message": "库存操作数量必须为有限正数"}
         if isinstance(raw_quantity, bool) or not math.isfinite(quantity) or quantity <= 0:
             return {"success": False, "message": "库存操作数量必须为有限正数"}
+    if action in {"stock_in", "stock_out"}:
+        try:
+            raw_price = params.get("unit_price")
+            unit_price = _float_or_none(raw_price)
+            if isinstance(raw_price, bool) or (
+                unit_price is not None
+                and (
+                    not math.isfinite(unit_price)
+                    or unit_price < 0
+                    or not math.isfinite(quantity * unit_price)
+                )
+            ):
+                raise ValueError("invalid price")
+        except (TypeError, ValueError, OverflowError):
+            return {"success": False, "message": "库存单价或金额无效，请提供有限非负单价"}
     if action == "stock_in":
         return _facade().cast(
             "dict[Any, Any]",
@@ -64,7 +79,7 @@ def _registered_router_inventory(
                 quantity=quantity,
                 batch_no=params.get("batch_no"),
                 location_id=params.get("location_id"),
-                unit_price=_float_or_none(params.get("unit_price")),
+                unit_price=unit_price,
                 reference_type=params.get("reference_type"),
                 reference_id=params.get("reference_id"),
                 operator=params.get("operator"),
@@ -83,7 +98,7 @@ def _registered_router_inventory(
                 product_id=params.get("product_id"),
                 warehouse_id=params.get("warehouse_id"),
                 quantity=quantity,
-                unit_price=_float_or_none(params.get("unit_price")),
+                unit_price=unit_price,
                 batch_no=params.get("batch_no"),
                 location_id=params.get("location_id"),
                 reference_type=params.get("reference_type"),

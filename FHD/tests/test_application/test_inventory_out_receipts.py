@@ -105,3 +105,20 @@ def test_stock_movement_rejects_overflowing_total_before_database(method):
         result = getattr(InventoryService(), method)(1, 1, 1e200, unit_price=1e200)
     assert not result["success"]
     database.assert_not_called()
+
+
+@pytest.mark.parametrize("action", ["stock_in", "stock_out"])
+@pytest.mark.parametrize("price", ["bad", True, "NaN", "Infinity", -1])
+def test_ai_movement_invalid_price_returns_business_error(action, price):
+    from unittest.mock import Mock
+
+    from app.services.tools_workflow_registered_part01_part02 import _registered_router_inventory
+
+    service = Mock()
+    with patch("app.application.inventory_app_service.InventoryAppService", return_value=service):
+        result = _registered_router_inventory(
+            action, {"quantity": 3, "unit_price": price}, {}, "normal", ""
+        )
+    assert not result["success"]
+    service.inventory_in.assert_not_called()
+    service.inventory_out.assert_not_called()
