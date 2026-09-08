@@ -299,7 +299,11 @@ class _AIChatApplicationServicePart03Mixin:
             self._pending_workflows.pop(user_id, None)
             return None
         candidates = item.get("candidates") or []
-        confirmed = resolve_confirmed_target(text, candidates)
+        from app.application.workflow.clarification_fields import resolve_missing_field
+
+        confirmed = resolve_missing_field(target, item, text) if not candidates else None
+        if confirmed is None:
+            confirmed = resolve_confirmed_target(text, candidates)
         if confirmed is None and target.tool_id == "business_db" and (not candidates):
             from app.services.tools_workflow_registered import prepare_business_db_write_target
 

@@ -53,3 +53,45 @@ def test_no_approval_requirement_leaves_existing_continuation_available():
     )
     assert service._pending_workflows == {}
     service._persist_plan_state.assert_not_called()
+
+
+def test_missing_product_identity_is_filled_then_approval_is_required():
+    node = WorkflowNode(
+        node_id="create", tool_id="products", action="create", params={"price": 25.5}, risk="medium"
+    )
+    plan = PlanGraph(plan_id="p", intent="create_product", nodes=[node])
+    pending = {
+        "plan": plan,
+        "target_node_id": "create",
+        "clarify_node_id": "clarify",
+        "runtime_context": {},
+        "clarification": {
+            "reason": "missing_required",
+            "field": "name_or_model",
+            "missing_fields": ["name_or_model"],
+        },
+    }
+    service = SimpleNamespace(
+        _pending_workflows={"u": pending},
+        approval_service=Mock(),
+        _persist_plan_state=Mock(),
+        _run_workflow_with_state_updates=Mock(side_effect=AssertionError("must await approval")),
+    )
+    service.approval_service.get_approval_required_nodes.return_value = [node]
+    response = _AIChatApplicationServicePart03Mixin._continue_after_clarification(
+        service, "u", pending, "A100"
+    )
+    assert response["data"]["action"] == "workflow_confirmation_required"
+    assert node.params == {"name_or_model": "A100", "price": 25.5}
+    service._run_workflow_with_state_updates.assert_not_called()
+
+
+def test_invalid_missing_integer_does_not_mutate_node():
+    from app.application.workflow.clarification_fields import resolve_missing_field
+
+    node = WorkflowNode(node_id="d", tool_id="products", action="delete", params={}, risk="high")
+    item = {"reason": "missing_required", "field": "id", "missing_fields": ["id"]}
+    for value in ("abc", "true", "1.5", "{}", ""):
+        assert resolve_missing_field(node, item, value) is None
+    assert node.params == {}
+    assert resolve_missing_field(node, item, "42") == {"id": 42}

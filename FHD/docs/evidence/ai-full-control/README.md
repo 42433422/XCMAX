@@ -6,6 +6,12 @@
 目标是四个阶段全部完成。本目录记录当前实施证据，不代表四阶段验收通过。
 此前对话中的 20%–30% 覆盖率与工期只是未验证估计，不作为验收基线。
 
+## Single scalar field clarification
+
+A single missing scalar required field can now be resolved from the user's reply using the current tool schema. String, integer, number and boolean inputs are supported; the complete candidate parameter set must pass tool-call validation before mutation. Empty/invalid inputs leave the node unchanged. Business-database payloads, multiple missing fields and structured objects are left to their existing handling rather than guessed.
+
+26 related tests pass, including the actual chat continuation filling product identity while preserving price and entering pending approval without dispatch. Invalid integer inputs do not mutate parameters. Application mypy (1809 files), Ruff and all 10 blocking dev guards pass. Approval policy and persistence are mocked here; full approval execution, multi-field/structured answers and installed-client acceptance remain open. Business score remains the last measured 10/22.
+
 ## Approval recheck after candidate clarification
 
 After candidate selection resolves an operation target, chat continuation now rechecks the configured approval service. Required approvals create a normal pending workflow with resolved parameters and clarification answers, rather than immediately resuming the engine. Selection of a record is no longer treated as approval of the operation. When policy reports no approval requirement, the existing continuation remains available.
