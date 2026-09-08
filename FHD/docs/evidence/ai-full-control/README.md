@@ -6,6 +6,12 @@
 目标是四个阶段全部完成。本目录记录当前实施证据，不代表四阶段验收通过。
 此前对话中的 20%–30% 覆盖率与工期只是未验证估计，不作为验收基线。
 
+## Benchmark unverified-state correction
+
+The runner now emits db_assertion_count and leaves db_pass null when no database assertion was declared, instead of reporting true for an unperformed check. Existing overall pass semantics remain unchanged and must not be interpreted as complete business-result acceptance.
+
+A fresh isolated SQLite trial on source 6abcaed29 plus the recorded runner change remains 10/22, with four database-assertion passes. Verified that every zero-assertion row has db_pass null. Ruff passes. See business-task-evidence-aware.jsonl and its metadata for source, runner and dataset hashes. This is a local fallback trial, not real-model, production approval or installed-client acceptance.
+
 ## Business evidence strength breakdown
 
 The last recorded 22-task trial has 10 passing rows, but only four passing rows declare database-state assertions. These are the two customer-create cases, explicit product creation, and the prohibition case asserting zero customers. The other six passing rows do not by themselves establish database-result correctness. This breakdown does not rerun or upgrade the historical trial to current-source acceptance.

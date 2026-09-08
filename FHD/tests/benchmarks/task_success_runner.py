@@ -208,6 +208,7 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
                 "routing_pass": False,
                 "exec_pass": None,
                 "db_pass": None,
+                "db_assertion_count": len(expect.get("db_state") or []),
                 "pass": False,
                 "failure": None,
             }
@@ -234,7 +235,7 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
                     elif has_db_assert:
                         result["exec_pass"] = True
                     db_ok, db_why = _check_db_state(expect)
-                    result["db_pass"] = db_ok
+                    result["db_pass"] = db_ok if has_db_assert else None
                     if not db_ok:
                         result["failure"] = db_why
                     result["pass"] = (
