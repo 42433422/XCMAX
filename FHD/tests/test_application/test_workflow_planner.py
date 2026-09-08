@@ -151,7 +151,9 @@ class TestLLMWorkflowPlanner:
         ):
             reg = get_tool_registry()
             plan = planner.plan("u1", "添加产品到公司A", reg)
-        assert plan.intent == "add_product_to_unit"
+        assert plan.intent == "create_product"
+        assert not any(n.tool_id == "customers" and n.action == "ensure_exists" for n in plan.nodes)
+        assert any(n.tool_id == "clarify" for n in plan.nodes)
         assert len(plan.nodes) >= 1
 
     def test_explicit_business_write_uses_deterministic_plan_before_llm(self):
