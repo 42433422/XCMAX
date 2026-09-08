@@ -17,6 +17,16 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Spawned-process approval tests now call the actual transaction service and use
+  os._exit after flushing the queue before commit, or immediately after commit
+  before response/notification. Verified exit codes distinguish both crash sites.
+  Fresh sessions observe all-or-nothing state: pre-commit death permits the same
+  grant to retry, post-commit death rejects replay and leaves a pollable queue.
+  A replacement worker claims exactly once without notification; a second cannot
+  claim it. All 32 HTTP/transaction checks passed (`approval-process-death`).
+  This tests abrupt application process exit on SQLite, not power-loss durability
+  or business-write recovery; those broader boundaries remain outstanding.
+
 - The SQL-backed HTTP approval route now revalidates the signed grant against
   a freshly read run and commits consumption, run/task staging and enqueue in
   one transaction. It checks the queue shares the same engine, uses row locking
