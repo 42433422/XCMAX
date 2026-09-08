@@ -498,6 +498,7 @@ describe('useAiOpenCursor - coverage ramp', () => {
     it('navigate with valid path calls router.push', async () => {
       const router = {
         currentRoute: { value: { fullPath: '/target' } },
+        resolve: vi.fn().mockReturnValue({ fullPath: '/target', matched: [{}] }),
         push: vi.fn().mockResolvedValue(undefined),
       } as any
       initAiOpenCursor(router)
@@ -917,6 +918,7 @@ describe('useAiOpenCursor - coverage ramp', () => {
       // navigate with path but router.push throws
       const router = {
         currentRoute: { value: { fullPath: '/' } },
+        resolve: vi.fn().mockReturnValue({ fullPath: '/x', matched: [{}] }),
         push: vi.fn().mockRejectedValue(new Error('nav fail')),
       } as any
       initAiOpenCursor(router)

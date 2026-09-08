@@ -40,7 +40,8 @@ def _validate_schema_payload(
     required = schema.get("required") if isinstance(schema.get("required"), list) else []
     if subject == "工具输出" and payload.get("success") is False:
         required = [key for key in (required or []) if str(key) == "success"]
-    properties = schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
+    raw_properties = schema.get("properties")
+    properties: dict[str, Any] = raw_properties if isinstance(raw_properties, dict) else {}
     for key in required or []:
         value = payload.get(str(key))
         prop = properties.get(str(key), {})

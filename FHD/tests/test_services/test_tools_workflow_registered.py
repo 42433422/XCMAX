@@ -583,6 +583,7 @@ class TestExecuteRegisteredWorkflowTool:
             "dataset_rag",
             "memory_v2",
             "system_maintenance",
+            "software",
         }
         assert set(_REGISTERED_WORKFLOW_ROUTERS.keys()) == expected_keys
 

@@ -169,6 +169,8 @@ def _default_fixture(
 
 
 def _special_permission(tool_id: str, action: str) -> str:
+    if tool_id == "memory_v2" and action in {"list", "summary"}:
+        return "memory_v2.read"
     if tool_id in PERMISSION_BARE_PREFIX_TOOLS:
         return f"{tool_id}.{action}"
     if tool_id == "dataset_rag":

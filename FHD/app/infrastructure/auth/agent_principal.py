@@ -21,6 +21,8 @@ class AgentPrincipal:
 
 
 def _from_user(user: Any) -> AgentPrincipal | None:
+    if not getattr(user, "is_active", True):
+        return None
     user_id = getattr(user, "id", None)
     if user_id is None:
         return None
@@ -32,6 +34,48 @@ def _from_user(user: Any) -> AgentPrincipal | None:
         tenant_id=str(getattr(user, "tenant_id", "") or ""),
         is_admin=tier == "admin" or role == "admin",
     )
+
+
+def bind_agent_runtime_context(
+    context: dict[str, Any], principal: AgentPrincipal, *, run: Any = None
+) -> dict[str, Any]:
+    """Keep public task hints separate from host-established execution identity.
+
+    Resume/approval preserves the task owner, including when an administrator
+    controls another user's task. An account with no tenant cannot supply one.
+    """
+    protected = {
+        "user_id",
+        "userId",
+        "local_user_id",
+        "actor_id",
+        "owner_id",
+        "tenant_id",
+        "service_source",
+        "route_module",
+        "route_confirmed",
+        "is_admin",
+        "role",
+        "tier",
+        "permissions",
+        "permission_grants",
+        "approved_by",
+        "approved_step_id",
+        "approval_grant",
+        "headers",
+        "cookies",
+        "authorization",
+    }
+    safe = {
+        key: value
+        for key, value in context.items()
+        if key not in protected and not key.startswith("_")
+    }
+    owner = str(run.user_id) if run is not None else principal.user_id
+    saved = (run.metadata.get("runtime_context") or {}) if run is not None else {}
+    tenant = str(saved.get("tenant_id") or "") if run is not None else principal.tenant_id
+    safe.update(user_id=owner, local_user_id=owner, actor_id=owner, tenant_id=tenant)
+    return safe
 
 
 def _test_header_enabled() -> bool:
@@ -48,6 +92,10 @@ def require_agent_principal(
 ) -> AgentPrincipal:
     """Resolve a verified session/mobile JWT identity; reject anonymous callers."""
     session_user = resolve_session_user(request)
+    if session_user is not None and not getattr(session_user, "is_active", True):
+        raise HTTPException(
+            status_code=403, detail={"code": "ACCOUNT_DISABLED", "message": "账户已被禁用"}
+        )
     principal = _from_user(session_user) if session_user is not None else None
     if principal is not None:
         # The tutorial middleware is the only authority allowed to replace the
@@ -85,4 +133,4 @@ def require_agent_principal(
     )
 
 
-__all__ = ["AgentPrincipal", "require_agent_principal"]
+__all__ = ["AgentPrincipal", "bind_agent_runtime_context", "require_agent_principal"]

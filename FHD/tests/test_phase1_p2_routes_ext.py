@@ -131,13 +131,14 @@ def test_static_favicon(static_client: TestClient) -> None:
 
 
 @pytest.fixture
-def misc_client() -> TestClient:
+def misc_client(monkeypatch) -> TestClient:
+    monkeypatch.setenv("FHD_ALLOW_X_USER_ID_HEADER", "1")
     from app.fastapi_routes.domains.misc import routes as misc_routes
 
     app = FastAPI()
     app.openapi = lambda: {"openapi": "3.0.0"}
     app.include_router(misc_routes.router)
-    return TestClient(app, raise_server_exceptions=False)
+    return TestClient(app, raise_server_exceptions=False, headers={"X-User-ID": "u-memory"})
 
 
 def test_preferences_get_post(misc_client: TestClient) -> None:
@@ -235,6 +236,7 @@ def test_memory_v2_routes_lifecycle_and_preference_sync(
 
 
 def test_memory_v2_routes_validate_type_and_status(misc_client: TestClient) -> None:
+    misc_client.headers["X-User-ID"] = "u"
     bad_type = misc_client.post(
         "/memory/v2/candidates",
         json={"user_id": "u", "memory_type": "unknown", "key": "k", "value": "v"},
@@ -252,6 +254,7 @@ def test_memory_v2_routes_govern_blocked_source(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
+    misc_client.headers["X-User-ID"] = "u-govern"
     import app.services.user_memory_service as memory_mod
 
     memory_dir = tmp_path / "memory"

@@ -226,14 +226,39 @@ def _registered_router_dataset_rag(
 def _registered_router_memory_v2(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
+    from app.application.agent_orchestrator.execution_identity import current_execution_actor
     from app.services.user_memory_service import get_user_memory_service
 
-    service = get_user_memory_service()
-    user_id = str(
-        params.get("user_id") or params.get("userId") or runtime_context.get("user_id") or "default"
-    ).strip()
+    user_id = current_execution_actor()
     if not user_id:
-        return {"success": False, "message": f"memory_v2.{action} 缺少 user_id 参数"}
+        return {
+            "success": False,
+            "code": "MEMORY_IDENTITY_REQUIRED",
+            "message": "记忆操作需要已登录账号或可信任务身份",
+        }
+    requested = str(params.get("user_id") or params.get("userId") or "").strip()
+    if requested not in {"", "default", user_id}:
+        return {
+            "success": False,
+            "code": "MEMORY_ACCOUNT_MISMATCH",
+            "message": "不能操作其他账号的记忆",
+        }
+    service = get_user_memory_service()
+    if action == "list":
+        return {
+            "success": True,
+            "user_id": user_id,
+            "memories": service.list_memories(
+                user_id, status=params.get("status"), memory_type=params.get("memory_type")
+            ),
+        }
+    if action == "summary":
+        return {
+            "success": True,
+            "user_id": user_id,
+            "summary": service.get_memory_v2_summary(user_id),
+            "planner_context": service.format_memory_v2_for_prompt(user_id),
+        }
 
     def as_float(value: _facade().Any, default: float) -> tuple[float, str]:
         if value in (None, ""):

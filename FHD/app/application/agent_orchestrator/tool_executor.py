@@ -5,7 +5,26 @@ from typing import Any
 from app.application.agent_orchestrator.run_models import AgentStep
 from app.application.agent_orchestrator.tool_spec import validate_tool_call, validate_tool_result
 
-_SQL_TENANT_SCOPED_TOOL_IDS = frozenset({"business_db"})
+_SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
+    {
+        "business_db",
+        "normal_slot_dispatch",
+        "customers",
+        "products",
+        "materials",
+        "inventory",
+        "purchase",
+        "sales",
+        "reports",
+        "finance",
+        "mrp",
+        "suppliers",
+        "shipment_records",
+        "shipment_orders",
+        "excel_import",
+        "unit_products_import",
+    }
+)
 
 
 class AgentToolExecutor:
@@ -33,7 +52,9 @@ class AgentToolExecutor:
         runtime_tenant_id: int | None = None
         if step.tool_id in _SQL_TENANT_SCOPED_TOOL_IDS and runtime_tenant_raw not in (None, ""):
             try:
-                if isinstance(runtime_tenant_raw, bool):
+                if isinstance(runtime_tenant_raw, bool) or not isinstance(
+                    runtime_tenant_raw, (str, int)
+                ):
                     raise ValueError
                 runtime_tenant_id = int(runtime_tenant_raw)
                 if runtime_tenant_id <= 0:
@@ -47,7 +68,18 @@ class AgentToolExecutor:
                     "action": action,
                 }
 
-        if step.tool_id == "software":
+        if step.tool_id == "memory_v2":
+            from app.application.agent_orchestrator.execution_identity import execution_actor_scope
+
+            actor = str(
+                runtime_context.get("local_user_id")
+                or runtime_context.get("actor_id")
+                or runtime_context.get("user_id")
+                or ""
+            )
+            with execution_actor_scope(actor):
+                result = execute_registered_workflow_tool(step.tool_id, action, params)
+        elif step.tool_id == "software":
             from app.application.aiopen.software_control import screen_actor_scope
 
             with screen_actor_scope(runtime_context):

@@ -7,11 +7,12 @@
  *
  * 模块级单例：VirtualCursorOverlay（App.vue 挂载）与 AIOpenPanel 共享状态。
  */
-import { ref } from 'vue'
+import { nextTick, ref, watch } from 'vue'
 import type { Router } from 'vue-router'
 import { getApiBase } from '@/utils/apiBase'
 import { createScreenCommandQueue } from './aiopenCommandQueue'
-import { checkScreenControl, controlState, ensureEditable, pressScreenKey, privateControl, screenRoutes, selectScreenOption } from './aiopenScreenControls'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
+import { checkScreenControl, controlState, ensureEditable, navigateScreen, pressScreenKey, privateControl, screenRoutes, selectScreenOption } from './aiopenScreenControls'
 
 const STORAGE_KEY = 'xcagi_aiopen_remote_control'
 const MAX_LOGS = 100
@@ -32,6 +33,7 @@ export const cursorActionLabel = ref('')
 let ws: WebSocket | null = null
 let routerRef: Router | null = null
 let reconnectTimer: number | null = null
+let stopAccountWatch: (() => void) | null = null
 
 function pushLog(text: string) {
   const ts = new Date().toLocaleTimeString('zh-CN', { hour12: false })
@@ -164,13 +166,10 @@ async function execSnapshot(params: Record<string, unknown> = {}): Promise<Recor
 async function execNavigate(params: Record<string, unknown>): Promise<Record<string, unknown>> {
   const path = String(params.path || '').trim()
   if (!path) return { success: false, message: 'path 不能为空' }
-  if (!routerRef) return { success: false, message: 'router 未就绪' }
-  await routerRef.push(path)
-  await sleep(400)
-  return { success: true, route: routerRef.currentRoute.value.fullPath }
+  return navigateScreen(routerRef, path)
 }
 
-async function execClick(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function execClick(params: Record<string, unknown>, assertCurrent: () => void): Promise<Record<string, unknown>> {
   const selector = params.selector ? String(params.selector) : undefined
   const text = params.text ? String(params.text) : undefined
   const el = findElement(selector, text)
@@ -182,13 +181,15 @@ async function execClick(params: Record<string, unknown>): Promise<Record<string
   await animateCursorTo(rect.x + rect.width / 2, rect.y + rect.height / 2, '点击')
   cursorClicking.value = true
   await sleep(180)
+  assertCurrent()
+  ensureEditable(el)
   el.click()
   cursorClicking.value = false
   pushLog(`click → ${elementText(el) || selector || text}`)
-  return { success: true, clicked: elementText(el) || selector || text }
+  return { success: true, clicked: elementText(el) || selector || text, verification: 'click_event_dispatched', instruction: '请回读快照或业务记录验证结果' }
 }
 
-async function execType(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function execType(params: Record<string, unknown>, assertCurrent: () => void): Promise<Record<string, unknown>> {
   const selector = String(params.selector || '')
   const text = String(params.text ?? '')
   const el = findElement(selector)
@@ -201,6 +202,8 @@ async function execType(params: Record<string, unknown>): Promise<Record<string,
   await sleep(260)
   const rect = el.getBoundingClientRect()
   await animateCursorTo(rect.x + rect.width / 2, rect.y + rect.height / 2, '输入')
+  assertCurrent()
+  ensureEditable(el)
   el.focus()
   const input = el as HTMLInputElement | HTMLTextAreaElement
   // 经原型 setter 写值，确保 Vue v-model 等响应式绑定能收到 input 事件
@@ -215,8 +218,10 @@ async function execType(params: Record<string, unknown>): Promise<Record<string,
   }
   input.dispatchEvent(new Event('input', { bubbles: true }))
   input.dispatchEvent(new Event('change', { bubbles: true }))
+  await nextTick()
+  const actual = el.getAttribute('contenteditable') === 'true' ? el.textContent : input.value
   pushLog(`type → ${selector}`)
-  return { success: true, selector, typed: privateControl(el) ? '[私密输入]' : text }
+  return { success: actual === text, selector, typed: privateControl(el) ? '[私密输入]' : actual, verification: 'field_value_readback' }
 }
 
 async function execScroll(params: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -235,7 +240,7 @@ async function execScroll(params: Record<string, unknown>): Promise<Record<strin
   return { success: true, delta_y: deltaY }
 }
 
-async function executeCommand(action: string, params: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function executeCommand(action: string, params: Record<string, unknown>, assertCurrent: () => void): Promise<Record<string, unknown>> {
   if (params.expected_route && params.expected_route !== routerRef?.currentRoute.value.fullPath) {
     return { success: false, message: '页面已经改变，请重新获取快照', code: 'STALE_SCREEN' }
   }
@@ -256,9 +261,9 @@ async function executeCommand(action: string, params: Record<string, unknown>): 
     case 'navigate':
       return execNavigate(params)
     case 'click':
-      return execClick(params)
+      return execClick(params, assertCurrent)
     case 'type':
-      return execType(params)
+      return execType(params, assertCurrent)
     case 'scroll':
       return execScroll(params)
     default:
@@ -280,12 +285,15 @@ function connect() {
     return
   }
   const connection = ws
+  const accountEpoch = productReadAccountEpoch.value
   const enqueue = createScreenCommandQueue()
   ws.onopen = () => {
+    if (ws !== connection) return
     aiopenCursorConnected.value = true
     pushLog('已连接 AIOPEN 操控通道')
   }
   ws.onmessage = async (event) => {
+    if (ws !== connection) return
     let msg: Record<string, unknown> | null = null
     try {
       msg = JSON.parse(String(event.data || ''))
@@ -306,7 +314,17 @@ function connect() {
         if (ws !== connection || !aiopenCursorEnabled.value) {
           return { success: false, code: 'SCREEN_CONNECTION_CLOSED' }
         }
-        return executeCommand(action, params)
+        const initialRoute = routerRef?.currentRoute.value.fullPath
+        const assertCurrent = () => {
+          if (ws !== connection || !aiopenCursorEnabled.value || productReadAccountEpoch.value !== accountEpoch) {
+            throw new Error('控制会话或账号已改变，未执行操作')
+          }
+          if (routerRef?.currentRoute.value.fullPath !== initialRoute) {
+            throw new Error('页面已经改变，请重新获取快照')
+          }
+        }
+        assertCurrent()
+        return executeCommand(action, params, assertCurrent)
       })
       if (action !== 'snapshot') {
         // 快照不收光标；操作类指令完成后短暂保留再淡出
@@ -323,6 +341,7 @@ function connect() {
     }
   }
   ws.onclose = () => {
+    if (ws !== connection) return
     aiopenCursorConnected.value = false
     aiopenCursorSessionId.value = ''
     ws = null
@@ -350,12 +369,13 @@ function disconnect() {
     reconnectTimer = null
   }
   if (ws) {
+    const connection = ws
+    ws = null
     try {
-      ws.close()
+      connection.close()
     } catch {
       /* already closed */
     }
-    ws = null
   }
   aiopenCursorConnected.value = false
   aiopenCursorSessionId.value = ''
@@ -385,6 +405,14 @@ export function setAiOpenCursorEnabled(enabled: boolean) {
 /** App.vue 内 VirtualCursorOverlay 调用：注入 router 并按持久化状态自动连接。 */
 export function initAiOpenCursor(router: Router) {
   routerRef = router
+  stopAccountWatch?.()
+  stopAccountWatch = watch(productReadAccountEpoch, () => {
+    disconnect()
+    aiopenCursorLogs.value = []
+    cursorClicking.value = false
+    cursorActionLabel.value = ''
+    if (aiopenCursorEnabled.value) connect()
+  }, { flush: 'sync' })
   let persisted = false
   try {
     persisted = localStorage.getItem(STORAGE_KEY) === '1'

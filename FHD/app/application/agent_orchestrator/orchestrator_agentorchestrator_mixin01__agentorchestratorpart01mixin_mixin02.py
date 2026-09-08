@@ -64,6 +64,8 @@ class __AgentOrchestratorPart01MixinPart02Mixin:
                 "node_id": step.node_id,
                 "message": run.message,
                 "user_id": run.user_id,
+                "local_user_id": run.user_id,
+                "actor_id": run.user_id,
                 "node_outputs": dict(node_outputs),
                 **_facade().task_execution_context(run, step),
             }

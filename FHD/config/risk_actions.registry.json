@@ -1650,14 +1650,15 @@
       }
     },
     "memory_v2": {
-      "description": "Memory v2 记忆生命周期工具。用于创建候选、确认、拒绝、修正和删除可治理记忆。",
+      "description": "当前登录账号的记忆工具。可查询、汇总、创建候选、确认、拒绝、修正和删除；账号由宿主绑定，不得指定他人身份。",
       "availability": "shared",
       "actions": {
+        "list": {"risk": "low", "idempotent": true, "required_params": [], "availability": "shared"},
+        "summary": {"risk": "low", "idempotent": true, "required_params": [], "availability": "shared"},
         "propose_candidate": {
           "risk": "medium",
           "idempotent": true,
           "required_params": [
-            "user_id",
             "memory_type",
             "key",
             "value"
@@ -1668,7 +1669,6 @@
           "risk": "high",
           "idempotent": false,
           "required_params": [
-            "user_id",
             "memory_id"
           ],
           "availability": "shared"
@@ -1677,7 +1677,6 @@
           "risk": "medium",
           "idempotent": false,
           "required_params": [
-            "user_id",
             "memory_id"
           ],
           "availability": "shared"
@@ -1686,7 +1685,6 @@
           "risk": "high",
           "idempotent": false,
           "required_params": [
-            "user_id",
             "memory_id"
           ],
           "availability": "shared"
@@ -1695,7 +1693,6 @@
           "risk": "high",
           "idempotent": false,
           "required_params": [
-            "user_id",
             "memory_id"
           ],
           "availability": "shared"

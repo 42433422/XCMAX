@@ -1096,12 +1096,20 @@ class TestDatasetRagRouter:
 
 
 class TestMemoryV2Router:
-    def test_missing_user_id(self):
-        # user_id defaults to "default" via `or "default"` fallback, so we
-        # must pass whitespace-only to make str(...).strip() produce "".
-        result = _registered_router_memory_v2("confirm", {"user_id": "  "}, {}, "admin", "")
+    @pytest.fixture(autouse=True)
+    def authenticated_task_scope(self):
+        from app.application.agent_orchestrator.execution_identity import execution_actor_scope
+
+        with execution_actor_scope("u1"):
+            yield
+
+    def test_missing_identity(self):
+        from app.application.agent_orchestrator.execution_identity import execution_actor_scope
+
+        with execution_actor_scope(""):
+            result = _registered_router_memory_v2("confirm", {"user_id": "u1"}, {}, "admin", "")
         assert result["success"] is False
-        assert "user_id" in result["message"]
+        assert result["code"] == "MEMORY_IDENTITY_REQUIRED"
 
     def test_propose_candidate_missing_key(self):
         with patch("app.services.user_memory_service.get_user_memory_service"):

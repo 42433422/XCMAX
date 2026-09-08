@@ -326,13 +326,17 @@ def execute_registered_capability(
         "workspace_root": workspace_root,
         "message": str(params.get("user_request") or params.get("message") or ""),
     }
-    if tool_id == "software":
-        from app.application.aiopen.software_control import request_screen_owner
-        from app.infrastructure.request_context import get_current_request
+    from app.application.aiopen.software_control import request_screen_owner
+    from app.infrastructure.request_context import get_current_request
 
-        owner = request_screen_owner(get_current_request())
-        if owner:
-            runtime_context.update(local_user_id=owner["owner_id"], tenant_id=owner["tenant_id"])
+    owner = request_screen_owner(get_current_request())
+    if owner:
+        runtime_context.update(
+            user_id=owner["owner_id"],
+            local_user_id=owner["owner_id"],
+            actor_id=owner["owner_id"],
+            tenant_id=owner["tenant_id"],
+        )
     try:
         decision, run_result = ApprovalGatedEngine(
             WorkflowEngine(tool_dispatcher=_dispatch_registered_tool)

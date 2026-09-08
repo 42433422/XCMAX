@@ -212,10 +212,12 @@ def _memory_v2_error(payload: dict, status_code: int = 400) -> JSONResponse:
 @router.get("/memory/v2")
 @router.get("/memory/v2/", include_in_schema=False)
 def memory_v2_list(
+    request: Request,
     user_id: str = Query(default="default"),
     status: str | None = Query(default=None),
     memory_type: str | None = Query(default=None),
 ):
+    user_id = _memory_v2_user_id_from_request(request, {"user_id": user_id})
     try:
         svc = _memory_v2_service()
         records = svc.list_memories(user_id, status=status, memory_type=memory_type)
@@ -231,7 +233,8 @@ def memory_v2_list(
 
 @router.get("/memory/v2/summary")
 @router.get("/memory/v2/summary/", include_in_schema=False)
-def memory_v2_summary(user_id: str = Query(default="default")) -> dict:
+def memory_v2_summary(request: Request, user_id: str = Query(default="default")) -> dict:
+    user_id = _memory_v2_user_id_from_request(request, {"user_id": user_id})
     svc = _memory_v2_service()
     return {
         "success": True,

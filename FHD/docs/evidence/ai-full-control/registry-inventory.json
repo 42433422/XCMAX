@@ -2,7 +2,7 @@
   "scope": "registered workflow actions and static host dispatcher; excludes unregistered UI/API/Mods",
   "product_coverage_percent": null,
   "capability_count": 37,
-  "action_count": 190,
+  "action_count": 192,
   "missing_dispatcher": [
     "wechat"
   ],
@@ -802,7 +802,6 @@
       "action": "confirm",
       "risk": "high",
       "required_params": [
-        "user_id",
         "memory_id"
       ],
       "idempotent": false,
@@ -814,7 +813,6 @@
       "action": "correct",
       "risk": "high",
       "required_params": [
-        "user_id",
         "memory_id"
       ],
       "idempotent": false,
@@ -826,7 +824,6 @@
       "action": "delete",
       "risk": "high",
       "required_params": [
-        "user_id",
         "memory_id"
       ],
       "idempotent": false,
@@ -835,10 +832,18 @@
     },
     {
       "tool_id": "memory_v2",
+      "action": "list",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "memory_v2",
       "action": "propose_candidate",
       "risk": "medium",
       "required_params": [
-        "user_id",
         "memory_type",
         "key",
         "value"
@@ -852,10 +857,18 @@
       "action": "reject",
       "risk": "medium",
       "required_params": [
-        "user_id",
         "memory_id"
       ],
       "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "memory_v2",
+      "action": "summary",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
       "dispatcher_present": true,
       "business_acceptance": "not_measured"
     },

@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import { checkScreenControl, controlState, pressScreenKey, screenRoutes, selectScreenOption } from './aiopenScreenControls'
+import { checkScreenControl, controlState, navigateScreen, pressScreenKey, screenRoutes, selectScreenOption } from './aiopenScreenControls'
 import { initAiOpenCursor, setAiOpenCursorEnabled, aiopenCursorLogs } from './useAiOpenCursor'
+import { updateProductReadAccountScope } from '@/utils/productReadAccountScope'
 
 vi.mock('@/utils/apiBase', () => ({ getApiBase: () => 'http://127.0.0.1:5000' }))
 
@@ -85,6 +86,30 @@ describe('semantic screen controls', () => {
     const catalog = screenRoutes(router)
     expect(catalog.routes).toContainEqual({ path: '/mods/new-workspace', name: 'dynamic-mod', title: '新增工作区', parameterized: false, redirect: false })
   })
+
+  it('reports guarded, redirected and missing navigation as not reached', async () => {
+    const router = createRouter({ history: createMemoryHistory(), routes: [
+      { path: '/', component: {} }, { path: '/protected', component: {} },
+      { path: '/redirect', redirect: '/' },
+    ] })
+    await router.push('/')
+    router.beforeEach((to) => to.path !== '/protected')
+    expect((await navigateScreen(router, '/protected')).success).toBe(false)
+    expect((await navigateScreen(router, '/redirect')).success).toBe(false)
+    expect((await navigateScreen(router, '/missing')).code).toBe('SCREEN_ROUTE_NOT_FOUND')
+    expect((await navigateScreen(router, '/')).success).toBe(true)
+  })
+
+  it('rejects hidden and detached controls before dispatching an event', async () => {
+    const checkbox = mountInput({ type: 'checkbox' })
+    const changed = vi.fn()
+    checkbox.addEventListener('change', changed)
+    checkbox.hidden = true
+    await expect(checkScreenControl(checkbox, { checked: true })).rejects.toThrow('不可见')
+    checkbox.remove()
+    await expect(checkScreenControl(checkbox, { checked: true })).rejects.toThrow('移除')
+    expect(changed).not.toHaveBeenCalled()
+  })
 })
 
 describe('screen transport contracts', () => {
@@ -165,5 +190,27 @@ describe('screen transport contracts', () => {
     document.querySelectorAll('button').forEach((button) => button.addEventListener('click', clicked))
     expect((await command('click', { selector: 'button' })).success).toBe(false)
     expect(clicked).not.toHaveBeenCalled()
+  })
+
+  it('reports actual field state when an application rejects the input', async () => {
+    const field = mountInput({ id: 'controlled', value: 'original' })
+    field.addEventListener('input', () => { field.value = 'original' })
+    const result = await command('type', { selector: '#controlled', text: 'new' })
+    expect(result.success).toBe(false)
+    expect(result.typed).toBe('original')
+  })
+
+  it('retires an animated command and reconnects when the account changes', async () => {
+    const field = mountInput({ id: 'changing', value: 'original' })
+    const previous = sockets[sockets.length - 1]!
+    const task = previous.onmessage!({ data: JSON.stringify({ type: 'command', id: 'changing-account', action: 'type', params: { selector: '#changing', text: 'must-not-write' } }) })
+    await vi.advanceTimersByTimeAsync(100)
+    updateProductReadAccountScope({ localUserId: 'new-account' })
+    expect(sockets).toHaveLength(2)
+    await vi.runAllTimersAsync()
+    await task
+    expect(field.value).toBe('original')
+    expect(JSON.parse(previous.send.mock.lastCall![0]).result.success).toBe(false)
+    expect(sockets[1]!.send).not.toHaveBeenCalled()
   })
 })
