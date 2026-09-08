@@ -6,6 +6,12 @@
 目标是四个阶段全部完成。本目录记录当前实施证据，不代表四阶段验收通过。
 此前对话中的 20%–30% 覆盖率与工期只是未验证估计，不作为验收基线。
 
+## Monthly ledger planning
+
+Explicit 本月/这个月账本 requests now route to finance.ledger_query with ISO month-start/month-end dates and bounded pagination. Leap-year February and December/January boundary tests pass. Compound requests remain for the existing planner. The current reference date is runtime-local; tenant-specific timezone handling remains unverified.
+
+74 related tests, Ruff and all 10 blocking dev guards pass. The isolated trial reaches 12/22, but its ledger case is unseeded and lacks result-content assertions (db_pass null), so this proves routing/execution only. See business-task-ledger.jsonl and metadata. Full ledger correctness, approvals, installed acceptance and the four-stage goal remain open.
+
 ## Financial entry database evidence
 
 The benchmark now supports test-only financial_transactions state assertions without expanding production business_db entities. The finance entry case requires exactly one tenant-scoped transaction and matching revenue type, amount 5000, counterparty 星光贸易 and CNY currency.

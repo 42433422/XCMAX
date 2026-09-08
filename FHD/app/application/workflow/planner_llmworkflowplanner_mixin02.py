@@ -211,6 +211,13 @@ class _LLMWorkflowPlannerPart02Mixin:
                     )
                 )
         if not nodes and "finance" in tool_registry:
+            from .finance_query import monthly_ledger_node
+
+            ledger_node = monthly_ledger_node(message)
+            if ledger_node is not None:
+                intent = "finance_ledger_query"
+                nodes.append(ledger_node)
+        if not nodes and "finance" in tool_registry:
             from .finance_creation import direct_finance_create_node
 
             finance_node = direct_finance_create_node(message)
