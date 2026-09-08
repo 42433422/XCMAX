@@ -670,12 +670,27 @@ class TestErpCapabilityGate:
             {
                 "tool_id": "sales",
                 "action": "quote",
-                "params": {"customer_id": 1, "items": [{"product_id": 1, "quantity": 1}]},
+                "params": {
+                    "customer_id": 1,
+                    "items": [{"product_id": 1, "quantity": 1, "unit_price": 25}],
+                },
             }
         )
         assert r["success"] is True
         assert r["risk"] == "medium"
         assert r["idempotent"] is True
+
+    def test_sales_quote_missing_price_rejected(self):
+        from app.application.tools.registered_capabilities import resolve_registered_capability_call
+
+        result = resolve_registered_capability_call(
+            {
+                "tool_id": "sales",
+                "action": "quote",
+                "params": {"customer_id": 1, "items": [{"product_id": 1, "quantity": 1}]},
+            }
+        )
+        assert result["success"] is False
 
     def test_sales_payment_missing_amount(self):
         from app.application.tools.registered_capabilities import (
