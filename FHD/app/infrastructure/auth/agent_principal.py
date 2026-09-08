@@ -65,6 +65,10 @@ def bind_agent_runtime_context(
         "headers",
         "cookies",
         "authorization",
+        "mod_scope",
+        "active_mod_id",
+        "mod_id",
+        "session_record_id",
     }
     safe = {
         key: value
@@ -75,6 +79,28 @@ def bind_agent_runtime_context(
     saved = (run.metadata.get("runtime_context") or {}) if run is not None else {}
     tenant = str(saved.get("tenant_id") or "") if run is not None else principal.tenant_id
     safe.update(user_id=owner, local_user_id=owner, actor_id=owner, tenant_id=tenant)
+    from app.application.agent_orchestrator.task_mod_scope import (
+        TaskModScopeError,
+        capture_task_mod_scope,
+    )
+
+    try:
+        if run is not None:
+            # Restarts and administrator controls retain the original scope;
+            # an owner's explicit reapproval may refresh the session receipt.
+            scope = saved.get("mod_scope")
+            legacy_mod = str(run.metadata.get("legacy_mod_scope_required") or "")
+            if legacy_mod and not isinstance(scope, dict):
+                if principal.user_id != owner:
+                    raise TaskModScopeError("旧模块任务需要原账号重新确认")
+                scope = capture_task_mod_scope(owner, tenant, mod_id=legacy_mod)
+            if isinstance(scope, dict) and principal.user_id == owner:
+                scope = capture_task_mod_scope(owner, tenant, mod_id=scope.get("mod_id"))
+            safe["mod_scope"] = scope
+        else:
+            safe["mod_scope"] = capture_task_mod_scope(owner, tenant)
+    except TaskModScopeError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     return safe
 
 

@@ -234,6 +234,13 @@ class ScheduleAuthorizations:
             actor = db.get(User, int(run.user_id))
             if actor is None or not actor.is_active or str(actor.tenant_id or "") != row.tenant_id:
                 return False
+            context = run.metadata.get("runtime_context") or {}
+            if context.get("mod_scope") is not None:
+                from app.application.agent_orchestrator.task_mod_scope import (
+                    validate_task_mod_scope,
+                )
+
+                validate_task_mod_scope(context["mod_scope"], run.user_id, row.tenant_id)
             return self._valid(
                 db,
                 receipt.authorization_id,

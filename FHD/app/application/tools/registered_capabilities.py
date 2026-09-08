@@ -302,9 +302,11 @@ def resolve_registered_capability_call(args: dict[str, Any] | None) -> dict[str,
 def _dispatch_registered_tool(
     *, tool_id: str, action: str, params: dict[str, Any]
 ) -> dict[str, Any]:
+    from app.application.agent_orchestrator.task_mod_scope import task_mod_execution_scope
     from app.application.facades.tools_facade import execute_registered_workflow_tool
 
-    return execute_registered_workflow_tool(tool_id=tool_id, action=action, params=params)
+    with task_mod_execution_scope(dict(params.get("_runtime_context") or {})):
+        return execute_registered_workflow_tool(tool_id=tool_id, action=action, params=params)
 
 
 def execute_registered_capability(
@@ -360,7 +362,7 @@ def execute_registered_capability(
         risk_level=normalize_workflow_risk(str(resolved["risk"])),
         metadata={"source": "erp_agent_capability_tool"},
     )
-    runtime_context = {
+    runtime_context: dict[str, Any] = {
         "source": "erp_agent_capability_tool",
         "workspace_root": workspace_root,
         "message": str(params.get("user_request") or params.get("message") or ""),
@@ -376,6 +378,17 @@ def execute_registered_capability(
             actor_id=owner["owner_id"],
             tenant_id=owner["tenant_id"],
         )
+        from app.application.agent_orchestrator.task_mod_scope import (
+            TaskModScopeError,
+            capture_task_mod_scope,
+        )
+
+        try:
+            runtime_context["mod_scope"] = capture_task_mod_scope(
+                owner["owner_id"], owner["tenant_id"]
+            )
+        except TaskModScopeError as exc:
+            return json.dumps({"success": False, "message": str(exc)}, ensure_ascii=False)
     try:
         decision, run_result = ApprovalGatedEngine(
             WorkflowEngine(tool_dispatcher=_dispatch_registered_tool)

@@ -173,6 +173,12 @@ class BackgroundTaskExecutionMixin:
                 "schedule.authorization_unavailable", "周期授权已失效或计划已暂停，请重新审批"
             )
             return cast("AgentRun | None", self._repo.save(run))
+        legacy_mod = run.metadata.get("legacy_mod_scope_required")
+        scope = (run.metadata.get("runtime_context") or {}).get("mod_scope")
+        if legacy_mod and (not isinstance(scope, dict) or scope.get("mod_id") != legacy_mod):
+            run.status = "blocked"
+            run.add_event("task.mod_scope_required", "旧模块任务需要原账号重新确认模块权限")
+            return cast("AgentRun | None", self._repo.save(run))
         dispatch = run.metadata.get("dispatch")
         dispatch = dict(dispatch) if isinstance(dispatch, dict) else {}
         approved_step_id = str(dispatch.get("approved_step_id") or "")

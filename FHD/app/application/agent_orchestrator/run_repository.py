@@ -278,6 +278,13 @@ def get_agent_run_repository() -> AgentRunRepository:
                 "degraded_reason": "",
             }
         except RECOVERABLE_ERRORS as exc:
+            from app.application.agent_orchestrator.mod_journal_migration import (
+                LegacyJournalMigrationError,
+            )
+
+            if isinstance(exc, LegacyJournalMigrationError):
+                _agent_run_repository = None
+                raise
             require_durable = os.environ.get(
                 "XCAGI_AGENT_RUN_REQUIRE_DURABLE", ""
             ).strip().lower() in {"1", "true", "yes", "on"}

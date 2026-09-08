@@ -36,6 +36,29 @@ class AgentToolExecutor:
         *,
         runtime_context: dict[str, Any],
     ) -> dict[str, Any]:
+        from app.application.agent_orchestrator.task_mod_scope import (
+            TaskModScopeError,
+            task_mod_execution_scope,
+        )
+
+        try:
+            with task_mod_execution_scope(runtime_context):
+                return self._execute_scoped(step, runtime_context=runtime_context)
+        except TaskModScopeError as exc:
+            return {
+                "success": False,
+                "error_code": "task_mod_scope_denied",
+                "message": str(exc),
+                "tool_id": step.tool_id,
+                "action": step.action,
+            }
+
+    def _execute_scoped(
+        self,
+        step: AgentStep,
+        *,
+        runtime_context: dict[str, Any],
+    ) -> dict[str, Any]:
         from app.application.facades.tools_facade import execute_registered_workflow_tool
 
         params = dict(step.params or {})
