@@ -210,6 +210,13 @@ class _LLMWorkflowPlannerPart02Mixin:
                         idempotent=True,
                     )
                 )
+        if not nodes and "finance" in tool_registry:
+            from .finance_creation import direct_finance_create_node
+
+            finance_node = direct_finance_create_node(message)
+            if finance_node is not None:
+                intent = "finance_create_transaction"
+                nodes.append(finance_node)
         if not nodes and "products" in tool_registry:
             from .product_creation import direct_product_create_node
 

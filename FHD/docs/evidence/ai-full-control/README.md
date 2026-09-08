@@ -6,6 +6,12 @@
 目标是四个阶段全部完成。本目录记录当前实施证据，不代表四阶段验收通过。
 此前对话中的 20%–30% 覆盖率与工期只是未验证估计，不作为验收基线。
 
+## Direct financial entry planning
+
+Explicit single-entry requests such as 记一笔收入 5000 元，来自星光贸易 now produce finance.create_transaction with preserved amount and counterparty. Full-input matching leaves unsupported extra clauses for the existing planner. The node retains medium risk and non-idempotence.
+
+73 related tests, application mypy (1811 files), Ruff and all 10 blocking dev guards pass. A fresh isolated trial reaches 11/22 with finance routing and tool execution success. This finance case declares no database assertion (db_pass is null); accounting correctness, approval-chain execution and installed acceptance remain unverified. See business-task-finance-planning.jsonl and measured source hashes.
+
 ## Benchmark unverified-state correction
 
 The runner now emits db_assertion_count and leaves db_pass null when no database assertion was declared, instead of reporting true for an unperformed check. Existing overall pass semantics remain unchanged and must not be interpreted as complete business-result acceptance.
