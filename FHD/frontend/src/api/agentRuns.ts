@@ -244,6 +244,10 @@ export interface CreateAgentTaskPayload {
 }
 
 export const agentRunsApi = {
+  downloadArtifact(runId: string, artifactId: string): Promise<Response> {
+    return api.download(`/api/agent/runs/${encodeURIComponent(runId)}/artifacts/${encodeURIComponent(artifactId)}`)
+  },
+
   createRun(payload: CreateAgentRunPayload): Promise<ApiResponse<AgentRun>> {
     return api.post<ApiResponse<AgentRun>>('/api/agent/runs', payload)
   },
