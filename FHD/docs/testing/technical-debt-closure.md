@@ -17,6 +17,14 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Quote services now resolve exact customer names and product model references
+  before adding an order. Missing/ambiguous names and conflicting product ID/model
+  pairs reject without leaving an order even if the caller commits afterward.
+  A real SQLite case verifies canonical customer/product IDs and amount 100;
+  234 related sales/tool regressions passed. This is service preparation only:
+  registry support, natural-language planning, missing-input interaction and
+  approval-bound resolved values remain outstanding.
+
 - Sales quote creation previously converted missing/invalid quantities or prices
   into zero and could write an order. A dedicated input validator now checks all
   rows before touching the session: finite positive quantities and explicitly

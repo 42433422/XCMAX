@@ -565,6 +565,52 @@ def _seed_quote_owner_db(db):
 class TestQuoteCallerOwnedSession:
     """quote 在调用方会话内执行：不 commit/rollback/close，跨会话可见性受调用方事务控制。"""
 
+    def test_quote_resolves_exact_customer_and_model(self, _facade_file_db):
+        from app.db.models import SalesOrderItem
+
+        db = _facade_file_db
+        customer, product = _seed_quote_owner_db(db)
+        result = SalesAppService().quote(
+            {
+                "customer_name": "客户Q",
+                "items": [
+                    {"model_number": "P-Q", "quantity": 2, "unit_price": 50},
+                ],
+            },
+            db=db,
+        )
+        assert result["success"] is True
+        db.commit()
+        order = db.query(SalesOrder).one()
+        item = db.query(SalesOrderItem).one()
+        assert order.customer_id == customer.id
+        assert item.product_id == product.id
+        assert item.product_name == "报价品"
+        assert float(order.total_amount) == 100
+
+    @pytest.mark.parametrize(
+        "problem", ["missing_customer", "duplicate_customer", "missing_product", "mismatch_product"]
+    )
+    def test_unresolved_reference_leaves_no_order(self, _facade_file_db, problem):
+        db = _facade_file_db
+        customer, product = _seed_quote_owner_db(db)
+        name = "客户Q"
+        item = {"model_number": "P-Q", "quantity": 2, "unit_price": 50}
+        if problem == "missing_customer":
+            name = "客户不存在"
+        elif problem == "duplicate_customer":
+            with tenant_scope(1):
+                db.add(Customer(customer_name="客户Q"))
+                db.commit()
+        elif problem == "missing_product":
+            item["model_number"] = "missing"
+        else:
+            item.update(product_id=product.id, model_number="wrong")
+        result = SalesAppService().quote({"customer_name": name, "items": [item]}, db=db)
+        assert result["success"] is False
+        db.commit()
+        assert db.query(SalesOrder).count() == 0
+
     def test_explicit_zero_price_is_preserved(self, _facade_file_db):
         db = _facade_file_db
         customer, product = _seed_quote_owner_db(db)

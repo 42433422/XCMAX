@@ -62,8 +62,8 @@ class __SalesAppServicePart01MixinPart01Mixin:
         """
         customer_id = data.get("customer_id")
         items_data = data.get("items") or []
-        if not customer_id:
-            return {"success": False, "message": "缺少 customer_id"}
+        if not customer_id and not str(data.get("customer_name") or "").strip():
+            return {"success": False, "message": "缺少 customer_id 或 customer_name"}
         if not isinstance(items_data, list) or not items_data:
             return {"success": False, "message": "缺少 items 明细"}
         from app.application.sales_quote_inputs import validated_quote_items
@@ -100,13 +100,12 @@ class __SalesAppServicePart01MixinPart01Mixin:
                         "data": existing.to_dict(),
                         "idempotent": True,
                     }
-            customer = (
-                ctx.query(_facade().Customer)
-                .filter(_facade().Customer.id == int(customer_id))
-                .first()
-            )
-            if customer is None:
-                return {"success": False, "message": f"客户不存在: customer_id={customer_id}"}
+            from app.application.sales_quote_references import resolve_quote_references
+
+            try:
+                customer, resolved_items = resolve_quote_references(ctx, data, items_data)
+            except (ValueError, TypeError) as exc:
+                return {"success": False, "message": str(exc)}
             total_amount = _facade().Decimal("0")
             order_no = data.get("order_no") or self._generate_order_no()
             order = _facade().SalesOrder(
@@ -124,13 +123,8 @@ class __SalesAppServicePart01MixinPart01Mixin:
             )
             ctx.add(order)
             ctx.flush()
-            for item_data in items_data:
-                product_id = item_data.get("product_id")
-                product = (
-                    ctx.query(_facade().Product).filter(_facade().Product.id == product_id).first()
-                    if product_id
-                    else None
-                )
+            for item_data, product in resolved_items:
+                product_id = product.id if product is not None else None
                 quantity = _facade()._to_decimal(item_data.get("quantity", "0"))
                 unit_price = _facade()._to_decimal(item_data.get("unit_price", "0"))
                 amount = quantity * unit_price
