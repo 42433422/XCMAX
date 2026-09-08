@@ -347,7 +347,6 @@ def products_resolve_name_hints(
     gate = _facade()._business_mod_json_block()
     if gate:
         return {**gate, "data": []}
-    raise _facade().HTTPException(
-        status_code=501,
-        detail="products/resolve-name-hints 未启用：product_name_resolve 模块已在清理过程中被移除，请使用销售合同流程中的 name_hint 解析能力。",
-    )
+    from app.fastapi_routes.xcagi_compat_product import products_resolve_name_hints as resolve
+
+    return resolve(request, body)
