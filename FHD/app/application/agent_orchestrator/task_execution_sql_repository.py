@@ -182,6 +182,7 @@ class SQLAlchemyTaskExecutionRepository:
                     AgentTaskExecutionRecord.run_id == str(run_id or ""),
                     AgentTaskExecutionRecord.state == "claimed",
                     AgentTaskExecutionRecord.lease_owner == str(owner_id or ""),
+                    AgentTaskExecutionRecord.lease_expires_at > current,
                 )
                 .update(
                     {
@@ -242,18 +243,23 @@ class SQLAlchemyTaskExecutionRepository:
                 query = query.filter(
                     AgentTaskExecutionRecord.state == "claimed",
                     AgentTaskExecutionRecord.lease_owner == str(owner_id or ""),
+                    AgentTaskExecutionRecord.lease_expires_at > now,
                 )
-            record = query.one_or_none()
-            if record is None:
-                return None
-            record.state = str(state)
-            record.lease_owner = None
-            record.lease_expires_at = None
-            record.heartbeat_at = None
-            record.last_error_code = str(error_code or "")[:64] or None
-            record.updated_at = now
+            values = {
+                AgentTaskExecutionRecord.state: str(state),
+                AgentTaskExecutionRecord.lease_owner: None,
+                AgentTaskExecutionRecord.lease_expires_at: None,
+                AgentTaskExecutionRecord.heartbeat_at: None,
+                AgentTaskExecutionRecord.last_error_code: str(error_code or "")[:64] or None,
+                AgentTaskExecutionRecord.updated_at: now,
+            }
             if state in {"completed", "failed", "cancelled", "blocked"}:
-                record.finished_at = now
+                values[AgentTaskExecutionRecord.finished_at] = now
+            # Ownership must be checked by the UPDATE itself. Reading the owner
+            # then flushing an ORM object permits an expired worker to overwrite
+            # a claim acquired by another process between those two operations.
+            if query.update(values, synchronize_session=False) != 1:
+                return None
         return self.get(run_id)
 
     def clear(self) -> None:
