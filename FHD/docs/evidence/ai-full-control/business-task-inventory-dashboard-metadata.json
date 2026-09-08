@@ -1,0 +1,9 @@
+{
+  "source_commit": "c89da7567c4c49d8bc11fb24ecd4de0003715a14",
+  "passed": 15,
+  "total": 22,
+  "passed_with_db_assertions": 5,
+  "scope": "Isolated SQLite fallback trial; no live model or installed runtime acceptance. Dashboard and inventory benchmark cases have no DB assertions. Separate test_inventory_query_planning uses seeded SQLite through the registered reports router to verify product and tenant filtering.",
+  "dataset_sha256": "69879205b4357a426468eda671be7bc9f012d2e9b60948cc7a0fb96e2f2d18b6",
+  "results_sha256": "8eecfbcb91426d0d25a7a8338e244bdd3ecdcac7207837cecf6b192f7a560643"
+}
