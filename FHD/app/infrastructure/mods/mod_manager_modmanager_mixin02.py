@@ -218,7 +218,11 @@ class _ModManagerPart02Mixin:
         self._recent_load_failures: list[dict[str, _facade().Any]] = []
         self._blueprint_failures: list[dict[str, _facade().Any]] = []
         mods = self.scan_mods()
-        mods.sort(key=lambda m: (not m.primary, (m.id or "").lower()))
+        from .dependency_order import order_mods
+
+        mods, blocked = order_mods(mods, set(_facade().get_mod_registry().list_mod_ids()))
+        for mod_id in blocked:
+            self._record_load_failure(mod_id, "dependencies", "循环依赖或依赖链被循环阻断")
         _facade().logger.info("[ModManager] load_all_mods: scanned %s mods", len(mods))
         loaded: list[str] = []
         for metadata in mods:
