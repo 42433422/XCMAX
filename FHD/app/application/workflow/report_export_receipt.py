@@ -1,0 +1,51 @@
+"""Turn report bytes into an account-owned, JSON-safe workflow result."""
+
+from email.message import Message
+from types import SimpleNamespace
+from typing import Any
+
+from app.application.agent_orchestrator.execution_identity import current_execution_actor
+from app.application.aiopen.api_artifacts import save_api_export
+from app.infrastructure.tenant_scope import current_tenant_id
+
+
+def export_report_receipt(service: Any, params: dict[str, Any]) -> dict[str, Any]:
+    from app.application.agent_orchestrator.task_mod_scope import capture_task_mod_scope
+
+    owner = current_execution_actor()
+    tenant = current_tenant_id()
+    if not owner or tenant is None:
+        return {
+            "success": False,
+            "code": "REPORT_IDENTITY_REQUIRED",
+            "message": "导出报表需要已登录账号与租户身份",
+        }
+    mod_scope = capture_task_mod_scope(owner, str(tenant)) or {}
+    result = service.export_to_excel(
+        report_type=str(params.get("report_type") or "report"),
+        data=params.get("data") or [],
+        filename=str(params.get("filename") or "report"),
+    )
+    if not result.get("success"):
+        return result
+    disposition = Message()
+    disposition.add_header(
+        "Content-Disposition", "attachment", filename=str(result.get("filename") or "report.xlsx")
+    )
+    response = SimpleNamespace(
+        content=result.get("data"),
+        headers={
+            "content-type": result.get("content_type") or "application/octet-stream",
+            "content-disposition": str(disposition["Content-Disposition"]),
+        },
+    )
+    artifact = save_api_export(
+        response,
+        {"owner_id": owner, "tenant_id": str(tenant), "mod_id": str(mod_scope.get("mod_id") or "")},
+    )
+    return {
+        "success": True,
+        "data": {"artifact": artifact},
+        "artifacts": [artifact],
+        "message": "报表已生成，可下载",
+    }

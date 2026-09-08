@@ -276,11 +276,9 @@ def _registered_router_reports(
     if action == "dashboard":
         return svc.get_dashboard_summary()
     if action == "export":
-        return svc.export_to_excel(
-            report_type=str(params.get("report_type") or "report"),
-            data=params.get("data") or [],
-            filename=str(params.get("filename") or "report"),
-        )
+        from app.application.workflow.report_export_receipt import export_report_receipt
+
+        return export_report_receipt(svc, params)
     return {"success": False, "message": f"未注册的 reports 动作: {action}"}
 
 
