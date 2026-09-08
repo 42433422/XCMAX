@@ -782,7 +782,7 @@ def test_report_export_returns_xlsx_download(
 
 
 def test_ai_compat_health_root_and_api(ai_client: TestClient) -> None:
-    for path in ("/health", "/api/health"):
+    for path in ("/health",):
         body = ai_client.get(path).json()
         assert body["success"] is True
         assert body["data"]["status"] == "ok"

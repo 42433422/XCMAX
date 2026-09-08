@@ -1,8 +1,8 @@
 {
   "scope": "Tracked FHD source declarations, including Mods; excludes tests, archives, package directories and build output. Counts are not unique business functions or runtime coverage.",
-  "source_sha256": "92e6d4a0d72135086e4f27c273650736580241819dc969a528075491352759ca",
+  "source_sha256": "807f66cc70bc1ba0b76f55de948f539fb593f7831c712be54edd65065567e9d1",
   "generator_sha256": "ceb39219815ed03f5f049188b128f7d7d2d781cae8657c677a0c35c1413af843",
-  "files_scanned": 4032,
+  "files_scanned": 4033,
   "product_coverage_percent": null,
   "remaining_denominators": [
     "native desktop/mobile commands",
@@ -13,7 +13,7 @@
     "account and deployment availability"
   ],
   "counts": {
-    "api_declarations": 1715,
+    "api_declarations": 1711,
     "route_declarations": 116,
     "ui_event_bindings": 2047,
     "file_input_candidates": 33,
@@ -2050,7 +2050,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 134,
+      "line": 133,
       "handler": "compat_health",
       "method": "GET",
       "declared_path": "/health",
@@ -2062,19 +2062,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 135,
-      "handler": "compat_health",
-      "method": "GET",
-      "declared_path": "/api/health",
-      "local_prefix": "",
-      "local_path": "/api/health",
-      "dynamic": false,
-      "mount_status": "unverified",
-      "ai_execution": "unverified"
-    },
-    {
-      "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 148,
+      "line": 146,
       "handler": "compat_ai_generate",
       "method": "POST",
       "declared_path": "/api/generate",
@@ -2086,7 +2074,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 224,
+      "line": 222,
       "handler": "compat_shipment_records_units",
       "method": "GET",
       "declared_path": "/api/shipment-records/units",
@@ -2098,7 +2086,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 231,
+      "line": 229,
       "handler": "compat_shipment_records_records",
       "method": "GET",
       "declared_path": "/api/shipment-records/records",
@@ -2110,7 +2098,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 238,
+      "line": 236,
       "handler": "compat_units_alias",
       "method": "GET",
       "declared_path": "/api/units",
@@ -2122,7 +2110,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 246,
+      "line": 244,
       "handler": "compat_purchase_units_create",
       "method": "POST",
       "declared_path": "/api/purchase_units",
@@ -2134,7 +2122,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 285,
+      "line": 283,
       "handler": "compat_purchase_units_update",
       "method": "PUT",
       "declared_path": "/api/purchase_units/{unit_id}",
@@ -2146,7 +2134,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 312,
+      "line": 310,
       "handler": "compat_purchase_units_delete",
       "method": "DELETE",
       "declared_path": "/api/purchase_units/{unit_id}",
@@ -2158,7 +2146,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 328,
+      "line": 326,
       "handler": "compat_purchase_units_by_name",
       "method": "GET",
       "declared_path": "/api/purchase_units/by_name/{unit_name}",
@@ -2170,7 +2158,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 339,
+      "line": 337,
       "handler": "compat_product_names",
       "method": "GET",
       "declared_path": "/api/product_names",
@@ -2182,7 +2170,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 345,
+      "line": 343,
       "handler": "compat_product_names_search",
       "method": "GET",
       "declared_path": "/api/product_names/search",
@@ -2194,7 +2182,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 351,
+      "line": 349,
       "handler": "compat_product_names_by_unit",
       "method": "GET",
       "declared_path": "/api/product_names/by_unit/{unit_id}",
@@ -2206,7 +2194,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 357,
+      "line": 355,
       "handler": "compat_product_by_unit_and_name",
       "method": "GET",
       "declared_path": "/api/product_names/by_unit_and_name",
@@ -2218,7 +2206,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 370,
+      "line": 368,
       "handler": "compat_printers",
       "method": "GET",
       "declared_path": "/api/printers",
@@ -2230,7 +2218,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 385,
+      "line": 383,
       "handler": "compat_print_diagnose",
       "method": "GET",
       "declared_path": "/api/print/diagnose",
@@ -2242,19 +2230,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 395,
-      "handler": "compat_print_shipment_file",
-      "method": "POST",
-      "declared_path": "/api/print/{filename:path}",
-      "local_prefix": "",
-      "local_path": "/api/print/{filename:path}",
-      "dynamic": false,
-      "mount_status": "unverified",
-      "ai_execution": "unverified"
-    },
-    {
-      "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 424,
+      "line": 393,
       "handler": "compat_print_last",
       "method": "POST",
       "declared_path": "/api/print-last",
@@ -2266,7 +2242,7 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 432,
+      "line": 401,
       "handler": "compat_print_pdf_labels",
       "method": "POST",
       "declared_path": "/api/print/pdf_labels",
@@ -2278,12 +2254,24 @@
     },
     {
       "source": "app/fastapi_routes/ai_assistant.py",
-      "line": 437,
+      "line": 406,
       "handler": "compat_print_single_label",
       "method": "POST",
       "declared_path": "/api/print/single_label",
       "local_prefix": "",
       "local_path": "/api/print/single_label",
+      "dynamic": false,
+      "mount_status": "unverified",
+      "ai_execution": "unverified"
+    },
+    {
+      "source": "app/fastapi_routes/ai_assistant.py",
+      "line": 471,
+      "handler": "compat_print_shipment_file",
+      "method": "POST",
+      "declared_path": "/api/print/{filename:path}",
+      "local_prefix": "",
+      "local_path": "/api/print/{filename:path}",
       "dynamic": false,
       "mount_status": "unverified",
       "ai_execution": "unverified"
@@ -8416,42 +8404,6 @@
       "declared_path": "/allowlist/{client_id}",
       "local_prefix": "/api/lan/admin",
       "local_path": "/api/lan/admin/allowlist/{client_id}",
-      "dynamic": false,
-      "mount_status": "unverified",
-      "ai_execution": "unverified"
-    },
-    {
-      "source": "app/fastapi_routes/lan_admin_routes.py",
-      "line": 320,
-      "handler": "get_settings",
-      "method": "GET",
-      "declared_path": "/settings",
-      "local_prefix": "/api/lan/admin",
-      "local_path": "/api/lan/admin/settings",
-      "dynamic": false,
-      "mount_status": "unverified",
-      "ai_execution": "unverified"
-    },
-    {
-      "source": "app/fastapi_routes/lan_admin_routes.py",
-      "line": 384,
-      "handler": "update_settings",
-      "method": "POST",
-      "declared_path": "/settings",
-      "local_prefix": "/api/lan/admin",
-      "local_path": "/api/lan/admin/settings",
-      "dynamic": false,
-      "mount_status": "unverified",
-      "ai_execution": "unverified"
-    },
-    {
-      "source": "app/fastapi_routes/lan_admin_routes.py",
-      "line": 385,
-      "handler": "update_settings",
-      "method": "PUT",
-      "declared_path": "/settings",
-      "local_prefix": "/api/lan/admin",
-      "local_path": "/api/lan/admin/settings",
       "dynamic": false,
       "mount_status": "unverified",
       "ai_execution": "unverified"

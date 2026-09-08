@@ -89,14 +89,17 @@ def test_compat_health_returns_ok_status() -> None:
     }
 
 
-def test_compat_health_api_alias_returns_ok_status() -> None:
-    client = _ai_assistant_client()
-    resp = client.get("/api/health")
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["success"] is True
-    assert body["data"]["status"] == "ok"
-    assert body["build"] == body["data"]["build"]
+def test_api_health_uses_canonical_mount() -> None:
+    from app.fastapi_routes.mounts.health import register_health_routes
+
+    app = FastAPI()
+    register_health_routes(app)
+    app.include_router(ai_assistant.router)
+    with TestClient(app) as client:
+        response = client.get("/api/health?lite=true")
+    assert response.status_code == 200
+    assert response.json()["service"] == "xcagi-fastapi"
+    assert "runtime" in response.json()
 
 
 # ---------------------------------------------------------------------------

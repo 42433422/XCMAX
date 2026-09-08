@@ -1531,8 +1531,8 @@ class TestProductDomainHandlersBranches:
 class TestEmployeeAgentBranches:
     """补充 EmployeeAgent.run() 未覆盖分支。"""
 
-    def test_run_with_workspace_root_in_payload_not_overwritten(self) -> None:
-        """payload 已有 workspace_root → 不被参数覆盖。"""
+    def test_run_uses_trusted_workspace_parameter_over_payload(self) -> None:
+        """宿主 workspace_root 参数覆盖 payload 中的工作区声明。"""
         agent = EmployeeAgent("emp-1")
         pack = {
             "pack_id": "emp-1",
@@ -1594,7 +1594,7 @@ class TestEmployeeAgentBranches:
         # 验证 payload 中的 workspace_root 不被覆盖
         actions_call = mock_actions.call_args
         # workspace_root 参数应传给 _actions_fhd
-        assert actions_call.args[5] == "/payload-ws"
+        assert actions_call.args[5] == "/param-ws"
 
     def test_run_direct_python_no_file_path_uses_cognition(self) -> None:
         """handler_list=['direct_python'] 但无 file_path → 走 cognition 路径。"""

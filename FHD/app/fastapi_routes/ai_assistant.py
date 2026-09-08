@@ -129,10 +129,8 @@ def _distinct_product_names(keyword: str | None = None) -> list[str]:
 
 
 # ``/api/health`` 的文档化版本由 ``app.fastapi_routes.__init__._register_health_routes``
-# 提供（含 NeuroBus 状态）。此处保留 ``/health`` 与 ``/api/health`` 的 compat 实现
-# 以兼容旧前端探测路径，但都从 OpenAPI 文档中隐藏避免 Duplicate Operation ID。
+# 提供（含 NeuroBus 状态）。此处只保留旧 ``/health`` 别名，避免重复注册。
 @router.get("/health", include_in_schema=False)
-@router.get("/api/health", include_in_schema=False)
 def compat_health():
     identity = build_identity()
     return _ok(
@@ -392,35 +390,6 @@ def compat_print_diagnose():
         return _fail("打印机诊断失败", 500)
 
 
-@router.post("/api/print/{filename:path}")
-def compat_print_shipment_file(filename: str, payload: dict[str, Any] = Body(default_factory=dict)):
-    from app.utils.path_io.path_utils import get_app_data_dir
-
-    printer_name = payload.get("printer_name") or payload.get("printer")
-    output_dir = Path(get_app_data_dir()).resolve() / "shipment_outputs"
-    try:
-        file_path = resolve_under_allowed_dirs(filename, [output_dir])
-    except UnsafeDownloadPathError:
-        return _fail("文件路径无效", 400)
-    if not file_path.is_file():  # lgtm[py/path-injection] -- resolved under shipment_outputs
-        return _fail("文件不存在", 404)
-
-    result = _printer_svc().print_document(str(file_path), printer_name=printer_name)
-    ok = bool(result.get("success"))
-    status = 200 if ok else 400
-    public_result = {
-        "success": ok,
-        "message": "打印任务已提交" if ok else "打印服务暂时不可用，请稍后重试",
-    }
-    traced = _trace_ai_assistant_route(
-        public_result,
-        route="/api/print/{filename}",
-        action="print_shipment_file",
-        body={"filename": filename, **dict(payload or {})},
-    )
-    return JSONResponse(traced, status_code=status)
-
-
 @router.post("/api/print-last")
 def compat_print_last():
     return _fail(
@@ -496,3 +465,33 @@ def compat_print_single_label(payload: dict[str, Any] = Body(default_factory=dic
             body=payload,
         )
         return JSONResponse(traced, status_code=500)
+
+
+# Catch-all file paths must follow concrete label actions.
+@router.post("/api/print/{filename:path}")
+def compat_print_shipment_file(filename: str, payload: dict[str, Any] = Body(default_factory=dict)):
+    from app.utils.path_io.path_utils import get_app_data_dir
+
+    printer_name = payload.get("printer_name") or payload.get("printer")
+    output_dir = Path(get_app_data_dir()).resolve() / "shipment_outputs"
+    try:
+        file_path = resolve_under_allowed_dirs(filename, [output_dir])
+    except UnsafeDownloadPathError:
+        return _fail("文件路径无效", 400)
+    if not file_path.is_file():  # lgtm[py/path-injection] -- resolved under shipment_outputs
+        return _fail("文件不存在", 404)
+
+    result = _printer_svc().print_document(str(file_path), printer_name=printer_name)
+    ok = bool(result.get("success"))
+    status = 200 if ok else 400
+    public_result = {
+        "success": ok,
+        "message": "打印任务已提交" if ok else "打印服务暂时不可用，请稍后重试",
+    }
+    traced = _trace_ai_assistant_route(
+        public_result,
+        route="/api/print/{filename}",
+        action="print_shipment_file",
+        body={"filename": filename, **dict(payload or {})},
+    )
+    return JSONResponse(traced, status_code=status)
