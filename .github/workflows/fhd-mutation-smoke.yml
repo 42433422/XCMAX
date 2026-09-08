@@ -5,6 +5,10 @@
 # 2026-08-05：mutation-smoke 是 required status check。此前 pull_request 用 paths 过滤，
 #   未命中路径的 PR 不会创建该 check → 永久 BLOCKED。改为 pull_request 无条件触发，
 #   用步骤级路径检测决定是否真正跑 mutmut；未命中时快速成功以满足 required check。
+# 2026-09-09：修复手动触发（workflow_dispatch）漏跑——此前 dispatch 不产出 run_mutation，
+#   所有 mutmut 步骤条件均不满足，整条流水线静默跳过。现 dispatch 强制跑。
+#   同时修复 N01 同类路径 bug：根仓 git diff 输出带 FHD/ 前缀，剥掉后再匹配 FHD 目录口径，
+#   否则 PR/push 的路径检测永远不命中、变异测试在 gate 上也一直在静默跳过。
 name: mutation-smoke
 
 on:
@@ -33,11 +37,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Detect mutation-scope path changes (PR / push only)
+      - name: Detect mutation-scope path changes (PR / push / dispatch)
         id: paths
-        if: github.event_name == 'pull_request' || github.event_name == 'push'
+        if: github.event_name == 'pull_request' || github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         working-directory: FHD
         run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # 手动触发 = 明确要求跑变异测试，不做路径过滤
+            echo "run_mutation=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             base="${{ github.event.pull_request.base.sha }}"
             head="${{ github.event.pull_request.head.sha }}"
@@ -49,8 +58,9 @@ jobs:
               ''|0000000000000000000000000000000000000000) base="${head}~1" ;;
             esac
           fi
-          changed="$(git diff --name-only "$base" "$head" 2>/dev/null || true)"
-          if printf '%s\n' "$changed" | grep -qE '^(app/di/|app/contexts/|tests/test_di/|tests/test_contexts/|tests/test_scripts/test_mutation_kill_report\.py|scripts/dev/mutation_kill_report\.py|pyproject\.toml|\.github/workflows/mutation-smoke\.yml)'; then
+          # 根仓 git diff 输出是仓库根相对路径（FHD/app/...），剥掉前缀后按 FHD 目录口径匹配
+          changed="$(git diff --name-only "$base" "$head" 2>/dev/null | sed 's|^FHD/||' || true)"
+          if printf '%s\n' "$changed" | grep -qE '^(app/di/|app/contexts/|tests/test_di/|tests/test_contexts/|tests/test_scripts/test_mutation_kill_report\.py|scripts/dev/mutation_kill_report\.py|pyproject\.toml|\.github/workflows/(fhd-)?mutation-smoke\.yml)'; then
             echo "run_mutation=true" >> "$GITHUB_OUTPUT"
           else
             echo "run_mutation=false" >> "$GITHUB_OUTPUT"
