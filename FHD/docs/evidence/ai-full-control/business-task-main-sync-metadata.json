@@ -1,0 +1,9 @@
+{
+  "source_commit": "39839bdfb0313feee635a62bfc1a1c9188f5626e",
+  "passed": 12,
+  "total": 22,
+  "database_verified_passes": 5,
+  "scope": "Isolated SQLite fallback only; not live model, approval chain or installed acceptance",
+  "regression_tests": "112 passed: ledger planning/database, accounting services, registered workflow dispatch",
+  "dataset_sha256": "d591a51c06121699eb09a09ed10dea908cc08d2cc70418965a7112b7cbb376a1"
+}
