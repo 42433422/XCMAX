@@ -130,7 +130,7 @@ def resolve_confirmed_target(
             or candidate.get("unit_name")
             or ""
         ).strip()
-        if name and (name == text or name in text or text in name):
+        if name and name == text:
             name_matches.append(candidate)
     if len(name_matches) == 1:
         return {"id": str(name_matches[0].get("id") or "")}
