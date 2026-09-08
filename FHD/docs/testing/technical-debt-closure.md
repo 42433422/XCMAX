@@ -19,6 +19,17 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Integration draft PR #1815 is now the single remote review channel:
+  https://github.com/42433422/XCMAX/pull/1815 . Mainline be51a83a2 (#1810 metrics
+  only) was merged at 5c9a3d5a1 without conflicts or other-worktree edits.
+  All 108 changed Python files pass Ruff and root workflow publication --check
+  reports no drift. PR CI/security/SSOT/frontend/customer-delivery jobs were
+  observed queued/in progress at that head; none are claimed passed here. The
+  initial Ruff file enumeration used Git's quoted non-ASCII filenames; NUL-safe
+  enumeration corrected the invocation and the full check passed. Changelog
+  entry is included for the product gate. The PR remains draft pending full
+  acceptance; no merge, artifact activation or installed-client delivery occurred.
+
 - Generic query verbs no longer force product_query. Product routing now requires
   product subject/model evidence; other query expressions reach the intent gate
   and remain unknown if it cannot resolve them. Three expression regressions
