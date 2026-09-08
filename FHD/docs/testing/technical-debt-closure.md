@@ -19,6 +19,16 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Mainline `73861ed71` (#1806 Mac control) is included at `e42c48808`; the only
+  merge conflict was the changelog, resolved by preserving both entries. At that
+  checkpoint, all 47 changed backend test files pass together: 1034 passed and
+  two opt-in benchmark skips. Full frontend validation passes 9827 tests with
+  four live-backend skips. All 124 changed Python files pass Ruff check/format.
+  The resulting 538-line Agent router violated the unchanged 500-line fitness
+  limit, so event history/stream endpoints were extracted into `event_routes.py`
+  with compatibility exports and the same concrete router. After extraction,
+  117 route/golden/compatibility/renewal tests and all ten blocking dev guards
+  pass. Existing utils-boundary warnings remain; this is not a debt-free claim.
 - A deterministic SQLite interleaving exposed a claim race after resume's queue
   read: FOR UPDATE is ignored by SQLite. Resume now conditionally updates the
   observed queue state/execution count before changing the run, acquiring the
