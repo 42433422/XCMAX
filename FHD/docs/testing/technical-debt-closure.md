@@ -17,6 +17,15 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Quote's static registry no longer claims unconditional idempotency: its
+  deduplication key is optional and does not prove crash/concurrency-safe replay.
+  Recovery now requires both the persisted step and current registry to permit
+  replay; it never upgrades an unsafe historical step. Tests exercise the real
+  quote registry with both new and legacy optimistic task records and verify
+  recovery blocks without invoking the executor. 159 related regressions and
+  eight queue/recovery checks passed. Durable business-write fencing and atomic
+  deduplication are still required for D4.
+
 - Quote services now resolve exact customer names and product model references
   before adding an order. Missing/ambiguous names and conflicting product ID/model
   pairs reject without leaving an order even if the caller commits afterward.

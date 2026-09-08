@@ -658,7 +658,7 @@
         },
         "quote": {
           "risk": "medium",
-          "idempotent": true,
+          "idempotent": false,
           "required_params": [
             "customer_id",
             "items"

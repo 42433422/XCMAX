@@ -213,10 +213,17 @@ class BackgroundTaskExecutionMixin:
         return cast("AgentRun | None", self._repo.save(run))
 
     def _prepare_expired_execution_recovery(self, run: AgentRun) -> bool:
+        from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+
         running_steps = [step for step in run.steps if step.status == "running"]
         if not running_steps:
             run.add_event("task.worker_recovered", "任务执行租约已恢复", {})
             return True
+        for step in running_steps:
+            current_spec = get_tool_action_spec(step.tool_id, step.action)
+            # Old persisted plans may carry a superseded replay-safety claim.
+            # Never upgrade an unsafe historical step based on a newer registry.
+            step.idempotent = bool(step.idempotent and current_spec and current_spec.idempotent)
         if any(not step.idempotent for step in running_steps):
             run.status = "blocked"
             run.error = _NON_IDEMPOTENT_RECOVERY_BLOCKED

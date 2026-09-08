@@ -611,7 +611,7 @@ class TestErpToolRegistry:
         reg = _workflow_registry()
         sales = reg["sales"]["actions"]
         assert sales["query"]["risk"] == "low" and sales["query"]["idempotent"] is True
-        assert sales["quote"]["risk"] == "medium" and sales["quote"]["idempotent"] is True
+        assert sales["quote"]["risk"] == "medium" and sales["quote"]["idempotent"] is False
         for a in ("confirm", "deliver", "invoice", "payment", "cancel"):
             assert sales[a]["idempotent"] is True
 
@@ -673,7 +673,7 @@ class TestErpCapabilityGate:
         )
         assert r["success"] is True
         assert r["risk"] == "medium"
-        assert r["idempotent"] is True
+        assert r["idempotent"] is False
 
     def test_sales_payment_missing_amount(self):
         from app.application.tools.registered_capabilities import (
