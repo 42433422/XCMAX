@@ -283,7 +283,7 @@ class TestProductsRouter:
         with patch("app.services.get_products_service", return_value=mock_svc):
             _registered_router_products(
                 "create",
-                {"unit_name": "u", "name_or_model": "p", "unit_price": "bad"},
+                {"unit_name": "桶", "name_or_model": "p", "unit_price": "bad"},
                 _ctx(),
                 "normal",
                 "",
@@ -296,7 +296,7 @@ class TestProductsRouter:
         mock_svc.create_product.return_value = {"success": True}
         with patch("app.services.get_products_service", return_value=mock_svc):
             result = _registered_router_products(
-                "create", {"unit_name": "u", "name_or_model": "p"}, _ctx(), "normal", ""
+                "create", {"unit_name": "桶", "name_or_model": "p"}, _ctx(), "normal", ""
             )
             assert result["success"] is True
             assert result["created"] is True
@@ -306,7 +306,7 @@ class TestProductsRouter:
         mock_svc.create_product.return_value = {"success": False, "message": "err"}
         with patch("app.services.get_products_service", return_value=mock_svc):
             result = _registered_router_products(
-                "create", {"unit_name": "u", "name_or_model": "p"}, _ctx(), "normal", ""
+                "create", {"unit_name": "桶", "name_or_model": "p"}, _ctx(), "normal", ""
             )
             assert result["success"] is False
 

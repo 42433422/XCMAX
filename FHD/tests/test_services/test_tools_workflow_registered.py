@@ -220,7 +220,7 @@ class TestProductsRouter:
         with patch("app.services.get_products_service", return_value=mock_svc):
             result = _registered_router_products(
                 "create",
-                {"name_or_model": "P1", "unit_name": "U1", "unit_price": 10.0},
+                {"name_or_model": "P1", "unit_name": "桶", "unit_price": 10.0},
                 {},
                 "admin",
                 "",
@@ -237,7 +237,7 @@ class TestProductsRouter:
         with patch("app.services.get_products_service", return_value=mock_svc):
             result = _registered_router_products(
                 "create",
-                {"name_or_model": "P1", "unit_name": "U1", "unit_price": "not_a_number"},
+                {"name_or_model": "P1", "unit_name": "桶", "unit_price": "not_a_number"},
                 {},
                 "admin",
                 "",
@@ -1026,3 +1026,14 @@ class TestPurchaseReadOnlyRouter:
         ):
             r = _registered_router_purchase("query_inbounds", {}, {}, "shared", "")
         assert r["success"] is True
+
+
+def test_product_customer_label_is_not_silently_used_as_measurement():
+    service = MagicMock()
+    with patch("app.services.get_products_service", return_value=service):
+        result = _registered_router_products(
+            "create", {"name_or_model": "P1", "unit_name": "测试客户公司"}, {}, "admin", ""
+        )
+    assert not result["success"]
+    assert result["error_code"] == "customer_product_link_unsupported"
+    service.create_product.assert_not_called()

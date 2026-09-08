@@ -822,7 +822,7 @@ class TestBusinessDbRouter:
                 {
                     "entity": "products",
                     "operation": "create",
-                    "payload": {"name": "P1", "unit_name": "U1"},
+                    "payload": {"name": "P1", "unit_name": "桶"},
                 },
                 {},
                 "admin",
