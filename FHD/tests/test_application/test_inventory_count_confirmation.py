@@ -144,6 +144,15 @@ def test_ai_count_preview_and_confirmation_only_change_selected_location(tmp_pat
             "",
         )
         assert unrelated["success"] and unrelated["total"] == 0
+    with tenant_scope(1):
+        conflict = _registered_router_inventory(
+            "inventory_count", {**params, "actual_quantity": 1, "confirmed": True}, {}, "normal", ""
+        )
+        assert conflict["error_code"] == "inventory_reserved_conflict"
+        with factory() as db:
+            stock = db.get(InventoryLedger, 2)
+            assert float(stock.quantity) == 7 and float(stock.available_quantity) == 5
+            assert db.query(InventoryTransaction).count() == 1
     with tenant_scope(2):
         foreign = _registered_router_inventory(
             "query_transactions", {"product_id": 1}, {}, "normal", ""

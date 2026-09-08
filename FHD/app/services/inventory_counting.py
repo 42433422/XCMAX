@@ -83,10 +83,17 @@ class InventoryCountingMixin:
                             "diff": diff,
                         },
                     }
+                available_after = float(ledger.available_quantity or 0) + diff
+                if available_after < 0:
+                    return {
+                        "success": False,
+                        "error_code": "inventory_reserved_conflict",
+                        "message": "盘点数量不足以覆盖已占用库存，请先核实占用记录",
+                    }
                 now = datetime.now()
                 before_quantity = book_quantity
                 ledger.quantity = actual_quantity
-                ledger.available_quantity = float(ledger.available_quantity or 0) + diff
+                ledger.available_quantity = available_after
                 ledger.updated_at = now
                 db.flush()
                 transaction = _facade().InventoryTransaction(
