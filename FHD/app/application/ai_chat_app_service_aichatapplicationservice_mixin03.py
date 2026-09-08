@@ -335,7 +335,13 @@ class _AIChatApplicationServicePart03Mixin:
             target.params["payload"] = payload
         else:
             target.params.update(confirmed)
-        if item.get("reason") == "missing_required" and len(item.get("missing_fields") or []) > 1:
+            if item.get("reason") == "inventory_unit_conversion":
+                target.description = (
+                    f"产品#{target.params.get('product_id')}入库"
+                    f"{confirmed['quantity']:g}{confirmed['requested_unit']}，"
+                    f"仓库#{target.params.get('warehouse_id')}（用户已确认换算，待审批）"
+                )
+        if item.get("reason") in {"missing_required", "inventory_unit_conversion"}:
             from app.application.workflow.clarification_node import needs_clarification
             from app.services.tools_execution.registry import get_workflow_tool_registry
 

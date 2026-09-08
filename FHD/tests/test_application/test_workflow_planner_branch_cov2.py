@@ -603,14 +603,15 @@ class TestFallbackPlan:
         assert plan.intent == "business_db_read"
         assert plan.nodes[0].action == "read"
 
-    def test_add_product_to_unit(self) -> None:
+    def test_create_product_without_implicit_customer(self) -> None:
         planner = self._make_planner()
         plan = planner._fallback_plan("p1", "新增产品", {"customers": {}, "products": {}})
-        assert plan.intent == "add_product_to_unit"
-        assert len(plan.nodes) == 2
-        assert plan.nodes[0].tool_id == "customers"
-        assert plan.nodes[1].tool_id == "products"
-        assert plan.nodes[1].depends_on == ["check_or_create_unit"]
+        assert plan.intent == "create_product"
+        assert len(plan.nodes) == 1
+        assert plan.nodes[0].tool_id == "products"
+        assert plan.nodes[0].action == "create"
+        assert plan.nodes[0].params == {}
+        assert plan.nodes[0].depends_on == []
 
     def test_generic_fallback_products(self) -> None:
         planner = self._make_planner()

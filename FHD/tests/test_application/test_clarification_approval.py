@@ -272,3 +272,48 @@ def test_inbound_warehouse_answer_requires_approval():
     params = service._pending_workflows["u"]["approval_nodes"][0]["params"]
     assert params == {"product_id": 1, "warehouse_id": 3, "quantity": 50, "requested_unit": "件"}
     service._run_workflow_with_state_updates.assert_not_called()
+
+
+def test_inbound_conversion_waits_after_warehouse_then_approves_converted_quantity():
+    from app.application.workflow.clarification_node import needs_clarification
+
+    node = WorkflowNode(
+        node_id="inbound",
+        tool_id="inventory",
+        action="stock_in",
+        risk="high",
+        params={"product_id": 1, "quantity": 50, "requested_unit": "箱", "_inventory_unit": "个"},
+    )
+    plan = PlanGraph(plan_id="conversion", intent="inventory_in", nodes=[node])
+    pending = {
+        "plan": plan,
+        "target_node_id": node.node_id,
+        "clarify_node_id": "clarify",
+        "runtime_context": {"tenant_id": 7},
+        "clarification": needs_clarification(plan)[0],
+    }
+    service = SimpleNamespace(
+        _pending_workflows={"u": pending},
+        approval_service=Mock(),
+        _persist_plan_state=Mock(),
+        _run_workflow_with_state_updates=Mock(side_effect=AssertionError("must await approval")),
+    )
+    service.approval_service.get_approval_required_nodes.return_value = [node]
+    resume = _AIChatApplicationServicePart03Mixin._continue_after_clarification
+    assert resume(service, "u", pending, "3") is None
+    assert pending["clarification"]["reason"] == "inventory_unit_conversion"
+    assert "50箱" in pending["clarification"]["question"]
+    service.approval_service.get_approval_required_nodes.assert_not_called()
+    before = dict(node.params)
+    for answer in ("确认", "500", "500箱", "0个", "-1个", "NaN个", "Infinity个", "true个"):
+        assert resume(service, "u", pending, answer) is None
+        assert node.params == before
+    service.approval_service.get_approval_required_nodes.assert_not_called()
+    response = resume(service, "u", pending, "500个")
+    assert response["data"]["action"] == "workflow_confirmation_required"
+    approved = service._pending_workflows["u"]["approval_nodes"][0]["params"]
+    assert approved["quantity"] == 500 and approved["requested_unit"] == "个"
+    assert approved["warehouse_id"] == 3
+    assert "入库500个" in node.description and "待审批" in node.description
+    assert needs_clarification(plan) == []
+    service._run_workflow_with_state_updates.assert_not_called()

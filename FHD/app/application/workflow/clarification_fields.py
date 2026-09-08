@@ -13,6 +13,25 @@ from .types import WorkflowNode
 def resolve_missing_field(
     node: WorkflowNode, item: dict[str, Any], text: str
 ) -> dict[str, Any] | None:
+    if item.get("reason") == "inventory_unit_conversion":
+        import math
+        import re
+
+        unit = node.params.get("_inventory_unit")
+        if (
+            node.tool_id != "inventory"
+            or node.action != "stock_in"
+            or not isinstance(unit, str)
+            or not unit
+        ):
+            return None
+        match = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)\s*" + re.escape(unit), text.strip())
+        if match is None:
+            return None
+        quantity = float(match.group(1))
+        if not math.isfinite(quantity) or quantity <= 0:
+            return None
+        return {"quantity": quantity, "requested_unit": unit}
     if item.get("reason") == "report_scope" and item.get("field") == "日期范围":
         if node.tool_id != "reports" or node.action not in {"sales_summary", "purchase_summary"}:
             return None

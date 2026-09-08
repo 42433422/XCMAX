@@ -225,6 +225,24 @@ def needs_clarification(
                     "question": _build_missing_question(node, missing),
                 }
             )
+        elif node.tool_id == "inventory" and node.action == "stock_in":
+            unit = params.get("_inventory_unit")
+            requested = params.get("requested_unit")
+            if isinstance(unit, str) and unit and requested != unit:
+                items.append(
+                    {
+                        "node_id": node.node_id,
+                        "tool_id": node.tool_id,
+                        "action": node.action,
+                        "reason": "inventory_unit_conversion",
+                        "field": "quantity",
+                        "question": (
+                            f"产品库存单位是{unit}，原请求为{params.get('quantity')}{requested}。"
+                            f"请提供换算后的入库数量并带上库存单位，例如‘10{unit}’。"
+                            "确认换算后还需审批才会入库。"
+                        ),
+                    }
+                )
     return items
 
 
