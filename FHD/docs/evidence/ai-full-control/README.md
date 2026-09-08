@@ -6,6 +6,12 @@
 目标是四个阶段全部完成。本目录记录当前实施证据，不代表四阶段验收通过。
 此前对话中的 20%–30% 覆盖率与工期只是未验证估计，不作为验收基线。
 
+## Clarification retry context
+
+An unresolved clarification reply now repeats the original question and returns the pending reason, field, missing fields and candidate list. Missing ordinary fields no longer get an unrelated instruction to select a record ID. The pending entry remains available for another reply.
+
+26 related tests pass, covering ordinary missing fields, fallback wording and ambiguous-target context. This is retry-response behavior with continuation mocked, not full business execution acceptance. The last measured business score remains 10/22.
+
 ## Single scalar field clarification
 
 A single missing scalar required field can now be resolved from the user's reply using the current tool schema. String, integer, number and boolean inputs are supported; the complete candidate parameter set must pass tool-call validation before mutation. Empty/invalid inputs leave the node unchanged. Business-database payloads, multiple missing fields and structured objects are left to their existing handling rather than guessed.
