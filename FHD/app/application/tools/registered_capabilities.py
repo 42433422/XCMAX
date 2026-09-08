@@ -180,6 +180,13 @@ def resolve_registered_capability_call(args: dict[str, Any] | None) -> dict[str,
             "action": action,
             "required_params": required,
         }
+    if (tool_id, action) == ("sales", "quote"):
+        from app.application.sales_quote_inputs import validated_quote_request
+
+        try:
+            validated_quote_request(params)
+        except ValueError as exc:
+            return {"success": False, "error": str(exc), "tool_id": tool_id, "action": action}
     return {
         "success": True,
         "tool_id": tool_id,

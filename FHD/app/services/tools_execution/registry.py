@@ -97,7 +97,7 @@ REQUIRED_PARAMS_BY_TOOL_ACTION = {
     ("mrp", "consume"): ["order_id", "warehouse_id"],
     ("mrp", "finish"): ["order_id", "warehouse_id"],
     ("mrp", "query_orders"): [],
-    ("sales", "quote"): ["customer_id", "items"],
+    ("sales", "quote"): ["items"],
     ("sales", "confirm"): ["order_id"],
     ("sales", "deliver"): ["order_id"],
     ("sales", "invoice"): ["order_id"],

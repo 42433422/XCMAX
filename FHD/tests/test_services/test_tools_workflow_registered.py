@@ -618,7 +618,7 @@ class TestErpToolRegistry:
     def test_sales_required_params(self):
         reg = _workflow_registry()
         sales = reg["sales"]["actions"]
-        assert set(sales["quote"]["required_params"]) == {"customer_id", "items"}
+        assert set(sales["quote"]["required_params"]) == {"items"}
         assert set(sales["payment"]["required_params"]) == {"order_id", "amount"}
         assert sales["confirm"]["required_params"] == ["order_id"]
 
@@ -668,7 +668,10 @@ class TestErpCapabilityGate:
             {
                 "tool_id": "sales",
                 "action": "quote",
-                "params": {"customer_id": 1, "items": [{"product_id": 1, "quantity": 1}]},
+                "params": {
+                    "customer_id": 1,
+                    "items": [{"product_id": 1, "quantity": 1, "unit_price": 50}],
+                },
             }
         )
         assert r["success"] is True

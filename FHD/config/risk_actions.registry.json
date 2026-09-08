@@ -660,7 +660,6 @@
           "risk": "medium",
           "idempotent": false,
           "required_params": [
-            "customer_id",
             "items"
           ],
           "availability": "shared",

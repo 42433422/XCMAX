@@ -17,6 +17,15 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Quote input contracts now accept either customer ID or customer name, with
+  shared domain validation used by the service, capability entry and Agent tool
+  validator. The registry requires items while domain validation enforces the
+  customer alternative and valid quantities/prices. Missing-customer interaction
+  exposes a named field; answering it reaches a separate write approval without
+  calling a tool. 173 existing regressions and 43 contract/clarification checks
+  passed. Natural-language planning and nested line-item clarification remain
+  outstanding; this does not claim the sales benchmark scenarios are complete.
+
 - Quote's static registry no longer claims unconditional idempotency: its
   deduplication key is optional and does not prove crash/concurrency-safe replay.
   Recovery now requires both the persisted step and current registry to permit

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
+
 from app.application.agent_orchestrator.run_models import AgentStep
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.agent_orchestrator.tool_spec import (
@@ -11,6 +13,27 @@ from app.application.agent_orchestrator.tool_spec import (
     validate_tool_result,
     validate_tool_spec_fixtures,
 )
+
+
+@pytest.mark.parametrize("customer", [{"customer_id": 1}, {"customer_name": "客户甲"}])
+def test_quote_contract_accepts_name_or_id_and_rejects_missing_price(customer):
+    from app.application.tools.registered_capabilities import resolve_registered_capability_call
+
+    params = {**customer, "items": [{"model_number": "A100", "quantity": 2, "unit_price": 50}]}
+    assert validate_tool_call("sales", "quote", params).ok
+    assert resolve_registered_capability_call(
+        {"tool_id": "sales", "action": "quote", "params": params}
+    )["success"]
+    del params["items"][0]["unit_price"]
+    assert not validate_tool_call("sales", "quote", params).ok
+    assert not resolve_registered_capability_call(
+        {"tool_id": "sales", "action": "quote", "params": params}
+    )["success"]
+
+
+def test_quote_requires_customer_even_when_details_are_complete():
+    params = {"items": [{"model_number": "A100", "quantity": 2, "unit_price": 50}]}
+    assert not validate_tool_call("sales", "quote", params).ok
 
 
 def test_build_tool_specs_v2_exposes_business_db_and_employee_contracts() -> None:

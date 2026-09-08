@@ -33,6 +33,10 @@ def apply_clarification_answer(run: AgentRun, *, step_id: str, parameters: dict[
         for key in (spec.required_params if spec else [])
         if target.params.get(key) in (None, "", [], {})
     }
+    if (target.tool_id, target.action) == ("sales", "quote"):
+        from app.application.sales_quote_inputs import missing_quote_fields
+
+        missing = set(missing_quote_fields(target.params))
     if not parameters or not set(parameters) <= missing:
         raise ClarificationAnswerError("答案只能补充当前目标缺失的必填参数")
     candidate = {**deepcopy(target.params), **deepcopy(parameters)}
@@ -93,13 +97,18 @@ def pause_for_clarification(run: AgentRun, step: AgentStep) -> bool:
         "transaction_type": "收支类型",
     }
     properties = spec.input_schema.get("properties", {}) if spec else {}
+    required_fields = spec.required_params if spec else []
+    if target and (target.tool_id, target.action) == ("sales", "quote"):
+        from app.application.sales_quote_inputs import missing_quote_fields
+
+        required_fields = missing_quote_fields(target.params)
     step.output["fields"] = [
         {
             "key": key,
             "label": properties.get(key, {}).get("title") or labels.get(key, key),
             "type": properties.get(key, {}).get("type", "string"),
         }
-        for key in (spec.required_params if spec else [])
+        for key in required_fields
         if target is not None and target.params.get(key) in (None, "", [], {})
     ]
     run.final_output = {"clarification": {"step_id": step.step_id, **step.output}}

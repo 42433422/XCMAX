@@ -60,16 +60,10 @@ class __SalesAppServicePart01MixinPart01Mixin:
         负责提交/回滚（本方法仅 flush/refresh，不 commit/rollback/close）；缺省时沿用
         本模块 ``get_db()`` 自有会话并自行提交。
         """
-        customer_id = data.get("customer_id")
-        items_data = data.get("items") or []
-        if not customer_id and not str(data.get("customer_name") or "").strip():
-            return {"success": False, "message": "缺少 customer_id 或 customer_name"}
-        if not isinstance(items_data, list) or not items_data:
-            return {"success": False, "message": "缺少 items 明细"}
-        from app.application.sales_quote_inputs import validated_quote_items
+        from app.application.sales_quote_inputs import validated_quote_request
 
         try:
-            items_data = validated_quote_items(items_data)
+            items_data = validated_quote_request(data)
         except ValueError as exc:
             return {"success": False, "message": str(exc)}
         idempotency_key = str(data.get("idempotency_key") or "").strip() or None
