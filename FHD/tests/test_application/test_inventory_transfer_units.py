@@ -150,6 +150,7 @@ def test_transfer_between_locations_in_same_warehouse(tmp_path, monkeypatch):
                 "product_id": 1,
                 "from_warehouse_id": 1,
                 "to_warehouse_id": 1,
+                "remark": "调整拣货库位",
                 "from_location_id": 1,
                 "to_location_id": 2,
                 "batch_no": "B",
@@ -173,6 +174,7 @@ def test_transfer_between_locations_in_same_warehouse(tmp_path, monkeypatch):
                 for row in stocks
             ] == [(1, 7, 5, 2, "桶"), (2, 3, 3, 0, "桶")]
             receipts = db.query(InventoryTransaction).all()
+            assert all("调整拣货库位" in row.remark for row in receipts)
             assert {
                 (row.location_id, row.transaction_type, float(row.quantity)) for row in receipts
             } == {(1, "transfer_out", -3), (2, "transfer_in", 3)}

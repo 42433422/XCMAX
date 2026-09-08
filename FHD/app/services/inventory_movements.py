@@ -318,7 +318,7 @@ class InventoryMovementsMixin:
                     reference_type="transfer",
                     transaction_date=now,
                     operator=operator,
-                    remark=f"调出至仓库{to_warehouse_id}",
+                    remark=f"调出至仓库{to_warehouse_id}" + (f"；{remark}" if remark else ""),
                     created_at=now,
                 )
                 db.add(out_transaction)
@@ -355,7 +355,7 @@ class InventoryMovementsMixin:
                     reference_type="transfer",
                     transaction_date=now,
                     operator=operator,
-                    remark=f"从仓库{from_warehouse_id}调入",
+                    remark=f"从仓库{from_warehouse_id}调入" + (f"；{remark}" if remark else ""),
                     created_at=now,
                 )
                 db.add(in_transaction)
