@@ -244,7 +244,11 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
     from app.db.base import Base
     from app.infrastructure.tenant_scope import tenant_scope
     from app.services.tools_execution.registry import get_workflow_tool_registry
-    from scripts.dev.task_benchmark_assertions import check_returned_records, seed_records
+    from scripts.dev.task_benchmark_assertions import (
+        check_returned_records,
+        seed_records,
+        seed_sales_period_orders,
+    )
 
     Base.metadata.create_all(engine, checkfirst=True)
 
@@ -278,6 +282,7 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
             }
             try:
                 seed_records(task.get("fixtures") or [])
+                seed_sales_period_orders(task.get("sales_period_orders") or [])
                 plan = planner.plan("bench-user", task["instruction"], registry)
                 nodes = list(plan.nodes) if plan else []
                 ok, why = _check_no_actions(nodes, expect)

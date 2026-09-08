@@ -17,6 +17,12 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Sales-month evidence now seeds 25 at the first instant of the month, 75 at the
+  final instant, and 999 immediately before the month. All three trials returned
+  total_amount=100 and quantity=2 with the expected product detail; 45 related
+  tests passed. This verifies the current month's inclusive boundaries and
+  excludes the prior month in the real report query. Evidence: `seeded-sales-period-trials`.
+
 - Dashboard acceptance now seeds two products and requires product_count=2 from
   the completed report tool output. All three trials returned exactly 2; ten
   benchmark/assertion tests passed. Sales totals and ledger contents still need

@@ -62,3 +62,53 @@ def seed_records(fixtures: list[dict]) -> None:
                 raise ValueError("fixture may not override the isolated trial tenant")
             db.add(model(tenant_id=current_tenant_id(), **values))
         db.commit()
+
+
+def seed_sales_period_orders(rows: list[dict]) -> None:
+    """Seed explicit month-boundary amounts in the trial's already-isolated DB."""
+    from calendar import monthrange
+    from datetime import datetime, timedelta
+    from decimal import Decimal
+
+    from app.db import SessionLocal
+    from app.db.models.sales import SalesOrder, SalesOrderItem
+    from app.infrastructure.tenant_scope import current_tenant_id
+
+    now = datetime.now()
+    first = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    last = first.replace(
+        day=monthrange(first.year, first.month)[1],
+        hour=23,
+        minute=59,
+        second=59,
+        microsecond=999999,
+    )
+    instants = {
+        "month_start": first,
+        "month_end": last,
+        "previous_month_end": first - timedelta(microseconds=1),
+    }
+    with SessionLocal() as db:
+        for index, row in enumerate(rows):
+            instant = instants[row["at"]]
+            amount = Decimal(str(row["amount"]))
+            order = SalesOrder(
+                tenant_id=current_tenant_id(),
+                order_no=f"BENCH-PERIOD-{index}",
+                customer_name="月报测试客户",
+                created_at=instant,
+                total_amount=amount,
+            )
+            db.add(order)
+            db.flush()
+            db.add(
+                SalesOrderItem(
+                    tenant_id=current_tenant_id(),
+                    order_id=order.id,
+                    product_name="月报测试产品",
+                    quantity=1,
+                    unit_price=amount,
+                    amount=amount,
+                )
+            )
+        db.commit()

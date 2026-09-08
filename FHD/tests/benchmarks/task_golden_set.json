@@ -199,7 +199,9 @@
       "domain": "sales",
       "difficulty": "easy",
       "instruction": "本月销售汇总",
+      "sales_period_orders": [{"at": "month_start", "amount": 25}, {"at": "month_end", "amount": 75}, {"at": "previous_month_end", "amount": 999}],
       "expect": {
+        "returned_records": [{"tool_id": "reports", "action": "sales_summary", "path": ["summary", "total_amount"], "equals": 100}, {"tool_id": "reports", "action": "sales_summary", "count": 1, "includes": [{"product_name": "月报测试产品", "quantity": 2, "amount": 100}]}],
         "actions_any_of": [
           [{"tool_id": "reports", "action": "sales_summary"}],
           [{"tool_id": "sales", "action": "query"}]
