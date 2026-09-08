@@ -1,0 +1,8 @@
+{
+  "source_commit": "11288b37f9c56bb807e46361de189c5553b3c89b",
+  "files": 20,
+  "passed": 1318,
+  "seconds": 5.84,
+  "scope": "Local tests selected by ai_chat/clarification/dynamic_workflow names using current worktree LangGraph packages. Not real model or installed acceptance.",
+  "log_sha256": "4b258ac69cdd30f7f219fc047779735f75e2be2a614376fa9f566f023cb40bd9"
+}
