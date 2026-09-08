@@ -158,3 +158,36 @@ def seed_ledger_period_entries(rows: list[dict]) -> None:
             ]
             db.add(entry)
         db.commit()
+
+
+def seed_inventory_quantities(rows: list[dict]) -> None:
+    from app.db import SessionLocal
+    from app.db.models.inventory import InventoryLedger, Warehouse
+    from app.db.models.product import Product
+    from app.infrastructure.tenant_scope import current_tenant_id
+
+    if not rows:
+        return
+    with SessionLocal() as db:
+        warehouse = Warehouse(tenant_id=current_tenant_id(), code="BENCH-STOCK", name="测试仓库")
+        db.add(warehouse)
+        db.flush()
+        for row in rows:
+            product = Product(
+                tenant_id=current_tenant_id(),
+                name=row["model_number"],
+                model_number=row["model_number"],
+            )
+            db.add(product)
+            db.flush()
+            db.add(
+                InventoryLedger(
+                    tenant_id=current_tenant_id(),
+                    product_id=product.id,
+                    warehouse_id=warehouse.id,
+                    quantity=row["quantity"],
+                    available_quantity=row["quantity"],
+                    reserved_quantity=0,
+                )
+            )
+        db.commit()

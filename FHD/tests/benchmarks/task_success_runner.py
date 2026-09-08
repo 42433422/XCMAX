@@ -246,6 +246,7 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
     from app.services.tools_execution.registry import get_workflow_tool_registry
     from scripts.dev.task_benchmark_assertions import (
         check_returned_records,
+        seed_inventory_quantities,
         seed_ledger_period_entries,
         seed_records,
         seed_sales_period_orders,
@@ -283,6 +284,7 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
             }
             try:
                 seed_records(task.get("fixtures") or [])
+                seed_inventory_quantities(task.get("inventory_quantities") or [])
                 seed_sales_period_orders(task.get("sales_period_orders") or [])
                 seed_ledger_period_entries(task.get("ledger_period_entries") or [])
                 plan = planner.plan("bench-user", task["instruction"], registry)

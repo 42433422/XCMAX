@@ -63,10 +63,15 @@ def report_read_node(message: str, registry: dict[str, Any], *, today=None) -> W
         tool, action = "reports", "sales_summary"
     elif re.search(r"(?:查询|查看|查一下|看下).*(?:账本|总账)", message):
         tool, action = "finance", "ledger_query"
+    inventory_model = re.search(
+        r"(?:查询|查一下|查看|查下)\s*(?:产品\s*)?([A-Za-z0-9][A-Za-z0-9._-]*)\s*的?库存", message
+    )
+    if inventory_model and not re.search(r"入库|出库|盘点|调整|转移", message):
+        tool, action = "reports", "inventory_summary"
     if not tool or tool not in registry:
         return None
     params: dict[str, Any] = {}
-    if action != "dashboard" and re.search(r"本月|这个月", message):
+    if action in {"sales_summary", "ledger_query"} and re.search(r"本月|这个月", message):
         current = today or date.today()
         first = current.replace(day=1).isoformat()
         last = current.replace(day=monthrange(current.year, current.month)[1]).isoformat()
@@ -74,6 +79,8 @@ def report_read_node(message: str, registry: dict[str, Any], *, today=None) -> W
             "start_date": first,
             "end_date": last if tool == "finance" else last + " 23:59:59.999999",
         }
+    if action == "inventory_summary" and inventory_model:
+        params["model_number"] = inventory_model.group(1).upper()
     if action == "sales_summary":
         params["group_by"] = "product"
     return WorkflowNode(

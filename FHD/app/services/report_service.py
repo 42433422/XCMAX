@@ -262,7 +262,10 @@ class ReportService(NeuroEventPublisherMixin):
             return {"success": True, "data": [], "summary": {}}
 
     def get_inventory_report(
-        self, warehouse_id: int | None = None, category: str | None = None
+        self,
+        warehouse_id: int | None = None,
+        category: str | None = None,
+        model_number: str | None = None,
     ) -> dict[str, Any]:
         with get_db() as db:
             query = db.query(InventoryLedger, Product).join(Product)
@@ -271,6 +274,8 @@ class ReportService(NeuroEventPublisherMixin):
                 query = query.filter(InventoryLedger.warehouse_id == warehouse_id)
             if category:
                 query = query.filter(Product.category == category)
+            if model_number:
+                query = query.filter(Product.model_number == model_number)
 
             ledgers = query.all()
 

@@ -228,7 +228,9 @@
       "domain": "inventory",
       "difficulty": "easy",
       "instruction": "查一下 A100 的库存",
+      "inventory_quantities": [{"model_number": "A100", "quantity": 50}, {"model_number": "B200", "quantity": 77}],
       "expect": {
+        "returned_records": [{"tool_id": "reports", "action": "inventory_summary", "count": 1, "includes": [{"model_number": "A100", "total_quantity": 50, "available_quantity": 50}]}],
         "actions_any_of": [
           [{"tool_id": "inventory", "action": "query"}],
           [{"tool_id": "inventory", "action": "list"}],

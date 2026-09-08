@@ -17,6 +17,11 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Model-specific inventory lookup routes to the inventory report with an exact
+  model filter. The fixture contains A100=50 and B200=77; three trials returned
+  only A100 with total/available quantity=50. All 132 report/tool/benchmark tests
+  passed, and the full observation is 15/22. Evidence: `inventory-query-trials`.
+
 - Ledger-month acceptance seeds balanced 25 and 75 vouchers at the month's edges
   plus a prior-month 999 voucher. Three trials returned exactly the two current
   vouchers with matching debit/credit totals and balanced=true; 18 related tests
