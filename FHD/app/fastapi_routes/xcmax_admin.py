@@ -33,6 +33,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/xcmax", tags=["xcmax-admin"])
 
+from app.fastapi_routes.mac_control_proxy import router as mac_control_router
+
+router.include_router(mac_control_router)
+
 REMOTE_HOST = os.environ.get("XCMAX_REMOTE_HOST", "119.27.178.147")
 REMOTE_PORT = int(os.environ.get("XCMAX_REMOTE_PORT", "9999"))
 _DEFAULT_URLOPEN = urllib.request.urlopen

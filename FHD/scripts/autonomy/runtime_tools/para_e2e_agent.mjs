@@ -10,6 +10,8 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
+import { probeTools } from './tool_preflight.mjs';
+import { createReceiptOutbox } from './control_receipt_outbox.mjs';
 import {
   describeCodexFailure,
   describeTraeFailure,
@@ -471,7 +473,14 @@ async function requestMergeOnComplete(task, taskDir) {
   }
 }
 
+const controlReceipts = createReceiptOutbox({
+  directory: process.env.XCMAX_CONTROL_RECEIPT_DIR || join(homedir(), 'XCMAX-runtime', 'control-receipts'),
+  url: process.env.XCMAX_CONTROL_RECEIPT_URL,
+  token: process.env.XCMAX_CONTROL_RECEIPT_TOKEN,
+  deviceId: process.env.XCMAX_CONTROL_DEVICE_ID,
+});
 const send = (ws, payload) => {
+  controlReceipts.record(payload);
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
 };
 
@@ -1422,6 +1431,7 @@ async function recoverPendingTask(ws) {
       tool: pending.tool,
       work_branch: pending.work_branch,
     };
+    controlReceipts.bind(recovered);
     if (enqueueTask(ws, recovered)) {
       console.log(`[e2e-agent] recovered running subtask ${pending.subtask_id}`);
     }
@@ -1464,7 +1474,17 @@ function toolExecutionStatus(tool, installed) {
   return runningTools.has(tool) || queued ? 'running' : 'idle';
 }
 
+let preflight = {};
+let preflightPending = false;
 function publishToolStatus(ws) {
+  void controlReceipts.drain();
+  if (!preflightPending) {
+    preflightPending = true;
+    probeTools({ codex: resolveCodexAgentBin(), cursor: resolveCursorAgentBin(),
+      trae: resolveTraeAgentBin(), claude_code: resolveClaudeAgentBin() })
+      .then((result) => { preflight = result; })
+      .finally(() => { preflightPending = false; });
+  }
   const traeInstalled = traeAgentAvailable();
   const codexInstalled = codexAgentAvailable();
   const cursorInstalled = cursorAgentAvailable();
@@ -1499,6 +1519,8 @@ function publishToolStatus(ws) {
     capabilities: {
       ...defaultCapabilities(),
       e2e_agent: true,
+      platform: process.platform === 'darwin' ? 'macos' : process.platform === 'win32' ? 'windows' : process.platform,
+      tool_preflight: preflight,
       trae_cli: traeInstalled,
       cursor_agent_cli: cursorInstalled,
       codex_cli: codexInstalled,
@@ -1518,6 +1540,7 @@ function connect() {
     try {
       const msg = JSON.parse(String(raw));
       if (msg.type === 'execute_task') {
+        controlReceipts.bind(msg);
         enqueueTask(ws, msg);
       }
     } catch (err) {

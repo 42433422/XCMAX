@@ -18,6 +18,9 @@ node --check "$AGENT_SOURCE"
 node --check "$HELPER_SOURCE"
 node --check "$QUEUE_POLICY_SOURCE"
 node --check "$RUNTIME_POLICY_SOURCE"
+for control_helper in tool_preflight.mjs control_receipt_outbox.mjs; do
+  node --check "$SCRIPT_DIR/$control_helper"
+done
 node --test "$SCRIPT_DIR/e2e_agent_runtime_policy.test.mjs"
 node --test "$SCRIPT_DIR/report_only_target_branch.test.mjs"
 node --test "$SCRIPT_DIR/workspace_base_refresh.test.mjs"
@@ -53,6 +56,13 @@ if [[ -f "$RUNTIME_POLICY_TARGET" ]]; then
 fi
 
 rollback() {
+  for control_helper in tool_preflight.mjs control_receipt_outbox.mjs; do
+    if [[ -f "$TARGET_DIR/$control_helper.backup-$BACKUP_SUFFIX" ]]; then
+      cp -p "$TARGET_DIR/$control_helper.backup-$BACKUP_SUFFIX" "$TARGET_DIR/$control_helper"
+    elif [[ -f "$TARGET_DIR/$control_helper" ]]; then
+      mv "$TARGET_DIR/$control_helper" "$TARGET_DIR/$control_helper.failed-install-$BACKUP_SUFFIX"
+    fi
+  done
   if [[ -n "$AGENT_BACKUP" && -f "$AGENT_BACKUP" ]]; then cp -p "$AGENT_BACKUP" "$AGENT_TARGET"; fi
   if [[ -n "$HELPER_BACKUP" && -f "$HELPER_BACKUP" ]]; then cp -p "$HELPER_BACKUP" "$HELPER_TARGET"; fi
   if [[ -n "$QUEUE_POLICY_BACKUP" && -f "$QUEUE_POLICY_BACKUP" ]]; then cp -p "$QUEUE_POLICY_BACKUP" "$QUEUE_POLICY_TARGET"; fi
@@ -71,6 +81,15 @@ rollback() {
   fi
 }
 trap rollback ERR
+
+for control_helper in tool_preflight.mjs control_receipt_outbox.mjs; do
+  if [[ -f "$TARGET_DIR/$control_helper" ]]; then
+    cp -p "$TARGET_DIR/$control_helper" "$TARGET_DIR/$control_helper.backup-$BACKUP_SUFFIX"
+  fi
+  install -m 0644 "$SCRIPT_DIR/$control_helper" "$TARGET_DIR/$control_helper.next"
+  mv "$TARGET_DIR/$control_helper.next" "$TARGET_DIR/$control_helper"
+  cmp "$SCRIPT_DIR/$control_helper" "$TARGET_DIR/$control_helper"
+done
 
 install -m 0755 "$AGENT_SOURCE" "$AGENT_TARGET.next"
 install -m 0644 "$HELPER_SOURCE" "$HELPER_TARGET.next"
