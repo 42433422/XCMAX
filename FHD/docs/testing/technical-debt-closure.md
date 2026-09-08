@@ -19,6 +19,15 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 ## Current evidence and remaining defects
 
+- Read-only local desktop inventory examined 24 candidate host/Mod SQLite files.
+  Only `Application Support/XCAGI/data/xcagi.db` contained Agent runs: 1750 total,
+  1733 terminal and 17 waiting_user. All 17 lack Mod bindings and recorded tool
+  calls; 15 lack tenant binding and 2 have tenant binding. Across these records,
+  10 waiting steps were found. Absence of a tool-call record is not proof that no
+  external effect occurred, and inconsistent/incomplete plans require review.
+  No task was resumed, reassigned, reauthorized, or migrated. This local inventory
+  does not qualify remote production, customer devices, or a renewal mechanism.
+
 - Durable Mod bindings now snapshot the account tenant and role at authorization.
   Execution revalidates both against the host account, rejecting changes and legacy
   bindings missing this snapshot. Two negative cases reproduced execution after
