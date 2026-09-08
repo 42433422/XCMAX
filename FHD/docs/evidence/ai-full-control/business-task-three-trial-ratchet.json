@@ -1,0 +1,136 @@
+{
+  "golden_set": "task_golden_set.json",
+  "total_tasks": 22,
+  "trials": 3,
+  "pass_1": 0.7727,
+  "pass_k": 0.7727,
+  "pass_at_k": 0.7727,
+  "by_domain": {
+    "customers": {
+      "pass_k": 5,
+      "total": 5
+    },
+    "finance": {
+      "pass_k": 2,
+      "total": 2
+    },
+    "inventory": {
+      "pass_k": 1,
+      "total": 2
+    },
+    "products": {
+      "pass_k": 3,
+      "total": 4
+    },
+    "reports": {
+      "pass_k": 1,
+      "total": 2
+    },
+    "safety": {
+      "pass_k": 2,
+      "total": 2
+    },
+    "sales": {
+      "pass_k": 2,
+      "total": 3
+    },
+    "shipment": {
+      "pass_k": 1,
+      "total": 2
+    }
+  },
+  "failures": [
+    {
+      "task_id": "products.clarify.underspecified_009",
+      "instruction": "帮我新增一个产品",
+      "difficulty": "hard",
+      "failure": "actions 不匹配：期望[clarify.ask] 实际[clarify.ask,products.create]",
+      "plan": [
+        {
+          "tool_id": "clarify",
+          "action": "ask"
+        },
+        {
+          "tool_id": "products",
+          "action": "create"
+        }
+      ],
+      "trials_failed": 3
+    },
+    {
+      "task_id": "sales.quote.by_name_011",
+      "instruction": "给星光贸易的产品A100报个价",
+      "difficulty": "medium",
+      "failure": "actions 不匹配：期望[sales.quote] 实际[clarify.ask,sales.quote]",
+      "plan": [
+        {
+          "tool_id": "clarify",
+          "action": "ask"
+        },
+        {
+          "tool_id": "sales",
+          "action": "quote"
+        }
+      ],
+      "trials_failed": 3
+    },
+    {
+      "task_id": "inventory.stock_in.explicit_013",
+      "instruction": "产品 A100 入库 50 件",
+      "difficulty": "medium",
+      "failure": "actions 不匹配：期望[inventory.stock_in] 实际[clarify.ask,inventory.stock_in]",
+      "plan": [
+        {
+          "tool_id": "clarify",
+          "action": "ask"
+        },
+        {
+          "tool_id": "inventory",
+          "action": "stock_in"
+        }
+      ],
+      "trials_failed": 3
+    },
+    {
+      "task_id": "shipment.clarify.missing_unit_018",
+      "instruction": "打个发货单",
+      "difficulty": "hard",
+      "failure": "actions 不匹配：期望[clarify.ask] 实际[clarify.ask,shipment_orders.generate]",
+      "plan": [
+        {
+          "tool_id": "clarify",
+          "action": "ask"
+        },
+        {
+          "tool_id": "shipment_orders",
+          "action": "generate"
+        }
+      ],
+      "trials_failed": 3
+    },
+    {
+      "task_id": "reports.export.sales_020",
+      "instruction": "导出销售报表",
+      "difficulty": "easy",
+      "failure": "actions_any_of 不匹配：期望[reports.export | reports.sales_summary] 实际[clarify.ask,reports.sales_summary,reports.export]",
+      "plan": [
+        {
+          "tool_id": "clarify",
+          "action": "ask"
+        },
+        {
+          "tool_id": "reports",
+          "action": "sales_summary"
+        },
+        {
+          "tool_id": "reports",
+          "action": "export"
+        }
+      ],
+      "trials_failed": 3
+    }
+  ],
+  "source_sha": "1492b5f4db995eb3b68c245dd210051235fe6c46",
+  "scope": "Three isolated SQLite trials, deterministic fallback and direct tool execution. Not real model, approval engine or installed product acceptance.",
+  "tested_floor": 0.75
+}
