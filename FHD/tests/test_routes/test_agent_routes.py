@@ -129,6 +129,25 @@ def test_empty_tenant_does_not_deduplicate_another_tenants_task():
     assert repeated.json()["data"]["run_id"] == unscoped.json()["data"]["run_id"]
 
 
+@pytest.mark.parametrize("second_mod", ["mod-b", ""])
+def test_unified_task_deduplication_rejects_different_mod_scope(second_mod):
+    body = {"task_id": "same-mod-task-id", "title": "查询产品", "tool_id": "products",
+            "action": "query", "params": {"keyword": "5003"}}
+    first_client = _client(mod_authorization={"mod_id": "mod-a", "session_row_id": 1, "user_id": "u1"})
+    first = first_client.post("/api/agent/tasks", json=body)
+    assert first.status_code == 202
+    run_id = first.json()["data"]["run_id"]
+    before = get_agent_run_repository().get(run_id).to_dict()
+    second = _client(mod_authorization={"mod_id": second_mod} if second_mod else None)
+    rejected = second.post("/api/agent/tasks", json=body)
+    assert rejected.status_code == 409
+    assert run_id not in rejected.text
+    assert get_agent_run_repository().get(run_id).to_dict() == before
+    same = first_client.post("/api/agent/tasks", json=body)
+    assert same.json()["deduplicated"] is True
+    assert same.json()["data"]["run_id"] == run_id
+
+
 def _drain_background_run(run_id: str) -> AgentRun:
     queue = get_task_execution_repository()
     claimed = queue.claim("route-test-worker", lease_seconds=30)
@@ -148,13 +167,14 @@ def _drain_background_run(run_id: str) -> AgentRun:
     return run
 
 
-def _client(user_id: str | None = "u1", *, tenant_id: str = "") -> TestClient:
+def _client(user_id: str | None = "u1", *, tenant_id: str = "", mod_authorization=None) -> TestClient:
     app = FastAPI()
     app.include_router(router)
     if user_id is not None:
         app.dependency_overrides[require_agent_principal] = lambda: AgentPrincipal(
             user_id=user_id,
             tenant_id=tenant_id,
+            mod_authorization=mod_authorization,
         )
     return TestClient(app, raise_server_exceptions=False)
 
