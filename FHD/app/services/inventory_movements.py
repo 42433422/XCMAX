@@ -58,6 +58,17 @@ class InventoryMovementsMixin:
                 )
                 if not warehouse:
                     return {"success": False, "message": "仓库不存在或不可访问"}
+                if location_id is not None:
+                    location = (
+                        db.query(_facade().StorageLocation)
+                        .filter(
+                            _facade().StorageLocation.id == location_id,
+                            _facade().StorageLocation.warehouse_id == warehouse_id,
+                        )
+                        .first()
+                    )
+                    if not location:
+                        return {"success": False, "message": "库位不存在或不属于所选仓库"}
                 ledger = (
                     db.query(_facade().InventoryLedger)
                     .filter(

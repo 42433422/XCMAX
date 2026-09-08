@@ -48,7 +48,13 @@ def test_inbound_rejects_missing_and_other_tenant_warehouse(tmp_path, monkeypatc
     from sqlalchemy.orm import sessionmaker
 
     from app.db.base import Base
-    from app.db.models import InventoryLedger, InventoryTransaction, Product, Warehouse
+    from app.db.models import (
+        InventoryLedger,
+        InventoryTransaction,
+        Product,
+        StorageLocation,
+        Warehouse,
+    )
     from app.infrastructure.tenant_scope import tenant_scope
 
     engine = create_engine(f"sqlite:///{tmp_path / 'inventory.sqlite'}")
@@ -57,11 +63,20 @@ def test_inbound_rejects_missing_and_other_tenant_warehouse(tmp_path, monkeypatc
     with factory.begin() as db:
         db.add(Product(id=1, tenant_id=1, name="A100"))
         db.add(Warehouse(id=2, tenant_id=2, name="其他租户", code="other"))
+        db.add(Warehouse(id=3, tenant_id=1, name="本仓", code="own"))
+        db.add(Warehouse(id=4, tenant_id=1, name="另一仓", code="second"))
+        db.flush()
+        db.add(StorageLocation(id=4, tenant_id=1, warehouse_id=4, code="wrong"))
     monkeypatch.setattr("app.db.session.SessionLocal", factory)
     with tenant_scope(1):
         for warehouse_id in (2, 999):
             result = InventoryService().inventory_in(
                 product_id=1, warehouse_id=warehouse_id, quantity=5
+            )
+            assert not result["success"]
+        for location_id in (4, 999):
+            result = InventoryService().inventory_in(
+                product_id=1, warehouse_id=3, location_id=location_id, quantity=5
             )
             assert not result["success"]
         with factory() as db:
