@@ -1,0 +1,97 @@
+{
+  "source_commit": "5cbaa6d488801f412d7352392c59761f48744328",
+  "migration_head": "2026_09_09_product_uom",
+  "sqlite_migration_tests": {
+    "passed": 2,
+    "files": [
+      "tests/test_application/test_customer_product_link_migration.py",
+      "tests/test_application/test_product_measurement_migration.py"
+    ],
+    "scope": "Isolated SQLite upgrade/downgrade and legacy data preservation; not deployed migration"
+  },
+  "static_guards": {
+    "ok": true,
+    "guards": [
+      {
+        "name": "layer-ratchet",
+        "status": "ok",
+        "exit": 0,
+        "blocking": true
+      },
+      {
+        "name": "type-debt",
+        "status": "ok",
+        "exit": 0,
+        "blocking": true
+      },
+      {
+        "name": "raw-sql",
+        "status": "ok",
+        "exit": 0,
+        "blocking": true
+      },
+      {
+        "name": "big-files",
+        "status": "ok",
+        "exit": 0,
+        "blocking": false
+      },
+      {
+        "name": "coverage-ramp-stubs",
+        "status": "ok",
+        "exit": 0,
+        "blocking": true
+      },
+      {
+        "name": "test-bloat",
+        "status": "ok",
+        "exit": 0,
+        "blocking": true
+      },
+      {
+        "name": "requirements-lock",
+        "status": "ok",
+        "exit": 0,
+        "blocking": true
+      },
+      {
+        "name": "mods-inline-ui",
+        "status": "ok",
+        "exit": 0,
+        "blocking": true
+      },
+      {
+        "name": "utils-boundary",
+        "status": "ok",
+        "exit": 0,
+        "blocking": true
+      },
+      {
+        "name": "mod-import-boundaries",
+        "status": "ok",
+        "exit": 0,
+        "blocking": true
+      },
+      {
+        "name": "arch-fitness",
+        "status": "ok",
+        "exit": 0,
+        "blocking": true
+      }
+    ]
+  },
+  "pr_snapshot": {
+    "number": 1804,
+    "head": "5cbaa6d488801f412d7352392c59761f48744328",
+    "reported_failures": 0,
+    "pending_checks": 26,
+    "merge_state": "BLOCKED"
+  },
+  "outstanding": [
+    "Complete CI for exact final head",
+    "PostgreSQL migration and business validation",
+    "AI customer-product association creation",
+    "Real-model business acceptance",
+    "Mainline artifact and installed UI acceptance"
+  ]
+}
