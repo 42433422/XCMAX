@@ -3,9 +3,9 @@
 from unittest.mock import Mock, patch
 
 import pytest
-from app.services.tools_workflow_registered_part01_part01 import _registered_router_products
 
 from app.application.agent_orchestrator.tool_spec import get_tool_action_spec, validate_tool_call
+from app.services.tools_workflow_erp_master import _registered_router_products
 
 
 @pytest.mark.parametrize(
