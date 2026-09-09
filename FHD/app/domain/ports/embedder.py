@@ -55,7 +55,7 @@ class HashEmbedder(EmbedderPort):
             return vec
 
         for token in tokens:
-            digest = hashlib.md5(token.encode("utf-8")).hexdigest()
+            digest = hashlib.md5(token.encode("utf-8"), usedforsecurity=False).hexdigest()
             idx = int(digest[:8], 16) % self._dimensions
             sign = 1.0 if int(digest[-1], 16) % 2 == 0 else -1.0
             vec[idx] += sign

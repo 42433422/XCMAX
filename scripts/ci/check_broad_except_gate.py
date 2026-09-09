@@ -21,7 +21,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 VENDOR_BASELINES = {"FHD/third_party/langgraph": 56}
 # FHD/docs/legal/ 为软著鉴别材料生成脚本，非运行时代码；其 broad except（docx 失败不阻塞 txt 产出）属有意豁免。
-OWNED_EXCLUDED_PREFIXES = ("FHD/docs/legal/",)
+# FHD/docs/evidence/audit-benchmark/ 为外部标杆实测一次性脚本存档，非运行时代码；其 broad except 是"任何异常如实记 FAIL"的测量设计，属有意豁免。
+OWNED_EXCLUDED_PREFIXES = ("FHD/docs/legal/", "FHD/docs/evidence/audit-benchmark/")
 
 
 def _python_paths() -> list[Path]:
