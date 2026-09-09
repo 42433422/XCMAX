@@ -10,7 +10,7 @@ from app.db.base import Base
 from app.db.models import InventoryLedger, Product, Warehouse
 from app.infrastructure.tenant_scope import tenant_scope
 from app.services.tools_execution.registry import get_workflow_tool_registry
-from app.services.tools_workflow_registered_part01_part02 import _registered_router_reports
+from app.services.tools_workflow_erp import _registered_router_reports
 
 
 def test_inventory_query_filters_actual_stock_and_tenant(monkeypatch):

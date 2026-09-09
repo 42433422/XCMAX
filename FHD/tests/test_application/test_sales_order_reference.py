@@ -2,7 +2,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from app.services.tools_workflow_registered_part01_part02 import _registered_router_sales
+from app.services.tools_workflow_erp import _registered_router_sales
 
 
 @pytest.mark.parametrize(
