@@ -37,7 +37,9 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 _STORE_DIR = Path(
-    os.environ.get("WORK_ORDER_SSOT_DIR") or os.environ.get("CAPABILITY_PROPOSAL_DIR") or "test_reports"
+    os.environ.get("WORK_ORDER_SSOT_DIR")
+    or os.environ.get("CAPABILITY_PROPOSAL_DIR")
+    or "test_reports"
 )
 _EVENTS_FILE = _STORE_DIR / "work_orders.jsonl"
 
@@ -275,9 +277,7 @@ def record_transition(
         if target == current:
             return {"ok": True, "reason": "already_in_state", "wo_id": wo_id, "status": current}
         if target not in _ALLOWED_TRANSITIONS.get(current, frozenset()):
-            logger.warning(
-                "work_order invalid transition %s: %s -> %s", wo_id, current, target
-            )
+            logger.warning("work_order invalid transition %s: %s -> %s", wo_id, current, target)
             return {
                 "ok": False,
                 "reason": "invalid_transition",
