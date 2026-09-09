@@ -149,9 +149,12 @@ class InventoryCountingMixin:
         end_date: datetime | None = None,
         page: int = 1,
         per_page: int = 50,
+        transaction_id: int | None = None,
     ) -> dict[str, Any]:
         with _facade().get_db() as db:
             query = db.query(_facade().InventoryTransaction)
+            if transaction_id is not None:
+                query = query.filter(_facade().InventoryTransaction.id == transaction_id)
             if product_id:
                 query = query.filter(_facade().InventoryTransaction.product_id == product_id)
             if warehouse_id:

@@ -194,6 +194,7 @@ def _registered_router_inventory(
             return {"success": False, "message": "页码须为正整数，每页数量须为 1 到 1000 的整数"}
         inv_svc = InventoryService()
         return inv_svc.query_transactions(
+            transaction_id=params.get("transaction_id"),
             product_id=params.get("product_id"),
             warehouse_id=params.get("warehouse_id"),
             transaction_type=params.get("transaction_type"),
