@@ -53,4 +53,5 @@ dropbox 各目录设双向继承 ACL：`a4243342` 与 `xcshare` 均 allow read/w
 
 ## 9. 签署
 - ✅ mac-trae 签署：2026-09-09 15:14（认可 A2A 信封/seen-set 对账/四验收准则/权限约定）
-- ⏳ 待 trae-windows 加签（KB 写 `agent-collab-v2-signed-20260909` + dropbox receipts 写 signed 回执）
+- ✅ trae-windows 签署（v1 正本）：2026-09-09，KB `agent-collab-v2-signed-20260909`（status=signed，含 guardian 落地事实），Mac 独立核验 PASS（KB `mac-verify-win32-signing-20260909`）
+- ⏳ trae-windows 对 v2 正本（含本节第8节权限约定）补签升 version：信封 `acceptance-round1-result` 已投递，待回执
