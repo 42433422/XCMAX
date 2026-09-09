@@ -185,7 +185,7 @@ def record_capability_proposal(
     try:
         from app.services.work_order_ssot import upsert_candidate
 
-        upsert_candidate(source=source, dedup_key=key, reason=reason)
+        upsert_candidate(source=source, dedup_key=key, reason=reason, context=context)
     except BOUNDARY_ERRORS:  # noqa: BLE001 - 工单写入失败不阻塞提案记录（跨仓导入边界兜底）
         logger.debug("work_order upsert skipped", exc_info=True)
     return {

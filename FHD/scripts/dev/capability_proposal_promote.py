@@ -171,6 +171,35 @@ def _validate_promotion(
     return True, "repository owner approved a governed capability proposal"
 
 
+CUSTOM_TRACK_APPROVED_LABEL = "custom-track-approved"
+
+
+def _custom_track_blocked(issue: dict[str, Any], issue_number: int) -> tuple[bool, str]:
+    """单客户定制轨道拦截：无显式 custom-track-approved 标签时拒绝派发。
+
+    工单查询失败按不拦截处理（工单系统 best-effort，issue 是对外载体）；
+    只有确证 track == customer_custom 且缺批准标签时才 fail closed。
+    """
+    labels = _label_names(issue)
+    if CUSTOM_TRACK_APPROVED_LABEL in labels:
+        return False, ""
+    try:
+        from app.services.work_order_ssot import find_by_issue
+
+        view = find_by_issue(issue_number)
+    except BOUNDARY_ERRORS:  # noqa: BLE001 - 工单视图读取失败不阻断通用轨道派发
+        logger.debug("work_order track lookup skipped", exc_info=True)
+        return False, ""
+    if view is None:
+        return False, ""
+    if str(view.get("track") or "") != "customer_custom":
+        return False, ""
+    return True, (
+        "工单轨道为 customer_custom（单客户定制）：禁止自动进入主线开发；"
+        f"确认按定制流程交付后，请补打 {CUSTOM_TRACK_APPROVED_LABEL} 标签再派发"
+    )
+
+
 def _receipt_marker(issue_number: int, approval_comment_id: int) -> str:
     return f"<!-- {RECEIPT_PREFIX}:{issue_number}:{approval_comment_id} -->"
 
@@ -270,6 +299,12 @@ def run(args: argparse.Namespace) -> int:
     )
     if not valid:
         return _finish(result, ok=False, status="rejected", reason=reason)
+
+    # 统一 Router 防污染门禁：单客户定制轨道的工单不得自动进入主线开发，
+    # 须由所有者显式补打 custom-track-approved 标签后才放行派发。
+    custom_blocked, custom_reason = _custom_track_blocked(issue, issue_number)
+    if custom_blocked:
+        return _finish(result, ok=False, status="rejected", reason=custom_reason)
 
     marker = _receipt_marker(issue_number, approval_comment_id)
     existing_receipt = _find_receipt(comments if isinstance(comments, list) else [], marker)
