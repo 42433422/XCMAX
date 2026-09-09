@@ -39,6 +39,35 @@ from app.services.capability_proposal_recorder import (  # noqa: E402  pylint: d
     list_pending_proposals,
     mark_proposals_processed,
 )
+from app.services.work_order_ssot import (
+    derive_wo_id,  # noqa: E402  pylint: disable=wrong-import-position
+)
+
+
+def _derive_wo_id(source: str, dedup_key: str) -> str:
+    """由提案来源 + 去重键派生唯一工单 ID（与 work_order_ssot 同一口径）。"""
+    if not str(dedup_key or "").strip():
+        return ""
+    return derive_wo_id(str(source or "").strip() or "unknown", str(dedup_key).strip())
+
+
+def _build_acceptance_criteria(
+    reason: str, intent_ctx: dict[str, Any], skill_ctx: dict[str, Any]
+) -> str:
+    """从提案上下文模板化生成可验证验收标准（无 LLM，可机器核对）。"""
+    criteria = [
+        "同类用户输入不再落入 capability_proposal 未命中队列（意图基准回归通过）",
+        "新增能力按预期完成意图识别与槽位校验，全流程本地测试通过",
+        "既有意图识别无回归（intent benchmark 棘轮不下降）",
+        "发布后 macOS 与 Windows 客户机安装回执均为 installed，无未解决 failed/rolled_back",
+    ]
+    candidate_slots = skill_ctx.get("candidate_slots") or []
+    if candidate_slots:
+        criteria.insert(1, f"必需槽位 {', '.join(candidate_slots)} 缺失时正确追问")
+    if not intent_ctx.get("classifier_fields_present"):
+        criteria.append("意图分类器对该类输入产出稳定 primary_intent")
+    _ = reason
+    return "\n".join(f"- [ ] {item}" for item in criteria) + "\n\n"
 
 
 def _utc_now() -> str:
@@ -180,9 +209,12 @@ def _build_issue_body(proposal: dict[str, Any]) -> str:
         "status": "proposed",
     }
     dedup_key = str(proposal.get("dedup_key") or "")
+    source = str(proposal.get("source") or "intent_confirmation_service")
+    wo_id = _derive_wo_id(source, dedup_key)
 
     return (
         "## 来源：能力提案 (capability_proposal)\n\n"
+        f"- **工单 ID (Work Order SSOT)**: `{wo_id}`\n"
         f"- **未命中时间**: `{ts}`\n"
         f"- **未命中原因**: `{reason}`\n"
         f"- **来源**: `{proposal.get('source') or '-'}`\n\n"
@@ -190,6 +222,8 @@ def _build_issue_body(proposal: dict[str, Any]) -> str:
         "## 结构化上下文（已移除用户原文和槽位值）\n\n```json\n"
         f"{json.dumps({'intent': safe_intent_ctx, 'skill': safe_skill_ctx}, ensure_ascii=False, indent=2)}\n"
         "```\n\n"
+        "## 验收标准（进入 AI 开发前必须可验证）\n\n"
+        f"{_build_acceptance_criteria(reason, safe_intent_ctx, safe_skill_ctx)}\n"
         "## 治理门禁\n\n"
         "1. 本 issue 只登记能力缺口，不直接触发任意代码生成。\n"
         "2. 用户原文与槽位值留在本地，不写入 GitHub。\n"
@@ -197,12 +231,47 @@ def _build_issue_body(proposal: dict[str, Any]) -> str:
         "4. 实现、审核、合并、上架和部署收据必须分别留证。\n"
         "5. 仓库所有者确认后，单独评论 `确认实现` 或 `/approve-implementation`；"
         "系统将显式派发实现工作流，批准本身不能直接合并代码。\n"
+        "6. CI 通过 ≠ 客户能用：发布后须 macOS 与 Windows 客户机安装回执双平台健康，"
+        "方可验收关闭；任一平台失败自动重开本 issue，不另起新单。\n"
     )
 
 
 def _build_issue_title(proposal: dict[str, Any]) -> str:
     dedup_key = str(proposal.get("dedup_key") or "unknown")[:12]
     return f"[capability-proposal] 新能力候选 {dedup_key}"
+
+
+def _parse_issue_number(issue_url: str) -> int:
+    """从 issue URL 解析编号（gh cli 创建只回 URL）。"""
+    match = re.search(r"/issues/(\d+)", str(issue_url or ""))
+    return int(match.group(1)) if match else 0
+
+
+def _link_work_order(proposal: dict[str, Any], issue_url: str, issue_number: int = 0) -> None:
+    """主线接线：issue 创建/调和后把工单推进到 routed（候选期终点）。
+
+    工单写入失败不阻塞 issue 流程 —— issue 本身是对外观测载体。
+    """
+    key = str(proposal.get("dedup_key") or "").strip()
+    if not key:
+        return
+    source = str(proposal.get("source") or "intent_confirmation_service")
+    number = int(issue_number or 0) or _parse_issue_number(issue_url)
+    try:
+        from app.services.work_order_ssot import link_issue, upsert_candidate
+
+        upsert_candidate(
+            source=source,
+            dedup_key=key,
+            reason=str(proposal.get("reason") or ""),
+        )
+        link_issue(
+            derive_wo_id(source, key),
+            issue_number=number,
+            issue_url=str(issue_url or ""),
+        )
+    except Exception:  # noqa: BLE001 - CI/中继边界兜底，不影响 issue 流程
+        logger.debug("work_order link skipped", exc_info=True)
 
 
 def _mark_verified(
@@ -293,6 +362,7 @@ def run(args: argparse.Namespace) -> int:
         key = str(proposal.get("dedup_key") or "")
         created_keys.append(key)
         issue_urls[key] = str(issue_url)
+        _link_work_order(proposal, str(issue_url), int(issue_number or 0))
         created_count += 1
 
     if created_keys:

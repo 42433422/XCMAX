@@ -179,6 +179,13 @@ def record_capability_proposal(
             return {"recorded": False, "reason": "write_failed", "dedup_key": key}
 
     logger.info("capability_proposal recorded: reason=%s key=%s", reason, key[:12])
+    # 主线接线：有效需求候选升级为唯一工单（Work Order SSOT），幂等不重复建单
+    try:
+        from app.services.work_order_ssot import upsert_candidate
+
+        upsert_candidate(source=source, dedup_key=key, reason=reason)
+    except Exception:  # noqa: BLE001 - 工单写入失败不阻塞提案记录（跨仓导入边界兜底）
+        logger.debug("work_order upsert skipped", exc_info=True)
     return {
         "recorded": True,
         "dedup_key": key,

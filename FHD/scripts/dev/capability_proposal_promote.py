@@ -388,12 +388,32 @@ def run(args: argparse.Namespace) -> int:
             ),
         )
 
+    _record_in_dev_transition(issue_number)
     return _finish(
         result,
         ok=True,
         status="dispatched",
         reason="owner-approved capability proposal dispatched to controlled implementation",
     )
+
+
+def _record_in_dev_transition(issue_number: int) -> None:
+    """主线接线：工单随 ai-implement 派发进入开发态（best-effort）。"""
+    try:
+        from app.services.work_order_ssot import find_by_issue, record_transition
+
+        view = find_by_issue(issue_number)
+        if view is None:
+            return
+        record_transition(
+            str(view["wo_id"]),
+            "in_dev",
+            ref={"issue_number": int(issue_number)},
+            note="owner 批准并派发实现工作流",
+            source="capability_proposal_promote",
+        )
+    except BOUNDARY_ERRORS:  # noqa: BLE001 - 工单写入失败不阻塞派发回执
+        logger.debug("work_order in_dev transition skipped", exc_info=True)
 
 
 def main() -> None:
