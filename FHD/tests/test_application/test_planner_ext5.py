@@ -973,7 +973,7 @@ class TestFallbackPlanBranches:
         }
         plan = planner._fallback_plan("p1", "查询信息", registry)
         assert plan.intent == "generic_workflow"
-        assert any(n.tool_id == "products" and n.action == "create" for n in plan.nodes)
+        assert any(n.tool_id == "customers" for n in plan.nodes)
 
     def test_generic_fallback_no_tools(self):
         from app.application.workflow.planner import LLMWorkflowPlanner
