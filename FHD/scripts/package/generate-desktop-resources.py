@@ -32,22 +32,71 @@ WHITE = (255, 255, 255)
 MUTED = (220, 240, 255)
 CARD_BG = (255, 255, 255)
 ACCENT = (0, 120, 215)
-PRODUCT_VERSION = "8.0"
+
+
+def _product_version() -> str:
+    """安装包文案版本号：与 electron-builder ${version}（desktop/package.json）同源。"""
+    try:
+        import json
+
+        pkg = json.loads((ROOT / "desktop" / "package.json").read_text(encoding="utf-8"))
+        return str(pkg.get("version") or "1.0")
+    except Exception:
+        return "1.0"
+
+
+PRODUCT_VERSION = _product_version()
+
+# 中文字体回退链：必须含真实 CJK 字体，否则「安装向导」等文案渲染为豆腐块。
+# macOS 上 PingFang.ttc 对 PIL 不可开，用 Hiragino Sans GB / STHeiti；
+# Windows 用微软雅黑；Linux CI 用 Noto Sans CJK SC。
+_CJK_FONT_FILES = (
+    "C:/Windows/Fonts/msyh.ttc",
+    "/System/Library/Fonts/Hiragino Sans GB.ttc",
+    "/System/Library/Fonts/STHeiti Light.ttc",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/opentype/noto/NotoSansCJKsc-Regular.otf",
+    "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+)
+_FONT_FAMILY_NAMES = (
+    "Microsoft YaHei",
+    "Microsoft YaHei UI",
+    "Hiragino Sans GB",
+    "Noto Sans CJK SC",
+    "WenQuanYi Micro Hei",
+    "Segoe UI",
+    "Arial Unicode MS",
+)
+
+
+def _font_has_cjk(font: ImageFont.FreeTypeFont) -> bool:
+    """校验字体真实含中文字形（缺字形时 Pillow 渲染 .notdef 方块）。"""
+    try:
+        return all(font.getmask(ch).getbbox() for ch in "安装向导企业")
+    except Exception:
+        return False
 
 
 def _try_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    for name in (
-        "msyh.ttc",
-        "Microsoft YaHei",
-        "Microsoft YaHei UI",
-        "Segoe UI",
-        "Arial Unicode MS",
-        "Arial",
-    ):
+    for path in _CJK_FONT_FILES:
         try:
-            return ImageFont.truetype(name, size)
+            font = ImageFont.truetype(path, size)
         except OSError:
             continue
+        if _font_has_cjk(font):
+            return font
+    for name in _FONT_FAMILY_NAMES:
+        try:
+            font = ImageFont.truetype(name, size)
+        except OSError:
+            continue
+        if _font_has_cjk(font):
+            return font
+    print(
+        "[generate-desktop-resources] WARNING: 未找到含中文字形的字体，"
+        "安装包位图文案将渲染为方块；请在构建机安装 CJK 字体（如 Noto Sans CJK）",
+        file=sys.stderr,
+    )
     return ImageFont.load_default()
 
 
