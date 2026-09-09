@@ -135,7 +135,7 @@ def test_ai_count_preview_and_confirmation_only_change_selected_location(tmp_pat
         row = readback["data"][0]
         assert row["transaction_type"] == "count"
         exact = _registered_router_inventory(
-            "query_transactions", {"transaction_id": result["transaction_id"]}, {}, "normal", ""
+            "query_transactions", {"transaction_id": str(result["transaction_id"])}, {}, "normal", ""
         )
         assert exact["total"] == 1 and exact["data"][0]["id"] == result["transaction_id"]
         missing = _registered_router_inventory(
@@ -202,5 +202,17 @@ def test_ai_transaction_pagination_rejected_before_database(pagination):
 
     with patch("app.services.inventory_service.get_db") as database:
         result = _registered_router_inventory("query_transactions", pagination, {}, "normal", "")
+    assert not result["success"]
+    database.assert_not_called()
+
+
+@pytest.mark.parametrize("transaction_id", [True, False, 0, -1, 1.5, "bad", "1.0"])
+def test_ai_receipt_query_invalid_id_never_queries_database(transaction_id):
+    from app.services.tools_workflow_registered_part01_part02 import _registered_router_inventory
+
+    with patch("app.services.inventory_service.get_db") as database:
+        result = _registered_router_inventory(
+            "query_transactions", {"transaction_id": transaction_id}, {}, "normal", ""
+        )
     assert not result["success"]
     database.assert_not_called()

@@ -194,9 +194,19 @@ def _registered_router_inventory(
                 raise ValueError("pagination range")
         except (TypeError, ValueError, OverflowError):
             return {"success": False, "message": "页码须为正整数，每页数量须为 1 到 1000 的整数"}
+        transaction_id = params.get("transaction_id")
+        if transaction_id is not None:
+            try:
+                if isinstance(transaction_id, bool):
+                    raise ValueError("boolean ID")
+                transaction_id = int(str(transaction_id))
+                if transaction_id <= 0:
+                    raise ValueError("nonpositive ID")
+            except (TypeError, ValueError, OverflowError):
+                return {"success": False, "message": "流水编号须为正整数"}
         inv_svc = InventoryService()
         return inv_svc.query_transactions(
-            transaction_id=params.get("transaction_id"),
+            transaction_id=transaction_id,
             product_id=params.get("product_id"),
             warehouse_id=params.get("warehouse_id"),
             transaction_type=params.get("transaction_type"),
