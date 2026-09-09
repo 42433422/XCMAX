@@ -47,6 +47,7 @@
 | process-flow（业务流程与交付流程） | [architecture/PROCESS_FLOW_SSOT.md](architecture/PROCESS_FLOW_SSOT.md) | 业务工作流程 + 对外交付流程唯一真相源；供 AGI 编排（Agent Orchestrator / Workflow Engine / NeuroBus 事件驱动）消费；含统一单据生命周期、自动化就绪度矩阵、断点行动项 |
 | utils-boundary（app/utils 职责域） | [devex/utils-domain-boundaries.md](devex/utils-domain-boundaries.md) | app/utils 47 模块职责域归类 + 目标包结构唯一真相源；excel/resilience 已迁移，其余待后续 Stage |
 | net-deletion（净删除棘轮） | [../metrics/line_baseline.json](../metrics/line_baseline.json) | 全仓「人工维护代码 + 文档」总行数基线，只减不增；口径与排除项见 scripts/dev/check_net_deletion.py |
+| desktop-platform-parity（桌面双端平级） | [desktop_platform_parity_ssot.md](desktop_platform_parity_ssot.md) | Windows 与 macOS 平级发布（同版本/同 release_sha/双端齐备）；功能双端验证通过才算完成；平台差异收口 desktop/platform/ 适配层 |
 
 ## 机器注册表（ssot.yaml）
 
@@ -79,6 +80,7 @@
 | dev-inventory | `FHD/scripts/dev/` | blocking |
 | dev-guards | `FHD/scripts/dev/` | blocking |
 | net-deletion | `FHD/metrics/line_baseline.json` | blocking |
+| desktop-platform-parity | `FHD/docs/desktop_platform_parity_ssot.md` | blocking |
 
 ## 已退役 SSOT（指针化）
 
