@@ -226,6 +226,10 @@ def try_normal_slot_read_payload(
             intent = str(rr.get("intent") or "").strip()
             if intent == "clarify":
                 payload = _facade().build_clarify_response_dict(rr)
+            elif intent == "template_preview":
+                from app.application.template_query_response import build_template_query_response
+
+                payload = build_template_query_response()
             elif intent == "printer_list":
                 from app.application.printer_query_response import build_printer_query_response
 
