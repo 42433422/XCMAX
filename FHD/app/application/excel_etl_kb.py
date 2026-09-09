@@ -378,7 +378,7 @@ def sheet_layout_fingerprint(
         "headers": [normalize_header_token(h) for h in header_cells if str(h or "").strip()],
     }
     raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:28]
+    return hashlib.sha1(raw.encode("utf-8"), usedforsecurity=False).hexdigest()[:28]
 
 
 __all__ = [
