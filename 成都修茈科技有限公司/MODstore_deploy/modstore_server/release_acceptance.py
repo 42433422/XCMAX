@@ -75,9 +75,7 @@ def judge_release_acceptance(
     for installation_id, row in latest.items():
         platform = normalize_platform(row.platform) or "unknown"
         status = str(row.status or "").strip()
-        bucket = per_platform.setdefault(
-            platform, {"devices": 0, "installed": 0, "failed": 0}
-        )
+        bucket = per_platform.setdefault(platform, {"devices": 0, "installed": 0, "failed": 0})
         bucket["devices"] += 1
         if status == "installed":
             bucket["installed"] += 1
