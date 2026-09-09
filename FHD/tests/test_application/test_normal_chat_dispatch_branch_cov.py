@@ -106,11 +106,11 @@ class TestRouteNormalModeMessageShipment:
     def test_template_preview_not_hijacked_by_bill_keyword(self):
         # 「预览送货单模板」含「送货单」但属模板预览意图，不应路由到 shipment
         result = route_normal_mode_message("预览送货单模板")
-        assert result["intent"] == "unknown"
+        assert result["intent"] == "template_preview"
 
     def test_template_preview_variant(self):
         result = route_normal_mode_message("看看发货单的模板")
-        assert result["intent"] == "unknown"
+        assert result["intent"] == "template_preview"
 
 
 # ---------------------------------------------------------------------------

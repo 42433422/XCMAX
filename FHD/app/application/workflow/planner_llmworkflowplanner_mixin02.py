@@ -177,6 +177,23 @@ class _LLMWorkflowPlannerPart02Mixin:
                 todo = ["识别业务实体与写入字段", "通过受控业务服务写入数据库", "返回写入结果"]
                 nodes.append(node)
         route = route_normal_mode_message(message)
+        if (
+            not nodes
+            and route.get("intent") == "template_preview"
+            and "template_preview" in tool_registry
+        ):
+            intent = "template_preview"
+            nodes.append(
+                _facade().WorkflowNode(
+                    node_id="query_templates",
+                    tool_id="template_preview",
+                    action="query",
+                    params={},
+                    risk="low",
+                    idempotent=True,
+                    description="读取可用模板及预览数据",
+                )
+            )
         if not nodes and route.get("intent") == "printer_list" and "printer_list" in tool_registry:
             intent = "printer_list"
             nodes.append(
