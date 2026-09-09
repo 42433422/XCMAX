@@ -87,6 +87,7 @@ def test_ai_count_preview_and_confirmation_only_change_selected_location(tmp_pat
     with tenant_scope(1):
         preview = _registered_router_inventory("inventory_count", params, {}, "normal", "")
     assert preview["success"] and preview["confirmed"] is False
+    assert "transaction_id" not in preview
     assert preview["data"]["diff"] == -3
     assert preview["data"]["ledger_id"] == 2
     assert preview["data"]["location_id"] == 2
@@ -115,6 +116,7 @@ def test_ai_count_preview_and_confirmation_only_change_selected_location(tmp_pat
             for row in rows
         ] == [(1, 10, 8, 2), (2, 7, 5, 2)]
         receipt = db.query(InventoryTransaction).one()
+        assert result["transaction_id"] == receipt.id
         assert (receipt.ledger_id, receipt.location_id, receipt.batch_no) == (2, 2, "B")
         assert (
             float(receipt.before_quantity),

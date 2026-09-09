@@ -120,6 +120,7 @@ class InventoryCountingMixin:
                 return {
                     "success": True,
                     "confirmed": True,
+                    "transaction_id": transaction.id,
                     "message": "盘点确认成功",
                     "data": {
                         "ledger_id": ledger.id,
