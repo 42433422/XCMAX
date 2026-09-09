@@ -198,9 +198,20 @@
 | D-02 | **恶化**：同版本并存构建 2→5 个（9.2） |
 | D-03 | **未修复**：`releases/stable/enterprise/latest.yml`（Windows）仍为 `productVersion=1.0.0.0 / buildSha=656db7b7…`（2026-07-13），Windows 真机验收仍被阻塞 |
 
-### 9.6 收敛路径（R03 结论）
+### 9.6 生产 CVM 侧身份核对（SSH 只读取证，2026-09-09）
 
-**当前"优化提交 / 主线 / 安装运行"三者不一致，R03 不能判 PASS。** 唯一收敛方式：PR#1826 合并后，以冻结的 main SHA 走一次完整 `Release Orchestrator`（security-preflight 双扫描 → verify-version-anchors → 单一构建批次），同批再生 OTA feed、下载 manifest 与 dmg/zip 制品，使所有身份载体绑定同一 `git_sha`；随后 Mac 端重跑本脚本（冷启动需先退出本机现有实例）+ Windows 端补 D-03 工件后验收。
+| 载体 | 值 |
+|---|---|
+| 运行后端 `/api/health` | `status=healthy`、`version=1.0.0.1`、`git_sha=73861ed71e41ce34b8a5cf06f9e17a1cfa93d44d` |
+| `/var/www/update/releases/stable/server/fhd-manifest.json` | `version=1.0.0.1`、`git_sha=73861ed7…`、`deploy_mode=tarball` |
+| 制品目录 | 77 个 `fhd-full-1.0.0.1-<sha12>.tar.gz` 并存（同版本多批次），无 `.hold` 冻结 |
+| 与 main 关系 | `73861ed7` 是 main 祖先（PR#1806 合并提交，2026-09-08T16:53Z） |
+
+**结论修正**：漂移集中在**桌面制品侧**，不是全站。服务器侧 manifest 与运行身份一致、绑定 main 上的真实提交，故 R03 的「安装运行」一环在生产后端成立；不成立的是桌面 dmg/zip 与其下载 manifest 的三方一致性（9.1 / 9.2）。
+
+### 9.7 收敛路径（R03 结论）
+
+**当前"优化提交 / 主线 / 安装运行"三者不一致，R03 不能判 PASS。** 精确口径（结合 9.6）：生产后端一致成立；不一致的是**桌面侧**（本机安装 diverged、下载 manifest 与 dmg 脱节）与**主线**（R01/R02/R12/R17 等修复仍在 PR#1826，未进 main）。唯一收敛方式：PR#1826 合并后，以冻结的 main SHA 走一次完整 `Release Orchestrator`（security-preflight 双扫描 → verify-version-anchors → 单一构建批次），同批再生 OTA feed、下载 manifest 与 dmg/zip 制品，使所有身份载体绑定同一 `git_sha`；随后 Mac 端重跑本脚本（冷启动需先退出本机现有实例）+ Windows 端补 D-03 工件后验收。
 
 ---
 
