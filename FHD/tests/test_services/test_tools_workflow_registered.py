@@ -611,7 +611,8 @@ class TestErpToolRegistry:
         reg = _workflow_registry()
         sales = reg["sales"]["actions"]
         assert sales["query"]["risk"] == "low" and sales["query"]["idempotent"] is True
-        assert sales["quote"]["risk"] == "medium" and sales["quote"]["idempotent"] is True
+        # 报价是写操作：medium 风险 + 非幂等，执行前需确认门禁。
+        assert sales["quote"]["risk"] == "medium" and sales["quote"]["idempotent"] is False
         for a in ("confirm", "deliver", "invoice", "payment", "cancel"):
             assert sales[a]["idempotent"] is True
 
@@ -673,7 +674,8 @@ class TestErpCapabilityGate:
         )
         assert r["success"] is True
         assert r["risk"] == "medium"
-        assert r["idempotent"] is True
+        # 报价未带 idempotency_key 时重复调用会重复建单 → 非幂等，走确认门禁。
+        assert r["idempotent"] is False
 
     def test_sales_payment_missing_amount(self):
         from app.application.tools.registered_capabilities import (

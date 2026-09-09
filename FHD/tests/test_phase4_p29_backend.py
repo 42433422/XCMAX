@@ -34,8 +34,8 @@ def test_route_shipment_number_style_order() -> None:
 def test_route_customers_query_with_keyword() -> None:
     rr = route_normal_mode_message("查询甲公司的客户")
     assert rr["intent"] == "customers_query"
-    # 客户类问题实体路由到 Agent customers.query；此处只选工具，keyword 由 Agent 填。
-    assert "甲公司" not in str(rr["slots"].get("keyword", ""))
+    # 客户名查询现在直接抽取 keyword 槽位，Agent 无需二次解析。
+    assert rr["slots"]["keyword"] == "甲公司"
 
 
 def test_route_inventory_alert() -> None:
