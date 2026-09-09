@@ -46,7 +46,10 @@ def _find_template_row(template_id: str) -> dict[str, Any] | None:
     raw = str(template_id or "").strip()
     if not raw:
         return None
-    templates = _templates_payload().get("templates") or []
+    payload = _templates_payload()
+    if payload.get("success") is False:
+        raise HTTPException(status_code=503, detail="模板服务暂时不可用")
+    templates = payload.get("templates") or []
     if raw.startswith("db:"):
         for t in templates:
             if str((t or {}).get("id") or "") == raw:
