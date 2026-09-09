@@ -69,7 +69,7 @@ def redis_url():
                     == 0
                 ):
                     break
-            except Exception:
+            except (OSError, subprocess.SubprocessError):
                 pass
             time.sleep(0.1)
         else:

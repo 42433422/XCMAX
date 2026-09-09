@@ -46,10 +46,12 @@ class RedisStreamsBridge:
         """确保消费组存在。"""
         if self._redis is None:
             return
+        from redis.exceptions import RedisError
+
         try:
             self._redis.xgroup_create(STREAM_KEY, CONSUMER_GROUP, id="$", mkstream=True)
             logger.info("created consumer group %s on %s", CONSUMER_GROUP, STREAM_KEY)
-        except Exception as e:  # noqa: BLE001 - transport boundary: handle all redis errors gracefully
+        except RedisError as e:
             # BUSYGROUP 表示已存在（进程重启后重复创建是正常路径）。
             # redis 的 ResponseError 不属于 RECOVERABLE_ERRORS 家族，必须显式兜住，
             # 否则重启即崩溃（2026-09-09 R12 真实 Redis 验收发现）。
