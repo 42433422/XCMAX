@@ -1,5 +1,8 @@
 {
   "total": 97,
+  "source_sha": "a2474024480c1e948a8b015b4844841c4d12b887",
+  "dataset_sha256": "afb0b3fb77280e73facfd206f462fb6c943383b886009d900cdd2d7ff6b472a5",
+  "measured_at": "2026-09-08T16:03:36.462448+00:00",
   "rule": {
     "layer": "rule",
     "counts": {
@@ -8,97 +11,16 @@
         "total": 24
       },
       "semantic": {
-        "correct": 19,
+        "correct": 60,
         "total": 73
       }
     },
     "accuracy": {
       "core": 1.0,
-      "semantic": 0.2603
+      "semantic": 0.8219
     },
     "failures": {
       "semantic": [
-        {
-          "text": "做一张出货单",
-          "got": {
-            "tool_key": "shipments",
-            "primary_intent": "shipments"
-          },
-          "expected_tool": "shipment_generate",
-          "expected_primary": "shipment_generate"
-        },
-        {
-          "text": "打印机列表",
-          "got": {
-            "tool_key": "print_label",
-            "primary_intent": "print_label"
-          },
-          "expected_tool": "printer_list",
-          "expected_primary": "printer_list"
-        },
-        {
-          "text": "系统设置",
-          "got": {
-            "tool_key": null,
-            "primary_intent": null
-          },
-          "expected_tool": "settings",
-          "expected_primary": "settings"
-        },
-        {
-          "text": "微信联系人",
-          "got": {
-            "tool_key": "shipment_template",
-            "primary_intent": "shipment_template"
-          },
-          "expected_tool": "wechat",
-          "expected_primary": "wechat"
-        },
-        {
-          "text": "模板预览",
-          "got": {
-            "tool_key": "shipment_template",
-            "primary_intent": "shipment_template"
-          },
-          "expected_tool": "template_preview",
-          "expected_primary": "template_preview"
-        },
-        {
-          "text": "提取模板",
-          "got": {
-            "tool_key": "shipment_template",
-            "primary_intent": "shipment_template"
-          },
-          "expected_tool": "template_extract",
-          "expected_primary": "template_extract"
-        },
-        {
-          "text": "分解Excel",
-          "got": {
-            "tool_key": null,
-            "primary_intent": null
-          },
-          "expected_tool": "excel_decompose",
-          "expected_primary": "excel_decompose"
-        },
-        {
-          "text": "导出客户列表",
-          "got": {
-            "tool_key": "customers",
-            "primary_intent": "customers"
-          },
-          "expected_tool": "customer_export",
-          "expected_primary": "customer_export"
-        },
-        {
-          "text": "AI生态",
-          "got": {
-            "tool_key": null,
-            "primary_intent": null
-          },
-          "expected_tool": "ai_ecosystem",
-          "expected_primary": "ai_ecosystem"
-        },
         {
           "text": "老规矩给七彩乐园出一单",
           "got": {
@@ -208,85 +130,13 @@
           "expected_primary": "shipments"
         },
         {
-          "text": "用微信通知李四明天到货",
+          "text": "你现在都能干哪些活",
           "got": {
             "tool_key": null,
             "primary_intent": null
           },
-          "expected_tool": "wechat_send",
-          "expected_primary": "wechat_send"
-        },
-        {
-          "text": "给张三发个消息说货发了",
-          "got": {
-            "tool_key": null,
-            "primary_intent": null
-          },
-          "expected_tool": "wechat_send",
-          "expected_primary": "wechat_send"
-        },
-        {
-          "text": "把发货信息微信同步给王总",
-          "got": {
-            "tool_key": "shipments",
-            "primary_intent": "shipments"
-          },
-          "expected_tool": "wechat_send",
-          "expected_primary": "wechat_send"
-        },
-        {
-          "text": "提醒一下客户去收快递",
-          "got": {
-            "tool_key": "customers",
-            "primary_intent": "customers"
-          },
-          "expected_tool": "wechat_send",
-          "expected_primary": "wechat_send"
-        },
-        {
-          "text": "微信上跟太阳鸟对一下数量",
-          "got": {
-            "tool_key": null,
-            "primary_intent": null
-          },
-          "expected_tool": "wechat_send",
-          "expected_primary": "wechat_send"
-        },
-        {
-          "text": "28规格的要贴标，打20张",
-          "got": {
-            "tool_key": "products",
-            "primary_intent": "products"
-          },
-          "expected_tool": "print_label",
-          "expected_primary": "print_label"
-        },
-        {
-          "text": "我传个表格你帮我看看",
-          "got": {
-            "tool_key": null,
-            "primary_intent": null
-          },
-          "expected_tool": "upload_file",
-          "expected_primary": "upload_file"
-        },
-        {
-          "text": "这份对账单录进去",
-          "got": {
-            "tool_key": null,
-            "primary_intent": null
-          },
-          "expected_tool": "upload_file",
-          "expected_primary": "upload_file"
-        },
-        {
-          "text": "把这个Excel里的产品扒出来",
-          "got": {
-            "tool_key": "products",
-            "primary_intent": "products"
-          },
-          "expected_tool": "upload_file",
-          "expected_primary": "upload_file"
+          "expected_tool": "tools_table",
+          "expected_primary": "tools_table"
         }
       ]
     }
