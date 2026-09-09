@@ -3,7 +3,7 @@
 > 生成时间：2026-07-31（第三轮全量扫描后定稿，覆盖官网/COS/dashboard/MODstore 全量）
 > 升级范围：XCMAX 全项目（FHD + MODstore + 根仓 workflows + 企业官网 + dashboard + COS 部署脚本）
 > 校验状态：✅ verify_version_anchors 通过 / ✅ 478 后端测试通过 / ✅ workflow 已同步根仓 / ✅ 第二轮 42 mod 测试通过 / ✅ mods+version 一致性检查 OK
-> 第二轮补漏：workflow-visualization-bridge manifest（3 副本）+ dashboard "v10 锁恒" 表述（3 文件）+ release/VERSION
+> 第二轮补漏：workflow-visualization-bridge manifest（3 副本）+ dashboard "v10 锁恒" 历史表述（3 文件）+ release/VERSION
 > 第三轮补漏：官网/COS 部署脚本（11 个）+ desktop-shell 3 个文件 + BRANCHING.md + runbook 示例 + market/public/download-release.json + corp-butler.js（已含 1.0.0.1，仅补登记）+ post-deploy-check.sh + upload-all-xcagi-cos.sh
 
 ---
@@ -153,7 +153,7 @@ version_sync 只改了 product_version/marketing_version 字段，以下字段�
 | `FHD/config/release_train.json` | `current` → 1.0.0.1（epoch 保留 1.0.0.0）|
 | `成都修茈科技有限公司/FHD/config/release_train.json` | 同上 |
 | `FHD/config/download_release.json` | _doc/version_lock/download_version/android_version/artifacts 文件名/last_push.release_train（保留 release_history）|
-| `FHD/config/time_rail_workflow_graph.json` | L280 desc 描述（"v10 锁恒 1.0.0.0" → "v10 当前 1.0.0.1"）|
+| `FHD/config/time_rail_workflow_graph.json` | L280 desc 历史描述（"v10 锁恒 1.0.0.0" → "v10 当前 1.0.0.1"）|
 | `FHD/release/VERSION` | 第二轮补漏：内容 `1.0.0.0` → `1.0.0.1`（version_sync 应覆盖但实际漏改）|
 
 ---
@@ -193,7 +193,7 @@ version_sync 只改了 product_version/marketing_version 字段，以下字段�
 
 | 文件 | 改动 |
 |---|---|
-| `docs/xcagi-dashboard/time_rail_workflow_graph.json` | L280 desc：`v10 锁恒 1.0.0.0` → `v10 当前 1.0.0.1` |
+| `docs/xcagi-dashboard/time_rail_workflow_graph.json` | L280 desc：历史 `v10 锁恒 1.0.0.0` → `v10 当前 1.0.0.1` |
 | `docs/xcagi-dashboard/emp-wf-radial-graph.js` | L285 desc：同上 |
 | `XCAGI-Full-Pipeline.html` | L967-968：`v10 锁恒 1.0.0.0` → `v10 当前 1.0.0.1`（L1075/L1776 的 "1.0.0.0 起" 是历史 epoch 起点描述，保留）|
 
