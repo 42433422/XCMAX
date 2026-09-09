@@ -225,7 +225,10 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add metrics/slo-production/*.json metrics/deploy_events.jsonl metrics/dora-*.json
+          # 同步重生成「声称 vs 实测」对照文档，保持与 metrics 快照一致
+          # （arch-fitness 的 claimed-vs-actual-freshness 门禁要求二者一致）。
+          python scripts/dev/gen_claimed_vs_actual.py
+          git add metrics/slo-production/*.json metrics/deploy_events.jsonl metrics/dora-*.json docs/CLAIMED_VS_ACTUAL.md
           if git diff --staged --quiet; then
             exit 0
           fi
