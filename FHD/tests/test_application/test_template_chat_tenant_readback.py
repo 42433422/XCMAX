@@ -51,3 +51,24 @@ def test_chat_template_readback_isolated_by_request_tenant(tmp_path, monkeypatch
             assert connection.execute(text("SELECT COUNT(*) FROM templates")).scalar_one() == 4
     finally:
         engine.dispose()
+
+
+def test_database_failure_reaches_chat_as_failure(tmp_path, monkeypatch):
+    from sqlalchemy.exc import OperationalError
+
+    @contextmanager
+    def unavailable_database():
+        raise OperationalError("SELECT templates", {}, RuntimeError("private connection details"))
+        yield  # pragma: no cover
+
+    monkeypatch.setattr("app.infrastructure.templates.template_store_impl.get_db", unavailable_database)
+    monkeypatch.setattr("app.infrastructure.templates.tenant_scope.ensure_templates_tenant_column", lambda: None)
+    service = TemplateApplicationService(FileSystemTemplateStore(str(tmp_path)))
+    monkeypatch.setattr("app.application.get_template_app_service", lambda: service)
+    response = try_normal_slot_read_payload(
+        "模板预览", request=SimpleNamespace(state=SimpleNamespace(tenant_id=11))
+    )
+    assert response["success"] is False
+    assert "无法读取" in response["response"]
+    assert "private connection details" not in str(response)
+    assert "templates" not in response.get("data", {})
