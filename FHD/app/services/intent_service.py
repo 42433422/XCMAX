@@ -104,7 +104,7 @@ _load_intent_runtime_rules()
 
 def _make_intent_cache_key(message: Any) -> str:
     normalized = _normalize(message if isinstance(message, str) else str(message or ""))
-    return hashlib.md5(normalized.lower().encode()).hexdigest()
+    return hashlib.md5(normalized.lower().encode(), usedforsecurity=False).hexdigest()
 
 
 def _normalize(msg: str | None) -> str:

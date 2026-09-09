@@ -73,7 +73,7 @@ def _dedup_key(raw_input: Any, reason: str) -> str:
     norm = _normalize(raw_input).lower()
     if len(norm) > 200:
         norm = norm[:200]
-    return hashlib.sha1(f"{reason}|{norm}".encode()).hexdigest()
+    return hashlib.sha1(f"{reason}|{norm}".encode(), usedforsecurity=False).hexdigest()
 
 
 def _load_recent_keys(lookback_seconds: int = _DEDUP_WINDOW_SECONDS) -> set[str]:
