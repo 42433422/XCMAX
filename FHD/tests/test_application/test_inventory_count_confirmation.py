@@ -169,6 +169,11 @@ def test_ai_count_preview_and_confirmation_only_change_selected_location(tmp_pat
             assert float(stock.quantity) == 7 and float(stock.available_quantity) == 5
             assert db.query(InventoryTransaction).count() == 1
     with tenant_scope(2):
+        exact_foreign = _registered_router_inventory(
+            "query_transactions", {"transaction_id": result["transaction_id"]}, {}, "normal", ""
+        )
+        assert exact_foreign["success"]
+        assert exact_foreign["total"] == 0 and exact_foreign["data"] == []
         foreign = _registered_router_inventory(
             "query_transactions", {"product_id": 1}, {}, "normal", ""
         )

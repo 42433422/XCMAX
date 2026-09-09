@@ -428,3 +428,9 @@ LabelJobService 新生成清单保存服务端上下文的 mod_id，读取、下
 工作流配置不完整时不发请求，返回 needs_configuration 并显示提示；完整配置只生成预览，等待单独确认。缺少 generated 任务回执或网络失败不显示成功。结果处理检查请求序号、账号 epoch、Mod 切换、面板卸载、任务移除及员工启用状态，旧响应不会写入新作用域。后端统一回归 165 项、前端 33 项通过且无未处理异常，全量前端类型检查、ESLint、应用 mypy、Ruff 和 10 项阻断 dev guards 通过。刷新清单仍有 1013 个唯一可读协议。任务一键打开已有预览、print-last、真实出纸与全部业务及安装端验收仍待完成。
 
 /api/print/pdf_labels 现复用 LabelJobService 的严格产品 ID、模板、份数和尺寸协议，必须登录；返回 generated 任务及预览、确认、提交地址，不直接打印。兼容路由归入 label_jobs 模块，保持具体路径先于文件 catch-all；原占位 501 测试改为实际认证入口检查。真实 SQL 与 PDF HTTP 贯通验证生成、下载、确认前零提交、确认后一次提交；物理打印使用替身。AI api_call 另以真实登录会话生成和回读 PDF，私有导出字节与原文件一致，其他账号读取被拒绝，预览任务仍保持 generated。172 项统一回归通过，10 项阻断 dev guards、Ruff/格式和应用 mypy 通过；隔离运行时清单重新生成后仍为 1013 个唯一协议、零重复与静态遮挡。single_label、print-last 旧流程、真实打印机、安装端与完整四阶段验收仍未完成。
+
+## Server model recheck at 861ecbcaf
+
+Read the running fhd-full.service model configuration through SSH, with credentials held only in process memory. The local normal-chat router completed 51/51 real mimo-v2.5-pro calls with zero errors or empty responses. Core: 16/24; semantic: 32/73; total: 48/97 (49.5%). The unchanged dataset previously scored 42/97 at 5a1e75a7b. This single run is not a controlled statistical comparison and does not establish full-function acceptance. No production business tools or installed UI were executed. See server-model-recheck-861ecbcaf.json.
+
+Inventory tenant-boundary regression: 45 tests passed, including an exact transaction ID from tenant 1 returning no records under tenant 2.
