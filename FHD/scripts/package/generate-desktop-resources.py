@@ -41,7 +41,7 @@ def _product_version() -> str:
 
         pkg = json.loads((ROOT / "desktop" / "package.json").read_text(encoding="utf-8"))
         return str(pkg.get("version") or "1.0")
-    except Exception:
+    except (OSError, ValueError):
         return "1.0"
 
 
@@ -73,7 +73,7 @@ def _font_has_cjk(font: ImageFont.FreeTypeFont) -> bool:
     """校验字体真实含中文字形（缺字形时 Pillow 渲染 .notdef 方块）。"""
     try:
         return all(font.getmask(ch).getbbox() for ch in "安装向导企业")
-    except Exception:
+    except (OSError, ValueError):
         return False
 
 
