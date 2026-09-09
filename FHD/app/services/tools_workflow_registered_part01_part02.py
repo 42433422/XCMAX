@@ -139,6 +139,8 @@ def _registered_router_inventory(
         from app.services.inventory_service import InventoryService
 
         raw_quantity = params.get("actual_quantity")
+        if raw_quantity is None:
+            return {"success": False, "message": "请提供实际盘点数量"}
         try:
             actual_quantity = (
                 float(raw_quantity) if not isinstance(raw_quantity, bool) else raw_quantity
