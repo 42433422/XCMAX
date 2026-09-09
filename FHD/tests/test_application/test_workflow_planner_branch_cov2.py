@@ -140,7 +140,8 @@ class TestLooksLikeBusinessDbWrite:
         assert _looks_like_business_db_write("新增产品", "新增产品") is False
 
     def test_english_insert_with_db(self) -> None:
-        assert _looks_like_business_db_write("insert into db", "insert into db") is True
+        # 2026-09 规划层 SQL 拒绝闸：INSERT INTO 属原始 SQL 形态，不再进入写规划。
+        assert _looks_like_business_db_write("insert into db", "insert into db") is False
 
     def test_english_upsert_with_database(self) -> None:
         assert _looks_like_business_db_write("upsert database", "upsert database") is True
@@ -613,23 +614,27 @@ class TestFallbackPlan:
         assert plan.nodes[1].depends_on == ["check_or_create_unit"]
 
     def test_generic_fallback_products(self) -> None:
+        # 2026-09 起未命中意图不再静默 products.query，而是 clarify.ask。
         planner = self._make_planner()
         plan = planner._fallback_plan("p1", "随便看看", {"products": {}})
-        assert plan.intent == "generic_workflow"
-        assert plan.nodes[0].tool_id == "products"
-        assert plan.nodes[0].action == "query"
+        assert plan.intent == "clarify_ask"
+        assert plan.nodes[0].tool_id == "clarify"
+        assert plan.nodes[0].action == "ask"
 
     def test_generic_fallback_customers(self) -> None:
+        # 命中 customers 意图时按 tool_key 路由到 customers.query。
         planner = self._make_planner()
-        plan = planner._fallback_plan("p1", "随便看看", {"customers": {}})
-        assert plan.intent == "generic_workflow"
+        plan = planner._fallback_plan("p1", "客户列表", {"customers": {}})
+        assert plan.intent == "intent_route_customers"
         assert plan.nodes[0].tool_id == "customers"
 
     def test_generic_fallback_empty_registry(self) -> None:
+        # 空注册表时 clarify 节点仍产出（意图未命中），不再返回空节点图。
         planner = self._make_planner()
         plan = planner._fallback_plan("p1", "随便看看", {})
-        assert plan.intent == "generic_workflow"
-        assert len(plan.nodes) == 0
+        assert plan.intent == "clarify_ask"
+        assert len(plan.nodes) == 1
+        assert plan.nodes[0].tool_id == "clarify"
 
     def test_risk_level_high(self) -> None:
         planner = self._make_planner()
