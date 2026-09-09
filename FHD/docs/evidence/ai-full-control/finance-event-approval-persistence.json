@@ -1,0 +1,11 @@
+{
+  "base_sha": "d3a2f9376",
+  "tests_passed": 23,
+  "change": "Finance event approval requires durable persistence.",
+  "verified": "Actual ApprovalService with injected persistence failure clears pending maps; handler publishes only finance.approval_failed.",
+  "limitations": [
+    "Successful handler tests mock approval service.",
+    "Queued event trusted actor propagation remains unverified; applicant_id payload is not treated as a trusted actor.",
+    "No production event execution."
+  ]
+}

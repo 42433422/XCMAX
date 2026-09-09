@@ -100,6 +100,49 @@ def test_no_match_returns_none(wechat_db) -> None:
     assert resolve_wechat_chat_context("今天天气怎么样", {"tenant_id": 7}) is None
 
 
+@pytest.mark.parametrize("tenant", [None, "", "invalid", True, False, 7.5, 0, -1])
+@pytest.mark.parametrize("explicit", [False, True])
+def test_missing_or_invalid_tenant_never_queries_global_contacts(monkeypatch, tenant, explicit):
+    def unexpected_query(*args, **kwargs):
+        pytest.fail("Invalid tenant must not reach the shared contact store")
+
+    monkeypatch.setattr(wechat_ingest_service, "list_wechat_contacts", unexpected_query)
+    monkeypatch.setattr(wechat_ingest_service, "build_contact_context", unexpected_query)
+    context = {"tenant_id": tenant}
+    if explicit:
+        context["wechat_contact_key"] = "客户一"
+    assert resolve_wechat_chat_context("客户一", context) is None
+
+
+def test_context_excludes_cross_tenant_customer_and_messages(wechat_db):
+    _seed_linked_contact(wechat_db)
+    from sqlalchemy import select
+
+    with wechat_db() as session:
+        contact = session.scalar(select(WechatContact).execution_options(skip_tenant_filter=True))
+        foreign_customer = Customer(customer_name="其他企业秘密客户", tenant_id=8)
+        session.add(foreign_customer)
+        session.flush()
+        contact.customer_id = foreign_customer.id
+        session.add(
+            WechatMessage(
+                contact_id=contact.id,
+                tenant_id=8,
+                role="other",
+                content="其他企业秘密消息",
+                dedupe_hash="foreign-message",
+            )
+        )
+        session.commit()
+    result = resolve_wechat_chat_context(
+        "查看联系人", {"tenant_id": 7, "wechat_contact_key": "白龙马^_^李秋林"}
+    )
+    assert result is not None
+    assert result["customer"] is None
+    assert result["message_count"] == 2
+    assert all("秘密" not in item["content"] for item in result["recent_messages"])
+
+
 def test_resolver_swallows_errors(monkeypatch) -> None:
     def _boom(*args, **kwargs):
         raise RuntimeError("db down")

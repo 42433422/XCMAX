@@ -22,6 +22,7 @@ from app.infrastructure.printing.label_dispatch_guard import (
     write_label_job,
 )
 from app.infrastructure.printing.template_label_renderer import render_template_label
+from app.request_active_mod_ctx import get_request_active_mod_id
 from app.services.document_templates.crud import _build_template_payload_from_row
 from app.utils.operational_errors import BOUNDARY_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir
@@ -60,6 +61,12 @@ class LabelJobService:
             or job.get("user_id") != owner[1]
             or job.get("id") != job_id
         ):
+            raise LabelJobError("标签任务不存在", 404)
+        if "mod_id" not in job:
+            # Older manifests cannot establish whether their data came from a Mod.
+            # Keep the artifact, but require regeneration in a known scope.
+            raise LabelJobError("旧标签任务缺少模块归属，请在当前模块重新生成", 409)
+        if job["mod_id"] != get_request_active_mod_id():
             raise LabelJobError("标签任务不存在", 404)
         return directory, job
 
@@ -193,6 +200,7 @@ class LabelJobService:
             "id": job_id,
             "tenant_id": owner[0],
             "user_id": owner[1],
+            "mod_id": get_request_active_mod_id(),
             "product_id": product_id,
             "product_name": product["name"],
             "template_id": template["id"],

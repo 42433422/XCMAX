@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import json
 import logging
 import os
@@ -119,6 +120,7 @@ async def complete_structured(
     max_tokens: int = 2000,
     conversation_service: Any | None = None,
     provider: Any | None = None,
+    reasoning_enabled: bool | None = None,
 ) -> StructuredResult:
     """调用 LLM 并保证返回通过 schema 校验的 dict；失败带反馈重试。"""
     repairs = _max_repairs_default() if max_repairs is None else max(0, max_repairs)
@@ -131,6 +133,8 @@ async def complete_structured(
         routing["conversation_service"] = conversation_service
     if provider is not None:
         routing["provider"] = provider
+    if reasoning_enabled is not None:
+        routing["reasoning_enabled"] = reasoning_enabled
 
     for attempt in range(1, total_attempts + 1):
         try:
@@ -203,20 +207,32 @@ def complete_structured_sync(
     **kwargs: Any,
 ) -> StructuredResult:
     """同步上下文桥：无运行 loop 直接 asyncio.run；有 loop 则独立线程执行。"""
+    from app.infrastructure.llm.http_client_scope import isolated_http_clients
+
+    async def run_scoped() -> StructuredResult:
+        async with isolated_http_clients():
+            try:
+                return await asyncio.wait_for(
+                    complete_structured(messages, **kwargs), timeout=timeout_seconds
+                )
+            except TimeoutError as exc:
+                raise StructuredOutputError(0, ["sync bridge timeout"], "") from exc
+
     try:
         asyncio.get_running_loop()
     except RuntimeError:
-        return asyncio.run(complete_structured(messages, **kwargs))
+        return asyncio.run(run_scoped())
 
     box: dict[str, Any] = {}
 
     def _runner() -> None:
         try:
-            box["result"] = asyncio.run(complete_structured(messages, **kwargs))
+            box["result"] = asyncio.run(run_scoped())
         except BOUNDARY_ERRORS as exc:
             box["error"] = exc
 
-    thread = threading.Thread(target=_runner, daemon=True)
+    context = contextvars.copy_context()
+    thread = threading.Thread(target=lambda: context.run(_runner), daemon=True)
     thread.start()
     thread.join(timeout=timeout_seconds)
     if "error" in box:

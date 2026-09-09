@@ -62,7 +62,8 @@ def _registered_router_employee(
     ).strip()
     if not task:
         return {"success": False, "message": "缺少 task：请说明要让员工执行什么任务。"}
-    input_data = params.get("input") if isinstance(params.get("input"), dict) else {}
+    raw_input = params.get("input")
+    input_data: dict = raw_input if isinstance(raw_input, dict) else {}
     payload = dict(input_data or {})
     for key, value in params.items():
         if key in {"employee_id", "pack_id", "tool_name", "id", "task", "user_request", "input"}:
@@ -74,11 +75,27 @@ def _registered_router_employee(
         str(params.get("workspace_root") or runtime_context.get("workspace_root") or "").strip()
         or None
     )
-    raw_user_id = params.get("user_id") or runtime_context.get("user_id") or 0
+    from app.application.agent_orchestrator.execution_identity import current_execution_actor
+
+    raw_user_id = current_execution_actor()
     try:
         numeric_user_id = int(raw_user_id)
     except (TypeError, ValueError):
         numeric_user_id = 0
+    if numeric_user_id <= 0:
+        return {
+            "success": False,
+            "code": "EMPLOYEE_IDENTITY_REQUIRED",
+            "message": "员工执行需要已登录账号或可信任务身份",
+        }
+    requested = str(params.get("user_id") or input_data.get("user_id") or "").strip()
+    if requested and requested != str(numeric_user_id):
+        return {
+            "success": False,
+            "code": "EMPLOYEE_ACCOUNT_MISMATCH",
+            "message": "不能以其他账号执行员工任务",
+        }
+    payload["user_id"] = numeric_user_id
     from app.application.employee_runtime.executor import execute_employee_task_local
 
     result = execute_employee_task_local(

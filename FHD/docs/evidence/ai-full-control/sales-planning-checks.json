@@ -1,0 +1,7 @@
+{
+  "source_commit": "037703af1",
+  "mypy": "Success: no issues found in 1815 source files",
+  "ruff": "passed for sales entity/planning and fallback modules",
+  "remaining_issue": "sales.quote registry idempotent=true while implementation only deduplicates when idempotency_key is supplied; explicit new planner node is false. Registry/recovery alignment still required.",
+  "scope": "Static checks and code inspection, not complete sales or installed acceptance"
+}

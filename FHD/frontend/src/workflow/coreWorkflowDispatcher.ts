@@ -1,6 +1,7 @@
 import type { CoreWorkflowEmployeeId } from '@/constants/coreWorkflowMod'
+import { printApi } from '@/api/print'
 import { tryPostCoreWorkflowEmployeeRun } from '@/utils/coreWorkflowEmployeeApi'
-import type { CoreWorkflowAuditLine, CoreWorkflowTimestampLine } from '@/workflow/coreWorkflowTypes'
+import type { CoreWorkflowAuditLine, CoreWorkflowLabelLine } from '@/workflow/coreWorkflowTypes'
 
 export const CORE_WORKFLOW_HOST_EVENTS = {
   labelPrintSignal: 'xcagi:workflow-label-print-signal',
@@ -28,6 +29,11 @@ export type LabelPrintSignalDetail = {
   modelNumber?: string
   quantity?: number
   contactName?: string
+  product_id?: number
+  template_id?: string
+  paper_width_mm?: number
+  paper_height_mm?: number
+  jobId?: string
 }
 
 export type ReceiptFeedbackSignalDetail = {
@@ -47,10 +53,11 @@ export type WechatStarPolledDetail = {
 }
 
 export function buildLabelPrintHostUpdate(detail: LabelPrintSignalDetail): {
-  lastLabelPrint: CoreWorkflowTimestampLine
+  lastLabelPrint: CoreWorkflowLabelLine
 } {
   const line = String(detail.line || '').trim() || '标签/打印类消息'
-  return { lastLabelPrint: { at: Number(detail.at) || Date.now(), line } }
+  const jobId = typeof detail.jobId === 'string' && /^[a-f0-9]{32}$/.test(detail.jobId) ? detail.jobId : undefined
+  return { lastLabelPrint: { at: Number(detail.at) || Date.now(), line, ...(jobId ? { jobId } : {}) } }
 }
 
 export function buildReceiptFeedbackHostUpdate(detail: ReceiptFeedbackSignalDetail): {
@@ -102,17 +109,26 @@ export function buildWechatMonitorUpdate(detail: WechatStarPolledDetail): {
   }
 }
 
-export async function runLabelPrintSideEffect(detail: LabelPrintSignalDetail): Promise<void> {
-  const modelNumber = String(detail.model_number || detail.modelNumber || '').trim()
-  const quantity = Number(detail.quantity) || 1
-  if (!modelNumber) return
+export async function runLabelPrintSideEffect(detail: LabelPrintSignalDetail): Promise<{
+  status: 'needs_configuration' | 'generated' | 'failed'
+  message: string
+  jobId?: string
+}> {
+  const { product_id, template_id, paper_width_mm, paper_height_mm } = detail
+  const copies = detail.quantity ?? 1
+  if (!Number.isInteger(product_id) || Number(product_id) <= 0 || typeof template_id !== 'string' || !template_id.trim()
+    || !Number.isInteger(copies) || copies < 1 || copies > 100
+    || !Number.isFinite(paper_width_mm) || Number(paper_width_mm) < 10 || Number(paper_width_mm) > 500
+    || !Number.isFinite(paper_height_mm) || Number(paper_height_mm) < 10 || Number(paper_height_mm) > 500) {
+    return { status: 'needs_configuration', message: '请在标签打印页选择具体产品和模板，核对张数与纸张尺寸后生成预览；当前未提交打印。' }
+  }
   try {
-    const { printApi } = await import('@/api')
-    const res = await printApi.printSingleLabel({ model_number: modelNumber, quantity })
-    if (!res?.success) {
-      console.warn('[workflow:label_print] 打印返回失败:', res?.message)
+    const res = await printApi.printSingleLabel({ product_id, template_id, copies, paper_width_mm, paper_height_mm })
+    if (!res?.success || !res.job?.id || res.job.status !== 'generated') {
+      return { status: 'failed', message: res?.message || '标签预览未生成，请检查配置后重试。' }
     }
+    return { status: 'generated', jobId: res.job.id, message: `标签预览已生成（任务 ${res.job.id}），请预览并确认后提交打印。` }
   } catch (err) {
-    console.warn('[workflow:label_print] 打印异常:', err)
+    return { status: 'failed', message: err instanceof Error ? err.message : '标签预览生成失败，请重试。' }
   }
 }

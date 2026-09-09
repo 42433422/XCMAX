@@ -318,8 +318,7 @@
           "risk": "medium",
           "idempotent": false,
           "required_params": [
-            "name_or_model",
-            "unit_name"
+            "name_or_model"
           ],
           "availability": "shared",
           "action_class": "business_db.write"
@@ -561,7 +560,9 @@
           "risk": "low",
           "idempotent": true,
           "required_params": [],
-          "availability": "shared"
+          "availability": "shared",
+          "optional_params": ["transaction_id", "product_id", "warehouse_id", "transaction_type", "start_date", "end_date", "page", "per_page"],
+          "description": "查询库存流水。核验执行回执时使用回执中的真实 transaction_id 精确查询；禁止编造 ID。日期使用 ISO 格式，每页数量 1 到 1000。"
         }
       }
     },
@@ -659,11 +660,18 @@
         },
         "quote": {
           "risk": "medium",
-          "idempotent": true,
+          "idempotent": false,
           "required_params": [
             "customer_id",
             "items"
           ],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        },
+        "confirm_from_result": {
+          "risk": "medium",
+          "idempotent": true,
+          "required_params": ["order_node_id"],
           "availability": "shared",
           "action_class": "business_db.write"
         },
@@ -1020,6 +1028,7 @@
       "actions": {
         "generate": {
           "risk": "high",
+          "approval": "interactive",
           "idempotent": false,
           "required_params": [
             "unit_name",
@@ -1394,12 +1403,14 @@
         "refresh_contact_cache": {
           "risk": "medium",
           "idempotent": true,
+          "timeout_seconds": 900,
           "required_params": [],
           "availability": "shared"
         },
         "refresh_messages_cache": {
           "risk": "medium",
           "idempotent": true,
+          "timeout_seconds": 900,
           "required_params": [],
           "availability": "shared"
         }
@@ -1650,14 +1661,15 @@
       }
     },
     "memory_v2": {
-      "description": "Memory v2 记忆生命周期工具。用于创建候选、确认、拒绝、修正和删除可治理记忆。",
+      "description": "当前登录账号的记忆工具。可查询、汇总、创建候选、确认、拒绝、修正和删除；账号由宿主绑定，不得指定他人身份。",
       "availability": "shared",
       "actions": {
+        "list": {"risk": "low", "idempotent": true, "required_params": [], "availability": "shared"},
+        "summary": {"risk": "low", "idempotent": true, "required_params": [], "availability": "shared"},
         "propose_candidate": {
           "risk": "medium",
           "idempotent": true,
           "required_params": [
-            "user_id",
             "memory_type",
             "key",
             "value"
@@ -1668,7 +1680,6 @@
           "risk": "high",
           "idempotent": false,
           "required_params": [
-            "user_id",
             "memory_id"
           ],
           "availability": "shared"
@@ -1677,7 +1688,6 @@
           "risk": "medium",
           "idempotent": false,
           "required_params": [
-            "user_id",
             "memory_id"
           ],
           "availability": "shared"
@@ -1686,7 +1696,6 @@
           "risk": "high",
           "idempotent": false,
           "required_params": [
-            "user_id",
             "memory_id"
           ],
           "availability": "shared"
@@ -1695,7 +1704,6 @@
           "risk": "high",
           "idempotent": false,
           "required_params": [
-            "user_id",
             "memory_id"
           ],
           "availability": "shared"
@@ -1781,6 +1789,27 @@
           "availability": "shared",
           "action_class": "bulk_import"
         }
+      }
+    },
+    "software": {
+      "description": "控制当前登录账号的软件窗口。先 list 选择窗口，再 routes 读取所有页面（含 Mods）、snapshot 回读控件；通过 navigate/click/type/select/check/press/scroll 操作，files 列出用户在本窗口选过的文件，set_files 放入文件控件。每步写操作后回读验证，不能将交互回执当作业务完成。",
+      "availability": "shared",
+      "actions": {
+        "desktop_info": {"risk": "low", "idempotent": true, "required_params": []},
+        "desktop_auto_launch": {"risk": "medium", "idempotent": true, "required_params": ["enabled"]},
+        "desktop_update": {"risk": "high", "idempotent": false, "required_params": ["operation"]},
+        "list": {"risk": "low", "idempotent": true, "required_params": []},
+        "files": {"risk": "low", "idempotent": true, "required_params": []},
+        "set_files": {"risk": "medium", "idempotent": false, "required_params": ["selector", "file_ids"]},
+        "routes": {"risk": "low", "idempotent": true, "required_params": []},
+        "snapshot": {"risk": "low", "idempotent": true, "required_params": []},
+        "navigate": {"risk": "medium", "idempotent": false, "required_params": ["path"]},
+        "click": {"risk": "medium", "idempotent": false, "required_params": ["selector"]},
+        "type": {"risk": "medium", "idempotent": false, "required_params": ["selector", "text"]},
+        "select": {"risk": "medium", "idempotent": false, "required_params": ["selector", "values"]},
+        "check": {"risk": "medium", "idempotent": false, "required_params": ["selector", "checked"]},
+        "press": {"risk": "medium", "idempotent": false, "required_params": ["selector", "key"]},
+        "scroll": {"risk": "low", "idempotent": false, "required_params": []}
       }
     },
     "unit_products_import": {

@@ -8,6 +8,9 @@
         >调度 {{ payload.execution.state }} · 执行 {{ payload.execution.execution_count }} 次 · 恢复
         {{ payload.execution.recovery_count }} 次</span
       >
+      <span v-if="payload.execution?.available_at && payload.execution.state === 'queued'">
+        最早执行时间：{{ new Date(payload.execution.available_at).toLocaleString() }}
+      </span>
     </div>
     <div v-if="payload.workspaceId || payload.workspacePath" class="agent-task-workspace">
       <strong>{{ $t('chat.taskWorkspace') }}</strong>
@@ -40,6 +43,7 @@
       <strong>业务结果</strong>
       <p>{{ resultSummary }}</p>
     </div>
+    <AgentArtifactDownloads :artifacts="artifacts" />
     <details v-if="hasResultEvidence" class="agent-result-evidence">
       <summary>技术明细（高级）</summary>
       <pre v-if="finalOutputText">{{ finalOutputText }}</pre>
@@ -75,6 +79,7 @@
 import { computed } from 'vue'
 import type { AgentArtifact, AgentRunStep, AgentToolCall } from '@/api/agentRuns'
 import type { TaskItem } from '@/composables/useChatPersistence'
+import AgentArtifactDownloads from './AgentArtifactDownloads.vue'
 
 type AgentTaskPayload = {
   runCount?: number
@@ -92,6 +97,7 @@ type AgentTaskPayload = {
   finalOutput?: Record<string, unknown>
   artifacts?: AgentArtifact[]
   execution?: {
+    available_at?: string
     state: string
     execution_count: number
     recovery_count: number

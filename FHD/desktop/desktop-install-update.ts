@@ -3,6 +3,7 @@ import { autoUpdater } from 'electron-updater'
 import { resolveDesktopInstallIdentity } from './installation-identity'
 import { desktopRuntime } from './runtime-state'
 import { getDownloadedUpdateState } from './updater'
+import { observeUpdate } from './update-observation'
 import {
   appendUpdaterEvent,
   discardPendingUpdateInstallReceipt,
@@ -55,8 +56,10 @@ export async function installUpdate(
       // backend. It is already drained here, so let ShipIt own this quit.
       desktopRuntime.backendShutdownComplete = true
     }
+    observeUpdate('install-requested', { version: state.version, buildSha: state.buildSha })
     autoUpdater.quitAndInstall(false, true)
   } catch (error) {
+    observeUpdate('error', { phase: 'install', message: error instanceof Error ? error.message : String(error) })
     discardPendingUpdateInstallReceipt()
     let cleanupError: unknown
     try {

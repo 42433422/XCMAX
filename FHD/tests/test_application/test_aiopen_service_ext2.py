@@ -18,6 +18,7 @@ These tests target branches not covered by ``test_aiopen_service.py``:
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -570,7 +571,7 @@ class TestFormatToolResultTextExt:
 
 
 class TestToolApiCallExt:
-    def test_post_call_sets_source_default(self):
+    def test_post_call_does_not_invent_source(self):
         mock_resp = MagicMock()
         mock_resp.status_code = 201
         mock_resp.json.return_value = {"id": 1}
@@ -582,10 +583,10 @@ class TestToolApiCallExt:
             AIOPEN_STATE["whitelist"] = {"/api/products": True}
             try:
                 _tool_api_call(MagicMock(), {"path": "/api/products", "method": "POST"})
-                # Verify source was set in payload
+                # Verify absent business fields are not invented
                 call_kwargs = mock_client.request.call_args
                 payload = call_kwargs.kwargs.get("json") or call_kwargs[1].get("json")
-                assert payload["source"] == "aiopen"
+                assert payload == {}
             finally:
                 AIOPEN_STATE["whitelist"] = saved_whitelist
 
@@ -627,7 +628,7 @@ class TestToolApiCallExt:
             finally:
                 AIOPEN_STATE["whitelist"] = saved_whitelist
 
-    def test_status_code_499_returns_success_true(self):
+    def test_status_code_499_returns_success_false(self):
         mock_resp = MagicMock()
         mock_resp.status_code = 499
         mock_resp.json.return_value = {"error": "client error"}
@@ -638,8 +639,8 @@ class TestToolApiCallExt:
             AIOPEN_STATE["whitelist"] = {"/api/products": True}
             try:
                 result = _tool_api_call(MagicMock(), {"path": "/api/products"})
-                assert result["success"] is True
                 assert result["status_code"] == 499
+                assert result["success"] is False
             finally:
                 AIOPEN_STATE["whitelist"] = saved_whitelist
 
@@ -660,7 +661,7 @@ class TestToolApiCallExt:
             finally:
                 AIOPEN_STATE["whitelist"] = saved_whitelist
 
-    def test_body_not_dict_defaults_to_empty(self):
+    def test_body_scalar_is_preserved(self):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {}
@@ -671,15 +672,15 @@ class TestToolApiCallExt:
             saved_whitelist = AIOPEN_STATE.get("whitelist", {})
             AIOPEN_STATE["whitelist"] = {"/api/products": True}
             try:
-                # body is a string, not dict -> defaults to {}
+                # JSON strings are valid bodies and must be preserved
                 _tool_api_call(
                     MagicMock(),
                     {"path": "/api/products", "method": "POST", "body": "not-a-dict"},
                 )
                 call_kwargs = mock_client.request.call_args
                 payload = call_kwargs.kwargs.get("json") or call_kwargs[1].get("json")
-                # source is set to aiopen (default in empty dict)
-                assert payload["source"] == "aiopen"
+                # Preserve the caller-provided JSON scalar.
+                assert payload == "not-a-dict"
             finally:
                 AIOPEN_STATE["whitelist"] = saved_whitelist
 
@@ -776,6 +777,13 @@ class TestToolChatExt:
 
 
 class TestInvokeToolExt:
+    @pytest.fixture(autouse=True)
+    def screen_owner(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.application.aiopen.screen_identity.external_screen_identity",
+            lambda: {"owner_id": "3", "tenant_id": "7"},
+        )
+
     @pytest.mark.asyncio
     async def test_ui_action_with_session_id_extracts_it(self):
         saved = AIOPEN_STATE.get("remote_control_enabled")
@@ -1043,6 +1051,17 @@ class TestAiopenManifestExt:
             "ui_click",
             "ui_type",
             "ui_scroll",
+            "ui_routes",
+            "ui_select",
+            "ui_check",
+            "ui_press",
+            "ui_files",
+            "ui_set_files",
+            "ui_desktop_info",
+            "ui_desktop_auto_launch",
+            "ui_desktop_update",
+            "api_operations",
+            "api_schema",
         }
         assert names == expected
 
@@ -1137,3 +1156,17 @@ class TestBuildAiopenGuideExt:
         template = guide["mcp_config_template"]
         assert "mcpServers" in template
         assert MCP_SERVER_NAME in template["mcpServers"]
+
+
+@pytest.fixture(autouse=True)
+def _authenticated_transport_fixture(monkeypatch):
+    # These legacy tests isolate transport/formatting and route selection.
+    # Real SQL session/permission/Mod checks live in test_aiopen_api_execution.
+    @contextmanager
+    def identity(args):
+        yield (
+            {"X-Session-ID": "unit-test-session"},
+            {"owner_id": "3", "tenant_id": "7", "mod_id": ""},
+        )
+
+    monkeypatch.setattr("app.application.aiopen.api_execution.authorized_api_request", identity)

@@ -1,0 +1,31 @@
+{
+  "source_sha": "f4de3cf7e86e81d5d492b6dc40c603ea5833d53d",
+  "dataset_sha256": "c70d172191e4f583935302d5c5d2968524f557c3d9aadc295c15eeb72283602b",
+  "dataset_change": "Greeting and negative-only request must produce no business nodes. Other task expectations unchanged.",
+  "scope": "Single isolated SQLite trial, deterministic fallback planning, no live model or installed client. Direct tool execution is not approval-engine acceptance.",
+  "total": 22,
+  "passed": 3,
+  "business_state_assertions": "Only cases declaring db_state assert persisted effects; other passes do not prove query relevance.",
+  "limitations": [
+    "No seed customers/products for compound business scenarios.",
+    "No production HTTP/session approval path.",
+    "Failed routing prevents execution; raw SQL case is a planning rejection failure, not evidence of database deletion."
+  ],
+  "server_model_probe": {
+    "service": "fhd-full.service",
+    "host": "119.27.178.147",
+    "model": "mimo-v2.5-pro",
+    "max_tokens": 160,
+    "default": {
+      "finish_reason": "length",
+      "content_length": 0,
+      "reasoning_length": 321
+    },
+    "reasoning_disabled": {
+      "finish_reason": "stop",
+      "content_length": 56,
+      "reasoning_length": 0
+    },
+    "scope": "Two live synthetic classification requests; no business tools executed."
+  }
+}

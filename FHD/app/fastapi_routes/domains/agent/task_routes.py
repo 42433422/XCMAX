@@ -31,11 +31,19 @@ from app.fastapi_routes.domains.agent.route_support import (
     run_response,
     success,
 )
-from app.infrastructure.auth.agent_principal import AgentPrincipal, require_agent_principal
+from app.infrastructure.auth.agent_principal import (
+    AgentPrincipal,
+    bind_agent_runtime_context,
+    require_agent_principal,
+)
 from app.utils.json_safe import json_safe
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(tags=["agent"])
+
+from app.fastapi_routes.domains.agent.schedule_routes import router as schedule_router
+
+router.include_router(schedule_router)
 
 
 def _task_envelope(
@@ -207,10 +215,8 @@ def create_agent_task(
             {"success": False, "message": "params 与 runtime_context 必须是对象"},
             status_code=400,
         )
-    runtime_context = dict(runtime_context_raw)
+    runtime_context = bind_agent_runtime_context(runtime_context_raw, principal)
     try:
-        if principal.tenant_id:
-            runtime_context["tenant_id"] = principal.tenant_id
         task_id = str(data.get("task_id") or "").strip()
         if not task_id or len(task_id) > 160 or "/" in task_id:
             return JSONResponse(
@@ -231,6 +237,7 @@ def create_agent_task(
                 action=str(data.get("action") or ""),
                 params=params,
                 runtime_context=runtime_context,
+                scheduled_at=data.get("scheduled_at"),
             )
         response = run_response(result.run, principal=principal)
         response["deduplicated"] = result.deduplicated

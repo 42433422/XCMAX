@@ -5,6 +5,50 @@ from __future__ import annotations
 import json
 
 
+def test_discovery_returns_customer_schema_without_executing(monkeypatch):
+    from app.application.tools import registered_capabilities as capabilities
+
+    def forbidden(**kwargs):
+        raise AssertionError("discovery must never execute")
+
+    monkeypatch.setattr(capabilities, "_dispatch_registered_tool", forbidden)
+    result = json.loads(capabilities.discover_registered_capabilities({"tool_id": "customers"}))
+    assert result["success"]
+    assert all(row["tool_id"] == "customers" for row in result["actions"])
+    update = next(row for row in result["actions"] if row["action"] == "update")
+    assert update["input_schema"]["properties"]["id"]["type"] == "integer"
+    assert update["permission"]
+
+
+def test_discovery_is_callable_from_model_workflow():
+    from app.application.tools.workflow import execute_workflow_tool, get_workflow_tool_registry
+
+    name = "discover_erp_capabilities"
+    assert name in {row["function"]["name"] for row in get_workflow_tool_registry()}
+    result = json.loads(execute_workflow_tool(name, {"tool_id": "not_registered"}))
+    assert result == {"success": True, "action_count": 0, "actions": []}
+
+
+def test_capability_rejects_wrong_parameter_type_before_execution():
+    from app.application.tools.registered_capabilities import resolve_registered_capability_call
+
+    result = resolve_registered_capability_call(
+        {
+            "tool_id": "customers",
+            "action": "update",
+            "params": {"id": True},
+        }
+    )
+    assert result["success"] is False
+    assert result["error_code"] == "schema_validation_failed"
+
+
+def test_capability_accepts_omitted_empty_parameters():
+    from app.application.tools.registered_capabilities import resolve_registered_capability_call
+
+    assert resolve_registered_capability_call({"tool_id": "print", "action": "list"})["success"]
+
+
 def test_capability_catalog_matches_workflow_registry_ssot() -> None:
     from app.application.tools.registered_capabilities import registered_capability_catalog
     from app.services.tools_execution.registry import get_workflow_tool_registry

@@ -81,3 +81,55 @@ def test_missing_model_is_not_reported_as_live_acceptance(monkeypatch, tmp_path)
     result = json.loads(output.read_text())
     assert result["llm"]["measurement_status"] == "unavailable_or_partial"
     assert result["llm"]["model_calls"]["completed"] == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "reason, content, expected",
+    [
+        ("private-value", "private-body", "other"),
+        ("length", "", "length"),
+        ("stop", "private-body", "stop"),
+    ],
+)
+async def test_response_diagnostics_preserve_response_without_recording_content(
+    monkeypatch, reason, content, expected
+):
+    from app.infrastructure.llm import invoke
+
+    response = {"choices": [{"finish_reason": reason, "message": {"content": content}}]}
+    calls = []
+
+    async def provider(*args, **kwargs):
+        calls.append((args, kwargs))
+        return response
+
+    monkeypatch.setattr(invoke, "chat_completion_openai_format", provider)
+    with model_runner.observe_model_calls() as evidence:
+        assert await invoke.chat_completion_openai_format([], profile="intent") is response
+    assert calls == [(([],), {"profile": "intent"})]
+    assert evidence["responses"] == {
+        "total": 1,
+        "empty_content": int(not content),
+        "finish_reasons": {expected: 1},
+        "errors": {},
+    }
+    assert "private" not in json.dumps(evidence)
+
+
+@pytest.mark.asyncio
+async def test_provider_loop_failure_is_classified_and_reraised(monkeypatch):
+    from app.infrastructure.llm import invoke
+
+    failure = RuntimeError("Event loop is closed")
+
+    async def provider(*args, **kwargs):
+        raise failure
+
+    monkeypatch.setattr(invoke, "chat_completion_openai_format", provider)
+    with model_runner.observe_model_calls() as evidence:
+        with pytest.raises(RuntimeError) as caught:
+            await invoke.chat_completion_openai_format([])
+    assert caught.value is failure
+    assert evidence["responses"]["errors"] == {"event_loop_closed": 1}
+    assert evidence["responses"]["total"] == 0

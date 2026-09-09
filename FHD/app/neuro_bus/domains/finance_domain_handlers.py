@@ -155,7 +155,9 @@ async def handle_approval_requested(event: NeuroEvent) -> dict[str, Any]:
     try:
         approval_service_factory: Callable[..., Any] = _resolve_approval_service()
         approval_service = approval_service_factory()
-        request = approval_service.create_approval_request(plan_id, node)
+        request = approval_service.create_approval_request(
+            plan_id, node, runtime_context={"local_user_id": applicant_id}, require_persistence=True
+        )
     except RECOVERABLE_ERRORS as exc:
         logger.exception("[FinanceServiceDomain] create_approval_request 失败: %s", exc)
         _publish_event(

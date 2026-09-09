@@ -8,11 +8,17 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.application.agent_orchestrator.task_mod_scope import (
+    TaskModScopeError,
+    capture_task_mod_scope,
+)
 from app.application.label_job_service import LabelJobError, LabelJobService
 from app.fastapi_routes.print_agent_helpers import run_print_agent
 from app.infrastructure.auth.dependencies import get_logged_in_user
+from app.infrastructure.request_context import reset_current_request, set_current_request
 
 router = APIRouter(prefix="/label-jobs", tags=["print-label-jobs"])
+compat_router = APIRouter(tags=["print-label-jobs"])
 
 
 class GenerateLabel(BaseModel):
@@ -29,10 +35,17 @@ class ConfirmLabel(BaseModel):
     confirm_token: Annotated[str, Field(min_length=20, max_length=100)]
 
 
-def _owner(user: Any = Depends(get_logged_in_user)) -> tuple[int, int]:
+def _owner(request: Request, user: Any = Depends(get_logged_in_user)) -> tuple[int, int]:
     tid, uid = getattr(user, "tenant_id", None), getattr(user, "id", None)
-    if not isinstance(tid, int) or not isinstance(uid, int) or tid < 1 or uid < 1:
+    if type(tid) is not int or type(uid) is not int or tid < 1 or uid < 1:
         raise HTTPException(403, "登录账号缺少租户归属，无法生成或访问标签")
+    token = set_current_request(request)
+    try:
+        capture_task_mod_scope(str(uid), str(tid))
+    except TaskModScopeError as exc:
+        raise HTTPException(403, str(exc)) from exc
+    finally:
+        reset_current_request(token)
     return tid, uid
 
 
@@ -50,6 +63,21 @@ def _call(function, *args):
 @router.post("")
 def generate_label(body: GenerateLabel, owner=Depends(_owner)):
     return {"success": True, "job": _call(_service().generate, owner, body.model_dump())}
+
+
+@compat_router.post("/api/print/pdf_labels")
+@compat_router.post("/api/print/single_label")
+def compat_print_pdf_labels(body: GenerateLabel, owner=Depends(_owner)):
+    """Generate an owned preview; physical printing uses the label confirmation flow."""
+    result = generate_label(body, owner)
+    base = f"/api/print/label-jobs/{result['job']['id']}"
+    return {
+        **result,
+        "requires_confirmation": True,
+        "preview_url": base + "/file",
+        "confirmation_url": base + "/confirmation",
+        "submit_url": base + "/submit",
+    }
 
 
 @router.get("/products")

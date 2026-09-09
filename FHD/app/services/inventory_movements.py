@@ -33,7 +33,30 @@ class InventoryMovementsMixin:
         reference_id: int | None = None,
         operator: str | None = None,
         remark: str | None = None,
+        requested_unit: str | None = None,
     ) -> dict[str, Any]:
+        import math
+
+        try:
+            valid_quantity = (
+                not isinstance(quantity, bool) and math.isfinite(quantity) and quantity > 0
+            )
+        except (TypeError, ValueError, OverflowError):
+            valid_quantity = False
+        if not valid_quantity:
+            return {"success": False, "message": "入库数量必须为有限正数"}
+        if unit_price is not None:
+            try:
+                valid_price = (
+                    not isinstance(unit_price, bool)
+                    and math.isfinite(unit_price)
+                    and unit_price >= 0
+                    and math.isfinite(quantity * unit_price)
+                )
+            except (TypeError, ValueError, OverflowError):
+                valid_price = False
+            if not valid_price:
+                return {"success": False, "message": "库存单价必须为有限非负数"}
         with _facade().get_db() as db:
             try:
                 product = (
@@ -41,17 +64,52 @@ class InventoryMovementsMixin:
                 )
                 if not product:
                     return {"success": False, "message": "产品不存在"}
+                from app.application.product_measurement import product_measurement_unit
+
+                stock_unit = product_measurement_unit(product)
+                if stock_unit is None:
+                    return {"success": False, "message": "产品计量单位尚未确认，请先补齐计量单位"}
+                if requested_unit is not None and requested_unit.strip() != stock_unit:
+                    return {
+                        "success": False,
+                        "message": "入库单位与产品库存单位不一致，请先确认换算数量",
+                    }
+                warehouse = (
+                    db.query(_facade().Warehouse)
+                    .filter(_facade().Warehouse.id == warehouse_id)
+                    .first()
+                )
+                if not warehouse:
+                    return {"success": False, "message": "仓库不存在或不可访问"}
+                if location_id is not None:
+                    location = (
+                        db.query(_facade().StorageLocation)
+                        .filter(
+                            _facade().StorageLocation.id == location_id,
+                            _facade().StorageLocation.warehouse_id == warehouse_id,
+                        )
+                        .first()
+                    )
+                    if not location:
+                        return {"success": False, "message": "库位不存在或不属于所选仓库"}
                 ledger = (
                     db.query(_facade().InventoryLedger)
                     .filter(
                         _facade().InventoryLedger.product_id == product_id,
                         _facade().InventoryLedger.warehouse_id == warehouse_id,
+                        _facade().InventoryLedger.location_id == location_id,
                         _facade().InventoryLedger.batch_no == batch_no,
                     )
                     .first()
                 )
                 now = datetime.now()
                 if ledger:
+                    if (ledger.unit or "").strip() != stock_unit:
+                        return {
+                            "success": False,
+                            "error_code": "inventory_unit_mismatch",
+                            "message": "现有库存台账单位与产品计量单位不一致，请先核实并完成库存单位换算",
+                        }
                     ledger.quantity = float(ledger.quantity or 0) + quantity
                     ledger.available_quantity = float(ledger.available_quantity or 0) + quantity
                     ledger.updated_at = now
@@ -64,7 +122,7 @@ class InventoryMovementsMixin:
                         quantity=quantity,
                         available_quantity=quantity,
                         reserved_quantity=0,
-                        unit=product.unit or "个",
+                        unit=stock_unit,
                         in_date=now.date(),
                         created_at=now,
                         updated_at=now,
@@ -82,7 +140,7 @@ class InventoryMovementsMixin:
                     before_quantity=float(ledger.quantity) - quantity,
                     after_quantity=float(ledger.quantity),
                     unit_price=unit_price,
-                    total_amount=quantity * unit_price if unit_price else None,
+                    total_amount=quantity * unit_price if unit_price is not None else None,
                     reference_type=reference_type,
                     reference_id=reference_id,
                     transaction_date=now,
@@ -97,6 +155,7 @@ class InventoryMovementsMixin:
                     "message": "入库成功",
                     "data": {
                         "ledger_id": ledger.id,
+                        "transaction_id": transaction.id,
                         "quantity": quantity,
                         "total_quantity": float(ledger.quantity),
                     },
@@ -117,7 +176,30 @@ class InventoryMovementsMixin:
         reference_id: int | None = None,
         operator: str | None = None,
         remark: str | None = None,
+        unit_price: float | None = None,
     ) -> dict[str, Any]:
+        import math
+
+        try:
+            valid_quantity = (
+                not isinstance(quantity, bool) and math.isfinite(quantity) and quantity > 0
+            )
+        except (TypeError, ValueError, OverflowError):
+            valid_quantity = False
+        if not valid_quantity:
+            return {"success": False, "message": "出库数量必须为有限正数"}
+        if unit_price is not None:
+            try:
+                valid_price = (
+                    not isinstance(unit_price, bool)
+                    and math.isfinite(unit_price)
+                    and unit_price >= 0
+                    and math.isfinite(quantity * unit_price)
+                )
+            except (TypeError, ValueError, OverflowError):
+                valid_price = False
+            if not valid_price:
+                return {"success": False, "message": "库存单价必须为有限非负数"}
         with _facade().get_db() as db:
             try:
                 query = db.query(_facade().InventoryLedger).filter(
@@ -125,9 +207,9 @@ class InventoryMovementsMixin:
                     _facade().InventoryLedger.warehouse_id == warehouse_id,
                     _facade().InventoryLedger.available_quantity >= quantity,
                 )
-                if batch_no:
+                if batch_no is not None:
                     query = query.filter(_facade().InventoryLedger.batch_no == batch_no)
-                if location_id:
+                if location_id is not None:
                     query = query.filter(_facade().InventoryLedger.location_id == location_id)
                 ledger = query.first()
                 if not ledger:
@@ -141,9 +223,11 @@ class InventoryMovementsMixin:
                     transaction_type="out",
                     product_id=product_id,
                     warehouse_id=warehouse_id,
-                    location_id=location_id,
-                    batch_no=batch_no,
+                    location_id=ledger.location_id,
+                    batch_no=ledger.batch_no,
                     quantity=-quantity,
+                    unit_price=unit_price,
+                    total_amount=quantity * unit_price if unit_price is not None else None,
                     before_quantity=float(ledger.quantity) + quantity,
                     after_quantity=float(ledger.quantity),
                     reference_type=reference_type,
@@ -160,6 +244,7 @@ class InventoryMovementsMixin:
                     "message": "出库成功",
                     "data": {
                         "ledger_id": ledger.id,
+                        "transaction_id": transaction.id,
                         "quantity": quantity,
                         "remaining_quantity": float(ledger.quantity),
                     },
@@ -181,6 +266,18 @@ class InventoryMovementsMixin:
         operator: str | None = None,
         remark: str | None = None,
     ) -> dict[str, Any]:
+        import math
+
+        try:
+            valid_quantity = (
+                not isinstance(quantity, bool) and math.isfinite(quantity) and quantity > 0
+            )
+        except (TypeError, ValueError, OverflowError):
+            valid_quantity = False
+        if not valid_quantity:
+            return {"success": False, "message": "调拨数量必须为有限正数"}
+        if from_warehouse_id == to_warehouse_id and from_location_id == to_location_id:
+            return {"success": False, "message": "源仓库和库位与目标相同，无需调拨"}
         with _facade().get_db() as db:
             try:
                 from_ledger = (
@@ -189,11 +286,47 @@ class InventoryMovementsMixin:
                         _facade().InventoryLedger.product_id == product_id,
                         _facade().InventoryLedger.warehouse_id == from_warehouse_id,
                         _facade().InventoryLedger.available_quantity >= quantity,
+                        _facade().InventoryLedger.location_id == from_location_id,
+                        _facade().InventoryLedger.batch_no == batch_no,
                     )
                     .first()
                 )
                 if not from_ledger:
                     return {"success": False, "message": "源仓库库存不足"}
+                destination = (
+                    db.query(_facade().Warehouse)
+                    .filter(_facade().Warehouse.id == to_warehouse_id)
+                    .first()
+                )
+                if not destination:
+                    return {"success": False, "message": "目标仓库不存在或不可访问"}
+                if to_location_id is not None:
+                    location = (
+                        db.query(_facade().StorageLocation)
+                        .filter(
+                            _facade().StorageLocation.id == to_location_id,
+                            _facade().StorageLocation.warehouse_id == to_warehouse_id,
+                        )
+                        .first()
+                    )
+                    if not location:
+                        return {"success": False, "message": "目标库位不存在或不属于目标仓库"}
+                to_ledger = (
+                    db.query(_facade().InventoryLedger)
+                    .filter(
+                        _facade().InventoryLedger.product_id == product_id,
+                        _facade().InventoryLedger.warehouse_id == to_warehouse_id,
+                        _facade().InventoryLedger.batch_no == batch_no,
+                        _facade().InventoryLedger.location_id == to_location_id,
+                    )
+                    .first()
+                )
+                if to_ledger and (to_ledger.unit or "").strip() != (from_ledger.unit or "").strip():
+                    return {
+                        "success": False,
+                        "error_code": "inventory_unit_mismatch",
+                        "message": "源库存与目标库存单位不一致，请先确认换算关系",
+                    }
                 now = datetime.now()
                 from_ledger.quantity = float(from_ledger.quantity) - quantity
                 from_ledger.available_quantity = float(from_ledger.available_quantity) - quantity
@@ -211,20 +344,10 @@ class InventoryMovementsMixin:
                     reference_type="transfer",
                     transaction_date=now,
                     operator=operator,
-                    remark=f"调出至仓库{to_warehouse_id}",
+                    remark=f"调出至仓库{to_warehouse_id}" + (f"；{remark}" if remark else ""),
                     created_at=now,
                 )
                 db.add(out_transaction)
-                to_ledger = (
-                    db.query(_facade().InventoryLedger)
-                    .filter(
-                        _facade().InventoryLedger.product_id == product_id,
-                        _facade().InventoryLedger.warehouse_id == to_warehouse_id,
-                        (_facade().InventoryLedger.batch_no == batch_no)
-                        | _facade().InventoryLedger.batch_no.is_(None),
-                    )
-                    .first()
-                )
                 if to_ledger:
                     to_ledger.quantity = float(to_ledger.quantity) + quantity
                     to_ledger.available_quantity = float(to_ledger.available_quantity) + quantity
@@ -258,7 +381,7 @@ class InventoryMovementsMixin:
                     reference_type="transfer",
                     transaction_date=now,
                     operator=operator,
-                    remark=f"从仓库{from_warehouse_id}调入",
+                    remark=f"从仓库{from_warehouse_id}调入" + (f"；{remark}" if remark else ""),
                     created_at=now,
                 )
                 db.add(in_transaction)
@@ -267,6 +390,8 @@ class InventoryMovementsMixin:
                     "success": True,
                     "message": "调拨成功",
                     "data": {
+                        "out_transaction_id": out_transaction.id,
+                        "in_transaction_id": in_transaction.id,
                         "from_ledger_id": from_ledger.id,
                         "to_ledger_id": to_ledger.id,
                         "quantity": quantity,

@@ -8,6 +8,7 @@ import logging
 import re
 from dataclasses import dataclass
 
+from app.domain.neuro.greeting import GREETING_PATTERN
 from app.domain.neuro.reflex_arc import ReflexType
 
 logger = logging.getLogger(__name__)
@@ -30,21 +31,7 @@ class ReflexPatternMatcher:
     """
 
     # 问候模式
-    GREETING_PATTERNS = [
-        PatternRule(r"^你好[！!。]?$", weight=1.0),
-        PatternRule(r"^您好[！!。]?$", weight=1.0),
-        PatternRule(r"^嗨[！!。]?$", weight=0.9),
-        PatternRule(r"^\s*hi\b", weight=0.8),
-        PatternRule(r"^\s*hello\b", weight=0.8),
-        PatternRule(r"^早上好", weight=0.9),
-        PatternRule(r"^下午好", weight=0.9),
-        PatternRule(r"^晚上好", weight=0.9),
-        PatternRule(r"^在吗[？?]?$", weight=0.7),
-        PatternRule(r"^有人吗[？?]?$", weight=0.7),
-        PatternRule(r"^在不在[？?]?$", weight=0.7),
-        PatternRule(r"^哈喽", weight=0.8),
-        PatternRule(r"^嘿[！!。]?$", weight=0.7),
-    ]
+    GREETING_PATTERNS = [PatternRule(GREETING_PATTERN, weight=1.0)]
 
     # 紧急停止模式
     EMERGENCY_STOP_PATTERNS = [

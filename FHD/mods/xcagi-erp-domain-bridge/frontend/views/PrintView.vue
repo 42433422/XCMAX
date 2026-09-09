@@ -2,6 +2,8 @@
   <div id="view-print" class="page-view">
     <div class="page-content">
       <div class="page-header"><h2>标签输出与打印</h2></div>
+      <LabelJobReview v-if="route.query.label_job" :job-id="String(route.query.label_job)" />
+      <template v-else>
       <div class="card">
         <div class="card-header">1. 选择产品与标签模板</div>
         <p v-if="loadError" role="alert">{{ loadError }} <button @click="loadOptions">重新加载</button></p>
@@ -61,6 +63,7 @@
           <button :disabled="busy" @click="confirmation = null">取消</button>
         </div>
       </div>
+      </template>
     </div>
   </div>
 </template>
@@ -71,6 +74,7 @@ import { RouterLink, useRoute } from 'vue-router'
 import printApi, { type LabelConfirmation, type LabelJob } from '@/api/print'
 import templatePreviewApi from '@/api/templatePreview'
 import { resolveErpPagePath } from '@/utils/erpPagePaths'
+import LabelJobReview from '@/components/LabelJobReview.vue'
 
 type Template = { id: string; name: string; category?: string; preview_data?: Record<string, unknown> }
 const route = useRoute()
@@ -216,8 +220,9 @@ async function refreshStatus() {
 }
 watch(templateId, loadTemplate)
 watch(selection, () => { confirmation.value = null })
+watch(() => route.query.label_job, value => { if (!value) void loadOptions() })
 onMounted(() => {
-  void loadOptions()
+  if (!route.query.label_job) void loadOptions()
   window.addEventListener('xcagi:templates-updated', loadTemplates)
 })
 onBeforeUnmount(() => {

@@ -1,0 +1,14 @@
+{
+  "base_sha": "7ed36f1da",
+  "tests_passed": 4,
+  "verified": [
+    "Independent Python process submits cancellation via actual SQLAlchemyAgentRunRepository and AgentOrchestrator.",
+    "Worker reads persisted command after in-flight controlled tool returns and skips dependent tool.",
+    "Fresh repository reads cancelled run and applied command."
+  ],
+  "limits": [
+    "SQLite file database and controlled tool; no production operation.",
+    "Worker remains alive; no crash/restart or PostgreSQL contention tested.",
+    "Not installed-client UI acceptance."
+  ]
+}

@@ -43,20 +43,52 @@ def _registered_router_inventory(
         return _facade().cast(
             "dict[Any, Any]", svc.delete_warehouse(int(params.get("warehouse_id") or 0))
         )
+    if action in {"stock_in", "stock_out", "transfer"}:
+        import math
+
+        raw_quantity = params.get("quantity")
+        if raw_quantity is None:
+            return {"success": False, "message": "库存操作数量必须为有限正数"}
+        try:
+            quantity = float(raw_quantity)
+        except (TypeError, ValueError, OverflowError):
+            return {"success": False, "message": "库存操作数量必须为有限正数"}
+        if isinstance(raw_quantity, bool) or not math.isfinite(quantity) or quantity <= 0:
+            return {"success": False, "message": "库存操作数量必须为有限正数"}
+    if action in {"stock_in", "stock_out"}:
+        try:
+            raw_price = params.get("unit_price")
+            unit_price = _float_or_none(raw_price)
+            if isinstance(raw_price, bool) or (
+                unit_price is not None
+                and (
+                    not math.isfinite(unit_price)
+                    or unit_price < 0
+                    or not math.isfinite(quantity * unit_price)
+                )
+            ):
+                raise ValueError("invalid price")
+        except (TypeError, ValueError, OverflowError):
+            return {"success": False, "message": "库存单价或金额无效，请提供有限非负单价"}
     if action == "stock_in":
         return _facade().cast(
             "dict[Any, Any]",
             svc.inventory_in(
                 product_id=params.get("product_id"),
                 warehouse_id=params.get("warehouse_id"),
-                quantity=float(params.get("quantity", 0)),
+                quantity=quantity,
                 batch_no=params.get("batch_no"),
                 location_id=params.get("location_id"),
-                unit_price=_float_or_none(params.get("unit_price")),
+                unit_price=unit_price,
                 reference_type=params.get("reference_type"),
                 reference_id=params.get("reference_id"),
                 operator=params.get("operator"),
                 remark=params.get("remark"),
+                **(
+                    {"requested_unit": str(params["requested_unit"])}
+                    if "requested_unit" in params
+                    else {}
+                ),
             ),
         )
     if action == "stock_out":
@@ -65,10 +97,10 @@ def _registered_router_inventory(
             svc.inventory_out(
                 product_id=params.get("product_id"),
                 warehouse_id=params.get("warehouse_id"),
-                quantity=float(params.get("quantity", 0)),
+                quantity=quantity,
+                unit_price=unit_price,
                 batch_no=params.get("batch_no"),
                 location_id=params.get("location_id"),
-                unit_price=_float_or_none(params.get("unit_price")),
                 reference_type=params.get("reference_type"),
                 reference_id=params.get("reference_id"),
                 operator=params.get("operator"),
@@ -82,7 +114,7 @@ def _registered_router_inventory(
                 product_id=params.get("product_id"),
                 from_warehouse_id=params.get("from_warehouse_id"),
                 to_warehouse_id=params.get("to_warehouse_id"),
-                quantity=float(params.get("quantity", 0)),
+                quantity=quantity,
                 batch_no=params.get("batch_no"),
                 from_location_id=params.get("from_location_id"),
                 to_location_id=params.get("to_location_id"),
@@ -106,28 +138,82 @@ def _registered_router_inventory(
     if action == "inventory_count":
         from app.services.inventory_service import InventoryService
 
+        raw_quantity = params.get("actual_quantity")
+        if raw_quantity is None:
+            return {"success": False, "message": "请提供实际盘点数量"}
+        try:
+            actual_quantity = (
+                float(raw_quantity) if not isinstance(raw_quantity, bool) else raw_quantity
+            )
+        except (TypeError, ValueError, OverflowError):
+            return {"success": False, "message": "盘点数量必须为有限非负数"}
         inv_svc = InventoryService()
         return inv_svc.inventory_count(
             product_id=int(params.get("product_id") or 0),
             warehouse_id=int(params.get("warehouse_id") or 0),
-            actual_quantity=float(params.get("actual_quantity", 0)),
+            actual_quantity=actual_quantity,
             batch_no=params.get("batch_no"),
             location_id=params.get("location_id"),
             operator=params.get("operator"),
             remark=params.get("remark"),
-            confirmed=bool(params.get("confirmed", False)),
+            confirmed=params.get("confirmed", False),
         )
     if action == "query_transactions":
+        from datetime import datetime, time
+
         from app.services.inventory_service import InventoryService
 
+        def parse_date(value, *, end=False):
+            if value is None or value == "":
+                return None
+            if isinstance(value, datetime):
+                return value
+            parsed = datetime.fromisoformat(str(value))
+            if end and len(str(value)) == 10:
+                parsed = datetime.combine(parsed.date(), time.max)
+            return parsed
+
+        try:
+            start_date = parse_date(params.get("start_date"))
+            end_date = parse_date(params.get("end_date"), end=True)
+            if start_date and end_date and start_date > end_date:
+                raise ValueError("reversed range")
+        except (TypeError, ValueError, OverflowError):
+            return {
+                "success": False,
+                "message": "流水查询日期无效，请使用有效日期且开始时间不晚于结束时间",
+            }
+        try:
+            page_raw = params.get("page", 1)
+            size_raw = params.get("per_page", 20)
+            if isinstance(page_raw, bool) or isinstance(size_raw, bool):
+                raise ValueError("boolean pagination")
+            page = int(str(page_raw))
+            per_page = int(str(size_raw))
+            if page < 1 or not 1 <= per_page <= 1000:
+                raise ValueError("pagination range")
+        except (TypeError, ValueError, OverflowError):
+            return {"success": False, "message": "页码须为正整数，每页数量须为 1 到 1000 的整数"}
+        transaction_id = params.get("transaction_id")
+        if transaction_id is not None:
+            try:
+                if isinstance(transaction_id, bool):
+                    raise ValueError("boolean ID")
+                transaction_id = int(str(transaction_id))
+                if transaction_id <= 0:
+                    raise ValueError("nonpositive ID")
+            except (TypeError, ValueError, OverflowError):
+                return {"success": False, "message": "流水编号须为正整数"}
         inv_svc = InventoryService()
         return inv_svc.query_transactions(
+            transaction_id=transaction_id,
             product_id=params.get("product_id"),
             warehouse_id=params.get("warehouse_id"),
-            start_date=params.get("start_date"),
-            end_date=params.get("end_date"),
-            page=int(params.get("page") or 1),
-            per_page=int(params.get("per_page") or 20),
+            transaction_type=params.get("transaction_type"),
+            start_date=start_date,
+            end_date=end_date,
+            page=page,
+            per_page=per_page,
         )
     return {"success": False, "message": f"未注册的 inventory 动作: {action}"}
 
@@ -220,8 +306,25 @@ def _registered_router_sales(
         )
     if action == "quote":
         return svc.quote(dict(params or {}))
-    if action == "confirm":
-        return svc.confirm(int(params.get("order_id") or 0))
+    if action in ("confirm", "confirm_from_result"):
+        order_id = params.get("order_id")
+        source_id = params.get("order_node_id")
+        if action == "confirm_from_result" and not source_id:
+            return {"success": False, "message": "缺少前序订单节点引用"}
+        if source_id:
+            source = (runtime_context.get("node_outputs") or {}).get(str(source_id))
+            data = source.get("data") if isinstance(source, dict) else None
+            resolved = data.get("id") if isinstance(data, dict) else None
+            if (
+                not isinstance(source, dict)
+                or source.get("success") is not True
+                or type(resolved) is not int
+                or resolved <= 0
+                or (order_id is not None and str(order_id) != str(resolved))
+            ):
+                return {"success": False, "message": "前序订单结果不可用或订单编号不一致"}
+            order_id = resolved
+        return svc.confirm(int(order_id or 0))
     if action == "deliver":
         return svc.deliver(
             int(params.get("order_id") or 0),
@@ -263,7 +366,9 @@ def _registered_router_reports(
         )
     if action == "inventory_summary":
         return svc.get_inventory_report(
-            warehouse_id=params.get("warehouse_id"), category=params.get("category")
+            warehouse_id=params.get("warehouse_id"),
+            category=params.get("category"),
+            product_keyword=params.get("product_keyword"),
         )
     if action == "purchase_summary":
         return svc.get_purchase_report(
@@ -274,11 +379,9 @@ def _registered_router_reports(
     if action == "dashboard":
         return svc.get_dashboard_summary()
     if action == "export":
-        return svc.export_to_excel(
-            report_type=str(params.get("report_type") or "report"),
-            data=params.get("data") or [],
-            filename=str(params.get("filename") or "report"),
-        )
+        from app.application.workflow.report_export_receipt import export_report_receipt
+
+        return export_report_receipt(svc, params, runtime_context)
     return {"success": False, "message": f"未注册的 reports 动作: {action}"}
 
 

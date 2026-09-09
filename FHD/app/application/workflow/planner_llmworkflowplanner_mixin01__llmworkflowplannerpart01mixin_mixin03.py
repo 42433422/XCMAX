@@ -39,6 +39,8 @@ class __LLMWorkflowPlannerPart01MixinPart03Mixin:
                             "risk": action_meta.get("risk", "low"),
                             "idempotent": bool(action_meta.get("idempotent", False)),
                             "required_params": action_meta.get("required_params", []),
+                            "optional_params": action_meta.get("optional_params", []),
+                            "description": action_meta.get("description", ""),
                         }
                     )
                 tool_specs.append(
@@ -73,7 +75,7 @@ class __LLMWorkflowPlannerPart01MixinPart03Mixin:
                     "只输出 JSON，不要 markdown。",
                     "node_id 必须唯一且非空。",
                     "所有 nodes 项必须包含 tool_id/action/params/risk/idempotent/description/depends_on 结构字段。",
-                    "对于 required_params：必须在 params 中提供非空值（若无法从 user_message 推断，仍需给出最合理的非空占位/默认值，保证结构字段不缺失）。",
+                    "对于 required_params：只使用用户提供或可信查询结果中的真实值。缺少参数时保留缺失状态交给澄清流程，禁止编造占位值、ID、文件路径或业务数据。",
                     "员工相关意图优先使用 employee.list/employee.execute；不知道 employee_id 时先 list，不要伪造员工 ID。",
                     "数据库读写必须使用 business_db.read/write 的 entity/operation/payload 结构，不得生成 sql/raw_sql/query_sql。",
                     "business_db.write 只在用户明确要求新增/添加/写入/入库/删除/更新时使用；普通查询使用 business_db.read。",
@@ -191,6 +193,8 @@ class __LLMWorkflowPlannerPart01MixinPart03Mixin:
                             "risk": action_meta.get("risk", "low"),
                             "idempotent": bool(action_meta.get("idempotent", False)),
                             "required_params": action_meta.get("required_params", []),
+                            "optional_params": action_meta.get("optional_params", []),
+                            "description": action_meta.get("description", ""),
                         }
                     )
                 tool_specs.append(

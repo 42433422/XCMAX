@@ -1,0 +1,100 @@
+{
+  "source_commit": "42205902fa58bc0ec86bcdbd53757b32c0ca9685",
+  "result": {
+    "passed": 1156,
+    "skipped": 25,
+    "failed": 0,
+    "duration_seconds": 19.37
+  },
+  "test_selection": [
+    "tests/test_application/test_etl*.py",
+    "tests/test_application/test_inventory*.py",
+    "tests/test_application/test_product_cache_tenant.py",
+    "tests/test_application/test_product_measurement_update.py",
+    "tests/test_application/test_customer_product_export_links.py",
+    "tests/test_services/test_products_service.py",
+    "tests/test_services/test_inventory_service.py",
+    "tests/test_services/test_tools_workflow_registered*.py",
+    "tests/test_application/test_tools_workflow_registered_branch_cov2.py"
+  ],
+  "static_guards": {
+    "ok": true,
+    "guards": [
+      {
+        "name": "layer-ratchet",
+        "status": "ok",
+        "exit": 0,
+        "blocking": true
+      },
+      {
+        "name": "type-debt",
+        "status": "ok",
+        "exit": 0,
+        "blocking": true
+      },
+      {
+        "name": "raw-sql",
+        "status": "ok",
+        "exit": 0,
+        "blocking": true
+      },
+      {
+        "name": "big-files",
+        "status": "ok",
+        "exit": 0,
+        "blocking": false
+      },
+      {
+        "name": "coverage-ramp-stubs",
+        "status": "ok",
+        "exit": 0,
+        "blocking": true
+      },
+      {
+        "name": "test-bloat",
+        "status": "ok",
+        "exit": 0,
+        "blocking": true
+      },
+      {
+        "name": "requirements-lock",
+        "status": "ok",
+        "exit": 0,
+        "blocking": true
+      },
+      {
+        "name": "mods-inline-ui",
+        "status": "ok",
+        "exit": 0,
+        "blocking": true
+      },
+      {
+        "name": "utils-boundary",
+        "status": "ok",
+        "exit": 0,
+        "blocking": true
+      },
+      {
+        "name": "mod-import-boundaries",
+        "status": "ok",
+        "exit": 0,
+        "blocking": true
+      },
+      {
+        "name": "arch-fitness",
+        "status": "ok",
+        "exit": 0,
+        "blocking": true
+      }
+    ]
+  },
+  "scope": "Local source regression; isolated test data. Not whole application acceptance.",
+  "remaining_gates": [
+    "Skipped tests",
+    "Real-model task completion",
+    "Customer-product AI association creation",
+    "PostgreSQL business and migration checks",
+    "Required CI and main integration",
+    "Exact-main artifact and installed UI business acceptance"
+  ]
+}

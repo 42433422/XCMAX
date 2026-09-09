@@ -1,0 +1,5 @@
+{
+  "source_commit": "64e6c8ccf30c31eb494b66db11d074b0445d7dcc",
+  "tests_passed": 422,
+  "scope": "Workflow export router generates a real XLSX and persists a private artifact; test reopens workbook and checks rows, JSON serialization, owner metadata, denied other-account read, and missing-identity rejection. Download authorization is stubbed in the test; real HTTP/session/UI acceptance and natural-language sales export orchestration remain outstanding."
+}

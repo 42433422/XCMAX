@@ -454,3 +454,48 @@ class TestNeuroBusExpiredEvent:
             assert len(received) == 0
         finally:
             await bus.stop()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("asynchronous", [True, False])
+async def test_queue_preserves_local_identity_but_not_remote_payload(asynchronous):
+    from app.application.agent_orchestrator.execution_identity import (
+        current_execution_actor,
+        execution_actor_scope,
+    )
+    from app.infrastructure.tenant_scope import current_tenant_id, tenant_scope
+
+    bus = NeuroBus(enable_metrics=False)
+    received = []
+
+    def record(event):
+        received.append((event.payload["case"], current_execution_actor(), current_tenant_id()))
+
+    async def async_record(event):
+        record(event)
+
+    bus.subscribe(
+        "test.identity", handler=async_record if asynchronous else record, is_async=asynchronous
+    )
+    await bus.start()
+    try:
+        reused = _make_event("test.identity", payload={"case": "local"})
+        with execution_actor_scope("71"), tenant_scope(1):
+            assert bus.publish(reused)
+        with execution_actor_scope("72"), tenant_scope(2):
+            assert bus.publish(reused)
+            assert bus.ingest_remote_event(
+                _make_event(
+                    "test.identity", payload={"case": "remote", "actor_id": "72", "tenant_id": 2}
+                )
+            )
+
+        async def wait_received():
+            while len(received) != 3:
+                await asyncio.sleep(0.01)
+
+        await asyncio.wait_for(wait_received(), timeout=3)
+        assert set(received) == {("local", "71", 1), ("local", "72", 2), ("remote", "", None)}
+        assert bus._local_event_identity == {}
+    finally:
+        await bus.stop()

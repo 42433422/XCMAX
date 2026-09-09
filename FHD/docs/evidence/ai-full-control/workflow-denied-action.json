@@ -1,0 +1,15 @@
+{
+  "base_sha": "92f3cbc67",
+  "tests_passed": 270,
+  "guards": "all 10 blocking passed",
+  "scope": [
+    "Actual planner entry and fallback return non-execution plans.",
+    "Actual WorkflowEngine in ordinary and agentic modes invokes no business dispatcher.",
+    "Shared matcher keeps do-not-forget instructions outside negation handling."
+  ],
+  "limits": [
+    "Does not cancel an already running task.",
+    "Mixed instructions require user clarification instead of extracting only affirmative clauses.",
+    "Real-model benchmark and installed runtime not revalidated in this change."
+  ]
+}

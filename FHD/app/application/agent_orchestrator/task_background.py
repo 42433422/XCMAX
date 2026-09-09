@@ -70,6 +70,8 @@ class BackgroundTaskExecutionMixin:
         step = self._find_waiting_step(run, approved_step_id=approved_step_id)
         if step is None:
             return cast("AgentRun | None", self._repo.save(run))
+        # Explicit per-run approval replaces any expired/revoked recurring consent.
+        run.metadata.pop("schedule_authorization", None)
         context = dict(run.metadata.get("runtime_context") or {})
         context.update(dict(runtime_context or {}))
         run.metadata["runtime_context"] = context
@@ -117,6 +119,17 @@ class BackgroundTaskExecutionMixin:
             return cast("AgentRun | None", run)
         control = run.metadata.get("control")
         resume_status = str(control.get("resume_status") or "") if isinstance(control, dict) else ""
+        previous_approval = str((run.metadata.get("dispatch") or {}).get("approved_step_id") or "")
+        resume_approval = next(
+            (
+                step.step_id
+                for step in run.steps
+                if step.step_id == previous_approval
+                and step.status == "pending"
+                and step.output.get("error_code") == "tool_wait_interrupted"
+            ),
+            "",
+        )
         command = self._repo.request_task_control(run_id, "resume", requested_by=requested_by)
         context = dict(run.metadata.get("runtime_context") or {})
         context.update(dict(runtime_context or {}))
@@ -130,7 +143,7 @@ class BackgroundTaskExecutionMixin:
         if run.status == "queued":
             run.metadata["dispatch"] = {
                 "state": "queued",
-                "approved_step_id": "",
+                "approved_step_id": resume_approval,
                 "requested_by": requested_by,
                 "queued_at": utc_now_iso(),
             }
@@ -158,6 +171,25 @@ class BackgroundTaskExecutionMixin:
             return cast("AgentRun | None", self._repo.save(run))
         if self._apply_requested_control(run):
             return cast("AgentRun | None", self._repo.get(run_id))
+        from app.application.agent_orchestrator.schedule_authorization import (
+            check_scheduled_dispatch,
+        )
+
+        if not check_scheduled_dispatch(run):
+            run.status = "waiting_user"
+            for step in run.steps:
+                if step.status == "pending":
+                    step.status = "waiting_user"
+            run.add_event(
+                "schedule.authorization_unavailable", "周期授权已失效或计划已暂停，请重新审批"
+            )
+            return cast("AgentRun | None", self._repo.save(run))
+        legacy_mod = run.metadata.get("legacy_mod_scope_required")
+        scope = (run.metadata.get("runtime_context") or {}).get("mod_scope")
+        if legacy_mod and (not isinstance(scope, dict) or scope.get("mod_id") != legacy_mod):
+            run.status = "blocked"
+            run.add_event("task.mod_scope_required", "旧模块任务需要原账号重新确认模块权限")
+            return cast("AgentRun | None", self._repo.save(run))
         dispatch = run.metadata.get("dispatch")
         dispatch = dict(dispatch) if isinstance(dispatch, dict) else {}
         approved_step_id = str(dispatch.get("approved_step_id") or "")

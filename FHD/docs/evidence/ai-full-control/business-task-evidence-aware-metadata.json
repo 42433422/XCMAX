@@ -1,0 +1,9 @@
+{
+  "source_sha": "6abcaed2905e2f64eeeeff18c6d495cca31c5cf9",
+  "runner_sha256": "8678f304464e6fa39cbb60132c5168373d80130213167f8543c9f788d24a95ef",
+  "dataset_sha256": "c70d172191e4f583935302d5c5d2968524f557c3d9aadc295c15eeb72283602b",
+  "total": 22,
+  "passed": 10,
+  "database_assertion_passed": 4,
+  "scope": "Single isolated SQLite fallback trial. db_pass=null when assertions are absent or not reached. Overall pass remains legacy routing/execution acceptance, not full business evidence."
+}

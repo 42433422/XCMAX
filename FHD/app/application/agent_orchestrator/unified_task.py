@@ -11,6 +11,7 @@ from typing import Any
 from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
 from app.application.agent_orchestrator.run_models import AgentRun
 from app.application.agent_orchestrator.task_models import tenant_id_of_run
+from app.application.agent_orchestrator.task_schedule import normalize_scheduled_at
 from app.application.agent_orchestrator.tool_spec import validate_tool_call
 from app.application.workflow.types import PlanGraph, WorkflowNode
 
@@ -67,6 +68,7 @@ def create_unified_task(
     action: str,
     params: dict[str, Any],
     runtime_context: dict[str, Any] | None = None,
+    scheduled_at: str | None = None,
 ) -> UnifiedTaskResult:
     normalized_task_id = str(task_id or "").strip()
     if not normalized_task_id or len(normalized_task_id) > 160 or "/" in normalized_task_id:
@@ -79,7 +81,13 @@ def create_unified_task(
     if not validation.ok or spec is None:
         raise UnifiedTaskError(validation.message or "任务工具未注册")
 
+    try:
+        due = normalize_scheduled_at(scheduled_at)
+    except (ValueError, OverflowError) as exc:
+        raise UnifiedTaskError("scheduled_at 必须是有效的带时区时间") from exc
     fingerprint = _request_fingerprint(spec.tool_id, spec.action, params)
+    if due:
+        fingerprint = hashlib.sha256(f"{fingerprint}:{due}".encode()).hexdigest()
     tenant_id = str((runtime_context or {}).get("tenant_id") or "")
     task = orchestrator.get_task(
         user_id=user_id,
@@ -167,6 +175,12 @@ def create_unified_task(
         runtime_context=context,
     )
     run.metadata["task_request_fingerprint"] = fingerprint
+    if due:
+        run.metadata["schedule"] = {
+            "kind": "once",
+            "scheduled_at": due,
+            "missed_run_policy": "run_once_after_approval",
+        }
     run.metadata["task_request"] = {
         "tool_id": spec.tool_id,
         "action": spec.action,

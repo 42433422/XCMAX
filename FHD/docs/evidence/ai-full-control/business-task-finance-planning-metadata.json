@@ -1,0 +1,11 @@
+{
+  "source_sha": "b29f2f86e6fffb26a6784dae5186ab3cc0415d9c",
+  "modified_sources": {
+    "app/application/workflow/finance_creation.py": "dc5c2bfc6e4e93cd25b288ddab292a0b8482bc8fd79d3a34ec9fcfa0dbcf769e",
+    "app/application/workflow/planner_llmworkflowplanner_mixin02.py": "1bde9c817d1a67b626294b10f564fbbade908a7f29759bea5b6066dc53ed77c6"
+  },
+  "dataset_sha256": "c70d172191e4f583935302d5c5d2968524f557c3d9aadc295c15eeb72283602b",
+  "passed": 11,
+  "total": 22,
+  "scope": "Single isolated SQLite fallback trial. Finance case has no database-state assertion; execution status alone does not establish financial correctness or production/installed acceptance."
+}

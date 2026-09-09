@@ -132,3 +132,32 @@ class TestSyncBridge:
         ):
             result = so.complete_structured_sync([{"role": "user", "content": "hi"}], schema=SCHEMA)
         assert result.data["intent"] == "sync"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("provider_id, disabled", [("xiaomi", True), ("openai_compatible", False)])
+async def test_intent_reasoning_option_reaches_provider_on_initial_and_repair(
+    provider_id, disabled
+):
+    class Provider:
+        def __init__(self):
+            self.provider_id = provider_id
+            self.calls = []
+
+        async def chat_completion(self, messages, **kwargs):
+            self.calls.append(kwargs)
+            return _llm_payload("invalid" if len(self.calls) == 1 else '{"intent":"products"}')
+
+    provider = Provider()
+    result = await so.complete_structured(
+        [{"role": "user", "content": "classify"}],
+        schema=SCHEMA,
+        provider=provider,
+        reasoning_enabled=False,
+        max_repairs=1,
+    )
+    assert result.data == {"intent": "products"}
+    assert len(provider.calls) == 2
+    for call in provider.calls:
+        assert (call.get("thinking") == {"type": "disabled"}) is disabled
+        assert "reasoning_enabled" not in call

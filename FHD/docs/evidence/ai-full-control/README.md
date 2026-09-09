@@ -1,0 +1,436 @@
+## 最新服务器模型复测
+
+使用服务器 fhd-full.service 已配置的 mimo-v2.5-pro，在本地分支上运行 97 条脱敏路由评测。源提交为 5a1e75a7b；50 次实际模型调用全部完成，零空响应、零调用异常。核心 14/24（58.3%），语义 28/73（38.4%），整体 42/97（43.3%），未达到验收要求。凭据仅保留于进程内存，未运行生产业务工具。
+
+“不要打印标签”和“打印机列表”被路由到 shipment，必须继续修正。数据集中也存在粗粒度工具标签与运行时路由名称的口径差异，后续应逐项核对，不能直接修改预期来提高分数。见 server-model-recheck-5a1e75a7b.json。
+
+事件总线处理器拆分恢复了 10 项阻断静态门禁；178 项相关测试、2 个变更应用文件的 mypy 和工作流同步检查通过。此阶段仍未完成主线合入、安装版和全功能业务验收。
+
+# AI 全功能控制：实施与验收记录
+
+初始基线：origin/main `893a6a36d`。历史修复 PR #1784 已以
+`72d26ec059b987cfb1a7ee753151b51836d4d780` 合入；模型意图兜底 PR #1801 已在基线中。
+
+目标是四个阶段全部完成。本目录记录当前实施证据，不代表四阶段验收通过。
+此前对话中的 20%–30% 覆盖率与工期只是未验证估计，不作为验收基线。
+
+## 当前验收摘要（2026-09-09 更新）
+
+四阶段全量目标尚未完成。集成分支已同步主线 `a48d955cb`（PR #1813 的门禁修复），产品改动仍在 PR #1804，未作为主线安装版交付。以下最近源码核验提交为 `9fb3553df`；各报告注明各自实际测量提交，不能混作同一提交的全量验收。
+
+- **业务结果：17/22，三次独立试验结果一致。** 见 `business-task-three-trial-ratchet.json`。隔离 SQLite、规则规划和直接工具执行；不是实际模型或完整审批执行率。回归门槛已提高到 75%，该门槛只阻止退步，不是四阶段完成标准。
+- **发货单实际结果：** 工作簿可打开，包含客户七彩乐园、型号 9803、3 桶、规格 12、36 KG，数据库记录一致。工作簿错误预期会使验收失败。见 `shipment-workbook-verification.json`。实际打印、文件版式和安装端尚未验收。
+- **审批与身份：** 默认启用且无自定义规则时，56 个高风险动作均要求审批；申请人绑定可信会话或宿主身份。HTTP、门控引擎和财务事件入口要求持久化成功。独立进程可恢复获批快照，待审批、跨租户和终态拒绝恢复。见 `high-risk-default-approval.json`、`shipment-approval-process-recovery.json`。
+- **本地事件到审批数据库：** 同步和异步队列传递发布身份；真实财务事件持久化正确申请人，冒用账号和消费前账号停用均被拒绝。见 `finance-queued-approval.json`、`queued-approval-account-deactivation.json`。远程事件授权、会话撤销和后续入库业务执行仍缺证据。
+- **累计回归：** 566 项审批、队列及接口测试通过；随后修复类型检查发现的问题，21 项受影响测试复验通过，Mypy 检查 1,821 个应用源文件无错误。见 `approval-neuro-integrated-regression.json`。这些数量不代表全部功能覆盖率。
+
+剩余五个业务案例均涉及多轮澄清：产品信息不足、口语报价、入库仓库与单位、发货单信息不足、销售导出日期。现有计划已包含澄清与后续动作，但基准尚未驱动真实回答、审批及执行闭环；不能仅放宽动作序列断言来把它们改成通过。
+
+接下来的验收重点是多轮业务完成、已批准任务真实执行与结果回执、服务器配置的真实模型复测，以及所有模块的能力覆盖。CI、主线合入、主线精确提交产物、安装版身份/UI与客户效果仍须分别验收。下文为历史证据，不覆盖或提高本摘要的验收结论。
+
+## Seeded monthly ledger verification
+
+A real SQLite test now feeds monthly planner parameters into the accounting ledger service with entries on January 31, February 1, leap-day February 29 and March 1, plus a separate tenant's February entry. It verifies exact returned IDs, inclusive month boundaries, tenant isolation, pagination totals and unchanged per-tenant row counts. Only the database connection provider is replaced; SQL execution is real.
+
+Seven related tests pass. See monthly-ledger-database.json for source and test identity. This is independent seeded evidence for the unfiltered-account monthly query; it does not establish account-specific line totals, tenant timezone semantics, production or installed acceptance. The 22-task benchmark was not rerun or re-scored by this test.
+
+## Monthly ledger planning
+
+Explicit 本月/这个月账本 requests now route to finance.ledger_query with ISO month-start/month-end dates and bounded pagination. Leap-year February and December/January boundary tests pass. Compound requests remain for the existing planner. The current reference date is runtime-local; tenant-specific timezone handling remains unverified.
+
+74 related tests, Ruff and all 10 blocking dev guards pass. The isolated trial reaches 12/22, but its ledger case is unseeded and lacks result-content assertions (db_pass null), so this proves routing/execution only. See business-task-ledger.jsonl and metadata. Full ledger correctness, approvals, installed acceptance and the four-stage goal remain open.
+
+## Financial entry database evidence
+
+The benchmark now supports test-only financial_transactions state assertions without expanding production business_db entities. The finance entry case requires exactly one tenant-scoped transaction and matching revenue type, amount 5000, counterparty 星光贸易 and CNY currency.
+
+A fresh isolated SQLite trial passes 11/22, now with five database-assertion passes. A separate negative control changes only the expected amount to 5001; it fails the database assertion and overall task as intended. Dataset and runner hashes are recorded in business-task-finance-db-metadata.json. This strengthens result evidence; it is not production approval, ledger reconciliation or installed-client acceptance.
+
+## Direct financial entry planning
+
+Explicit single-entry requests such as 记一笔收入 5000 元，来自星光贸易 now produce finance.create_transaction with preserved amount and counterparty. Full-input matching leaves unsupported extra clauses for the existing planner. The node retains medium risk and non-idempotence.
+
+73 related tests, application mypy (1811 files), Ruff and all 10 blocking dev guards pass. A fresh isolated trial reaches 11/22 with finance routing and tool execution success. This finance case declares no database assertion (db_pass is null); accounting correctness, approval-chain execution and installed acceptance remain unverified. See business-task-finance-planning.jsonl and measured source hashes.
+
+## Benchmark unverified-state correction
+
+The runner now emits db_assertion_count and leaves db_pass null when no database assertion was declared, instead of reporting true for an unperformed check. Existing overall pass semantics remain unchanged and must not be interpreted as complete business-result acceptance.
+
+A fresh isolated SQLite trial on source 6abcaed29 plus the recorded runner change remains 10/22, with four database-assertion passes. Verified that every zero-assertion row has db_pass null. Ruff passes. See business-task-evidence-aware.jsonl and its metadata for source, runner and dataset hashes. This is a local fallback trial, not real-model, production approval or installed-client acceptance.
+
+## Business evidence strength breakdown
+
+The last recorded 22-task trial has 10 passing rows, but only four passing rows declare database-state assertions. These are the two customer-create cases, explicit product creation, and the prohibition case asserting zero customers. The other six passing rows do not by themselves establish database-result correctness. This breakdown does not rerun or upgrade the historical trial to current-source acceptance.
+
+See business-evidence-matrix.json for each task's routing, execution, database-assertion presence and failure. Missing business-result checks and the 12 failing tasks remain acceptance work; neither 10/22 nor application regression totals measure all software-function coverage.
+
+## Business-language clarification options
+
+Finance transaction-type clarification now displays and accepts seven explicit Chinese options using one scoped mapping shared by prompt and parser. Canonical protocol values remain accepted, and the mapped value still passes the existing enum/schema validation. Unknown options leave parameters untouched; unrelated string fields are not translated.
+
+32 related tests pass, including every displayed option and the actual continuation sequence using 收入 before amount and pending approval. Approval/persistence remain mocked in that sequence. This does not expand other domains or prove full financial execution; the measured business score remains 10/22.
+
+## Sequential clarification prompt alignment
+
+Missing-field questions now ask for the current first field and state how many fields remain, matching the one-reply-at-a-time continuation. Common business fields use readable labels while the structured missing_fields list remains unchanged. This wording change does not expand parsing or execution coverage; the measured business score remains 10/22.
+
+## Sequential scalar clarification
+
+Multiple missing scalar fields can now be completed one reply at a time. Each value is checked against its field schema before storage; remaining requirements refresh the pending question without approval or execution. The final answer must pass complete tool-call validation before the existing approval recheck. Invalid replies retain previously accepted values.
+
+27 related tests pass, including the actual continuation method resolving finance transaction type then amount, rejecting an invalid amount and requiring approval only after completion. Application mypy (1809 files), Ruff and all 10 blocking dev guards pass. Policy/persistence are mocked in this scenario; structured objects, natural-language enum interpretation, full approval execution and installed acceptance remain open. The last measured business trial remains 10/22.
+
+## Broader chat regression verification
+
+All 1296 tests across 17 AI-chat, dynamic-workflow and clarification files pass on source 62ee8dcc8. The first attempt had 499 initialization failures because the shared virtualenv imported vendored LangGraph from another checkout. Rerunning with PYTHONPATH selecting this worktree's six vendored packages resolves those failures; no source-path assertion was disabled and no business code changed for this result.
+
+The temporary test data directory was removed after completion. See chat-regression-current-packages.json for source, selected tests and log hash. This is broader application regression evidence, with mocks in the suite; real-model/business approval/installed acceptance and the full four-stage goal remain open. The last business trial remains 10/22.
+
+## Clarification retry context
+
+An unresolved clarification reply now repeats the original question and returns the pending reason, field, missing fields and candidate list. Missing ordinary fields no longer get an unrelated instruction to select a record ID. The pending entry remains available for another reply.
+
+26 related tests pass, covering ordinary missing fields, fallback wording and ambiguous-target context. This is retry-response behavior with continuation mocked, not full business execution acceptance. The last measured business score remains 10/22.
+
+## Single scalar field clarification
+
+A single missing scalar required field can now be resolved from the user's reply using the current tool schema. String, integer, number and boolean inputs are supported; the complete candidate parameter set must pass tool-call validation before mutation. Empty/invalid inputs leave the node unchanged. Business-database payloads, multiple missing fields and structured objects are left to their existing handling rather than guessed.
+
+26 related tests pass, including the actual chat continuation filling product identity while preserving price and entering pending approval without dispatch. Invalid integer inputs do not mutate parameters. Application mypy (1809 files), Ruff and all 10 blocking dev guards pass. Approval policy and persistence are mocked here; full approval execution, multi-field/structured answers and installed-client acceptance remain open. Business score remains the last measured 10/22.
+
+## Approval recheck after candidate clarification
+
+After candidate selection resolves an operation target, chat continuation now rechecks the configured approval service. Required approvals create a normal pending workflow with resolved parameters and clarification answers, rather than immediately resuming the engine. Selection of a record is no longer treated as approval of the operation. When policy reports no approval requirement, the existing continuation remains available.
+
+24 related tests pass, including the actual continuation method with a trapped execution call and a controlled approval policy. Application mypy (1808 files), Ruff and all 10 blocking dev guards pass. This verifies the transition to pending approval, not the entire approval round trip or production persistence; those services are mocked in this check. Ordinary missing-field parsing and full approval/resume acceptance remain open. Business score remains the prior measured 10/22.
+
+## Chat clarification node reuse
+
+Chat entry now reuses a matching planned clarify.ask node (same target and question), updates its answer key to the missing field, and stores that same node ID in runtime context and pending state. If no matching node exists, it creates one as before.
+
+22 related tests pass. The new test runs the actual chat gate and workflow engine with a dispatch trap, verifying that no business tool executes while clarification is pending and that node/pending identities agree. Persistence is mocked in this check; ordinary field-answer parsing and approval-gated continuation remain incomplete. No change to the previously measured 10/22 business score is claimed.
+
+## Idempotent planner clarification decoration
+
+Repeated planner decoration now reuses an existing clarification with the same target node and question. Distinct target nodes retain separate questions. This removes duplicate planning-stage wait nodes without changing missing-field requirements or executing writes.
+
+76 related tests pass, including repeated decoration and distinct-target graph validation. Chat-entry insertion and ordinary missing-field answer handling still require follow-up; the existing answer handler primarily resolves candidate records. No business score improvement or complete clarification/resume acceptance is claimed.
+
+## Labelled product creation planning
+
+Standalone 新增/添加产品 with an explicit model and optional price/measurement unit now produces only products.create, retaining medium risk and non-idempotence. Unconsumed fields or compound instructions are left for the existing planner instead of silently dropping their text. Missing identity and clarification/resume behavior remain unfinished.
+
+80 related planner tests passed, followed by 8 focused checks including additional-field preservation boundaries. Application mypy and all 10 blocking dev guards passed during this increment; Ruff passes. The isolated SQLite business trial passes 10/22, verifying product model A100 and price 25.5 in database state. This is not model, production approval-chain or installed-client acceptance. See business-task-product-planning.jsonl and measured source hashes.
+
+## Product creation contract correction
+
+The risk action catalog, fallback registry and ToolSpec input schema now require name_or_model without requiring unit_name for products.create. This aligns the contract with the existing dispatcher: unit_name is legacy measurement-unit input, not a required customer association; the default measurement unit is 个. Write risk, permission and non-idempotent classification remain unchanged.
+
+28 protocol and regression tests pass, including actual dispatcher payload construction with a mocked product service for default/explicit/legacy units. This does not prove product database persistence or repair the old planner's extra customer node and missing-slot behavior. Business acceptance remains at the prior measured 9/22; no new business score is claimed for this contract increment.
+
+## Raw SQL request routing boundary
+
+Recognized raw SQL execution requests now produce an explicit non-execution response before model planning, instead of being reinterpreted as structured business writes. Cases cover DELETE FROM, INSERT INTO, UPDATE SET, TRUNCATE TABLE and SELECT FROM; ordinary business deletion requests and SQL explanation examples retain their existing planning path. Existing execution-side raw_sql/sql/query_sql restrictions remain in place.
+
+52 related tests pass, including model/dispatcher bypass checks. Application mypy (1806 files), Ruff and all 10 blocking dev guards pass. The unchanged isolated business trial improves from 8/22 to 9/22. This is a conservative routing guard, not a complete SQL parser or proof of all adversarial syntax rejection. Production approval, actual model and installed-client acceptance remain open. See business-task-rawsql.jsonl and its source-hashed metadata.
+
+## Direct customer creation with contact fields
+
+Anchored 新增/添加客户 requests now enter the existing controlled business-database write path without requiring database jargon. Contact person and phone survive extraction. Compound product onboarding retains its existing path. Negative/instructional phrases in the focused regression cases are not classified as this direct creation request.
+
+97 related tests pass, including three customer phrasing variants and existing database/planner regressions. The unchanged isolated SQLite business trial now passes 8/22 (previously 7/22); the added passing task verifies the persisted customer name, contact person and phone. Application mypy (1806 files), Ruff and all 10 blocking dev guards pass. This is local source and database evidence; production approval round trips, real-model and installed-client acceptance remain open. The parser is not complete for every compound instruction or customer name containing another business-domain word. See business-task-customer-create.jsonl and source-hashed metadata.
+
+## Secret-scan finding investigation
+
+The PR-range gitleaks failure identified a 64-character source hash at intent-routing-loop-fixed.json:729, introduced by 6340e51b1. Recomputing SHA-256 over that commit's http_client_scope.py exactly matches the reported value. It is source provenance, not a credential. Added one exact historical finding fingerprint to .gitleaksignore; scanner rules and path coverage are unchanged. The local same-range rerun result is recorded in secret-scan-hash-exception.json. Remote CI must still rerun on the resulting commit; integration and installed delivery remain open.
+
+## Explicit non-execution outcome
+
+Pure greetings and conservatively recognized standalone prohibitions now return an explicit no_operation plan before model planning or tool probes. This plan must contain zero nodes and low risk; ordinary empty business plans remain invalid. Both workflow engine modes bypass dispatch, and the agent orchestrator records completion instead of blocking on missing steps. Chat formatting includes the non-execution response. A forged no_operation plan containing business nodes is rejected by validation, engine and orchestrator.
+
+17 focused tests verify no model/dispatch calls, mixed business instructions remaining eligible for planning, both engine modes and the actual in-memory orchestrator path. Related planner, engine and orchestrator regressions pass; application mypy (1806 files), Ruff and all 10 blocking dev guards pass. The unchanged isolated 22-task business trial now passes 7/22, up from 5/22. This is not a live-model, production persistence/approval-chain or installed-client acceptance result. Recognition of complex negation, remaining business domains and four-stage delivery are still incomplete. See business-task-no-operation.jsonl and source-hashed metadata.
+
+## Customer query routing and fallback
+
+Customer list and explicit name queries now retain their customer intent and keyword through normal routing and fallback planning. The fallback requires an available low-risk, idempotent customers.query contract. Ambiguous relationship text and customer writes no longer silently become an unfiltered customer list. Quoted literal customer names are preserved.
+
+314 related tests pass, including seeded SQLite execution proving named/list results, tenant isolation and unchanged record counts. Ruff, application mypy and all 10 blocking dev guards passed. The isolated deterministic business trial improves from 3/22 to 5/22; this remains insufficient acceptance. See business-task-customer-query.jsonl and its metadata for base commit, modified-source hashes and scope. No live-model rerun, production approval-chain execution or installed-client acceptance is claimed for this increment. Remaining writes, negation, other domains and full delivery stay open.
+
+## Standalone greeting boundary
+
+Default greeting paths now share a full-utterance pattern. A salutation followed by business text continues to business intent recognition; the substring hi inside shipping or Hitachi no longer marks a request as greeting. Explicit custom reflex rules remain supported. Changes cover the service helper/basic flags and both default reflex implementations.
+
+249 related tests pass, including all default entry points, mixed greeting/business text and actual rule recognition preserving the same customer/product/shipment-record tool as the unprefixed request. Application mypy, Ruff and all 10 blocking dev guards passed. The unchanged 97-case rule benchmark passes its ratchet: 24/24 core and 20/73 semantic (previously 19/73 semantic). Local business-name database lookup was unavailable and fell back as before; this is rule-routing evidence, not live-model or business execution acceptance. Planner fallback, remaining domains and full four-stage delivery remain incomplete.
+
+## Sync structured-call HTTP lifecycle repair
+
+Synchronous structured calls now create an isolated HTTP-client scope. OpenAI-compatible adapters (including MiMo) reuse a client within that call and close it before the temporary event loop exits. The adapter's long-lived asynchronous pools remain untouched. Worker-thread calls copy ContextVars so account/request context is preserved. The no-running-loop path now honors timeout_seconds and cancels the timed-out coroutine before closing its scoped clients.
+
+A real local HTTP/1.1 keepalive server verifies repeated and concurrent calls, closed clients, preserved asynchronous pools, thread-context propagation, intra-call reuse, failure cleanup and synchronous deadline cancellation. Related regressions total 64 passing tests; full application mypy and all 10 blocking dev guards passed. This fixes the reproduced sync OpenAI-compatible path; it is not evidence for every provider's custom connection lifecycle, business acceptance or installed deployment.
+
+Live server-config rerun: 38/45 structured calls completed, versus 23/45 before the lifecycle fix. No event_loop_closed was recorded; seven structured calls still failed, including one observed ConnectError. All 38 responses had nonempty content and finish_reason=stop. The 97-case routing result is 14/24 core and 23/73 semantic, still unavailable_or_partial with exit 2. This is improved transport reliability, not accepted intent accuracy or full functionality. Remaining timeout/provider diagnostics and semantic routing gaps stay open. See intent-routing-loop-fixed.json (measured modified-source hashes included; later adapter import formatting has no behavioral change).
+
+## Remaining live model failures diagnosed
+
+A full 97-case rerun with current server process configuration still has 23 successful structured responses and 22 failures. All 23 actual responses finished with stop and nonempty content; the other calls failed before returning a provider response. A separate three-call live probe of the same synthetic input reproduced two successes and one Event loop is closed failure. This confirms an event-loop lifecycle failure in this sync/pooled-HTTP path; it does not prove every remaining failure has the same cause.
+
+Added transparent diagnostics around the real provider boundary: bounded finish-reason categories, empty-content counts and exception-type counts. No raw provider content, prompt, credential or arbitrary finish-reason string is recorded; results and exceptions are preserved. The runtime lifecycle fix remains outstanding. Files: intent-routing-diagnostics.json and intent-loop-probe.json. These are local source evaluations with server credentials, not production business execution or installed-client acceptance.
+
+## Follow-up CI repair
+
+The prior head's frontend run passed 9869 assertions but failed on an unhandled label-event rejection when the side-effect result was undefined. The handler now reports an invalid receipt or rejected request as failure, retaining account/sequence checks before publishing results. 19 event tests, full frontend build typecheck and ESLint pass locally. The architecture check also mistook a historical CI check name in this report for a new source-of-truth claim; wording was clarified and docs lint reports zero conflicts. Remote reruns remain required.
+
+## Live intent evaluation and MiMo short-response repair
+
+With the user's server-configuration selection, read only the current fhd-full.service process configuration on 119.27.178.147. Credentials remained in process memory and are absent from evidence. The evaluation executes this local branch against the configured real model, not the installed client or production business tools.
+
+Before repair, 45 structured calls completed only 1 usable response (mimo-v2.5-pro). A two-call synthetic probe established the cause for one failure: with a 160-token cap, default reasoning ended with length and zero content; disabling reasoning ended with stop and 56 content characters. Structured output now forwards an optional reasoning setting through the existing provider adapter; intent classification disables reasoning. Other structured callers keep their default, and only the existing Xiaomi adapter emits the thinking parameter.
+
+After repair, the same 97-case dataset completed 23/45 structured calls, with 22 StructuredOutputError failures. The benchmark still exits 2 (unavailable_or_partial). Routing outcomes changed from 12/24 core + 10/73 semantic to 13/24 + 18/73, but these partial results are not an accepted model accuracy score. Remaining provider/format failures and routing vocabulary gaps require further diagnosis. Rule-only results remain 24/24 core and 19/73 semantic.
+
+The separate deterministic business trial exposed incorrect product-query fallback across multiple domains. Two cases previously passed despite unrelated product queries for a greeting and a negative-only request. Their expectations now require no business nodes; the same 22 tasks pass only 3. This is one isolated SQLite trial with no live model, seeded compound business data or approval-engine/installed-client validation. The raw-SQL case failed the plan rejection assertion before tool execution; it is not evidence that deletion occurred. Full four-stage acceptance is not achieved.
+
+40 focused structured/intent/benchmark tests plus 228 normal-routing regressions passed. Application mypy, Ruff and all 10 blocking dev guards passed. See intent-routing-current.json, intent-routing-server-config.json, intent-routing-server-fixed.json and intent-business-evaluation.json for measured scope and source identities. No production deployment or installed-host change occurred.
+
+## Verified catalog download increment
+
+The download endpoint now returns the explicitly requested public Catalog ZIP after package, trusted signature and identity verification. Login and workspace identity are required. The shared fetch is bounded to 64 MiB and 30 seconds; temporary files are removed on success and rejection. No install or initialization occurs. AI api_call exports the ZIP into the current account's private artifact store; another account cannot read it.
+
+290 related tests passed using real temporary Ed25519 ZIPs, isolated SQL/login, HTTP and AI export readback. Catalog transport is simulated; this is not live Catalog or installed-client acceptance. Runtime inventory: 5 tests passed, 1013 unique readable operations, no duplicate or detected static shadow. Application mypy, Ruff and all 10 blocking dev guards passed. Rating, deletion, remaining capabilities and full four-stage acceptance remain outstanding.
+
+Mainline sync included be51a83a2 (#1810, two metric JSON files only). PR #1804 remains unmerged. The prior head CI reports failures in the version-drift check and backend-smoke; both traced to the manifest version comparison refactor removing the current_version anchor. Restored the named version assignment without changing its value or comparison behavior; the exact version-anchor checker and workflow-copy verification now pass locally. New remote checks remain pending.
+
+## 实测与本次改动
+
+构建身份回读增量：原生 get-app-identity 分别读取桌面 build-info.json 与 backend/build-info.json，返回来源、有效性、完整 SHA 和产品版本，分别判断 SHA/版本一致性。缺失不借用另一组件身份，损坏、超限和相互冲突的 SHA 别名明确无效；开发环境身份单独标记。AI 既有 desktop_info 接收完整身份对象。真实临时文件覆盖一致、不一致、缺失、损坏和开发模式，相关桌面回归 82 项与 TypeScript 类型检查通过，工程 10 项阻断守卫通过。该信息仅是随包元数据声明，不证明签名可信、正在运行的后端身份、安装升级完成或实际客户端验收。
+
+更新观察回读增量：新增独立原生更新观察接口，记录当前进程的 not-observed、checking、无更新、下载进度、已下载、错误、跳过和安装请求等事件及观察时间；同时返回已下载目标版本/SHA。保留旧角标接口语义，AI 信息读取优先使用新观察，旧接口标记 observation_complete=false。开发模式跳过检查返回 UPDATE_SKIPPED，不再报告请求执行成功。网络/检查/下载/安装异常保留错误状态；install-requested 不等于安装完成，重启后仍需核对实际身份。桌面更新器 27 项、其他主进程/更新/回执 103 项、前端 14 项测试通过，桌面和前端类型检查通过；系统及网络使用隔离测试替身，未执行真实升级。
+
+桌面原生执行增量：software 新增 desktop_info、desktop_auto_launch、desktop_update，接到已有账号/租户/窗口队列；preload 补出已有的 get-app-identity IPC。可读取安装身份、更新状态和开机启动设置，设置开机启动后回读值；支持检查、下载、安装更新请求。更新结果明确为 native_request_returned + requires_followup，不把返回回执视为新版本已安装；重启后需重新连接核对身份。窗口身份变化会阻止后续调用与旧结果发布，普通浏览器和旧桥接返回明确不可用。
+
+后台协议及身份专项 136 项、前端专项 13 项通过；前端包含实际 preload 源码转译执行、精确 IPC 通道与账号变化验证，系统原生实现仍由替身模拟。软件能力写操作保持原有审批门禁，测试先确认审批前未发送，再分别验证内部调度。前端 build 类型检查、ESLint、后端 mypy 和工程门禁通过。未执行真实系统设置变更或更新安装；其他原生功能、全阶段验收及 main 交付仍待完成。注册清单现为 37 类/197 动作，软件控制 15 动作，分发入口缺失为 0，数量不代表业务覆盖率。
+
+桌面原生分母增量：源码扫描器增加 Electron IPC 注册/调用与 preload 对象成员，支持命名导入别名和命名空间导入，动态通道保留不确定性。上一轮静态报告扫描 4070 个受版本控制源文件，API 声明 1711、前端路由 116、Vue 事件 2051、文件候选 33、Mod 清单副本 103；额外识别 26 个 ipcMain 注册和 30 条 ipcRenderer 调用/订阅声明，以及 1 个 preload 对象。9 项解析器回归通过，扫描无解析错误，详细通道对账见 source-surfaces.md。此处数量不是唯一功能总数或 AI 成功覆盖率；原生执行、CommonJS/间接注册、移动端及外部应用仍未完成验收。
+
+激活失败隔离增量：待重启包激活抛出的可恢复异常或签名错误转为 install_activation 失败记录，不中断整个批量启动。真实签名包覆盖内容篡改、回执发布失败、单个/批量加载，旧代码及待生效目录保留，失败模块不注册，独立模块继续启动。637 项 Mod 回归通过。该增量只隔离激活失败，不自动放行损坏包，也不证明强杀恢复或完整业务回滚完成。
+
+主线同步与联合验收增量：已将 origin/main `a114e4b4c` 合入本工作分支（合并提交 `ea33a5500`），包含主线已合并的考勤旧库升级、意图评测和 CI 修复，未合并其他工作分支。联合测试发现导出模块 reload 后附件适配器捕获旧异常类，错误返回 API_EXPORT_FAILED；改为通过模块读取当前异常类与函数，失效或无权附件稳定返回 INVALID_API_BODY，业务端不接收请求。358 项 AI API/附件/ETL/标签/意图/Mod 安装/考勤升级联合回归通过，应用 mypy、Ruff、10 项阻断 dev guards 和工作流发布副本校验通过。新提交仍须完整 CI；本 PR 尚未合入 main，不能视为产品已交付。
+
+安装写入失败恢复增量：先保存包归档，再发布代码目录和回执；可捕获的回执写入 OSError 会恢复原目录。重启激活失败时还原旧代码并将新包移回待生效目录，保留原回执以便重试；首次安装回执失败不留下没有回执的活动代码。真实签名包与文件替换故障注入覆盖未加载升级、已加载暂存、归档失败、回执失败、重启激活及首次安装，相关回归 632 项通过，追加首次安装后专项 6 项通过；mypy、Ruff 与工程门禁通过。此增量不覆盖断电/强杀恢复、回滚操作本身再次失败或插件业务副作用回滚，完整安装事务验收仍未完成。
+
+初始化失败回执增量：声明后端但目录缺失、声明初始化但入口缺失/不可调用、必填参数无法满足以及初始化抛出 TypeError，均进入加载失败流程，不再静默跳过后登记为已加载。入口模块只在初始化成功后写入管理器缓存。真实临时 Python 后端覆盖异常、缺参数、非函数、缺函数和缺目录，失败模块及其依赖方均未注册；相关 Mod 回归 632 项通过，mypy、Ruff 和工程门禁通过。初始化失败前已经发生的插件副作用不由此自动回滚，完整安装事务和故障恢复仍待验收。
+
+批量依赖加载增量：按依赖拓扑顺序启动磁盘 Mod，在可启动节点中保留 primary 优先及名称排序；已注册依赖无需再次成为磁盘候选。循环依赖及其下游记录失败，独立分支继续加载。版本不足、缺失依赖或权益拒绝仍由实际加载检查阻断，排序不授予权限、不安装缺失包。
+
+扩大 Mod 回归 693 项通过，追加真实 Python 后端初始化后专项 8 项通过；反向命名依赖链先注册基础 Mod，再启动依赖方并写入临时初始化回执。循环、自循环、下游、独立分支和版本/权益阻断均有隔离回归。mypy、Ruff 通过；此进展补齐批量加载顺序，单个安装的自动依赖解析、嵌套 bundle 和完整安装运行验收仍待完成。
+
+商店包预检增量：`/validate` 与 `/dependencies` 已替换占位返回。登录后以明确的 `包编号:数值版本` 从 Catalog 下载，最多 64 MiB、下载等待 30 秒；实际校验 ZIP、可信签名、清单和请求身份，再按当前登录会话权益及工作空间归属筛选注册表依赖版本。错编号、错版本、无签名、非法依赖声明均拒绝；超时和成功均删除临时包，不安装或启动后端。报告中的 can_install 仅表示已声明依赖是否满足（scope=declared_dependencies_only），不代替购买权益、嵌套 bundle 依赖、安装或运行验收。私有交付源及无明确版本的包仍需按对应交付流程处理。
+
+隔离登录 SQL、真实临时 Ed25519 签名 ZIP、注册表与 HTTP 路由联合回归 289 项通过，追加 AI API 桥接贯通后预检 14 项通过；AI 可取得真实签名预检结果，错包不会报告成功。mypy、Ruff 与 10 项阻断 dev guards 通过。完整安装闭环及其余商店占位功能尚未完成。
+
+Mod 依赖版本增量：单个和批量加载器使用注册表中的实际版本检查依赖，版本不足时不启动后端。修正四段版本比较截断问题，支持数值版本比较、范围交集、caret、tilde 和尾段通配符；不支持的约束拒绝匹配。旧的仅名称列表只允许无版本约束的依赖，不能据此证明版本兼容。宿主兼容基线仍为 1.0.0.1，尚未改成发行版本动态读取。
+
+真实隔离 ModRegistry 与临时 manifest 覆盖单个/批量加载、依赖版本不足/满足及后端启动阻断，扩大 Mod 回归 686 项通过；应用 mypy、Ruff 和 10 项阻断 dev guards 通过。商店 dependencies/validate 与批量拓扑排序后续进展见上文；安装包验收仍待完成，此增量不代表 Mod 交付或四阶段完成。
+
+产品解析增量：此前 /products/resolve-name-hints 明确返回 501，提示指向已不存在的解析模块。现接通登录账号及当前 Mod 权益下的真实产品 SQL 查询，兼容旧路由调用。名称或型号唯一精确匹配才给出 product_id；重名和单个近似匹配均返回 ambiguous，需要调用方确认，停用及异租户产品排除。hints/names 最多 100 项、每项 200 字符；LIKE 特殊字符按字面值匹配。每项最多展示 20 个候选，超限时 truncated=true、total=null，不虚报完整总数。只解析、不写产品或订单。
+
+隔离数据库分别覆盖宿主、授权 Mod、其他租户和未授权 Mod，使用真实登录会话经 AI API 桥接调用；包含精确型号、同名、近似、百分号/下划线、停用、超限和非法输入。相关 88 项回归通过，应用 mypy、Ruff/格式和 10 项阻断 dev guards 通过；路由鉴权辅助已拆分，避免兼容路由文件越过 500 行门禁。此增量不等于完整语义商品识别、客户实机或四阶段交付完成。
+
+当前静态注册盘点为 37 类能力、197 个动作，注册项缺失分发入口为 0。
+注册数量不等于业务成功率；尚未登记的 UI、API、动态 Mods 功能不在分母中。
+完整结果见 `registry-inventory.json`；可运行
+`python scripts/dev/ai_control_inventory.py` 重现，无需启动业务服务。
+
+- 新增模型可调用的 `discover_erp_capabilities`，查询动作的输入、输出、权限和可用性协议。
+- 能力调用接入现有 ToolSpec 参数校验，错误参数在执行前返回错误；无参数动作可省略 params。
+- 计划修复禁止虚构业务参数、ID 和文件路径；缺失信息交给已有澄清流程。
+- AIOPEN 不再把 401/403/404/422 或 HTTP 200 下的业务 success=false 报告为成功。
+- 新增内部 software 控制能力（12 个动作），连接真实登录账号/租户的桌面会话；后台任务通过可信执行器恢复身份，客户端提交的 `_runtime_context` 不作为授权依据。
+- 页面目录读取运行时路由，包含动态 Mod 页面；快照分页显示控件状态、下拉选项和只读/禁用状态，隐藏私密字段。
+- 补齐选择、勾选、按键；过期页面和歧义选择器拒绝执行。单个连接串行执行命令，缓存最近 128 个完成回执以避免同 ID 重复执行。
+- 回执绑定原始窗口，多窗口需明确选择；断连和超时报告失败/结果未知，不将它们当作业务成功。
+- AIOPEN 增加运行时 API 目录与单操作 OpenAPI 协议读取，支持挂载路由和动态路由；目录可见性不授予执行权限。
+- AIOPEN 输入调用追踪隐藏 text/typed；这不等于所有业务任务的存储已完成敏感数据治理。
+- 账号切换同步断开旧控制连接，动画等待后的点击/输入再次检查账号、页面与控件；导航守卫阻断及输入被应用拒绝不再报告成功。
+- 客户、产品、物料、库存、采购、销售、报表、财务、MRP、供应商、发货与导入等后台工具恢复任务租户。真实 SQLite 客户查询、更新落库和跨租户拒绝已有回归证据，其余模块仍需逐项业务验收。
+- 公开任务创建、审批/恢复剥离调用方身份和内部路由标记，绑定服务端账号；执行器再次使用持久化 run.user_id。管理员恢复保留原任务所有者。
+- Memory v2 新增 list/summary，完整生命周期绑定登录账号/可信执行作用域，取消模型必填 user_id；匿名、跨账号及伪造原始工具上下文拒绝。实际候选→确认→持久化重载和跨账号隔离已验证。
+- 员工调用恢复任务账号与租户，拒绝参数/原始工具上下文伪造账号。线程池桥接使用上下文复制保留账号、租户和当前 Mod，子线程修改不污染父任务。员工协作 payload 的账号/会话由宿主参数覆盖。调度器将风险门/产品权限阻止视为失败。
+- 模型能力调用与任务创建接口支持一次性 `scheduled_at`，强制带时区并转 UTC；任务中心审批后按原有 SQL 队列的 available_at 领取，暂停恢复不提前，取消后不领取，过期任务审批后补一次。稳定 task_id 与规范化时间共同去重，不同时间使用相同 task_id 返回冲突。任务面板显示最早执行时间。周期调度仍未完成。
+
+## 四阶段验收状态
+
+当前文件控制增量：新增 software.files / software.set_files 与对应 AIOPEN 工具。控制开启后保存用户原生选择的窗口内 File 引用（最多 32 个、15 分钟）；账号切换或关闭控制清除引用。模型只能使用不透明文件编号，不能指定本机路径、URL 或文件内容。AIOPEN 全部页面动作与窗口列表现已绑定服务端认证账号/租户或下述账号连接口令。
+
+赋值前检查文件、控件、单选/多选与 accept，使用 DataTransfer 触发页面事件并回读 FileList。回执只证明文件选择，上传、ETL 落库和业务保存须另行验证。长期任务附件及全部文件入口的业务验收仍未完成。
+
+真实 Chromium 验证原生选择、中文文件内容原样传递、一次上传事件、类型拒绝、清空与账号切换后旧编号失效（scripts/dev/check_ai_file_controls.mjs）。后端定向 106 项、前端控制定向 83 项通过；全量应用 mypy 和 3088 个 Python 文件 Ruff/格式检查通过。这是隔离测试页面证据，不是已安装软件业务验收。
+
+| 阶段 | 已有基础与本次进展 | 尚未完成的验收 |
+| --- | --- | --- |
+| 1 全功能盘点与统一协议 | 注册动作清单、模型协议检索、参数检查 | 全部页面控件/API/Mods 的功能分母；逐动作分发和参数协议覆盖 |
+| 2 导航、查询、CRUD、报表、ETL | 页面语义操作与结果回读；客户后台真实数据库查询/更新与租户隔离验证 | 其余各模块真实数据与界面闭环；撤销和异常验收 |
+| 3 业务流程、配置、Mods、跨模块任务 | 已有持久任务、审批、恢复与工具执行器 | 所有功能接入；跨模块业务链；主机更新保持客户 Mods 权益与数据 |
+| 4 记忆、主动发现、定时、自我修正、自治 | Memory v2 账号内读写、确认与持久化重载闭环；已有员工 scheduler、repair advisor | 员工身份及跨模块贯通；暂停/恢复/去重；真实业务故障恢复与持续运行验收 |
+
+不得通过开放任意内部接口、绕过鉴权、生成参数占位值或把注册成功当执行成功来补足覆盖率。
+
+源码入口对账已扩展至注册表以外，见 [候选入口报告](source-surfaces.md) 与 `source-surfaces.json`。扫描 4033 个受版本控制的 FHD 源文件，包含 1711 个 API 声明、116 个前端路由声明、2047 个 Vue 事件绑定、33 个文件输入候选和 103 份 Mod 清单副本，无解析错误。数字包含源码/发布副本且不证明运行时挂载或账号授权；865 个 API 声明的路径或前缀仍有静态不确定性。原生端、外部后台、第一方 packages 与动态生成入口仍需补齐。8 项扫描器回归通过，源码及扫描器哈希随报告保存。文件控件通用链路已新增，候选位置仍需逐项对照专用导入工具和实际业务结果验收。
+微信动作现已接入分发：查询读取租户内的宿主同步数据；刷新使用下述请求与回执链路。真实 Windows 采集验收仍未完成，不能把分发入口存在视为业务完成。
+
+微信接入核查：已定位 `tools/wechat_sync/wechat_sync.py` 的 Windows 实际采集代理及 `/api/ops/wechat/ingest` 回流链路，但刷新动作尚无请求/领取/结果回执协议。本批先修复 AI 上下文无租户时读取全局联系人的行为，拒绝空值、非法值、布尔值、浮点值和非正租户；联系人关联客户、消息和数量均约束到联系人所属租户，人工绑定按指定租户选择联系人并拒绝跨租户客户。32 项摄取/上下文回归通过，包括同名跨租户联系人、错误关联和异租户消息混入的真实 SQLite 测试。此批不代表微信刷新已执行，也不代表该能力已完整接入。
+
+微信执行增量：新增宿主 SQL 刷新请求、按租户领取的 CAS 租约和幂等回执，接通 Windows 代理守护循环。联系人刷新不读取消息；消息刷新上行成功才保存游标；采集失败不再变成空数据成功。AI 等待最多 10 秒，离线/等待/过期均不报告业务完成，并提供回执查询编号和重试幂等键。账号内状态查询、异租户/异账号拒绝、过期租约、并发领取、冲突回执和迁移重复执行都有回归。人工绑定 HTTP 路由也已传递租户，避免只修服务而入口丢失筛选条件。
+
+该批注册/协议/后台执行/微信定向回归 172 项通过，执行器贯通测试覆盖注册分发、真实 HTTP 摄取、SQLite 持久数据及回执；仅 Windows 数据库读取由样例替代。刷新请求在 15 分钟后过期，单次领取租约为 5 分钟；真实设备和长耗时采集仍需验收。静态清单 37 类/192 个动作当前缺失分发入口为 0，但全软件覆盖率仍为未知；未登记 UI/API/Mods 和业务验收不包含在这个分母中。
+
+执行器贯通改造后对应 10 项复验通过；应用全量 mypy 无错误，3050 个应用/测试文件格式检查和架构适应性检查通过。后续已接入后台协作等待：前台仍限 10 秒，后台在请求剩余有效期内等待，由原步骤接收晚到回执并持久化完成。等待占用后台槽位并服从持久暂停/取消；恢复复用原请求与原步骤审批，中断退款且不生成业务失败观察。暂停中的过期采集租约不得重新领取。实际 SQLite 任务账本测试覆盖晚到回执、暂停恢复、取消、请求过期和净计费一次；计费接口为测试替身，真实账单及 Windows 实机仍待验收。
+
+该次任务分发/协议/微信回归 47 项通过，随后微信/编排/路由快照 39 项通过。CI `c73088435` 暴露冷启动循环导入、services 文件数棘轮、路由快照遗漏及 schema 漂移脚本导入路径问题：适配器已移到 application 且延迟导入编排身份；补上两条真实刷新路由快照；先设置脚本模块路径再导入 app。冷启动子进程、schema 迁移全链无漂移与分层棘轮本地复验通过，新提交仍需完整 CI。
+
+集成分支已同步正式主线 `455223967`（PR #1785 的共享主机与签名客户 Mod 交付改动），没有引入其他未合并工作树。组合版本的任务/路由回归 45 项、跨服务签名 Mod 交付 4 项通过，全量应用 mypy 无错误、3087 文件格式检查、全部 dev guards 和工作流源/副本漂移检查通过。该组合尚未合入 main，也未构建或安装交付制品。
+
+## 验证
+
+此前 25 项能力注册/分发与 64 项编排/调度回归通过。本轮账号身份、API 协议、窗口回执、AIOPEN 服务/路由、追踪脱敏、能力协议与编排定向回归合计 298 项通过；页面控制及命令排队回归 74 项通过。前端类型检查、触及文件 ESLint/Ruff 与架构适应性检查通过。
+这些是本地行为回归，不是全部功能的业务验收，也不证明已安装版本包含变更。
+集成 PR #1804 为草稿，尚未合入主线。旧提交的全量后端检查为 36908 通过、1 失败、63 跳过；失败是旧测试仍期待 HTTP 499 成功，本轮已纠正，需由新提交 CI 重新确认。
+CI、主线合并以及从主线构建并核对运行 UI/后端身份仍需完成。
+
+后续增量：账号/后台业务/记忆等定向套件 414 项，前端操作套件 78 项；全量 `mypy app/ --no-error-summary --no-incremental` 通过。旧提交 `5cdb851b5` 的 backend-test 停在新校验文件的两处类型收窄错误，本轮已修复并本地复验；新提交 CI 尚需确认。测试数字不能累加为功能覆盖率。
+
+员工增量：执行账号/线程上下文/调度及相关编排回归 392 项通过；提取公共异步桥接后对应 145 项复验通过，另有 agent runner 和员工编排 77 项通过。线程上下文传递不证明持久任务已捕获并恢复原 Mod，也不证明按账号的持久定时调度已经完成。
+
+离线平台验收 120/120 通过（含工具替身，不是 120 项真实客户业务验收）。记忆路由评测显式提供已验证会话；SQL 导入样例使用合法正整数租户，非法租户拒绝测试保留。本地评测使用隔离临时数据目录和当前工作树的 vendored LangGraph 源码，未绕过来源断言。
+
+一次性调度增量：36 项调度/队列/任务路由回归通过，包含实际 SQLite 重新建立仓储后领取、暂停恢复、取消、到期去重，以及模型创建待审批任务而不执行工具。前端类型检查和触及文件 ESLint 通过。该证据不证明周期调度或已安装桌面端验收。
+
+周期调度增量：新增宿主 SQL 表和 Alembic 迁移，支持 interval/daily（IANA 时区，午夜、夏令时缺失/重复时刻有明确策略）。模型 `execute_erp_capability` 可创建，`manage_erp_schedule` 可查询/暂停/恢复/取消，任务中心新增列表与控制。原 dispatcher 每秒发布最多一个到期任务；持久租约与固定发生时间生成稳定任务 ID，旧租约回执拒绝，停机补一次，未完成任务不累积。每次仍经任务中心审批，**尚未实现周期授权后的自动业务执行**；控制只影响后续触发，已生成任务独立保留。
+
+周期仓储、API/模型、队列和注册定向回归 57 项通过；真实 SQLite 重载与双线程争抢、回执丢失重试、取消不复活、跨账号拒绝、迁移重复执行及实际 dispatcher 线程生成待审批任务均有测试。周期面板/全局任务中心 4 项通过，前端类型检查、ESLint、Ruff、全量应用 mypy 与架构适应性检查通过。已安装桌面 UI 尚未验收；持久任务捕获原 Mod 和自动周期授权仍属剩余范围。
+
+## 明确剩余范围
+
+Mod 作用域增量：创建任务绑定服务端当前模块和已验证的会话记录编号，不保存会话令牌；执行前重读宿主账号/会话/权益，恢复 Mod 后访问业务仓储并在结束时复原线程上下文。用户提供的 mod_scope/active_mod_id 等字段不作为授权。账号停用、会话过期、权益撤销、租户变更或伪造作用域拒绝执行。实际分开的 SQLite 库验证客户查询/更新只落目标 Mod，其他 Mod 不变。
+
+Agent 账本与执行队列改用 HostSessionLocal。访问仍有旧账本的 Mod 时，事务复制历史到宿主；不删除原库、不覆盖宿主已有记录，冲突拒绝且不会退化为空内存仓储。旧待执行任务暂停等待原账号重新确认；旧队列已领取或运行中任务标记结果未知且禁止重试。该迁移按当前 Mod 访问触发，尚未完成所有历史 Mod 的统一枚举验收；退役 Mod 映射、未知结果业务对账和长期周期计划跨会话续授权仍需贯通。
+
+此批 Mod/业务租户/员工/调度/路由定向回归 67 项通过，迁移模块更名后 10 项复验；全量格式检查 3046 文件通过，应用 mypy 无错误。架构检查最初拒绝 legacy_ 文件命名，改为 mod_journal_migration 后通过。未修改已安装软件和生产数据。
+
+上一提交的前端 CI `34199959402` / job `101976246848` 在 npm 安装 onnxruntime-node 时下载 Linux GPU 包遇到 ECONNRESET，测试尚未开始；新提交需重新完成该门禁，不能将网络安装失败算作测试通过。
+
+周期授权增量：新增限时、限次且绑定具体动作/参数/周期和 ToolSpec 权限范围的授权及逐 run 额度预留记录。用户在任务中心查看操作并确认，模型创建计划本身不授予自动执行权限。授权内任务使用原任务队列执行；执行前再次核对计划状态、授权有效性、动作参数与账号活动/租户。暂停、取消、撤销、过期和次数耗尽均有对应路径；待审批任务续授权或恢复后可重新入队。记录中的次数是已批准任务数，不是业务成功数；已开始的操作不承诺强制中断。
+
+该增量后，调度/授权/任务中心后端定向回归 66 项、前端 6 项通过，包含真实 SQLite 并发额度上限、授权撤销/续期、队列到编排执行以及迁移重复执行。执行器使用测试替身，不能作为全部业务动作验收。此前“尚未实现周期授权自动执行”的记录属于旧提交阶段，当前已补机制与回归；已安装桌面端、全部业务功能与 Mod 作用域仍未全量验收。
+
+旧提交 `08e60ff45` 的 CI `34198194272` 在 `ruff format --check app/ tests/` 停止，原因是 `recurring_schedule_service.py` 需要格式化；本批修复并本地全量检查 3043 个文件通过。新提交仍需完整 CI，不能将该格式修复描述为全量后端验收通过。
+
+- 完整功能分母：逐页面/API/授权 Mod 对账，补齐缺失 dispatcher，不能用 192 个注册动作冒充全软件覆盖率。
+- 控件与身份：文件上传、复杂自绘控件，以及旧外部 AIOPEN 通道的身份策略仍需核验；账号切换连接和在途命令已补回归。
+- 业务结果：导航/点击回执只证明交互层结果；各模块持久化读取、权限隔离、撤销和异常补偿需真实数据闭环。
+- 任务与自治：跨模块任务、配置和 Mod 更新；员工执行身份、主动发现、调度、去重、暂停恢复和故障修复需按账号贯通验证。长期记忆单模块闭环已验证，跨模块自动使用仍需验收。
+- 交付：同一集成 PR 必需检查通过、合入 main、精确提交构建、安装后 UI/后端/Mod 权益核对。
+
+## 当前增量：外部 AI 账号连接口令
+
+面板发放的运行时口令绑定真实登录账号、租户、宿主会话记录与会话摘要，不存储登录口令。有效期为原会话到期与 24 小时中的较早者，进程重启需重新生成。每次使用重读宿主 SQL：停用、租户变更、会话过期/删除/替换或撤销均失效。显式提供无效或共享环境口令时不得回退到浏览器另一个账号。原无账号绑定的口令不能控制屏幕。
+
+全部外部页面动作、窗口列表、控制面板历史与钥匙列表按账号和租户隔离；同租户其他账号也不可操作。只有口令所属账号可以撤销；生成/撤销审计使用实际账号。公开接入说明同步账号口令要求和动态工具数量。共享环境口令不授予账号权限；后续账号连接口令的业务 API 执行贯通见下节。
+
+AIOPEN/路由/协议/隐私/软件控制扩大回归 289 项通过；随后账号正整数边界新增后 24 项复验通过。真实 SQLite + HTTP/MCP 覆盖口令发放、撤销、当前会话有效性、跨账号列表与操作拒绝、实际控制命令回执和面板历史隔离。全量应用 mypy 无错误，3090 个 Python 文件 Ruff/格式检查通过。未构建或安装交付制品，四阶段仍未验收完成。
+
+## 当前增量：业务 API 真实身份与请求协议
+
+api_call 现使用已验证的本机登录会话或账号连接口令恢复登录身份，不接受模型提供的认证头/账号/租户作为权限来源。会话只在进程内发往目标 ASGI 应用，不出现在工具回执中；实际接口继续执行登录和角色权限检查。目标请求由真实行业中间件解析租户，清除继承的租户覆盖；mod_id 省略继承当前请求，空字符串选择宿主，指定模块重验会话权益，结束后恢复原上下文。当前登录请求的教学 Cookie 保留给原中间件验证，账号口令不继承其他浏览器账号的 Cookie；有效教学任务的完整业务验收仍待完成。
+
+调用只接受本机路径，拒绝目录跳转、异常编码/控制字符及外部 URL；不跟随重定向。白名单按最长匹配执行，关闭的子路径不再被父前缀重新放行。保留原 CSRF 流程并关闭临时客户端。JSON 请求体按原值发送，支持数组、标量和 null，包含 DELETE/显式 GET 请求体；不再自动插入 source 字段（chat 自己明确提供 source）。非 JSON 数值/对象拒绝执行。
+
+314 项 AIOPEN、协议、路由与软件控制回归通过，其中 22 项新执行回归使用真实宿主 SQLite 会话、实际 HTTP 资料/客户路由、生产行业/CSRF 中间件与客户服务。已验证外部 REST 到受保护资料接口、客户读取与更新落库、跨租户更新 404、管理员接口 403、Mod 权益撤销与独立数据库隔离、过期登录拒绝、上下文恢复、JSON 原样传递及重定向拒绝。Mod 数据库由隔离测试工厂提供，不等于实际安装 Mod 验收；客户新增/删除/回滚和其他业务模块仍需逐项闭环。全量应用 mypy 无错误，3092 个 Python 文件 Ruff/格式检查通过。
+
+当前仍需补齐原生端/动态入口与功能分母、附件/二进制导出/流式 API、各业务模块和长期自治验收，以及 CI、main 合并、精确主线制品与安装端核验。此批不代表四阶段完成。
+
+## 当前增量：导出文件与下载回执
+
+API 返回的附件、二进制、CSV 和长文本现保存完整字节，不再截成 2000 字符后报告完整交付。私有目录位于 get_data_dir()/aiopen-private-artifacts，下载通过独立 /api/aiopen/artifacts/{artifact_id} 路由，返回文件名、大小、SHA-256、到期时间和认证下载 URI。回执同时进入任务 artifact，任务归属取真实 API execution_scope，不能由请求体伪造。
+
+读取先核验当前账号、租户和 Mod 权益，再检查文件大小与哈希；跨账号、权益撤销、过期、损坏、非法编号和符号链接拒绝。响应强制附件下载、private/no-store 和 nosniff。当前每文件保存上限 64 MiB，有效期 24 小时；同账号下次导出时只清理其已过期回执与文件。当前响应仍先缓存在内存，未实现大文件流式限流、集群共享存储或全部历史孤立文件清理，不能据此宣称这些验收通过。
+
+实际生成 XLSX 经 API、私有文件存储、认证 HTTP 下载后，字节/哈希一致，重新打开可读出中文客户名与数值。模块重载后回执仍可读取；同时验证了未标注类型的二进制、CSV、长文本、过期清理、损坏/超限拒绝及真实任务 artifact 归属。扩大回归 317 项通过；补充回执与边界并拆分路由后，相关 75 项复验通过。旧路由文件超过 500 行的架构守卫问题已通过独立下载路由解决，全部 dev guards、全量应用 mypy、3095 个 Python 文件 Ruff/格式检查通过。实际安装端 UI 下载、真实客户导出业务和长期运行仍需验收，四阶段目标保持未完成。
+
+导出回执后续复验：改用真实 SQLite 任务仓储并重新实例化仓储读取，文件 URI、SHA-256、实际账号与租户均保留；相关 8 项通过。此验证不等于安装端页面已展示或客户已下载。
+
+## 当前增量：任务结果直接下载
+
+聊天任务结果卡现直接展示私有导出文件、大小、有效期与下载按钮。仅接受编号一致的认证下载回执，沿用现有登录客户端；拒绝重定向，并检查大小、服务端摘要与可用时的浏览器 SHA-256。重复点击不会重复请求，90 秒超时可重试；账号切换、组件退出或回执移除会中止旧请求，相同任务轮询不会误取消下载。提示“下载已发起”，不将浏览器保存动作当作已经落盘。
+
+24 项前端回归通过，包含拒绝后重试、过期、损坏文件、重复点击、超时与账号切换；全量前端类型检查、触及文件 ESLint 和 10 项阻断 dev guards 均通过。真实 Chromium 使用实际任务组件、API 客户端和下载工具，验证认证 Cookie、中文文件名、下载字节一致及账号切换中止旧下载，页面无脚本异常。验收脚本为 scripts/dev/check_ai_artifact_download_ui.mjs。
+
+![任务文件下载组件验收](task-artifact-download.png)
+
+图片来自隔离样例页面，不代表已安装软件。实际客户导出、全部历史附件类型、主线交付与安装端验收仍未完成；四阶段目标保持进行中。
+
+## 当前增量：表单、multipart 与 ETL 实际后端闭环
+
+api_call 新增 form 与 files 协议。表单值保持字符串、重复值和空值，不自动转换业务参数；body 与表单/附件互斥。multipart 仅引用已有私有导出回执，逐个重新核验文件账号、源 Mod 权益、到期、大小与哈希，目标接口仍执行当前会话和目标 Mod 权限。最多 16 个附件、合计 64 MiB；不允许模型指定文件系统路径、外部 URL 或内联文件内容。用户新上传附件的持久接入和大文件流式处理仍需完善。
+
+表单及既有 API 身份/导出定向 50 项通过，其他 AIOPEN 回归 245 项通过。实际 FastAPI multipart 解析验证中文 XLSX 完整字节、重复文件字段与表单值；无权、过期、损坏和超额附件未调用目标处理函数。全量应用 mypy、Ruff 和格式检查通过，10 项阻断 dev guards 全通过。
+
+另新增真实 ETL 后端贯通验收：私有导出文件 → /api/etl/uploads → 客户预演 → 明确 confirmed 后执行 → 客户列表读取 → 重复导入零新增 → 原运行撤销。使用真实 SQL 会话、接口权限、生产行业/CSRF 中间件、XLSX 解析器、ETL 服务及后台线程，数据库工厂、文件目录和工作线程池使用隔离测试资源；测试账号具有管理员角色，桌面登录许可探针与动态客户 Mod 分发使用已有测试接缝，行建议器使用内置确定性降级。200 条样例客户在预演前后不写入，执行后本租户从 1 条变成 201 条，重复执行保持 201 条，撤销后恢复 1 条；同租户其他账号和异租户不能读取或执行该运行，另一租户原数据不变。此证据不证明安装端 UI 或全部 ETL 目标验收通过。
+
+该阶段核查曾发现旧 /api/customers/import 路由引用缺失的 run_customers_excel_import_bytes，旧覆盖测试以替身返回成功；/api/customers/export 兼容路由仍明确返回 501。这两个旧入口的后续修复见下一节；实际部署和安装端仍待验收，不能因通用 API 协议接通而标记完成。当前工作仍在同一集成 PR #1804，未合入 main 或更新已安装软件。
+
+该批统一重跑上述 AIOPEN 与 ETL 贯通套件共 296 项全部通过；新增业务验收后 10 项阻断 dev guards 复验通过。
+
+## 当前增量：客户页导入、导出与 Mod 预演作用域
+
+客户文件接口现复用既有服务：/api/customers/import 创建 ETL 上传和预演并返回 202、run_id、requires_confirmation，保留企业版与 etl.execute 权限及客户写入检查；不调用已缺失的旧函数、不直接写客户。客户页取得有效回执后打开 /business-docking?run_id=…，待用户核对再确认写入。没有回执的 success 不显示导入成功，账号切换后的旧响应不跳转。
+
+客户导出连接已有 CustomerTransferMixin.export_to_excel，并将文件路由注册在 customer_id 路由之前，消除原路径被动态 ID 路由抢先匹配的问题。导出显式约束当前租户、保留电话前导零，将业务字段中的公式样式文本作为文本写出；文件名增加 UUID，连续或并发导出不共用同一个秒级文件名。指定模板不可用时明确失败，不能静默换成默认模板。客户页提供“标准客户清单”选项，并在账号切换后阻止旧下载落到浏览器保存流程。
+
+ERP 门面 Mod 通过显式宿主 SDK customer_exchange_router 挂载相同文件接口，源码与 XCAGI 副本同步升级为 1.0.0.1。初次直接导入宿主路由被 Mod 边界守卫拒绝，已改成 SDK 导出并通过守卫。预演与执行线程用 copy_context 保留提交时的 Mod 上下文，解决工作线程默认访问宿主而找不到 Mod 运行的问题；这不证明重启后恢复或执行期间权益变更已经全量验收。
+
+客户服务/路由与真实数据贯通 169 项通过；扩大 AIOPEN/ETL 预演、操作租约和执行回归 183 项通过、14 项 PostgreSQL 用例因未配置独立 ETL_TEST_POSTGRES_URL 跳过。实际宿主和 Mod 接口均通过 XLSX 附件创建 200 行客户预演；预演不写入，确认后只有目标库从 1 条变为 201 条，其他 Mod 与宿主保持原值。导出实际工作簿验证租户范围、唯一文件名、电话文本、公式样式文本和缺失模板拒绝。路由快照 36 项通过，前端 14 项通过，全量前端类型检查、应用 mypy、Python Ruff/格式及 10 项阻断 dev guards 通过。测试使用隔离 SQL、样例文件和已有登录/桌面许可测试接缝，不涉及真实客户数据。
+
+尚未构建或安装该 Mod 版本，旧已发布客户端、模板完整样式、安装端点击与新入口整链仍需验收。私人客户 Mod 的自定义文件路由必须另行对账；不能用通用 ERP 门面改动替代全部客户 Mod 完成。四阶段目标仍未全部完成。
+
+## 当前增量：隐藏接口协议与 HTTP 方法对账
+
+api_operations 现包含普通 Starlette HTTP 路由，并按 schema_available 明确区分类型化 API 和没有请求协议的 HTTP 入口。普通路由只报告已挂载的方法，不虚构参数。隐藏于公开 OpenAPI 的 FastAPI 动作可按需读取协议：在私有副本中保留真实挂载前缀、依赖参数和模型字段，只为该次协议查询开启 schema；原路由和公开 OpenAPI 不变，业务处理器与依赖均不执行。
+
+api_call 增加 HEAD/OPTIONS，与发现工具的方法列表一致。未显式提供请求体时发送空请求体；HEAD 只返回明确允许的响应元数据，不把附件响应头误认为已下载文件，不回传 Set-Cookie 或任意内部令牌头。权限、Mod 与路径检查继续使用原执行链。
+
+AIOPEN 扩大回归 299 项通过；补充 HEAD 头部脱敏后相关 36 项复验通过。真实 HTTP 验证 HEAD/OPTIONS 执行及无伪造导出，嵌套路由测试验证隐藏协议、依赖参数和公开 OpenAPI 不变。全量应用 mypy、3100 个 Python 文件 Ruff/格式检查与 10 项阻断 dev guards 通过。这些证据仍不构成全软件功能分母或全部已安装业务验收；无类型化协议的入口还需补充正式契约或专用适配器。
+
+## 当前增量：实际注册路由清单与冲突修复
+
+新增 [隔离注册清单](runtime-contracts.md) 和完整逐项 JSON。register_all_routes、legacy compatibility 开启的测试配置下，1017 条注册对应 1013 个不同路径/方法；发现 health 与 LAN settings 的 4 个重复注册，并发现 6 条静态路径被前序动态或重复路由遮挡。隐藏 OpenAPI 不改变 HTTP 分发优先级，不能用于解决重复注册。
+
+修复后同一配置下保留 1013 个不同操作：重复注册与已检测的静态遮挡均为 0，1013 个协议均可读取。具体打印动作先于通用文件 catch-all 注册，LAN 配置只保留规范 HTTP 所有者，/api/health 只保留正式健康路由。原 /health 和旧 SDK 配置函数继续保留。真实 HTTP 验证具体标签入口与规范授权器，打印机使用替身；pdf_labels 原有 501 仍是未实现业务，不能标记完成。
+
+相关扩大回归 376 项通过（包含一次性报告生成检查）；将报告改为可选输出并删除临时生成测试后，永久审计套件 5 项通过。全量应用 mypy、Python Ruff/格式和 10 项阻断 dev guards 通过。回归发现一条旧员工测试仍期望 payload 工作区覆盖宿主参数，已按此前可信身份实现更新断言，未改变员工实现。该注册清单只证明隔离配置的路由和协议，不证明所有启动后 Mod、原生端、实际账号或全部业务动作完成。
+
+## 当前增量：标签任务绑定来源 Mod 与 CI 修复
+
+LabelJobService 新生成清单保存服务端上下文的 mod_id，读取、下载、确认和提交统一检查来源模块。测试覆盖宿主到 Mod、Mod 到宿主和两个 Mod 之间的拒绝；拒绝不会消费原确认，切回来源模块并重新实例化服务后仍可提交一次。真实生成三页 PDF，物理提交使用替身，不代表真实打印机验收。旧清单没有来源标记时返回 409 要求重新生成，原文件保留；不猜测旧任务属于宿主。此增量仅验证来源绑定，不能代替完整权益撤销及动态 Mod 生命周期验收。
+
+打印、打印路由和运行时清单回归 43 项通过、1 项 PostgreSQL 检查因未配置测试环境跳过。应用 mypy（1796 文件）和 10 项阻断 dev guards 通过。CI 在 235fc0730 检出的两处宽泛异常捕获已修正：协议诊断只捕获明确的 schema 构建错误，测试数据库依赖利用 Session 关闭时回滚，保留 ETL 内部多事务语义。ETL、客户文件和协议审计复验 9 项通过，本地 broad-except 门禁通过；远端新提交检查仍需等待。旧打印兼容入口的功能修复、主线合入、安装端及实际业务验收仍未完成。
+
+## 当前增量：PDF 标签旧入口真实接通
+
+直接标签接口的权益增量：公共 owner 依赖通过当前 HTTP 请求复验 Mod 会话与权益，核验后恢复原请求上下文；覆盖产品选择、三个生成入口、任务读取、文件下载、确认和提交。隔离 SQL、真实登录会话及生产 register_extra_middleware 验证撤销权益后全部相关操作拒绝，文件清单与确认字节不变、打印适配器未调用，恢复权益后仍可读取原 generated 任务。45 项相关回归通过，强化未消费确认断言后 7 项复验通过；应用 mypy、Ruff/格式与 10 项阻断 dev guards 通过。此证据是请求时权益复验，不证明已提交物理任务可以撤回，亦不等于完整四阶段交付。
+
+标签续接增量：工作流结果保存经格式校验的 jobId，现有任务合并与 JSON 恢复保留该编号；展开任务卡可打开 ERP 打印页的 label_job 查询地址。页面读取服务端现有任务与 PDF，不重新生成；预览有效且任务为 generated/failed 时才可准备确认，确认后才提交。提交响应丢失时标记结果未知并禁用再次确认，需检查打印队列。账号、Mod、任务编号变化及组件退出清除旧文件 URL 和确认，迟到响应不回填。
+
+真实 Vue 组件及 Mod 物理页面测试验证链接续接、恢复记录、读取、PDF 预览、独立确认和提交，以及权限变化、坏 PDF、非法编号和未知结果；HTTP/PDF/打印响应使用隔离样例，不代表安装端或真实出纸。扩大前端回归 97 项通过，全量类型检查、ESLint、10 项阻断 dev guards 通过。企业完整宿主构建成功，新预览组件位于 PrintView 构建块；通用精简模式不包含业务 Mod，不能替代本项验收。ERP Mod 源与 XCAGI 镜像保持一致，版本升为 1.0.0.2；仍未安装、发布或合入 main，print-last 和完整四阶段验收继续进行。
+
+后续单标签增量：/api/print/single_label 现与 pdf_labels 共用认证标签生成处理函数，产品 ID、模板、张数和尺寸必须明确。删除旧型号模糊匹配第一条、查询失败用型号冒充产品名、非法数量静默改成 1 的分支；只有型号和数量的旧调用须补齐配置。旧替身伪造打印成功的测试已用真实 SQL/PDF/HTTP 预览确认测试替代。
+
+工作流配置不完整时不发请求，返回 needs_configuration 并显示提示；完整配置只生成预览，等待单独确认。缺少 generated 任务回执或网络失败不显示成功。结果处理检查请求序号、账号 epoch、Mod 切换、面板卸载、任务移除及员工启用状态，旧响应不会写入新作用域。后端统一回归 165 项、前端 33 项通过且无未处理异常，全量前端类型检查、ESLint、应用 mypy、Ruff 和 10 项阻断 dev guards 通过。刷新清单仍有 1013 个唯一可读协议。任务一键打开已有预览、print-last、真实出纸与全部业务及安装端验收仍待完成。
+
+/api/print/pdf_labels 现复用 LabelJobService 的严格产品 ID、模板、份数和尺寸协议，必须登录；返回 generated 任务及预览、确认、提交地址，不直接打印。兼容路由归入 label_jobs 模块，保持具体路径先于文件 catch-all；原占位 501 测试改为实际认证入口检查。真实 SQL 与 PDF HTTP 贯通验证生成、下载、确认前零提交、确认后一次提交；物理打印使用替身。AI api_call 另以真实登录会话生成和回读 PDF，私有导出字节与原文件一致，其他账号读取被拒绝，预览任务仍保持 generated。172 项统一回归通过，10 项阻断 dev guards、Ruff/格式和应用 mypy 通过；隔离运行时清单重新生成后仍为 1013 个唯一协议、零重复与静态遮挡。single_label、print-last 旧流程、真实打印机、安装端与完整四阶段验收仍未完成。
+
+## Server model recheck at 861ecbcaf
+
+Read the running fhd-full.service model configuration through SSH, with credentials held only in process memory. The local normal-chat router completed 51/51 real mimo-v2.5-pro calls with zero errors or empty responses. Core: 16/24; semantic: 32/73; total: 48/97 (49.5%). The unchanged dataset previously scored 42/97 at 5a1e75a7b. This single run is not a controlled statistical comparison and does not establish full-function acceptance. No production business tools or installed UI were executed. See server-model-recheck-861ecbcaf.json.
+
+Inventory tenant-boundary regression: 45 tests passed, including an exact transaction ID from tenant 1 returning no records under tenant 2.

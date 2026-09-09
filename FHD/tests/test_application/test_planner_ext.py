@@ -234,7 +234,14 @@ class TestLLMWorkflowPlannerPlanExtended:
             patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
         ):
             result = planner.plan("u1", "添加客户公司A", get_tool_registry(), {})
-        assert result.intent in ("add_customer", "ensure_customer", "generic_workflow")
+        assert result.intent == "business_db_write"
+        writes = [node for node in result.nodes if node.tool_id == "business_db" and node.action == "write"]
+        assert len(writes) == 1
+        assert writes[0].params["entity"] == "customers"
+        assert writes[0].params["operation"] == "upsert"
+        assert writes[0].params["payload"]["unit_name"] == "公司A"
+        assert writes[0].params["payload"]["customer_name"] == "公司A"
+        assert writes[0].risk == "medium"
 
 
 # ========================= _validate_required_params - extended ===========

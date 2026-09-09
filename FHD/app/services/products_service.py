@@ -9,11 +9,13 @@
 - 异步批量操作
 """
 
+import json
 import logging
 import time
 from typing import Any, cast
 
 from app.application.ports.product_repository import ProductRepository
+from app.infrastructure.tenant_scope import current_tenant_id
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -98,7 +100,10 @@ class ProductsService(NeuroEventPublisherMixin):
             return {"success": False, "message": "服务未正确初始化", "data": [], "total": 0}
 
         start_time = time.perf_counter()
-        cache_key = f"products:list:{unit_name}:{model_number}:{keyword}:{page}:{per_page}"
+        cache_key = self._tenant_cache_key(
+            "products:list:"
+            + json.dumps([unit_name, model_number, keyword, page, per_page], ensure_ascii=False)
+        )
 
         # 尝试从缓存获取（仅对第一页和简单查询启用缓存）
         use_cache = (page == 1 and not model_number) or (keyword is None)
@@ -142,7 +147,7 @@ class ProductsService(NeuroEventPublisherMixin):
             logger.error("ProductRepository 未注入")
             return {"success": False, "message": "服务未正确初始化", "data": [], "count": 0}
 
-        cache_key = "product_units:all"
+        cache_key = self._tenant_cache_key("product_units:all")
 
         if self._cache:
             cached = self._cache.get(cache_key)
@@ -162,7 +167,7 @@ class ProductsService(NeuroEventPublisherMixin):
             logger.error("ProductRepository 未注入")
             return {"success": False, "message": "服务未正确初始化", "data": None}
 
-        cache_key = f"product:{product_id}"
+        cache_key = self._tenant_cache_key(f"product:{product_id}")
 
         if self._cache:
             cached = self._cache.get(cache_key)
@@ -309,7 +314,9 @@ class ProductsService(NeuroEventPublisherMixin):
             logger.error("ProductRepository 未注入")
             return {"success": False, "message": "服务未正确初始化", "data": [], "count": 0}
 
-        cache_key = f"product_names:{keyword or 'all'}"
+        cache_key = self._tenant_cache_key(
+            "product_names:" + json.dumps(keyword, ensure_ascii=False)
+        )
 
         if self._cache:
             cached = self._cache.get(cache_key)
@@ -352,6 +359,10 @@ class ProductsService(NeuroEventPublisherMixin):
 
         return result
 
+    @staticmethod
+    def _tenant_cache_key(key: str) -> str:
+        return f"tenant:{current_tenant_id()}:products:v2:{key}"
+
     def _invalidate_product_cache(self):
         """清除所有产品相关缓存"""
         if not self._cache:
@@ -359,13 +370,14 @@ class ProductsService(NeuroEventPublisherMixin):
 
         try:
             patterns = [
+                "product:*",
                 "products:list:*",
                 "product_units:*",
                 "product_names:*",
             ]
 
             for pattern in patterns:
-                self._cache.clear_pattern(pattern)
+                self._cache.clear_pattern(self._tenant_cache_key(pattern))
 
             logger.debug("产品列表缓存已清除")
 
@@ -373,15 +385,16 @@ class ProductsService(NeuroEventPublisherMixin):
             logger.warning("清除产品缓存失败: %s", e)
 
     def _invalidate_single_product_cache(self, product_id: int):
-        """清除单个产品的缓存"""
+        """清除产品详情及包含它的列表、名称和单位缓存。"""
         if not self._cache:
             return
 
         try:
-            cache_key = f"product:{product_id}"
+            cache_key = self._tenant_cache_key(f"product:{product_id}")
             self._cache.delete(cache_key)
         except RECOVERABLE_ERRORS as e:
             logger.warning("清除单产品缓存失败 [%s]: %s", product_id, e)
+        self._invalidate_product_cache()
 
 
 from app.neuro_bus.neuro_service_instrumentation import instrument_service_layer_class

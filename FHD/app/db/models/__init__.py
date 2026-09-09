@@ -1,8 +1,14 @@
+from app.db.models.customer_product_link import CustomerProductLink
 from app.db.models.agent import (
     AgentRunRecord,
     AgentTaskCommandRecord,
     AgentTaskExecutionRecord,
     AgentTaskRecord,
+)
+from app.db.models.agent_schedule import AgentScheduleRecord
+from app.db.models.schedule_authorization import (
+    ScheduleAuthorizationRecord,
+    ScheduleAuthorizationUseRecord,
 )
 from app.db.models.ai_circle import AiCircleComment, AiCirclePost, AiCircleReaction
 from app.db.models.ai_employee import AiEmployeeProfile
@@ -85,6 +91,7 @@ from app.db.models.user import Session as UserSession
 from app.db.models.user import User
 from app.db.models.tutorial import TutorialRun, TutorialStepEvidence, TutorialWorkspace
 from app.db.models.wechat_sync import WechatContact, WechatMessage
+from app.db.models.wechat_refresh import WechatRefreshRequest
 from app.db.models.workflow import (
     WorkflowCheckpoint,
     WorkflowDefinition,
@@ -109,6 +116,9 @@ __all__ = [
     "AgentTaskRecord",
     "AgentTaskCommandRecord",
     "AgentTaskExecutionRecord",
+    "AgentScheduleRecord",
+    "ScheduleAuthorizationRecord",
+    "ScheduleAuthorizationUseRecord",
     "AiCirclePost",
     "AiCircleReaction",
     "AiCircleComment",
@@ -120,6 +130,7 @@ __all__ = [
     "ImMessage",
     "WechatContact",
     "WechatMessage",
+    "WechatRefreshRequest",
     "Product",
     "ShipmentRecord",
     "ShipmentEtlImportFingerprint",

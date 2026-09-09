@@ -1,0 +1,17 @@
+{
+  "source_sha": "a357378aea9866d96bf14b80b6e3835ca2596cfb",
+  "dataset_sha256": "c70d172191e4f583935302d5c5d2968524f557c3d9aadc295c15eeb72283602b",
+  "passed": 7,
+  "total": 22,
+  "scope": "Single isolated SQLite fallback trial; no live model, production approval chain or installed client. Non-execution runtime tested separately.",
+  "modified_sources": {
+    "FHD/app/application/agent_orchestrator/execution_lease.py": "bf07ebfcfc46f17aae64c3ca34e6b46410a79f63b7c389c321e10ae7786babea",
+    "FHD/app/application/agent_orchestrator/orchestrator_agentorchestrator_mixin01__agentorchestratorpart01mixin_mixin01.py": "26284d70be37751dcd5e959692a303d5f105c69f1e7597a878026890dcb60d52",
+    "FHD/app/application/ai_chat/workflow_response_builder.py": "974e9f3f72246fd7e547c52a5f4a69390eb6e6337820d6c8594bee8eaca9d780",
+    "FHD/app/application/workflow/engine_workflowengine_mixin01__workflowenginepart01mixin_mixin01.py": "ae70c1f344dc7a8ac1e7b8f15dbed4a490cf1b2d85d9e3e452547e2fef0d4465",
+    "FHD/app/application/workflow/planner_llmworkflowplanner_mixin01__llmworkflowplannerpart01mixin_mixin01.py": "021c2c667b26b0842ec39968cc1585b84b59418a9e128e8c1bf686b8630147fd",
+    "FHD/app/application/workflow/planner_llmworkflowplanner_mixin02.py": "1f2c077e7e91fbf9f4fc8fdbf3caa11093f6460d6c05ce57da195f6bea237f23",
+    "FHD/app/application/workflow/types.py": "a4960723306b50478acc462786d1ae44e80541a862ccfb2df4054f4d55012823",
+    "FHD/app/application/workflow/no_operation.py": "b284162597c8f9e5ad1023574b0d9c2f979b20677a410eafdeadfa0237e5fac3"
+  }
+}

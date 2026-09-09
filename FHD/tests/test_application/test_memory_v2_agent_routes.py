@@ -24,6 +24,7 @@ def _patch_agent_repo(repo: InMemoryAgentRunRepository):
 
 
 def _configure_runtime(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("FHD_ALLOW_X_USER_ID_HEADER", "1")
     import app.services.user_memory_service as memory_mod
 
     memory_dir = tmp_path / "memory"

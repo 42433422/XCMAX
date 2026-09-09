@@ -14,9 +14,18 @@ SPECIAL_INPUT_SCHEMAS_PART_3: dict[tuple[str, str], dict[str, Any]] = {
             "access_context": {"type": "object"},
         },
     },
+    ("memory_v2", "list"): {
+        "type": "object",
+        "required": [],
+        "properties": {
+            "status": {"type": "string", "enum": ["pending", "active", "rejected", "deleted"]},
+            "memory_type": {"type": "string", "enum": ["preference", "entity", "episodic"]},
+        },
+    },
+    ("memory_v2", "summary"): {"type": "object", "required": [], "properties": {}},
     ("memory_v2", "propose_candidate"): {
         "type": "object",
-        "required": ["user_id", "memory_type", "key", "value"],
+        "required": ["memory_type", "key", "value"],
         "properties": {
             "user_id": {"type": "string"},
             "memory_type": {"type": "string", "enum": ["preference", "entity", "episodic"]},
@@ -30,7 +39,7 @@ SPECIAL_INPUT_SCHEMAS_PART_3: dict[tuple[str, str], dict[str, Any]] = {
     },
     ("memory_v2", "confirm"): {
         "type": "object",
-        "required": ["user_id", "memory_id"],
+        "required": ["memory_id"],
         "properties": {
             "user_id": {"type": "string"},
             "memory_id": {"type": "string"},
@@ -39,7 +48,7 @@ SPECIAL_INPUT_SCHEMAS_PART_3: dict[tuple[str, str], dict[str, Any]] = {
     },
     ("memory_v2", "reject"): {
         "type": "object",
-        "required": ["user_id", "memory_id"],
+        "required": ["memory_id"],
         "properties": {
             "user_id": {"type": "string"},
             "memory_id": {"type": "string"},
@@ -48,7 +57,7 @@ SPECIAL_INPUT_SCHEMAS_PART_3: dict[tuple[str, str], dict[str, Any]] = {
     },
     ("memory_v2", "correct"): {
         "type": "object",
-        "required": ["user_id", "memory_id"],
+        "required": ["memory_id"],
         "properties": {
             "user_id": {"type": "string"},
             "memory_id": {"type": "string"},
@@ -59,7 +68,7 @@ SPECIAL_INPUT_SCHEMAS_PART_3: dict[tuple[str, str], dict[str, Any]] = {
     },
     ("memory_v2", "delete"): {
         "type": "object",
-        "required": ["user_id", "memory_id"],
+        "required": ["memory_id"],
         "properties": {
             "user_id": {"type": "string"},
             "memory_id": {"type": "string"},

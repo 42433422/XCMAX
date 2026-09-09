@@ -257,6 +257,25 @@ SPECIAL_OUTPUT_SCHEMAS_PART_3: dict[tuple[str, str], dict[str, Any]] = {
             "error_code": {"type": "string"},
         },
     },
+    ("memory_v2", "list"): {
+        "type": "object",
+        "required": ["success", "user_id", "memories"],
+        "properties": {
+            "success": {"type": "boolean"},
+            "user_id": {"type": "string"},
+            "memories": {"type": "array", "minItems": 0},
+        },
+    },
+    ("memory_v2", "summary"): {
+        "type": "object",
+        "required": ["success", "user_id", "summary"],
+        "properties": {
+            "success": {"type": "boolean"},
+            "user_id": {"type": "string"},
+            "summary": {"type": "object"},
+            "planner_context": {"type": "string"},
+        },
+    },
     ("memory_v2", "propose_candidate"): {
         "type": "object",
         "required": ["success"],

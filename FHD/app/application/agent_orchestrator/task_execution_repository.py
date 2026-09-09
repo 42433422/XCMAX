@@ -9,6 +9,7 @@ import threading
 
 from app.application.agent_orchestrator.run_models import AgentRun, utc_now_iso
 from app.application.agent_orchestrator.task_models import tenant_id_of_run
+from app.application.agent_orchestrator.task_schedule import execution_available_at
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,7 @@ class InMemoryTaskExecutionRepository:
         priority: int = 100,
     ) -> AgentTaskExecution:
         now = utc_now_iso()
+        available_at = execution_available_at(run, now)
         with self._lock:
             row = self._rows.get(run.run_id)
             if row is None:
@@ -55,7 +57,7 @@ class InMemoryTaskExecutionRepository:
                 row.heartbeat_at = ""
                 row.finished_at = ""
             row.priority = int(priority)
-            row.available_at = now
+            row.available_at = available_at
             row.requested_by = str(requested_by or "")
             row.last_error_code = ""
             row.updated_at = now
@@ -193,6 +195,12 @@ def get_task_execution_repository() -> TaskExecutionRepository:
             repository.get("")
             _task_execution_repository = repository
         except RECOVERABLE_ERRORS as exc:
+            from app.application.agent_orchestrator.mod_journal_migration import (
+                LegacyJournalMigrationError,
+            )
+
+            if isinstance(exc, LegacyJournalMigrationError):
+                raise
             require_durable = os.environ.get(
                 "XCAGI_AGENT_RUN_REQUIRE_DURABLE", ""
             ).strip().lower() in {"1", "true", "yes", "on"}

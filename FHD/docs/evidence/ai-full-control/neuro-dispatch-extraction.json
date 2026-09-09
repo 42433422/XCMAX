@@ -1,0 +1,11 @@
+{
+  "base_sha": "5a1e75a7b24001b08ee1905216a0a3780f0d261c",
+  "change": "Extract handler invocation, retry and failure accounting into bus_dispatch; preserve per-entry event copies.",
+  "tests_passed": 178,
+  "static_guards": "all 10 blocking guards and advisory big-files passed",
+  "mypy": "2 changed application files passed",
+  "limits": [
+    "Local regression only; not installed runtime or production business acceptance.",
+    "Server model evaluation started before this behavior-preserving extraction; intent modules unchanged."
+  ]
+}

@@ -38,9 +38,9 @@ def _sys(stmt: Select) -> Select:
 
 
 def _open_session():
-    from app.db import SessionLocal
+    from app.db import HostSessionLocal
 
-    return SessionLocal()
+    return HostSessionLocal()
 
 
 def _parse_ts(value: Any) -> datetime | None:
@@ -315,7 +315,13 @@ def build_contact_context(
         customer_payload: dict[str, Any] | None = None
         if contact.customer_id:
             customer = session.scalars(
-                _sys(select(Customer).where(Customer.id == contact.customer_id).limit(1))
+                _sys(
+                    select(Customer)
+                    .where(
+                        Customer.id == contact.customer_id, Customer.tenant_id == contact.tenant_id
+                    )
+                    .limit(1)
+                )
             ).first()
             if customer is not None:
                 customer_payload = {
@@ -332,7 +338,10 @@ def build_contact_context(
             rows = session.scalars(
                 _sys(
                     select(WechatMessage)
-                    .where(WechatMessage.contact_id == contact.id)
+                    .where(
+                        WechatMessage.contact_id == contact.id,
+                        WechatMessage.tenant_id == contact.tenant_id,
+                    )
                     .order_by(WechatMessage.msg_ts.desc(), WechatMessage.id.desc())
                     .limit(max(1, min(int(limit), 200)))
                 )
@@ -352,7 +361,10 @@ def build_contact_context(
                 _sys(
                     select(func.count())
                     .select_from(WechatMessage)
-                    .where(WechatMessage.contact_id == contact.id)
+                    .where(
+                        WechatMessage.contact_id == contact.id,
+                        WechatMessage.tenant_id == contact.tenant_id,
+                    )
                 )
             )
             or 0
@@ -424,13 +436,18 @@ def link_wechat_contact(
     if owned:
         session = _open_session()
     try:
-        contact = session.scalars(
-            _sys(select(WechatContact).where(WechatContact.contact_key == key).limit(1))
-        ).first()
+        contact_stmt = select(WechatContact).where(WechatContact.contact_key == key)
+        if tenant_id is not None:
+            contact_stmt = contact_stmt.where(WechatContact.tenant_id == tenant_id)
+        contact = session.scalars(_sys(contact_stmt.limit(1))).first()
         if contact is None:
             return {"success": False, "message": "contact not found", "error_code": "not_found"}
         customer = session.scalars(
-            _sys(select(Customer).where(Customer.id == int(customer_id)).limit(1))
+            _sys(
+                select(Customer)
+                .where(Customer.id == int(customer_id), Customer.tenant_id == contact.tenant_id)
+                .limit(1)
+            )
         ).first()
         if customer is None:
             return {"success": False, "message": "customer not found", "error_code": "not_found"}

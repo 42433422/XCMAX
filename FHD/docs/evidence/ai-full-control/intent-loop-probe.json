@@ -1,0 +1,21 @@
+{
+  "attempted": 3,
+  "completed": 2,
+  "errors": {
+    "StructuredOutputError": 1
+  },
+  "models": [
+    "mimo-v2.5-pro"
+  ],
+  "seconds": 8.589,
+  "responses": {
+    "total": 2,
+    "empty_content": 0,
+    "finish_reasons": {
+      "stop": 2
+    },
+    "errors": {
+      "event_loop_closed": 1
+    }
+  }
+}

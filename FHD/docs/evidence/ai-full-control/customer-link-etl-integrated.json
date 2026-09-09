@@ -1,0 +1,14 @@
+{
+  "source_sha": "2fa763c16",
+  "worktree_change": "Migration import ordering only",
+  "pytest_scope": "tests/test_application/test_etl*.py",
+  "collected": 420,
+  "passed": 395,
+  "skipped": 25,
+  "log_sha256": "1c316b12684283b10e6ecf8b6737c59fdf8e49ee1393a63f1418b41712e79a3d",
+  "mypy": "5 related source files passed",
+  "limits": [
+    "Skipped cases are not passes.",
+    "Legacy unit representation remains; no backfill or installed acceptance."
+  ]
+}

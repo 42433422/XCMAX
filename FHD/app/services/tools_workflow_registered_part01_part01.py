@@ -137,7 +137,9 @@ def _registered_router_products(
         from app.services import get_products_service
 
         svc = get_products_service()
-    explicit_measure_unit = str(params.get("unit") or params.get("measure_unit") or "").strip()
+    explicit_measure_unit = str(
+        params.get("measurement_unit") or params.get("unit") or params.get("measure_unit") or ""
+    ).strip()
     legacy_unit_name = str(params.get("unit_name") or "").strip()
     try:
         from app.infrastructure.repositories.product_query_helpers import TRIVIAL_MEASURE_UNITS
@@ -192,6 +194,12 @@ def _registered_router_products(
         if str(runtime_context.get("service_source") or "") == "fastapi_product_route":
             payload = dict(params or {})
             return _facade().cast("dict[Any, Any]", svc.create_product(payload))
+        if legacy_unit_name and not legacy_measure_unit:
+            return {
+                "success": False,
+                "error_code": "customer_product_link_unsupported",
+                "message": "当前产品创建能力尚不支持客户关联，本次未创建产品。",
+            }
         name_or_model = str(params.get("name_or_model") or product_name or model_number).strip()
         if not name_or_model:
             return {"success": False, "message": "缺少 name_or_model"}
@@ -210,6 +218,7 @@ def _registered_router_products(
                 "unit_price": price,
                 "price": price,
                 "unit": measure_unit,
+                "measurement_unit": measure_unit,
             }
         )
         if create_result.get("success"):
@@ -226,15 +235,17 @@ def _registered_router_products(
             payload["price"] = payload.pop("unit_price")
         if "product_code" in payload and "model_number" not in payload:
             payload["model_number"] = payload.pop("product_code")
-        if "measure_unit" in payload and "unit" not in payload:
-            payload["unit"] = payload.pop("measure_unit")
+        if "measure_unit" in payload:
+            payload.setdefault("measurement_unit", payload.pop("measure_unit"))
         legacy_update_unit = str(payload.pop("unit_name", "") or "").strip()
-        if legacy_update_unit and "unit" not in payload:
-            payload["unit"] = (
-                legacy_update_unit
-                if legacy_update_unit in {"个", "件", "桶", "箱", "kg", "公斤", "吨", "米", "升"}
-                else "个"
-            )
+        if legacy_update_unit:
+            if legacy_update_unit not in {"个", "件", "桶", "箱", "kg", "公斤", "吨", "米", "升"}:
+                return {
+                    "success": False,
+                    "error_code": "customer_product_link_unsupported",
+                    "message": "客户关联需要独立处理，本次未修改产品。",
+                }
+            payload.setdefault("measurement_unit", legacy_update_unit)
         return _facade().cast("dict[Any, Any]", svc.update_product(product_id, payload))
     if action == "delete":
         return _facade().cast("dict[Any, Any]", svc.delete_product(int(params.get("id") or 0)))

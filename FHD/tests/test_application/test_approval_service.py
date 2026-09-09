@@ -465,13 +465,16 @@ def test_ai_workflow_approval_persists_valid_actor_flow_and_audit(monkeypatch, t
             },
         )
         plan = _make_plan([node])
-        request = svc.create_approval_request(
-            "plan-crud",
-            node,
-            runtime_context={"user_id": str(user_id)},
-            plan=plan,
-            require_persistence=True,
-        )
+        from app.application.agent_orchestrator.execution_identity import execution_actor_scope
+
+        with execution_actor_scope(str(user_id)):
+            request = svc.create_approval_request(
+                "plan-crud",
+                node,
+                runtime_context={"user_id": str(user_id)},
+                plan=plan,
+                require_persistence=True,
+            )
         metadata = svc.get_request_metadata(request.request_id)
         assert metadata is not None
         assert metadata["applicant_id"] == user_id
@@ -597,3 +600,57 @@ class TestIsApprovalEnabled:
         svc = ApprovalService()
         svc._config = MagicMock(enabled=False)
         assert svc.is_approval_enabled() is False
+
+
+def test_all_registered_high_risk_actions_require_default_approval():
+    from unittest.mock import patch
+
+    from resources.config.approval_config import ApprovalConfig
+    from resources.config.risk_actions_loader import get_workflow_tools_from_registry
+
+    with patch(
+        "app.application.workflow.approval_service.get_approval_config",
+        return_value=ApprovalConfig(rules=[], enabled=True),
+    ):
+        service = ApprovalService()
+    checked = []
+    for tool, spec in get_workflow_tools_from_registry().items():
+        for action, metadata in spec.get("actions", {}).items():
+            if metadata.get("risk") != "high":
+                continue
+            # Model-supplied low risk cannot downgrade trusted registry policy.
+            node = WorkflowNode(node_id="audit", tool_id=tool, action=action, risk="low", params={})
+            assert service.check_node_requires_approval(node), (tool, action)
+            checked.append((tool, action))
+    assert len(checked) > 20
+
+
+def test_pending_approval_freezes_nested_plan_and_runtime_values():
+    from unittest.mock import patch
+
+    service = ApprovalService()
+    node = _make_node(
+        tool_id="shipment_orders",
+        action="generate",
+        params={
+            "unit_name": "七彩乐园",
+            "products": [{"model_number": "9803", "quantity_tins": 3, "tin_spec": 12}],
+        },
+    )
+    plan = _make_plan([node])
+    context = {"selection": {"warehouse_id": 1}}
+    with patch.object(service, "_persist_request_to_db", return_value={"request_no": "test"}):
+        request = service.create_approval_request(
+            plan.plan_id, node, runtime_context=context, plan=plan, require_persistence=True
+        )
+    node.params["products"][0]["quantity_tins"] = 300
+    context["selection"]["warehouse_id"] = 2
+    assert request.params["products"][0]["quantity_tins"] == 3
+    pending = service.get_pending_workflow(request.request_id)
+    assert pending["plan"].nodes[0].params["products"][0]["quantity_tins"] == 3
+    assert pending["runtime_context"]["selection"]["warehouse_id"] == 1
+    pending["plan"].nodes[0].params["products"][0]["quantity_tins"] = 999
+    pending["runtime_context"]["selection"]["warehouse_id"] = 999
+    reread = service.get_pending_workflow(request.request_id)
+    assert reread["plan"].nodes[0].params["products"][0]["quantity_tins"] == 3
+    assert reread["runtime_context"]["selection"]["warehouse_id"] == 1

@@ -45,6 +45,12 @@ class ProductAdapter(TargetAdapter):
         ),
         TargetField("model_number", "型号", aliases=("型号", "产品型号")),
         TargetField("name", "产品名称", required=True, aliases=("品名", "产品", "名称")),
+        TargetField(
+            "measurement_unit",
+            "计量单位",
+            aliases=("计量单位", "数量单位", "库存单位"),
+            updatable=True,
+        ),
         TargetField("specification", "规格", aliases=("规格", "规格型号"), updatable=True),
         TargetField(
             "price",
@@ -180,6 +186,7 @@ class ProductAdapter(TargetAdapter):
             obj = Product(
                 tenant_id=tenant_id_for_write(),
                 unit=str(data.get("unit") or ""),
+                measurement_unit=optional_text(data.get("measurement_unit")),
                 model_number=optional_text(data.get("model_number")),
                 name=str(data.get("name") or ""),
                 specification=optional_text(data.get("specification")),

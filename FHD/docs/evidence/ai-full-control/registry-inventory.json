@@ -1,0 +1,2063 @@
+{
+  "scope": "registered workflow actions and static host dispatcher; excludes unregistered UI/API/Mods",
+  "product_coverage_percent": null,
+  "capability_count": 37,
+  "action_count": 197,
+  "missing_dispatcher": [],
+  "actions": [
+    {
+      "tool_id": "business_db",
+      "action": "read",
+      "risk": "low",
+      "required_params": [
+        "entity"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "business_db",
+      "action": "write",
+      "risk": "medium",
+      "required_params": [
+        "entity",
+        "operation",
+        "payload"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "business_docking",
+      "action": "extract",
+      "risk": "low",
+      "required_params": [
+        "file_path"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "business_docking",
+      "action": "preview",
+      "risk": "low",
+      "required_params": [
+        "file_path"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "business_docking",
+      "action": "view",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "business_event",
+      "action": "inventory_update",
+      "risk": "high",
+      "required_params": [
+        "product_id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "business_event",
+      "action": "print_label",
+      "risk": "high",
+      "required_params": [
+        "document_name"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "business_event",
+      "action": "shipment_create",
+      "risk": "high",
+      "required_params": [
+        "unit_name"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "customers",
+      "action": "add_address",
+      "risk": "medium",
+      "required_params": [
+        "customer_id",
+        "address_type",
+        "address"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "customers",
+      "action": "batch_delete",
+      "risk": "high",
+      "required_params": [
+        "ids"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "customers",
+      "action": "create",
+      "risk": "medium",
+      "required_params": [
+        "unit_name"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "customers",
+      "action": "delete",
+      "risk": "high",
+      "required_params": [
+        "id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "customers",
+      "action": "ensure_exists",
+      "risk": "medium",
+      "required_params": [
+        "unit_name"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "customers",
+      "action": "get_addresses",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "customers",
+      "action": "query",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "customers",
+      "action": "set_credit_limit",
+      "risk": "medium",
+      "required_params": [
+        "customer_id",
+        "credit_limit"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "customers",
+      "action": "update",
+      "risk": "medium",
+      "required_params": [
+        "id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "dataset_rag",
+      "action": "cancel_rebuild",
+      "risk": "medium",
+      "required_params": [
+        "dataset_id",
+        "job_id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "dataset_rag",
+      "action": "delete_document",
+      "risk": "high",
+      "required_params": [
+        "dataset_id",
+        "document_id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "dataset_rag",
+      "action": "diff_versions",
+      "risk": "low",
+      "required_params": [
+        "dataset_id",
+        "source",
+        "from_version"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "dataset_rag",
+      "action": "ingest_document",
+      "risk": "medium",
+      "required_params": [
+        "dataset_id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "dataset_rag",
+      "action": "query",
+      "risk": "low",
+      "required_params": [
+        "dataset_id",
+        "query"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "dataset_rag",
+      "action": "rebuild_index",
+      "risk": "medium",
+      "required_params": [
+        "dataset_id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "dataset_rag",
+      "action": "rollback_version",
+      "risk": "high",
+      "required_params": [
+        "dataset_id",
+        "source",
+        "target_version"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "document_template",
+      "action": "create",
+      "risk": "medium",
+      "required_params": [],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "document_template",
+      "action": "delete",
+      "risk": "high",
+      "required_params": [
+        "id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "document_template",
+      "action": "ingest",
+      "risk": "medium",
+      "required_params": [],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "document_template",
+      "action": "update",
+      "risk": "medium",
+      "required_params": [
+        "id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "document_template",
+      "action": "upload",
+      "risk": "medium",
+      "required_params": [],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "employee",
+      "action": "execute",
+      "risk": "medium",
+      "required_params": [
+        "task"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "employee",
+      "action": "list",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "excel_analysis",
+      "action": "query",
+      "risk": "low",
+      "required_params": [
+        "file_path",
+        "question"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "excel_analysis",
+      "action": "read",
+      "risk": "low",
+      "required_params": [
+        "file_path"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "excel_analysis",
+      "action": "statistics",
+      "risk": "low",
+      "required_params": [
+        "file_path"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "excel_analysis",
+      "action": "structure",
+      "risk": "low",
+      "required_params": [
+        "file_path"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "excel_analyzer",
+      "action": "analyze",
+      "risk": "low",
+      "required_params": [
+        "file_path"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "excel_import",
+      "action": "execute_import",
+      "risk": "medium",
+      "required_params": [
+        "pending_import_id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "excel_import",
+      "action": "import_records",
+      "risk": "medium",
+      "required_params": [
+        "records"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "excel_toolkit",
+      "action": "merged",
+      "risk": "low",
+      "required_params": [
+        "file_path"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "excel_toolkit",
+      "action": "structure",
+      "risk": "low",
+      "required_params": [
+        "file_path"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "excel_toolkit",
+      "action": "styles",
+      "risk": "low",
+      "required_params": [
+        "file_path"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "excel_toolkit",
+      "action": "view",
+      "risk": "low",
+      "required_params": [
+        "file_path"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "excel_vector_index",
+      "action": "execute",
+      "risk": "low",
+      "required_params": [
+        "file_path"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "excel_vector_index",
+      "action": "query",
+      "risk": "low",
+      "required_params": [
+        "index_id",
+        "query"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "finance",
+      "action": "aging_report",
+      "risk": "low",
+      "required_params": [
+        "account_type",
+        "days"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "finance",
+      "action": "chart_seed",
+      "risk": "medium",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "finance",
+      "action": "create_transaction",
+      "risk": "high",
+      "required_params": [
+        "transaction_type",
+        "amount"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "finance",
+      "action": "delete_transaction",
+      "risk": "high",
+      "required_params": [
+        "transaction_id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "finance",
+      "action": "journal_entry_create",
+      "risk": "high",
+      "required_params": [
+        "lines"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "finance",
+      "action": "journal_entry_reverse",
+      "risk": "high",
+      "required_params": [
+        "entry_id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "finance",
+      "action": "ledger_query",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "finance",
+      "action": "update_transaction",
+      "risk": "high",
+      "required_params": [
+        "transaction_id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "generate_office_document",
+      "action": "execute",
+      "risk": "medium",
+      "required_params": [],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "inventory",
+      "action": "create_storage_location",
+      "risk": "medium",
+      "required_params": [],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "inventory",
+      "action": "create_warehouse",
+      "risk": "medium",
+      "required_params": [],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "inventory",
+      "action": "delete_warehouse",
+      "risk": "high",
+      "required_params": [
+        "warehouse_id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "inventory",
+      "action": "inventory_count",
+      "risk": "medium",
+      "required_params": [
+        "product_id",
+        "warehouse_id",
+        "actual_quantity"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "inventory",
+      "action": "low_stock_alert",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "inventory",
+      "action": "query_transactions",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "inventory",
+      "action": "replenishment_suggest",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "inventory",
+      "action": "stock_in",
+      "risk": "high",
+      "required_params": [
+        "product_id",
+        "warehouse_id",
+        "quantity"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "inventory",
+      "action": "stock_out",
+      "risk": "high",
+      "required_params": [
+        "product_id",
+        "warehouse_id",
+        "quantity"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "inventory",
+      "action": "transfer",
+      "risk": "high",
+      "required_params": [
+        "product_id",
+        "from_warehouse_id",
+        "to_warehouse_id",
+        "quantity"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "inventory",
+      "action": "update_storage_location",
+      "risk": "medium",
+      "required_params": [
+        "location_id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "inventory",
+      "action": "update_warehouse",
+      "risk": "medium",
+      "required_params": [
+        "warehouse_id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "label_template_generator",
+      "action": "execute",
+      "risk": "low",
+      "required_params": [
+        "image_path"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "materials",
+      "action": "batch_delete",
+      "risk": "high",
+      "required_params": [],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "materials",
+      "action": "create",
+      "risk": "medium",
+      "required_params": [
+        "name"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "materials",
+      "action": "delete",
+      "risk": "high",
+      "required_params": [
+        "id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "materials",
+      "action": "export",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "materials",
+      "action": "list",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "materials",
+      "action": "query",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "materials",
+      "action": "update",
+      "risk": "medium",
+      "required_params": [
+        "id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "memory_v2",
+      "action": "confirm",
+      "risk": "high",
+      "required_params": [
+        "memory_id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "memory_v2",
+      "action": "correct",
+      "risk": "high",
+      "required_params": [
+        "memory_id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "memory_v2",
+      "action": "delete",
+      "risk": "high",
+      "required_params": [
+        "memory_id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "memory_v2",
+      "action": "list",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "memory_v2",
+      "action": "propose_candidate",
+      "risk": "medium",
+      "required_params": [
+        "memory_type",
+        "key",
+        "value"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "memory_v2",
+      "action": "reject",
+      "risk": "medium",
+      "required_params": [
+        "memory_id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "memory_v2",
+      "action": "summary",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "mrp",
+      "action": "confirm_order",
+      "risk": "high",
+      "required_params": [
+        "order_id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "mrp",
+      "action": "consume",
+      "risk": "high",
+      "required_params": [
+        "order_id",
+        "warehouse_id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "mrp",
+      "action": "create_bom",
+      "risk": "medium",
+      "required_params": [
+        "product_id",
+        "lines"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "mrp",
+      "action": "create_order",
+      "risk": "medium",
+      "required_params": [
+        "bom_id",
+        "quantity"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "mrp",
+      "action": "finish",
+      "risk": "high",
+      "required_params": [
+        "order_id",
+        "warehouse_id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "mrp",
+      "action": "get_bom",
+      "risk": "low",
+      "required_params": [
+        "bom_id"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "mrp",
+      "action": "query_boms",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "mrp",
+      "action": "query_orders",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "normal_slot_dispatch",
+      "action": "product_query",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "normal_slot_dispatch",
+      "action": "shipment_preview",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "ocr",
+      "action": "analyze",
+      "risk": "low",
+      "required_params": [
+        "text"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "ocr",
+      "action": "extract",
+      "risk": "low",
+      "required_params": [
+        "text"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "ocr",
+      "action": "recognize",
+      "risk": "low",
+      "required_params": [
+        "file_path"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "ocr",
+      "action": "recognize_and_extract",
+      "risk": "low",
+      "required_params": [
+        "file_path"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "ocr",
+      "action": "request",
+      "risk": "low",
+      "required_params": [
+        "request_id",
+        "image_url"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "print",
+      "action": "list",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "print",
+      "action": "print_document",
+      "risk": "high",
+      "required_params": [
+        "file_path"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "print",
+      "action": "print_label",
+      "risk": "high",
+      "required_params": [
+        "file_path"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "print",
+      "action": "query",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "print",
+      "action": "save_printer_selection",
+      "risk": "medium",
+      "required_params": [],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "print",
+      "action": "test",
+      "risk": "medium",
+      "required_params": [
+        "printer_name"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "print",
+      "action": "view",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "print",
+      "action": "workflow_label_dispatch",
+      "risk": "high",
+      "required_params": [
+        "model_number"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "printer_list",
+      "action": "list",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "printer_list",
+      "action": "set_default",
+      "risk": "medium",
+      "required_params": [
+        "printer_name"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "printer_list",
+      "action": "view",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "products",
+      "action": "batch_create",
+      "risk": "high",
+      "required_params": [
+        "products"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "products",
+      "action": "batch_delete",
+      "risk": "high",
+      "required_params": [
+        "ids"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "products",
+      "action": "create",
+      "risk": "medium",
+      "required_params": [
+        "name_or_model",
+        "unit_name"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "products",
+      "action": "delete",
+      "risk": "high",
+      "required_params": [
+        "id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "products",
+      "action": "exists",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "products",
+      "action": "query",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "products",
+      "action": "update",
+      "risk": "medium",
+      "required_params": [
+        "id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "purchase",
+      "action": "approve_order",
+      "risk": "high",
+      "required_params": [
+        "order_id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "purchase",
+      "action": "cancel_order",
+      "risk": "high",
+      "required_params": [
+        "order_id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "purchase",
+      "action": "create_inbound",
+      "risk": "high",
+      "required_params": [],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "purchase",
+      "action": "create_order",
+      "risk": "medium",
+      "required_params": [],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "purchase",
+      "action": "create_supplier",
+      "risk": "medium",
+      "required_params": [],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "purchase",
+      "action": "delete_supplier",
+      "risk": "high",
+      "required_params": [
+        "supplier_id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "purchase",
+      "action": "query_inbounds",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "purchase",
+      "action": "query_orders",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "purchase",
+      "action": "query_suppliers",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "purchase",
+      "action": "update_order",
+      "risk": "medium",
+      "required_params": [
+        "order_id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "purchase",
+      "action": "update_supplier",
+      "risk": "medium",
+      "required_params": [
+        "supplier_id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "reports",
+      "action": "dashboard",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "reports",
+      "action": "export",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "reports",
+      "action": "inventory_summary",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "reports",
+      "action": "purchase_summary",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "reports",
+      "action": "sales_summary",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "sales",
+      "action": "cancel",
+      "risk": "high",
+      "required_params": [
+        "order_id"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "sales",
+      "action": "confirm",
+      "risk": "medium",
+      "required_params": [
+        "order_id"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "sales",
+      "action": "credit_note",
+      "risk": "high",
+      "required_params": [
+        "order_id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "sales",
+      "action": "deliver",
+      "risk": "high",
+      "required_params": [
+        "order_id",
+        "item_id",
+        "quantity",
+        "warehouse_id"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "sales",
+      "action": "execute_closed_loop",
+      "risk": "high",
+      "required_params": [
+        "payload"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "sales",
+      "action": "invoice",
+      "risk": "high",
+      "required_params": [
+        "order_id"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "sales",
+      "action": "payment",
+      "risk": "high",
+      "required_params": [
+        "order_id",
+        "amount"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "sales",
+      "action": "query",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "sales",
+      "action": "quote",
+      "risk": "medium",
+      "required_params": [
+        "customer_id",
+        "items"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "sales",
+      "action": "refund",
+      "risk": "high",
+      "required_params": [
+        "allocation_id"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "settings",
+      "action": "disable_startup",
+      "risk": "medium",
+      "required_params": [],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "settings",
+      "action": "enable_startup",
+      "risk": "medium",
+      "required_params": [],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "settings",
+      "action": "get_startup_config",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "settings",
+      "action": "get_system_info",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "settings",
+      "action": "query",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "settings",
+      "action": "view",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "shipment_orders",
+      "action": "clear_all",
+      "risk": "high",
+      "required_params": [],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "shipment_orders",
+      "action": "clear_shipment",
+      "risk": "high",
+      "required_params": [
+        "purchase_unit"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "shipment_orders",
+      "action": "delete",
+      "risk": "high",
+      "required_params": [
+        "id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "shipment_orders",
+      "action": "generate",
+      "risk": "high",
+      "required_params": [
+        "unit_name",
+        "products"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "shipment_orders",
+      "action": "generate_batch",
+      "risk": "high",
+      "required_params": [
+        "shipments"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "shipment_orders",
+      "action": "print",
+      "risk": "high",
+      "required_params": [
+        "file_path"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "shipment_orders",
+      "action": "reset_sequence",
+      "risk": "high",
+      "required_params": [],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "shipment_orders",
+      "action": "set_sequence",
+      "risk": "high",
+      "required_params": [
+        "sequence"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "shipment_records",
+      "action": "create",
+      "risk": "high",
+      "required_params": [
+        "unit_name"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "shipment_records",
+      "action": "delete",
+      "risk": "high",
+      "required_params": [
+        "id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "shipment_records",
+      "action": "export",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "shipment_records",
+      "action": "list",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "shipment_records",
+      "action": "query",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "shipment_records",
+      "action": "update",
+      "risk": "medium",
+      "required_params": [
+        "id"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "software",
+      "action": "check",
+      "risk": "medium",
+      "required_params": [
+        "selector",
+        "checked"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "software",
+      "action": "click",
+      "risk": "medium",
+      "required_params": [
+        "selector"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "software",
+      "action": "desktop_auto_launch",
+      "risk": "medium",
+      "required_params": [
+        "enabled"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "software",
+      "action": "desktop_info",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "software",
+      "action": "desktop_update",
+      "risk": "high",
+      "required_params": [
+        "operation"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "software",
+      "action": "files",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "software",
+      "action": "list",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "software",
+      "action": "navigate",
+      "risk": "medium",
+      "required_params": [
+        "path"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "software",
+      "action": "press",
+      "risk": "medium",
+      "required_params": [
+        "selector",
+        "key"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "software",
+      "action": "routes",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "software",
+      "action": "scroll",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "software",
+      "action": "select",
+      "risk": "medium",
+      "required_params": [
+        "selector",
+        "values"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "software",
+      "action": "set_files",
+      "risk": "medium",
+      "required_params": [
+        "selector",
+        "file_ids"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "software",
+      "action": "snapshot",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "software",
+      "action": "type",
+      "risk": "medium",
+      "required_params": [
+        "selector",
+        "text"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "suppliers",
+      "action": "get_supplier",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "suppliers",
+      "action": "query_suppliers",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "system_maintenance",
+      "action": "backup_database",
+      "risk": "medium",
+      "required_params": [],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "system_maintenance",
+      "action": "clear_performance_cache",
+      "risk": "medium",
+      "required_params": [],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "system_maintenance",
+      "action": "delete_database_backup",
+      "risk": "high",
+      "required_params": [
+        "backup_file"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "system_maintenance",
+      "action": "disable_startup",
+      "risk": "medium",
+      "required_params": [],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "system_maintenance",
+      "action": "enable_startup",
+      "risk": "medium",
+      "required_params": [],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "system_maintenance",
+      "action": "invalidate_performance_cache",
+      "risk": "medium",
+      "required_params": [
+        "keys"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "system_maintenance",
+      "action": "reinitialize_performance",
+      "risk": "high",
+      "required_params": [],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "system_maintenance",
+      "action": "restore_database",
+      "risk": "high",
+      "required_params": [
+        "backup_file"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "system_maintenance",
+      "action": "set_default_printer",
+      "risk": "medium",
+      "required_params": [
+        "printer_name"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "template_extract",
+      "action": "extract",
+      "risk": "low",
+      "required_params": [
+        "file_path"
+      ],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "template_extract",
+      "action": "view",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "template_preview",
+      "action": "create",
+      "risk": "medium",
+      "required_params": [],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "template_preview",
+      "action": "list",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "template_preview",
+      "action": "query",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "template_preview",
+      "action": "view",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "unit_products_import",
+      "action": "execute_import",
+      "risk": "medium",
+      "required_params": [
+        "saved_name",
+        "unit_name"
+      ],
+      "idempotent": false,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "wechat",
+      "action": "list",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "wechat",
+      "action": "query",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "wechat",
+      "action": "refresh_contact_cache",
+      "risk": "medium",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "wechat",
+      "action": "refresh_messages_cache",
+      "risk": "medium",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    },
+    {
+      "tool_id": "wechat",
+      "action": "view",
+      "risk": "low",
+      "required_params": [],
+      "idempotent": true,
+      "dispatcher_present": true,
+      "business_acceptance": "not_measured"
+    }
+  ]
+}

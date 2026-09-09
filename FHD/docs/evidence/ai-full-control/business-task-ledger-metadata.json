@@ -1,0 +1,10 @@
+{
+  "source_sha": "ced91881203940083b9661917138ddb5ddf25f3a",
+  "modified_sources": {
+    "app/application/workflow/finance_query.py": "f9215b6e584bda261abda7cafb774cd2447ec32845ffb6e375c14298ad98973a",
+    "app/application/workflow/planner_llmworkflowplanner_mixin02.py": "fc8821e78b38cbe395b347f15cf5aa5b44ea221c9a78c7679cf1f08315b5a850"
+  },
+  "passed": 12,
+  "total": 22,
+  "scope": "Isolated SQLite fallback trial. Ledger case is unseeded and has no result-content assertion. Month uses runtime local date; tenant timezone semantics not verified."
+}

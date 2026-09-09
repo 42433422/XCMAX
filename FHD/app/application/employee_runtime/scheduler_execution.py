@@ -47,9 +47,11 @@ def _execute_job_task(
             workspace_root=workspace_root,
             session_id=session_id,
         )
-        ok = bool(result.get("success"))
+        ok = result.get("success") is True and not any(
+            result.get(flag) for flag in ("blocked_by_risk_gate", "blocked_by_product_plane")
+        )
         error = "" if ok else _facade()._result_error(result)
-        if not error:
+        if not ok and not error:
             error = "employee task failed"
         return (ok, result, error)
     except RECOVERABLE_ERRORS:

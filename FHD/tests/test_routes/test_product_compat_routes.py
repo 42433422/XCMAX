@@ -268,7 +268,7 @@ class TestProductsResolveNameHints:
             body = r.json()
             assert body["success"] is False
 
-    def test_resolve_name_hints_raises_501(self, client_compat):
+    def test_resolve_name_hints_requires_login(self, client_compat):
         with (
             patch("app.legacy.routes.product.compat_routes.verify_db_read_token_header"),
             patch(
@@ -277,7 +277,7 @@ class TestProductsResolveNameHints:
             ),
         ):
             r = client_compat.post("/products/resolve-name-hints", json={"hints": ["ABC"]})
-            assert r.status_code == 501
+            assert r.status_code == 401
 
 
 # ========================= POST /products/update =========================

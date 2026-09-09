@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -641,7 +642,11 @@ class TestInvokeTool:
 
     @pytest.mark.asyncio
     async def test_ui_sessions(self):
-        result = await invoke_tool("ui_sessions", {}, MagicMock())
+        with patch(
+            "app.application.aiopen.screen_identity.external_screen_identity",
+            return_value={"owner_id": "3", "tenant_id": "7"},
+        ):
+            result = await invoke_tool("ui_sessions", {}, MagicMock())
         assert result["success"] is True
         assert "sessions" in result
 
@@ -661,7 +666,13 @@ class TestInvokeTool:
         saved = AIOPEN_STATE.get("remote_control_enabled")
         AIOPEN_STATE["remote_control_enabled"] = True
         try:
-            with patch("app.application.aiopen.service.aiopen_cursor_hub") as mock_hub:
+            with (
+                patch("app.application.aiopen.service.aiopen_cursor_hub") as mock_hub,
+                patch(
+                    "app.application.aiopen.screen_identity.external_screen_identity",
+                    return_value={"owner_id": "3", "tenant_id": "7"},
+                ),
+            ):
                 mock_hub.dispatch = AsyncMock(return_value={"success": True})
                 result = await invoke_tool(
                     "ui_click", {"selector": "#btn", "session_id": "s1"}, MagicMock()
@@ -750,7 +761,8 @@ class TestConstants:
         assert MCP_DEFAULT_PROTOCOL_VERSION in MCP_PROTOCOL_VERSIONS
 
     def test_tool_definitions_count(self):
-        assert len(TOOL_DEFINITIONS) == 10
+        assert len(TOOL_DEFINITIONS) == 18
+        assert len({tool["name"] for tool in TOOL_DEFINITIONS}) == 18
         assert any(t["name"] == "capability_loop" for t in TOOL_DEFINITIONS)
 
     def test_ui_actions_mapping(self):
@@ -765,3 +777,17 @@ class TestConstants:
         assert "openclaw_base" in AIOPEN_STATE
         assert "remote_control_enabled" in AIOPEN_STATE
         assert "runtime_keys" in AIOPEN_STATE
+
+
+@pytest.fixture(autouse=True)
+def _authenticated_transport_fixture(monkeypatch):
+    # These legacy tests isolate transport/formatting and route selection.
+    # Real SQL session/permission/Mod checks live in test_aiopen_api_execution.
+    @contextmanager
+    def identity(args):
+        yield (
+            {"X-Session-ID": "unit-test-session"},
+            {"owner_id": "3", "tenant_id": "7", "mod_id": ""},
+        )
+
+    monkeypatch.setattr("app.application.aiopen.api_execution.authorized_api_request", identity)

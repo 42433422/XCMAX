@@ -19,7 +19,10 @@ def _registered_router_template_preview(
 
     svc = get_template_app_service()
     if action in ("list", "query"):
-        result = svc.get_templates()
+        try:
+            result = svc.get_templates()
+        except _facade().RECOVERABLE_ERRORS:
+            return {"success": False, "message": "模板读取失败，请稍后重试。"}
         if isinstance(result, dict):
             return result
         return {"success": True, "data": result}

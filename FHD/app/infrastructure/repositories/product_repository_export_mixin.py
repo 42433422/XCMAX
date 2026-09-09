@@ -9,6 +9,8 @@ from sqlalchemy import inspect
 
 from app.db.models import Product as ProductModel
 from app.db.session import get_db
+from app.infrastructure.repositories.product_query_helpers import apply_product_filters
+from app.infrastructure.tenant_scope import apply_tenant_filter
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -38,10 +40,10 @@ class ProductExportMixin:
                         "filename": None,
                     }
 
-                query = db.query(ProductModel)
+                query = apply_tenant_filter(db.query(ProductModel), ProductModel)
 
                 if unit_name:
-                    query = query.filter(ProductModel.unit == unit_name)
+                    query = apply_product_filters(query, unit_name=unit_name)
 
                 if keyword:
                     query = query.filter(

@@ -89,14 +89,17 @@ def test_compat_health_returns_ok_status() -> None:
     }
 
 
-def test_compat_health_api_alias_returns_ok_status() -> None:
-    client = _ai_assistant_client()
-    resp = client.get("/api/health")
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["success"] is True
-    assert body["data"]["status"] == "ok"
-    assert body["build"] == body["data"]["build"]
+def test_api_health_uses_canonical_mount() -> None:
+    from app.fastapi_routes.mounts.health import register_health_routes
+
+    app = FastAPI()
+    register_health_routes(app)
+    app.include_router(ai_assistant.router)
+    with TestClient(app) as client:
+        response = client.get("/api/health?lite=true")
+    assert response.status_code == 200
+    assert response.json()["service"] == "xcagi-fastapi"
+    assert "runtime" in response.json()
 
 
 # ---------------------------------------------------------------------------
@@ -729,14 +732,8 @@ def test_compat_print_last_returns_501() -> None:
     assert "print-last" in body["message"]
 
 
-def test_compat_print_pdf_labels_returns_501() -> None:
-    # 注意：``/api/print/pdf_labels`` 路由被先注册的 ``/api/print/{filename:path}``
-    # 路径参数路由遮蔽，无法通过 HTTP 触发；这里直接调用函数以覆盖其函数体。
-    resp = ai_assistant.compat_print_pdf_labels()
-    assert resp.status_code == 501
-    body = resp.body.decode() if hasattr(resp, "body") else ""
-    assert "pdf_labels" in body
-    assert "false" in body.lower()
+def test_compat_print_pdf_labels_requires_login() -> None:
+    assert _ai_assistant_client().post("/api/print/pdf_labels", json={}).status_code == 401
 
 
 def test_compat_print_shipment_file_not_found_returns_404(
@@ -803,109 +800,6 @@ def test_compat_print_shipment_file_failure_returns_400(
 # ---------------------------------------------------------------------------
 # ai_assistant — /api/print/single_label
 # ---------------------------------------------------------------------------
-
-
-def test_compat_print_single_label_no_model_number_uses_defaults() -> None:
-    # 注意：``/api/print/single_label`` 路由被先注册的 ``/api/print/{filename:path}``
-    # 路径参数路由遮蔽，无法通过 HTTP 触发；这里直接调用函数以覆盖其函数体。
-    with patch("app.application.print_app_service.get_print_application_service") as mock_get_svc:
-        mock_svc = MagicMock()
-        mock_svc.print_single_label.return_value = {
-            "success": True,
-            "message": "ok",
-        }
-        mock_get_svc.return_value = mock_svc
-        resp = ai_assistant.compat_print_single_label({})
-    assert resp.status_code == 200
-    body = _parse_json_response(resp)
-    assert body["success"] is True
-    call_kwargs = mock_svc.print_single_label.call_args.kwargs
-    assert call_kwargs["product_name"] == ""
-    assert call_kwargs["model_number"] is None
-    assert call_kwargs["unit"] == "个"
-    assert call_kwargs["quantity"] == 1
-
-
-def test_compat_print_single_label_invalid_quantity_defaults_to_1() -> None:
-    with patch("app.application.print_app_service.get_print_application_service") as mock_get_svc:
-        mock_svc = MagicMock()
-        mock_svc.print_single_label.return_value = {"success": True}
-        mock_get_svc.return_value = mock_svc
-        # quantity=0 → 1, quantity=200 → 1
-        resp = ai_assistant.compat_print_single_label({"quantity": 0})
-        assert resp.status_code == 200
-        assert mock_svc.print_single_label.call_args.kwargs["quantity"] == 1
-
-        resp = ai_assistant.compat_print_single_label({"quantity": 200})
-        assert resp.status_code == 200
-        assert mock_svc.print_single_label.call_args.kwargs["quantity"] == 1
-
-
-def test_compat_print_single_label_with_model_number_lookup_success() -> None:
-    with (
-        patch("app.application.get_product_app_service") as mock_get_product,
-        patch("app.application.print_app_service.get_print_application_service") as mock_get_print,
-    ):
-        mock_product_svc = MagicMock()
-        mock_product_svc.search_products.return_value = [
-            {"name": "高级漆", "specification": "20L", "unit": "桶"}
-        ]
-        mock_get_product.return_value = mock_product_svc
-
-        mock_print_svc = MagicMock()
-        mock_print_svc.print_single_label.return_value = {"success": True}
-        mock_get_print.return_value = mock_print_svc
-
-        resp = ai_assistant.compat_print_single_label({"model_number": "ABC", "quantity": 5})
-    assert resp.status_code == 200
-    call_kwargs = mock_print_svc.print_single_label.call_args.kwargs
-    assert call_kwargs["product_name"] == "高级漆"
-    assert call_kwargs["specification"] == "20L"
-    assert call_kwargs["unit"] == "桶"
-    assert call_kwargs["quantity"] == 5
-    assert call_kwargs["model_number"] == "ABC"
-
-
-def test_compat_print_single_label_product_lookup_failure_falls_back() -> None:
-    with (
-        patch("app.application.get_product_app_service") as mock_get_product,
-        patch("app.application.print_app_service.get_print_application_service") as mock_get_print,
-    ):
-        mock_get_product.side_effect = RuntimeError("product db down")
-
-        mock_print_svc = MagicMock()
-        mock_print_svc.print_single_label.return_value = {"success": True}
-        mock_get_print.return_value = mock_print_svc
-
-        resp = ai_assistant.compat_print_single_label({"model_number": "ABC"})
-    assert resp.status_code == 200
-    # 查询失败时使用 model_number 作为 product_name
-    call_kwargs = mock_print_svc.print_single_label.call_args.kwargs
-    assert call_kwargs["product_name"] == "ABC"
-
-
-def test_compat_print_single_label_print_failure_returns_400() -> None:
-    with patch("app.application.print_app_service.get_print_application_service") as mock_get_print:
-        mock_print_svc = MagicMock()
-        mock_print_svc.print_single_label.return_value = {
-            "success": False,
-            "message": "no printer",
-        }
-        mock_get_print.return_value = mock_print_svc
-        resp = ai_assistant.compat_print_single_label({})
-    assert resp.status_code == 400
-    body = _parse_json_response(resp)
-    assert body["success"] is False
-
-
-def test_compat_print_single_label_recoverable_error_returns_500() -> None:
-    with patch("app.application.print_app_service.get_print_application_service") as mock_get_print:
-        mock_get_print.side_effect = ValueError("print svc broken")
-        resp = ai_assistant.compat_print_single_label({})
-    assert resp.status_code == 500
-    body = _parse_json_response(resp)
-    assert body["success"] is False
-    assert body["message"] == "打印服务暂时不可用，请稍后重试"
 
 
 # ---------------------------------------------------------------------------

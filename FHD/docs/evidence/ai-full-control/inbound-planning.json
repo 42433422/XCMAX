@@ -1,0 +1,6 @@
+{
+  "source_commit": "cab4d21f874d28cf8bddcea7c2c92bef32d84159",
+  "mypy_source_files": 1821,
+  "mypy_passed": true,
+  "scope": "Explicit inbound requests preserve quantity/requested unit and resolve a unique current-tenant product. Missing warehouse enters clarification; integer ID schema supports filling the warehouse field. Planning/field tests do not establish full chat, approval, unit conversion or installed acceptance."
+}

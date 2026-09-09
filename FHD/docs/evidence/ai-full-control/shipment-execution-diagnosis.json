@@ -1,0 +1,23 @@
+{
+  "baseline_source": "a3d41c063",
+  "trials": [
+    "business-task-shipment-routing.jsonl",
+    "business-task-shipment-seeded.jsonl",
+    "business-task-shipment-purchase-unit.jsonl"
+  ],
+  "findings": [
+    "Default golden case has no customer precondition.",
+    "Seeding Customer does not populate PurchaseUnit used by shipment document resolver.",
+    "Seeding PurchaseUnit reaches record persistence and exposes detached ShipmentRecord receipt access."
+  ],
+  "fix": "Read scalar record ID inside session before context manager commits and closes.",
+  "validation": {
+    "tests_passed": 15,
+    "scope": "Record store unit suite plus real SQLite default commit-and-close receipt and persisted fields."
+  },
+  "limits": [
+    "Document contents and physical printing not verified.",
+    "Full seeded generation has not been rerun after this fix.",
+    "Golden dataset and measured overall business pass rate unchanged."
+  ]
+}

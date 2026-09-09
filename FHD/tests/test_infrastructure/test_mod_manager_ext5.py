@@ -190,8 +190,9 @@ class TestInvokeModInitHook:
         def init_fn(unknown_required):
             called.append("called")
 
-        # Should skip calling because required param cannot be satisfied
-        _invoke_mod_init_hook(init_fn, mod_id="m1")
+        # Cannot report success when required parameters cannot be satisfied
+        with pytest.raises(ValueError, match="required Mod initialization parameter"):
+            _invoke_mod_init_hook(init_fn, mod_id="m1")
         assert called == []
 
     def test_signature_bind_fails_falls_back_to_no_kwargs(self):
@@ -1333,6 +1334,7 @@ class TestLoadModBackendNoDir:
         os.makedirs(mod_path)  # no backend/ subdir
         meta = MagicMock()
         meta.backend_entry = ""
+        meta.backend_init = ""
         result = mm._load_mod_backend("m1", mod_path, meta)
         # No backend directory -> early return, nothing registered.
         assert result is None

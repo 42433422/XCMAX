@@ -116,7 +116,17 @@ def _check_db_state(expect: dict[str, Any]) -> tuple[bool, str]:
         for spec in assertions:
             entity = spec["entity"]
             try:
-                model, field_map, _selector = _model_config(entity)
+                if entity == "financial_transactions":
+                    from app.db.models.finance import FinancialTransaction
+
+                    model, field_map = FinancialTransaction, {}
+                elif entity in {"sales_orders", "sales_order_items"}:
+                    from app.db.models import SalesOrder, SalesOrderItem
+
+                    model = SalesOrder if entity == "sales_orders" else SalesOrderItem
+                    field_map = {}
+                else:
+                    model, field_map, _selector = _model_config(entity)
             except ValueError:
                 return False, f"db_state 断言不支持实体 {entity}"
             query = db.query(model).filter(model.tenant_id == tenant_id)
@@ -141,16 +151,22 @@ def _check_db_state(expect: dict[str, Any]) -> tuple[bool, str]:
     return True, ""
 
 
-def _execute_nodes(nodes: list[Any]) -> tuple[bool, str, list[dict[str, Any]]]:
-    """逐节点执行计划。clarify.ask 是交互节点，跳过执行只算路由。"""
+def _execute_nodes(
+    nodes: list[Any], expect: dict[str, Any] | None = None
+) -> tuple[bool, str, list[dict[str, Any]]]:
+    """逐节点执行计划；传递成功结果，未回答的澄清阻止后续执行。"""
     from app.services.tools_workflow_registered import execute_registered_workflow_tool
 
     executed: list[dict[str, Any]] = []
+    outputs: dict[str, Any] = {}
     for node in nodes:
         if node.tool_id == "clarify":
             executed.append({"tool_id": node.tool_id, "action": node.action, "skipped": True})
-            continue
+            return False, "需要用户澄清，尚未完成执行", executed
+        if any(dep not in outputs for dep in node.depends_on):
+            return False, "前序节点未完成，禁止执行依赖动作", executed
         params = {k: v for k, v in (node.params or {}).items() if k != "_runtime_context"}
+        params["_runtime_context"] = {"node_outputs": outputs}
         try:
             result = execute_registered_workflow_tool(node.tool_id, node.action, dict(params))
         except _TRIAL_BOUNDARY_ERRORS as exc:
@@ -169,6 +185,31 @@ def _execute_nodes(nodes: list[Any]) -> tuple[bool, str, list[dict[str, Any]]]:
                 f"{node.tool_id}.{node.action} 执行失败: {result.get('message') or result.get('error')}",
                 executed,
             )
+        outputs[node.node_id] = result
+    for assertion in (expect or {}).get("xlsx_state", []):
+        from openpyxl import load_workbook
+
+        result = outputs.get(assertion["node_id"], {})
+        path = Path(str(result.get("file_path") or ""))
+        if not path.is_file():
+            return False, "生成的工作簿不存在", executed
+        workbook = load_workbook(path, read_only=True, data_only=True)
+        try:
+            values = [
+                str(value)
+                for sheet in workbook
+                for row in sheet.values
+                for value in row
+                if value is not None
+            ]
+        finally:
+            workbook.close()
+        for value in assertion.get("values", []):
+            if str(value) not in values:
+                return False, f"工作簿缺少预期值：{value}", executed
+        for text in assertion.get("contains", []):
+            if not any(text in value for value in values):
+                return False, f"工作簿缺少预期文本：{text}", executed
     return True, "", executed
 
 
@@ -208,10 +249,17 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
                 "routing_pass": False,
                 "exec_pass": None,
                 "db_pass": None,
+                "db_assertion_count": len(expect.get("db_state") or []),
                 "pass": False,
                 "failure": None,
             }
             try:
+                if task.get("initial_state"):
+                    from app.db import SessionLocal
+                    from tests.benchmarks.task_fixtures import seed_initial_state
+
+                    with SessionLocal() as db, db.begin():
+                        seed_initial_state(db, task["initial_state"], tenant_id=1)
                 plan = planner.plan("bench-user", task["instruction"], registry)
                 nodes = list(plan.nodes) if plan else []
                 ok, why = _check_no_actions(nodes, expect)
@@ -226,7 +274,7 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
                 else:
                     has_db_assert = bool(expect.get("db_state"))
                     if nodes:
-                        exec_ok, exec_why, executed = _execute_nodes(nodes)
+                        exec_ok, exec_why, executed = _execute_nodes(nodes, expect)
                         result["exec_pass"] = exec_ok
                         result["executed"] = executed
                         if not exec_ok:
@@ -234,7 +282,7 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
                     elif has_db_assert:
                         result["exec_pass"] = True
                     db_ok, db_why = _check_db_state(expect)
-                    result["db_pass"] = db_ok
+                    result["db_pass"] = db_ok if has_db_assert else None
                     if not db_ok:
                         result["failure"] = db_why
                     result["pass"] = (

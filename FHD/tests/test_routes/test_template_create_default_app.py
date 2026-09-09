@@ -204,3 +204,29 @@ def test_label_create_readback_uses_authenticated_owner_and_tenant(template_app,
     _, saved_job = service._read((11, 7), job["id"])
     assert saved_job["layout"]["fields"][0]["left"] == 50
     assert saved_job["layout"]["fields"][0]["top"] == 90
+
+
+def test_template_list_database_failure_returns_http_failure(template_app, monkeypatch):
+    from contextlib import contextmanager
+
+    from sqlalchemy.exc import OperationalError
+
+    client, engine, _repo = template_app
+
+    @contextmanager
+    def unavailable_database():
+        raise OperationalError("SELECT templates", {}, RuntimeError("private database endpoint"))
+        yield  # pragma: no cover
+
+    monkeypatch.setattr("app.infrastructure.templates.template_store_impl.get_db", unavailable_database)
+    response = client.get("/api/templates", headers={"X-Session-ID": "label-session-7"})
+    assert response.status_code == 503
+    assert response.json()["success"] is False
+    assert response.json()["service_unavailable"] is True
+    assert response.json()["templates"] == []
+    assert "private database endpoint" not in response.text
+    assert _template_count(engine) == 0
+
+    detail = client.get("/api/templates/db:1", headers={"X-Session-ID": "label-session-7"})
+    assert detail.status_code == 503
+    assert "private database endpoint" not in detail.text

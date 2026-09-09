@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import importlib.util
 import inspect
 import json
@@ -143,14 +142,9 @@ def _import_module_from_path(module_path: Path, module_label: str):
 def _run_maybe_async(fn, *args, **kwargs):
     out = fn(*args, **kwargs)
     if inspect.isawaitable(out):
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            return asyncio.run(out)
-        import concurrent.futures
+        from app.application.employee_runtime.async_bridge import run_employee_coroutine
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            return pool.submit(asyncio.run, out).result()
+        return run_employee_coroutine(out)
     return out
 
 

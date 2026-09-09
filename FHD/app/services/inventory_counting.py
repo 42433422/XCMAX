@@ -38,6 +38,20 @@ class InventoryCountingMixin:
         - confirmed=False：仅返回差异供对话层反问确认，不实际改动库存。
         - confirmed=True：按实际数量调整台账并写入一条 transaction_type="count" 流水。
         """
+        import math
+
+        if not isinstance(confirmed, bool):
+            return {"success": False, "message": "盘点确认必须为布尔值"}
+        try:
+            valid = (
+                not isinstance(actual_quantity, bool)
+                and math.isfinite(actual_quantity)
+                and actual_quantity >= 0
+            )
+        except (TypeError, ValueError, OverflowError):
+            valid = False
+        if not valid:
+            return {"success": False, "message": "盘点数量必须为有限非负数"}
         with _facade().get_db() as db:
             try:
                 ledger = (
@@ -46,6 +60,7 @@ class InventoryCountingMixin:
                         _facade().InventoryLedger.product_id == product_id,
                         _facade().InventoryLedger.warehouse_id == warehouse_id,
                         _facade().InventoryLedger.batch_no == batch_no,
+                        _facade().InventoryLedger.location_id == location_id,
                     )
                     .first()
                 )
@@ -60,6 +75,9 @@ class InventoryCountingMixin:
                         "confirmed": False,
                         "message": "盘点待确认",
                         "data": {
+                            "ledger_id": ledger.id,
+                            "location_id": ledger.location_id,
+                            "unit": ledger.unit,
                             "product_id": product_id,
                             "warehouse_id": warehouse_id,
                             "batch_no": batch_no,
@@ -68,12 +86,17 @@ class InventoryCountingMixin:
                             "diff": diff,
                         },
                     }
+                available_after = float(ledger.available_quantity or 0) + diff
+                if available_after < 0:
+                    return {
+                        "success": False,
+                        "error_code": "inventory_reserved_conflict",
+                        "message": "盘点数量不足以覆盖已占用库存，请先核实占用记录",
+                    }
                 now = datetime.now()
                 before_quantity = book_quantity
                 ledger.quantity = actual_quantity
-                ledger.available_quantity = float(ledger.available_quantity or 0) + diff
-                if location_id:
-                    ledger.location_id = location_id
+                ledger.available_quantity = available_after
                 ledger.updated_at = now
                 db.flush()
                 transaction = _facade().InventoryTransaction(
@@ -97,8 +120,12 @@ class InventoryCountingMixin:
                 return {
                     "success": True,
                     "confirmed": True,
+                    "transaction_id": transaction.id,
                     "message": "盘点确认成功",
                     "data": {
+                        "ledger_id": ledger.id,
+                        "location_id": ledger.location_id,
+                        "unit": ledger.unit,
                         "product_id": product_id,
                         "warehouse_id": warehouse_id,
                         "batch_no": batch_no,
@@ -122,9 +149,12 @@ class InventoryCountingMixin:
         end_date: datetime | None = None,
         page: int = 1,
         per_page: int = 50,
+        transaction_id: int | None = None,
     ) -> dict[str, Any]:
         with _facade().get_db() as db:
             query = db.query(_facade().InventoryTransaction)
+            if transaction_id is not None:
+                query = query.filter(_facade().InventoryTransaction.id == transaction_id)
             if product_id:
                 query = query.filter(_facade().InventoryTransaction.product_id == product_id)
             if warehouse_id:
@@ -139,7 +169,10 @@ class InventoryCountingMixin:
                 query = query.filter(_facade().InventoryTransaction.transaction_date <= end_date)
             total = query.count()
             items = (
-                query.order_by(_facade().InventoryTransaction.transaction_date.desc())
+                query.order_by(
+                    _facade().InventoryTransaction.transaction_date.desc(),
+                    _facade().InventoryTransaction.id.desc(),
+                )
                 .offset((page - 1) * per_page)
                 .limit(per_page)
                 .all()

@@ -220,7 +220,7 @@ class TestProductsRouter:
         with patch("app.services.get_products_service", return_value=mock_svc):
             result = _registered_router_products(
                 "create",
-                {"name_or_model": "P1", "unit_name": "U1", "unit_price": 10.0},
+                {"name_or_model": "P1", "unit_name": "桶", "unit_price": 10.0},
                 {},
                 "admin",
                 "",
@@ -237,7 +237,7 @@ class TestProductsRouter:
         with patch("app.services.get_products_service", return_value=mock_svc):
             result = _registered_router_products(
                 "create",
-                {"name_or_model": "P1", "unit_name": "U1", "unit_price": "not_a_number"},
+                {"name_or_model": "P1", "unit_name": "桶", "unit_price": "not_a_number"},
                 {},
                 "admin",
                 "",
@@ -583,6 +583,8 @@ class TestExecuteRegisteredWorkflowTool:
             "dataset_rag",
             "memory_v2",
             "system_maintenance",
+            "software",
+            "wechat",
         }
         assert set(_REGISTERED_WORKFLOW_ROUTERS.keys()) == expected_keys
 
@@ -611,7 +613,7 @@ class TestErpToolRegistry:
         reg = _workflow_registry()
         sales = reg["sales"]["actions"]
         assert sales["query"]["risk"] == "low" and sales["query"]["idempotent"] is True
-        assert sales["quote"]["risk"] == "medium" and sales["quote"]["idempotent"] is True
+        assert sales["quote"]["risk"] == "medium" and sales["quote"]["idempotent"] is False
         for a in ("confirm", "deliver", "invoice", "payment", "cancel"):
             assert sales[a]["idempotent"] is True
 
@@ -668,12 +670,27 @@ class TestErpCapabilityGate:
             {
                 "tool_id": "sales",
                 "action": "quote",
-                "params": {"customer_id": 1, "items": [{"product_id": 1, "quantity": 1}]},
+                "params": {
+                    "customer_id": 1,
+                    "items": [{"product_id": 1, "quantity": 1, "unit_price": 25}],
+                },
             }
         )
         assert r["success"] is True
         assert r["risk"] == "medium"
-        assert r["idempotent"] is True
+        assert r["idempotent"] is False
+
+    def test_sales_quote_missing_price_rejected(self):
+        from app.application.tools.registered_capabilities import resolve_registered_capability_call
+
+        result = resolve_registered_capability_call(
+            {
+                "tool_id": "sales",
+                "action": "quote",
+                "params": {"customer_id": 1, "items": [{"product_id": 1, "quantity": 1}]},
+            }
+        )
+        assert result["success"] is False
 
     def test_sales_payment_missing_amount(self):
         from app.application.tools.registered_capabilities import (
@@ -1009,3 +1026,14 @@ class TestPurchaseReadOnlyRouter:
         ):
             r = _registered_router_purchase("query_inbounds", {}, {}, "shared", "")
         assert r["success"] is True
+
+
+def test_product_customer_label_is_not_silently_used_as_measurement():
+    service = MagicMock()
+    with patch("app.services.get_products_service", return_value=service):
+        result = _registered_router_products(
+            "create", {"name_or_model": "P1", "unit_name": "测试客户公司"}, {}, "admin", ""
+        )
+    assert not result["success"]
+    assert result["error_code"] == "customer_product_link_unsupported"
+    service.create_product.assert_not_called()

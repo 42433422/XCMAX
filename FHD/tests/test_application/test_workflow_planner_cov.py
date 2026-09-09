@@ -551,7 +551,9 @@ class TestFallbackPlan:
     def test_fallback_add_product_to_unit(self) -> None:
         planner = self._make_planner()
         result = planner._fallback_plan("pid", "添加新产品到客户单位", _SAMPLE_REGISTRY)
-        assert result.intent == "add_product_to_unit"
+        assert result.intent == "create_product"
+        assert [(n.tool_id, n.action) for n in result.nodes] == [("products", "create")]
+        assert result.nodes[0].params == {}
 
     def test_fallback_default_query_products(self) -> None:
         planner = self._make_planner()

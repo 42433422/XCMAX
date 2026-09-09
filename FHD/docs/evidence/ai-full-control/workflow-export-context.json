@@ -1,0 +1,5 @@
+{
+  "source_commit": "fada735bb99d511ccf28b96fa0f39fb5ae237dde",
+  "regression_passed": 81,
+  "scope": "Workflow engine, parallel fan-out, and report export regressions. Added concurrent barrier test verifies inherited actor/tenant and independent per-worker context mutations. Export orchestration uses a stubbed sales query and a real XLSX artifact; production SQL plus HTTP download and installed UI remain unverified."
+}

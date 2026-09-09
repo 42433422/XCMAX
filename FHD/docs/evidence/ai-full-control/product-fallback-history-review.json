@@ -1,0 +1,8 @@
+{
+  "source_base": "1913eb171",
+  "historical_change": "cfbfc585a69b08da6993056fd52cc10d8f8fd5cb",
+  "finding": "Old fallback implicitly ensured a customer but did not bind customer output to product parameters. Removal was intentional; old intent assertions were stale.",
+  "tests_updated": "Assert no implicit ensure_exists and clarification at public planner entry; raw fallback retains empty required product params.",
+  "regression_passed": 527,
+  "remaining_requirement": "Explicit customer-product linkage with real persisted business effect is not proven by this repair."
+}

@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import importlib
 
+from starlette.responses import Response
+
 
 def _facade():
     return importlib.import_module("app.fastapi_routes.mod_store_routes")
@@ -107,8 +109,13 @@ async def mod_store_update(
 
 
 @_facade().router.get("/validate", response_model=_facade().ModStoreSimpleResponse)
-async def mod_store_validate() -> _facade().ModStoreSimpleResponse:
-    return _facade().ModStoreSimpleResponse(success=False, message="未实现", data=None)
+async def mod_store_validate(
+    request: _facade().Request, package_file: str = ""
+) -> _facade().ModStoreSimpleResponse:
+    from app.fastapi_routes.mod_store_preflight import package_preflight
+
+    data = await package_preflight(request, package_file)
+    return _facade().ModStoreSimpleResponse(success=True, message="包验证通过，尚未安装", data=data)
 
 
 @_facade().router.get("/updates", response_model=_facade().ModStoreUpdatesResponse)
@@ -169,16 +176,13 @@ async def mod_store_updates(
 
 
 @_facade().router.get("/dependencies", response_model=_facade().ModStoreDependenciesResponse)
-async def mod_store_dependencies() -> _facade().ModStoreDependenciesResponse:
-    return _facade().ModStoreDependenciesResponse(
-        data={
-            "mod_id": "",
-            "dependencies": [],
-            "satisfied": [],
-            "missing": [],
-            "can_install": True,
-        }
-    )
+async def mod_store_dependencies(
+    request: _facade().Request, package_file: str = ""
+) -> _facade().ModStoreDependenciesResponse:
+    from app.fastapi_routes.mod_store_preflight import package_preflight
+
+    data = await package_preflight(request, package_file)
+    return _facade().ModStoreDependenciesResponse(data=data["dependency_check"])
 
 
 @_facade().router.post(
@@ -191,8 +195,27 @@ async def mod_store_rate(mod_id: str) -> _facade().ModStoreNotImplementedRespons
 
 
 @_facade().router.get("/package/{package_file:path}/download")
-async def mod_store_download(package_file: str) -> None:
-    raise _facade().HTTPException(status_code=404, detail="包下载未实现")
+async def mod_store_download(request: _facade().Request, package_file: str) -> Response:
+    """Download a verified public catalog release without installing or activating it."""
+    from app.application.mod_package_preflight import download_verified_catalog_package
+    from app.application.tenant_workspace_prefs import resolve_workspace_owner_id
+    from app.infrastructure.auth.dependencies import get_logged_in_user
+
+    user = get_logged_in_user(request)
+    if not resolve_workspace_owner_id(request, user):
+        raise _facade().HTTPException(status_code=401, detail="无法确定当前工作空间")
+    content, verified, _ = await download_verified_catalog_package(package_file)
+    manifest = verified["manifest"]
+    filename = f"{manifest['id']}-{manifest['version']}.zip"
+    return Response(
+        content,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @_facade().router.delete(

@@ -21,6 +21,7 @@ from app.build_identity import build_identity
 from app.fastapi_routes.ai_assistant_responses import fail as _fail
 from app.fastapi_routes.ai_assistant_responses import ok as _ok
 from app.fastapi_routes.ai_assistant_tts import router as tts_router
+from app.fastapi_routes.label_jobs import compat_router as label_compat_router
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.security.safe_download_path import (
     UnsafeDownloadPathError,
@@ -31,6 +32,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["ai-assistant-compat"])
 router.include_router(tts_router)
+router.include_router(label_compat_router)
 
 _TRACE_MAX_STRING = 500
 _TRACE_SECRET_KEYS = {"audiobase64", "audio_base64", "key", "token", "password", "secret"}
@@ -129,10 +131,8 @@ def _distinct_product_names(keyword: str | None = None) -> list[str]:
 
 
 # ``/api/health`` 的文档化版本由 ``app.fastapi_routes.__init__._register_health_routes``
-# 提供（含 NeuroBus 状态）。此处保留 ``/health`` 与 ``/api/health`` 的 compat 实现
-# 以兼容旧前端探测路径，但都从 OpenAPI 文档中隐藏避免 Duplicate Operation ID。
+# 提供（含 NeuroBus 状态）。此处只保留旧 ``/health`` 别名，避免重复注册。
 @router.get("/health", include_in_schema=False)
-@router.get("/api/health", include_in_schema=False)
 def compat_health():
     identity = build_identity()
     return _ok(
@@ -392,6 +392,15 @@ def compat_print_diagnose():
         return _fail("打印机诊断失败", 500)
 
 
+@router.post("/api/print-last")
+def compat_print_last():
+    return _fail(
+        "XCAGI 未实现 print-last（请通过 /api/print/<filename> 打印指定文件）",
+        501,
+    )
+
+
+# Catch-all file paths must follow concrete label actions.
 @router.post("/api/print/{filename:path}")
 def compat_print_shipment_file(filename: str, payload: dict[str, Any] = Body(default_factory=dict)):
     from app.utils.path_io.path_utils import get_app_data_dir
@@ -419,80 +428,3 @@ def compat_print_shipment_file(filename: str, payload: dict[str, Any] = Body(def
         body={"filename": filename, **dict(payload or {})},
     )
     return JSONResponse(traced, status_code=status)
-
-
-@router.post("/api/print-last")
-def compat_print_last():
-    return _fail(
-        "XCAGI 未实现 print-last（请通过 /api/print/<filename> 打印指定文件）",
-        501,
-    )
-
-
-@router.post("/api/print/pdf_labels")
-def compat_print_pdf_labels():
-    return _fail("XCAGI 暂未实现 pdf_labels（请使用现有打印功能）", 501)
-
-
-@router.post("/api/print/single_label")
-def compat_print_single_label(payload: dict[str, Any] = Body(default_factory=dict)):
-    """打印单张标签：根据型号查找产品信息后发送到标签打印机。"""
-    model_number = str(payload.get("model_number") or "").strip()
-    quantity = int(payload.get("quantity") or 1)
-    if quantity < 1 or quantity > 100:
-        quantity = 1
-
-    product_name = model_number
-    specification: str | None = None
-    unit = "个"
-
-    if model_number:
-        try:
-            from app.application import get_product_app_service
-
-            svc = get_product_app_service()
-            products_result = svc.search_products(keyword=model_number, filters={"per_page": 1})
-            products = (
-                products_result.get("data") or []
-                if isinstance(products_result, dict)
-                else products_result
-            )
-            if isinstance(products, list) and products and isinstance(products[0], dict):
-                product = products[0]
-                product_name = str(
-                    product.get("name") or product.get("product_name") or model_number
-                )
-                specification = (
-                    str(product.get("specification") or product.get("spec") or "") or None
-                )
-                unit = str(product.get("unit") or "个")
-        except RECOVERABLE_ERRORS:
-            logger.warning("single_label: 查询产品失败，使用型号作为名称", exc_info=True)
-
-    try:
-        from app.application.print_app_service import get_print_application_service
-
-        result = get_print_application_service().print_single_label(
-            product_name=product_name,
-            model_number=model_number or None,
-            specification=specification,
-            unit=unit,
-            quantity=quantity,
-        )
-        status = 200 if result.get("success") else 400
-        traced = _trace_ai_assistant_route(
-            dict(result),
-            route="/api/print/single_label",
-            action="print_single_label",
-            body=payload,
-        )
-        return JSONResponse(traced, status_code=status)
-    except RECOVERABLE_ERRORS:
-        logger.exception("single_label 打印失败")
-        traced = _trace_ai_assistant_route(
-            {"success": False, "message": "打印服务暂时不可用，请稍后重试"},
-            route="/api/print/single_label",
-            action="print_single_label",
-            body=payload,
-        )
-        return JSONResponse(traced, status_code=500)

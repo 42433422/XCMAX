@@ -122,6 +122,7 @@ def resolve_confirmed_target(
         candidate_id = str(candidate.get("id") or "").strip()
         if candidate_id and candidate_id == text:
             return {"id": candidate_id}
+    name_matches = []
     for candidate in candidates:
         name = str(
             candidate.get("name")
@@ -129,8 +130,12 @@ def resolve_confirmed_target(
             or candidate.get("unit_name")
             or ""
         ).strip()
-        if name and (name == text or name in text or text in name):
-            return {"id": str(candidate.get("id") or "")}
+        if name and name == text:
+            name_matches.append(candidate)
+    if len(name_matches) == 1:
+        return {"id": str(name_matches[0].get("id") or "")}
+    if len(name_matches) > 1:
+        return None
     if text.isdigit():
         index = int(text)
         if 1 <= index <= len(candidates):

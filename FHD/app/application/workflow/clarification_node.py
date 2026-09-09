@@ -104,10 +104,31 @@ def _first_required(node: WorkflowNode, required: list[str]) -> str:
 
 
 def _build_missing_question(node: WorkflowNode, missing: list[str]) -> str:
-    return (
-        f"执行 {node.tool_id}.{node.action} 前需要补充必填参数："
-        f"{'、'.join(missing)}。请提供后再执行，避免误操作。"
-    )
+    labels = {
+        "name_or_model": "产品名称或型号",
+        "unit_name": "单位名称",
+        "customer_id": "客户编号",
+        "product_id": "产品编号",
+        "warehouse_id": "仓库编号",
+        "quantity": "数量",
+        "amount": "金额",
+        "order_id": "订单编号",
+        "transaction_type": "交易类型",
+        "from_warehouse_id": "调出仓库编号",
+        "to_warehouse_id": "调入仓库编号",
+    }
+    if not missing:
+        return "请补充所需信息。"
+    current = labels.get(missing[0], missing[0])
+    if node.tool_id == "shipment_orders" and node.action == "generate" and missing[0] == "products":
+        return "请提供发货产品、规格和数量，例如：编号9803，规格12，一共3桶。补齐后还需审批。"
+    from .clarification_options import field_options
+
+    options = field_options(node.tool_id, node.action, missing[0])
+    if options:
+        current += "（" + "、".join(options) + "）"
+    remaining = f"还有 {len(missing) - 1} 项信息，随后会继续询问。" if len(missing) > 1 else ""
+    return f"请先提供{current}。{remaining}信息补齐后再确认执行。"
 
 
 def _build_ambiguous_question(node: WorkflowNode, candidates: list[dict[str, Any]]) -> str:
@@ -206,6 +227,24 @@ def needs_clarification(
                     "question": _build_missing_question(node, missing),
                 }
             )
+        elif node.tool_id == "inventory" and node.action == "stock_in":
+            unit = params.get("_inventory_unit")
+            requested = params.get("requested_unit")
+            if isinstance(unit, str) and unit and requested != unit:
+                items.append(
+                    {
+                        "node_id": node.node_id,
+                        "tool_id": node.tool_id,
+                        "action": node.action,
+                        "reason": "inventory_unit_conversion",
+                        "field": "quantity",
+                        "question": (
+                            f"产品库存单位是{unit}，原请求为{params.get('quantity')}{requested}。"
+                            f"请提供换算后的入库数量并带上库存单位，例如‘10{unit}’。"
+                            "确认换算后还需审批才会入库。"
+                        ),
+                    }
+                )
     return items
 
 
@@ -269,9 +308,7 @@ def detect_erp_clarification(
     for node in plan.nodes or []:
         if node.tool_id == "reports" and node.action in (
             "sales_summary",
-            "inventory_summary",
             "purchase_summary",
-            "dashboard",
         ):
             params = node.params or {}
             if not params.get("start_date") or not params.get("end_date"):
@@ -280,7 +317,7 @@ def detect_erp_clarification(
                         node.node_id,
                         "report_scope",
                         "日期范围",
-                        "报表口径未指定日期范围，请确认统计起止日期后我再汇总。",
+                        "请确认统计日期范围，可回复“本月”或“2024-02-01至2024-02-29”这样的起止日期。",
                         severity="medium",
                     )
                 )

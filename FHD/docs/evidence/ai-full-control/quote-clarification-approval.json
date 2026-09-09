@@ -1,0 +1,11 @@
+{
+  "base_commit": "402fbdef7",
+  "contract_and_clarification_regression": "62 passed before new quote continuation case",
+  "approval_test_file": "6 passed including new quote continuation case",
+  "scope": "Actual clarification continuation with mocked approval policy and persistence; verified resolved quote params and tenant context retained, execution not called. Not approval round trip, natural-language item parsing, or installed acceptance.",
+  "sha256": {
+    "FHD/tests/test_application/test_clarification_approval.py": "147a12fbbe07a8eb944381cf708faca5f7f78a1bc8337e80facb805e9f0146ae",
+    "FHD/app/application/workflow/clarification_fields.py": "4b212667ac9dc6c8f6373294851c39083c6caa1fa226bf6907668241e4e761bc",
+    "FHD/app/application/agent_orchestrator/tool_spec_data/input_schemas_part_2.py": "a74db41bb2564abcce58d3f6b80e4bf9992fb99b81e77aa055fe644c942ab472"
+  }
+}

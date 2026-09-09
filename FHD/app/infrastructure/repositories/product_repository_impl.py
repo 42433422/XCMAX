@@ -103,6 +103,7 @@ class SQLAlchemyProductRepository(ProductRepository, ProductExportMixin):
                     "category": m.category or "",
                     "brand": m.brand or "",
                     "unit": m.unit or "个",
+                    "measurement_unit": m.measurement_unit,
                     "is_active": bool(m.is_active),
                     "created_at": m.created_at.isoformat() if m.created_at else None,
                     "updated_at": m.updated_at.isoformat() if m.updated_at else None,
@@ -222,6 +223,7 @@ class SQLAlchemyProductRepository(ProductRepository, ProductExportMixin):
                     category=item.get("category"),
                     brand=item.get("brand"),
                     unit=item.get("unit", "个"),
+                    measurement_unit=item.get("measurement_unit"),
                     is_active=item.get("is_active", 1),
                     created_at=datetime.now(),
                     updated_at=datetime.now(),
@@ -275,6 +277,9 @@ class SQLAlchemyProductRepository(ProductRepository, ProductExportMixin):
                     has_update = True
                 if "unit" in data:
                     product.unit = data["unit"]
+                    has_update = True
+                if "measurement_unit" in data:
+                    product.measurement_unit = data["measurement_unit"]
                     has_update = True
                 if "is_active" in data:
                     product.is_active = data["is_active"]
@@ -332,6 +337,7 @@ class SQLAlchemyProductRepository(ProductRepository, ProductExportMixin):
                                     "category": data.get("category"),
                                     "brand": data.get("brand"),
                                     "unit": data.get("unit", "个"),
+                                    "measurement_unit": data.get("measurement_unit"),
                                     "is_active": data.get("is_active", 1),
                                     "tenant_id": tenant_id,
                                     "created_at": now,

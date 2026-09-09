@@ -1,0 +1,14 @@
+{
+  "base_sha": "955c81b69",
+  "tests_passed": 232,
+  "guards": "10 blocking guards passed",
+  "verified": [
+    "Three printer query phrasings produce printer_list intent and query workflow node.",
+    "Response invokes registered capability with system service stub and preserves printer/default fields.",
+    "Service failure returns failed user response."
+  ],
+  "limits": [
+    "System printer service stubbed; real device and installed runtime not verified.",
+    "Changing default printer and full model planner remain outside these tests."
+  ]
+}

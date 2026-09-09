@@ -341,6 +341,15 @@ class __AgentOrchestratorPart01MixinPart01Mixin:
             "metadata": plan_metadata,
         }
         self._attach_memory_recall(run, plan_metadata.get("memory_recall"))
+        if plan.intent == "no_operation":
+            from app.application.workflow.types import validate_plan_graph
+
+            error = validate_plan_graph(plan)
+            if error:
+                raise ValueError(error)
+            run.status = "completed"
+            run.add_event("run.completed", str(plan_metadata.get("response") or "本次无需执行业务操作"))
+            return
         run.steps = [self._step_from_node(node) for node in plan.nodes]
         self._apply_repair_policy(run, dict(plan.metadata or {}))
         self._attach_artifacts_from_payload(

@@ -1,15 +1,60 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
 from typing import Any
 
 from app.application.agent_orchestrator.run_models import AgentStep
 from app.application.agent_orchestrator.tool_spec import validate_tool_call, validate_tool_result
 
-_SQL_TENANT_SCOPED_TOOL_IDS = frozenset({"business_db"})
+_SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
+    {
+        "business_db",
+        "normal_slot_dispatch",
+        "customers",
+        "products",
+        "materials",
+        "inventory",
+        "purchase",
+        "sales",
+        "reports",
+        "finance",
+        "mrp",
+        "suppliers",
+        "shipment_records",
+        "shipment_orders",
+        "excel_import",
+        "unit_products_import",
+        "employee",
+        "wechat",
+    }
+)
 
 
 class AgentToolExecutor:
     def execute(
+        self,
+        step: AgentStep,
+        *,
+        runtime_context: dict[str, Any],
+    ) -> dict[str, Any]:
+        from app.application.agent_orchestrator.task_mod_scope import (
+            TaskModScopeError,
+            task_mod_execution_scope,
+        )
+
+        try:
+            with task_mod_execution_scope(runtime_context):
+                return self._execute_scoped(step, runtime_context=runtime_context)
+        except TaskModScopeError as exc:
+            return {
+                "success": False,
+                "error_code": "task_mod_scope_denied",
+                "message": str(exc),
+                "tool_id": step.tool_id,
+                "action": step.action,
+            }
+
+    def _execute_scoped(
         self,
         step: AgentStep,
         *,
@@ -31,9 +76,17 @@ class AgentToolExecutor:
         action = validation.action or step.action
         runtime_tenant_raw = params["_runtime_context"].get("tenant_id")
         runtime_tenant_id: int | None = None
+        if step.tool_id == "wechat" and runtime_tenant_raw in (None, ""):
+            return {
+                "success": False,
+                "error_code": "invalid_tenant_context",
+                "message": "微信后台任务缺少租户上下文",
+            }
         if step.tool_id in _SQL_TENANT_SCOPED_TOOL_IDS and runtime_tenant_raw not in (None, ""):
             try:
-                if isinstance(runtime_tenant_raw, bool):
+                if isinstance(runtime_tenant_raw, bool) or not isinstance(
+                    runtime_tenant_raw, (str, int)
+                ):
                     raise ValueError
                 runtime_tenant_id = int(runtime_tenant_raw)
                 if runtime_tenant_id <= 0:
@@ -47,7 +100,27 @@ class AgentToolExecutor:
                     "action": action,
                 }
 
-        if runtime_tenant_id is None:
+        if step.tool_id in {"memory_v2", "employee", "wechat"}:
+            from app.application.agent_orchestrator.execution_identity import execution_actor_scope
+            from app.infrastructure.tenant_scope import tenant_scope
+
+            actor = str(
+                runtime_context.get("local_user_id")
+                or runtime_context.get("actor_id")
+                or runtime_context.get("user_id")
+                or ""
+            )
+            with (
+                execution_actor_scope(actor),
+                tenant_scope(runtime_tenant_id) if runtime_tenant_id is not None else nullcontext(),
+            ):
+                result = execute_registered_workflow_tool(step.tool_id, action, params)
+        elif step.tool_id == "software":
+            from app.application.aiopen.software_control import screen_actor_scope
+
+            with screen_actor_scope(runtime_context):
+                result = execute_registered_workflow_tool(step.tool_id, action, params)
+        elif runtime_tenant_id is None:
             result = execute_registered_workflow_tool(step.tool_id, action, params)
         else:
             # Durable/background Agent runs execute outside the originating HTTP

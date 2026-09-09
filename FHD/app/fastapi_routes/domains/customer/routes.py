@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 from typing import Any, cast
 
-from fastapi import APIRouter, Body, File, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Body, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
 from app.fastapi_routes.domains.customer.agent_helpers import (
@@ -51,7 +51,10 @@ __all__ = [
     "router",
 ]
 
+from app.fastapi_routes.domains.customer.exchange import router as exchange_router
+
 router = APIRouter(tags=["xcagi-compat"])
+router.include_router(exchange_router)
 logger = logging.getLogger(__name__)
 
 
@@ -404,34 +407,4 @@ def customers_batch_delete(request: Request, body: dict = Body(default_factory=d
         action="batch_delete",
         params={"ids": ids},
         route_path="/customers/batch-delete",
-    )
-
-
-@router.post("/customers/import")
-@router.post("/customers/import/", include_in_schema=False)
-async def customers_import(request: Request, file: UploadFile = File(...)) -> dict:
-    _customers_write_raise(request)
-    gate = _business_mod_json_block()
-    if gate:
-        return cast("dict[Any, Any]", gate)
-    try:
-        content = await file.read()
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("customer import upload read failed")
-        raise HTTPException(status_code=400, detail="读取上传文件失败") from exc
-    from app.application.excel_imports import run_customers_excel_import_bytes
-
-    out = run_customers_excel_import_bytes(content)
-    if not out.get("success"):
-        msg = str(out.get("message") or out.get("error") or "导入失败")
-        raise HTTPException(status_code=400, detail=msg)
-    return {"success": True, "data": out}
-
-
-@router.get("/customers/export")
-@router.get("/customers/export/", include_in_schema=False)
-def customers_export_stub() -> dict:
-    raise HTTPException(
-        status_code=501,
-        detail="客户 Excel 导出尚未在 FastAPI 兼容层实现；请接回 XCAGI 全量后端或使用本地模板导出。",
     )

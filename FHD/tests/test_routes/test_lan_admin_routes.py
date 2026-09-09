@@ -426,9 +426,10 @@ class TestAllowlistEndpoints:
         assert resp.status_code == 404
 
 
-class TestSettingsEndpoints:
+class TestLegacySettingsFunctions:
+    # HTTP is owned by lan_settings_routes; SDK functions remain compatible.
     @patch("app.fastapi_routes.lan_admin_routes.get_lan_config")
-    def test_get_settings_returns_config(self, mock_cfg):
+    async def test_get_settings_returns_config(self, mock_cfg):
         mock_config = MagicMock()
         mock_config.enabled = True
         mock_config.is_secret_ready.return_value = True
@@ -436,7 +437,6 @@ class TestSettingsEndpoints:
         mock_config.admin_bootstrap_key = _TEST_BOOTSTRAP_KEY
         mock_config.allowed_cidrs = ["10.0.0.0/8"]
         mock_cfg.return_value = mock_config
-        client = _make_app_with_overrides(dep_host_override=_admin_host_actor)
         with patch("app.security.lan_settings_store.load_overrides") as mock_load:
             mock_overrides = MagicMock()
             mock_overrides.enabled = None
@@ -444,15 +444,15 @@ class TestSettingsEndpoints:
             mock_overrides.admin_bootstrap_key = None
             mock_overrides.allowed_cidrs = None
             mock_load.return_value = mock_overrides
-            resp = client.get("/api/lan/admin/settings")
-        assert resp.status_code == 200
-        data = resp.json()
+            from app.fastapi_routes.lan_admin_routes import get_settings
+
+            data = await get_settings(_admin_host_actor())
         assert data["enabled"] is True
 
     @patch("app.security.lan_config.reset_lan_config_cache")
     @patch("app.security.lan_settings_store.save_overrides")
     @patch("app.fastapi_routes.lan_admin_routes.get_lan_config")
-    def test_update_settings_success(self, mock_cfg, mock_save, mock_reset):
+    async def test_update_settings_success(self, mock_cfg, mock_save, mock_reset):
         mock_config = MagicMock()
         mock_config.enabled = True
         mock_config.is_secret_ready.return_value = True
@@ -460,7 +460,6 @@ class TestSettingsEndpoints:
         mock_config.admin_bootstrap_key = _TEST_BOOTSTRAP_KEY
         mock_config.allowed_cidrs = ["10.0.0.0/8"]
         mock_cfg.return_value = mock_config
-        client = _make_app_with_overrides(dep_host_override=_admin_host_actor)
         with patch("app.security.lan_settings_store.load_overrides") as mock_load:
             mock_overrides = MagicMock()
             mock_overrides.enabled = None
@@ -468,19 +467,21 @@ class TestSettingsEndpoints:
             mock_overrides.admin_bootstrap_key = None
             mock_overrides.allowed_cidrs = None
             mock_load.return_value = mock_overrides
-            resp = client.put(
-                "/api/lan/admin/settings",
-                json={"enabled": True, "allowed_cidrs": ["10.0.0.0/8"]},
-            )
-        assert resp.status_code == 200
+            from app.fastapi_routes.lan_admin_routes import update_settings
 
-    def test_update_settings_secret_too_short(self):
-        client = _make_app_with_overrides(dep_host_override=_admin_host_actor)
-        resp = client.put(
-            "/api/lan/admin/settings",
-            json={"license_secret": "short"},
-        )
-        assert resp.status_code == 400
+            result = await update_settings(
+                SettingsUpdate(enabled=True, allowed_cidrs=["10.0.0.0/8"]), _admin_host_actor()
+            )
+        assert result["enabled"] is True
+
+    async def test_update_settings_secret_too_short(self):
+        from fastapi import HTTPException
+
+        from app.fastapi_routes.lan_admin_routes import update_settings
+
+        with pytest.raises(HTTPException) as caught:
+            await update_settings(SettingsUpdate(license_secret="short"), _admin_host_actor())
+        assert caught.value.status_code == 400
 
 
 class TestIssueKeyRequestModel:

@@ -78,6 +78,8 @@ def _logical_reference_guards(obj: Any) -> list[Any]:
     def absent(model, *conditions):
         return ~exists(select(1).where(model.__table__.c.tenant_id == obj.tenant_id, *conditions))
 
+    if inspect(obj).mapper.local_table.name == "customer_product_links":
+        return []  # This association has no legacy name-based dependents.
     shipment = ShipmentRecord.__table__.c
     if inspect(obj).mapper.local_table.name == "purchase_units":
         return [

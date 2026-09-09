@@ -142,7 +142,24 @@ def test_invoke_unknown_tool(client, monkeypatch):
     assert resp.status_code == 404
 
 
-def test_runtime_key_lifecycle(client, monkeypatch):
+@pytest.fixture
+def bound_key_service(monkeypatch):
+    # These tests cover trace formatting; real SQL authentication is exercised
+    # in test_aiopen_screen_identity.py.
+    identity = {"owner_id": "3", "tenant_id": "7"}
+    monkeypatch.setattr(
+        "app.application.aiopen.screen_identity.capture_screen_grant",
+        lambda request: {**identity, "expires_at": 9999999999},
+    )
+    monkeypatch.setattr(
+        "app.application.aiopen.screen_identity.validate_screen_grant", lambda grant: identity
+    )
+    monkeypatch.setattr(
+        "app.application.aiopen.software_control.request_screen_owner", lambda request: identity
+    )
+
+
+def test_runtime_key_lifecycle(client, monkeypatch, bound_key_service):
     monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
     created = client.post("/api/aiopen/keys", json={"label": "测试"}).json()
     assert created["success"] is True
@@ -165,7 +182,7 @@ def test_runtime_key_lifecycle(client, monkeypatch):
     assert aiopen_service.list_api_keys() == []
 
 
-def test_aiopen_key_lifecycle_traces_without_key_leak(client, monkeypatch):
+def test_aiopen_key_lifecycle_traces_without_key_leak(client, monkeypatch, bound_key_service):
     monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
     repo = InMemoryAgentRunRepository()
 
@@ -182,7 +199,7 @@ def test_aiopen_key_lifecycle_traces_without_key_leak(client, monkeypatch):
 
     create_run = repo.get(created["run_id"])
     assert create_run is not None
-    assert create_run.user_id == "key-admin"
+    assert create_run.user_id == "3"
     assert create_run.intent == "aiopen_control_update"
     assert create_run.metadata["channel"] == "aiopen_control"
     assert create_run.metadata["runtime_context"]["route"] == "/api/aiopen/keys"
@@ -368,7 +385,7 @@ def test_ui_tool_without_session(client, monkeypatch):
     assert resp.status_code == 200
     body = resp.json()
     assert body["success"] is False
-    assert "虚拟光标会话" in body["message"]
+    assert body["code"] == "SCREEN_IDENTITY_REQUIRED"
 
 
 def test_ui_tool_blocked_when_remote_control_off(client, monkeypatch):
@@ -543,7 +560,7 @@ def test_screen_ws_command_roundtrip(client):
         sessions = client.post(
             "/api/aiopen/invoke", json={"tool": "ui_sessions", "args": {}}
         ).json()
-        assert any(s["session_id"] == "test_screen" for s in sessions["sessions"])
+        assert sessions["code"] == "SCREEN_IDENTITY_REQUIRED"
 
 
 def test_aiopen_source_alias():

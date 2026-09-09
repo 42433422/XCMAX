@@ -57,6 +57,35 @@ def _ingest_payload() -> dict:
     }
 
 
+def test_manual_link_scopes_contact_and_customer(client_and_session_factory, monkeypatch):
+    client, factory = client_and_session_factory
+    monkeypatch.setattr(wechat_ingest, "_auth", lambda *args, **kwargs: None)
+    from sqlalchemy import select
+
+    with factory() as session:
+        first = WechatContact(contact_key="same", display_name="同名", tenant_id=7)
+        second = WechatContact(contact_key="same", display_name="同名", tenant_id=8)
+        customer = Customer(customer_name="租户八客户", tenant_id=8)
+        session.add_all([first, second, customer])
+        session.commit()
+        customer_id = customer.id
+
+    denied = wechat_ingest_service.link_wechat_contact("same", customer_id, tenant_id=7)
+    assert denied["success"] is False
+    accepted = client.post(
+        "/api/ops/wechat/contacts/same/link", json={"customer_id": customer_id, "tenant_id": 8}
+    ).json()
+    assert accepted["success"] is True
+    with factory() as session:
+        contacts = session.scalars(
+            select(WechatContact)
+            .order_by(WechatContact.tenant_id)
+            .execution_options(skip_tenant_filter=True)
+        ).all()
+        assert contacts[0].customer_id is None
+        assert contacts[1].customer_id == customer_id
+
+
 def test_ingest_idempotent_and_context_backflow(client_and_session_factory, monkeypatch) -> None:
     client, _ = client_and_session_factory
     monkeypatch.setattr(wechat_ingest, "_auth", lambda *args, **kwargs: None)

@@ -782,7 +782,7 @@ def test_report_export_returns_xlsx_download(
 
 
 def test_ai_compat_health_root_and_api(ai_client: TestClient) -> None:
-    for path in ("/health", "/api/health"):
+    for path in ("/health",):
         body = ai_client.get(path).json()
         assert body["success"] is True
         assert body["data"]["status"] == "ok"
@@ -816,42 +816,6 @@ def test_ai_generate_with_template_name(
     assert svc.generate_shipment_document.call_args.kwargs["template_name"] == "default.docx"
 
 
-def test_ai_single_label_success(ai_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    product_svc = MagicMock()
-    product_svc.search_products.return_value = [
-        {"name": "底漆", "specification": "25kg", "unit": "桶"},
-    ]
-    print_app = MagicMock()
-    print_app.print_single_label.return_value = {"success": True, "message": "printed"}
-    monkeypatch.setattr("app.application.get_product_app_service", lambda: product_svc)
-    monkeypatch.setattr(
-        "app.application.print_app_service.get_print_application_service",
-        lambda: print_app,
-    )
-    # /api/print/{filename:path} is registered before /api/print/single_label — call handler directly.
-    r = ai_routes_mod.compat_print_single_label({"model_number": "9803", "quantity": 2})
-    assert r.status_code == 200
-    print_app.print_single_label.assert_called_once()
-
-
-def test_ai_single_label_product_lookup_fail(
-    ai_client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(
-        "app.application.get_product_app_service",
-        lambda: (_ for _ in ()).throw(RuntimeError("product svc down")),
-    )
-    print_app = MagicMock()
-    print_app.print_single_label.return_value = {"success": True}
-    monkeypatch.setattr(
-        "app.application.print_app_service.get_print_application_service",
-        lambda: print_app,
-    )
-    r = ai_routes_mod.compat_print_single_label({"model_number": "X99", "quantity": 0})
-    assert r.status_code == 200
-    assert print_app.print_single_label.call_args.kwargs["quantity"] == 1
-
-
 def test_ai_print_file_failure(
     ai_client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
@@ -868,10 +832,8 @@ def test_ai_print_file_failure(
     assert "offline" not in r.text
 
 
-def test_ai_print_pdf_labels_501(ai_client: TestClient) -> None:
-    # Same path-param shadow as single_label — invoke compat handler directly.
-    r = ai_routes_mod.compat_print_pdf_labels()
-    assert r.status_code == 501
+def test_ai_print_pdf_labels_requires_login(ai_client: TestClient) -> None:
+    assert ai_client.post("/api/print/pdf_labels", json={}).status_code == 401
 
 
 def test_ai_tts_success(ai_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:

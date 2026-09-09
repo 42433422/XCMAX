@@ -324,13 +324,24 @@ def test_ai_approval_request_missing_ids(shipment_client: TestClient) -> None:
     assert r.status_code == 400
 
 
-def test_ai_approval_request_create(shipment_client: TestClient) -> None:
-    r = shipment_client.post(
-        "/api/ai/approval/request",
-        json={"plan_id": "p1", "node_id": "n1", "tool_id": "t1", "action": "run"},
-    )
-    assert r.status_code == 200
-    assert r.json()["success"] is True
+def test_ai_approval_request_without_identity_fails(shipment_client: TestClient) -> None:
+    from unittest.mock import patch
+
+    from app.application.agent_orchestrator.execution_identity import execution_actor_scope
+
+    with (
+        execution_actor_scope(""),
+        patch(
+            "app.application.agent_orchestrator.execution_identity.current_execution_actor",
+            return_value="",
+        ),
+    ):
+        r = shipment_client.post(
+            "/api/ai/approval/request",
+            json={"plan_id": "p1", "node_id": "n1", "tool_id": "t1", "action": "run"},
+        )
+    assert r.status_code == 500
+    assert r.json()["success"] is False
 
 
 def test_ai_approval_approve_missing(shipment_client: TestClient) -> None:

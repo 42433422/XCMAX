@@ -190,14 +190,14 @@ class TestBasicIntentHelpers:
             arc.process.return_value = rr
             assert is_greeting("嗨！") is True
 
-    def test_is_goodbye_via_reflex(self):
+    def test_emergency_stop_is_not_goodbye(self):
         from app.domain.neuro.reflex_arc import ReflexType
         from app.services.intent_service import is_goodbye
 
         rr = _make_reflex(ReflexType.EMERGENCY_STOP, triggered=True)
         with patch("app.services.intent_service._reflex_arc") as arc:
             arc.process.return_value = rr
-            assert is_goodbye("stop") is True
+            assert is_goodbye("stop") is False
 
     def test_is_goodbye_via_keyword(self):
         from app.domain.neuro.reflex_arc import ReflexType

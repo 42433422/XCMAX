@@ -188,6 +188,9 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
         return compat_purchase_units_by_name(unit_name)
 
+    from app.mod_sdk.host_services import customer_exchange_router
+
+    router.include_router(customer_exchange_router)
     app.include_router(router)
     logger.info("xcagi-erp-domain-bridge registered: %s", mod_id)
 

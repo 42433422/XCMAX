@@ -252,6 +252,8 @@ def test_failed_rollback_retry_skips_previously_restored_rows(db):
 
 
 def test_aggregate_rollback_removes_created_products_before_created_customer(db):
+    from app.db.models.customer_product_link import CustomerProductLink
+
     adapter = get_adapter("customer_products")
     receipts = []
     for model in ("CREATED-1", "CREATED-2"):
@@ -266,11 +268,65 @@ def test_aggregate_rollback_removes_created_products_before_created_customer(db)
         receipts.append({"match_ref": result["match_ref"], "before": {}, "after": result["after"]})
         db.commit()
     run, rows = persist_run(db, "customer_products", receipts)
+    assert db.query(CustomerProductLink).count() == 2
     assert db.query(Product).count() == 2
     assert db.query(PurchaseUnit).count() == 1
 
     EtlService(adviser=MagicMock()).rollback(db, run_id=run.id, owner_user_id=1)
 
+    assert db.query(CustomerProductLink).count() == 0
     assert db.query(Product).count() == 0
     assert db.query(PurchaseUnit).count() == 0
     assert [row.execution_status for row in rows] == ["rolled_back", "rolled_back"]
+
+
+def test_aggregate_rollback_preserves_preexisting_explicit_link(db):
+    from app.application.customer_product_links import ensure_customer_product_link
+    from app.db.models.customer_product_link import CustomerProductLink
+
+    customer, product = seed_business_rows(db)
+    link, created = ensure_customer_product_link(db, customer.id, product.id)
+    assert created
+    link_id = link.id
+    db.commit()
+    receipt = apply_import(db, "customer_products", customer)
+    assert receipt["after"]["_etl"]["link_created"] is False
+    assert receipt["after"]["_etl"]["link_id"] == link_id
+    get_adapter("customer_products").rollback_row(db, **receipt)
+    db.commit()
+    assert db.get(CustomerProductLink, link_id) is not None
+    assert db.query(CustomerProductLink).count() == 1
+    assert product.price == Decimal("10")
+    assert customer.contact_phone == "100"
+
+
+def test_customer_product_measurement_import_and_rollback_keep_customer_label(db):
+    customer, product = seed_business_rows(db)
+    product.measurement_unit = "桶"
+    db.commit()
+    adapter = get_adapter("customer_products")
+    data = {
+        "customer_name": customer.unit_name,
+        "name": product.name,
+        "model_number": product.model_number,
+        "measurement_unit": "箱",
+    }
+    preview = adapter.preview(db, data, allowed_update_fields={"measurement_unit"}, context={})
+    assert preview.action == "update"
+    result = adapter.execute_row(
+        db,
+        data,
+        action="update",
+        match_ref=preview.match_ref,
+        allowed_update_fields={"measurement_unit"},
+        context={},
+    )
+    db.commit()
+    assert product.measurement_unit == "箱"
+    assert product.unit == customer.unit_name
+    adapter.rollback_row(
+        db, match_ref=result["match_ref"], before=preview.before, after=result["after"], context={}
+    )
+    db.commit()
+    assert product.measurement_unit == "桶"
+    assert product.unit == customer.unit_name

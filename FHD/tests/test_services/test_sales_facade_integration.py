@@ -248,9 +248,9 @@ class TestRiskIdempotencyMetadataReflectBehavior:
         sales = _workflow_registry()["sales"]["actions"]
         # 只读查询幂等
         assert sales["query"]["idempotent"] is True
-        # GAP-3 纠正：报价与交付均支持 idempotency_key → 声明可幂等
-        for action in ("quote", "deliver"):
-            assert sales[action]["idempotent"] is True
+        # 报价的幂等键可选，因此不能声明无条件幂等。
+        assert sales["quote"]["idempotent"] is False
+        assert sales["deliver"]["idempotent"] is True
         # 生命周期 / 开票 / 收款 / 退款委托的服务均幂等返回
         for action in ("confirm", "invoice", "payment", "refund", "cancel"):
             assert sales[action]["idempotent"] is True

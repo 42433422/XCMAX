@@ -158,6 +158,22 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
     """普通版轻量槽位提取与任务分流。"""
     text = (message or "").strip()
     lower = text.lower()
+    # Do not let an action noun in a denied or mixed instruction trigger a write.
+    # Mixed positive/negative clauses require clarification before any execution.
+    from app.domain.neuro.action_negation import has_denied_action
+
+    if has_denied_action(text):
+        return {
+            "intent": "clarify",
+            "slots": {"question": "已暂停执行。请说明需要保留的操作，或确认取消本次任务。"},
+            "reason": "negated_action",
+        }
+    if (
+        "打印机" in text
+        and any(word in text for word in ("列表", "查询", "查看", "看看", "哪台", "哪些"))
+        and not any(word in text for word in ("更换", "换成", "设置", "删除", "添加"))
+    ):
+        return {"intent": "printer_list", "slots": {}}
     shipment_keywords = ("发货单", "送货单", "出货单", "开单", "打单", "打印")
     number_style_order = bool(
         _facade().re.search(
@@ -168,11 +184,19 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
     # 「预览…模板」类话术是模板预览意图，不被「送货单/发货单」等单据词截胡成开单。
     template_preview = bool(
         _facade().re.search("(?:预览|看看|看下)[^，,。]{0,12}模板|模板[^，,。]{0,8}预览", text)
+        or (
+            any(word in text for word in ("发货单", "送货单", "出货单"))
+            and any(word in text for word in ("版式", "长什么样"))
+            and any(word in text for word in ("预览", "看看", "看下", "长什么样"))
+        )
     )
-    if (any(k in text for k in shipment_keywords) or number_style_order) and not template_preview:
-        return {"intent": "shipment", "slots": {"number_style_order": number_style_order}}
     if template_preview:
-        return {"intent": "unknown", "slots": {}}
+        return {"intent": "template_preview", "slots": {}}
+    if (
+        (any(k in text for k in shipment_keywords) or number_style_order)
+        and not any(word in text for word in ("标签", "商标", "贴标", "打印机"))
+    ):
+        return {"intent": "shipment", "slots": {"number_style_order": number_style_order}}
     sales_write_payload = _facade()._parse_sales_write_request(text)
     if sales_write_payload is not None:
         return {
@@ -185,9 +209,11 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
     unit_model_signal = bool(
         _facade().re.search("([^\\s，,。]{2,})\\s*的\\s*([0-9A-Za-z-]{2,})", text)
     )
-    customer_entity_markers = ("客户", "购买单位", "买家")
-    if any(k in text for k in customer_entity_markers):
-        return {"intent": "customers_query", "slots": {"keyword": ""}}
+    from app.application.customer_query_intent import customer_query_slots
+
+    customer_slots = customer_query_slots(text)
+    if customer_slots is not None:
+        return {"intent": "customers_query", "slots": customer_slots}
     delete_keywords = ("删除", "移除", "删掉", "删了")
     if any(k in text for k in delete_keywords):
         del_target = ""

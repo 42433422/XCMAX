@@ -171,7 +171,7 @@ class FileSystemTemplateStore(TemplateStorePort):
         return "excel"
 
     def _db_templates(self) -> list[dict]:
-        """从 templates 表读取模板元数据（按当前租户隔离；若表不存在则返回空列表）。"""
+        """从 templates 表读取模板元数据（按当前租户隔离；读取失败向调用方传播）。"""
         from app.infrastructure.templates.tenant_scope import (
             ensure_templates_tenant_column,
             templates_tenant_where_sql,
@@ -194,8 +194,8 @@ class FileSystemTemplateStore(TemplateStorePort):
                     ),
                     tenant_bind,
                 ).fetchall()
-        except RECOVERABLE_ERRORS:
-            return []
+        except RECOVERABLE_ERRORS as exc:
+            raise RuntimeError("模板数据库读取失败") from exc
 
         out: list[dict] = []
         for r in rows:

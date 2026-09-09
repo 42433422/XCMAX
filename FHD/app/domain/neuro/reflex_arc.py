@@ -13,6 +13,7 @@ import time
 from dataclasses import dataclass
 from enum import Enum
 
+from app.domain.neuro.greeting import GREETING_PATTERN
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -124,18 +125,7 @@ class IntentReflexArc:
         self.add_pattern(
             ReflexPattern(
                 reflex_type=ReflexType.GREETING,
-                patterns=[
-                    r"^你好",
-                    r"^您好",
-                    r"^嗨",
-                    r"^hi\b",
-                    r"^hello\b",
-                    r"^早上好",
-                    r"^下午好",
-                    r"^晚上好",
-                    r"^在吗",
-                    r"^有人吗",
-                ],
+                patterns=[GREETING_PATTERN],
                 response="您好！有什么可以帮助您的吗？",
                 priority=1,
             )

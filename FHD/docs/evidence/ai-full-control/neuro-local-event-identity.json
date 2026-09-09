@@ -1,0 +1,16 @@
+{
+  "base_sha": "c0f303717",
+  "tests_passed": 91,
+  "change": "Capture actor and tenant in private process-local map per queue entry; restore on consumer and copy context into synchronous executor.",
+  "verified": [
+    "Async and sync consumers see correct identity for two publishers.",
+    "Reusing same event object does not overwrite earlier identity.",
+    "Remote actor/tenant payload cannot acquire trusted identity.",
+    "Consumed entries removed from identity map."
+  ],
+  "limitations": [
+    "Process-local queue only; remote durable authorization/replay identity is not implemented.",
+    "No financial approval end-to-end persistence through event consumer in this test.",
+    "Session revocation between publish and consume requires separate validation."
+  ]
+}

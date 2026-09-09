@@ -18,6 +18,7 @@ def product_to_domain(db_model: ProductModel) -> Product:
         category=db_model.category or "",
         brand=db_model.brand or "",
         unit=db_model.unit or "个",
+        measurement_unit=db_model.measurement_unit,
         is_active=bool(db_model.is_active),
         created_at=db_model.created_at or datetime.now(),
         updated_at=db_model.updated_at or datetime.now(),
@@ -35,5 +36,6 @@ def product_to_db(product: Product) -> dict[str, Any]:
         "category": product.category,
         "brand": product.brand,
         "unit": product.unit,
+        "measurement_unit": product.measurement_unit,
         "is_active": 1 if product.is_active else 0,
     }

@@ -202,7 +202,7 @@ def test_xcagi_products_list(xcagi_product_client: TestClient) -> None:
     assert r.json()["total"] == 1
 
 
-def test_xcagi_products_resolve_name_hints_501(xcagi_product_client: TestClient) -> None:
+def test_xcagi_products_resolve_name_hints_requires_login(xcagi_product_client: TestClient) -> None:
     with patch(
         "app.fastapi_routes.xcagi_compat_product._business_mod_json_block",
         return_value=None,
@@ -211,7 +211,7 @@ def test_xcagi_products_resolve_name_hints_501(xcagi_product_client: TestClient)
             "/products/resolve-name-hints",
             json={"hints": ["清漆"]},
         )
-    assert r.status_code == 501
+    assert r.status_code == 401
 
 
 def test_xcagi_products_get_by_id(xcagi_product_client: TestClient) -> None:

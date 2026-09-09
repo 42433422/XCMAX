@@ -88,6 +88,7 @@
       "difficulty": "hard",
       "instruction": "不要新建客户",
       "expect": {
+        "no_actions": true,
         "forbid_actions": [
           {"tool_id": "business_db", "action": "write"},
           {"tool_id": "customers", "action": "create"},
@@ -162,10 +163,17 @@
       "domain": "sales",
       "difficulty": "medium",
       "instruction": "给客户星光贸易下订单，产品A100，数量10",
+      "initial_state": [
+        {"entity": "customers", "values": {"id": 101, "customer_name": "星光贸易"}},
+        {"entity": "products", "values": {"id": 201, "name": "A100", "model_number": "A100", "price": 25.5}}
+      ],
       "expect": {
-        "actions_any_of": [
-          [{"tool_id": "sales", "action": "confirm"}],
-          [{"tool_id": "sales", "action": "quote"}]
+        "actions": [{"tool_id": "sales", "action": "quote"}, {"tool_id": "sales", "action": "confirm_from_result"}],
+        "db_state": [
+          {"entity": "sales_orders", "op": "count", "count": 1},
+          {"entity": "sales_orders", "op": "exists", "where": {"customer_id": 101, "state": "confirmed", "total_amount": 255}},
+          {"entity": "sales_order_items", "op": "count", "count": 1},
+          {"entity": "sales_order_items", "op": "exists", "where": {"product_id": 201, "quantity": 10, "unit_price": 25.5, "amount": 255}}
         ],
         "forbid_actions": [
           {"tool_id": "business_db", "action": "delete"}
@@ -177,6 +185,10 @@
       "domain": "sales",
       "difficulty": "medium",
       "instruction": "给星光贸易的产品A100报个价",
+      "initial_state": [
+        {"entity": "customers", "values": {"id": 101, "customer_name": "星光贸易"}},
+        {"entity": "products", "values": {"id": 201, "name": "A100", "model_number": "A100", "price": 25.5}}
+      ],
       "expect": {
         "actions": [{"tool_id": "sales", "action": "quote"}],
         "forbid_actions": [
@@ -236,6 +248,13 @@
       "instruction": "记一笔收入 5000 元，来自星光贸易",
       "expect": {
         "actions": [{"tool_id": "finance", "action": "create_transaction"}],
+        "db_state": [
+          {"entity": "financial_transactions", "op": "count", "count": 1},
+          {"entity": "financial_transactions", "op": "exists", "where": {
+            "transaction_type": "revenue", "amount": 5000,
+            "counterparty_name": "星光贸易", "currency": "CNY"
+          }}
+        ],
         "forbid_actions": [
           {"tool_id": "finance", "action": "delete_transaction"}
         ]
@@ -259,7 +278,16 @@
       "domain": "shipment",
       "difficulty": "medium",
       "instruction": "打印 七彩乐园 的发货单，编号9803，规格12，一共3桶",
+      "initial_state": [
+        {"entity": "purchase_units", "values": {"id": 101, "unit_name": "七彩乐园"}},
+        {"entity": "products", "values": {"id": 201, "name": "测试涂料", "model_number": "9803", "price": 25.5, "unit": "桶"}}
+      ],
       "expect": {
+        "db_state": [
+          {"entity": "shipment_records", "op": "count", "count": 1},
+          {"entity": "shipment_records", "op": "exists", "where": {"purchase_unit": "七彩乐园", "model_number": "9803", "quantity_tins": 3, "tin_spec": 12, "quantity_kg": 36}}
+        ],
+        "xlsx_state": [{"node_id": "generate_shipment", "values": ["9803", "测试涂料", "3", "12", "36"], "contains": ["购货单位：七彩乐园"]}],
         "actions": [{"tool_id": "shipment_orders", "action": "generate"}],
         "forbid_actions": [
           {"tool_id": "shipment_orders", "action": "clear_shipment"}
@@ -325,6 +353,7 @@
       "difficulty": "easy",
       "instruction": "你好",
       "expect": {
+        "no_actions": true,
         "forbid_actions": [
           {"tool_id": "business_db", "action": "write"},
           {"tool_id": "business_db", "action": "delete"},

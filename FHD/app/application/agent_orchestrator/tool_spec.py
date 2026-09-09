@@ -4,6 +4,12 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Literal, cast
 
+from app.application.agent_orchestrator.tool_schema_validation import (  # noqa: F401
+    _is_empty,
+    _type_matches,
+    _validate_schema_payload,
+)
+
 # Data tables are externalised into the ``tool_spec_data`` package. They are
 # re-exported here under their original names so downstream code (and tests)
 # can keep importing them from ``tool_spec`` unchanged.
@@ -107,6 +113,10 @@ def _sample_value_for_property(key: str, prop: dict[str, Any]) -> Any:
         return enum_values[0]
 
     expected_type = str(prop.get("type") or "").strip()
+    if expected_type == "array" and isinstance(prop.get("items"), dict):
+        return [_sample_value_for_property("item", prop["items"])]
+    if expected_type == "object" and prop.get("properties"):
+        return _sample_payload_from_schema(prop)
     if key == "success":
         return True
     if key in {"ids", "records", "artifacts", "data"} and expected_type == "array":
@@ -163,6 +173,8 @@ def _default_fixture(
 
 
 def _special_permission(tool_id: str, action: str) -> str:
+    if tool_id == "memory_v2" and action in {"list", "summary"}:
+        return "memory_v2.read"
     if tool_id in PERMISSION_BARE_PREFIX_TOOLS:
         return f"{tool_id}.{action}"
     if tool_id == "dataset_rag":
@@ -264,6 +276,13 @@ def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
     from app.services.tools_execution.registry import get_workflow_tool_registry
 
     registry = get_workflow_tool_registry()
+    from app.application.aiopen.service import _UI_ACTIONS, TOOL_DEFINITIONS
+
+    screen_schemas = {
+        _UI_ACTIONS[tool["name"]]: tool["inputSchema"]
+        for tool in TOOL_DEFINITIONS
+        if tool["name"] in _UI_ACTIONS
+    }
     specs: dict[tuple[str, str], ToolActionSpecV2] = {}
     for tool_id, tool_meta in registry.items():
         actions = tool_meta.get("actions") if isinstance(tool_meta, dict) else None
@@ -281,6 +300,10 @@ def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
                 (str(tool_id), normalized_action),
                 _schema_from_required(required_params),
             )
+            if str(tool_id) == "software":
+                input_schema = screen_schemas.get(
+                    normalized_action, _schema_from_required(required_params)
+                )
             output_schema = _SPECIAL_OUTPUT_SCHEMAS.get(
                 (str(tool_id), normalized_action),
                 _DEFAULT_OUTPUT_SCHEMA,
@@ -316,63 +339,6 @@ def get_tool_action_spec(tool_id: str, action: str) -> ToolActionSpecV2 | None:
     normalized_tool_id = str(tool_id or "").strip()
     normalized_action = _normalize_tool_action(str(action or "view"))
     return build_tool_specs_v2().get((normalized_tool_id, normalized_action))
-
-
-def _is_empty(value: Any) -> bool:
-    if value is None:
-        return True
-    if isinstance(value, str):
-        return not value.strip()
-    if isinstance(value, (list, tuple, dict)):
-        return len(value) == 0
-    return False
-
-
-def _type_matches(value: Any, expected: str) -> bool:
-    if expected == "object":
-        return isinstance(value, dict)
-    if expected == "array":
-        return isinstance(value, list)
-    if expected == "string":
-        return isinstance(value, str)
-    if expected == "integer":
-        return isinstance(value, int) and not isinstance(value, bool)
-    if expected == "number":
-        return isinstance(value, (int, float)) and not isinstance(value, bool)
-    if expected == "boolean":
-        return isinstance(value, bool)
-    return True
-
-
-def _validate_schema_payload(
-    schema: dict[str, Any],
-    payload: dict[str, Any],
-    *,
-    subject: str,
-) -> tuple[bool, str]:
-    expected_root_type = str(schema.get("type") or "object").strip()
-    if expected_root_type == "object" and not isinstance(payload, dict):
-        return False, f"{subject} 必须是 object"
-    required = schema.get("required") if isinstance(schema.get("required"), list) else []
-    if subject == "工具输出" and payload.get("success") is False:
-        required = [key for key in (required or []) if str(key) == "success"]
-    for key in required or []:
-        if _is_empty(payload.get(str(key))):
-            return False, f"{subject} 缺少字段：{key}"
-
-    properties = schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
-    for key, prop in (properties or {}).items():
-        if key not in payload or _is_empty(payload.get(key)):
-            continue
-        if not isinstance(prop, dict):
-            continue
-        expected_type = str(prop.get("type") or "").strip()
-        if expected_type and not _type_matches(payload.get(key), expected_type):
-            return False, f"{subject} 字段 {key} 类型错误，应为 {expected_type}"
-        enum_values = prop.get("enum")
-        if isinstance(enum_values, list) and enum_values and payload.get(key) not in enum_values:
-            return False, f"{subject} 字段 {key} 不在允许范围内"
-    return True, ""
 
 
 def _validate_input_schema(spec: ToolActionSpecV2, params: dict[str, Any]) -> tuple[bool, str]:

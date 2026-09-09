@@ -401,7 +401,7 @@ class TestExportToExcelExtended:
             mock_tpl_svc.get_templates.return_value = {"templates": []}
             mock_get_tpl.return_value = mock_tpl_svc
             result = svc.export_to_excel(template_id="1")
-        assert result["success"] is True
+        assert result["success"] is False
 
     def test_template_lookup_error(self, tmp_path):
         svc = CustomerApplicationService()
@@ -419,7 +419,7 @@ class TestExportToExcelExtended:
             ),
         ):
             result = svc.export_to_excel(template_id="1")
-        assert result["success"] is True  # Should fall back to no template
+        assert result["success"] is False
 
     def test_outer_error(self):
         svc = CustomerApplicationService()

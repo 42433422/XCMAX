@@ -1,0 +1,9 @@
+{
+  "source_commit": "545c94370",
+  "source_note": "Trial ran before committing the runner and dataset changes contained in this commit.",
+  "passed": 16,
+  "total": 22,
+  "passed_with_db_assertions": 6,
+  "dataset_sha256": "b7872d980bfc6260a3212aa16fbe7c28bfbff36660ae1cf8ec7c3c83d40d6be2",
+  "scope": "Isolated SQLite direct execution; no approval, live model or installed acceptance."
+}

@@ -1,0 +1,7 @@
+{
+  "source_commit": "cd6db2713c9ad20834036136a92fede54b9fd5f8",
+  "passed": 16,
+  "total": 22,
+  "dataset_sha256": "b7872d980bfc6260a3212aa16fbe7c28bfbff36660ae1cf8ec7c3c83d40d6be2",
+  "scope": "Isolated SQLite fallback. Inbound clarification remains incomplete; no live model, approval or installed-runtime acceptance."
+}

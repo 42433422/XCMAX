@@ -11,6 +11,7 @@ import {
   type ReleaseMediaSlide,
 } from './release-media.js'
 import { appendUpdaterEvent, discardPendingUpdateInstallReceipt } from './update-install-receipts.js'
+import { observeUpdate, resetUpdateObservation } from './update-observation.js'
 
 let updateDownloaded = false
 let downloadedVersion = ''
@@ -343,6 +344,7 @@ export function configureUpdater(
   }
 
   const send = (type: string, data?: unknown) => {
+    observeUpdate(type, data)
     if (
       type === 'update-available' ||
       type === 'update-downloaded' ||
@@ -426,6 +428,7 @@ export async function downloadUpdate(): Promise<unknown> {
     return downloadPromise
   }
   downloadInFlight = true
+  observeUpdate('download-started')
   appendUpdaterEvent('download_start', {})
   downloadPromise = (async () => {
     try {
@@ -437,6 +440,7 @@ export async function downloadUpdate(): Promise<unknown> {
         ? '更新服务器提供的是安装包（DMG），无法在应用内自动更新。请改用官网下载 ZIP/安装包，或等待已修复的更新源生效后再试。'
         : raw
       appendUpdaterEvent('download_failed', { message: raw })
+      observeUpdate('error', { message, phase: 'download' })
       throw new Error(message)
     } finally {
       downloadInFlight = false
@@ -447,6 +451,16 @@ export async function downloadUpdate(): Promise<unknown> {
 }
 
 export async function runUpdateCheckWithDirectNet(): Promise<unknown> {
+  observeUpdate('checking-for-update')
+  try {
+    return await checkWithDirectNet()
+  } catch (error) {
+    observeUpdate('error', { phase: 'network_check', message: error instanceof Error ? error.message : String(error) })
+    throw error
+  }
+}
+
+async function checkWithDirectNet(): Promise<unknown> {
   const defaultSession = session.defaultSession
   const previous = await defaultSession.resolveProxy('https://xiu-ci.com')
   await defaultSession.setProxy({ mode: 'direct' })
@@ -480,7 +494,18 @@ function parseYamlBlock(content: string, field: string): string {
 }
 
 export async function checkForUpdates(): Promise<unknown> {
+  observeUpdate('checking-for-update')
+  try {
+    return await performUpdateCheck()
+  } catch (error) {
+    observeUpdate('error', { phase: 'check', message: error instanceof Error ? error.message : String(error) })
+    throw error
+  }
+}
+
+async function performUpdateCheck(): Promise<unknown> {
   if (!app.isPackaged && !process.env.XCAGI_UPDATE_URL) {
+    observeUpdate('check-skipped', { reason: 'dev-mode-without-XCAGI_UPDATE_URL' })
     return { skipped: true, reason: 'dev-mode-without-XCAGI_UPDATE_URL' }
   }
   remoteProductVersion = ''
@@ -550,6 +575,7 @@ export async function verifyMetadataSignatureText(content: string, publicKeyPem:
 
 /** 测试辅助：重置 updateDownloaded 状态。仅用于单测。 */
 export function __resetUpdateDownloadedForTest(): void {
+  resetUpdateObservation()
   discardPendingUpdateInstallReceipt()
   updateDownloaded = false
   downloadedVersion = ''

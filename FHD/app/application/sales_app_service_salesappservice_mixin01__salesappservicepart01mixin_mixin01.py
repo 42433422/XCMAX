@@ -66,6 +66,18 @@ class __SalesAppServicePart01MixinPart01Mixin:
             return {"success": False, "message": "缺少 customer_id"}
         if not isinstance(items_data, list) or not items_data:
             return {"success": False, "message": "缺少 items 明细"}
+        for item in items_data:
+            if not isinstance(item, dict):
+                return {"success": False, "message": "报价明细必须为对象"}
+            try:
+                quantity = _facade().Decimal(str(item.get("quantity")))
+                unit_price = _facade().Decimal(str(item.get("unit_price")))
+            except (_facade().InvalidOperation, ValueError, TypeError):
+                return {"success": False, "message": "报价明细缺少有效数量或单价"}
+            if not quantity.is_finite() or quantity <= 0:
+                return {"success": False, "message": "报价数量必须为正数"}
+            if not unit_price.is_finite() or unit_price < 0:
+                return {"success": False, "message": "报价单价必须为非负数"}
         idempotency_key = str(data.get("idempotency_key") or "").strip() or None
         idem_marker = f"idempotency:sales_quote:{idempotency_key}" if idempotency_key else None
         owned = db is None

@@ -224,6 +224,7 @@
               <div v-if="expandedTaskIds.includes(task.id)" class="task-list-detail">
                 <div v-if="task.summary" class="task-summary">{{ normalizeTaskDisplayText(task.summary) }}</div>
                 <div v-if="task.error" class="task-error">{{ normalizeTaskDisplayText(task.error) }}</div>
+                <WorkflowLabelPreviewLink v-if="task.type === 'workflow_employee'" :job-id="workflowPayload(task).lastLabelPrint?.jobId" />
                 <AgentTaskRuntimePanel v-if="task.type === 'agent_task'" :task="task" @open="openWorkspace(task)" @approve="$emit('approve-task', task.id)" @retry="$emit('retry-task', task.id)" @pause="$emit('pause-task', task.id)" @resume="$emit('resume-task', task.id)" @cancel="$emit('cancel-task-by-id', task.id)" />
                 <div
                   v-if="task.type !== 'workflow_employee' && task.type !== 'agent_task'"
@@ -272,11 +273,13 @@ import { RouterLink, useRouter, type RouteLocationRaw } from 'vue-router'
 import type { ShipmentTask } from '@/composables/useShipmentTask'
 import type { TaskFilter, TaskItem } from '@/composables/useChatPersistence'
 import AgentTaskRuntimePanel from './AgentTaskRuntimePanel.vue'
+import WorkflowLabelPreviewLink from '@/components/WorkflowLabelPreviewLink.vue'
 import { workflowProgressIsIdle } from '@/workflow/coreWorkflowTaskUi'
 import { normalizeTaskDisplayText } from '@/utils/chatTaskLabels'
 useI18n()
 const router = useRouter()
 type WorkflowTaskPayload = {
+  lastLabelPrint?: { jobId?: unknown }
   workflowProgressPct?: number
   workflowMonitorLine?: string
   workflowCurrentHint?: string

@@ -1,0 +1,15 @@
+{
+  "base_sha": "2a824d428",
+  "integrated_tests_passed": 566,
+  "integrated_scope": "Neuro bus, finance events, approval persistence/service, clarification and phase6 route/gated-engine suites.",
+  "found": "Mypy found three errors in shipment clarification quantity/spec narrowing.",
+  "fix": "Separate shipment quantity variable and narrow numeric types while rejecting bool.",
+  "post_fix_tests_passed": 21,
+  "mypy_source_files": 1821,
+  "mypy_errors": 0,
+  "ruff": "passed",
+  "limitations": [
+    "566-test run preceded type-only fix; 21 affected tests rerun after fix.",
+    "No new business benchmark or real-model acceptance in this run."
+  ]
+}

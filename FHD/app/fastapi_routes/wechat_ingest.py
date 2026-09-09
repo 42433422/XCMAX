@@ -10,7 +10,7 @@ import hmac
 import os
 from typing import Any
 
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Query, Request
 
 from app.application.wechat_ingest_service import (
     build_contact_context,
@@ -109,4 +109,52 @@ async def wechat_contact_link(
         customer_id = int(str(raw))
     except (TypeError, ValueError):
         raise HTTPException(status_code=400, detail="customer_id must be int") from None
-    return link_wechat_contact(contact_key, customer_id)
+    tenant_raw = payload.get("tenant_id")
+    tenant_id = None
+    if tenant_raw is not None:
+        if isinstance(tenant_raw, bool) or not isinstance(tenant_raw, (str, int)):
+            raise HTTPException(status_code=400, detail="positive tenant_id required")
+        try:
+            tenant_id = int(tenant_raw)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="positive tenant_id required") from None
+        if tenant_id <= 0:
+            raise HTTPException(status_code=400, detail="positive tenant_id required")
+    return link_wechat_contact(contact_key, customer_id, tenant_id=tenant_id)
+
+
+@router.post("/refresh/claim")
+def wechat_refresh_claim(
+    tenant_id: int = Query(gt=0),
+    authorization: str | None = Header(default=None),
+    x_wechat_token: str | None = Header(default=None, alias="X-Wechat-Token"),
+) -> dict[str, Any]:
+    from app.application.wechat_refresh_service import claim_refresh
+
+    _auth(authorization, x_wechat_token)
+    return {"success": True, "request": claim_refresh(tenant_id)}
+
+
+@router.post("/refresh/{request_id}/receipt")
+def wechat_refresh_receipt(
+    request_id: str,
+    payload: dict[str, Any],
+    tenant_id: int = Query(gt=0),
+    authorization: str | None = Header(default=None),
+    x_wechat_token: str | None = Header(default=None, alias="X-Wechat-Token"),
+) -> dict[str, Any]:
+    from app.application.wechat_refresh_service import finish_refresh
+
+    _auth(authorization, x_wechat_token)
+    receipt = payload.get("receipt")
+    if not isinstance(receipt, dict):
+        raise HTTPException(status_code=400, detail="receipt required")
+    try:
+        accepted = finish_refresh(
+            tenant_id, request_id, str(payload.get("lease_token") or ""), receipt
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not accepted:
+        raise HTTPException(status_code=409, detail="refresh lease expired or receipt conflicts")
+    return {"success": True}

@@ -224,7 +224,9 @@ class EmployeeAgent:
         employee_id = self.employee_id
         t0 = time.perf_counter()
         payload = dict(input_data or {})
-        if workspace_root and "workspace_root" not in payload:
+        payload["user_id"] = user_id
+        payload["session_id"] = session_id
+        if workspace_root:
             payload["workspace_root"] = workspace_root
         logger.info("employee_agent_run task_len=%s", len(task or ""))
         try:

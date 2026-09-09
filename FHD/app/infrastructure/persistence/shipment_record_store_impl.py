@@ -82,5 +82,6 @@ class SQLAlchemyShipmentRecordStore(ShipmentRecordStorePort):
             db.add(record)
             db.commit()
             db.refresh(record)
+            record_id = record.id
 
-        return {"success": True, "record_id": record.id}
+        return {"success": True, "record_id": record_id}

@@ -267,7 +267,7 @@ class TestResolveConfirmedTarget:
         assert resolve_confirmed_target("cust_2", self.CANDIDATES) == {"id": "cust_2"}
 
     def test_resolve_by_name(self):
-        assert resolve_confirmed_target("北京智造科技", self.CANDIDATES) == {"id": "cust_1"}
+        assert resolve_confirmed_target("北京智造科技", self.CANDIDATES) is None
 
     def test_unresolvable_returns_none(self):
         assert resolve_confirmed_target("3", self.CANDIDATES) is None

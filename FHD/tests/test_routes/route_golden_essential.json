@@ -244,6 +244,8 @@
   "/api/ops/wechat/contacts/{contact_key}/link",
   "/api/ops/wechat/context",
   "/api/ops/wechat/ingest",
+  "/api/ops/wechat/refresh/claim",
+  "/api/ops/wechat/refresh/{request_id}/receipt",
   "/api/ping",
   "/api/platform-shell/auth/permission-matrix",
   "/api/platform-shell/capabilities",

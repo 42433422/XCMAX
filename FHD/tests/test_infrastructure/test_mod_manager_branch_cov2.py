@@ -154,7 +154,8 @@ class TestInvokeModInitHook:
         def init_fn(unknown_required) -> None:
             called.append(True)
 
-        _invoke_mod_init_hook(init_fn, mod_id="test")
+        with pytest.raises(ValueError, match="required Mod initialization parameter"):
+            _invoke_mod_init_hook(init_fn, mod_id="test")
         assert called == []
 
     def test_optional_param_not_required(self) -> None:
@@ -182,8 +183,9 @@ class TestInvokeModInitHook:
         def init_fn(app=None, mod_id=None, *, extra) -> None:
             called.append(True)
 
-        # extra is required (no default) and not app/mod_id → skip
-        _invoke_mod_init_hook(init_fn, mod_id="test")
+        # extra is required (no default) and not app/mod_id → report failure
+        with pytest.raises(ValueError, match="required Mod initialization parameter"):
+            _invoke_mod_init_hook(init_fn, mod_id="test")
         assert called == []
 
     def test_bind_typeerror_falls_back_to_direct_call(self) -> None:

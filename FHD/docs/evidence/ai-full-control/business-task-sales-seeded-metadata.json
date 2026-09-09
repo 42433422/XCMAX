@@ -1,0 +1,10 @@
+{
+  "base_commit": "b2393f3c787464e3af1b1a5f55448f81341615eb",
+  "files": {
+    "tests/benchmarks/task_success_runner.py": "d67814ceb0db82a82f76b2cd16c3246f61547e6daf2d65057406f380d9d70854",
+    "tests/benchmarks/task_golden_set.json": "69879205b4357a426468eda671be7bc9f012d2e9b60948cc7a0fb96e2f2d18b6"
+  },
+  "passed": 12,
+  "total": 22,
+  "scope": "Isolated fallback trial with seeded sales customer/product. Sales routing still fails; no sales execution or approval acceptance."
+}

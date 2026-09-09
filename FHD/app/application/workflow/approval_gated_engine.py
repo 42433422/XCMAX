@@ -132,6 +132,7 @@ class ApprovalGatedEngine:
                     node=node,
                     runtime_context=runtime_context,
                     plan=plan,
+                    require_persistence=True,
                 )
                 nd.approval_request_id = req.request_id
                 decision.approval_request_ids.append(req.request_id)

@@ -1076,7 +1076,7 @@ class TestExportToExcelAdditional:
             mock_template_svc.get_templates.return_value = {"templates": []}
             mock_get_templates.return_value = mock_template_svc
             result = svc.export_to_excel(template_id="nonexistent")
-        assert result["success"] is True
+        assert result["success"] is False
 
     def test_export_with_template_id_found(self, tmp_path):
         """Test export with template_id that matches a template."""
@@ -1122,8 +1122,8 @@ class TestExportToExcelAdditional:
             ),
         ):
             result = svc.export_to_excel(template_id="1")
-        # Should still succeed (template error is caught)
-        assert result["success"] is True
+        # An unavailable selected template must not silently change the export.
+        assert result["success"] is False
 
 
 # ---------------------------------------------------------------------------

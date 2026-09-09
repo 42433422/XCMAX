@@ -31,15 +31,15 @@
           <select
             v-model="selectedTemplateId"
             class="template-select"
-            :disabled="loadingTemplateOptions || templateOptions.length === 0"
+            :disabled="loadingTemplateOptions"
             title="客户管理导出模板"
           >
-            <option value="" disabled>{{ loadingTemplateOptions ? '加载模板中...' : '请选择导出模板' }}</option>
+            <option value="">{{ loadingTemplateOptions ? '加载模板中...' : '标准客户清单' }}</option>
             <option v-for="tpl in templateOptions" :key="tpl.id" :value="tpl.id">
               {{ tpl.name }}
             </option>
           </select>
-          <button class="btn btn-icon" @click="triggerImport" title="上传Excel更新购买单位">
+          <button class="btn btn-icon" @click="triggerImport" title="上传客户文件并预演">
             <i class="fa fa-upload" aria-hidden="true"></i>
           </button>
           <input
@@ -53,7 +53,7 @@
             class="btn btn-icon"
             @click="exportCustomers"
             title="导出购买单位Excel"
-            :disabled="!selectedTemplateId"
+            :disabled="loadingTemplateOptions"
           >
             <svg class="excel-icon-svg" viewBox="0 0 24 24" width="22" height="22">
               <rect width="24" height="24" rx="3" fill="#217346"/>

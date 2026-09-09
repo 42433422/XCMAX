@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from copy import deepcopy
 from datetime import datetime
 from typing import Any
 
@@ -50,10 +51,13 @@ class ApprovalService:
         try:
             from resources.config.risk_actions_loader import (
                 get_action_approval,
+                get_action_risk,
                 requires_write_approval,
             )
 
             if get_action_approval(node.tool_id, node.action) in {"always", "interactive"}:
+                return True
+            if get_action_risk(node.tool_id, node.action) == "high":
                 return True
             if requires_write_approval(node.tool_id, node.action):
                 return True
@@ -124,15 +128,15 @@ class ApprovalService:
             node_id=node.node_id,
             tool_id=node.tool_id,
             action=node.action,
-            params=node.params.copy() if node.params else {},
+            params=deepcopy(node.params) if node.params else {},
             status=ApprovalStatus.PENDING,
             created_at=datetime.now(),
         )
         self._pending_requests[request_id] = request
         if plan is not None:
             self._pending_workflows[request_id] = {
-                "plan": plan,
-                "runtime_context": runtime_context or {},
+                "plan": deepcopy(plan),
+                "runtime_context": deepcopy(runtime_context or {}),
                 "plan_id": plan_id,
             }
         logger.info("创建审批请求: %s for %s.%s", request_id, node.tool_id, node.action)
@@ -174,7 +178,8 @@ class ApprovalService:
         return dict(metadata) if metadata is not None else None
 
     def get_pending_workflow(self, request_id: str) -> dict[str, Any] | None:
-        return self._pending_workflows.get(request_id)
+        pending = self._pending_workflows.get(request_id)
+        return deepcopy(pending) if pending is not None else None
 
     def load_durable_workflow_snapshot(self, request_id: str) -> dict[str, Any] | None:
         """从 DB 加载绑定 ``request_no`` 的可靠工作流快照（获批后可据此重建/续跑）。

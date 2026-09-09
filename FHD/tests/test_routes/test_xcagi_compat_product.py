@@ -269,7 +269,7 @@ class TestProductsResolveNameHints:
             ),
         ):
             r = client.post("/products/resolve-name-hints", json={"hints": ["test"]})
-            assert r.status_code == 501
+            assert r.status_code == 401
 
 
 # ---------------------------------------------------------------------------

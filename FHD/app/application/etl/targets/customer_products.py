@@ -72,6 +72,12 @@ class CustomerProductsAdapter(CustomerProductPreviewMixin, TargetAdapter):
             required=True,
             aliases=("品名", "产品", "产品名称", "名称"),
         ),
+        TargetField(
+            "measurement_unit",
+            "计量单位",
+            aliases=("计量单位", "数量单位", "库存单位"),
+            updatable=True,
+        ),
         TargetField("specification", "规格", aliases=("规格", "规格型号"), updatable=True),
         TargetField(
             "price",
@@ -88,6 +94,7 @@ class CustomerProductsAdapter(CustomerProductPreviewMixin, TargetAdapter):
     _customer_fields = frozenset(CUSTOMER_MODEL_FIELDS)
     _product_fields = frozenset(
         {
+            "measurement_unit",
             "specification",
             "price",
             "category",
@@ -106,6 +113,7 @@ class CustomerProductsAdapter(CustomerProductPreviewMixin, TargetAdapter):
     def _product_data(data: dict[str, Any]) -> dict[str, Any]:
         return {
             "unit": str(data.get("customer_name") or "").strip(),
+            "measurement_unit": data.get("measurement_unit"),
             "model_number": data.get("model_number"),
             "name": data.get("name"),
             "specification": data.get("specification"),
@@ -300,6 +308,7 @@ class CustomerProductsAdapter(CustomerProductPreviewMixin, TargetAdapter):
             product = Product(
                 tenant_id=tenant_id_for_write(),
                 unit=str(product_data["unit"]),
+                measurement_unit=optional_text(product_data.get("measurement_unit")),
                 model_number=optional_text(product_data.get("model_number")),
                 name=str(product_data.get("name") or ""),
                 specification=optional_text(product_data.get("specification")),
@@ -326,6 +335,9 @@ class CustomerProductsAdapter(CustomerProductPreviewMixin, TargetAdapter):
                     product_updated = True
             if product_updated:
                 db.flush()
+        from app.application.customer_product_links import ensure_customer_product_link
+
+        link, link_created = ensure_customer_product_link(db, customer.id, product.id)
         after = {
             "customer": customer_values(customer),
             "product": model_values(product, ProductAdapter.fields),
@@ -334,6 +346,8 @@ class CustomerProductsAdapter(CustomerProductPreviewMixin, TargetAdapter):
                 "product_unit": product.unit,
             },
             "_etl": {
+                "link_id": link.id,
+                "link_created": link_created,
                 "customer_created": customer_created,
                 "customer_updated": customer_updated,
                 "customer_before": customer_before,
@@ -361,6 +375,19 @@ class CustomerProductsAdapter(CustomerProductPreviewMixin, TargetAdapter):
             if product_id
             else None
         )
+        if metadata.get("link_created"):
+            from app.db.models.customer_product_link import CustomerProductLink
+
+            link = (
+                owned_query(db, CustomerProductLink)
+                .filter_by(
+                    id=metadata.get("link_id"), purchase_unit_id=customer_id, product_id=product_id
+                )
+                .first()
+            )
+            if link is None:
+                raise EtlError("ETL_ROLLBACK_TARGET_MISSING", "客户产品关联撤销目标已不存在")
+            delete_created_row(db, link, "客户产品关联")
         if metadata.get("product_created"):
             if not product:
                 raise EtlError("ETL_ROLLBACK_TARGET_MISSING", "关联产品撤销目标已不存在")

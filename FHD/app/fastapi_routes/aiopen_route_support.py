@@ -36,6 +36,18 @@ def trace_tool_call(
     user_id: str = "",
 ) -> str:
     try:
+        trace_args = dict(args or {})
+        trace_result = dict(result or {})
+        scope = result.get("execution_scope")
+        if isinstance(scope, dict):
+            user_id = str(scope.get("owner_id") or "")
+        # The tracing server cannot determine whether the selected field is
+        # private. Do not persist any UI typing contents in observational logs.
+        if tool == "ui_type":
+            if "text" in trace_args:
+                trace_args["text"] = "[redacted]"
+            if "typed" in trace_result:
+                trace_result["typed"] = "[redacted]"
         message = str(result.get("message") or result.get("code") or f"AIOPEN tool {tool} executed")
         trace_payload = {
             "success": bool(result.get("success", False)),
@@ -47,8 +59,8 @@ def trace_tool_call(
                         "tool_id": "aiopen",
                         "tool_name": "aiopen",
                         "action": tool,
-                        "params": dict(args or {}),
-                        "output": dict(result or {}),
+                        "params": trace_args,
+                        "output": trace_result,
                         "tool_call_id": f"aiopen:{tool}",
                     }
                 ],
@@ -62,6 +74,11 @@ def trace_tool_call(
                 "source": "aiopen",
                 "tool": tool,
                 "protocol": "mcp" if channel == "aiopen_mcp" else "rest",
+                **(
+                    {"tenant_id": scope.get("tenant_id"), "active_mod_id": scope.get("mod_id", "")}
+                    if isinstance(scope, dict)
+                    else {}
+                ),
             },
             user_id=user_id or str(args.get("user_id") or args.get("userId") or "aiopen"),
             source="aiopen",

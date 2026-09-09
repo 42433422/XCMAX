@@ -1018,9 +1018,9 @@ class TestLoadModBackendBranches:
             backend_entry="entry",
             backend_init="init",
         )
-        with caplog.at_level("WARNING"):
+        with pytest.raises(ValueError, match="required Mod initialization parameter"):
             mm._load_mod_backend("m", str(tmp_path), meta)
-        # init 因不可满足参数被跳过，但不应抛异常
+        assert "m" not in mm._backend_entry_modules
 
     def test_recoverable_error_reraises(self, tmp_path: Path) -> None:
         """backend_entry 加载抛 RECOVERABLE_ERRORS → 重新抛出。"""

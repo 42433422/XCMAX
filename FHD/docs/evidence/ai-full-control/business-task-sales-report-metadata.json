@@ -1,0 +1,7 @@
+{
+  "source_commit": "ea0ff3567d27ab896e20a28bd7b8de9732015166",
+  "passed": 13,
+  "total": 22,
+  "scope": "Isolated SQLite fallback trial. New monthly sales report pass has no seeded sales or result assertions; routing/execution only. Real model and installed acceptance remain open.",
+  "dataset_sha256": "69879205b4357a426468eda671be7bc9f012d2e9b60948cc7a0fb96e2f2d18b6"
+}

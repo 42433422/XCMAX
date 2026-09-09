@@ -11,6 +11,7 @@ from fastapi import APIRouter, Body, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, Response
 
 from app.application.workflow.types import normalize_workflow_risk
+from app.fastapi_routes.product_name_hints import resolve_authenticated_product_hints
 from app.fastapi_routes.xcagi_compat_product_actions import (
     execute_product_action,
     price_list_word_response,
@@ -357,12 +358,21 @@ def products_get_by_id(request: Request, product_id: int) -> dict | JSONResponse
 
 @router.post("/products/resolve-name-hints")
 @router.post("/products/resolve-name-hints/")
-def products_resolve_name_hints(request: Request, body: dict = Body(default_factory=dict)) -> dict:
+def products_resolve_name_hints(
+    request: Request,
+    body: dict = Body(
+        default_factory=dict,
+        description="hints（或 names）为 1–100 个产品名称/型号字符串，每项最多 200 字符。",
+    ),
+) -> dict:
+    """解析真实产品；只有唯一精确匹配返回 product_id，ambiguous 必须由调用方确认候选。"""
     verify_db_read_token_header(request)
     raw = body.get("hints") or body.get("names") or []
     if not isinstance(raw, list):
         return {"success": False, "message": "hints 须为字符串数组", "data": []}
-    hints = [str(x).strip() for x in raw if str(x).strip()]
+    if len(raw) > 100 or any(not isinstance(x, str) or len(x) > 200 for x in raw):
+        raise HTTPException(422, "最多 100 个产品名称，每项须为不超过 200 字符的字符串")
+    hints = [x.strip() for x in raw if x.strip()]
     if not hints:
         return {"success": False, "message": "hints 不能为空", "data": []}
 
@@ -370,13 +380,7 @@ def products_resolve_name_hints(request: Request, body: dict = Body(default_fact
     if gate:
         return {**gate, "data": []}
 
-    raise HTTPException(
-        status_code=501,
-        detail=(
-            "products/resolve-name-hints 未启用：product_name_resolve 模块已在清理过程中被移除，"
-            "请使用销售合同流程中的 name_hint 解析能力。"
-        ),
-    )
+    return resolve_authenticated_product_hints(request, hints)
 
 
 @router.post("/products/update", response_model=None)

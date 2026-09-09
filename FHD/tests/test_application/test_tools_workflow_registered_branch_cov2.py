@@ -283,7 +283,7 @@ class TestProductsRouter:
         with patch("app.services.get_products_service", return_value=mock_svc):
             _registered_router_products(
                 "create",
-                {"unit_name": "u", "name_or_model": "p", "unit_price": "bad"},
+                {"unit_name": "桶", "name_or_model": "p", "unit_price": "bad"},
                 _ctx(),
                 "normal",
                 "",
@@ -296,7 +296,7 @@ class TestProductsRouter:
         mock_svc.create_product.return_value = {"success": True}
         with patch("app.services.get_products_service", return_value=mock_svc):
             result = _registered_router_products(
-                "create", {"unit_name": "u", "name_or_model": "p"}, _ctx(), "normal", ""
+                "create", {"unit_name": "桶", "name_or_model": "p"}, _ctx(), "normal", ""
             )
             assert result["success"] is True
             assert result["created"] is True
@@ -306,7 +306,7 @@ class TestProductsRouter:
         mock_svc.create_product.return_value = {"success": False, "message": "err"}
         with patch("app.services.get_products_service", return_value=mock_svc):
             result = _registered_router_products(
-                "create", {"unit_name": "u", "name_or_model": "p"}, _ctx(), "normal", ""
+                "create", {"unit_name": "桶", "name_or_model": "p"}, _ctx(), "normal", ""
             )
             assert result["success"] is False
 
@@ -1167,6 +1167,10 @@ class TestEmployeeRouter:
 
     def test_execute_finds_employee_from_message(self) -> None:
         with (
+            patch(
+                "app.application.agent_orchestrator.execution_identity.current_execution_actor",
+                return_value="7",
+            ),
             patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status") as mock_fn,
             patch(
                 "app.application.employee_runtime.executor.execute_employee_task_local"
@@ -1180,10 +1184,15 @@ class TestEmployeeRouter:
                 "execute", {}, _ctx(message="please run emp1"), "normal", "please run emp1"
             )
             assert result["success"] is True
+            assert mock_exec.call_args.kwargs["user_id"] == 7
             assert result["employee_id"] == "emp1"
 
     def test_execute_success(self) -> None:
         with (
+            patch(
+                "app.application.agent_orchestrator.execution_identity.current_execution_actor",
+                return_value="7",
+            ),
             patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status") as mock_fn,
             patch(
                 "app.application.employee_runtime.executor.execute_employee_task_local"
@@ -1199,9 +1208,14 @@ class TestEmployeeRouter:
                 "",
             )
             assert result["success"] is True
+            assert mock_exec.call_args.kwargs["user_id"] == 7
 
     def test_execute_blocked_by_risk_gate(self) -> None:
         with (
+            patch(
+                "app.application.agent_orchestrator.execution_identity.current_execution_actor",
+                return_value="7",
+            ),
             patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status") as mock_fn,
             patch(
                 "app.application.employee_runtime.executor.execute_employee_task_local"
@@ -1217,9 +1231,14 @@ class TestEmployeeRouter:
                 "",
             )
             assert result["success"] is False
+            mock_exec.assert_called_once()
 
     def test_execute_invalid_user_id(self) -> None:
         with (
+            patch(
+                "app.application.agent_orchestrator.execution_identity.current_execution_actor",
+                return_value="7",
+            ),
             patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status") as mock_fn,
             patch(
                 "app.application.employee_runtime.executor.execute_employee_task_local"
@@ -1227,14 +1246,15 @@ class TestEmployeeRouter:
         ):
             mock_fn.return_value = {"employee_pack_tools": []}
             mock_exec.return_value = {"success": True}
-            _registered_router_employee(
+            result = _registered_router_employee(
                 "execute",
                 {"employee_id": "emp1", "task": "do work", "user_id": "bad"},
                 _ctx(),
                 "normal",
                 "",
             )
-            assert mock_exec.call_args.kwargs["user_id"] == 0
+            assert result["code"] == "EMPLOYEE_ACCOUNT_MISMATCH"
+            mock_exec.assert_not_called()
 
 
 class TestNormalizeBusinessDbEntity:

@@ -11,7 +11,7 @@ import { nextTick, reactive, ref } from 'vue'
 import { flushPromises } from '@vue/test-utils'
 
 const dispatchCoreWorkflowModRun = vi.fn()
-const runLabelPrintSideEffect = vi.fn(async () => {})
+const runLabelPrintSideEffect = vi.fn(async () => ({ status: 'needs_configuration', message: '请选择模板' }))
 const buildLabelPrintHostUpdate = vi.fn(() => ({ lastLabelPrint: { at: 1, line: 'lp' } }))
 const buildReceiptFeedbackHostUpdate = vi.fn(() => ({
   lastReceiptFeedback: { at: 2, line: 'rc', detail: 'd' },
@@ -39,10 +39,12 @@ vi.mock('@/stores/workflowAiEmployees', () => ({
 
 import { useWorkflowPanelEvents, type WorkflowPanelEventsDeps } from './useWorkflowPanelEvents'
 import type { TaskItem } from '../useChatPersistence'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 
 function makeDeps(overrides?: Partial<WorkflowPanelEventsDeps>) {
   const taskList = ref<TaskItem[]>([])
   const modsStore = reactive({
+    activeModId: '',
     modsForUi: [] as Array<{ id?: string }>,
     modsForWorkflowUi: [] as Array<{ id?: string }>,
   })
@@ -89,6 +91,22 @@ function mountedApi(deps: WorkflowPanelEventsDeps) {
 }
 
 describe('useWorkflowPanelEvents', () => {
+  it.each(['account', 'mod', 'unmount', 'removed'])('drops a label result after %s changes', async (change) => {
+    let finish!: (value: { status: string; message: string }) => void
+    runLabelPrintSideEffect.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const { deps, taskList, modsStore } = makeDeps()
+    taskList.value = [{ id: 'workflow_emp_label_print' } as TaskItem]
+    const api = mountedApi(deps)
+    dispatch('xcagi:workflow-label-print-signal', { line: 'old account' })
+    if (change === 'account') productReadAccountEpoch.value++
+    if (change === 'mod') { modsStore.activeModId = 'other'; modsStore.activeModId = '' }
+    if (change === 'unmount') api.unmountWorkflowPanel()
+    if (change === 'removed') taskList.value = []
+    finish({ status: 'generated', message: 'old result' })
+    await flushPromises()
+    expect(deps.emitAssistantPush).not.toHaveBeenCalled()
+    expect(deps.upsertWorkflowEmployeeTask).toHaveBeenCalledTimes(1)
+  })
   beforeEach(() => {
     vi.useFakeTimers()
   })
@@ -173,6 +191,18 @@ describe('useWorkflowPanelEvents', () => {
     await flushPromises()
     expect(deps.upsertWorkflowEmployeeTask).toHaveBeenCalledWith('label_print', expect.anything())
     expect(runLabelPrintSideEffect).toHaveBeenCalledWith(expect.objectContaining({ line: '打印' }))
+    expect(deps.emitAssistantPush).toHaveBeenCalledWith(expect.objectContaining({ title: '标签打印待配置', description: '请选择模板' }))
+  })
+
+  it.each(['missing', 'rejected'])('reports an invalid label receipt: %s', async (kind) => {
+    if (kind === 'missing') runLabelPrintSideEffect.mockResolvedValueOnce(undefined as never)
+    else runLabelPrintSideEffect.mockRejectedValueOnce(new Error('transport failed'))
+    const { deps, taskList } = makeDeps()
+    taskList.value = [{ id: 'workflow_emp_label_print' } as TaskItem]
+    mountedApi(deps)
+    dispatch('xcagi:workflow-label-print-signal', {})
+    await flushPromises()
+    expect(deps.emitAssistantPush).toHaveBeenCalledWith(expect.objectContaining({ title: '标签生成失败' }))
   })
 
   it('标签打印信号：未启用或无常驻项时短路', async () => {

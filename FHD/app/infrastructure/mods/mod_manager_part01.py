@@ -244,12 +244,7 @@ def _invoke_mod_init_hook(init_fn: _facade().Any, *, mod_id: str | None = None) 
         elif p.name == "mod_id":
             kwargs["mod_id"] = mod_id
         elif p.default is inspect.Parameter.empty:
-            _facade().logger.warning(
-                "Skip mod init %s: cannot satisfy required parameter %r",
-                getattr(init_fn, "__qualname__", init_fn),
-                p.name,
-            )
-            return
+            raise ValueError(f"Cannot satisfy required Mod initialization parameter: {p.name}")
     try:
         sig.bind(**kwargs)
     except TypeError:  # noqa: TRY003 - signature bind failure selects legacy no-arg init.

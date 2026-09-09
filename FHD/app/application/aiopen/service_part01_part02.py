@@ -31,6 +31,10 @@ def aiopen_manifest() -> dict[str, _facade().Any]:
 
 def build_aiopen_guide(base_url: str) -> dict[str, _facade().Any]:
     """生成可供外部 AI 自行阅读的接入说明（``GET /api/aiopen/guide`` SSOT）。"""
+    from app.application.aiopen.screen_identity import external_screen_identity
+
+    identity = external_screen_identity()
+    visible_sessions = _facade().aiopen_cursor_hub.sessions_info(**identity) if identity else []
     root = str(base_url or "").rstrip("/")
     mcp_url = f"{root}/api/aiopen/mcp"
     invoke_url = f"{root}/api/aiopen/invoke"
@@ -48,7 +52,7 @@ def build_aiopen_guide(base_url: str) -> dict[str, _facade().Any]:
     tool_lines = "\n".join(
         f"- **{t['name']}**：{t['description']}" for t in _facade().TOOL_DEFINITIONS
     )
-    markdown = f"""# XCAGI AIOPEN 接入说明（给 AI 阅读）\n\n你是即将接入 XCAGI 的 AI Agent。请阅读本文并完成 MCP 配置，然后告知用户配置结果。\n\n## 产品\n\n- 名称：**{_facade().AIOPEN_PRODUCT_NAME}** — {_facade().AIOPEN_PRODUCT_TAGLINE}\n- 版本：1.0.0.1（稳定版）\n\n## 前置条件（请提醒用户）\n\n1. 用户在 XCAGI 前端打开 **AI生态应用 → AIOPEN 开放智控**\n2. 用户点击 **「一键开启 AI 操控」**（或手动开启远程操控 + 本浏览器受控屏幕）\n3. 用户在本面板 **「获取连接口令」** 后将口令提供给你（开发模式无 Key 时可留空）\n\n当前服务端远程操控：{("已开启" if _facade().AIOPEN_STATE.get("remote_control_enabled") else "未开启")}\n在线虚拟光标会话数：{len(_facade().aiopen_cursor_hub.session_ids())}\n\n## 端点（基于请求来源 `{root}`）\n\n| 用途 | URL |\n|------|-----|\n| **本说明（你正在读的）** | `{guide_url}` |\n| 工具目录 JSON | `{manifest_url}` |\n| MCP 接入（推荐） | `{mcp_url}` |\n| REST 通用调用 | `{invoke_url}` |\n| 生成运行时 Key（POST） | `{keys_url}` |\n\n鉴权请求头：`X-AIOPEN-Key: <连接口令>`（未配置任何 Key 时开发模式可省略）\n\n## 你的配置任务（MCP）\n\n**方式 A（推荐 · Cursor 一键）**：让用户在 AIOPEN 面板点「在 Cursor 中安装」，或打开 deep link：\n\n`{url_deeplink}`\n\n**方式 B（手动 JSON）**：写入 `~/.cursor/mcp.json`：\n\n```json\n{_facade().json.dumps(mcp_template, ensure_ascii=False, indent=2)}\n```\n\n将连接口令填入 `X-AIOPEN-Key`（向用户索取或在面板生成）。\n\n**方式 C（npx mcp-remote · 与 Notion/Asana 同款）**：\n\n```json\n{remote_template}\n```\n\n完整安装选项：`GET {install_url}`\n\n### MCP 协议\n\n- 传输：Streamable HTTP — POST JSON-RPC 2.0 到 `{mcp_url}`\n- 支持方法：`initialize`、`tools/list`、`tools/call`、`ping`、`notifications/initialized`\n- 响应头：`MCP-Protocol-Version`、`Mcp-Session-Id`\n- 请求头：`Content-Type: application/json`，以及 `X-AIOPEN-Key`（若已配置）\n\n### 验证步骤\n\n1. `initialize` → 应返回 serverInfo.name = AIOPEN\n2. `tools/list` → 应返回 9 个工具（含 ui_snapshot、ui_click、chat 等）\n3. `tools/call` name=`ui_sessions` → 确认有在线 screen 会话（用户须保持浏览器打开）\n4. `tools/call` name=`ui_snapshot` → 读取当前页面可交互元素\n5. 按需 `ui_click` / `ui_type` / `ui_navigate` 操作页面\n\n## REST 备选\n\n```bash\ncurl -X POST '{invoke_url}' \\\n  -H 'Content-Type: application/json' \\\n  -H 'X-AIOPEN-Key: <连接口令>' \\\n  -d '{{"tool": "chat", "args": {{"message": "你好"}}}}'\n```\n\n## 可用工具\n\n{tool_lines}\n\n## 虚拟光标操作流程\n\n1. `ui_sessions` — 确认有在线会话\n2. `ui_snapshot` — 获取 selector / 可见文本\n3. `ui_click` — 点击（参数 selector 或 text）\n4. `ui_type` — 输入（selector + text）\n5. `ui_navigate` — 跳转路由 path\n6. `ui_scroll` — 滚动\n\n## 完成后请告诉用户\n\n- MCP 是否配置成功\n- tools/list 工具数量\n- 是否检测到在线 screen 会话\n- 若失败：是否缺少连接口令、用户是否已一键开启、后端是否已重启\n\n---\n文档 URL：{guide_url} · 重新获取最新说明请再次 GET 此链接\n"""
+    markdown = f"""# XCAGI AIOPEN 接入说明（给 AI 阅读）\n\n你是即将接入 XCAGI 的 AI Agent。请阅读本文并完成 MCP 配置，然后告知用户配置结果。\n\n## 产品\n\n- 名称：**{_facade().AIOPEN_PRODUCT_NAME}** — {_facade().AIOPEN_PRODUCT_TAGLINE}\n- 版本：1.0.0.1（稳定版）\n\n## 前置条件（请提醒用户）\n\n1. 用户在 XCAGI 前端打开 **AI生态应用 → AIOPEN 开放智控**\n2. 用户点击 **「一键开启 AI 操控」**（或手动开启远程操控 + 本浏览器受控屏幕）\n3. 用户在本面板 **「获取连接口令」** 后将口令提供给你（口令绑定当前账号，最长有效 24 小时；退出原登录会话后失效）\n\n当前服务端远程操控：{("已开启" if _facade().AIOPEN_STATE.get("remote_control_enabled") else "未开启")}\n在线虚拟光标会话数：{len(visible_sessions)}\n\n## 端点（基于请求来源 `{root}`）\n\n| 用途 | URL |\n|------|-----|\n| **本说明（你正在读的）** | `{guide_url}` |\n| 工具目录 JSON | `{manifest_url}` |\n| MCP 接入（推荐） | `{mcp_url}` |\n| REST 通用调用 | `{invoke_url}` |\n| 生成运行时 Key（POST） | `{keys_url}` |\n\n鉴权请求头：`X-AIOPEN-Key: <连接口令>`（屏幕操作需使用登录后生成的账号口令，共享环境口令不授予屏幕权限）\n\n## 你的配置任务（MCP）\n\n**方式 A（推荐 · Cursor 一键）**：让用户在 AIOPEN 面板点「在 Cursor 中安装」，或打开 deep link：\n\n`{url_deeplink}`\n\n**方式 B（手动 JSON）**：写入 `~/.cursor/mcp.json`：\n\n```json\n{_facade().json.dumps(mcp_template, ensure_ascii=False, indent=2)}\n```\n\n将连接口令填入 `X-AIOPEN-Key`（向用户索取或在面板生成）。\n\n**方式 C（npx mcp-remote · 与 Notion/Asana 同款）**：\n\n```json\n{remote_template}\n```\n\n完整安装选项：`GET {install_url}`\n\n### MCP 协议\n\n- 传输：Streamable HTTP — POST JSON-RPC 2.0 到 `{mcp_url}`\n- 支持方法：`initialize`、`tools/list`、`tools/call`、`ping`、`notifications/initialized`\n- 响应头：`MCP-Protocol-Version`、`Mcp-Session-Id`\n- 请求头：`Content-Type: application/json`，以及 `X-AIOPEN-Key`（若已配置）\n\n### 验证步骤\n\n1. `initialize` → 应返回 serverInfo.name = AIOPEN\n2. `tools/list` → 应返回 {len(_facade().TOOL_DEFINITIONS)} 个工具（含 ui_snapshot、ui_click、chat 等）\n3. `tools/call` name=`ui_sessions` → 确认有在线 screen 会话（用户须保持浏览器打开）\n4. `tools/call` name=`ui_snapshot` → 读取当前页面可交互元素\n5. 按需 `ui_click` / `ui_type` / `ui_navigate` 操作页面\n\n## REST 备选\n\n```bash\ncurl -X POST '{invoke_url}' \\\n  -H 'Content-Type: application/json' \\\n  -H 'X-AIOPEN-Key: <连接口令>' \\\n  -d '{{"tool": "chat", "args": {{"message": "你好"}}}}'\n```\n\n## 可用工具\n\n{tool_lines}\n\n## 虚拟光标操作流程\n\n1. `ui_sessions` — 确认有在线会话\n2. `ui_snapshot` — 获取 selector / 可见文本\n3. `ui_click` — 点击（参数 selector 或 text）\n4. `ui_type` — 输入（selector + text）\n5. `ui_navigate` — 跳转路由 path\n6. `ui_scroll` — 滚动\n\n## 完成后请告诉用户\n\n- MCP 是否配置成功\n- tools/list 工具数量\n- 是否检测到在线 screen 会话\n- 若失败：是否缺少连接口令、用户是否已一键开启、后端是否已重启\n\n---\n文档 URL：{guide_url} · 重新获取最新说明请再次 GET 此链接\n"""
     prompt_for_user = (
         f"请打开并阅读以下 XCAGI AIOPEN 接入说明，然后帮我完成 MCP 配置并验证连接：\n{guide_url}"
     )
@@ -69,7 +73,7 @@ def build_aiopen_guide(base_url: str) -> dict[str, _facade().Any]:
         "cursor_deeplink": url_deeplink,
         "auth_header": "X-AIOPEN-Key",
         "remote_control_enabled": bool(_facade().AIOPEN_STATE.get("remote_control_enabled", False)),
-        "screen_sessions_online": len(_facade().aiopen_cursor_hub.session_ids()),
+        "screen_sessions_online": len(visible_sessions),
         "prompt_for_user": prompt_for_user,
         "markdown": markdown,
         "instructions_for_ai": [
@@ -104,18 +108,18 @@ def is_path_whitelisted(path: str, whitelist: dict[str, bool] | None = None) -> 
     target = _facade().normalize_api_path(path)
     if not target:
         return False
-    if bool(wl.get(target, False)):
-        return True
     matched_len = -1
+    permitted = False
     for prefix, enabled in wl.items():
-        if not enabled:
-            continue
         p = _facade().normalize_api_path(str(prefix or ""))
         if not p:
             continue
         if target == p or target.startswith(p + "/"):
-            matched_len = max(matched_len, len(p))
-    return matched_len >= 0
+            if len(p) > matched_len:
+                matched_len, permitted = len(p), bool(enabled)
+            elif len(p) == matched_len:
+                permitted = permitted and bool(enabled)
+    return permitted
 
 
 def seed_capability_whitelist(
@@ -151,11 +155,26 @@ def _tool_api_catalog() -> dict[str, _facade().Any]:
 
 
 def _tool_api_call(app: _facade().Any, args: dict[str, _facade().Any]) -> dict[str, _facade().Any]:
+    from contextlib import closing
+    from http.cookies import SimpleCookie
+
     from starlette.testclient import TestClient
+
+    from app.application.agent_orchestrator.task_mod_scope import TaskModScopeError
+    from app.application.aiopen.api_artifacts import (
+        ApiArtifactError,
+        is_export_response,
+        save_api_export,
+    )
+    from app.application.aiopen.api_execution import (
+        ApiExecutionError,
+        authorized_api_request,
+        local_api_path,
+    )
+    from app.application.aiopen.api_request_body import ApiBodyError, api_request_body
 
     raw_path = str(args.get("path") or "").strip()
     method = str(args.get("method") or "GET").upper()
-    body = args.get("body") if isinstance(args.get("body"), dict) else {}
     if not raw_path:
         return {"success": False, "message": "path 不能为空"}
     if method not in _facade()._API_CALL_METHODS:
@@ -164,46 +183,97 @@ def _tool_api_call(app: _facade().Any, args: dict[str, _facade().Any]) -> dict[s
             "message": f"不支持的 method：{method}",
             "code": "METHOD_NOT_ALLOWED",
         }
-    if not _facade().is_path_whitelisted(raw_path):
+    try:
+        routing_path = local_api_path(raw_path)
+    except ValueError:
         return {
             "success": False,
-            "message": f"路由 {_facade().normalize_api_path(raw_path)} 未在 AIOPEN 白名单启用",
+            "code": "INVALID_API_PATH",
+            "message": "API 路径无效或包含目录跳转",
+        }
+    if not _facade().is_path_whitelisted(routing_path):
+        return {
+            "success": False,
+            "message": f"路由 {routing_path} 未在 AIOPEN 白名单启用",
             "code": "ROUTE_NOT_WHITELISTED",
         }
     try:
-        client = TestClient(app)
-        headers: dict[str, str] = {"X-AIOPEN-Internal": "1"}
-        if method in {"POST", "PUT", "PATCH", "DELETE"}:
+        with (
+            authorized_api_request(args) as (headers, scope),
+            closing(TestClient(app, follow_redirects=False)) as client,
+        ):
+            if "Cookie" in headers:
+                cookies = SimpleCookie(headers.pop("Cookie"))
+                for key, value in cookies.items():
+                    client.cookies.set(key, value.value)
+            if method in {"POST", "PUT", "PATCH", "DELETE"}:
+                client.get("/api/aiopen/manifest", headers=headers)
+                csrf = client.cookies.get("csrf_token")
+                if csrf:
+                    headers["X-CSRF-Token"] = str(csrf)
+            options = api_request_body(args)
+            request_headers = {**headers, **options.pop("headers", {})}
+            if not options and method == "GET":
+                resp = client.get(raw_path, headers=request_headers)
+            elif not options and method == "DELETE":
+                resp = client.delete(raw_path, headers=request_headers)
+            else:
+                resp = client.request(method, raw_path, headers=request_headers, **options)
             try:
-                client.get("/api/aiopen/manifest")
-            except _facade().RECOVERABLE_ERRORS:
-                pass
-            csrf = client.cookies.get("csrf_token")
-            if csrf:
-                headers["X-CSRF-Token"] = str(csrf)
-        if method == "GET":
-            resp = client.get(raw_path, headers=headers)
-        elif method == "DELETE":
-            resp = client.delete(raw_path, headers=headers)
-        else:
-            payload = dict(body or {})
-            payload.setdefault("source", "aiopen")
-            resp = client.request(method, raw_path, json=payload, headers=headers)
-        try:
-            data = resp.json()
-        except (ValueError, TypeError):
-            data = {"raw": resp.text[:2000]}
-        try:
-            status_code = int(resp.status_code)
-        except (TypeError, ValueError):
-            status_code = 599
-        return {
-            "success": status_code < 500,
-            "path": raw_path,
-            "method": method,
-            "status_code": status_code,
-            "data": data,
-        }
+                status_code = int(resp.status_code)
+            except (TypeError, ValueError):
+                status_code = 599
+            if method == "HEAD":
+                allowed = (
+                    "content-type",
+                    "content-length",
+                    "content-disposition",
+                    "etag",
+                    "last-modified",
+                    "allow",
+                )
+                return {
+                    "success": 200 <= status_code < 300,
+                    "path": raw_path,
+                    "method": method,
+                    "status_code": status_code,
+                    "execution_scope": scope,
+                    "data": {
+                        "headers": {
+                            key: resp.headers[key] for key in allowed if key in resp.headers
+                        }
+                    },
+                }
+            if 200 <= status_code < 300 and is_export_response(resp):
+                artifact = save_api_export(resp, scope)
+                return {
+                    "success": True,
+                    "path": raw_path,
+                    "method": method,
+                    "status_code": status_code,
+                    "execution_scope": scope,
+                    "data": {"artifact": artifact},
+                    "artifacts": [artifact],
+                }
+            try:
+                data = resp.json()
+            except (ValueError, TypeError):
+                data = {"raw": resp.text[:2000]}
+            return {
+                "success": 200 <= status_code < 300
+                and not (isinstance(data, dict) and data.get("success") is False),
+                "path": raw_path,
+                "method": method,
+                "status_code": status_code,
+                "data": data,
+                "execution_scope": scope,
+            }
+    except ApiBodyError as exc:
+        return {"success": False, "code": "INVALID_API_BODY", "message": str(exc)}
+    except ApiArtifactError as exc:
+        return {"success": False, "code": "API_EXPORT_FAILED", "message": str(exc)}
+    except (ApiExecutionError, TaskModScopeError) as exc:
+        return {"success": False, "code": "API_IDENTITY_REQUIRED", "message": str(exc)}
     except _facade().RECOVERABLE_ERRORS:
         return {"success": False, "path": raw_path, "method": method, "message": "请求执行失败"}
 
@@ -303,12 +373,15 @@ def _tool_capability_loop(
             "message": chat_res.get("message"),
         }
     )
-    sessions = _facade().aiopen_cursor_hub.sessions_info()
+    from app.application.aiopen.screen_identity import external_screen_identity
+
+    identity = external_screen_identity()
+    sessions = _facade().aiopen_cursor_hub.sessions_info(**identity) if identity else []
     remote_on = bool(_facade().AIOPEN_STATE.get("remote_control_enabled", False))
     steps.append(
         {
             "step": "ui_sessions",
-            "ok": True,
+            "ok": bool(identity),
             "remote_control_enabled": remote_on,
             "session_count": len(sessions),
             "ui_ready": remote_on and len(sessions) > 0,

@@ -69,6 +69,14 @@ def looks_like_business_db_write(message: str, lower: str | None = None) -> bool
     if db_marker:
         return True
 
+    # A direct customer creation request is CRUD even when users say 新增/添加.
+    # Keep compound product onboarding on its existing planning path.
+    direct_customer_create = bool(
+        re.match(r"^\s*(?:请帮我|帮我|请)?\s*(?:新增|添加)\s*(?:客户|购买单位)", value)
+    ) and not any(word in value for word in ("产品", "商品", "物料", "原材料", "发货", "出货"))
+    if direct_customer_create:
+        return True
+
     # Keep the legacy customer/product onboarding route for generic “添加/新增”
     # phrases.  Without explicit database wording, only verbs that unambiguously
     # describe record CRUD may enter the guarded business-database write path.

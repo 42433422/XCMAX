@@ -92,6 +92,25 @@ def _files_match(directory: Path, files: dict[str, str]) -> bool:
     return True
 
 
+def _publish_install(source: Path, destination: Path, state: Path, row: dict[str, Any]) -> None:
+    """Publish code and receipt under the caller's lock; undo a failed receipt write."""
+    backup = state / ("previous-" + uuid.uuid4().hex)
+    had_previous = destination.exists()
+    if had_previous:
+        os.replace(destination, backup)
+    moved = False
+    try:
+        os.replace(source, destination)
+        moved = True
+        _write(state / "receipt.json", row)
+    except OSError:
+        if moved:
+            os.replace(destination, source)
+        if had_previous:
+            os.replace(backup, destination)
+        raise
+
+
 def install_extracted(
     *,
     mods_root: str,
@@ -102,7 +121,7 @@ def install_extracted(
     was_loaded: bool,
     owner_scope: str = "",
 ) -> bool:
-    """Atomically install, retaining previous code and staging active updates.
+    """Install with publication-error rollback, retaining code and staging active updates.
 
     Return True if a new process is required. The active code directory is never
     replaced beneath a running backend (including its templates and lazy imports).
@@ -143,18 +162,6 @@ def install_extracted(
         ):
             raise ValueError("Mod version already exists with different package bytes")
         destination = state / ("pending-" + digest) if was_loaded else target
-        with tempfile.TemporaryDirectory(prefix=".mod-install-", dir=root) as staging:
-            staged = Path(staging) / mid
-            shutil.copytree(extracted_root, staged)
-            backup = state / ("previous-" + uuid.uuid4().hex)
-            if destination.exists():
-                os.replace(destination, backup)
-            try:
-                os.replace(staged, destination)
-            except OSError:
-                if backup.exists():
-                    os.replace(backup, destination)
-                raise
         archive = state / (digest + ".zip")
         if not archive.exists() or hashlib.sha256(archive.read_bytes()).hexdigest() != digest:
             fd, temporary = tempfile.mkstemp(prefix=".archive-", dir=state)
@@ -178,7 +185,10 @@ def install_extracted(
             "runtime_process_id": "",
             "runtime_status": "restart_required" if was_loaded else "installed",
         }
-        _write(state / "receipt.json", row)
+        with tempfile.TemporaryDirectory(prefix=".mod-install-", dir=root) as staging:
+            staged = Path(staging) / mid
+            shutil.copytree(extracted_root, staged)
+            _publish_install(staged, destination, state, row)
         return was_loaded
 
 
@@ -201,17 +211,8 @@ def activate_pending_install(mod_id: str, *, mods_root: str) -> bool:
         ):
             raise ValueError("Pending Mod signature or content changed")
         target = root / mod_id
-        backup = state / ("previous-" + uuid.uuid4().hex)
-        if target.exists():
-            os.replace(target, backup)
-        try:
-            os.replace(pending, target)
-        except OSError:
-            if backup.exists():
-                os.replace(backup, target)
-            raise
         row.update(installed_root=str(target), requires_restart=False, runtime_status="installed")
-        _write(state / "receipt.json", row)
+        _publish_install(pending, target, state, row)
         return True
 
 

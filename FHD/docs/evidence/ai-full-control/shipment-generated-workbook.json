@@ -1,0 +1,53 @@
+{
+  "source_sha": "2e1c3210c",
+  "scope": "Isolated seeded fallback planning and real generation; no approval or printing",
+  "result_keys": [
+    "success",
+    "message",
+    "doc_name",
+    "file_path",
+    "order_number",
+    "total_amount",
+    "total_quantity",
+    "purchase_unit",
+    "unit_id",
+    "parsed_products",
+    "labels",
+    "products_source",
+    "template_resolution",
+    "record_id",
+    "order_id"
+  ],
+  "success": true,
+  "file_sha256": "2bfdad1c637a958fa0959a328a33309b114eeead70a66af442caaa667071e199",
+  "file_bytes": 5672,
+  "workbook_values": [
+    "成都国圣工业有限公司 送货单",
+    "购货单位：七彩乐园       联系人：              2026年9月9日      订单编号：26-0900001A",
+    "产品型号",
+    "产品名称",
+    "数量/件",
+    "规格/KG",
+    "数量/KG",
+    "9803",
+    "测试涂料",
+    "3",
+    "12",
+    "36",
+    "合计",
+    "3",
+    "36",
+    "大写人民币：",
+    "918",
+    "备注："
+  ],
+  "records": [
+    {
+      "id": 1,
+      "unit": "七彩乐园",
+      "model": "9803",
+      "quantity_tins": 3,
+      "quantity_kg": 36.0
+    }
+  ]
+}

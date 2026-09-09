@@ -203,7 +203,7 @@ class TestProductsRouterMissingBranches:
         with patch("app.services.get_products_service", return_value=svc):
             result = _registered_router_products(
                 "create",
-                {"name_or_model": "P1", "unit_name": "U1"},
+                {"name_or_model": "P1", "unit_name": "桶"},
                 {},
                 "admin",
                 "",

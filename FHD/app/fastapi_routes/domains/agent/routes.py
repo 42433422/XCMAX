@@ -48,7 +48,11 @@ from app.fastapi_routes.domains.agent.route_support import (
     sync_execution_terminal_state as _sync_execution_terminal_state,
 )
 from app.fastapi_routes.domains.agent.task_routes import router as task_router
-from app.infrastructure.auth.agent_principal import AgentPrincipal, require_agent_principal
+from app.infrastructure.auth.agent_principal import (
+    AgentPrincipal,
+    bind_agent_runtime_context,
+    require_agent_principal,
+)
 from app.utils.json_safe import json_safe
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -81,9 +85,7 @@ def create_agent_run(
             {"success": False, "message": "runtime_context 必须是对象"},
             status_code=400,
         )
-    runtime_context = dict(runtime_context_raw)
-    if principal.tenant_id:
-        runtime_context["tenant_id"] = principal.tenant_id
+    runtime_context = bind_agent_runtime_context(runtime_context_raw, principal)
 
     try:
         orchestrator = AgentOrchestrator()
@@ -145,9 +147,7 @@ def record_observed_tool_run(
             {"success": False, "message": "runtime_context 必须是对象"},
             status_code=400,
         )
-    runtime_context = dict(runtime_context_raw)
-    if principal.tenant_id:
-        runtime_context["tenant_id"] = principal.tenant_id
+    runtime_context = bind_agent_runtime_context(runtime_context_raw, principal)
 
     from app.application.agent_orchestrator.observed_tool_trace import (
         create_observed_tool_trace_run,
@@ -227,7 +227,7 @@ def continue_agent_run(
                 run_id,
                 approved_by=principal.user_id,
                 approved_step_id=str(claims["step_id"]),
-                runtime_context=runtime_context,
+                runtime_context=bind_agent_runtime_context(runtime_context, principal, run=current),
             )
         if run is None:
             return JSONResponse(
@@ -255,7 +255,7 @@ def _control_agent_run(
 ) -> dict[str, Any] | JSONResponse:
     def apply_control() -> dict[str, Any] | JSONResponse:
         orchestrator = AgentOrchestrator()
-        _, error = _owned_run(orchestrator, run_id, principal)
+        current, error = _owned_run(orchestrator, run_id, principal)
         if error is not None:
             return error
         if action == "pause":
@@ -266,7 +266,9 @@ def _control_agent_run(
             run = orchestrator.stage_resume_run(
                 run_id,
                 requested_by=principal.user_id,
-                runtime_context=runtime_context,
+                runtime_context=bind_agent_runtime_context(
+                    runtime_context or {}, principal, run=current
+                ),
             )
         if run is None:
             return JSONResponse(

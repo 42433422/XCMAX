@@ -24,6 +24,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+from app.application.aiopen.api_contracts import API_CONTRACT_TOOLS
+from app.application.aiopen.screen_tools import SCREEN_TOOL_DEFINITIONS
 from app.infrastructure.aiopen.cursor_hub import aiopen_cursor_hub
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -167,7 +169,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     },
     {
         "name": "api_call",
-        "description": "调用白名单内的 XCAGI 业务 API。path 支持精确匹配或已启用前缀的子路径（如启用 /api/products 则可调 /api/products/list）。method 支持 GET/POST/PUT/PATCH/DELETE。",
+        "description": "使用当前登录会话或账号连接口令调用白名单内的业务 API，保留接口权限检查。path 必须是本机路径；method 支持 GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS，Mod 需有当前账号权益。",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -177,10 +179,40 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 },
                 "method": {
                     "type": "string",
-                    "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"],
+                    "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
                     "default": "GET",
                 },
-                "body": {"type": "object", "description": "请求体（JSON，非 GET/DELETE 时使用）"},
+                "body": {
+                    "description": "JSON 请求体，按接口协议原样发送；支持对象、数组及 JSON 标量，不自动添加业务字段。",
+                },
+                "form": {
+                    "type": "object",
+                    "description": "表单字段，值为字符串或字符串列表；保留重复字段和空值。与 body 互斥。",
+                    "additionalProperties": {
+                        "anyOf": [
+                            {"type": "string"},
+                            {"type": "array", "items": {"type": "string"}},
+                        ],
+                    },
+                },
+                "files": {
+                    "type": "array",
+                    "maxItems": 16,
+                    "description": "multipart 附件：使用本账号有效导出回执的 artifact_id；重新核验源 Mod 权益。总大小最多 64 MiB，不接受本机路径、URL 或内容。与 body 互斥。",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "field": {"type": "string", "minLength": 1},
+                            "artifact_id": {"type": "string", "pattern": "^[a-f0-9]{32}$"},
+                        },
+                        "required": ["field", "artifact_id"],
+                        "additionalProperties": False,
+                    },
+                },
+                "mod_id": {
+                    "type": "string",
+                    "description": "目标 Mod；省略继承当前请求，空字符串选择宿主。执行前重新验证账号权益。",
+                },
             },
             "required": ["path"],
         },
@@ -220,7 +252,12 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "session_id": {"type": "string", "description": "目标会话，缺省取第一个在线会话"}
+                "session_id": {"type": "string", "description": "目标会话，缺省取第一个在线会话"},
+                "offset": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "分页起点；使用上次快照 next_offset 读取剩余控件。",
+                },
             },
         },
     },
@@ -258,7 +295,11 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "type": "object",
             "properties": {
                 "selector": {"type": "string", "description": "输入框 CSS 选择器"},
-                "text": {"type": "string", "description": "要输入的文本"},
+                "text": {
+                    "type": "string",
+                    "minLength": 0,
+                    "description": "要输入的文本；空字符串清空输入框。",
+                },
                 "session_id": {"type": "string"},
             },
             "required": ["selector", "text"],
@@ -279,6 +320,15 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
 ]
 
 _UI_ACTIONS = {
+    "ui_desktop_info": "desktop_info",
+    "ui_desktop_auto_launch": "desktop_auto_launch",
+    "ui_desktop_update": "desktop_update",
+    "ui_files": "files",
+    "ui_set_files": "set_files",
+    "ui_routes": "routes",
+    "ui_select": "select",
+    "ui_check": "check",
+    "ui_press": "press",
     "ui_snapshot": "snapshot",
     "ui_navigate": "navigate",
     "ui_click": "click",
@@ -286,4 +336,13 @@ _UI_ACTIONS = {
     "ui_scroll": "scroll",
 }
 
-_API_CALL_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE"})
+TOOL_DEFINITIONS.extend(SCREEN_TOOL_DEFINITIONS)
+TOOL_DEFINITIONS.extend(API_CONTRACT_TOOLS)
+for _screen_tool in TOOL_DEFINITIONS:
+    if _screen_tool["name"] in _UI_ACTIONS:
+        _screen_tool["inputSchema"]["properties"].setdefault(
+            "expected_route",
+            {"type": "string", "description": "最近快照 route；页面变化时拒绝操作。"},
+        )
+
+_API_CALL_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"})

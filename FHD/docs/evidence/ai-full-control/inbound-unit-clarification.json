@@ -1,0 +1,22 @@
+{
+  "source_sha": "7878e5be1722617f2edc22712dbffa262cb1f41f",
+  "tests": {
+    "passed": 527,
+    "failed": 0,
+    "scope": "Clarification, inbound validation, inventory service and three planner branch suites"
+  },
+  "mypy": {
+    "source_files": 1821,
+    "errors": 0
+  },
+  "ruff": "passed",
+  "workflow_parity": "passed",
+  "behavior": "Parsed unique product retains inventory unit; after warehouse answer, mismatched unit requires explicit positive finite quantity with inventory unit. Converted quantity appears in approval parameters and description. No dispatch before approval.",
+  "test_repairs": "Five legacy assertions expected implicit customer creation for product-only requests. Updated to require product creation only; behavior was changed in cfbfc585a6.",
+  "limits": [
+    "Unit metadata currently populated by explicit inbound fallback parser; other planning paths not proven.",
+    "Execution independently rechecks current product unit; concurrent catalog unit changes may still reject after approval.",
+    "Approval service and persistence mocked in continuation test.",
+    "No live model, installed UI, production business execution or release acceptance in this evidence."
+  ]
+}

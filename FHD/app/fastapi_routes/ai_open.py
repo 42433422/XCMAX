@@ -43,6 +43,7 @@ from app.application.aiopen.service import (
     seed_capability_whitelist,
     verify_api_key,
 )
+from app.fastapi_routes.aiopen_artifacts import router as artifacts_router
 from app.fastapi_routes.aiopen_route_support import (
     handle_mcp_message,
     safe_control_payload,
@@ -67,6 +68,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["aiopen"])
+router.include_router(artifacts_router)
 
 AiOpenKeyHeader = Annotated[str | None, Header(alias="X-AIOPEN-Key")]
 
@@ -300,32 +302,36 @@ async def aiopen_mcp(
 
 
 @router.get("/api/aiopen/keys")
-def aiopen_keys_list():
-    return {"success": True, "keys": list_api_keys()}
+def aiopen_keys_list(request: Request):
+    return {"success": True, "keys": list_api_keys(request=request)}
 
 
 @router.post("/api/aiopen/keys")
-def aiopen_keys_create(body: dict = Body(default_factory=dict)):
-    created = generate_api_key(str(body.get("label") or ""))
+def aiopen_keys_create(request: Request, body: dict = Body(default_factory=dict)):
+    from app.application.aiopen.software_control import request_screen_owner
+
+    created = generate_api_key(str(body.get("label") or ""), request=request)
     return _trace_aiopen_control_result(
         {"success": True, **created},
         route="/api/aiopen/keys",
         action="keys_create",
-        body=body,
+        body={**body, "user_id": request_screen_owner(request).get("owner_id", "")},
     )
 
 
 @router.delete("/api/aiopen/keys")
-def aiopen_keys_revoke(body: dict = Body(default_factory=dict)):
+def aiopen_keys_revoke(request: Request, body: dict = Body(default_factory=dict)):
+    from app.application.aiopen.software_control import request_screen_owner
+
     key = str(body.get("key") or "").strip()
     if not key:
         return JSONResponse({"success": False, "message": "key 不能为空"}, status_code=400)
-    ok = revoke_api_key(key)
+    ok = revoke_api_key(key, request=request)
     return _trace_aiopen_control_result(
         {"success": ok, "revoked": ok},
         route="/api/aiopen/keys",
         action="keys_revoke",
-        body=body,
+        body={**body, "user_id": request_screen_owner(request).get("owner_id", "")},
     )
 
 
@@ -336,6 +342,11 @@ def aiopen_keys_revoke(body: dict = Body(default_factory=dict)):
 
 @router.get("/api/aiopen/panel")
 def aiopen_panel(request: Request):
+    from app.application.aiopen.software_control import request_screen_owner
+
+    identity = request_screen_owner(request)
+    sessions = aiopen_cursor_hub.sessions_info(**identity) if identity else []
+    session_ids = {row["session_id"] for row in sessions}
     whitelist = AIOPEN_STATE.get("whitelist", {})
     base = str(request.base_url).rstrip("/")
     manifest = aiopen_manifest()
@@ -345,9 +356,13 @@ def aiopen_panel(request: Request):
         "openclaw_base": str(AIOPEN_STATE.get("openclaw_base", "http://127.0.0.1:28789")),
         "remote_control_enabled": bool(AIOPEN_STATE.get("remote_control_enabled", False)),
         "routes": [{"path": p, "enabled": bool(e)} for p, e in whitelist.items()],
-        "screen_sessions": aiopen_cursor_hub.sessions_info(),
-        "recent_commands": aiopen_cursor_hub.recent_commands(30),
-        "keys": list_api_keys(),
+        "screen_sessions": sessions,
+        "recent_commands": [
+            row
+            for row in aiopen_cursor_hub.recent_commands(30)
+            if row.get("session_id") in session_ids
+        ],
+        "keys": list_api_keys(request=request),
         "mcp": {
             "tool_count": len(manifest["tools"]),
             "endpoint": f"{base}/api/aiopen/mcp",
@@ -458,12 +473,20 @@ async def aiopen_screen_ws(ws: WebSocket):
 
         session_id = "screen_" + uuid.uuid4().hex[:12]
     label = str(ws.query_params.get("label") or "").strip()
-    await aiopen_cursor_hub.connect(session_id, ws, meta={"label": label or "XCAGI 前端"})
+    from app.application.aiopen.software_control import request_screen_owner
+
+    owner = request_screen_owner(ws)
+    await aiopen_cursor_hub.connect(
+        session_id,
+        ws,
+        meta={"label": label or "XCAGI 前端", **owner},
+        authorize=(lambda: request_screen_owner(ws) == owner) if owner else None,
+    )
     try:
         await ws.send_json({"type": "hello", "session_id": session_id})
         while True:
             raw = await ws.receive_text()
-            handled = aiopen_cursor_hub.handle_client_message(raw)
+            handled = aiopen_cursor_hub.handle_client_message(raw, session_id=session_id)
             if not handled:
                 logger.debug("aiopen ws unhandled message: %s", raw[:200])
     except WebSocketDisconnect:

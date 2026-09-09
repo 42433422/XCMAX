@@ -594,6 +594,102 @@ def test_get_agent_run_returns_404_for_missing_run() -> None:
     assert events_response.json()["success"] is False
 
 
+def test_model_schedules_real_durable_task_without_executing_tool() -> None:
+    import json
+
+    from app.application.tools.registered_capabilities import execute_registered_capability
+
+    args = {
+        "task_id": "model-scheduled-report",
+        "tool_id": "products",
+        "action": "query",
+        "params": {"keyword": "sample", "_runtime_context": {"user_id": "other"}},
+        "scheduled_at": "2099-01-01T08:00:00+08:00",
+    }
+    principal = AgentPrincipal(user_id="17", tenant_id="7")
+    with (
+        patch(
+            "app.application.tools.scheduled_capability.get_current_request", return_value=object()
+        ),
+        patch(
+            "app.application.tools.scheduled_capability.require_agent_principal",
+            return_value=principal,
+        ),
+        patch("app.application.facades.tools_facade.execute_registered_workflow_tool") as execute,
+    ):
+        result = json.loads(execute_registered_capability(args))
+        assert result["task_created"] and result["pending_approval"]
+        assert result["operation_executed"] is False
+        run = get_agent_run_repository().get(result["run_id"])
+        assert run.user_id == "17"
+        assert run.metadata["runtime_context"]["tenant_id"] == "7"
+        assert json.loads(execute_registered_capability(args))["deduplicated"]
+        invalid = json.loads(execute_registered_capability({**args, "scheduled_at": "tomorrow"}))
+        assert invalid["success"] is False
+        execute.assert_not_called()
+
+
+def test_scheduled_task_is_approved_but_not_dispatched_early() -> None:
+    client = _client("schedule-owner", tenant_id="7")
+    body = {
+        "task_id": "scheduled-report",
+        "tool_id": "products",
+        "action": "query",
+        "params": {"keyword": "sample"},
+        "scheduled_at": "2099-01-01T08:00:00+08:00",
+    }
+    created = client.post("/api/agent/tasks", json=body)
+    assert created.status_code == 202
+    payload = created.json()
+    run_id = payload["data"]["run_id"]
+    assert get_task_execution_repository().get(run_id) is None
+    approved = client.post(
+        f"/api/agent/runs/{run_id}/continue",
+        json={"approval_grant": payload["approval"]["grant"]},
+    )
+    assert approved.status_code == 202
+    assert approved.json()["execution"]["available_at"] == "2099-01-01T00:00:00+00:00"
+    assert get_task_execution_repository().claim("early", lease_seconds=10) is None
+    duplicate = client.post(
+        "/api/agent/tasks",
+        json={
+            **body,
+            "scheduled_at": "2099-01-01T00:00:00Z",
+        },
+    )
+    assert duplicate.json()["deduplicated"] is True
+    assert (
+        client.post(
+            "/api/agent/tasks",
+            json={
+                **body,
+                "scheduled_at": "2099-01-02T00:00:00Z",
+            },
+        ).status_code
+        == 409
+    )
+    assert (
+        client.post(
+            "/api/agent/tasks",
+            json={
+                **body,
+                "scheduled_at": "2099-01-01T08:00:00",
+            },
+        ).status_code
+        == 400
+    )
+    cancelled = client.post(f"/api/agent/runs/{run_id}/cancel")
+    assert cancelled.status_code == 200
+    assert (
+        get_task_execution_repository().claim(
+            "future",
+            lease_seconds=10,
+            now="2099-01-02T00:00:00+00:00",
+        )
+        is None
+    )
+
+
 def test_unified_task_requires_approval_and_deduplicates_execution() -> None:
     repository = get_agent_run_repository()
     repository.clear()

@@ -1,0 +1,19 @@
+{
+  "source_sha": "83f8aebac",
+  "entry": "try_normal_slot_read_payload",
+  "inputs": [
+    "打印机列表",
+    "现在连的哪台打印机",
+    "看看有哪些打印机"
+  ],
+  "live_result": {
+    "all_success": true,
+    "printer_count": 1,
+    "default_printer": "Canon_TS3700_series"
+  },
+  "tests_passed": 5,
+  "limits": [
+    "Read-only local source entry, no installed HTTP/session/UI validation.",
+    "No physical printing."
+  ]
+}

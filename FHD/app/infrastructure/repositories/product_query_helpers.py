@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from sqlalchemy import func, or_
+from sqlalchemy import exists, func, or_, select
 
 from app.db.models import Product as ProductModel
 
@@ -62,7 +62,21 @@ def apply_product_filters(query: Any, **kwargs: Any) -> Any:
     """对产品查询应用 unit_name / model_number / keyword 过滤，返回过滤后的 query。"""
     unit_name = kwargs.get("unit_name")
     if unit_name:
-        query = query.filter(ProductModel.unit == unit_name)
+        from app.db.models.customer_product_link import CustomerProductLink
+        from app.db.models.purchase_unit import PurchaseUnit
+
+        linked_customer = exists(
+            select(1)
+            .select_from(CustomerProductLink)
+            .join(PurchaseUnit, PurchaseUnit.id == CustomerProductLink.purchase_unit_id)
+            .where(
+                CustomerProductLink.product_id == ProductModel.id,
+                CustomerProductLink.tenant_id == ProductModel.tenant_id,
+                PurchaseUnit.tenant_id == ProductModel.tenant_id,
+                PurchaseUnit.unit_name == unit_name,
+            )
+        )
+        query = query.filter(or_(ProductModel.unit == unit_name, linked_customer))
 
     model_number = kwargs.get("model_number")
     if model_number:

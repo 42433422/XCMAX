@@ -16,6 +16,7 @@ import {
 } from './app-shell'
 import {
   downloadUpdate,
+  getDownloadedUpdateState,
   getUpdateStatus,
   runUpdateCheckWithDirectNet,
 } from './updater'
@@ -24,6 +25,8 @@ import { assertSelfUpdateInstallSupported, getDesktopInstallIdentity, installUpd
 import { desktopOfflineDbPath, queryOffline } from './data-bridge'
 import { deleteSecret, getSecret, listSecrets, setSecret } from './secure-store'
 import { reportRendererError } from './desktop-resilience'
+import { getUpdateObservation } from './update-observation'
+import { readDesktopBuildIdentity } from './build-identity'
 
 function getLanIPv4(): string {
   const nets = networkInterfaces()
@@ -74,6 +77,8 @@ export function registerDesktopIpcHandlers(): void {
   ipcMain.handle('xcagi:get-app-identity', () => ({
     name: app.getName(),
     version: readPackagedAppVersion(),
+    electronAppVersion: app.getVersion(),
+    buildIdentity: readDesktopBuildIdentity(process.resourcesPath, app.isPackaged, process.env.XCAGI_BUILD_SHA),
     isPackaged: app.isPackaged,
     install: getDesktopInstallIdentity(),
   }))
@@ -81,6 +86,7 @@ export function registerDesktopIpcHandlers(): void {
   ipcMain.handle('xcagi:export-support-bundle', () => exportSupportBundleInteractive())
   ipcMain.handle('xcagi:check-for-updates', () => runUpdateCheckWithDirectNet())
   ipcMain.handle('xcagi:get-update-status', () => getUpdateStatus())
+  ipcMain.handle('xcagi:get-update-observation', () => ({ ...getUpdateObservation(), downloaded: getDownloadedUpdateState() }))
   ipcMain.handle('xcagi:download-update', () => {
     assertSelfUpdateInstallSupported()
     return downloadUpdate()

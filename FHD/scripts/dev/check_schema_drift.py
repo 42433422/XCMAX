@@ -35,10 +35,10 @@ import sys
 import tempfile
 from pathlib import Path
 
-from app.utils.operational_errors import BOUNDARY_ERRORS
-
 REPO_ROOT = Path(__file__).resolve().parents[2]  # FHD/
 sys.path.insert(0, str(REPO_ROOT))
+
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 # 与 alembic/env.py 保持一致：这些表由迁移内 raw SQL 创建、刻意无 ORM 模型，
 # 不参与 autogenerate 对比。

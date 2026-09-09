@@ -26,16 +26,30 @@ class _DynamicWorkflowPendingResumeMixin:
                 continued = self._continue_after_clarification(user_id, pending, message)
                 if continued is not None:
                     return (True, continued)
+                clarification = pending.get("clarification") or {}
+                question = str(clarification.get("question") or "").strip()
+                if not question:
+                    question = (
+                        "请补充所需字段后再继续。"
+                        if clarification.get("reason") == "missing_required"
+                        else "仍无法唯一确定操作目标，请回复候选序号或唯一 ID。"
+                    )
                 return (
                     True,
                     {
                         "success": True,
                         "message": "需要澄清",
-                        "response": "仍无法唯一确定操作目标，请回复候选序号或唯一 ID（例如「1」）。",
+                        "response": question,
                         "data": {
-                            "text": "仍无法唯一确定操作目标，请回复候选序号或唯一 ID。",
+                            "text": question,
                             "action": "clarification_required",
-                            "data": {"requires_confirmation": True},
+                            "data": {
+                                "requires_confirmation": True,
+                                "reason": clarification.get("reason"),
+                                "field": clarification.get("field"),
+                                "missing_fields": clarification.get("missing_fields") or [],
+                                "candidates": clarification.get("candidates") or [],
+                            },
                         },
                     },
                 )

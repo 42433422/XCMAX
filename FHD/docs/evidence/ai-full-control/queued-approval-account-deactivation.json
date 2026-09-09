@@ -1,0 +1,14 @@
+{
+  "base_sha": "d61a1bb25",
+  "tests_passed": 2,
+  "scope": "Actual local event queue and file-backed SQLite; publisher account disabled after enqueue and committed before consumer is scheduled.",
+  "verified": [
+    "Disabled publisher cannot persist queued approval.",
+    "No pending approval row or memory request survives.",
+    "Active-account baseline still creates exactly one valid approval and rejects forged applicant."
+  ],
+  "limitations": [
+    "Account deactivation only; session logout/revocation and tenant membership changes are not covered.",
+    "No remote queue or installed application acceptance."
+  ]
+}

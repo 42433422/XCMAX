@@ -87,6 +87,7 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
         self._dropped_count = 0
         # Event to signal new items in the queue; created when start() runs on the event loop.
         self._event_available: asyncio.Event | None = None
+        self._local_event_identity: dict[int, tuple[str, int | None]] = {}
 
         # 事件持久化（可选）
         self._event_buffer: list[dict[str, Any]] = []
@@ -253,6 +254,7 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
                         await asyncio.sleep(0.001)
                     continue
 
+                identity = self._local_event_identity.pop(id(event), ("", None))
                 # 检查超时
                 if event.is_expired():
                     logger.warning("Event expired: %s", event)
@@ -260,7 +262,13 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
                     continue
 
                 # 分发事件
-                await self._dispatch_event(event)
+                from app.application.agent_orchestrator.execution_identity import (
+                    execution_actor_scope,
+                )
+                from app.infrastructure.tenant_scope import tenant_scope
+
+                with execution_actor_scope(identity[0]), tenant_scope(identity[1]):
+                    await self._dispatch_event(event)
 
             except asyncio.CancelledError:
                 break
@@ -326,58 +334,9 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
             self._rel_tracer.end_span(sid, SpanStatus.ERROR if any_failed else SpanStatus.OK)
 
     async def _call_handler(self, subscription: HandlerSubscription, event: NeuroEvent) -> bool:
-        """调用处理器；返回是否成功（无异常）。"""
-        if self._rel_circuit is not None and not self._rel_circuit.can_execute():
-            logger.warning("NeuroBus circuit open; skipping handler for %s", event.event_type)
-            return False
+        from app.neuro_bus.bus_dispatch import call_handler
 
-        async def _invoke() -> None:
-            if subscription.is_async:
-                await subscription.handler(event)
-            else:
-                await asyncio.get_running_loop().run_in_executor(
-                    self._executor, subscription.handler, event
-                )
-
-        retry_count = 0
-        try:
-            if self._rel_retry_handler is not None:
-                domain = event.metadata.domain or "default"
-                retry_handler = self._rel_retry_handler.get_handler(domain)
-                try:
-                    await retry_handler.execute(
-                        _invoke,
-                        operation_name=getattr(subscription.handler, "__name__", "handler"),
-                    )
-                except RECOVERABLE_ERRORS:
-                    retry_count = retry_handler._config.max_retries  # noqa: SLF001
-                    raise
-            else:
-                await _invoke()
-            subscription.record_call(success=True)
-            if self._rel_circuit is not None:
-                self._rel_circuit.record_success()
-
-        except RECOVERABLE_ERRORS as e:
-            logger.exception("Handler error for event %s: %s", event, e)
-            subscription.record_call(success=False)
-            self._error_count += 1
-            if self._rel_circuit is not None:
-                self._rel_circuit.record_failure()
-            if self._dlq_integration is not None:
-                try:
-                    self._dlq_integration.handle_failure(
-                        event,
-                        e,
-                        retry_count=retry_count,
-                        handler_name=getattr(subscription.handler, "__name__", None),
-                    )
-                    record_delivery_metric(self._enable_metrics, "dead_lettered")
-                except RECOVERABLE_ERRORS as dlq_exc:
-                    logger.exception("NeuroBus DLQ enqueue failed: %s", dlq_exc)
-                    record_delivery_metric(self._enable_metrics, "lost")
-            return False
-        return True
+        return await call_handler(self, subscription, event)
 
     def _preflight_publish(self, event: NeuroEvent) -> bool:
         if self._rel_dedup is not None:
@@ -428,7 +387,17 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
             span_id = sp.span_id
             self._trace_by_event_id[event.metadata.event_id] = span_id
 
+        from copy import copy
+
+        from app.application.agent_orchestrator.execution_identity import current_execution_actor
+        from app.infrastructure.tenant_scope import current_tenant_id
+
+        # Each queue entry owns its identity even when a caller reuses an event object.
+        event = copy(event)
+        self._local_event_identity[id(event)] = (current_execution_actor(), current_tenant_id())
         success = self._event_queue.put(event)
+        if not success:
+            self._local_event_identity.pop(id(event), None)
         if success:
             self._published_count += 1
             record_delivery_metric(self._enable_metrics, "published")

@@ -236,6 +236,7 @@ async def catalog_download_to(
     dest: Path,
     *,
     headers: dict[str, str] | None = None,
+    max_bytes: int | None = None,
 ) -> dict[str, str]:
     """Stream a catalog artifact into ``dest`` and retain its delivery headers."""
     url = _catalog_url(path)
@@ -253,8 +254,12 @@ async def catalog_download_to(
                         detail=f"远端 Mod 包下载失败 {resp.status_code}: {text[:300].decode('utf-8', 'ignore')}",
                     )
                 with dest.open("wb") as fh:
+                    received = 0
                     async for chunk in resp.aiter_bytes():
                         if chunk:
+                            received += len(chunk)
+                            if max_bytes is not None and received > max_bytes:
+                                raise HTTPException(413, "Mod 包超过允许的下载大小")
                             fh.write(chunk)
                 return dict(resp.headers)
     except HTTPException:
