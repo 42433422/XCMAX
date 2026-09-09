@@ -1352,6 +1352,134 @@
           }
         ]
       }
+    },
+    {
+      "task_id": "finance.aging_receivable_bare_044",
+      "domain": "finance",
+      "difficulty": "easy",
+      "instruction": "应收账款明细",
+      "expect": {
+        "actions": [
+          {
+            "tool_id": "finance",
+            "action": "aging_report"
+          }
+        ],
+        "forbid_actions": [
+          {
+            "tool_id": "products",
+            "action": "query"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "finance.aging_payable_bare_045",
+      "domain": "finance",
+      "difficulty": "easy",
+      "instruction": "应付账款",
+      "expect": {
+        "actions": [
+          {
+            "tool_id": "finance",
+            "action": "aging_report"
+          }
+        ],
+        "forbid_actions": [
+          {
+            "tool_id": "products",
+            "action": "query"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "sales.order_status_pending_046",
+      "domain": "sales",
+      "difficulty": "medium",
+      "instruction": "未发货的订单",
+      "expect": {
+        "actions": [
+          {
+            "tool_id": "sales",
+            "action": "query"
+          }
+        ],
+        "forbid_actions": [
+          {
+            "tool_id": "products",
+            "action": "query"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "reports.sales_ranking_047",
+      "domain": "sales",
+      "difficulty": "medium",
+      "instruction": "销量排行",
+      "expect": {
+        "actions": [
+          {
+            "tool_id": "clarify",
+            "action": "ask"
+          },
+          {
+            "tool_id": "reports",
+            "action": "sales_summary"
+          }
+        ],
+        "forbid_actions": [
+          {
+            "tool_id": "products",
+            "action": "query"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "mrp.order_query_048",
+      "domain": "production",
+      "difficulty": "easy",
+      "instruction": "工单列表",
+      "expect": {
+        "actions": [
+          {
+            "tool_id": "mrp",
+            "action": "query_orders"
+          }
+        ],
+        "forbid_actions": [
+          {
+            "tool_id": "products",
+            "action": "query"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "sales.invoice_clarify_049",
+      "domain": "sales",
+      "difficulty": "medium",
+      "instruction": "开发票",
+      "expect": {
+        "actions": [
+          {
+            "tool_id": "clarify",
+            "action": "ask"
+          }
+        ],
+        "forbid_actions": [
+          {
+            "tool_id": "products",
+            "action": "query"
+          },
+          {
+            "tool_id": "business_db",
+            "action": "write"
+          }
+        ]
+      }
     }
   ]
 }

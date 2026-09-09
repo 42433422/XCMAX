@@ -60,3 +60,66 @@ def test_sales_order_query_variants():
         node = sales_order_query_node(message)
         assert node is not None, message
         assert node.tool_id == "sales"
+
+
+def test_receivable_payable_bare_nouns():
+    for message, account in (("应收账款明细", "receivable"), ("应付账款", "payable")):
+        route = domain_query_nodes(message, REGISTRY)
+        assert route is not None, message
+        assert route[0] == "finance_aging_report"
+        assert route[2][0].params["account_type"] == account
+
+
+def test_money_question_routes_to_ledger():
+    for message in ("这个月收入", "花了多少钱"):
+        route = domain_query_nodes(message, REGISTRY)
+        assert route is not None, message
+        assert route[0] == "finance_ledger_query"
+        assert route[2][0].tool_id == "finance"
+
+
+def test_order_status_filter():
+    route = domain_query_nodes("未发货的订单", REGISTRY)
+    assert route is not None
+    node = route[2][0]
+    assert node.tool_id == "sales"
+    assert node.params["status"] == "confirmed"
+    done = domain_query_nodes("已完成的订单", REGISTRY)
+    assert done is not None and done[2][0].params["status"] == "delivered"
+
+
+def test_sales_ranking_routes_to_summary():
+    for message in ("销量排行", "卖得最好的产品", "哪个产品卖得最多"):
+        route = domain_query_nodes(message, REGISTRY)
+        assert route is not None, message
+        assert route[0] == "sales_ranking"
+        assert route[2][0].tool_id == "reports"
+
+
+def test_period_sales_routes_to_summary():
+    for message in ("今天营业额", "昨日销售", "本周销量"):
+        route = domain_query_nodes(message, REGISTRY)
+        assert route is not None, message
+        assert route[0] == "sales_report"
+        node = route[2][0]
+        assert node.params["start_date"] <= node.params["end_date"]
+
+
+def test_mrp_order_query():
+    for message in ("工单列表", "生产计划"):
+        route = domain_query_nodes(message, REGISTRY)
+        assert route is not None, message
+        assert route[0] == "mrp_order_query"
+        assert route[2][0].tool_id == "mrp"
+
+
+def test_missing_slot_writes_clarify():
+    for message in ("新建客户", "添加供应商", "开发票", "回款登记"):
+        route = domain_query_nodes(message, REGISTRY)
+        assert route is not None, message
+        assert route[0] == "clarify_missing_slots"
+        assert route[2][0].tool_id == "clarify"
+
+
+def test_named_customer_create_not_intercepted():
+    assert domain_query_nodes("新增客户 星光贸易", REGISTRY) is None
