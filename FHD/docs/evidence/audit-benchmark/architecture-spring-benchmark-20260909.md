@@ -9,7 +9,7 @@
 |---|---|
 | standard_version | 1.0.0 |
 | scoring_version | external-anchors-v1 |
-| reference_versions_editions_regions | Spring Framework 5.3.39（Maven Central 官方构件，Apache-2.0），JDK 17 Temurin，本地直连运行。**版本边界**：SSOT 锁定 main@572850bd（6.2.x 开发线），本次实测为受支持稳定发行版 5.3.39，差异已在审计记录登记（政策允许，不声称等同该 SHA） |
+| reference_versions_editions_regions | Spring Framework 5.3.39（Maven Central 官方构件，Apache-2.0），JDK 17 Temurin，本地直连运行。**版本边界**：基准目录固定参考为 main@572850bd（6.2.x 开发线），本次实测为受支持稳定发行版 5.3.39，差异已在本记录登记（政策允许，不声称等同该 SHA） |
 | dataset_hash | 任务脚本随本文档存档（同目录 architecture-spring-tasks） |
 | task_protocol | B1 组合根+生命周期+适配器替换；B2 契约可自动验证（缺依赖 fail-fast）；B3 初始化/并发失败可定位 |
 | predeclared_metrics_and_tolerances | 适配器输出精确匹配；端口无实现时 refresh 必抛；BeanCreationException 定位 bean 名+根因；40 并发无丢失 |
