@@ -84,6 +84,7 @@ export function useTpTemplateList() {
         error.value = (res && res.message) || '加载失败'
       }
     } catch (err) {
+      if (refreshGen !== templateListRefreshGen) return
       console.error('加载模板列表失败:', err)
       const errRec = (err && typeof err === 'object' ? err : {}) as { name?: unknown; message?: unknown }
       const msg = errRec.name === 'TimeoutError'
@@ -91,7 +92,7 @@ export function useTpTemplateList() {
         : (typeof errRec.message === 'string' && errRec.message) || '未知错误'
       error.value = '加载模板列表失败：' + msg
     } finally {
-      loading.value = false
+      if (refreshGen === templateListRefreshGen) loading.value = false
     }
   }
 
