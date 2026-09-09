@@ -69,6 +69,10 @@ def client():
     def kellai_pairing_start():
         return {"success": True}
 
+    @app.post("/api/desktop/update-install-receipts/report")
+    def desktop_install_receipt():
+        return {"success": True}
+
     @app.post("/api/ops/autonomy/actions/ingest")
     def autonomy_ingest():
         return {"ok": True}
@@ -225,6 +229,18 @@ def test_kellai_pairing_requires_dedicated_local_header(client):
     allowed = client.post(
         "/api/kellai/binding/start",
         headers={"X-Kellai-Local-Pairing": "1"},
+    )
+
+    assert rejected.status_code == 403
+    assert allowed.status_code == 200
+
+
+def test_desktop_install_receipt_requires_dedicated_local_header(client):
+    """Electron 本机上报安装回执：无 CSRF Cookie，但必须带专用头（路由层再校验回环）。"""
+    rejected = client.post("/api/desktop/update-install-receipts/report")
+    allowed = client.post(
+        "/api/desktop/update-install-receipts/report",
+        headers={"X-XCAGI-Desktop-Local": "1"},
     )
 
     assert rejected.status_code == 403
