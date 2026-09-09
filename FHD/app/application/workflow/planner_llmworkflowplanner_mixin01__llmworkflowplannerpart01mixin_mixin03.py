@@ -39,6 +39,8 @@ class __LLMWorkflowPlannerPart01MixinPart03Mixin:
                             "risk": action_meta.get("risk", "low"),
                             "idempotent": bool(action_meta.get("idempotent", False)),
                             "required_params": action_meta.get("required_params", []),
+                            "optional_params": action_meta.get("optional_params", []),
+                            "description": action_meta.get("description", ""),
                         }
                     )
                 tool_specs.append(
@@ -191,6 +193,8 @@ class __LLMWorkflowPlannerPart01MixinPart03Mixin:
                             "risk": action_meta.get("risk", "low"),
                             "idempotent": bool(action_meta.get("idempotent", False)),
                             "required_params": action_meta.get("required_params", []),
+                            "optional_params": action_meta.get("optional_params", []),
+                            "description": action_meta.get("description", ""),
                         }
                     )
                 tool_specs.append(

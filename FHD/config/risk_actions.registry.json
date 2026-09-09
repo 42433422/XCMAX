@@ -560,7 +560,9 @@
           "risk": "low",
           "idempotent": true,
           "required_params": [],
-          "availability": "shared"
+          "availability": "shared",
+          "optional_params": ["transaction_id", "product_id", "warehouse_id", "transaction_type", "start_date", "end_date", "page", "per_page"],
+          "description": "查询库存流水。核验执行回执时使用回执中的真实 transaction_id 精确查询；禁止编造 ID。日期使用 ISO 格式，每页数量 1 到 1000。"
         }
       }
     },
