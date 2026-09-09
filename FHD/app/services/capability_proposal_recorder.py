@@ -23,6 +23,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
 logger = logging.getLogger(__name__)
 
 # 写入路径：CI artifact 与本地可读
@@ -184,7 +186,7 @@ def record_capability_proposal(
         from app.services.work_order_ssot import upsert_candidate
 
         upsert_candidate(source=source, dedup_key=key, reason=reason)
-    except Exception:  # noqa: BLE001 - 工单写入失败不阻塞提案记录（跨仓导入边界兜底）
+    except BOUNDARY_ERRORS:  # noqa: BLE001 - 工单写入失败不阻塞提案记录（跨仓导入边界兜底）
         logger.debug("work_order upsert skipped", exc_info=True)
     return {
         "recorded": True,

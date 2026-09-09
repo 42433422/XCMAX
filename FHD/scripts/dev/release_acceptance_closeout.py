@@ -32,6 +32,15 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+# 通过 sys.path 注入让脚本能 import app.utils / app.services（与 to_issue 同款约定）
+_FHD_ROOT = Path(__file__).resolve().parents[2]
+if str(_FHD_ROOT) not in sys.path:
+    sys.path.insert(0, str(_FHD_ROOT))
+
+from app.utils.operational_errors import (  # noqa: E402  pylint: disable=wrong-import-position
+    BOUNDARY_ERRORS,
+)
+
 logger = logging.getLogger(__name__)
 
 LABEL_FAILED = "acceptance-failed"
@@ -158,7 +167,6 @@ def _accept_issue(repo: str, token: str, issue: dict[str, Any], acceptance: dict
 def _record_verdict_local(issue_number: int, version: str, verdict: str, acceptance: dict) -> None:
     """把验收判定落回本地工单事件流（best-effort；服务端运行时持久）。"""
     try:
-        sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
         from app.services.work_order_ssot import record_acceptance_verdict
 
         record_acceptance_verdict(
@@ -167,7 +175,7 @@ def _record_verdict_local(issue_number: int, version: str, verdict: str, accepta
             verdict=verdict,
             evidence={"per_platform": acceptance.get("per_platform") or {}},
         )
-    except Exception:  # noqa: BLE001 - CI 运行器本地事件流为临时介质，不阻塞回写
+    except BOUNDARY_ERRORS:  # noqa: BLE001 - CI 运行器本地事件流为临时介质，不阻塞回写
         logger.debug("local work_order verdict skipped", exc_info=True)
 
 

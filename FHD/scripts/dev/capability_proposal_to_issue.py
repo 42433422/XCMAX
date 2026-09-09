@@ -42,6 +42,9 @@ from app.services.capability_proposal_recorder import (  # noqa: E402  pylint: d
 from app.services.work_order_ssot import (
     derive_wo_id,  # noqa: E402  pylint: disable=wrong-import-position
 )
+from app.utils.operational_errors import (  # noqa: E402  pylint: disable=wrong-import-position
+    BOUNDARY_ERRORS,
+)
 
 
 def _derive_wo_id(source: str, dedup_key: str) -> str:
@@ -270,7 +273,7 @@ def _link_work_order(proposal: dict[str, Any], issue_url: str, issue_number: int
             issue_number=number,
             issue_url=str(issue_url or ""),
         )
-    except Exception:  # noqa: BLE001 - CI/中继边界兜底，不影响 issue 流程
+    except BOUNDARY_ERRORS:  # noqa: BLE001 - CI/中继边界兜底，不影响 issue 流程
         logger.debug("work_order link skipped", exc_info=True)
 
 
