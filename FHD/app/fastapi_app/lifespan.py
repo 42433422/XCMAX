@@ -38,6 +38,41 @@ from .sqlite_paths import is_sqlite_url, resolve_effective_database_url, sqlite_
 logger = logging.getLogger(__name__)
 
 
+def _install_proactor_reset_filter() -> None:
+    """抑制 Windows ProactorEventLoop 关闭已重置连接时的良性噪声。
+
+    对端强制断开后，``_ProactorBasePipeTransport._call_connection_lost`` 会在
+    清理阶段抛 ``ConnectionResetError``（WinError 10054），asyncio 默认把它交给
+    loop 的 exception handler 打印，导致后端日志被同一异常刷屏（实测 81 次/2000
+    行）。这是 CPython 在 3.12.1 前未修复的已知竞态，连接本身早已失效，忽略即可。
+    其余异常仍完整委托给原 handler，不吞掉任何真实错误。
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    current = loop.get_exception_handler()
+    if getattr(current, "_xcagi_proactor_filter", False):
+        return
+
+    def _filtered_handler(current_loop, context):
+        exc = context.get("exception")
+        message = str(context.get("message", ""))
+        if (
+            isinstance(exc, ConnectionResetError)
+            and getattr(exc, "winerror", None) == 10054
+            and "_call_connection_lost" in message
+        ):
+            return
+        if current is not None:
+            current(current_loop, context)
+        else:
+            current_loop.default_exception_handler(context)
+
+    _filtered_handler._xcagi_proactor_filter = True  # type: ignore[attr-defined]
+    loop.set_exception_handler(_filtered_handler)
+
+
 def _desktop_fast_start_enabled() -> bool:
     import os
 
@@ -72,6 +107,8 @@ async def lifespan(app: FastAPI):
     from app.fastapi_app.startup_timing import mark_startup
 
     mark_startup("lifespan_begin")
+
+    _install_proactor_reset_filter()
 
     from app.neuro_async_bridge import set_neuro_main_loop
 
