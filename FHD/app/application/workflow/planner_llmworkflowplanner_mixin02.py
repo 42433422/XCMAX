@@ -253,14 +253,11 @@ class _LLMWorkflowPlannerPart02Mixin:
                 intent = "customer_export"
                 todo = ["查询客户列表", "导出为 Excel", "返回下载结果"]
                 nodes.extend(customer_export)
-        if not nodes and "reports" in tool_registry:
-            from .inventory_query_planning import general_inventory_query_node, inventory_query_node
+        if not nodes and ("reports" in tool_registry or "inventory" in tool_registry):
+            from .inventory_query_planning import inventory_route
 
-            inventory_node = inventory_query_node(message)
-            if inventory_node is None:
-                inventory_node = general_inventory_query_node(message)
-            if inventory_node is not None:
-                intent = "inventory_query"
+            if (inventory := inventory_route(message, tool_registry)) is not None:
+                intent, todo, inventory_node = inventory
                 nodes.append(inventory_node)
         if not nodes and "reports" in tool_registry:
             from .dashboard_planning import dashboard_query_node

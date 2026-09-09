@@ -32,6 +32,7 @@ def monthly_sales_report_node(message: str, *, today: date | None = None) -> Wor
         "销售排行",
         "销售额",
         "销售额多少",
+        "卖了多少",
         "的销售额",
         "的销售汇总",
         "的销售报表",

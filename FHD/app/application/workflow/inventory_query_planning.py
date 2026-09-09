@@ -13,6 +13,31 @@ _PRODUCT_STOCK_RE = re.compile(
     r"(?:的)?(?:还有多少库存|还剩多少库存|库存还有多少|库存还剩多少|库存是多少|还有库存|库存)\s*"
     r"(?:件|个|箱|桶|支|包|瓶|台|套)?[。？?\s]*$"
 )
+# 低库存/缺货预警口径：优先于全量库存概览，落到 inventory.low_stock_alert。
+_LOW_STOCK_RE = re.compile(
+    r"快没货|没货|缺货|断货|库存不足|存货不足|低于安全|安全库存|库存预警|缺货预警"
+)
+
+
+def low_stock_alert_node(message: str) -> WorkflowNode | None:
+    """「哪些产品快没货了 / 库存低于安全线的有哪些」→ inventory.low_stock_alert。"""
+    text = str(message or "").strip()
+    if not text or not _LOW_STOCK_RE.search(text):
+        return None
+    if any(word in text for word in _NEGATION_WORDS):
+        return None
+    if any(word in text for word in ("采购", "购买", "补充", "备货", "进货", "安排")):
+        # 「库存不足就安排采购」属于库存-采购条件分支，交由既有 inventory_purchase 处理。
+        return None
+    return WorkflowNode(
+        node_id="low_stock_alert",
+        tool_id="inventory",
+        action="low_stock_alert",
+        params={},
+        risk="low",
+        idempotent=True,
+        description="查询低于安全库存的产品",
+    )
 
 
 def inventory_query_node(message: str) -> WorkflowNode | None:
@@ -90,3 +115,17 @@ def general_inventory_query_node(message: str) -> WorkflowNode | None:
         idempotent=True,
         description="查询当前库存概览",
     )
+
+
+def inventory_route(
+    message: str, tool_registry: dict[str, object]
+) -> tuple[str, list[str], WorkflowNode] | None:
+    """库存域统一入口：低库存预警优先，其次精确/概览查询。"""
+    if "inventory" in tool_registry and (low := low_stock_alert_node(message)):
+        return ("inventory_low_stock", ["查询低于安全库存的产品", "返回缺货清单"], low)
+    if "reports" not in tool_registry:
+        return None
+    node = inventory_query_node(message) or general_inventory_query_node(message)
+    if node is None:
+        return None
+    return ("inventory_query", ["查询库存", "返回库存结果"], node)

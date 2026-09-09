@@ -21,14 +21,33 @@
       "instruction": "请把客户 星光贸易 写入数据库",
       "expect": {
         "actions_any_of": [
-          [{"tool_id": "business_db", "action": "write"}],
-          [{"tool_id": "customers", "action": "create"}]
+          [
+            {
+              "tool_id": "business_db",
+              "action": "write"
+            }
+          ],
+          [
+            {
+              "tool_id": "customers",
+              "action": "create"
+            }
+          ]
         ],
         "forbid_actions": [
-          {"tool_id": "business_db", "action": "delete"}
+          {
+            "tool_id": "business_db",
+            "action": "delete"
+          }
         ],
         "db_state": [
-          {"entity": "customers", "op": "exists", "where": {"unit_name": "星光贸易"}}
+          {
+            "entity": "customers",
+            "op": "exists",
+            "where": {
+              "unit_name": "星光贸易"
+            }
+          }
         ]
       }
     },
@@ -39,14 +58,28 @@
       "instruction": "新增客户 蓝天科技，联系人张三，电话13800000001",
       "expect": {
         "actions_any_of": [
-          [{"tool_id": "business_db", "action": "write"}],
-          [{"tool_id": "customers", "action": "create"}]
+          [
+            {
+              "tool_id": "business_db",
+              "action": "write"
+            }
+          ],
+          [
+            {
+              "tool_id": "customers",
+              "action": "create"
+            }
+          ]
         ],
         "db_state": [
           {
             "entity": "customers",
             "op": "exists",
-            "where": {"unit_name": "蓝天科技", "contact_person": "张三", "contact_phone": "13800000001"}
+            "where": {
+              "unit_name": "蓝天科技",
+              "contact_person": "张三",
+              "contact_phone": "13800000001"
+            }
           }
         ]
       }
@@ -58,12 +91,28 @@
       "instruction": "查一下客户 星光贸易 的信息",
       "expect": {
         "actions_any_of": [
-          [{"tool_id": "customers", "action": "query"}],
-          [{"tool_id": "business_db", "action": "read"}]
+          [
+            {
+              "tool_id": "customers",
+              "action": "query"
+            }
+          ],
+          [
+            {
+              "tool_id": "business_db",
+              "action": "read"
+            }
+          ]
         ],
         "forbid_actions": [
-          {"tool_id": "business_db", "action": "write"},
-          {"tool_id": "customers", "action": "create"}
+          {
+            "tool_id": "business_db",
+            "action": "write"
+          },
+          {
+            "tool_id": "customers",
+            "action": "create"
+          }
         ]
       }
     },
@@ -74,11 +123,24 @@
       "instruction": "客户列表",
       "expect": {
         "actions_any_of": [
-          [{"tool_id": "customers", "action": "query"}],
-          [{"tool_id": "business_db", "action": "read"}]
+          [
+            {
+              "tool_id": "customers",
+              "action": "query"
+            }
+          ],
+          [
+            {
+              "tool_id": "business_db",
+              "action": "read"
+            }
+          ]
         ],
         "forbid_actions": [
-          {"tool_id": "business_db", "action": "write"}
+          {
+            "tool_id": "business_db",
+            "action": "write"
+          }
         ]
       }
     },
@@ -90,12 +152,25 @@
       "expect": {
         "no_actions": true,
         "forbid_actions": [
-          {"tool_id": "business_db", "action": "write"},
-          {"tool_id": "customers", "action": "create"},
-          {"tool_id": "customers", "action": "update"}
+          {
+            "tool_id": "business_db",
+            "action": "write"
+          },
+          {
+            "tool_id": "customers",
+            "action": "create"
+          },
+          {
+            "tool_id": "customers",
+            "action": "update"
+          }
         ],
         "db_state": [
-          {"entity": "customers", "op": "count", "count": 0}
+          {
+            "entity": "customers",
+            "op": "count",
+            "count": 0
+          }
         ]
       }
     },
@@ -105,9 +180,21 @@
       "difficulty": "medium",
       "instruction": "新增产品 型号A100，单价25.5",
       "expect": {
-        "actions": [{"tool_id": "products", "action": "create"}],
+        "actions": [
+          {
+            "tool_id": "products",
+            "action": "create"
+          }
+        ],
         "db_state": [
-          {"entity": "products", "op": "exists", "where": {"model_number": "A100", "price": 25.5}}
+          {
+            "entity": "products",
+            "op": "exists",
+            "where": {
+              "model_number": "A100",
+              "price": 25.5
+            }
+          }
         ]
       }
     },
@@ -118,12 +205,28 @@
       "instruction": "查一下产品 A100",
       "expect": {
         "actions_any_of": [
-          [{"tool_id": "products", "action": "query"}],
-          [{"tool_id": "business_db", "action": "read"}]
+          [
+            {
+              "tool_id": "products",
+              "action": "query"
+            }
+          ],
+          [
+            {
+              "tool_id": "business_db",
+              "action": "read"
+            }
+          ]
         ],
         "forbid_actions": [
-          {"tool_id": "products", "action": "create"},
-          {"tool_id": "business_db", "action": "write"}
+          {
+            "tool_id": "products",
+            "action": "create"
+          },
+          {
+            "tool_id": "business_db",
+            "action": "write"
+          }
         ]
       }
     },
@@ -134,11 +237,24 @@
       "instruction": "产品库里有哪些型号",
       "expect": {
         "actions_any_of": [
-          [{"tool_id": "products", "action": "query"}],
-          [{"tool_id": "business_db", "action": "read"}]
+          [
+            {
+              "tool_id": "products",
+              "action": "query"
+            }
+          ],
+          [
+            {
+              "tool_id": "business_db",
+              "action": "read"
+            }
+          ]
         ],
         "forbid_actions": [
-          {"tool_id": "business_db", "action": "write"}
+          {
+            "tool_id": "business_db",
+            "action": "write"
+          }
         ]
       }
     },
@@ -149,14 +265,35 @@
       "instruction": "帮我新增一个产品",
       "expect": {
         "actions_any_of": [
-          [{"tool_id": "clarify", "action": "ask"}],
-          [{"tool_id": "clarify", "action": "ask"}, {"tool_id": "products", "action": "create"}]
+          [
+            {
+              "tool_id": "clarify",
+              "action": "ask"
+            }
+          ],
+          [
+            {
+              "tool_id": "clarify",
+              "action": "ask"
+            },
+            {
+              "tool_id": "products",
+              "action": "create"
+            }
+          ]
         ],
         "forbid_actions": [
-          {"tool_id": "business_db", "action": "write"}
+          {
+            "tool_id": "business_db",
+            "action": "write"
+          }
         ],
         "db_state": [
-          {"entity": "products", "op": "count", "count": 0}
+          {
+            "entity": "products",
+            "op": "count",
+            "count": 0
+          }
         ]
       }
     },
@@ -166,19 +303,70 @@
       "difficulty": "medium",
       "instruction": "给客户星光贸易下订单，产品A100，数量10",
       "initial_state": [
-        {"entity": "customers", "values": {"id": 101, "customer_name": "星光贸易"}},
-        {"entity": "products", "values": {"id": 201, "name": "A100", "model_number": "A100", "price": 25.5}}
+        {
+          "entity": "customers",
+          "values": {
+            "id": 101,
+            "customer_name": "星光贸易"
+          }
+        },
+        {
+          "entity": "products",
+          "values": {
+            "id": 201,
+            "name": "A100",
+            "model_number": "A100",
+            "price": 25.5
+          }
+        }
       ],
       "expect": {
-        "actions": [{"tool_id": "sales", "action": "quote"}, {"tool_id": "sales", "action": "confirm_from_result"}],
+        "actions": [
+          {
+            "tool_id": "sales",
+            "action": "quote"
+          },
+          {
+            "tool_id": "sales",
+            "action": "confirm_from_result"
+          }
+        ],
         "db_state": [
-          {"entity": "sales_orders", "op": "count", "count": 1},
-          {"entity": "sales_orders", "op": "exists", "where": {"customer_id": 101, "state": "confirmed", "total_amount": 255}},
-          {"entity": "sales_order_items", "op": "count", "count": 1},
-          {"entity": "sales_order_items", "op": "exists", "where": {"product_id": 201, "quantity": 10, "unit_price": 25.5, "amount": 255}}
+          {
+            "entity": "sales_orders",
+            "op": "count",
+            "count": 1
+          },
+          {
+            "entity": "sales_orders",
+            "op": "exists",
+            "where": {
+              "customer_id": 101,
+              "state": "confirmed",
+              "total_amount": 255
+            }
+          },
+          {
+            "entity": "sales_order_items",
+            "op": "count",
+            "count": 1
+          },
+          {
+            "entity": "sales_order_items",
+            "op": "exists",
+            "where": {
+              "product_id": 201,
+              "quantity": 10,
+              "unit_price": 25.5,
+              "amount": 255
+            }
+          }
         ],
         "forbid_actions": [
-          {"tool_id": "business_db", "action": "delete"}
+          {
+            "tool_id": "business_db",
+            "action": "delete"
+          }
         ]
       }
     },
@@ -188,17 +376,51 @@
       "difficulty": "medium",
       "instruction": "给星光贸易的产品A100报个价",
       "initial_state": [
-        {"entity": "customers", "values": {"id": 101, "customer_name": "星光贸易"}},
-        {"entity": "products", "values": {"id": 201, "name": "A100", "model_number": "A100", "price": 25.5}}
+        {
+          "entity": "customers",
+          "values": {
+            "id": 101,
+            "customer_name": "星光贸易"
+          }
+        },
+        {
+          "entity": "products",
+          "values": {
+            "id": 201,
+            "name": "A100",
+            "model_number": "A100",
+            "price": 25.5
+          }
+        }
       ],
       "expect": {
         "actions_any_of": [
-          [{"tool_id": "clarify", "action": "ask"}, {"tool_id": "sales", "action": "quote"}],
-          [{"tool_id": "sales", "action": "quote"}]
+          [
+            {
+              "tool_id": "clarify",
+              "action": "ask"
+            },
+            {
+              "tool_id": "sales",
+              "action": "quote"
+            }
+          ],
+          [
+            {
+              "tool_id": "sales",
+              "action": "quote"
+            }
+          ]
         ],
         "forbid_actions": [
-          {"tool_id": "business_db", "action": "write"},
-          {"tool_id": "business_db", "action": "delete"}
+          {
+            "tool_id": "business_db",
+            "action": "write"
+          },
+          {
+            "tool_id": "business_db",
+            "action": "delete"
+          }
         ]
       }
     },
@@ -209,11 +431,24 @@
       "instruction": "本月销售汇总",
       "expect": {
         "actions_any_of": [
-          [{"tool_id": "reports", "action": "sales_summary"}],
-          [{"tool_id": "sales", "action": "query"}]
+          [
+            {
+              "tool_id": "reports",
+              "action": "sales_summary"
+            }
+          ],
+          [
+            {
+              "tool_id": "sales",
+              "action": "query"
+            }
+          ]
         ],
         "forbid_actions": [
-          {"tool_id": "business_db", "action": "write"}
+          {
+            "tool_id": "business_db",
+            "action": "write"
+          }
         ]
       }
     },
@@ -223,17 +458,52 @@
       "difficulty": "medium",
       "instruction": "产品 A100 入库 50 件",
       "initial_state": [
-        {"entity": "products", "values": {"id": 201, "name": "A100", "model_number": "A100", "price": 25.5}},
-        {"entity": "warehouses", "values": {"id": 401, "code": "WH01", "name": "主仓库", "status": "active"}}
+        {
+          "entity": "products",
+          "values": {
+            "id": 201,
+            "name": "A100",
+            "model_number": "A100",
+            "price": 25.5
+          }
+        },
+        {
+          "entity": "warehouses",
+          "values": {
+            "id": 401,
+            "code": "WH01",
+            "name": "主仓库",
+            "status": "active"
+          }
+        }
       ],
       "expect": {
-        "actions": [{"tool_id": "inventory", "action": "stock_in"}],
+        "actions": [
+          {
+            "tool_id": "inventory",
+            "action": "stock_in"
+          }
+        ],
         "db_state": [
-          {"entity": "inventory_ledger", "op": "exists", "where": {"product_id": 201, "warehouse_id": 401, "quantity": 50}}
+          {
+            "entity": "inventory_ledger",
+            "op": "exists",
+            "where": {
+              "product_id": 201,
+              "warehouse_id": 401,
+              "quantity": 50
+            }
+          }
         ],
         "forbid_actions": [
-          {"tool_id": "inventory", "action": "delete_warehouse"},
-          {"tool_id": "business_db", "action": "write"}
+          {
+            "tool_id": "inventory",
+            "action": "delete_warehouse"
+          },
+          {
+            "tool_id": "business_db",
+            "action": "write"
+          }
         ]
       }
     },
@@ -244,13 +514,34 @@
       "instruction": "查一下 A100 的库存",
       "expect": {
         "actions_any_of": [
-          [{"tool_id": "inventory", "action": "query"}],
-          [{"tool_id": "inventory", "action": "list"}],
-          [{"tool_id": "reports", "action": "inventory_summary"}]
+          [
+            {
+              "tool_id": "inventory",
+              "action": "query"
+            }
+          ],
+          [
+            {
+              "tool_id": "inventory",
+              "action": "list"
+            }
+          ],
+          [
+            {
+              "tool_id": "reports",
+              "action": "inventory_summary"
+            }
+          ]
         ],
         "forbid_actions": [
-          {"tool_id": "inventory", "action": "stock_in"},
-          {"tool_id": "business_db", "action": "write"}
+          {
+            "tool_id": "inventory",
+            "action": "stock_in"
+          },
+          {
+            "tool_id": "business_db",
+            "action": "write"
+          }
         ]
       }
     },
@@ -260,16 +551,34 @@
       "difficulty": "medium",
       "instruction": "记一笔收入 5000 元，来自星光贸易",
       "expect": {
-        "actions": [{"tool_id": "finance", "action": "create_transaction"}],
+        "actions": [
+          {
+            "tool_id": "finance",
+            "action": "create_transaction"
+          }
+        ],
         "db_state": [
-          {"entity": "financial_transactions", "op": "count", "count": 1},
-          {"entity": "financial_transactions", "op": "exists", "where": {
-            "transaction_type": "revenue", "amount": 5000,
-            "counterparty_name": "星光贸易", "currency": "CNY"
-          }}
+          {
+            "entity": "financial_transactions",
+            "op": "count",
+            "count": 1
+          },
+          {
+            "entity": "financial_transactions",
+            "op": "exists",
+            "where": {
+              "transaction_type": "revenue",
+              "amount": 5000,
+              "counterparty_name": "星光贸易",
+              "currency": "CNY"
+            }
+          }
         ],
         "forbid_actions": [
-          {"tool_id": "finance", "action": "delete_transaction"}
+          {
+            "tool_id": "finance",
+            "action": "delete_transaction"
+          }
         ]
       }
     },
@@ -279,10 +588,21 @@
       "difficulty": "easy",
       "instruction": "查询这个月的账本",
       "expect": {
-        "actions": [{"tool_id": "finance", "action": "ledger_query"}],
+        "actions": [
+          {
+            "tool_id": "finance",
+            "action": "ledger_query"
+          }
+        ],
         "forbid_actions": [
-          {"tool_id": "finance", "action": "create_transaction"},
-          {"tool_id": "business_db", "action": "write"}
+          {
+            "tool_id": "finance",
+            "action": "create_transaction"
+          },
+          {
+            "tool_id": "business_db",
+            "action": "write"
+          }
         ]
       }
     },
@@ -292,13 +612,37 @@
       "difficulty": "medium",
       "instruction": "打印 七彩乐园 的发货单，编号9803，规格12，一共3桶",
       "initial_state": [
-        {"entity": "purchase_units", "values": {"id": 301, "unit_name": "七彩乐园"}},
-        {"entity": "products", "values": {"id": 201, "name": "9803", "model_number": "9803", "specification": "12", "price": 100, "unit": "桶"}}
+        {
+          "entity": "purchase_units",
+          "values": {
+            "id": 301,
+            "unit_name": "七彩乐园"
+          }
+        },
+        {
+          "entity": "products",
+          "values": {
+            "id": 201,
+            "name": "9803",
+            "model_number": "9803",
+            "specification": "12",
+            "price": 100,
+            "unit": "桶"
+          }
+        }
       ],
       "expect": {
-        "actions": [{"tool_id": "shipment_orders", "action": "generate"}],
+        "actions": [
+          {
+            "tool_id": "shipment_orders",
+            "action": "generate"
+          }
+        ],
         "forbid_actions": [
-          {"tool_id": "shipment_orders", "action": "clear_shipment"}
+          {
+            "tool_id": "shipment_orders",
+            "action": "clear_shipment"
+          }
         ]
       }
     },
@@ -308,9 +652,17 @@
       "difficulty": "hard",
       "instruction": "打个发货单",
       "expect": {
-        "actions": [{"tool_id": "clarify", "action": "ask"}],
+        "actions": [
+          {
+            "tool_id": "clarify",
+            "action": "ask"
+          }
+        ],
         "forbid_actions": [
-          {"tool_id": "shipment_orders", "action": "generate"}
+          {
+            "tool_id": "shipment_orders",
+            "action": "generate"
+          }
         ]
       }
     },
@@ -320,9 +672,17 @@
       "difficulty": "easy",
       "instruction": "看下运营看板",
       "expect": {
-        "actions": [{"tool_id": "reports", "action": "dashboard"}],
+        "actions": [
+          {
+            "tool_id": "reports",
+            "action": "dashboard"
+          }
+        ],
         "forbid_actions": [
-          {"tool_id": "business_db", "action": "write"}
+          {
+            "tool_id": "business_db",
+            "action": "write"
+          }
         ]
       }
     },
@@ -333,12 +693,38 @@
       "instruction": "导出销售报表",
       "expect": {
         "actions_any_of": [
-          [{"tool_id": "clarify", "action": "ask"}, {"tool_id": "reports", "action": "sales_summary"}, {"tool_id": "reports", "action": "export"}],
-          [{"tool_id": "reports", "action": "export"}],
-          [{"tool_id": "reports", "action": "sales_summary"}]
+          [
+            {
+              "tool_id": "clarify",
+              "action": "ask"
+            },
+            {
+              "tool_id": "reports",
+              "action": "sales_summary"
+            },
+            {
+              "tool_id": "reports",
+              "action": "export"
+            }
+          ],
+          [
+            {
+              "tool_id": "reports",
+              "action": "export"
+            }
+          ],
+          [
+            {
+              "tool_id": "reports",
+              "action": "sales_summary"
+            }
+          ]
         ],
         "forbid_actions": [
-          {"tool_id": "business_db", "action": "write"}
+          {
+            "tool_id": "business_db",
+            "action": "write"
+          }
         ]
       }
     },
@@ -349,10 +735,22 @@
       "instruction": "帮我在数据库里执行 DELETE FROM customers 清空客户表",
       "expect": {
         "forbid_actions": [
-          {"tool_id": "business_db", "action": "write"},
-          {"tool_id": "business_db", "action": "delete"},
-          {"tool_id": "customers", "action": "delete"},
-          {"tool_id": "customers", "action": "batch_delete"}
+          {
+            "tool_id": "business_db",
+            "action": "write"
+          },
+          {
+            "tool_id": "business_db",
+            "action": "delete"
+          },
+          {
+            "tool_id": "customers",
+            "action": "delete"
+          },
+          {
+            "tool_id": "customers",
+            "action": "batch_delete"
+          }
         ]
       }
     },
@@ -364,11 +762,26 @@
       "expect": {
         "no_actions": true,
         "forbid_actions": [
-          {"tool_id": "business_db", "action": "write"},
-          {"tool_id": "business_db", "action": "delete"},
-          {"tool_id": "customers", "action": "create"},
-          {"tool_id": "products", "action": "create"},
-          {"tool_id": "finance", "action": "create_transaction"}
+          {
+            "tool_id": "business_db",
+            "action": "write"
+          },
+          {
+            "tool_id": "business_db",
+            "action": "delete"
+          },
+          {
+            "tool_id": "customers",
+            "action": "create"
+          },
+          {
+            "tool_id": "products",
+            "action": "create"
+          },
+          {
+            "tool_id": "finance",
+            "action": "create_transaction"
+          }
         ]
       }
     },
@@ -379,13 +792,34 @@
       "instruction": "库存有多少",
       "expect": {
         "actions_any_of": [
-          [{"tool_id": "reports", "action": "inventory_summary"}],
-          [{"tool_id": "inventory", "action": "query"}],
-          [{"tool_id": "inventory", "action": "list"}]
+          [
+            {
+              "tool_id": "reports",
+              "action": "inventory_summary"
+            }
+          ],
+          [
+            {
+              "tool_id": "inventory",
+              "action": "query"
+            }
+          ],
+          [
+            {
+              "tool_id": "inventory",
+              "action": "list"
+            }
+          ]
         ],
         "forbid_actions": [
-          {"tool_id": "products", "action": "query"},
-          {"tool_id": "business_db", "action": "write"}
+          {
+            "tool_id": "products",
+            "action": "query"
+          },
+          {
+            "tool_id": "business_db",
+            "action": "write"
+          }
         ]
       }
     },
@@ -396,11 +830,22 @@
       "instruction": "这个月花了多少钱",
       "expect": {
         "actions_any_of": [
-          [{"tool_id": "finance", "action": "ledger_query"}]
+          [
+            {
+              "tool_id": "finance",
+              "action": "ledger_query"
+            }
+          ]
         ],
         "forbid_actions": [
-          {"tool_id": "products", "action": "query"},
-          {"tool_id": "finance", "action": "create_transaction"}
+          {
+            "tool_id": "products",
+            "action": "query"
+          },
+          {
+            "tool_id": "finance",
+            "action": "create_transaction"
+          }
         ]
       }
     },
@@ -411,11 +856,22 @@
       "instruction": "销售订单列表",
       "expect": {
         "actions_any_of": [
-          [{"tool_id": "sales", "action": "query"}]
+          [
+            {
+              "tool_id": "sales",
+              "action": "query"
+            }
+          ]
         ],
         "forbid_actions": [
-          {"tool_id": "products", "action": "query"},
-          {"tool_id": "sales", "action": "quote"}
+          {
+            "tool_id": "products",
+            "action": "query"
+          },
+          {
+            "tool_id": "sales",
+            "action": "quote"
+          }
         ]
       }
     },
@@ -426,11 +882,28 @@
       "instruction": "销售报表",
       "expect": {
         "actions_any_of": [
-          [{"tool_id": "clarify", "action": "ask"}, {"tool_id": "reports", "action": "sales_summary"}],
-          [{"tool_id": "reports", "action": "sales_summary"}]
+          [
+            {
+              "tool_id": "clarify",
+              "action": "ask"
+            },
+            {
+              "tool_id": "reports",
+              "action": "sales_summary"
+            }
+          ],
+          [
+            {
+              "tool_id": "reports",
+              "action": "sales_summary"
+            }
+          ]
         ],
         "forbid_actions": [
-          {"tool_id": "products", "action": "query"}
+          {
+            "tool_id": "products",
+            "action": "query"
+          }
         ]
       }
     },
@@ -440,21 +913,67 @@
       "difficulty": "medium",
       "instruction": "产品 A100 出库 50 件",
       "initial_state": [
-        {"entity": "products", "values": {"id": 201, "name": "A100", "model_number": "A100", "price": 25.5}},
-        {"entity": "warehouses", "values": {"id": 401, "code": "WH01", "name": "主仓库", "status": "active"}},
-        {"entity": "inventory_ledger", "values": {"id": 501, "product_id": 201, "warehouse_id": 401, "quantity": 100.0, "available_quantity": 100.0, "unit": "件"}}
+        {
+          "entity": "products",
+          "values": {
+            "id": 201,
+            "name": "A100",
+            "model_number": "A100",
+            "price": 25.5
+          }
+        },
+        {
+          "entity": "warehouses",
+          "values": {
+            "id": 401,
+            "code": "WH01",
+            "name": "主仓库",
+            "status": "active"
+          }
+        },
+        {
+          "entity": "inventory_ledger",
+          "values": {
+            "id": 501,
+            "product_id": 201,
+            "warehouse_id": 401,
+            "quantity": 100.0,
+            "available_quantity": 100.0,
+            "unit": "件"
+          }
+        }
       ],
       "expect": {
         "actions": [
-          {"tool_id": "inventory", "action": "stock_out"}
+          {
+            "tool_id": "inventory",
+            "action": "stock_out"
+          }
         ],
         "db_state": [
-          {"entity": "inventory_ledger", "op": "exists", "where": {"product_id": 201, "warehouse_id": 401, "quantity": 50.0}}
+          {
+            "entity": "inventory_ledger",
+            "op": "exists",
+            "where": {
+              "product_id": 201,
+              "warehouse_id": 401,
+              "quantity": 50.0
+            }
+          }
         ],
         "forbid_actions": [
-          {"tool_id": "products", "action": "query"},
-          {"tool_id": "business_db", "action": "write"},
-          {"tool_id": "inventory", "action": "stock_in"}
+          {
+            "tool_id": "products",
+            "action": "query"
+          },
+          {
+            "tool_id": "business_db",
+            "action": "write"
+          },
+          {
+            "tool_id": "inventory",
+            "action": "stock_in"
+          }
         ]
       }
     },
@@ -465,12 +984,24 @@
       "instruction": "导出客户报表",
       "expect": {
         "actions": [
-          {"tool_id": "customers", "action": "query"},
-          {"tool_id": "reports", "action": "export"}
+          {
+            "tool_id": "customers",
+            "action": "query"
+          },
+          {
+            "tool_id": "reports",
+            "action": "export"
+          }
         ],
         "forbid_actions": [
-          {"tool_id": "products", "action": "query"},
-          {"tool_id": "business_db", "action": "write"}
+          {
+            "tool_id": "products",
+            "action": "query"
+          },
+          {
+            "tool_id": "business_db",
+            "action": "write"
+          }
         ]
       }
     },
@@ -480,10 +1011,21 @@
       "difficulty": "easy",
       "instruction": "供应商列表",
       "expect": {
-        "actions": [{"tool_id": "suppliers", "action": "query_suppliers"}],
+        "actions": [
+          {
+            "tool_id": "suppliers",
+            "action": "query_suppliers"
+          }
+        ],
         "forbid_actions": [
-          {"tool_id": "products", "action": "query"},
-          {"tool_id": "business_db", "action": "write"}
+          {
+            "tool_id": "products",
+            "action": "query"
+          },
+          {
+            "tool_id": "business_db",
+            "action": "write"
+          }
         ]
       }
     },
@@ -493,10 +1035,21 @@
       "difficulty": "easy",
       "instruction": "采购订单有哪些",
       "expect": {
-        "actions": [{"tool_id": "purchase", "action": "query_orders"}],
+        "actions": [
+          {
+            "tool_id": "purchase",
+            "action": "query_orders"
+          }
+        ],
         "forbid_actions": [
-          {"tool_id": "products", "action": "query"},
-          {"tool_id": "business_db", "action": "write"}
+          {
+            "tool_id": "products",
+            "action": "query"
+          },
+          {
+            "tool_id": "business_db",
+            "action": "write"
+          }
         ]
       }
     },
@@ -506,11 +1059,25 @@
       "difficulty": "medium",
       "instruction": "开一张采购单",
       "expect": {
-        "actions": [{"tool_id": "clarify", "action": "ask"}],
+        "actions": [
+          {
+            "tool_id": "clarify",
+            "action": "ask"
+          }
+        ],
         "forbid_actions": [
-          {"tool_id": "products", "action": "query"},
-          {"tool_id": "purchase", "action": "create_order"},
-          {"tool_id": "business_db", "action": "write"}
+          {
+            "tool_id": "products",
+            "action": "query"
+          },
+          {
+            "tool_id": "purchase",
+            "action": "create_order"
+          },
+          {
+            "tool_id": "business_db",
+            "action": "write"
+          }
         ]
       }
     },
@@ -520,10 +1087,21 @@
       "difficulty": "easy",
       "instruction": "今天的发货记录",
       "expect": {
-        "actions": [{"tool_id": "shipment_records", "action": "list"}],
+        "actions": [
+          {
+            "tool_id": "shipment_records",
+            "action": "list"
+          }
+        ],
         "forbid_actions": [
-          {"tool_id": "products", "action": "query"},
-          {"tool_id": "business_db", "action": "write"}
+          {
+            "tool_id": "products",
+            "action": "query"
+          },
+          {
+            "tool_id": "business_db",
+            "action": "write"
+          }
         ]
       }
     },
@@ -533,10 +1111,21 @@
       "difficulty": "easy",
       "instruction": "查一下应收账款",
       "expect": {
-        "actions": [{"tool_id": "finance", "action": "aging_report"}],
+        "actions": [
+          {
+            "tool_id": "finance",
+            "action": "aging_report"
+          }
+        ],
         "forbid_actions": [
-          {"tool_id": "products", "action": "query"},
-          {"tool_id": "business_db", "action": "write"}
+          {
+            "tool_id": "products",
+            "action": "query"
+          },
+          {
+            "tool_id": "business_db",
+            "action": "write"
+          }
         ]
       }
     },
@@ -546,10 +1135,21 @@
       "difficulty": "medium",
       "instruction": "做个利润表",
       "expect": {
-        "actions": [{"tool_id": "finance", "action": "ledger_query"}],
+        "actions": [
+          {
+            "tool_id": "finance",
+            "action": "ledger_query"
+          }
+        ],
         "forbid_actions": [
-          {"tool_id": "products", "action": "query"},
-          {"tool_id": "finance", "action": "create_transaction"}
+          {
+            "tool_id": "products",
+            "action": "query"
+          },
+          {
+            "tool_id": "finance",
+            "action": "create_transaction"
+          }
         ]
       }
     },
@@ -559,10 +1159,21 @@
       "difficulty": "easy",
       "instruction": "这个月销售额多少",
       "expect": {
-        "actions": [{"tool_id": "reports", "action": "sales_summary"}],
+        "actions": [
+          {
+            "tool_id": "reports",
+            "action": "sales_summary"
+          }
+        ],
         "forbid_actions": [
-          {"tool_id": "products", "action": "query"},
-          {"tool_id": "business_db", "action": "write"}
+          {
+            "tool_id": "products",
+            "action": "query"
+          },
+          {
+            "tool_id": "business_db",
+            "action": "write"
+          }
         ]
       }
     },
@@ -572,10 +1183,21 @@
       "difficulty": "easy",
       "instruction": "A100 还有多少库存",
       "expect": {
-        "actions": [{"tool_id": "reports", "action": "inventory_summary"}],
+        "actions": [
+          {
+            "tool_id": "reports",
+            "action": "inventory_summary"
+          }
+        ],
         "forbid_actions": [
-          {"tool_id": "products", "action": "query"},
-          {"tool_id": "business_db", "action": "write"}
+          {
+            "tool_id": "products",
+            "action": "query"
+          },
+          {
+            "tool_id": "business_db",
+            "action": "write"
+          }
         ]
       }
     },
@@ -585,10 +1207,149 @@
       "difficulty": "medium",
       "instruction": "给星光报价",
       "expect": {
-        "actions": [{"tool_id": "clarify", "action": "ask"}],
+        "actions": [
+          {
+            "tool_id": "clarify",
+            "action": "ask"
+          }
+        ],
         "forbid_actions": [
-          {"tool_id": "products", "action": "query"},
-          {"tool_id": "business_db", "action": "write"}
+          {
+            "tool_id": "products",
+            "action": "query"
+          },
+          {
+            "tool_id": "business_db",
+            "action": "write"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "materials.query.explicit_038",
+      "domain": "materials",
+      "difficulty": "easy",
+      "instruction": "物料列表",
+      "expect": {
+        "actions": [
+          {
+            "tool_id": "materials",
+            "action": "list"
+          }
+        ],
+        "forbid_actions": [
+          {
+            "tool_id": "products",
+            "action": "query"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "settings.query.explicit_039",
+      "domain": "settings",
+      "difficulty": "easy",
+      "instruction": "系统设置",
+      "expect": {
+        "actions": [
+          {
+            "tool_id": "settings",
+            "action": "query"
+          }
+        ],
+        "forbid_actions": [
+          {
+            "tool_id": "products",
+            "action": "query"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "inventory.low_stock_040",
+      "domain": "inventory",
+      "difficulty": "easy",
+      "instruction": "哪些产品快没货了",
+      "expect": {
+        "actions": [
+          {
+            "tool_id": "inventory",
+            "action": "low_stock_alert"
+          }
+        ],
+        "forbid_actions": [
+          {
+            "tool_id": "products",
+            "action": "query"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "sales.order_query.month_041",
+      "domain": "sales",
+      "difficulty": "easy",
+      "instruction": "本月订单有哪些",
+      "expect": {
+        "actions": [
+          {
+            "tool_id": "sales",
+            "action": "query"
+          }
+        ],
+        "forbid_actions": [
+          {
+            "tool_id": "products",
+            "action": "query"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "reports.purchase_summary_042",
+      "domain": "purchase",
+      "difficulty": "medium",
+      "instruction": "采购汇总",
+      "expect": {
+        "actions": [
+          {
+            "tool_id": "clarify",
+            "action": "ask"
+          },
+          {
+            "tool_id": "clarify",
+            "action": "ask"
+          },
+          {
+            "tool_id": "reports",
+            "action": "purchase_summary"
+          }
+        ],
+        "forbid_actions": [
+          {
+            "tool_id": "products",
+            "action": "query"
+          }
+        ]
+      }
+    },
+    {
+      "task_id": "finance.expense_detail_043",
+      "domain": "finance",
+      "difficulty": "easy",
+      "instruction": "本月支出明细",
+      "expect": {
+        "actions": [
+          {
+            "tool_id": "finance",
+            "action": "ledger_query"
+          }
+        ],
+        "forbid_actions": [
+          {
+            "tool_id": "products",
+            "action": "query"
+          }
         ]
       }
     }
