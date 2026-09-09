@@ -209,7 +209,15 @@
 
 **结论修正**：漂移集中在**桌面制品侧**，不是全站。服务器侧 manifest 与运行身份一致、绑定 main 上的真实提交，故 R03 的「安装运行」一环在生产后端成立；不成立的是桌面 dmg/zip 与其下载 manifest 的三方一致性（9.1 / 9.2）。
 
-### 9.7 收敛路径（R03 结论）
+### 9.7 漂移根因（制度性，2026-09-09 定案）
+
+服务器取证：`/var/www/xcagi-v1.0.0.1/manifest.json` 生成于 **09-02 20:33**（绑定 build `2e6f03bf`），而 dmg/zip 实际文件 mtime 为 **09-05 01:52**（build `99854233`，服务器实测 sha256 `c39bed60…` 与本地下载一致）。
+
+发布流水线核对：`Release Desktop` 的 `generate-manifest` job 仅在 `windows`+`macos` 构建双成功时运行；而 09-05 唯一成功的 run（`33956311584`）走的是 `windows_installer_only` 旁路——`release-preflight / macos / generate-manifest` 全部 skipped。即：**macOS 制品经流水线外通道（手工上传）替换过，但下载中心 manifest 从未再生**，OTA feed 单独更新到 `99854233`。
+
+结论：漂移不是构建缺陷，而是"制品替换绕过 manifest 再生"的流程缺口。收敛必须走完整 stable 路径（双构建 + generate-manifest + 原子发布），或在替换制品后强制重跑 manifest 生成/校验。
+
+### 9.8 收敛路径（R03 结论）
 
 **当前"优化提交 / 主线 / 安装运行"三者不一致，R03 不能判 PASS。** 精确口径（结合 9.6）：生产后端一致成立；不一致的是**桌面侧**（本机安装 diverged、下载 manifest 与 dmg 脱节）与**主线**（R01/R02/R12/R17 等修复仍在 PR#1826，未进 main）。唯一收敛方式：PR#1826 合并后，以冻结的 main SHA 走一次完整 `Release Orchestrator`（security-preflight 双扫描 → verify-version-anchors → 单一构建批次），同批再生 OTA feed、下载 manifest 与 dmg/zip 制品，使所有身份载体绑定同一 `git_sha`；随后 Mac 端重跑本脚本（冷启动需先退出本机现有实例）+ Windows 端补 D-03 工件后验收。
 
