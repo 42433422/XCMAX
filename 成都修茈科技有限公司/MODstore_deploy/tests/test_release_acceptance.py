@@ -167,7 +167,9 @@ class TestAcceptanceEndpoint:
                 )
                 record_update_installation_receipt(body, db, plain)
 
-            verdict = get_release_acceptance(version=version, channel="stable", db=db, user=admin)
+            verdict = get_release_acceptance(
+                version=version, channel="stable", build_sha="", db=db, user=admin
+            )
             assert verdict["verdict"] == "accepted"
             assert verdict["version"] == version
 
@@ -175,5 +177,69 @@ class TestAcceptanceEndpoint:
             from fastapi import HTTPException
 
             with pytest.raises(HTTPException) as excinfo:
-                get_release_acceptance(version=version, channel="stable", db=db, user=plain)
+                get_release_acceptance(
+                    version=version, channel="stable", build_sha="", db=db, user=plain
+                )
             assert excinfo.value.status_code == 403
+
+    def test_acceptance_filters_by_released_build(self, client) -> None:
+        """不同构建的回执不参与同一次发布的验收判定。"""
+        from modstore_server.models import get_session_factory, User
+        from modstore_server.update_installation_api import (
+            UpdateInstallationReceiptBody,
+            get_release_acceptance,
+            record_update_installation_receipt,
+        )
+
+        sf = get_session_factory()
+        with sf() as db:
+            suffix = uuid.uuid4().hex[:12]
+            admin = User(
+                username=f"accbuild_admin_{suffix}",
+                email=f"accbuild_admin_{suffix}@pytest.local",
+                password_hash="x",
+                is_admin=True,
+            )
+            plain = User(
+                username=f"accbuild_user_{suffix}",
+                email=f"accbuild_user_{suffix}@pytest.local",
+                password_hash="x",
+                is_admin=False,
+            )
+            db.add_all([admin, plain])
+            db.commit()
+            db.refresh(admin)
+            db.refresh(plain)
+
+            version = f"9.8.{uuid.uuid4().int % 9000 + 1000}"
+            released_sha = "1" * 40
+            other_sha = "2" * 40
+
+            def _report(platform: str, build_sha: str, status: str) -> None:
+                body = UpdateInstallationReceiptBody(
+                    installation_id=str(uuid.uuid4()),
+                    idempotency_key=f"accbuild-{uuid.uuid4().hex}",
+                    platform=platform,
+                    target_version=version,
+                    target_build_sha=build_sha,
+                    installed_version=version,
+                    installed_build_sha=build_sha,
+                    status=status,
+                    reported_at=datetime.now(UTC) - timedelta(minutes=1),
+                )
+                record_update_installation_receipt(body, db, plain)
+
+            # 发布构建：win/mac 均健康；另一构建：mac 失败
+            _report("win32", released_sha, "installed")
+            _report("darwin", released_sha, "installed")
+            _report("darwin", other_sha, "failed")
+
+            accepted = get_release_acceptance(
+                version=version, channel="stable", build_sha=released_sha, db=db, user=admin
+            )
+            assert accepted["verdict"] == "accepted", "其它构建的失败不得污染发布构建"
+
+            only_other = get_release_acceptance(
+                version=version, channel="stable", build_sha=other_sha, db=db, user=admin
+            )
+            assert only_other["verdict"] == "rejected"

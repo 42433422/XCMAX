@@ -113,30 +113,33 @@ def classify_track(
 ) -> str:
     """把工单分入四类去向之一（确定性规则，无 LLM，可机器核对）。
 
-    优先级：单客户定制 > 运维支持 > 行业 Mod > 通用产品线（默认）。
+    优先级：强定制信号 > 运维与支持 > 显式客户作用域 > 行业 Mod > 通用产品线（默认）。
+
+    关键区分：仅携带 ``customer_id`` 的普通故障（llm_timeout/install_failed 等
+    运行期信号）仍归 ``ops_support``，不得因客户标识而自动归入 ``customer_custom``；
+    只有显式 ``customer_scoped``（或技能提案 customer_scoped）与其后再判断的
+    customer_id/account_id 才构成单客户定制。
+
     默认落 product_line 与「只有通用能力进入主产品」一致——
     无法证明属于其他轨道的需求，按通用能力走主产品治理门禁。
     """
     ctx = context if isinstance(context, dict) else {}
-    # 1) 单客户定制信号：显式客户/账号作用域标记
-    if (
-        ctx.get("customer_id")
-        or ctx.get("account_id")
-        or ctx.get("customer_scoped")
-        or (
-            isinstance(ctx.get("skill_proposal"), dict)
-            and ctx["skill_proposal"].get("customer_scoped")
-        )
-    ):
-        return "customer_custom"
-    # 2) 运维与支持：reason 是运行期故障信号
-    if str(reason or "").strip() in _OPS_REASONS:
-        return "ops_support"
-    # 3) 行业共性：上下文带行业标识（intent_result.industry / skill_proposal.industry）
-    raw_intent = ctx.get("intent_result")
-    intent_result: dict[str, Any] = raw_intent if isinstance(raw_intent, dict) else {}
+    reason_tag = str(reason or "").strip()
     raw_skill = ctx.get("skill_proposal")
     skill_proposal: dict[str, Any] = raw_skill if isinstance(raw_skill, dict) else {}
+    # 1) 强定制信号：显式 customer_scoped（含技能提案场景）→ 单客户定制
+    if ctx.get("customer_scoped") or skill_proposal.get("customer_scoped"):
+        return "customer_custom"
+    # 2) 运维与支持：运行期故障信号，优先级高于「仅携带 customer_id」。
+    #    带客户标识的普通故障仍是运维问题，不得因此自动归入客户定制。
+    if reason_tag in _OPS_REASONS:
+        return "ops_support"
+    # 3) 显式单客户作用域（无运维故障时才成立）
+    if ctx.get("customer_id") or ctx.get("account_id"):
+        return "customer_custom"
+    # 4) 行业共性：上下文带行业标识（intent_result.industry / skill_proposal.industry）
+    raw_intent = ctx.get("intent_result")
+    intent_result: dict[str, Any] = raw_intent if isinstance(raw_intent, dict) else {}
     if ctx.get("industry") or intent_result.get("industry") or skill_proposal.get("industry"):
         return "industry_mod"
     return "product_line"
@@ -442,6 +445,15 @@ def record_acceptance_verdict(
     if view is None:
         return {"ok": False, "reason": "issue_not_linked", "issue_number": int(issue_number)}
     wo_id = str(view["wo_id"])
+    # pending：回执未齐，绝不可自动补写开发/合并/发布完成状态——
+    # 只有真实可验收的 accepted/rejected 才推进状态机。
+    if verdict not in ("accepted", "rejected"):
+        return {
+            "ok": False,
+            "reason": "verdict_pending",
+            "wo_id": wo_id,
+            "status": str(view.get("status") or ""),
+        }
     ref = {"issue_number": int(issue_number), "release_version": str(release_version or "")}
     if evidence:
         ref["evidence"] = evidence
@@ -460,11 +472,9 @@ def record_acceptance_verdict(
         return record_transition(
             wo_id, "closed", ref=ref, note="双平台回执健康，客户验收通过", source="acceptance"
         )
-    if verdict == "rejected":
-        return record_transition(
-            wo_id, "reopened", ref=ref, note="客户机安装/运行失败，重开原工单", source="acceptance"
-        )
-    return {"ok": False, "reason": "verdict_pending", "wo_id": wo_id}
+    return record_transition(
+        wo_id, "reopened", ref=ref, note="客户机安装/运行失败，重开原工单", source="acceptance"
+    )
 
 
 __all__ = [
