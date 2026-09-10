@@ -361,6 +361,63 @@ def run_alembic_upgrade(
     _run_alembic_cli("upgrade", version)
 
 
+def _current_head_revision() -> str | None:
+    """当前包迁移链的 head revision（ScriptDirectory 解析，不依赖数据库）。"""
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    ini = _resolve_alembic_ini()
+    if not ini.is_file():
+        raise FileNotFoundError(f"alembic.ini not found: {ini}")
+    script = ScriptDirectory.from_config(Config(str(ini)))
+    return script.get_current_head()
+
+
+def is_schema_current(data_dir: str | os.PathLike[str] | None = None) -> bool | None:
+    """判断存量库 schema 是否已在 head。
+
+    返回 True 表示已在 head（可零开销跳过）；False 表示需要升级（含首启、
+    链外版本戳待修复、版本戳缺失三种情况，均交给 run_alembic_upgrade 处理）。
+    """
+    dirs = ensure_desktop_dirs(data_dir)
+    db = dirs["data"] / "xcagi.db"
+    if not db.exists() or db.stat().st_size == 0:
+        return False
+    stamped = _read_stamped_revision(db)
+    if not stamped:
+        return False
+    if stamped not in _known_alembic_revisions():
+        return False
+    return stamped == _current_head_revision()
+
+
+def ensure_startup_migration(
+    data_dir: str | os.PathLike[str] | None = None, version: str = "startup"
+) -> dict[str, str]:
+    """桌面每次启动的 schema 兜底：已在 head 直接跳过，否则热备份后补迁移。
+
+    背景：Electron 仅在更新安装流程执行 ``--migrate-only``；常规启动从不
+    迁移。存量库停在旧迁移版本时，新代码按新 ORM 查询即 500（2026-09-10
+    实测：老库缺 ``products.base_uom_id`` / ``inventory_transactions.ordered_quantity``
+    导致产品/库存页整页不可用）。
+
+    失败时抛出异常让调用方（run_fastapi / Electron）捕获退出码引导用户，
+    而不是带病启动后静默 500。
+    """
+    configure_desktop_environment(data_dir)
+    if is_schema_current(data_dir):
+        return {"action": "skipped", "detail": "schema already at head"}
+    dirs = ensure_desktop_dirs(data_dir)
+    db = dirs["data"] / "xcagi.db"
+    if db.exists() and db.stat().st_size > 0:
+        backup = backup_database(data_dir, os.environ.get("XCAGI_VERSION", version))
+        if backup is None:
+            # 与 --migrate-only 的备份门禁保持一致：宁可不启动，不做无备份迁移
+            raise RuntimeError("migration backup failed; refusing to continue")
+    run_alembic_upgrade(data_dir)
+    return {"action": "upgraded", "detail": "schema migrated at startup"}
+
+
 def _should_bootstrap_sqlite(data_dir: str | os.PathLike[str] | None = None) -> bool:
     db_path = ensure_desktop_dirs(data_dir)["data"] / "xcagi.db"
     if not db_path.exists() or db_path.stat().st_size == 0:

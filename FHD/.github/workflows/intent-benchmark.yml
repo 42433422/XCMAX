@@ -11,6 +11,10 @@ permissions:
 jobs:
   benchmark:
     runs-on: ubuntu-latest
+    env:
+      # R17 LLM 口径实测凭据（缺失时相关步骤自动跳过，不影响规则引擎棘轮）
+      XCAUTO_API_KEY: ${{ secrets.AUTONOMY_STRONG_API_KEY }}
+      XCAUTO_BASE_URL: ${{ vars.AUTONOMY_STRONG_BASE_URL }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -23,7 +27,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -r requirements-server-api.txt pytest
+          pip install -r requirements-server-api.txt pytest pytest-asyncio
 
       - name: Run intent golden set benchmark
         env:
@@ -42,6 +46,34 @@ jobs:
           TASK_BENCHMARK_MIN_PASS: "0.2"
         run: |
           python -m pytest tests/benchmarks/test_task_success.py -v --tb=short
+
+      # R17：LLM 口径任务成功率实测（MiMo via OPENAI 兼容 env）。
+      # secret 缺失时跳过，不阻塞规则引擎棘轮；报告只上传 artifact 留证，
+      # 不写 metrics/（避免 LLM 波动污染只升不降棘轮）。
+      - name: Run task-level benchmark (LLM mode, R17)
+        if: ${{ env.XCAUTO_API_KEY != '' }}
+        env:
+          XCAUTO_API_KEY: ${{ secrets.AUTONOMY_STRONG_API_KEY }}
+          XCAUTO_BASE_URL: ${{ vars.AUTONOMY_STRONG_BASE_URL }}
+          LLM_PROVIDER: xcauto
+          XCAGI_SKIP_INTENT_LLM: "0"
+          TASK_BENCHMARK_RUN: "1"
+          TASK_BENCHMARK_TRIALS: "1"
+          TASK_BENCHMARK_MIN_PASS: "0"
+        run: |
+          python -m pytest tests/benchmarks/test_task_success.py -v --tb=short
+          mkdir -p test_reports_llm
+          cp test_reports/task_benchmark_report.json test_reports_llm/task_benchmark_report_llm.json
+
+      - name: Upload LLM-mode report
+        if: ${{ always() && env.XCAUTO_API_KEY != '' }}
+        env:
+          XCAUTO_API_KEY: ${{ secrets.AUTONOMY_STRONG_API_KEY }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: task-benchmark-llm-report
+          path: FHD/test_reports_llm/task_benchmark_report_llm.json
+          if-no-files-found: ignore
 
       - name: Commit intent benchmark report
         if: always()

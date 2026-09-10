@@ -54,6 +54,7 @@ WORKFLOW_RENAMES = {
     "modstore-tests.yml": "fhd-modstore-tests.yml",
     "intent-benchmark.yml": "fhd-intent-benchmark.yml",
     "slo-metrics-collect.yml": "fhd-slo-metrics-collect.yml",
+    "release-acceptance-closeout.yml": "fhd-release-acceptance-closeout.yml",
 }
 
 # These workflows use only absolute/remote commands.  Injecting the normal FHD
