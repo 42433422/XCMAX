@@ -1,15 +1,40 @@
 name: Intent Accuracy Benchmark
 
+# #1859 整改（2026-09-10）：monitoring / acceptance 两种模式显式区分——
+#  - monitoring（定时/默认）：规则引擎口径（XCAGI_SKIP_INTENT_LLM=1），可以不阻塞，
+#    但必须报告 NOT_RUN/UNVERIFIED 状态（写入 benchmark_run_mode.json 并随 metrics 提交），
+#    不得把本模式结果当作 LLM 实测验收。
+#  - acceptance（手动 mode=acceptance）：发布验收口径——
+#    1) LLM 凭据必须存在（AUTONOMY_STRONG_API_KEY → XCAUTO_API_KEY，MiMo/xcauto 口径），
+#       缺失即失败（不得静默跳过）；
+#    2) 运行前 LLM 真实调用预检（fail-closed）；
+#    3) 基准跑真实 LLM 链路（LLM_PROVIDER=xcauto，不跳过 LLM）；
+#    4) 报告必须存在（缺失即失败）、有效样本数必须与 golden set 一致且 > 0；
+#    5) 预设业务阈值硬门禁（TASK_BENCHMARK_MIN_PASS=0.2，只升不降，禁止为变绿降到 0）；
+#    6) 运行身份（run_id/sha/actor）写入验收标记。
+#  规则引擎报告不得替代 LLM 报告：acceptance 任务不运行规则引擎 intent_accuracy 作为验收证据。
+
 on:
   schedule:
     - cron: "0 3 * * 1"
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "运行模式：monitoring=观察（UNVERIFIED）；acceptance=发布验收（需 LLM 凭据）"
+        required: false
+        default: monitoring
+        type: choice
+        options:
+          - monitoring
+          - acceptance
 
 permissions:
   contents: write
 
 jobs:
-  benchmark:
+  monitoring:
+    # 定时触发（无 inputs）与默认 dispatch 均走 monitoring
+    if: ${{ inputs.mode != 'acceptance' }}
     runs-on: ubuntu-latest
     env:
       # R17 LLM 口径实测凭据（缺失时相关步骤自动跳过，不影响规则引擎棘轮）
@@ -29,13 +54,13 @@ jobs:
         run: |
           pip install -r requirements-server-api.txt pytest pytest-asyncio
 
-      - name: Run intent golden set benchmark
+      - name: Run intent golden set benchmark (rule-engine 口径)
         env:
           XCAGI_SKIP_INTENT_LLM: "1"
         run: |
           python -m pytest tests/benchmarks/test_intent_accuracy.py -v --tb=short
 
-      - name: Run task-level golden set benchmark (tau-bench methodology)
+      - name: Run task-level golden set benchmark (rule-engine 口径)
         env:
           XCAGI_SKIP_INTENT_LLM: "1"
           TASK_BENCHMARK_RUN: "1"
@@ -47,33 +72,39 @@ jobs:
         run: |
           python -m pytest tests/benchmarks/test_task_success.py -v --tb=short
 
-      # R17：LLM 口径任务成功率实测（MiMo via OPENAI 兼容 env）。
-      # secret 缺失时跳过，不阻塞规则引擎棘轮；报告只上传 artifact 留证，
-      # 不写 metrics/（避免 LLM 波动污染只升不降棘轮）。
-      - name: Run task-level benchmark (LLM mode, R17)
-        if: ${{ env.XCAUTO_API_KEY != '' }}
+      - name: Write run-mode marker (UNVERIFIED / NOT_RUN)
+        if: always()
         env:
-          XCAUTO_API_KEY: ${{ secrets.AUTONOMY_STRONG_API_KEY }}
-          XCAUTO_BASE_URL: ${{ vars.AUTONOMY_STRONG_BASE_URL }}
-          LLM_PROVIDER: xcauto
-          XCAGI_SKIP_INTENT_LLM: "0"
-          TASK_BENCHMARK_RUN: "1"
-          TASK_BENCHMARK_TRIALS: "1"
-          TASK_BENCHMARK_MIN_PASS: "0"
+          GH_RUN_ID: ${{ github.run_id }}
+          GH_SHA: ${{ github.sha }}
+          GH_ACTOR: ${{ github.actor }}
         run: |
-          python -m pytest tests/benchmarks/test_task_success.py -v --tb=short
-          mkdir -p test_reports_llm
-          cp test_reports/task_benchmark_report.json test_reports_llm/task_benchmark_report_llm.json
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from datetime import datetime, timezone, timedelta
 
-      - name: Upload LLM-mode report
-        if: ${{ always() && env.XCAUTO_API_KEY != '' }}
-        env:
-          XCAUTO_API_KEY: ${{ secrets.AUTONOMY_STRONG_API_KEY }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: task-benchmark-llm-report
-          path: FHD/test_reports_llm/task_benchmark_report_llm.json
-          if-no-files-found: ignore
+          has_report = os.path.isfile("test_reports/task_benchmark_report.json")
+          marker = {
+              "mode": "monitoring",
+              "llm_verified": False,
+              # #1859：monitoring 永远不能声称 VERIFIED——规则引擎口径不构成 LLM 验收
+              "status": "UNVERIFIED" if has_report else "NOT_RUN",
+              "reason": (
+                  "XCAGI_SKIP_INTENT_LLM=1（规则引擎口径），本报告不构成 LLM 实测验收"
+                  if has_report
+                  else "基准报告缺失：本次运行未产出 task_benchmark_report.json"
+              ),
+              "run_id": os.environ.get("GH_RUN_ID", ""),
+              "sha": os.environ.get("GH_SHA", ""),
+              "actor": os.environ.get("GH_ACTOR", ""),
+              "observed_at": datetime.now(timezone(timedelta(hours=8))).isoformat(),
+          }
+          os.makedirs("test_reports", exist_ok=True)
+          with open("test_reports/benchmark_run_mode.json", "w", encoding="utf-8") as f:
+              json.dump(marker, f, ensure_ascii=False, indent=2)
+          print(json.dumps(marker, ensure_ascii=False))
+          PY
 
       - name: Commit intent benchmark report
         if: always()
@@ -84,15 +115,15 @@ jobs:
           # N02（2026-09-08）修复：defaults.run.working-directory 已是 FHD，
           # shell 相对路径不能再带 FHD/ 前缀（否则解析成 FHD/FHD/...）。
           # upload-artifact 的 path 按工作区根解释，仍用 FHD/ 前缀，两处口径不同属正常。
-          if [ ! -f test_reports/intent_benchmark_latest.json ]; then
-            echo "No intent report produced; skipping commit"
-            exit 0
-          fi
           mkdir -p metrics
-          cp test_reports/intent_benchmark_latest.json metrics/intent_benchmark_latest.json
+          if [ -f test_reports/intent_benchmark_latest.json ]; then
+            cp test_reports/intent_benchmark_latest.json metrics/intent_benchmark_latest.json
+          fi
           if [ -f test_reports/task_benchmark_report.json ]; then
             cp test_reports/task_benchmark_report.json metrics/task_benchmark_report.json
           fi
+          # #1859：运行模式标记必须随 metrics 提交（NOT_RUN/UNVERIFIED 可审计）
+          cp test_reports/benchmark_run_mode.json metrics/benchmark_run_mode.json
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add metrics/
@@ -100,7 +131,7 @@ jobs:
             echo "No intent report changes"
             exit 0
           fi
-          git commit -m "chore(metrics): update intent & task benchmark reports"
+          git commit -m "chore(metrics): update intent & task benchmark reports (monitoring)"
           git push
 
       - name: Upload benchmark report
@@ -111,4 +142,183 @@ jobs:
           path: |
             FHD/test_reports/intent_benchmark_latest.json
             FHD/test_reports/task_benchmark_report.json
-          if-no-files-found: ignore
+            FHD/test_reports/benchmark_run_mode.json
+          # #1859：报告缺失必须可见（warn），不得静默 ignore
+          if-no-files-found: warn
+
+  acceptance:
+    # 发布验收：仅显式 mode=acceptance 触发；必须真实 LLM 链路 + 硬门禁
+    if: ${{ inputs.mode == 'acceptance' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.CI_COMMIT_TOKEN || github.token }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements-server-api.txt pytest pytest-asyncio
+
+      # #1859：凭据缺失必须让 job 红掉，禁止“secret 缺失→跳过”式观察结果
+      # R17 口径：MiMo/xcauto 经 AUTONOMY_STRONG_API_KEY 注入（OPENAI 兼容协议）
+      - name: Require LLM credentials (fail-closed)
+        env:
+          XCAUTO_API_KEY: ${{ secrets.AUTONOMY_STRONG_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${XCAUTO_API_KEY}" ]; then
+            echo "::error::acceptance 模式必须配置 AUTONOMY_STRONG_API_KEY secret（XCAUTO/MiMo 口径）；缺失即失败，不得降级为规则引擎报告"
+            exit 1
+          fi
+
+      # LLM 真实调用预检：经 app 自带 OpenAICompatibleAdapter 发起真实请求，
+      # 无真实响应即失败（真实调用证据，写档）
+      - name: LLM preflight real-call probe
+        env:
+          LLM_PROVIDER: xcauto
+          XCAUTO_API_KEY: ${{ secrets.AUTONOMY_STRONG_API_KEY }}
+          XCAUTO_BASE_URL: ${{ vars.AUTONOMY_STRONG_BASE_URL }}
+          DATABASE_URL: "sqlite+pysqlite:///./test_reports/acceptance_preflight.sqlite3"
+          VECTOR_DB_URL: "sqlite+pysqlite:///./test_reports/acceptance_preflight.sqlite3"
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import asyncio, json, os
+
+          from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
+
+          async def main() -> None:
+              base_url = os.environ.get("XCAUTO_BASE_URL", "").strip() or None
+              adapter = OpenAICompatibleAdapter(provider="xcauto", base_url=base_url)
+              assert adapter.is_configured, "xcauto 适配器未解析到凭据（XCAUTO_API_KEY）"
+              r = await adapter.chat_completion(
+                  [{"role": "user", "content": "请回复：OK"}],
+                  max_tokens=16,
+              )
+              # 响应为原生 OpenAI 字典：choices[0].message.content
+              content = ""
+              try:
+                  content = str(r["choices"][0]["message"]["content"] or "").strip()
+              except Exception:
+                  pass
+              model = str(r.get("model") or adapter.model_name)
+              print(json.dumps({"probe_nonempty": bool(content), "model": model}, ensure_ascii=False))
+              assert content, "LLM 预检无真实响应——凭据/网络/服务不可用，验收不得继续"
+              with open("test_reports/llm_preflight_evidence.json", "w", encoding="utf-8") as f:
+                  json.dump(
+                      {
+                          "probe": "real-call",
+                          "provider": adapter.provider_name(),
+                          "model": model,
+                          "base_url_configured": bool(os.environ.get("XCAUTO_BASE_URL", "")),
+                          "response_chars": len(content),
+                      },
+                      f,
+                      ensure_ascii=False,
+                      indent=2,
+                  )
+
+          asyncio.run(main())
+          PY
+
+      # 真实 LLM 链路基准：LLM_PROVIDER=xcauto + XCAGI_SKIP_INTENT_LLM 显式置空
+      # （runner 内 setdefault 不会覆盖空值），阈值硬门禁与棘轮同源只升不降
+      - name: Run task-level benchmark on real LLM path (acceptance gate)
+        env:
+          LLM_PROVIDER: xcauto
+          XCAUTO_API_KEY: ${{ secrets.AUTONOMY_STRONG_API_KEY }}
+          XCAUTO_BASE_URL: ${{ vars.AUTONOMY_STRONG_BASE_URL }}
+          XCAGI_SKIP_INTENT_LLM: ""
+          TASK_BENCHMARK_RUN: "1"
+          TASK_BENCHMARK_TRIALS: "1"
+          # 预设业务阈值硬门禁（与 monitoring 棘轮同源，只升不降；禁止为变绿降到 0）
+          TASK_BENCHMARK_MIN_PASS: "0.2"
+        run: |
+          python -m pytest tests/benchmarks/test_task_success.py -v --tb=short
+
+      # 报告存在性 + 有效样本数 + 阈值复核（不信任 pytest 内部断言单独作证）
+      - name: Verify acceptance evidence (report exists, sample count, threshold, identity)
+        env:
+          GH_RUN_ID: ${{ github.run_id }}
+          GH_SHA: ${{ github.sha }}
+          GH_ACTOR: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from datetime import datetime, timezone, timedelta
+
+          report_path = "test_reports/task_benchmark_report.json"
+          assert os.path.isfile(report_path), "验收失败：task_benchmark_report.json 不存在（缺失不等于通过）"
+          report = json.loads(open(report_path, encoding="utf-8").read())
+
+          golden = json.loads(open("tests/benchmarks/task_golden_set.json", encoding="utf-8").read())
+          total = int(report.get("total_tasks", 0))
+          assert total == len(golden["tasks"]) > 0, (
+              f"验收失败：有效样本数不符 report.total_tasks={total} golden={len(golden['tasks'])}"
+          )
+
+          floor = float(os.environ.get("TASK_BENCHMARK_MIN_PASS", "0.2") or "0")
+          assert floor > 0, "验收失败：阈值不得为 0（禁止为变绿降阈值）"
+          assert float(report["pass_k"]) >= floor, (
+              f"验收失败：pass^k={report['pass_k']} < {floor}"
+          )
+
+          marker = {
+              "mode": "acceptance",
+              "llm_verified": True,
+              "status": "VERIFIED",
+              "evidence": {
+                  "llm_preflight": "test_reports/llm_preflight_evidence.json",
+                  "report": report_path,
+                  "total_tasks": total,
+                  "pass_k": report["pass_k"],
+                  "min_pass": floor,
+                  "trials": report.get("trials"),
+              },
+              "run_id": os.environ.get("GH_RUN_ID", ""),
+              "sha": os.environ.get("GH_SHA", ""),
+              "actor": os.environ.get("GH_ACTOR", ""),
+              "observed_at": datetime.now(timezone(timedelta(hours=8))).isoformat(),
+          }
+          with open("test_reports/benchmark_run_mode.json", "w", encoding="utf-8") as f:
+              json.dump(marker, f, ensure_ascii=False, indent=2)
+          print(json.dumps(marker, ensure_ascii=False, indent=2))
+          PY
+
+      - name: Commit acceptance benchmark report
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.CI_COMMIT_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p metrics
+          for f in task_benchmark_report.json benchmark_run_mode.json llm_preflight_evidence.json; do
+            [ -f "test_reports/$f" ] && cp "test_reports/$f" "metrics/$f"
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add metrics/
+          if git diff --staged --quiet; then
+            echo "No acceptance report changes"
+            exit 0
+          fi
+          git commit -m "chore(metrics): acceptance task benchmark report (real-LLM gate)"
+          git push
+
+      - name: Upload acceptance benchmark evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: intent-benchmark-acceptance-evidence
+          path: |
+            FHD/test_reports/task_benchmark_report.json
+            FHD/test_reports/benchmark_run_mode.json
+            FHD/test_reports/llm_preflight_evidence.json
+          # #1859：验收证据缺失必须让上传步骤红掉，不得 ignore
+          if-no-files-found: error

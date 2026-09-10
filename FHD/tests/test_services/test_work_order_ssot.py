@@ -31,13 +31,17 @@ def isolated_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 class TestDeriveWoId:
     def test_same_input_same_id(self) -> None:
-        assert wo.derive_wo_id("s", "k") == wo.derive_wo_id("s", "k")
+        assert wo.derive_wo_id("k") == wo.derive_wo_id("k")
 
-    def test_different_source_different_id(self) -> None:
-        assert wo.derive_wo_id("a", "k") != wo.derive_wo_id("b", "k")
+    def test_same_requirement_from_different_sources_same_id(self) -> None:
+        # 整改（#1851）：同一需求从不同入口进来必须合并到同一工单
+        assert wo.derive_wo_id("k") == wo.derive_wo_id("k")
+
+    def test_different_requirement_different_id(self) -> None:
+        assert wo.derive_wo_id("k1") != wo.derive_wo_id("k2")
 
     def test_id_format(self) -> None:
-        assert wo._WO_ID_RE.match(wo.derive_wo_id("s", "k"))
+        assert wo._WO_ID_RE.match(wo.derive_wo_id("k"))
 
 
 class TestUpsertCandidate:
@@ -119,16 +123,30 @@ class TestIssueLink:
 
 
 class TestAcceptanceVerdict:
-    def _make_verifying(self) -> str:
-        wo_id = wo.upsert_candidate(source="s", dedup_key="kv", reason="r")["wo_id"]
-        wo.link_issue(wo_id, issue_number=77, issue_url="https://x/77")
-        wo.record_transition(wo_id, "in_dev")
+    """验收回执判定：只判定不补状态（2026-09-10 #1853 复审整改）。"""
+
+    def _make_verifying(self, issue: int = 77) -> str:
+        wo_id = wo.upsert_candidate(source="s", dedup_key=f"kv{issue}", reason="r")["wo_id"]
+        wo.link_issue(wo_id, issue_number=issue, issue_url=f"https://x/{issue}")
+        # 完成阶段必须由对应证据驱动：逐段显式推进到 verifying
+        for state in ("in_dev", "merged", "released", "verifying"):
+            assert wo.record_transition(wo_id, state)["ok"] is True
         return wo_id
+
+    _HEALTHY = {
+        "per_platform": {
+            "win": {"installed": 2, "failed": 0, "devices": 2},
+            "mac": {"installed": 1, "failed": 0, "devices": 1},
+        }
+    }
 
     def test_accepted_closes(self, isolated_store: Path) -> None:
         wo_id = self._make_verifying()
         result = wo.record_acceptance_verdict(
-            issue_number=77, release_version="1.0.0.2", verdict="accepted"
+            issue_number=77,
+            release_version="1.0.0.2",
+            verdict="accepted",
+            evidence=dict(self._HEALTHY),
         )
         assert result["ok"] is True
         assert result["to"] == "closed"
@@ -136,13 +154,37 @@ class TestAcceptanceVerdict:
         assert view["status"] == "closed"
         assert view["release_version"] == "1.0.0.2"
 
+    def test_accepted_from_released_single_step_correction(self, isolated_store: Path) -> None:
+        # released → verifying 允许回执驱动的单步校正（事件带明确标记）
+        wo_id = wo.upsert_candidate(source="s", dedup_key="kv-rel", reason="r")["wo_id"]
+        wo.link_issue(wo_id, issue_number=78, issue_url="https://x/78")
+        for state in ("in_dev", "merged", "released"):
+            assert wo.record_transition(wo_id, state)["ok"] is True
+        result = wo.record_acceptance_verdict(
+            issue_number=78,
+            release_version="1.0.0.2",
+            verdict="accepted",
+            evidence=dict(self._HEALTHY),
+        )
+        assert result["ok"] is True
+        view = wo.get_work_order(wo_id)
+        assert view["status"] == "closed"
+        correction = [
+            e
+            for e in view["history"]
+            if e.get("event") == "transition" and e.get("to") == "verifying"
+        ]
+        assert correction and "校正" in str(correction[0].get("note")), (
+            "起点校正必须明确标记，不得当作开发/合并动作真实发生"
+        )
+
     def test_rejected_reopens_original(self, isolated_store: Path) -> None:
         wo_id = self._make_verifying()
         result = wo.record_acceptance_verdict(
             issue_number=77,
             release_version="1.0.0.2",
             verdict="rejected",
-            evidence={"failed": 2},
+            evidence={"per_platform": {"win": {"installed": 1, "failed": 1}, "mac": {}}},
         )
         assert result["ok"] is True
         assert result["to"] == "reopened"
@@ -150,20 +192,112 @@ class TestAcceptanceVerdict:
         assert wo.record_transition(wo_id, "in_dev")["ok"] is True
         assert wo.get_work_order(wo_id)["wo_id"] == wo_id
 
-    def test_pending_verdict_not_recorded(self, isolated_store: Path) -> None:
-        wo_id = self._make_verifying()
+    def test_pending_verdict_never_advances_or_rewrites(self, isolated_store: Path) -> None:
+        # 反例（#1853）：routed 工单收到 pending 不得被推进到 verifying
+        wo_id = wo.upsert_candidate(source="s", dedup_key="kp", reason="r")["wo_id"]
+        wo.link_issue(wo_id, issue_number=79, issue_url="https://x/79")
+        before = wo.get_work_order(wo_id)
+        assert before is not None
+        before_events = list(before["history"])
         result = wo.record_acceptance_verdict(
-            issue_number=77, release_version="1.0.0.2", verdict="pending"
+            issue_number=79, release_version="1.0.0.2", verdict="pending"
         )
         assert result["ok"] is False
         assert result["reason"] == "verdict_pending"
-        # pending 不得自动补写开发/合并/发布完成状态：工单保持原 in_dev
-        view = wo.get_work_order(wo_id)
-        assert view["status"] == "in_dev"
-        to_states = [e.get("to") for e in view["history"] if e.get("event") == "transition"]
-        assert "merged" not in to_states
-        assert "released" not in to_states
-        assert "verifying" not in to_states
+        after = wo.get_work_order(wo_id)
+        assert after is not None
+        assert after["status"] == "routed", "pending 不得推进任何完成阶段"
+        assert after["history"] == before_events, "pending 不得改写历史"
+
+    def test_receipt_from_routed_refused_without_backfill(self, isolated_store: Path) -> None:
+        # 完成阶段必须由开发/合并/发布证据驱动，回执不得补齐
+        wo_id = wo.upsert_candidate(source="s", dedup_key="kr", reason="r")["wo_id"]
+        wo.link_issue(wo_id, issue_number=80, issue_url="https://x/80")
+        result = wo.record_acceptance_verdict(
+            issue_number=80,
+            release_version="1.0.0.2",
+            verdict="accepted",
+            evidence=dict(self._HEALTHY),
+        )
+        assert result["ok"] is False
+        assert result["reason"] == "not_in_acceptance_window"
+        assert wo.get_work_order(wo_id)["status"] == "routed"  # type: ignore[index]
+
+    def test_accepted_without_release_identity_refused(self, isolated_store: Path) -> None:
+        wo_id = self._make_verifying(issue=81)
+        result = wo.record_acceptance_verdict(
+            issue_number=81, release_version="", verdict="accepted"
+        )
+        assert result["ok"] is False
+        assert result["reason"] == "missing_release_identity"
+        assert wo.get_work_order(wo_id)["status"] == "verifying"  # type: ignore[index]
+
+    def test_accepted_without_business_evidence_refused(self, isolated_store: Path) -> None:
+        # 发布身份/业务验收证据缺失时拒绝关闭（CI 通过 ≠ 客户能用）
+        wo_id = self._make_verifying(issue=82)
+        result = wo.record_acceptance_verdict(
+            issue_number=82, release_version="1.0.0.2", verdict="accepted"
+        )
+        assert result["ok"] is False
+        assert result["reason"] == "missing_acceptance_evidence"
+        assert wo.get_work_order(wo_id)["status"] == "verifying"  # type: ignore[index]
+        # 只有单平台健康也不够
+        partial = wo.record_acceptance_verdict(
+            issue_number=82,
+            release_version="1.0.0.2",
+            verdict="accepted",
+            evidence={"per_platform": {"win": {"installed": 1, "failed": 0}}},
+        )
+        assert partial["ok"] is False
+        assert wo.get_work_order(wo_id)["status"] == "verifying"  # type: ignore[index]
+
+    def test_duplicate_accepted_receipt_is_idempotent(self, isolated_store: Path) -> None:
+        wo_id = self._make_verifying(issue=83)
+        first = wo.record_acceptance_verdict(
+            issue_number=83,
+            release_version="1.0.0.2",
+            verdict="accepted",
+            evidence=dict(self._HEALTHY),
+        )
+        assert first["ok"] is True
+        events_after_first = len(wo.get_work_order(wo_id)["history"])  # type: ignore[index]
+        replay = wo.record_acceptance_verdict(
+            issue_number=83,
+            release_version="1.0.0.2",
+            verdict="accepted",
+            evidence=dict(self._HEALTHY),
+        )
+        assert replay["ok"] is True
+        assert replay["reason"] == "already_closed"
+        assert len(wo.get_work_order(wo_id)["history"]) == events_after_first  # type: ignore[index]
+
+    def test_stale_receipt_does_not_overwrite_new_state(self, isolated_store: Path) -> None:
+        # 乱序回执：closed 后收到旧版本 rejected 不得重开
+        wo_id = self._make_verifying(issue=84)
+        assert (
+            wo.record_acceptance_verdict(
+                issue_number=84,
+                release_version="2.0.0.0",
+                verdict="accepted",
+                evidence=dict(self._HEALTHY),
+            )["ok"]
+            is True
+        )
+        stale = wo.record_acceptance_verdict(
+            issue_number=84, release_version="1.0.0.2", verdict="rejected"
+        )
+        assert stale["ok"] is False
+        assert stale["reason"] == "stale_receipt"
+        assert wo.get_work_order(wo_id)["status"] == "closed"  # type: ignore[index]
+
+    def test_unknown_verdict_rejected(self, isolated_store: Path) -> None:
+        wo_id = self._make_verifying(issue=85)
+        result = wo.record_acceptance_verdict(
+            issue_number=85, release_version="1.0.0.2", verdict="maybe"
+        )
+        assert result["ok"] is False
+        assert result["reason"] == "unknown_verdict"
+        assert wo.get_work_order(wo_id)["status"] == "verifying"  # type: ignore[index]
 
     def test_unlinked_issue_rejected(self, isolated_store: Path) -> None:
         result = wo.record_acceptance_verdict(
@@ -193,7 +327,7 @@ class TestListWorkOrders:
 
 
 class TestClassifyTrack:
-    """统一 Router 四类去向的确定性规则。"""
+    """统一 Router 四类去向的确定性规则（身份字段只用于归属）。"""
 
     def test_default_is_product_line(self) -> None:
         # 无法证明属于其他轨道 → 通用产品线（只有通用能力进入主产品）
@@ -204,15 +338,28 @@ class TestClassifyTrack:
         assert wo.classify_track(reason="llm_timeout") == "ops_support"
         assert wo.classify_track(reason="install_failed") == "ops_support"
 
-    def test_ops_reason_with_customer_id_stays_ops(self) -> None:
-        # 带客户标识的普通故障仍是运维问题，不得因此自动归入客户定制
+    def test_customer_id_with_ops_reason_still_ops(self) -> None:
+        # 反例（#1851 整改）：已知客户反馈普通故障仍走运维，不得转定制
         track = wo.classify_track(reason="llm_timeout", context={"customer_id": "c-1"})
         assert track == "ops_support"
+        assert (
+            wo.classify_track(reason="deploy_failed", context={"account_id": "acc-9"})
+            == "ops_support"
+        )
 
-    def test_bare_customer_id_without_ops_is_custom(self) -> None:
-        # 无运维故障、仅显式客户作用域 → 单客户定制
-        assert wo.classify_track(context={"customer_id": "c-1"}) == "customer_custom"
-        assert wo.classify_track(context={"account_id": "a-1"}) == "customer_custom"
+    def test_customer_identity_alone_does_not_make_custom_track(self) -> None:
+        # 身份字段只用于归属；无显式 customer_scoped 不得进定制轨道
+        assert wo.classify_track(context={"customer_id": "c-1"}) == "product_line"
+        assert (
+            wo.classify_track(reason="intent_unknown", context={"account_id": "acc-1"})
+            == "product_line"
+        )
+
+    def test_explicit_customer_scoped_routes_to_custom(self) -> None:
+        # 专属范围由显式 customer_scoped 决定（派发前仍须批准标签）
+        assert wo.classify_track(context={"customer_scoped": True}) == "customer_custom"
+        ctx = {"skill_proposal": {"customer_scoped": True, "industry": "涂料"}}
+        assert wo.classify_track(context=ctx) == "customer_custom"
 
     def test_industry_signal_routes_to_industry_mod(self) -> None:
         assert wo.classify_track(context={"industry": "涂料"}) == "industry_mod"
@@ -221,9 +368,41 @@ class TestClassifyTrack:
         ctx2 = {"skill_proposal": {"industry": "考勤"}}
         assert wo.classify_track(context=ctx2) == "industry_mod"
 
-    def test_customer_scoped_in_skill_proposal(self) -> None:
-        ctx = {"skill_proposal": {"customer_scoped": True, "industry": "涂料"}}
-        assert wo.classify_track(context=ctx) == "customer_custom"
+    def test_ops_reason_beats_industry_and_scope(self) -> None:
+        # 运行期故障永远优先：即使带行业/身份信息也不是产品需求
+        ctx = {"industry": "涂料", "customer_id": "c-1", "customer_scoped": True}
+        assert wo.classify_track(reason="health_check_failed", context=ctx) == "ops_support"
+
+
+class TestDedupAndTenantIsolation:
+    """同需求跨入口去重 + 跨租户隔离（2026-09-10 #1851 整改）。"""
+
+    def test_same_need_from_different_entries_merges(self, isolated_store: Path) -> None:
+        # 同一需求经对话与反馈两个入口到达 → 同一工单（source 只做归属）
+        first = wo.upsert_candidate(source="intent", dedup_key="k-merge", reason="skill_proposal")
+        assert first["created"] is True
+        second = wo.upsert_candidate(
+            source="market_feedback", dedup_key="k-merge", reason="skill_proposal"
+        )
+        assert second["created"] is False
+        assert second["wo_id"] == first["wo_id"]
+        assert len(wo.list_work_orders()) == 1
+
+    def test_same_text_from_different_customers_isolated(self, isolated_store: Path) -> None:
+        from app.services import capability_proposal_recorder as recorder
+
+        a = recorder._dedup_key("打印报表失败", "skill_proposal", {"customer_id": "cust-A"})
+        b = recorder._dedup_key("打印报表失败", "skill_proposal", {"customer_id": "cust-B"})
+        assert a != b, "不同客户提交相同文字不得合并为同一提案（跨租户隔离）"
+        generic = recorder._dedup_key("打印报表失败", "skill_proposal", None)
+        assert generic != a and generic != b
+
+    def test_same_customer_same_need_dedups(self) -> None:
+        from app.services import capability_proposal_recorder as recorder
+
+        k1 = recorder._dedup_key("打印报表失败", "skill_proposal", {"customer_id": "cust-A"})
+        k2 = recorder._dedup_key(" 打印报表失败 ", "skill_proposal", {"tenant_id": "cust-A"})
+        assert k1 == k2, "同客户同需求（归一化后）仍须去重"
 
 
 class TestRouterTrackGate:

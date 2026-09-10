@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from app.utils.operational_errors import BOUNDARY_ERRORS
+from app.utils.process_lock import exclusive_file_lock
 
 logger = logging.getLogger(__name__)
 
@@ -35,27 +36,22 @@ _DEDUP_WINDOW_SECONDS = 7 * 24 * 3600  # 7 天去重窗口
 
 _file_lock = threading.Lock()
 
-try:
-    import fcntl
-except ImportError:  # pragma: no cover - Windows 使用线程锁兜底
-    fcntl = None  # type: ignore[assignment]
+# 跨进程锁等待上限：超过则失败退出，不静默并发写坏提案队列。
+_LOCK_TIMEOUT_SECONDS = 60.0
 
 
 @contextmanager
 def _exclusive_file_lock():
-    """同进程线程锁 + POSIX 跨进程文件锁。"""
+    """同进程线程锁 + 跨进程文件锁（Windows 走 msvcrt，POSIX 走 fcntl）。"""
     with _file_lock:
-        if fcntl is None:
-            yield
-            return
         _REPORT_DIR.mkdir(parents=True, exist_ok=True)
-        lock_path = _REPORT_DIR / ".capability_proposal.lock"
-        with lock_path.open("a+", encoding="utf-8") as handle:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-            try:
-                yield
-            finally:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        with exclusive_file_lock(
+            _REPORT_DIR / ".capability_proposal.lock",
+            blocking=True,
+            timeout=_LOCK_TIMEOUT_SECONDS,
+            reject_symlink=True,
+        ):
+            yield
 
 
 def _utc_now() -> str:
@@ -68,12 +64,25 @@ def _normalize(text: Any) -> str:
     return " ".join(str(text).strip().split())
 
 
-def _dedup_key(raw_input: Any, reason: str) -> str:
-    """归一化输入 + reason → 去重键。"""
+def _dedup_key(raw_input: Any, reason: str, context: dict[str, Any] | None = None) -> str:
+    """归一化输入 + reason + 租户作用域 → 去重键。
+
+    整改（2026-09-10 #1851 复审）：携带客户/租户身份的提案必须把身份
+    纳入去重键——不同客户提交相同文字不得合并为同一条提案（跨租户
+    隔离）；未携带身份的通用入口共享同一命名空间（同需求跨入口去重）。
+    """
     norm = _normalize(raw_input).lower()
     if len(norm) > 200:
         norm = norm[:200]
-    return hashlib.sha1(f"{reason}|{norm}".encode(), usedforsecurity=False).hexdigest()
+    scope = ""
+    if isinstance(context, dict):
+        scope = str(
+            context.get("tenant_id")
+            or context.get("customer_id")
+            or context.get("account_id")
+            or ""
+        ).strip()
+    return hashlib.sha256(f"{reason}|{scope}|{norm}".encode(), usedforsecurity=False).hexdigest()
 
 
 def _load_recent_keys(lookback_seconds: int = _DEDUP_WINDOW_SECONDS) -> set[str]:
@@ -156,7 +165,7 @@ def record_capability_proposal(
     if len(norm_input) > 500:
         norm_input = norm_input[:500] + "...(truncated)"
 
-    key = _dedup_key(raw_input, reason)
+    key = _dedup_key(raw_input, reason, context)
     with _exclusive_file_lock():
         recent = _load_recent_keys()
         if key in recent:
