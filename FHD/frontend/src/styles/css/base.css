@@ -112,6 +112,25 @@ html.xcagi-electron-mac .main-content .top-bar {
   z-index: 2;
 }
 
+/* Windows 桌面壳：titleBarStyle=hidden + titleBarOverlay（window-manager.ts），
+ * 顶栏即标题栏——空白处可拖拽/双击最大化，右侧为 overlay 预留 140px 避让区，
+ * 交互控件保持可点击。与 macOS 观感平级（desktop-platform-parity SSOT）。 */
+html.xcagi-electron-win .main-content .top-bar {
+  position: relative;
+  z-index: 2;
+  -webkit-app-region: drag;
+  padding-right: 140px;
+}
+
+html.xcagi-electron-win .main-content .top-bar button,
+html.xcagi-electron-win .main-content .top-bar input,
+html.xcagi-electron-win .main-content .top-bar a,
+html.xcagi-electron-win .main-content .top-bar .top-bar-actions,
+html.xcagi-electron-win .main-content .top-bar .top-quick-nav,
+html.xcagi-electron-win .main-content .top-bar .page-account-sub {
+  -webkit-app-region: no-drag;
+}
+
 /* 桌面壳：开屏字标不露出；登录页右下角 .login-panel-logo 保留 64px 角标 */
 html.xcagi-electron .startup-logo-text,
 html.xcagi-electron img[src*='xc-logo-text']:not(.login-panel-logo):not(.sidebar-brand-logo):not(.welcome-logo) {
