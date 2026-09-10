@@ -7,13 +7,24 @@
 - record_acceptance_verdict 把市场端双平台回执判定落回同一工单：
   accepted → closed；rejected → reopened（重开原单，不另起新单）
 
+整改（2026-09-10 #1853 复审）新增集成口径：
+- 从真实聊天入口（IntentConfirmationService）驱动到工单，验证闲聊/普通
+  问答不派发开发任务、全程零网络（无 LLM/GitHub 调用）；
+- 跨进程重启后工单状态从 JSONL 事件流恢复（真实持久化，非仅模块内视图）；
+- 回执重放幂等、失败重开→修复→再验收的完整闭环；
+- 验收回执网络超时时本地工单状态不被破坏。
+
 全程不访问网络/GitHub：script 层只调用纯本地函数，GitHub 交互面不在本测试范围。
 """
 
 from __future__ import annotations
 
+import argparse
 import importlib.util
 import json
+import os
+import socket
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -72,7 +83,7 @@ class TestSignalToWorkOrder:
             reason="intent_unknown",
             context={"intent_result": {"industry": "涂料"}},
         )
-        wo_id = wo.derive_wo_id(proposal["source"], proposal["dedup_key"])
+        wo_id = wo.derive_wo_id(proposal["dedup_key"])
         view = wo.get_work_order(wo_id)
         assert view is not None, "提案落盘必须同步升级出唯一工单"
         assert view["status"] == "candidate"
@@ -204,7 +215,8 @@ class TestCustomTrackGate:
             isolated_stores,
             raw_input="给我们厂单独做一个专属报表",
             reason="intent_unknown",
-            context={"customer_id": "cust-001"},
+            # 显式 customer_scoped 才是定制信号；customer_id 仅用于归属
+            context={"customer_id": "cust-001", "customer_scoped": True},
         )
         track = to_issue._classify_proposal_track(proposal)
         assert track == "customer_custom"
@@ -214,12 +226,22 @@ class TestCustomTrackGate:
         assert blocked is True
         assert "custom-track-approved" in reason
 
-    def test_custom_track_allowed_with_approval_label(self, isolated_stores: Path) -> None:
+    def test_customer_identity_alone_stays_generic(self, isolated_stores: Path) -> None:
+        # 反例（#1851 整改）：已知客户的普通能力诉求不因身份字段进定制轨道
         proposal = _record_and_read_back(
             isolated_stores,
             raw_input="给我们厂单独做一个专属报表",
             reason="intent_unknown",
             context={"customer_id": "cust-001"},
+        )
+        assert to_issue._classify_proposal_track(proposal) == "product_line"
+
+    def test_custom_track_allowed_with_approval_label(self, isolated_stores: Path) -> None:
+        proposal = _record_and_read_back(
+            isolated_stores,
+            raw_input="给我们厂单独做一个专属报表",
+            reason="intent_unknown",
+            context={"customer_id": "cust-001", "customer_scoped": True},
         )
         to_issue._link_work_order(
             proposal,
@@ -249,6 +271,13 @@ class TestCustomTrackGate:
 class TestAcceptanceCloseout:
     """验收后半段：双平台回执判定落回同一工单（同一 wo_id 贯穿到底）。"""
 
+    _HEALTHY = {
+        "per_platform": {
+            "win": {"installed": 1, "failed": 0, "devices": 1},
+            "mac": {"installed": 1, "failed": 0, "devices": 1},
+        }
+    }
+
     def _routed_wo(self, tmp_path: Path, issue_number: int) -> str:
         proposal = _record_and_read_back(
             tmp_path,
@@ -262,15 +291,21 @@ class TestAcceptanceCloseout:
             issue_number,
             "product_line",
         )
-        return wo.derive_wo_id(proposal["source"], proposal["dedup_key"])
+        return wo.derive_wo_id(proposal["dedup_key"])
+
+    def _drive_to_verifying(self, wo_id: str) -> None:
+        # 完成阶段由各自证据驱动（开发/合并/发布），回执只判定
+        for state in ("in_dev", "merged", "released", "verifying"):
+            assert wo.record_transition(wo_id, state)["ok"] is True
 
     def test_accepted_closes_same_work_order(self, isolated_stores: Path) -> None:
         wo_id = self._routed_wo(isolated_stores, 201)
+        self._drive_to_verifying(wo_id)
         result = wo.record_acceptance_verdict(
             issue_number=201,
             release_version="1.2.3.4",
             verdict="accepted",
-            evidence={"per_platform": {"win": {"installed": 1}, "mac": {"installed": 1}}},
+            evidence=dict(self._HEALTHY),
         )
         assert result["ok"] is True
         view = wo.get_work_order(wo_id)
@@ -285,6 +320,7 @@ class TestAcceptanceCloseout:
 
     def test_rejected_reopens_original_work_order(self, isolated_stores: Path) -> None:
         wo_id = self._routed_wo(isolated_stores, 202)
+        self._drive_to_verifying(wo_id)
         result = wo.record_acceptance_verdict(
             issue_number=202,
             release_version="1.2.3.4",
@@ -300,13 +336,20 @@ class TestAcceptanceCloseout:
         assert moved["ok"] is True
         assert wo.get_work_order(wo_id)["status"] == "in_dev"  # type: ignore[index]
 
-    def test_pending_verdict_does_not_close(self, isolated_stores: Path) -> None:
+    def test_pending_verdict_does_not_close_or_advance(self, isolated_stores: Path) -> None:
         wo_id = self._routed_wo(isolated_stores, 203)
+        before = wo.get_work_order(wo_id)
+        assert before is not None
+        before_events = list(before["history"])
         result = wo.record_acceptance_verdict(
             issue_number=203, release_version="1.2.3.4", verdict="pending"
         )
         assert result["ok"] is False
-        assert wo.get_work_order(wo_id)["status"] != "closed"  # type: ignore[index]
+        view = wo.get_work_order(wo_id)
+        assert view is not None
+        assert view["status"] != "closed"  # type: ignore[index]
+        assert view["status"] == "routed", "pending 回执不得把 routed 推进到完成阶段"
+        assert view["history"] == before_events, "pending 回执不得改写历史"
 
     def test_verdict_for_unlinked_issue_is_noop(self, isolated_stores: Path) -> None:
         result = wo.record_acceptance_verdict(
@@ -314,3 +357,266 @@ class TestAcceptanceCloseout:
         )
         assert result["ok"] is False
         assert result["reason"] == "issue_not_linked"
+
+
+@pytest.fixture
+def network_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    """测试期间禁网：任何 TCP 连接（LLM/GitHub/市场端）都视为测试缺陷。"""
+
+    def _no_network(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("测试期间禁止任何网络调用（昂贵 LLM/编码任务不允许被触发）")
+
+    monkeypatch.setattr(socket.socket, "connect", _no_network)
+    monkeypatch.setattr(socket.socket, "connect_ex", _no_network)
+
+
+class TestRealChatEntryToWorkOrder:
+    """真实聊天入口 → 工单：闲聊/普通问答不派发开发任务，全程零网络。"""
+
+    def _service(self) -> Any:
+        from app.services.intent_confirmation_service import IntentConfirmationService
+
+        return IntentConfirmationService()
+
+    def test_greeting_recognized_intent_never_creates_work_order(
+        self, isolated_stores: Path, network_disabled: None
+    ) -> None:
+        result = self._service().check_and_build_prompt(
+            {"final_intent": "greeting", "is_greeting": True, "slots": {}, "raw_input": "你好"}
+        )
+        assert result["status"] in {"complete", "missing_slots", "unclear"}
+        assert recorder.list_pending_proposals() == []
+        assert wo.list_work_orders() == [], "已识别的问候不得进入工单系统"
+
+    def test_normal_qa_with_confident_intent_never_creates_work_order(
+        self, isolated_stores: Path, network_disabled: None
+    ) -> None:
+        result = self._service().check_and_build_prompt(
+            {
+                "final_intent": "inventory_query",
+                "confidence": 0.97,
+                "slots": {"warehouse": "主仓"},
+                "raw_input": "主仓现在还有多少库存",
+            }
+        )
+        assert result["status"] in {"complete", "missing_slots"}
+        assert wo.list_work_orders() == [], "高置信普通问答不得派发开发任务"
+
+    def test_capability_gap_from_chat_creates_single_candidate(
+        self, isolated_stores: Path, network_disabled: None
+    ) -> None:
+        result = self._service().check_and_build_prompt(
+            {
+                "raw_input": "我想按客户维度批量导出对账单",
+                "slots": {},
+            }
+        )
+        # 真实入口产出的提案必须同步升级出唯一候选工单
+        assert wo.list_work_orders(), "开放世界缺口应被记录为候选工单"
+        orders = wo.list_work_orders()
+        assert all(o["status"] == "candidate" for o in orders)
+        # 隐私接缝：context 只携带字段名，不携带用户原文/业务值
+        record = json.loads(
+            (isolated_stores / "capability_proposal.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()[-1]
+        )
+        assert record["raw_input"].startswith("我想按客户维度")
+        assert "slot_names" in (record.get("context") or {}).get("intent_result", {})
+
+    def test_chit_chat_proposal_never_dispatches_without_owner_approval(
+        self, isolated_stores: Path, network_disabled: None
+    ) -> None:
+        # 未识别闲聊最多形成候选提案；派发必须过 owner 批准门禁
+        self._service().check_and_build_prompt({"raw_input": "你好呀，在吗", "slots": {}})
+        issue = {
+            "number": 66,
+            "state": "open",
+            "labels": [
+                {"name": "capability-proposal"},
+                {"name": "auto-generated"},
+                {"name": "needs-human"},
+            ],
+            "title": "[capability-proposal] 新能力候选 x",
+            "body": "来源：能力提案 (capability_proposal)\n## 结构化上下文\n## 治理门禁",
+        }
+        non_owner_comment = {"author_association": "NONE", "body": "确认实现"}
+        valid, reason = promote._validate_promotion(issue, non_owner_comment, issue_number=66)
+        assert valid is False, "无 owner 批准评论不得派发实现工作流"
+        assert "owner" in reason
+        # 未经派发，工单不得离开 candidate
+        for order in wo.list_work_orders():
+            assert order["status"] == "candidate"
+
+
+class TestServiceRestartPersistence:
+    """跨服务重启：工单状态必须从 JSONL 事件流恢复（真实进程重启）。"""
+
+    _CHILD = r"""
+import json, sys
+sys.path.insert(0, sys.argv[1])
+from app.services import work_order_ssot as wo
+if sys.argv[2] == "write":
+    wo_id = wo.upsert_candidate(source="chat", dedup_key="restart-key", reason="llm_timeout")["wo_id"]
+    wo.record_transition(wo_id, "routed")
+    print(wo_id)
+else:
+    view = wo.get_work_order(sys.argv[3])
+    print(json.dumps({"status": view["status"], "track": view["track"]}))
+"""
+
+    def test_state_survives_process_restart(self, tmp_path: Path) -> None:
+        store = tmp_path / "store"
+        env = {**os.environ, "WORK_ORDER_SSOT_DIR": str(store)}
+
+        def run_child(mode: str, wo_id: str = "") -> str:
+            proc = subprocess.run(
+                [sys.executable, "-c", self._CHILD, str(_FHD_ROOT), mode, wo_id],
+                capture_output=True,
+                text=True,
+                cwd=str(_FHD_ROOT),
+                env=env,
+                timeout=120,
+            )
+            assert proc.returncode == 0, f"子进程失败: {proc.stderr[-800:]}"
+            return proc.stdout.strip().splitlines()[-1]
+
+        wo_id = run_child("write")
+        assert wo._WO_ID_RE.match(wo_id)
+        # 新进程（重启）只依赖同一 JSONL 存储读取，不依赖原进程内存
+        restored = json.loads(run_child("read", wo_id))
+        assert restored["status"] == "routed"
+        assert restored["track"] == "ops_support", "重启后轨道必须随事件流恢复"
+
+    def test_events_file_survives_crash_after_write(self, tmp_path: Path) -> None:
+        store = tmp_path / "store"
+        env = {**os.environ, "WORK_ORDER_SSOT_DIR": str(store)}
+        script = (
+            "import sys; sys.path.insert(0, sys.argv[1]);"
+            "from app.services import work_order_ssot as wo;"
+            "print(wo.upsert_candidate(source='chat', dedup_key='crash-key', reason='r')['wo_id'])"
+        )
+        proc = subprocess.run(
+            [sys.executable, "-c", script, str(_FHD_ROOT)],
+            capture_output=True,
+            text=True,
+            cwd=str(_FHD_ROOT),
+            env=env,
+            timeout=120,
+        )
+        assert proc.returncode == 0, proc.stderr[-500:]
+        wo_id = proc.stdout.strip().splitlines()[-1]
+        events = (store / "work_orders.jsonl").read_text(encoding="utf-8").strip()
+        assert wo_id in events, "写入即落盘（fsync），崩溃不丢已写入事件"
+
+
+class TestReopenReacceptLoop:
+    """失败重开 → 修复 → 再验收的完整闭环（同一 wo_id）。"""
+
+    def test_fail_reopen_then_reaccept_closes(self, isolated_stores: Path) -> None:
+        proposal = _record_and_read_back(
+            isolated_stores, raw_input="闭环回归需求", reason="intent_unknown", context={}
+        )
+        wo_id = wo.derive_wo_id(proposal["dedup_key"])
+        to_issue._link_work_order(proposal, "https://x/310", 310, "product_line")
+        for state in ("in_dev", "merged", "released", "verifying"):
+            wo.record_transition(wo_id, state)
+        first = wo.record_acceptance_verdict(
+            issue_number=310, release_version="1.0.0", verdict="rejected"
+        )
+        assert first["ok"] is True
+        assert wo.get_work_order(wo_id)["status"] == "reopened"  # type: ignore[index]
+        # 修复后沿原主线重新走完完成阶段（回执不再替开发/合并/发布补状态）
+        for state in ("in_dev", "merged", "released", "verifying"):
+            assert wo.record_transition(wo_id, state)["ok"] is True
+        second = wo.record_acceptance_verdict(
+            issue_number=310,
+            release_version="1.0.1",
+            verdict="accepted",
+            evidence={
+                "per_platform": {
+                    "win": {"installed": 1, "failed": 0, "devices": 1},
+                    "mac": {"installed": 1, "failed": 0, "devices": 1},
+                }
+            },
+        )
+        assert second["ok"] is True
+        view = wo.get_work_order(wo_id)
+        assert view["status"] == "closed"  # type: ignore[index]
+        assert view["wo_id"] == wo_id, "重开再验收仍是原单"  # type: ignore[index]
+        # 两次验收之间不得有重复关闭事件
+        closed_events = [
+            e for e in view["history"] if e.get("event") == "transition" and e.get("to") == "closed"
+        ]
+        assert len(closed_events) == 1
+
+    def test_receipt_replay_is_idempotent(self, isolated_stores: Path) -> None:
+        proposal = _record_and_read_back(
+            isolated_stores, raw_input="重放回归需求", reason="intent_unknown", context={}
+        )
+        wo_id = wo.derive_wo_id(proposal["dedup_key"])
+        to_issue._link_work_order(proposal, "https://x/311", 311, "product_line")
+        for state in ("in_dev", "merged", "released", "verifying"):
+            wo.record_transition(wo_id, state)
+        evidence = {
+            "per_platform": {
+                "win": {"installed": 1, "failed": 0, "devices": 1},
+                "mac": {"installed": 1, "failed": 0, "devices": 1},
+            }
+        }
+        first = wo.record_acceptance_verdict(
+            issue_number=311, release_version="1.0.0", verdict="accepted", evidence=evidence
+        )
+        assert first["ok"] is True
+        count_after_first = len(wo.get_work_order(wo_id)["history"])  # type: ignore[index]
+        for _ in range(2):
+            replay = wo.record_acceptance_verdict(
+                issue_number=311, release_version="1.0.0", verdict="accepted", evidence=evidence
+            )
+            assert replay["ok"] is True
+            assert replay["reason"] == "already_closed"
+        assert len(wo.get_work_order(wo_id)["history"]) == count_after_first  # type: ignore[index]
+
+
+class TestCloseoutNetworkTimeout:
+    """验收回执网络超时：脚本失败但本地工单状态不被破坏。"""
+
+    def test_market_timeout_leaves_work_order_untouched(
+        self, isolated_stores: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        closeout = _load_script("release_acceptance_closeout")
+        proposal = _record_and_read_back(
+            isolated_stores, raw_input="超时回归需求", reason="intent_unknown", context={}
+        )
+        wo_id = wo.derive_wo_id(proposal["dedup_key"])
+        to_issue._link_work_order(proposal, "https://x/320", 320, "product_line")
+        for state in ("in_dev", "merged", "released", "verifying"):
+            wo.record_transition(wo_id, state)
+        before = wo.get_work_order(wo_id)
+        assert before is not None
+        before_events = list(before["history"])
+
+        config = tmp_path / "release_config.json"
+        config.write_text(json.dumps({"version_lock": "1.0.0", "linked_issues": [320]}))
+        args = argparse.Namespace(
+            repo="acme/repo",
+            token="t",
+            market_base="https://market.invalid",
+            market_token="m",
+            release_config=str(config),
+            version="",
+            channel="stable",
+            dry_run=False,
+            apply=True,
+        )
+
+        def _timeout(*a: Any, **k: Any) -> Any:
+            raise TimeoutError("connection timed out")
+
+        # 打在 urlopen 底层，让 closeout._http 的网络异常兜底走真实路径
+        monkeypatch.setattr("urllib.request.urlopen", _timeout)
+        assert closeout.run(args) == 1, "网络超时必须以失败退出，不得静默成功"
+        after = wo.get_work_order(wo_id)
+        assert after is not None
+        assert after["status"] == "verifying"
+        assert after["history"] == before_events, "超时不得改写本地工单历史"
