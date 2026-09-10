@@ -9,7 +9,7 @@
 |---|---|
 | standard_version | 1.0.0 |
 | scoring_version | external-anchors-v1 |
-| reference_versions_editions_regions | Kill Bill 0.24.12（killbill/killbill:0.24.12 官方镜像，内嵌 H2，Apache-2.0），本地 Docker 端口 18082；SSOT 锁定 source_commit=cb60779c171391be558cd7aebb1eafea60ad2b82 |
+| reference_versions_editions_regions | Kill Bill 0.24.12（killbill/killbill:0.24.12 官方镜像，内嵌 H2，Apache-2.0），本地 Docker 端口 18082；`FHD/config/audit_benchmark_ssot.json` 锁定 source_commit=cb60779c171391be558cd7aebb1eafea60ad2b82 |
 | dataset_hash | 任务脚本随本文档存档（java-payment-killbill-tasks-20260910.sh） |
 | task_protocol | B1 金额精度/币种/支付状态机/幂等键；B2 退款一致/重放/对账净额；B3 凭据隔离/事务并发/异常可定位 |
 | predeclared_metrics_and_tolerances | 金额 10.05 精确回显（numeric 无损）；同 paymentExternalKey 重复提交被拒（精确）；退款后 purchased−refunded=0.00（精确）；同 transactionExternalKey 重放退款被拒（精确）；10 并发支付全部 201 且总数=11（精确）；无凭据/错 secret 一律 401（精确） |
