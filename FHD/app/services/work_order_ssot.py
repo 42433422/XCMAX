@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.process_lock import exclusive_file_lock
 
 logger = logging.getLogger(__name__)
 
@@ -45,10 +46,8 @@ _EVENTS_FILE = _STORE_DIR / "work_orders.jsonl"
 
 _file_lock = threading.Lock()
 
-try:
-    import fcntl
-except ImportError:  # pragma: no cover - Windows 使用线程锁兜底
-    fcntl = None  # type: ignore[assignment]
+# 跨进程锁等待上限：超过则失败退出，不静默并发写坏事件流。
+_LOCK_TIMEOUT_SECONDS = 60.0
 
 # 主线状态机：candidate → routed → in_dev → merged → released → verifying → closed
 # reopened 从 verifying/closed 回到 in_dev（失败重开原单，不另起新单）
@@ -150,19 +149,16 @@ def _utc_now() -> str:
 
 @contextmanager
 def _exclusive_file_lock():
-    """同进程线程锁 + POSIX 跨进程文件锁。"""
+    """同进程线程锁 + 跨进程文件锁（Windows 走 msvcrt，POSIX 走 fcntl）。"""
     with _file_lock:
-        if fcntl is None:
-            yield
-            return
         _STORE_DIR.mkdir(parents=True, exist_ok=True)
-        lock_path = _STORE_DIR / ".work_orders.lock"
-        with lock_path.open("a+", encoding="utf-8") as handle:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-            try:
-                yield
-            finally:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        with exclusive_file_lock(
+            _STORE_DIR / ".work_orders.lock",
+            blocking=True,
+            timeout=_LOCK_TIMEOUT_SECONDS,
+            reject_symlink=True,
+        ):
+            yield
 
 
 def derive_wo_id(dedup_key: str) -> str:
