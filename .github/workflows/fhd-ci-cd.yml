@@ -355,11 +355,46 @@ jobs:
           cache: npm
           cache-dependency-path: FHD/frontend/package-lock.json
 
-      - name: Install Playwright and start dev server
+      - name: Cache Playwright browsers (pinned by package-lock)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+
+      - name: Install Playwright Chromium binary (CDN)
         working-directory: FHD/frontend
         run: |
           npm ci
-          npx playwright install chromium --with-deps
+          npx playwright install chromium
+
+      # 2026-09-10 #1851 复审：apt 外部源（Google Chrome 等）曾出现 Hash Sum
+      # mismatch 导致 P0 E2E 被环境阻断。整改：浏览器二进制走 Playwright CDN
+      # 并缓存；系统依赖（apt）有限重试 3 次（清列表换索引），最终失败必须
+      # 让 job 红掉并保留日志——禁止 || true 或跳过当修复。
+      - name: Install Playwright system deps (bounded retry)
+        working-directory: FHD/frontend
+        run: |
+          set -uo pipefail
+          rc=1
+          for attempt in 1 2 3; do
+            echo "[deps] attempt ${attempt}/3"
+            if npx playwright install-deps chromium; then
+              rc=0
+              break
+            fi
+            echo "::warning::playwright install-deps attempt ${attempt} failed; refreshing apt lists"
+            sudo apt-get clean || true
+            sudo rm -rf /var/lib/apt/lists/*
+            sudo apt-get update
+          done
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::playwright system deps failed after 3 attempts (环境阻断，需人工排查，不得跳过)"
+            exit 1
+          fi
+
+      - name: Start dev server
+        working-directory: FHD/frontend
+        run: |
           npm run dev -- --host 127.0.0.1 --port 5001 &
           for i in $(seq 1 30); do
             curl -sf http://127.0.0.1:5001/ >/dev/null && break
