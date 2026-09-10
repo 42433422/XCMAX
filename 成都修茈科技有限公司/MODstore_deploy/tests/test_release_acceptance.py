@@ -184,7 +184,7 @@ class TestAcceptanceEndpoint:
 
     def test_acceptance_filters_by_released_build(self, client) -> None:
         """不同构建的回执不参与同一次发布的验收判定。"""
-        from modstore_server.models import get_session_factory, User
+        from modstore_server.models import User, get_session_factory
         from modstore_server.update_installation_api import (
             UpdateInstallationReceiptBody,
             get_release_acceptance,
