@@ -77,7 +77,9 @@ jwt:
   expiration: 86400
 
 payment:
-  secret-key: ${PAYMENT_SECRET_KEY:default_secret_key}
+  # fail-closed：不设弱默认值。未配置 PAYMENT_SECRET_KEY 时服务启动即失败
+  # （见 SecurityService 启动校验），防止可预测密钥被静默带上生产。
+  secret-key: ${PAYMENT_SECRET_KEY:}
   public-origin: ${MODSTORE_PUBLIC_ORIGIN:http://localhost:8765}
   market-prefix: ${MODSTORE_MARKET_PREFIX:/market}
   pending-order-max-age-minutes: ${PAYMENT_PENDING_ORDER_MAX_AGE_MINUTES:30}

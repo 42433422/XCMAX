@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 from pathlib import Path
 
 from .paths import ensure_desktop_dirs, sqlite_database_url
@@ -23,3 +24,27 @@ def configure_sqlite_defaults(data_dir: str | os.PathLike[str] | None = None) ->
 
 def database_file(data_dir: str | os.PathLike[str] | None = None) -> Path:
     return ensure_desktop_dirs(data_dir)["data"] / "xcagi.db"
+
+
+def _pragma_ok(db_path: Path, pragma: str) -> bool:
+    """跑指定 PRAGMA 校验，结果恰为 'ok' 时返回 True。"""
+    conn = None
+    try:
+        conn = sqlite3.connect(str(db_path))
+        result = conn.execute(pragma).fetchone()
+        return bool(result) and result[0] == "ok"
+    except sqlite3.Error:
+        return False
+    finally:
+        if conn is not None:
+            conn.close()
+
+
+def integrity_check_ok(db_path: Path) -> bool:
+    """跑 PRAGMA integrity_check，返回 True 当且仅当结果为 'ok'。"""
+    return _pragma_ok(db_path, "PRAGMA integrity_check")
+
+
+def quick_check_ok(db_path: Path) -> bool:
+    """跑 PRAGMA quick_check（启动时用，比 integrity_check 快）。"""
+    return _pragma_ok(db_path, "PRAGMA quick_check")
