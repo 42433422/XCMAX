@@ -63,9 +63,7 @@ class TestUnprivilegedCallersRejected:
     def test_non_desktop_runtime_is_rejected(
         self, app: FastAPI, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(
-            "app.fastapi_routes.desktop_runtime.is_desktop_mode", lambda: False
-        )
+        monkeypatch.setattr("app.fastapi_routes.desktop_runtime.is_desktop_mode", lambda: False)
         proxy = AsyncMock()
         monkeypatch.setattr(f"{_MARKET_MODULE}._proxy_json", proxy)
 
@@ -78,9 +76,7 @@ class TestUnprivilegedCallersRejected:
     def test_non_loopback_client_is_rejected(
         self, app: FastAPI, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(
-            "app.fastapi_routes.desktop_runtime.is_desktop_mode", lambda: True
-        )
+        monkeypatch.setattr("app.fastapi_routes.desktop_runtime.is_desktop_mode", lambda: True)
         proxy = AsyncMock()
         monkeypatch.setattr(f"{_MARKET_MODULE}._proxy_json", proxy)
 
@@ -96,9 +92,7 @@ class TestValidationAndTokenBoundary:
     def test_invalid_status_is_rejected(
         self, app: FastAPI, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(
-            "app.fastapi_routes.desktop_runtime.is_desktop_mode", lambda: True
-        )
+        monkeypatch.setattr("app.fastapi_routes.desktop_runtime.is_desktop_mode", lambda: True)
         proxy = AsyncMock()
         monkeypatch.setattr(f"{_MARKET_MODULE}._proxy_json", proxy)
 
@@ -111,14 +105,10 @@ class TestValidationAndTokenBoundary:
     def test_missing_market_token_returns_conflict(
         self, app: FastAPI, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(
-            "app.fastapi_routes.desktop_runtime.is_desktop_mode", lambda: True
-        )
+        monkeypatch.setattr("app.fastapi_routes.desktop_runtime.is_desktop_mode", lambda: True)
         # The route imports ``latest_session_market_token`` from the module, so
         # patching that module attribute is what actually takes effect.
-        monkeypatch.setattr(
-            f"{_MARKET_MODULE}.latest_session_market_token", lambda *a, **k: None
-        )
+        monkeypatch.setattr(f"{_MARKET_MODULE}.latest_session_market_token", lambda *a, **k: None)
         proxy = AsyncMock()
         monkeypatch.setattr(f"{_MARKET_MODULE}._proxy_json", proxy)
 
@@ -133,9 +123,7 @@ class TestAuthorizedHappyPath:
     def test_receipt_forwarded_with_exact_body(
         self, app: FastAPI, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(
-            "app.fastapi_routes.desktop_runtime.is_desktop_mode", lambda: True
-        )
+        monkeypatch.setattr("app.fastapi_routes.desktop_runtime.is_desktop_mode", lambda: True)
         monkeypatch.setattr(
             f"{_MARKET_MODULE}.latest_session_market_token", lambda *a, **k: "market-token"
         )

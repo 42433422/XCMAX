@@ -4,6 +4,7 @@
 "SUMMARY 后显式退出判定" 无法被门禁守住。本测试把该入口接入 CI：
 分别强制 B1/B2/B3 失败必须非零退出，全 PASS 才返回 0，且失败时仍保留结果报告。
 """
+
 from __future__ import annotations
 
 import os
