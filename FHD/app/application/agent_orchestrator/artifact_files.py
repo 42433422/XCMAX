@@ -11,11 +11,13 @@ from typing import Any
 
 from app.utils.path_io.path_utils import get_app_data_dir
 
-_COMPONENT = re.compile(r"[A-Za-z0-9_-]{1,160}\Z")
-
 
 def artifact_path(run_id: str, artifact_id: str) -> Path:
-    if not _COMPONENT.fullmatch(run_id) or not _COMPONENT.fullmatch(artifact_id):
+    # 内联字面量正则（与 label_job_service 同款）：CodeQL 将 fullmatch 校验识别为
+    # 路径注入屏障；预编译对象不被识别，会导致 py/path-injection 误报。
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,160}", run_id):
+        raise ValueError("invalid run artifact identity")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,160}", artifact_id):
         raise ValueError("invalid run artifact identity")
     root = Path(get_app_data_dir()).resolve() / "agent-artifacts"
     folder = root / run_id
