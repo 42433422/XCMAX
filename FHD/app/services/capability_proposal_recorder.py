@@ -68,12 +68,25 @@ def _normalize(text: Any) -> str:
     return " ".join(str(text).strip().split())
 
 
-def _dedup_key(raw_input: Any, reason: str) -> str:
-    """归一化输入 + reason → 去重键。"""
+def _dedup_key(raw_input: Any, reason: str, context: dict[str, Any] | None = None) -> str:
+    """归一化输入 + reason + 租户作用域 → 去重键。
+
+    整改（2026-09-10 #1851 复审）：携带客户/租户身份的提案必须把身份
+    纳入去重键——不同客户提交相同文字不得合并为同一条提案（跨租户
+    隔离）；未携带身份的通用入口共享同一命名空间（同需求跨入口去重）。
+    """
     norm = _normalize(raw_input).lower()
     if len(norm) > 200:
         norm = norm[:200]
-    return hashlib.sha1(f"{reason}|{norm}".encode(), usedforsecurity=False).hexdigest()
+    scope = ""
+    if isinstance(context, dict):
+        scope = str(
+            context.get("tenant_id")
+            or context.get("customer_id")
+            or context.get("account_id")
+            or ""
+        ).strip()
+    return hashlib.sha256(f"{reason}|{scope}|{norm}".encode(), usedforsecurity=False).hexdigest()
 
 
 def _load_recent_keys(lookback_seconds: int = _DEDUP_WINDOW_SECONDS) -> set[str]:
@@ -156,7 +169,7 @@ def record_capability_proposal(
     if len(norm_input) > 500:
         norm_input = norm_input[:500] + "...(truncated)"
 
-    key = _dedup_key(raw_input, reason)
+    key = _dedup_key(raw_input, reason, context)
     with _exclusive_file_lock():
         recent = _load_recent_keys()
         if key in recent:

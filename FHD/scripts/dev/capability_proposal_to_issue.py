@@ -49,10 +49,10 @@ from app.utils.operational_errors import (  # noqa: E402  pylint: disable=wrong-
 
 
 def _derive_wo_id(source: str, dedup_key: str) -> str:
-    """由提案来源 + 去重键派生唯一工单 ID（与 work_order_ssot 同一口径）。"""
+    """由去重键派生唯一工单 ID（source 仅归属，不参与散列，跨入口同单）。"""
     if not str(dedup_key or "").strip():
         return ""
-    return derive_wo_id(str(source or "").strip() or "unknown", str(dedup_key).strip())
+    return derive_wo_id(str(dedup_key).strip())
 
 
 def _build_acceptance_criteria(
@@ -285,7 +285,7 @@ def _link_work_order(
             context=proposal.get("context") if isinstance(proposal.get("context"), dict) else None,
         )
         link_issue(
-            derive_wo_id(source, key),
+            derive_wo_id(key),
             issue_number=number,
             issue_url=str(issue_url or ""),
             track=str(track or ""),
