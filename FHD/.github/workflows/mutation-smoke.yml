@@ -85,7 +85,11 @@ jobs:
       - name: Run mutmut
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || steps.paths.outputs.run_mutation == 'true'
         working-directory: FHD
-        run: mutmut run 2>&1 | tee mutmut-run.log
+        # --max-children 1：mutmut 并发子进程会在 pytest 自身清理
+        # /tmp/pytest-of-runner/garbage-* 时竞态（Errno 39 Directory not empty →
+        # PytestWarning → run 日志带 traceback → kill report 判诊断无效）。
+        # 串行执行消除竞态；268 变体串行仍远小于 60 分钟超时。pytest 修复后可恢复并发。
+        run: mutmut run --max-children 1 2>&1 | tee mutmut-run.log
 
       - name: Generate kill report
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || steps.paths.outputs.run_mutation == 'true'
