@@ -1514,6 +1514,7 @@ def test_generated_shipment_download_contains_real_business_cells(tmp_path, monk
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
+    import app.di.registry as _di_registry
     from app.application.agent_orchestrator.run_models import artifact_from_dict
     from app.db.base import Base
     from app.db.models import Product, PurchaseUnit
@@ -1521,7 +1522,6 @@ def test_generated_shipment_download_contains_real_business_cells(tmp_path, monk
     from app.services.tools_workflow_shipments_docs import (
         _registered_router_shipment_orders,
     )
-    import app.di.registry as _di_registry
 
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path / "data"))
     engine = create_engine(f"sqlite:///{tmp_path / 'shipment.db'}")
