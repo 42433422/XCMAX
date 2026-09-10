@@ -53,7 +53,9 @@ class TestCore:
         assert classify_track() == "product_line"
         assert classify_track(reason="llm_timeout") == "ops_support"
         assert classify_track(reason="llm_timeout", context={"customer_id": "c1"}) == "ops_support"
-        assert classify_track(context={"customer_id": "c1"}) == "customer_custom"
+        # 仅带客户身份字段不算定制：身份只作归属，不参与轨道判定
+        assert classify_track(context={"customer_id": "c1"}) == "product_line"
+        assert classify_track(context={"account_id": "a1"}) == "product_line"
         assert classify_track(context={"industry": "涂料"}) == "industry_mod"
         assert (
             classify_track(context={"skill_proposal": {"customer_scoped": True}})
