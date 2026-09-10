@@ -113,33 +113,32 @@ def classify_track(
 ) -> str:
     """把工单分入四类去向之一（确定性规则，无 LLM，可机器核对）。
 
-    优先级：强定制信号 > 运维与支持 > 显式客户作用域 > 行业 Mod > 通用产品线（默认）。
-
-    关键区分：仅携带 ``customer_id`` 的普通故障（llm_timeout/install_failed 等
-    运行期信号）仍归 ``ops_support``，不得因客户标识而自动归入 ``customer_custom``；
-    只有显式 ``customer_scoped``（或技能提案 customer_scoped）与其后再判断的
-    customer_id/account_id 才构成单客户定制。
-
+    优先级：运维支持 > 显式客户专属 > 行业 Mod > 通用产品线（默认）。
     默认落 product_line 与「只有通用能力进入主产品」一致——
     无法证明属于其他轨道的需求，按通用能力走主产品治理门禁。
+
+    整改（2026-09-10 #1851 复审）：
+    - 身份字段（customer_id/account_id）只用于归属，不参与轨道判定：
+      已知客户反馈 llm_timeout 等运行期故障仍走 ops_support。
+    - customer_custom 只由显式 customer_scoped 标记决定（skill_proposal
+      或 context 顶层），且派发前仍须 custom-track-approved 批准标签。
     """
     ctx = context if isinstance(context, dict) else {}
-    reason_tag = str(reason or "").strip()
-    raw_skill = ctx.get("skill_proposal")
-    skill_proposal: dict[str, Any] = raw_skill if isinstance(raw_skill, dict) else {}
-    # 1) 强定制信号：显式 customer_scoped（含技能提案场景）→ 单客户定制
-    if ctx.get("customer_scoped") or skill_proposal.get("customer_scoped"):
-        return "customer_custom"
-    # 2) 运维与支持：运行期故障信号，优先级高于「仅携带 customer_id」。
-    #    带客户标识的普通故障仍是运维问题，不得因此自动归入客户定制。
-    if reason_tag in _OPS_REASONS:
+    # 1) 运维与支持：运行期故障信号永远优先——故障不是产品需求
+    if str(reason or "").strip() in _OPS_REASONS:
         return "ops_support"
-    # 3) 显式单客户作用域（无运维故障时才成立）
-    if ctx.get("customer_id") or ctx.get("account_id"):
+    # 2) 单客户定制：显式客户作用域标记（仅凭客户身份字段不算）
+    scoped = bool(ctx.get("customer_scoped")) or (
+        isinstance(ctx.get("skill_proposal"), dict)
+        and bool(ctx["skill_proposal"].get("customer_scoped"))
+    )
+    if scoped:
         return "customer_custom"
-    # 4) 行业共性：上下文带行业标识（intent_result.industry / skill_proposal.industry）
+    # 3) 行业共性：上下文带行业标识（intent_result.industry / skill_proposal.industry）
     raw_intent = ctx.get("intent_result")
     intent_result: dict[str, Any] = raw_intent if isinstance(raw_intent, dict) else {}
+    raw_skill = ctx.get("skill_proposal")
+    skill_proposal: dict[str, Any] = raw_skill if isinstance(raw_skill, dict) else {}
     if ctx.get("industry") or intent_result.get("industry") or skill_proposal.get("industry"):
         return "industry_mod"
     return "product_line"
@@ -166,9 +165,16 @@ def _exclusive_file_lock():
                 fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
-def derive_wo_id(source: str, dedup_key: str) -> str:
-    """由信号来源 + 去重键派生唯一工单 ID（幂等：同输入必同 ID）。"""
-    digest = hashlib.sha1(f"{source}|{dedup_key}".encode()).hexdigest()
+def derive_wo_id(dedup_key: str) -> str:
+    """由去重键派生唯一工单 ID（幂等：同输入必同 ID）。
+
+    整改（2026-09-10 #1851 复审）：同一需求从不同入口（对话/反馈等）
+    携带相同去重键时必须合并到同一工单，因此 ``source`` 不参与散列，
+    只作为 created 事件里的归属元数据保留。
+    """
+    digest = hashlib.sha256(
+        str(dedup_key or "").strip().encode(), usedforsecurity=False
+    ).hexdigest()
     return f"WO-{digest[:12]}"
 
 
@@ -318,7 +324,7 @@ def upsert_candidate(
     key = str(dedup_key or "").strip()
     if not key:
         return {"wo_id": "", "created": False, "status": "", "reason": "empty_dedup_key"}
-    wo_id = derive_wo_id(src, key)
+    wo_id = derive_wo_id(key)
     with _exclusive_file_lock():
         existing = _fold(_load_events()).get(wo_id)
         if existing:
@@ -436,44 +442,20 @@ def record_acceptance_verdict(
     verdict: str,
     evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """市场端回执验收判定落回主线：verifying → closed / reopened。
+    """市场端回执验收判定（re-export，详见 work_order_acceptance）。
 
-    由 release-acceptance-closeout 在回写 GitHub issue 后调用；
-    issue 未绑定工单时返回 ok=False（不阻塞 issue 回写本身）。
+    签名与行为不变；从主模块拆出以满足 app/ 单文件 ≤500 行门禁。
+    实现与整改记录见 ``app.services.work_order_acceptance``。
     """
-    view = find_by_issue(issue_number)
-    if view is None:
-        return {"ok": False, "reason": "issue_not_linked", "issue_number": int(issue_number)}
-    wo_id = str(view["wo_id"])
-    # pending：回执未齐，绝不可自动补写开发/合并/发布完成状态——
-    # 只有真实可验收的 accepted/rejected 才推进状态机。
-    if verdict not in ("accepted", "rejected"):
-        return {
-            "ok": False,
-            "reason": "verdict_pending",
-            "wo_id": wo_id,
-            "status": str(view.get("status") or ""),
-        }
-    ref = {"issue_number": int(issue_number), "release_version": str(release_version or "")}
-    if evidence:
-        ref["evidence"] = evidence
-    current = str(view.get("status") or "")
-    # 验收期起点校正：历史事件可能缺席，沿主线逐步补齐到 verifying
-    for step in ("in_dev", "merged", "released", "verifying"):
-        if current == step:
-            continue
-        current = str(find_by_issue(issue_number).get("status") or "")  # type: ignore[union-attr]
-        if current == step:
-            continue
-        if step not in _ALLOWED_TRANSITIONS.get(current, frozenset()):
-            break
-        record_transition(wo_id, step, ref=ref, note="验收期起点补齐", source="acceptance")
-    if verdict == "accepted":
-        return record_transition(
-            wo_id, "closed", ref=ref, note="双平台回执健康，客户验收通过", source="acceptance"
-        )
-    return record_transition(
-        wo_id, "reopened", ref=ref, note="客户机安装/运行失败，重开原工单", source="acceptance"
+    from app.services.work_order_acceptance import (
+        record_acceptance_verdict as _impl,
+    )
+
+    return _impl(
+        issue_number=issue_number,
+        release_version=release_version,
+        verdict=verdict,
+        evidence=evidence,
     )
 
 
