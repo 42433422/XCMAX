@@ -24,7 +24,9 @@ _match_cache = get_intent_rule_cache()
 
 
 def _make_cache_key(message: str, intent_id: str) -> str:
-    return hashlib.md5(f"{intent_id}:{message.strip().lower()}".encode()).hexdigest()
+    return hashlib.md5(
+        f"{intent_id}:{message.strip().lower()}".encode(), usedforsecurity=False
+    ).hexdigest()
 
 
 class RuleEngine:

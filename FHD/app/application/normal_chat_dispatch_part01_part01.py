@@ -178,6 +178,10 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
     template_preview = bool(
         _facade().re.search("(?:预览|看看|看下)[^，,。]{0,12}模板|模板[^，,。]{0,8}预览", text)
     )
+    # 拒绝类请求（审计 R02）：「不要打印/别删除」等否定动作不得路由到任何
+    # 执行意图（开单/删除/打印标签/销售闭环写），交回普通对话处理。
+    if _facade()._is_negated_action_request(text):
+        return {"intent": "unknown", "slots": {}}
     if (
         any(k in text for k in shipment_keywords) or number_style_order or print_spec_order
     ) and not template_preview:

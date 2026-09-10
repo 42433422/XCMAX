@@ -406,6 +406,15 @@ jobs:
       - name: docs-ssot-lint
         run: python scripts/dev/docs_ssot_lint.py --strict
 
+      - name: doc-version-freshness
+        run: python scripts/dev/verify_doc_versions.py
+
+      - name: doc-claims-consistency
+        run: python scripts/dev/verify_doc_claims.py
+
+      - name: claimed-vs-actual-freshness
+        run: python scripts/dev/gen_claimed_vs_actual.py --check
+
   # Security & Dependency Scanning
   security-scan:
     needs: guard-temp-scripts

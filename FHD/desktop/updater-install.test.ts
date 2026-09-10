@@ -1,4 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+
+// 每次测试运行使用唯一临时目录，避免并行测试进程共享固定 /tmp 路径
+// 互相清写（2026-09-05 审计 R07：沙箱下固定 /tmp 写入 EPERM）。
+const mockUserDataDir = vi.hoisted(() => ({ current: '' }))
 
 const mocks = vi.hoisted(() => {
   const handlers = new Map<string, (payload: Record<string, unknown>) => void>()
@@ -21,7 +28,7 @@ vi.mock('electron', () => ({
   app: {
     isPackaged: true,
     getVersion: vi.fn(() => '1.0.0'),
-    getPath: vi.fn(() => '/tmp/xcagi-updater-test'),
+    getPath: vi.fn(() => mockUserDataDir.current),
   },
   net: {},
   session: {
@@ -36,6 +43,7 @@ describe('updater install rollback contract', () => {
   beforeEach(async () => {
     vi.useFakeTimers()
     vi.resetModules()
+    mockUserDataDir.current = fs.mkdtempSync(path.join(os.tmpdir(), 'xcagi-updater-install-test-'))
     mocks.handlers.clear()
     mocks.autoUpdater.on.mockClear()
     mocks.autoUpdater.quitAndInstall.mockReset()
@@ -46,6 +54,10 @@ describe('updater install rollback contract', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+    if (mockUserDataDir.current) {
+      fs.rmSync(mockUserDataDir.current, { recursive: true, force: true })
+      mockUserDataDir.current = ''
+    }
   })
 
   async function markDownloaded(version: string, buildSha = '') {

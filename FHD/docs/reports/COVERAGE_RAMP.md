@@ -4,7 +4,7 @@
 [`metrics/coverage_ratchet_baseline.json`](../../metrics/coverage_ratchet_baseline.json) 与
 [`frontend/vitest.config.js`](../../frontend/vitest.config.js) thresholds 对齐。
 
-**最后更新**：2026-06-20
+**最后更新**：2026-09-09（D2-5 stub 清零、floor 重校准后同步，见 [ADR-0005](../adr/0005-coverage-floor-recalibrate-stub-retirement.md)）
 
 ## 唯一可复现 SSOT（2026-06-17）
 
@@ -36,10 +36,14 @@ WIP 数字仅供内部跟踪；对外材料、棘轮 `--bump`、发版门禁仍�
 
 ### 棘轮 floor（当前 CI 守护）
 
+> 2026-09-01（D2-5）：82 个 `coverage_ramp` stub 全部去前缀迁出为契约测试，
+> 总口径与真实行为口径合一；后端 floor 自行为口径 78 行 / 69 分支起步，只升不降。
+> 历史宣称 88/81 含 stub 注水，已废止（见 [ADR-0005](../adr/0005-coverage-floor-recalibrate-stub-retirement.md)）。
+
 | 项 | floor | 来源 |
 |----|------:|------|
-| 后端行 | **88%** | `pyproject.toml` `fail_under` |
-| 后端分支 | **81%** | `coverage_ratchet_baseline.json` |
+| 后端行 | **78%** | `pyproject.toml` `fail_under` |
+| 后端分支 | **69%** | `coverage_ratchet_baseline.json` |
 | 前端 lines / statements | **92%** | `vitest.config.js` + ratchet |
 | 前端 branches | **81%** | 同上 |
 | 前端 functions | **90%** | 同上 |

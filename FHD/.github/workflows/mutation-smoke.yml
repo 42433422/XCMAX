@@ -4,6 +4,9 @@
 # 2026-08-05：mutation-smoke 是 required status check。此前 pull_request 用 paths 过滤，
 #   未命中路径的 PR 不会创建该 check → 永久 BLOCKED。改为 pull_request 无条件触发，
 #   用步骤级路径检测决定是否真正跑 mutmut；未命中时快速成功以满足 required check。
+# 2026-09-09：修复手动触发（workflow_dispatch）漏跑——Detect 步骤此前只在 PR/push 时运行，
+#   dispatch 时不产出 run_mutation，后续 mutmut 步骤条件（schedule 或 run_mutation=true）
+#   全不满足，整条流水线静默跳过绿灯。现 dispatch 强制跑（手动触发即明确要求执行）。
 name: mutation-smoke
 
 on:
@@ -27,59 +30,73 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Determine mutation scope
+      - name: Detect mutation-scope path changes (PR / push / dispatch)
         id: paths
+        if: github.event_name == 'pull_request' || github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         working-directory: FHD
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          python scripts/ci/mutation_scope.py \
-            --event "$EVENT_NAME" --base "$BASE_SHA" --head "$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # 手动触发 = 明确要求跑变异测试，不做路径过滤
+            echo "run_mutation=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.event.pull_request.head.sha }}"
+          else
+            # push main：merge 后新 HEAD 必须有 required check；未命中变异路径时快速成功
+            base="${{ github.event.before }}"
+            head="${{ github.sha }}"
+            case "$base" in
+              ''|0000000000000000000000000000000000000000) base="${head}~1" ;;
+            esac
+          fi
+          # git diff 两个 SHA 是全树 diff，路径相对仓库根（如 FHD/app/di/...）；
+          # 先剥掉 FHD/ 前缀再匹配，同时根仓 .github/workflows/ 的改动也能命中
+          changed="$(git diff --name-only "$base" "$head" 2>/dev/null | sed 's#^FHD/##' || true)"
+          if printf '%s\n' "$changed" | grep -qE '^(app/di/|app/contexts/|tests/test_di/|tests/test_contexts/|tests/test_scripts/test_mutation_kill_report\.py|scripts/dev/mutation_kill_report\.py|pyproject\.toml|\.github/workflows/(fhd-)?mutation-smoke\.yml)'; then
+            echo "run_mutation=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_mutation=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Skip notice (no mutation-scope changes)
-        if: steps.paths.outputs.run_mutation == 'false'
+        if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch' && steps.paths.outputs.run_mutation != 'true'
         run: echo "No mutation-scope path changes; required check satisfied without running mutmut."
 
       - name: Setup Python
-        if: steps.paths.outputs.run_mutation == 'true'
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || steps.paths.outputs.run_mutation == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install uv
-        if: steps.paths.outputs.run_mutation == 'true'
-        run: pip install uv
-
-      - name: Sync dependencies
-        if: steps.paths.outputs.run_mutation == 'true'
+      - name: Install dependencies
+        if: github.event_name == 'schedule' || steps.paths.outputs.run_mutation == 'true'
         working-directory: FHD
-        run: uv sync --frozen --extra server-api --extra dev
+        # 与 backend-test 同口径（pip + requirements 锁文件）。
+        # 2026-09-08：原 `uv sync --group dev` 引用了 pyproject 不存在的 dev 组，
+        # 且 N01 路径修复前该分支从未真实执行，命令错误一直未被暴露。
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-server-api.txt
+          pip install -r deploy/requirements-dev.txt
+          pip install mutmut
 
-      - name: Install mutmut
-        if: steps.paths.outputs.run_mutation == 'true'
+      - name: Run mutmut
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || steps.paths.outputs.run_mutation == 'true'
         working-directory: FHD
-        run: uv pip install mutmut
+        run: mutmut run 2>&1 | tee mutmut-run.log
 
-      - name: Generate mutants and test mapping
-        if: steps.paths.outputs.run_mutation == 'true'
+      - name: Generate kill report
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || steps.paths.outputs.run_mutation == 'true'
         working-directory: FHD
-        run: uv run --no-sync mutmut run 2>&1 | tee mutmut-run.log
-
-      - name: Verify mutants in isolated interpreters
-        if: steps.paths.outputs.run_mutation == 'true'
-        working-directory: FHD
-        # Forked mutmut outcomes are diagnostic only; recheck every generated mutant.
-        run: uv run --no-sync python scripts/dev/mutation_isolated.py --mutants mutants --output mutation-isolated --threshold 80
+        # mutmut 3.x ``results`` 默认跳过 killed；优先解析 run 日志里的 progress 摘要
+        run: python scripts/dev/mutation_kill_report.py --threshold 80 --from-file mutmut-run.log
 
       - name: Upload mutation history
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: mutation-history
-          path: |
-            FHD/metrics/mutation-history.jsonl
-            FHD/mutmut-run.log
-            FHD/mutation-isolated/
+          path: FHD/metrics/mutation-history.jsonl
           if-no-files-found: warn

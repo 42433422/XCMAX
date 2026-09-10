@@ -23,6 +23,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
 logger = logging.getLogger(__name__)
 
 # 写入路径：CI artifact 与本地可读
@@ -71,7 +73,7 @@ def _dedup_key(raw_input: Any, reason: str) -> str:
     norm = _normalize(raw_input).lower()
     if len(norm) > 200:
         norm = norm[:200]
-    return hashlib.sha1(f"{reason}|{norm}".encode()).hexdigest()
+    return hashlib.sha1(f"{reason}|{norm}".encode(), usedforsecurity=False).hexdigest()
 
 
 def _load_recent_keys(lookback_seconds: int = _DEDUP_WINDOW_SECONDS) -> set[str]:
@@ -179,6 +181,13 @@ def record_capability_proposal(
             return {"recorded": False, "reason": "write_failed", "dedup_key": key}
 
     logger.info("capability_proposal recorded: reason=%s key=%s", reason, key[:12])
+    # 主线接线：有效需求候选升级为唯一工单（Work Order SSOT），幂等不重复建单
+    try:
+        from app.services.work_order_ssot import upsert_candidate
+
+        upsert_candidate(source=source, dedup_key=key, reason=reason, context=context)
+    except BOUNDARY_ERRORS:  # noqa: BLE001 - 工单写入失败不阻塞提案记录（跨仓导入边界兜底）
+        logger.debug("work_order upsert skipped", exc_info=True)
     return {
         "recorded": True,
         "dedup_key": key,
