@@ -20,6 +20,7 @@ throwaway SQLite database in ``tmp_path``:
 from __future__ import annotations
 
 import errno
+import logging
 import os
 import sqlite3
 from pathlib import Path
@@ -220,3 +221,19 @@ def test_keyboard_interrupt_during_upgrade_propagates(
 
     with pytest.raises(KeyboardInterrupt):
         migrate.ensure_startup_migration(str(legacy_data_dir))
+
+
+def test_in_process_upgrade_does_not_disable_existing_app_loggers(tmp_path: Path) -> None:
+    """迁移不得禁用既有 ``app.*`` logger。
+
+    ``alembic/env.py`` 曾依赖 ``fileConfig`` 的默认 ``disable_existing_loggers=True``：
+    desktop 端在 frozen 进程内以 API 方式调用 ``command.upgrade``，迁移之后所有已存在
+    的 ``app.*`` logger 会被置为 ``disabled``，应用静默丢日志（同一个 pytest 会话里的
+    后续用例也会因此收不到 ``caplog`` 记录）。
+    """
+    probe = logging.getLogger("app.desktop_runtime.probe_logger")
+    assert probe.disabled is False
+
+    _seed_legacy_db(tmp_path / "xcagi-home")  # 真实 in-process ``command.upgrade``
+
+    assert probe.disabled is False
