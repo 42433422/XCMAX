@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from typing import cast
+from typing import Any, cast
 
 from sqlalchemy import Table, and_, or_
 from sqlalchemy.orm import Session
@@ -251,7 +251,7 @@ class SQLAlchemyTaskExecutionRepository:
                     AgentTaskExecutionRecord.lease_owner == str(owner_id or ""),
                     AgentTaskExecutionRecord.lease_expires_at > now,
                 )
-            values = {
+            values: dict[Any, Any] = {
                 AgentTaskExecutionRecord.state: str(state),
                 AgentTaskExecutionRecord.lease_owner: None,
                 AgentTaskExecutionRecord.lease_expires_at: None,

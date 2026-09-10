@@ -28,13 +28,16 @@ def validate_stock_in_request(params: dict[str, Any]) -> None:
         if key in params and not isinstance(params[key], str):
             raise ValueError("产品型号和仓库名称必须是文本")
     quantity = params.get("quantity")
-    try:
-        valid = (
-            not isinstance(quantity, bool)
-            and math.isfinite(float(quantity))
-            and float(quantity) > 0
-        )
-    except (TypeError, ValueError, OverflowError):
+    if quantity is None:
         valid = False
+    else:
+        try:
+            valid = (
+                not isinstance(quantity, bool)
+                and math.isfinite(float(quantity))
+                and float(quantity) > 0
+            )
+        except (TypeError, ValueError, OverflowError):
+            valid = False
     if not valid:
         raise ValueError("入库数量必须是有效正数")
