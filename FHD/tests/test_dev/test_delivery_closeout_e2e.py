@@ -119,6 +119,8 @@ class _GitHubSim:
         self.comments: dict[int, list[dict[str, Any]]] = {}
         self.comment_count = 0
         self.fail_after: str | None = None  # e.g. "comments" 用于注入回写超时
+        self.wo_acceptance_calls: list[dict[str, Any]] = []
+        self.wo_acceptance_fail = False  # 模拟共享宿主不可达 → 走本地兜底
 
     def new_issue(self, number: int) -> None:
         self.issues[number] = {"number": number, "state": "open", "labels": [], "body": ""}
@@ -130,6 +132,12 @@ class _GitHubSim:
     def http(self, method: str, url: str, _token: str, body: dict[str, Any] | None = None) -> Any:
         if self.fail_after and self.fail_after in url:
             return {"_error": 504, "_body": "gateway timeout (simulated)"}
+        if "/api/work-orders/acceptance" in url:
+            if body:
+                self.wo_acceptance_calls.append(body)
+            if self.wo_acceptance_fail:
+                return {"_error": 503, "_body": "market unreachable"}
+            return {"ok": True, "wo_id": "WO-remote", "from": "verifying", "to": "closed"}
         if "/labels" in url and method == "POST" and "repos/" not in url:
             return {}  # ensure-label 就当存在
         import re
@@ -269,13 +277,50 @@ class TestDeliveryCloseout:
         rc = closeout.run(_args(_config(isolates, version, sha, [number])))
 
         assert rc == 0
-        view = wo.get_work_order(wo_id)
-        assert view is not None and view["status"] == "closed"
-        assert view["release_version"] == version
+        # 验收结论经真实回写路径发往共享宿主（远端优先）
+        call = pipeline.gh.wo_acceptance_calls[-1]
+        assert call["issue_number"] == number
+        assert call["verdict"] == "accepted"
+        assert call["release_version"] == version
+        assert call["evidence"]["per_platform"]["win"]["installed"] == 1
+        assert call["evidence"]["per_platform"]["mac"]["installed"] == 1
+        # 远端权威，本地 JSONL 视图不重复写
+        assert wo.get_work_order(wo_id)["status"] != "closed"  # type: ignore[index]
         assert [label["name"] for label in pipeline.gh.issues[number]["labels"]] == [
             "customer-accepted"
         ]
         assert pipeline.gh.comment_count == 1
+
+    def test_market_unreachable_falls_back_to_local(
+        self, isolates: Path, pipeline: SimpleNamespace
+    ) -> None:
+        """共享宿主不可达 → closeout 降级本地事件流，仍能关闭原工单。"""
+        version = "1.0.0.9"
+        sha = "9" * 40
+        number = 910
+        wo_id = _make_work_order(isolates, number)
+        pipeline.gh.new_issue(number)
+        pipeline.gh.wo_acceptance_fail = True
+        pipeline.store.stage(
+            install_id="dev-win",
+            platform="win32",
+            status="installed",
+            version=version,
+            build_sha=sha,
+        )
+        pipeline.store.stage(
+            install_id="dev-mac",
+            platform="darwin",
+            status="installed",
+            version=version,
+            build_sha=sha,
+        )
+
+        rc = closeout.run(_args(_config(isolates, version, sha, [number])))
+        assert rc == 0
+        view = wo.get_work_order(wo_id)
+        assert view is not None and view["status"] == "closed"
+        assert view["release_version"] == version
 
     def test_fail_reopen_fix_reaccept_updates_same_order(
         self, isolates: Path, pipeline: SimpleNamespace
@@ -304,12 +349,12 @@ class TestDeliveryCloseout:
         )
         rc1 = closeout.run(_args(_config(isolates, version, sha, [number])))
         assert rc1 == 0
-        assert wo.get_work_order(wo_id)["status"] == "reopened"  # type: ignore[index]
+        assert pipeline.gh.wo_acceptance_calls[-1]["verdict"] == "rejected"
         assert "acceptance-failed" in [
             label["name"] for label in pipeline.gh.issues[number]["labels"]
         ]
 
-        # 阶段2：修复后 mac 成功、win 保持成功 → accepted → 同一工单关闭
+        # 阶段2：修复后 mac 成功、win 保持成功 → accepted → 同一工单再发验收
         pipeline.store.stage(
             install_id="dev-mac",
             platform="darwin",
@@ -319,9 +364,8 @@ class TestDeliveryCloseout:
         )
         rc2 = closeout.run(_args(_config(isolates, version, sha, [number])))
         assert rc2 == 0
-        view = wo.get_work_order(wo_id)
-        assert view is not None and view["status"] == "closed"
-        assert view["wo_id"] == wo_id
+        assert pipeline.gh.wo_acceptance_calls[-1]["verdict"] == "accepted"
+        assert len(pipeline.gh.wo_acceptance_calls) == 2
 
     def test_writeback_timeout_does_not_close(
         self, isolates: Path, pipeline: SimpleNamespace
@@ -376,12 +420,13 @@ class TestDeliveryCloseout:
 
         cfg = _config(isolates, version, sha, [number])
         assert closeout.run(_args(cfg)) == 0
-        assert wo.get_work_order(wo_id)["status"] == "closed"  # type: ignore[index]
+        assert pipeline.gh.wo_acceptance_calls[-1]["verdict"] == "accepted"
 
         # 同一发布再跑一次（重复回执/重复 closeout）：不重复评论、结果稳定
         rc2 = closeout.run(_args(cfg))
         assert rc2 == 0
         assert pipeline.gh.comment_count == 1, "重复执行不得重复评论"
+        assert len(pipeline.gh.wo_acceptance_calls) == 2, "label 幂等但验收落库保守重放"
 
     def test_different_build_does_not_pollute_acceptance(
         self, isolates: Path, pipeline: SimpleNamespace
@@ -420,7 +465,8 @@ class TestDeliveryCloseout:
         # 关联实际发布构建 SHA → 其他构建不参与 → accepted
         rc = closeout.run(_args(_config(isolates, version, released_sha, [number])))
         assert rc == 0
-        assert wo.get_work_order(wo_id)["status"] == "closed"  # type: ignore[index]
+        assert pipeline.gh.wo_acceptance_calls[-1]["verdict"] == "accepted"
+        assert wo.get_work_order(wo_id)["status"] != "closed"  # type: ignore[index] 远端权威
 
     def test_unrelated_build_failure_alone_stays_pending(
         self, isolates: Path, pipeline: SimpleNamespace

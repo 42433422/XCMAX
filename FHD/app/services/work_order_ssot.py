@@ -36,6 +36,17 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
+try:
+    import urllib.error
+    import urllib.request
+except ImportError:  # pragma: no cover - 环境兜底
+    urllib = None  # type: ignore[assignment]
+
+
+class _RemoteUnavailable(Exception):
+    """共享宿主（市场端 work-order API）不可达或返回异常。"""
+
+
 _STORE_DIR = Path(
     os.environ.get("WORK_ORDER_SSOT_DIR")
     or os.environ.get("CAPABILITY_PROPOSAL_DIR")
@@ -103,6 +114,53 @@ _OPS_REASONS: frozenset[str] = frozenset(
         "health_check_failed",
     }
 )
+
+
+# ---- 共享持久层（远端优先） ----
+# 配置 WORK_ORDER_MARKET_BASE（+ WORK_ORDER_MARKET_TOKEN，缺省 MARKET_ADMIN_TOKEN）
+# 后，本模块对工单的读写与判定委托市场端 /api/work-orders（共享 DB），
+# 本地 JSONL 仅作不可达时的降级视图；不配置则保持纯本地行为（测试/单仓开发）。
+def _remote_enabled() -> bool:
+    base = str(
+        os.environ.get("WORK_ORDER_MARKET_BASE") or os.environ.get("WORK_ORDER_MARKET_URL") or ""
+    ).strip()
+    token = str(
+        os.environ.get("WORK_ORDER_MARKET_TOKEN") or os.environ.get("MARKET_ADMIN_TOKEN") or ""
+    ).strip()
+    return bool(base and token) and urllib is not None
+
+
+def _remote_request(method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    if urllib is None:  # pragma: no cover - 环境兜底
+        raise _RemoteUnavailable()
+    base = str(
+        os.environ.get("WORK_ORDER_MARKET_BASE") or os.environ.get("WORK_ORDER_MARKET_URL") or ""
+    ).rstrip("/")
+    token = str(
+        os.environ.get("WORK_ORDER_MARKET_TOKEN") or os.environ.get("MARKET_ADMIN_TOKEN") or ""
+    )
+    data = json.dumps(body).encode("utf-8") if body is not None else None
+    req = urllib.request.Request(
+        f"{base}{path}",
+        data=data,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        method=method,
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            raw = resp.read().decode("utf-8")
+    except (urllib.error.URLError, urllib.error.HTTPError, OSError, TimeoutError) as exc:
+        logger.warning("work_order remote %s %s unavailable: %s", method, path, exc)
+        raise _RemoteUnavailable() from exc
+    try:
+        parsed = json.loads(raw) if raw else {}
+    except json.JSONDecodeError as exc:
+        logger.warning("work_order remote %s %s bad payload", method, path)
+        raise _RemoteUnavailable() from exc
+    return parsed if isinstance(parsed, dict) else {}
 
 
 def classify_track(
@@ -282,11 +340,21 @@ def get_work_order(wo_id: str) -> dict[str, Any] | None:
     """按工单 ID 读取物化视图（含完整时间线）。"""
     if not _WO_ID_RE.match(wo_id):
         return None
+    if _remote_enabled():
+        try:
+            remote = _remote_request("GET", f"/api/work-orders/{wo_id}")
+            if remote:
+                return remote
+        except _RemoteUnavailable:
+            logger.debug("remote work_order lookup skipped", exc_info=True)
     return _fold(_load_events()).get(wo_id)
 
 
 def list_work_orders(status: str | None = None, limit: int = 200) -> list[dict[str, Any]]:
-    """列出工单视图（按更新时间倒序）；``status`` 过滤当前状态。"""
+    """列出工单视图（按更新时间倒序）；``status`` 过滤当前状态。
+
+    远端共享库为主时，本列表为本地降级视图（不做远端全量枚举）。
+    """
     views = list(_fold(_load_events()).values())
     if status:
         views = [v for v in views if v["status"] == status]
@@ -297,6 +365,13 @@ def list_work_orders(status: str | None = None, limit: int = 200) -> list[dict[s
 def find_by_issue(issue_number: int) -> dict[str, Any] | None:
     """按 GitHub issue 号反查工单（验收回写用）。"""
     number = int(issue_number)
+    if _remote_enabled():
+        try:
+            remote = _remote_request("GET", f"/api/work-orders/by-issue/{number}")
+            if remote:
+                return remote
+        except _RemoteUnavailable:
+            logger.debug("remote by-issue lookup skipped", exc_info=True)
     for view in _fold(_load_events()).values():
         if int(view.get("issue_number") or 0) == number:
             return view
@@ -318,6 +393,27 @@ def upsert_candidate(
     key = str(dedup_key or "").strip()
     if not key:
         return {"wo_id": "", "created": False, "status": "", "reason": "empty_dedup_key"}
+    if _remote_enabled():
+        try:
+            res = _remote_request(
+                "POST",
+                "/api/work-orders/candidate",
+                {
+                    "source": src,
+                    "dedup_key": key,
+                    "reason": str(reason or ""),
+                    "context": context or {},
+                },
+            )
+            if res.get("wo_id"):
+                return {
+                    "wo_id": str(res["wo_id"]),
+                    "created": bool(res.get("created")),
+                    "status": str(res.get("status") or "candidate"),
+                    "remote": True,
+                }
+        except _RemoteUnavailable:
+            logger.debug("remote candidate upsert skipped", exc_info=True)
     wo_id = derive_wo_id(src, key)
     with _exclusive_file_lock():
         existing = _fold(_load_events()).get(wo_id)
@@ -355,6 +451,31 @@ def record_transition(
     target = str(to_state or "").strip()
     if target not in WO_STATES:
         return {"ok": False, "reason": "unknown_state", "wo_id": wo_id}
+    if _remote_enabled():
+        try:
+            res = _remote_request(
+                "POST",
+                "/api/work-orders/transition",
+                {
+                    "wo_id": wo_id,
+                    "to_state": target,
+                    "ref": ref or {},
+                    "note": str(note or "")[:500],
+                    "source": str(source or "mainline"),
+                },
+            )
+            if res.get("wo_id") and "ok" in res:
+                return {
+                    "ok": bool(res.get("ok")),
+                    "wo_id": str(res["wo_id"]),
+                    "from": str(res.get("from") or ""),
+                    "to": str(res.get("to") or ""),
+                    "status": str(res.get("status") or ""),
+                    "reason": str(res.get("reason") or ""),
+                    "remote": True,
+                }
+        except _RemoteUnavailable:
+            logger.debug("remote transition skipped", exc_info=True)
     with _exclusive_file_lock():
         view = _fold(_load_events()).get(wo_id)
         if view is None:
@@ -440,7 +561,34 @@ def record_acceptance_verdict(
 
     由 release-acceptance-closeout 在回写 GitHub issue 后调用；
     issue 未绑定工单时返回 ok=False（不阻塞 issue 回写本身）。
+
+    共享模式（WORK_ORDER_MARKET_BASE）：验收判定委托市场端（服务端权威，
+    verifying/released 窗口内才生效，不做复盘补写）；本地模式保留本地实现。
     """
+    if _remote_enabled():
+        try:
+            res = _remote_request(
+                "POST",
+                "/api/work-orders/acceptance",
+                {
+                    "issue_number": int(issue_number),
+                    "release_version": str(release_version or ""),
+                    "verdict": str(verdict or ""),
+                    "evidence": evidence or {},
+                },
+            )
+            if "wo_id" in res:
+                return {
+                    "ok": bool(res.get("ok")),
+                    "wo_id": str(res["wo_id"]),
+                    "to": str(res.get("to") or ""),
+                    "from": str(res.get("from") or ""),
+                    "reason": str(res.get("reason") or ""),
+                    "status": str(res.get("status") or ""),
+                    "remote": True,
+                }
+        except _RemoteUnavailable:
+            logger.debug("remote acceptance skipped", exc_info=True)
     view = find_by_issue(issue_number)
     if view is None:
         return {"ok": False, "reason": "issue_not_linked", "issue_number": int(issue_number)}
