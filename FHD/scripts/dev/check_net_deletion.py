@@ -81,7 +81,8 @@ GENERATED_BANNER_RE = re.compile(
     r"(DO NOT EDIT|auto-?generated|@generated|自动生成|代码生成|此文件由.*生成)",
     re.IGNORECASE,
 )
-_BANNER_BYTES = 2048
+_BANNER_BYTES = 2048      # 读取上限（足以覆盖头部若干行）
+_BANNER_HEAD_LINES = 5    # 只认开头这几行内的横幅声明；按行而非按字节，避免随散文增删漂移
 
 
 def _git(*args: str) -> str:
@@ -124,17 +125,22 @@ def _count_lines(abs_path: Path) -> int:
 
 
 def _has_generated_banner(abs_path: Path) -> bool:
-    """文件头部声明「自动生成 / DO NOT EDIT」即视为生成物，不计入人工维护行数。"""
+    """文件开头若干行声明「自动生成 / DO NOT EDIT」即视为生成物，不计入人工维护行数。
+
+    只看开头固定**行数**而非固定字节数：字节窗口会随文件顶部散文的增删而漂移，
+    使同一文件在相邻提交间被误判（例如 FHD/CHANGELOG.md 仅插入一行更新日志，
+    就把正文里的「自动生成」挤出窗口，整份 1300+ 行的活文档被当成生成物剔除）。
+    """
     try:
         with abs_path.open("rb") as fh:
             head = fh.read(_BANNER_BYTES)
     except OSError:
         return False
     try:
-        text = head.decode("utf-8", errors="ignore")
+        lines = head.decode("utf-8", errors="ignore").splitlines()
     except (LookupError, ValueError):
         return False
-    return GENERATED_BANNER_RE.search(text) is not None
+    return any(GENERATED_BANNER_RE.search(ln) for ln in lines[:_BANNER_HEAD_LINES])
 
 
 def count_lines() -> tuple[int, int, dict[str, int]]:
