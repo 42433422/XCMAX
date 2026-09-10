@@ -172,6 +172,16 @@ export async function createWindow(): Promise<void> {
   if (process.platform === 'darwin') {
     winOpts.frame = true
     winOpts.titleBarStyle = 'default'
+  } else if (process.platform === 'win32') {
+    // 与 macOS 平级观感（desktop-platform-parity SSOT）：隐藏原生标题栏带，
+    // 用 titleBarOverlay 把系统 最小化/最大化/关闭 按钮悬浮进应用内顶栏，
+    // 顶栏拖拽区由前端 CSS（-webkit-app-region）提供。
+    winOpts.titleBarStyle = 'hidden'
+    winOpts.titleBarOverlay = {
+      color: '#ffffff',
+      symbolColor: '#334155',
+      height: 50
+    }
   }
   winOpts.show = true
   winOpts.backgroundColor = '#f4f7fb'

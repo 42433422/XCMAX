@@ -312,6 +312,18 @@ domains:
     check: python scripts/dev/dev_guards.py check
     sync: null
 
+  - name: net-deletion
+    owner: platform-governance
+    enabled: true
+    # 净删除棘轮 SSOT：全仓「人工维护代码 + 文档」总行数基线，只减不增（棘轮）。
+    # 口径与排除项（生成物/第三方/dump/锁文件）见 scripts/dev/check_net_deletion.py；
+    # 已独立成域，故不进 dev-guards 聚合，避免同一门禁重复执行。
+    ssot: FHD/metrics/line_baseline.json
+    derived: []
+    mode: ratchet
+    check: python scripts/dev/check_net_deletion.py
+    sync: python scripts/dev/check_net_deletion.py --update
+
   - name: audit-benchmark
     owner: audit-quality
     enabled: true
