@@ -116,9 +116,7 @@ def test_blocking_timeout_when_another_process_holds_lock(tmp_path: Path) -> Non
         holder.wait(timeout=30)
 
 
-def test_windows_platform_uses_msvcrt(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_windows_platform_uses_msvcrt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Windows 必须真正加锁：历史实现在 fcntl 缺失时静默退化为无锁。"""
     calls: list[tuple[int, int]] = []
     fake_msvcrt = types.ModuleType("msvcrt")

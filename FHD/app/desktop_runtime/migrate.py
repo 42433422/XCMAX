@@ -19,6 +19,8 @@ from app.utils.process_lock import exclusive_file_lock
 from app.utils.time import utc_now_naive
 
 from .backup_retention import cleanup_local_backups
+from .db import integrity_check_ok as _integrity_check_ok
+from .db import quick_check_ok as _quick_check_ok
 from .paths import configure_desktop_environment, ensure_desktop_dirs
 
 logger = logging.getLogger(__name__)
@@ -99,34 +101,6 @@ def backup_database(
     # snapshots, while explicitly protecting the just-validated recovery point.
     cleanup_local_backups(dirs["backups"], protected=(target,))
     return target
-
-
-def _integrity_check_ok(db_path: Path) -> bool:
-    """跑 PRAGMA integrity_check，返回 True 当且仅当结果为 'ok'。"""
-    conn = None
-    try:
-        conn = sqlite3.connect(str(db_path))
-        result = conn.execute("PRAGMA integrity_check").fetchone()
-        return bool(result) and result[0] == "ok"
-    except sqlite3.Error:
-        return False
-    finally:
-        if conn is not None:
-            conn.close()
-
-
-def _quick_check_ok(db_path: Path) -> bool:
-    """跑 PRAGMA quick_check（启动时用，比 integrity_check 快）。"""
-    conn = None
-    try:
-        conn = sqlite3.connect(str(db_path))
-        result = conn.execute("PRAGMA quick_check").fetchone()
-        return bool(result) and result[0] == "ok"
-    except sqlite3.Error:
-        return False
-    finally:
-        if conn is not None:
-            conn.close()
 
 
 def recover_if_corrupt(
