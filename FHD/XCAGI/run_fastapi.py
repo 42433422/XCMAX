@@ -368,6 +368,20 @@ def main(argv: list[str] | None = None) -> None:
         run_alembic_upgrade(args.data_dir)
         return
 
+    if args.desktop or os.environ.get("XCAGI_DESKTOP_MODE", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }:
+        # 桌面启动兜底：Electron 仅在更新安装流程执行迁移，常规启动不做；
+        # 存量库缺迁移时新 ORM 查询即 500（2026-09-10 实测产品/库存页）。
+        # 已在 head 时零开销跳过；失败抛出交由 Electron 捕获退出码。
+        _ensure_sys_path()
+        from app.desktop_runtime.migrate import ensure_startup_migration
+
+        ensure_startup_migration(args.data_dir)
+
     if args.host:
         os.environ["FASTAPI_HOST"] = args.host
         os.environ["XCAGI_API_HOST"] = args.host
