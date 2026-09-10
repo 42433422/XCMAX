@@ -157,6 +157,13 @@ class TestAcceptanceVerdict:
         )
         assert result["ok"] is False
         assert result["reason"] == "verdict_pending"
+        # pending 不得自动补写开发/合并/发布完成状态：工单保持原 in_dev
+        view = wo.get_work_order(wo_id)
+        assert view["status"] == "in_dev"
+        to_states = [e.get("to") for e in view["history"] if e.get("event") == "transition"]
+        assert "merged" not in to_states
+        assert "released" not in to_states
+        assert "verifying" not in to_states
 
     def test_unlinked_issue_rejected(self, isolated_store: Path) -> None:
         result = wo.record_acceptance_verdict(
@@ -197,10 +204,15 @@ class TestClassifyTrack:
         assert wo.classify_track(reason="llm_timeout") == "ops_support"
         assert wo.classify_track(reason="install_failed") == "ops_support"
 
-    def test_customer_scope_wins_over_ops(self) -> None:
-        # 优先级：定制 > 运维
+    def test_ops_reason_with_customer_id_stays_ops(self) -> None:
+        # 带客户标识的普通故障仍是运维问题，不得因此自动归入客户定制
         track = wo.classify_track(reason="llm_timeout", context={"customer_id": "c-1"})
-        assert track == "customer_custom"
+        assert track == "ops_support"
+
+    def test_bare_customer_id_without_ops_is_custom(self) -> None:
+        # 无运维故障、仅显式客户作用域 → 单客户定制
+        assert wo.classify_track(context={"customer_id": "c-1"}) == "customer_custom"
+        assert wo.classify_track(context={"account_id": "a-1"}) == "customer_custom"
 
     def test_industry_signal_routes_to_industry_mod(self) -> None:
         assert wo.classify_track(context={"industry": "涂料"}) == "industry_mod"

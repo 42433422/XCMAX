@@ -89,10 +89,70 @@ class TestSignalToWorkOrder:
         assert second["reason"] == "duplicate"
         assert len(wo.list_work_orders()) == 1, "去重命中不得另起工单"
 
-    def test_empty_input_never_creates_work_order(self, isolated_stores: Path) -> None:
-        result = recorder.record_capability_proposal(raw_input="   ", reason="intent_unknown")
-        assert result["recorded"] is False
-        assert wo.list_work_orders() == [], "闲聊/空输入必须挡在工单系统之外"
+
+class TestRealConversationGate:
+    """经实际会话入口（意图确认服务漏斗）验证真实闲聊/普通问答不建单。
+
+    走 conversation 实际调用的 IntentConfirmationService.check_and_build_prompt，
+    用真实句子（非空串）；仅 stub 开放世界技能增强（返回无技能路由），
+    让漏斗的「非能力冲突 → unclear，不记录提案」分支被真实执行。
+    """
+
+    @pytest.fixture(autouse=True)
+    def _no_skill_route(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """屏蔽开放世界技能路由：闲聊/问答没有技能提案信号。"""
+        import app.domain.neuro.cognition.cognitive_orchestrator as ce
+
+        def fake_factory() -> Any:
+            class _Fake:
+                def enrich_intent_result(
+                    self, intent_result, *, text="", **_: Any
+                ) -> dict[str, Any]:
+                    return {"skill_route": None}
+
+            return _Fake()
+
+        monkeypatch.setattr(ce, "get_cognitive_orchestrator", fake_factory)
+
+    @staticmethod
+    def _no_work_order_or_proposal(tmp_path: Path) -> None:
+        assert wo.list_work_orders() == [], "闲聊/问答不得产生工单"
+        proposal_file = tmp_path / "capability_proposal.jsonl"
+        assert not proposal_file.exists() or proposal_file.read_text().strip() == "", (
+            "闲聊/问答不得落能力提案"
+        )
+
+    def test_real_chitchat_does_not_create_work_order(self, isolated_stores: Path) -> None:
+        from app.services.intent_confirmation_service import get_confirmation_service
+
+        result = get_confirmation_service().check_and_build_prompt(
+            {
+                "raw_input": "今天天气不错，你吃饭了吗？",
+                "final_intent": "unk",
+                "primary_intent": None,
+                "tool_key": None,
+                "slots": {},
+            }
+        )
+        assert result["status"] == "unclear"
+        assert result["intent"] is None
+        self._no_work_order_or_proposal(isolated_stores)
+
+    def test_real_qa_does_not_create_work_order(self, isolated_stores: Path) -> None:
+        from app.services.intent_confirmation_service import get_confirmation_service
+
+        result = get_confirmation_service().check_and_build_prompt(
+            {
+                "raw_input": "请问你们公司几点上班？",
+                "final_intent": "unk",
+                "primary_intent": None,
+                "tool_key": None,
+                "slots": {},
+            }
+        )
+        assert result["status"] == "unclear"
+        assert result["intent"] is None
+        self._no_work_order_or_proposal(isolated_stores)
 
 
 class TestRouterToIssue:

@@ -67,9 +67,9 @@ def _http(method: str, url: str, token: str, body: dict[str, Any] | None = None)
 
 
 def _fetch_acceptance(
-    market_base: str, market_token: str, version: str, channel: str
+    market_base: str, market_token: str, version: str, channel: str, build_sha: str = ""
 ) -> dict[str, Any]:
-    query = urllib.parse.urlencode({"version": version, "channel": channel})
+    query = urllib.parse.urlencode({"version": version, "channel": channel, "build_sha": build_sha})
     url = f"{market_base.rstrip('/')}/api/update-installations/receipts/acceptance?{query}"
     result = _http("GET", url, market_token)
     return result if isinstance(result, dict) else {}
@@ -187,6 +187,7 @@ def run(args: argparse.Namespace) -> int:
         logger.error("cannot read release config %s: %s", config_path, exc)
         return 1
     version = str(args.version or config.get("version_lock") or "").strip()
+    build_sha = str(config.get("build_sha") or config.get("git_sha") or "").strip()
     linked = config.get("linked_issues")
     linked_issues = [int(n) for n in (linked if isinstance(linked, list) else []) if int(n) > 0]
     if not version:
@@ -196,16 +197,16 @@ def run(args: argparse.Namespace) -> int:
         logger.info("version %s carries no linked_issues, nothing to close out", version)
         return 0
 
-    acceptance = _fetch_acceptance(args.market_base, args.market_token, version, args.channel)
+    acceptance = _fetch_acceptance(
+        args.market_base, args.market_token, version, args.channel, build_sha
+    )
     if acceptance.get("_error"):
         logger.error(
             "acceptance query failed: %s %s", acceptance.get("_error"), acceptance.get("_body")
         )
         return 1
     verdict = str(acceptance.get("verdict") or "pending")
-    logger.info(
-        "version=%s verdict=%s linked_issues=%s", version, verdict, linked_issues
-    )
+    logger.info("version=%s verdict=%s linked_issues=%s", version, verdict, linked_issues)
     if verdict == "pending":
         return 0
     if verdict not in ("accepted", "rejected"):
@@ -216,16 +217,14 @@ def run(args: argparse.Namespace) -> int:
         logger.info("[dry-run] would write back verdict=%s to issues %s", verdict, linked_issues)
         return 0
 
-    _ensure_label(
-        args.repo, args.token, LABEL_FAILED, "d73a4a", "客户机验收失败，工单已自动重开"
-    )
-    _ensure_label(
-        args.repo, args.token, LABEL_ACCEPTED, "0e8a16", "双平台客户机回执健康，验收通过"
-    )
+    _ensure_label(args.repo, args.token, LABEL_FAILED, "d73a4a", "客户机验收失败，工单已自动重开")
+    _ensure_label(args.repo, args.token, LABEL_ACCEPTED, "0e8a16", "双平台客户机回执健康，验收通过")
 
     failures = 0
     for number in linked_issues:
-        issue = _http("GET", f"https://api.github.com/repos/{args.repo}/issues/{number}", args.token)
+        issue = _http(
+            "GET", f"https://api.github.com/repos/{args.repo}/issues/{number}", args.token
+        )
         if issue.get("_error"):
             logger.error("fetch issue #%d failed: %s", number, issue.get("_error"))
             failures += 1
