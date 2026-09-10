@@ -28,6 +28,7 @@ permissions:
   contents: write
   actions: write
   checks: read
+  statuses: read
   security-events: read
 
 concurrency:
