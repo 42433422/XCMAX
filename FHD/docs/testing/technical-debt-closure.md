@@ -172,7 +172,8 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
 
 - Mainline reconciliation on September 9: merged `75d09beff` (#1814 audit
   standard catalog) without conflicts. Architecture fitness and audit-benchmark
-  SSOT validation pass; catalog validity is not product audit acceptance.
+  source-of-truth validation pass; catalog validity is not product audit
+  acceptance.
 - Mod boundaries now cover task deduplication, run/task reads and controls,
   task/run collections before public limits, task streams and runtime counts.
   Backend integration at `631b1d1b0`: 960 passed / 2 opt-in benchmarks skipped,
@@ -225,10 +226,11 @@ Existing work must be preserved. PR #1809 owns attendance upgrades and the missi
   https://github.com/42433422/XCMAX/pull/1815 . Mainline be51a83a2 (#1810 metrics
   only) was merged at 5c9a3d5a1 without conflicts or other-worktree edits.
   All 108 changed Python files pass Ruff and root workflow publication --check
-  reports no drift. PR CI/security/SSOT/frontend/customer-delivery jobs were
-  observed queued/in progress at that head; none are claimed passed here. The
-  initial Ruff file enumeration used Git's quoted non-ASCII filenames; NUL-safe
-  enumeration corrected the invocation and the full check passed. Changelog
+  reports no drift. PR CI/security/source-of-truth/frontend/customer-delivery
+  jobs were observed queued/in progress at that head; none are claimed passed
+  here. The initial Ruff file enumeration used Git's quoted non-ASCII filenames;
+  NUL-safe enumeration corrected the invocation and the full check passed.
+  Changelog
   entry is included for the product gate. The PR remains draft pending full
   acceptance; no merge, artifact activation or installed-client delivery occurred.
 
