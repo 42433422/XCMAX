@@ -299,7 +299,8 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
     product_subject = any(word in text for word in ("产品", "商品", "货品"))
     model_token = bool(
         _facade().re.search(
-            r"(?<![0-9A-Za-z])(?:[A-Za-z][A-Za-z0-9-]*\d[A-Za-z0-9-]*|\d{3,6})(?![0-9A-Za-z])",
+            r"(?<![0-9A-Za-z])(?:[A-Za-z][A-Za-z0-9-]*\d[A-Za-z0-9-]*"
+            r"|\d{2,6}[A-Za-z][A-Za-z0-9-]*|\d{3,6})(?![0-9A-Za-z])",
             text,
         )
     )

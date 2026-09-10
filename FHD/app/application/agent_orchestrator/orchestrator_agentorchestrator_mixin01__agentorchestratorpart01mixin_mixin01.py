@@ -394,7 +394,11 @@ class __AgentOrchestratorPart01MixinPart01Mixin:
         approved_step_id: str = "",
     ) -> None:
         if not run.steps:
-            return
+            # 拒绝执行的 SQL 计划（refusal_code）需保持 blocked，交由调用方给出拒答；
+            # 其余空计划维持既有语义：无步骤可执行即视为已完成。
+            refusal = run.final_output if isinstance(run.final_output, dict) else {}
+            if run.status == "blocked" and refusal.get("refusal_code"):
+                return
         approved = str(approved_step_id or "").strip()
         completed_node_ids: set[str] = {
             step.node_id for step in run.steps if step.status == "completed"

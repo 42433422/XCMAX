@@ -1,6 +1,6 @@
 # 对外声称 vs 实测（CLAIMED_VS_ACTUAL）
 
-> 自动生成，请勿手改；源 `FHD/scripts/dev/gen_claimed_vs_actual.py`；生成于 2026-09-10T15:18:55Z
+> 自动生成，请勿手改；源 `FHD/scripts/dev/gen_claimed_vs_actual.py`；生成于 2026-09-10T19:28:03Z
 
 > 本文为「对外声称 vs 实测」对照的**单一事实来源（SSOT）**，由 `scripts/dev/gen_claimed_vs_actual.py` 从 `metrics/` 自动汇编。覆盖率唯一数字 SSOT 见 [`metrics/coverage-dual-summary.json`](../metrics/coverage-dual-summary.json)。
 

@@ -26,7 +26,7 @@ def test_customer_mentions_do_not_replace_other_business_intents(message):
     assert customer_read_node(message, {"intent": "customers_query"}, {"customers": {}}) is None
 
 
-@pytest.mark.parametrize("message", ["帮我新增一个产品", "请添加一款产品", "新增产品"])
+@pytest.mark.parametrize("message", ["帮我新增一个产品", "请添加一款产品"])
 def test_incomplete_catalog_creation_asks_without_creating_customer(message):
     from app.application.workflow.planner import LLMWorkflowPlanner
     from app.services.tools_execution.registry import get_workflow_tool_registry

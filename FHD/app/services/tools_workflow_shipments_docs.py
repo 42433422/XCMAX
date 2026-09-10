@@ -191,10 +191,11 @@ def _registered_router_shipment_orders(
 
             generated = Path(str(result.get("file_path") or "")).resolve()
             root = (Path(get_app_data_dir()) / "shipment_outputs").resolve()
-            if not generated.is_relative_to(root) or generated.suffix.lower() != ".xlsx":
-                raise ValueError("shipment file is outside the generated output directory")
-            artifact = store_spreadsheet(run_id, generated.read_bytes(), name=generated.name)
-            result = {**result, "artifacts": [artifact]}
+            # 仅登记位于受控输出目录内的真实 xlsx：路径不在受控目录（例如自定义
+            # 输出位置）时不登记 artifact，但保持生成结果原样返回。
+            if generated.is_relative_to(root) and generated.suffix.lower() == ".xlsx":
+                artifact = store_spreadsheet(run_id, generated.read_bytes(), name=generated.name)
+                result = {**result, "artifacts": [artifact]}
         return result
     if action == "generate_batch":
         shipments = params.get("shipments") or []
