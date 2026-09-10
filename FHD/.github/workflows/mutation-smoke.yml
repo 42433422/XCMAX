@@ -61,11 +61,11 @@ jobs:
           fi
 
       - name: Skip notice (no mutation-scope changes)
-        if: github.event_name != 'schedule' && steps.paths.outputs.run_mutation != 'true'
+        if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch' && steps.paths.outputs.run_mutation != 'true'
         run: echo "No mutation-scope path changes; required check satisfied without running mutmut."
 
       - name: Setup Python
-        if: github.event_name == 'schedule' || steps.paths.outputs.run_mutation == 'true'
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || steps.paths.outputs.run_mutation == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -83,12 +83,12 @@ jobs:
           pip install mutmut
 
       - name: Run mutmut
-        if: github.event_name == 'schedule' || steps.paths.outputs.run_mutation == 'true'
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || steps.paths.outputs.run_mutation == 'true'
         working-directory: FHD
         run: mutmut run 2>&1 | tee mutmut-run.log
 
       - name: Generate kill report
-        if: github.event_name == 'schedule' || steps.paths.outputs.run_mutation == 'true'
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || steps.paths.outputs.run_mutation == 'true'
         working-directory: FHD
         # mutmut 3.x ``results`` 默认跳过 killed；优先解析 run 日志里的 progress 摘要
         run: python scripts/dev/mutation_kill_report.py --threshold 80 --from-file mutmut-run.log

@@ -40,6 +40,7 @@ from app.services.capability_proposal_recorder import (  # noqa: E402  pylint: d
     mark_proposals_processed,
 )
 from app.services.work_order_ssot import (
+    classify_track,  # noqa: E402  pylint: disable=wrong-import-position
     derive_wo_id,  # noqa: E402  pylint: disable=wrong-import-position
 )
 from app.utils.operational_errors import (  # noqa: E402  pylint: disable=wrong-import-position
@@ -218,6 +219,8 @@ def _build_issue_body(proposal: dict[str, Any]) -> str:
     return (
         "## 来源：能力提案 (capability_proposal)\n\n"
         f"- **工单 ID (Work Order SSOT)**: `{wo_id}`\n"
+        f"- **分流轨道（统一 Router）**: `{_classify_proposal_track(proposal)}`"
+        "（ops_support 运维支持 / product_line 通用产品线 / industry_mod 行业 Mod / customer_custom 单客户定制）\n"
         f"- **未命中时间**: `{ts}`\n"
         f"- **未命中原因**: `{reason}`\n"
         f"- **来源**: `{proposal.get('source') or '-'}`\n\n"
@@ -250,7 +253,19 @@ def _parse_issue_number(issue_url: str) -> int:
     return int(match.group(1)) if match else 0
 
 
-def _link_work_order(proposal: dict[str, Any], issue_url: str, issue_number: int = 0) -> None:
+def _classify_proposal_track(proposal: dict[str, Any]) -> str:
+    """统一 Router：按提案信号确定四类去向（确定性规则，见 work_order_ssot）。"""
+    ctx = proposal.get("context") if isinstance(proposal.get("context"), dict) else {}
+    return classify_track(
+        source=str(proposal.get("source") or ""),
+        reason=str(proposal.get("reason") or ""),
+        context=ctx,
+    )
+
+
+def _link_work_order(
+    proposal: dict[str, Any], issue_url: str, issue_number: int = 0, track: str = ""
+) -> None:
     """主线接线：issue 创建/调和后把工单推进到 routed（候选期终点）。
 
     工单写入失败不阻塞 issue 流程 —— issue 本身是对外观测载体。
@@ -267,11 +282,13 @@ def _link_work_order(proposal: dict[str, Any], issue_url: str, issue_number: int
             source=source,
             dedup_key=key,
             reason=str(proposal.get("reason") or ""),
+            context=proposal.get("context") if isinstance(proposal.get("context"), dict) else None,
         )
         link_issue(
             derive_wo_id(source, key),
             issue_number=number,
             issue_url=str(issue_url or ""),
+            track=str(track or ""),
         )
     except BOUNDARY_ERRORS:  # noqa: BLE001 - CI/中继边界兜底，不影响 issue 流程
         logger.debug("work_order link skipped", exc_info=True)
@@ -326,8 +343,11 @@ def run(args: argparse.Namespace) -> int:
     reconciled_keys: list[str] = []
     issue_urls: dict[str, str] = {}
     created_count = 0
-    labels = ["capability-proposal", "auto-generated", "needs-human"]
+    base_labels = ["capability-proposal", "auto-generated", "needs-human"]
     for proposal in limited:
+        # 统一 Router：四类去向轨道随 issue 标签对观察者可查
+        track = _classify_proposal_track(proposal)
+        labels = [*base_labels, f"track:{track}"]
         body = _build_issue_body(proposal)
         title = _build_issue_title(proposal)
         existing = (
@@ -365,7 +385,7 @@ def run(args: argparse.Namespace) -> int:
         key = str(proposal.get("dedup_key") or "")
         created_keys.append(key)
         issue_urls[key] = str(issue_url)
-        _link_work_order(proposal, str(issue_url), int(issue_number or 0))
+        _link_work_order(proposal, str(issue_url), int(issue_number or 0), track)
         created_count += 1
 
     if created_keys:

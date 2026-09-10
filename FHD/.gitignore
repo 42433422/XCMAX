@@ -294,3 +294,7 @@ coverage-behavior.json
 test_reports/*
 !test_reports/junit-full.xml
 !test_reports/pytest-full-last.txt
+
+# .NET build artifacts (IDE-generated; was misdetected as code changes by dispatch pipeline)
+tools/**/obj/
+tools/**/bin/

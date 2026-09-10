@@ -73,7 +73,7 @@ def _dedup_key(raw_input: Any, reason: str) -> str:
     norm = _normalize(raw_input).lower()
     if len(norm) > 200:
         norm = norm[:200]
-    return hashlib.sha1(f"{reason}|{norm}".encode()).hexdigest()
+    return hashlib.sha1(f"{reason}|{norm}".encode(), usedforsecurity=False).hexdigest()
 
 
 def _load_recent_keys(lookback_seconds: int = _DEDUP_WINDOW_SECONDS) -> set[str]:
@@ -185,7 +185,7 @@ def record_capability_proposal(
     try:
         from app.services.work_order_ssot import upsert_candidate
 
-        upsert_candidate(source=source, dedup_key=key, reason=reason)
+        upsert_candidate(source=source, dedup_key=key, reason=reason, context=context)
     except BOUNDARY_ERRORS:  # noqa: BLE001 - 工单写入失败不阻塞提案记录（跨仓导入边界兜底）
         logger.debug("work_order upsert skipped", exc_info=True)
     return {
