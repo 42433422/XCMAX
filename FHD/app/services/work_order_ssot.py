@@ -20,15 +20,12 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import os
-import re
 import threading
 import time
 from contextlib import contextmanager
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -61,58 +58,20 @@ try:
 except ImportError:  # pragma: no cover - Windows 使用线程锁兜底
     fcntl = None  # type: ignore[assignment]
 
-# 主线状态机：candidate → routed → in_dev → merged → released → verifying → closed
-# reopened 从 verifying/closed 回到 in_dev（失败重开原单，不另起新单）
-WO_STATES: tuple[str, ...] = (
-    "candidate",
-    "routed",
-    "in_dev",
-    "merged",
-    "released",
-    "verifying",
-    "closed",
-    "reopened",
-    "dropped",
-)
-
-_ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
-    "candidate": frozenset({"routed", "dropped"}),
-    "routed": frozenset({"in_dev", "dropped"}),
-    "in_dev": frozenset({"merged", "dropped"}),
-    "merged": frozenset({"released"}),
-    "released": frozenset({"verifying", "closed"}),
-    "verifying": frozenset({"closed", "reopened"}),
-    "closed": frozenset({"reopened"}),
-    "reopened": frozenset({"in_dev", "dropped"}),
-    "dropped": frozenset(),
-}
-
-_WO_ID_RE = re.compile(r"^WO-[0-9a-f]{12}$")
-
-# 统一 Router 的四类去向（工单分流轨道）：
-#   ops_support    运维与支持问题（超时/不可用/部署安装失败等运行期信号）
-#   product_line   通用产品线能力（默认去向：只有通用能力进入主产品 main）
-#   industry_mod   行业共性沉淀（进入版本化 Mod，不进主产品主线）
-#   customer_custom 单客户定制（严禁自动进入主线；派发实现前须显式加
-#                   custom-track-approved 标签，见 capability_proposal_promote）
-WO_TRACKS: tuple[str, ...] = (
-    "ops_support",
-    "product_line",
-    "industry_mod",
-    "customer_custom",
-)
-
-# reason → 运维支持轨道（运行期故障信号不是产品需求）
-_OPS_REASONS: frozenset[str] = frozenset(
-    {
-        "llm_timeout",
-        "llm_unavailable",
-        "service_unavailable",
-        "deploy_failed",
-        "install_failed",
-        "update_failed",
-        "health_check_failed",
-    }
+# 状态机常量/折叠/分类等纯逻辑在 work_order_state（app/ 单文件 ≤500 行门禁）；
+# 此处显式重导出，保持既有调用面（wo.WO_STATES / classify_track / _fold ...）不变。
+from app.services.work_order_state import (  # noqa: E402  pylint: disable=wrong-import-position
+    _ALLOWED_TRANSITIONS,
+    _OPS_REASONS,  # noqa: F401  (重导出：外部/一致性测试经本模块访问)
+    _WO_ID_RE,
+    WO_STATES,
+    WO_TRACKS,
+    _created_context,
+    _created_reason,
+    _fold,
+    _utc_now,
+    classify_track,
+    derive_wo_id,
 )
 
 
@@ -163,50 +122,6 @@ def _remote_request(method: str, path: str, body: dict[str, Any] | None = None) 
     return parsed if isinstance(parsed, dict) else {}
 
 
-def classify_track(
-    *,
-    source: str = "",
-    reason: str = "",
-    context: dict[str, Any] | None = None,
-) -> str:
-    """把工单分入四类去向之一（确定性规则，无 LLM，可机器核对）。
-
-    优先级：强定制信号 > 运维与支持 > 显式客户作用域 > 行业 Mod > 通用产品线（默认）。
-
-    关键区分：仅携带 ``customer_id`` 的普通故障（llm_timeout/install_failed 等
-    运行期信号）仍归 ``ops_support``，不得因客户标识而自动归入 ``customer_custom``；
-    只有显式 ``customer_scoped``（或技能提案 customer_scoped）与其后再判断的
-    customer_id/account_id 才构成单客户定制。
-
-    默认落 product_line 与「只有通用能力进入主产品」一致——
-    无法证明属于其他轨道的需求，按通用能力走主产品治理门禁。
-    """
-    ctx = context if isinstance(context, dict) else {}
-    reason_tag = str(reason or "").strip()
-    raw_skill = ctx.get("skill_proposal")
-    skill_proposal: dict[str, Any] = raw_skill if isinstance(raw_skill, dict) else {}
-    # 1) 强定制信号：显式 customer_scoped（含技能提案场景）→ 单客户定制
-    if ctx.get("customer_scoped") or skill_proposal.get("customer_scoped"):
-        return "customer_custom"
-    # 2) 运维与支持：运行期故障信号，优先级高于「仅携带 customer_id」。
-    #    带客户标识的普通故障仍是运维问题，不得因此自动归入客户定制。
-    if reason_tag in _OPS_REASONS:
-        return "ops_support"
-    # 3) 显式单客户作用域（无运维故障时才成立）
-    if ctx.get("customer_id") or ctx.get("account_id"):
-        return "customer_custom"
-    # 4) 行业共性：上下文带行业标识（intent_result.industry / skill_proposal.industry）
-    raw_intent = ctx.get("intent_result")
-    intent_result: dict[str, Any] = raw_intent if isinstance(raw_intent, dict) else {}
-    if ctx.get("industry") or intent_result.get("industry") or skill_proposal.get("industry"):
-        return "industry_mod"
-    return "product_line"
-
-
-def _utc_now() -> str:
-    return datetime.now(UTC).isoformat()
-
-
 @contextmanager
 def _exclusive_file_lock():
     """同进程线程锁 + POSIX 跨进程文件锁。"""
@@ -222,12 +137,6 @@ def _exclusive_file_lock():
                 yield
             finally:
                 fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-
-
-def derive_wo_id(source: str, dedup_key: str) -> str:
-    """由信号来源 + 去重键派生唯一工单 ID（幂等：同输入必同 ID）。"""
-    digest = hashlib.sha1(f"{source}|{dedup_key}".encode()).hexdigest()
-    return f"WO-{digest[:12]}"
 
 
 def _append_event(event: dict[str, Any]) -> None:
@@ -259,23 +168,6 @@ def _load_events() -> list[dict[str, Any]]:
     return out
 
 
-def _created_reason(view: dict[str, Any]) -> str:
-    """从物化视图 history 里取建单 reason（自动分类轨道的输入之一）。"""
-    for rec in view.get("history") or []:
-        if rec.get("event") == "created":
-            return str(rec.get("reason") or "")
-    return ""
-
-
-def _created_context(view: dict[str, Any]) -> dict[str, Any]:
-    """从物化视图 history 里取建单 context。"""
-    for rec in view.get("history") or []:
-        if rec.get("event") == "created":
-            ctx = rec.get("context")
-            return ctx if isinstance(ctx, dict) else {}
-    return {}
-
-
 def _publish_bus_event(wo_id: str, to_state: str, ref: dict[str, Any]) -> None:
     """状态迁移 → NeuroBus（best-effort，主线写入不受总线故障影响）。"""
     try:
@@ -291,49 +183,6 @@ def _publish_bus_event(wo_id: str, to_state: str, ref: dict[str, Any]) -> None:
         )
     except RECOVERABLE_ERRORS:
         logger.debug("work_order bus publish skipped", exc_info=True)
-
-
-def _fold(events: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """事件流 → 每工单最新物化视图。"""
-    orders: dict[str, dict[str, Any]] = {}
-    for rec in events:
-        wo_id = str(rec["wo_id"])
-        view = orders.setdefault(
-            wo_id,
-            {
-                "wo_id": wo_id,
-                "status": "",
-                "source": "",
-                "dedup_key": "",
-                "issue_number": 0,
-                "issue_url": "",
-                "release_version": "",
-                "track": "",
-                "created_at": "",
-                "updated_at": "",
-                "history": [],
-            },
-        )
-        view["history"].append(rec)
-        view["updated_at"] = str(rec.get("at") or "")
-        if rec.get("event") == "created":
-            view["status"] = "candidate"
-            view["source"] = str(rec.get("source") or "")
-            view["dedup_key"] = str(rec.get("dedup_key") or "")
-            view["created_at"] = str(rec.get("at") or "")
-        elif rec.get("event") == "transition":
-            view["status"] = str(rec.get("to") or view["status"])
-        raw_ref = rec.get("ref")
-        ref: dict[str, Any] = raw_ref if isinstance(raw_ref, dict) else {}
-        if ref.get("issue_number"):
-            view["issue_number"] = int(ref["issue_number"])
-        if ref.get("issue_url"):
-            view["issue_url"] = str(ref["issue_url"])
-        if ref.get("release_version"):
-            view["release_version"] = str(ref["release_version"])
-        if ref.get("track"):
-            view["track"] = str(ref["track"])
-    return orders
 
 
 def get_work_order(wo_id: str) -> dict[str, Any] | None:
