@@ -210,7 +210,16 @@ def _make_work_order(tmp_path: Path, issue_number: int, *, customer_scoped: bool
     to_issue._link_work_order(
         proposal, f"https://github.com/acme/repo/issues/{issue_number}", issue_number, track
     )
-    return wo.derive_wo_id(source, key)
+    wo_id = wo.derive_wo_id(key)
+    # 完成阶段必须由对应开发/合并/发布证据驱动（#1853：验收回执不得补齐完成阶段）。
+    # 这里按真实主线推进到 released，再交由 closeout 用市场回执判定验收。
+    ref = {"issue_number": issue_number, "pr": f"acme/repo#pr-{issue_number}"}
+    assert wo.record_transition(wo_id, "in_dev", ref=ref, note="开发立项", source="dev")["ok"]
+    assert wo.record_transition(wo_id, "merged", ref=ref, note="合入主线", source="merge")["ok"]
+    assert wo.record_transition(
+        wo_id, "released", ref=ref, note="随发布构建上线", source="release"
+    )["ok"]
+    return wo_id
 
 
 def _config(tmp_path: Path, version: str, build_sha: str, issue_numbers: list[int]) -> Path:
@@ -309,7 +318,19 @@ class TestDeliveryCloseout:
             label["name"] for label in pipeline.gh.issues[number]["labels"]
         ]
 
-        # 阶段2：修复后 mac 成功、win 保持成功 → accepted → 同一工单关闭
+        # 阶段2：修复后沿原主线重新开发/合并/发布（完成阶段由证据驱动），再重新验收
+        fix_ref = {"issue_number": number, "pr": f"acme/repo#fix-{number}"}
+        assert wo.record_transition(wo_id, "in_dev", ref=fix_ref, note="重开修复", source="dev")[
+            "ok"
+        ]
+        assert wo.record_transition(
+            wo_id, "merged", ref=fix_ref, note="修复合入主线", source="merge"
+        )["ok"]
+        assert wo.record_transition(
+            wo_id, "released", ref=fix_ref, note="修复版本上线", source="release"
+        )["ok"]
+
+        # 修复后 mac 成功、win 保持成功 → accepted → 同一工单关闭
         pipeline.store.stage(
             install_id="dev-mac",
             platform="darwin",
