@@ -299,9 +299,14 @@ markers = [
 # Targeted third-party ignore: anyio 弃用了自家 anyio.abc.BlockingPortal 别名 shim，
 # 经 fastapi TestClient 导入链在收集期触发（filterwarnings=error 下阻断全部收集）。
 # fastapi/starlette 停用该别名后可移除。
+# pytest 9.1.1 自身收集代码（_pytest/pathlib.py find_prefixed）遗留的 scandir 迭代器在
+# gc 时发 ResourceWarning，filterwarnings=error 下变成 unraisable 异常，
+# mutmut 进程内反复跑 pytest 时在 unconfigure 期崩溃（mutation-smoke 自 6 月起 main 周跑必挂）。
+# 泄漏在 pytest 内部而非 app 代码；pytest 修复后移除本条。
 filterwarnings = [
     "error",
     'ignore:The anyio\.abc\.BlockingPortal alias is deprecated',
+    'ignore:unclosed scandir iterator:builtins.ResourceWarning',
 ]
 
 [tool.coverage.run]
