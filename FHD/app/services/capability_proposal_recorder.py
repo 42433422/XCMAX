@@ -86,7 +86,7 @@ def _dedup_key(raw_input: Any, reason: str, context: dict[str, Any] | None = Non
             or context.get("account_id")
             or ""
         ).strip()
-    return hashlib.sha1(f"{reason}|{scope}|{norm}".encode(), usedforsecurity=False).hexdigest()
+    return hashlib.sha256(f"{reason}|{scope}|{norm}".encode(), usedforsecurity=False).hexdigest()
 
 
 def _load_recent_keys(lookback_seconds: int = _DEDUP_WINDOW_SECONDS) -> set[str]:
