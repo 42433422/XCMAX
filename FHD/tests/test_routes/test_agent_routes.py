@@ -1521,6 +1521,7 @@ def test_generated_shipment_download_contains_real_business_cells(tmp_path, monk
     from app.services.tools_workflow_shipments_docs import (
         _registered_router_shipment_orders,
     )
+    import app.di.registry as _di_registry
 
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path / "data"))
     engine = create_engine(f"sqlite:///{tmp_path / 'shipment.db'}")
@@ -1528,6 +1529,10 @@ def test_generated_shipment_download_contains_real_business_cells(tmp_path, monk
     factory = sessionmaker(bind=engine)
     monkeypatch.setattr("app.db.session.SessionLocal", factory)
     monkeypatch.setattr("app.db.SessionLocal", factory)
+    # 全量套件顺序敏感：DI 容器是全局单例，若更早的用例已按 conftest 固定数据目录
+    # 物化 shipment 服务，这里会拿到冻结了旧路径的缓存实例，生成文件不在本用例的
+    # 受控输出目录内 → 不登记 artifacts → KeyError。丢弃缓存容器，强制按当前环境重建。
+    monkeypatch.setattr(_di_registry, "_registry", None)
     try:
         with tenant_scope(1):
             with factory() as db:
