@@ -1,5 +1,5 @@
 # 跨设备 Agent 协作 v2 协议正本 (A2A-adapted)
-> 状态：draft（mac 已签，待 win32 加签） · 修订：v2-draft-20260909 · 参与方：mac-trae / trae-windows
+> 状态：signed（双签完成） · 修订：v2-20260909 · 参与方：mac-trae / trae-windows
 > 背景：Mac 与 Windows 两个 Trae 经共享记忆库 + dropbox 快通道协作，取代"人力派工/轮询"的旧模式。
 > 重建说明：2026-09-09 dropbox 因本地误删事故重建（已从 bare mirror 恢复仓库），历史信封/回执丢失，双端需重发 Agent Card。
 
@@ -53,4 +53,5 @@ dropbox 各目录设双向继承 ACL：`a4243342` 与 `xcshare` 均 allow read/w
 
 ## 9. 签署
 - ✅ mac-trae 签署：2026-09-09 15:14（认可 A2A 信封/seen-set 对账/四验收准则/权限约定）
-- ⏳ 待 trae-windows 加签（KB 写 `agent-collab-v2-signed-20260909` + dropbox receipts 写 signed 回执）
+- ✅ trae-windows 签署：2026-09-09，KB `agent-collab-v2-signed-20260909`（v1 签署 + v2 补签含第8节权限约定，status=signed），Mac 独立核验 PASS（KB `mac-verify-win32-signing-20260909`）
+- **协议状态：signed（双签完成）**

@@ -335,3 +335,66 @@ def test_set_service_registry_identical_container_does_not_close():
     set_service_registry(c)
     set_service_registry(c)
     assert stack.close_calls == 0
+
+
+# ── 初始化故障与并发（审计 R19）──────────────────────────────
+
+
+def test_lazy_factory_failure_leaves_slot_unset_and_propagates():
+    """factory 抛异常：异常原样上抛，槽位保持 None（不留半初始化对象），
+    后续访问重新触发 factory（失败不缓存）。"""
+    c = ServiceContainer()
+
+    class _Boom(RuntimeError):
+        pass
+
+    calls = []
+
+    def flaky():
+        calls.append(1)
+        if len(calls) == 1:
+            raise _Boom("初始化故障")
+        return object()
+
+    with pytest.raises(_Boom):
+        c._lazy("_session_service", flaky)  # noqa: SLF001
+    assert c._session_service is None  # noqa: SLF001
+
+    ok = c._lazy("_session_service", flaky)  # noqa: SLF001
+    assert ok is not None
+    assert c._session_service is ok  # noqa: SLF001
+    assert len(calls) == 2
+
+
+def test_lazy_concurrent_first_access_constructs_once():
+    """多线程并发首次访问同一懒加载属性：双重检查锁保证 factory 只执行一次。"""
+    import threading
+
+    c = ServiceContainer()
+    calls = []
+    start = threading.Event()
+
+    def slow_factory():
+        calls.append(1)
+        # 放大竞态窗口：无锁实现时这里会并发进入多次
+        import time
+
+        time.sleep(0.02)
+        return object()
+
+    results = []
+
+    def worker():
+        start.wait()
+        results.append(c._lazy("_auth_service", slow_factory))  # noqa: SLF001
+
+    threads = [threading.Thread(target=worker) for _ in range(8)]
+    for t in threads:
+        t.start()
+    start.set()
+    for t in threads:
+        t.join()
+
+    assert len(calls) == 1, f"factory 被并发调用 {len(calls)} 次，双重检查锁失效"
+    assert len(results) == 8
+    assert all(r is results[0] for r in results), "并发访问返回了不同实例"

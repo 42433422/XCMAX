@@ -162,6 +162,28 @@ def _is_frozen() -> bool:
     return bool(getattr(sys, "frozen", False)) or hasattr(sys, "_MEIPASS")
 
 
+def _force_stdio_utf8() -> None:
+    """Windows 打包后端强制 stdout/stderr 使用 UTF-8。
+
+    Electron 以 UTF-8 解码后端管道日志；而 PyInstaller 冻结包在中文 Windows 上
+    可能忽略 ``PYTHONUTF8``，使 stderr 退回 ANSI(cp936)。WinError 等系统消息经
+    GBK 字节写出后被 Node 按 UTF-8 解码即产生"锟斤拷"乱码。这里在解释器完全
+    初始化后显式 reconfigure，确保日志字节流与解码端编码约定一致。
+    """
+    if sys.platform != "win32":
+        return
+    for stream in (sys.stdout, sys.stderr):
+        if stream is None:
+            continue
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8")
+        except (ValueError, OSError):
+            pass
+
+
 def _verify_frozen_critical_runtime() -> None:
     """Exercise critical office and voice dependencies in the frozen executable."""
     import tempfile
@@ -295,6 +317,7 @@ def _resolve_reload(desktop: bool) -> bool:
 
 
 def main(argv: list[str] | None = None) -> None:
+    _force_stdio_utf8()
     args = _parse_args(argv)
 
     if args.verify_frozen_critical_runtime:
@@ -344,6 +367,20 @@ def main(argv: list[str] | None = None) -> None:
                 print(f"XCAGI_MIGRATION_BACKUP={backup_path}", flush=True)
         run_alembic_upgrade(args.data_dir)
         return
+
+    if args.desktop or os.environ.get("XCAGI_DESKTOP_MODE", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }:
+        # 桌面启动兜底：Electron 仅在更新安装流程执行迁移，常规启动不做；
+        # 存量库缺迁移时新 ORM 查询即 500（2026-09-10 实测产品/库存页）。
+        # 已在 head 时零开销跳过；失败抛出交由 Electron 捕获退出码。
+        _ensure_sys_path()
+        from app.desktop_runtime.migrate import ensure_startup_migration
+
+        ensure_startup_migration(args.data_dir)
 
     if args.host:
         os.environ["FASTAPI_HOST"] = args.host

@@ -117,6 +117,37 @@ def record_update_installation_receipt(
     return {"ok": True, "duplicate": False, "receipt": _serialize(row)}
 
 
+@router.get("/receipts/acceptance")
+def get_release_acceptance(
+    version: str = Query(..., min_length=1, max_length=64),
+    channel: str = Query(default="stable", pattern="^(stable|staging)$"),
+    build_sha: str = Query(default="", max_length=40, pattern="^$|^[0-9a-fA-F]{40}$"),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """发布验收判定：双平台安装回执聚合 → accepted / rejected / pending。
+
+    供 release-acceptance-closeout 回写 GitHub issue（验收关闭 / 失败重开）。
+
+    ``build_sha`` 关联实际发布的完整构建 SHA：传入时只统计该构建的回执，
+    其它构建（同一版本号的不同构建）不参与判定，避免污染验收结论。
+    """
+    if not user.is_admin:
+        raise HTTPException(403, "需要管理员权限")
+    from modstore_server.release_acceptance import judge_release_acceptance
+
+    query = db.query(UpdateInstallationReceipt).filter(
+        UpdateInstallationReceipt.target_version == version.strip(),
+        UpdateInstallationReceipt.channel == channel,
+    )
+    if build_sha.strip():
+        query = query.filter(
+            UpdateInstallationReceipt.target_build_sha == build_sha.strip().lower()
+        )
+    rows = query.order_by(UpdateInstallationReceipt.reported_at.desc()).limit(2000).all()
+    return judge_release_acceptance(rows, version=version.strip())
+
+
 @router.get("/receipts")
 def list_update_installation_receipts(
     target_build_sha: str = Query(default="", max_length=128),
