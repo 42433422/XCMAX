@@ -144,11 +144,7 @@ def get_release_acceptance(
         query = query.filter(
             UpdateInstallationReceipt.target_build_sha == build_sha.strip().lower()
         )
-    rows = (
-        query.order_by(UpdateInstallationReceipt.reported_at.desc())
-        .limit(2000)
-        .all()
-    )
+    rows = query.order_by(UpdateInstallationReceipt.reported_at.desc()).limit(2000).all()
     return judge_release_acceptance(rows, version=version.strip())
 
 
