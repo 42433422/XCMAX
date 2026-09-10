@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from app.utils.operational_errors import BOUNDARY_ERRORS
+from app.utils.process_lock import exclusive_file_lock
 
 logger = logging.getLogger(__name__)
 
@@ -35,27 +36,22 @@ _DEDUP_WINDOW_SECONDS = 7 * 24 * 3600  # 7 天去重窗口
 
 _file_lock = threading.Lock()
 
-try:
-    import fcntl
-except ImportError:  # pragma: no cover - Windows 使用线程锁兜底
-    fcntl = None  # type: ignore[assignment]
+# 跨进程锁等待上限：超过则失败退出，不静默并发写坏提案队列。
+_LOCK_TIMEOUT_SECONDS = 60.0
 
 
 @contextmanager
 def _exclusive_file_lock():
-    """同进程线程锁 + POSIX 跨进程文件锁。"""
+    """同进程线程锁 + 跨进程文件锁（Windows 走 msvcrt，POSIX 走 fcntl）。"""
     with _file_lock:
-        if fcntl is None:
-            yield
-            return
         _REPORT_DIR.mkdir(parents=True, exist_ok=True)
-        lock_path = _REPORT_DIR / ".capability_proposal.lock"
-        with lock_path.open("a+", encoding="utf-8") as handle:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-            try:
-                yield
-            finally:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        with exclusive_file_lock(
+            _REPORT_DIR / ".capability_proposal.lock",
+            blocking=True,
+            timeout=_LOCK_TIMEOUT_SECONDS,
+            reject_symlink=True,
+        ):
+            yield
 
 
 def _utc_now() -> str:
