@@ -17,11 +17,11 @@ import json
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, Path
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from modstore_server.api.deps import get_current_user, get_db
+from modstore_server.api.deps import get_db, require_admin
 from modstore_server.db.work_orders import WorkOrderEvent
 from modstore_server.models import User
 from modstore_server.work_order_core import (
@@ -57,11 +57,6 @@ class AcceptanceBody(BaseModel):
     release_version: str = Field(..., max_length=64)
     verdict: str = Field(..., max_length=16)
     evidence: dict[str, Any] = Field(default_factory=dict)
-
-
-def _require_admin(user: User) -> None:
-    if not user.is_admin:
-        raise HTTPException(403, "需要管理员权限")
 
 
 def _now_utc() -> datetime:
@@ -130,9 +125,8 @@ def _created_facts(db: Session, wo_id: str) -> tuple[str, str, dict[str, Any]]:
 def create_candidate(
     body: CandidateBody,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    _user: User = Depends(require_admin),
 ) -> dict[str, Any]:
-    _require_admin(user)
     key = str(body.dedup_key or "").strip()
     if not key:
         return {"wo_id": "", "created": False, "status": "", "reason": "empty_dedup_key"}
@@ -159,9 +153,8 @@ def create_candidate(
 def transition(
     body: TransitionBody,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    _user: User = Depends(require_admin),
 ) -> dict[str, Any]:
-    _require_admin(user)
     wo_id = str(body.wo_id or "").strip()
     target = str(body.to_state or "").strip()
     view = _view(db, wo_id)
@@ -203,9 +196,8 @@ def transition(
 def acceptance(
     body: AcceptanceBody,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    _user: User = Depends(require_admin),
 ) -> dict[str, Any]:
-    _require_admin(user)
     issue_number = int(body.issue_number)
     view = _find_by_issue(db, issue_number)
     if view is None:
@@ -267,9 +259,8 @@ def _find_by_issue(db: Session, issue_number: int) -> dict[str, Any] | None:
 def by_issue(
     issue_number: int = Path(..., gt=0),
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    _user: User = Depends(require_admin),
 ) -> dict[str, Any]:
-    _require_admin(user)
     view = _find_by_issue(db, int(issue_number))
     return view if view is not None else {}
 
@@ -278,9 +269,8 @@ def by_issue(
 def get_order(
     wo_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    _user: User = Depends(require_admin),
 ) -> dict[str, Any]:
-    _require_admin(user)
     view = _view(db, wo_id)
     return view if view is not None else {}
 
