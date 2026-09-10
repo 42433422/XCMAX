@@ -265,7 +265,8 @@ class PromptsMixin:
             return hashlib.md5(
                 json.dumps(metadata, sort_keys=True, ensure_ascii=False, default=str).encode(
                     "utf-8"
-                )
+                ),
+                usedforsecurity=False,
             ).hexdigest()
         except RECOVERABLE_ERRORS:
             return str(hash(frozenset(metadata.keys())))

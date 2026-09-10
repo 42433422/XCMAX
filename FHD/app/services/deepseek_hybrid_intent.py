@@ -77,6 +77,16 @@ class HybridIntentWithDeepSeek:
             logger.info("[HYBRID] 简单意图，直接返回: %s", rule_result.get("primary_intent"))
             return rule_result
 
+        if rule_result.get("is_negated") and rule_result.get("primary_intent"):
+            # 拒绝类请求（审计 R02）：规则命中但被否定守卫拦截时，
+            # 不得把 primary_intent 透传成 final_intent 供下游执行；
+            # 显式清空后交回普通对话应答，不重新走 LLM 分类。
+            rule_result["final_intent"] = None
+            rule_result["intent_source"] = "rule"
+            rule_result["slots"] = {}
+            logger.info("[HYBRID] 否定式请求，抑制执行意图: %s", rule_result.get("primary_intent"))
+            return rule_result
+
         if rule_result.get("primary_intent") and rule_result.get("primary_intent") != "unk":
             rule_result["final_intent"] = rule_result["primary_intent"]
             rule_result["intent_source"] = "rule"

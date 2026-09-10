@@ -192,6 +192,10 @@ def test_business_intent_covers_natural_wording(message: str, operation: str) ->
         "请数字员工帮我查一下库存，再生成报价单",
         "智能员工，查询演示商品并告诉我可用数量",
         "请虚拟员工帮我查询客户并生成订单",
+        # 审计 F04 复现用例：AI 员工称谓不得把跨业务请求误路由成 personnel_read。
+        "请 AI 员工帮我查询客户订单",
+        "让 AI 员工查一下库存",
+        "让AI员工导出客户对账单",
     ],
 )
 def test_explanatory_or_general_chat_is_not_intercepted(message: str) -> None:

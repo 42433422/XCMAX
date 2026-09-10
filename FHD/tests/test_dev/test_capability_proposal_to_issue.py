@@ -130,7 +130,12 @@ def test_apply_ignores_legacy_and_writes_issue_receipt(
 
     assert relay.run(args) == 0
     assert len(sent) == 1
-    assert sent[0]["labels"] == ["capability-proposal", "auto-generated", "needs-human"]
+    assert sent[0]["labels"] == [
+        "capability-proposal",
+        "auto-generated",
+        "needs-human",
+        "track:product_line",  # 统一 Router 默认轨道：无定制/运维/行业信号
+    ]
     assert "13800000000" not in sent[0]["body"]
     assert recorder.list_pending_proposals() == []
     receipts = [
