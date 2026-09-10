@@ -102,7 +102,9 @@ class RuleEngine:
             None,
         )
         if exact_tool:
-            definition = next((item for item in tool_intents if item["id"] == exact_tool), {})
+            definition: dict[str, Any] = next(
+                (item for item in tool_intents if item["id"] == exact_tool), {}
+            )
             return [
                 {
                     "id": exact_tool,

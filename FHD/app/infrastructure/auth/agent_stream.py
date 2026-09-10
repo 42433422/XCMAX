@@ -10,6 +10,8 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 StreamAuthorizer = Callable[[], Awaitable[bool]]
 
+STREAM_AUTH_ERRORS: tuple[type[Exception], ...] = (HTTPException, *RECOVERABLE_ERRORS)
+
 
 def require_stream_authorizer(
     request: Request, principal: AgentPrincipal = Depends(require_agent_principal)
@@ -20,7 +22,7 @@ def require_stream_authorizer(
                 require_agent_principal, request, x_user_id=request.headers.get("X-User-ID")
             )
             return current == principal
-        except (HTTPException, *RECOVERABLE_ERRORS):
+        except STREAM_AUTH_ERRORS:
             return False
 
     return authorize

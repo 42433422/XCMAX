@@ -155,7 +155,7 @@ class SQLAlchemyAgentRunRepository:
                 return [
                     run for record in records if (run := self._record_to_run(record)) is not None
                 ]
-            result = []
+            result: list[AgentRun] = []
             if limit <= 0:
                 return result
             # Older rows store tenant only in their JSON payload. Filter before

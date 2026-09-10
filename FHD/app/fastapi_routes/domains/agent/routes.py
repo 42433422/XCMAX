@@ -18,6 +18,7 @@ from app.application.agent_orchestrator.approval_transaction import approve_and_
 from app.application.agent_orchestrator.clarification import ClarificationAnswerError
 from app.application.agent_orchestrator.run_control import run_operation_lock
 from app.application.agent_orchestrator.run_lifecycle import requires_retry_reconciliation
+from app.application.agent_orchestrator.run_models import AgentRun
 from app.application.agent_orchestrator.run_repository import get_agent_run_repository
 from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
 from app.application.agent_orchestrator.runtime_context import RuntimeContextOwnershipError
@@ -277,11 +278,11 @@ def continue_agent_run(
                 )
             runs = get_agent_run_repository()
             queue = get_task_execution_repository()
-            durable = isinstance(runs, SQLAlchemyAgentRunRepository)
-            if durable:
+            if isinstance(runs, SQLAlchemyAgentRunRepository):
+                durable = True
                 if not isinstance(queue, SQLAlchemyTaskExecutionRepository):
                     raise ApprovalGrantStorageError("持久化审批需要持久化队列")
-                run = approve_and_enqueue(
+                run: AgentRun | None = approve_and_enqueue(
                     runs,
                     queue,
                     run_id=run_id,
@@ -291,6 +292,7 @@ def continue_agent_run(
                     authenticated_binding=principal.mod_authorization,
                 )
             else:
+                durable = False
                 from app.application.agent_orchestrator.session_renewal import (
                     renew_approval_session,
                 )
@@ -348,6 +350,7 @@ def _control_agent_run(
         current, error = _owned_run(orchestrator, run_id, principal)
         if error is not None:
             return error
+        assert current is not None
         if action == "resume" and requires_retry_reconciliation(current):
             return JSONResponse(
                 {"success": False, "message": "任务执行结果需要人工核对，暂不能恢复"},

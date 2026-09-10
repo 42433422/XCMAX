@@ -25,8 +25,10 @@ def test_complete_configured_command_wins_over_broad_keywords(message, expected)
 def test_exact_command_does_not_override_a_longer_request():
     engine = RuleEngine()
     matches = engine.match_intents("把打印机列表发给他")
+    # main #1811 added 打印机 as a broad printer_list keyword, so a longer
+    # sentence may still match it as a secondary intent. The exact command
+    # must not take over: the higher-priority wechat_send stays on top.
     assert matches[0]["tool_key"] == "wechat_send"
-    assert all(item["tool_key"] != "printer_list" for item in matches)
 
 
 def test_negated_print_command_still_cannot_execute():

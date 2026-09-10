@@ -1477,11 +1477,11 @@ def test_exported_spreadsheet_download_checks_owner_and_file_content(tmp_path, m
     import json
     from io import BytesIO
 
-    from app.services.tools_workflow_registered_part01_part02 import _registered_router_reports
     from openpyxl import load_workbook
 
     from app.application.agent_orchestrator.artifact_files import artifact_path
     from app.application.agent_orchestrator.run_models import artifact_from_dict
+    from app.services.tools_workflow_erp import _registered_router_reports
 
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
     run = AgentRun(user_id="u1", message="导出销售报表", status="completed")
@@ -1510,9 +1510,6 @@ def test_exported_spreadsheet_download_checks_owner_and_file_content(tmp_path, m
 def test_generated_shipment_download_contains_real_business_cells(tmp_path, monkeypatch):
     from io import BytesIO
 
-    from app.services.tools_workflow_registered_part02_part01 import (
-        _registered_router_shipment_orders,
-    )
     from openpyxl import load_workbook
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
@@ -1521,6 +1518,9 @@ def test_generated_shipment_download_contains_real_business_cells(tmp_path, monk
     from app.db.base import Base
     from app.db.models import Product, PurchaseUnit
     from app.infrastructure.tenant_scope import tenant_scope
+    from app.services.tools_workflow_shipments_docs import (
+        _registered_router_shipment_orders,
+    )
 
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path / "data"))
     engine = create_engine(f"sqlite:///{tmp_path / 'shipment.db'}")
