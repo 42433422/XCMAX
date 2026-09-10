@@ -58,7 +58,7 @@ def test_negated_request_is_not_business_db_write(message: str) -> None:
 @pytest.mark.parametrize(
     ("message", "expected_intent"),
     [
-        ("帮我打印标签", "shipment"),
+        ("帮我打印标签", "label_print"),
         ("开单", "shipment"),
         ("删除客户张三", "customers_query"),
         ("导出报表", "reports_query"),

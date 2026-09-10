@@ -269,8 +269,10 @@ class _LLMWorkflowPlannerPart02Mixin:
         if (
             not nodes
             and "products" in tool_registry
+            and not any(word in message for word in ("客户", "购买单位"))
             and _facade().re.fullmatch(
-                r"(?:请)?(?:帮我)?\s*(?:新增|添加)\s*(?:一个|一款|一种)?\s*产品[。！!]?",
+                r"(?:(?:请|帮我|请帮我)\s*(?:新增|添加)\s*(?:一个|一款|一种)?"
+                r"|(?:新增|添加)\s*(?:一个|一款|一种))\s*产品[。！!]?",
                 message.strip(),
             )
         ):
