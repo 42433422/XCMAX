@@ -7,6 +7,8 @@
 - link_issue 与 find_by_issue 反查
 - record_acceptance_verdict：accepted→closed / rejected→reopened
 - 事件流折叠视图与 list_work_orders 过滤
+- 统一 Router：classify_track 四类去向规则、routed 迁移强制携带轨道、
+  缺省自动分类、非法轨道拒绝
 """
 
 from __future__ import annotations
@@ -181,3 +183,63 @@ class TestListWorkOrders:
         view = wo.get_work_order(wo_id)
         events = [h["event"] for h in view["history"]]
         assert events == ["created", "transition"]
+
+
+class TestClassifyTrack:
+    """统一 Router 四类去向的确定性规则。"""
+
+    def test_default_is_product_line(self) -> None:
+        # 无法证明属于其他轨道 → 通用产品线（只有通用能力进入主产品）
+        assert wo.classify_track(reason="intent_unknown") == "product_line"
+        assert wo.classify_track() == "product_line"
+
+    def test_ops_reasons_route_to_ops_support(self) -> None:
+        assert wo.classify_track(reason="llm_timeout") == "ops_support"
+        assert wo.classify_track(reason="install_failed") == "ops_support"
+
+    def test_customer_scope_wins_over_ops(self) -> None:
+        # 优先级：定制 > 运维
+        track = wo.classify_track(reason="llm_timeout", context={"customer_id": "c-1"})
+        assert track == "customer_custom"
+
+    def test_industry_signal_routes_to_industry_mod(self) -> None:
+        assert wo.classify_track(context={"industry": "涂料"}) == "industry_mod"
+        ctx = {"intent_result": {"industry": "涂料"}}
+        assert wo.classify_track(context=ctx) == "industry_mod"
+        ctx2 = {"skill_proposal": {"industry": "考勤"}}
+        assert wo.classify_track(context=ctx2) == "industry_mod"
+
+    def test_customer_scoped_in_skill_proposal(self) -> None:
+        ctx = {"skill_proposal": {"customer_scoped": True, "industry": "涂料"}}
+        assert wo.classify_track(context=ctx) == "customer_custom"
+
+
+class TestRouterTrackGate:
+    """routed 迁移必须携带合法轨道；缺省自动分类。"""
+
+    def test_routed_auto_classifies_from_created_event(self, isolated_store: Path) -> None:
+        wo_id = wo.upsert_candidate(source="s", dedup_key="kt", reason="llm_timeout")["wo_id"]
+        result = wo.record_transition(wo_id, "routed")
+        assert result["ok"] is True
+        assert wo.get_work_order(wo_id)["track"] == "ops_support"
+
+    def test_routed_explicit_track_preserved(self, isolated_store: Path) -> None:
+        wo_id = wo.upsert_candidate(source="s", dedup_key="kt2", reason="r")["wo_id"]
+        result = wo.link_issue(wo_id, issue_number=7, issue_url="https://x/7", track="industry_mod")
+        assert result["ok"] is True
+        view = wo.get_work_order(wo_id)
+        assert view["status"] == "routed"
+        assert view["track"] == "industry_mod"
+
+    def test_routed_rejects_unknown_track(self, isolated_store: Path) -> None:
+        wo_id = wo.upsert_candidate(source="s", dedup_key="kt3", reason="r")["wo_id"]
+        result = wo.record_transition(wo_id, "routed", ref={"track": "sidestreet"})
+        assert result["ok"] is False
+        assert result["reason"] == "unknown_track"
+        assert wo.get_work_order(wo_id)["status"] == "candidate"
+
+    def test_track_survives_later_transitions(self, isolated_store: Path) -> None:
+        wo_id = wo.upsert_candidate(source="s", dedup_key="kt4", reason="r")["wo_id"]
+        wo.link_issue(wo_id, issue_number=9, issue_url="u", track="customer_custom")
+        wo.record_transition(wo_id, "in_dev")
+        assert wo.get_work_order(wo_id)["track"] == "customer_custom"

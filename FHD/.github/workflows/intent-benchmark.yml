@@ -23,7 +23,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -r requirements-server-api.txt pytest
+          pip install -r requirements-server-api.txt pytest pytest-asyncio
 
       - name: Run intent golden set benchmark
         env:
