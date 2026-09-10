@@ -7,9 +7,10 @@ name: Intent Accuracy Benchmark
 #    但必须报告 NOT_RUN/UNVERIFIED 状态（写入 benchmark_run_mode.json 并随 metrics 提交），
 #    不得把本模式结果当作 LLM 实测验收。
 #  - acceptance（手动 mode=acceptance）：发布验收口径——
-#    1) DEEPSEEK_API_KEY 必须存在，缺失即失败（不得静默跳过）；
+#    1) LLM 凭据必须存在（AUTONOMY_STRONG_API_KEY → XCAUTO_API_KEY，MiMo/xcauto 口径），
+#       缺失即失败（不得静默跳过）；
 #    2) 运行前 LLM 真实调用预检（fail-closed）；
-#    3) 基准跑真实 LLM 链路（不设 XCAGI_SKIP_INTENT_LLM）；
+#    3) 基准跑真实 LLM 链路（LLM_PROVIDER=xcauto，不跳过 LLM）；
 #    4) 报告必须存在（缺失即失败）、有效样本数必须与 golden set 一致且 > 0；
 #    5) 预设业务阈值硬门禁（TASK_BENCHMARK_MIN_PASS=0.2，只升不降，禁止为变绿降到 0）；
 #    6) 运行身份（run_id/sha/actor）写入验收标记。
@@ -78,35 +79,6 @@ jobs:
         run: |
           python -m pytest tests/benchmarks/test_task_success.py -v --tb=short
 
-<<<<<<< HEAD
-      # R17：LLM 口径任务成功率实测（MiMo via OPENAI 兼容 env）。
-      # secret 缺失时跳过，不阻塞规则引擎棘轮；报告只上传 artifact 留证，
-      # 不写 metrics/（避免 LLM 波动污染只升不降棘轮）。
-      - name: Run task-level benchmark (LLM mode, R17)
-        if: ${{ env.XCAUTO_API_KEY != '' }}
-        env:
-          XCAUTO_API_KEY: ${{ secrets.AUTONOMY_STRONG_API_KEY }}
-          XCAUTO_BASE_URL: ${{ vars.AUTONOMY_STRONG_BASE_URL }}
-          LLM_PROVIDER: xcauto
-          XCAGI_SKIP_INTENT_LLM: "0"
-          TASK_BENCHMARK_RUN: "1"
-          TASK_BENCHMARK_TRIALS: "1"
-          TASK_BENCHMARK_MIN_PASS: "0"
-        run: |
-          python -m pytest tests/benchmarks/test_task_success.py -v --tb=short
-          mkdir -p test_reports_llm
-          cp test_reports/task_benchmark_report.json test_reports_llm/task_benchmark_report_llm.json
-
-      - name: Upload LLM-mode report
-        if: ${{ always() && env.XCAUTO_API_KEY != '' }}
-        env:
-          XCAUTO_API_KEY: ${{ secrets.AUTONOMY_STRONG_API_KEY }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: task-benchmark-llm-report
-          path: FHD/test_reports_llm/task_benchmark_report_llm.json
-          if-no-files-found: ignore
-=======
       - name: Write run-mode marker (UNVERIFIED / NOT_RUN)
         if: always()
         env:
@@ -140,7 +112,6 @@ jobs:
               json.dump(marker, f, ensure_ascii=False, indent=2)
           print(json.dumps(marker, ensure_ascii=False))
           PY
->>>>>>> d8c16f1b4 (fix(audit): #1853/#1851/#1859 整改——工单验收回执、分流身份、E2E 覆盖、基准双模式、Playwright 环境)
 
       - name: Commit intent benchmark report
         if: always()
@@ -201,20 +172,24 @@ jobs:
           pip install -r requirements-server-api.txt pytest pytest-asyncio
 
       # #1859：凭据缺失必须让 job 红掉，禁止“secret 缺失→跳过”式观察结果
+      # R17 口径：MiMo/xcauto 经 AUTONOMY_STRONG_API_KEY 注入（OPENAI 兼容协议）
       - name: Require LLM credentials (fail-closed)
         env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          XCAUTO_API_KEY: ${{ secrets.AUTONOMY_STRONG_API_KEY }}
         run: |
           set -euo pipefail
-          if [ -z "${DEEPSEEK_API_KEY}" ]; then
-            echo "::error::acceptance 模式必须配置 DEEPSEEK_API_KEY secret；缺失即失败，不得降级为规则引擎报告"
+          if [ -z "${XCAUTO_API_KEY}" ]; then
+            echo "::error::acceptance 模式必须配置 AUTONOMY_STRONG_API_KEY secret（XCAUTO/MiMo 口径）；缺失即失败，不得降级为规则引擎报告"
             exit 1
           fi
 
-      # LLM 真实调用预检：无真实响应即失败（真实调用证据，写档）
+      # LLM 真实调用预检：经 app 自带 OpenAICompatibleAdapter 发起真实请求，
+      # 无真实响应即失败（真实调用证据，写档）
       - name: LLM preflight real-call probe
         env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          LLM_PROVIDER: xcauto
+          XCAUTO_API_KEY: ${{ secrets.AUTONOMY_STRONG_API_KEY }}
+          XCAUTO_BASE_URL: ${{ vars.AUTONOMY_STRONG_BASE_URL }}
           DATABASE_URL: "sqlite+pysqlite:///./test_reports/acceptance_preflight.sqlite3"
           VECTOR_DB_URL: "sqlite+pysqlite:///./test_reports/acceptance_preflight.sqlite3"
         run: |
@@ -222,24 +197,49 @@ jobs:
           python - <<'PY'
           import asyncio, json, os
 
-          from app.ai_engines.deepseek.intent_service import DeepseekIntentClassifier
+          from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
 
           async def main() -> None:
-              c = DeepseekIntentClassifier(api_key=os.environ["DEEPSEEK_API_KEY"])
-              r = await c.recognize("查询上个月的销售订单")
-              intent = str(r.get("intent") or "").strip()
-              print(json.dumps({"probe_intent": intent}, ensure_ascii=False))
-              assert intent, "LLM 预检无真实响应——凭据/网络/服务不可用，验收不得继续"
+              base_url = os.environ.get("XCAUTO_BASE_URL", "").strip() or None
+              adapter = OpenAICompatibleAdapter(provider="xcauto", base_url=base_url)
+              assert adapter.is_configured, "xcauto 适配器未解析到凭据（XCAUTO_API_KEY）"
+              r = await adapter.chat_completion(
+                  [{"role": "user", "content": "请回复：OK"}],
+                  max_tokens=16,
+              )
+              # 响应为原生 OpenAI 字典：choices[0].message.content
+              content = ""
+              try:
+                  content = str(r["choices"][0]["message"]["content"] or "").strip()
+              except Exception:
+                  pass
+              model = str(r.get("model") or adapter.model_name)
+              print(json.dumps({"probe_nonempty": bool(content), "model": model}, ensure_ascii=False))
+              assert content, "LLM 预检无真实响应——凭据/网络/服务不可用，验收不得继续"
               with open("test_reports/llm_preflight_evidence.json", "w", encoding="utf-8") as f:
-                  json.dump({"probe_intent": intent, "probe": "real-call", "source": "DeepseekIntentClassifier.recognize"}, f, ensure_ascii=False, indent=2)
+                  json.dump(
+                      {
+                          "probe": "real-call",
+                          "provider": adapter.provider_name(),
+                          "model": model,
+                          "base_url_configured": bool(os.environ.get("XCAUTO_BASE_URL", "")),
+                          "response_chars": len(content),
+                      },
+                      f,
+                      ensure_ascii=False,
+                      indent=2,
+                  )
 
           asyncio.run(main())
           PY
 
-      # 真实 LLM 链路基准：XCAGI_SKIP_INTENT_LLM 显式置空（runner 内 setdefault 不会覆盖空值）
+      # 真实 LLM 链路基准：LLM_PROVIDER=xcauto + XCAGI_SKIP_INTENT_LLM 显式置空
+      # （runner 内 setdefault 不会覆盖空值），阈值硬门禁与棘轮同源只升不降
       - name: Run task-level benchmark on real LLM path (acceptance gate)
         env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          LLM_PROVIDER: xcauto
+          XCAUTO_API_KEY: ${{ secrets.AUTONOMY_STRONG_API_KEY }}
+          XCAUTO_BASE_URL: ${{ vars.AUTONOMY_STRONG_BASE_URL }}
           XCAGI_SKIP_INTENT_LLM: ""
           TASK_BENCHMARK_RUN: "1"
           TASK_BENCHMARK_TRIALS: "1"
