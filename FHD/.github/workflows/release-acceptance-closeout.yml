@@ -1,0 +1,72 @@
+# 主线闭环最后一段：发布后市场端客户机安装/运行回执验收判定 → 回写原工单。
+# accepted → 关单 + customer-accepted 标签；rejected → 重开 + acceptance-failed 标签；
+# pending（双平台回执未齐）→ 不动作，下个 tick 再查。
+name: release-acceptance-closeout
+
+on:
+  schedule:
+    # 每 30 分钟轮询一次市场端验收判定
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '指定验收版本（缺省读 config/download_release.json 的 version_lock）'
+        required: false
+        type: string
+      channel:
+        description: '验收通道'
+        required: true
+        type: choice
+        options:
+          - stable
+          - staging
+        default: stable
+      dry_run:
+        description: '只查询判定，不回写工单'
+        required: false
+        type: boolean
+        default: true
+
+concurrency:
+  group: release-acceptance-closeout
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  closeout:
+    name: Acceptance closeout
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Close out linked work orders from acceptance verdict
+        working-directory: FHD
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          XCAGI_MARKET_BASE_URL: ${{ vars.XCAGI_MARKET_BASE_URL }}
+          MARKET_ADMIN_TOKEN: ${{ secrets.MARKET_ADMIN_TOKEN }}
+        run: |
+          set -euo pipefail
+          args=(--channel "${{ inputs.channel || 'stable' }}")
+          if [ -n "${{ inputs.version }}" ]; then
+            args+=(--version "${{ inputs.version }}")
+          fi
+          # 定时触发自动回写（闭环主体）；手动派发默认 dry-run，显式 dry_run=false 才回写
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            args+=(--apply)
+          elif [ "${{ inputs.dry_run }}" = "true" ]; then
+            args+=(--dry-run)
+          else
+            args+=(--apply)
+          fi
+          python scripts/dev/release_acceptance_closeout.py "${args[@]}"

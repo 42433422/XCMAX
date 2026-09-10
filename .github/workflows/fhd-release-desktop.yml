@@ -592,6 +592,8 @@ jobs:
           done
       - name: Generate manifest.json + download-release.json
         working-directory: FHD
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           raw="${{ github.event.inputs.version || github.ref_name }}"
@@ -603,6 +605,15 @@ jobs:
           immutable_base="https://xiu-ci.com/releases/builds/${version}/${XCAGI_BUILD_SHA,,}"
           android_version="$(jq -er '.android_version' config/download_release.json)"
           android_git_sha="$(jq -er '.android_git_sha' config/download_release.json)"
+          # 主线闭环：把本发布关闭的工单（issue）写进 manifest，
+          # 供市场端验收判定结果回写到原工单。
+          prev_feed_sha="$(jq -er '.git_sha // empty' config/download_release.json || true)"
+          linked_issues=""
+          if [ -n "${prev_feed_sha:-}" ]; then
+            linked_issues="$(python scripts/dev/extract_release_linked_issues.py \
+              --from "$prev_feed_sha" --to "${XCAGI_BUILD_SHA}" \
+              --repo "${GITHUB_REPOSITORY}" --format csv || true)"
+          fi
           python scripts/package/generate-download-manifest.py \
             --version "$version" \
             --release-dir release \
@@ -611,6 +622,7 @@ jobs:
             --release-id "$release_id" \
             --build-workflow-run-id "${GITHUB_RUN_ID}" \
             --frontend-workflow-run-id "${{ inputs.frontend_run_id }}" \
+            --linked-issues "$linked_issues" \
             --auto-update-base "$immutable_base" \
             --official-download-base "$immutable_base" \
             --android-version "$android_version" \

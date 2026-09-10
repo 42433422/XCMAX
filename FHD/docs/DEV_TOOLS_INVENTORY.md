@@ -32,6 +32,7 @@
 | guard_temp_scripts.py | `scripts/ci/guard_temp_scripts.py` | guard | no | stdlib |
 | verify_admin_console.py | `scripts/deploy/lib/verify_admin_console.py` | verify | no | stdlib |
 | verify_release_archive.py | `scripts/deploy/lib/verify_release_archive.py` | verify | no | stdlib |
+| audit_benchmark_ssot.py | `scripts/dev/audit_benchmark_ssot.py` | ssot | yes | stdlib |
 | check_budget.py | `scripts/dev/check_budget.py` | guard | no | stdlib |
 | check_footprint.py | `scripts/dev/check_footprint.py` | guard | no | stdlib |
 | check_layer_ratchet.py | `scripts/dev/check_layer_ratchet.py` | guard | no | stdlib |
@@ -61,6 +62,7 @@
 | ssot_inventory.py | `scripts/dev/ssot_inventory.py` | ssot | yes | stdlib |
 | ssot_registry_crosscheck.py | `scripts/dev/ssot_registry_crosscheck.py` | ssot | yes | stdlib |
 | test_bloat_report.py | `scripts/dev/test_bloat_report.py` | normative | no | stdlib |
+| verify_desktop_manifest_drift.py | `scripts/dev/verify_desktop_manifest_drift.py` | verify | no | stdlib |
 | verify_doc_claims.py | `scripts/dev/verify_doc_claims.py` | verify | no | stdlib |
 | verify_doc_versions.py | `scripts/dev/verify_doc_versions.py` | verify | no | stdlib |
 | verify_employee_contract.py | `scripts/dev/verify_employee_contract.py` | verify | no | stdlib |
@@ -83,4 +85,4 @@
 | verify_sales_contract_template_env.py | `scripts/verify_sales_contract_template_env.py` | verify | no | stdlib |
 | verify_six_line_event_rail.py | `scripts/verify_six_line_event_rail.py` | verify | no | stdlib |
 
-合计：12 已纳入 ssot / 61 已登记清单 / 3 新游离
+合计：13 已纳入 ssot / 64 已登记清单 / 1 新游离
