@@ -63,6 +63,9 @@ def _http(method: str, url: str, token: str, body: dict[str, Any] | None = None)
             raw = resp.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
         return {"_error": exc.code, "_body": exc.read().decode("utf-8", errors="replace")[:500]}
+    except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
+        # 网络超时/DNS/连接失败：返回结构化错误而非裸崩，调用方按失败处理
+        return {"_error": "network_error", "_body": str(exc)[:500]}
     return json.loads(raw) if raw else {}
 
 

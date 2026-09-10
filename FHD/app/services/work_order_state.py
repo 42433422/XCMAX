@@ -80,12 +80,12 @@ def classify_track(
 ) -> str:
     """把工单分入四类去向之一（确定性规则，无 LLM，可机器核对）。
 
-    优先级：强定制信号 > 运维与支持 > 显式客户作用域 > 行业 Mod > 通用产品线（默认）。
+    优先级：运维与支持 > 显式客户作用域 > 行业 Mod > 通用产品线（默认）。
 
-    关键区分：仅携带 ``customer_id`` 的普通故障（llm_timeout/install_failed 等
-    运行期信号）仍归 ``ops_support``，不得因客户标识而自动归入 ``customer_custom``；
-    只有显式 ``customer_scoped``（或技能提案 customer_scoped）与其后再判断的
-    customer_id/account_id 才构成单客户定制。
+    关键区分：运行期故障信号（llm_timeout/install_failed 等）永远优先——故障不是
+    产品需求，即便携带客户标识也归 ``ops_support``。``customer_id``/``account_id``
+    只作归属元数据，不参与轨道判定；只有显式 ``customer_scoped``（含技能提案
+    ``customer_scoped``）才构成单客户定制。
 
     默认落 product_line 与「只有通用能力进入主产品」一致——
     无法证明属于其他轨道的需求，按通用能力走主产品治理门禁。
@@ -94,17 +94,14 @@ def classify_track(
     reason_tag = str(reason or "").strip()
     raw_skill = ctx.get("skill_proposal")
     skill_proposal: dict[str, Any] = raw_skill if isinstance(raw_skill, dict) else {}
-    # 1) 强定制信号：显式 customer_scoped（含技能提案场景）→ 单客户定制
-    if ctx.get("customer_scoped") or skill_proposal.get("customer_scoped"):
-        return "customer_custom"
-    # 2) 运维与支持：运行期故障信号，优先级高于「仅携带 customer_id」。
-    #    带客户标识的普通故障仍是运维问题，不得因此自动归入客户定制。
+    # 1) 运维与支持：运行期故障信号永远优先——故障不是产品需求，
+    #    即使带客户标识或行业属性也只算运维问题。
     if reason_tag in _OPS_REASONS:
         return "ops_support"
-    # 3) 显式单客户作用域（无运维故障时才成立）
-    if ctx.get("customer_id") or ctx.get("account_id"):
+    # 2) 单客户定制：仅凭显式 customer_scoped 标记（身份字段不算）
+    if ctx.get("customer_scoped") or skill_proposal.get("customer_scoped"):
         return "customer_custom"
-    # 4) 行业共性：上下文带行业标识（intent_result.industry / skill_proposal.industry）
+    # 3) 行业共性：上下文带行业标识（intent_result.industry / skill_proposal.industry）
     raw_intent = ctx.get("intent_result")
     intent_result: dict[str, Any] = raw_intent if isinstance(raw_intent, dict) else {}
     if ctx.get("industry") or intent_result.get("industry") or skill_proposal.get("industry"):
@@ -112,9 +109,15 @@ def classify_track(
     return "product_line"
 
 
-def derive_wo_id(source: str, dedup_key: str) -> str:
-    """由信号来源 + 去重键派生唯一工单 ID（幂等：同输入必同 ID）。"""
-    digest = hashlib.sha1(f"{source}|{dedup_key}".encode()).hexdigest()
+def derive_wo_id(dedup_key: str) -> str:
+    """由去重键派生唯一工单 ID（幂等：同输入必同 ID）。
+
+    同一需求从不同入口（对话/反馈等）携带相同去重键时必须合并到同一工单，
+    因此 ``source`` 不参与散列，只作为 created 事件里的归属元数据保留。
+    """
+    digest = hashlib.sha256(
+        str(dedup_key or "").strip().encode(), usedforsecurity=False
+    ).hexdigest()
     return f"WO-{digest[:12]}"
 
 

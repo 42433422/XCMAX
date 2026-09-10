@@ -40,8 +40,8 @@ class TestWoidParity:
     def test_derive_wo_id_identical(self) -> None:
         if server is None:
             return
-        for source, key in [("s", "k"), ("intent_confirmation_service", "abc123"), ("", "x")]:
-            assert fhd.derive_wo_id(source, key) == server.derive_wo_id(source, key)
+        for key in ("k", "abc123", "x"):
+            assert fhd.derive_wo_id(key) == server.derive_wo_id(key)
 
 
 class TestClassifyTrackParity:

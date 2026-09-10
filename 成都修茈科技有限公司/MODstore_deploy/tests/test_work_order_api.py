@@ -44,9 +44,10 @@ def _user(db, *, is_admin: bool = False, tag: str = "wo"):
 
 class TestCore:
     def test_derive_wo_id_matches_fhd_algorithm(self) -> None:
-        assert derive_wo_id("s", "k") == derive_wo_id("s", "k")
-        assert derive_wo_id("a", "k") != derive_wo_id("b", "k")
-        assert derive_wo_id("s", "k").startswith("WO-")
+        # 同一去重键必同 ID（幂等）；source 不参与散列，不同入口同需求合并到同单
+        assert derive_wo_id("k") == derive_wo_id("k")
+        assert derive_wo_id("k1") != derive_wo_id("k2")
+        assert derive_wo_id("k").startswith("WO-")
 
     def test_classify_track_priorities(self) -> None:
         assert classify_track() == "product_line"
@@ -125,7 +126,7 @@ class TestCoreFold:
         return row
 
     def test_fold_recovers_issue_and_release(self) -> None:
-        wo_id = derive_wo_id("intent_confirmation_service", "key-1")
+        wo_id = derive_wo_id("key-1")
         rows = [
             self._row(wo_id, "created", source="intent_confirmation_service", dedup_key="key-1"),
             self._row(

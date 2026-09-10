@@ -131,7 +131,7 @@ def create_candidate(
     if not key:
         return {"wo_id": "", "created": False, "status": "", "reason": "empty_dedup_key"}
     source = str(body.source or "").strip() or "unknown"
-    wo_id = derive_wo_id(source, key)
+    wo_id = derive_wo_id(key)
     existing = _view(db, wo_id)
     if existing:
         return {"wo_id": wo_id, "created": False, "status": existing["status"]}

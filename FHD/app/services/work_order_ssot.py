@@ -263,7 +263,7 @@ def upsert_candidate(
                 }
         except _RemoteUnavailable:
             logger.debug("remote candidate upsert skipped", exc_info=True)
-    wo_id = derive_wo_id(src, key)
+    wo_id = derive_wo_id(key)
     with _exclusive_file_lock():
         existing = _fold(_load_events()).get(wo_id)
         if existing:
@@ -412,7 +412,9 @@ def record_acceptance_verdict(
     issue 未绑定工单时返回 ok=False（不阻塞 issue 回写本身）。
 
     共享模式（WORK_ORDER_MARKET_BASE）：验收判定委托市场端（服务端权威，
-    verifying/released 窗口内才生效，不做复盘补写）；本地模式保留本地实现。
+    verifying/released 窗口内才生效，不做复盘补写）；本地模式或市场端
+    不可达时走 ``app.services.work_order_acceptance`` 的同一套严格判定
+    （完成阶段必须由开发/合并/发布证据驱动，回执只做验收判定）。
     """
     if _remote_enabled():
         try:
@@ -438,39 +440,15 @@ def record_acceptance_verdict(
                 }
         except _RemoteUnavailable:
             logger.debug("remote acceptance skipped", exc_info=True)
-    view = find_by_issue(issue_number)
-    if view is None:
-        return {"ok": False, "reason": "issue_not_linked", "issue_number": int(issue_number)}
-    wo_id = str(view["wo_id"])
-    # pending：回执未齐，绝不可自动补写开发/合并/发布完成状态——
-    # 只有真实可验收的 accepted/rejected 才推进状态机。
-    if verdict not in ("accepted", "rejected"):
-        return {
-            "ok": False,
-            "reason": "verdict_pending",
-            "wo_id": wo_id,
-            "status": str(view.get("status") or ""),
-        }
-    ref = {"issue_number": int(issue_number), "release_version": str(release_version or "")}
-    if evidence:
-        ref["evidence"] = evidence
-    current = str(view.get("status") or "")
-    # 验收期起点校正：历史事件可能缺席，沿主线逐步补齐到 verifying
-    for step in ("in_dev", "merged", "released", "verifying"):
-        if current == step:
-            continue
-        current = str(find_by_issue(issue_number).get("status") or "")  # type: ignore[union-attr]
-        if current == step:
-            continue
-        if step not in _ALLOWED_TRANSITIONS.get(current, frozenset()):
-            break
-        record_transition(wo_id, step, ref=ref, note="验收期起点补齐", source="acceptance")
-    if verdict == "accepted":
-        return record_transition(
-            wo_id, "closed", ref=ref, note="双平台回执健康，客户验收通过", source="acceptance"
-        )
-    return record_transition(
-        wo_id, "reopened", ref=ref, note="客户机安装/运行失败，重开原工单", source="acceptance"
+    from app.services.work_order_acceptance import (
+        record_acceptance_verdict as _impl,
+    )
+
+    return _impl(
+        issue_number=issue_number,
+        release_version=release_version,
+        verdict=verdict,
+        evidence=evidence,
     )
 
 

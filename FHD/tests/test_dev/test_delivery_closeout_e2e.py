@@ -218,7 +218,16 @@ def _make_work_order(tmp_path: Path, issue_number: int, *, customer_scoped: bool
     to_issue._link_work_order(
         proposal, f"https://github.com/acme/repo/issues/{issue_number}", issue_number, track
     )
-    return wo.derive_wo_id(source, key)
+    wo_id = wo.derive_wo_id(key)
+    # 完成阶段必须由对应开发/合并/发布证据驱动（#1853：验收回执不得补齐完成阶段）。
+    # 这里按真实主线推进到 released，再交由 closeout 用市场回执判定验收。
+    ref = {"issue_number": issue_number, "pr": f"acme/repo#pr-{issue_number}"}
+    assert wo.record_transition(wo_id, "in_dev", ref=ref, note="开发立项", source="dev")["ok"]
+    assert wo.record_transition(wo_id, "merged", ref=ref, note="合入主线", source="merge")["ok"]
+    assert wo.record_transition(
+        wo_id, "released", ref=ref, note="随发布构建上线", source="release"
+    )["ok"]
+    return wo_id
 
 
 def _config(tmp_path: Path, version: str, build_sha: str, issue_numbers: list[int]) -> Path:
@@ -328,7 +337,7 @@ class TestDeliveryCloseout:
         version = "1.0.0.2"
         sha = "b" * 40
         number = 902
-        wo_id = _make_work_order(isolates, number)
+        _make_work_order(isolates, number)
         pipeline.gh.new_issue(number)
 
         # 阶段1：win 成功、mac 失败 → rejected → 重开原工单

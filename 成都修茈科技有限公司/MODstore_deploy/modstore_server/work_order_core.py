@@ -64,9 +64,11 @@ _OPS_REASONS: frozenset[str] = frozenset(
 _WO_ID_RE = re.compile(r"^WO-[0-9a-f]{12}$")
 
 
-def derive_wo_id(source: str, dedup_key: str) -> str:
-    """与 FHD 同算法：source|dedup_key 的 sha1 前 12 位。"""
-    digest = hashlib.sha1(f"{source}|{dedup_key}".encode()).hexdigest()
+def derive_wo_id(dedup_key: str) -> str:
+    """与 FHD 同算法：dedup_key 的 sha256 前 12 位（source 不参与散列）。"""
+    digest = hashlib.sha256(
+        str(dedup_key or "").strip().encode(), usedforsecurity=False
+    ).hexdigest()
     return f"WO-{digest[:12]}"
 
 
@@ -80,21 +82,22 @@ def classify_track(
     reason: str = "",
     context: dict[str, Any] | None = None,
 ) -> str:
-    """四类去向（与 FHD classify_track 同规则，跨仓镜像）。"""
+    """四类去向（与 FHD classify_track 同规则，跨仓镜像）。
+
+    优先级：运维与支持 > 显式客户作用域 > 行业 Mod > 通用产品线（默认）。
+    运行期故障永远优先；``customer_id``/``account_id`` 只作归属，不参与判定。
+    """
     ctx = context if isinstance(context, dict) else {}
     reason_tag = str(reason or "").strip()
     raw_skill = ctx.get("skill_proposal")
     skill_proposal: dict[str, Any] = raw_skill if isinstance(raw_skill, dict) else {}
-    # 1) 强定制信号
-    if ctx.get("customer_scoped") or skill_proposal.get("customer_scoped"):
-        return "customer_custom"
-    # 2) 运维与支持（带客户标识的普通故障仍是运维问题）
+    # 1) 运维与支持：运行期故障永远优先——故障不是产品需求
     if reason_tag in _OPS_REASONS:
         return "ops_support"
-    # 3) 显式单客户作用域
-    if ctx.get("customer_id") or ctx.get("account_id"):
+    # 2) 单客户定制：仅凭显式 customer_scoped 标记（身份字段不算）
+    if ctx.get("customer_scoped") or skill_proposal.get("customer_scoped"):
         return "customer_custom"
-    # 4) 行业共性
+    # 3) 行业共性
     raw_intent = ctx.get("intent_result")
     intent_result: dict[str, Any] = raw_intent if isinstance(raw_intent, dict) else {}
     if ctx.get("industry") or intent_result.get("industry") or skill_proposal.get("industry"):
