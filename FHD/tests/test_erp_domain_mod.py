@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
@@ -146,6 +147,61 @@ def test_try_invoke_products_list(monkeypatch):
     out = ed.try_invoke_erp_domain_handler("products", "list", page=1, per_page=10)
     assert out is not None
     assert out.get("source") == "mod:xcagi-erp-domain-bridge"
+
+
+def test_try_invoke_propagates_schema_errors(monkeypatch):
+    """DB schema 错误必须原样上抛，不得伪装成 handler missing。"""
+    import sqlite3
+
+    import pytest as _pytest
+    from sqlalchemy.exc import OperationalError as SQLAOperationalError
+
+    from app.mod_sdk import erp_domain_dispatch as ed
+
+    monkeypatch.setattr(ed, "is_erp_domain_handlers_enabled", lambda: True)
+    monkeypatch.setattr(ed, "_mod_domain_handler_domains", lambda: ["products"])
+    monkeypatch.setattr(
+        ed,
+        "_resolve_mod_path",
+        lambda: ("xcagi-erp-domain-bridge", str(MOD_DIR)),
+    )
+    monkeypatch.setattr(
+        ed,
+        "_load_domain_handlers_module",
+        lambda _path, _mod_id: Mock(
+            run_domain_handler=Mock(
+                side_effect=SQLAOperationalError(
+                    "no such column: products.base_uom_id",
+                    None,
+                    sqlite3.OperationalError("no such column: products.base_uom_id"),
+                )
+            )
+        ),
+    )
+
+    with _pytest.raises(SQLAOperationalError):
+        ed.try_invoke_erp_domain_handler("products", "list", page=1, per_page=10)
+
+
+def test_try_invoke_still_swallows_generic_recoverable(monkeypatch):
+    """非 schema 类可恢复错误仍按原契约吞掉返回 None（走宿主 fallback）。"""
+    from app.mod_sdk import erp_domain_dispatch as ed
+
+    monkeypatch.setattr(ed, "is_erp_domain_handlers_enabled", lambda: True)
+    monkeypatch.setattr(ed, "_mod_domain_handler_domains", lambda: ["products"])
+    monkeypatch.setattr(
+        ed,
+        "_resolve_mod_path",
+        lambda: ("xcagi-erp-domain-bridge", str(MOD_DIR)),
+    )
+    monkeypatch.setattr(
+        ed,
+        "_load_domain_handlers_module",
+        lambda _path, _mod_id: Mock(run_domain_handler=Mock(side_effect=ValueError("boom"))),
+    )
+
+    out = ed.try_invoke_erp_domain_handler("products", "list", page=1, per_page=10)
+    assert out is None
 
 
 def test_registry_phase_g_domains(monkeypatch):
