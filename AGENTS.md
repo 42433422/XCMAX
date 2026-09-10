@@ -30,6 +30,27 @@ Catalog validation does not mean the product passed an audit. Keep historical
 reports immutable: the old 73.3 and 77.1 internal-review scores cannot be converted
 into the new external-anchor scale without a new evidence-backed assessment.
 
+## Documentation and net-deletion governance
+
+Documentation is a liability once it drifts. Keep a small set of living
+documents; everything else is archived out of the workspace, not retained as a
+second stale copy inside it.
+
+1. Living documents only. Every maintained document is registered in the SSOT
+   (`FHD/config/ssot.yaml` and `FHD/docs/SSOT_INDEX.md`). Historical snapshots and
+   untracked drafts are not a source of truth, and cross-links inside a dead tree
+   do not make a document living. When a document is superseded, archive it out of
+   the workspace (see `ARCHIVE_POINTER.md`) instead of leaving a duplicate.
+2. Every iteration must delete more than it adds. A change is not complete until
+   it shows a net reduction in maintained lines (code and docs combined). The
+   ratchet baseline is `FHD/metrics/line_baseline.json`, enforced by
+   `python scripts/dev/check_net_deletion.py` (SSOT domain `net-deletion`, run by
+   the blocking `ssot-drift-gate` job). Net-deleting lowers the baseline with
+   `--update`; raising it requires `--update --force --reason <why>`.
+3. Use AI to review, delete, and reconcile, not to generate more prose. Prefer
+   audits, deduplication, and reconciliation against the SSOT over producing new
+   documents. A new document must justify why an existing one cannot be updated.
+
 ## Mandatory end-of-task cleanup
 
 Before reporting a task complete:

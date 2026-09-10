@@ -5,17 +5,18 @@
 本脚本用**确定性规则**给出可复核的归档清单，把「活文档」收敛为 SSOT_INDEX
 登记项 + 入口文档 + 被代码/manifest 引用的运行时资产。
 
-判定为「活文档」（任一命中即保留，保守优先）：
-  1. SSOT 登记：出现在 ``FHD/config/ssot.yaml`` 或 ``FHD/docs/SSOT_INDEX.md``
-  2. 入链：被其它 md 文件以链接/路径形式引用（历史快照目录除外，见下）
-  3. 代码引用：文件路径或 basename 出现在任意被跟踪的非 md 文件中
-  4. 入口文档：basename 命中 ENTRY_BASENAMES
-  5. 运行时资产：位于 PROTECTED_PREFIXES，或路径含 prompts/skills 段
-  6. manifest 白名单：被员工包 ``workspace_policy.scope_globs`` 匹配
+活文档 = 从「根」出发沿 md 引用图 **可达** 的文档（死树自引用不算活）：
+  根（任一命中即为根）：
+    1. SSOT 登记：出现在 ``FHD/config/ssot.yaml`` 或 ``FHD/docs/SSOT_INDEX.md``
+    2. 入口文档：basename 命中 ENTRY_BASENAMES
+    3. 运行时资产：位于 PROTECTED_PREFIXES，或路径含 prompts/skills 段
+    4. 代码引用：basename 出现在任意被跟踪的非 md 文件中
+    5. manifest 白名单：被员工包 ``workspace_policy.scope_globs`` 匹配
+  可达：根文档链式引用到的 md 也算活（reason=inlink）。
 
-归档候选（HISTORICAL_SEGMENTS 下的历史快照目录豁免第 2 条入链保护，
-因为报告/证据/复盘/计划之间互链属于死树自引用）按原因标注：
-  deprecated（含废弃标记） / historical-snapshot（历史快照） / unreferenced（零引用）。
+归档候选 = 上述可达集之外的 md，按原因标注：
+  deprecated（含废弃标记） / historical-snapshot（历史快照） / unreferenced（不可达）。
+这取代了早期「任一 md 入链即活」的规则——后者会被死树内部互链自保，收敛不动。
 
 用法::
 
@@ -136,12 +137,6 @@ def _read_text(abs_path: Path) -> str:
         return ""
 
 
-def _path_suffixes(path: str) -> set[str]:
-    """返回路径的所有 / 边界后缀，用于把 'docs/a/b.md' 与 'b.md' 对上。"""
-    parts = path.split("/")
-    return {"/".join(parts[i:]) for i in range(len(parts))}
-
-
 def _load_ssot_registered() -> tuple[set[str], set[str]]:
     """返回 (protected_paths, protected_prefixes)；仅按路径匹配，不用 basename
     （basename 歧义大：SSOT_INDEX 里的 README.md 会误保护全仓 README）。"""
@@ -219,24 +214,33 @@ def _glob_match(path: str, pattern: str) -> bool:
     return fnmatch.fnmatch(path, pattern)
 
 
-def _collect_refs(tracked: list[str]) -> tuple[set[str], set[str]]:
-    """返回 (code_refs, md_inlinks)。
+def _collect_refs(tracked: list[str]) -> tuple[set[str], dict[str, set[str]]]:
+    """返回 (code_refs, md_edges)。
 
     * ``code_refs``：非 md 文件（代码/配置/脚本）中出现的 .md 路径或 basename
       —— 命中即说明该文档被代码/工具消费。
-    * ``md_inlinks``：其它 md 文件里以链接/路径形式指向的 **解析后路径**。
-      只按路径判入链，避免 basename 歧义造成的大面积误保。
+    * ``md_edges``：md 文档之间的 **有向引用图**（解析后的仓库相对路径）。
+      用于从根出发做可达性判定，死树内部互链不产生活文档。
     """
+    md_set = {p for p in tracked if p.lower().endswith(".md")}
+    # 路径后缀索引：把 'docs/a/b.md' 与引用里的 'a/b.md' / 'b.md' 对上。
+    suffix_index: dict[str, set[str]] = {}
+    for p in md_set:
+        parts = p.split("/")
+        for i in range(len(parts)):
+            suffix_index.setdefault("/".join(parts[i:]), set()).add(p)
+
     code_refs: set[str] = set()
-    md_inlinks: set[str] = set()
+    md_edges: dict[str, set[str]] = {p: set() for p in md_set}
     for rel in tracked:
         if not _is_text_like(rel):
             continue
         text = _read_text(REPO_ROOT / rel)
         if not text:
             continue
-        if rel.lower().endswith(".md"):
+        if rel in md_set:
             base_dir = os.path.dirname(rel)
+            outs = md_edges[rel]
             for token in MD_REF_RE.findall(text):
                 token = token.strip().strip("()<>").lstrip("./")
                 if not token:
@@ -244,9 +248,13 @@ def _collect_refs(tracked: list[str]) -> tuple[set[str], set[str]]:
                 resolved = os.path.normpath(os.path.join(base_dir, token)).replace(os.sep, "/")
                 if resolved.startswith("../"):
                     resolved = resolved[3:]
-                md_inlinks.add(resolved)
+                if resolved in md_set:
+                    outs.add(resolved)
+                elif "/" in resolved:
+                    outs |= suffix_index.get(resolved, set())
                 if "/" in token:
-                    md_inlinks.add(token)
+                    outs |= suffix_index.get(token, set())
+            outs.discard(rel)
         else:
             for token in MD_REF_RE.findall(text):
                 token = token.strip("./")
@@ -254,7 +262,7 @@ def _collect_refs(tracked: list[str]) -> tuple[set[str], set[str]]:
                     continue
                 code_refs.add(token)
                 code_refs.add(Path(token).name)
-    return code_refs, md_inlinks
+    return code_refs, md_edges
 
 
 def _count_lines(abs_path: Path) -> int:
@@ -270,60 +278,85 @@ def _count_lines(abs_path: Path) -> int:
 DEPRECATED_RE = re.compile(r"(DEPRECATED|已废弃|已归档|已过期|OBSOLETE|SUPERSEDED)", re.IGNORECASE)
 
 
+def _root_reason(
+    rel: str,
+    ssot_paths: set[str],
+    ssot_prefixes: set[str],
+    scope_globs: list[str],
+    code_refs: set[str],
+) -> str | None:
+    """文档若是「活文档之根」返回原因，否则 None（须由可达性抢救）。"""
+    basename = Path(rel).name
+    if rel in ssot_paths:
+        return "ssot"
+    if any(rel == pref.rstrip("/") or rel.startswith(pref) for pref in ssot_prefixes):
+        return "ssot-dir"
+    if basename in ENTRY_BASENAMES:
+        return "entry"
+    if rel.startswith(PROTECTED_PREFIXES) or basename in PROTECTED_BASENAMES:
+        return "runtime"
+    if any(seg in PROTECTED_SEGMENTS for seg in rel.split("/")[:-1]):
+        return "runtime"
+    if any(_glob_match(rel, g) for g in scope_globs):
+        return "manifest-scope"
+    if basename in code_refs:
+        return "code-ref"
+    return None
+
+
 def classify() -> tuple[list[dict], list[dict]]:
-    """返回 (living, archive) 两个清单，元素含 path/lines/reason。"""
+    """返回 (living, archive) 两个清单，元素含 path/lines/reason。
+
+    活文档 = 根 ∪ 从根沿引用图可达者；其余为归档候选。
+    """
     tracked = _tracked_files()
     ssot_paths, ssot_prefixes = _load_ssot_registered()
     scope_globs = _load_scope_globs()
-    code_refs, md_inlinks = _collect_refs(tracked)
+    code_refs, md_edges = _collect_refs(tracked)
 
     md_files = [p for p in tracked if p.lower().endswith(".md")]
+
+    reason: dict[str, str] = {}
+    for rel in md_files:
+        r = _root_reason(rel, ssot_paths, ssot_prefixes, scope_globs, code_refs)
+        if r:
+            reason[rel] = r
+    stack = list(reason)
+    while stack:
+        cur = stack.pop()
+        for nxt in md_edges.get(cur, ()):
+            if nxt not in reason:
+                reason[nxt] = "inlink"
+                stack.append(nxt)
+
     living: list[dict] = []
     archive: list[dict] = []
-
     for rel in md_files:
-        basename = Path(rel).name
-        suffixes = _path_suffixes(rel)
         lines = _count_lines(REPO_ROOT / rel)
-        reason = None
-
-        if rel in ssot_paths:
-            reason = "ssot"
-        elif any(rel == pref.rstrip("/") or rel.startswith(pref) for pref in ssot_prefixes):
-            reason = "ssot-dir"
-        elif basename in ENTRY_BASENAMES:
-            reason = "entry"
-        elif rel.startswith(PROTECTED_PREFIXES) or basename in PROTECTED_BASENAMES:
-            reason = "runtime"
-        elif any(seg in PROTECTED_SEGMENTS for seg in rel.split("/")[:-1]):
-            reason = "runtime"
-        elif any(_glob_match(rel, g) for g in scope_globs):
-            reason = "manifest-scope"
-        else:
-            path_suffixes = {s for s in suffixes if "/" in s}
-            in_historical = bool(set(rel.split("/")) & HISTORICAL_SEGMENTS)
-            if not in_historical and (rel in md_inlinks or (path_suffixes & md_inlinks)):
-                reason = "inlink"
-            elif basename in code_refs:
-                reason = "code-ref"
-
         entry = {"path": rel, "lines": lines}
-        if reason:
-            entry["reason"] = reason
+        if rel in reason:
+            entry["reason"] = reason[rel]
             living.append(entry)
+            continue
+        in_historical = bool(set(rel.split("/")) & HISTORICAL_SEGMENTS)
+        text = _read_text(REPO_ROOT / rel)
+        entry["deprecated"] = bool(DEPRECATED_RE.search(text))
+        if entry["deprecated"]:
+            entry["archive_reason"] = "deprecated"
+        elif in_historical:
+            entry["archive_reason"] = "historical-snapshot"
         else:
-            text = _read_text(REPO_ROOT / rel)
-            entry["deprecated"] = bool(DEPRECATED_RE.search(text))
-            if entry["deprecated"]:
-                entry["archive_reason"] = "deprecated"
-            elif in_historical:
-                entry["archive_reason"] = "historical-snapshot"
-            else:
-                entry["archive_reason"] = "unreferenced"
-            archive.append(entry)
+            entry["archive_reason"] = "unreferenced"
+        archive.append(entry)
 
     living.sort(key=lambda e: e["path"])
     archive.sort(key=lambda e: e["path"])
+    # 在途文档：工作区有未提交改动 → 虽不可达也不可归档（归档会丢工作）。
+    # 与 cmd_apply 的过滤口径保持一致，避免报告把在途文档误列为可归档。
+    dirty = _dirty_paths()
+    for entry in archive:
+        if entry["path"] in dirty:
+            entry["in_flight"] = True
     return living, archive
 
 
@@ -332,8 +365,15 @@ def _print_summary(living: list[dict], archive: list[dict]) -> None:
     live_lines = sum(e["lines"] for e in living)
     arch_lines = sum(e["lines"] for e in archive)
     print(f"[docs-triage] 跟踪 md 总数：{total} 篇 / {live_lines + arch_lines} 行")
+    actionable = [e for e in archive if not e.get("in_flight")]
+    in_flight = [e for e in archive if e.get("in_flight")]
     print(f"[docs-triage] 活文档：{len(living)} 篇 / {live_lines} 行")
-    print(f"[docs-triage] 归档候选：{len(archive)} 篇 / {arch_lines} 行")
+    print(
+        f"[docs-triage] 归档候选：{len(archive)} 篇 / {arch_lines} 行"
+        f"（可归档 {len(actionable)} 篇 / 在途 {len(in_flight)} 篇）"
+    )
+    for e in in_flight:
+        print(f"    [在途] {e['path']}（{e['lines']} 行，{e['archive_reason']}）")
 
     by_reason: dict[str, list[int]] = {}
     for e in living:
@@ -344,9 +384,9 @@ def _print_summary(living: list[dict], archive: list[dict]) -> None:
     for reason, (count, lines) in sorted(by_reason.items(), key=lambda kv: -kv[1][1]):
         print(f"    {reason:<16} {count:>4} 篇 / {lines:>7} 行")
 
-    print("[docs-triage] 归档候选拆解：")
+    print("[docs-triage] 归档候选拆解（仅可归档）：")
     by_arch: dict[str, list[int]] = {}
-    for e in archive:
+    for e in actionable:
         slot = by_arch.setdefault(e.get("archive_reason", "?"), [0, 0])
         slot[0] += 1
         slot[1] += e["lines"]
@@ -354,7 +394,7 @@ def _print_summary(living: list[dict], archive: list[dict]) -> None:
         print(f"    {reason:<20} {count:>4} 篇 / {lines:>7} 行")
 
     top: dict[str, list[int]] = {}
-    for e in archive:
+    for e in actionable:
         topdir = e["path"].split("/")[0] if "/" in e["path"] else "."
         slot = top.setdefault(topdir, [0, 0])
         slot[0] += 1
@@ -376,6 +416,8 @@ def cmd_report(as_json: bool) -> int:
             {
                 "living_count": len(living),
                 "archive_count": len(archive),
+                "actionable_count": len([e for e in archive if not e.get("in_flight")]),
+                "in_flight_count": len([e for e in archive if e.get("in_flight")]),
                 "living_lines": sum(e["lines"] for e in living),
                 "archive_lines": sum(e["lines"] for e in archive),
                 "archive": archive,
