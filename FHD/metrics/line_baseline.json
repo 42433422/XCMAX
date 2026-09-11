@@ -1,5 +1,5 @@
 {
-  "lines": 2324122,
+  "lines": 2324126,
   "updated": "2026-09-12",
-  "note": "G6/G7 实机证据回填增量 +91（SSOT Gate 状态 + 复现/日志/截图 + CHANGELOG + ssot 插件 RED 三要素校验）；随 #1874 基线重算同步"
+  "note": "B11 security gate: npm overrides 补丁行（js-yaml 4.3.2 / sharp 0.35.4 / @xmldom 0.8.15）+4 行，CVE-2026-84375、GHSA-rgj7-g3m4-5g8c 等 53-high 清零"
 }
