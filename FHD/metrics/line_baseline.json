@@ -1,5 +1,5 @@
 {
-  "lines": 2321520,
+  "lines": 2321521,
   "updated": "2026-09-11",
-  "note": "同上一笔（SSOT 注册表修复 + macOS 发布快照入库）+2 行 CHANGELOG 条目，同一迭代合并计量"
+  "note": "docs 清理净 +1：CHANGELOG 必备条目（changelog-gate 要求产品代码 PR 记录），marketAccount 注释替换为中性"
 }
