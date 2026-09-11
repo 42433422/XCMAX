@@ -2,7 +2,7 @@
 
 > **本文件的唯一职责：说真话。** 不写愿景、不写"已完成"除非有证据。
 > 给人看，也给 AI 员工看——它们照字面信这里的每一行，所以这里只许写实测。
-> 最后更新：2026-07-24
+> 最后更新：2026-09-11
 
 ## 一句话定位
 
@@ -84,3 +84,5 @@ L0 物理基底    DB schema🟢(旁路封+冻结) · 租户隔离🟢 · runtim
 - 认知 Processor 已挂生产 intent（失败 fallback unified）；域事件样板仅采购订单创建→`order.created` 持久化，未宣称全域落地
 - 认知全栈补齐（2026-07-29）：SCM lite 因果/反事实、技能契约开放世界、策略向持续学习、软约束规划、白名单自我反思已落地（见 `docs/architecture/COGNITIVE_FULL_STACK_20260729.md`）；全域业务因果与跨行业适配器仍需扩样板
 - 战略自治规划（2026-07-29）：LLM 季度目标分解 + 反思修正 + adaptive_thresholds 已接入；运维 impact-predictor 规则轨仍在，LLM advisory 需 `XCAGI_IMPACT_LLM=1` 开启
+- **Windows 稳定自动更新 feed 被人为指向未签名隔离包（2026-09-10 记录；保持现状，待签名 1.0.0.1 覆盖）**：`/var/www/update/releases/stable/enterprise/latest.yml` 为手工改写（属主 `1001:1001`，缺 `stagingPercentage`/`minVersion`/`forceUpgrade`），`files[0].url` 指向隔离热修包 `XCAGI-Enterprise-Setup-1.0.0.1-x64-macalign.exe`（`buildSha 73861ed7`），与 `windows-macalign-hotfix.yml` 的「Public delivery: forbidden」相悖；同版本 `https://xiu-ci.com/xcagi-v1.0.0.1/manifest.json` 漂移（`release_ready:false`、`git_sha 2e6f03bf`、无 windows 条目），公开下载页已 fail-closed（`download-windows-hotfix.json` `download_allowed:false`）。**决定：不回滚、不改写 feed，等同一 SHA 的签名 1.0.0.1 覆盖。**
+- **Windows 未签名验收包只走测试隔离通道**：`XCAGI-Enterprise-Setup-1.0.0.1-x64-unsigned.exe`（sha256 `ac7fa2c7…321a`、`git_sha a9507f0f`、`signature_status:unsigned`、`runner_install_smoke:passed`，run 34552543418 精确 SHA 构建，含 #1845 安装器中文豆腐块/标题栏修复与 #1815 Agent 持久化/租户隔离加固）已替换至 `https://xiu-ci.com/releases/testing/enterprise/`（`.sha256` 与 `delivery-receipt.json` 同步，公网全量下载 SHA256 端到端复核一致；旧包 87d510c5f/654db6a8e 保留为 `.bak-*`）；**不进稳定通道、不上公开下载页**；项2「正式安装包覆盖升级」与项7/8 的实机证据仍未闭环。

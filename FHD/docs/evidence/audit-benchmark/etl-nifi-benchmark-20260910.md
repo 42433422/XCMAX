@@ -15,7 +15,7 @@
 | predeclared_metrics_and_tolerances | 3 条合法行精确映射（acme×2、globex×1）；2 条坏行按行号+原因精确定位（5=missing_customer_id、6=qty_not_numeric）；链路计数 get.out=1→etl.in=1→etl.out=2（精确）；人工编辑文件重跑后字节不变（精确） |
 | environment | 本机 macOS Docker（Colima），HTTP 一律 `--noproxy '*'`/ProxyHandler({})；宿主-容器共享 /tmp/r22-etl/{in,good,errors} bind mount |
 | observed_results | B1/B2/B3 全部 PASS（见下表） |
-| unknowns | provenance 查询子系统在 standalone 镜像返回 500（`/nifi-api/provenance*` 全部不可用），来源追踪降级为处理器级事件链计数断言（get.out→etl.in→etl.out 一致），未覆盖 FlowFile 级 lineage 查询 UI；多节点/背压/集群协调未覆盖；商业锚点（Fivetran / Informatica / Matillion）未实测 |
+| unknowns | provenance 查询子系统在 standalone 镜像返回 500（`/nifi-api/provenance*` 全部不可用），来源追踪降级为处理器级事件链计数断言（get.out→etl.in→etl.out 一致），未覆盖 FlowFile 级 lineage 查询 UI；多节点/背压/集群协调未覆盖；商业锚点（Informatica IDMC / Qlik Talend Cloud / Microsoft Fabric Data Factory）未实测 |
 | domain_status | etl 域开源 60 分锚点：B1/B2/B3 实测通过（E3：真实 NiFi 环境完整任务+错误定位+重试不覆盖） |
 | score | 不授予（单锚点记录） |
 | auditor | agent-mac-trae |

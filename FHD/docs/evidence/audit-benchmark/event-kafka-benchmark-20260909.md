@@ -10,7 +10,7 @@
 | standard_version | 1.0.0 |
 | scoring_version | external-anchors-v1 |
 | reference_versions_editions_regions | Apache Kafka 3.8.1（apache/kafka:3.8.1 官方镜像，KRaft 单节点，Apache-2.0），本地 Docker；客户端 confluent-kafka 2.15.0（librdkafka） |
-| dataset_hash | 任务脚本随本文档存档（同目录 agent-langgraph-tasks / erp-erpnext-tasks） |
+| dataset_hash | 任务脚本随本文档存档（同目录 event-kafka-tasks-20260909.py） |
 | task_protocol | B1 事件契约/顺序/投递语义；B2 重复投递/消费失败/死信；B3 进程重启恢复+丢失/延迟观测 |
 | predeclared_metrics_and_tolerances | 50 条全量按序（精确）；未提交位移重放=原 offset 序列（精确）；重启续读追平 LEO（committed>=LEO） |
 | environment | 本机 macOS Docker，单分区主题，幂等 producer |

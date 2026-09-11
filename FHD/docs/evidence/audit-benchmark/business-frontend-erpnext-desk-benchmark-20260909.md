@@ -15,7 +15,7 @@
 | predeclared_metrics_and_tolerances | B1 真实建单成功且服务端拒绝非法物料/数量 0、不存在筛选返回空列表非报错；B2 ping=200、坏 DocType 返回服务端异常、列表计数与 DB 行数精确一致、未登录核心 API 真实 401；B3 编辑后重读精确一致、name 精确筛选唯一命中、导出 CSV 含编辑标记 |
 | environment | 本机 macOS Docker（r22-erpnext-backend-1:18081，Host 头路由站点），curl 直连 Desk REST 层 |
 | observed_results | B1/B2/B3 全部 PASS（见下表） |
-| unknowns | 商业锚点（SAP Fiori / Oracle Fusion / ServiceNow）未实测；本记录走 Desk 前端实际调用的同一 REST 代码路径，未做浏览器像素级 UI 断言（列表视图渲染、看板拖拽等纯前端语义不在本任务范围）；scope_note 要求按完整任务比较而非页面数，本记录只覆盖必选治理语义 |
+| unknowns | 商业锚点（SAP Fiori / Microsoft Dynamics 365 Business Central / Oracle NetSuite ERP）未实测；本记录走 Desk 前端实际调用的同一 REST 代码路径，未做浏览器像素级 UI 断言（列表视图渲染、看板拖拽等纯前端语义不在本任务范围）；scope_note 要求按完整任务比较而非页面数，本记录只覆盖必选治理语义 |
 | domain_status | business-frontend 域开源 60 分锚点：B1/B2/B3 实测通过（E3：真实软件环境完整任务） |
 | score | 不授予（单锚点记录） |
 | auditor | agent-mac-trae |
