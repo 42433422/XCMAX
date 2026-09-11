@@ -1,0 +1,967 @@
+[
+  {
+    "text": "客户名册",
+    "tier": "core",
+    "domain": "customers",
+    "expected_tool": "customers",
+    "expected_primary": "customers"
+  },
+  {
+    "text": "查一下华林建材这个客户",
+    "tier": "core",
+    "domain": "customers",
+    "expected_tool": "customers",
+    "expected_primary": "customers"
+  },
+  {
+    "text": "常青工厂那个吴老板手机多少",
+    "tier": "semantic",
+    "domain": "customers",
+    "expected_tool": "customers",
+    "expected_primary": "customers"
+  },
+  {
+    "text": "三月份下单的单位有哪些",
+    "tier": "semantic",
+    "domain": "customers",
+    "expected_tool": "customers",
+    "expected_primary": "customers"
+  },
+  {
+    "text": "新增一个客户叫美家超市",
+    "tier": "semantic",
+    "domain": "customers",
+    "expected_tool": "customer_supplement",
+    "expected_primary": "customer_supplement"
+  },
+  {
+    "text": "陈酒鬼的地址改成高新区天府三街",
+    "tier": "semantic",
+    "domain": "customers",
+    "expected_tool": "customer_edit",
+    "expected_primary": "customer_edit"
+  },
+  {
+    "text": "帮我把吴老板的联系电话录一下",
+    "tier": "semantic",
+    "domain": "customers",
+    "expected_tool": "customer_supplement",
+    "expected_primary": "customer_supplement"
+  },
+  {
+    "text": "咱们合作过的单位总共有多少家",
+    "tier": "semantic",
+    "domain": "customers",
+    "expected_tool": "customers",
+    "expected_primary": "customers"
+  },
+  {
+    "text": "哪些客户还欠着货款",
+    "tier": "semantic",
+    "domain": "customers",
+    "expected_tool": "customers",
+    "expected_primary": "customers"
+  },
+  {
+    "text": "买过晶白乳液的那家客户帮我找找",
+    "tier": "semantic",
+    "domain": "customers",
+    "expected_tool": "customers",
+    "expected_primary": "customers"
+  },
+  {
+    "text": "商品目录",
+    "tier": "core",
+    "domain": "products",
+    "expected_tool": "products",
+    "expected_primary": "products"
+  },
+  {
+    "text": "都有哪些型号",
+    "tier": "core",
+    "domain": "products",
+    "expected_tool": "products",
+    "expected_primary": "products"
+  },
+  {
+    "text": "9801一桶多少钱",
+    "tier": "semantic",
+    "domain": "products",
+    "expected_tool": "products",
+    "expected_primary": "products"
+  },
+  {
+    "text": "A-200和B-15有什么区别",
+    "tier": "semantic",
+    "domain": "products",
+    "expected_tool": "products",
+    "expected_primary": "products"
+  },
+  {
+    "text": "18L的包装有没有小一点的",
+    "tier": "semantic",
+    "domain": "products",
+    "expected_tool": "products",
+    "expected_primary": "products"
+  },
+  {
+    "text": "咱们卖不卖5升装的小桶漆",
+    "tier": "semantic",
+    "domain": "products",
+    "expected_tool": "products",
+    "expected_primary": "products"
+  },
+  {
+    "text": "晶白乳液的照片发我看看",
+    "tier": "semantic",
+    "domain": "products",
+    "expected_tool": "show_images",
+    "expected_primary": "show_images"
+  },
+  {
+    "text": "有没有产品宣传的视频",
+    "tier": "semantic",
+    "domain": "products",
+    "expected_tool": "show_videos",
+    "expected_primary": "show_videos"
+  },
+  {
+    "text": "9902的单价是多少",
+    "tier": "semantic",
+    "domain": "products",
+    "expected_tool": "products",
+    "expected_primary": "products"
+  },
+  {
+    "text": "卖得最好的产品是哪个",
+    "tier": "semantic",
+    "domain": "products",
+    "expected_tool": "products",
+    "expected_primary": "products"
+  },
+  {
+    "text": "给华林建材生成发货单",
+    "tier": "core",
+    "domain": "sales",
+    "expected_tool": "shipment_generate",
+    "expected_primary": "shipment_generate"
+  },
+  {
+    "text": "开送货单 常青工厂 12桶",
+    "tier": "core",
+    "domain": "sales",
+    "expected_tool": "shipment_generate",
+    "expected_primary": "shipment_generate"
+  },
+  {
+    "text": "打单",
+    "tier": "core",
+    "domain": "sales",
+    "expected_tool": "shipment_generate",
+    "expected_primary": "shipment_generate"
+  },
+  {
+    "text": "美家超市要9801十二桶安排发货",
+    "tier": "semantic",
+    "domain": "sales",
+    "expected_tool": "shipment_generate",
+    "expected_primary": "shipment_generate"
+  },
+  {
+    "text": "给云栖贸易备货三十六箱",
+    "tier": "semantic",
+    "domain": "sales",
+    "expected_tool": "shipment_generate",
+    "expected_primary": "shipment_generate"
+  },
+  {
+    "text": "老周那边的单子照惯例开",
+    "tier": "semantic",
+    "domain": "sales",
+    "expected_tool": "shipment_generate",
+    "expected_primary": "shipment_generate"
+  },
+  {
+    "text": "货配齐了，出个单给客户",
+    "tier": "semantic",
+    "domain": "sales",
+    "expected_tool": "shipment_generate",
+    "expected_primary": "shipment_generate"
+  },
+  {
+    "text": "和信物流的80桶今天必须发出去",
+    "tier": "semantic",
+    "domain": "sales",
+    "expected_tool": "shipment_generate",
+    "expected_primary": "shipment_generate"
+  },
+  {
+    "text": "蓝天文具要一张出货单",
+    "tier": "semantic",
+    "domain": "sales",
+    "expected_tool": "shipment_generate",
+    "expected_primary": "shipment_generate"
+  },
+  {
+    "text": "广达装饰那边先把单子开了再叫车",
+    "tier": "semantic",
+    "domain": "sales",
+    "expected_tool": "shipment_generate",
+    "expected_primary": "shipment_generate"
+  },
+  {
+    "text": "材料库库存",
+    "tier": "core",
+    "domain": "inventory",
+    "expected_tool": "materials",
+    "expected_primary": "materials"
+  },
+  {
+    "text": "查库存",
+    "tier": "core",
+    "domain": "inventory",
+    "expected_tool": "materials",
+    "expected_primary": "materials"
+  },
+  {
+    "text": "碳酸钙还剩多少",
+    "tier": "semantic",
+    "domain": "inventory",
+    "expected_tool": "materials",
+    "expected_primary": "materials"
+  },
+  {
+    "text": "分散剂够用不够用",
+    "tier": "semantic",
+    "domain": "inventory",
+    "expected_tool": "materials",
+    "expected_primary": "materials"
+  },
+  {
+    "text": "增稠剂是不是要补货了",
+    "tier": "semantic",
+    "domain": "inventory",
+    "expected_tool": "materials",
+    "expected_primary": "materials"
+  },
+  {
+    "text": "醋酸丁酯还有几桶",
+    "tier": "semantic",
+    "domain": "inventory",
+    "expected_tool": "materials",
+    "expected_primary": "materials"
+  },
+  {
+    "text": "原料撑不撑得过下周生产",
+    "tier": "semantic",
+    "domain": "inventory",
+    "expected_tool": "materials",
+    "expected_primary": "materials"
+  },
+  {
+    "text": "滑石粉断货了没有",
+    "tier": "semantic",
+    "domain": "inventory",
+    "expected_tool": "materials",
+    "expected_primary": "materials"
+  },
+  {
+    "text": "材料仓的货盘一遍",
+    "tier": "semantic",
+    "domain": "inventory",
+    "expected_tool": "materials",
+    "expected_primary": "materials"
+  },
+  {
+    "text": "看看原料的进出库情况",
+    "tier": "semantic",
+    "domain": "inventory",
+    "expected_tool": "materials",
+    "expected_primary": "materials"
+  },
+  {
+    "text": "价格表",
+    "tier": "core",
+    "domain": "finance",
+    "expected_tool": "price_list",
+    "expected_primary": "price_list"
+  },
+  {
+    "text": "打印报价单",
+    "tier": "core",
+    "domain": "finance",
+    "expected_tool": "price_list",
+    "expected_primary": "price_list"
+  },
+  {
+    "text": "生成产品价格表",
+    "tier": "core",
+    "domain": "finance",
+    "expected_tool": "price_list",
+    "expected_primary": "price_list"
+  },
+  {
+    "text": "打印公司的价格表",
+    "tier": "core",
+    "domain": "finance",
+    "expected_tool": "price_list",
+    "expected_primary": "price_list"
+  },
+  {
+    "text": "客户价格表",
+    "tier": "core",
+    "domain": "finance",
+    "expected_tool": "price_list",
+    "expected_primary": "price_list"
+  },
+  {
+    "text": "导出报价单",
+    "tier": "core",
+    "domain": "finance",
+    "expected_tool": "price_list",
+    "expected_primary": "price_list"
+  },
+  {
+    "text": "给客户报个价",
+    "tier": "semantic",
+    "domain": "finance",
+    "expected_tool": "price_list",
+    "expected_primary": "price_list"
+  },
+  {
+    "text": "把报价单打出来一份",
+    "tier": "semantic",
+    "domain": "finance",
+    "expected_tool": "price_list",
+    "expected_primary": "price_list"
+  },
+  {
+    "text": "9901现在什么价位",
+    "tier": "semantic",
+    "domain": "finance",
+    "expected_tool": "price_list",
+    "expected_primary": "price_list"
+  },
+  {
+    "text": "所有产品的最新价格列一下",
+    "tier": "semantic",
+    "domain": "finance",
+    "expected_tool": "price_list",
+    "expected_primary": "price_list"
+  },
+  {
+    "text": "导出客户资料",
+    "tier": "core",
+    "domain": "reports",
+    "expected_tool": "customer_export",
+    "expected_primary": "customer_export"
+  },
+  {
+    "text": "把客户整理成表格导出来",
+    "tier": "semantic",
+    "domain": "reports",
+    "expected_tool": "customer_export",
+    "expected_primary": "customer_export"
+  },
+  {
+    "text": "输出一份客户名册",
+    "tier": "semantic",
+    "domain": "reports",
+    "expected_tool": "customer_export",
+    "expected_primary": "customer_export"
+  },
+  {
+    "text": "客户联系方式导出来存档",
+    "tier": "semantic",
+    "domain": "reports",
+    "expected_tool": "customer_export",
+    "expected_primary": "customer_export"
+  },
+  {
+    "text": "单位名单做成表格给我",
+    "tier": "semantic",
+    "domain": "reports",
+    "expected_tool": "customer_export",
+    "expected_primary": "customer_export"
+  },
+  {
+    "text": "这个季度开了多少单",
+    "tier": "semantic",
+    "domain": "reports",
+    "expected_tool": "shipments",
+    "expected_primary": "shipments"
+  },
+  {
+    "text": "汇总一下最近半年的出货情况",
+    "tier": "semantic",
+    "domain": "reports",
+    "expected_tool": "shipments",
+    "expected_primary": "shipments"
+  },
+  {
+    "text": "哪个月出货最多",
+    "tier": "semantic",
+    "domain": "reports",
+    "expected_tool": "shipments",
+    "expected_primary": "shipments"
+  },
+  {
+    "text": "全年出货金额统计",
+    "tier": "semantic",
+    "domain": "reports",
+    "expected_tool": "shipments",
+    "expected_primary": "shipments"
+  },
+  {
+    "text": "把这月的订单汇总打出来",
+    "tier": "semantic",
+    "domain": "reports",
+    "expected_tool": "shipments",
+    "expected_primary": "shipments"
+  },
+  {
+    "text": "订单列表",
+    "tier": "core",
+    "domain": "shipment",
+    "expected_tool": "shipments",
+    "expected_primary": "shipments"
+  },
+  {
+    "text": "发货单模板",
+    "tier": "core",
+    "domain": "shipment",
+    "expected_tool": "shipment_template",
+    "expected_primary": "shipment_template"
+  },
+  {
+    "text": "昨天发的货走的哪家物流",
+    "tier": "semantic",
+    "domain": "shipment",
+    "expected_tool": "shipments",
+    "expected_primary": "shipments"
+  },
+  {
+    "text": "华林建材那单发出去了吗",
+    "tier": "semantic",
+    "domain": "shipment",
+    "expected_tool": "shipments",
+    "expected_primary": "shipments"
+  },
+  {
+    "text": "查一下单号9905",
+    "tier": "semantic",
+    "domain": "shipment",
+    "expected_tool": "shipments",
+    "expected_primary": "shipments"
+  },
+  {
+    "text": "发货单的抬头改一下",
+    "tier": "semantic",
+    "domain": "shipment",
+    "expected_tool": "shipment_template",
+    "expected_primary": "shipment_template"
+  },
+  {
+    "text": "预览一下模板效果",
+    "tier": "core",
+    "domain": "shipment",
+    "expected_tool": "template_preview",
+    "expected_primary": "template_preview"
+  },
+  {
+    "text": "这张表的表头提取一下",
+    "tier": "core",
+    "domain": "shipment",
+    "expected_tool": "template_extract",
+    "expected_primary": "template_extract"
+  },
+  {
+    "text": "解析这个excel",
+    "tier": "core",
+    "domain": "shipment",
+    "expected_tool": "excel_decompose",
+    "expected_primary": "excel_decompose"
+  },
+  {
+    "text": "现在用的单据长什么版式",
+    "tier": "semantic",
+    "domain": "shipment",
+    "expected_tool": "template_preview",
+    "expected_primary": "template_preview"
+  },
+  {
+    "text": "发消息给陈九",
+    "tier": "core",
+    "domain": "wechat",
+    "expected_tool": "wechat_send",
+    "expected_primary": "wechat_send"
+  },
+  {
+    "text": "微信通讯录",
+    "tier": "core",
+    "domain": "wechat",
+    "expected_tool": "wechat",
+    "expected_primary": "wechat"
+  },
+  {
+    "text": "微信上跟老周说货发走了",
+    "tier": "semantic",
+    "domain": "wechat",
+    "expected_tool": "wechat_send",
+    "expected_primary": "wechat_send"
+  },
+  {
+    "text": "把出货单微信发给对方",
+    "tier": "semantic",
+    "domain": "wechat",
+    "expected_tool": "wechat_send",
+    "expected_primary": "wechat_send"
+  },
+  {
+    "text": "看看微信好友名单",
+    "tier": "core",
+    "domain": "wechat",
+    "expected_tool": "wechat",
+    "expected_primary": "wechat"
+  },
+  {
+    "text": "通知吴老板明天来提货",
+    "tier": "semantic",
+    "domain": "wechat",
+    "expected_tool": "wechat_send",
+    "expected_primary": "wechat_send"
+  },
+  {
+    "text": "把这张订单微信发给陈总",
+    "tier": "semantic",
+    "domain": "wechat",
+    "expected_tool": "wechat_send",
+    "expected_primary": "wechat_send"
+  },
+  {
+    "text": "微信里回复一下老周",
+    "tier": "semantic",
+    "domain": "wechat",
+    "expected_tool": "wechat_send",
+    "expected_primary": "wechat_send"
+  },
+  {
+    "text": "华林建材的微信联系人是谁",
+    "tier": "semantic",
+    "domain": "wechat",
+    "expected_tool": "wechat",
+    "expected_primary": "wechat"
+  },
+  {
+    "text": "微信通知一下所有客户调价了",
+    "tier": "semantic",
+    "domain": "wechat",
+    "expected_tool": "wechat_send",
+    "expected_primary": "wechat_send"
+  },
+  {
+    "text": "打印三十张标签",
+    "tier": "core",
+    "domain": "print",
+    "expected_tool": "print_label",
+    "expected_primary": "print_label"
+  },
+  {
+    "text": "打印B-15的标签五十张",
+    "tier": "semantic",
+    "domain": "print",
+    "expected_tool": "print_label",
+    "expected_primary": "print_label"
+  },
+  {
+    "text": "这批9902要贴标",
+    "tier": "semantic",
+    "domain": "print",
+    "expected_tool": "print_label",
+    "expected_primary": "print_label"
+  },
+  {
+    "text": "标签机连的哪台打印机",
+    "tier": "core",
+    "domain": "print",
+    "expected_tool": "printer_list",
+    "expected_primary": "printer_list"
+  },
+  {
+    "text": "换成激光打印机出标签",
+    "tier": "semantic",
+    "domain": "print",
+    "expected_tool": "printer_list",
+    "expected_primary": "printer_list"
+  },
+  {
+    "text": "把A-200的商标打印出来",
+    "tier": "core",
+    "domain": "print",
+    "expected_tool": "print_label",
+    "expected_primary": "print_label"
+  },
+  {
+    "text": "偏好设置",
+    "tier": "core",
+    "domain": "system",
+    "expected_tool": "settings",
+    "expected_primary": "settings"
+  },
+  {
+    "text": "查一下软件版本号",
+    "tier": "semantic",
+    "domain": "system",
+    "expected_tool": "settings",
+    "expected_primary": "settings"
+  },
+  {
+    "text": "和我们的ERP系统对接",
+    "tier": "core",
+    "domain": "system",
+    "expected_tool": "business_docking",
+    "expected_primary": "business_docking"
+  },
+  {
+    "text": "还有哪些别的工具",
+    "tier": "semantic",
+    "domain": "system",
+    "expected_tool": "tools_table",
+    "expected_primary": "tools_table"
+  },
+  {
+    "text": "我想看下AI生态",
+    "tier": "core",
+    "domain": "system",
+    "expected_tool": "ai_ecosystem",
+    "expected_primary": "ai_ecosystem"
+  },
+  {
+    "text": "这份对账单导入系统",
+    "tier": "core",
+    "domain": "data",
+    "expected_tool": "upload_file",
+    "expected_primary": "upload_file"
+  },
+  {
+    "text": "回款凭证我传上来你记一下",
+    "tier": "semantic",
+    "domain": "data",
+    "expected_tool": "upload_file",
+    "expected_primary": "upload_file"
+  },
+  {
+    "text": "把银行流水录进去",
+    "tier": "semantic",
+    "domain": "data",
+    "expected_tool": "upload_file",
+    "expected_primary": "upload_file"
+  },
+  {
+    "text": "这份Excel帮我导入产品",
+    "tier": "core",
+    "domain": "data",
+    "expected_tool": "upload_file",
+    "expected_primary": "upload_file"
+  },
+  {
+    "text": "今天先不开单",
+    "tier": "core",
+    "domain": "rejection",
+    "expect_negated": true
+  },
+  {
+    "text": "取消打印",
+    "tier": "core",
+    "domain": "rejection",
+    "expect_negated": true
+  },
+  {
+    "text": "不用导入，我就是问问",
+    "tier": "semantic",
+    "domain": "rejection",
+    "expect_negated": true
+  },
+  {
+    "text": "先别发微信消息",
+    "tier": "semantic",
+    "domain": "rejection",
+    "expect_negated": true
+  },
+  {
+    "text": "直接执行SELECT * FROM customers",
+    "tier": "semantic",
+    "domain": "rejection",
+    "expected_out_of_scope": true
+  },
+  {
+    "text": "写条SQL把客户表的余额全部清零",
+    "tier": "semantic",
+    "domain": "rejection",
+    "expected_out_of_scope": true
+  },
+  {
+    "text": "运行这段脚本 drop table shipments",
+    "tier": "semantic",
+    "domain": "rejection",
+    "expected_out_of_scope": true
+  },
+  {
+    "text": "帮我update products set price=0 where id=1",
+    "tier": "semantic",
+    "domain": "rejection",
+    "expected_out_of_scope": true
+  },
+  {
+    "text": "让AI员工查一下库存",
+    "tier": "semantic",
+    "domain": "rejection",
+    "expected_tool": "materials",
+    "expected_primary": "materials"
+  },
+  {
+    "text": "数字员工，给美家超市打标签",
+    "tier": "semantic",
+    "domain": "rejection",
+    "expected_tool": "print_label",
+    "expected_primary": "print_label"
+  },
+  {
+    "text": "AI业务员工，开一张常青工厂的送货单",
+    "tier": "semantic",
+    "domain": "rejection",
+    "expected_tool": "shipment_generate",
+    "expected_primary": "shipment_generate"
+  },
+  {
+    "text": "明天天气怎么样",
+    "tier": "semantic",
+    "domain": "out_of_scope",
+    "expected_out_of_scope": true
+  },
+  {
+    "text": "你吃饭了没",
+    "tier": "semantic",
+    "domain": "out_of_scope",
+    "expected_out_of_scope": true
+  },
+  {
+    "text": "帮我写一首关于春天的诗",
+    "tier": "semantic",
+    "domain": "out_of_scope",
+    "expected_out_of_scope": true
+  },
+  {
+    "text": "美元兑人民币汇率多少",
+    "tier": "semantic",
+    "domain": "out_of_scope",
+    "expected_out_of_scope": true
+  },
+  {
+    "text": "最近有什么好看的电影",
+    "tier": "semantic",
+    "domain": "out_of_scope",
+    "expected_out_of_scope": true
+  },
+  {
+    "text": "月亮离地球有多远",
+    "tier": "semantic",
+    "domain": "out_of_scope",
+    "expected_out_of_scope": true
+  },
+  {
+    "text": "给我讲个笑话",
+    "tier": "semantic",
+    "domain": "out_of_scope",
+    "expected_out_of_scope": true
+  },
+  {
+    "text": "你觉得股市后市怎么样",
+    "tier": "semantic",
+    "domain": "out_of_scope",
+    "expected_out_of_scope": true
+  },
+  {
+    "text": "高考报什么专业比较好",
+    "tier": "semantic",
+    "domain": "out_of_scope",
+    "expected_out_of_scope": true
+  },
+  {
+    "text": "周末会不会下雨要不要带伞",
+    "tier": "semantic",
+    "domain": "out_of_scope",
+    "expected_out_of_scope": true
+  },
+  {
+    "text": "昨晚那场球赛比分是多少",
+    "tier": "semantic",
+    "domain": "out_of_scope",
+    "expected_out_of_scope": true
+  },
+  {
+    "text": "有人吗",
+    "tier": "core",
+    "domain": "greeting",
+    "check": "greeting"
+  },
+  {
+    "text": "下午好",
+    "tier": "core",
+    "domain": "greeting",
+    "check": "greeting"
+  },
+  {
+    "text": "嗨，好久不见",
+    "tier": "core",
+    "domain": "greeting",
+    "check": "greeting"
+  },
+  {
+    "text": "晚上好呀",
+    "tier": "semantic",
+    "domain": "greeting",
+    "check": "greeting"
+  },
+  {
+    "text": "先这样",
+    "tier": "core",
+    "domain": "greeting",
+    "check": "goodbye"
+  },
+  {
+    "text": "谢谢再见",
+    "tier": "core",
+    "domain": "greeting",
+    "check": "goodbye"
+  },
+  {
+    "text": "有什么功能",
+    "tier": "core",
+    "domain": "greeting",
+    "check": "help"
+  },
+  {
+    "text": "怎么操作",
+    "tier": "core",
+    "domain": "greeting",
+    "check": "help"
+  },
+  {
+    "text": "hello",
+    "tier": "core",
+    "domain": "greeting",
+    "check": "greeting"
+  },
+  {
+    "text": "你们有什么功能呀",
+    "tier": "semantic",
+    "domain": "greeting",
+    "check": "help"
+  },
+  {
+    "text": "有哪些打印机装好了",
+    "tier": "semantic",
+    "domain": "print",
+    "expected_tool": "printer_list",
+    "expected_primary": "printer_list"
+  },
+  {
+    "text": "标签纸装好了，打一百张",
+    "tier": "semantic",
+    "domain": "print",
+    "expected_tool": "print_label",
+    "expected_primary": "print_label"
+  },
+  {
+    "text": "出标签换台设备",
+    "tier": "semantic",
+    "domain": "print",
+    "expected_tool": "printer_list",
+    "expected_primary": "printer_list"
+  },
+  {
+    "text": "9801的商标来三十张",
+    "tier": "semantic",
+    "domain": "print",
+    "expected_tool": "print_label",
+    "expected_primary": "print_label"
+  },
+  {
+    "text": "打开设置页面",
+    "tier": "core",
+    "domain": "system",
+    "expected_tool": "settings",
+    "expected_primary": "settings"
+  },
+  {
+    "text": "开机自启关掉",
+    "tier": "semantic",
+    "domain": "system",
+    "expected_tool": "settings",
+    "expected_primary": "settings"
+  },
+  {
+    "text": "版本号在哪里看",
+    "tier": "semantic",
+    "domain": "system",
+    "expected_tool": "settings",
+    "expected_primary": "settings"
+  },
+  {
+    "text": "库存数据同步到ERP",
+    "tier": "semantic",
+    "domain": "system",
+    "expected_tool": "business_docking",
+    "expected_primary": "business_docking"
+  },
+  {
+    "text": "了解一下人工智能生态",
+    "tier": "semantic",
+    "domain": "system",
+    "expected_tool": "ai_ecosystem",
+    "expected_primary": "ai_ecosystem"
+  },
+  {
+    "text": "上传文件",
+    "tier": "core",
+    "domain": "data",
+    "expected_tool": "upload_file",
+    "expected_primary": "upload_file"
+  },
+  {
+    "text": "导入客户表",
+    "tier": "core",
+    "domain": "data",
+    "expected_tool": "upload_file",
+    "expected_primary": "upload_file"
+  },
+  {
+    "text": "我传一张进货单照片",
+    "tier": "semantic",
+    "domain": "data",
+    "expected_tool": "upload_file",
+    "expected_primary": "upload_file"
+  },
+  {
+    "text": "这份入库单录进去",
+    "tier": "semantic",
+    "domain": "data",
+    "expected_tool": "upload_file",
+    "expected_primary": "upload_file"
+  },
+  {
+    "text": "分析一下模板结构",
+    "tier": "semantic",
+    "domain": "data",
+    "expected_tool": "excel_analyzer",
+    "expected_primary": "excel_analyzer"
+  },
+  {
+    "text": "把这份表格拆解一下",
+    "tier": "semantic",
+    "domain": "data",
+    "expected_tool": "excel_decompose",
+    "expected_primary": "excel_decompose"
+  }
+]

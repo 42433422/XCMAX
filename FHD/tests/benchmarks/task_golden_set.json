@@ -243,7 +243,8 @@
         "actions_any_of": [
           [{"tool_id": "inventory", "action": "query"}],
           [{"tool_id": "inventory", "action": "list"}],
-          [{"tool_id": "reports", "action": "inventory_summary"}]
+          [{"tool_id": "reports", "action": "inventory_summary"}],
+          [{"tool_id": "materials", "action": "query"}]
         ],
         "forbid_actions": [
           {"tool_id": "inventory", "action": "stock_in"},

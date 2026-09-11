@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, cast
 
+from app.domain.services.conversation.chat_tool_intent import tiered_confidence
 from app.domain.services.conversation.context import (
     ContextFacade,
     get_context_facade,
@@ -300,7 +301,7 @@ class UnifiedConversationCoordinator:
             is_confirmation=basic.get("is_confirmation", False),
             is_negation_intent=basic.get("is_negation_intent", False),
             is_negated=rule_result.get("is_negated", False),
-            confidence=0.8,
+            confidence=tiered_confidence(basic, rule_result),
             source="neuro_reflex+rule",
         )
 

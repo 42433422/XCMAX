@@ -133,9 +133,11 @@ def test_task_golden_set_pass_k():
         print(f"  {d:12s} {s['pass_k']}/{s['total']}")
     print(f"报告: {report_path}")
 
-    # N03（2026-09-08）：默认即硬门禁（按规则引擎口径校准 0.2，棘轮只升不降）；
+    # N03（2026-09-08）：默认即硬门禁（棘轮只升不降）；
     # 显式设 TASK_BENCHMARK_MIN_PASS=0 退回只报告模式。此前默认 0 导致全失败也放行。
-    floor = float(os.environ.get("TASK_BENCHMARK_MIN_PASS", "0.2") or "0")
+    # Task 6（2026-09-09）上调 0.2 → 0.4：规则层修复后实测 pass^1=0.4545（10/22），
+    # 按 spec「实测下调约 5% 取整」定标。
+    floor = float(os.environ.get("TASK_BENCHMARK_MIN_PASS", "0.4") or "0")
     assert report["pass_k"] >= floor, (
         f"任务级基准低于门禁：pass^{trials}={report['pass_k']} < {floor}；"
         f"失败 {len(failures)} 项，详见 {report_path}"
