@@ -635,6 +635,20 @@ jobs:
           path: |
             ${{ runner.temp }}/manifest.json
             ${{ runner.temp }}/download-release.json
+      - name: Progress linked work orders to released (mainline merged/released)
+        # 主线闭环：本次发布合并的工单沿状态机真实推进 merged → released，
+        # 让验收回执在 verifying 窗口判定关闭/重开。失败不阻断发布。
+        continue-on-error: true
+        env:
+          XCAGI_MARKET_BASE_URL: ${{ vars.XCAGI_MARKET_BASE_URL }}
+          MARKET_ADMIN_TOKEN: ${{ secrets.MARKET_ADMIN_TOKEN }}
+        run: |
+          if [ -z "${MARKET_ADMIN_TOKEN:-}" ]; then
+            echo "::warning::SKIP work-order progress: MARKET_ADMIN_TOKEN not configured"
+            exit 0
+          fi
+          python scripts/dev/record_release_work_order_states.py \
+            --release-config "${RUNNER_TEMP}/download-release.json" --apply || true
       - name: Publish unified Windows + macOS release to CVM
         timeout-minutes: 45
         working-directory: .
