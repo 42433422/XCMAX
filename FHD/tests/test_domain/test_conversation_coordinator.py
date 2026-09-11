@@ -298,9 +298,7 @@ class TestTieredConfidence:
         assert c == 0.7
 
     def test_rule_hit_priority_missing(self):
-        c = tiered_confidence(
-            self._basic(), {"primary_intent": "products"}
-        )
+        c = tiered_confidence(self._basic(), {"primary_intent": "products"})
         assert c == 0.7
 
     def test_negation_ambiguity_lowest_rule_tier(self):
@@ -311,26 +309,13 @@ class TestTieredConfidence:
         assert c == 0.6
 
     def test_reflex_hit_highest(self):
+        assert tiered_confidence(self._basic(is_greeting=True), {"primary_intent": None}) == 0.95
         assert (
-            tiered_confidence(
-                self._basic(is_greeting=True), {"primary_intent": None}
-            )
-            == 0.95
-        )
-        assert (
-            tiered_confidence(
-                self._basic(is_confirmation=True), {"primary_intent": None}
-            )
-            == 0.95
+            tiered_confidence(self._basic(is_confirmation=True), {"primary_intent": None}) == 0.95
         )
 
     def test_no_hit_zero(self):
-        assert (
-            tiered_confidence(
-                self._basic(), {"primary_intent": None}
-            )
-            == 0.0
-        )
+        assert tiered_confidence(self._basic(), {"primary_intent": None}) == 0.0
 
     def test_recognize_intent_end_to_end_rule_hit(self):
         """_recognize_intent 用真实规则管道：高优先级命中 → 0.85"""
@@ -360,6 +345,8 @@ class TestTieredConfidence:
             }
             result = coord._recognize_intent("随便说点什么", {})
         assert result.confidence == 0.0
+
+
 # R02: 拒绝类请求护栏 — 否定语境下不得执行/生成写入类计划
 # ---------------------------------------------------------------------------
 
