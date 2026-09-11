@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.application.chat_tool_intent import tiered_confidence
+from app.domain.services.conversation.chat_tool_intent import tiered_confidence
 from app.domain.services.conversation.coordinator import (
     IntentResult,
     PendingIntent,

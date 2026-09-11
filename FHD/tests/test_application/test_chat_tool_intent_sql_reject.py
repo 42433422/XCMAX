@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.application.chat_tool_intent import (
+from app.domain.services.conversation.chat_tool_intent import (
     looks_like_business_db_write,
     looks_like_raw_sql,
 )

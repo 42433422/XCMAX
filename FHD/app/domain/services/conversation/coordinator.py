@@ -30,7 +30,7 @@ from app.domain.services.conversation.context import (
 )
 from app.domain.services.conversation.context import PendingIntent as ContextPendingIntent
 from app.domain.services.conversation.slot_validator import SlotValidator
-from app.application.chat_tool_intent import tiered_confidence
+from app.domain.services.conversation.chat_tool_intent import tiered_confidence
 
 logger = logging.getLogger(__name__)
 
