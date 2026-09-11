@@ -60,6 +60,17 @@ def is_negated_action_request(text: str) -> bool:
     return bool(_NEGATED_ACTION_RE.search(normalized))
 
 
+def tiered_confidence(basic: dict[str, bool], rule_result: dict[str, Any]) -> float:
+    """置信度分层（契约纪律）：否定歧义 0.6＜反射弧 0.95＜规则命中 priority≥10 取 0.85／＜10 取 0.7；未命中 0.0。"""
+    hit = rule_result.get("primary_intent")
+    if hit and rule_result.get("is_negated", False):
+        return 0.6
+    if any(basic.values()):
+        return 0.95
+    priority = rule_result.get("matched_priority", 0) or 0
+    return (0.85 if priority >= 10 else 0.7) if hit else 0.0
+
+
 # 原始 SQL 语句形态检测：动词+目标词同现的组合正则，降低对普通业务话术的误伤。
 # 输入统一小写并把全角空格归一为半角，允许中英文夹杂（如「执行DELETE FROM customers」）。
 _RAW_SQL_PATTERNS: tuple[re.Pattern[str], ...] = (

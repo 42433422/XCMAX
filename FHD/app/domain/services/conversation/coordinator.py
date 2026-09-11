@@ -30,6 +30,7 @@ from app.domain.services.conversation.context import (
 )
 from app.domain.services.conversation.context import PendingIntent as ContextPendingIntent
 from app.domain.services.conversation.slot_validator import SlotValidator
+from app.application.chat_tool_intent import tiered_confidence
 
 logger = logging.getLogger(__name__)
 
@@ -300,31 +301,11 @@ class UnifiedConversationCoordinator:
             is_confirmation=basic.get("is_confirmation", False),
             is_negation_intent=basic.get("is_negation_intent", False),
             is_negated=rule_result.get("is_negated", False),
-            confidence=self._tiered_confidence(basic, rule_result),
+            confidence=tiered_confidence(basic, rule_result),
             source="neuro_reflex+rule",
         )
 
         return result
-
-    @staticmethod
-    def _tiered_confidence(basic: dict[str, bool], rule_result: dict[str, Any]) -> float:
-        """置信度分层（契约纪律）：
-
-        - 命中意图带否定歧义 → 0.6
-        - 反射弧命中（问候/告别/帮助/确认/否定）→ 0.95
-        - 规则引擎命中且 priority >= 10 → 0.85
-        - 规则引擎命中且 priority < 10 → 0.7
-        - 未命中 → 0.0
-        """
-        rule_hit = bool(rule_result.get("primary_intent"))
-        if rule_hit and rule_result.get("is_negated", False):
-            return 0.6
-        if any(basic.values()):
-            return 0.95
-        if rule_hit:
-            priority = rule_result.get("matched_priority", 0) or 0
-            return 0.85 if priority >= 10 else 0.7
-        return 0.0
 
     def _handle_confirmation(
         self, user_id: str, message: str, pending: PendingIntent

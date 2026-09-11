@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from app.application.chat_tool_intent import tiered_confidence
 from app.domain.services.conversation.coordinator import (
     IntentResult,
     PendingIntent,
@@ -279,31 +280,31 @@ class TestTieredConfidence:
         return base
 
     def test_rule_hit_high_priority(self):
-        c = UnifiedConversationCoordinator._tiered_confidence(
+        c = tiered_confidence(
             self._basic(), {"primary_intent": "shipment_generate", "matched_priority": 12}
         )
         assert c == 0.85
 
     def test_rule_hit_priority_equal_10(self):
-        c = UnifiedConversationCoordinator._tiered_confidence(
+        c = tiered_confidence(
             self._basic(), {"primary_intent": "wechat_send", "matched_priority": 10}
         )
         assert c == 0.85
 
     def test_rule_hit_low_priority(self):
-        c = UnifiedConversationCoordinator._tiered_confidence(
+        c = tiered_confidence(
             self._basic(), {"primary_intent": "shipment_template", "matched_priority": 9}
         )
         assert c == 0.7
 
     def test_rule_hit_priority_missing(self):
-        c = UnifiedConversationCoordinator._tiered_confidence(
+        c = tiered_confidence(
             self._basic(), {"primary_intent": "products"}
         )
         assert c == 0.7
 
     def test_negation_ambiguity_lowest_rule_tier(self):
-        c = UnifiedConversationCoordinator._tiered_confidence(
+        c = tiered_confidence(
             self._basic(),
             {"primary_intent": "shipment_generate", "matched_priority": 12, "is_negated": True},
         )
@@ -311,13 +312,13 @@ class TestTieredConfidence:
 
     def test_reflex_hit_highest(self):
         assert (
-            UnifiedConversationCoordinator._tiered_confidence(
+            tiered_confidence(
                 self._basic(is_greeting=True), {"primary_intent": None}
             )
             == 0.95
         )
         assert (
-            UnifiedConversationCoordinator._tiered_confidence(
+            tiered_confidence(
                 self._basic(is_confirmation=True), {"primary_intent": None}
             )
             == 0.95
@@ -325,7 +326,7 @@ class TestTieredConfidence:
 
     def test_no_hit_zero(self):
         assert (
-            UnifiedConversationCoordinator._tiered_confidence(
+            tiered_confidence(
                 self._basic(), {"primary_intent": None}
             )
             == 0.0
