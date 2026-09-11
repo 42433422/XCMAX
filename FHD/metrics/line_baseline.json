@@ -1,5 +1,5 @@
 {
-  "lines": 2320879,
+  "lines": 2321343,
   "updated": "2026-09-11",
-  "note": "桌面双端平级 SSOT 域（新注册表域+门禁插件）为治理规则真实增量，与 CHANGELOG 条目同属一次迭代"
+  "note": "rebase 合并双方增量（桌面双端平级 SSOT + 共享记忆/守护脚本/systemd 收编），以 check_net_deletion 实测复核"
 }
