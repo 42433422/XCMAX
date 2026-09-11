@@ -1,5 +1,5 @@
 {
-  "lines": 2324031,
+  "lines": 2324067,
   "updated": "2026-09-12",
-  "note": "merge-main baseline recompute for #1874 (upstream established lines)"
+  "note": "分支并入 main(#1874 故障注入脚本)后叠加基准管线修复，净增 36 行属交付证据工具合法增量（CI SSOT Drift Gate 实证 34644157107）"
 }
