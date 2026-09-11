@@ -1,9 +1,7 @@
 # macOS 发布交付 SSOT（唯一事实来源）
 
 > 登记于 [SSOT_INDEX.md](SSOT_INDEX.md)「macos-release」域。**每次 macOS 发版必须复用本文件**：更新第 1–5 节事实，重跑第 6 节全部 Gate，无证据不得标 GREEN，CI 通过 ≠ 验收通过。
-> 状态取值仅限：`GREEN`（有完整真机证据）/ `YELLOW`（部分证据或以替代证据佐证）/ `RED`（真机验证失败，须记录复现步骤+日志+截图）/ `UNKNOWN`（无法静态证明，须生成实机验收任务）。
-> 判据协议：[desktop-real-machine-acceptance-protocol.md](e2e/desktop-real-machine-acceptance-protocol.md)；证据模板：[desktop-acceptance-template.md](e2e/templates/desktop-acceptance-template.md)。
-> RED 处理规则：只修真正阻断闭环的问题，修复后重测，不得直接改状态。
+> 状态仅限：`GREEN`（完整真机证据）/ `YELLOW`（部分或替代证据）/ `RED`（真机验证失败，记录复现+日志+截图，只修真阻断项，修完重测，禁止直接改状态）/ `UNKNOWN`（无法静态证明，生成实机任务）。判据协议与证据模板见 [e2e/desktop-real-machine-acceptance-protocol.md](e2e/desktop-real-machine-acceptance-protocol.md)。
 
 ## 1. 当前版本信息
 
@@ -13,8 +11,8 @@
 | 工具链兼容版本 | `1.0.0`（npm/Electron/Apple 三段映射） | 同上 |
 | 发布 SKU | `enterprise`（personal 冻结） | [download_release.json](../config/download_release.json) |
 | 发布产物 gitSha | `99854233c5d4ea05a96b1f6ae1e3b7edfe03b526` | latest-mac.yml `buildSha`（= main 合并 #1713，2026-09-05） |
-| manifest git_sha | `2e6f03bf67b88965e450721e5b8432ab6395782b`（= main 合并 #1685，2026-09-02） | manifest.json ⚠ 与构建 gitSha 不同（见 §7 偏差-1） |
-| 构建时间 | `2026-09-04T16:48:33Z`（feed）/ 本机安装副本 `2026-09-07`（非发布产物，见 §7 偏差-3） | latest-mac.yml / build-info.json |
+| manifest git_sha | `99854233c5d4ea05a96b1f6ae1e3b7edfe03b526`（= main 合并 #1713，2026-09-11 重跑 publish 后修复，原为 #1685 过期值） | manifest.json `generated_at=2026-09-11T08:05Z`；修复 run [34577330930](https://github.com/42433422/XCMAX/actions/runs/34577330930) |
+| 构建时间 | `2026-09-04T16:48:33Z`（feed）/ 本机安装副本 `2026-09-07`（非发布产物，见 §7 偏差-1） | latest-mac.yml / build-info.json |
 | release_train 内部流水 | `1.0.0.3`（服务器无 v1.0.0.2/3/4 目录，仅内部号） | [release_train.json](../config/release_train.json) |
 | `release_ready` | `false` | download_release.json + manifest.json |
 
@@ -22,10 +20,10 @@
 
 | 产物 | URL | 大小（字节） | 指纹 |
 |------|-----|------------|------|
-| DMG（arm64，官方下载） | `https://xiu-ci.com/xcagi-v1.0.0.1/enterprise/XCAGI-Enterprise-1.0.0.1-mac-arm64.dmg` | 290,432,409 | SHA256 `7ab4fdc1de1974e69695fde08e82047b5a8eef9c01ecc15dfa8c360fb8a62796`（manifest） |
+| DMG（arm64，官方下载） | `https://xiu-ci.com/xcagi-v1.0.0.1/enterprise/XCAGI-Enterprise-1.0.0.1-mac-arm64.dmg` | **293,401,820** | SHA256 `c39bed60b92ce32d7f88d18b9eaa4fc61364d78302a4def7daacd6f7cff3d89c`（实测 2026-09-11，证据 [dmg-sha256.txt](evidence/e2e/macos-release-1.0.0.1/dmg-sha256.txt)；2026-09-11 修复后 manifest 已同步此值） |
 | ZIP（arm64，OTA 载荷） | `https://xiu-ci.com/releases/stable/enterprise/XCAGI-Enterprise-1.0.0.1-mac-arm64.zip` | 257,302,899 | SHA512 `ma1SqVskHoL/O3e85w4OQ3jKpn40dUxCwoxDugI2WwMb1X1VvQhKxAjINvcRG/bYZKeDhZ4Xddu8wfAd22eMnA==`（latest-mac.yml，附 ed25519 二次签名） |
 
-x64 dmg：download_release.json 声明 `mac_x64`，但 manifest 无 x64 条目——**x64 产物未进 manifest，按未发布对待**（偏差-4）。
+x64 dmg：download_release.json 声明 `mac_x64`，但 manifest 无 x64 条目，按未发布对待（偏差-3）。
 
 ## 3. 构建环境
 
@@ -59,29 +57,31 @@ x64 dmg：download_release.json 声明 `mac_x64`，但 manifest 无 x64 条目�
 | 序列号 | LK7W1TVPX1 |
 | 环境性质 | ⚠ **非干净环境**：开发机（有 Xcode/Python/仓库），userData `~/Library/Application Support/XCAGI/` 已有 ~11GB 历史数据与多份旧安装副本 |
 
-## 6. Release Gate 状态（2026-09-11 实跑）
+## 6. Release Gate 状态（2026-09-11 实跑；证据目录 [evidence/e2e/macos-release-1.0.0.1/](evidence/e2e/macos-release-1.0.0.1/)：截图/SHA256/health/Mod 探针）
 
 | # | Gate | 状态 | 现有证据 | 缺失证据 | 阻断 | 对应 PR | 下一步 |
 |---|------|------|---------|---------|------|---------|--------|
-| G1 | 构建（产物+身份） | YELLOW | feed/manifest/DMG 在线可下；buildSha=#1713；SHA256 实测一致 | manifest git_sha(#1685,09-02)≠构建 gitSha(#1713,09-05) 的构建 run 链接 | 无 | #1713 / #1685 | 记录 release run URL 与产物对应关系，修正 manifest 生成时点 |
+| G1 | 构建（产物+身份） | GREEN | 版本身份四点一致：feed buildSha = 安装副本 build-info gitSha = main #1713 合并提交 = manifest git_sha `99854233`；2026-09-11 重跑 [publish run 34577330930](https://github.com/42433422/XCMAX/actions/runs/34577330930) 全绿，重生成 manifest（`generated_at=2026-09-11T08:05Z`）DMG 条目 293,401,820B/`c39bed60…` 与实测一致，脚本内含 SSH 对服务器双路径 DMG 字节级哈希核验；latest-mac.yml 重测未变且验签字段完好 | — | 无 | #1713 | — |
 | G2 | 干净环境安装 | YELLOW | 验收脚本真实下载→SHA256→挂载→安装 `~/Applications/acceptance/` 全链 PASS | 非干净机（dev 机+存量数据）；未在全新用户/VM 验证 | 无 | #1870 | 实机任务 T1：干净环境（新账户或 VM）重跑 |
-| G3 | macOS 安全项 | 待实跑回填 | 服务器产物 TeamID G26WSH472M | — | — | — | — |
-| G4 | 首次启动 | 待实跑回填 | — | — | — | — | — |
-| G5 | 登录绑定 | UNKNOWN | 历史证据（旧版本） | 1.0.0.1 真机登录绑定截图/日志 | 无 | — | 实机任务 T2 |
-| G6 | Mod / AI 员工加载 | 待实跑回填 | — | — | — | — | — |
-| G7 | 真实业务任务 | UNKNOWN | 历史业务证据（旧版本 `docs/evidence/e2e/01~07-*.png`） | 1.0.0.1 真机业务用例证据 | 无 | — | 实机任务 T3 |
+| G3 | macOS 安全项 | GREEN | `codesign --verify --deep --strict` exit=0；TeamID `G26WSH472M`；hardened runtime(flags 0x10000)；`spctl --assess` accepted, source=Notarized Developer ID, origin=Developer ID Application: jialong Li (G26WSH472M)；时间戳 Sep 5 2026 00:41:41 | — | 无 | — | — |
+| G4 | 首次启动 | YELLOW | 后端进程 PID 95037 监听 17500；`/api/health` 200 返回 JSON；runtime.status=healthy, blockers=[], failures=[]；neuro.status=healthy, running=true, published=496, errors=0；主窗口截图 [04-cold-start.png](evidence/e2e/macos-release-1.0.0.1/04-cold-start.png) | status=degraded（唯一原因 `LLM_RUNTIME_UNAVAILABLE`——登录前无 LLM provider 配置，属预期态，见 §7-4）；未在干净环境首次启动 | 无 | — | T2 登录后复测 health 应转绿；T1 干净环境冷启动 |
+| G5 | 登录绑定 | UNKNOWN | 历史证据（旧版本）；2026-09-11 静态确认：行业业务（考勤等）走账号权益门控（`mod_sdk/customer_features.py` `delivery_for_account`），登录是业务任务的硬前置 | 1.0.0.1 真机登录绑定截图/日志 | 无 | — | 实机任务 T2（须先于 T3） |
+| G6 | Mod / AI 员工加载 | GREEN | `/api/mods` 200 返回 62 个 mod（含 attendance-industry、xcagi-erp-domain-bridge 等 15 个后端日志确认 loaded + 47 个前端可见）；后端日志 `load_all_mods result: [15 个已加载 mod]`；`/api/employees` 200 返回 catalog（6 个 split_mod_entries，含 label_print/shipment_mgmt/receipt_confirm/wechat_msg 等 legacy 员工）；neuro handlers=39, domains=11 | — | 无 | — | — |
+| G7 | 真实业务任务 | YELLOW | 真机 API 层业务流实测（2026-09-11，登录前）：发运单取号 `26-09-00001A` PASS（CSRF 双提交链路通过）；生成单到达业务层后停在 `TEMPLATE_NOT_FOUND`——应用不内置出货单模板、userData 亦无，模板为客户自带数据（预期产品行为） | 登录绑定后的 UI 真实业务单据（T3）；考勤类业务需账号权益（attendance-convert） | 无 | — | T3：先 T2 登录 → 导入客户模板 → 完成 1 单真实业务 |
 | G8 | 更新发现 | YELLOW | feed 可达+ed25519 签名字段存在；本版=最新无升级目标（协议 4.4 SKIP）；历史闭环 [desktop-ota-closed-loop-20260724](evidence/e2e/desktop-ota-closed-loop-20260724/) | 无更高版本可触发真实"发现" | 无 | #583 | 下次发版 T4 触发真实发现 |
 | G9 | 更新安装 | YELLOW | 历史闭环：checkForUpdates+downloadUpdate 验签+提取 buildSha 一致；`quitAndInstall` 未执行 | 真机完整"重启安装"动作从未执行过 | 无 | #583 | T4：下版发后真机全链 OTA |
-| G10 | 数据保留（升级后） | UNKNOWN | userData 备份目录存在；Windows 覆盖升级比对已落地 | macOS 覆盖升级数据保留比对脚本缺失（#1870 仅 Windows）；真机升级数据基线缺失 | 无 | #1870 | T5：补 macOS 覆盖升级验收（对齐 acceptance-windows.ps1） |
+| G10 | 数据保留（升级后） | YELLOW | `acceptance-macos.sh --overwrite-upgrade` 已落地（对齐 Windows 口径）：本机实测同版本覆盖重装 PASS——基线 986,615,808B 库/151 uploads/843 mods 文件/4 备份 → 重装后零丢失、标记存活（[data-retention.json](evidence/e2e/macos-release-1.0.0.1/data-retention.json)、[run log](evidence/e2e/macos-release-1.0.0.1/overwrite-reinstall-run.log)） | 跨版本（旧版→新版 OTA/覆盖）数据保留未实测 | 无 | #1870 | T5（下版发后真机跨版本执行） |
 | G11 | 更新后重新执行业务 | UNKNOWN | — | 依赖 G9/G10 | 无 | — | T4/T5 后执行 |
 | G12 | 重启 Mac 后核心功能复验 | UNKNOWN | — | 未执行真实重启（避免中断在用会话） | 无 | — | T6：发版后重启复验 |
 
 ## 7. 已知偏差与缺陷
 
-1. **版本身份三分叉**：manifest git_sha `2e6f03bf`(09-02) / feed buildSha `99854233`(09-05) / 本机 `/Applications` 安装副本 `1532f843`(09-07，不在本地 main 历史，疑似本地开发构建)。发布产物以 feed buildSha 为准；`/Applications` 副本不是发布产物。
-2. **`/Applications/XCAGI.app` spctl 报 `a sealed resource is missing or invalid`**：本地副本被改或本地构建签名不完整；与发布产物无关（以验收实例对新鲜 DMG 的 spctl 结果为准，见 G3）。
+1. **~~manifest 与实际产物不符（G1 RED）~~ 已修复（2026-09-11）**：09-04 构建 run 取消导致 manifest 生成步骤未执行，线上 manifest 停在 09-02（#1685、DMG 条目 290,432,409B/`7ab4fdc1…`）与服务器实际 DMG（293,401,820B/`c39bed60…`）不符。修复：在构建 SHA 上建临时分支触发 `Publish macOS Download Center Metadata`（[run 34577330930](https://github.com/42433422/XCMAX/actions/runs/34577330930) 全绿），manifest 重生成后与实测一致，重测 G1 转 GREEN。教训：OTA run 取消会留下"feed 已更新、manifest 未生成"的漂移；发版 Runbook 第 2 步后必须核验 manifest `generated_at` 与构建 SHA。
+2. **`/Applications/XCAGI.app` spctl 报 `a sealed resource is missing or invalid`**：本地副本被改或本地构建签名不完整；与发布产物无关（以验收实例对新鲜 DMG 的 spctl 结果为准，见 G3 GREEN）。
 3. x64 dmg 在 download_release.json 声明但 manifest 无条目（§2）。
-4. 仓库根 `release/VERSION`（=0.0.1）为 legacy 暂存目录，不在 version 域锚点内；版本域锚点 `FHD/release/VERSION`=1.0.0.1 已验证同步（`verify_version_anchors.py` OK）。
+4. **首启 `status=degraded`（LLM_RUNTIME_UNAVAILABLE）为登录前预期态，非缺陷**：`app/runtime_integrity.py` `neuro_degraded_reasons()` 在无任何已配置 LLM provider 时上报该原因；provider 配置来自登录后的 modstore 会话/API key（`registry.resolve()`），干净机器登录前必然为 false；前端 [runtimeHealthPresentation.js](../frontend/src/components/sidebar/runtimeHealthPresentation.js) 对此有专用文案（"部分 AI 能力未就绪…在设置的模型服务中确认"）。登录绑定后复测应转绿（并入 T2）。
+5. **本机代理拦截 127.0.0.1 致健康检查假阴性（测试环境坑，已修复工具）**：系统代理把 `curl http://127.0.0.1:17500` 路由到代理返回 502；`acceptance-macos.sh` 健康检查已加 `--noproxy '*'`（2026-09-11）。人工复核命令务必带 `--noproxy '*'`；CI/干净机无代理不受影响。
+6. 仓库根 `release/VERSION`（=0.0.1）为 legacy 暂存目录，不在 version 域锚点内；版本域锚点 `FHD/release/VERSION`=1.0.0.1 已验证同步（`verify_version_anchors.py` OK）。
 
 ## 8. 实机验收任务（UNKNOWN 项 → 待执行）
 
@@ -89,16 +89,16 @@ x64 dmg：download_release.json 声明 `mac_x64`，但 manifest 无 x64 条目�
 |----|------|------|------|
 | T1 | 全新 macOS 用户账户（或干净 VM）跑 `acceptance-macos.sh`，验证无开发依赖 | G2 | 干净机 |
 | T2 | 真机登录绑定（市场账号），截图+日志 | G5 | 任意真机 |
-| T3 | 真机完成 1 单真实业务（订单/考勤/对话），按模板留证 | G7 | 任意真机 |
+| T3 | 真机完成 1 单真实业务（订单/考勤/对话），按模板留证。前置：T2 登录；发运单需先导入客户模板（应用不内置）；考勤需账号开通 attendance-convert 权益 | G7 | 任意真机 |
 | T4 | 下次发版后：旧版真机→检查更新→下载→安装→观察期→复验 | G8/G9/G11 | 真机 |
-| T5 | 对齐 Windows：macOS 覆盖升级数据保留比对（升级前业务基线→升级后比对） | G10 | 真机 |
+| T5 | 跨版本覆盖升级数据保留：旧版真机装新版（`acceptance-macos.sh --version <新版> --overwrite-upgrade`），基线→比对→标记存活 | G10 | 真机 |
 | T6 | 重启 Mac 后复验登录/Mod/业务 | G12 | 真机 |
 
 ## 9. 发版复用 Runbook（每次 macOS 发版照此执行）
 
 1. `VERSION.md` 升版 → `version_sync.py --apply` + `verify_version_anchors.py`；
-2. CI `release-desktop-mac-ota` 构建+签名+公证+发布 → `publish-macos-download-center` 更新下载中心/manifest/feed；
-3. 真机跑 `bash FHD/scripts/package/acceptance-macos.sh --version <v>`（下载→SHA256→签名→安装→冷启动→健康检查）；
+2. CI `release-desktop-mac-ota` 构建+签名+公证+发布 → `publish-macos-download-center` 更新下载中心/manifest/feed（发版 Runbook 第 2 步后必须核验 manifest `generated_at` 与构建 SHA，防"feed 已更新、manifest 未生成"漂移，见 §7-1）；
+3. 真机跑 `bash FHD/scripts/package/acceptance-macos.sh --version <v>`（下载→SHA256→签名→安装→冷启动→健康检查）；跨版本数据保留走 `--overwrite-upgrade`（T5）；
 4. 有新版本时真机走完整 OTA 链（G8→G12），按协议 4.1–4.2 判定；
 5. 按模板填写 `FHD/docs/evidence/e2e/desktop-real-machine-acceptance-<版本>-macos.md`，截图入 `assets/`；
 6. 回填本文件 §1–§6；全部 Gate 无 RED 且 G1–G4 GREEN、G5–G12 无 UNKNOWN 遗留方可宣布闭环；

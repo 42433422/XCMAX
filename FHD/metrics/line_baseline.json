@@ -1,5 +1,5 @@
 {
-  "lines": 2321521,
+  "lines": 2321658,
   "updated": "2026-09-11",
-  "note": "docs 清理净 +1：CHANGELOG 必备条目（changelog-gate 要求产品代码 PR 记录），marketAccount 注释替换为中性"
+  "note": "merge-main recompute for #1830"
 }
