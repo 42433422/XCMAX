@@ -1,5 +1,5 @@
 {
-  "lines": 2320718,
+  "lines": 2320824,
   "updated": "2026-09-11",
-  "note": "同批 CHANGELOG 新增本次交付条目 +2 行（实机验收工具链补齐），与上一笔工具链入库同属一次迭代；基线 2320717→2320719。"
+  "note": "归档 1.0.0.1 macOS 实跑证据（docs/evidence/e2e/macos-release-1.0.0.1/，+4 行文本 + 1 张截图）：DMG 实测 SHA256、/api/health 原始 JSON、/api/mods 与 /api/employees 探针原始响应；G1 RED 与 G4 degraded 结论的原始凭证，验收协议要求的可复查留证。"
 }
