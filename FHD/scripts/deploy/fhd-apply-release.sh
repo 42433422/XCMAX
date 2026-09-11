@@ -321,6 +321,24 @@ if [[ "${FHD_RUN_MIGRATIONS:-0}" == "1" && -f "$DEPLOY_ROOT/alembic.ini" ]]; the
   exit 77
 fi
 
+# Managed systemd drop-ins: keep env-critical service settings aligned across releases.
+# Source of truth lives in the release tree (scripts/deploy/systemd/*.conf); copying is
+# idempotent and daemon-reload only happens when something actually changed.
+DROPIN_DIR="/etc/systemd/system/${SERVICE}.d"
+DROPIN_SRC_DIR="$DEPLOY_ROOT/scripts/deploy/systemd"
+if [[ -d "$DROPIN_SRC_DIR" ]]; then
+  mkdir -p "$DROPIN_DIR"
+  for unit_dropin in "$DROPIN_SRC_DIR"/*.conf; do
+    [[ -f "$unit_dropin" ]] || continue
+    dropin_name="$(basename "$unit_dropin")"
+    if ! cmp -s "$unit_dropin" "$DROPIN_DIR/$dropin_name"; then
+      cp "$unit_dropin" "$DROPIN_DIR/$dropin_name"
+      systemctl daemon-reload
+      deploy_emit dropin synced "file=$dropin_name"
+    fi
+  done
+fi
+
 deploy_emit restart started "service=$SERVICE"
 autonomy_evaluate_action "restart_service" "restart:release:${TARBALL_SHA256:0:16}"
 echo "$TARBALL_SHA256" > "$DEPLOY_ROOT/.deploy-sha256"
