@@ -1,5 +1,5 @@
 {
-  "lines": 2320717,
+  "lines": 2320718,
   "updated": "2026-09-11",
-  "note": "交付证据工具链入库（+2）：覆盖升级验收脚本扩展至 CVM 交付版（-OverwriteInstall 基线比对+STEP4-8）、实机验收协议补充覆盖升级/未签名判定条款、PROJECT_STATE 登记 stable 通道漂移与 a9507f0f 验收包证据；同批打包管线净删约 300 行（build-sunbird-installer/stage-sunbird-delivery 收敛）。"
+  "note": "同批 CHANGELOG 新增本次交付条目 +2 行（实机验收工具链补齐），与上一笔工具链入库同属一次迭代；基线 2320717→2320719。"
 }
