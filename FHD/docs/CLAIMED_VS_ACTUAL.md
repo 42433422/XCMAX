@@ -1,6 +1,6 @@
 # 对外声称 vs 实测（CLAIMED_VS_ACTUAL）
 
-> 自动生成，请勿手改；源 `FHD/scripts/dev/gen_claimed_vs_actual.py`；生成于 2026-09-10T19:28:03Z
+> 自动生成，请勿手改；源 `FHD/scripts/dev/gen_claimed_vs_actual.py`；生成于 2026-09-11T13:15:03Z
 
 > 本文为「对外声称 vs 实测」对照的**单一事实来源（SSOT）**，由 `scripts/dev/gen_claimed_vs_actual.py` 从 `metrics/` 自动汇编。覆盖率唯一数字 SSOT 见 [`metrics/coverage-dual-summary.json`](../metrics/coverage-dual-summary.json)。
 
@@ -16,7 +16,7 @@
 | 后端行 floor（fail_under 交叉校验） | 棘轮 floor=78 | pyproject fail_under=78 | pyproject.toml fail_under vs coverage-dual-summary.json#ratchet_floors.backend_line | 🟢 |
 | 覆盖率趋势（最新 2026-06-26） | 趋势上行 | 后端行 90.69% / 前端行 93.21% | coverage-history.jsonl（最后一行） | 🟡 |
 | 健康探针 /api/health | P50 < 500ms 预算 | 11.23ms（status 200） | sla-snapshot.json#probe.probe_result.health | 🟢 |
-| DORA 部署频率 | 持续交付 | 环境 production / 窗口 7d / 事件 2 / 频率 0.2857/d / 2 天内采集 | dora-20260908.json | 🟢 |
+| DORA 部署频率 | 持续交付 | 环境 production / 窗口 7d / 事件 2 / 频率 0.2857/d / 数据已过期 3 天 | dora-20260908.json | 🟡 |
 | 前端 E2E spec 数 | 有 E2E 套件 | 16 个 spec | frontend/e2e/*.spec.ts | 🟢 |
 | Android 端交付等级 | 实验骨架 | 实验骨架·非签约级 | VERSION.md『各端交付等级』vs docs/guides/MOBILE_ANDROID.md | 🟢 |
 
