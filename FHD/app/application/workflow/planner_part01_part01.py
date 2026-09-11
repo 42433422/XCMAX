@@ -175,6 +175,9 @@ def _changes_for_business_db_message(entity: str, message: str) -> dict[str, _fa
 
 
 def _extract_business_db_write_node(message: str) -> _facade().WorkflowNode | None:
+    # 双保险：原始 SQL 形态绝不产出写节点（主闸在 plan()/looks_like_business_db_write）。
+    if _facade()._looks_like_raw_sql(message):
+        return None
     entity = _facade()._infer_business_db_entity(message)
     operation = _facade()._infer_business_db_operation(message)
     if operation in {"update", "delete"}:

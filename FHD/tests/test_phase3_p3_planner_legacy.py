@@ -56,7 +56,8 @@ def test_fallback_plan_generic_query_node() -> None:
     planner = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
     plan = planner._fallback_plan("gid", "查库存5003", get_tool_registry())
     assert isinstance(plan, PlanGraph)
-    assert plan.nodes[0].tool_id in ("products", "customers")
+    # 2026-09 起「库存」命中规则意图 materials，按 tool_key 路由（不再静默 products）。
+    assert plan.nodes[0].tool_id in ("products", "customers", "materials")
 
 
 @patch("app.application.workflow.planner.get_ai_conversation_service")

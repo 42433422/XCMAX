@@ -26,7 +26,7 @@ def predict(text: str) -> dict:
 
 def match_prediction(case: dict, result: dict) -> bool:
     actual = result.get("intent", "unknown")
-    if case.get("expect_negated"):
+    if case.get("expect_negated") or case.get("expected_out_of_scope"):
         return actual in {"unknown", "clarify"}
     expected = case.get("expected_route") or case.get("check")
     if expected is None:

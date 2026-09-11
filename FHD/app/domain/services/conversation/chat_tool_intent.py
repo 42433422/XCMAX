@@ -60,6 +60,35 @@ def is_negated_action_request(text: str) -> bool:
     return bool(_NEGATED_ACTION_RE.search(normalized))
 
 
+def tiered_confidence(basic: dict[str, bool], rule_result: dict[str, Any]) -> float:
+    """置信度分层（契约纪律）：否定歧义 0.6＜反射弧 0.95＜规则命中 priority≥10 取 0.85／＜10 取 0.7；未命中 0.0。"""
+    hit = rule_result.get("primary_intent")
+    if hit and rule_result.get("is_negated", False):
+        return 0.6
+    if any(basic.values()):
+        return 0.95
+    priority = rule_result.get("matched_priority", 0) or 0
+    return (0.85 if priority >= 10 else 0.7) if hit else 0.0
+
+
+# 原始 SQL 语句形态检测：动词+目标词同现的组合正则，降低对普通业务话术的误伤。
+# 输入统一小写并把全角空格归一为半角，允许中英文夹杂（如「执行DELETE FROM customers」）。
+_RAW_SQL_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"(?<![a-z0-9_])delete\s+from(?![a-z0-9_])"),
+    re.compile(r"(?<![a-z0-9_])insert\s+into(?![a-z0-9_])"),
+    re.compile(r"(?<![a-z0-9_])drop\s+table(?![a-z0-9_])"),
+    re.compile(r"(?<![a-z0-9_])truncate(?:\s+table)?(?![a-z0-9_])"),
+    re.compile(r"(?<![a-z0-9_])select(?![a-z0-9_]).{0,200}?(?<![a-z0-9_])from(?![a-z0-9_])"),
+    re.compile(r"(?<![a-z0-9_])update(?![a-z0-9_]).{0,200}?(?<![a-z0-9_])set(?![a-z0-9_])"),
+)
+
+
+def looks_like_raw_sql(text: str) -> bool:
+    """识别原始 SQL 语句形态（DELETE FROM / SELECT..FROM / DROP TABLE / TRUNCATE / UPDATE..SET / INSERT INTO）。"""
+    value = str(text or "").lower().replace("\u3000", " ")
+    return any(pattern.search(value) for pattern in _RAW_SQL_PATTERNS)
+
+
 def attach_explicit_tenant_id(payload: dict[str, Any], message: str) -> dict[str, Any]:
     """Keep an explicit tenant target so the execution guard can reject it."""
     match = re.search(
@@ -73,6 +102,9 @@ def attach_explicit_tenant_id(payload: dict[str, Any], message: str) -> dict[str
 def looks_like_business_db_write(message: str, lower: str | None = None) -> bool:
     """Recognize explicit CRUD without requiring users to say database jargon."""
     value = str(message or "")
+    # 原始 SQL 永不进入写规划：安全闸从执行层前移到规划层（审计 safety.raw_sql.reject_021）。
+    if looks_like_raw_sql(value):
+        return False
     # 拒绝类请求（审计 R02）：「不要删除客户X」不得判定为数据库写操作。
     if is_negated_action_request(value):
         return False

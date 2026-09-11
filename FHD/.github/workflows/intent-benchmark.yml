@@ -243,8 +243,10 @@ jobs:
           XCAGI_SKIP_INTENT_LLM: ""
           TASK_BENCHMARK_RUN: "1"
           TASK_BENCHMARK_TRIALS: "1"
-          # 预设业务阈值硬门禁（与 monitoring 棘轮同源，只升不降；禁止为变绿降到 0）
-          TASK_BENCHMARK_MIN_PASS: "0.2"
+          # N03（2026-09-08）：业务成功率硬门禁；显式设 0 才是只报告模式。
+          # 棘轮只升不降：规则/模型能力提升后应同步上调此值。
+          # Task 6（2026-09-09）上调 0.2 → 0.4（实测 pass^1=0.4545，10/22，按 spec 下调约 5% 取整）。
+          TASK_BENCHMARK_MIN_PASS: "0.4"
         run: |
           python -m pytest tests/benchmarks/test_task_success.py -v --tb=short
 
@@ -328,4 +330,63 @@ jobs:
             FHD/test_reports/benchmark_run_mode.json
             FHD/test_reports/llm_preflight_evidence.json
           # #1859：验收证据缺失必须让上传步骤红掉，不得 ignore
+          if-no-files-found: error
+
+  # Task 5（2026-09-09）：周度 LLM 路径基准——真实平台模型走留出集（--llm --holdout）。
+  # 仅 schedule / workflow_dispatch 触发（token 成本），PR/push 不跑；本 workflow 无
+  # push/PR 触发器，且不在 branch protection required checks 中，绝不进任何 PR 门禁。
+  # 缺 API key 时后续步骤全部跳过（job 绿，不失败）；有 key 时失败即标红 = 棘轮告警语义，
+  # 不设 continue-on-error。注意：secrets 上下文在 job 级 if 不可用（会让整个 workflow
+  # 启动校验失败），因此 key 守卫用首步探测 + 步骤级 if 实现。
+  llm-benchmark:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # 平台模型凭证映射到 app 统一解析口径（credentials.resolve_openai_env_credentials：
+      # OPENAI_API_KEY + OPENAI_BASE_URL + OPENAI_MODEL；base_url 为 xiu-ci.com 时自动识别为 xcauto）。
+      OPENAI_API_KEY: ${{ secrets.XCAGI_LLM_API_KEY }}
+      OPENAI_BASE_URL: ${{ secrets.XCAGI_LLM_BASE_URL }}
+      OPENAI_MODEL: ${{ secrets.XCAGI_LLM_MODEL }}
+    steps:
+      - name: Detect LLM credentials
+        id: creds
+        env:
+          LLM_KEY: ${{ secrets.XCAGI_LLM_API_KEY }}
+        run: |
+          if [ -n "${LLM_KEY}" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "LLM benchmark skipped: XCAGI_LLM_API_KEY secret not configured"
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.creds.outputs.available == 'true'
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        if: steps.creds.outputs.available == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        if: steps.creds.outputs.available == 'true'
+        run: |
+          pip install -r requirements-server-api.txt pytest
+
+      - name: Run LLM holdout benchmark (142 cases x 3 rounds)
+        if: steps.creds.outputs.available == 'true'
+        # 不设 XCAGI_SKIP_INTENT_LLM：本 job 评的就是 LLM 路由层。
+        # 测量不完整（模型调用失败/为 0）时脚本返回 2 → job 标红告警。
+        run: |
+          python scripts/dev/intent_benchmark.py --llm --holdout --repeat 3
+
+      - name: Upload holdout LLM report
+        if: steps.creds.outputs.available == 'true' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: intent-holdout-llm-report
+          path: FHD/metrics/intent_holdout_latest.json
           if-no-files-found: error
