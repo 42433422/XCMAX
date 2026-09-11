@@ -11,7 +11,7 @@
 | scoring_version | external-anchors-v1 |
 | source_sha / main_sha | 见提交历史（feat/audit-roadmap-r01-r22） |
 | reference_versions_editions_regions | LangGraph OSS 1.2.11（PyPI 稳定版，MIT），本地 venv（python3.11），SqliteSaver 检查点 |
-| dataset_hash | 任务脚本随本文档存档（erp 域同目录） |
+| dataset_hash | 任务脚本随本文档存档（同目录 agent-langgraph-tasks-20260909.py） |
 | task_protocol | B1 状态持久化+暂停恢复；B2 人工审批绑定实际动作；B3 重试/恢复不重复副作用 |
 | predeclared_metrics_and_tolerances | 状态值精确匹配；审批拒绝=零副作用、批准=一次副作用；重试收敛后 effects 计数=1 |
 | environment | 本机 macOS venv，SQLite 检查点文件 |
