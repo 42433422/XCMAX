@@ -103,3 +103,7 @@ x64 dmg：download_release.json 声明 `mac_x64`，但 manifest 无 x64 条目�
 5. 按模板填写 `FHD/docs/evidence/e2e/desktop-real-machine-acceptance-<版本>-macos.md`，截图入 `assets/`；
 6. 回填本文件 §1–§6；全部 Gate 无 RED 且 G1–G4 GREEN、G5–G12 无 UNKNOWN 遗留方可宣布闭环；
 7. RED：只修阻断项→重测→重写状态，禁止直接改状态。
+5. **dmg/manifest 漂移 live 实锤（2026-09-11）**：dmg 实测 293,401,820 B（09-05 重构建 `99854233c`）≠ manifest `7ab4fdc1…/290,432,409 B` → §6-G1「SHA256 实测一致」已失效，须重发布或重生成 manifest（修复归属本域，对应 Windows 域 B3）。
+6. **x64 dmg live 404**（2026-09-11 探测）：`xcagi-v1.0.0.1/enterprise/XCAGI-Enterprise-1.0.0.1-mac-x64.dmg` → 404（偏差-4 的 live 确认）。
+7. **隔离测试通道 latest.yml Ed25519 验签 INVALID**（2026-09-11，生产公钥实测）：双平台共用测试通道，需以正确密钥重签。
+8. **本域缺回滚门**：Windows 域 G13（回滚/恢复）为交付目标强制项，建议本域补 G13 并列入 T 任务。

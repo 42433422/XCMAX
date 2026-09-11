@@ -300,6 +300,17 @@ domains:
     check: python scripts/dev/ssot_plugins/macos_release.py check
     sync: null
 
+  - name: windows-release
+    owner: desktop-platform
+    enabled: true
+    # Windows 发布交付事实快照（人工维护）：版本/产物/SHA256/下载与更新地址/测试机/G1-G13 Gate 状态/阻断项/实机任务/发版 runbook。
+    # 与 macos-release 同构（兄弟域）；check 校验结构、状态值合法性，且 RED 行必须引用 §5 阻断项编号（B#）。
+    ssot: FHD/docs/WINDOWS_RELEASE_SSOT.md
+    derived: []
+    mode: lint
+    check: python scripts/dev/ssot_plugins/windows_release.py check
+    sync: null
+
   - name: repository-ssot
     owner: backend
     enabled: true
