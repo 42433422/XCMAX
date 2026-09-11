@@ -190,16 +190,23 @@ jobs:
           python - <<'PY'
           import asyncio, json, os
 
+          import httpx
+
           from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
 
           async def main() -> None:
               base_url = os.environ.get("XCAUTO_BASE_URL", "").strip() or None
               adapter = OpenAICompatibleAdapter(provider="xcauto", base_url=base_url)
               assert adapter.is_configured, "xcauto 适配器未解析到凭据（XCAUTO_API_KEY）"
-              r = await adapter.chat_completion(
-                  [{"role": "user", "content": "请回复：OK"}],
-                  max_tokens=16,
-              )
+              try:
+                  # MiMo V2.5 为推理模型：预算太小会被推理耗尽导致 content 为空
+                  r = await adapter.chat_completion(
+                      [{"role": "user", "content": "请回复：OK"}], max_tokens=256
+                  )
+              except httpx.HTTPStatusError as exc:
+                  # 端点拒绝时打印响应体（不含凭据），避免只见状态码无法定位
+                  print(f"PREFLIGHT_HTTP_{exc.response.status_code}: {(exc.response.text or '')[:500]}", flush=True)
+                  raise
               # 响应为原生 OpenAI 字典：choices[0].message.content
               content = ""
               try:
