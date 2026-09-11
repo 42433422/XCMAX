@@ -55,9 +55,11 @@ x64 dmg：download_release.json 声明 `mac_x64`，但 manifest 无 x64 条目�
 | OS | macOS 26.3 (25D125) |
 | 内存 / 可用磁盘 | 24 GB / 70 GB |
 | 序列号 | LK7W1TVPX1 |
-| 环境性质 | ⚠ **非干净环境**：开发机（有 Xcode/Python/仓库），userData `~/Library/Application Support/XCAGI/` 已有 ~11GB 历史数据与多份旧安装副本 |
+| 环境性质 | ⚠ **非干净环境**：开发机（有 Xcode/Python/仓库），userData `~/Library/Application Support/XCAGI/` 已有 ~11GB 历史数据与多份旧安装副本；**且与主安装 `/Applications/XCAGI.app`（同 1.0.0.1）共享同一 userData**（含 2026-09-07 同步的 mods 与 986MB 生产库）——G6 attendance 回归即此环境污染与版本错配共同暴露，见 §7-7 |
 
-## 6. Release Gate 状态（2026-09-11 实跑；证据目录 [evidence/e2e/macos-release-1.0.0.1/](evidence/e2e/macos-release-1.0.0.1/)：截图/SHA256/health/Mod 探针）
+## 6. Release Gate 状态（2026-09-11/12 实跑；证据目录 [evidence/e2e/macos-release-1.0.0.1/](evidence/e2e/macos-release-1.0.0.1/)：截图/SHA256/health/Mod 探针）
+
+> **当前结论（2026-09-12）：NOT Release Ready。** 阻断项：G7 RED（1.0.0.1 模板导入链路断裂，用户无法完成真实业务）；G5 UNKNOWN（登录绑定待真机账号）；G6 YELLOW（attendance 路由注册失败，main 已修未发版）。两项缺陷修复均已存在于 main（b97073acc、f37372e97），1.0.0.1 feed 未包含，重测并入 T7。
 
 | # | Gate | 状态 | 现有证据 | 缺失证据 | 阻断 | 对应 PR | 下一步 |
 |---|------|------|---------|---------|------|---------|--------|
@@ -65,9 +67,9 @@ x64 dmg：download_release.json 声明 `mac_x64`，但 manifest 无 x64 条目�
 | G2 | 干净环境安装 | YELLOW | 验收脚本真实下载→SHA256→挂载→安装 `~/Applications/acceptance/` 全链 PASS | 非干净机（dev 机+存量数据）；未在全新用户/VM 验证 | 无 | #1870 | 实机任务 T1：干净环境（新账户或 VM）重跑 |
 | G3 | macOS 安全项 | GREEN | `codesign --verify --deep --strict` exit=0；TeamID `G26WSH472M`；hardened runtime(flags 0x10000)；`spctl --assess` accepted, source=Notarized Developer ID, origin=Developer ID Application: jialong Li (G26WSH472M)；时间戳 Sep 5 2026 00:41:41 | — | 无 | — | — |
 | G4 | 首次启动 | YELLOW | 后端进程 PID 95037 监听 17500；`/api/health` 200 返回 JSON；runtime.status=healthy, blockers=[], failures=[]；neuro.status=healthy, running=true, published=496, errors=0；主窗口截图 [04-cold-start.png](evidence/e2e/macos-release-1.0.0.1/04-cold-start.png) | status=degraded（唯一原因 `LLM_RUNTIME_UNAVAILABLE`——登录前无 LLM provider 配置，属预期态，见 §7-4）；未在干净环境首次启动 | 无 | — | T2 登录后复测 health 应转绿；T1 干净环境冷启动 |
-| G5 | 登录绑定 | UNKNOWN | 历史证据（旧版本）；2026-09-11 静态确认：行业业务（考勤等）走账号权益门控（`mod_sdk/customer_features.py` `delivery_for_account`），登录是业务任务的硬前置 | 1.0.0.1 真机登录绑定截图/日志 | 无 | — | 实机任务 T2（须先于 T3） |
-| G6 | Mod / AI 员工加载 | GREEN | `/api/mods` 200 返回 62 个 mod（含 attendance-industry、xcagi-erp-domain-bridge 等 15 个后端日志确认 loaded + 47 个前端可见）；后端日志 `load_all_mods result: [15 个已加载 mod]`；`/api/employees` 200 返回 catalog（6 个 split_mod_entries，含 label_print/shipment_mgmt/receipt_confirm/wechat_msg 等 legacy 员工）；neuro handlers=39, domains=11 | — | 无 | — | — |
-| G7 | 真实业务任务 | YELLOW | 真机 API 层业务流实测（2026-09-11，登录前）：发运单取号 `26-09-00001A` PASS（CSRF 双提交链路通过）；生成单到达业务层后停在 `TEMPLATE_NOT_FOUND`——应用不内置出货单模板、userData 亦无，模板为客户自带数据（预期产品行为） | 登录绑定后的 UI 真实业务单据（T3）；考勤类业务需账号权益（attendance-convert） | 无 | — | T3：先 T2 登录 → 导入客户模板 → 完成 1 单真实业务 |
+| G5 | 登录绑定 | UNKNOWN | 历史证据（旧版本）；2026-09-11 静态确认：行业业务（考勤等）走账号权益门控（`mod_sdk/customer_features.py` `delivery_for_account`），登录是业务任务的硬前置；CDP 登录监听器已部署（自动采集登录后证据） | 1.0.0.1 真机登录绑定截图/日志 | 无（外部依赖：需真实市场账号） | — | 实机任务 T2（须先于 T3） |
+| G6 | Mod / AI 员工加载 | YELLOW | `/api/mods` 200 返回 62 个 mod（含 attendance-industry v1.0.0 primary=True）；15 个后端 mod 加载成功；`/api/employees` 200 返回 catalog；neuro handlers=39, domains=11。**但 attendance-industry HTTP 路由注册每次启动均失败**（userData 同步版 mod import `app.mod_sdk.customer_features`，99854233 bundle 无此模块；`/attendance/capabilities|policy|rules|convert-upload|download` 不可用），证据 [g6-attendance-route-regression.txt](evidence/e2e/macos-release-1.0.0.1/g6-attendance-route-regression.txt) | 干净首装（seed 版 mod）路由注册行为未验证；登录后 AI 员工运行时验证 | 考勤类业务不可用（不阻断 ERP 业务闭环）；main 修复 f37372e97 未随 1.0.0.1 发布 | f37372e97 | T7：下版发后重测（日志应无该 ERROR + `/attendance/capabilities` 可达） |
+| G7 | 真实业务任务 | RED | **1.0.0.1 模板导入链路断裂，用户无法完成发运单真实业务**：模板库仅 builtin_seed（无发货单类型）；`POST /api/templates/upload|analyze|create` 全部 405（shipped 后端缺 template_create 路由，b97073acc 引入晚于构建提交），而打包前端 `templatePreview-DX5BWt7p.js` 正是调用这些端点；`/api/excel/template/save` 404 源模板不存在（无 UI 途径放置源文件）；bundle 无 legacy 兜底模板 → `POST /api/shipment/generate` 500 TEMPLATE_NOT_FOUND。取号/CSRF 链路正常（`26-09-00001A` PASS）。复现步骤+日志+截图 [g7-template-import-broken.txt](evidence/e2e/macos-release-1.0.0.1/g7-template-import-broken.txt)、[g7-full-chain-run.log](evidence/e2e/macos-release-1.0.0.1/g7-full-chain-run.log)、[06-app-state-g7-red.png](evidence/e2e/macos-release-1.0.0.1/06-app-state-g7-red.png) | 登录绑定后的 UI 真实业务单据（T3，被本 RED 阻断） | **阻断闭环**：用户无法导入模板 → 无法完成真实业务任务；main 修复 b97073acc 未随 1.0.0.1 发布 | b97073acc | T7：下版发后重测（upload 2xx + 入库后 generate 出单），再执行 T2→T3 |
 | G8 | 更新发现 | YELLOW | feed 可达+ed25519 签名字段存在；本版=最新无升级目标（协议 4.4 SKIP）；历史闭环 [desktop-ota-closed-loop-20260724](evidence/e2e/desktop-ota-closed-loop-20260724/) | 无更高版本可触发真实"发现" | 无 | #583 | 下次发版 T4 触发真实发现 |
 | G9 | 更新安装 | YELLOW | 历史闭环：checkForUpdates+downloadUpdate 验签+提取 buildSha 一致；`quitAndInstall` 未执行 | 真机完整"重启安装"动作从未执行过 | 无 | #583 | T4：下版发后真机全链 OTA |
 | G10 | 数据保留（升级后） | YELLOW | `acceptance-macos.sh --overwrite-upgrade` 已落地（对齐 Windows 口径）：本机实测同版本覆盖重装 PASS——基线 986,615,808B 库/151 uploads/843 mods 文件/4 备份 → 重装后零丢失、标记存活（[data-retention.json](evidence/e2e/macos-release-1.0.0.1/data-retention.json)、[run log](evidence/e2e/macos-release-1.0.0.1/overwrite-reinstall-run.log)） | 跨版本（旧版→新版 OTA/覆盖）数据保留未实测 | 无 | #1870 | T5（下版发后真机跨版本执行） |
@@ -82,6 +84,8 @@ x64 dmg：download_release.json 声明 `mac_x64`，但 manifest 无 x64 条目�
 4. **首启 `status=degraded`（LLM_RUNTIME_UNAVAILABLE）为登录前预期态，非缺陷**：`app/runtime_integrity.py` `neuro_degraded_reasons()` 在无任何已配置 LLM provider 时上报该原因；provider 配置来自登录后的 modstore 会话/API key（`registry.resolve()`），干净机器登录前必然为 false；前端 [runtimeHealthPresentation.js](../frontend/src/components/sidebar/runtimeHealthPresentation.js) 对此有专用文案（"部分 AI 能力未就绪…在设置的模型服务中确认"）。登录绑定后复测应转绿（并入 T2）。
 5. **本机代理拦截 127.0.0.1 致健康检查假阴性（测试环境坑，已修复工具）**：系统代理把 `curl http://127.0.0.1:17500` 路由到代理返回 502；`acceptance-macos.sh` 健康检查已加 `--noproxy '*'`（2026-09-11）。人工复核命令务必带 `--noproxy '*'`；CI/干净机无代理不受影响。
 6. 仓库根 `release/VERSION`（=0.0.1）为 legacy 暂存目录，不在 version 域锚点内；版本域锚点 `FHD/release/VERSION`=1.0.0.1 已验证同步（`verify_version_anchors.py` OK）。
+7. **G6 缺陷（1.0.0.1）：attendance-industry mod HTTP 路由注册失败**：userData 同步版 mod（2026-09-07）import `app.mod_sdk.customer_features`，该模块由 main f37372e97 引入、晚于构建提交 99854233，bundle 缺失 → 每次启动 `Failed to register routes for attendance-industry`，`/attendance/*`（capabilities/policy/rules/convert-upload/download）全部不可用；bundle 自带 seed 版 mod 为旧版不受影响（干净首装待 T1 验证）。修复已在 main（f37372e97），1.0.0.1 不含。证据 [g6-attendance-route-regression.txt](evidence/e2e/macos-release-1.0.0.1/g6-attendance-route-regression.txt)。
+8. **G7 阻断（1.0.0.1）：发货单模板导入链路断裂**：shipped 后端缺 `template_create.py` 路由（main b97073acc 引入，晚于构建提交）→ 前端 `templates/upload|analyze|create` 全部 405；`/api/excel/template/save` 要求源文件预置于 base_dir（无 UI 途径）；bundle 无 legacy 兜底模板 → `shipment/generate` 恒 TEMPLATE_NOT_FOUND。**1.0.0.1 用户无法完成发运单真实业务**。修复已在 main（b97073acc），1.0.0.1 不含。证据 [g7-template-import-broken.txt](evidence/e2e/macos-release-1.0.0.1/g7-template-import-broken.txt)。
 
 ## 8. 实机验收任务（UNKNOWN 项 → 待执行）
 
@@ -93,6 +97,7 @@ x64 dmg：download_release.json 声明 `mac_x64`，但 manifest 无 x64 条目�
 | T4 | 下次发版后：旧版真机→检查更新→下载→安装→观察期→复验 | G8/G9/G11 | 真机 |
 | T5 | 跨版本覆盖升级数据保留：旧版真机装新版（`acceptance-macos.sh --version <新版> --overwrite-upgrade`），基线→比对→标记存活 | G10 | 真机 |
 | T6 | 重启 Mac 后复验登录/Mod/业务 | G12 | 真机 |
+| T7 | 下版本发后重测 G6/G7：日志无 `Failed to register routes for attendance-industry` 且 `/attendance/capabilities` 可达；`POST /api/templates/upload` 2xx 且入库后 `shipment/generate` 出单；随后 T2→T3 | G6/G7 | 真机（新版 feed） |
 
 ## 9. 发版复用 Runbook（每次 macOS 发版照此执行）
 
@@ -101,5 +106,6 @@ x64 dmg：download_release.json 声明 `mac_x64`，但 manifest 无 x64 条目�
 3. 真机跑 `bash FHD/scripts/package/acceptance-macos.sh --version <v>`（下载→SHA256→签名→安装→冷启动→健康检查）；跨版本数据保留走 `--overwrite-upgrade`（T5）；
 4. 有新版本时真机走完整 OTA 链（G8→G12），按协议 4.1–4.2 判定；
 5. 按模板填写 `FHD/docs/evidence/e2e/desktop-real-machine-acceptance-<版本>-macos.md`，截图入 `assets/`；
+5a. 发版前回归两个历史 RED：`POST /api/templates/upload` 非 405（G7，见 §7-8）；启动日志无 attendance 路由注册 ERROR（G6，见 §7-7）；
 6. 回填本文件 §1–§6；全部 Gate 无 RED 且 G1–G4 GREEN、G5–G12 无 UNKNOWN 遗留方可宣布闭环；
 7. RED：只修阻断项→重测→重写状态，禁止直接改状态。

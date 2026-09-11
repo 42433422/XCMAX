@@ -4,7 +4,8 @@
 校验：
   1. 必填节存在（§1 版本 / §6 Gate / §8 实机任务 / §9 runbook）
   2. Gate 状态取值合法（GREEN / YELLOW / RED / UNKNOWN / 待实跑回填）
-  3. RED 状态必须附「复现」说明（RED 处理规则：禁止直接改状态）
+  3. RED 状态必须附完整证据（复现步骤 + evidence/e2e/ 证据链接 + 修复 PR/commit 引用），
+     缺任一项即 DRIFT；对应协议：只修真阻断项，修完重测，禁止直接改状态
 
 用法: python scripts/dev/ssot_plugins/macos_release.py check
 退出码: 0=OK 1=DRIFT
@@ -39,7 +40,24 @@ def check() -> int:
             continue
         state = cells[2]
         if state in LEGAL_STATES and state == "RED":
-            problems.append(f"line {i}: Gate 状态 RED 未消除（须附复现步骤+日志，禁止直接改状态）")
+            row = line
+            has_repro = "复现" in row
+            has_evidence = "evidence/e2e/" in row
+            has_fix_ref = bool(re.search(r"#[0-9]+|[0-9a-f]{9,40}", row))
+            if not (has_repro and has_evidence and has_fix_ref):
+                missing = [
+                    name
+                    for name, ok in (
+                        ("复现步骤", has_repro),
+                        ("evidence/e2e/ 证据链接", has_evidence),
+                        ("修复 PR/commit 引用", has_fix_ref),
+                    )
+                    if not ok
+                ]
+                problems.append(
+                    f"line {i}: Gate 状态 RED 证据不全（缺 {'、'.join(missing)}）；"
+                    "RED 须记录复现步骤+日志+截图并关联修复 PR/commit，禁止直接改状态"
+                )
         if re.fullmatch(r"[A-Z]{4,}", state) and state not in LEGAL_STATES:
             problems.append(f"line {i}: 非法 Gate 状态值: {state}（合法: {'/'.join(sorted(LEGAL_STATES))}）")
     if problems:

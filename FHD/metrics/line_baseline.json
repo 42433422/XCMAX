@@ -1,5 +1,5 @@
 {
-  "lines": 2324031,
+  "lines": 2324122,
   "updated": "2026-09-12",
-  "note": "merge-main baseline recompute for #1874 (upstream established lines)"
+  "note": "G6/G7 实机证据回填增量 +91（SSOT Gate 状态 + 复现/日志/截图 + CHANGELOG + ssot 插件 RED 三要素校验）；随 #1874 基线重算同步"
 }
