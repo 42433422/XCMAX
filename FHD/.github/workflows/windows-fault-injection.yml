@@ -1,0 +1,78 @@
+# Windows runner 故障注入验收（交付清单项 7 数据与并发安全 / 项 8 故障恢复与回退）
+#
+# 用途：在 GitHub Windows runner 上自动生成 fault-injection-windows.ps1 的
+# 四个可自动化场景（kill-all / kill-orphan / corrupt-backup / corrupt-main）
+# 的 runner 级证据。仅 workflow_dispatch 手动触发，不进任何 PR 门禁。
+# 客户实机场景（disk-full / power-cut）仍需人工执行（脚本记 SKIP）。
+#
+# 安全边界：安装与注入只发生在一次性 runner 环境的 C:\XCAGI-acceptance
+# 隔离安装根（corrupt-main 安全闸允许的唯一目录），不触碰任何真实安装。
+
+name: fhd-windows-fault-injection
+
+on:
+  workflow_dispatch:
+    inputs:
+      installer_url:
+        description: "安装包 URL（默认 CVM testing 通道未签名包）"
+        required: false
+        default: "https://xiu-ci.com/releases/testing/enterprise/XCAGI-Enterprise-Setup-1.0.0.1-x64-unsigned.exe"
+      installer_sha256:
+        description: "安装包 SHA256（与 URL 对应，必须一致才继续）"
+        required: false
+        default: "fe690c9cea166d88862bffb4cdefb5cbdfdb671b9268a0d3cae9712031d17c32"
+      scenarios:
+        description: "场景：all 或逗号分隔（kill-all,kill-orphan,corrupt-backup,corrupt-main）"
+        required: false
+        default: "all"
+
+permissions:
+  contents: read
+
+jobs:
+  fault-injection:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download installer and verify SHA256
+        env:
+          INSTALLER_URL: ${{ inputs.installer_url }}
+          INSTALLER_SHA256: ${{ inputs.installer_sha256 }}
+        run: |
+          $url = if ($env:INSTALLER_URL) { $env:INSTALLER_URL } else { 'https://xiu-ci.com/releases/testing/enterprise/XCAGI-Enterprise-Setup-1.0.0.1-x64-unsigned.exe' }
+          $expected = if ($env:INSTALLER_SHA256) { $env:INSTALLER_SHA256.ToLower() } else { 'fe690c9cea166d88862bffb4cdefb5cbdfdb671b9268a0d3cae9712031d17c32' }
+          Invoke-WebRequest -Uri $url -OutFile installer.exe -UseBasicParsing -TimeoutSec 600
+          $actual = (Get-FileHash installer.exe -Algorithm SHA256).Hash.ToLower()
+          if ($actual -ne $expected) {
+            throw "SHA256 mismatch: expected=$expected actual=$actual"
+          }
+          Write-Host "installer SHA256 verified: $actual"
+
+      - name: Silent install to isolated acceptance root
+        run: |
+          Start-Process -FilePath installer.exe -ArgumentList @('/S', '/D=C:\XCAGI-acceptance') -Wait
+          if (-not (Test-Path 'C:\XCAGI-acceptance\XCAGI.exe')) {
+            throw 'silent install failed: C:\XCAGI-acceptance\XCAGI.exe not found'
+          }
+          Write-Host "installed to C:\XCAGI-acceptance"
+
+      - name: Run fault injection scenarios
+        env:
+          SCENARIOS: ${{ inputs.scenarios }}
+        run: |
+          $scenarios = if ($env:SCENARIOS) { ($env:SCENARIOS -split ',') | ForEach-Object { $_.Trim() } } else { @('all') }
+          FHD/scripts/package/fault-injection-windows.ps1 -Scenario $scenarios -InstallRoot 'C:\XCAGI-acceptance' -CiMode -EvidenceDir fault-injection-evidence
+          if ($LASTEXITCODE -ne 0) { throw "fault injection reported failures ($LASTEXITCODE)" }
+
+      - name: Upload fault injection receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fault-injection-receipt-${{ github.run_id }}
+          path: fault-injection-evidence/
+          if-no-files-found: error

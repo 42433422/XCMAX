@@ -300,8 +300,9 @@ NSIS 静默安装可加 `/LOG=安装日志.txt` 参数留存。
 | macOS | `FHD/scripts/package/acceptance-macos.sh` | `bash FHD/scripts/package/acceptance-macos.sh --version 1.0.0.1`（自动下载/验签/挂载/签名校验/装到 ~/Applications/acceptance/，`--skip-launch` 跳过真实启动） |
 | Windows（全新隔离安装） | `FHD/scripts/package/acceptance-windows.ps1` | `powershell -ExecutionPolicy Bypass -File acceptance-windows.ps1 -Version 1.0.0.1`（逐步引导，每步人工确认 [Y/N]） |
 | Windows（覆盖升级，项2） | `FHD/scripts/package/acceptance-windows.ps1` | 追加 `-InstallerPath <exe> -ReceiptPath <delivery-receipt.json> -InstallRoot <已装目录> -OverwriteInstall`，脚本采集升级前业务数据基线，升级后比对库/上传/Mod 文件数与数据保留标记，并在首次启动迁移后核对新备份 |
+| Windows（故障注入，项7/8） | `FHD/scripts/package/fault-injection-windows.ps1` | `powershell -ExecutionPolicy Bypass -File fault-injection-windows.ps1`（默认跑 kill-all / kill-orphan / corrupt-backup / corrupt-main 四个可自动化场景并输出 JSON 收据；`corrupt-main` 有安全闸，仅允许 `C:\XCAGI-acceptance` 隔离安装；disk-full 与 power-cut 为人工场景，脚本给指引并记录结果）。runner 级证据可用 GitHub Actions 手动工作流 `fhd-windows-fault-injection` 生成（下载 CVM 测试包 → SHA 校验 → 静默隔离安装 → 注入 → 上传收据，`-CiMode` 跳过人工录入） |
 
-脚本只做"下载、校验、安装位、计时、截图、读版本、覆盖升级前后数据比对"，**OTA 与回滚两步永远输出人工操作指引**（涉及真实更新源与破坏性场景，不允许脚本静默执行）。
+脚本只做"下载、校验、安装位、计时、截图、读版本、覆盖升级前后数据比对"，**OTA 与回滚两步永远输出人工操作指引**（涉及真实更新源与破坏性场景，不允许脚本静默执行）。故障注入脚本同理：注入动作只针对验收隔离环境，`corrupt-main` 场景带安装根安全闸。
 签名项按交付声明判定：声明 `signed` 要求 `Valid` 否则 FAIL；声明 `unsigned`（如 `delivery-receipt.json` 的 `signature_status:unsigned`）时只要求 `NotSigned` 与回执哈希一致并记 PARTIAL，不阻断上机功能验收，但该包不得进入稳定自动更新通道。
 
 ---
