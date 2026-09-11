@@ -45,6 +45,14 @@ esac
   echo "[err] frontend build did not produce $VUE_DIST/index.html" >&2
   exit 1
 }
+
+# B9 回归防护（2026-09-11 实机验收发现）：dist 必须含 Mod 物理视图 glob 键，
+# 否则全部 Mod 业务页在打包应用中回退"未安装"（vite 构建上下文缺 mods/ 或 glob 根配置漂移）。
+if ! grep -rqE 'mods/[a-z0-9_-]+/frontend/views/' "$VUE_DIST/assets/js" 2>/dev/null; then
+  echo "[err] vue-dist 缺少 Mod 物理视图 glob 键（mods/*/frontend/views/*）——Mod 业务页将全部回退'未安装'（B9 回归）" >&2
+  exit 1
+fi
+echo "[ok] vue-dist 含 Mod 物理视图 glob 键"
 HASH="$(grep -oE 'index-[A-Za-z0-9_-]+\.js' "$VUE_DIST/index.html" | head -1 || echo 'unknown')"
 echo "[ok] templates/vue-dist ready (${HASH}) -> 桌面端 PyInstaller 内嵌 + Web 端推送共用"
 mkdir -p "$ROOT/build"

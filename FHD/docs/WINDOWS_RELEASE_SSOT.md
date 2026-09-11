@@ -100,7 +100,7 @@
 | B5 | **P2** | exe 版本元数据 1.0.0.0 ≠ build-info 1.0.0.1 | electron-builder 四段版本同步 |
 | B7 | **P2** | testing 通道 latest.yml Ed25519 签名与生产公钥不匹配（验签 INVALID） | `sign_update_metadata.py` 以正确密钥重签 |
 | B8 | **P2** | OTA 无 `.blockmap`（两端口 404）→ 每次全量 236MB，弱网成功率低（09-09 实录 6 连败） | `upload-release-skus.ps1` 同步上传 blockmap |
-| B9 | **P1** | **ERP 桥接 Mod「已交付未注册」：文件在运行时目录（`%APPDATA%\XCAGI\mods\xcagi-erp-domain-bridge`，87/88 文件，捆绑包同在），但订单管理页渲染时判定「本机尚未安装 Mod xcagi-erp-domain-bridge」→ 订单/库存等 ERP 业务页空壳，真实业务任务无法执行（2026-09-11 实机复现，证据 `evidence/g7-order-list.png`）** | 定位订单页 mod-presence 判定（文案为运行时动态拼接）与注册源（mod registry/DB vs 目录扫描），修复注册一致性后回测 G6/G7 |
+| B9 | **P1→已定位** | **ERP 桥接 Mod「已交付未注册」根因确诊（2026-09-11）：安装包内嵌 vue-dist 为旧通道构建，渲染层 glob 键完全缺失 `mods/xcagi-erp-domain-bridge/*`（实测 0 键）→ `findModViewLoader` 全部未命中 → 所有 Mod 业务页（订单/库存/客户等）回退「未安装」空壳。同源码 CVM 干净构建实测含全部键（index+modViews chunk）→ 非 glob 代码缺陷，是构建管线产物缺陷** | 已加防护：`build-frontend.sh` 构建后校验 dist 含 `mods/*/frontend/views/` glob 键，缺则 fail（防回归）；解除路径=T1 编排器重发（共享 build-frontend 单次构建）→ 重装回测 G6/G7 |
 | B10 | **P2** | 首次设置向导同步失败：「公司名称未能同步到企业账号，请稍后重试」（2026-09-11 实机出现一次，经「先进入，稍后再设置」绕过；影响 G5 绑定闭环） | 复现并修复企业账号同步链路；G5 复验时重新走完整绑定流程 |
 
 ## 6. 实机验收任务（UNKNOWN/RED 项 → 待执行）
