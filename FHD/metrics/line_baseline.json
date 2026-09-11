@@ -1,5 +1,5 @@
 {
-  "lines": 2321520,
+  "lines": 2321567,
   "updated": "2026-09-11",
-  "note": "同上一笔（SSOT 注册表修复 + macOS 发布快照入库）+2 行 CHANGELOG 条目，同一迭代合并计量"
+  "note": "acceptance 基准打通：LLM 适配器端点感知模型名自愈（xcauto-account 直连小米 400 实证修复）+ 3 个单测 + 预检 token 预算/响应体可诊断性，均为必要增量而非注水"
 }

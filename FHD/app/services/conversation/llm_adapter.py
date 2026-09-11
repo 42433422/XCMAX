@@ -105,6 +105,11 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         "sensetime": "SenseChat-5",
     }
 
+    # 账户虚拟名仅修茈网关可解析（与 credentials._XCAUTO_PROVIDER_ALIASES / MODstore 网关 XCauto_VIRTUAL_MODELS 对齐）
+    _XCAUTO_VIRTUAL_MODELS: frozenset = frozenset(
+        {"xcauto-account", "xcauto-default", "xcauto", "xiuci-account", "xiuci-default", "xiuci"}
+    )
+
     # 小米 2026-06-30 下线 V2；缓存/环境变量里的旧 ID 映射到官方替代（与 MODstore llm_chat_proxy 对齐）
     _XIAOMI_MODEL_ALIASES: Dict[str, str] = {
         "mimo-v2-base": "mimo-v2.5-pro",
@@ -171,6 +176,12 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         raw_model = model or self.DEFAULT_MODELS.get(self.provider, "gpt-3.5-turbo")
         if self.provider == "xiaomi":
             raw_model = self._XIAOMI_MODEL_ALIASES.get(raw_model, raw_model)
+        # 账户虚拟名（xcauto-account 等）只在修茈网关（xiu-ci.com）有效；
+        # base_url 被显式改指其他端点（如小米 token-plan 直连）时必须映射为
+        # 该端点的真实模型，否则端点校验模型名直接 400（fail-closed 预检实证）。
+        if self.provider in ("xcauto", "xiuci") and raw_model in self._XCAUTO_VIRTUAL_MODELS:
+            if "xiaomimimo.com" in (self._base_url or "").lower():
+                raw_model = self.DEFAULT_MODELS.get("xiaomi", "mimo-v2.5-pro")
         self._model = raw_model
 
         self._client: Optional[httpx.AsyncClient] = None
