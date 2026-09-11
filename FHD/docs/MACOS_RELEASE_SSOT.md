@@ -65,12 +65,12 @@ x64 dmg：download_release.json 声明 `mac_x64`，但 manifest 无 x64 条目�
 | G2 | 干净环境安装 | YELLOW | 验收脚本真实下载→SHA256→挂载→安装 `~/Applications/acceptance/` 全链 PASS | 非干净机（dev 机+存量数据）；未在全新用户/VM 验证 | 无 | #1870 | 实机任务 T1：干净环境（新账户或 VM）重跑 |
 | G3 | macOS 安全项 | GREEN | `codesign --verify --deep --strict` exit=0；TeamID `G26WSH472M`；hardened runtime(flags 0x10000)；`spctl --assess` accepted, source=Notarized Developer ID, origin=Developer ID Application: jialong Li (G26WSH472M)；时间戳 Sep 5 2026 00:41:41 | — | 无 | — | — |
 | G4 | 首次启动 | YELLOW | 后端进程 PID 95037 监听 17500；`/api/health` 200 返回 JSON；runtime.status=healthy, blockers=[], failures=[]；neuro.status=healthy, running=true, published=496, errors=0；主窗口截图 [04-cold-start.png](evidence/e2e/macos-release-1.0.0.1/04-cold-start.png) | status=degraded（唯一原因 `LLM_RUNTIME_UNAVAILABLE`——登录前无 LLM provider 配置，属预期态，见 §7-4）；未在干净环境首次启动 | 无 | — | T2 登录后复测 health 应转绿；T1 干净环境冷启动 |
-| G5 | 登录绑定 | UNKNOWN | 历史证据（旧版本） | 1.0.0.1 真机登录绑定截图/日志 | 无 | — | 实机任务 T2 |
+| G5 | 登录绑定 | UNKNOWN | 历史证据（旧版本）；2026-09-11 静态确认：行业业务（考勤等）走账号权益门控（`mod_sdk/customer_features.py` `delivery_for_account`），登录是业务任务的硬前置 | 1.0.0.1 真机登录绑定截图/日志 | 无 | — | 实机任务 T2（须先于 T3） |
 | G6 | Mod / AI 员工加载 | GREEN | `/api/mods` 200 返回 62 个 mod（含 attendance-industry、xcagi-erp-domain-bridge 等 15 个后端日志确认 loaded + 47 个前端可见）；后端日志 `load_all_mods result: [15 个已加载 mod]`；`/api/employees` 200 返回 catalog（6 个 split_mod_entries，含 label_print/shipment_mgmt/receipt_confirm/wechat_msg 等 legacy 员工）；neuro handlers=39, domains=11 | — | 无 | — | — |
-| G7 | 真实业务任务 | UNKNOWN | 历史业务证据（旧版本 `docs/evidence/e2e/01~07-*.png`） | 1.0.0.1 真机业务用例证据 | 无 | — | 实机任务 T3 |
+| G7 | 真实业务任务 | YELLOW | 真机 API 层业务流实测（2026-09-11，登录前）：发运单取号 `26-09-00001A` PASS（CSRF 双提交链路通过）；生成单到达业务层后停在 `TEMPLATE_NOT_FOUND`——应用不内置出货单模板、userData 亦无，模板为客户自带数据（预期产品行为） | 登录绑定后的 UI 真实业务单据（T3）；考勤类业务需账号权益（attendance-convert） | 无 | — | T3：先 T2 登录 → 导入客户模板 → 完成 1 单真实业务 |
 | G8 | 更新发现 | YELLOW | feed 可达+ed25519 签名字段存在；本版=最新无升级目标（协议 4.4 SKIP）；历史闭环 [desktop-ota-closed-loop-20260724](evidence/e2e/desktop-ota-closed-loop-20260724/) | 无更高版本可触发真实"发现" | 无 | #583 | 下次发版 T4 触发真实发现 |
 | G9 | 更新安装 | YELLOW | 历史闭环：checkForUpdates+downloadUpdate 验签+提取 buildSha 一致；`quitAndInstall` 未执行 | 真机完整"重启安装"动作从未执行过 | 无 | #583 | T4：下版发后真机全链 OTA |
-| G10 | 数据保留（升级后） | UNKNOWN | userData 备份目录存在；Windows 覆盖升级比对已落地 | macOS 覆盖升级数据保留比对脚本缺失（#1870 仅 Windows）；真机升级数据基线缺失 | 无 | #1870 | T5：补 macOS 覆盖升级验收（对齐 acceptance-windows.ps1） |
+| G10 | 数据保留（升级后） | YELLOW | `acceptance-macos.sh --overwrite-upgrade` 已落地（对齐 Windows 口径）：本机实测同版本覆盖重装 PASS——基线 986,615,808B 库/151 uploads/843 mods 文件/4 备份 → 重装后零丢失、标记存活（[data-retention.json](evidence/e2e/macos-release-1.0.0.1/data-retention.json)、[run log](evidence/e2e/macos-release-1.0.0.1/overwrite-reinstall-run.log)） | 跨版本（旧版→新版 OTA/覆盖）数据保留未实测 | 无 | #1870 | T5（下版发后真机跨版本执行） |
 | G11 | 更新后重新执行业务 | UNKNOWN | — | 依赖 G9/G10 | 无 | — | T4/T5 后执行 |
 | G12 | 重启 Mac 后核心功能复验 | UNKNOWN | — | 未执行真实重启（避免中断在用会话） | 无 | — | T6：发版后重启复验 |
 
@@ -80,7 +80,8 @@ x64 dmg：download_release.json 声明 `mac_x64`，但 manifest 无 x64 条目�
 2. **`/Applications/XCAGI.app` spctl 报 `a sealed resource is missing or invalid`**：本地副本被改或本地构建签名不完整；与发布产物无关（以验收实例对新鲜 DMG 的 spctl 结果为准，见 G3 GREEN）。
 3. x64 dmg 在 download_release.json 声明但 manifest 无条目（§2）。
 4. **首启 `status=degraded`（LLM_RUNTIME_UNAVAILABLE）为登录前预期态，非缺陷**：`app/runtime_integrity.py` `neuro_degraded_reasons()` 在无任何已配置 LLM provider 时上报该原因；provider 配置来自登录后的 modstore 会话/API key（`registry.resolve()`），干净机器登录前必然为 false；前端 [runtimeHealthPresentation.js](../frontend/src/components/sidebar/runtimeHealthPresentation.js) 对此有专用文案（"部分 AI 能力未就绪…在设置的模型服务中确认"）。登录绑定后复测应转绿（并入 T2）。
-5. 仓库根 `release/VERSION`（=0.0.1）为 legacy 暂存目录，不在 version 域锚点内；版本域锚点 `FHD/release/VERSION`=1.0.0.1 已验证同步（`verify_version_anchors.py` OK）。
+5. **本机代理拦截 127.0.0.1 致健康检查假阴性（测试环境坑，已修复工具）**：系统代理把 `curl http://127.0.0.1:17500` 路由到代理返回 502；`acceptance-macos.sh` 健康检查已加 `--noproxy '*'`（2026-09-11）。人工复核命令务必带 `--noproxy '*'`；CI/干净机无代理不受影响。
+6. 仓库根 `release/VERSION`（=0.0.1）为 legacy 暂存目录，不在 version 域锚点内；版本域锚点 `FHD/release/VERSION`=1.0.0.1 已验证同步（`verify_version_anchors.py` OK）。
 
 ## 8. 实机验收任务（UNKNOWN 项 → 待执行）
 
@@ -88,9 +89,9 @@ x64 dmg：download_release.json 声明 `mac_x64`，但 manifest 无 x64 条目�
 |----|------|------|------|
 | T1 | 全新 macOS 用户账户（或干净 VM）跑 `acceptance-macos.sh`，验证无开发依赖 | G2 | 干净机 |
 | T2 | 真机登录绑定（市场账号），截图+日志 | G5 | 任意真机 |
-| T3 | 真机完成 1 单真实业务（订单/考勤/对话），按模板留证 | G7 | 任意真机 |
+| T3 | 真机完成 1 单真实业务（订单/考勤/对话），按模板留证。前置：T2 登录；发运单需先导入客户模板（应用不内置）；考勤需账号开通 attendance-convert 权益 | G7 | 任意真机 |
 | T4 | 下次发版后：旧版真机→检查更新→下载→安装→观察期→复验 | G8/G9/G11 | 真机 |
-| T5 | 对齐 Windows：macOS 覆盖升级数据保留比对（升级前业务基线→升级后比对） | G10 | 真机 |
+| T5 | 跨版本覆盖升级数据保留：旧版真机装新版（`acceptance-macos.sh --version <新版> --overwrite-upgrade`），基线→比对→标记存活 | G10 | 真机 |
 | T6 | 重启 Mac 后复验登录/Mod/业务 | G12 | 真机 |
 
 ## 9. 发版复用 Runbook（每次 macOS 发版照此执行）

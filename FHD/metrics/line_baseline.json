@@ -1,5 +1,5 @@
 {
-  "lines": 2321520,
+  "lines": 2321656,
   "updated": "2026-09-11",
-  "note": "同上一笔（SSOT 注册表修复 + macOS 发布快照入库）+2 行 CHANGELOG 条目，同一迭代合并计量"
+  "note": "G10/G7 增量入库：acceptance-macos.sh --overwrite-upgrade 覆盖升级数据保留验收（+113，补 #1870 Windows-only 缺口，本机实测 PASS）+ 覆盖升级实测证据（data-retention.json/05-overwrite-reinstall.png/overwrite-reinstall-run.log +92）+ G7 业务流实测证据与 SSOT Gate 回填（G7 YELLOW、G5→G7 硬依赖、偏差-5 noproxy 修复、T3/T5 前置细化）。"
 }
