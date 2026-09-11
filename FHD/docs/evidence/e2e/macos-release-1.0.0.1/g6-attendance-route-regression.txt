@@ -1,0 +1,35 @@
+# G6 缺陷证据：attendance-industry mod HTTP 路由注册失败（2026-09-12 真机定位）
+
+环境：macOS 验收实例（1.0.0.1 / gitSha 99854233），后端 127.0.0.1:17500。
+
+## 现象
+
+- 后端日志 `logs/electron-backend.log`（当前实例）每次 Mod 路由注册阶段均报错（本日志窗口内 3 次实例启动全部复现）：
+
+```
+ERROR:app.infrastructure.mods.mod_manager:Failed to register routes for attendance-industry: No module named 'app.mod_sdk.customer_features'
+  File "app/infrastructure/mods/mod_manager_part04.py", line 159, in _register_single_mod_http_routes
+  File ".../mods/attendance-industry/backend/blueprints.py", line 169, in register_fastapi_routes
+    attendance_routes = _load_local_module("attendance_routes")
+  File ".../mods/attendance-industry/backend/attendance_routes.py", line 11, in <module>
+    from app.mod_sdk.customer_features import attendance_custom_features, require_attendance_conversion
+ModuleNotFoundError: No module named 'app.mod_sdk.customer_features'
+```
+
+- 受影响路由（userData `mods/attendance-industry/backend/attendance_routes.py`）：`GET /attendance/capabilities`、`GET|POST /attendance/policy`、`GET /attendance/rules`、`POST /attendance/convert-upload`、`GET /attendance/download`（考勤转换业务全链）。
+- 不受影响：mod 元数据注册（`/api/mods` 62 个含 attendance-industry v1.0.0 primary=True）、`/api/system/industries` 200（由核心 `app/fastapi_routes/system_routes.py` 提供）、其余 14 个 mod 路由注册、AI 员工 catalog。
+
+## 根因
+
+- userData 中 `mods/attendance-industry/backend/attendance_routes.py`（2026-09-07 20:24 同步版本）静态 import `app.mod_sdk.customer_features`；
+- shipped host（99854233）bundle 内**无** `app/mod_sdk/customer_features.py`（该文件由 main 上 f37372e97「keep attendance conversion an account-scoped customization」引入，晚于构建提交）；
+- bundle 自带 seed 副本（`backend/_internal/industry-seeds/attendance-industry`）为旧版、不引用该模块 → 干净首装可能正常；但任何 modstore/跨安装同步到新版 mod 后，1.0.0.1 host 必现此错。
+
+## 环境注意事项（影响证据口径）
+
+- 验收实例与主安装 `/Applications/XCAGI.app` 共享 `~/Library/Application Support/XCAGI/`（986MB 生产库 + 2026-09-07 同步的 mods），**非干净环境**；干净首装（T1）下 attendance 路由注册行为未验证。
+
+## 修复与重测
+
+- 修复已在 main：f37372e97。下版本（T7）发版后重测：`logs` 中不应再出现 `Failed to register routes for attendance-industry`，且 `/attendance/capabilities` 可达。
+- 本缺陷不阻断 ERP（发运单等）业务闭环，但阻断考勤类业务（G7 考勤路径）。
