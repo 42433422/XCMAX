@@ -18,6 +18,8 @@ JAR="$(mktemp /tmp/shared-brain-csrf.XXXX)"
 STATE="$MEMORY_DIR/.shared-brain-state.json"
 MIRROR="$MEMORY_DIR/shared_brain_kb.md"
 
+mkdir -p "$MEMORY_DIR" "$HOME/Library/Logs/XCMAX" 2>/dev/null || true
+
 H=(-H "X-Dataset-Actor-ID: $ACTOR_ID" -H "X-Dataset-Tenant-ID: default"
    -H "X-Dataset-Permissions: dataset.read,dataset.write")
 
@@ -25,14 +27,14 @@ csrf() { curl -s -m 8 --noproxy '*' -c "$JAR" "$TUNNEL_BASE/health" "${H[@]}" -o
          awk '$6=="csrf_token" {print $7}' "$JAR" | tail -n1; }
 
 kb_post() { local c; c=$(csrf); [ -n "$c" ] || return 1
-            curl -s -m 25 --noproxy '*' -X POST "$1" -H "X-CSRF-Token: $c" -b "$JAR"
+            curl -s -m 25 --noproxy '*' -X POST "$1" -H "X-CSRF-Token: $c" -b "$JAR" \
                  -H "Content-Type: application/json" "${H[@]}" -d "$2"; }
 
 local_brain_text() {
   local out=""
   local pm="$MEMORY_DIR/../projects"; local f
   f=$(ls -t "$pm"/*/project_memory.md 2>/dev/null | head -n1 || true)
-  [ -n "${f:-}" ] && out+="## 本地 project_memory（最新在后）"$'\n'"$(sed 's/\r$//' "$f")"$'\n\n'"
+  [ -n "${f:-}" ] && out+="## 本地 project_memory（最新在后）"$'\n'"$(sed 's/\r$//' "$f")"$'\n\n'
   f=$(ls -t "$pm"/*/20*/topics.md 2>/dev/null | head -n1 || true)
   [ -n "${f:-}" ] && out+="## 最近会话 topics（尾部最新）"$'\n'"$(tail -c 1800 "$f")"
   printf '%s' "$out" | tail -c "$MAX_PUSH_CHARS"
@@ -61,12 +63,13 @@ push_local() {
 }
 
 pull_remote() {
-  local st; st=$(curl -s -m 10 --noproxy '*' "$TUNNEL_BASE/datasets/$DATASET/status?include_documents=true" "${H[@]}")
-  echo "# 共享大脑镜像（自动同步，勿手编；源=persy-knowledge）"; echo ""
+  local st; st=$(curl -s -m 10 --noproxy '*' "$TUNNEL_BASE/datasets/$DATASET/status?include_documents=true" "${H[@]}") || return 0
   echo "$st" | python3 -c '
 import json,sys,subprocess,os
 d=json.load(sys.stdin)
 if not d.get("success"): sys.exit(0)
+print("# 共享大脑镜像（自动同步，勿手编；源=persy-knowledge）")
+print("")
 me=os.environ.get("DEVICE","mac")
 for doc in d.get("documents",[]):
     m=doc.get("metadata",{})
