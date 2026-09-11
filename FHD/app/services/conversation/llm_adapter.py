@@ -10,6 +10,7 @@ import logging
 import os
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, cast
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -179,8 +180,11 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         # 账户虚拟名（xcauto-account 等）只在修茈网关（xiu-ci.com）有效；
         # base_url 被显式改指其他端点（如小米 token-plan 直连）时必须映射为
         # 该端点的真实模型，否则端点校验模型名直接 400（fail-closed 预检实证）。
+        # 主机判定用 urlsplit 精确匹配（子串 in 会被 CodeQL 判 incomplete-url-sanitization，
+        # 且理论上可被 evil.com/?x=xiaomimimo.com 类 URL 绕过）。
         if self.provider in ("xcauto", "xiuci") and raw_model in self._XCAUTO_VIRTUAL_MODELS:
-            if "xiaomimimo.com" in (self._base_url or "").lower():
+            host = (urlsplit(self._base_url or "").hostname or "").lower()
+            if host == "xiaomimimo.com" or host.endswith(".xiaomimimo.com"):
                 raw_model = self.DEFAULT_MODELS.get("xiaomi", "mimo-v2.5-pro")
         self._model = raw_model
 

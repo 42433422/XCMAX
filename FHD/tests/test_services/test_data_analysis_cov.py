@@ -194,6 +194,15 @@ class TestOpenAICompatibleAdapter:
         )
         assert a.model_name == "mimo-v2.5-pro"
 
+    def test_xcauto_substring_host_not_matched(self):
+        """仅子串包含域名的非小米主机不触发映射（精确主机判定，防 CodeQL REDOS/绕过类问题）。"""
+        from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
+
+        a = OpenAICompatibleAdapter(
+            provider="xcauto", api_key="k", base_url="https://evil.com/?x=xiaomimimo.com"
+        )
+        assert a.model_name == "xcauto-account"
+
     def test_xcauto_explicit_model_survives_endpoint_switch(self):
         """显式指定的真实模型不被端点映射覆盖。"""
         from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
