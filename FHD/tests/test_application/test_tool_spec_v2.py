@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
+
 from app.application.agent_orchestrator.run_models import AgentStep
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.agent_orchestrator.tool_spec import (
@@ -11,6 +13,48 @@ from app.application.agent_orchestrator.tool_spec import (
     validate_tool_result,
     validate_tool_spec_fixtures,
 )
+
+
+@pytest.mark.parametrize("customer", [{"customer_id": 1}, {"customer_name": "客户甲"}])
+def test_quote_contract_accepts_name_or_id_and_rejects_missing_price(customer):
+    from app.application.tools.registered_capabilities import resolve_registered_capability_call
+
+    params = {**customer, "items": [{"model_number": "A100", "quantity": 2, "unit_price": 50}]}
+    assert validate_tool_call("sales", "quote", params).ok
+    assert resolve_registered_capability_call(
+        {"tool_id": "sales", "action": "quote", "params": params}
+    )["success"]
+    del params["items"][0]["unit_price"]
+    assert not validate_tool_call("sales", "quote", params).ok
+    assert not resolve_registered_capability_call(
+        {"tool_id": "sales", "action": "quote", "params": params}
+    )["success"]
+
+
+def test_quote_requires_customer_even_when_details_are_complete():
+    params = {"items": [{"model_number": "A100", "quantity": 2, "unit_price": 50}]}
+    assert not validate_tool_call("sales", "quote", params).ok
+
+
+@pytest.mark.parametrize(
+    "params, accepted",
+    [
+        ({"model_number": "A100", "warehouse_name": "主仓库", "quantity": 50}, True),
+        ({"product_id": 1, "warehouse_id": 2, "quantity": 50}, True),
+        ({"model_number": "A100", "quantity": 50}, False),
+        ({"model_number": "A100", "warehouse_name": "主仓库", "quantity": -50}, False),
+    ],
+)
+def test_stock_in_contract_requires_destination_and_valid_quantity(params, accepted):
+    from app.application.tools.registered_capabilities import resolve_registered_capability_call
+
+    assert validate_tool_call("inventory", "stock_in", params).ok is accepted
+    assert (
+        resolve_registered_capability_call(
+            {"tool_id": "inventory", "action": "stock_in", "params": params}
+        )["success"]
+        is accepted
+    )
 
 
 def test_build_tool_specs_v2_exposes_business_db_and_employee_contracts() -> None:
@@ -78,7 +122,7 @@ def test_build_tool_specs_v2_exposes_business_db_and_employee_contracts() -> Non
 
     stock_in_spec = specs[("inventory", "stock_in")]
     assert stock_in_spec.risk == "high"
-    assert stock_in_spec.input_schema["required"] == ["product_id", "warehouse_id", "quantity"]
+    assert stock_in_spec.input_schema["required"] == ["quantity"]
     assert stock_in_spec.test_fixtures[0]["output"]["data"]["transaction_type"] == "in"
 
     warehouse_delete_spec = specs[("inventory", "delete_warehouse")]

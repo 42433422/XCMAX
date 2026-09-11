@@ -428,7 +428,7 @@ class TestRefreshSessionEntitlementsFromMarket:
             patch(
                 "app.fastapi_routes.market_account._proxy_json", new_callable=AsyncMock
             ) as mock_proxy,
-            patch("app.enterprise.mod_entitlements.is_client_mod_id", return_value=True),
+            patch("app.enterprise.market_entitlement_client.PROTECTED_CLIENT_MOD_IDS", {"mod-imp"}),
             patch(
                 "app.enterprise.mod_entitlements._augment_entitled_for_username",
                 side_effect=lambda u, s: s,

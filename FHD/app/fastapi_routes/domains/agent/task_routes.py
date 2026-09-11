@@ -10,14 +10,18 @@ from typing import Any, cast
 from fastapi import APIRouter, Body, Depends, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from app.application.agent_orchestrator import AgentOrchestrator
+from app.application.agent_orchestrator import AgentOrchestrator, get_agent_run_repository
 from app.application.agent_orchestrator.run_control import run_operation_lock
 from app.application.agent_orchestrator.run_models import utc_now_iso
 from app.application.agent_orchestrator.task_dispatcher import get_agent_task_dispatcher
 from app.application.agent_orchestrator.task_execution_repository import (
     get_task_execution_repository,
 )
-from app.application.agent_orchestrator.task_models import task_from_run, tenant_id_of_run
+from app.application.agent_orchestrator.task_models import (
+    mod_id_of_run,
+    task_from_run,
+    tenant_id_of_run,
+)
 from app.application.agent_orchestrator.task_progress import task_progress_snapshot
 from app.application.agent_orchestrator.unified_task import (
     UnifiedTaskConflictError,
@@ -26,12 +30,16 @@ from app.application.agent_orchestrator.unified_task import (
     task_capabilities,
 )
 from app.fastapi_routes.domains.agent.route_support import (
+    authenticated_runtime_context,
     internal_error_response,
     public_run_dict,
     run_response,
+    scoped_tasks,
     success,
+    task_scope_matches,
 )
 from app.infrastructure.auth.agent_principal import AgentPrincipal, require_agent_principal
+from app.infrastructure.auth.agent_stream import StreamAuthorizer, require_stream_authorizer
 from app.utils.json_safe import json_safe
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -133,9 +141,9 @@ def list_agent_tasks(
 ) -> dict[str, Any] | JSONResponse:
     try:
         orchestrator = AgentOrchestrator()
-        for run in orchestrator.list_runs(user_id=principal.user_id, limit=limit):
-            if principal.tenant_id and tenant_id_of_run(run) != principal.tenant_id:
-                continue
+        for run in get_agent_run_repository().list_recent(
+            user_id=principal.user_id, tenant_id=principal.tenant_id, limit=limit
+        ):
             context = run.metadata.get("task_context")
             task_id = str(context.get("task_id") or "") if isinstance(context, dict) else ""
             if not task_id:
@@ -143,13 +151,13 @@ def list_agent_tasks(
             existing = orchestrator.get_task(
                 user_id=principal.user_id,
                 task_id=task_id,
-                tenant_id=principal.tenant_id or None,
+                tenant_id=principal.tenant_id,
             )
             if existing is None:
                 orchestrator.save_task(task_from_run(run))
-        tasks = orchestrator.list_tasks(
-            user_id=principal.user_id,
-            tenant_id=principal.tenant_id or None,
+        tasks = scoped_tasks(
+            orchestrator,
+            principal=principal,
             limit=limit,
             include_archived=include_archived,
         )
@@ -176,9 +184,21 @@ def get_agent_task_runtime(
 ) -> dict[str, Any] | JSONResponse:
     try:
         snapshot = get_agent_task_dispatcher().snapshot()
-        tasks = AgentOrchestrator().list_tasks(
-            user_id=principal.user_id,
-            tenant_id=principal.tenant_id or None,
+        orchestrator = AgentOrchestrator()
+        active_count = 0
+        for item in cast(list[dict[str, Any]], snapshot["active"]):
+            run = orchestrator.get_run(str(item["run_id"]))
+            if (
+                run is not None
+                and run.user_id == principal.user_id
+                and tenant_id_of_run(run) == principal.tenant_id
+                and mod_id_of_run(run)
+                == str((principal.mod_authorization or {}).get("mod_id") or "")
+            ):
+                active_count += 1
+        tasks = scoped_tasks(
+            AgentOrchestrator(),
+            principal=principal,
             limit=200,
             include_archived=False,
         )
@@ -186,7 +206,7 @@ def get_agent_task_runtime(
             {
                 "running": bool(snapshot["running"]),
                 "max_workers": int(cast(Any, snapshot["max_workers"])),
-                "active_count": int(cast(Any, snapshot["active_count"])),
+                "active_count": active_count,
                 "progress": _task_progress_overview(tasks),
             }
         )
@@ -207,10 +227,8 @@ def create_agent_task(
             {"success": False, "message": "params 与 runtime_context 必须是对象"},
             status_code=400,
         )
-    runtime_context = dict(runtime_context_raw)
+    runtime_context = authenticated_runtime_context(runtime_context_raw, principal)
     try:
-        if principal.tenant_id:
-            runtime_context["tenant_id"] = principal.tenant_id
         task_id = str(data.get("task_id") or "").strip()
         if not task_id or len(task_id) > 160 or "/" in task_id:
             return JSONResponse(
@@ -249,15 +267,18 @@ def create_agent_task(
 async def stream_agent_tasks(
     once: bool = Query(default=False),
     principal: AgentPrincipal = Depends(require_agent_principal),
+    authorize: StreamAuthorizer = Depends(require_stream_authorizer),
 ) -> StreamingResponse:
     async def event_stream():
         previous = ""
         deadline = time.monotonic() + 60.0
         while time.monotonic() < deadline:
+            if not await authorize():
+                break
             orchestrator = AgentOrchestrator()
-            tasks = orchestrator.list_tasks(
-                user_id=principal.user_id,
-                tenant_id=principal.tenant_id or None,
+            tasks = scoped_tasks(
+                orchestrator,
+                principal=principal,
                 limit=200,
                 include_archived=False,
             )
@@ -265,6 +286,8 @@ async def stream_agent_tasks(
             snapshot = [_task_stream_envelope(task, executions) for task in tasks]
             encoded = json.dumps(json_safe(snapshot), ensure_ascii=False, sort_keys=True)
             if encoded != previous:
+                if not await authorize():
+                    break
                 previous = encoded
                 yield f"event: task.snapshot\ndata: {encoded}\n\n"
             if once:
@@ -289,9 +312,9 @@ def get_agent_task(
         task = orchestrator.get_task(
             user_id=principal.user_id,
             task_id=task_id,
-            tenant_id=principal.tenant_id or None,
+            tenant_id=principal.tenant_id,
         )
-        if task is None:
+        if task is None or not task_scope_matches(orchestrator, task, principal):
             return JSONResponse({"success": False, "message": "任务不存在"}, status_code=404)
         return success(_task_envelope(orchestrator, task))
     except RECOVERABLE_ERRORS:
@@ -309,9 +332,9 @@ def mark_agent_task_read(
         task = orchestrator.get_task(
             user_id=principal.user_id,
             task_id=task_id,
-            tenant_id=principal.tenant_id or None,
+            tenant_id=principal.tenant_id,
         )
-        if task is None:
+        if task is None or not task_scope_matches(orchestrator, task, principal):
             return JSONResponse({"success": False, "message": "工作区不存在"}, status_code=404)
         if task.attention_state == "result_unread":
             task.attention_state = ""
@@ -332,9 +355,9 @@ def archive_agent_task(
         owned = orchestrator.get_task(
             user_id=principal.user_id,
             task_id=task_id,
-            tenant_id=principal.tenant_id or None,
+            tenant_id=principal.tenant_id,
         )
-        if owned is None:
+        if owned is None or not task_scope_matches(orchestrator, owned, principal):
             return JSONResponse({"success": False, "message": "任务不存在"}, status_code=404)
         if owned.status not in {"completed", "failed", "cancelled"}:
             return JSONResponse(
@@ -344,7 +367,7 @@ def archive_agent_task(
         archived = orchestrator.archive_task(
             user_id=principal.user_id,
             task_id=task_id,
-            tenant_id=principal.tenant_id or None,
+            tenant_id=principal.tenant_id,
         )
         return success(archived.to_dict() if archived is not None else owned.to_dict())
     except RECOVERABLE_ERRORS:

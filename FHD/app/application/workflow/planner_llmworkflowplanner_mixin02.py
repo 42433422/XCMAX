@@ -53,7 +53,11 @@ class _LLMWorkflowPlannerPart02Mixin:
         self, plan_id: str, message: str, tool_registry: dict[str, _facade().Any]
     ) -> _facade().PlanGraph:
         from app.application.normal_chat_dispatch import route_normal_mode_message
+        from app.application.workflow.sql_execution_policy import rejected_sql_plan
 
+        rejected = rejected_sql_plan(message, plan_id)
+        if rejected is not None:
+            return rejected
         lower = (message or "").lower()
         nodes: list[_facade().WorkflowNode] = []
         todo = ["理解用户目标", "执行可用工具", "输出执行结果"]
@@ -154,6 +158,20 @@ class _LLMWorkflowPlannerPart02Mixin:
                         idempotent=True,
                     )
                 )
+        if not nodes:
+            from app.application.workflow.shipment_plan import shipment_document_node
+
+            shipment_node = shipment_document_node(message, tool_registry)
+            if shipment_node is not None:
+                nodes.append(shipment_node)
+                intent = "shipment_generate"
+        if not nodes:
+            from app.application.workflow.inventory_write_plan import stock_in_node
+
+            inventory_node = stock_in_node(message, tool_registry)
+            if inventory_node is not None:
+                nodes.append(inventory_node)
+                intent = "inventory_stock_in"
         if (
             not nodes
             and _facade()._looks_like_business_db_write(message, lower)
@@ -164,6 +182,20 @@ class _LLMWorkflowPlannerPart02Mixin:
                 intent = "business_db_write"
                 todo = ["识别业务实体与写入字段", "通过受控业务服务写入数据库", "返回写入结果"]
                 nodes.append(node)
+        if not nodes:
+            from app.application.workflow.finance_write_plan import finance_transaction_node
+
+            finance_node = finance_transaction_node(message, tool_registry)
+            if finance_node is not None:
+                nodes.append(finance_node)
+                intent = "finance_write"
+        if not nodes:
+            from app.application.workflow.sales_quote_plan import sales_quote_node
+
+            quote_node = sales_quote_node(message, tool_registry)
+            if quote_node is not None:
+                nodes.append(quote_node)
+                intent = f"sales_{quote_node.action}"
         route = route_normal_mode_message(message)
         if (
             not nodes
@@ -205,6 +237,57 @@ class _LLMWorkflowPlannerPart02Mixin:
                         idempotent=True,
                     )
                 )
+        if (
+            not nodes
+            and "products" in tool_registry
+            and any(word in message for word in ("新增产品", "添加产品"))
+        ):
+            parsed = _facade()._extract_business_db_write_node(message)
+            payload = parsed.params.get("payload", {}) if parsed is not None else {}
+            if payload.get("model_number") and not any(
+                word in message for word in ("客户", "购买单位")
+            ):
+                params = {
+                    "name_or_model": payload["model_number"],
+                    "model_number": payload["model_number"],
+                }
+                for key in ("price", "specification", "unit"):
+                    if key in payload:
+                        params[key] = payload[key]
+                nodes.append(
+                    _facade().WorkflowNode(
+                        node_id="create_product",
+                        tool_id="products",
+                        action="create",
+                        params=params,
+                        risk="medium",
+                        idempotent=False,
+                        description="新增产品资料",
+                    )
+                )
+                intent = "product_create"
+        if (
+            not nodes
+            and "products" in tool_registry
+            and not any(word in message for word in ("客户", "购买单位"))
+            and _facade().re.fullmatch(
+                r"(?:(?:请|帮我|请帮我)\s*(?:新增|添加)\s*(?:一个|一款|一种)?"
+                r"|(?:新增|添加)\s*(?:一个|一款|一种))\s*产品[。！!]?",
+                message.strip(),
+            )
+        ):
+            nodes.append(
+                _facade().WorkflowNode(
+                    node_id="create_product",
+                    tool_id="products",
+                    action="create",
+                    params={},
+                    risk="medium",
+                    idempotent=False,
+                    description="新增产品资料",
+                )
+            )
+            intent = "product_create"
         if not nodes and (
             ("添加" in message or "新增" in message or "create" in lower) and "产品" in message
         ):
@@ -289,6 +372,22 @@ class _LLMWorkflowPlannerPart02Mixin:
                 )
             )
             nodes.append(purchase_node)
+        if not nodes:
+            from app.application.workflow.read_query_plan import customer_read_node
+
+            read_node = customer_read_node(message, route, tool_registry)
+            if read_node is not None:
+                nodes.append(read_node)
+                intent = "customers_query"
+        if not nodes:
+            from app.application.workflow.read_query_plan import report_read_node, sales_export_node
+
+            read_node = sales_export_node(message, tool_registry) or report_read_node(
+                message, tool_registry
+            )
+            if read_node is not None:
+                nodes.append(read_node)
+                intent = f"{read_node.tool_id}_query"
         if not nodes:
             if "products" in tool_registry:
                 nodes.append(

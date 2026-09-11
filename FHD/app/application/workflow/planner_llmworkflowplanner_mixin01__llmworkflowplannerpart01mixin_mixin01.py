@@ -21,6 +21,8 @@ class __LLMWorkflowPlannerPart01MixinPart01Mixin:
         tool_registry: dict[str, _facade().Any],
         context: dict[str, _facade().Any] | None = None,
     ) -> _facade().PlanGraph:
+        from app.application.workflow.sql_execution_policy import rejected_sql_plan
+
         context = dict(context or {})
         session_key = str(context.get("session_id") or context.get("conversation_id") or "").strip()
         plan_id = (
@@ -28,6 +30,9 @@ class __LLMWorkflowPlannerPart01MixinPart01Mixin:
             if session_key
             else f"wp-{_facade().uuid.uuid4().hex}"
         )
+        rejected = rejected_sql_plan(message, plan_id)
+        if rejected is not None:
+            return rejected
         from app.application.normal_chat_dispatch import resolve_tool_execution_profile
 
         profile = resolve_tool_execution_profile(context)
@@ -197,7 +202,8 @@ class __LLMWorkflowPlannerPart01MixinPart01Mixin:
         inserted: list[_facade().WorkflowNode] = []
         for item in items:
             clarify = _facade().build_clarify_node(
-                item["question"], ambient={"target_node_id": item["node_id"]}
+                item["question"],
+                ambient={"target_node_id": item["node_id"], "clarification": item},
             )
             plan.nodes.insert(0, clarify)
             inserted.append(clarify)

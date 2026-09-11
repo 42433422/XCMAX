@@ -248,9 +248,9 @@ class TestRiskIdempotencyMetadataReflectBehavior:
         sales = _workflow_registry()["sales"]["actions"]
         # 只读查询幂等
         assert sales["query"]["idempotent"] is True
-        # GAP-3 纠正：报价与交付均支持 idempotency_key → 声明可幂等
-        for action in ("quote", "deliver"):
-            assert sales[action]["idempotent"] is True
+        # Optional quote deduplication does not make every invocation replay-safe.
+        assert sales["quote"]["idempotent"] is False
+        assert sales["deliver"]["idempotent"] is True
         # 生命周期 / 开票 / 收款 / 退款委托的服务均幂等返回
         for action in ("confirm", "invoice", "payment", "refund", "cancel"):
             assert sales[action]["idempotent"] is True
@@ -564,6 +564,160 @@ def _seed_quote_owner_db(db):
 
 class TestQuoteCallerOwnedSession:
     """quote 在调用方会话内执行：不 commit/rollback/close，跨会话可见性受调用方事务控制。"""
+
+    @pytest.mark.parametrize("confirmation_fails", [False, True])
+    def test_create_confirmed_order_commits_all_or_rolls_back(
+        self, _facade_file_db, monkeypatch, confirmation_fails
+    ):
+        from app.application.sales_order_creation import create_confirmed_order
+        from app.db.models import PurchaseUnit, SalesOrderItem
+
+        db = _facade_file_db
+        monkeypatch.setattr("app.db.session.SessionLocal", db.info["session_factory"])
+        with tenant_scope(1):
+            db.add(PurchaseUnit(unit_name="下单客户"))
+            db.add(Product(name="订单产品", model_number="ORDER"))
+            db.commit()
+            if confirmation_fails:
+                monkeypatch.setattr(
+                    SalesAppService,
+                    "confirm",
+                    lambda *_args, **_kwargs: {"success": False, "message": "确认失败测试"},
+                )
+            result = create_confirmed_order(
+                {
+                    "customer_name": "下单客户",
+                    "items": [
+                        {"model_number": "ORDER", "quantity": 10, "unit_price": 50},
+                    ],
+                }
+            )
+            assert result["success"] is not confirmation_fails
+            fresh = db.info["session_factory"]()
+            try:
+                expected = 0 if confirmation_fails else 1
+                assert fresh.query(SalesOrder).count() == expected
+                assert fresh.query(SalesOrderItem).count() == expected
+                assert fresh.query(Customer).count() == expected
+                if expected:
+                    assert fresh.query(SalesOrder).one().state == "confirmed"
+                    assert float(fresh.query(SalesOrder).one().total_amount) == 500
+            finally:
+                fresh.close()
+
+    @pytest.mark.parametrize("valid_product", [True, False])
+    def test_purchase_unit_bridge_is_written_only_with_valid_quote(
+        self, _facade_file_db, valid_product
+    ):
+        from app.db.models import PurchaseUnit
+
+        db = _facade_file_db
+        with tenant_scope(1):
+            db.add(PurchaseUnit(unit_name="客户管理客户", contact_person="联系人甲"))
+            db.add(Product(model_number="BRIDGE", name="桥接产品"))
+            db.commit()
+            result = SalesAppService().quote(
+                {
+                    "customer_name": "客户管理客户",
+                    "items": [
+                        {
+                            "model_number": "BRIDGE" if valid_product else "missing",
+                            "quantity": 2,
+                            "unit_price": 50,
+                        },
+                    ],
+                },
+                db=db,
+            )
+            db.commit()
+            assert result["success"] is valid_product
+            assert db.query(Customer).count() == int(valid_product)
+            assert db.query(SalesOrder).count() == int(valid_product)
+            if valid_product:
+                assert db.query(Customer).one().contact_person == "联系人甲"
+
+    def test_quote_resolves_exact_customer_and_model(self, _facade_file_db):
+        from app.db.models import SalesOrderItem
+
+        db = _facade_file_db
+        customer, product = _seed_quote_owner_db(db)
+        result = SalesAppService().quote(
+            {
+                "customer_name": "客户Q",
+                "items": [
+                    {"model_number": "P-Q", "quantity": 2, "unit_price": 50},
+                ],
+            },
+            db=db,
+        )
+        assert result["success"] is True
+        db.commit()
+        order = db.query(SalesOrder).one()
+        item = db.query(SalesOrderItem).one()
+        assert order.customer_id == customer.id
+        assert item.product_id == product.id
+        assert item.product_name == "报价品"
+        assert float(order.total_amount) == 100
+
+    @pytest.mark.parametrize(
+        "problem", ["missing_customer", "duplicate_customer", "missing_product", "mismatch_product"]
+    )
+    def test_unresolved_reference_leaves_no_order(self, _facade_file_db, problem):
+        db = _facade_file_db
+        customer, product = _seed_quote_owner_db(db)
+        name = "客户Q"
+        item = {"model_number": "P-Q", "quantity": 2, "unit_price": 50}
+        if problem == "missing_customer":
+            name = "客户不存在"
+        elif problem == "duplicate_customer":
+            with tenant_scope(1):
+                db.add(Customer(customer_name="客户Q"))
+                db.commit()
+        elif problem == "missing_product":
+            item["model_number"] = "missing"
+        else:
+            item.update(product_id=product.id, model_number="wrong")
+        result = SalesAppService().quote({"customer_name": name, "items": [item]}, db=db)
+        assert result["success"] is False
+        db.commit()
+        assert db.query(SalesOrder).count() == 0
+
+    def test_explicit_zero_price_is_preserved(self, _facade_file_db):
+        db = _facade_file_db
+        customer, product = _seed_quote_owner_db(db)
+        item = {"product_id": product.id, "quantity": "2.5", "unit_price": 0}
+        result = SalesAppService().quote({"customer_id": customer.id, "items": [item]}, db=db)
+        assert result["success"] is True
+        assert result["data"]["total_amount"] == 0
+        db.commit()
+        assert db.query(SalesOrder).count() == 1
+        assert item == {"product_id": product.id, "quantity": "2.5", "unit_price": 0}
+
+    @pytest.mark.parametrize(
+        "bad_item",
+        [
+            {"quantity": 2},
+            {"unit_price": 10},
+            {"quantity": 0, "unit_price": 10},
+            {"quantity": -1, "unit_price": 10},
+            {"quantity": "NaN", "unit_price": 10},
+            {"quantity": 1, "unit_price": "Infinity"},
+            {"quantity": True, "unit_price": 10},
+            {"quantity": 1, "unit_price": "bad"},
+            {"quantity": 1, "unit_price": -10},
+            None,
+        ],
+    )
+    def test_invalid_later_item_does_not_leave_partial_order(self, _facade_file_db, bad_item):
+        db = _facade_file_db
+        customer, product = _seed_quote_owner_db(db)
+        valid = {"product_id": product.id, "quantity": 2, "unit_price": 50}
+        result = SalesAppService().quote(
+            {"customer_id": customer.id, "items": [valid, bad_item]}, db=db
+        )
+        assert result["success"] is False
+        db.commit()  # Caller may commit unrelated work after a rejected request.
+        assert db.query(SalesOrder).count() == 0
 
     def test_quote_visible_after_flush_only_after_caller_commit(self, _facade_file_db):
         db = _facade_file_db

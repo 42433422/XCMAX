@@ -2,23 +2,47 @@
 
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
-import time
 from typing import Any
 
 from fastapi import Body, Depends, Query
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse
 
 from app.application.agent_orchestrator import AgentOrchestrator
 from app.application.agent_orchestrator.approval_grant import (
     ApprovalGrantError,
+    ApprovalGrantStorageError,
     consume_approval_grant,
 )
+from app.application.agent_orchestrator.approval_transaction import approve_and_enqueue
+from app.application.agent_orchestrator.clarification import ClarificationAnswerError
 from app.application.agent_orchestrator.run_control import run_operation_lock
+from app.application.agent_orchestrator.run_lifecycle import requires_retry_reconciliation
+from app.application.agent_orchestrator.run_models import AgentRun
+from app.application.agent_orchestrator.run_repository import get_agent_run_repository
+from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+from app.application.agent_orchestrator.runtime_context import RuntimeContextOwnershipError
+from app.application.agent_orchestrator.task_dispatcher import notify_agent_task_dispatcher
+from app.application.agent_orchestrator.task_execution_repository import (
+    get_task_execution_repository,
+)
+from app.application.agent_orchestrator.task_execution_sql_repository import (
+    SQLAlchemyTaskExecutionRepository,
+)
+from app.fastapi_routes.domains.agent.artifact_routes import (
+    download_agent_artifact as download_agent_artifact,
+)
+from app.fastapi_routes.domains.agent.event_routes import (
+    list_agent_run_events as list_agent_run_events,
+)
+from app.fastapi_routes.domains.agent.event_routes import (
+    stream_agent_run_events as stream_agent_run_events,
+)
 from app.fastapi_routes.domains.agent.route_support import (
     PUBLIC_APPROVAL_ERROR as _PUBLIC_APPROVAL_ERROR,
+)
+from app.fastapi_routes.domains.agent.route_support import (
+    authenticated_runtime_context,
 )
 from app.fastapi_routes.domains.agent.route_support import (
     enqueue_run as _enqueue_run,
@@ -28,9 +52,6 @@ from app.fastapi_routes.domains.agent.route_support import (
 )
 from app.fastapi_routes.domains.agent.route_support import (
     owned_run as _owned_run,
-)
-from app.fastapi_routes.domains.agent.route_support import (
-    public_event_dict as _public_event_dict,
 )
 from app.fastapi_routes.domains.agent.route_support import (
     public_run_dict as _public_run_dict,
@@ -49,7 +70,6 @@ from app.fastapi_routes.domains.agent.route_support import (
 )
 from app.fastapi_routes.domains.agent.task_routes import router as task_router
 from app.infrastructure.auth.agent_principal import AgentPrincipal, require_agent_principal
-from app.utils.json_safe import json_safe
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -81,9 +101,7 @@ def create_agent_run(
             {"success": False, "message": "runtime_context 必须是对象"},
             status_code=400,
         )
-    runtime_context = dict(runtime_context_raw)
-    if principal.tenant_id:
-        runtime_context["tenant_id"] = principal.tenant_id
+    runtime_context = authenticated_runtime_context(runtime_context_raw, principal)
 
     try:
         orchestrator = AgentOrchestrator()
@@ -116,7 +134,12 @@ def list_agent_runs(
     try:
         # Public callers can only enumerate their own runs. Cross-user admin search should
         # use a separately permissioned admin route, not a caller-controlled query string.
-        runs = AgentOrchestrator().list_runs(user_id=principal.user_id, limit=limit)
+        runs = get_agent_run_repository().list_recent(
+            user_id=principal.user_id,
+            tenant_id=principal.tenant_id,
+            limit=limit,
+            mod_id=str((principal.mod_authorization or {}).get("mod_id") or ""),
+        )
         return _success([_public_run_dict(run) for run in runs], count=len(runs))
     except RECOVERABLE_ERRORS:
         return _internal_error_response("list agent runs")
@@ -145,9 +168,7 @@ def record_observed_tool_run(
             {"success": False, "message": "runtime_context 必须是对象"},
             status_code=400,
         )
-    runtime_context = dict(runtime_context_raw)
-    if principal.tenant_id:
-        runtime_context["tenant_id"] = principal.tenant_id
+    runtime_context = authenticated_runtime_context(runtime_context_raw, principal)
 
     from app.application.agent_orchestrator.observed_tool_trace import (
         create_observed_tool_trace_run,
@@ -197,6 +218,36 @@ def get_agent_run(
         return _internal_error_response("get agent run")
 
 
+@router.post("/api/agent/runs/{run_id}/clarification", response_model=None)
+def answer_agent_clarification(
+    run_id: str,
+    body: dict[str, Any] = Body(default_factory=dict),
+    principal: AgentPrincipal = Depends(require_agent_principal),
+) -> dict[str, Any] | JSONResponse:
+    step_id, parameters = body.get("step_id"), body.get("parameters")
+    if not isinstance(step_id, str) or not step_id.strip() or not isinstance(parameters, dict):
+        return JSONResponse(
+            {"success": False, "message": "请提供 step_id 和参数对象"}, status_code=400
+        )
+    try:
+        with run_operation_lock(run_id):
+            orchestrator = AgentOrchestrator()
+            _, error = _owned_run(orchestrator, run_id, principal)
+            if error is not None:
+                return error
+            run = orchestrator.stage_clarification_answer(
+                run_id, step_id=step_id, parameters=parameters, requested_by=principal.user_id
+            )
+        if run is None:
+            return JSONResponse({"success": False, "message": "agent run 不存在"}, status_code=404)
+        _enqueue_run(run, requested_by=principal.user_id)
+        return JSONResponse(_run_response(run, principal=principal), status_code=202)
+    except ClarificationAnswerError as exc:
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
+    except RECOVERABLE_ERRORS:
+        return _internal_error_response("answer agent clarification")
+
+
 @router.post("/api/agent/runs/{run_id}/continue", response_model=None)
 def continue_agent_run(
     run_id: str,
@@ -218,25 +269,65 @@ def continue_agent_run(
                 return error
             if current is None:
                 return _internal_error_response("approve agent run")
-            claims = consume_approval_grant(
-                str(data.get("approval_grant") or ""),
-                run=current,
-                principal_id=principal.user_id,
-            )
-            run = orchestrator.stage_approved_run(
-                run_id,
-                approved_by=principal.user_id,
-                approved_step_id=str(claims["step_id"]),
-                runtime_context=runtime_context,
-            )
+            original_context = current.metadata.get("runtime_context") or {}
+            if "tenant_id" in runtime_context and str(runtime_context["tenant_id"] or "") != str(
+                original_context.get("tenant_id") or ""
+            ):
+                return JSONResponse(
+                    {"success": False, "message": "不能更改任务的租户范围"}, status_code=400
+                )
+            runs = get_agent_run_repository()
+            queue = get_task_execution_repository()
+            if isinstance(runs, SQLAlchemyAgentRunRepository):
+                durable = True
+                if not isinstance(queue, SQLAlchemyTaskExecutionRepository):
+                    raise ApprovalGrantStorageError("持久化审批需要持久化队列")
+                run: AgentRun | None = approve_and_enqueue(
+                    runs,
+                    queue,
+                    run_id=run_id,
+                    token=str(data.get("approval_grant") or ""),
+                    principal_id=principal.user_id,
+                    runtime_context=runtime_context,
+                    authenticated_binding=principal.mod_authorization,
+                )
+            else:
+                durable = False
+                from app.application.agent_orchestrator.session_renewal import (
+                    renew_approval_session,
+                )
+
+                renew_approval_session(
+                    current,
+                    principal_id=principal.user_id,
+                    authenticated_binding=principal.mod_authorization,
+                )
+                claims = consume_approval_grant(
+                    str(data.get("approval_grant") or ""),
+                    run=current,
+                    principal_id=principal.user_id,
+                )
+                run = orchestrator.stage_approved_run(
+                    run_id,
+                    approved_by=principal.user_id,
+                    approved_step_id=str(claims["step_id"]),
+                    runtime_context=runtime_context,
+                    authenticated_binding=principal.mod_authorization,
+                )
         if run is None:
             return JSONResponse(
                 {"success": False, "message": "agent run 不存在"},
                 status_code=404,
             )
-        if run.status == "queued":
+        if durable:
+            notify_agent_task_dispatcher()
+        elif run.status == "queued":
             _enqueue_run(run, requested_by=principal.user_id)
         return JSONResponse(_run_response(run, principal=principal), status_code=202)
+    except ApprovalGrantStorageError:
+        return JSONResponse(
+            {"success": False, "message": "审批存储暂时不可用，请稍后重试"}, status_code=503
+        )
     except ApprovalGrantError:
         return JSONResponse(
             {"success": False, "message": _PUBLIC_APPROVAL_ERROR},
@@ -255,26 +346,54 @@ def _control_agent_run(
 ) -> dict[str, Any] | JSONResponse:
     def apply_control() -> dict[str, Any] | JSONResponse:
         orchestrator = AgentOrchestrator()
-        _, error = _owned_run(orchestrator, run_id, principal)
+        durable_resume = False
+        current, error = _owned_run(orchestrator, run_id, principal)
         if error is not None:
             return error
+        assert current is not None
+        if action == "resume" and requires_retry_reconciliation(current):
+            return JSONResponse(
+                {"success": False, "message": "任务执行结果需要人工核对，暂不能恢复"},
+                status_code=409,
+            )
         if action == "pause":
             run = orchestrator.pause_run(run_id, requested_by=principal.user_id)
         elif action == "cancel":
             run = orchestrator.cancel_run(run_id, requested_by=principal.user_id)
         else:
-            run = orchestrator.stage_resume_run(
-                run_id,
-                requested_by=principal.user_id,
-                runtime_context=runtime_context,
-            )
+            runs = get_agent_run_repository()
+            queue = get_task_execution_repository()
+            if isinstance(runs, SQLAlchemyAgentRunRepository):
+                from app.application.agent_orchestrator.resume_transaction import resume_and_enqueue
+
+                if not isinstance(queue, SQLAlchemyTaskExecutionRepository):
+                    raise ApprovalGrantStorageError("持久化恢复需要持久化队列")
+                run = resume_and_enqueue(
+                    runs,
+                    queue,
+                    run_id=run_id,
+                    principal_id=principal.user_id,
+                    runtime_context=runtime_context or {},
+                    authenticated_binding=principal.mod_authorization,
+                )
+                durable_resume = True
+            else:
+                run = orchestrator.stage_resume_run(
+                    run_id,
+                    requested_by=principal.user_id,
+                    runtime_context=runtime_context,
+                    authenticated_binding=principal.mod_authorization,
+                )
         if run is None:
             return JSONResponse(
                 {"success": False, "message": "agent run 不存在"},
                 status_code=404,
             )
         if run.status == "queued":
-            _enqueue_run(run, requested_by=principal.user_id)
+            if durable_resume:
+                notify_agent_task_dispatcher()
+            else:
+                _enqueue_run(run, requested_by=principal.user_id)
         else:
             _sync_execution_terminal_state(run)
         response = _run_response(run, principal=principal)
@@ -318,12 +437,23 @@ def resume_agent_run(
         return JSONResponse(
             {"success": False, "message": "runtime_context 必须是对象"}, status_code=400
         )
-    return _control_agent_run(
-        run_id,
-        action="resume",
-        principal=principal,
-        runtime_context=runtime_context,
-    )
+    try:
+        return _control_agent_run(
+            run_id,
+            action="resume",
+            principal=principal,
+            runtime_context=runtime_context,
+        )
+    except RuntimeContextOwnershipError:
+        return JSONResponse(
+            {"success": False, "message": "不能更改任务的租户范围"}, status_code=400
+        )
+    except ApprovalGrantError:
+        return JSONResponse(
+            {"success": False, "message": "任务授权或状态已变化，请先核对"}, status_code=403
+        )
+    except RECOVERABLE_ERRORS:
+        return _internal_error_response("resume agent run")
 
 
 @router.post("/api/agent/runs/{run_id}/retry", response_model=None)
@@ -342,9 +472,12 @@ def retry_agent_run(
                 {"success": False, "message": "只有失败、取消或阻塞的任务可以重试"},
                 status_code=409,
             )
-        if run.metadata.get("non_retryable"):
+        if requires_retry_reconciliation(run):
+            message = "任务执行结果需要人工核对，暂不能重试"
+            if run.metadata.get("trace_mode") == "desktop_observed_tool":
+                message = "该观察记录不能作为执行任务重试"
             return JSONResponse(
-                {"success": False, "message": "该观察记录不能作为执行任务重试"},
+                {"success": False, "message": message},
                 status_code=409,
             )
         try:
@@ -363,54 +496,3 @@ def retry_agent_run(
             return _run_reference_response(retried)
         except RECOVERABLE_ERRORS:
             return _internal_error_response("retry agent run")
-
-
-@router.get("/api/agent/runs/{run_id}/events", response_model=None)
-def list_agent_run_events(
-    run_id: str,
-    after_event_id: str | None = Query(default=None),
-    principal: AgentPrincipal = Depends(require_agent_principal),
-) -> dict[str, Any] | JSONResponse:
-    try:
-        orchestrator = AgentOrchestrator()
-        _, error = _owned_run(orchestrator, run_id, principal)
-        if error is not None:
-            return error
-        events = orchestrator.list_events(run_id, after_event_id=after_event_id)
-        return _success([_public_event_dict(event) for event in events], count=len(events))
-    except RECOVERABLE_ERRORS:
-        return _internal_error_response("list agent run events")
-
-
-@router.get("/api/agent/runs/{run_id}/events/stream", response_model=None)
-async def stream_agent_run_events(
-    run_id: str,
-    after_event_id: str | None = Query(default=None),
-    principal: AgentPrincipal = Depends(require_agent_principal),
-) -> StreamingResponse | JSONResponse:
-    orchestrator = AgentOrchestrator()
-    _, error = _owned_run(orchestrator, run_id, principal)
-    if error is not None:
-        return error
-
-    async def event_stream():
-        cursor = after_event_id
-        deadline = time.monotonic() + 60.0
-        terminal = {"completed", "failed", "cancelled"}
-        while time.monotonic() < deadline:
-            current_orchestrator = AgentOrchestrator()
-            events = current_orchestrator.list_events(run_id, after_event_id=cursor)
-            for event in events:
-                cursor = event.event_id
-                yield f"id: {event.event_id}\nevent: {event.event_type}\ndata: {json.dumps(json_safe(_public_event_dict(event)), ensure_ascii=False)}\n\n"
-            current = current_orchestrator.get_run(run_id)
-            if current is None or (current.status in terminal and not events):
-                break
-            await asyncio.sleep(0.25)
-        yield "event: stream.closed\ndata: {}\n\n"
-
-    return StreamingResponse(
-        event_stream(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )

@@ -1,3 +1,4 @@
+vi.mock('@/utils/authenticatedEventStream', () => ({ AuthenticatedEventStream: class { constructor(url: string) { return new EventSource(url) } } }))
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 import type { AgentRun } from '@/api/agentRuns'
@@ -242,4 +243,28 @@ describe('useAgentTaskWorkspace', () => {
     state.workspace.stop()
     expect(FakeEventSource.instances[0]?.closed).toBe(true)
   })
+  it('discards an in-flight refresh after the workspace stops', async () => {
+    let resolve!: (value: unknown) => void
+    apiMock.listTasks.mockReturnValueOnce(new Promise((r) => { resolve = r }))
+    const state = setup()
+    const pending = state.workspace.refreshTasks()
+    state.workspace.stop()
+    resolve({ success: true, data: [serverTask()] })
+    await pending
+    expect(state.taskList.value).toEqual([])
+    expect(apiMock.listRuns).not.toHaveBeenCalled()
+  })
+
+  it('does not approve an old task after the workspace is stopped', async () => {
+    const state = setup()
+    await state.workspace.refreshTasks()
+    let resolve!: (value: unknown) => void
+    apiMock.getRun.mockReturnValueOnce(new Promise((r) => { resolve = r }))
+    const pending = state.workspace.controlTask(state.taskList.value[0].id, 'approve')
+    state.workspace.stop()
+    resolve({ success: true, approval: { grant: 'old-grant' } })
+    await pending
+    expect(apiMock.continueRun).not.toHaveBeenCalled()
+  })
+
 })

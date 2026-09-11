@@ -1,3 +1,4 @@
+import { AuthenticatedEventStream } from '@/utils/authenticatedEventStream'
 import type { Ref } from 'vue'
 import agentRunsApi from '@/api/agentRuns'
 import type { AgentTaskSummary } from '@/api/agentRuns'
@@ -19,8 +20,9 @@ export interface UseAgentTaskWorkspaceOptions {
 export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
   let refreshTimer: number | null = null
   let reconnectTimer: number | null = null
-  let taskStream: EventSource | null = null
+  let taskStream: AuthenticatedEventStream | null = null
   let refreshInFlight = false
+  let lifecycleVersion = 0
 
   function applyTaskItems(serverTasks: TaskItem[]): void {
     const localTasks = options.taskList.value.filter((task) => !['agent_task', 'agent_run'].includes(task.type))
@@ -49,16 +51,20 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
   async function refreshTasks(): Promise<void> {
     if (refreshInFlight) return
     refreshInFlight = true
+    const requestedVersion = lifecycleVersion
     try {
       let serverTasks: TaskItem[]
       try {
         const response = await agentRunsApi.listTasks({ limit: 200 })
+        if (requestedVersion !== lifecycleVersion) return
         const tasks = Array.isArray(response?.data) ? response.data : []
         applyFirstTaskCompletionEvidence(tasks)
         serverTasks = taskSummariesToTaskItems(tasks)
       } catch {
+        if (requestedVersion !== lifecycleVersion) return
         // Compatibility with an older backend during rolling desktop upgrades.
         const response = await agentRunsApi.listRuns({ limit: 200 })
+        if (requestedVersion !== lifecycleVersion) return
         const runs = Array.isArray(response?.data) ? response.data : []
         runs.forEach((run) => completeFirstAiTaskFromRun(run))
         serverTasks = groupAgentRunsIntoTasks(runs)
@@ -67,7 +73,7 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
     } catch {
       // Keep the last durable snapshot in the panel while offline.
     } finally {
-      refreshInFlight = false
+      if (requestedVersion === lifecycleVersion) refreshInFlight = false
     }
   }
 
@@ -80,10 +86,10 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
   }
 
   function connectTaskStream(): void {
-    if (typeof window === 'undefined' || typeof EventSource === 'undefined') return
+    if (typeof window === 'undefined' || typeof fetch === 'undefined') return
     if (typeof agentRunsApi.taskEventStreamPath !== 'function') return
     taskStream?.close()
-    taskStream = new EventSource(buildFullApiUrl(agentRunsApi.taskEventStreamPath()), { withCredentials: true })
+    taskStream = new AuthenticatedEventStream(buildFullApiUrl(agentRunsApi.taskEventStreamPath()))
     taskStream.addEventListener('task.snapshot', (event) => {
       try {
         const snapshot = JSON.parse((event as MessageEvent).data)
@@ -112,6 +118,8 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
   }
 
   function stop(): void {
+    lifecycleVersion += 1
+    refreshInFlight = false
     if (refreshTimer !== null) window.clearInterval(refreshTimer)
     if (reconnectTimer !== null) window.clearTimeout(reconnectTimer)
     taskStream?.close()
@@ -121,6 +129,7 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
   }
 
   async function selectTask(task: TaskItem): Promise<void> {
+    const requestedVersion = lifecycleVersion
     options.activeTaskId.value = task.id
     if (!options.expandedTaskIds.value.includes(task.id)) {
       options.expandedTaskIds.value = [...options.expandedTaskIds.value, task.id]
@@ -129,11 +138,14 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
     const durableTaskId = String(task.payload?.taskId || '').trim()
     if (durableTaskId) {
       await agentRunsApi.markTaskRead(durableTaskId).catch(() => undefined)
+      if (requestedVersion !== lifecycleVersion) return
     }
     const conversationId = conversationIdOfTask(task)
     if (conversationId && options.onOpenConversation) {
       await options.onOpenConversation(conversationId)
+      if (requestedVersion !== lifecycleVersion) return
       await refreshTasks()
+      if (requestedVersion !== lifecycleVersion) return
       options.activeTaskId.value = task.id
       if (!options.expandedTaskIds.value.includes(task.id)) {
         options.expandedTaskIds.value = [...options.expandedTaskIds.value, task.id]
@@ -145,12 +157,14 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
   }
 
   async function controlTask(taskId: string, action: 'pause' | 'resume' | 'cancel' | 'retry' | 'approve'): Promise<void> {
+    const requestedVersion = lifecycleVersion
     const task = options.taskList.value.find((item) => item.id === taskId)
     if (!task || task.type !== 'agent_task') return
     const runId = activeRunIdOfTask(task)
     if (!runId) return
     if (action === 'approve') {
       const snapshot = await agentRunsApi.getRun(runId)
+      if (requestedVersion !== lifecycleVersion) return
       const grant = snapshot.approval?.grant
       if (!grant) throw new Error('任务当前没有可用的审批凭证')
       await agentRunsApi.continueRun(runId, { approval_grant: grant })
@@ -158,10 +172,12 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
     else if (action === 'resume') await agentRunsApi.resumeRun(runId)
     else if (action === 'retry') await agentRunsApi.retryRun(runId)
     else await agentRunsApi.cancelRun(runId)
+    if (requestedVersion !== lifecycleVersion) return
     await refreshTasks()
   }
 
   async function archiveCompletedTasks(): Promise<void> {
+    const requestedVersion = lifecycleVersion
     const completed = options.taskList.value.filter(
       (task) => task.type === 'agent_task' && ['success', 'failed', 'cancelled'].includes(task.status),
     )
@@ -171,6 +187,7 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
         if (taskId) await agentRunsApi.archiveTask(taskId)
       }),
     )
+    if (requestedVersion !== lifecycleVersion) return
     const archivedIds = new Set(completed.map((task) => task.id))
     options.taskList.value = options.taskList.value.filter((task) => !archivedIds.has(task.id))
     options.onPersist?.()

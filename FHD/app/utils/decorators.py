@@ -17,11 +17,13 @@ import time
 from collections.abc import Callable
 from typing import Any, TypeVar, cast
 
-from app.utils.combined_optimization import combined_optimization
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.optimizer_components import (
-    OptimizedServiceMixin,
+from app.utils.performance.combined_optimization import (
+    combined_optimization as _compose_optimization,
+)
+from app.utils.performance.optimizer_components import (
     get_optimizer_components,
+    initialize_service_optimizers,
 )
 
 logger = logging.getLogger(__name__)
@@ -446,6 +448,37 @@ def retry(
         return wrapper
 
     return decorator
+
+
+class OptimizedServiceMixin:
+    def _init_optimizers(self) -> None:
+        initialize_service_optimizers(self, get_optimizer_components())
+
+
+def combined_optimization(
+    cache_ttl: int = 0,
+    rate_limit: int = 0,
+    monitor_slow_ms: float = 0,
+    dedup_window: int = 0,
+    circuit_failures: int = 0,
+    retry_times: int = 0,
+):
+    return _compose_optimization(
+        cache_ttl,
+        rate_limit,
+        monitor_slow_ms,
+        dedup_window,
+        circuit_failures,
+        retry_times,
+        policies=lambda: {
+            "retry": retry,
+            "circuit_breaker": circuit_breaker,
+            "deduplicated": deduplicated,
+            "rate_limited": rate_limited,
+            "cached": cached,
+            "monitored": monitored,
+        },
+    )
 
 
 # 快捷方式导出

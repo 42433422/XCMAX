@@ -4,11 +4,15 @@ import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import type { AgentTaskSummary } from '@/api/agentRuns'
 import { useAgentTaskCenterStore } from '@/stores/agentTaskCenter'
+import { useAccountProfileStore } from '@/stores/accountProfile'
+import { useModsStore } from '@/stores/mods'
 import { useTutorialV2Store } from '@/stores/tutorialV2'
 import { taskNeedsApproval, taskProgressPercent, taskStatusLabel, taskUnreadCount } from '@/utils/taskWorkspacePresentation'
 
 const store = useAgentTaskCenterStore()
 const tutorialStore = useTutorialV2Store()
+const account = useAccountProfileStore()
+const mods = useModsStore()
 const router = useRouter()
 const { tasks, drawerOpen, loading, connected, error, runtime, unreadCount, approvalCount, activeCount } = storeToRefs(store)
 const filter = ref<'all' | 'active' | 'unread' | 'approval'>('all')
@@ -32,7 +36,7 @@ const filteredTasks = computed(() =>
 
 const tutorialScopeKey = computed(() => {
   const run = tutorialStore.currentRun
-  return `${run?.id || ''}:${run?.status || ''}:${run?.generation || ''}`
+  return JSON.stringify([run?.id, run?.status, run?.generation, account.tenantId, account.localUserId, account.marketUserId, account.impersonatingMarketUserId, account.accountKind, mods.activeModId])
 })
 
 const overview = computed(
@@ -78,7 +82,7 @@ onMounted(() => store.start())
 onBeforeUnmount(() => store.stop())
 watch(tutorialScopeKey, (next, previous) => {
   if (next !== previous) store.restartForScope()
-})
+}, { flush: 'sync' })
 </script>
 
 <template>

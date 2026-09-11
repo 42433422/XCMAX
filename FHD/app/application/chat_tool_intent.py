@@ -92,6 +92,25 @@ def looks_like_business_db_write(message: str, lower: str | None = None) -> bool
     if db_marker:
         return True
 
+    # A named customer creation is explicit CRUD even without the word database.
+    # The name must be explicitly delimited ("新增客户 蓝天科技" / "新增客户：蓝天科技")
+    # or the ask must carry a request prefix ("请帮我添加客户星光贸易"); the bare
+    # "添加客户公司A" wording stays on the legacy onboarding route.  Keep
+    # underspecified onboarding and customer-product/order requests separate.
+    stripped_value = value.strip()
+    named_customer_create = re.match(
+        r"^(?:请)?(?:帮我)?\s*(?:新增|添加)\s*(?:客户|购买单位)"
+        r"(?:\s*[:：]\s*|\s+)([^，,。；;\s]{2,})",
+        stripped_value,
+    ) or re.match(
+        r"^(?:请|帮我|请帮我)\s*(?:新增|添加)\s*(?:客户|购买单位)\s*[:：]?\s*([^，,。；;\s]{2,})",
+        stripped_value,
+    )
+    if named_customer_create and not any(
+        marker in value for marker in ("产品", "商品", "订单", "报价", "发货", "不要", "别", "取消")
+    ):
+        return True
+
     # Keep the legacy customer/product onboarding route for generic “添加/新增”
     # phrases.  Without explicit database wording, only verbs that unambiguously
     # describe record CRUD may enter the guarded business-database write path.

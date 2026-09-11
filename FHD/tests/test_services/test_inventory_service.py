@@ -423,7 +423,118 @@ class TestGetInventorySummary:
 # ---------------------------------------------------------------------------
 # inventory_in
 # ---------------------------------------------------------------------------
+@pytest.mark.parametrize("operation", ["in", "out", "transfer"])
+@pytest.mark.parametrize("quantity", [-50, 0, True, None, "bad", float("nan"), float("inf"), "-3"])
+def test_invalid_movement_quantity_preserves_stock(test_session, operation, quantity):
+    db = test_session
+    product = Product(name="受保护产品", model_number="SAFE")
+    source = Warehouse(code="SOURCE", name="源仓库", status="active")
+    destination = Warehouse(code="DEST", name="目标仓库", status="active")
+    db.add_all([product, source, destination])
+    db.flush()
+    db.add(
+        InventoryLedger(
+            product_id=product.id,
+            warehouse_id=source.id,
+            quantity=100,
+            available_quantity=100,
+            reserved_quantity=0,
+            unit="个",
+        )
+    )
+    db.commit()
+    service = InventoryService()
+    with patch("app.services.inventory_service.get_db", _mock_get_db(db)) as get_db:
+        if operation == "in":
+            result = service.inventory_in(product.id, source.id, quantity)
+        elif operation == "out":
+            result = service.inventory_out(product.id, source.id, quantity)
+        else:
+            result = service.inventory_transfer(product.id, source.id, destination.id, quantity)
+    assert result["success"] is False
+    db.commit()
+    db.expire_all()
+    assert db.query(InventoryTransaction).count() == 0
+    assert db.query(InventoryLedger).count() == 1
+    assert float(db.query(InventoryLedger).one().quantity) == 100
+    assert float(db.query(InventoryLedger).one().available_quantity) == 100
+
+
 class TestInventoryIn:
+    @pytest.mark.parametrize(
+        "problem",
+        [None, "duplicate_product", "duplicate_warehouse", "wrong_model", "wrong_warehouse"],
+    )
+    def test_named_inbound_uses_exact_references_or_writes_nothing(self, test_session, problem):
+        db = test_session
+        product = Product(name="型号产品", model_number="A100")
+        warehouse = Warehouse(code="MAIN", name="主仓库", status="active")
+        db.add_all([product, warehouse])
+        db.commit()
+        if problem == "duplicate_product":
+            db.add(Product(name="重名型号", model_number="A100"))
+        if problem == "duplicate_warehouse":
+            db.add(Warehouse(code="OTHER", name="主仓库", status="active"))
+        db.commit()
+        params = {
+            "product_id": None,
+            "warehouse_id": None,
+            "model_number": "A100",
+            "warehouse_name": "主仓库",
+            "quantity": 50,
+        }
+        if problem == "wrong_model":
+            params.update(product_id=product.id, model_number="wrong")
+        if problem == "wrong_warehouse":
+            params.update(warehouse_id=warehouse.id, warehouse_name="wrong")
+        with patch("app.services.inventory_service.get_db", _mock_get_db(db)):
+            result = InventoryService().inventory_in(**params)
+        db.commit()
+        assert result["success"] is (problem is None)
+        assert db.query(InventoryLedger).count() == int(problem is None)
+        assert db.query(InventoryTransaction).count() == int(problem is None)
+        if problem is None:
+            ledger = db.query(InventoryLedger).one()
+            assert (ledger.product_id, ledger.warehouse_id, float(ledger.quantity)) == (
+                product.id,
+                warehouse.id,
+                50,
+            )
+
+    @pytest.mark.parametrize("quantity", [0, -1, float("nan"), float("inf"), True, "bad", None])
+    def test_invalid_quantity_never_opens_write_session(self, quantity):
+        with patch("app.services.inventory_service.get_db") as get_db:
+            assert (
+                InventoryService().inventory_in(product_id=1, warehouse_id=1, quantity=quantity)[
+                    "success"
+                ]
+                is False
+            )
+            get_db.assert_not_called()
+
+    @pytest.mark.parametrize("warehouse_status", [None, "inactive", "active"])
+    def test_real_inbound_requires_active_warehouse(self, test_session, warehouse_status):
+        db = test_session
+        product = Product(name="入库测试产品", model_number="IN-TEST")
+        db.add(product)
+        warehouse = None
+        if warehouse_status is not None:
+            warehouse = Warehouse(code="IN-WH", name="入库仓库", status=warehouse_status)
+            db.add(warehouse)
+        db.commit()
+        with patch("app.services.inventory_service.get_db", _mock_get_db(db)):
+            result = InventoryService().inventory_in(
+                product_id=product.id, warehouse_id=warehouse.id if warehouse else 999, quantity=50
+            )
+        db.commit()
+        valid = warehouse_status == "active"
+        assert result["success"] is valid
+        assert db.query(InventoryLedger).count() == int(valid)
+        assert db.query(InventoryTransaction).count() == int(valid)
+        if valid:
+            assert float(db.query(InventoryLedger).one().quantity) == 50
+            assert float(db.query(InventoryTransaction).one().after_quantity) == 50
+
     @patch("app.services.inventory_service.get_db")
     def test_product_not_found(self, mock_get_db):
         mock_db = MagicMock()

@@ -35,17 +35,10 @@ def get_optimizer_components() -> dict[str, Any]:
     return components
 
 
-class OptimizedServiceMixin:
-    """Populate optional optimizer fields for a service instance."""
-
-    def _init_optimizers(self) -> None:
-        # Resolve through the compatibility module so existing monkeypatch and
-        # extension points continue to control component discovery.
-        from app.utils import decorators
-
-        components = decorators.get_optimizer_components()
-        self._cache = components["cache"]
-        self._monitor = components["monitor"]
-        self._deduplicator = components["deduplicator"]
-        self._async_manager = components["async_manager"]
-        logger.debug("服务 %s 优化组件已初始化", self.__class__.__name__)
+def initialize_service_optimizers(service: Any, components: dict[str, Any]) -> None:
+    """Bind explicitly supplied optional components to a service instance."""
+    service._cache = components["cache"]
+    service._monitor = components["monitor"]
+    service._deduplicator = components["deduplicator"]
+    service._async_manager = components["async_manager"]
+    logger.debug("服务 %s 优化组件已初始化", service.__class__.__name__)

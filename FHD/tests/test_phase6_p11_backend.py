@@ -963,7 +963,6 @@ def test_restore_no_row_returns_false(monkeypatch: pytest.MonkeyPatch) -> None:
             pass
 
     monkeypatch.setattr("app.db.session.get_db", lambda: _Ctx())
-    monkeypatch.setattr("app.db.models.user.Session", MagicMock())
     assert restore_entitlements_from_session_row("sid") is False
 
 
@@ -989,7 +988,6 @@ def test_restore_row_found_sets_session(monkeypatch: pytest.MonkeyPatch) -> None
             pass
 
     monkeypatch.setattr("app.db.session.get_db", lambda: _Ctx())
-    monkeypatch.setattr("app.db.models.user.Session", MagicMock())
     assert restore_entitlements_from_session_row("sid") is True
     uid, uname = get_cached_market_identity()
     assert uid == 7
@@ -1009,7 +1007,6 @@ def test_restore_recoverable_error_returns_false(
         raise RuntimeError("db down")
 
     monkeypatch.setattr("app.db.session.get_db", _fail)
-    monkeypatch.setattr("app.db.models.user.Session", MagicMock())
     assert restore_entitlements_from_session_row("sid") is False
 
 
@@ -1035,7 +1032,6 @@ def test_restore_invalid_json_returns_false(monkeypatch: pytest.MonkeyPatch) -> 
             pass
 
     monkeypatch.setattr("app.db.session.get_db", lambda: _Ctx())
-    monkeypatch.setattr("app.db.models.user.Session", MagicMock())
     # json.JSONDecodeError 属于 RECOVERABLE_ERRORS → 返回 False
     assert restore_entitlements_from_session_row("sid") is False
 

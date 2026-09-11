@@ -53,7 +53,7 @@ ACTION_ALIASES = {
 }
 
 REQUIRED_PARAMS_BY_TOOL_ACTION = {
-    ("products", "create"): ["name_or_model", "unit_name"],
+    ("products", "create"): ["name_or_model"],
     ("customers", "create"): ["unit_name"],
     ("customers", "update"): ["id"],
     ("customers", "delete"): ["id"],
@@ -69,7 +69,7 @@ REQUIRED_PARAMS_BY_TOOL_ACTION = {
     ("inventory", "update_storage_location"): ["location_id"],
     ("inventory", "delete_warehouse"): ["warehouse_id"],
     ("inventory", "update_warehouse"): ["warehouse_id"],
-    ("inventory", "stock_in"): ["product_id", "warehouse_id", "quantity"],
+    ("inventory", "stock_in"): ["quantity"],
     ("inventory", "stock_out"): ["product_id", "warehouse_id", "quantity"],
     ("inventory", "transfer"): ["product_id", "from_warehouse_id", "to_warehouse_id", "quantity"],
     ("purchase", "update_supplier"): ["supplier_id"],
@@ -97,7 +97,8 @@ REQUIRED_PARAMS_BY_TOOL_ACTION = {
     ("mrp", "consume"): ["order_id", "warehouse_id"],
     ("mrp", "finish"): ["order_id", "warehouse_id"],
     ("mrp", "query_orders"): [],
-    ("sales", "quote"): ["customer_id", "items"],
+    ("sales", "quote"): ["items"],
+    ("sales", "create_order"): ["items"],
     ("sales", "confirm"): ["order_id"],
     ("sales", "deliver"): ["order_id"],
     ("sales", "invoice"): ["order_id"],

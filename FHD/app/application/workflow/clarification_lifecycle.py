@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import time
 import uuid
+from copy import deepcopy
 from typing import Any
 
 from .types import Branch, PlanGraph, WorkflowNode
@@ -38,6 +39,7 @@ def build_clarify_node(
             "question": str(question or ""),
             "answer_key": str(ambient.get("answer_key") or "confirmed"),
             "target_node_id": target,
+            "clarification": deepcopy(ambient.get("clarification") or {}),
         },
         risk="low",
         idempotent=True,
