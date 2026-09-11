@@ -113,10 +113,13 @@ jobs:
           print(json.dumps(marker, ensure_ascii=False))
           PY
 
+      # N04（2026-09-12）：与 acceptance job 同理，main 受分支保护直推必拒；
+      # 改走 automation 分支 + PR + auto-merge（slo-metrics 同轨）。
       - name: Commit intent benchmark report
         if: always()
         env:
           GH_TOKEN: ${{ secrets.CI_COMMIT_TOKEN || github.token }}
+          GH_RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
           # N02（2026-09-08）修复：defaults.run.working-directory 已是 FHD，
@@ -138,8 +141,18 @@ jobs:
             echo "No intent report changes"
             exit 0
           fi
-          git commit -m "chore(metrics): update intent & task benchmark reports (monitoring)"
-          git push
+          branch="automation/intent-benchmark-monitoring-${GH_RUN_ID}"
+          title="chore(metrics): update intent & task benchmark reports (run ${GH_RUN_ID})"
+          git switch -c "$branch"
+          git commit -m "$title"
+          git pull --rebase origin "$GITHUB_REF_NAME"
+          git push --set-upstream origin "$branch"
+          pr_url="$(gh pr create \
+            --base "$GITHUB_REF_NAME" \
+            --head "$branch" \
+            --title "$title" \
+            --body "规则引擎口径意图/任务基准报告回写（run ${GH_RUN_ID}，monitoring=UNVERIFIED）。合并后 metrics/ 即为唯一事实来源。")"
+          gh pr merge "$pr_url" --auto --squash --delete-branch
 
       - name: Upload benchmark report
         if: always()
@@ -227,7 +240,10 @@ jobs:
                   json.dump(
                       {
                           "probe": "real-call",
-                          "provider": adapter.provider_name(),
+                          # N04（2026-09-12）：provider_name 是 @property，不能加 ()
+                          # 调用（实证：run 34636879093 TypeError 'str' object is not
+                          # callable）——LLM 真调用已 200 OK，不能让取名字段毁掉证据。
+                          "provider": adapter.provider_name,
                           "model": model,
                           "base_url_configured": bool(os.environ.get("XCAUTO_BASE_URL", "")),
                           "response_chars": len(content),
@@ -307,10 +323,14 @@ jobs:
           print(json.dumps(marker, ensure_ascii=False, indent=2))
           PY
 
+      # N04（2026-09-12）：main 受分支保护（11 项 required checks），直推必被 GH006
+      # 拒绝（实证：run 34636879093，报告 commit 41e2688 从未落 main）。与
+      # slo-metrics 同轨：automation 分支 + PR + auto-merge，证据经门禁回流主线。
       - name: Commit acceptance benchmark report
         if: always()
         env:
           GH_TOKEN: ${{ secrets.CI_COMMIT_TOKEN || github.token }}
+          GH_RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
           mkdir -p metrics
@@ -324,8 +344,18 @@ jobs:
             echo "No acceptance report changes"
             exit 0
           fi
-          git commit -m "chore(metrics): acceptance task benchmark report (real-LLM gate)"
-          git push
+          branch="automation/intent-benchmark-acceptance-${GH_RUN_ID}"
+          title="chore(metrics): acceptance task benchmark report (run ${GH_RUN_ID})"
+          git switch -c "$branch"
+          git commit -m "$title"
+          git pull --rebase origin "$GITHUB_REF_NAME"
+          git push --set-upstream origin "$branch"
+          pr_url="$(gh pr create \
+            --base "$GITHUB_REF_NAME" \
+            --head "$branch" \
+            --title "$title" \
+            --body "LLM 验收基准证据回写（run ${GH_RUN_ID}）。报告与预检证据同时随 run artifacts 存档；合并后 metrics/ 即为唯一事实来源。")"
+          gh pr merge "$pr_url" --auto --squash --delete-branch
 
       - name: Upload acceptance benchmark evidence
         if: always()
@@ -356,6 +386,15 @@ jobs:
       OPENAI_BASE_URL: ${{ secrets.XCAGI_LLM_BASE_URL }}
       OPENAI_MODEL: ${{ secrets.XCAGI_LLM_MODEL }}
     steps:
+      # N04（2026-09-12）顺序修复：根镜像注入 defaults.run.working-directory=FHD，
+      # 任何 run 步骤在 checkout 前执行都会因 FHD/ 不存在而无法启动 bash
+      #（实证：run 34636879093 llm-benchmark job "No such file or directory"）。
+      # 因此 checkout 必须最先执行；凭据缺失时仅跳过昂贵步骤。
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.CI_COMMIT_TOKEN || github.token }}
+
       - name: Detect LLM credentials
         id: creds
         env:
@@ -367,10 +406,6 @@ jobs:
             echo "LLM benchmark skipped: XCAGI_LLM_API_KEY secret not configured"
             echo "available=false" >> "$GITHUB_OUTPUT"
           fi
-
-      - name: Checkout
-        if: steps.creds.outputs.available == 'true'
-        uses: actions/checkout@v4
 
       - name: Set up Python
         if: steps.creds.outputs.available == 'true'

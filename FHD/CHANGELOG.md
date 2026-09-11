@@ -6,6 +6,7 @@
 
 ## Unreleased（1.0.0.1 之后的累积变更）
 
+- **LLM 验收基准管线打通（首轮实跑暴露三处断裂全修复）**：acceptance 预检已实证 LLM 真调用 200 OK（#1876 端点自愈生效，模型解析为 mimo-v2.5-pro），但管线仍因三处 workflow 缺陷未出完整证据——① 预检证据取名字段对 @property 误加调用括号（TypeError 毁证据）；② llm-benchmark 凭据探测排在 checkout 之前，根镜像注入的 FHD 工作目录尚不存在导致 bash 无法启动；③ 报告回写直推 main 被分支保护 GH006 拒绝（历史所有周期任务的 metrics 回写其实从未成功落主线）。现全部修复：property 去括号、checkout 提前、报告改走 automation 分支+PR+auto-merge（与 slo-metrics 同轨），证据经门禁回流 metrics/ 唯一事实来源。
 - **LLM 直连端点模型名自愈（acceptance 基准打通前置）**：`xcauto-account` 账户虚拟名只在修茈网关有效，`XCAUTO_BASE_URL` 直指小米 token-plan 端点时端点校验模型名直接 400（acceptance 预检实证：真密钥过鉴权后 400，而非 401）；适配器现在按 base_url 主机自动把虚拟名映射为小米真实模型（mimo-v2.5-pro），预检 probe 同步把 token 预算提到 256（MiMo V2.5 为推理模型，16 会被推理耗尽导致空回复）并在 HTTP 拒绝时打印响应体便于定位。三条调用路径（预检直构造、manager 直连、registry 卫星）全部收敛到同一修复点。
 - **macOS 验收脚本支持"覆盖升级不丢数据"验证**：`acceptance-macos.sh` 新增 `--overwrite-upgrade`——升级前自动给业务数据（库/上传/Mod 文件/备份）拍基线快照并埋数据保留标记，装完新版后逐一比对，任何一样东西变少都会明确报 FAIL；同时修复了本机开代理时脚本健康检查被拦成假失败的问题（健康检查改为直连本机）。已在真机实测：覆盖重装后 986MB 业务库、151 个上传文件、843 个 Mod 文件、4 份备份一个不少。
 - **macOS 发布交付 SSOT 入库 + 双端注册表登记补齐**：macOS 版本/产物/SHA256/构建环境/下载与更新地址/测试机/12 项 Release Gate 状态/实机验收任务 T1-T6/发版 runbook 首次以唯一事实来源入库（每次发版复用回填）；同时修复 #1839 合并时桌面双端平级域漏登记 SSOT_INDEX 的注册表漂移（机器注册表补 `desktop-platform-parity` 行），新增 `macos-release` 机器域与结构校验插件（Gate 状态取值合法性、RED 须附复现证据）。
