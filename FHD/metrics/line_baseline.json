@@ -1,5 +1,5 @@
 {
-  "lines": 2323876,
+  "lines": 2323863,
   "updated": "2026-09-11",
-  "note": "合并 main（#1820 R02 拒绝护栏实现+测试）带入上游既成行 +162；保留双侧 CHANGELOG 与测试类为合并必要结果，无死行可删"
+  "note": "merge-main baseline recompute for #1838 (upstream established lines)"
 }
