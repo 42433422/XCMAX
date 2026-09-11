@@ -80,6 +80,7 @@ x64 dmg：download_release.json 声明 `mac_x64`，但 manifest 无 x64 条目�
 2. **`/Applications/XCAGI.app` spctl 报 `a sealed resource is missing or invalid`**：本地副本被改或本地构建签名不完整；与发布产物无关（以验收实例对新鲜 DMG 的 spctl 结果为准，见 G3 GREEN）。
 3. x64 dmg 在 download_release.json 声明但 manifest 无条目（§2）。
 4. **首启 `status=degraded`（LLM_RUNTIME_UNAVAILABLE）为登录前预期态，非缺陷**：`app/runtime_integrity.py` `neuro_degraded_reasons()` 在无任何已配置 LLM provider 时上报该原因；provider 配置来自登录后的 modstore 会话/API key（`registry.resolve()`），干净机器登录前必然为 false；前端 [runtimeHealthPresentation.js](../frontend/src/components/sidebar/runtimeHealthPresentation.js) 对此有专用文案（"部分 AI 能力未就绪…在设置的模型服务中确认"）。登录绑定后复测应转绿（并入 T2）。
+5. 仓库根 `release/VERSION`（=0.0.1）为 legacy 暂存目录，不在 version 域锚点内；版本域锚点 `FHD/release/VERSION`=1.0.0.1 已验证同步（`verify_version_anchors.py` OK）。
 
 ## 8. 实机验收任务（UNKNOWN 项 → 待执行）
 
@@ -94,7 +95,10 @@ x64 dmg：download_release.json 声明 `mac_x64`，但 manifest 无 x64 条目�
 
 ## 9. 发版复用 Runbook（每次 macOS 发版照此执行）
 
-1. `VERSION.md` 升版 → `version_sync.py --apply` + `verify_version_anchors.py`；CI `release-desktop-mac-ota` 构建+签名+公证+发布 → `publish-macos-download-center` 更新下载中心/manifest/feed；
-2. 真机跑 `bash FHD/scripts/package/acceptance-macos.sh --version <v>`（下载→SHA256→签名→安装→冷启动→健康检查）；有新版本时走完整 OTA 链（G8→G12），按协议 4.1–4.2 判定；
-3. 按模板填写 `FHD/docs/evidence/e2e/desktop-real-machine-acceptance-<版本>-macos.md`，截图入 `assets/`；
-4. 回填本文件 §1–§6；全部 Gate 无 RED 且 G1–G4 GREEN、G5–G12 无 UNKNOWN 遗留方可宣布闭环；RED 只修阻断项→重测→重写状态，禁止直接改状态。
+1. `VERSION.md` 升版 → `version_sync.py --apply` + `verify_version_anchors.py`；
+2. CI `release-desktop-mac-ota` 构建+签名+公证+发布 → `publish-macos-download-center` 更新下载中心/manifest/feed（发版 Runbook 第 2 步后必须核验 manifest `generated_at` 与构建 SHA，防"feed 已更新、manifest 未生成"漂移，见 §7-1）；
+3. 真机跑 `bash FHD/scripts/package/acceptance-macos.sh --version <v>`（下载→SHA256→签名→安装→冷启动→健康检查）；跨版本数据保留走 `--overwrite-upgrade`（T5）；
+4. 有新版本时真机走完整 OTA 链（G8→G12），按协议 4.1–4.2 判定；
+5. 按模板填写 `FHD/docs/evidence/e2e/desktop-real-machine-acceptance-<版本>-macos.md`，截图入 `assets/`；
+6. 回填本文件 §1–§6；全部 Gate 无 RED 且 G1–G4 GREEN、G5–G12 无 UNKNOWN 遗留方可宣布闭环；
+7. RED：只修阻断项→重测→重写状态，禁止直接改状态。
