@@ -173,6 +173,11 @@ class UnifiedConversationCoordinator:
         if intent_result.is_confirmation and pending:
             return self._handle_confirmation(user_id, message, pending)
 
+        # R02 拒绝类请求护栏：否定语境下不得执行/生成写入类计划
+        guard = self._negation_write_guard(user_id, message, intent_result, pending)
+        if guard is not None:
+            return guard
+
         if intent_result.is_negation_intent and not pending:
             if len(message) < 10:
                 return ProcessingResult(
@@ -214,6 +219,59 @@ class UnifiedConversationCoordinator:
                 turn_count=ctx_pending.turn_count,
             )
         return None
+
+    def _negation_write_guard(
+        self,
+        user_id: str,
+        message: str,
+        intent_result: IntentResult,
+        pending: PendingIntent | None,
+    ) -> ProcessingResult | None:
+        """拒绝类请求护栏（R02）：否定语境下不得执行/生成写入类计划。
+
+        拦截条件（同时满足）：
+        1. 目标意图为写入类（生成单据/发消息/打印/导入），来自 tool_key、
+           primary_intent（规则层否定时 tool_key 被压制但 primary_intent 保留，
+           历史漏洞路径）或待续接的 pending 计划；
+        2. 消息带否定信号：is_negated / is_negation_intent / 否定词兜底
+           （覆盖 LLM 兜底直给 tool_key 而未打否定标记的场景）。
+        命中即取消 pending 并返回 NEGATED，绝不调用 execute_plan。
+        查询类意图无副作用，不拦（避免过度拦截正常表达）。
+        """
+        from app.services.intent_service import WRITE_TOOL_INTENTS, is_negation
+
+        write_target: str | None = None
+        if pending is not None and pending.intent in WRITE_TOOL_INTENTS:
+            write_target = pending.intent
+        else:
+            target = intent_result.tool_key or intent_result.primary_intent
+            if target in WRITE_TOOL_INTENTS and (
+                intent_result.tool_key or intent_result.is_negated
+            ):
+                write_target = target
+
+        if write_target is None:
+            return None
+
+        if not (
+            intent_result.is_negated or intent_result.is_negation_intent or is_negation(message)
+        ):
+            return None
+
+        logger.info(
+            "[COORDINATOR] Negation guard blocked write intent: user=%s, intent=%s",
+            user_id,
+            write_target,
+        )
+        if pending is not None:
+            self.context_facade.intent_context.clear_pending(user_id)
+
+        return ProcessingResult(
+            action=ProcessingAction.NEGATED,
+            text="好的，不会执行这个写入操作。有其他需要随时告诉我。",
+            data={"blocked_intent": write_target},
+            pending_intent=None,
+        )
 
     def _recognize_intent(self, message: str, context_data: dict[str, Any]) -> IntentResult:
         """意图识别 — 通过 NeuroDDD 反射弧 + 规则引擎"""
