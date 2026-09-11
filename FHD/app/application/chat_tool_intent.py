@@ -78,7 +78,6 @@ def looks_like_raw_sql(text: str) -> bool:
     return any(pattern.search(value) for pattern in _RAW_SQL_PATTERNS)
 
 
-
 def attach_explicit_tenant_id(payload: dict[str, Any], message: str) -> dict[str, Any]:
     """Keep an explicit tenant target so the execution guard can reject it."""
     match = re.search(
