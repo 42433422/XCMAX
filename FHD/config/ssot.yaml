@@ -276,6 +276,19 @@ domains:
     check: python scripts/ops/runtime_inventory.py check
     sync: null
 
+  - name: desktop-platform-parity
+    owner: desktop-platform
+    enabled: true
+    # 桌面双端平级 SSOT（2026-09-09 生效）：Windows 与 macOS 平级发布（同版本/同 release_sha/双端齐备），
+    # 功能双端验证通过才算完成；平台差异收口 FHD/desktop/platform/ 适配层，
+    # 业务模块禁止散落 process.platform 判断，不再让 Windows 追着 Mac 改。
+    ssot: FHD/docs/desktop_platform_parity_ssot.md
+    derived:
+      - FHD/.github/workflows/release-desktop.yml
+    mode: lint
+    check: python scripts/dev/ssot_plugins/desktop_platform_parity.py check
+    sync: null
+
   - name: repository-ssot
     owner: backend
     enabled: true
