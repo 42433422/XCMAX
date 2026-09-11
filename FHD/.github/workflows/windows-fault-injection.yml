@@ -1,5 +1,3 @@
-# CI SSOT: generated from FHD/.github/workflows/windows-fault-injection.yml — DO NOT edit here.
-# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
 # Windows runner 故障注入验收（交付清单项 7 数据与并发安全 / 项 8 故障恢复与回退）
 #
 # 用途：在 GitHub Windows runner 上自动生成 fault-injection-windows.ps1 的
@@ -30,11 +28,6 @@ on:
 
 permissions:
   contents: read
-
-
-defaults:
-  run:
-    working-directory: FHD
 
 jobs:
   fault-injection:
