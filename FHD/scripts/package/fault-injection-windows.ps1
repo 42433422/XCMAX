@@ -206,6 +206,38 @@ Write-Ok ("安装根：{0}" -f $InstallRoot)
 $AppExe = Join-Path $InstallRoot 'XCAGI.exe'
 $BackendExe = Join-Path $InstallRoot 'resources\backend\xcagi-backend.exe'
 
+# N06：后端桌面环境（与 desktop/backend-env.ts desktopBackendEnv 同源）。
+# 孤儿后端场景与备份种子都直接拉起 xcagi-backend.exe，缺 XCAGI_DATA_DIR /
+# XCAGI_DESKTOP_RESOURCES 时后端无法定位数据目录与资源（首轮 34646944874
+# 孤儿未监听、34642734307 备份缺失均源于此）。DATABASE_URL 绝不继承。
+Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
+$env:XCAGI_DESKTOP_MODE = '1'
+$env:XCAGI_DATA_DIR = $DataRoot
+$env:XCAGI_UVICORN_RELOAD = '0'
+$env:XCAGI_GLOBAL_RATE_LIMIT = '0'
+$env:XCAGI_EMPLOYEE_SCHEDULER = '0'
+$env:PYTHONUTF8 = '1'
+$env:XCAGI_DESKTOP_RESOURCES = (Join-Path $InstallRoot 'resources')
+
+# N06：用应用自带「--migrate-only --backup」产出**真实备份**——走
+# backup_database() 的 sqlite3.backup() 热备份 + integrity_check 校验，
+# 与更新安装备份同源。全新安装只有迁移才产生备份（ensure_startup_migration
+# 对已是 head 的库直接跳过），corrupt-backup / corrupt-main 两场景因此需要
+# 显式种子，否则只能 SKIP（首轮实证）。
+function New-AppBackup {
+  if (-not (Test-Path $BackendExe)) { Write-Warn2 ("sidecar 不存在，无法创建备份：{0}" -f $BackendExe); return $false }
+  Write-Info ("创建备份：xcagi-backend --migrate-only --backup（XCAGI_DATA_DIR={0}）" -f $DataRoot)
+  $out = Join-Path $script:EvidenceDir 'seed-backup-stdout.txt'
+  $err = Join-Path $script:EvidenceDir 'seed-backup-stderr.txt'
+  $p = Start-Process -FilePath $BackendExe -ArgumentList @('--migrate-only', '--backup') -NoNewWindow -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
+  if (-not $p.WaitForExit(180000)) { try { $p.Kill() } catch { }; Write-Warn2 "备份进程 180s 超时已终止" }
+  elseif ($p.ExitCode -ne 0) { Write-Warn2 ("备份进程退出码 {0}（详见 seed-backup-stderr.txt）" -f $p.ExitCode) }
+  $bks = @(Get-ChildItem (Join-Path $DataRoot 'backups') -Filter 'xcagi-*.db' -File -ErrorAction SilentlyContinue)
+  if ($bks.Count -eq 0) { Write-Warn2 "备份目录仍为空"; return $false }
+  Write-Ok ("备份已创建：{0}" -f ($bks | Sort-Object LastWriteTime -Descending | Select-Object -First 1).Name)
+  return $true
+}
+
 $running = Get-Process -Name 'XCAGI' -ErrorAction SilentlyContinue
 if ($running) {
   Write-Info "检测到运行中的 XCAGI 实例，故障注入需要先退出（强杀会污染前置状态）。"
@@ -291,11 +323,11 @@ if ($Scenario -contains 'corrupt-backup') {
   $bks = @(Get-ChildItem $backupsDir -File -ErrorAction SilentlyContinue |
     Where-Object { $_.Name -match '^xcagi-.+?(-\w+)?-\d{14}\.db$' } | Sort-Object LastWriteTime -Descending)
   if (-not ($bks.Count -gt 0)) {
-    Write-Info "无可用备份：先启动一次应用让迁移/备份产生，再退出。"
-    $seeding = Start-App $AppExe
-    if ($seeding.Up) { Stop-AppAll | Out-Null }
-    $bks = @(Get-ChildItem $backupsDir -File -ErrorAction SilentlyContinue |
-      Where-Object { $_.Name -match '^xcagi-.+?(-\w+)?-\d{14}\.db$' } | Sort-Object LastWriteTime -Descending)
+    Write-Info "无可用备份：用应用自带 migrate-only --backup 创建。"
+    if (New-AppBackup) {
+      $bks = @(Get-ChildItem $backupsDir -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match '^xcagi-.+?(-\w+)?-\d{14}\.db$' } | Sort-Object LastWriteTime -Descending)
+    }
   }
   if (-not ($bks.Count -gt 0)) {
     Record 'corrupt-backup' 'SKIP' '数据根无备份文件，场景无法执行'
@@ -334,6 +366,10 @@ if ($Scenario -contains 'corrupt-main') {
     if (-not (Test-Path $mainDb)) { Record 'corrupt-main' 'FAIL' ("主库不存在：{0}" -f $mainDb) }
     else {
       $before = Get-Digest $DataRoot
+      if ([int64]$before['backups.files'] -le 0) {
+        Write-Info "无备份可恢复：先尝试用应用自带 migrate-only --backup 创建。"
+        if (New-AppBackup) { $before = Get-Digest $DataRoot }
+      }
       if ([int64]$before['backups.files'] -le 0) {
         Record 'corrupt-main' 'SKIP' '无备份可恢复（corrupt_no_backup 路径属于阻塞启动的预期行为，请人工核对启动日志后重跑）'
       } else {
