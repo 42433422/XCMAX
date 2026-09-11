@@ -127,9 +127,7 @@ def test_update_profile_username_and_company(
     session.first_results = [session.row, None]
     client = _make_client(monkeypatch, session)
 
-    resp = client.put(
-        "/api/auth/profile", json={"username": "alice", "company": "Acme Corp"}
-    )
+    resp = client.put("/api/auth/profile", json={"username": "alice", "company": "Acme Corp"})
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["ok"] is True
