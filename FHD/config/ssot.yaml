@@ -289,6 +289,17 @@ domains:
     check: python scripts/dev/ssot_plugins/desktop_platform_parity.py check
     sync: null
 
+  - name: macos-release
+    owner: desktop-platform
+    enabled: true
+    # macOS 发布交付事实快照（人工维护）：版本/产物/SHA256/Gate 状态/偏差登记/实机任务/发版 runbook。
+    # check 只校验文档结构与 Gate 状态值合法性；真机证据无法自动校验，按 §9 runbook 回填。
+    ssot: FHD/docs/MACOS_RELEASE_SSOT.md
+    derived: []
+    mode: lint
+    check: python scripts/dev/ssot_plugins/macos_release.py check
+    sync: null
+
   - name: repository-ssot
     owner: backend
     enabled: true
