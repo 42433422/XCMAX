@@ -167,8 +167,33 @@ def _accept_issue(repo: str, token: str, issue: dict[str, Any], acceptance: dict
     return True
 
 
-def _record_verdict_local(issue_number: int, version: str, verdict: str, acceptance: dict) -> None:
-    """把验收判定落回本地工单事件流（best-effort；服务端运行时持久）。"""
+def _record_verdict_local(
+    market_base: str,
+    market_token: str,
+    issue_number: int,
+    version: str,
+    verdict: str,
+    acceptance: dict,
+) -> bool:
+    """验收判定落回主线：先写共享宿主（市场端 work-order DB），失败再落本地视图。
+
+    返回是否已持久化（false=两端都失败，不影响 issue 回写本身）。
+    """
+    payload = {
+        "issue_number": int(issue_number),
+        "release_version": version,
+        "verdict": verdict,
+        "evidence": {"per_platform": acceptance.get("per_platform") or {}},
+    }
+    result = _http(
+        "POST",
+        f"{market_base.rstrip('/')}/api/work-orders/acceptance",
+        market_token,
+        payload,
+    )
+    if not result.get("_error") and isinstance(result, dict) and result.get("ok") is True:
+        return True
+    # 降级：本地事件流（best-effort；服务端运行时持久）
     try:
         from app.services.work_order_ssot import record_acceptance_verdict
 
@@ -180,6 +205,7 @@ def _record_verdict_local(issue_number: int, version: str, verdict: str, accepta
         )
     except BOUNDARY_ERRORS:  # noqa: BLE001 - CI 运行器本地事件流为临时介质，不阻塞回写
         logger.debug("local work_order verdict skipped", exc_info=True)
+    return False
 
 
 def run(args: argparse.Namespace) -> int:
@@ -240,7 +266,9 @@ def run(args: argparse.Namespace) -> int:
             else _reopen_issue(args.repo, args.token, issue, acceptance)
         )
         if ok:
-            _record_verdict_local(number, version, verdict, acceptance)
+            _record_verdict_local(
+                args.market_base, args.market_token, number, version, verdict, acceptance
+            )
         else:
             failures += 1
     return 1 if failures else 0
