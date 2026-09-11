@@ -40,7 +40,9 @@ param(
   # 证据目录；默认 .\fault-injection-evidence-<时间戳>。
   [string]$EvidenceDir = "",
   # 健康检查地址（与验收脚本一致）。
-  [string]$HealthUrl = 'http://127.0.0.1:17500/api/health'
+  [string]$HealthUrl = 'http://127.0.0.1:17500/api/health',
+  # CI/非交互模式：跳过人工场景 Read-Host 录入（disk-full/power-cut 记 SKIP），供 runner 执行。
+  [switch]$CiMode
 )
 
 $ErrorActionPreference = 'Stop'
@@ -300,6 +302,11 @@ if ($Scenario -contains 'corrupt-main') {
 
 # ---------------------------------------------------------------- 人工场景指引
 Write-Step "人工场景（脚本不自动执行）"
+if ($CiMode) {
+  Write-Info "CI 模式：disk-full / power-cut 为实体机人工场景，此处记 SKIP。"
+  Record 'disk-full(人工)' 'SKIP' 'CI 环境：实体机场景待人工执行'
+  Record 'power-cut(人工)' 'SKIP' 'CI 环境：实体机场景待人工执行'
+} else {
 Write-Host "▶ disk-full（磁盘写满）：" -ForegroundColor Cyan
 Write-Host "  1) 用卷配额或小型 VHD 把数据根所在卷写到剩余 <100MB；"
 Write-Host "  2) 正常使用中触发写入失败 → 观察应用报错是否友好、无静默数据损坏；"
@@ -313,6 +320,7 @@ $diskFull = Read-Host "  disk-full 执行结果 [PASS/FAIL/SKIP]"
 $powerCut = Read-Host "  power-cut 执行结果 [PASS/FAIL/SKIP]"
 Record 'disk-full(人工)' $(if ($diskFull) { $diskFull.ToUpper() } else { 'SKIP' }) '实体机场景'
 Record 'power-cut(人工)' $(if ($powerCut) { $powerCut.ToUpper() } else { 'SKIP' }) '实体机场景'
+}
 
 # ---------------------------------------------------------------- 汇总
 Write-Host ""
