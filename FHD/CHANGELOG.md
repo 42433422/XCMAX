@@ -6,6 +6,7 @@
 
 ## Unreleased（1.0.0.1 之后的累积变更）
 
+- **macOS 验收脚本支持"覆盖升级不丢数据"验证**：`acceptance-macos.sh` 新增 `--overwrite-upgrade`——升级前自动给业务数据（库/上传/Mod 文件/备份）拍基线快照并埋数据保留标记，装完新版后逐一比对，任何一样东西变少都会明确报 FAIL；同时修复了本机开代理时脚本健康检查被拦成假失败的问题（健康检查改为直连本机）。已在真机实测：覆盖重装后 986MB 业务库、151 个上传文件、843 个 Mod 文件、4 份备份一个不少。
 - **macOS 发布交付 SSOT 入库 + 双端注册表登记补齐**：macOS 版本/产物/SHA256/构建环境/下载与更新地址/测试机/12 项 Release Gate 状态/实机验收任务 T1-T6/发版 runbook 首次以唯一事实来源入库（每次发版复用回填）；同时修复 #1839 合并时桌面双端平级域漏登记 SSOT_INDEX 的注册表漂移（机器注册表补 `desktop-platform-parity` 行），新增 `macos-release` 机器域与结构校验插件（Gate 状态取值合法性、RED 须附复现证据）。
 - **Windows 故障注入验收脚本入库（项7/8 实机证据工具）**：新增 `scripts/package/fault-injection-windows.ps1`，把故障恢复从"函数级单测"补到"进程级实机证据"——强杀全部进程后重启（WAL+FULL 下数据无损、主库无损坏证据）、孤儿后端占端口（观察端口占用处理/回滚保护）、损坏备份不误伤启动、损坏主库自动改名留证并从最近有效备份恢复，四个场景全自动执行并输出 JSON 收据；`corrupt-main` 带安装根安全闸（仅限 `C:\XCAGI-acceptance` 隔离安装，防止误伤真实数据），磁盘写满与异常断电保留为人工场景并给操作指引。配套 `fhd-windows-fault-injection` 手动工作流：GitHub Windows runner 下载 CVM 测试包 → SHA 校验 → 静默隔离安装 → 全场景注入 → 上传收据，runner 级证据无需等实机即可生成（仅手动触发，不进 PR 门禁）。
 - **桌面双端平级发布成为门禁**：Windows 与 macOS 正式平级——同版本号、同 release_sha、双端安装回执齐备才算一次完整发布；新 SSOT 域 `desktop-platform-parity` 注册进注册表并用门禁脚本自动核对发布流水线双 runner 一致性，平台差异统一收口到 desktop/platform/ 适配层，双端功能验证通过才算完成。

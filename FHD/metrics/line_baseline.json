@@ -1,5 +1,5 @@
 {
-  "lines": 2321871,
+  "lines": 2322008,
   "updated": "2026-09-11",
-  "note": "Windows 故障注入验收工具链（项7/8 实机证据）：ps1 四场景脚本 + runner 工作流 + 协议文档 + CHANGELOG，实机验收能力必要新增"
+  "note": "merge-main recompute for #1874"
 }
