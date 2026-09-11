@@ -1,5 +1,5 @@
 {
-  "lines": 2324126,
+  "lines": 2324127,
   "updated": "2026-09-12",
-  "note": "B11 security gate: npm overrides 补丁行（js-yaml 4.3.2 / sharp 0.35.4 / @xmldom 0.8.15）+4 行，CVE-2026-84375、GHSA-rgj7-g3m4-5g8c 等 53-high 清零"
+  "note": "B11: +1 changelog 行（安全修复条目，写给非技术读者）；lockfile URL 改写为行内替换零行差"
 }
