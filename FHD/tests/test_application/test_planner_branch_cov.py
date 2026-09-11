@@ -1069,23 +1069,25 @@ class TestFallbackPlanBranches:
         assert not any(n.tool_id == "customers" for n in result.nodes)
 
     def test_default_fallback_to_products_query(self) -> None:
-        """无匹配意图时默认查询产品。"""
+        """无匹配意图时不再静默查询产品，改为 clarify.ask 反问。"""
         planner = _make_planner()
         result = planner._fallback_plan("pid", "随便看看", _sample_registry())
-        assert any(n.tool_id == "products" for n in result.nodes)
+        assert result.intent == "clarify_ask"
+        assert any(n.tool_id == "clarify" for n in result.nodes)
 
     def test_default_fallback_to_customers_when_no_products(self) -> None:
-        """无 products 工具时回退查询客户。"""
+        """命中 customers 意图时按 tool_key 路由到 customers.query。"""
         planner = _make_planner()
         reg = {"customers": _sample_registry()["customers"]}
-        result = planner._fallback_plan("pid", "随便看看", reg)
+        result = planner._fallback_plan("pid", "客户列表", reg)
         assert any(n.tool_id == "customers" for n in result.nodes)
 
     def test_default_fallback_empty_registry(self) -> None:
-        """空注册表时返回空节点图。"""
+        """空注册表且意图未命中时返回 clarify 节点。"""
         planner = _make_planner()
         result = planner._fallback_plan("pid", "随便看看", {})
-        assert len(result.nodes) == 0
+        assert len(result.nodes) == 1
+        assert result.nodes[0].tool_id == "clarify"
         assert result.risk_level == "low"
 
     def test_employee_keyword_english(self) -> None:

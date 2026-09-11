@@ -951,10 +951,11 @@ class TestFallbackPlanBranches:
 
         planner = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
         registry = get_tool_registry()
+        # 2026-09 起未命中意图不再静默查询产品，而是 clarify.ask。
         plan = planner._fallback_plan("p1", "查询信息", registry)
-        assert plan.intent == "generic_workflow"
-        # Should fall back to a query node.
+        assert plan.intent == "clarify_ask"
         assert len(plan.nodes) >= 1
+        assert plan.nodes[0].tool_id == "clarify"
 
     def test_generic_fallback_without_products(self):
         from app.application.workflow.planner import LLMWorkflowPlanner
@@ -968,8 +969,11 @@ class TestFallbackPlanBranches:
                 }
             }
         }
-        plan = planner._fallback_plan("p1", "查询信息", registry)
-        assert plan.intent == "generic_workflow"
+        # 命中 customers 意图时路由到 customers.query（#1815 customer_read_node 优先命中
+        # 时 intent=customers_query；否则规则意图服务路由 intent_route_customers）。
+        plan = planner._fallback_plan("p1", "客户列表", registry)
+        assert plan.intent in {"intent_route_customers", "customers_query"}
+        assert not any(n.tool_id == "products" for n in plan.nodes)
         assert any(n.tool_id == "customers" for n in plan.nodes)
 
     def test_generic_fallback_no_tools(self):
@@ -977,8 +981,9 @@ class TestFallbackPlanBranches:
 
         planner = LLMWorkflowPlanner.__new__(LLMWorkflowPlanner)
         plan = planner._fallback_plan("p1", "查询信息", {})
-        assert plan.intent == "generic_workflow"
-        assert plan.nodes == []
+        assert plan.intent == "clarify_ask"
+        assert len(plan.nodes) == 1
+        assert plan.nodes[0].tool_id == "clarify"
 
     def test_risk_level_high(self):
         from app.application.workflow.planner import (

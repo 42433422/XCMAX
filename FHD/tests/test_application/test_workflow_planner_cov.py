@@ -554,11 +554,14 @@ class TestFallbackPlan:
         assert result.intent == "add_product_to_unit"
 
     def test_fallback_default_query_products(self) -> None:
+        # 2026-09 起未命中意图不再静默 products.query，而是 clarify.ask。
         planner = self._make_planner()
         result = planner._fallback_plan("pid", "帮我看看", _SAMPLE_REGISTRY)
-        assert any(n.tool_id == "products" for n in result.nodes)
+        assert result.intent == "clarify_ask"
+        assert any(n.tool_id == "clarify" for n in result.nodes)
 
     def test_fallback_no_products_falls_to_customers(self) -> None:
+        # 命中 customers 意图时按 tool_key 路由到 customers.query；未命中走 clarify。
         planner = self._make_planner()
         reg = {
             "customers": {
@@ -574,7 +577,7 @@ class TestFallbackPlan:
                 },
             }
         }
-        result = planner._fallback_plan("pid", "帮我看看", reg)
+        result = planner._fallback_plan("pid", "客户列表", reg)
         assert any(n.tool_id == "customers" for n in result.nodes)
 
     def test_fallback_risk_level_high_when_node_is_high(self) -> None:

@@ -1547,12 +1547,13 @@ class TestLLMWorkflowPlannerFallback:
 
     def test_fallback_create_product_english(self) -> None:
         # The intent matcher requires the Chinese token "产品" — English-only
-        # input falls through to generic_workflow. We assert the actual
-        # contract so the behaviour is documented.
+        # input falls through to the two-level default (2026-09: clarify when
+        # no rule-intent hit). We assert the actual contract so the behaviour
+        # is documented.
         planner = self._make_planner()
         reg = get_tool_registry()
         plan = planner._fallback_plan("p1", "create product", reg)
-        assert plan.intent == "generic_workflow"
+        assert plan.intent in ("generic_workflow", "clarify_ask")
         assert len(plan.nodes) >= 1
 
     def test_fallback_create_product_chinese(self) -> None:
@@ -1564,21 +1565,25 @@ class TestLLMWorkflowPlannerFallback:
     def test_fallback_generic(self) -> None:
         planner = self._make_planner()
         reg = get_tool_registry()
+        # 2026-09 起未命中意图不再静默 products.query，而是 clarify.ask。
         plan = planner._fallback_plan("p1", "查询信息", reg)
-        assert plan.intent == "generic_workflow"
+        assert plan.intent == "clarify_ask"
         assert len(plan.nodes) >= 1
 
     def test_fallback_no_products_in_registry(self) -> None:
         planner = self._make_planner()
         reg = {"customers": {"actions": {"query": {"risk": "low"}}}}
-        plan = planner._fallback_plan("p1", "查询", reg)
+        # 命中 customers 意图时按 tool_key 路由到 customers.query。
+        plan = planner._fallback_plan("p1", "客户列表", reg)
         assert len(plan.nodes) >= 1
         assert plan.nodes[0].tool_id == "customers"
 
     def test_fallback_empty_registry(self) -> None:
         planner = self._make_planner()
+        # 空注册表且意图未命中时仍产出 clarify 节点。
         plan = planner._fallback_plan("p1", "查询", {})
-        assert len(plan.nodes) == 0
+        assert len(plan.nodes) == 1
+        assert plan.nodes[0].tool_id == "clarify"
         assert plan.risk_level == "low"
 
     def test_fallback_risk_level_medium(self) -> None:
@@ -1931,8 +1936,8 @@ class TestLLMWorkflowPlannerPlan:
                 patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
             ):
                 plan = planner.plan("u1", "msg", get_tool_registry())
-                # Should fall back to fallback plan
-                assert plan.intent in ("generic_workflow", "add_product_to_unit")
+                # Should fall back to fallback plan（2026-09：未命中意图走 clarify_ask）
+                assert plan.intent in ("generic_workflow", "add_product_to_unit", "clarify_ask")
 
     def test_plan_react_none_falls_back(self) -> None:
         with patch("app.application.workflow.planner.get_ai_conversation_service"):

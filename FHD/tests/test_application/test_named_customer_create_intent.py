@@ -1,6 +1,6 @@
 import pytest
 
-from app.application.chat_tool_intent import looks_like_business_db_write
+from app.domain.services.conversation.chat_tool_intent import looks_like_business_db_write
 
 
 @pytest.mark.parametrize(
