@@ -77,10 +77,10 @@
 | G1 | 构建 | YELLOW | CI run 34552543418（`a9507f0f`）`runner_install_smoke:passed` + 回执在册；本机已装 `49d0fe105` 可构建可安装 | 授权管线（含签名）的本轮产物 | B1 | T1 |
 | G2 | 干净环境安装 | RED | 验收脚本在库；本机静默安装历史 | **正式地址 404**；本轮未执行 | B2/B6 | T1→T2 |
 | G3 | Windows 安全项 | RED | `delivery-receipt.json` `authenticode_status:NotSigned`（03 声明一致） | 签名 Valid 的产物 | B1 | T1（先配 ES_* secrets） |
-| G4 | 首次启动 | YELLOW | 实机 `/api/health` 200 `healthy 1.0.0.1 49d0fe105`，required 路由全 ok，17500 监听 | 受控冷启动计时+截图 | 无 | T2 |
-| G5 | 登录绑定 | UNKNOWN | — | 1.0.0.1 实机登录绑定证据 | 无 | T3 |
-| G6 | Mod/AI 员工 | UNKNOWN | — | 同上 | 无 | T3 |
-| G7 | 业务任务 | UNKNOWN | — | 1.0.0.1 实机业务用例证据 | 无 | T3 |
+| G4 | 首次启动 | **GREEN** | 受控冷启动实机实测（2026-09-11 16:0x）：`Start-Process` 起表 → 24.5s health 首响应（neuro 总线延迟启动期 status=degraded）→ ~50s 全绿（`status=healthy / runtime=healthy / neuro=healthy running=true`，无 degradedReasons）；主窗口完整渲染截图 `evidence/g4-main-window-foreground.png`；xcagi-backend + 5×XCAGI 进程在册；health JSON 存档 `evidence/g4-health.json` | — | 无 | — |
+| G5 | 登录绑定 | YELLOW | 自动登录成功（会话保持），主窗口截图显示已登录 SUNBIRD 工作空间 | 新鲜登录动作未单独执行；首次设置向导出现 B10 同步失败（可绕过） | B10 | T3 复验 |
+| G6 | Mod / AI 员工加载 | YELLOW | AI 员工「饰品包装助手」在线并有真实回复（`evidence/g7-business-task.png`）；17 个 Mod 文件交付到运行时 `%APPDATA%\XCAGI\mods\`（ERP 桥接 87/88 文件）；业务菜单全量渲染 | **ERP 桥接 Mod 被订单页判定「尚未安装」→ ERP 业务页空壳**（B9） | B9 | B9 修复后回测 |
+| G7 | 真实业务任务 | RED | 两次真实尝试留证：① AI 对话查询「查一下今天的订单情况」→ 字面匹配业务对象 0 条（意图空转，`evidence/g7-business-task-final.png`）；② 订单管理页 → B9 空壳无数据（`evidence/g7-order-list.png`） | B9 修复后重执行业务任务 | B9 | B9 修复后回测 |
 | G8 | 更新发现 | YELLOW | stable feed 可达+签名 VALID；09-09 真实下载 247,881,767 B 文件证据在册 | 应用内"发现新版本"截图 | B4 | T4 |
 | G9 | 更新安装 | YELLOW | 真实下载+sha512 一致；同版本重建防护实测工作 | 完整安装动作观察 | B6/B8 | T4 |
 | G10 | 数据保留 | UNKNOWN | `-OverwriteInstall` 比对机制在库（#1870） | 实机升级前后基线比对 | 无 | T4 |
@@ -100,6 +100,8 @@
 | B5 | **P2** | exe 版本元数据 1.0.0.0 ≠ build-info 1.0.0.1 | electron-builder 四段版本同步 |
 | B7 | **P2** | testing 通道 latest.yml Ed25519 签名与生产公钥不匹配（验签 INVALID） | `sign_update_metadata.py` 以正确密钥重签 |
 | B8 | **P2** | OTA 无 `.blockmap`（两端口 404）→ 每次全量 236MB，弱网成功率低（09-09 实录 6 连败） | `upload-release-skus.ps1` 同步上传 blockmap |
+| B9 | **P1** | **ERP 桥接 Mod「已交付未注册」：文件在运行时目录（`%APPDATA%\XCAGI\mods\xcagi-erp-domain-bridge`，87/88 文件，捆绑包同在），但订单管理页渲染时判定「本机尚未安装 Mod xcagi-erp-domain-bridge」→ 订单/库存等 ERP 业务页空壳，真实业务任务无法执行（2026-09-11 实机复现，证据 `evidence/g7-order-list.png`）** | 定位订单页 mod-presence 判定（文案为运行时动态拼接）与注册源（mod registry/DB vs 目录扫描），修复注册一致性后回测 G6/G7 |
+| B10 | **P2** | 首次设置向导同步失败：「公司名称未能同步到企业账号，请稍后重试」（2026-09-11 实机出现一次，经「先进入，稍后再设置」绕过；影响 G5 绑定闭环） | 复现并修复企业账号同步链路；G5 复验时重新走完整绑定流程 |
 
 ## 6. 实机验收任务（UNKNOWN/RED 项 → 待执行）
 
