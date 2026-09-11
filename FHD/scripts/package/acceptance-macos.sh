@@ -6,12 +6,18 @@
 #   bash scripts/package/acceptance-macos.sh --version 1.0.0.1 \
 #        [--dmg /path/to/XCAGI-Enterprise-1.0.0.1-mac-arm64.dmg] \
 #        [--skip-launch] [--keep-dmg] [--dest /custom/install/dir] [--help]
+#   覆盖升级数据保留验收（对齐 Windows -OverwriteInstall，协议 6b）：
+#   bash scripts/package/acceptance-macos.sh --version <新版本> --overwrite-upgrade
 #
 # 自动执行：下载 dmg → SHA256 校验 → 挂载 → codesign/spctl 校验
 #           → 安装到 ~/Applications/acceptance/（不触碰 /Applications）
 #           → 版本身份读取（Info.plist / build-info.json / product-sku.json）
 #           → 冷启动计时 + 截图 + 后端健康检查（可用 --skip-launch 跳过）
 #           → 卸载 dmg，打印 OTA / 回滚两步的人工操作指引
+#
+# --overwrite-upgrade：在既有安装（${ACCEPT_DIR}/XCAGI.app，须先退出应用）上覆盖升级。
+#   安装前采集 userData 业务数据基线 + 写入数据保留标记，安装后重采集并比对，
+#   证明覆盖升级后库/上传/Mod 数据零丢失。基线与比对结果落 WORK_DIR JSON。
 #
 # 幂等：重复运行会重建 ~/Applications/acceptance/XCAGI.app，重用/覆盖下载缓存。
 # 安全边界：绝不修改 /Applications 下的任何内容；OTA 与回滚只打印指引，不自动执行。
@@ -31,6 +37,8 @@ VERSION=""
 LOCAL_DMG=""
 SKIP_LAUNCH=0
 KEEP_DMG=0
+OVERWRITE_UPGRADE=0
+DATA_ROOT="${HOME}/Library/Application Support/XCAGI"
 
 MOUNT_PT=""
 DMG_PATH=""
@@ -66,8 +74,57 @@ cleanup_mount() {
 }
 trap cleanup_mount EXIT
 
+# 业务数据快照（口径对齐 acceptance-windows.ps1 Get-BusinessDataDigest）：
+# 主库/向量库大小、mod_dbs 与 uploads/mods/models 文件数、自动备份数量与最新备份。
+capture_data_digest() {
+  local out_file="$1"
+  python3 - "${DATA_ROOT}" "${out_file}" <<'PY'
+import json, os, sys
+root, out = sys.argv[1], sys.argv[2]
+def count_files(p):
+    return sum(len(fs) for _, _, fs in os.walk(p)) if os.path.isdir(p) else 0
+d = {}
+db = os.path.join(root, 'data', 'xcagi.db')
+d['xcagi.db.bytes'] = os.path.getsize(db) if os.path.isfile(db) else -1
+vec = os.path.join(root, 'data', 'excel_vectors.db')
+d['excel_vectors.db.bytes'] = os.path.getsize(vec) if os.path.isfile(vec) else -1
+d['mod_dbs.files'] = count_files(os.path.join(root, 'data', 'mod_dbs'))
+for sub in ('uploads', 'mods', 'models'):
+    d[sub + '.files'] = count_files(os.path.join(root, sub))
+bdir = os.path.join(root, 'backups')
+bks = sorted(
+    (f for f in os.listdir(bdir) if f.startswith('xcagi-') and f.endswith('.db')),
+    key=lambda f: os.path.getmtime(os.path.join(bdir, f)),
+) if os.path.isdir(bdir) else []
+d['backups.files'] = len(bks)
+d['backups.latest'] = bks[-1] if bks else ''
+with open(out, 'w') as fh:
+    json.dump(d, fh, ensure_ascii=False, indent=1)
+print(' '.join(f'{k}={v}' for k, v in d.items()))
+PY
+}
+
+# 比对升级前后快照（口径对齐 Compare-DataDigest）：零值/缺失不算丢失。
+# 有任何 lost 键则退出码 1，stdout 逐行输出 LOST/GAINED 明细。
+compare_data_digests() {
+  python3 - "$1" "$2" <<'PY'
+import json, sys
+b = json.load(open(sys.argv[1]))
+a = json.load(open(sys.argv[2]))
+keys = ('xcagi.db.bytes', 'excel_vectors.db.bytes', 'mod_dbs.files',
+        'uploads.files', 'mods.files', 'models.files')
+lost = [f'{k}: {b.get(k)} → {a.get(k)}' for k in keys if b.get(k, 0) > 0 and a.get(k, 0) < b[k]]
+gained = [f'{k}: {b.get(k)} → {a.get(k)}' for k in keys if a.get(k, 0) > b.get(k, 0)]
+for line in lost:
+    print('LOST ' + line)
+for line in gained:
+    print('GAINED ' + line)
+sys.exit(1 if lost else 0)
+PY
+}
+
 usage() {
-  sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,23p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -79,6 +136,7 @@ while [[ $# -gt 0 ]]; do
     --skip-launch) SKIP_LAUNCH=1; shift ;;
     --keep-dmg)   KEEP_DMG=1; shift ;;
     --dest)       ACCEPT_DIR="${2:-}"; shift 2 ;;
+    --overwrite-upgrade) OVERWRITE_UPGRADE=1; shift ;;
     --help|-h)    usage ;;
     *) die "未知参数：$1（使用 --help 查看用法）" ;;
   esac
@@ -253,6 +311,29 @@ if [[ -d "/Applications/XCAGI.app" ]]; then
   warn "/Applications/XCAGI.app 已存在——本脚本不会触碰它，验收实例独立安装在 ${ACCEPT_DIR}。"
 fi
 
+# 覆盖升级验收：安装前采集业务数据基线 + 数据保留标记（对齐协议 6b / Windows STEP4）。
+BASELINE_FILE=""
+MARKER_FILE=""
+if [[ "${OVERWRITE_UPGRADE}" -eq 1 ]]; then
+  OLD_APP="${ACCEPT_DIR}/XCAGI.app"
+  OLD_BI="${OLD_APP}/Contents/Resources/build-info.json"
+  [[ -f "${OLD_BI}" ]] || die "覆盖升级模式：未在 ${OLD_APP} 找到既有安装（缺 build-info.json）。请先装好旧版再跑覆盖升级验收。"
+  if pgrep -f "XCAGI.app/Contents/MacOS/XCAGI" >/dev/null 2>&1; then
+    die "覆盖升级模式：检测到正在运行的 XCAGI 实例，请先完全退出（Dock 右键 → 退出）后重跑。"
+  fi
+  read -r OLD_VER OLD_SHA <<<"$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d.get("version",""), d.get("gitSha",""))' "${OLD_BI}")"
+  ok "升级前安装：${OLD_APP}（version=${OLD_VER} gitSha=${OLD_SHA}）"
+  if [[ "${OLD_VER}" == "${VERSION}" ]]; then
+    warn "升级前版本已等于验收目标 ${VERSION}，本次不构成跨版本覆盖升级（仍可验证重装数据保留）。"
+  fi
+  BASELINE_FILE="${WORK_DIR}/data-baseline.json"
+  mkdir -p "${WORK_DIR}"
+  ok "升级前业务数据：$(capture_data_digest "${BASELINE_FILE}")"
+  MARKER_FILE="${DATA_ROOT}/.xcagi-acceptance-marker-$(date +%Y%m%d-%H%M%S).txt"
+  printf 'xcagi-acceptance-overwrite baseline version=%s gitSha=%s\n' "${OLD_VER}" "${OLD_SHA}" > "${MARKER_FILE}"
+  ok "已写入数据保留标记：${MARKER_FILE}"
+fi
+
 mkdir -p "${ACCEPT_DIR}"
 rm -rf "${ACCEPT_DIR}/XCAGI.app"
 ditto "${SRC_APP}" "${ACCEPT_DIR}/XCAGI.app"
@@ -297,6 +378,46 @@ if [[ -f "${SKU_FILE}" ]]; then
   ok "product-sku.json：$(cat "${SKU_FILE}")"
 fi
 
+# 覆盖升级验收：安装后重采集并比对业务数据（对齐协议 6b / Windows STEP6b）。
+DATA_RETENTION=SKIP
+if [[ "${OVERWRITE_UPGRADE}" -eq 1 ]]; then
+  AFTER_FILE="${WORK_DIR}/data-after.json"
+  ok "升级后业务数据：$(capture_data_digest "${AFTER_FILE}")"
+  DIFF_OUT="$(compare_data_digests "${BASELINE_FILE}" "${AFTER_FILE}" || true)"
+  LOST_LINES="$(printf '%s\n' "${DIFF_OUT}" | grep '^LOST ' || true)"
+  GAINED_LINES="$(printf '%s\n' "${DIFF_OUT}" | grep '^GAINED ' || true)"
+  MARKER_KEPT=NO
+  [[ -f "${MARKER_FILE}" ]] && MARKER_KEPT=YES
+  if [[ -n "${LOST_LINES}" ]]; then
+    DATA_RETENTION=FAIL
+    while IFS= read -r line; do fail "业务数据减少：${line#LOST }"; done <<< "${LOST_LINES}"
+  elif [[ "${MARKER_KEPT}" != "YES" ]]; then
+    DATA_RETENTION=FAIL
+    fail "数据保留标记丢失：${MARKER_FILE}（userData 可能被清空）"
+  else
+    DATA_RETENTION=PASS
+    ok "业务数据零丢失（库/文件数均未减少），数据保留标记仍在"
+    if [[ -n "${GAINED_LINES}" ]]; then
+      while IFS= read -r line; do ok "新增（正常）：${line#GAINED }"; done <<< "${GAINED_LINES}"
+    fi
+  fi
+  python3 - "${BASELINE_FILE}" "${AFTER_FILE}" "${WORK_DIR}/data-retention.json" "${MARKER_FILE}" "${MARKER_KEPT}" "${LOST_LINES}" "${GAINED_LINES}" <<'PY'
+import json, sys
+result = {
+    'before': json.load(open(sys.argv[1])),
+    'after': json.load(open(sys.argv[2])),
+    'marker_file': sys.argv[4],
+    'marker_kept': sys.argv[5] == 'YES',
+    'lost': [l[5:] for l in sys.argv[6].splitlines() if l],
+    'gained': [g[7:] for g in sys.argv[7].splitlines() if g],
+    'result': 'FAIL' if sys.argv[6].strip() or sys.argv[5] != 'YES' else 'PASS',
+}
+with open(sys.argv[3], 'w') as fh:
+    json.dump(result, fh, ensure_ascii=False, indent=1)
+print(f"数据保留结果已写入 {sys.argv[3]}（result={result['result']}）")
+PY
+fi
+
 # -------------------------------------------------------------- [8/9] 冷启动
 STEP_NAME="冷启动（计时 + 截图 + 健康检查）"
 log "[8/9] ${STEP_NAME}"
@@ -339,7 +460,8 @@ else
     log "健康检查 ${HEALTH_URL}（最多 60 秒）..."
     HEALTH_OK=0
     for _ in $(seq 1 60); do
-      if HEALTH_JSON="$(curl -fsS --max-time 3 "${HEALTH_URL}" 2>/dev/null)"; then
+      # --noproxy：本机代理会拦截 127.0.0.1 并回 502，健康检查必须直连。
+      if HEALTH_JSON="$(curl -fsS --noproxy '*' --max-time 3 "${HEALTH_URL}" 2>/dev/null)"; then
         HEALTH_OK=1
         break
       fi
