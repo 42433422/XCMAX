@@ -1,8 +1,8 @@
 {
   "total": 97,
-  "source_sha": "a2474024480c1e948a8b015b4844841c4d12b887",
+  "source_sha": "a83f2e2b65d8b8a4913f850656bee0823519d160",
   "dataset_sha256": "afb0b3fb77280e73facfd206f462fb6c943383b886009d900cdd2d7ff6b472a5",
-  "measured_at": "2026-09-08T16:03:36.462448+00:00",
+  "measured_at": "2026-09-09T08:22:51.181797+00:00",
   "rule": {
     "layer": "rule",
     "counts": {

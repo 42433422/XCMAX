@@ -123,17 +123,22 @@ class HybridIntentWithDeepSeek:
                     return rule_result
 
                 if not self.use_deepseek or not self.deepseek_recognizer:
-                    rule_result["final_intent"] = distilled_intent or rule_result.get(
-                        "primary_intent"
-                    )
-                    rule_result["tool_key"] = distilled_intent or rule_result.get("tool_key")
+                    # 置信度纪律：低于阈值不采纳蒸馏结果，显式降级到规则结果
+                    rule_primary = rule_result.get("primary_intent")
+                    rule_hit = bool(rule_primary and rule_primary != "unk")
+                    rule_result["distilled_low_confidence"] = bool(distilled_intent)
                     rule_result["intent_source"] = (
                         "distilled_low_confidence" if distilled_intent else "rule"
                     )
-                    rule_result["intent_confidence"] = distilled_confidence
-                    rule_result["slots"] = distilled_slots or self._extract_slots_from_rule(
-                        message, rule_result
-                    )
+                    if rule_hit:
+                        rule_result["final_intent"] = rule_primary
+                        rule_result["slots"] = self._extract_slots_from_rule(message, rule_result)
+                    else:
+                        rule_result["final_intent"] = None
+                        rule_result["tool_key"] = rule_result.get("tool_key")
+                        rule_result["is_likely_unclear"] = True
+                        rule_result["low_confidence_clarify"] = True
+                        rule_result["slots"] = self._extract_slots_from_rule(message, rule_result)
                     return rule_result
             except RECOVERABLE_ERRORS as e:
                 logger.warning("蒸馏意图识别失败，降级到 DeepSeek: %s", e)
@@ -152,18 +157,29 @@ class HybridIntentWithDeepSeek:
             rule_result["deepseek_reasoning"] = deepseek_result.get("reasoning", "")
             rule_result["sources_used"].append("deepseek")
 
-            if deepseek_result.get("confidence", 0.0) >= self.confidence_threshold:
+            ds_confidence = float(deepseek_result.get("confidence", 0.0) or 0.0)
+            if ds_confidence >= self.confidence_threshold:
                 rule_result["final_intent"] = deepseek_result.get("intent")
                 rule_result["tool_key"] = deepseek_result.get("intent")
                 rule_result["intent_source"] = "deepseek"
-                rule_result["intent_confidence"] = deepseek_result.get("confidence", 0.0)
+                rule_result["intent_confidence"] = ds_confidence
                 rule_result["slots"] = deepseek_result.get("slots", {})
             else:
-                rule_result["final_intent"] = deepseek_result.get("intent")
-                rule_result["tool_key"] = deepseek_result.get("intent")
+                # 置信度纪律：低于阈值不采纳 LLM 结果，显式降级到规则结果；
+                # 规则也无命中则标记 unclear，交由上层澄清，绝不静默采纳。
+                rule_primary = rule_result.get("primary_intent")
+                rule_hit = bool(rule_primary and rule_primary != "unk")
+                rule_result["deepseek_low_confidence"] = True
                 rule_result["intent_source"] = "deepseek_low_confidence"
-                rule_result["intent_confidence"] = deepseek_result.get("confidence", 0.0)
-                rule_result["slots"] = deepseek_result.get("slots", {})
+                rule_result["intent_confidence"] = ds_confidence
+                if rule_hit:
+                    rule_result["final_intent"] = rule_primary
+                    rule_result["slots"] = self._extract_slots_from_rule(message, rule_result)
+                else:
+                    rule_result["final_intent"] = None
+                    rule_result["is_likely_unclear"] = True
+                    rule_result["low_confidence_clarify"] = True
+                    rule_result["slots"] = self._extract_slots_from_rule(message, rule_result)
 
         except RECOVERABLE_ERRORS as e:
             logger.error("DeepSeek 意图识别失败: %s", e)

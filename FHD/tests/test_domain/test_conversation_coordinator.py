@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from app.domain.services.conversation.chat_tool_intent import tiered_confidence
 from app.domain.services.conversation.coordinator import (
     IntentResult,
     PendingIntent,
@@ -262,6 +263,90 @@ class TestUnifiedConversationCoordinator:
 
 
 # ---------------------------------------------------------------------------
+# 置信度分层（契约纪律）
+# ---------------------------------------------------------------------------
+
+
+class TestTieredConfidence:
+    def _basic(self, **flags):
+        base = {
+            "is_greeting": False,
+            "is_goodbye": False,
+            "is_help": False,
+            "is_confirmation": False,
+            "is_negation_intent": False,
+        }
+        base.update(flags)
+        return base
+
+    def test_rule_hit_high_priority(self):
+        c = tiered_confidence(
+            self._basic(), {"primary_intent": "shipment_generate", "matched_priority": 12}
+        )
+        assert c == 0.85
+
+    def test_rule_hit_priority_equal_10(self):
+        c = tiered_confidence(
+            self._basic(), {"primary_intent": "wechat_send", "matched_priority": 10}
+        )
+        assert c == 0.85
+
+    def test_rule_hit_low_priority(self):
+        c = tiered_confidence(
+            self._basic(), {"primary_intent": "shipment_template", "matched_priority": 9}
+        )
+        assert c == 0.7
+
+    def test_rule_hit_priority_missing(self):
+        c = tiered_confidence(self._basic(), {"primary_intent": "products"})
+        assert c == 0.7
+
+    def test_negation_ambiguity_lowest_rule_tier(self):
+        c = tiered_confidence(
+            self._basic(),
+            {"primary_intent": "shipment_generate", "matched_priority": 12, "is_negated": True},
+        )
+        assert c == 0.6
+
+    def test_reflex_hit_highest(self):
+        assert tiered_confidence(self._basic(is_greeting=True), {"primary_intent": None}) == 0.95
+        assert (
+            tiered_confidence(self._basic(is_confirmation=True), {"primary_intent": None}) == 0.95
+        )
+
+    def test_no_hit_zero(self):
+        assert tiered_confidence(self._basic(), {"primary_intent": None}) == 0.0
+
+    def test_recognize_intent_end_to_end_rule_hit(self):
+        """_recognize_intent 用真实规则管道：高优先级命中 → 0.85"""
+        coord = UnifiedConversationCoordinator()
+        with patch("app.services.intent_service.recognize_intents") as mock_rule:
+            mock_rule.return_value = {
+                "primary_intent": "shipment_generate",
+                "tool_key": "shipment_generate",
+                "slots": {},
+                "is_negated": False,
+                "matched_priority": 12,
+            }
+            result = coord._recognize_intent("开发货单给星海化工 3桶 规格20", {})
+        assert result.confidence == 0.85
+        assert result.primary_intent == "shipment_generate"
+        assert result.source == "neuro_reflex+rule"
+
+    def test_recognize_intent_end_to_end_no_hit(self):
+        """未命中且非反射 → 置信度 0.0（不再硬编码 0.8）"""
+        coord = UnifiedConversationCoordinator()
+        with patch("app.services.intent_service.recognize_intents") as mock_rule:
+            mock_rule.return_value = {
+                "primary_intent": None,
+                "tool_key": None,
+                "slots": {},
+                "is_negated": False,
+            }
+            result = coord._recognize_intent("随便说点什么", {})
+        assert result.confidence == 0.0
+
+
 # R02: 拒绝类请求护栏 — 否定语境下不得执行/生成写入类计划
 # ---------------------------------------------------------------------------
 
