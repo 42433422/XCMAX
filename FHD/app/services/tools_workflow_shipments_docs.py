@@ -181,7 +181,22 @@ def _registered_router_shipment_orders(
             )
         if params.get("order_number"):
             gen_kwargs["order_number"] = params.get("order_number")
-        return cast("dict[Any, Any]", svc.generate_shipment_document(**gen_kwargs))
+        result = cast("dict[Any, Any]", svc.generate_shipment_document(**gen_kwargs))
+        run_id = str(runtime_context.get("run_id") or "")
+        if run_id and result.get("success"):
+            from pathlib import Path
+
+            from app.application.agent_orchestrator.artifact_files import store_spreadsheet
+            from app.utils.path_io.path_utils import get_app_data_dir
+
+            generated = Path(str(result.get("file_path") or "")).resolve()
+            root = (Path(get_app_data_dir()) / "shipment_outputs").resolve()
+            # 仅登记位于受控输出目录内的真实 xlsx：路径不在受控目录（例如自定义
+            # 输出位置）时不登记 artifact，但保持生成结果原样返回。
+            if generated.is_relative_to(root) and generated.suffix.lower() == ".xlsx":
+                artifact = store_spreadsheet(run_id, generated.read_bytes(), name=generated.name)
+                result = {**result, "artifacts": [artifact]}
+        return result
     if action == "generate_batch":
         shipments = params.get("shipments") or []
         if not isinstance(shipments, list) or not shipments:

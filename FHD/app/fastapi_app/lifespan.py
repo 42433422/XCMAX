@@ -30,6 +30,7 @@ from app.fastapi_app.asset_install_lifecycle import (
     start_paid_asset_installs,
     stop_paid_asset_installs,
 )
+from app.fastapi_app.event_loop_noise import install_proactor_reset_filter
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .node_role import passive_node_enabled
@@ -72,6 +73,8 @@ async def lifespan(app: FastAPI):
     from app.fastapi_app.startup_timing import mark_startup
 
     mark_startup("lifespan_begin")
+
+    install_proactor_reset_filter()
 
     from app.neuro_async_bridge import set_neuro_main_loop
 

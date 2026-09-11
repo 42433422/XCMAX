@@ -244,6 +244,10 @@ export interface CreateAgentTaskPayload {
 }
 
 export const agentRunsApi = {
+  downloadArtifact(runId: string, artifactId: string): Promise<Response> {
+    return api.download(`/api/agent/runs/${encodeURIComponent(runId)}/artifacts/${encodeURIComponent(artifactId)}`)
+  },
+
   createRun(payload: CreateAgentRunPayload): Promise<ApiResponse<AgentRun>> {
     return api.post<ApiResponse<AgentRun>>('/api/agent/runs', payload)
   },
@@ -282,6 +286,10 @@ export const agentRunsApi = {
 
   continueRun(runId: string, payload: ContinueAgentRunPayload): Promise<AgentRunResponse> {
     return api.post<AgentRunResponse>(`/api/agent/runs/${encodeURIComponent(runId)}/continue`, payload)
+  },
+
+  answerClarification(runId: string, payload: { step_id: string; parameters: Record<string, unknown> }): Promise<AgentRunResponse> {
+    return api.post<AgentRunResponse>(`/api/agent/runs/${encodeURIComponent(runId)}/clarification`, payload)
   },
 
   pauseRun(runId: string): Promise<ApiResponse<AgentRun>> {

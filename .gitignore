@@ -158,6 +158,9 @@ FHD/1",
 /xcmax_path_employee_map.json
 /branch-cleanup-record-*.txt
 
+# work_order_ssot 以 cwd 相对路径 "test_reports" 落盘；从仓根运行时会在根目录生成
+/test_reports/
+
 # XCAGI HTML 仪表盘必须保留根目录（FastAPI static_mounts.py 依赖根目录位置）
 !XCAGI-Full-Pipeline.html
 !XCAGI-Five-Line.html

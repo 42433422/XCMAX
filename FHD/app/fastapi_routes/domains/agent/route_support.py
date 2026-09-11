@@ -13,6 +13,7 @@ from app.application.agent_orchestrator.task_dispatcher import notify_agent_task
 from app.application.agent_orchestrator.task_execution_repository import (
     get_task_execution_repository,
 )
+from app.application.agent_orchestrator.task_models import tenant_id_of_run
 from app.application.agent_orchestrator.unified_task import task_capabilities
 from app.infrastructure.auth.agent_principal import AgentPrincipal
 from app.utils.json_safe import json_safe
@@ -23,6 +24,17 @@ PUBLIC_AGENT_ERROR = "Agent 执行失败，详细信息已记录"
 PUBLIC_AGENT_SERVICE_ERROR = "Agent 服务暂时不可用，请稍后重试"
 PUBLIC_APPROVAL_ERROR = "approval_grant 无效、过期或与当前步骤不匹配"
 _INTERNAL_ERROR_KEYS = frozenset({"error", "exception", "stack_trace", "traceback"})
+
+
+def authenticated_runtime_context(raw: dict[str, Any], principal: AgentPrincipal) -> dict[str, Any]:
+    context = dict(raw)
+    context.pop("tenant_id", None)
+    context.pop("_mod_authorization", None)
+    if principal.tenant_id:
+        context["tenant_id"] = principal.tenant_id
+    if principal.mod_authorization:
+        context["_mod_authorization"] = dict(principal.mod_authorization)
+    return context
 
 
 def success(data: Any, **extra: Any) -> dict[str, Any]:
@@ -92,11 +104,58 @@ def owned_run(
         return None, JSONResponse(
             {"success": False, "message": "agent run 不存在"}, status_code=404
         )
-    if not principal.is_admin and run.user_id != principal.user_id:
+    runtime_context = run.metadata.get("runtime_context") or {}
+    binding = runtime_context.get("_mod_authorization") or {}
+    requested_binding = principal.mod_authorization or {}
+    same_mod = binding.get("mod_id", "") == requested_binding.get("mod_id", "")
+    if not same_mod or (
+        not principal.is_admin
+        and (run.user_id != principal.user_id or tenant_id_of_run(run) != principal.tenant_id)
+    ):
         return None, JSONResponse(
             {"success": False, "message": "无权访问该 agent run"}, status_code=403
         )
     return run, None
+
+
+def task_scope_matches(
+    orchestrator: AgentOrchestrator, task: Any, principal: AgentPrincipal
+) -> bool:
+    if task.user_id != principal.user_id or task.tenant_id != principal.tenant_id:
+        return False
+    runs = [
+        run
+        for run in orchestrator.list_task_runs(user_id=task.user_id, task_id=task.task_id)
+        if tenant_id_of_run(run) == task.tenant_id
+    ]
+    if not runs:
+        # Legacy tasks without execution records have no authenticated Mod binding.
+        return not principal.mod_authorization
+    return all(owned_run(orchestrator, run.run_id, principal)[1] is None for run in runs)
+
+
+def scoped_tasks(
+    orchestrator: AgentOrchestrator,
+    *,
+    principal: AgentPrincipal,
+    limit: int,
+    include_archived: bool = False,
+) -> list[Any]:
+    result: list[Any] = []
+    offset = 0
+    while len(result) < limit:
+        page = orchestrator.list_tasks(
+            user_id=principal.user_id,
+            tenant_id=principal.tenant_id,
+            limit=100,
+            offset=offset,
+            include_archived=include_archived,
+        )
+        result.extend(task for task in page if task_scope_matches(orchestrator, task, principal))
+        if len(page) < 100:
+            break
+        offset += len(page)
+    return result[:limit]
 
 
 def enqueue_run(run: Any, *, requested_by: str) -> None:

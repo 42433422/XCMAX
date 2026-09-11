@@ -17,6 +17,7 @@ from app.application.agent_orchestrator.run_sql_repository import (
 from app.application.agent_orchestrator.task_models import (
     AgentTask,
     TaskControlCommand,
+    mod_id_of_run,
     task_from_run,
     tenant_id_of_run,
 )
@@ -30,7 +31,14 @@ class AgentRunRepository(Protocol):
 
     def get(self, run_id: str) -> AgentRun | None: ...
 
-    def list_recent(self, *, user_id: str | None = None, limit: int = 50) -> list[AgentRun]: ...
+    def list_recent(
+        self,
+        *,
+        user_id: str | None = None,
+        limit: int = 50,
+        tenant_id: str | None = None,
+        mod_id: str | None = None,
+    ) -> list[AgentRun]: ...
 
     def list_task_runs(self, *, user_id: str, task_id: str) -> list[AgentRun]: ...
 
@@ -47,6 +55,7 @@ class AgentRunRepository(Protocol):
         tenant_id: str | None = None,
         limit: int = 50,
         include_archived: bool = False,
+        offset: int = 0,
     ) -> list[AgentTask]: ...
 
     def archive_task(
@@ -102,11 +111,22 @@ class InMemoryAgentRunRepository:
             run = self._runs.get(str(run_id or ""))
             return copy.deepcopy(run) if run is not None else None
 
-    def list_recent(self, *, user_id: str | None = None, limit: int = 50) -> list[AgentRun]:
+    def list_recent(
+        self,
+        *,
+        user_id: str | None = None,
+        limit: int = 50,
+        tenant_id: str | None = None,
+        mod_id: str | None = None,
+    ) -> list[AgentRun]:
         with self._lock:
             runs = list(self._runs.values())
         if user_id is not None:
             runs = [run for run in runs if run.user_id == user_id]
+        if tenant_id is not None:
+            runs = [run for run in runs if tenant_id_of_run(run) == tenant_id]
+        if mod_id is not None:
+            runs = [run for run in runs if mod_id_of_run(run) == mod_id]
         runs.sort(key=lambda run: run.updated_at, reverse=True)
         return [copy.deepcopy(run) for run in runs[: max(0, int(limit))]]
 
@@ -154,6 +174,7 @@ class InMemoryAgentRunRepository:
         tenant_id: str | None = None,
         limit: int = 50,
         include_archived: bool = False,
+        offset: int = 0,
     ) -> list[AgentTask]:
         with self._lock:
             tasks = [task for (_, owner, _), task in self._tasks.items() if owner == str(user_id)]
@@ -162,7 +183,10 @@ class InMemoryAgentRunRepository:
         if not include_archived:
             tasks = [task for task in tasks if not task.archived_at]
         tasks.sort(key=lambda task: (task.updated_at, task.task_id), reverse=True)
-        return [copy.deepcopy(task) for task in tasks[: max(0, int(limit))]]
+        return [
+            copy.deepcopy(task)
+            for task in tasks[max(0, int(offset)) : max(0, int(offset)) + max(0, int(limit))]
+        ]
 
     def archive_task(
         self,

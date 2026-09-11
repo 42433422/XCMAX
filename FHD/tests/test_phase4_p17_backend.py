@@ -253,7 +253,8 @@ def test_inventory_in_product_missing(svc: InventoryService) -> None:
 
 def test_inventory_in_new_ledger(svc: InventoryService) -> None:
     product = Product(id=1, name="苹果", unit="箱", model_number="A1")
-    s = _session([_fluent(first=product), _fluent(first=None)])
+    warehouse = Warehouse(id=1, code="W1", name="主仓", status="active")
+    s = _session([_fluent(first=product), _fluent(first=warehouse), _fluent(first=None)])
     with _patch_db(s):
         out = svc.inventory_in(
             product_id=1, warehouse_id=1, quantity=5, unit_price=2.0, batch_no="B1"
@@ -264,8 +265,9 @@ def test_inventory_in_new_ledger(svc: InventoryService) -> None:
 
 def test_inventory_in_existing_ledger(svc: InventoryService) -> None:
     product = Product(id=1, name="苹果", unit="箱", model_number="A1")
+    warehouse = Warehouse(id=1, code="W1", name="主仓", status="active")
     ledger = InventoryLedger(id=9, product_id=1, warehouse_id=1, quantity=10, available_quantity=10)
-    s = _session([_fluent(first=product), _fluent(first=ledger)])
+    s = _session([_fluent(first=product), _fluent(first=warehouse), _fluent(first=ledger)])
     with _patch_db(s):
         out = svc.inventory_in(product_id=1, warehouse_id=1, quantity=5)
     assert out["success"] is True
@@ -274,7 +276,8 @@ def test_inventory_in_existing_ledger(svc: InventoryService) -> None:
 
 def test_inventory_in_error(svc: InventoryService) -> None:
     product = Product(id=1, name="苹果", unit="箱", model_number="A1")
-    s = _session([_fluent(first=product), _fluent(first=None)])
+    warehouse = Warehouse(id=1, code="W1", name="主仓", status="active")
+    s = _session([_fluent(first=product), _fluent(first=warehouse), _fluent(first=None)])
     s.commit.side_effect = RuntimeError("commit fail")
     with _patch_db(s):
         out = svc.inventory_in(product_id=1, warehouse_id=1, quantity=5)

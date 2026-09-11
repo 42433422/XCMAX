@@ -19,14 +19,14 @@ import os
 from datetime import datetime
 from typing import Any
 
-from app.utils.operational_errors import RECOVERABLE_ERRORS
-from app.utils.user_memory_analysis import (
+from app.domain.user_memory.analysis import (
     analyze_action_sequence,
     feedback_stats,
     habit_suggestions,
     memory_summary,
 )
-from app.utils.user_memory_models import ActionPattern, ContextSummary, FeedbackRecord, UserMemory
+from app.domain.user_memory.models import ActionPattern, ContextSummary, FeedbackRecord, UserMemory
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 

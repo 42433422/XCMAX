@@ -9,14 +9,15 @@
         --tasks tests/benchmarks/task_golden_set.json \
         --trial 0 --out /tmp/trial_0.jsonl
 
-评测链路：instruction → LLMWorkflowPlanner.plan() → 逐节点
-execute_registered_workflow_tool() → DB 终态断言（复用
+评测链路：instruction → LLMWorkflowPlanner.plan() → AgentOrchestrator
+（包含审批、依赖和工具结果校验）→ DB 终态断言（复用
 business_db_write_verification._model_config 的实体映射 SSOT）。
 """
 
 from __future__ import annotations
 
 import argparse
+import atexit
 import json
 import os
 import sys
@@ -35,14 +36,20 @@ def _bootstrap_isolated_db() -> None:
     global _BOOTED
     if _BOOTED:
         return
-    tmpdir = tempfile.mkdtemp(prefix="xcagi-task-bench-")
+    workspace = tempfile.TemporaryDirectory(prefix="xcagi-task-bench-")
+    atexit.register(workspace.cleanup)
+    tmpdir = workspace.name
     url = f"sqlite+pysqlite:///{tmpdir}/trial.sqlite3"
     os.environ["DATABASE_URL"] = url
     os.environ["VECTOR_DB_URL"] = url
-    os.environ.setdefault("XCAGI_SKIP_INTENT_LLM", "1")
+    os.environ["XCAGI_SKIP_INTENT_LLM"] = "1"
+    os.environ["XCAGI_AGENT_RUNTIME_HOOKS"] = "0"
+    os.environ["MODEL_USAGE_LEDGER_PATH"] = f"{tmpdir}/usage.json"
+    os.environ["MODEL_USAGE_WALLET_BACKEND"] = "audit"
+    os.environ.pop("MODEL_USAGE_WALLET_REQUIRED", None)
     os.environ.setdefault("FHD_ALLOW_X_USER_ID_HEADER", "1")
     # 计划追溯日志重定向到临时目录，避免污染仓库 resources/routing_policies/
-    os.environ.setdefault("XCAGI_PLAN_GRAPH_LOG", f"{tmpdir}/plan_graphs.jsonl")
+    os.environ["XCAGI_PLAN_GRAPH_LOG"] = f"{tmpdir}/plan_graphs.jsonl"
     _BOOTED = True
 
 
@@ -103,10 +110,10 @@ def _check_db_state(expect: dict[str, Any]) -> tuple[bool, str]:
     assertions = expect.get("db_state") or []
     if not assertions:
         return True, ""
-    from app.application.business_db_write_verification import _model_config
     from app.db import SessionLocal, engine
     from app.db.base import Base
     from app.infrastructure.tenant_scope import current_tenant_id
+    from scripts.dev.task_benchmark_assertions import assertion_model_config as _model_config
 
     engine.dispose()  # 刷新连接池：旧连接持有 WAL 旧快照会看不到已提交写入
     Base.metadata.create_all(engine, checkfirst=True)
@@ -141,35 +148,93 @@ def _check_db_state(expect: dict[str, Any]) -> tuple[bool, str]:
     return True, ""
 
 
-def _execute_nodes(nodes: list[Any]) -> tuple[bool, str, list[dict[str, Any]]]:
-    """逐节点执行计划。clarify.ask 是交互节点，跳过执行只算路由。"""
-    from app.services.tools_workflow_registered import execute_registered_workflow_tool
+def _execute_plan(plan: Any, task: dict[str, Any]) -> tuple[bool, str, dict[str, Any]]:
+    """Exercise the product orchestrator, including its approval and dependency gates.
 
-    executed: list[dict[str, Any]] = []
-    for node in nodes:
-        if node.tool_id == "clarify":
-            executed.append({"tool_id": node.tool_id, "action": node.action, "skipped": True})
-            continue
-        params = {k: v for k, v in (node.params or {}).items() if k != "_runtime_context"}
-        try:
-            result = execute_registered_workflow_tool(node.tool_id, node.action, dict(params))
-        except _TRIAL_BOUNDARY_ERRORS as exc:
-            return False, f"{node.tool_id}.{node.action} 执行异常: {exc}", executed
-        executed.append(
-            {
-                "tool_id": node.tool_id,
-                "action": node.action,
-                "success": bool(result.get("success")),
-                "message": result.get("message"),
-            }
+    Approvals are explicit scenario inputs, never inferred from expected success.
+    Clarification remains waiting until a later user turn is represented in a case.
+    Durability and HTTP authorization are verified separately from this benchmark.
+    """
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+
+    orchestrator = AgentOrchestrator(repository=InMemoryAgentRunRepository())
+    context = {"tenant_id": 1, "source": "task_benchmark"}
+    run = orchestrator.start_run_from_plan(
+        user_id="bench-user", message=task["instruction"], plan=plan, runtime_context=context
+    )
+    approval_error = ""
+    for answer in task.get("answers") or []:
+        waiting = next((step for step in run.steps if step.status == "waiting_user"), None)
+        target = next(
+            (
+                step
+                for step in run.steps
+                if waiting is not None and step.node_id == waiting.params.get("target_node_id")
+            ),
+            None,
         )
-        if not result.get("success"):
-            return (
-                False,
-                f"{node.tool_id}.{node.action} 执行失败: {result.get('message') or result.get('error')}",
-                executed,
-            )
-    return True, "", executed
+        if (
+            waiting is None
+            or waiting.tool_id != "clarify"
+            or target is None
+            or _action_sig(target) != {"tool_id": answer["tool_id"], "action": answer["action"]}
+        ):
+            approval_error = "scripted answer does not match the pending clarification target"
+            break
+        orchestrator.stage_clarification_answer(
+            run.run_id,
+            step_id=waiting.step_id,
+            parameters=answer["parameters"],
+            requested_by="bench-user",
+        )
+        continued = orchestrator.execute_dispatched_run(run.run_id)
+        if continued is None:
+            approval_error = "answered run disappeared"
+            break
+        run = continued
+    for approval in task.get("approvals") or []:
+        if approval_error:
+            break
+        waiting = next((step for step in run.steps if step.status == "waiting_user"), None)
+        if (
+            run.status != "waiting_user"
+            or waiting is None
+            or waiting.tool_id == "clarify"
+            or _action_sig(waiting)
+            != {"tool_id": approval["tool_id"], "action": approval["action"]}
+            or waiting.params != approval["params"]
+        ):
+            approval_error = "scripted approval does not match the pending action and parameters"
+            break
+        continued = orchestrator.continue_run(
+            run.run_id,
+            approved_by="bench-user",
+            approved_step_id=waiting.step_id,
+            runtime_context=context,
+        )
+        if continued is None:
+            approval_error = "approved run disappeared"
+            break
+        run = continued
+    expected_status = (task.get("expect") or {}).get("run_status", "completed")
+    success = not approval_error and run.status == expected_status
+    reason = approval_error or (
+        "" if success else f"run status: expected {expected_status}, got {run.status}; {run.error}"
+    )
+    return (
+        success,
+        reason,
+        {
+            "run_id": run.run_id,
+            "artifacts": [artifact.to_dict() for artifact in run.artifacts],
+            "status": run.status,
+            "steps": [step.to_dict() for step in run.steps],
+            "tool_calls": [call.to_dict() for call in run.tool_calls],
+            "final_output": run.final_output,
+            "error": run.error,
+        },
+    )
 
 
 def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
@@ -180,6 +245,14 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
     from app.db.base import Base
     from app.infrastructure.tenant_scope import tenant_scope
     from app.services.tools_execution.registry import get_workflow_tool_registry
+    from scripts.dev.task_benchmark_assertions import (
+        check_returned_records,
+        check_spreadsheets,
+        seed_inventory_quantities,
+        seed_ledger_period_entries,
+        seed_records,
+        seed_sales_period_orders,
+    )
 
     Base.metadata.create_all(engine, checkfirst=True)
 
@@ -212,6 +285,10 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
                 "failure": None,
             }
             try:
+                seed_records(task.get("fixtures") or [])
+                seed_inventory_quantities(task.get("inventory_quantities") or [])
+                seed_sales_period_orders(task.get("sales_period_orders") or [])
+                seed_ledger_period_entries(task.get("ledger_period_entries") or [])
                 plan = planner.plan("bench-user", task["instruction"], registry)
                 nodes = list(plan.nodes) if plan else []
                 ok, why = _check_no_actions(nodes, expect)
@@ -220,26 +297,36 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
                 if ok:
                     ok, why = _check_forbid(nodes, expect)
                 result["routing_pass"] = ok
-                if not ok:
-                    result["failure"] = why
-                    result["plan"] = [_action_sig(n) for n in nodes]
+                result["plan"] = [_action_sig(n) for n in nodes]
+                executed = {}
+                if plan is None:
+                    exec_ok, exec_why = False, "planner returned no plan"
                 else:
-                    has_db_assert = bool(expect.get("db_state"))
-                    if nodes:
-                        exec_ok, exec_why, executed = _execute_nodes(nodes)
-                        result["exec_pass"] = exec_ok
-                        result["executed"] = executed
-                        if not exec_ok:
-                            result["failure"] = exec_why
-                    elif has_db_assert:
-                        result["exec_pass"] = True
-                    db_ok, db_why = _check_db_state(expect)
-                    result["db_pass"] = db_ok
-                    if not db_ok:
-                        result["failure"] = db_why
-                    result["pass"] = (
-                        result["routing_pass"] and result["exec_pass"] is not False and db_ok
+                    exec_ok, exec_why, executed = _execute_plan(plan, task)
+                    result["execution"] = executed
+                if expect.get("no_tool_calls") and executed.get("tool_calls"):
+                    exec_ok = False
+                    exec_why = "unexpected tool execution while user input was required"
+                result["exec_pass"] = exec_ok
+                db_ok, db_why = _check_db_state(expect)
+                result["db_pass"] = db_ok
+                output_ok, output_why = check_returned_records(
+                    executed, expect.get("returned_records") or []
+                )
+                result["output_pass"] = output_ok
+                artifact_ok, artifact_why = check_spreadsheets(
+                    executed, expect.get("spreadsheets") or []
+                )
+                result["artifact_pass"] = artifact_ok
+                result["failure"] = (
+                    "; ".join(
+                        reason
+                        for reason in (why, exec_why, db_why, output_why, artifact_why)
+                        if reason
                     )
+                    or None
+                )
+                result["pass"] = ok and exec_ok and db_ok and output_ok and artifact_ok
             except _TRIAL_BOUNDARY_ERRORS as exc:
                 result["failure"] = f"{type(exc).__name__}: {exc}"
             out.write(json.dumps(result, ensure_ascii=False) + "\n")

@@ -11,17 +11,41 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Iterator
 
+from app.utils.process_lock import exclusive_file_lock
 from app.utils.time import utc_now_naive
 
 from .backup_retention import cleanup_local_backups
+from .db import integrity_check_ok as _integrity_check_ok
+from .db import quick_check_ok as _quick_check_ok
 from .paths import configure_desktop_environment, ensure_desktop_dirs
 
 logger = logging.getLogger(__name__)
 
 # 启动自检：磁盘剩余空间低于此阈值（字节）时记录警告，但不阻塞启动。
 _MIN_DISK_FREE_BYTES = 500 * 1024 * 1024  # 500 MB
+
+# 迁移互斥：两个后端进程（或后端 + ``--migrate-only`` CLI）并发迁移同一个
+# SQLite 库会交叉 Alembic 事务、互相覆盖备份，必须串行化。锁由操作系统在
+# 进程退出时释放，不会遗留死锁；超时则失败退出，不静默带病迁移。
+_MIGRATION_LOCK_NAME = ".xcagi-migration.lock"
+_MIGRATION_LOCK_TIMEOUT_SECONDS = 600.0
+
+
+@contextmanager
+def migration_lock(data_dir: str | os.PathLike[str] | None = None) -> Iterator[None]:
+    """串行化同一 data_dir 下的 schema 迁移与迁移前备份。"""
+    lock_dir = ensure_desktop_dirs(data_dir)["data"]
+    with exclusive_file_lock(
+        lock_dir / _MIGRATION_LOCK_NAME,
+        blocking=True,
+        timeout=_MIGRATION_LOCK_TIMEOUT_SECONDS,
+        reject_symlink=True,
+    ):
+        yield
 
 
 def backup_database(
@@ -77,34 +101,6 @@ def backup_database(
     # snapshots, while explicitly protecting the just-validated recovery point.
     cleanup_local_backups(dirs["backups"], protected=(target,))
     return target
-
-
-def _integrity_check_ok(db_path: Path) -> bool:
-    """跑 PRAGMA integrity_check，返回 True 当且仅当结果为 'ok'。"""
-    conn = None
-    try:
-        conn = sqlite3.connect(str(db_path))
-        result = conn.execute("PRAGMA integrity_check").fetchone()
-        return bool(result) and result[0] == "ok"
-    except sqlite3.Error:
-        return False
-    finally:
-        if conn is not None:
-            conn.close()
-
-
-def _quick_check_ok(db_path: Path) -> bool:
-    """跑 PRAGMA quick_check（启动时用，比 integrity_check 快）。"""
-    conn = None
-    try:
-        conn = sqlite3.connect(str(db_path))
-        result = conn.execute("PRAGMA quick_check").fetchone()
-        return bool(result) and result[0] == "ok"
-    except sqlite3.Error:
-        return False
-    finally:
-        if conn is not None:
-            conn.close()
 
 
 def recover_if_corrupt(
@@ -353,12 +349,75 @@ def run_alembic_upgrade(
     data_dir: str | os.PathLike[str] | None = None, version: str = "head"
 ) -> None:
     configure_desktop_environment(data_dir)
-    if _should_bootstrap_sqlite(data_dir):
-        bootstrap_sqlite_schema(data_dir)
-        _run_alembic_cli("stamp", "head")
-        return
-    repair_unknown_stamped_revision(data_dir)
-    _run_alembic_cli("upgrade", version)
+    # 迁移会改写 schema 契约，必须与并发启动的其它进程互斥（见 migration_lock）。
+    with migration_lock(data_dir):
+        if _should_bootstrap_sqlite(data_dir):
+            bootstrap_sqlite_schema(data_dir)
+            _run_alembic_cli("stamp", "head")
+            return
+        repair_unknown_stamped_revision(data_dir)
+        _run_alembic_cli("upgrade", version)
+
+
+def _current_head_revision() -> str | None:
+    """当前包迁移链的 head revision（ScriptDirectory 解析，不依赖数据库）。"""
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    ini = _resolve_alembic_ini()
+    if not ini.is_file():
+        raise FileNotFoundError(f"alembic.ini not found: {ini}")
+    script = ScriptDirectory.from_config(Config(str(ini)))
+    return script.get_current_head()
+
+
+def is_schema_current(data_dir: str | os.PathLike[str] | None = None) -> bool | None:
+    """判断存量库 schema 是否已在 head。
+
+    返回 True 表示已在 head（可零开销跳过）；False 表示需要升级（含首启、
+    链外版本戳待修复、版本戳缺失三种情况，均交给 run_alembic_upgrade 处理）。
+    """
+    dirs = ensure_desktop_dirs(data_dir)
+    db = dirs["data"] / "xcagi.db"
+    if not db.exists() or db.stat().st_size == 0:
+        return False
+    stamped = _read_stamped_revision(db)
+    if not stamped:
+        return False
+    if stamped not in _known_alembic_revisions():
+        return False
+    return stamped == _current_head_revision()
+
+
+def ensure_startup_migration(
+    data_dir: str | os.PathLike[str] | None = None, version: str = "startup"
+) -> dict[str, str]:
+    """桌面每次启动的 schema 兜底：已在 head 直接跳过，否则热备份后补迁移。
+
+    背景：Electron 仅在更新安装流程执行 ``--migrate-only``；常规启动从不
+    迁移。存量库停在旧迁移版本时，新代码按新 ORM 查询即 500（2026-09-10
+    实测：老库缺 ``products.base_uom_id`` / ``inventory_transactions.ordered_quantity``
+    导致产品/库存页整页不可用）。
+
+    失败时抛出异常让调用方（run_fastapi / Electron）捕获退出码引导用户，
+    而不是带病启动后静默 500。
+    """
+    configure_desktop_environment(data_dir)
+    if is_schema_current(data_dir):
+        return {"action": "skipped", "detail": "schema already at head"}
+    with migration_lock(data_dir):
+        # 拿到锁后再确认一次：并发启动的另一个进程可能刚完成迁移，无需重复备份。
+        if is_schema_current(data_dir):
+            return {"action": "skipped", "detail": "schema already at head"}
+        dirs = ensure_desktop_dirs(data_dir)
+        db = dirs["data"] / "xcagi.db"
+        if db.exists() and db.stat().st_size > 0:
+            backup = backup_database(data_dir, os.environ.get("XCAGI_VERSION", version))
+            if backup is None:
+                # 与 --migrate-only 的备份门禁保持一致：宁可不启动，不做无备份迁移
+                raise RuntimeError("migration backup failed; refusing to continue")
+        run_alembic_upgrade(data_dir)
+    return {"action": "upgraded", "detail": "schema migrated at startup"}
 
 
 def _should_bootstrap_sqlite(data_dir: str | os.PathLike[str] | None = None) -> bool:

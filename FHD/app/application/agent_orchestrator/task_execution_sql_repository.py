@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from typing import cast
+from typing import Any, cast
 
 from sqlalchemy import Table, and_, or_
 from sqlalchemy.orm import Session
@@ -41,36 +41,42 @@ class SQLAlchemyTaskExecutionRepository:
         priority: int = 100,
     ) -> AgentTaskExecution:
         self._ensure_schema()
-        now = utc_now_iso()
         with self._session_scope() as db:
-            from app.db.models.agent import AgentTaskExecutionRecord
-
-            record = db.get(AgentTaskExecutionRecord, run.run_id)
-            if record is None:
-                record = AgentTaskExecutionRecord(
-                    run_id=run.run_id,
-                    task_id=_task_id_of(run),
-                    user_id=run.user_id,
-                    tenant_id=tenant_id_of_run(run),
-                    state="queued",
-                    priority=int(priority),
-                    available_at=now,
-                    created_at=now,
-                    updated_at=now,
-                )
-                db.add(record)
-            elif record.state != "claimed":
-                record.state = "queued"
-                record.lease_owner = None
-                record.lease_expires_at = None
-                record.heartbeat_at = None
-                record.finished_at = None
-            record.priority = int(priority)
-            record.available_at = now
-            record.requested_by = str(requested_by or "") or None
-            record.last_error_code = None
-            record.updated_at = now
+            self.enqueue_in_session(db, run, requested_by=requested_by, priority=priority)
         return self.get(run.run_id)  # type: ignore[return-value]
+
+    def enqueue_in_session(
+        self, db: Session, run: AgentRun, *, requested_by: str = "", priority: int = 100
+    ) -> None:
+        """Stage queue state in the caller's transaction; never publish it early."""
+        now = utc_now_iso()
+        from app.db.models.agent import AgentTaskExecutionRecord
+
+        record = db.get(AgentTaskExecutionRecord, run.run_id)
+        if record is None:
+            record = AgentTaskExecutionRecord(
+                run_id=run.run_id,
+                task_id=_task_id_of(run),
+                user_id=run.user_id,
+                tenant_id=tenant_id_of_run(run),
+                state="queued",
+                priority=int(priority),
+                available_at=now,
+                created_at=now,
+                updated_at=now,
+            )
+            db.add(record)
+        elif record.state != "claimed":
+            record.state = "queued"
+            record.lease_owner = None
+            record.lease_expires_at = None
+            record.heartbeat_at = None
+            record.finished_at = None
+        record.priority = int(priority)
+        record.available_at = now
+        record.requested_by = str(requested_by or "") or None
+        record.last_error_code = None
+        record.updated_at = now
 
     def get(self, run_id: str) -> AgentTaskExecution | None:
         self._ensure_schema()
@@ -182,6 +188,7 @@ class SQLAlchemyTaskExecutionRepository:
                     AgentTaskExecutionRecord.run_id == str(run_id or ""),
                     AgentTaskExecutionRecord.state == "claimed",
                     AgentTaskExecutionRecord.lease_owner == str(owner_id or ""),
+                    AgentTaskExecutionRecord.lease_expires_at > current,
                 )
                 .update(
                     {
@@ -242,18 +249,23 @@ class SQLAlchemyTaskExecutionRepository:
                 query = query.filter(
                     AgentTaskExecutionRecord.state == "claimed",
                     AgentTaskExecutionRecord.lease_owner == str(owner_id or ""),
+                    AgentTaskExecutionRecord.lease_expires_at > now,
                 )
-            record = query.one_or_none()
-            if record is None:
-                return None
-            record.state = str(state)
-            record.lease_owner = None
-            record.lease_expires_at = None
-            record.heartbeat_at = None
-            record.last_error_code = str(error_code or "")[:64] or None
-            record.updated_at = now
+            values: dict[Any, Any] = {
+                AgentTaskExecutionRecord.state: str(state),
+                AgentTaskExecutionRecord.lease_owner: None,
+                AgentTaskExecutionRecord.lease_expires_at: None,
+                AgentTaskExecutionRecord.heartbeat_at: None,
+                AgentTaskExecutionRecord.last_error_code: str(error_code or "")[:64] or None,
+                AgentTaskExecutionRecord.updated_at: now,
+            }
             if state in {"completed", "failed", "cancelled", "blocked"}:
-                record.finished_at = now
+                values[AgentTaskExecutionRecord.finished_at] = now
+            # Ownership must be checked by the UPDATE itself. Reading the owner
+            # then flushing an ORM object permits an expired worker to overwrite
+            # a claim acquired by another process between those two operations.
+            if query.update(values, synchronize_session=False) != 1:
+                return None
         return self.get(run_id)
 
     def clear(self) -> None:
@@ -264,12 +276,24 @@ class SQLAlchemyTaskExecutionRepository:
             db.query(AgentTaskExecutionRecord).delete()
 
     @contextmanager
+    def transaction(self, *, read_only: bool = False) -> Iterator[Session]:
+        """Own one initialized storage transaction for cross-repository operations.
+
+        The caller may use session-bound writes but must not commit or close the
+        session. Successful writes commit once on exit; failures roll back.
+        """
+        self._ensure_schema()
+        with self._session_scope(read_only=read_only) as db:
+            yield db
+
+    @contextmanager
     def _session_scope(self, *, read_only: bool = False) -> Iterator[Session]:
         session_factory = self._session_factory
         if session_factory is None:
-            from app.db import SessionLocal
+            from app.db import HostSessionLocal
 
-            session_factory = SessionLocal
+            # Workers and HTTP requests share one durable control database.
+            session_factory = HostSessionLocal
         db = session_factory()
         try:
             yield db

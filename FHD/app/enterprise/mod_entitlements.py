@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
-import base64
 import json
 import logging
 import os
 import time
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass
 from typing import Any
 
+from app.enterprise.market_entitlement_client import (
+    _market_user_id_from_access_token,
+    fetch_entitled_client_mod_ids_for_market_user,
+    fetch_entitled_client_mod_ids_from_market,
+    parse_mod_ids_from_market_payload,
+)
 from app.mod_sdk.industry_mod_aliases import is_retired_runtime_mod_id
 from app.mod_sdk.platform_shell import PROTECTED_CLIENT_MOD_IDS
 from app.mod_sdk.product_skus import bundled_mod_ids_for_sku, resolve_product_sku
@@ -25,6 +33,44 @@ _cached_account_kind: str = "enterprise"
 _cached_market_is_admin: bool = False
 _entitlement_sync_at_by_session: dict[str, float] = {}
 _reloaded_entitlement_ids_by_session: dict[str, frozenset[str]] = {}
+
+
+@dataclass(frozen=True)
+class _EntitlementState:
+    user_id: int | None = None
+    username: str = ""
+    mod_ids: frozenset[str] = frozenset()
+    account_kind: str = "enterprise"
+    is_admin: bool = False
+
+
+_request_entitlements: ContextVar[_EntitlementState | None] = ContextVar(
+    "request_entitlements", default=None
+)
+
+
+@contextmanager
+def request_entitlement_scope():
+    """Start each HTTP request without inheriting another account's rights."""
+    token = _request_entitlements.set(_EntitlementState())
+    try:
+        yield
+    finally:
+        _request_entitlements.reset(token)
+
+
+def _current_entitlements() -> _EntitlementState:
+    scoped = _request_entitlements.get()
+    if scoped is not None:
+        return scoped
+    # Preserve non-request startup/desktop compatibility. HTTP never falls back.
+    return _EntitlementState(
+        _cached_market_user_id,
+        _cached_market_username,
+        frozenset(_cached_entitled_client_mod_ids or ()),
+        _cached_account_kind,
+        _cached_market_is_admin,
+    )
 
 
 def _entitlement_sync_ttl_seconds() -> float:
@@ -51,16 +97,20 @@ def get_cached_entitled_client_mod_ids() -> set[str] | None:
     """None 表示非企业版或未登录绑定；set 表示允许加载/展示的客户 Mod id。"""
     if not enterprise_mod_filter_active():
         return None
-    return set(_cached_entitled_client_mod_ids or set())
+    return set(_current_entitlements().mod_ids)
 
 
 def get_cached_market_identity() -> tuple[int | None, str]:
-    return _cached_market_user_id, _cached_market_username
+    state = _current_entitlements()
+    return state.user_id, state.username
 
 
 def clear_session_entitlements() -> None:
     global _cached_market_user_id, _cached_market_username, _cached_entitled_client_mod_ids
     global _cached_account_kind, _cached_market_is_admin
+    if _request_entitlements.get() is not None:
+        _request_entitlements.set(_EntitlementState())
+        return
     _cached_market_user_id = None
     _cached_market_username = ""
     _cached_entitled_client_mod_ids = None
@@ -80,29 +130,22 @@ def set_session_entitlements(
 ) -> None:
     global _cached_market_user_id, _cached_market_username, _cached_entitled_client_mod_ids
     global _cached_account_kind, _cached_market_is_admin
+    if _request_entitlements.get() is not None:
+        _request_entitlements.set(
+            _EntitlementState(
+                market_user_id,
+                (market_username or "").strip(),
+                frozenset(entitled_client_mod_ids),
+                (account_kind or "enterprise").strip() or "enterprise",
+                bool(market_is_admin),
+            )
+        )
+        return
     _cached_market_user_id = market_user_id
     _cached_market_username = (market_username or "").strip()
     _cached_entitled_client_mod_ids = set(entitled_client_mod_ids)
     _cached_account_kind = (account_kind or "enterprise").strip() or "enterprise"
     _cached_market_is_admin = bool(market_is_admin)
-
-
-def _market_user_id_from_access_token(market_token: str) -> int | None:
-    """Best-effort identity fallback for market JWTs already accepted by market APIs."""
-    token = (market_token or "").strip()
-    if token.lower().startswith("bearer "):
-        token = token[7:].strip()
-    parts = token.split(".")
-    if len(parts) < 2:
-        return None
-    payload = parts[1]
-    payload += "=" * (-len(payload) % 4)
-    try:
-        data = json.loads(base64.urlsafe_b64decode(payload.encode("ascii")).decode("utf-8"))
-        raw = data.get("sub")
-        return int(raw) if raw is not None and str(raw).strip() else None
-    except (ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
-        return None
 
 
 def _session_row_db_context():
@@ -125,7 +168,8 @@ def _session_row_db_context():
 
 
 def is_admin_account_session() -> bool:
-    return _cached_account_kind == "admin" and _cached_market_is_admin
+    state = _current_entitlements()
+    return state.account_kind == "admin" and state.is_admin
 
 
 def is_mod_visible_for_enterprise(mod_id: str) -> bool:
@@ -186,79 +230,7 @@ def filter_mod_id_list_for_enterprise(mod_ids: list[str]) -> list[str]:
 
 
 def _parse_mod_ids_from_market_payload(payload: Any) -> set[str]:
-    ids: set[str] = set()
-    if not isinstance(payload, dict):
-        return ids
-    raw_ids = payload.get("mod_ids")
-    if isinstance(raw_ids, list):
-        for mid in raw_ids:
-            s = str(mid).strip()
-            if s and is_client_mod_id(s):
-                ids.add(s)
-        if ids:
-            return ids
-    data = payload.get("data")
-    if isinstance(data, list):
-        rows = data
-    elif isinstance(data, dict) and isinstance(data.get("mods"), list):
-        rows = data["mods"]
-    else:
-        rows = []
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        mid = str(row.get("id") or "").strip()
-        if mid:
-            ids.add(mid)
-    return ids
-
-
-async def fetch_entitled_client_mod_ids_from_market(market_token: str) -> set[str]:
-    """从修茈市场拉取当前账号绑定的客户 Mod（不走 is_admin 全量列表）。"""
-    from app.application.delivery_entitlements import valid_entitlement_ids
-    from app.fastapi_routes.market_account import _proxy_json
-
-    tok = (market_token or "").strip()
-    if not tok:
-        return set()
-    auth = tok if tok.lower().startswith("bearer ") else f"Bearer {tok}"
-    payload = await _proxy_json(
-        "GET",
-        "/api/enterprise/entitled-mod-ids",
-        authorization=auth,
-        return_error_payload=True,
-    )
-    if isinstance(payload, dict) and payload.get("__proxy_error__"):
-        logger.warning("fetch entitled-mod-ids failed: %s", payload)
-        return set()
-    if isinstance(payload, dict):
-        raw = payload.get("mod_ids") or payload.get("data", {}).get("mod_ids")
-        if isinstance(raw, list):
-            return valid_entitlement_ids(raw)
-    return _parse_mod_ids_from_market_payload(payload)
-
-
-async def fetch_entitled_client_mod_ids_for_market_user(
-    market_token: str,
-    target_market_user_id: int,
-) -> set[str]:
-    """管理员代管：拉取指定市场用户的 user_mods 客户 Mod。"""
-    from app.fastapi_routes.market_account import _proxy_json
-
-    tok = (market_token or "").strip()
-    if not tok:
-        return set()
-    auth = tok if tok.lower().startswith("bearer ") else f"Bearer {tok}"
-    payload = await _proxy_json(
-        "GET",
-        f"/api/admin/users/{int(target_market_user_id)}/mods",
-        authorization=auth,
-        return_error_payload=True,
-    )
-    if isinstance(payload, dict) and payload.get("__proxy_error__"):
-        logger.warning("fetch admin user mods failed: %s", payload)
-        return set()
-    return _parse_mod_ids_from_market_payload(payload)
+    return parse_mod_ids_from_market_payload(payload, is_client_mod_id=is_client_mod_id)
 
 
 async def refresh_session_entitlements_from_market(
@@ -321,8 +293,9 @@ def persist_entitlements_to_session_row(session_id: str, client_ids: set[str]) -
             row = db.query(UserSession).filter(UserSession.session_id == sid).first()
             if row is None:
                 return
-            if _cached_market_user_id is not None:
-                row.market_user_id = _cached_market_user_id
+            identity = _current_entitlements().user_id
+            if identity is not None:
+                row.market_user_id = identity
             row.entitled_mod_ids_json = json.dumps(sorted(client_ids), ensure_ascii=False)
             db.commit()
     except RECOVERABLE_ERRORS:
@@ -335,9 +308,17 @@ def restore_entitlements_from_session_row(session_id: str) -> bool:
         return False
     try:
         from app.db.models.user import Session as UserSession
+        from app.utils.time import utc_now_naive
 
         with _session_row_db_context() as db:
-            row = db.query(UserSession).filter(UserSession.session_id == sid).first()
+            row = (
+                db.query(UserSession)
+                .filter(
+                    UserSession.session_id == sid,
+                    UserSession.expires_at > utc_now_naive(),
+                )
+                .first()
+            )
             if row is None:
                 clear_session_entitlements()
                 return False
@@ -413,7 +394,12 @@ async def sync_entitlements_for_session(session_id: str, *, force: bool = False)
         and last_sync > 0
         and time.monotonic() - last_sync < _entitlement_sync_ttl_seconds()
     ):
-        return set(cached_now)
+        # The TTL belongs to this session; the process cache may belong to the
+        # last account that made a request. Reload this session before reuse.
+        if not restore_entitlements_from_session_row(sid):
+            clear_session_entitlements()
+            return set()
+        return set(get_cached_entitled_client_mod_ids() or set())
     try:
         from app.fastapi_routes.market_account import resolve_valid_market_access_token
 
@@ -427,11 +413,11 @@ async def sync_entitlements_for_session(session_id: str, *, force: bool = False)
             )
             client_ids = _augment_entitled_for_username(local_username, client_ids)
             set_session_entitlements(
-                market_user_id=_cached_market_user_id,
-                market_username=local_username or _cached_market_username,
+                market_user_id=_current_entitlements().user_id,
+                market_username=local_username or _current_entitlements().username,
                 entitled_client_mod_ids=client_ids,
-                account_kind=_cached_account_kind,
-                market_is_admin=_cached_market_is_admin,
+                account_kind=_current_entitlements().account_kind,
+                market_is_admin=_current_entitlements().is_admin,
             )
             persist_entitlements_to_session_row(sid, client_ids)
             entitlement_fingerprint = frozenset(client_ids)
@@ -440,23 +426,27 @@ async def sync_entitlements_for_session(session_id: str, *, force: bool = False)
                 _reloaded_entitlement_ids_by_session[sid] = entitlement_fingerprint
             _entitlement_sync_at_by_session[sid] = time.monotonic()
             return client_ids
-        restore_entitlements_from_session_row(sid)
+        if not restore_entitlements_from_session_row(sid):
+            clear_session_entitlements()
+            return set()
         cached = _augment_entitled_for_username(
             local_username, get_cached_entitled_client_mod_ids() or set()
         )
         if cached:
             set_session_entitlements(
-                market_user_id=_cached_market_user_id,
-                market_username=local_username or _cached_market_username,
+                market_user_id=_current_entitlements().user_id,
+                market_username=local_username or _current_entitlements().username,
                 entitled_client_mod_ids=cached,
-                account_kind=_cached_account_kind,
-                market_is_admin=_cached_market_is_admin,
+                account_kind=_current_entitlements().account_kind,
+                market_is_admin=_current_entitlements().is_admin,
             )
         _entitlement_sync_at_by_session[sid] = time.monotonic()
         return cached
     except RECOVERABLE_ERRORS:
         logger.exception("sync_entitlements_for_session failed")
-        restore_entitlements_from_session_row(sid)
+        if not restore_entitlements_from_session_row(sid):
+            clear_session_entitlements()
+            return set()
         local_username = _session_username_for_entitlements(sid)
         cached = _augment_entitled_for_username(
             local_username, get_cached_entitled_client_mod_ids() or set()

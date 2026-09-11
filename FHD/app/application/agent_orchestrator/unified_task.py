@@ -56,6 +56,20 @@ def _request_fingerprint(tool_id: str, action: str, params: dict[str, Any]) -> s
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def _assert_reused_run_scope(
+    run: AgentRun, *, user_id: str, tenant_id: str, runtime_context: dict[str, Any] | None
+) -> None:
+    previous_context = run.metadata.get("runtime_context") or {}
+    previous_binding = previous_context.get("_mod_authorization") or {}
+    requested_binding = (runtime_context or {}).get("_mod_authorization") or {}
+    if (
+        run.user_id != user_id
+        or tenant_id_of_run(run) != tenant_id
+        or previous_binding.get("mod_id", "") != requested_binding.get("mod_id", "")
+    ):
+        raise UnifiedTaskConflictError("task_id 已绑定到不同的账号或 Mod 范围")
+
+
 def create_unified_task(
     *,
     orchestrator: AgentOrchestrator,
@@ -84,7 +98,7 @@ def create_unified_task(
     task = orchestrator.get_task(
         user_id=user_id,
         task_id=normalized_task_id,
-        tenant_id=tenant_id or None,
+        tenant_id=tenant_id,
     )
     if task is not None:
         previous_fingerprint = str(task.metadata.get("task_request_fingerprint") or "")
@@ -92,10 +106,17 @@ def create_unified_task(
             raise UnifiedTaskConflictError("task_id 已绑定到不同的任务内容")
         previous = orchestrator.get_run(task.active_run_id)
         if previous is None:
-            task_runs = orchestrator.list_task_runs(user_id=user_id, task_id=normalized_task_id)
+            task_runs = [
+                run
+                for run in orchestrator.list_task_runs(user_id=user_id, task_id=normalized_task_id)
+                if tenant_id_of_run(run) == tenant_id
+            ]
             previous = task_runs[-1] if task_runs else None
         if previous is None:
             raise UnifiedTaskError("任务账本缺少执行记录")
+        _assert_reused_run_scope(
+            previous, user_id=user_id, tenant_id=tenant_id, runtime_context=runtime_context
+        )
         return UnifiedTaskResult(run=previous, deduplicated=True)
 
     # Backfill a pre-Task-SSOT AgentRun on first access so old durable tasks keep
@@ -107,6 +128,9 @@ def create_unified_task(
     ]
     if existing:
         previous = existing[-1]
+        _assert_reused_run_scope(
+            previous, user_id=user_id, tenant_id=tenant_id, runtime_context=runtime_context
+        )
         previous_fingerprint = str(previous.metadata.get("task_request_fingerprint") or "")
         if not previous_fingerprint and not previous.tool_calls and previous.steps:
             first_step = previous.steps[0]

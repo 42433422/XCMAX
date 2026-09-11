@@ -318,8 +318,7 @@
           "risk": "medium",
           "idempotent": false,
           "required_params": [
-            "name_or_model",
-            "unit_name"
+            "name_or_model"
           ],
           "availability": "shared",
           "action_class": "business_db.write"
@@ -508,8 +507,6 @@
           "risk": "high",
           "idempotent": false,
           "required_params": [
-            "product_id",
-            "warehouse_id",
             "quantity"
           ],
           "availability": "shared"
@@ -657,11 +654,17 @@
           "required_params": [],
           "availability": "shared"
         },
+        "create_order": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": ["items"],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        },
         "quote": {
           "risk": "medium",
-          "idempotent": true,
+          "idempotent": false,
           "required_params": [
-            "customer_id",
             "items"
           ],
           "availability": "shared",

@@ -611,14 +611,14 @@ class TestErpToolRegistry:
         reg = _workflow_registry()
         sales = reg["sales"]["actions"]
         assert sales["query"]["risk"] == "low" and sales["query"]["idempotent"] is True
-        assert sales["quote"]["risk"] == "medium" and sales["quote"]["idempotent"] is True
+        assert sales["quote"]["risk"] == "medium" and sales["quote"]["idempotent"] is False
         for a in ("confirm", "deliver", "invoice", "payment", "cancel"):
             assert sales[a]["idempotent"] is True
 
     def test_sales_required_params(self):
         reg = _workflow_registry()
         sales = reg["sales"]["actions"]
-        assert set(sales["quote"]["required_params"]) == {"customer_id", "items"}
+        assert set(sales["quote"]["required_params"]) == {"items"}
         assert set(sales["payment"]["required_params"]) == {"order_id", "amount"}
         assert sales["confirm"]["required_params"] == ["order_id"]
 
@@ -668,12 +668,15 @@ class TestErpCapabilityGate:
             {
                 "tool_id": "sales",
                 "action": "quote",
-                "params": {"customer_id": 1, "items": [{"product_id": 1, "quantity": 1}]},
+                "params": {
+                    "customer_id": 1,
+                    "items": [{"product_id": 1, "quantity": 1, "unit_price": 50}],
+                },
             }
         )
         assert r["success"] is True
         assert r["risk"] == "medium"
-        assert r["idempotent"] is True
+        assert r["idempotent"] is False
 
     def test_sales_payment_missing_amount(self):
         from app.application.tools.registered_capabilities import (

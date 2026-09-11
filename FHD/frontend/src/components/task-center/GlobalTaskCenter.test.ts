@@ -1,3 +1,7 @@
+import { nextTick } from 'vue'
+import { useAccountProfileStore } from '@/stores/accountProfile'
+import { useModsStore } from '@/stores/mods'
+import { useAgentTaskCenterStore } from '@/stores/agentTaskCenter'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
@@ -18,6 +22,8 @@ const apiMock = vi.hoisted(() => ({
   markTaskRead: vi.fn(),
   taskEventStreamPath: vi.fn(() => '/api/agent/tasks/events/stream'),
 }))
+vi.mock('@/stores/accountProfile', async () => { const { reactive } = await import('vue'); const state = reactive({ localUserId: 1 }); return { useAccountProfileStore: () => state } })
+vi.mock('@/stores/mods', async () => { const { reactive } = await import('vue'); const state = reactive({ activeModId: 'a' }); return { useModsStore: () => state } })
 vi.mock('@/api/agentRuns', () => ({ default: apiMock }))
 vi.mock('@/api/core', () => ({ buildFullApiUrl: (path: string) => path }))
 vi.mock('@/stores/tutorialV2', () => ({
@@ -152,4 +158,19 @@ describe('GlobalTaskCenter', () => {
 
     wrapper.unmount()
   })
+})
+
+it('restarts scope synchronously on account and Mod changes', async () => {
+  const pinia = createPinia()
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] })
+  await router.push('/')
+  const store = useAgentTaskCenterStore(pinia)
+  const restart = vi.spyOn(store, 'restartForScope')
+  const wrapper = mount(GlobalTaskCenter, { global: { plugins: [pinia, router], stubs: { Teleport: true } } })
+  useModsStore().activeModId = 'b'
+  expect(restart).toHaveBeenCalledTimes(1)
+  useAccountProfileStore().localUserId = 2
+  expect(restart).toHaveBeenCalledTimes(2)
+  await nextTick()
+  wrapper.unmount()
 })

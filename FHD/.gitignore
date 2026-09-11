@@ -156,6 +156,8 @@ temp_excel/
 shipment_outputs/
 saved_analyses/
 user_memory/
+!app/domain/user_memory/
+!app/domain/user_memory/*.py
 labels/
 test_labels/
 output/
@@ -271,6 +273,9 @@ _archived_removed_mods/
 migration_metrics.json
 migration_status_report.txt
 
+# docs_triage.py report/apply 每次重写的清单（生成物，勿提交）
+metrics/docs-triage.json
+
 # mutmut 3.x 变异测试沙箱与缓存（运行时生成约80M，勿提交）
 mutants/
 .mutmut-cache
@@ -294,3 +299,7 @@ coverage-behavior.json
 test_reports/*
 !test_reports/junit-full.xml
 !test_reports/pytest-full-last.txt
+
+# .NET build artifacts (IDE-generated; was misdetected as code changes by dispatch pipeline)
+tools/**/obj/
+tools/**/bin/

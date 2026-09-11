@@ -124,7 +124,13 @@ class InMemoryTaskExecutionRepository:
         current = str(now or utc_now_iso())
         with self._lock:
             row = self._rows.get(str(run_id or ""))
-            if row is None or row.state != "claimed" or row.lease_owner != owner_id:
+            if (
+                row is None
+                or row.state != "claimed"
+                or row.lease_owner != owner_id
+                or not row.lease_expires_at
+                or row.lease_expires_at <= current
+            ):
                 return False
             row.heartbeat_at = current
             row.lease_expires_at = _deadline(current, lease_seconds)
@@ -141,7 +147,13 @@ class InMemoryTaskExecutionRepository:
     ) -> AgentTaskExecution | None:
         with self._lock:
             row = self._rows.get(str(run_id or ""))
-            if row is None or row.state != "claimed" or row.lease_owner != owner_id:
+            if (
+                row is None
+                or row.state != "claimed"
+                or row.lease_owner != owner_id
+                or not row.lease_expires_at
+                or row.lease_expires_at <= utc_now_iso()
+            ):
                 return None
             return self._transition_locked(row, state, error_code=error_code)
 

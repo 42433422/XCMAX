@@ -89,6 +89,7 @@ _FULL_OPTIONAL_MODULES = (
     "modstore_server.analytics_api",
     "modstore_server.refund_api",
     "modstore_server.update_installation_api",
+    "modstore_server.work_order_api",
     "modstore_server.asset_installation_api",
     "modstore_server.standard_delivery_api",
     "modstore_server.mac_control_api",

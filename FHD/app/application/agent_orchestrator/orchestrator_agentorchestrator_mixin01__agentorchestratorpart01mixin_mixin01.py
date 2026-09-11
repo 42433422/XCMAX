@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import importlib
 
+from app.application.agent_orchestrator.clarification import pause_for_clarification
+
 
 def _facade():
     return importlib.import_module("app.application.agent_orchestrator.orchestrator")
@@ -349,7 +351,12 @@ class __AgentOrchestratorPart01MixinPart01Mixin:
         self._refresh_artifact_metadata(run)
         run.status = "running" if run.steps else "blocked"
         if not run.steps:
-            run.error = "planner returned no executable steps"
+            from app.application.workflow.sql_execution_policy import REFUSAL_CODE, REFUSAL_MESSAGE
+
+            refused = plan_metadata.get("refusal_code") == REFUSAL_CODE
+            run.error = REFUSAL_CODE if refused else "planner returned no executable steps"
+            if refused:
+                run.final_output = {"message": REFUSAL_MESSAGE, "refusal_code": REFUSAL_CODE}
             run.add_event("planner.blocked", "计划没有可执行节点")
 
     @staticmethod
@@ -386,6 +393,12 @@ class __AgentOrchestratorPart01MixinPart01Mixin:
         runtime_context: dict[str, _facade().Any],
         approved_step_id: str = "",
     ) -> None:
+        if not run.steps:
+            # 拒绝执行的 SQL 计划（refusal_code）需保持 blocked，交由调用方给出拒答；
+            # 其余空计划维持既有语义：无步骤可执行即视为已完成。
+            refusal = run.final_output if isinstance(run.final_output, dict) else {}
+            if run.status == "blocked" and refusal.get("refusal_code"):
+                return
         approved = str(approved_step_id or "").strip()
         completed_node_ids: set[str] = {
             step.node_id for step in run.steps if step.status == "completed"
@@ -400,6 +413,8 @@ class __AgentOrchestratorPart01MixinPart01Mixin:
                 return
             if step.status == "completed":
                 continue
+            if pause_for_clarification(run, step):
+                return
             if any(dep not in completed_node_ids for dep in step.depends_on):
                 run.status = "blocked"
                 step.status = "skipped"

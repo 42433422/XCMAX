@@ -276,6 +276,30 @@ domains:
     check: python scripts/ops/runtime_inventory.py check
     sync: null
 
+  - name: desktop-platform-parity
+    owner: desktop-platform
+    enabled: true
+    # 桌面双端平级 SSOT（2026-09-09 生效）：Windows 与 macOS 平级发布（同版本/同 release_sha/双端齐备），
+    # 功能双端验证通过才算完成；平台差异收口 FHD/desktop/platform/ 适配层，
+    # 业务模块禁止散落 process.platform 判断，不再让 Windows 追着 Mac 改。
+    ssot: FHD/docs/desktop_platform_parity_ssot.md
+    derived:
+      - FHD/.github/workflows/release-desktop.yml
+    mode: lint
+    check: python scripts/dev/ssot_plugins/desktop_platform_parity.py check
+    sync: null
+
+  - name: macos-release
+    owner: desktop-platform
+    enabled: true
+    # macOS 发布交付事实快照（人工维护）：版本/产物/SHA256/Gate 状态/偏差登记/实机任务/发版 runbook。
+    # check 只校验文档结构与 Gate 状态值合法性；真机证据无法自动校验，按 §9 runbook 回填。
+    ssot: FHD/docs/MACOS_RELEASE_SSOT.md
+    derived: []
+    mode: lint
+    check: python scripts/dev/ssot_plugins/macos_release.py check
+    sync: null
+
   - name: repository-ssot
     owner: backend
     enabled: true
@@ -311,6 +335,18 @@ domains:
     mode: lint
     check: python scripts/dev/dev_guards.py check
     sync: null
+
+  - name: net-deletion
+    owner: platform-governance
+    enabled: true
+    # 净删除棘轮 SSOT：全仓「人工维护代码 + 文档」总行数基线，只减不增（棘轮）。
+    # 口径与排除项（生成物/第三方/dump/锁文件）见 scripts/dev/check_net_deletion.py；
+    # 已独立成域，故不进 dev-guards 聚合，避免同一门禁重复执行。
+    ssot: FHD/metrics/line_baseline.json
+    derived: []
+    mode: ratchet
+    check: python scripts/dev/check_net_deletion.py
+    sync: python scripts/dev/check_net_deletion.py --update
 
   - name: audit-benchmark
     owner: audit-quality

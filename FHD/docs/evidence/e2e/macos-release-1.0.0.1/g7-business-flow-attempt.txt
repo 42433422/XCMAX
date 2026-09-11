@@ -1,0 +1,9 @@
+# G7 真机 API 层业务流实测（2026-09-11，登录前，实测人：macOS 验收实例）
+
+== GET /api/shipment/orders/next_number ==
+{"success":true,"data":{"order_number":"26-09-00001A","sequence":1,"year_month":"26-09"}}
+
+== POST /api/shipment/generate（CSRF 双提交通过，业务层执行） ==
+{"success":false,"message":"出货单操作失败","products_source":"request","template_resolution":{"template_id":null,"template_name":null,"template_type":null,"source":null,"reason":"no_template_found","error_code":"TEMPLATE_NOT_FOUND","ok":false},"run_id":"run_f8f383dcf26e4e2697a513d1c84be05b","agent_status":"failed"}
+
+== 结论：取号/CSRF/业务路由全链通；文档生成需客户自带模板（应用不内置，userData 无）；考勤类走账号权益门控（mod_sdk/customer_features.py），T3 前置 T2 登录 ==

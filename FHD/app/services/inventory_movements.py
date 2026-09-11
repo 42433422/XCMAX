@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import importlib
 import logging
+import math
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
+from app.application.agent_orchestrator.business_write_guard import worker_write_guard
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger("app.services.inventory_service")
@@ -16,6 +18,18 @@ def _facade():
     return importlib.import_module("app.services.inventory_service")
 
 
+def _positive_movement_quantity(value: Any) -> float:
+    if isinstance(value, bool):
+        raise ValueError("库存变动数量必须是有效正数")
+    try:
+        quantity = float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("库存变动数量必须是有效正数") from exc
+    if not math.isfinite(quantity) or quantity <= 0:
+        raise ValueError("库存变动数量必须是有效正数")
+    return quantity
+
+
 class InventoryMovementsMixin:
     if TYPE_CHECKING:
 
@@ -23,8 +37,8 @@ class InventoryMovementsMixin:
 
     def inventory_in(
         self,
-        product_id: int,
-        warehouse_id: int,
+        product_id: int | None,
+        warehouse_id: int | None,
         quantity: float,
         batch_no: str | None = None,
         location_id: int | None = None,
@@ -33,14 +47,62 @@ class InventoryMovementsMixin:
         reference_id: int | None = None,
         operator: str | None = None,
         remark: str | None = None,
+        model_number: str | None = None,
+        warehouse_name: str | None = None,
     ) -> dict[str, Any]:
-        with _facade().get_db() as db:
+        try:
+            quantity = _positive_movement_quantity(quantity)
+        except ValueError:
+            return {"success": False, "message": "入库数量必须是有效正数"}
+        with _facade().get_db() as db, worker_write_guard(db):
             try:
-                product = (
-                    db.query(_facade().Product).filter(_facade().Product.id == product_id).first()
-                )
+                if product_id is None and model_number:
+                    products = (
+                        db.query(_facade().Product)
+                        .filter(_facade().Product.model_number == model_number)
+                        .limit(2)
+                        .all()
+                    )
+                    if len(products) != 1:
+                        return {
+                            "success": False,
+                            "message": "产品型号不存在或不唯一，请选择明确的产品",
+                        }
+                    product = products[0]
+                else:
+                    product = (
+                        db.query(_facade().Product)
+                        .filter(_facade().Product.id == product_id)
+                        .first()
+                    )
                 if not product:
                     return {"success": False, "message": "产品不存在"}
+                if model_number and product.model_number != model_number:
+                    return {"success": False, "message": "产品编号与型号不符"}
+                if warehouse_id is None and warehouse_name:
+                    warehouses = (
+                        db.query(_facade().Warehouse)
+                        .filter(_facade().Warehouse.name == warehouse_name)
+                        .limit(2)
+                        .all()
+                    )
+                    if len(warehouses) != 1:
+                        return {
+                            "success": False,
+                            "message": "仓库名称不存在或不唯一，请选择明确的仓库",
+                        }
+                    warehouse = warehouses[0]
+                else:
+                    warehouse = (
+                        db.query(_facade().Warehouse)
+                        .filter(_facade().Warehouse.id == warehouse_id)
+                        .first()
+                    )
+                if warehouse is None or warehouse.status != "active":
+                    return {"success": False, "message": "仓库不存在或未启用"}
+                if warehouse_name and warehouse.name != warehouse_name:
+                    return {"success": False, "message": "仓库编号与名称不符"}
+                product_id, warehouse_id = product.id, warehouse.id
                 ledger = (
                     db.query(_facade().InventoryLedger)
                     .filter(
@@ -118,7 +180,11 @@ class InventoryMovementsMixin:
         operator: str | None = None,
         remark: str | None = None,
     ) -> dict[str, Any]:
-        with _facade().get_db() as db:
+        try:
+            quantity = _positive_movement_quantity(quantity)
+        except ValueError:
+            return {"success": False, "message": "出库数量必须是有效正数"}
+        with _facade().get_db() as db, worker_write_guard(db):
             try:
                 query = db.query(_facade().InventoryLedger).filter(
                     _facade().InventoryLedger.product_id == product_id,
@@ -181,7 +247,11 @@ class InventoryMovementsMixin:
         operator: str | None = None,
         remark: str | None = None,
     ) -> dict[str, Any]:
-        with _facade().get_db() as db:
+        try:
+            quantity = _positive_movement_quantity(quantity)
+        except ValueError:
+            return {"success": False, "message": "调拨数量必须是有效正数"}
+        with _facade().get_db() as db, worker_write_guard(db):
             try:
                 from_ledger = (
                     db.query(_facade().InventoryLedger)

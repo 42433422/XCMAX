@@ -18,7 +18,7 @@
 | coverage（覆盖率） | [reports/COVERAGE_RAMP.md](reports/COVERAGE_RAMP.md) | 后端/前端覆盖率基线、目标、棘轮 floor |
 | ci（CI/CD） | [../../docs/CI_SSOT.md](../../docs/CI_SSOT.md) | 根仓 .github/workflows/ 唯一调度入口 |
 | mod（Mod 开发） | [guides/MOD_AUTHORING_GUIDE.md](guides/MOD_AUTHORING_GUIDE.md) | Mod 开发规范、mods/ 为唯一编辑源 |
-| version（产品版本） | [VERSION.md](../VERSION.md) | 产品版本 1.0.0.0、工具链映射 1.0.0 |
+| version（产品版本） | [VERSION.md](../VERSION.md) | 产品版本 1.0.0.1、工具链映射 1.0.0 |
 | route（路由） | [reports/WAVE2_ROUTE_SSOT.md](reports/WAVE2_ROUTE_SSOT.md) | RouteRegistry + mounts/* 路由 SSOT |
 | git（Git 仓库） | [reports/GIT_WORKTREE_RECOVERY.md](reports/GIT_WORKTREE_RECOVERY.md) | 根仓 XCMAX/ 为 Git SSOT |
 | mypy（类型检查） | [../pyproject.toml](../pyproject.toml) | [tool.mypy] 配置 |
@@ -46,6 +46,9 @@
 | customer-delivery（客户私有交付） | [../config/customer_delivery.json](../config/customer_delivery.json) | 客户品牌；`legacy_mod_id` vs `industry_mod_id`；**双轨** `modules` / `employees` 及轨道节点进度；生产员工只列定制包；太阳鸟「考勤表转化」= 模块轨节点 |
 | process-flow（业务流程与交付流程） | [architecture/PROCESS_FLOW_SSOT.md](architecture/PROCESS_FLOW_SSOT.md) | 业务工作流程 + 对外交付流程唯一真相源；供 AGI 编排（Agent Orchestrator / Workflow Engine / NeuroBus 事件驱动）消费；含统一单据生命周期、自动化就绪度矩阵、断点行动项 |
 | utils-boundary（app/utils 职责域） | [devex/utils-domain-boundaries.md](devex/utils-domain-boundaries.md) | app/utils 47 模块职责域归类 + 目标包结构唯一真相源；excel/resilience 已迁移，其余待后续 Stage |
+| net-deletion（净删除棘轮） | [../metrics/line_baseline.json](../metrics/line_baseline.json) | 全仓「人工维护代码 + 文档」总行数基线，只减不增；口径与排除项见 scripts/dev/check_net_deletion.py |
+| macos-release（macOS 发布交付） | [MACOS_RELEASE_SSOT.md](MACOS_RELEASE_SSOT.md) | macOS 版本/产物/SHA256/构建环境/下载与更新地址/测试机 + 12 项 Release Gate 状态与实机验收任务；每次发版复用 |
+| desktop-platform-parity（桌面双端平级） | [desktop_platform_parity_ssot.md](desktop_platform_parity_ssot.md) | Windows 与 macOS 平级发布（同版本/同 release_sha/双端齐备）；功能双端验证通过才算完成；平台差异收口 desktop/platform/ 适配层 |
 
 ## 机器注册表（ssot.yaml）
 
@@ -77,6 +80,9 @@
 | repository-ssot | `FHD/app/infrastructure/repositories/` | blocking |
 | dev-inventory | `FHD/scripts/dev/` | blocking |
 | dev-guards | `FHD/scripts/dev/` | blocking |
+| net-deletion | `FHD/metrics/line_baseline.json` | blocking |
+| desktop-platform-parity | `FHD/docs/desktop_platform_parity_ssot.md` | blocking |
+| macos-release | `FHD/docs/MACOS_RELEASE_SSOT.md` | blocking |
 
 ## 已退役 SSOT（指针化）
 

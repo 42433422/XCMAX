@@ -464,7 +464,7 @@ _BOOTSTRAP_TEMPLATE = textwrap.dedent(
         exec(compile(source, "<sandbox>", "exec"), ns, ns)
         fn = ns.get({function_name!r})
         if not callable(fn):
-            raise RuntimeError(f"function {{!r}} not found".format({function_name!r}))
+            raise RuntimeError(f"function {function_name!r} not found")
         result = fn(**input_data)
         result_dict = result if isinstance(result, dict) else {{"result": result}}
         raw = json.dumps(result_dict, default=str, ensure_ascii=False)

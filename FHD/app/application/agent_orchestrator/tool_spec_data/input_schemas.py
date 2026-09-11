@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 
 _BUSINESS_ENTITIES = ["customers", "products", "materials", "shipment_records"]
@@ -19,3 +20,6 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
     **SPECIAL_INPUT_SCHEMAS_PART_2,
     **SPECIAL_INPUT_SCHEMAS_PART_3,
 }
+_SPECIAL_INPUT_SCHEMAS[("sales", "create_order")] = deepcopy(
+    _SPECIAL_INPUT_SCHEMAS[("sales", "quote")]
+)

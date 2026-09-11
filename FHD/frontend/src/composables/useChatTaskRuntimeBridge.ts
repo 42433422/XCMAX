@@ -1,4 +1,6 @@
-import type { Ref } from 'vue'
+import { watch, type Ref } from 'vue'
+import { useModsStore } from '@/stores/mods'
+import { useAccountProfileStore } from '@/stores/accountProfile'
 import type { TaskItem } from './useChatPersistence'
 import { useAgentTaskWorkspace } from './useAgentTaskWorkspace'
 
@@ -26,8 +28,29 @@ export function useChatTaskRuntimeBridge(options: UseChatTaskRuntimeBridgeOption
     onJumpToMessage: options.jumpToMessage,
   })
 
+  const mods = useModsStore()
+  const account = useAccountProfileStore()
+  let started = false
+  let scopeVersion = 0
+  function start(): void { started = true; workspace.start() }
+  function stop(): void { scopeVersion += 1; started = false; workspace.stop() }
+  watch(
+    () => [mods.activeModId, account.tenantId, account.localUserId, account.marketUserId, account.impersonatingMarketUserId, account.accountKind],
+    () => {
+      scopeVersion += 1
+      workspace.stop()
+      options.taskList.value = []
+      options.activeTaskId.value = ''
+      options.expandedTaskIds.value = []
+      if (started) workspace.start()
+    },
+    { flush: 'sync' },
+  )
+
   async function loadSession(conversationId: string): Promise<void> {
+    const requestedVersion = scopeVersion
     await options.loadConversation(conversationId)
+    if (requestedVersion !== scopeVersion) return
     await workspace.refreshTasks()
   }
 
@@ -47,7 +70,9 @@ export function useChatTaskRuntimeBridge(options: UseChatTaskRuntimeBridgeOption
   }
 
   async function clearTaskHistory(): Promise<void> {
+    const requestedVersion = scopeVersion
     await workspace.archiveCompletedTasks()
+    if (requestedVersion !== scopeVersion) return
     options.clearLocalHistory()
   }
 
@@ -62,7 +87,7 @@ export function useChatTaskRuntimeBridge(options: UseChatTaskRuntimeBridgeOption
     approveTask: (id: string) => workspace.controlTask(id, 'approve'),
     clearTaskHistory,
     refreshTasks: workspace.refreshTasks,
-    start: workspace.start,
-    stop: workspace.stop,
+    start,
+    stop,
   }
 }

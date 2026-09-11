@@ -6,6 +6,14 @@ from app.security import web_jwt as w
 
 
 class TestWebJwt:
+    def test_session_binding_survives_refresh(self):
+        tokens = w.issue_web_tokens(user_id=7, session_id="bound-session")
+        assert w.verify_web_jwt(tokens["access_token"])["session_id"] == "bound-session"
+        rotated = w.refresh_web_access_token(tokens["refresh_token"])
+        assert rotated is not None
+        for token in rotated.values():
+            assert w.verify_web_jwt(token)["session_id"] == "bound-session"
+
     def test_issue_and_verify(self):
         toks = w.issue_web_tokens(user_id=7, username="bob", account_kind="enterprise")
         assert "access_token" in toks and "refresh_token" in toks

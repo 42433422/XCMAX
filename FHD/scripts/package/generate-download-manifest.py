@@ -212,6 +212,15 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--linked-issues",
+        default="",
+        help=(
+            "Comma-separated GitHub issue numbers closed by this release "
+            "(see scripts/dev/extract_release_linked_issues.py). Written into the "
+            "manifest so acceptance receipts can be traced back to work orders."
+        ),
+    )
+    parser.add_argument(
         "--auto-update-base",
         default="https://xiu-ci.com/releases/stable",
     )
@@ -236,6 +245,13 @@ def main() -> int:
         return 1
 
     official_base = args.official_download_base or f"https://xiu-ci.com/xcagi-v{args.version}"
+    linked_issues = sorted(
+        {
+            int(n)
+            for n in re.split(r"[,\s]+", str(args.linked_issues or "").strip())
+            if n.isdigit() and int(n) > 0
+        }
+    )
     release_root = Path(args.release_dir) / args.release_subdir
     if not release_root.is_dir():
         print(f"[error] release root not found: {release_root}", file=sys.stderr)
@@ -292,6 +308,7 @@ def main() -> int:
         "release_root": official_base,
         "manifest_url": f"{official_base}/manifest.json",
         "auto_update_base": args.auto_update_base,
+        "linked_issues": linked_issues,
     }
     if args.android_version:
         download_release["android_version"] = args.android_version

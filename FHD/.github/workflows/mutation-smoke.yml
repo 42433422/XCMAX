@@ -61,11 +61,11 @@ jobs:
           fi
 
       - name: Skip notice (no mutation-scope changes)
-        if: github.event_name != 'schedule' && steps.paths.outputs.run_mutation != 'true'
+        if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch' && steps.paths.outputs.run_mutation != 'true'
         run: echo "No mutation-scope path changes; required check satisfied without running mutmut."
 
       - name: Setup Python
-        if: github.event_name == 'schedule' || steps.paths.outputs.run_mutation == 'true'
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || steps.paths.outputs.run_mutation == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -83,12 +83,16 @@ jobs:
           pip install mutmut
 
       - name: Run mutmut
-        if: github.event_name == 'schedule' || steps.paths.outputs.run_mutation == 'true'
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || steps.paths.outputs.run_mutation == 'true'
         working-directory: FHD
-        run: mutmut run 2>&1 | tee mutmut-run.log
+        # --max-children 1：mutmut 并发子进程会在 pytest 自身清理
+        # /tmp/pytest-of-runner/garbage-* 时竞态（Errno 39 Directory not empty →
+        # PytestWarning → run 日志带 traceback → kill report 判诊断无效）。
+        # 串行执行消除竞态；268 变体串行仍远小于 60 分钟超时。pytest 修复后可恢复并发。
+        run: mutmut run --max-children 1 2>&1 | tee mutmut-run.log
 
       - name: Generate kill report
-        if: github.event_name == 'schedule' || steps.paths.outputs.run_mutation == 'true'
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || steps.paths.outputs.run_mutation == 'true'
         working-directory: FHD
         # mutmut 3.x ``results`` 默认跳过 killed；优先解析 run 日志里的 progress 摘要
         run: python scripts/dev/mutation_kill_report.py --threshold 80 --from-file mutmut-run.log
