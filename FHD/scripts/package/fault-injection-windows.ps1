@@ -77,24 +77,52 @@ function Wait-PortFree([int]$Seconds = 30) {
   return $false
 }
 
-# 启动应用并等 health；返回 $true=healthy。
+# N05（2026-09-12）：健康判定口径修正——原实现死磕 status=healthy，但 /api/health 在
+# 无 LLM 凭据环境（runner/客户机）会返回 degraded（app/fastapi_routes/mounts/health.py
+# 的 neuro 降级链路），导致 run 34642734307 四场景全误判 FAIL（后端实际已在 17500 监听）。
+# 现与 acceptance-windows.ps1 口径一致：200 响应即算启动成功；degraded 状态与原因记入证据。
+function Get-Health {
+  try {
+    if ($PSVersionTable.PSEdition -eq 'Core') {
+      # -NoProxy：本机代理可能拦截 127.0.0.1 造成假阴性（此前 macOS 实证）。
+      return Invoke-RestMethod -Uri $HealthUrl -TimeoutSec 3 -NoProxy
+    }
+    return Invoke-RestMethod -Uri $HealthUrl -TimeoutSec 3 -UseBasicParsing
+  } catch { return $null }
+}
+
+# 启动应用并等待 health；返回 @{ Up=bool; Status=string; Detail=string }。
 function Start-App([string]$Exe) {
-  Start-Process -FilePath $Exe | Out-Null
+  $proc = Start-Process -FilePath $Exe -PassThru
+  $lastErr = 'no response'
   for ($i = 0; $i -lt 90; $i++) {
     Start-Sleep -Seconds 1
-    try {
-      $health = Invoke-RestMethod -Uri $HealthUrl -TimeoutSec 3
-      if ($health.status -eq 'healthy') { return $true }
-    } catch { }
+    if ($proc.HasExited) {
+      return @{ Up = $false; Status = 'exited'; Detail = ("XCAGI.exe 第 {0} 秒提前退出 ExitCode={1}" -f $i, $proc.ExitCode) }
+    }
+    $h = Get-Health
+    if ($null -ne $h) {
+      $reasons = if ($h.degradedReasons) { @($h.degradedReasons) -join ';' } else { '-' }
+      return @{ Up = $true; Status = [string]$h.status; Detail = ("status={0}; degradedReasons={1}" -f $h.status, $reasons) }
+    }
+    $lastErr = 'health 未就绪'
   }
-  return $false
+  return @{ Up = $false; Status = 'no-health'; Detail = ("90s 无 health 响应（最后状态：{0}）" -f $lastErr) }
 }
 
 # 强杀全部 XCAGI 相关进程（Electron 主进程 + sidecar 后端）。
+# N05：taskkill /T 树杀 + 按端口归属兜底清场——原 Stop-Process 不杀子进程树，
+# 场景间残留孤儿监听导致后续场景前置检查级联失败（run 34642734307 实证）。
 function Stop-AppAll {
   foreach ($name in @('XCAGI', 'xcagi-backend')) {
-    Get-Process -Name $name -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Get-Process -Name $name -ErrorAction SilentlyContinue | ForEach-Object {
+      taskkill /PID $_.Id /T /F 2>$null | Out-Null
+    }
   }
+  Get-NetTCPConnection -LocalPort 17500 -State Listen -ErrorAction SilentlyContinue |
+    Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object {
+      taskkill /PID $_ /T /F 2>$null | Out-Null
+    }
   Start-Sleep -Seconds 2
   $freed = Wait-PortFree 30
   if (-not $freed) { Write-Warn2 "强杀后 17500 端口 30 秒内未释放（可能有残留进程）" }
@@ -132,6 +160,30 @@ function New-Evidence([string]$Name, [string]$Text) {
   return $path
 }
 
+# N05：失败取证——端口/进程状态 + 后端日志尾部 + 数据根清单。
+# 本轮 run 34642734307 全场景 FAIL 但无任何应用日志可查，根因无法定位，此函数堵住该缺口。
+function Collect-Diagnostics([string]$Tag) {
+  $sb = New-Object System.Text.StringBuilder
+  [void]$sb.AppendLine(("=== 诊断 {0} @ {1} ===" -f $Tag, (Get-Date -Format o)))
+  $conn = @(Get-NetTCPConnection -LocalPort 17500 -ErrorAction SilentlyContinue | Select-Object -First 3)
+  $portLine = if ($conn) { ($conn | ForEach-Object { "State={0} PID={1}" -f $_.State, $_.OwningProcess }) -join ' | ' } else { '无监听' }
+  [void]$sb.AppendLine(("端口17500: {0}" -f $portLine))
+  $procs = @(Get-Process -Name @('XCAGI', 'xcagi-backend') -ErrorAction SilentlyContinue)
+  $procLine = if ($procs) { ($procs | ForEach-Object { "{0}#{1}" -f $_.Name, $_.Id }) -join ' | ' } else { '无' }
+  [void]$sb.AppendLine(("进程: {0}" -f $procLine))
+  $logPath = Join-Path $DataRoot 'logs\electron-backend.log'
+  if (Test-Path $logPath) {
+    [void]$sb.AppendLine("--- electron-backend.log 尾部 80 行 ---")
+    Get-Content $logPath -Tail 80 -ErrorAction SilentlyContinue | ForEach-Object { [void]$sb.AppendLine($_) }
+  } else {
+    [void]$sb.AppendLine(("未找到后端日志: {0}" -f $logPath))
+  }
+  [void]$sb.AppendLine("--- 数据根清单（前 40 项）---")
+  Get-ChildItem $DataRoot -Recurse -Depth 2 -ErrorAction SilentlyContinue |
+    Select-Object -First 40 | ForEach-Object { [void]$sb.AppendLine($_.FullName) }
+  return New-Evidence ("diag-" + $Tag) $sb.ToString()
+}
+
 # ---------------------------------------------------------------- 前置检查
 Write-Host ""
 Write-Host "XCAGI 桌面端 Windows 故障注入验收（协议：docs/e2e/desktop-real-machine-acceptance-protocol.md）" -ForegroundColor White
@@ -165,27 +217,31 @@ if ($Scenario -contains 'all') { $Scenario = @('kill-all', 'kill-orphan', 'corru
 # ---------------------------------------------------------------- 场景 1 kill-all
 if ($Scenario -contains 'kill-all') {
   Write-Step "1/4 kill-all 强杀全部进程 → 重启恢复"
-  if (-not (Start-App $AppExe)) {
-    Record 'kill-all' 'FAIL' '前置启动失败（health 未 healthy），无法执行强杀场景'
+  $pre = Start-App $AppExe
+  if (-not $pre.Up) {
+    Collect-Diagnostics 'kill-all-前置启动' | Out-Null
+    Record 'kill-all' 'FAIL' ("前置启动失败，无法执行强杀场景：{0}" -f $pre.Detail)
   } else {
+    Write-Info ("前置启动：{0}" -f $pre.Detail)
     $before = Get-Digest $DataRoot
     Write-Info ("强杀前快照：{0}" -f (Format-Digest $before))
-    New-Evidence 'kill-all-before' (Format-Digest $before) | Out-Null
-    Write-Info "注入：Stop-Process -Force（XCAGI + xcagi-backend，等价强杀/断电对进程的影响）"
+    New-Evidence 'kill-all-before' ("{0}; {1}" -f $pre.Detail, (Format-Digest $before)) | Out-Null
+    Write-Info "注入：taskkill /T /F（XCAGI + xcagi-backend，等价强杀/断电对进程的影响）"
     Stop-AppAll | Out-Null
     Write-Info "重启并等待 health ..."
-    $healthy = Start-App $AppExe
+    $re = Start-App $AppExe
     $after = Get-Digest $DataRoot
-    New-Evidence 'kill-all-after' (Format-Digest $after) | Out-Null
-    if (-not $healthy) {
-      Record 'kill-all' 'FAIL' '强杀后重启 health 未恢复'
+    New-Evidence 'kill-all-after' ("restart_up={0}; {1}; {2}" -f $re.Up, $re.Detail, (Format-Digest $after)) | Out-Null
+    if (-not $re.Up) {
+      Collect-Diagnostics 'kill-all-重启' | Out-Null
+      Record 'kill-all' 'FAIL' ("强杀后重启未恢复：{0}" -f $re.Detail)
     } elseif ([int64]$after['xcagi.db.bytes'] -lt [int64]$before['xcagi.db.bytes']) {
       Record 'kill-all' 'FAIL' ("强杀后主库变小（{0} → {1}），疑似数据丢失" -f $before['xcagi.db.bytes'], $after['xcagi.db.bytes'])
     } elseif ([int64]$after['corrupt.evidence'] -gt 0) {
       Record 'kill-all' 'FAIL' '强杀后重启出现损坏库留证（WAL+synchronous=FULL 下不应发生）'
     } else {
-      Write-Ok "强杀后重启：health healthy，主库无损坏证据，数据未减少"
-      Record 'kill-all' 'PASS' ("health=healthy；主库 {0} → {1} 字节；corrupt 证据=0" -f $before['xcagi.db.bytes'], $after['xcagi.db.bytes'])
+      Write-Ok ("强杀后重启：health 可达（{0}），主库无损坏证据，数据未减少" -f $re.Status)
+      Record 'kill-all' 'PASS' ("{0}；主库 {1} → {2} 字节；corrupt 证据=0" -f $re.Detail, $before['xcagi.db.bytes'], $after['xcagi.db.bytes'])
     }
     Stop-AppAll | Out-Null
   }
@@ -209,17 +265,19 @@ if ($Scenario -contains 'kill-orphan') {
     if (-not $orphanConn) { Write-Warn2 "孤儿后端未在 17500 监听（可能启动失败），场景按实际情况记录" }
     Start-Process -FilePath $AppExe | Out-Null
     Start-Sleep -Seconds 12
-    $healthy = $false
-    try { $h = Invoke-RestMethod -Uri $HealthUrl -TimeoutSec 3; if ($h.status -eq 'healthy') { $healthy = $true } } catch { }
+    $h = Get-Health
     $rollbackNote = if (Test-Path $rollback) { (Get-Content $rollback -Raw -Encoding UTF8) } else { '' }
-    New-Evidence 'kill-orphan' ("healthy={0}; rollback_applied={1}" -f $healthy, $rollbackNote) | Out-Null
-    if ($healthy) {
-      Write-Ok "孤儿后端场景：应用最终 health healthy（端口占用被妥善处理）"
-      Record 'kill-orphan' 'PASS' '孤儿 sidecar 占端口后重启，最终 health healthy'
+    $healthNote = if ($null -ne $h) { ("up status={0}" -f $h.status) } else { 'no-health' }
+    New-Evidence 'kill-orphan' ("{0}; rollback_applied={1}" -f $healthNote, $rollbackNote) | Out-Null
+    if ($null -ne $h) {
+      Write-Ok "孤儿后端场景：应用最终 health 可达（端口占用被妥善处理）"
+      Record 'kill-orphan' 'PASS' ("孤儿 sidecar 占端口后重启，最终 {0}" -f $healthNote)
     } elseif ($rollbackNote) {
       Write-Warn2 "触发回滚保护（rollback-applied.json 已落盘），应用进入受控恢复路径"
+      Collect-Diagnostics 'kill-orphan-回滚' | Out-Null
       Record 'kill-orphan' 'PARTIAL' 'health 未恢复但回滚保护触发（受控行为，需人工复核原因）'
     } else {
+      Collect-Diagnostics 'kill-orphan-失败' | Out-Null
       Record 'kill-orphan' 'FAIL' '孤儿后端占端口后应用既未恢复健康也无回滚证据'
     }
     Stop-AppAll | Out-Null
@@ -234,7 +292,8 @@ if ($Scenario -contains 'corrupt-backup') {
     Where-Object { $_.Name -match '^xcagi-.+?(-\w+)?-\d{14}\.db$' } | Sort-Object LastWriteTime -Descending)
   if (-not ($bks.Count -gt 0)) {
     Write-Info "无可用备份：先启动一次应用让迁移/备份产生，再退出。"
-    if (Start-App $AppExe) { Stop-AppAll | Out-Null }
+    $seeding = Start-App $AppExe
+    if ($seeding.Up) { Stop-AppAll | Out-Null }
     $bks = @(Get-ChildItem $backupsDir -File -ErrorAction SilentlyContinue |
       Where-Object { $_.Name -match '^xcagi-.+?(-\w+)?-\d{14}\.db$' } | Sort-Object LastWriteTime -Descending)
   }
@@ -247,14 +306,15 @@ if ($Scenario -contains 'corrupt-backup') {
     Write-Info ("注入：向最新备份写入垃圾字节（不碰主库）：{0}" -f $victim.Name)
     [IO.File]::WriteAllBytes($victimPath, ([byte[]](0x58, 0x43, 0x41, 0x47, 0x49, 0x2D, 0x43, 0x4F, 0x52, 0x52, 0x55, 0x50, 0x54)))
     $beforeMain = (Get-Item (Join-Path $DataRoot 'data\xcagi.db')).Length
-    $healthy = Start-App $AppExe
+    $re = Start-App $AppExe
     $after = Get-Digest $DataRoot
-    New-Evidence 'corrupt-backup' ("healthy={0}; victim={1}; main={2}→{3}" -f $healthy, $victim.Name, $beforeMain, $after['xcagi.db.bytes']) | Out-Null
-    if ($healthy) {
+    New-Evidence 'corrupt-backup' ("up={0}; {1}; victim={2}; main={3}→{4}" -f $re.Up, $re.Detail, $victim.Name, $beforeMain, $after['xcagi.db.bytes']) | Out-Null
+    if ($re.Up) {
       Write-Ok "坏备份未误伤正常启动（recover_if_corrupt 只在主库损坏时启用）"
-      Record 'corrupt-backup' 'PASS' ("坏备份 {0} 存在时启动正常，主库未动" -f $victim.Name)
+      Record 'corrupt-backup' 'PASS' ("坏备份 {0} 存在时启动正常（{1}），主库未动" -f $victim.Name, $re.Detail)
     } else {
-      Record 'corrupt-backup' 'FAIL' '损坏备份后启动失败（坏备份不应影响健康主库的启动）'
+      Collect-Diagnostics 'corrupt-backup-失败' | Out-Null
+      Record 'corrupt-backup' 'FAIL' ("损坏备份后启动失败（坏备份不应影响健康主库的启动）：{0}" -f $re.Detail)
     }
     Stop-AppAll | Out-Null
     Remove-Item ($victimPath + '.pre-inject') -ErrorAction SilentlyContinue
@@ -280,18 +340,19 @@ if ($Scenario -contains 'corrupt-main') {
         Copy-Item $mainDb ($mainDb + '.pre-inject') -Force
         Write-Info ("注入：向主库写入垃圾字节（备份 {0} 份可用，最新 {1}）" -f $before['backups.files'], $before['backups.latest'])
         [IO.File]::WriteAllBytes($mainDb, ([byte[]](0x53, 0x51, 0x4C, 0x69, 0x74, 0x65, 0x20, 0x66, 0x6F, 0x72, 0x6D, 0x61, 0x74, 0x20, 0x43, 0x4F, 0x52, 0x52, 0x55, 0x50, 0x54)))
-        Write-Info "启动应用，预期：坏库改名 .corrupt-{timestamp} 留证 → 从最近有效备份恢复 → health healthy"
-        $healthy = Start-App $AppExe
+        Write-Info "启动应用，预期：坏库改名 .corrupt-{timestamp} 留证 → 从最近有效备份恢复 → health 可达"
+        $re = Start-App $AppExe
         $after = Get-Digest $DataRoot
-        New-Evidence 'corrupt-main' ("healthy={0}; corrupt_evidence={1}; main={2}→{3}" -f $healthy, $after['corrupt.evidence'], $before['xcagi.db.bytes'], $after['xcagi.db.bytes']) | Out-Null
-        if ($healthy -and ([int64]$after['corrupt.evidence'] -gt 0)) {
-          Write-Ok "主库损坏后自动恢复：坏库留证 + 备份还原 + health healthy"
-          Record 'corrupt-main' 'PASS' ("health=healthy；.corrupt 留证 {0} 份；主库由备份恢复（{1} 字节）" -f $after['corrupt.evidence'], $after['xcagi.db.bytes'])
-        } elseif ($healthy) {
-          Write-Warn2 "启动健康但未见 .corrupt 留证：可能恢复逻辑未触发（请核对启动日志与 data 目录）"
-          Record 'corrupt-main' 'PARTIAL' 'health=healthy 但缺少 .corrupt 留证，恢复路径未确认'
+        New-Evidence 'corrupt-main' ("up={0}; {1}; corrupt_evidence={2}; main={3}→{4}" -f $re.Up, $re.Detail, $after['corrupt.evidence'], $before['xcagi.db.bytes'], $after['xcagi.db.bytes']) | Out-Null
+        if ($re.Up -and ([int64]$after['corrupt.evidence'] -gt 0)) {
+          Write-Ok "主库损坏后自动恢复：坏库留证 + 备份还原 + health 可达"
+          Record 'corrupt-main' 'PASS' ("{0}；.corrupt 留证 {1} 份；主库由备份恢复（{2} 字节）" -f $re.Detail, $after['corrupt.evidence'], $after['xcagi.db.bytes'])
+        } elseif ($re.Up) {
+          Write-Warn2 "启动可达但未见 .corrupt 留证：可能恢复逻辑未触发（请核对启动日志与 data 目录）"
+          Record 'corrupt-main' 'PARTIAL' "health 可达但缺少 .corrupt 留证，恢复路径未确认"
         } else {
-          Record 'corrupt-main' 'FAIL' '主库损坏后启动失败且未自动恢复'
+          Collect-Diagnostics 'corrupt-main-失败' | Out-Null
+          Record 'corrupt-main' 'FAIL' ("主库损坏后启动失败且未自动恢复：{0}" -f $re.Detail)
         }
         Stop-AppAll | Out-Null
         Remove-Item ($mainDb + '.pre-inject') -ErrorAction SilentlyContinue
@@ -328,10 +389,12 @@ Write-Host ("=" * 72) -ForegroundColor DarkCyan
 Write-Host (" 故障注入验收汇总（{0} · Windows x64）" -f $InstallRoot) -ForegroundColor White
 Write-Host ("=" * 72) -ForegroundColor DarkCyan
 $script:Results | Format-Table -AutoSize | Out-Host
-$failCount = @($script:Results | Where-Object { $_.结果 -eq 'FAIL' }).Count
-$partialCount = @($script:Results | Where-Object { $_.结果 -eq 'PARTIAL' }).Count
-$skipCount = @($script:Results | Where-Object { $_.结果 -eq 'SKIP' }).Count
-$passCount = @($script:Results).Count - $failCount - $partialCount - $skipCount
+# N05：直接按结果分类计数并显式转 [int]——原实现用总减法在 pwsh 下触发
+# 「Argument types do not match」（run 34642734307 line 334 实证）。
+$failCount    = [int](@($script:Results | Where-Object { $_.结果 -eq 'FAIL' }).Count)
+$partialCount = [int](@($script:Results | Where-Object { $_.结果 -eq 'PARTIAL' }).Count)
+$skipCount    = [int](@($script:Results | Where-Object { $_.结果 -eq 'SKIP' }).Count)
+$passCount    = [int](@($script:Results | Where-Object { $_.结果 -eq 'PASS' }).Count)
 Write-Host ("统计：PASS={0} FAIL={1} PARTIAL={2} SKIP={3}" -f $passCount, $failCount, $partialCount, $skipCount) -ForegroundColor Gray
 
 $receipt = [ordered]@{
