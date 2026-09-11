@@ -186,7 +186,8 @@ class TestLLMWorkflowPlanner:
         ):
             reg = get_tool_registry()
             plan = planner.plan("u1", "查询信息", reg)
-        assert plan.intent == "generic_workflow"
+        # 2026-09 起未命中意图不再静默 products.query，而是 clarify.ask。
+        assert plan.intent == "clarify_ask"
         assert len(plan.nodes) >= 1
 
     def test_fallback_plan_risk_level(self):

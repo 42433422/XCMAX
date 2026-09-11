@@ -6,7 +6,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from app.application.chat_tool_intent import looks_like_explicit_workflow_tool_intent
+from app.domain.services.conversation.chat_tool_intent import (
+    looks_like_explicit_workflow_tool_intent,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
