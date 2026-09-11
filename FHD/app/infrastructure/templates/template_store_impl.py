@@ -10,7 +10,7 @@ from typing import Any, cast
 from sqlalchemy import text
 
 from app.application.ports.template_store import TemplateStorePort
-from app.db.session import get_db
+from app.db import session as db_session
 from app.infrastructure.templates.stored_metadata import read_stored_template_metadata
 from app.infrastructure.templates.template_discovery import (
     business_scope,
@@ -180,7 +180,7 @@ class FileSystemTemplateStore(TemplateStorePort):
         ensure_templates_tenant_column()
         tenant_sql, tenant_bind = templates_tenant_where_sql()
         try:
-            with get_db() as db:
+            with db_session.get_db() as db:
                 rows = db.execute(
                     text(
                         f"""
@@ -289,7 +289,7 @@ class FileSystemTemplateStore(TemplateStorePort):
                 db_id = None
             if db_id is not None:
                 try:
-                    with get_db() as db:
+                    with db_session.get_db() as db:
                         row = db.execute(
                             text(
                                 "SELECT original_file_path FROM templates "
@@ -356,7 +356,7 @@ class FileSystemTemplateStore(TemplateStorePort):
 
             tenant_id = templates_tenant_id_for_insert()
             tenant_sql, tenant_bind = templates_tenant_where_sql()
-            with get_db() as db:
+            with db_session.get_db() as db:
                 # 这里不强制唯一约束，只是简单插入一条记录，并将同类型旧记录标记为非激活
                 db.execute(
                     sql_text(
@@ -438,7 +438,7 @@ class FileSystemTemplateStore(TemplateStorePort):
             from app.infrastructure.tenant_scope import TenantScopeError
 
             tenant_id = templates_tenant_id_for_insert()
-            with get_db() as db:
+            with db_session.get_db() as db:
                 res = db.execute(
                     text(
                         """
