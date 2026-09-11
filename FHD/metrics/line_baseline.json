@@ -1,5 +1,5 @@
 {
-  "lines": 2321882,
+  "lines": 2321883,
   "updated": "2026-09-11",
-  "note": "合并 main（#1820 R02 拒绝护栏 + #1873 macOS 覆盖升级验收）带入上游既成行 +165；本分支增量此前已计入基线，无死行可删"
+  "note": "merge-main baseline recompute for #1876 (upstream established lines)"
 }

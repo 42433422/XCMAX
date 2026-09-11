@@ -370,7 +370,7 @@ class TestSaveTemplate:
         result = store.save_template({"template_name": "   "})
         assert result["success"] is False
 
-    @patch("app.infrastructure.templates.template_store_impl.get_db")
+    @patch("app.db.session.get_db")
     def test_save_success(self, mock_get_db, store):
         mock_db = MagicMock()
         mock_result = MagicMock()
@@ -384,7 +384,7 @@ class TestSaveTemplate:
         assert result["success"] is True
         assert result["id"] == 42
 
-    @patch("app.infrastructure.templates.template_store_impl.get_db")
+    @patch("app.db.session.get_db")
     def test_save_with_all_fields(self, mock_get_db, store):
         mock_db = MagicMock()
         mock_result = MagicMock()
