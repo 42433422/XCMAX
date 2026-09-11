@@ -622,10 +622,11 @@ class TestFallbackPlan:
         assert plan.nodes[0].action == "ask"
 
     def test_generic_fallback_customers(self) -> None:
-        # 命中 customers 意图时按 tool_key 路由到 customers.query。
+        # 客户类查询命中 #1815 确定性读取路由（customer_read_node 优先），
+        # intent 为 customers_query；intent_route_* 兜底只服务无专用路由的域。
         planner = self._make_planner()
         plan = planner._fallback_plan("p1", "客户列表", {"customers": {}})
-        assert plan.intent == "intent_route_customers"
+        assert plan.intent == "customers_query"
         assert plan.nodes[0].tool_id == "customers"
 
     def test_generic_fallback_empty_registry(self) -> None:
