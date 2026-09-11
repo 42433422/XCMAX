@@ -24,13 +24,13 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, cast
 
+from app.domain.services.conversation.chat_tool_intent import tiered_confidence
 from app.domain.services.conversation.context import (
     ContextFacade,
     get_context_facade,
 )
 from app.domain.services.conversation.context import PendingIntent as ContextPendingIntent
 from app.domain.services.conversation.slot_validator import SlotValidator
-from app.domain.services.conversation.chat_tool_intent import tiered_confidence
 
 logger = logging.getLogger(__name__)
 

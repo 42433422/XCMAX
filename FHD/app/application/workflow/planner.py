@@ -10,14 +10,16 @@ from typing import Any, cast
 
 import httpx
 
+from app.application.workflow.types import normalize_workflow_risk
 from app.domain.services.conversation.chat_tool_intent import (
     attach_explicit_tenant_id as _attach_explicit_tenant_id,
 )
 from app.domain.services.conversation.chat_tool_intent import (
     looks_like_business_db_write as _looks_like_business_db_write,
 )
-from app.domain.services.conversation.chat_tool_intent import looks_like_raw_sql as _looks_like_raw_sql
-from app.application.workflow.types import normalize_workflow_risk
+from app.domain.services.conversation.chat_tool_intent import (
+    looks_like_raw_sql as _looks_like_raw_sql,
+)
 from app.services import get_ai_conversation_service
 from app.services.tools_workflow_registered import execute_registered_workflow_tool
 from app.utils.operational_errors import RECOVERABLE_ERRORS
