@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from copy import deepcopy
+
 import pytest
 
 from modstore_server.self_maintenance_memory_reconciliation import (
@@ -9,7 +11,8 @@ from modstore_server.self_maintenance_memory_reconciliation import (
 pytestmark = pytest.mark.release_gate
 
 
-def test_verified_merge_closes_resumed_failures_and_updates_recent_run(monkeypatch):
+@pytest.mark.parametrize("sha", ["a" * 40, "b" * 64, "a" * 41, "a" * 63, "", "g" * 40])
+def test_verified_merge_closes_resumed_failures_and_updates_recent_run(monkeypatch, sha):
     memory = {
         "closed_items": [],
         "open_items": [
@@ -52,7 +55,7 @@ def test_verified_merge_closes_resumed_failures_and_updates_recent_run(monkeypat
         {
             "branch": "devfleet/cursor/fix",
             "event": "merge_completed",
-            "merge_sha": "a" * 40,
+            "merge_sha": sha,
             "ok": True,
             "para_task_id": "task-1",
             "run_id": "merged-run",
@@ -73,7 +76,13 @@ def test_verified_merge_closes_resumed_failures_and_updates_recent_run(monkeypat
         lambda value: writes.append(value),
     )
 
+    before = deepcopy(memory)
     result = reconcile_completed_loop_memory_from_ledger()
+    if sha not in ("a" * 40, "b" * 64):
+        assert result == {"closed_count": 0, "reconciled_run_ids": [], "updated_runs": 0}
+        assert memory == before
+        assert writes == []
+        return
 
     assert result == {
         "closed_count": 2,
@@ -83,7 +92,7 @@ def test_verified_merge_closes_resumed_failures_and_updates_recent_run(monkeypat
     assert [item["run_id"] for item in memory["open_items"]] == ["unrelated-run"]
     assert memory["recent_runs"][0] == {
         "deployment_verified": True,
-        "merge_sha": "a" * 40,
+        "merge_sha": sha,
         "run_id": "merged-run",
         "status": "completed_merged",
     }

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 
@@ -26,6 +27,7 @@ def _verified_merge_rows(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]
             and row.get("ok") is True
             and _text(row.get("status")) == "completed_merged"
             and run_id
+            and re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", _text(row.get("merge_sha")))
         ):
             verified[run_id] = row
     return verified
