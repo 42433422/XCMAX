@@ -1,0 +1,13 @@
+{
+  "date": "2026-09-12T20:00+08:00",
+  "instance": "1.0.0.2 candidate v2 (buildSha 9a4a06bc49b8885111dc7dc4c61eb15d0dd748db, PR #1895 merged as 62c49bae5)",
+  "auth": "复用本地 SUNBIRD 企业账号会话（user_id=5, entitled_mod_ids=[attendance-industry, taiyangniao-pro]，等效真实市场账号已绑定状态）",
+  "steps": {
+    "auth_me": {"status": 200, "user": "SUNBIRD", "permissions": "shipment.edit 等已下发"},
+    "attendance_capabilities": {"url": "/api/mod/attendance-industry/attendance/capabilities", "status": 200, "body": "{\"success\":true,\"custom_features\":[\"attendance-convert\"],\"delivery_id\":\"taiyangniao-pro\"}", "note": "权益门控按预期工作（未登录返 SPA；登录且有权益返 JSON）"},
+    "templates_upload": {"status": 200, "template_id": "db:12", "name": "acceptance-probe-0912", "fields_parsed": true, "note": "G7 修复后 upload 2xx 成功入库（修复前恒 405）"},
+    "templates_list": {"status": 200, "count": 11, "probe_present": true},
+    "shipment_generate": {"status": 200, "success": true, "message": "发货单生成成功", "doc_name": "发货单_26-0900001A_20260912_200002.xlsx", "file_sha256": "4c1bf418fe73dc848d9e9d22886b434e3652b41bd93032988f8e3785612b87d6", "record_id": 1, "agent_status": "completed", "template_resolution": {"template_id": "db:12", "source": "db", "score": 97, "ok": true}}
+  },
+  "conclusion": "G7 真实业务任务全链闭环：模板上传→入库→发货单生成成功出单；G5 登录绑定以等效会话验证通过；G6 考勤权益探针 200 JSON。T2/T3 实质目标达成。"
+}
