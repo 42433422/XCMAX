@@ -1,5 +1,5 @@
 {
-  "lines": 2324929,
-  "updated": "2026-09-12",
-  "note": "LLM 基准基础设施修复：429 独立退避预算（structured_output ~+20）+ 跨 loop 客户端重建（llm_adapter ~+15）+ 基准节流（intent_benchmark ~+10）+ CHANGELOG 实证条目 1 行；对应 run 34698110821 holdout 失败根因修复"
+  "lines": 2324938,
+  "updated": "2026-09-13",
+  "note": "1.0.0.2 发版升版合法增量（rebase 到 main a4d0d7fb=#1904 后按实际行数重算）"
 }
