@@ -2,6 +2,7 @@ import crypto from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const [,, artifactPath, version, platform = 'win'] = process.argv
 if (!artifactPath || !version) {
@@ -57,6 +58,56 @@ if (artifactUrlPrefix && !/^https:\/\/[^/?#]+(?:\/[^?#]*)?$/.test(artifactUrlPre
 }
 const artifactUrl = artifactUrlPrefix ? `${artifactUrlPrefix}/${encodeURIComponent(name)}` : name
 const releaseNotes = String(process.env.XCAGI_RELEASE_NOTES || '').trim()
+
+/**
+ * B8 修复：为最终安装包生成内容定义分块 blockmap（electron-builder differential 更新用）。
+ *
+ * 流水线对 NSIS exe 做二次包装（UI 重打包 + 重命名），electron-builder 原生
+ * blockmap 对应的是原始 exe，哈希已失配——因此必须在最终产物上重新生成。
+ * 复用 app-builder-lib 内置 buildBlockMap（与 NsisTarget 相同参数：gzip、<file>.blockmap），
+ * 保证与 electron-updater 的 differentialDownloader 完全兼容。
+ * 生成失败仅告警并降级为全量下载（latest.yml 不引用 blockmap），不阻断发布。
+ */
+async function buildBlockMapForArtifact() {
+  const selfDir = path.dirname(fileURLToPath(import.meta.url))
+  const blockmapModule = path.resolve(
+    selfDir,
+    '..',
+    '..',
+    'desktop',
+    'node_modules',
+    'app-builder-lib',
+    'out',
+    'targets',
+    'blockmap',
+    'blockmap.js',
+  )
+  if (!fs.existsSync(blockmapModule)) {
+    console.warn('blockmap generation skipped: app-builder-lib not found (full download fallback)')
+    return null
+  }
+  const { createRequire } = await import('node:module')
+  const require = createRequire(import.meta.url)
+  const { buildBlockMap } = require(blockmapModule)
+  const blockMapFile = `${artifact}.blockmap`
+  await buildBlockMap(artifact, 'gzip', blockMapFile)
+  return blockMapFile
+}
+
+let blockmapEntryLines = []
+try {
+  const blockMapFile = await buildBlockMapForArtifact()
+  if (blockMapFile) {
+    const bmBytes = fs.readFileSync(blockMapFile)
+    const bmSha512 = crypto.createHash('sha512').update(bmBytes).digest('base64')
+    const bmName = path.basename(blockMapFile)
+    const bmUrl = artifactUrlPrefix ? `${artifactUrlPrefix}/${encodeURIComponent(bmName)}` : bmName
+    blockmapEntryLines = [`  - url: ${bmUrl}`, `    sha512: ${bmSha512}`, `    size: ${bmBytes.length}`]
+    console.log(`Generated ${bmName} (${bmBytes.length} bytes)`)
+  }
+} catch (error) {
+  console.warn(`blockmap generation failed (full download fallback): ${error && error.message ? error.message : error}`)
+}
 
 function yamlEscapeBlock(text) {
   return text
@@ -139,6 +190,7 @@ let body = [
   `  - url: ${artifactUrl}`,
   `    sha512: ${sha512}`,
   `    size: ${size}`,
+  ...blockmapEntryLines,
   `path: ${artifactUrl}`,
   `sha512: ${sha512}`,
   `releaseDate: '${new Date().toISOString()}'`,
