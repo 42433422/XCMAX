@@ -19,17 +19,23 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]  # FHD/
 DOC = ROOT / "docs" / "MACOS_RELEASE_SSOT.md"
-REQUIRED_SECTIONS = ("## 1. 当前版本信息", "## 6. Release Gate", "## 8. 实机验收任务", "## 9. 发版复用 Runbook")
+REQUIRED_SECTIONS = (
+    "## 1. 当前版本信息",
+    "## 6. Release Gate",
+    "## 8. 实机验收任务",
+    "## 9. 发版复用 Runbook",
+)
 LEGAL_STATES = {"GREEN", "YELLOW", "RED", "UNKNOWN", "待实跑回填"}
 
 
-def check() -> int:
-    if not DOC.is_file():
-        print(f"缺少 SSOT 文档: {DOC}", file=sys.stderr)
+def _check_doc(doc: Path, sections: tuple[str, ...], label: str) -> int:
+    """共享校验核心：windows_release.py 复用同一 Gate 状态证据契约。"""
+    if not doc.is_file():
+        print(f"缺少 SSOT 文档: {doc}", file=sys.stderr)
         return 1
-    text = DOC.read_text(encoding="utf-8")
+    text = doc.read_text(encoding="utf-8")
     problems: list[str] = []
-    for sec in REQUIRED_SECTIONS:
+    for sec in sections:
         if sec not in text:
             problems.append(f"缺少必填节: {sec}")
     for i, line in enumerate(text.splitlines(), 1):
@@ -59,14 +65,20 @@ def check() -> int:
                     "RED 须记录复现步骤+日志+截图并关联修复 PR/commit，禁止直接改状态"
                 )
         if re.fullmatch(r"[A-Z]{4,}", state) and state not in LEGAL_STATES:
-            problems.append(f"line {i}: 非法 Gate 状态值: {state}（合法: {'/'.join(sorted(LEGAL_STATES))}）")
+            problems.append(
+                f"line {i}: 非法 Gate 状态值: {state}（合法: {'/'.join(sorted(LEGAL_STATES))}）"
+            )
     if problems:
         for p in problems:
             print(p, file=sys.stderr)
         print("修复：见文档头部状态取值与 RED 处理规则", file=sys.stderr)
         return 1
-    print("macos-release: OK（结构与状态值合法）")
+    print(f"{label}: OK（结构与状态值合法）")
     return 0
+
+
+def check() -> int:
+    return _check_doc(DOC, REQUIRED_SECTIONS, "macos-release")
 
 
 if __name__ == "__main__":
