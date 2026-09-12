@@ -90,44 +90,16 @@ def test_verified_merge_closes_resumed_failures_and_updates_recent_run(monkeypat
     assert memory["completed_merge_reconciliations"] == ["merged-run"]
     assert len(writes) == 1
 
-
-def test_reconciliation_is_idempotent(monkeypatch):
-    memory = {
-        "completed_merge_reconciliations": ["merged-run"],
-        "open_items": [],
-        "recent_runs": [],
-    }
-    rows = [
-        {
-            "event": "merge_completed",
-            "ok": True,
-            "run_id": "merged-run",
-            "status": "completed_merged",
-        }
-    ]
-    writes = []
-    monkeypatch.setattr(
-        "modstore_server.self_maintenance_loop_runner._read_ledger",
-        lambda limit: rows,
-    )
-    monkeypatch.setattr(
-        "modstore_server.self_maintenance_loop_runner._load_loop_memory",
-        lambda: memory,
-    )
-    monkeypatch.setattr(
-        "modstore_server.self_maintenance_loop_runner._write_loop_memory",
-        lambda value: writes.append(value),
-    )
-
     assert reconcile_completed_loop_memory_from_ledger() == {
         "closed_count": 0,
         "reconciled_run_ids": [],
         "updated_runs": 0,
     }
-    assert writes == []
+    assert len(writes) == 1
 
 
-def test_fresh_completed_run_reconciles_without_resume_candidate(monkeypatch):
+@pytest.mark.parametrize("merge_sha", ["b" * 40, "c" * 64, None, "", "abc", "g" * 40])
+def test_fresh_completed_run_reconciles_without_resume_candidate(monkeypatch, merge_sha):
     memory = {
         "completed_merge_reconciliations": ["older-run"],
         "open_items": [
@@ -150,7 +122,7 @@ def test_fresh_completed_run_reconciles_without_resume_candidate(monkeypatch):
         {
             "branch": "devfleet/cursor/fresh",
             "event": "merge_completed",
-            "merge_sha": "b" * 40,
+            "merge_sha": merge_sha,
             "ok": True,
             "run_id": "fresh-run",
             "status": "completed_merged",
@@ -169,6 +141,13 @@ def test_fresh_completed_run_reconciles_without_resume_candidate(monkeypatch):
         "modstore_server.self_maintenance_loop_runner._write_loop_memory",
         lambda value: writes.append(value),
     )
+
+    if merge_sha not in ("b" * 40, "c" * 64):
+        assert reconcile_completed_loop_memory_from_ledger()["reconciled_run_ids"] == []
+        assert len(memory["open_items"]) == 1
+        assert memory["completed_merge_reconciliations"] == ["older-run"]
+        assert writes == []
+        return
 
     assert reconcile_completed_loop_memory_from_ledger() == {
         "closed_count": 1,

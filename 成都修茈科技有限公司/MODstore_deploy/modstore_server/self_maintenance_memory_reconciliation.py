@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from modstore_server.self_maintenance_deploy_receipts import _COMMIT_RE
+
 
 def _text(value: Any) -> str:
     return str(value or "").strip()
@@ -25,6 +27,7 @@ def _verified_merge_rows(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]
             row.get("event") == "merge_completed"
             and row.get("ok") is True
             and _text(row.get("status")) == "completed_merged"
+            and _COMMIT_RE.fullmatch(_text(row.get("merge_sha")))
             and run_id
         ):
             verified[run_id] = row
