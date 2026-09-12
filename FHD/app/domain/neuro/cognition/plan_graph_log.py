@@ -25,9 +25,9 @@ def _log_path() -> Path:
     override = (os.environ.get("XCAGI_PLAN_GRAPH_LOG") or "").strip()
     if override:
         return Path(override)
-    return (
-        Path(__file__).resolve().parents[4] / "resources" / "routing_policies" / "plan_graphs.jsonl"
-    )
+    from app.neuro_bus.routing.policy_paths import resolve_policy_file
+
+    return resolve_policy_file("plan_graphs.jsonl", for_write=True)
 
 
 def _utc_now() -> str:
