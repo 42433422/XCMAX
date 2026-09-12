@@ -11,9 +11,9 @@ on:
       product_version:
         description: Visible product version
         required: true
-        default: "1.0.0.1"
+        default: "1.0.0.2"
         type: choice
-        options: ["1.0.0.1"]
+        options: ["1.0.0.2", "1.0.0.1"]
       convergence_run_id:
         description: Fresh successful release-convergence-readback workflow run ID
         required: true
