@@ -1,5 +1,5 @@
 {
   "lines": 2324423,
   "updated": "2026-09-12",
-  "note": "B8：generate-update-metadata 在最终安装包上重生成 blockmap（+52）+ CHANGELOG 条目（+1）——CI 报 total=2324423；differential 更新恢复所需，非膨胀性散文"
+  "note": "rebase 冲突取 main 侧值（B8 blockmap 重生成 +52 + CHANGELOG +1，CI 报 total=2324423）；本分支 G7 修复行数将在 rebase 完成后由 CI 实测重算"
 }
