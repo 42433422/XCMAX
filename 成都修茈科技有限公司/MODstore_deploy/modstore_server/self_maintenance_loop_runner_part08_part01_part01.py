@@ -279,20 +279,9 @@ def _reject_and_retry_kb_schema_failure(
     triggered_by: str = "scheduled_self_maintenance",
     started_at: _facade().Optional[_facade().datetime] = None,
 ) -> _facade().Dict[str, _facade().Any]:
-    """Reject KB-schema-invalid branch and retry code step (or escalate to human).
+    """Persist cumulative KB failures and label the PR; escalate at the retry limit.
 
-    Called immediately after code step completes when KB JSON schema validation fails.
-    Actions (best-effort, never raises):
-      1. Comment on the PR (find by branch via `gh pr list --head`)
-      2. Add ``kb-schema-failed`` label to the PR
-      3. Write/refresh a ``kb_schema_retry`` open_item in loop memory (retry_count++)
-      4. If retry_count >= KB_SCHEMA_RETRY_MAX: add ``needs-human`` label, mark escalated
-      5. Return a final state dict with policy_decision.action=hold_for_automated_remediation
-
-    Next LOOP iteration sees the ``kb_schema_retry`` open_item and re-runs the code step
-    (see ``_resume_review_qa_candidate``). After KB_SCHEMA_RETRY_MAX retries without
-    resolution, the item is marked escalated so the loop stops retrying and waits for
-    human review.
+    Resume code through _resume_review_qa_candidate until human review is required.
     """
     errors = kb_validation.get("errors") if isinstance(kb_validation, dict) else None
     if not isinstance(errors, list) or not errors:
@@ -313,7 +302,7 @@ def _reject_and_retry_kb_schema_failure(
         open_items, branch=branch, para_task_id=para_task_id
     )
     if existing is not None:
-        retry_count = int(existing.get("retry_count") or 0) + 1
+        retry_count = max(1, int(existing.get("retry_count") or 0)) + 1
     else:
         retry_count = 1
     escalated = retry_count >= _facade().KB_SCHEMA_RETRY_MAX

@@ -5236,7 +5236,10 @@ def test_reject_and_retry_kb_schema_first_failure_writes_open_item(monkeypatch, 
     assert kb_items[0]["para_task_id"] == "task-kb-1"
 
 
-def test_reject_and_retry_kb_schema_second_failure_increments_retry_count(monkeypatch, tmp_path):
+@pytest.mark.parametrize("retry_count", [1, 0, -100])
+def test_reject_and_retry_kb_schema_second_failure_increments_retry_count(
+    monkeypatch, tmp_path, retry_count
+):
     """第二次 schema 失败（同 branch）→ retry_count=2, escalated=True, 标 needs-human。"""
     _seed_loop_memory_for_kb_retry(
         tmp_path,
@@ -5247,7 +5250,7 @@ def test_reject_and_retry_kb_schema_second_failure_increments_retry_count(monkey
                 "escalated": False,
                 "kind": "kb_schema_retry",
                 "para_task_id": "task-kb-1",
-                "retry_count": 1,
+                "retry_count": retry_count,
                 "run_id": "run-kb-1",
                 "steps": ["code"],
             }
@@ -5275,69 +5278,17 @@ def test_reject_and_retry_kb_schema_second_failure_increments_retry_count(monkey
         gate={},
     )
 
-    # 第二次失败 → escalated
     assert final["policy_decision"]["retry_count"] == 2
     assert final["policy_decision"]["escalated"] is True
     assert final["status"] == "completed_waiting_human_strategy"
     assert (42, KB_SCHEMA_FAILED_LABEL) in label_calls
     assert (42, NEEDS_HUMAN_LABEL) in label_calls
 
-    # open_item 应被刷新（不是新增）
     memory = _load_loop_memory()
     kb_items = [i for i in memory["open_items"] if i.get("kind") == "kb_schema_retry"]
     assert len(kb_items) == 1
     assert kb_items[0]["retry_count"] == 2
     assert kb_items[0]["escalated"] is True
-
-
-def test_reject_and_retry_kb_schema_escalates_after_max_retries(monkeypatch, tmp_path):
-    """retry_count >= KB_SCHEMA_RETRY_MAX (2) → 升级为 human review。"""
-    # 验证 KB_SCHEMA_RETRY_MAX 常量是 2
-    assert KB_SCHEMA_RETRY_MAX == 2
-
-    _seed_loop_memory_for_kb_retry(
-        tmp_path,
-        [
-            {
-                "branch": "devfleet/codex/kb-bad-1",
-                "created_at": "2026-07-20T12:00:00+00:00",
-                "escalated": False,
-                "kind": "kb_schema_retry",
-                "para_task_id": "task-kb-1",
-                "retry_count": 1,  # 已经失败过 1 次
-                "run_id": "run-kb-1",
-                "steps": ["code"],
-            }
-        ],
-    )
-    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "loop_memory.json"))
-
-    monkeypatch.setattr(loop_runner, "_find_pr_number_for_branch", lambda branch: 99)
-    label_calls = []
-    monkeypatch.setattr(
-        loop_runner,
-        "_gh_pr_add_label",
-        lambda pr, label: label_calls.append((pr, label)) or True,
-    )
-    monkeypatch.setattr(loop_runner, "_gh_pr_comment", lambda pr, body: True)
-    monkeypatch.setattr(loop_runner, "_append_governance_audit", lambda record: None)
-    monkeypatch.setattr(loop_runner, "_append_ledger", lambda record: None)
-
-    final = _reject_and_retry_kb_schema_failure(
-        run_id="run-kb-2",
-        branch="devfleet/codex/kb-bad-1",
-        para_task_id="task-kb-1",
-        kb_validation=_kb_validation_failed_payload(),
-        steps=[{"step": "code", "ok": True}],
-        gate={},
-    )
-
-    # 第二次失败 → escalated
-    assert final["policy_decision"]["retry_count"] == 2
-    assert final["policy_decision"]["escalated"] is True
-    assert final["status"] == "completed_waiting_human_strategy"
-    # needs-human label 被添加
-    assert (99, NEEDS_HUMAN_LABEL) in label_calls
 
 
 def test_reject_and_retry_kb_schema_uses_24h_fallback_for_new_branch(monkeypatch, tmp_path):
