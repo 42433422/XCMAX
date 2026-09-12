@@ -20,12 +20,35 @@ logger = logging.getLogger(__name__)
 
 class ExcelImportResolveMixin:
     @staticmethod
+    def _excel_import_path_within_roots(fp: str) -> bool:
+        """CodeQL #3730 加固：file_path 必须落在应用数据目录或系统临时目录内。
+        上传链路只会把 Excel 存进这些根；越界视为路径穿越并降级（不读文件）。"""
+        import tempfile
+
+        from app.utils.path_io.path_utils import get_app_data_dir
+
+        try:
+            resolved = Path(fp).resolve()
+        except OSError:
+            return False
+        for root in (get_app_data_dir(), tempfile.gettempdir()):
+            try:
+                resolved.relative_to(Path(root).resolve())
+                return True
+            except ValueError:
+                continue
+        return False
+
+    @classmethod
     def _resolve_excel_path_for_import(
-        excel_analysis: dict[str, Any], preview_data: dict[str, Any]
+        cls, excel_analysis: dict[str, Any], preview_data: dict[str, Any]
     ) -> str:
         fp = str(excel_analysis.get("file_path") or "").strip()
         if not fp and isinstance(preview_data, dict):
             fp = str(preview_data.get("file_path") or "").strip()
+        if fp and not cls._excel_import_path_within_roots(fp):
+            logger.info("[导入调试] excel file_path 越界，忽略重导入文件提示: %s", fp)
+            return ""
         return fp
 
     @staticmethod

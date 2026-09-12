@@ -1,5 +1,5 @@
 {
-  "lines": 2324127,
+  "lines": 2324153,
   "updated": "2026-09-12",
-  "note": "B11: +1 changelog 行（安全修复条目，写给非技术读者）；lockfile URL 改写为行内替换零行差"
+  "note": "B12: +约26 行安全加固（CodeQL #3730 path containment guard、#3735/3736 输入截断）；lockfile 为镜像无关重排"
 }
