@@ -32,16 +32,14 @@ if [ -f "${MAC_SIGNING_ENV}" ]; then
   done < "${MAC_SIGNING_ENV}"
 fi
 
-# Apply signing normalization to both the local dotenv path and callers that
-# inject the same values through CI or a clean release worktree environment.
 if [ -n "${CSC_NAME:-}" ]; then
   # electron-builder 26 selects the certificate class itself and rejects this prefix.
   CSC_NAME="${CSC_NAME#Developer ID Application: }"
   export CSC_NAME
 fi
-if [ -n "${CSC_LINK:-}" ] && [ -z "${CSC_KEY_PASSWORD:-}" ] && command -v security >/dev/null 2>&1; then
-  # Prefer an already unlocked keychain identity when the local P12 has no configured password.
-  # CI normally provides CSC_KEY_PASSWORD and continues to use CSC_LINK.
+if [ -n "${CSC_KEYCHAIN:-}" ]; then
+  unset CSC_LINK
+elif [ -n "${CSC_LINK:-}" ] && [ -z "${CSC_KEY_PASSWORD:-}" ] && command -v security >/dev/null 2>&1; then
   if security find-identity -v -p codesigning 2>/dev/null | grep -Fq "${CSC_NAME:-}"; then
     unset CSC_LINK
   fi
