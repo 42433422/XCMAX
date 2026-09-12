@@ -1,5 +1,5 @@
 {
-  "lines": 2324127,
+  "lines": 2324162,
   "updated": "2026-09-12",
-  "note": "B11: +1 changelog 行（安全修复条目，写给非技术读者）；lockfile URL 改写为行内替换零行差"
+  "note": "B12 ruff(0.15.21) 格式化重排"
 }

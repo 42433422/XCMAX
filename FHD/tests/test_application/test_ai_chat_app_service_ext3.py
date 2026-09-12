@@ -546,17 +546,25 @@ class TestResolveSheetNameForReimportExtended:
 
 
 class TestResolveExcelPathForImportExtended:
-    def test_from_excel_analysis(self):
+    def test_out_of_root_blocked(self):
+        # CodeQL #3730 加固契约：出根路径（应用数据/临时目录之外）一律返回空
         result = AIChatApplicationService._resolve_excel_path_for_import(
             {"file_path": "/path/to/file.xlsx"}, {}
         )
-        assert result == "/path/to/file.xlsx"
+        assert result == ""
 
     def test_from_preview_data_fallback(self):
+        # 出根路径同样拦截，即便来自 preview_data 回退
         result = AIChatApplicationService._resolve_excel_path_for_import(
             {"file_path": ""}, {"file_path": "/fallback/path.xlsx"}
         )
-        assert result == "/fallback/path.xlsx"
+        assert result == ""
+
+    def test_within_temp_root_passthrough(self, tmp_path):
+        # 根内路径放行
+        fp = str(tmp_path / "in.xlsx")
+        result = AIChatApplicationService._resolve_excel_path_for_import({"file_path": fp}, {})
+        assert result == fp
 
     def test_empty_both(self):
         result = AIChatApplicationService._resolve_excel_path_for_import({}, {})
