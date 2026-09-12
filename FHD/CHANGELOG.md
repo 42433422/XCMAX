@@ -5,9 +5,8 @@
 ---
 
 ## Unreleased（1.0.0.2 之后的累积变更）
-- fix(release): release-orchestrator 双源 permissions 增补 administration:read——security-preflight 读 main 分支保护 required checks 曾 403（T1 run 34694275310/34697783917 失败根因）
 
-（暂无）
+- 修复 Mac 安装包签名时重复导入证书导致构建失败的问题，复用已解锁的签名钥匙串。
 
 ## 1.0.0.2（2026-09-12 正式发布）
 - **LLM 基准 429 限流退避 + 跨 loop 客户端重建（holdout 首次真跑实证）**：run 34698110821 首次真实跑通全管线——acceptance job（真实 MiMo + `TASK_BENCHMARK_MIN_PASS=0.4` 硬门禁）**成功通过**，项 5「AI 任务执行」验收证据首次取得；同 run 的 holdout job（142 用例 × 3 轮）暴露两处基础设施缺陷：① 端点限流（与 acceptance 并发同打一个端点）429 全灭（73 次调用 0 完成），fail-closed 正确判 `unavailable_or_partial` 拒算通过；② 共享 httpx 客户端跨 event loop 复用报 "Event loop is closed"（基准每用例 `asyncio.run` 新建 loop）。修复：意图门 `max_repairs=0` 不再让传输层限流即永久失败——429 获独立退避重试预算（2s/5s，不消耗 schema 修复预算，生产同享）；适配器记录客户端创建时的 loop id，跨 loop 自动重建。配套基准脚本用例间节流（`XCAGI_BENCH_LLM_SLEEP`，默认 1s）。
