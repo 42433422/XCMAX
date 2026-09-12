@@ -1,5 +1,5 @@
 {
-  "lines": 2324122,
+  "lines": 2324127,
   "updated": "2026-09-12",
-  "note": "G6/G7 实机证据回填增量 +91（SSOT Gate 状态 + 复现/日志/截图 + CHANGELOG + ssot 插件 RED 三要素校验）；随 #1874 基线重算同步"
+  "note": "B11: +1 changelog 行（安全修复条目，写给非技术读者）；lockfile URL 改写为行内替换零行差"
 }

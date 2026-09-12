@@ -5,6 +5,7 @@
 ---
 
 ## Unreleased（1.0.0.1 之后的累积变更）
+- **依赖安全修复与发布流水线修复**：把 5 个软件包用到的底层组件升级到安全版本，清零了 53 项高危安全告警；同时修复了发布流水线里一处下载地址写错的问题，让自动构建恢复正常。
 
 - **macOS 发布闭环实跑回填：G7 判 RED、G6 判 YELLOW**——1.0.0.1 真机实测发现发货单模板导入链路断裂（打包后端缺 template_create 路由，前端上传入口全部 405，`shipment/generate` 恒 TEMPLATE_NOT_FOUND，用户无法完成真实业务）；attendance-industry mod 在同步新版后路由注册失败（bundle 缺 `app/mod_sdk/customer_features`，`/attendance/*` 不可用）。两项修复均已存在于 main（b97073acc、f37372e97），1.0.0.1 feed 未包含；SSOT 回填复现步骤/日志/截图，发版 Runbook 新增发版前回归步骤（5a）与下版重测任务 T7；SSOT 校验插件同步修正——RED 不再一刀切拒绝，改为强制校验「复现步骤+evidence 证据链接+修复 PR/commit」三要素齐备。
 - **LLM 直连端点模型名自愈（acceptance 基准打通前置）**：`xcauto-account` 账户虚拟名只在修茈网关有效，`XCAUTO_BASE_URL` 直指小米 token-plan 端点时端点校验模型名直接 400（acceptance 预检实证：真密钥过鉴权后 400，而非 401）；适配器现在按 base_url 主机自动把虚拟名映射为小米真实模型（mimo-v2.5-pro），预检 probe 同步把 token 预算提到 256（MiMo V2.5 为推理模型，16 会被推理耗尽导致空回复）并在 HTTP 拒绝时打印响应体便于定位。三条调用路径（预检直构造、manager 直连、registry 卫星）全部收敛到同一修复点。
