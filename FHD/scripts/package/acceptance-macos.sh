@@ -181,7 +181,11 @@ for candidate in "${BASE_URL}/xcagi-v${VERSION}/manifest.json" "${BASE_URL}/rele
 done
 
 DMG_URL=""
-if [[ "${MANIFEST_STATUS}" != "未获取" ]]; then
+if [[ -n "${LOCAL_DMG}" ]]; then
+  # 本地候选包验收：线上 manifest 必然无此版本条目，跳过解析避免误判为缺产物。
+  ok "本地 dmg 模式（--dmg）：跳过线上 manifest 解析，SHA256 仅输出实测值。"
+  MANIFEST_STATUS="本地 dmg，跳过线上基准"
+elif [[ "${MANIFEST_STATUS}" != "未获取" ]]; then
   manifest_version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("version",""))' "${MANIFEST_FILE}")"
   # manifest 的 version 与验收目标不一致时（如 releases/stable/manifest.json 仍是旧版本），
   # 其条目与 git_sha 都不能作为本版本基准。
@@ -221,7 +225,7 @@ else
   warn "manifest 获取失败（xcagi-v${VERSION} 与 releases/stable 均不可达）——SHA256 将无线上基准，仅输出实测值。"
 fi
 
-if [[ -z "${DMG_URL}" ]]; then
+if [[ -z "${DMG_URL}" && -z "${LOCAL_DMG}" ]]; then
   DMG_FILENAME="XCAGI-Enterprise-${VERSION}-mac-${DMG_ARCH}.dmg"
   DMG_URL="${BASE_URL}/xcagi-v${VERSION}/enterprise/${DMG_FILENAME}"
   if ! curl -fsIL --max-time 20 -A "xcagi-acceptance/1.0" "${DMG_URL}" >/dev/null 2>&1; then
@@ -297,6 +301,10 @@ CODESIGN_VERIFY="${CODESIGN_VERIFY:-PASS}"
 SPCTL_OUT="$(spctl -a -vv -t execute "${SRC_APP}" 2>&1)" || true
 if echo "${SPCTL_OUT}" | grep -q "accepted"; then
   ok "spctl 评估：${SPCTL_OUT}"
+elif [[ -n "${LOCAL_DMG}" ]] && echo "${SPCTL_OUT}" | grep -q "Unnotarized Developer ID"; then
+  # 候选包为 Developer ID 签名但未公证（本地构建无公证密钥）：允许继续，汇总时明确降级。
+  warn "候选包未公证（Unnotarized Developer ID）——本地 dmg 验收模式放行，G3 按 YELLOW 记录：${SPCTL_OUT}"
+  SPCTL_STATUS=CANDIDATE_UNNOTARIZED
 else
   fail "Gatekeeper 拒绝（spctl 未 accepted）：${SPCTL_OUT}"
   SPCTL_STATUS=FAIL

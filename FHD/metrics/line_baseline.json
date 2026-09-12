@@ -1,5 +1,5 @@
 {
-  "lines": 2324423,
+  "lines": 2324745,
   "updated": "2026-09-12",
-  "note": "B8：generate-update-metadata 在最终安装包上重生成 blockmap（+52）+ CHANGELOG 条目（+1）——CI 报 total=2324423；differential 更新恢复所需，非膨胀性散文"
+  "note": "CHANGELOG 增补 acceptance-macos.sh 本地候选包模式条目（+1），门禁 changelog-gate 要求脚本修复有记录"
 }
