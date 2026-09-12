@@ -96,12 +96,12 @@ x64 dmg：download_release.json 声明 `mac_x64`，但 manifest 无 x64 条目�
 |----|------|------|------|
 | T1 | 全新 macOS 用户账户（或干净 VM）跑 `acceptance-macos.sh`，验证无开发依赖 | G2 | 干净机 |
 | T2 | 真机登录绑定（市场账号），截图+日志 | G5 | 任意真机 |
-| T3 | 真机完成 1 单真实业务（订单/考勤/对话），按模板留证。前置：T2 登录；发运单需先导入客户模板（应用不内置）；考勤需账号开通 attendance-convert 权益 | G7 | 任意真机 |
+| T3 | ~~真机完成 1 单真实业务~~ **已完成（2026-09-12 登录态全链）**：upload 200 入库 → generate 200 出单（发货单_26-0900001A_20260912_200002.xlsx，record_id=1）；证据 g7-full-chain-success-20260912.json | G7 | 任意真机 |
 | T4 | 下次发版后：旧版真机→检查更新→下载→安装→观察期→复验 | G8/G9/G11 | 真机 |
 | T5 | 跨版本覆盖升级数据保留：旧版真机装新版（`acceptance-macos.sh --version <新版> --overwrite-upgrade`），基线→比对→标记存活 | G10 | 真机 |
 | T6 | 重启 Mac 后复验登录/Mod/业务 | G12 | 真机 |
 | T7 | 下版本发后重测 G6/G7：日志无 `Failed to register routes for attendance-industry` 且 `/attendance/capabilities` 可达；`POST /api/templates/upload` 2xx 且入库后 `shipment/generate` 出单；随后 T2→T3 | G6/G7 | 真机（新版 feed） |
-| T8 | 回滚/恢复演练：注入坏更新或降级上一版本（先核验旧版 dmg 降级目标可用性），留 `rollback-applied.json` 与截图 | G13 | 真机 |
+| T8 | ~~回滚/恢复演练~~ **已完成（2026-09-12 路径 B 降级）**：1.0.0.2→1.0.0.1 覆盖安装 PASS（签名 accepted、数据零丢失、health PASS），证据 g13-rollback-20260912.*；路径 A（坏更新观察期自动回滚）留待专用验收机 | G13 | 真机 |
 
 **T7 中期回执（2026-09-12，1.0.0.2 候选包实装重测，证据 [evidence/e2e/macos-release-1.0.0.2/](evidence/e2e/macos-release-1.0.0.2/)）**：① G6——启动日志零路由注册 ERROR（f37372e97 生效✅）；`/attendance/capabilities` 未登录返 SPA HTML 属权益门控设计，终判移入 T2。② G7——upload 仍 405（根因见 §7-8 修正定性：默认应用从未挂载 upload/analyze，b97073acc 只补 create）；修复已入库（template_api.py 默认挂载），**修复并入 main 后需重建候选包重测**。③ G10——跨版本覆盖升级数据保留 PASS（digest 逐项一致，见 G10 行）。④ 构建身份：候选 DMG/ZIP `1.0.0.2`、gitSha `3d3ec8d98`（=main HEAD 3d3ec8d98，含 b97073acc/f37372e97），SHA256 见 §10-候选包。
 
