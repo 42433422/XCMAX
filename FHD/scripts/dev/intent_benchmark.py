@@ -28,6 +28,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
@@ -258,6 +259,14 @@ def _run_holdout_llm_round(cases: list[dict]) -> list[dict]:
     """留出集单轮 LLM 路由评测：走真实 normal router（含 LLM 意图闸），只看路由结果。"""
     from scripts.dev.intent_benchmark_llm import match_prediction, predict
 
+    # 用例间节流：并发任务（acceptance + holdout）同打一个端点时，无间隔的
+    # 连续调用会触发 429 限流，导致整轮 0 完成（fail-closed 判 unmeasured）。
+    raw_sleep = (os.environ.get("XCAGI_BENCH_LLM_SLEEP") or "1.0").strip()
+    try:
+        llm_sleep = max(0.0, float(raw_sleep))
+    except ValueError:
+        llm_sleep = 1.0
+
     rows: list[dict] = []
     for case in cases:
         text = case["text"]
@@ -270,6 +279,8 @@ def _run_holdout_llm_round(cases: list[dict]) -> list[dict]:
         except BOUNDARY_ERRORS as exc:  # 评测隔离边界：单条异常记为 miss，不中断整场评测
             ok = False
             error = type(exc).__name__
+        if llm_sleep > 0:
+            time.sleep(llm_sleep)
         rows.append(
             {
                 "text": text,
