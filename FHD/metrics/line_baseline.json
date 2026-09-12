@@ -1,5 +1,5 @@
 {
-  "lines": 2324154,
+  "lines": 2324162,
   "updated": "2026-09-12",
-  "note": "B12 补差：CHANGELOG 1 行 + os.path 守卫重写（CodeQL #3738 sink 规避），合计 +2 行安全/文档行数"
+  "note": "B12 ruff(0.15.21) 格式化重排"
 }

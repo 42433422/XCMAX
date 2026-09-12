@@ -563,9 +563,7 @@ class TestResolveExcelPathForImportExtended:
     def test_within_temp_root_passthrough(self, tmp_path):
         # 根内路径放行
         fp = str(tmp_path / "in.xlsx")
-        result = AIChatApplicationService._resolve_excel_path_for_import(
-            {"file_path": fp}, {}
-        )
+        result = AIChatApplicationService._resolve_excel_path_for_import({"file_path": fp}, {})
         assert result == fp
 
     def test_empty_both(self):
