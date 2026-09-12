@@ -1,0 +1,17 @@
+{
+  "mode": "acceptance",
+  "llm_verified": true,
+  "status": "VERIFIED",
+  "evidence": {
+    "llm_preflight": "test_reports/llm_preflight_evidence.json",
+    "report": "test_reports/task_benchmark_report.json",
+    "total_tasks": 22,
+    "pass_k": 0.9091,
+    "min_pass": 0.2,
+    "trials": 1
+  },
+  "run_id": "34698110821",
+  "sha": "c5a521e3306e91fced1e6b92294ee9c7954c8f6f",
+  "actor": "42433422",
+  "observed_at": "2026-09-12T22:06:27.764357+08:00"
+}
