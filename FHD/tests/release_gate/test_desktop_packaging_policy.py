@@ -403,9 +403,8 @@ def test_macos_installer_reuses_clean_local_electron_distribution() -> None:
     assert "hdiutil create" in dmg_builder
     assert "notarytool submit" in dmg_builder
     assert "stapler staple" in dmg_builder
-    assert "Apply signing normalization to both the local dotenv path" in installer
     assert installer.index('if [ -f "${MAC_SIGNING_ENV}" ]') < installer.index(
-        'if [ -n "${CSC_LINK:-}" ]'
+        'if [ -n "${CSC_KEYCHAIN:-}" ]'
     )
     assert "unset CSC_LINK" in installer
     assert "SKIP_DESKTOP_BUILD=1 but desktop/dist/main.js is missing" in installer
