@@ -1,6 +1,6 @@
 {
   "schema": "xcagi.download_release/v1",
-  "_doc": "官网下载版本 SSOT。当前只发布 enterprise；personal 已冻结。桌面产品与下载目录为 1.0.0.1，Android 继续发布已验收的 1.0.0.0；npm/Electron/Apple 工具链内部映射为 1.0.0。",
+  "_doc": "官网下载版本 SSOT。当前只发布 enterprise；personal 已冻结。macOS arm64 产品与下载目录为 1.0.0.2，Android 继续发布已验收的 1.0.0.0；npm/Electron/Apple 工具链内部映射为 1.0.0。",
   "version_lock": "1.0.0.2",
   "marketing_version": "1.0.0.2",
   "download_version": "1.0.0.2",
@@ -25,7 +25,7 @@
   "artifacts": {
     "enterprise": {
       "win": "XCAGI-Enterprise-Setup-1.0.0.1-x64.exe",
-      "mac_arm64": "XCAGI-Enterprise-1.0.0.1-mac-arm64.dmg",
+      "mac_arm64": "XCAGI-Enterprise-1.0.0.2-mac-arm64.dmg",
       "mac_x64": "XCAGI-Enterprise-1.0.0.1-mac-x64.dmg",
       "android": "XCAGI-Enterprise-Android-1.0.0.0.apk"
     }
@@ -34,15 +34,13 @@
     "win": "latest.yml",
     "mac": "latest-mac.yml"
   },
-  "last_push": {
-    "at": "2026-08-24T00:09:07.635494+00:00",
-    "release_train": "1.0.3.0",
-    "release_kind": "installer",
-    "git_sha": null,
-    "cos_uploaded": false,
-    "by": "installer-employee-chain"
-  },
   "release_history": [
+    {
+      "version": "1.0.0.2", "date": "2026-09-13",
+      "title": "Mac 模板导入与行业能力修复", "channel": "macOS 稳定版",
+      "notes": ["修复发货单模板上传入口，恢复模板导入与出单链路。", "修复太阳鸟等已授权行业 Mod 的宿主兼容问题，保留原有账号权益和业务数据。", "macOS Apple Silicon 安装包完成 Developer ID 签名与公证，稳定更新源发布 1.0.0.2。"],
+      "platforms": ["macOS Apple Silicon 1.0.0.2 稳定版"]
+    },
     {
       "version": "1.0.0.1",
       "date": "2026-09-02",
