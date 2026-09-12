@@ -221,9 +221,7 @@ class OnlineLearner:
         manifest["policies"].append(new_entry)
         manifest["active_version"] = version
 
-        write_file.write_text(
-            json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
+        write_file.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
 
     @staticmethod
     def _compute_sha256(path: Path) -> str:

@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 _ACTION_ORDER = (ProcessorType.REFLEX, ProcessorType.SUBCONSCIOUS, ProcessorType.CONSCIOUS)
 
+
 def _default_canary_state_path() -> str:
     from app.neuro_bus.routing.policy_paths import resolve_policy_file
 

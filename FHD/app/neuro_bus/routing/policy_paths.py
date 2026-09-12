@@ -14,9 +14,7 @@ import os
 from pathlib import Path
 
 # 仓库/bundle 内置目录（种子数据，只读用途）
-BUNDLED_POLICIES_DIR = (
-    Path(__file__).resolve().parents[3] / "resources" / "routing_policies"
-)
+BUNDLED_POLICIES_DIR = Path(__file__).resolve().parents[3] / "resources" / "routing_policies"
 
 ENV_DIR = "XCAGI_ROUTING_POLICIES_DIR"
 
