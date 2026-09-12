@@ -1,5 +1,5 @@
 {
-  "lines": 2324938,
+  "lines": 2324939,
   "updated": "2026-09-13",
-  "note": "1.0.0.2 发版升版合法增量（rebase 到 main a4d0d7fb=#1904 后按实际行数重算）"
+  "note": "rebase 重算（bd8686336 release-desktop workflow choice +2 行镜像）"
 }
