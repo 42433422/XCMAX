@@ -1,5 +1,5 @@
 {
-  "lines": 2324882,
+  "lines": 2324929,
   "updated": "2026-09-12",
-  "note": "四次 rebase 到 main(62c49bae5=#1895 G7 模板端点)：#1881 基准管线 + #1882 故障注入三轮交付证据工具合法增量 137 行（run 34648499865 PASS=4/FAIL=0），叠加 main 侧 #1897 blockmap +53 与 #1895 G7 断链修复 +322"
+  "note": "LLM 基准基础设施修复：429 独立退避预算（structured_output ~+20）+ 跨 loop 客户端重建（llm_adapter ~+15）+ 基准节流（intent_benchmark ~+10）+ CHANGELOG 实证条目 1 行；对应 run 34698110821 holdout 失败根因修复"
 }
