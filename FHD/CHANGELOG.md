@@ -4,7 +4,11 @@
 
 ---
 
-## Unreleased（1.0.0.1 之后的累积变更）
+## Unreleased（1.0.0.2 之后的累积变更）
+
+（暂无）
+
+## 1.0.0.2（2026-09-12 正式发布）
 - **LLM 基准 429 限流退避 + 跨 loop 客户端重建（holdout 首次真跑实证）**：run 34698110821 首次真实跑通全管线——acceptance job（真实 MiMo + `TASK_BENCHMARK_MIN_PASS=0.4` 硬门禁）**成功通过**，项 5「AI 任务执行」验收证据首次取得；同 run 的 holdout job（142 用例 × 3 轮）暴露两处基础设施缺陷：① 端点限流（与 acceptance 并发同打一个端点）429 全灭（73 次调用 0 完成），fail-closed 正确判 `unavailable_or_partial` 拒算通过；② 共享 httpx 客户端跨 event loop 复用报 "Event loop is closed"（基准每用例 `asyncio.run` 新建 loop）。修复：意图门 `max_repairs=0` 不再让传输层限流即永久失败——429 获独立退避重试预算（2s/5s，不消耗 schema 修复预算，生产同享）；适配器记录客户端创建时的 loop id，跨 loop 自动重建。配套基准脚本用例间节流（`XCAGI_BENCH_LLM_SLEEP`，默认 1s）。
 - **macOS 验收脚本支持本地候选包**：`acceptance-macos.sh --dmg <本地包>` 不再误查线上 manifest（候选版本线上必然无条目，此前直接判死）；候选包未公证（Unnotarized Developer ID）时 Gatekeeper 项降级为「候选未公证」而非判失败，正式包仍要求 accepted。macOS 发布 SSOT 同步回填候选包 v2 实机重测结论（模板导入断链修复实证、三次覆盖升级数据保留全 PASS）。
 - **G7 模板导入断链根治：`/api/templates/upload|analyze|progress` 默认挂载**——1.0.0.2 验收候选包实装重测发现 b97073acc 只把 `create` 迁进 xcagi_compat，`upload|analyze` 仍留在 env 门禁的 legacy_gap（`XCAGI_REGISTER_LEGACY_ROUTES=1` 才挂载），默认应用从未挂载 → 前端 templatePreview 上传一律 405，客户无法导入模板（真机证据 [macos-release-1.0.0.2](docs/evidence/e2e/macos-release-1.0.0.2/)）。修复：`template_api.py` 原生挂载 upload/analyze/progress 三端点（登录+租户隔离与 create 同套鉴权，`type=excel|word|logo` 历史参数不再误判为 business_scope），默认 app openapi 回归测试锁路由注册，发版 Runbook 5a 同步覆盖。同链路顺带修复：入库 INSERT 取自增 id 在 PostgreSQL（psycopg3 Cursor 无 `lastrowid`）恒 500，改为 PG `RETURNING id`/SQLite `lastrowid` 方言自适应（双引擎真实 xlsx 入库实测 200）。1.0.0.2 候选包其余重测结论：G6 attendance 路由注册修复生效、跨版本覆盖升级数据保留 PASS（digest 逐项一致）。
