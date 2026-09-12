@@ -134,7 +134,13 @@ def test_upload_rejects_anonymous_without_ingest(template_app):
     client, _engine, _repo = template_app
     response = client.post(
         "/api/templates/upload",
-        files={"file": ("t.xlsx", b"not-a-real-xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        files={
+            "file": (
+                "t.xlsx",
+                b"not-a-real-xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
         data={"template_name": "回归模板"},
     )
     assert response.status_code == 401, response.text
