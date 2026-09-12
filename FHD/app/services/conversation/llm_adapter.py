@@ -6,6 +6,7 @@
          腾讯混元, 智谱GLM, 讯飞星火, 零一万物, 阶跃星辰, 百川智能, 商汤日日新
 """
 
+import asyncio
 import logging
 import os
 from abc import ABC, abstractmethod
@@ -190,6 +191,11 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
 
         self._client: Optional[httpx.AsyncClient] = None
         self._stream_client: Optional[httpx.AsyncClient] = None
+        # AsyncClient 连接池绑定创建时的 event loop；跨 loop 复用（如基准脚本
+        # 每用例 asyncio.run）会报 "Event loop is closed"。记录创建时的 loop id，
+        # loop 变化即重建客户端。
+        self._client_loop_id: Optional[int] = None
+        self._stream_client_loop_id: Optional[int] = None
 
         # Provider/model/base URL and credential metadata can be tenant-private.
         # Keep initialization logs free of values derived from credentials or requests.
@@ -225,20 +231,28 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
 
     async def _get_client(self) -> httpx.AsyncClient:
         """获取/创建异步HTTP客户端（用于同步请求）"""
-        if self._client is None or self._client.is_closed:
+        loop_id = id(asyncio.get_running_loop())
+        if self._client is None or self._client.is_closed or self._client_loop_id != loop_id:
             self._client = httpx.AsyncClient(
                 timeout=httpx.Timeout(30.0, connect=10.0),
                 limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
             )
+            self._client_loop_id = loop_id
         return self._client
 
     async def _get_stream_client(self) -> httpx.AsyncClient:
         """获取/创建流式HTTP客户端"""
-        if self._stream_client is None or self._stream_client.is_closed:
+        loop_id = id(asyncio.get_running_loop())
+        if (
+            self._stream_client is None
+            or self._stream_client.is_closed
+            or self._stream_client_loop_id != loop_id
+        ):
             self._stream_client = httpx.AsyncClient(
                 timeout=httpx.Timeout(connect=15.0, read=300.0, write=60.0, pool=30.0),
                 limits=httpx.Limits(max_keepalive_connections=200, max_connections=1000),
             )
+            self._stream_client_loop_id = loop_id
         return self._stream_client
 
     def _normalize_base_url(self) -> str:
