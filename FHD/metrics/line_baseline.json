@@ -1,5 +1,5 @@
 {
-  "lines": 2324939,
-  "updated": "2026-09-13",
-  "note": "rebase 重算（bd8686336 release-desktop workflow choice +2 行镜像）"
+  "lines": 2324941,
+  "updated": "2026-09-12",
+  "note": "rebase 重算（bd8686336 release-desktop workflow choice +2 行镜像）；+2 行为 release-orchestrator 双源 permissions 增补 administration:read（T1 403 修复，PR 同批）"
 }
