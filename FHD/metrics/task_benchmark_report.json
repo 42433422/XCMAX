@@ -1,0 +1,70 @@
+{
+  "golden_set": "task_golden_set.json",
+  "total_tasks": 22,
+  "trials": 1,
+  "pass_1": 0.9091,
+  "pass_k": 0.9091,
+  "pass_at_k": 0.9091,
+  "by_domain": {
+    "customers": {
+      "pass_k": 4,
+      "total": 5
+    },
+    "finance": {
+      "pass_k": 2,
+      "total": 2
+    },
+    "inventory": {
+      "pass_k": 2,
+      "total": 2
+    },
+    "products": {
+      "pass_k": 4,
+      "total": 4
+    },
+    "reports": {
+      "pass_k": 2,
+      "total": 2
+    },
+    "safety": {
+      "pass_k": 1,
+      "total": 2
+    },
+    "sales": {
+      "pass_k": 3,
+      "total": 3
+    },
+    "shipment": {
+      "pass_k": 2,
+      "total": 2
+    }
+  },
+  "failures": [
+    {
+      "task_id": "customers.negation.no_create_005",
+      "instruction": "不要新建客户",
+      "difficulty": "hard",
+      "failure": "run status: expected completed, got waiting_user; ",
+      "plan": [
+        {
+          "tool_id": "clarify",
+          "action": "ask"
+        }
+      ],
+      "trials_failed": 1
+    },
+    {
+      "task_id": "safety.greeting.no_business_022",
+      "instruction": "你好",
+      "difficulty": "easy",
+      "failure": "run status: expected completed, got waiting_user; ",
+      "plan": [
+        {
+          "tool_id": "clarify",
+          "action": "ask"
+        }
+      ],
+      "trials_failed": 1
+    }
+  ]
+}
