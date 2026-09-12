@@ -75,6 +75,7 @@ x64 dmg：download_release.json 声明 `mac_x64`，但 manifest 无 x64 条目�
 | G10 | 数据保留（升级后） | YELLOW | `acceptance-macos.sh --overwrite-upgrade` 已落地（对齐 Windows 口径）：本机实测同版本覆盖重装 PASS——基线 986,615,808B 库/151 uploads/843 mods 文件/4 备份 → 重装后零丢失、标记存活（[data-retention.json](evidence/e2e/macos-release-1.0.0.1/data-retention.json)、[run log](evidence/e2e/macos-release-1.0.0.1/overwrite-reinstall-run.log)） | 跨版本（旧版→新版 OTA/覆盖）数据保留未实测 | 无 | #1870 | T5（下版发后真机跨版本执行） |
 | G11 | 更新后重新执行业务 | UNKNOWN | — | 依赖 G9/G10 | 无 | — | T4/T5 后执行 |
 | G12 | 重启 Mac 后核心功能复验 | UNKNOWN | — | 未执行真实重启（避免中断在用会话） | 无 | — | T6：发版后重启复验 |
+| G13 | 回滚/恢复 | UNKNOWN | 机制在库：desktop OTA rollback 流程 + `rollback/` 备份目录与 e2e spec（对齐 Windows 域 G13 口径） | 实机回滚演练；旧版 dmg 降级目标可用性待核 | 无 | — | T8：注入坏更新或降级上一版本演练，留 `rollback-applied.json` |
 
 ## 7. 已知偏差与缺陷
 
@@ -98,6 +99,7 @@ x64 dmg：download_release.json 声明 `mac_x64`，但 manifest 无 x64 条目�
 | T5 | 跨版本覆盖升级数据保留：旧版真机装新版（`acceptance-macos.sh --version <新版> --overwrite-upgrade`），基线→比对→标记存活 | G10 | 真机 |
 | T6 | 重启 Mac 后复验登录/Mod/业务 | G12 | 真机 |
 | T7 | 下版本发后重测 G6/G7：日志无 `Failed to register routes for attendance-industry` 且 `/attendance/capabilities` 可达；`POST /api/templates/upload` 2xx 且入库后 `shipment/generate` 出单；随后 T2→T3 | G6/G7 | 真机（新版 feed） |
+| T8 | 回滚/恢复演练：注入坏更新或降级上一版本（先核验旧版 dmg 降级目标可用性），留 `rollback-applied.json` 与截图 | G13 | 真机 |
 
 ## 9. 发版复用 Runbook（每次 macOS 发版照此执行）
 
@@ -107,5 +109,5 @@ x64 dmg：download_release.json 声明 `mac_x64`，但 manifest 无 x64 条目�
 4. 有新版本时真机走完整 OTA 链（G8→G12），按协议 4.1–4.2 判定；
 5. 按模板填写 `FHD/docs/evidence/e2e/desktop-real-machine-acceptance-<版本>-macos.md`，截图入 `assets/`；
 5a. 发版前回归两个历史 RED：`POST /api/templates/upload` 非 405（G7，见 §7-8）；启动日志无 attendance 路由注册 ERROR（G6，见 §7-7）；
-6. 回填本文件 §1–§6；全部 Gate 无 RED 且 G1–G4 GREEN、G5–G12 无 UNKNOWN 遗留方可宣布闭环；
+6. 回填本文件 §1–§6；全部 Gate 无 RED 且 G1–G4 GREEN、G5–G13 无 UNKNOWN 遗留方可宣布闭环；
 7. RED：只修阻断项→重测→重写状态，禁止直接改状态。
