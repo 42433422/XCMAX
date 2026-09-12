@@ -13,7 +13,7 @@ on:
       version:
         description: "Published product version"
         required: true
-        default: "1.0.0.1"
+        default: "1.0.0.2"
         type: string
       release_git_sha:
         description: "Exact 40-character build SHA recorded in latest-mac.yml"

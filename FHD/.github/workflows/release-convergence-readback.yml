@@ -11,7 +11,7 @@ on:
       product_version:
         description: Visible product version
         required: true
-        default: "1.0.0.1"
+        default: "1.0.0.2"
         type: string
 
 permissions:

@@ -64,6 +64,10 @@ export function setAutoLaunchEnabled(enabled: boolean): { ok: boolean; reason?: 
 
 // ---------- 首次引导 + 更新日志（What's New） ----------
 const RELEASE_NOTES: Record<string, string> = {
+  '1.0.0.2':
+    '· 修复：发货单模板导入断链（模板上传/解析端点默认挂载，导入后可直接出单）\n' +
+    '· 修复：考勤工作区路由注册（企业版 Mod 加载更稳）\n' +
+    '· 继续保持更新观察期自动回滚与稳定性保障',
   '1.0.0.1':
     '· 桌面端新增：开机自启、xcagi:// 深链唤起、渲染错误遥测、全局截图与语音唤起快捷键\n' +
     '· 继续保持更新观察期自动回滚与稳定性保障',

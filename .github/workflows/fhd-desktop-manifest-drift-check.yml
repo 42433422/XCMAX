@@ -13,9 +13,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "产品版本（默认 1.0.0.1）"
+        description: "产品版本（默认 1.0.0.2）"
         required: false
-        default: "1.0.0.1"
+        default: "1.0.0.2"
         type: string
       full_sha256:
         description: "下载制品核对 sha256（高带宽，默认仅 HEAD 尺寸）"
@@ -53,7 +53,7 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/dev/verify_desktop_manifest_drift.py \
-            --version "${{ inputs.version || '1.0.0.1' }}" \
+            --version "${{ inputs.version || '1.0.0.2' }}" \
             --output "${RUNNER_TEMP}/drift-size.json" \
             | tee "${GITHUB_STEP_SUMMARY}"
       - name: Check sha256 when requested
@@ -61,7 +61,7 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/dev/verify_desktop_manifest_drift.py \
-            --version "${{ inputs.version || '1.0.0.1' }}" \
+            --version "${{ inputs.version || '1.0.0.2' }}" \
             --full-sha256 \
             --output "${RUNNER_TEMP}/drift-full.json" \
             | tee "${GITHUB_STEP_SUMMARY}"

@@ -1,5 +1,5 @@
 param(
-  [string]$Version = "1.0.0.1",
+  [string]$Version = "1.0.0.2",
   [switch]$SkipBackend,
   # 复用 build-frontend.sh 产出的共享 templates/vue-dist，不再重建前端（统一 Web/桌面构建源）
   [switch]$SkipFrontend,

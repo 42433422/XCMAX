@@ -4,7 +4,11 @@
 
 ---
 
-## Unreleased（1.0.0.1 之后的累积变更）
+## Unreleased（1.0.0.2 之后的累积变更）
+
+（暂无）
+
+## 1.0.0.2（2026-09-12 正式发布）
 - **LLM 基准 429 限流退避 + 跨 loop 客户端重建（holdout 首次真跑实证）**：run 34698110821 首次真实跑通全管线——acceptance job（真实 MiMo + `TASK_BENCHMARK_MIN_PASS=0.4` 硬门禁）**成功通过**，项 5「AI 任务执行」验收证据首次取得；同 run 的 holdout job（142 用例 × 3 轮）暴露两处基础设施缺陷：① 端点限流（与 acceptance 并发同打一个端点）429 全灭（73 次调用 0 完成），fail-closed 正确判 `unavailable_or_partial` 拒算通过；② 共享 httpx 客户端跨 event loop 复用报 "Event loop is closed"（基准每用例 `asyncio.run` 新建 loop）。修复：意图门 `max_repairs=0` 不再让传输层限流即永久失败——429 获独立退避重试预算（2s/5s，不消耗 schema 修复预算，生产同享）；适配器记录客户端创建时的 loop id，跨 loop 自动重建。配套基准脚本用例间节流（`XCAGI_BENCH_LLM_SLEEP`，默认 1s）。
 - **macOS 桌面端路由策略文件不再写坏签名包**：路由在线学习权重/manifest、路由决策日志、plan graph 日志、canary 状态文件此前按 `__file__` 相对路径解析，打包后落在 `XCAGI.app/Contents/Resources/backend/_internal/` 签名 bundle 内，运行期写入导致 codesign 封条破损（`spctl` 判 rejected）。现桌面模式（`XCAGI_DESKTOP_MODE=1`）下一律重定向到 `~/Library/Application Support/XCAGI/data/routing_policies/`，读取优先 userData、回退 bundle 内置种子文件；开发态路径不变。新增 `XCAGI_ROUTING_POLICIES_DIR` 环境变量可整体覆盖目录。
 - **macOS 验收脚本支持本地候选包**：`acceptance-macos.sh --dmg <本地包>` 不再误查线上 manifest（候选版本线上必然无条目，此前直接判死）；候选包未公证（Unnotarized Developer ID）时 Gatekeeper 项降级为「候选未公证」而非判失败，正式包仍要求 accepted。macOS 发布 SSOT 同步回填候选包 v2 实机重测结论（模板导入断链修复实证、三次覆盖升级数据保留全 PASS）。

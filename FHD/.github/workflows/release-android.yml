@@ -9,8 +9,8 @@ on:
         description: Release version (manual dispatch only)
         required: true
         type: choice
-        default: "1.0.0.1"
-        options: ["1.0.0.1"]
+        default: "1.0.0.2"
+        options: ["1.0.0.2", "1.0.0.1"]
       release_sha:
         description: Immutable 40-character source SHA
         required: true
@@ -53,13 +53,13 @@ jobs:
         run: |
           raw="${{ github.event.inputs.version || github.ref_name }}"
           if [[ "${raw}" == "main" || "${raw}" == "master" || "${raw}" == "feature"* || -z "${raw}" ]]; then
-            raw="1.0.0.1"
+            raw="1.0.0.2"
           fi
           raw="${raw#FHD/}"
           raw="${raw#v}"
           raw="${raw#V}"
           if [[ -z "${raw}" ]]; then
-            raw="1.0.0.1"
+            raw="1.0.0.2"
           fi
           echo "version=${raw}" >> "${GITHUB_OUTPUT}"
           echo "toolchain_version=$(printf '%s' "${raw}" | cut -d. -f1-3)" >> "${GITHUB_OUTPUT}"

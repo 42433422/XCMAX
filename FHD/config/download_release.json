@@ -1,9 +1,9 @@
 {
   "schema": "xcagi.download_release/v1",
   "_doc": "官网下载版本 SSOT。当前只发布 enterprise；personal 已冻结。桌面产品与下载目录为 1.0.0.1，Android 继续发布已验收的 1.0.0.0；npm/Electron/Apple 工具链内部映射为 1.0.0。",
-  "version_lock": "1.0.0.1",
-  "marketing_version": "1.0.0.1",
-  "download_version": "1.0.0.1",
+  "version_lock": "1.0.0.2",
+  "marketing_version": "1.0.0.2",
+  "download_version": "1.0.0.2",
   "android_version": "1.0.0.0",
   "android_git_sha": "a6af956c70e5c4ced49859240455fc9ba8e42e5c",
   "release_ready": false,
