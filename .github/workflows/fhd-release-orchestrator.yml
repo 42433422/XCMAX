@@ -30,6 +30,7 @@ permissions:
   checks: read
   statuses: read
   security-events: read
+  administration: read  # read branch protection required checks (security-preflight)
 
 concurrency:
   group: xcagi-release-orchestrator
