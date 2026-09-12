@@ -1,0 +1,15 @@
+# 1.0.0.2 验收候选包构建收据（本地构建，Developer ID 签名、未公证，仅验收用）
+# 构建时间: 2026-09-12T07:10:45Z  buildSha: 3d3ec8d9867fa43cfeb402893ae3676fd86b0b95
+# 构建环境: macOS 本机 + Node v22.14.0 (tarball)，scripts/package/build-installer.sh 1.0.0.2 enterprise，env -u CI
+
+## SHA256
+6d11b2af30514d95491a3ba28c9945706467bf6980911c4e620d4bc61b764632  XCAGI-Enterprise-1.0.0.2-mac-arm64.dmg
+1092e4fa955549b00a6e393c3290a23f8742dd009d5aaacb2f50dac79a91b095  XCAGI-Enterprise-1.0.0.2-mac-arm64.zip
+
+## codesign --verify --deep --strict (DMG)
+exit=0
+
+## spctl --assess（未公证预期 rejected）
+XCAGI-Enterprise-1.0.0.2-mac-arm64.dmg: rejected
+source=Unnotarized Developer ID
+origin=Developer ID Application: jialong Li (G26WSH472M)

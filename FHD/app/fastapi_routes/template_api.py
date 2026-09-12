@@ -11,9 +11,12 @@ import logging
 import time
 from typing import Any, cast
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import JSONResponse
 
 from app.fastapi_routes.template_create import router as template_create_router
+from app.infrastructure.auth.dependencies import get_logged_in_user
+from app.infrastructure.tenant_scope import tenant_scope
 from app.neuro_bus.application_neuro_bridge import publish_neuro_event
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -160,3 +163,97 @@ def templates_get_one(template_id: str):
     if not row:
         raise HTTPException(status_code=404, detail="模板不存在")
     return {"success": True, "template": row}
+
+
+def _tenant_scope_or_403(user: Any):
+    """与 template_create 一致：账号是唯一身份来源，缺租户上下文直接 403。"""
+    tenant_id = getattr(user, "tenant_id", None)
+    if tenant_id is None:
+        raise HTTPException(status_code=403, detail="缺少租户上下文，无法操作模板")
+    return tenant_scope(int(tenant_id))
+
+
+@router.post("/api/templates/upload", summary="上传办公文件解析并入库模板库（analyze → create）")
+async def templates_upload(
+    request: Request,
+    file: UploadFile = File(...),
+    template_name: str = Form(default=""),
+    name: str = Form(default=""),
+    template_scope: str = Form(default=""),
+    type: str = Form(default=""),
+    source: str = Form(default="office_upload"),
+    user: Any = Depends(get_logged_in_user),
+) -> JSONResponse:
+    """办公文件入口：解析并自动入库模版库。
+
+    前端 templatePreview 默认上传端点。此前仅存在于 env 门禁的 legacy_gap
+    路由（XCAGI_REGISTER_LEGACY_ROUTES=1），默认应用从未挂载 → 一律 405，
+    客户无法导入模板（G7 断链根因）。本路由为默认挂载的 SSOT 实现。
+    """
+    from app.application.office_template_ingest_app_service import (
+        ingest_office_bytes_to_template_library,
+    )
+
+    raw = await file.read()
+    display_name = str(template_name or name or "").strip()
+    scope = str(template_scope or type or "").strip()
+    # 文档历史参数 type=excel|word|logo 不是 business_scope，避免误触发词条校验
+    if scope.lower() in {"excel", "word", "logo", "label", "image"}:
+        scope = ""
+    with _tenant_scope_or_403(user):
+        data, code = ingest_office_bytes_to_template_library(
+            file_body=raw,
+            filename=str(file.filename or "upload.bin"),
+            template_name=display_name,
+            template_scope=scope,
+            source=str(source or "office_upload").strip() or "office_upload",
+        )
+    return JSONResponse(data, status_code=code)
+
+
+@router.post("/api/templates/analyze", summary="解析办公模板（auto_save=1 时等同 upload）")
+async def templates_analyze(
+    request: Request,
+    file: UploadFile = File(...),
+    template_name: str = Form(default=""),
+    template_scope: str = Form(default=""),
+    auto_save: str = Form(default="0"),
+    user: Any = Depends(get_logged_in_user),
+) -> JSONResponse:
+    """解析办公模板；``auto_save=1`` 时直接写入模版库（等同 upload）。"""
+    raw = await file.read()
+    with _tenant_scope_or_403(user):
+        if str(auto_save or "").strip().lower() in {"1", "true", "yes", "on"}:
+            from app.application.office_template_ingest_app_service import (
+                ingest_office_bytes_to_template_library,
+            )
+
+            data, code = ingest_office_bytes_to_template_library(
+                file_body=raw,
+                filename=str(file.filename or "upload.bin"),
+                template_name=template_name,
+                template_scope=template_scope,
+                source="templates_analyze_auto_save",
+            )
+        else:
+            from app.legacy.routes.document_templates_compat import (
+                run_archive_template_analyze,
+            )
+
+            data, code = run_archive_template_analyze(
+                file_body=raw,
+                filename=str(file.filename or "upload.bin"),
+                template_name=template_name,
+                template_scope=template_scope,
+            )
+    return JSONResponse(data, status_code=code)
+
+
+@router.get(
+    "/api/templates/progress/{task_id}",
+    summary="模板解析进度查询（上传/分析流程轮询）",
+)
+def templates_progress(task_id: str):
+    from app.template_analysis_progress import get_template_analysis_progress
+
+    return get_template_analysis_progress(task_id)

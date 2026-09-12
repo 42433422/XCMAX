@@ -121,6 +121,31 @@ def test_default_factory_registers_only_template_create_mutation(template_app):
     assert "delete" not in paths.get("/api/templates/delete", {})
 
 
+def test_default_factory_registers_template_upload_and_analyze(template_app):
+    """G7 回归：默认应用必须挂载 upload/analyze（此前仅 env 门禁 legacy_gap 可达）。"""
+    client, _engine, _repo = template_app
+    paths = client.app.openapi()["paths"]
+    assert "post" in paths.get("/api/templates/upload", {}), paths.get("/api/templates/upload")
+    assert "post" in paths.get("/api/templates/analyze", {}), paths.get("/api/templates/analyze")
+    assert "get" in paths.get("/api/templates/progress/{task_id}", {})
+
+
+def test_upload_rejects_anonymous_without_ingest(template_app):
+    client, _engine, _repo = template_app
+    response = client.post(
+        "/api/templates/upload",
+        files={
+            "file": (
+                "t.xlsx",
+                b"not-a-real-xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+        data={"template_name": "回归模板"},
+    )
+    assert response.status_code == 401, response.text
+
+
 @pytest.mark.parametrize("session_id, expected", [(None, 401), ("label-session-9", 403)])
 def test_create_rejects_anonymous_or_missing_tenant_without_writes(
     template_app, session_id, expected

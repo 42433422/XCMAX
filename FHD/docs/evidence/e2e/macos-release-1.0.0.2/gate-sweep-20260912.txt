@@ -1,0 +1,33 @@
+# Gate 巡检实测记录（2026-09-12 16:35–16:50 CST，验收实例 1.0.0.2 候选包）
+
+实例：`~/Applications/acceptance/XCAGI.app`（build-info: releaseId=xcagi-1.0.0.2-3d3ec8d9867fa43cfeb402893ae3676fd86b0b95, builtAt=2026-09-12T07:06:09Z），桌面模式启动，端口 17500，CDP 9222。
+
+## G1/G8 线上 feed 与 manifest（--noproxy '*' 实测）
+- latest-mac.yml: version=1.0.0 productVersion=1.0.0.1 buildSha=99854233c5d4ea05a96b1f6ae1e3b7edfe03b526，sha512=ma1SqVskHoL/O3e85w4OQ3jKpn40dUxCwoxDugI2WwMb1X1VvQhKxAjINvcRG/bYZKeDhZ4Xddu8wfAd22eMnA==，signature=ed25519:7AX0/2hv/fRim933p0dN4zQcgIh+FCVfByooGVKY5xsOxdLMoU42XrorVvel3dn0SFD7OZG7pX4g64CrWyIWAw==
+- manifest.json: version=1.0.0.1 git_sha=99854233… generated_at=2026-09-11T08:05:08Z release_ready=false
+- 一致性：feed buildSha = manifest git_sha = main #1713 合并提交 ✓
+
+## G3 签名核验（验收候选包，本机已安装副本）
+- codesign --verify --deep --strict → exit=0
+- spctl --assess --type execute → rejected, source=Unnotarized Developer ID（候选包未公证，预期；不得冒充发布产物）
+
+## G4 健康检查（curl --noproxy '*' http://127.0.0.1:17500/api/health）
+- status=healthy, runtime.blockers=[], runtime.failures=[]
+- 对比 1.0.0.1 首启 degraded(LLM_RUNTIME_UNAVAILABLE)：本机已配置 LLM provider，健康转绿
+
+## G6 Mod / AI 员工
+- /api/mods → success=true, 62 个 mod，含 attendance-industry
+- /api/employees → catalog/workflow_delivery 等键存在
+- 启动日志（acceptance-10002-launch.log，实为本次桌面实例 17500 的日志）零 "Failed to register routes" 错误
+
+## G7 关键探针校准（修正此前"403=已挂载"的误读风险）
+- POST /api/<任意不存在路径>（无 CSRF）→ 403 {"message":"CSRF token missing"}：**CSRF 中间件先于路由，403 不能证明端点已挂载**
+- 带有效 CSRF（GET /api/health 取 cookie + X-CSRF-Token 头）：
+  - POST /api/templates/upload → **405 Method Not Allowed**（path=/api/templates/upload）——候选包（3d3ec8d98）默认应用仍未挂载 upload，与 retest-10002-results.json 一致，G7 维持 RED 待修复版重测
+  - POST /api/templates/analyze → 403 CSRF（无 token）；带 token 后同样 405（路由未挂载）
+- GET /api/templates/upload → 404：命中 template_api 的 GET /api/templates/{template_id} 且模板不存在——405 的机制来源（路径被 {id} GET 占用，POST 无路由）
+- GET /api/skills/list → 404：domains/system/routes.py（legacy_gap）未挂载，确认桌面实例未开 XCAGI_REGISTER_LEGACY_ROUTES
+- OpenAPI /openapi.json：paths 中无 /api/templates/upload|analyze|create|list（template_api compat 路由不在 schema 内属预期，但 upload 物理缺失已由带 token 405 证实）
+
+## 结论
+1.0.0.2 候选包 G6 修复确认有效、G4 转绿、G3 候选签名有效（未公证）、G1/G8 线上身份一致；G7 在候选包上仍为 405（RED 维持），等待 PR #1895 合并后重建候选包重测。
