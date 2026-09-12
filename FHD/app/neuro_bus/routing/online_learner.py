@@ -15,6 +15,7 @@ from app.neuro_bus.routing.policy_nn import (
     get_policy,
     save_policy_state_dict,
 )
+from app.neuro_bus.routing.policy_paths import resolve_policy_file, writable_policies_dir
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -28,11 +29,11 @@ except ImportError:  # pragma: no cover
 
 
 def _manifest_path() -> Path:
-    return Path(__file__).resolve().parents[3] / "resources" / "routing_policies" / "manifest.json"
+    return resolve_policy_file("manifest.json")
 
 
 def _policies_dir() -> Path:
-    return Path(__file__).resolve().parents[3] / "resources" / "routing_policies"
+    return writable_policies_dir()
 
 
 class OnlineLearner:
@@ -192,7 +193,9 @@ class OnlineLearner:
 
     def _update_manifest(self, version: str, weights_path: Path) -> None:
         """更新 manifest.json：追加新版本，设置 active_version。"""
+        # 读取走 userData→bundle 回退；写入必须落可写目录（桌面 bundle 只读）
         manifest_file = _manifest_path()
+        write_file = resolve_policy_file("manifest.json", for_write=True)
         try:
             if manifest_file.is_file():
                 manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
@@ -218,10 +221,7 @@ class OnlineLearner:
         manifest["policies"].append(new_entry)
         manifest["active_version"] = version
 
-        manifest_file.parent.mkdir(parents=True, exist_ok=True)
-        manifest_file.write_text(
-            json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
+        write_file.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
 
     @staticmethod
     def _compute_sha256(path: Path) -> str:

@@ -7,6 +7,7 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from app.neuro_bus.routing.policy_paths import resolve_policy_file
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -48,7 +49,7 @@ _policy_device: str = "cpu"
 
 
 def _manifest_path() -> Path:
-    return Path(__file__).resolve().parents[3] / "resources" / "routing_policies" / "manifest.json"
+    return resolve_policy_file("manifest.json")
 
 
 def load_active_policy() -> RoutingMLP | None:
@@ -73,7 +74,7 @@ def load_active_policy() -> RoutingMLP | None:
     for p in manifest.get("policies") or []:
         if str(p.get("version")) == ver:
             rel = p.get("path") or f"policy_v{ver}.pt"
-            weights = Path(__file__).resolve().parents[3] / "resources" / "routing_policies" / rel
+            weights = resolve_policy_file(rel)
             break
     if weights is None or not weights.is_file():
         logger.debug("routing policy weights not found for version=%s", ver)
