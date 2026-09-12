@@ -1,5 +1,5 @@
 {
-  "lines": 2324423,
+  "lines": 2324691,
   "updated": "2026-09-12",
-  "note": "rebase 冲突取 main 侧值（B8 blockmap 重生成 +52 + CHANGELOG +1，CI 报 total=2324423）；本分支 G7 修复行数将在 rebase 完成后由 CI 实测重算"
+  "note": "macOS Gate 巡检证据入库（候选包v2 G7重测/G10保留/验收运行日志+截图）与 SSOT 回填：证据为发版门禁必需产物；acceptance-macos.sh 本地候选包模式修复"
 }

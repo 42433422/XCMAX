@@ -1,0 +1,89 @@
+[1;34m[acceptance][0m [1/9] 确定验收版本
+[1;32m  ✔ 验收版本 1.0.0.2 · 架构 arm64（dmg 后缀 -arm64）[0m
+[1;34m[acceptance][0m [2/9] 获取线上 manifest 与工件元数据
+[1;32m  ✔ 本地 dmg 模式（--dmg）：跳过线上 manifest 解析，SHA256 仅输出实测值。[0m
+[1;34m[acceptance][0m [3/9] 获取安装包 dmg
+[1;32m  ✔ 跳过下载，使用本地 dmg：/private/tmp/xcmax-cand-build/FHD/release/xcagi-v1.0.0.2/enterprise/XCAGI-Enterprise-1.0.0.2-mac-arm64.dmg[0m
+[1;34m[acceptance][0m [4/9] SHA256 校验
+[1;32m  ✔ 实测 SHA256：da2a1bd7bc0b5f386db483f2c53348f46718ba8ff72a0f0a9d557f382d0c2e82[0m
+[1;33m  ⚠ manifest 无该版本条目，SHA256 无线上基准——请将实测值记入证据文件并在发布库核对。[0m
+[1;34m[acceptance][0m [5/9] 挂载 dmg 并校验签名
+[1;32m  ✔ 已挂载：/Volumes/XCAGI-Enterprise 1[0m
+[1;32m  ✔ 找到应用：XCAGI.app[0m
+[1;34m[acceptance][0m codesign -dv（签名身份）：
+    Identifier=com.xcagi.desktop.enterprise
+    Authority=Developer ID Application: jialong Li (G26WSH472M)
+    Authority=Developer ID Certification Authority
+    Authority=Apple Root CA
+    TeamIdentifier=G26WSH472M
+[1;32m  ✔ codesign --verify --deep --strict：签名完整[0m
+[1;33m  ⚠ 候选包未公证（Unnotarized Developer ID）——本地 dmg 验收模式放行，G3 按 YELLOW 记录：/Volumes/XCAGI-Enterprise 1/XCAGI.app: rejected
+source=Unnotarized Developer ID
+origin=Developer ID Application: jialong Li (G26WSH472M)[0m
+[1;34m[acceptance][0m [6/9] 安装到 ~/Applications/acceptance/（不影响 /Applications 现有安装）
+[1;33m  ⚠ /Applications/XCAGI.app 已存在——本脚本不会触碰它，验收实例独立安装在 /Users/a4243342/Applications/acceptance。[0m
+[1;32m  ✔ 升级前安装：/Users/a4243342/Applications/acceptance/XCAGI.app（version=1.0.0.1 gitSha=3d3ec8d9867fa43cfeb402893ae3676fd86b0b95）[0m
+[1;32m  ✔ 升级前业务数据：xcagi.db.bytes=986615808 excel_vectors.db.bytes=-1 mod_dbs.files=1 uploads.files=151 mods.files=847 models.files=0 backups.files=4 backups.latest=xcagi-startup-20260912071557.db[0m
+[1;32m  ✔ 已写入数据保留标记：/Users/a4243342/Library/Application Support/XCAGI/.xcagi-acceptance-marker-20260912-173900.txt[0m
+[1;32m  ✔ 已安装：/Users/a4243342/Applications/acceptance/XCAGI.app[0m
+[1;34m[acceptance][0m [7/9] 读取并核对应用版本身份
+[1;32m  ✔ Info.plist CFBundleShortVersionString：1.0.0.2[0m
+[1;32m  ✔ build-info.json：version=1.0.0.1 gitSha=9a4a06bc49b8885111dc7dc4c61eb15d0dd748db builtAt=2026-09-12T09:26:33.086Z[0m
+[1;31m  ✘ build-info.json version=1.0.0.1 与验收目标 1.0.0.2 不一致！[0m
+[1;32m  ✔ product-sku.json：{"sku":"enterprise","schema_version":1}[0m
+[1;32m  ✔ 升级后业务数据：xcagi.db.bytes=986615808 excel_vectors.db.bytes=-1 mod_dbs.files=1 uploads.files=151 mods.files=847 models.files=0 backups.files=4 backups.latest=xcagi-startup-20260912071557.db[0m
+[1;32m  ✔ 业务数据零丢失（库/文件数均未减少），数据保留标记仍在[0m
+数据保留结果已写入 /tmp/xcagi-acceptance-20260912-173856/data-retention.json（result=PASS）
+[1;34m[acceptance][0m [8/9] 冷启动（计时 + 截图 + 健康检查）
+[1;32m  ✔ 进程出现耗时：0.1 秒（PID 32654）[0m
+[1;32m  ✔ 截图已保存：/tmp/xcagi-acceptance-20260912-173856/xcagi-acceptance-20260912-173856.png[0m
+[1;34m[acceptance][0m 健康检查 http://127.0.0.1:17500/api/health（最多 60 秒）...
+[1;32m  ✔ 健康检查通过：{"status":"degraded","version":"1.0.0.1","service":"xcagi-fastapi","runtime":{"status":"healthy","components":{"desktop_runtime_routes":{"ok":true,"required":true,"detail":""},"desktop_automation_routes":{"ok":true,"required":false,"detail":""},"gdpr_routes":{"ok":true,"required":false,"detail":""},"platform_shell_routes":{"ok":true,"required":true,"detail":""},"business_route:xcmax_admin":{"ok":true,"required":false,"detail":""},"business_route:order_bridge_webhook":{"ok":true,"required":false,"detail":""},"business_route:xcmax_private_delivery_admin":{"ok":true,"required":false,"detail":""},"business_route:founder_autonomy":{"ok":true,"required":false,"detail":""},"business_route:ops_autonomy":{"ok":true,"required":false,"detail":""},"business_route:ops_wechat_ingest":{"ok":true,"required":false,"detail":""},"business_route:admin_audit":{"ok":true,"required":false,"detail":""},"business_route:genai_traces":{"ok":true,"required":false,"detail":""},"business_route:aibiz_terminal":{"ok":true,"required":false,"detail":""},"business_route:agent":{"ok":true,"required":false,"detail":""},"business_route:tutorial_v2":{"ok":true,"required":false,"detail":""},"business_route:knowledge_v1":{"ok":true,"required":false,"detail":""},"business_route:etl":{"ok":true,"required":true,"detail":""},"business_route:etl_targets":{"ok":true,"required":false,"detail":""},"business_route:taiyangniao_attendance_compat":{"ok":true,"required":false,"detail":""},"business_route:purchase":{"ok":true,"required":true,"detail":""},"business_route:inventory":{"ok":true,"required":true,"detail":""},"business_route:finance_unified_ledger":{"ok":true,"required":false,"detail":""},"business_route:finance_invoices":{"ok":true,"required":false,"detail":""},"business_route:finance":{"ok":true,"required":true,"detail":""},"business_route:reports":{"ok":true,"required":true,"detail":""},"business_route:rbac":{"ok":true,"required":false,"detail":""},"business_route:mods":{"ok":true,"required":true,"detail":""},"business_route:workspace_prefs":{"ok":true,"required":true,"detail":""},"business_route:business_bridge":{"ok":true,"required":true,"detail":""},"business_route:mod_store":{"ok":true,"required":true,"detail":""},"business_route:control":{"ok":true,"required":false,"detail":""},"business_route:voice":{"ok":true,"required":false,"detail":""},"business_route:mobile_api":{"ok":true,"required":false,"detail":""},"business_route:im_v0":{"ok":true,"required":false,"detail":""},"business_route:internal_im":{"ok":true,"required":false,"detail":""},"business_route:production_line_event":{"ok":true,"required":false,"detail":""},"business_route:production_line_event_xcmax":{"ok":true,"required":false,"detail":""}},"failures":[],"blockers":[],"degraded_reasons":[]},"degradedReasons":["NEURO_BUS_UNHEALTHY","NEURO_BUS_NOT_RUNNING"],"build":{"admin_console_sha256":"","admin_console_git_sha":"","artifact_sha256":"","built_at":"","git_sha":"","image_digest":"","product_version":"","release_id":""},"git_sha":"","release_id":"","neuro":{"status":"down","running":false,"queue_size":0,"components":{"bus_running":false,"queue_size":0,"domains":[]},"reliability":{"fhd_env":"","dedup":false,"rate_limit":false,"circuit_breaker":false,"lifeline":false,"tracer":false,"sla_log":false,"sla_controller":false,"retry":false,"dlq_auto":false,"redis_pubsub":false,"trace_sample_rate":null},"processors":{"coordinator":{"reflex":0,"subconscious":0,"conscious":0,"total":0,"fallbacks":0,"errors":0,"reflex_rate":0.0,"fallback_rate":0.0},"reflex":{"cache_size":0,"max_cache_size":1000,"hits":0,"misses":0,"hit_rate":0.0,"timeouts":0,"patterns":5},"subconscious":{"processed":0,"batched":0,"errors":0,"timeouts":0,"avg_latency_ms":0.0,"handlers":0,"batch_handlers":0,"running":false},"conscious":{"processed":0,"success":0,"errors":0,"deduplicated":0,"circuit_open":0,"sandbox_rejected":0,"sla_violations":0,"success_rate":0.0,"handlers":0,"reliability_enabled":true}},"cognition":{"enabled":true,"conscious_processor":{"processed":0,"success":0,"errors":0,"deduplicated":0,"circuit_open":0,"sandbox_rejected":0,"sla_violations":0,"success_rate":0.0,"handlers":0,"reliability_enabled":true},"subconscious_processor":{"processed":0,"batched":0,"errors":0,"timeouts":0,"avg_latency_ms":0.0,"handlers":0,"batch_handlers":0,"running":false},"cognition":{"llm_port_available":true},"subconscious_ml":{"anomaly_detector":{"total_samples":0,"total_predictions":0,"anomalies_detected":0,"anomaly_rate":0.0,"model_ready":false,"samples_since_fit":0},"pattern_predictor":{"total_observations":0,"ngram_order":3,"ngram_patterns":0,"markov_states":0,"history_size":0},"local_embedder":{"cache_size":0}},"evolution":{"handler":{"total_handled":0,"total_success":0,"success_rate":0.0,"supported_events":["evolution.mine","evolution.index","error.occurred","evolution.reflect","evolution.search","evolution.export"],"kb_stats":{"total_entries":0,"by_kind":{},"indexed":true,"kb_root":"/Users/a4243342/Applications/acceptance/XCAGI.app/Contents/Resources/backend/_internal/XCAGI/kb"},"miner_stats":{"log_path":"routing_decisions.jsonl","log_exists":false,"records_scanned":0,"min_occurrences":3,"min_confidence":0.8},"fixer_stats":{"total_proposals":0,"actionable_proposals":0,"actionable_rate":0.0,"min_score":0.3,"kb_stats":{"total_entries":0,"by_kind":{},"indexed":true,"kb_root":"/Users/a4243342/Applications/acceptance/XCAGI.app/Contents/Resources/backend/_internal/XCAGI/kb"}}},"kb_retriever":{"total_entries":0,"by_kind":{},"indexed":true,"kb_root":"/Users/a4243342/Applications/acceptance/XCAGI.app/Contents/Resources/backend/_internal/XCAGI/kb"},"reflex_pattern_miner":{"log_path":"routing_decisions.jsonl","log_exists":false,"records_scanned":0,"min_occurrences":3,"min_confidence":0.8},"runtime_self_fix":{"total_proposals":0,"actionable_proposals":0,"actionable_rate":0.0,"min_score":0.3,"kb_stats":{"total_entries":0,"by_kind":{},"indexed":true,"kb_root":"/Users/a4243342/Applications/acceptance/XCAGI.app/Contents/Resources/backend/_internal/XCAGI/kb"}}}}}}[0m
+[1;34m[acceptance][0m [9/9] 卸载 dmg 与输出人工指引
+[1;34m[acceptance][0m 清理：卸载已挂载的 dmg ...
+[1;32m  ✔ dmg 已卸载[0m
+
+=======================================================================
+ 验收结果汇总（版本 1.0.0.2 · macOS arm64）
+=======================================================================
+  下载文件           : /private/tmp/xcmax-cand-build/FHD/release/xcagi-v1.0.0.2/enterprise/XCAGI-Enterprise-1.0.0.2-mac-arm64.dmg
+  实测 SHA256        : da2a1bd7bc0b5f386db483f2c53348f46718ba8ff72a0f0a9d557f382d0c2e82
+  manifest SHA256    : （manifest 无本版本基准）
+  签名校验           : codesign=PASS spctl=CANDIDATE_UNNOTARIZED
+  安装位置           : /Users/a4243342/Applications/acceptance/XCAGI.app
+  产品版本（build-info）: 1.0.0.1 · gitSha=9a4a06bc49b8885111dc7dc4c61eb15d0dd748db
+  Info.plist 版本    : 1.0.0.2
+  冷启动             : PID出现 0.1s
+  健康检查           : PASS
+  截图               : /tmp/xcagi-acceptance-20260912-173856/xcagi-acceptance-20260912-173856.png
+----------------------------------------------------------------------
+  dmg 已保留（--keep-dmg）：/private/tmp/xcmax-cand-build/FHD/release/xcagi-v1.0.0.2/enterprise/XCAGI-Enterprise-1.0.0.2-mac-arm64.dmg
+  卸载验收实例（验收结束后可选）：rm -rf "/Users/a4243342/Applications/acceptance/XCAGI.app"
+=======================================================================
+
+【接下来两步必须人工完成（脚本不代替）】
+
+▶ 步骤三 OTA（在线自动更新）——协议第 4 节：
+  1) 确认更新源有新版本：
+     curl -sS https://xiu-ci.com/releases/stable/enterprise/latest-mac.yml
+  2) 打开 XCAGI → 设置 → 检查更新 → 下载完成后点「立即重启安装」；
+  3) 观察期（约 5 秒稳定性窗口）内不要强制退出；
+  4) 复核：cat "/Users/a4243342/Applications/acceptance/XCAGI.app/Contents/Resources/build-info.json"
+     curl -sS http://127.0.0.1:17500/api/health
+     cat ~/Library/Application\ Support/XCAGI/rollback-marker.json 2>/dev/null || echo 'marker 已提交'
+  ※ 当前线上已是 1.0.0.2 且无更高版本时：本步记 SKIP（无升级目标），
+    并引用最近一次 OTA 闭环证据（desktop-ota-closed-loop-20260724）。
+
+▶ 步骤四 回滚 ——协议第 5 节：
+  路径 A（观察期自动回滚，需专用验收机构造坏更新）：更新后启动失败会自动还原旧版
+  并写 rollback-applied.json，用以下命令取证：
+     cat ~/Library/Application\ Support/XCAGI/rollback-applied.json
+  路径 B（降级安装）：从 https://xiu-ci.com/xcagi-v<旧版本>/enterprise/ 下载上一版本 dmg，
+  重复安装步骤覆盖后确认版本回到旧版且 /api/health healthy。
+  ※ 不注入坏更新时：记 PARTIAL，引用 rollback.test.ts + update-rollback.e2e.spec.ts 佐证。
+
+【证据归档】按模板填写：FHD/docs/e2e/templates/desktop-acceptance-template.md
+  → 复制为 FHD/docs/evidence/e2e/desktop-real-machine-acceptance-1.0.0.2-macos.md
+  → 截图放 FHD/docs/evidence/e2e/assets/
+=======================================================================
+ACCEPT_EXIT=0
