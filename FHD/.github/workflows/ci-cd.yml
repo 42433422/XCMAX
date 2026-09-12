@@ -525,7 +525,7 @@ jobs:
               break
             fi
             if payload="$(docker exec "${container_name}" curl -fsS http://127.0.0.1:5000/api/health)" \
-              && jq -e '.runtime.status == "healthy" and .version == "1.0.0.1"' <<<"${payload}" >/dev/null; then
+              && jq -e '.runtime.status == "healthy" and .version == "1.0.0.2"' <<<"${payload}" >/dev/null; then
               jq '{status, version, runtime_status: .runtime.status}' <<<"${payload}"
               exit 0
             fi

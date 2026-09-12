@@ -7,7 +7,7 @@ on:
       version:
         description: "Release version"
         required: true
-        default: "1.0.0.1"
+        default: "1.0.0.2"
       frontend_run_id:
         description: "Run ID of the orchestrator's build-frontend job producing the shared xcagi-vue-dist artifact"
         required: true

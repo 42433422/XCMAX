@@ -220,9 +220,9 @@ class MobileBuildConfig {
   static const modstoreBaseUrl = 'https://xiu-ci.com';
   static const enterpriseFhdBaseUrl = 'https://xiu-ci.com/fhd-api';
   static const versionCode = 10;
-  static const versionName = '1.0.0.1';
+  static const versionName = '1.0.0.2';
   static const displayVersion = 'v$versionName';
-  static const profileVersionText = '版本 1.0.0.1 (10)';
+  static const profileVersionText = '版本 1.0.0.2 (11)';
 }
 
 class MobileUpdateCheckResult {
