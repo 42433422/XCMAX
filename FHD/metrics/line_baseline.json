@@ -1,5 +1,5 @@
 {
-  "lines": 2324744,
+  "lines": 2324745,
   "updated": "2026-09-12",
-  "note": "rebase 后按最新 main(2324423) 重算：本分支净增 +321=G7/G6 修复代码与默认应用回归测试 + macOS Gate 巡检证据（候选包v2 重测/覆盖升级/截图/运行日志）+ SSOT 回填，均为发版闭环门禁必需产物"
+  "note": "CHANGELOG 增补 acceptance-macos.sh 本地候选包模式条目（+1），门禁 changelog-gate 要求脚本修复有记录"
 }
