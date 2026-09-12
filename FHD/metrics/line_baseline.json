@@ -1,5 +1,5 @@
 {
-  "lines": 2324153,
+  "lines": 2324154,
   "updated": "2026-09-12",
-  "note": "B12: +约26 行安全加固（CodeQL #3730 path containment guard、#3735/3736 输入截断）；lockfile 为镜像无关重排"
+  "note": "B12 补差：CHANGELOG 1 行 + os.path 守卫重写（CodeQL #3738 sink 规避），合计 +2 行安全/文档行数"
 }

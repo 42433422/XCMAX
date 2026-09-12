@@ -21,22 +21,22 @@ logger = logging.getLogger(__name__)
 class ExcelImportResolveMixin:
     @staticmethod
     def _excel_import_path_within_roots(fp: str) -> bool:
-        """CodeQL #3730 加固：file_path 必须落在应用数据目录或系统临时目录内。
-        上传链路只会把 Excel 存进这些根；越界视为路径穿越并降级（不读文件）。"""
+        """CodeQL #3730/#3738 加固：file_path 必须落在应用数据目录或系统临时目录内。
+        上传链路只会把 Excel 存进这些根；越界视为路径穿越并降级（不读文件）。
+        用 os.path.realpath + 前缀比较（避免对不可信值构造 pathlib 对象）。"""
+        import os
         import tempfile
 
         from app.utils.path_io.path_utils import get_app_data_dir
 
         try:
-            resolved = Path(fp).resolve()
+            real = os.path.realpath(fp)
         except OSError:
             return False
         for root in (get_app_data_dir(), tempfile.gettempdir()):
-            try:
-                resolved.relative_to(Path(root).resolve())
+            base = os.path.realpath(root)
+            if real == base or real.startswith(base + os.sep):
                 return True
-            except ValueError:
-                continue
         return False
 
     @classmethod
