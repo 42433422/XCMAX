@@ -5,6 +5,7 @@
 ---
 
 ## Unreleased（1.0.0.1 之后的累积变更）
+- **安全扫描收尾加固**：堵住了 Excel 重新导入时可能读到任意文件的一个漏洞口，并给文字识别提取加了输入上限；同时把最后一个遗漏的组件升级到安全版本。
 - **依赖安全修复与发布流水线修复**：把 5 个软件包用到的底层组件升级到安全版本，清零了 53 项高危安全告警；同时修复了发布流水线里一处下载地址写错的问题，让自动构建恢复正常。
 
 - **macOS 发布闭环实跑回填：G7 判 RED、G6 判 YELLOW**——1.0.0.1 真机实测发现发货单模板导入链路断裂（打包后端缺 template_create 路由，前端上传入口全部 405，`shipment/generate` 恒 TEMPLATE_NOT_FOUND，用户无法完成真实业务）；attendance-industry mod 在同步新版后路由注册失败（bundle 缺 `app/mod_sdk/customer_features`，`/attendance/*` 不可用）。两项修复均已存在于 main（b97073acc、f37372e97），1.0.0.1 feed 未包含；SSOT 回填复现步骤/日志/截图，发版 Runbook 新增发版前回归步骤（5a）与下版重测任务 T7；SSOT 校验插件同步修正——RED 不再一刀切拒绝，改为强制校验「复现步骤+evidence 证据链接+修复 PR/commit」三要素齐备。
