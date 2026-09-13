@@ -46,7 +46,7 @@ jobs:
           set -euo pipefail
           printf '%s' "${{ inputs.release_sha }}" | grep -Eq '^[0-9a-f]{40}$'
           test "$(git rev-parse HEAD)" = "${{ inputs.release_sha }}"
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"
