@@ -1,5 +1,5 @@
 {
-  "lines": 2325068,
+  "lines": 2325070,
   "updated": "2026-09-13",
-  "note": "macOS 1.0.0.2 正式交付证据回填：CVM 恢复证据文档 ota-release-cvm-recovery-20260913.md（52 行）+ 官方包 G3 实测收据 g3-official-10002.txt（13 行）——交付波唯一集成 PR #1918 的证据增量"
+  "note": "fix(deploy): pack step 透传 FHD_RELEASE_CHANNEL（+2 行），fhd-manifest.json channel 与实际发布通道一致，staging 免走 stable 人工审批"
 }
