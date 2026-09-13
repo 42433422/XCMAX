@@ -67,6 +67,9 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install cryptography for signing/verification
+        run: python3 -m pip install --quiet cryptography
+
       - name: Resolve artifact and download quarantined installer
         run: |
           set -euo pipefail
@@ -161,7 +164,7 @@ jobs:
       - name: Publish to CVM testing channel atomically
         env:
           DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
-          HOST: ${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}
+          HOST: ${{ secrets.FHD_PUSH_HOST || '119.27.178.147' }}
           DEST: /var/www/update/releases/testing/enterprise
         run: |
           set -euo pipefail
