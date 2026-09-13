@@ -4,7 +4,11 @@
 
 ---
 
-## Unreleased（1.0.0.2 之后的累积变更）
+## Unreleased（1.0.0.3 之后的累积变更）
+
+（暂无）
+
+## 1.0.0.3（2026-09-13 正式发布）
 - 修复新建发货单调用旧接口导致模板列表、生成与下载失效，按模板 ID 保留选模版和订单号。
 - **macOS 模板上传不再写坏签名包**：1.0.0.2 真机 OTA 升级后重测 G7 实证，模板导入分析链路把上传的 Excel 先存到 `analyzer.py` 旁的 `uploads/templates`——打包后该路径位于 `XCAGI.app/Contents/Resources/backend/_internal/` 签名 bundle 内，写入报 `Permission denied`（登录修复后暴露的下一个断点，复现日志 [g7-retest-post-ota.txt](docs/evidence/e2e/macos-release-1.0.0.2/)）。现改走 `get_upload_dir()`（打包感知：源码态落仓库、打包态落 `~/Library/Application Support/XCAGI/uploads/templates`），与路由策略文件重定向同一原则。
 - fix(release): release-orchestrator 双源 permissions 增补 administration:read——security-preflight 读 main 分支保护 required checks 曾 403（T1 run 34694275310/34697783917 失败根因）
