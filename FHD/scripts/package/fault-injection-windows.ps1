@@ -11,9 +11,11 @@ tests/test_desktop_db_resilience.py（函数级单测）之上的进程级/实�
   3. corrupt-backup    损坏最新备份（不碰主库）→ 启动 → 坏备份不误伤正常启动。
   4. corrupt-main      损坏主库 → 启动 → 自动改名留证 + 从最近有效备份恢复 → health + 数据可访问。
                         ⚠ 仅允许在 C:\XCAGI-acceptance 隔离安装上执行，检测到其他安装根一律拒绝。
+  5. dual-process      运行中二次启动 XCAGI.exe → 单实例锁应令第二实例自行退出，主实例 health 无损。
+  6. migration-mutex   冷启动竞态：两个 XCAGI.exe 近似同时拉起 → 仅一个后端完成迁移/监听 17500，无损坏证据。
   人工场景（脚本给指引，不自动执行）：
-  5. disk-full         磁盘写满（需卷配额/小 VHD，物理环境执行）。
-  6. power-cut         异常断电（拔电/断 PDU，物理环境执行）。
+  7. disk-full         磁盘写满（需卷配额/小 VHD，物理环境执行）。
+  8. power-cut         异常断电（拔电/断 PDU，物理环境执行）。
 
 行为依据：
   - recover_if_corrupt（app/desktop_runtime/migrate.py）：损坏库改名 .corrupt-{timestamp} 留证；
@@ -31,7 +33,7 @@ tests/test_desktop_db_resilience.py（函数级单测）之上的进程级/实�
   .\scripts\package\fault-injection-windows.ps1 -Scenario all -InstallRoot "C:\XCAGI-acceptance" -DataRoot "$env:APPDATA\XCAGI"
 #>
 param(
-  [ValidateSet('all', 'kill-all', 'kill-orphan', 'corrupt-backup', 'corrupt-main')]
+  [ValidateSet('all', 'kill-all', 'kill-orphan', 'corrupt-backup', 'corrupt-main', 'dual-process', 'migration-mutex')]
   [string[]]$Scenario = @('all'),
   # 安装根；默认按 C:\XCAGI-acceptance → %LOCALAPPDATA%\Programs\XCAGI → %ProgramFiles%\XCAGI 探测。
   [string]$InstallRoot = "",
@@ -244,11 +246,11 @@ if ($running) {
   Stop-AppAll | Out-Null
 }
 
-if ($Scenario -contains 'all') { $Scenario = @('kill-all', 'kill-orphan', 'corrupt-backup', 'corrupt-main') }
+if ($Scenario -contains 'all') { $Scenario = @('kill-all', 'kill-orphan', 'corrupt-backup', 'corrupt-main', 'dual-process', 'migration-mutex') }
 
 # ---------------------------------------------------------------- 场景 1 kill-all
 if ($Scenario -contains 'kill-all') {
-  Write-Step "1/4 kill-all 强杀全部进程 → 重启恢复"
+  Write-Step "1/6 kill-all 强杀全部进程 → 重启恢复"
   $pre = Start-App $AppExe
   if (-not $pre.Up) {
     Collect-Diagnostics 'kill-all-前置启动' | Out-Null
@@ -281,7 +283,7 @@ if ($Scenario -contains 'kill-all') {
 
 # ---------------------------------------------------------------- 场景 2 kill-orphan
 if ($Scenario -contains 'kill-orphan') {
-  Write-Step "2/4 kill-orphan 孤儿后端占端口 → 再启动"
+  Write-Step "2/6 kill-orphan 孤儿后端占端口 → 再启动"
   if (-not (Test-Path $BackendExe)) {
     Record 'kill-orphan' 'SKIP' ("未找到 sidecar：{0}" -f $BackendExe)
   } elseif (-not (Wait-PortFree 5)) {
@@ -318,7 +320,7 @@ if ($Scenario -contains 'kill-orphan') {
 
 # ---------------------------------------------------------------- 场景 3 corrupt-backup
 if ($Scenario -contains 'corrupt-backup') {
-  Write-Step "3/4 corrupt-backup 损坏最新备份 → 启动不受影响"
+  Write-Step "3/6 corrupt-backup 损坏最新备份 → 启动不受影响"
   $backupsDir = Join-Path $DataRoot 'backups'
   $bks = @(Get-ChildItem $backupsDir -File -ErrorAction SilentlyContinue |
     Where-Object { $_.Name -match '^xcagi-.+?(-\w+)?-\d{14}\.db$' } | Sort-Object LastWriteTime -Descending)
@@ -355,7 +357,7 @@ if ($Scenario -contains 'corrupt-backup') {
 
 # ---------------------------------------------------------------- 场景 4 corrupt-main
 if ($Scenario -contains 'corrupt-main') {
-  Write-Step "4/4 corrupt-main 损坏主库 → 自动恢复"
+  Write-Step "4/6 corrupt-main 损坏主库 → 自动恢复"
   # 安全闸：仅允许隔离验收目录，防止误伤客户真实安装。
   $isolated = ($InstallRoot -eq $AcceptRoot) -or ($InstallRoot.StartsWith($AcceptRoot + '\'))
   if (-not $isolated) {
@@ -394,6 +396,91 @@ if ($Scenario -contains 'corrupt-main') {
         Remove-Item ($mainDb + '.pre-inject') -ErrorAction SilentlyContinue
       }
     }
+  }
+}
+
+# ---------------------------------------------------------------- 场景 5 dual-process
+if ($Scenario -contains 'dual-process') {
+  Write-Step "5/6 dual-process 运行中二次启动 → 单实例锁拒绝第二实例"
+  $pre = Start-App $AppExe
+  if (-not $pre.Up) {
+    Collect-Diagnostics 'dual-process-前置启动' | Out-Null
+    Record 'dual-process' 'FAIL' ("前置启动失败：{0}" -f $pre.Detail)
+  } else {
+    $before = Get-Digest $DataRoot
+    Write-Info "注入：主实例健康时再次 Start-Process XCAGI.exe（预期 requestSingleInstanceLock 拒绝并退出）"
+    $second = Start-Process -FilePath $AppExe -PassThru
+    $exitedAt = -1
+    for ($i = 1; $i -le 20; $i++) {
+      Start-Sleep -Seconds 1
+      if ($second.HasExited) { $exitedAt = $i; break }
+    }
+    $h = Get-Health
+    $backendCount = @(Get-Process -Name 'xcagi-backend' -ErrorAction SilentlyContinue).Count
+    $after = Get-Digest $DataRoot
+    New-Evidence 'dual-process' ("second_exited_at={0}s exitcode={1}; health={2}; backend_count={3}; main={4}→{5}" -f `
+      $(if ($exitedAt -gt 0) { $exitedAt } else { 'NOT-EXITED(20s)' }), $(if ($second.HasExited) { $second.ExitCode } else { '-' }), `
+      $(if ($null -ne $h) { $h.status } else { 'no-health' }), $backendCount, $before['xcagi.db.bytes'], $after['xcagi.db.bytes']) | Out-Null
+    if (-not $second.HasExited) {
+      Collect-Diagnostics 'dual-process-未退出' | Out-Null
+      Stop-AppAll | Out-Null
+      Record 'dual-process' 'FAIL' '第二实例 20s 未退出：单实例锁未生效（存在双主进程/双后端风险）'
+    } elseif ($null -eq $h) {
+      Collect-Diagnostics 'dual-process-失联' | Out-Null
+      Record 'dual-process' 'FAIL' "第二实例已退出（${exitedAt}s）但主实例 health 失联，二次启动干扰了主实例"
+    } elseif ([int]$backendCount -gt 1) {
+      Collect-Diagnostics 'dual-process-双后端' | Out-Null
+      Record 'dual-process' 'FAIL' ("第二实例退出后仍有 {0} 个 xcagi-backend 残留（应恰为 1）" -f $backendCount)
+    } elseif ([int64]$after['corrupt.evidence'] -gt 0) {
+      Record 'dual-process' 'FAIL' '二次启动后出现损坏库留证'
+    } else {
+      Write-Ok ("第二实例 {0}s 自行退出，主实例 health={1}，单后端，数据无损" -f $exitedAt, $h.status)
+      Record 'dual-process' 'PASS' ("单实例锁生效：第二实例 {0}s 退出（ExitCode={1}），主实例 {2}" -f $exitedAt, $second.ExitCode, $h.status)
+    }
+    Stop-AppAll | Out-Null
+  }
+}
+
+# ---------------------------------------------------------------- 场景 6 migration-mutex
+if ($Scenario -contains 'migration-mutex') {
+  Write-Step "6/6 migration-mutex 冷启动竞态 → 仅一个迁移方/后端"
+  if (-not (Wait-PortFree 5)) {
+    Record 'migration-mutex' 'FAIL' '17500 未释放，前置不满足（先清场）'
+  } else {
+    Write-Info "注入：0.3s 间隔连续拉起两个 XCAGI.exe（迁移/端口竞态），随后等待 health"
+    Start-Process -FilePath $AppExe | Out-Null
+    Start-Sleep -Milliseconds 300
+    Start-Process -FilePath $AppExe | Out-Null
+    $h = $null
+    for ($i = 0; $i -lt 120; $i++) {
+      Start-Sleep -Seconds 1
+      $h = Get-Health
+      if ($null -ne $h) { break }
+    }
+    Start-Sleep -Seconds 5   # 让竞态败者的退出流程走完
+    $xProcs = @(Get-Process -Name 'XCAGI' -ErrorAction SilentlyContinue)
+    $backendCount = @(Get-Process -Name 'xcagi-backend' -ErrorAction SilentlyContinue).Count
+    $conn = @(Get-NetTCPConnection -LocalPort 17500 -State Listen -ErrorAction SilentlyContinue |
+      Select-Object -ExpandProperty OwningProcess -Unique)
+    $after = Get-Digest $DataRoot
+    New-Evidence 'migration-mutex' ("health={0}; xcagi_procs={1}; backend_count={2}; listeners={3}; corrupt_evidence={4}; main={5}" -f `
+      $(if ($null -ne $h) { $h.status } else { 'no-health' }), $xProcs.Count, $backendCount, ($conn -join '/'), `
+      $after['corrupt.evidence'], $after['xcagi.db.bytes']) | Out-Null
+    if ($null -eq $h) {
+      Collect-Diagnostics 'migration-mutex-无健康' | Out-Null
+      Record 'migration-mutex' 'FAIL' '竞态启动 120s 内 health 不可达'
+    } elseif ([int]$conn.Count -gt 1) {
+      Collect-Diagnostics 'migration-mutex-多监听' | Out-Null
+      Record 'migration-mutex' 'FAIL' ("17500 有 {0} 个监听进程：迁移互斥失效" -f $conn.Count)
+    } elseif ([int64]$after['corrupt.evidence'] -gt 0) {
+      Collect-Diagnostics 'migration-mutex-损坏' | Out-Null
+      Record 'migration-mutex' 'FAIL' '竞态启动产生损坏库留证（迁移并发保护缺失）'
+    } else {
+      Write-Ok ("竞态启动收敛：health={0}，监听 PID 唯一，无损坏证据（主库 {1} 字节）" -f $h.status, $after['xcagi.db.bytes'])
+      Record 'migration-mutex' 'PASS' ("竞态双启动收敛：{0}；XCAGI 进程 {1} 个、后端 {2} 个、监听 {3}" -f `
+        $h.status, $xProcs.Count, $backendCount, ($conn -join '/'))
+    }
+    Stop-AppAll | Out-Null
   }
 }
 
