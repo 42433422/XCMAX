@@ -6,7 +6,7 @@
 > 判据协议：[desktop-real-machine-acceptance-protocol.md](e2e/desktop-real-machine-acceptance-protocol.md)；证据模板：[desktop-acceptance-template.md](e2e/templates/desktop-acceptance-template.md)。
 > RED 处理规则：只修真正阻断闭环的问题，修复后重测，不得直接改状态。
 > **闭环规则**：G2→G12 连续完整通过 **2 轮**（第二轮从正式地址重新下载开始）才算交付闭环。
-> 最后实跑：2026-09-11（本机即 Windows 测试机）。
+> 最后实跑：2026-09-13（1.0.0.2 交付至测试通道 + 故障注入 run 34727133868）。
 
 ## 1. 当前版本信息与真相源
 
@@ -36,14 +36,13 @@
 | 产物 | 构建 gitSha | 大小 | 校验和 | 签名 | 托管 |
 |------|------------|------|--------|------|------|
 | Win 稳定通道热修包 `…-1.0.0.1-x64-macalign.exe` | `73861ed7` | 247,881,767 B | sha512 `u2oJlM7h…Q==`（本地更新器副本实测一致）；sha256 `b196c07f…f0a63` | **未签名** | `…:8443/releases/stable/enterprise/` 200；**:443 同路径 404** |
-| Win 隔离验收包 `…-1.0.0.1-x64-unsigned.exe` | `a9507f0f` | 248,318,327 B | sha256 `ac7fa2c7…321a`（`.sha256` + `delivery-receipt.json` 在列，09-11 10:41） | **未签名** | `…/releases/testing/enterprise/` |
+| Win 隔离验收包 `…-1.0.0.2-x64-unsigned.exe` | `77aca5743` | 248,408,728 B | sha256 `d281abad…d575`（`.sha256` + `delivery-receipt.json` 在列，09-13 07:59；`git_sha=77aca5743` 交付波收口 main，`runner_install_smoke:passed`，run 34725093731 `windows_installer_only` 精确 SHA 构建；本机下载与 CVM 远端 SHA 双验证一致） | **未签名** | `…/releases/testing/enterprise/` |
 | 回滚演练目标 `…-1.0.0.0-x64.exe` | 1.0.0.0 | 213,833,311 B | sha256 `a40250c2…`（stable manifest） | 未签名 | 200；其 `.sha256` 文件 404 |
 
 **live 探测（2026-09-11）**：`xcagi-v1.0.0.1/manifest.json` 200（`release_ready:false`、**无 win 条目**）；营销目录服务器端实测**仅 mac arm64 dmg/zip，无任何 win exe**（B2 实锤）；`latest-mac.yml` 200（格式完整、ed25519 VALID）；mac x64 dmg **404**。
 
 **服务器端实测（2026-09-11，root SSH 只读）**：
 - nginx `conf.d/xcagi-h1-download.conf` 在 **8443** 专设 HTTP/1.1 下载通道——09-09 六次 `ERR_HTTP2_PING_FAILED` 下载失败的针对性规避；**:443 主块未包含该路径**（B4 定位收窄为主块 alias/发布根不一致）。
-- `delivery-receipt.json`（testing，09-11 10:41）：`git_sha=a9507f0f`，`runner_install_smoke: passed`。**`a9507f0f`（09-11 09:43，#1815）晚于 `#1857` 迁移修复 → 当前 testing 包即含修复的候选签名基座**；另有两份更早 CI 构建备份（`87d510c5f` #1865、`654db6a8e` #1847）。
 - `MACALIGN-HOTFIX.txt` 陈旧：写 `2e6f03bf`（09-05），实际文件已是 09-09 `73861ed7` 构建（服务器文档漂移，随 T1 更正）。
 - 元数据 Ed25519 验签（公钥取自 desktop-config.ts，本机 `verify_update_manifest_sig.py` 实测）：stable `latest.yml` **VALID**、stable `latest-mac.yml` **VALID**、testing `latest.yml` **INVALID**（B7）。
 - 更新器事件链（`%APPDATA%\XCAGI\logs\updater-events.jsonl`）：07-08/09-08 两次 `install_failed 数据库迁移失败（code=1）`；09-09 六次下载失败后成功（sha512 一致）；07-10/11 同版本重建防护正常。
@@ -70,6 +69,8 @@
 
 **失败处理**：任一 Gate FAIL → 精确定位失败点 → 建 Issue/任务 → **只修当前阻断点** → 回到该 Gate 重测 → 通过后才继续后续 Gate。
 
+> **故障注入补充证据（2026-09-13，GitHub Windows runner，包=§2 1.0.0.2 行）**：run 34727133868 `fault-injection-windows.ps1 -Scenario all` PASS=4/FAIL=0/SKIP=2——kill-all（status=degraded 可观测）/kill-orphan（孤儿 sidecar 占端口后重启恢复）/corrupt-backup（坏备份不误伤启动）/corrupt-main（坏库改名留证→备份还原→health 可达）全过；disk-full/power-cut 为实体机人工场景 SKIP（归 T8）。
+
 ## 4. Release Gate 状态（2026-09-11 实跑）
 
 | # | Gate | 状态 | 现有证据 | 缺失证据 | 阻断 | 下一步 |
@@ -95,7 +96,6 @@
 | B1 | **P0** | 全部产物未 Authenticode 签名（`authenticode_status:NotSigned`）→ 不得进稳定通道/公开下载页 | 需配置 **5 项**（用户侧，2026-09-12 依 `fhd-release-desktop.yml` 签名预检核实）：secrets `ES_USERNAME`/`ES_PASSWORD`/`CREDENTIAL_ID`/`ES_TOTP_SECRET` + vars `XCAGI_WINDOWS_PUBLISHER_NAME`；预检为三态——5 项全齐=签名发布、**部分配置=job 直接失败**（不允许静默降级）、全空=显式未签名且 stable feeds 不动（B6 不解除）。已核仓库 secrets（39 个）与 vars（4 个）均无此 5 项 |
 | B2 | **P0** | 正式营销目录无 Windows 包（服务器实测确认），manifest `release_ready:false` 无 win 条目 | 发布管线未对 1.0.0.1-win 执行上传+清单 |
 | B6 | **P0** | **稳定 feed 广播 `73861ed7`（早于 `#1857` 迁移修复），且实机两次 OTA 安装失败于数据库迁移（07-08/09-08）→ 现网升级大概率启动失败** | 以含 `#1857` 的签名构建（基座 `a9507f0f`）覆盖 feed；覆盖前稳定通道处于"分发危险构建"状态 |
-| B3 | **P1→已解除（2026-09-12 live 实测）** | manifest 已于 2026-09-11T08:05Z 重生成（git_sha=`99854233c`）：官方下载与 stable 双通道 dmg HEAD 实测均 293,401,820 B，与 manifest sha256/size 一致 → 官方 sha256 校验恢复有效 | 回归护栏：产物替换后 `generate-download-manifest.py` 强制重跑并原子发布（归属 macos-release 域，见 §7） |
 | B4 | **P1** | feed `files.url` 指向 `:8443`（h1-download 专用通道），**:443 主块同路径 404**；stable latest.yml 为手工改写缺 3 字段 | 主 server block 补 alias 或发布根统一；feed 生成器收口 |
 | B5 | **P2** | exe 版本元数据 1.0.0.0 ≠ build-info 1.0.0.1 | electron-builder 四段版本同步 |
 | B7 | **P2** | testing 通道 latest.yml Ed25519 签名与生产公钥不匹配（验签 INVALID） | `sign_update_metadata.py` 以正确密钥重签 |
@@ -116,11 +116,11 @@
 | T5 | 回滚演练：路径 A 注入坏更新或路径 B 降级 1.0.0.0 | G13 | 留 `rollback-applied.json` |
 | T6 | 干净环境快照：VM（无开发环境）重跑 T2 | G2 严谨性 | 虚拟机快照 |
 | T7 | 闭环第 2 轮：从正式地址重新下载重跑 T2–T4 | 闭环 | 连续两轮全过才算闭环 |
+| T8 | 实体机人工故障场景：磁盘满、异常断电（CI runner 无法模拟，run 34727133868 记 SKIP） | G13/数据安全 | 实体机按 `fault-injection-windows.ps1` disk-full/power-cut 场景执行并留证 |
 
 ## 7. 与 macOS 域的同步注记（维护 [MACOS_RELEASE_SSOT.md] 时并入）
 
-1. **dmg/manifest 漂移——已解除（2026-09-12 复测）**：manifest 2026-09-11T08:05Z 重生成后（293,401,820 B + sha256），官方下载与 stable 双通道 dmg HEAD 实测一致，其 G1「SHA256 实测一致」恢复有效；回归护栏=产物替换后 manifest 强制重跑。
-2. **x64 dmg live 404**（其偏差-4 的 live 确认）；**testing 通道签名 INVALID**（B7，双平台共用测试通道）。
+1. **x64 dmg live 404**（其偏差-4 的 live 确认）；**testing 通道签名 INVALID**（B7，双平台共用测试通道）。
 
 ## 8. 发版复用 Runbook（每次 Windows 发版照此执行）
 
