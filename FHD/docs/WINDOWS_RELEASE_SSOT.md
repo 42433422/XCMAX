@@ -12,7 +12,7 @@
 
 | 字段 | 值 | 证据 |
 |------|-----|------|
-| 稳定产品版本 | `1.0.0.1` | [VERSION.md](../VERSION.md)（版本域 SSOT）；`verify_version_anchors.py` PASS（2026-09-11 实跑） |
+| 稳定产品版本 | `1.0.0.2` | [VERSION.md](../VERSION.md)（版本域 SSOT，#1899 升版）；stable feed 仍广播 1.0.0.1（B1 决策下未签名不进 stable，见 B6） |
 | 工具链兼容版本 | `1.0.0`（npm/Electron 三段映射） | 同上 |
 | 发布 SKU | `enterprise`（personal 冻结） | [download_release.json](../config/download_release.json) |
 | 发布火车内部流水 | `1.0.0.3`（服务器无 v1.0.0.2/3/4 目录，仅内部号） | [release_train.json](../config/release_train.json) |
@@ -36,7 +36,9 @@
 | 产物 | 构建 gitSha | 大小 | 校验和 | 签名 | 托管 |
 |------|------------|------|--------|------|------|
 | Win 稳定通道热修包 `…-1.0.0.1-x64-macalign.exe` | `73861ed7` | 247,881,767 B | sha512 `u2oJlM7h…Q==`（本地更新器副本实测一致）；sha256 `b196c07f…f0a63` | **未签名** | `…:8443/releases/stable/enterprise/` 200；**:443 同路径 404** |
+| Win 隔离验收包 `…-1.0.0.1-x64-unsigned.exe` | `a9507f0f` | 248,318,327 B | sha256 `ac7fa2c7…321a`（`.sha256` + `delivery-receipt.json` 在列，09-11 10:41） | **未签名** | `…/releases/testing/enterprise/` |
 | Win 隔离验收包 `…-1.0.0.2-x64-unsigned.exe` | `77aca5743` | 248,408,728 B | sha256 `d281abad…d575`（`.sha256` + `delivery-receipt.json` 在列，09-13 07:59；`git_sha=77aca5743` 交付波收口 main，`runner_install_smoke:passed`，run 34725093731 `windows_installer_only` 精确 SHA 构建；本机下载与 CVM 远端 SHA 双验证一致） | **未签名** | `…/releases/testing/enterprise/` |
+| Win 未签名交付包 `XCAGI-Enterprise-Setup-1.0.0.2-x64-unsigned.exe`（manual_installer） | `e3bde5f33` | 248410443 B | sha256 `7738e8d58ea1e219b1ce2c532816d5ad079288dbdd36c7ecc50f069fa2b0449a`（delivery-receipt + 本机下载复验一致） | **未签名（B1 决策）** | GitHub Actions run 34738192540 artifact `xcagi-windows-installer-e3bde5f33e14b12ad400e0ae8fc6587079f5594b`（需仓库读权限）；stable feed 不动 |
 | 回滚演练目标 `…-1.0.0.0-x64.exe` | 1.0.0.0 | 213,833,311 B | sha256 `a40250c2…`（stable manifest） | 未签名 | 200；其 `.sha256` 文件 404 |
 
 **live 探测（2026-09-11）**：`xcagi-v1.0.0.1/manifest.json` 200（`release_ready:false`、**无 win 条目**）；营销目录服务器端实测**仅 mac arm64 dmg/zip，无任何 win exe**（B2 实锤）；`latest-mac.yml` 200（格式完整、ed25519 VALID）；mac x64 dmg **404**。
@@ -77,7 +79,7 @@
 |---|------|------|---------|---------|------|--------|
 | G1 | 构建 | YELLOW | CI run 34552543418（`a9507f0f`）`runner_install_smoke:passed` + 回执在册；本机已装 `49d0fe105` 可构建可安装 | 授权管线（含签名）的本轮产物 | B1 | T1 |
 | G2 | 干净环境安装 | RED | 复现步骤：curl 正式营销目录 `https://xiu-ci.com/xcagi-v1.0.0.1/enterprise/` → 服务器实测仅 mac dmg/zip、无任何 win exe（§2 live 探测 2026-09-11），下载无从谈起；证据 [evidence/e2e/windows-release-1.0.0.1/](evidence/e2e/windows-release-1.0.0.1/)（服务器探针与产物清单随 T1 回填）；本轮静默安装未执行。修复引用：发布管线修复 PR #1889/#1893 已合入 main `201d1f691`，B1/B6 清零后由 release-orchestrator 重发正式包 | 正式地址可下载的 win 包；SHA256 一致输出 | B2/B6 | T1→T2 |
-| G3 | Windows 安全项 | RED | 复现步骤：`Get-AuthenticodeSignature XCAGI-*.exe` → `authenticode_status:NotSigned`（delivery-receipt.json 2026-09-11 实录，与 03 声明一致）；仓库无 `ES_*` secrets（§2 签名管线事实）；证据 [evidence/e2e/windows-release-1.0.0.1/](evidence/e2e/windows-release-1.0.0.1/)（签名验证输出随 T1 回填） | 签名 Valid 的产物 | B1 | T1（先配 ES_* secrets，PR #1893 后 main `201d1f691` 为签名基座候选） |
+| G3 | Windows 安全项 | YELLOW（口径随 B1 决策改写） | 交付声明=未签名 → 验收口径=`Get-AuthenticodeSignature XCAGI-*.exe` 输出 **NotSigned 且与 delivery-receipt.json 声明一致**（signed 期望值 Valid 的旧口径随 B1 决策作废）；SmartScreen「未知发布者」提示属预期并截图留证。复现步骤：T2 干净安装后执行签名判定 + 对照回执；证据随 T2 回填 evidence/e2e/windows-release-1.0.0.2/ | NotSigned 与声明一致的判定输出 + SmartScreen 截图 | 无（口径已改写） | T2 |
 | G4 | 首次启动 | **GREEN** | 受控冷启动实机实测（2026-09-11 16:0x）：`Start-Process` 起表 → 24.5s health 首响应（neuro 总线延迟启动期 status=degraded）→ ~50s 全绿（`status=healthy / runtime=healthy / neuro=healthy running=true`，无 degradedReasons）；主窗口完整渲染截图 [g4-main-window-foreground.png](evidence/e2e/windows-release-1.0.0.1/g4-main-window-foreground.png)；xcagi-backend + 5×XCAGI 进程在册；health JSON 存档 [g4-health.json](evidence/e2e/windows-release-1.0.0.1/g4-health.json) | — | 无 | — |
 | G5 | 登录绑定 | YELLOW | 自动登录成功（会话保持），主窗口截图显示已登录 SUNBIRD 工作空间；向导公司同步链路经真实客户端实测 **200**（2026-09-12，`POST /api/auth/company-brand` → 市场回显一致，见 B10，修复前同路径 502） | 新鲜登录动作未单独执行 | 无 | T3 复验 |
 | G6 | Mod / AI 员工加载 | YELLOW | AI 员工「饰品包装助手」在线并有真实回复（[g7-business-task.png](evidence/e2e/windows-release-1.0.0.1/g7-business-task.png)）；17 个 Mod 文件交付到运行时 `%APPDATA%\XCAGI\mods\`（ERP 桥接 87/88 文件）；业务菜单全量渲染 | **ERP 桥接 Mod 被订单页判定「尚未安装」→ ERP 业务页空壳**（B9） | B9 | B9 修复后回测 |
@@ -93,9 +95,10 @@
 
 | # | 级别 | 阻断点 | 精确定位 |
 |---|------|--------|----------|
-| B1 | **P0** | 全部产物未 Authenticode 签名（`authenticode_status:NotSigned`）→ 不得进稳定通道/公开下载页 | 需配置 **5 项**（用户侧，2026-09-12 依 `fhd-release-desktop.yml` 签名预检核实）：secrets `ES_USERNAME`/`ES_PASSWORD`/`CREDENTIAL_ID`/`ES_TOTP_SECRET` + vars `XCAGI_WINDOWS_PUBLISHER_NAME`；预检为三态——5 项全齐=签名发布、**部分配置=job 直接失败**（不允许静默降级）、全空=显式未签名且 stable feeds 不动（B6 不解除）。已核仓库 secrets（39 个）与 vars（4 个）均无此 5 项 |
-| B2 | **P0** | 正式营销目录无 Windows 包（服务器实测确认），manifest `release_ready:false` 无 win 条目 | 发布管线未对 1.0.0.1-win 执行上传+清单 |
-| B6 | **P0** | **稳定 feed 广播 `73861ed7`（早于 `#1857` 迁移修复），且实机两次 OTA 安装失败于数据库迁移（07-08/09-08）→ 现网升级大概率启动失败** | 以含 `#1857` 的签名构建（基座 `a9507f0f`）覆盖 feed；覆盖前稳定通道处于"分发危险构建"状态 |
+| B1 | **P0→已按用户决策关闭（2026-09-13）** | 用户决策：**不提供签名支持，免费安装**——交付形态=显式未签名 manual_installer（`windows-installer-delivery` job，`windows_installer_only=true`），不进 stable 自动更新通道；secrets `ES_USERNAME`/`ES_PASSWORD`/`CREDENTIAL_ID`/`ES_TOTP_SECRET` 与 var `XCAGI_WINDOWS_PUBLISHER_NAME` 保持不配置。T1 Windows 交付执行：desktop run 34738192540（XCAGI-Enterprise-Setup-1.0.0.2-x64-unsigned.exe，sha256 `7738e8d58ea1e219…`，248410443 B，delivery-receipt `delivery_mode=manual_installer`、`stable_auto_update=false`、`signature_status=unsigned`） | 交付形态已定；如未来恢复签名发布，回退至「配置 5 项」路径 |
+| B2 | **P0→随 B1 决策转为交付形态限制（2026-09-13）** | 正式营销目录无 Windows 包（服务器实测确认）——营销目录发布依赖签名 stable 管线，B1 决策（不签名）下该路径不启用 | 交付形态变更：正式分发=GitHub artifact manual_installer（见 §2 产物表 1.0.0.2 行）；营销目录 win 包列为已知限制，恢复签名后由 orchestrator 原子发布解除 |
+| B6 | **P0·开放（B1 决策下管线无法解除，需用户决策）** | 稳定 feed 仍广播 `73861ed7`（早于 `#1857` 迁移修复）——实机两次 OTA 安装失败于数据库迁移；B1 决策（不签名）下管线**禁止未签名进 stable**，故无法以新构建覆盖 feed | 可选处置（需用户授权，CVM 侧手动）：下架/清空 `update/releases/stable/enterprise/latest.yml` 停止向存量用户广播危险构建；或保持现状并记录风险 |
+| B3 | **P1→已解除（2026-09-12 live 实测）** | manifest 已于 2026-09-11T08:05Z 重生成（git_sha=`99854233c`）：官方下载与 stable 双通道 dmg HEAD 实测均 293,401,820 B，与 manifest sha256/size 一致 → 官方 sha256 校验恢复有效 | 回归护栏：产物替换后 `generate-download-manifest.py` 强制重跑并原子发布（归属 macos-release 域，见 §7） |
 | B4 | **P1** | feed `files.url` 指向 `:8443`（h1-download 专用通道），**:443 主块同路径 404**；stable latest.yml 为手工改写缺 3 字段 | 主 server block 补 alias 或发布根统一；feed 生成器收口 |
 | B5 | **P2** | exe 版本元数据 1.0.0.0 ≠ build-info 1.0.0.1 | electron-builder 四段版本同步 |
 | B7 | **P2** | testing 通道 latest.yml Ed25519 签名与生产公钥不匹配（验签 INVALID） | `sign_update_metadata.py` 以正确密钥重签 |
@@ -109,7 +112,7 @@
 
 | ID | 任务 | Gate | 步骤 |
 |----|------|------|------|
-| T1 | B1 五项配置后触发 `fhd-release-orchestrator.yml`（product_version=1.0.0.1）→ 签名产物自动发布 feed+营销目录+manifest（原子），解除 B6。**入参已产出（2026-09-12 18:54 看护链）**：release_sha=`81339bbbb1`（B8 修复基座）、security_scan_run_id=34689284976、previous_security_scan_run_id=34687420771（scan pair 双 ✅，CodeQL 双语言匹配 tip）。API 派发名=`fhd-release-orchestrator.yml`（root 生成名，09-08 run 34243974482 失败于安全证据门，该根因已随 B11/B12 修复） | G1/G3、B1/B2/B4/B6 | B1 配置后 `xcmax-t1-dispatch.py --fire`（预检已过 scan pair 项，仅余 B1） |
+| T1 | **双腿执行（2026-09-13）**：①orchestrator（`fhd-release-orchestrator.yml`，product_version=1.0.0.2，release_sha=e3bde5f33，scan#1=34735864144 scan#2=34737848040 编排 run=34738147579）——服务器部署腿（staging→MODstore→FHD stable→production）按设计执行；其桌面派发走全路径 release-preflight（要求全部签名 secrets）在 B1 决策下**预期快速失败**，属已解释状态而非事故；②Windows 授权交付=直接派发 `fhd-release-desktop.yml` `windows_installer_only=true`（未签名 manual_installer）→ desktop run 34738192540 | G1/G3、B1/B2/B4 | 已执行，产物 SHA256 已入册（§2 产物表） |
 | T2 | 闭环第 1 轮·干净安装+首启：正式地址下载→SHA256→签名判定→静默隔离安装→冷启动计时+截图 | G2/G3/G4 | `acceptance-windows.ps1 -Version <v>`（**不设 `XCAGI_UPDATE_URL`**） |
 | T3 | 闭环第 1 轮·业务就绪：登录→绑定→Mod/AI 员工→1 个真实业务任务 | G5/G6/G7 | 按证据模板逐步截图 |
 | T4 | OTA 闭环：应用内发现→下载→安装→重启观察期→数据基线比对→业务复验 | G8–G12 | 真实升级目标（T1 发布的下一版本或 1.0.0.2） |
