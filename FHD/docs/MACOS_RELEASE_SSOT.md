@@ -117,26 +117,11 @@ x64 dmg：download_release.json 声明 `mac_x64`，但 manifest 无 x64 条目�
 6. 回填本文件 §1–§6；全部 Gate 无 RED 且 G1–G4 GREEN、G5–G13 无 UNKNOWN 遗留方可宣布闭环；
 7. RED：只修阻断项→重测→重写状态，禁止直接改状态。
 
-## 10. 验收候选包（非发布产物）
+## 10. 验收候选包（非发布产物，历史记录）
 
-> 候选包仅供实机验收（T7 重测等），**Developer ID 签名但未公证（spctl rejected）**，不得替代发布产物、不得进入 feed。构建环境三坑见 §7-9。
+> 候选包 Developer ID 签名未公证（spctl rejected），仅供实机验收，不得替代发布产物、不得进 feed；正式 1.0.0.2 已于 2026-09-13 发布（§1/§2）。构建环境三坑见 §7-9；候选包 build-info `version` 落后产品号的口径见 §7-10。
 
-| 项 | 值 |
-|----|-----|
-| 版本 / buildSha / 产物目录 | `1.0.0.2` / `3d3ec8d9867fa43cfeb402893ae3676fd86b0b95`（构建时 main HEAD，含 b97073acc/f37372e97，**不含** G7 upload/analyze 挂载修复）/ 本机 `release/xcagi-v1.0.0.2/enterprise/`（latest-mac.yml `productVersion=1.0.0.2`） |
-| 产物 SHA256 | DMG `6d11b2af30514d95491a3ba28c9945706467bf6980911c4e620d4bc61b764632`（295,755,247 B）；ZIP `1092e4fa955549b00a6e393c3290a23f8742dd009d5aaacb2f50dac79a91b095`（263,613,399 B，latest-mac.yml sha512+ed25519 同步） |
-| 签名核验 | codesign --verify --deep --strict exit=0；spctl `rejected, source=Unnotarized Developer ID`（收据 [candidate-build-receipt.txt](evidence/e2e/macos-release-1.0.0.2/candidate-build-receipt.txt)） |
-| 实装重测结论 | G6 修复生效（启动日志零路由 ERROR）；G7 upload 仍 405（缺修复，[retest-10002-results.json](evidence/e2e/macos-release-1.0.0.2/retest-10002-results.json)）；G10 跨版本覆盖升级数据保留 PASS（[pre](evidence/e2e/macos-release-1.0.0.2/data-digest-preupgrade-10002.json)/[post](evidence/e2e/macos-release-1.0.0.2/data-digest-after-10002.json)） |
-
-### 10.1 候选包 v2（含 G7 修复，buildSha `9a4a06bc49b8885111dc7dc4c61eb15d0dd748db`，2026-09-12 17:30 构建）
-
-> 从 PR #1895 合并 main（6f75ce184）后的分支 HEAD 干净构建（codeload tarball + APFS 克隆 .venv/node_modules，`XCAGI_BUILD_SHA` 显式注入，Node v22.14.0，`env -u CI` 跳过公证）。
-
-| 项 | 值 |
-|----|-----|
-| 产物目录 | `/private/tmp/xcmax-cand-build/FHD/release/xcagi-v1.0.0.2/enterprise/` |
-| DMG SHA256 | `da2a1bd7bc0b5f386db483f2c53348f46718ba8ff72a0f0a9d557f382d0c2e82` |
-| ZIP SHA256 | `e866079bf32ee70a27f09d7a85e67928f1cd9941572798fcef86e3ee93478655` |
-| 签名核验 | codesign exit=0；spctl rejected Unnotarized Developer ID（预期） |
-| 实装重测 | 覆盖升级（3d3ec8d98→9a4a06bc4）PASS；G7 upload/analyze 由 405→401（断链根治、鉴权生效）；G10 数据保留 PASS；冷启动 0.1s health PASS。证据 [g7-retest-cand2-20260912.txt](evidence/e2e/macos-release-1.0.0.2/g7-retest-cand2-20260912.txt) |
-| 已知偏差 | build-info.json `version`=1.0.0.1（Python 包版本，非产品版本；§7-10 口径），验收脚本对此误报——建议后续将 generate-desktop-build-info.py 的 version 改为产品版本 |
+| 候选 | buildSha | 实装重测结论 | 证据 |
+|------|----------|-------------|------|
+| v1（2026-09-12） | `3d3ec8d9867fa43cfeb402893ae3676fd86b0b95`（构建时 main HEAD，含 b97073acc/f37372e97，**不含** G7 挂载修复；DMG `6d11b2af…`/ZIP `1092e4fa…`） | G6 修复生效（启动日志零路由 ERROR）；G7 upload 仍 405（催生 template_api.py 默认挂载方案）；G10 跨版本覆盖升级数据保留 PASS | [receipt](evidence/e2e/macos-release-1.0.0.2/candidate-build-receipt.txt)、[retest](evidence/e2e/macos-release-1.0.0.2/retest-10002-results.json)、[pre](evidence/e2e/macos-release-1.0.0.2/data-digest-preupgrade-10002.json)/[post](evidence/e2e/macos-release-1.0.0.2/data-digest-after-10002.json) |
+| v2（2026-09-12 17:30，含 G7 修复） | `9a4a06bc49b8885111dc7dc4c61eb15d0dd748db`（DMG `da2a1bd7…`/ZIP `e866079b…`，PR #1895 合并 main 后干净构建，`env -u CI` 跳过公证） | 覆盖升级（3d3ec8d98→9a4a06bc4）PASS；G7 upload/analyze 405→401（断链根治、鉴权生效）；G10 PASS；冷启动 0.1s health PASS | [g7-retest-cand2-20260912.txt](evidence/e2e/macos-release-1.0.0.2/g7-retest-cand2-20260912.txt) |
