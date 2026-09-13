@@ -572,6 +572,8 @@ jobs:
         run: python scripts/dev/verify_version_anchors.py
 
       - name: Pack FHD server release tarball
+        env:
+          FHD_RELEASE_CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.release_channel || (contains(github.ref, '-rc') && 'staging' || 'stable') }}
         run: bash scripts/deploy/fhd-pack-release.sh
 
       - name: Upload server release artifacts
