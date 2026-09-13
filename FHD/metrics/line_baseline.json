@@ -1,5 +1,5 @@
 {
-  "lines": 2325017,
+  "lines": 2325068,
   "updated": "2026-09-13",
-  "note": "holdout job timeout 45->120min: solo real-run 142x3 exceeds 45min (run 34727372618 cancelled); +2 comment lines document the constraint"
+  "note": "macOS 1.0.0.2 正式交付证据回填：CVM 恢复证据文档 ota-release-cvm-recovery-20260913.md（52 行）+ 官方包 G3 实测收据 g3-official-10002.txt（13 行）——交付波唯一集成 PR #1918 的证据增量"
 }
