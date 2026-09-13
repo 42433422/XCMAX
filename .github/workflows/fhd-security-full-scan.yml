@@ -77,7 +77,7 @@ jobs:
 
       - name: Run Trivy filesystem scan including unfixed findings
         continue-on-error: true
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -100,7 +100,7 @@ jobs:
         run: docker build --target production -f FHD/docker/Dockerfile.fhd-api -t xcagi-release-scan:${{ inputs.release_sha }} FHD
       - name: Scan final FHD production image
         continue-on-error: true
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: xcagi-release-scan:${{ inputs.release_sha }}
           format: json
