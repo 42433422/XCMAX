@@ -1,12 +1,5 @@
 {
-  "lines": {
-    "ok": true,
-    "current": 2325315,
-    "baseline": 2325556,
-    "delta": -241,
-    "doc_lines": 55834,
-    "code_lines": 2269481
-  },
+  "lines": 2325556,
   "updated": "2026-09-13",
-  "note": "棘轮抬升：合入 main（#1924）后的 channel 修复合并增量"
+  "note": "feat(delivery): testing-feed publisher 工作流双源落地（root 243 行 + FHD 241 行）+ guard_utils_boundary 白名单登记（+1 行）+ cryptography 安装步骤（双源 +6 行）——净增 488 行基线同步"
 }
