@@ -32,7 +32,6 @@ buildSha: ${'a'.repeat(40)}${extra}`
   return `${body}\n${signBody(body)}`
 }
 
-// --- mocks ---
 const mocks = vi.hoisted(() => {
   const handlers = new Map<string, (...args: unknown[]) => void>()
   const autoUpdater = {
@@ -195,7 +194,6 @@ releaseDate: '2026-08-23T00:00:00.000Z'`
     configureUpdater({ isDestroyed: () => false, webContents: { send } } as never)
     await checkForUpdates()
 
-    // 触发 update-available：enrichUpdateInfo 应把解析出的 releaseNotes 附带进事件
     const handler = mocks.handlers.get('update-available')
     handler?.({ version: '3.0.0', files: [] })
     const payload = send.mock.calls.find(c => c[0] === 'xcagi:update-event')?.[1] as {
@@ -203,6 +201,9 @@ releaseDate: '2026-08-23T00:00:00.000Z'`
     }
     expect(payload?.data?.productVersion).toBe('3.0.0.7')
     expect(payload?.data?.releaseNotes).toContain('修复了若干问题')
+    mocks.handlers.get('update-downloaded')?.({ version: '3.0.0', files: [] })
+    const { getDownloadedUpdateState } = await import('./updater.js')
+    expect(getDownloadedUpdateState().version).toBe('3.0.0.7')
     fetchSpy.mockRestore()
   })
 })
@@ -270,7 +271,6 @@ describe('updater — downloadUpdate error mapping', () => {
     __resetUpdateDownloadedForTest()
     configureUpdater({ isDestroyed: () => false, webContents: { send: vi.fn() } } as never)
 
-    // 模拟 update-downloaded 事件
     const handler = mocks.handlers.get('update-downloaded')
     handler?.({ version: '2.0.0', buildSha: '', files: [] })
 

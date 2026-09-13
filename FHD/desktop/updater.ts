@@ -383,7 +383,7 @@ export function configureUpdater(
   autoUpdater.on('download-progress', progress => send('download-progress', progress))
   autoUpdater.on('update-downloaded', info => {
     updateDownloaded = true
-    downloadedVersion = String(info.version || '').trim()
+    downloadedVersion = remoteProductVersion || String(info.version || '').trim()
     downloadedBuildSha = String(
       (info as UpdateInfo & { buildSha?: string }).buildSha || remoteBuildSha || '',
     ).trim()
