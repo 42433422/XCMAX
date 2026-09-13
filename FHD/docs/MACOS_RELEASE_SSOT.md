@@ -7,21 +7,21 @@
 
 | 字段 | 值 | 证据 |
 |------|-----|------|
-| 稳定产品版本 | `1.0.0.1` | [VERSION.md](../VERSION.md)（版本域 SSOT） |
+| 稳定产品版本 | `1.0.0.2` | [VERSION.md](../VERSION.md)（版本域 SSOT） |
 | 工具链兼容版本 | `1.0.0`（npm/Electron/Apple 三段映射） | 同上 |
 | 发布 SKU | `enterprise`（personal 冻结） | [download_release.json](../config/download_release.json) |
-| 发布产物 gitSha | `99854233c5d4ea05a96b1f6ae1e3b7edfe03b526` | latest-mac.yml `buildSha`（= main 合并 #1713，2026-09-05） |
-| manifest git_sha | `99854233c5d4ea05a96b1f6ae1e3b7edfe03b526`（= main 合并 #1713，2026-09-11 重跑 publish 后修复，原为 #1685 过期值） | manifest.json `generated_at=2026-09-11T08:05Z`；修复 run [34577330930](https://github.com/42433422/XCMAX/actions/runs/34577330930) |
-| 构建时间 | `2026-09-04T16:48:33Z`（feed）/ 本机安装副本 `2026-09-07`（非发布产物，见 §7 偏差-1） | latest-mac.yml / build-info.json |
-| release_train 内部流水 | `1.0.0.3`（服务器无 v1.0.0.2/3/4 目录，仅内部号） | [release_train.json](../config/release_train.json) |
-| `release_ready` | `false` | download_release.json + manifest.json |
+| 发布产物 gitSha | `6eda2203df27c53958b9d7af0e6db26d22b560c4` | latest-mac.yml `buildSha`（= main 合并 #1912，2026-09-13） |
+| manifest git_sha | `6eda2203df27c53958b9d7af0e6db26d22b560c4`（DMG 条目 SHA256/size 与实测一致） | [manifest.json](https://xiu-ci.com/xcagi-v1.0.0.2/manifest.json) `generated_at=2026-09-13T07:09Z` |
+| 构建时间 | `2026-09-13T02:22:10Z`（feed releaseDate） | latest-mac.yml |
+| 安全扫描对 | A [34729999599](https://github.com/42433422/XCMAX/actions/runs/34729999599) + B [34731821526](https://github.com/42433422/XCMAX/actions/runs/34731821526) 双 success，均锚定 `6eda2203d`，间隔 35min（≥30min），run 内 `verify_security_scan_pair.py` 通过 | release run [34732266439](https://github.com/42433422/XCMAX/actions/runs/34732266439) |
+| `release_ready` | `false`（T4/T6 真机 OTA/重启复验未完成） | download_release.json + manifest.json |
 
 ## 2. 构建产物（线上实测）
 
 | 产物 | URL | 大小（字节） | 指纹 |
 |------|-----|------------|------|
-| DMG（arm64，官方下载） | `https://xiu-ci.com/xcagi-v1.0.0.1/enterprise/XCAGI-Enterprise-1.0.0.1-mac-arm64.dmg` | **293,401,820** | SHA256 `c39bed60b92ce32d7f88d18b9eaa4fc61364d78302a4def7daacd6f7cff3d89c`（实测 2026-09-11，证据 [dmg-sha256.txt](evidence/e2e/macos-release-1.0.0.1/dmg-sha256.txt)；2026-09-11 修复后 manifest 已同步此值） |
-| ZIP（arm64，OTA 载荷） | `https://xiu-ci.com/releases/stable/enterprise/XCAGI-Enterprise-1.0.0.1-mac-arm64.zip` | 257,302,899 | SHA512 `ma1SqVskHoL/O3e85w4OQ3jKpn40dUxCwoxDugI2WwMb1X1VvQhKxAjINvcRG/bYZKeDhZ4Xddu8wfAd22eMnA==`（latest-mac.yml，附 ed25519 二次签名） |
+| DMG（arm64，官方下载） | `https://xiu-ci.com/xcagi-v1.0.0.2/enterprise/XCAGI-Enterprise-1.0.0.2-mac-arm64.dmg` | **307,268,181** | SHA256 `f00801b0679f6cd10af2c844c29846d2cd26acb729414f38d147aea5e77b2a28`（artifact 下载与 CVM 双路径逐字节一致，2026-09-13） |
+| ZIP（arm64，OTA 载荷） | `https://xiu-ci.com/releases/stable/enterprise/XCAGI-Enterprise-1.0.0.2-mac-arm64.zip` | 264,517,668 | SHA256 `44c1a3807100c9805af0fe276af790e083cf77da942e710c75e63c1495a6e7b6`；latest-mac.yml sha512+ed25519 签名验证通过 |
 
 x64 dmg：download_release.json 声明 `mac_x64`，但 manifest 无 x64 条目，按未发布对待（偏差-3）。
 
@@ -59,13 +59,13 @@ x64 dmg：download_release.json 声明 `mac_x64`，但 manifest 无 x64 条目�
 
 ## 6. Release Gate 状态（2026-09-11/12 实跑；证据目录 [evidence/e2e/macos-release-1.0.0.1/](evidence/e2e/macos-release-1.0.0.1/)：截图/SHA256/health/Mod 探针）
 
-> **当前结论（2026-09-12 深夜）：NOT Release Ready（仅剩真机 OTA/重启/回滚演练，无代码阻断）。** G5 登录绑定已用本地企业账号会话（SUNBIRD，entitled=[attendance-industry, taiyangniao-pro]）等效验证：auth/me 200、权限下发正常 → 升 YELLOW（UI 登录动作截图待 T2 补齐）。G7 升 **GREEN**：修复（PR #1895，已合并 main `62c49bae5`）在候选包 v2（buildSha 9a4a06bc4）登录态下全链实证——`POST /api/templates/upload` 200 入库（db:12）→ `POST /api/shipment/generate` 200 出单（`发货单_26-0900001A_20260912_200002.xlsx`，SHA256 `4c1bf418…`，record_id=1，template_resolution ok）→ `/api/templates/list` 11 条含新模板；G6 考勤权益探针 `/api/mod/attendance-industry/attendance/capabilities` 200 JSON（`custom_features:["attendance-convert"]`）→ 升 YELLOW（权益门控按预期，干净首装行为并入 T1）。G10 GREEN（三次覆盖升级逐字节一致）。候选包为 Developer ID 签名未公证（spctl rejected），**不得冒充发布产物**；Release Ready 判定时 G3 须以正式公证包为准。剩余 UNKNOWN：G8/G9/G11（线上无更高版本可触发真实 OTA，T4）、G12（重启复验，T6）。**G13 已升 GREEN（降级演练 PASS）**。证据 [g7-full-chain-success-20260912.json](evidence/e2e/macos-release-1.0.0.2/g7-full-chain-success-20260912.json)。
+> **当前结论（2026-09-13）：NOT Release Ready（1.0.0.2 正式包已发布上线，剩真机 OTA/登录截图/重启复验，无代码阻断）。** 1.0.0.2 正式发布闭环已达成：release run [34732266439](https://github.com/42433422/XCMAX/actions/runs/34732266439)（checkout `6eda2203d` 构建+签名+公证+扫描对门禁通过）→ CVM 上传步骤 180min 超时 → artifact 手动恢复发布（五文件 SHA256 与 artifact 逐字节一致，官方+stable 双路径，manifest/公开 feed 复验通过，见 §10.2）。G1 升 GREEN（1.0.0.2 正式公证包，buildSha=6eda2203d 全链一致）。G7/G6/G10 GREEN（候选包 v2 实证，修复全部含于 6eda2203d）。G8 现在有真实升级目标（1.0.0.1 真机 → 发现 1.0.0.2），T4 可执行。剩余未闭环：T2（UI 登录截图）、T4（G8/G9/G11 真机 OTA 全链）、T6（G12 重启复验）。**G13 GREEN（降级演练 PASS）**。证据 [g7-full-chain-success-20260912.json](evidence/e2e/macos-release-1.0.0.2/g7-full-chain-success-20260912.json)。
 
 | # | Gate | 状态 | 现有证据 | 缺失证据 | 阻断 | 对应 PR | 下一步 |
 |---|------|------|---------|---------|------|---------|--------|
-| G1 | 构建（产物+身份） | GREEN | 版本身份四点一致：feed buildSha = 安装副本 build-info gitSha = main #1713 合并提交 = manifest git_sha `99854233`；2026-09-11 重跑 [publish run 34577330930](https://github.com/42433422/XCMAX/actions/runs/34577330930) 全绿，重生成 manifest（`generated_at=2026-09-11T08:05Z`）DMG 条目 293,401,820B/`c39bed60…` 与实测一致，脚本内含 SSH 对服务器双路径 DMG 字节级哈希核验；latest-mac.yml 重测未变且验签字段完好 | — | 无 | #1713 | — |
+| G1 | 构建（产物+身份） | GREEN | **1.0.0.2 正式发布（2026-09-13）**：release run [34732266439](https://github.com/42433422/XCMAX/actions/runs/34732266439) checkout `6eda2203d`（= main HEAD #1912）构建+Developer ID 签名+公证；扫描对 A/B 双 success 锚定同 SHA（间隔 35min）；latest-mac.yml `buildSha=6eda2203d`+ed25519 签名；manifest DMG 条目 SHA256/size 与实测 artifact 逐字节一致；CVM 官方+stable 双路径五文件 SHA256 校验一致（§10.2） | — | 无 | #1912 | — |
 | G2 | 干净环境安装 | YELLOW | 验收脚本真实下载→SHA256→挂载→安装 `~/Applications/acceptance/` 全链 PASS | 非干净机（dev 机+存量数据）；未在全新用户/VM 验证 | 无 | #1870 | 实机任务 T1：干净环境（新账户或 VM）重跑 |
-| G3 | macOS 安全项 | GREEN | `codesign --verify --deep --strict` exit=0；TeamID `G26WSH472M`；hardened runtime(flags 0x10000)；`spctl --assess` accepted, source=Notarized Developer ID, origin=Developer ID Application: jialong Li (G26WSH472M)；时间戳 Sep 5 2026 00:41:41 | — | 无 | — | — |
+| G3 | macOS 安全项 | GREEN | **1.0.0.2 正式公证包实测（2026-09-13）**：`codesign --verify --deep --strict` exit=0；hardened runtime（flags=0x10000）；TeamID `G26WSH472M`；`spctl --assess --type execute` exit=0（accepted，公证通过）——对发布 DMG 原件挂载实测 | — | 无 | — | — |
 | G4 | 首次启动 | YELLOW | 后端进程 PID 95037 监听 17500；`/api/health` 200 返回 JSON；runtime.status=healthy, blockers=[], failures=[]；neuro.status=healthy, running=true, published=496, errors=0；主窗口截图 [04-cold-start.png](evidence/e2e/macos-release-1.0.0.1/04-cold-start.png) | status=degraded（唯一原因 `LLM_RUNTIME_UNAVAILABLE`——登录前无 LLM provider 配置，属预期态，见 §7-4）；未在干净环境首次启动 | 无 | — | T2 登录后复测 health 应转绿；T1 干净环境冷启动 |
 | G5 | 登录绑定 | YELLOW | 历史证据（旧版本）；2026-09-11 静态确认：行业业务（考勤等）走账号权益门控（`mod_sdk/customer_features.py` `delivery_for_account`），登录是业务任务的硬前置；CDP 登录监听器已部署（自动采集登录后证据） | **已用本地企业账号会话等效验证（2026-09-12）**：`auth/me` 200（SUNBIRD，is_active=true，shipment.* 权限下发）、attendance 权益探针 200 JSON、模板上传+出单全链走通——证明登录态是完整业务闭环的充分条件；UI 登录动作截图/日志待 T2 补齐 | 无（等效验证已过，形式证据待补） | — | T2（UI 登录截图，非阻断） |
 | G6 | Mod / AI 员工加载 | YELLOW | `/api/mods` 200 返回 62 个 mod（含 attendance-industry v1.0.0 primary=True）；15 个后端 mod 加载成功；`/api/employees` 200 返回 catalog；neuro handlers=39, domains=11。**但 attendance-industry HTTP 路由注册每次启动均失败**（userData 同步版 mod import `app.mod_sdk.customer_features`，99854233 bundle 无此模块；`/attendance/capabilities|policy|rules|convert-upload|download` 不可用），证据 [g6-attendance-route-regression.txt](evidence/e2e/macos-release-1.0.0.1/g6-attendance-route-regression.txt)。**1.0.0.2 候选包重测（2026-09-12）：启动日志无任何路由注册 ERROR，f37372e97 修复确认生效**；`/attendance/capabilities` 返回 SPA HTML 属预期——路由按 `mount_entitled_client_mod_api_routes` 账号权益门控挂载，未登录必然不可达（设计行为，非缺陷） | **已验证（2026-09-12 登录态）**：`/api/mod/attendance-industry/attendance/capabilities` 200 `{"custom_features":["attendance-convert"]}`——权益门控按预期；干净首装 seed 版 mod 行为待 T1 | 考勤类业务需登录权益（不阻断 ERP 业务闭环） | f37372e97 | 终判并入 T2（登录后探针）+ T3 |
@@ -103,7 +103,7 @@ x64 dmg：download_release.json 声明 `mac_x64`，但 manifest 无 x64 条目�
 | T7 | 下版本发后重测 G6/G7：日志无 `Failed to register routes for attendance-industry` 且 `/attendance/capabilities` 可达；`POST /api/templates/upload` 2xx 且入库后 `shipment/generate` 出单；随后 T2→T3 | G6/G7 | 真机（新版 feed） |
 | T8 | ~~回滚/恢复演练~~ **已完成（2026-09-12 路径 B 降级）**：1.0.0.2→1.0.0.1 覆盖安装 PASS（签名 accepted、数据零丢失、health PASS），证据 g13-rollback-20260912.*；路径 A（坏更新观察期自动回滚）留待专用验收机 | G13 | 真机 |
 
-**T7 中期回执（2026-09-12，1.0.0.2 候选包实装重测，证据 [evidence/e2e/macos-release-1.0.0.2/](evidence/e2e/macos-release-1.0.0.2/)）**：① G6——启动日志零路由注册 ERROR（f37372e97 生效✅）；`/attendance/capabilities` 未登录返 SPA HTML 属权益门控设计，终判移入 T2。② G7——upload 仍 405（根因见 §7-8 修正定性：默认应用从未挂载 upload/analyze，b97073acc 只补 create）；修复已入库（template_api.py 默认挂载），**修复并入 main 后需重建候选包重测**。③ G10——跨版本覆盖升级数据保留 PASS（digest 逐项一致，见 G10 行）。④ 构建身份：候选 DMG/ZIP `1.0.0.2`、gitSha `3d3ec8d98`（=main HEAD 3d3ec8d98，含 b97073acc/f37372e97），SHA256 见 §10-候选包。
+**T7 中期回执（2026-09-12，1.0.0.2 候选包实装重测，证据 [evidence/e2e/macos-release-1.0.0.2/](evidence/e2e/macos-release-1.0.0.2/)）**：① G6 启动日志零路由 ERROR（f37372e97 生效），未登录 `/attendance/capabilities` 返 SPA HTML 属权益门控设计，终判移入 T2；② G7 upload 仍 405（§7-8 根因修正：默认应用从未挂载 upload/analyze），修复入库后重建候选包重测；③ 构建身份：候选 DMG/ZIP `1.0.0.2`、gitSha `3d3ec8d98`，SHA256 见 §10-v1。
 
 ## 9. 发版复用 Runbook（每次 macOS 发版照此执行）
 
@@ -118,17 +118,7 @@ x64 dmg：download_release.json 声明 `mac_x64`，但 manifest 无 x64 条目�
 
 ## 10. 验收候选包（非发布产物）
 
-> 候选包仅供实机验收（T7 重测等），**Developer ID 签名但未公证（spctl rejected）**，不得替代发布产物、不得进入 feed。构建环境三坑见 §7-9。
-
-| 项 | 值 |
-|----|-----|
-| 版本 / buildSha | `1.0.0.2` / `3d3ec8d9867fa43cfeb402893ae3676fd86b0b95`（构建时 main HEAD，含 b97073acc/f37372e97，**不含** G7 upload/analyze 挂载修复） |
-| 产物目录 | 本机 `release/xcagi-v1.0.0.2/enterprise/`（latest-mac.yml `productVersion=1.0.0.2`） |
-| DMG SHA256 | `6d11b2af30514d95491a3ba28c9945706467bf6980911c4e620d4bc61b764632`（295,755,247 B） |
-| ZIP SHA256 | `1092e4fa955549b00a6e393c3290a23f8742dd009d5aaacb2f50dac79a91b095`（263,613,399 B，latest-mac.yml sha512+ed25519 同步） |
-| 签名核验 | codesign --verify --deep --strict exit=0；spctl `rejected, source=Unnotarized Developer ID`（收据 [candidate-build-receipt.txt](evidence/e2e/macos-release-1.0.0.2/candidate-build-receipt.txt)） |
-| 实装重测结论 | G6 修复生效（启动日志零路由 ERROR）；G7 upload 仍 405（缺修复，[retest-10002-results.json](evidence/e2e/macos-release-1.0.0.2/retest-10002-results.json)）；G10 跨版本覆盖升级数据保留 PASS（[pre](evidence/e2e/macos-release-1.0.0.2/data-digest-preupgrade-10002.json)/[post](evidence/e2e/macos-release-1.0.0.2/data-digest-after-10002.json)） |
-| 后续 | G7 修复 PR 并入 main 后重建候选包（buildSha 递增），重测 upload 2xx + generate 出单 |
+> 候选包仅供实机验收（T7 重测等），**Developer ID 签名但未公证（spctl rejected）**，不得替代发布产物、不得进入 feed。构建环境三坑见 §7-9。候选包 v1（3d3ec8d98，DMG `6d11b2af…`，收据 [candidate-build-receipt.txt](evidence/e2e/macos-release-1.0.0.2/candidate-build-receipt.txt)）重测结论：G6 修复生效、G7 upload 仍 405（缺挂载修复）、G10 数据保留 PASS——已被 v2 取代。
 
 ### 10.1 候选包 v2（含 G7 修复，buildSha `9a4a06bc49b8885111dc7dc4c61eb15d0dd748db`，2026-09-12 17:30 构建）
 
@@ -136,9 +126,17 @@ x64 dmg：download_release.json 声明 `mac_x64`，但 manifest 无 x64 条目�
 
 | 项 | 值 |
 |----|-----|
-| 产物目录 | `/private/tmp/xcmax-cand-build/FHD/release/xcagi-v1.0.0.2/enterprise/` |
 | DMG SHA256 | `da2a1bd7bc0b5f386db483f2c53348f46718ba8ff72a0f0a9d557f382d0c2e82` |
 | ZIP SHA256 | `e866079bf32ee70a27f09d7a85e67928f1cd9941572798fcef86e3ee93478655` |
 | 签名核验 | codesign exit=0；spctl rejected Unnotarized Developer ID（预期） |
 | 实装重测 | 覆盖升级（3d3ec8d98→9a4a06bc4）PASS；G7 upload/analyze 由 405→401（断链根治、鉴权生效）；G10 数据保留 PASS；冷启动 0.1s health PASS。证据 [g7-retest-cand2-20260912.txt](evidence/e2e/macos-release-1.0.0.2/g7-retest-cand2-20260912.txt) |
-| 已知偏差 | build-info.json `version`=1.0.0.1（Python 包版本，非产品版本；§7-10 口径），验收脚本对此误报——建议后续将 generate-desktop-build-info.py 的 version 改为产品版本 |
+
+### 10.2 正式发布 1.0.0.2（buildSha `6eda2203df27c53958b9d7af0e6db26d22b560c4`，2026-09-13）
+
+| 项 | 值 |
+|----|-----|
+| 发布 run | [34732266439](https://github.com/42433422/XCMAX/actions/runs/34732266439)（checkout `6eda2203d` = main HEAD #1912；构建+签名+公证 PASS；扫描对门禁 `verify_security_scan_pair.py` PASS；**CVM 上传步骤 180min 超时失败**） |
+| 扫描对 | A [34729999599](https://github.com/42433422/XCMAX/actions/runs/34729999599) success（01:22 UTC）+ B [34731821526](https://github.com/42433422/XCMAX/actions/runs/34731821526) success（02:04 UTC），均锚定 `6eda2203d`，间隔 35min |
+| CVM 恢复 | artifact `mac-ota-enterprise-1.0.0.2`（552MB）下载 → SSH rsync `--partial` 断点续传至官方 `/var/www/xcagi-v1.0.0.2/enterprise/` + stable `/var/www/update/releases/stable/enterprise/`；**五文件（DMG/ZIP/两 blockmap/latest-mac.yml）SHA256 与 artifact 逐字节一致** |
+| 恢复核验 | codesign --deep --strict PASS + hardened runtime + `spctl` exit=0（公证）；公开 feed `buildSha=6eda2203d`；manifest DMG SHA256/size 与实测一致 |
+| 教训 | ① 扫描对要求 release_sha=main HEAD 且 CodeQL provenance 锚定（#1910 并行合并使 v8 扫描 B 报 source_sha_mismatch）→ 发布链须全程漂移校验；② CVM 上传超时后 release run 失败但 artifact 完好 → 按设计走 artifact 手动恢复（workflow 注释预期路径）；③ 发版窗口与并行合并冲突，attempt 1/2 扫描对因 main 漂移作废 |
