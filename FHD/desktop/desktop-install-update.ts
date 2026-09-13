@@ -55,6 +55,11 @@ export async function installUpdate(
       // backend. It is already drained here, so let ShipIt own this quit.
       desktopRuntime.backendShutdownComplete = true
     }
+    // Squirrel 的 native quitAndInstall 走 [NSApp terminate]，该路径不触发 before-quit，
+    // app.isQuitting 仍为 false 时主窗口 close 处理会 preventDefault+hide，terminate 被
+    // 取消 → 应用不退出、ShipIt 无限等待（2026-09-14 1.0.0.2→1.0.0.3 实机复测）。
+    // 先置位退出标志让 close 放行。
+    app.isQuitting = true
     autoUpdater.quitAndInstall(false, true)
   } catch (error) {
     discardPendingUpdateInstallReceipt()
