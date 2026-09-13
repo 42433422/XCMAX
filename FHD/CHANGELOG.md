@@ -5,6 +5,8 @@
 ---
 
 ## Unreleased（1.0.0.2 之后的累积变更）
+- 修复新建发货单调用旧接口导致模板列表、生成与下载失效，按模板 ID 保留选模版和订单号。
+- **macOS 模板上传不再写坏签名包**：1.0.0.2 真机 OTA 升级后重测 G7 实证，模板导入分析链路把上传的 Excel 先存到 `analyzer.py` 旁的 `uploads/templates`——打包后该路径位于 `XCAGI.app/Contents/Resources/backend/_internal/` 签名 bundle 内，写入报 `Permission denied`（登录修复后暴露的下一个断点，复现日志 [g7-retest-post-ota.txt](docs/evidence/e2e/macos-release-1.0.0.2/)）。现改走 `get_upload_dir()`（打包感知：源码态落仓库、打包态落 `~/Library/Application Support/XCAGI/uploads/templates`），与路由策略文件重定向同一原则。
 - fix(release): release-orchestrator 双源 permissions 增补 administration:read——security-preflight 读 main 分支保护 required checks 曾 403（T1 run 34694275310/34697783917 失败根因）
 - ci(benchmark): holdout 基准 job 超时 45→120min——solo 真跑 142 用例 × 3 轮实测超 45 分钟（run 34727372618 被上限取消），上调给足节流+重试余量
 - docs(release): macOS 发布 SSOT 回填 1.0.0.2 正式交付——run 34732266439 构建+签名+公证成功，step14 CVM 直传 10KB/s 超时失败改 artifact 本机中转补齐（双目录 SHA256 核验、公网 feed buildSha 6eda2203d、ed25519 验签 VALID、官方包 spctl accepted/stapler OK），扫描对 A/B 35min 证据与 CVM 恢复异常处置（覆盖并行会话误写的 fa3c8832e 未验证产物）一并入库，G1/G3 保持 GREEN
