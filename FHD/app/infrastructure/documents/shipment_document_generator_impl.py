@@ -341,6 +341,7 @@ class LegacyShipmentDocumentGenerator(ShipmentDocumentGeneratorPort):
 
         parsed_data: dict[str, Any] = {
             "purchase_unit": resolved.unit_name,
+            "date": date,
             "products": parsed_products,
         }
 

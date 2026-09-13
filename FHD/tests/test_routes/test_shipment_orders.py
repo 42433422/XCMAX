@@ -187,6 +187,7 @@ class TestShipmentDownload:
         doc = generator.generate_document(
             "",
             {
+                "date": "2026-08-01",
                 "products": [
                     {
                         "name": "验收清漆",
@@ -197,7 +198,7 @@ class TestShipmentDownload:
                         "unit_price": 18,
                         "amount": 900,
                     }
-                ]
+                ],
             },
             purchase_unit=legacy.PurchaseUnitInfo(name="验收客户"),
             template_name=str(template),
@@ -207,6 +208,7 @@ class TestShipmentDownload:
         workbook = load_workbook(document, data_only=True)
         assert workbook.sheetnames == ["送货甲"]
         assert workbook.active["I4"].value == 900
+        assert "2026年8月1日" in workbook.active["A2"].value
         workbook.close()
         response = client.get(f"/api/shipment/download/{document.name}")
         assert response.status_code == 200

@@ -298,6 +298,7 @@ class ShipmentDocumentGenerator:
                     total_quantity_tins=total_quantity_tins,
                     total_amount=total_amount,
                     order_text=order_text,
+                    order_date=parsed_data.get("date"),
                 )
             else:
                 logger.warning(f"模板文件不存在: {template_file}，创建新文档")
@@ -313,6 +314,7 @@ class ShipmentDocumentGenerator:
                     total_quantity_tins,
                     total_amount,
                     order_text,
+                    order_date=parsed_data.get("date"),
                 )
 
             for sheet in list(workbook.worksheets):
@@ -362,14 +364,11 @@ class ShipmentDocumentGenerator:
         total_quantity_tins: int,
         total_amount: float,
         order_text: str,
+        order_date: str = None,
     ):
         """使用模板填充数据 - 匹配尹玉华1.xlsx原模板格式"""
-        # 手动格式化日期以避免locale编码问题
-        now = datetime.now()
-        year = now.year
-        month = now.month
-        day = now.day
-        today = f"{year}年{month}月{day}日"
+        now = datetime.fromisoformat(order_date) if order_date else datetime.now()
+        today = f"{now.year}年{now.month}月{now.day}日"
 
         # 第2行：购货单位、联系人、日期、订单编号（合并单元格A2:J2）
         header_cell = worksheet.cell(row=2, column=1)
@@ -436,14 +435,11 @@ class ShipmentDocumentGenerator:
         total_quantity_tins: int,
         total_amount: float,
         order_text: str,
+        order_date: str = None,
     ):
         """创建默认文档格式"""
-        # 手动格式化日期以避免locale编码问题
-        now = datetime.now()
-        year = now.year
-        month = now.month
-        day = now.day
-        today = f"{year}年{month}月{day}日"
+        now = datetime.fromisoformat(order_date) if order_date else datetime.now()
+        today = f"{now.year}年{now.month}月{now.day}日"
 
         # 设置列宽
         worksheet.column_dimensions["A"].width = 15
