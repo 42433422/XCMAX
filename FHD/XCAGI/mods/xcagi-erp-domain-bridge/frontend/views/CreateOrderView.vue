@@ -17,7 +17,7 @@
             <label>发货单模板</label>
             <select v-model="form.templateName" @change="onTemplateChange">
               <option value="">-- 请选择模板 --</option>
-              <option v-for="t in templates" :key="t.name" :value="t.name">{{ t.name }}</option>
+              <option v-for="t in templates" :key="t.id" :value="t.id">{{ t.name }}</option>
             </select>
           </div>
           <div class="form-col" style="flex: 0;">
@@ -131,8 +131,8 @@
       <div v-if="result" class="card" style="margin-top: 20px;">
         <h3><i class="fa fa-check-circle-o" aria-hidden="true"></i> 生成结果</h3>
         <div style="text-align: center; padding: 20px;">
-          <p style="margin-bottom: 15px;">文件名: {{ result.output_filename }}</p>
-          <a :href="`/download/${result.output_filename}`" class="btn btn-success" download style="padding: 15px 30px; font-size: 16px;">
+          <p style="margin-bottom: 15px;">文件名: {{ result.doc_name }}</p>
+          <a :href="`/api/shipment/download/${encodeURIComponent(result.doc_name || '')}`" class="btn btn-success" download style="padding: 15px 30px; font-size: 16px;">
             <i class="fa fa-download" aria-hidden="true"></i> 下载发货单
           </a>
           <button class="btn" @click="resetForm" style="padding: 15px 30px; font-size: 16px;">

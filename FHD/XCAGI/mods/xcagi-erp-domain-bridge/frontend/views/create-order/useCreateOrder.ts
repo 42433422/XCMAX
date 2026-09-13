@@ -1,6 +1,7 @@
 import { ref, reactive, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/api/index'
+import { templatePreviewApi } from '@/api/templatePreview'
 import { appAlert } from '@/utils/appDialog'
 import { pushErpPage } from '@/utils/erpPagePaths'
 
@@ -24,8 +25,9 @@ interface AIFillOrderPayload {
   products?: AIProductPayload[]
 }
 
-// 模板下拉项（/templates?action=api，模板仅访问 name）
+// 使用模板 ID，避免同名模板串用。
 interface TemplateOption {
+  id: string
   name: string
 }
 
@@ -58,27 +60,10 @@ interface OrderProductRow {
   amount: number
 }
 
-// /documents 生成结果（模板访问 output_filename）
 interface ShipmentResult {
   success: boolean
-  output_filename?: string
+  doc_name?: string
   message?: string
-}
-
-// 发货单可编辑数据结构（提交给 /documents 的 editable_data）
-interface ShipmentHeaderCell {
-  purchase_unit: string
-  contact_person: string
-  purchase_date: string
-  order_number: string
-}
-
-type ShipmentRowCells = Record<number, string | number>
-
-interface ShipmentEditableData {
-  header_row: Record<number, ShipmentHeaderCell>
-  product_rows: ShipmentRowCells[]
-  price_row: Record<number, string | number>
 }
 
 declare global {
@@ -225,17 +210,11 @@ export function useCreateOrder() {
 
   async function loadTemplates() {
     try {
-      const response = await fetch('/templates?action=api', {
-        headers: {
-          'Accept': 'application/json',
-          'X-Requested-With': 'XMLHttpRequest'
-        }
-      })
-      const data: { success: boolean; templates: TemplateOption[] } = await response.json()
+      const data = await templatePreviewApi.listTemplates() as { success: boolean; templates: TemplateOption[] }
       if (data.success) {
         templates.value = data.templates
         if (data.templates.length > 0 && !form.templateName) {
-          form.templateName = data.templates[0].name
+          form.templateName = data.templates[0].id
         }
       }
     } catch (error) {
@@ -396,47 +375,22 @@ export function useCreateOrder() {
 
     showStatus('正在生成发货单...', 'processing')
 
-    const editableData: ShipmentEditableData = {
-      header_row: {},
-      product_rows: [],
-      price_row: {}
-    }
-
-    const dateStr = form.purchaseDate.replace(/(\d{4})-(\d{2})-(\d{2})/, '$1年$2月$3日')
-    editableData.header_row[1] = {
-      purchase_unit: form.purchaseUnit,
-      contact_person: form.contactPerson,
-      purchase_date: dateStr,
-      order_number: form.orderNumber
-    }
-
-    products.value.forEach((product, index) => {
-      const rowNum = index + 4
-      const productData: ShipmentRowCells = {}
-      productData[1] = product.model || ''
-      productData[4] = product.name || ''
-      productData[5] = product.quantityBox || ''
-      productData[6] = product.specification || ''
-      productData[7] = product.quantityKg || ''
-      productData[8] = product.unitPrice || ''
-      productData[9] = product.amount || ''
-      editableData.product_rows.push(productData)
-    })
-
     try {
-      const response = await fetch('/documents', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          template_name: form.templateName,
-          editable_data: editableData,
-          // 统一策略：仅使用编号模式，禁用其他模式分支
-          number_mode: true,
-          custom_mode: false
-        })
+      const data = await api.post<ShipmentResult>('/api/shipment/generate', {
+        unit_name: form.purchaseUnit,
+        date: form.purchaseDate,
+        order_number: form.orderNumber,
+        template_id: form.templateName,
+        products: products.value.map(product => ({
+          name: product.name,
+          model_number: product.model,
+          quantity_tins: product.quantityBox,
+          tin_spec: product.specification,
+          quantity_kg: product.quantityKg,
+          unit_price: product.unitPrice,
+          amount: product.amount
+        }))
       })
-
-      const data: ShipmentResult = await response.json()
       if (data.success) {
         showStatus('发货单生成成功！', 'success')
         result.value = data

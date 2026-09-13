@@ -152,7 +152,16 @@ def shipment_generate(request: Request, payload: dict[str, Any] = Body(default_f
         result = _run_shipment_orders_agent(
             request=request,
             action="generate",
-            params={"unit_name": unit_name, "products": products, "date": date},
+            params={
+                "unit_name": unit_name,
+                "products": products,
+                "date": date,
+                **{
+                    key: payload[key]
+                    for key in ("template_id", "template_name", "order_number")
+                    if key in payload
+                },
+            },
             route_path="/api/shipment/generate",
         )
         return JSONResponse(result, status_code=200 if result.get("success") else 500)
