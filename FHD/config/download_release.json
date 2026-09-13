@@ -1,9 +1,9 @@
 {
   "schema": "xcagi.download_release/v1",
-  "_doc": "官网下载版本 SSOT。当前只发布 enterprise；personal 已冻结。macOS arm64 产品与下载目录为 1.0.0.2，Android 继续发布已验收的 1.0.0.0；npm/Electron/Apple 工具链内部映射为 1.0.0。",
-  "version_lock": "1.0.0.2",
-  "marketing_version": "1.0.0.2",
-  "download_version": "1.0.0.2",
+  "_doc": "官网下载版本 SSOT。当前只发布 enterprise；personal 已冻结。macOS arm64 产品与下载目录为 1.0.0.3，Android 继续发布已验收的 1.0.0.0；npm/Electron/Apple 工具链内部映射为 1.0.0。",
+  "version_lock": "1.0.0.3",
+  "marketing_version": "1.0.0.3",
+  "download_version": "1.0.0.3",
   "android_version": "1.0.0.0",
   "android_git_sha": "a6af956c70e5c4ced49859240455fc9ba8e42e5c",
   "release_ready": false,
@@ -25,7 +25,7 @@
   "artifacts": {
     "enterprise": {
       "win": "XCAGI-Enterprise-Setup-1.0.0.1-x64.exe",
-      "mac_arm64": "XCAGI-Enterprise-1.0.0.2-mac-arm64.dmg",
+      "mac_arm64": "XCAGI-Enterprise-1.0.0.3-mac-arm64.dmg",
       "mac_x64": "XCAGI-Enterprise-1.0.0.1-mac-x64.dmg",
       "android": "XCAGI-Enterprise-Android-1.0.0.0.apk"
     }
@@ -35,6 +35,12 @@
     "mac": "latest-mac.yml"
   },
   "release_history": [
+    {
+      "version": "1.0.0.3", "date": "2026-09-13",
+      "title": "Mac 模板上传写入修复", "channel": "macOS 稳定版",
+      "notes": ["修复 macOS 正式包模板上传写入受限路径，模板导入不再报错。", "修复新建发货单调用旧接口导致模板列表、生成与下载失效的问题。", "稳定更新源发布 1.0.0.3。"],
+      "platforms": ["macOS Apple Silicon 1.0.0.3 稳定版"]
+    },
     {
       "version": "1.0.0.2", "date": "2026-09-13",
       "title": "Mac 模板导入与行业能力修复", "channel": "macOS 稳定版",

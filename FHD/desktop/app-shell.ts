@@ -64,6 +64,10 @@ export function setAutoLaunchEnabled(enabled: boolean): { ok: boolean; reason?: 
 
 // ---------- 首次引导 + 更新日志（What's New） ----------
 const RELEASE_NOTES: Record<string, string> = {
+  '1.0.0.3':
+    '· 修复：Mac 正式包模板上传写入受限路径，导入模板不再报错\n' +
+    '· 修复：新建发货单旧接口导致模板列表、生成与下载失效\n' +
+    '· 继续保持更新观察期自动回滚与稳定性保障',
   '1.0.0.2':
     '· 修复：发货单模板导入断链（模板上传/解析端点默认挂载，导入后可直接出单）\n' +
     '· 修复：考勤工作区路由注册（企业版 Mod 加载更稳）\n' +
