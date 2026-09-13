@@ -9,8 +9,8 @@ VERSION="${VERSION#v}"
 VERSION="${VERSION#V}"
 # workflow_dispatch on branch can leave ref_name=main; never feed that to npm version
 if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
-  echo "[warn] invalid VERSION='${VERSION}', falling back to 1.0.0.2" >&2
-  VERSION="1.0.0.2"
+  echo "[warn] invalid VERSION='${VERSION}', falling back to 1.0.0.3" >&2
+  VERSION="1.0.0.3"
 fi
 TOOLCHAIN_VERSION="$(printf '%s' "${VERSION}" | cut -d. -f1-3)"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

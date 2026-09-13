@@ -6,9 +6,9 @@ on:
       product_version:
         description: "Visible product version (existing release tags are not moved)"
         required: true
-        default: "1.0.0.2"
+        default: "1.0.0.3"
         type: choice
-        options: ["1.0.0.2", "1.0.0.1"]
+        options: ["1.0.0.3", "1.0.0.2", "1.0.0.1"]
       release_sha:
         description: "Full 40-character commit to freeze after required CI/security gates pass"
         required: true
@@ -266,7 +266,7 @@ jobs:
           raw="${raw#FHD/}"
           raw="${raw#v}"
           raw="${raw#V}"
-          version="${raw:-1.0.0.2}"
+          version="${raw:-1.0.0.3}"
           if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$'; then
             echo "::error::Invalid product_version: $version"
             exit 1

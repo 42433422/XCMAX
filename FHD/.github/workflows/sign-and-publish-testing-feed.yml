@@ -9,7 +9,7 @@ on:
       version:
         description: "Product version (four-part)"
         required: true
-        default: "1.0.0.2"
+        default: "1.0.0.3"
       release_sha:
         description: "Exact 40-character release commit baked into the installer"
         required: true

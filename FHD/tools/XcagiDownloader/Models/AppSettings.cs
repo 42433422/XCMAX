@@ -14,7 +14,7 @@ public sealed class AppSettings
         if (string.IsNullOrWhiteSpace(version))
             return "1.0.0.3";
         version = version.TrimStart('v', 'V');
-        return string.IsNullOrWhiteSpace(version) ? "1.0.0.2" : version;
+        return string.IsNullOrWhiteSpace(version) ? "1.0.0.3" : version;
     }
 
     private static string DefaultUpdateBaseUrl()
