@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { app } from 'electron'
 
 // 每次测试运行使用唯一临时目录，避免并行测试进程共享固定 /tmp 路径
 // 互相清写（2026-09-05 审计 R07：沙箱下固定 /tmp 写入 EPERM）。
@@ -127,6 +128,20 @@ describe('updater install rollback contract', () => {
     expect(callOrder).toEqual(['prepareQuit', 'quitAndInstall'])
     const { desktopRuntime } = await import('./runtime-state.js')
     expect(desktopRuntime.backendShutdownComplete).toBe(true)
+  })
+
+  it('sets app.isQuitting before quitAndInstall (Squirrel terminate path)', async () => {
+    const updater = await markDownloaded('1.0.0.3')
+    let quittingAtInstall: unknown
+    mocks.autoUpdater.quitAndInstall.mockImplementationOnce(() => {
+      quittingAtInstall = app.isQuitting
+    })
+
+    await updater.installUpdate()
+
+    // [NSApp terminate] 路径不触发 before-quit；close 拦截依赖 isQuitting 放行，
+    // 否则 terminate 被取消、应用不退出、ShipIt 无限等待。
+    expect(quittingAtInstall).toBe(true)
   })
 
   it('blocks quitAndInstall when prepareQuit fails and runs cleanup', async () => {

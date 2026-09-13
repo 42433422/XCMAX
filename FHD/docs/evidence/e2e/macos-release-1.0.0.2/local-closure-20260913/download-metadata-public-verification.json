@@ -1,0 +1,15 @@
+{
+  "checked_at": "2026-09-12T23:15:57.556832+00:00",
+  "results": [
+    {
+      "url": "https://xiu-ci.com/download-release.json?release-run=mac-closure-1911",
+      "sha256": "f88b1a2fd4a9c635d29d0bb8b27ce1da677ed3f0996b6f9cf577580c50943367",
+      "matches_published": true
+    },
+    {
+      "url": "https://xiu-ci.com/xcagi-v1.0.0.2/manifest.json",
+      "sha256": "62c71f77c630ae4378a1d1c528935182797dffb16db99ecaf80121e00d8ab89d",
+      "matches_published": true
+    }
+  ]
+}

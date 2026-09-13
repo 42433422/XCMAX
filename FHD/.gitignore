@@ -94,6 +94,8 @@ scripts/ai_agent_v0/demo.local.env
 # Logs & temporary output
 # ============================================================================
 *.log
+# 例外：SSOT 引用的验收证据 log（evidence 目录内的实测日志必须入仓，链接不得悬空）
+!docs/evidence/**/*.log
 logs/
 .agent-*.log
 .uvicorn.*.log

@@ -1,0 +1,38 @@
+{
+  "tested_at": "2026-09-13T06:30:40.203965+00:00",
+  "scope": "source acceptance candidate, not installed formal build",
+  "pull_request": 1920,
+  "browser_url": "http://127.0.0.1:17513",
+  "account": "xcagi-enterprise-demo",
+  "template": "候选验收-1920-送货单",
+  "customer": "候选验收客户1920",
+  "order_number": "26-09-00002A",
+  "products": 1,
+  "worksheet_count": 1,
+  "quantity_tins": 2,
+  "quantity_kg": 50,
+  "amount": 900,
+  "sha256": "180169c6ebe5122f105ec27a49b04db5dd8569e66e66f1d95d9aa0cc15475736",
+  "download_request_status": 200,
+  "parser_evaluation": "3/3 passed; before fix 0/3 with 2 customer rows",
+  "formal_installed_acceptance": false,
+  "final_head": "0834a6a2bf78c842c71f960c9460b03acd38fb85",
+  "final_case": {
+    "order_number": "26-09-00004A",
+    "date": "2026-09-12",
+    "model": "RX-1920-LINKED",
+    "quantity_tins": 2,
+    "quantity_kg": 50,
+    "amount": 900,
+    "sheets": [
+      "送货甲"
+    ],
+    "download_http_status": 200,
+    "return_to_list_auto_refresh": true,
+    "sha256": "0df4ec9b39b0f2ffce6ad4a5a8b38844b0e5c99865f804e6d44cce53d64b73f5"
+  },
+  "superseded_failed_cases": {
+    "26-09-00001A": "extra customer worksheet and download400",
+    "26-09-00003A": "selected date not reflected in generated Excel; retained as failure evidence"
+  }
+}
