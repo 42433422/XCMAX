@@ -1063,7 +1063,6 @@
             <div class="hero-proof" aria-label="版本演进概览">
               <div><strong>12</strong><span>关键版本</span></div>
               <div><strong>4</strong><span>能力阶段</span></div>
-              <div><strong>3 端</strong><span>稳定交付</span></div>
             </div>
           </div>
           <aside class="version-summary" aria-label="当前交付版本">
@@ -1074,11 +1073,7 @@
               <span>发布日期<b id="summary-date">2026-09-01</b></span>
               <span>发布渠道<b id="summary-channel">Enterprise interim</b></span>
             </div>
-            <ul class="summary-changes" aria-label="当前版本重点">
-              <li>客户交付中心显示已安装版本与平台</li>
-              <li>Windows 1.0.0.1 临时包公开下载与 SHA-256</li>
-              <li>稳定签名门禁保持关闭，未混入自动更新</li>
-            </ul>
+            <ul class="summary-changes" id="summary-changes" aria-label="当前版本重点"></ul>
           </aside>
         </div>
       </section>
@@ -1519,7 +1514,10 @@
           summaryVersionEl.textContent = 'v' + String(history[0].version || '')
           summaryDateEl.textContent = String(history[0].date || '')
           summaryStatusEl.textContent = interimActive ? 'Windows 临时交付可下载' : '稳定版可下载'
-          summaryChannelEl.textContent = interimActive ? 'Enterprise interim' : 'Enterprise'
+          summaryChannelEl.textContent = String(history[0].channel || (interimActive ? 'Enterprise interim' : 'Enterprise'))
+          document.getElementById('summary-changes').replaceChildren(...(history[0].notes || []).slice(0, 3).map(function (note) {
+            return Object.assign(document.createElement('li'), { textContent: String(note) })
+          }))
         }
 
         render(fallbackHistory, true)
