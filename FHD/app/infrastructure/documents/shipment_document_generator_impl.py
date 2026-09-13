@@ -385,6 +385,7 @@ class LegacyShipmentDocumentGenerator(ShipmentDocumentGeneratorPort):
             "doc_name": filename,
             "file_path": file_path,
             "order_number": order_number,
+            "date": date or datetime.now().strftime("%Y-%m-%d"),
             "total_amount": total_amount,
             "total_quantity": total_quantity,
             "purchase_unit": resolved.unit_name,
