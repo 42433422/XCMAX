@@ -1,5 +1,5 @@
 {
-  "lines": 2325553,
+  "lines": 2325556,
   "updated": "2026-09-13",
-  "note": "feat(delivery): testing-feed publisher 工作流双源落地（root 243 行 + FHD 241 行）+ guard_utils_boundary 白名单登记（+1 行）——净增 485 行基线同步"
+  "note": "feat(delivery): testing-feed publisher 工作流双源落地（root 243 行 + FHD 241 行）+ guard_utils_boundary 白名单登记（+1 行）+ cryptography 安装步骤（双源 +6 行）——净增 488 行基线同步"
 }
