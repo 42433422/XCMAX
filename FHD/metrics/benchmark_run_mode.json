@@ -1,10 +1,17 @@
 {
-  "mode": "monitoring",
-  "llm_verified": false,
-  "status": "UNVERIFIED",
-  "reason": "XCAGI_SKIP_INTENT_LLM=1（规则引擎口径），本报告不构成 LLM 实测验收",
-  "run_id": "34727372618",
-  "sha": "7c589f2b7abc4300fcb0e68888decb3bd01d5767",
+  "mode": "acceptance",
+  "llm_verified": true,
+  "status": "VERIFIED",
+  "evidence": {
+    "llm_preflight": "test_reports/llm_preflight_evidence.json",
+    "report": "test_reports/task_benchmark_report.json",
+    "total_tasks": 22,
+    "pass_k": 0.9091,
+    "min_pass": 0.2,
+    "trials": 1
+  },
+  "run_id": "34725098385",
+  "sha": "77aca574376b3e01049404eeeb1aa2b6ebfae916",
   "actor": "42433422",
-  "observed_at": "2026-09-13T08:14:15.108817+08:00"
+  "observed_at": "2026-09-13T07:20:56.227543+08:00"
 }
