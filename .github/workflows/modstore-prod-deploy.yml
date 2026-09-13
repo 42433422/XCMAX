@@ -108,7 +108,7 @@ jobs:
           retention-days: 7
 
       - name: Deploy immutable release and verify exact runtime identity
-        uses: appleboy/ssh-action@v1.2.2
+        uses: appleboy/ssh-action@v1.2.5
         env:
           TARGET_SHA: ${{ steps.target.outputs.sha }}
           STRICT_KEY: ${{ github.event_name == 'workflow_dispatch' && inputs.require_platform_key == 'false' && '0' || '1' }}
