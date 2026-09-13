@@ -1,0 +1,7 @@
+﻿Authenticode path: C:\Users\97088\AppData\Local\Programs\XCAGI\XCAGI.exe
+Authenticode status: NotSigned
+Authenticode message: The file C:\Users\97088\AppData\Local\Programs\XCAGI\XCAGI.exe is not digitally signed. You canno
+t run this script on the current system. For more information about running scripts and setting execution policy, see a
+bout_Execution_Policies at https:/go.microsoft.com/fwlink/?LinkID=135170
+UNSIGNED: manual installer delivery only; not eligible for stable automatic updates.
+

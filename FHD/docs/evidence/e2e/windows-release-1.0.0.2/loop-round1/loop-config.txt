@@ -1,0 +1,7 @@
+﻿round=round1
+baseline_installer=C:\Users\97088\Desktop\xcmax-release-ssot-staging\baseline-a9507f0f.exe
+baseline_sha=a9507f0f6ddff3ece31c6986751a9ffe060d04fd
+feed_url=https://xiu-ci.com/releases/testing/enterprise
+target_version=1.0.0.2
+target_sha=1f7d9f11ecc739cad78d57da86a3c5118b5af3fb
+start=2026-09-13T23:43:58.9341520+08:00
