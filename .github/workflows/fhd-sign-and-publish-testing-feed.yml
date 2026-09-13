@@ -39,7 +39,7 @@ defaults:
 jobs:
   sign-and-publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 120
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -180,10 +180,26 @@ jobs:
             -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
           WORK="/tmp/xcagi-win-feed-${GITHUB_RUN_ID}"
           ssh "${SSH_OPTS[@]}" "root@${HOST}" "rm -rf '${WORK}' && mkdir -p '${WORK}'"
-          scp "${SSH_OPTS[@]}" "${RUNNER_TEMP}/installer/${INSTALLER_EXE}" \
-            "${RUNNER_TEMP}/installer/${INSTALLER_EXE}.sha256" \
-            "${RUNNER_TEMP}/installer/latest.yml" "root@${HOST}:${WORK}/"
           EXPECTED_SHA256="$(cut -d' ' -f1 "${RUNNER_TEMP}/installer/${INSTALLER_EXE}.sha256")"
+          # 跨境链路上传 248MB 曾在 45 分钟超时内失败；若运维已把同 SHA256 的安装包
+          # 预置到 PREPLACE，则远端直接复制，免.runner 上传。哈希不符即回退全量上传。
+          PREPLACE="/tmp/xcagi-preplace"
+          REMOTE_COPIED="$(ssh "${SSH_OPTS[@]}" "root@${HOST}" "
+            if [ -f '${PREPLACE}/${INSTALLER_EXE}' ] && \
+               [ \"\$(sha256sum '${PREPLACE}/${INSTALLER_EXE}' | cut -d' ' -f1)\" = '${EXPECTED_SHA256}' ]; then
+              cp '${PREPLACE}/${INSTALLER_EXE}' '${WORK}/${INSTALLER_EXE}'
+              echo copied
+            fi
+          " || true)"
+          if [ "${REMOTE_COPIED}" = "copied" ]; then
+            echo "installer preplaced on remote (sha256 match); skipping large upload"
+            scp "${SSH_OPTS[@]}" "${RUNNER_TEMP}/installer/${INSTALLER_EXE}.sha256" \
+              "${RUNNER_TEMP}/installer/latest.yml" "root@${HOST}:${WORK}/"
+          else
+            scp "${SSH_OPTS[@]}" "${RUNNER_TEMP}/installer/${INSTALLER_EXE}" \
+              "${RUNNER_TEMP}/installer/${INSTALLER_EXE}.sha256" \
+              "${RUNNER_TEMP}/installer/latest.yml" "root@${HOST}:${WORK}/"
+          fi
           ssh "${SSH_OPTS[@]}" "root@${HOST}" "
             set -euo pipefail
             ACTUAL=\$(sha256sum '${WORK}/${INSTALLER_EXE}' | cut -d' ' -f1)
