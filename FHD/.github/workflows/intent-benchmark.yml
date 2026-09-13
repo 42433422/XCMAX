@@ -371,7 +371,9 @@ jobs:
   llm-benchmark:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # 142 用例 × 3 轮 solo 真跑实测 >45min（run 34727372618 被 45min 上限取消），
+    # 上调至 120min 给足节流+重试余量。
+    timeout-minutes: 120
     env:
       # 平台模型凭证映射到 app 统一解析口径（credentials.resolve_openai_env_credentials：
       # OPENAI_API_KEY + OPENAI_BASE_URL + OPENAI_MODEL；base_url 为 xiu-ci.com 时自动识别为 xcauto）。

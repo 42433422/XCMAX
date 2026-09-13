@@ -6,6 +6,7 @@
 
 ## Unreleased（1.0.0.2 之后的累积变更）
 - fix(release): release-orchestrator 双源 permissions 增补 administration:read——security-preflight 读 main 分支保护 required checks 曾 403（T1 run 34694275310/34697783917 失败根因）
+- ci(benchmark): holdout 基准 job 超时 45→120min——solo 真跑 142 用例 × 3 轮实测超 45 分钟（run 34727372618 被上限取消），上调给足节流+重试余量
 
 - 修复 Mac 1.0.0.2 下载中心版本历史与安装包版本不一致的问题。 当前版本摘要同步发布清单，分平台提示下载开放状态。
 - 修复 Mac 安装包签名时重复导入证书导致构建失败的问题，复用已解锁的签名钥匙串。

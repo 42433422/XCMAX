@@ -1,5 +1,5 @@
 {
-  "lines": 2325013,
+  "lines": 2325016,
   "updated": "2026-09-13",
-  "note": "棘轮下调"
+  "note": "holdout job timeout 45->120min: solo real-run 142x3 exceeds 45min (run 34727372618 cancelled); +2 comment lines document the constraint"
 }

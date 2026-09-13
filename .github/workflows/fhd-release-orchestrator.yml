@@ -30,7 +30,6 @@ permissions:
   checks: read
   statuses: read
   security-events: read
-  administration: read  # read branch protection required checks (security-preflight)
 
 concurrency:
   group: xcagi-release-orchestrator
@@ -64,6 +63,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_SHA: ${{ inputs.release_sha }}
+          RELEASE_PROTECTION_TOKEN: ${{ secrets.RELEASE_PROTECTION_TOKEN }}
         run: |
           set -euo pipefail
           printf '%s' "$RELEASE_SHA" | grep -Eq '^[0-9a-f]{40}$'
@@ -72,7 +72,7 @@ jobs:
             echo "::error::release_sha is not the current origin/main SHA."
             exit 1
           }
-          protection="$(gh api "repos/${GH_REPO}/branches/main/protection/required_status_checks")"
+          protection="$(GH_TOKEN="${RELEASE_PROTECTION_TOKEN:?RELEASE_PROTECTION_TOKEN secret missing (needs a PAT with admin read on branch protection)}" gh api "repos/${GH_REPO}/branches/main/protection/required_status_checks")"
           mapfile -t required < <(
             jq -r '(.contexts[]?), (.checks[]?.context)' <<<"$protection" | sort -u
           )
