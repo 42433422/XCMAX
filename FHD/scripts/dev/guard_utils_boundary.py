@@ -56,6 +56,7 @@ CROSS_CUTTING = {
     "no_email",
     "openapi_path",
     "operational_errors",
+    "process_lock",
     "time",
     "user_memory",
 }
