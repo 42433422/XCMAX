@@ -1,0 +1,24 @@
+ready: readyForUi=True;modsReady=True;storageMode=local_sqlite
+PASS health code=200
+PASS desktop-status readyForUi=True;modsReady=True;storageMode=local_sqlite
+PASS runtime-product-sku sku=enterprise;enterprise=True
+PASS mods-list count=23
+PASS mods-loading-status loaded=13;partial_failure=False
+PASS mod-detail:xcagi-erp-domain-bridge code=200
+PASS mod-detail:xcagi-approval-bridge code=200
+PASS mod-detail:xcagi-customer-service-bridge code=200
+PASS mod-detail:xcagi-model-payment-bridge code=200
+PASS mod-detail:xcagi-lan-license-bridge code=200
+PASS mod-detail:xcagi-neuro-bus-bridge code=200
+PASS mod-detail:xcagi-office-employee-pack-bridge code=200
+PASS mod-detail:xcagi-planner-bridge code=200
+PASS mod-detail:xcagi-workflow-visualization-bridge code=200
+PASS purchase-summary code=200
+PASS report-dashboard code=200
+PASS mobile-pairing-issue code=200;pairingCode=408776
+PASS erp-mod-products-list code=200
+PASS erp-mod-purchase-units code=200
+PASS compat-products-list code=200
+PASS compat-purchase-units code=200
+SMOKE_PASS=21
+SMOKE_FAIL=0

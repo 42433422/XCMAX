@@ -1,0 +1,1 @@
+﻿update_available observed; feed=https://xiu-ci.com/releases/testing/enterprise; expected=1.0.0.3
