@@ -72,7 +72,6 @@ declare global {
   }
 }
 
-// 拆分自 CreateOrderView.vue script（原第 179–563 行）；逻辑逐字迁移，行为不变。
 export function useCreateOrder() {
   const router = useRouter()
 
