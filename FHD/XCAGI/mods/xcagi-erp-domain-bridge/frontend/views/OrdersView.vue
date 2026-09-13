@@ -66,11 +66,10 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted } from 'vue';
+import { computed, ref, onMounted, onActivated } from 'vue';
 import { useRouter } from 'vue-router';
 import { useOrdersStore } from '@/stores/orders';
 import { pushErpPage } from '@/utils/erpPagePaths';
-import { storeToRefs } from 'pinia';
 import DataTable from '@/components/DataTable.vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import { appAlert, appConfirm, appPrompt } from '@/utils/appDialog';
@@ -78,7 +77,6 @@ import { useTutorialV2Store } from '@/stores/tutorialV2';
 
 const router = useRouter();
 const store = useOrdersStore();
-const { orders } = storeToRefs(store);
 const tutorialStore = useTutorialV2Store();
 const tutorialSalesEvidence = computed(() => tutorialStore.courses
   .find((course) => course.id === 'sales-to-cash')
@@ -140,6 +138,8 @@ async function handleClearAll() {
 async function confirmClearAll() {
   await store.clearAllOrders();
 }
+
+onActivated(doSearch);
 
 onMounted(() => {
   loadOrders();
