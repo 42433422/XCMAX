@@ -1,0 +1,241 @@
+# Windows testing-channel update feed: sign and publish from a quarantined
+# Release Desktop installer artifact. Unsigned installers never enter stable;
+# this channel exists for acceptance machines only (SSOT §2 isolation lane).
+name: Sign and publish Windows testing feed
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Product version (four-part)"
+        required: true
+        default: "1.0.0.2"
+      release_sha:
+        description: "Exact 40-character release commit baked into the installer"
+        required: true
+        type: string
+      installer_run_id:
+        description: "Successful Release Desktop run holding xcagi-windows-installer-<sha>"
+        required: true
+      installer_artifact_name:
+        description: "Artifact name; defaults to xcagi-windows-installer-<release_sha>"
+        required: false
+        type: string
+      release_notes:
+        description: "Optional release notes (first line shown in-app)"
+        required: false
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  sign-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+
+      - name: Verify exact release SHA
+        run: |
+          set -euo pipefail
+          if [[ ! "${{ inputs.release_sha }}" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "::error::release_sha must be a full 40-character Git SHA."
+            exit 1
+          fi
+          ACTUAL="$(git rev-parse HEAD)"
+          if [ "${ACTUAL}" != "${{ inputs.release_sha }}" ]; then
+            echo "::error::checkout drift: ${ACTUAL} != ${{ inputs.release_sha }}"
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Resolve artifact and download quarantined installer
+        run: |
+          set -euo pipefail
+          RUN_ID="${{ inputs.installer_run_id }}"
+          if [[ ! "${RUN_ID}" =~ ^[0-9]+$ ]]; then
+            echo "::error::installer_run_id must be numeric."
+            exit 1
+          fi
+          RUN_META="$(gh run view "${RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
+            --json conclusion,headSha,workflowName)"
+          if [ "$(printf '%s' "${RUN_META}" | jq -er '.conclusion')" != "success" ]; then
+            echo "::error::installer_run_id is not a successful run."
+            exit 1
+          fi
+          if [ "$(printf '%s' "${RUN_META}" | jq -er '.headSha')" != "${{ inputs.release_sha }}" ]; then
+            echo "::error::installer run headSha differs from release_sha."
+            exit 1
+          fi
+          NAME="${{ inputs.installer_artifact_name }}"
+          if [ -z "${NAME}" ]; then
+            NAME="xcagi-windows-installer-${{ inputs.release_sha }}"
+          fi
+          gh run download "${RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
+            --name "${NAME}" --dir "${RUNNER_TEMP}/installer"
+
+      - name: Verify delivery receipt and installer SHA256
+        env:
+          EXPECTED_SHA: ${{ inputs.release_sha }}
+          EXPECTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}/installer"
+          EXE="$(find . -type f -name 'XCAGI-Enterprise-Setup-*.exe' | head -1)"
+          if [ -z "${EXE}" ]; then
+            echo "::error::no installer exe in artifact."
+            exit 1
+          fi
+          export EXE
+          python3 - <<'PY'
+          import hashlib, json, os, sys
+          from pathlib import Path
+          exe = Path(os.environ["EXE"])
+          receipt = json.loads(Path("delivery-receipt.json").read_text(encoding="utf-8"))
+          actual = hashlib.sha256(exe.read_bytes()).hexdigest()
+          checks = {
+            "receipt.git_sha": (receipt["git_sha"], os.environ["EXPECTED_SHA"]),
+            "receipt.version": (receipt["version"], os.environ["EXPECTED_VERSION"]),
+            "receipt.sha256": (receipt["sha256"], actual),
+            "receipt.size": (str(receipt["size"]), str(exe.stat().st_size)),
+          }
+          bad = [f"{k}: {a} != {b}" for k, (a, b) in checks.items() if a != b]
+          if bad:
+            print("::error::receipt mismatch: " + "; ".join(bad))
+            sys.exit(1)
+          sha256_file = Path(f"{exe.name}.sha256")
+          if sha256_file.exists():
+            listed = sha256_file.read_text(encoding="utf-8").split()[0].strip().lower()
+            if listed != actual:
+              print(f"::error::.sha256 file mismatch: {listed} != {actual}")
+              sys.exit(1)
+          print(f"installer identity verified: {exe.name} sha256={actual}")
+          PY
+          echo "INSTALLER_EXE=${EXE##*/}" >> "${GITHUB_ENV}"
+
+      - name: Generate and sign latest.yml
+        env:
+          XCAGI_UPDATE_ED25519_PRIVATE_KEY: ${{ secrets.XCAGI_UPDATE_ED25519_PRIVATE_KEY }}
+          XCAGI_BUILD_SHA: ${{ inputs.release_sha }}
+          XCAGI_PRODUCT_VERSION: ${{ inputs.version }}
+          XCAGI_RELEASE_NOTES: ${{ inputs.release_notes }}
+        run: |
+          set -euo pipefail
+          if [ -z "${XCAGI_UPDATE_ED25519_PRIVATE_KEY:-}" ]; then
+            echo "::error::XCAGI_UPDATE_ED25519_PRIVATE_KEY missing."
+            exit 1
+          fi
+          cd "${RUNNER_TEMP}/installer"
+          EXE="$(find . -type f -name 'XCAGI-Enterprise-Setup-*.exe' | head -1)"
+          TOOLCHAIN="$(printf '%s' "${XCAGI_PRODUCT_VERSION}" | cut -d. -f1-3)"
+          node "${GITHUB_WORKSPACE}/FHD/scripts/package/generate-update-metadata.mjs" \
+            "${EXE}" "${TOOLCHAIN}" win
+          python3 "${GITHUB_WORKSPACE}/FHD/scripts/dev/sign_update_metadata.py" latest.yml
+          python3 - <<'PY'
+          from pathlib import Path
+          lines = Path("latest.yml").read_text(encoding="utf-8").splitlines()
+          assert any(l.startswith("signature: ed25519:") for l in lines), "signature line missing"
+          assert any(l.startswith("buildSha: ") for l in lines), "buildSha missing"
+          print("latest.yml signed; buildSha present")
+          PY
+          echo "INSTALLER_EXE=${EXE##*/}" >> "${GITHUB_ENV}"
+
+      - name: Publish to CVM testing channel atomically
+        env:
+          DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
+          HOST: ${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}
+          DEST: /var/www/update/releases/testing/enterprise
+        run: |
+          set -euo pipefail
+          if [ -z "${DESKTOP_SSH_KEY:-}" ]; then
+            echo "::error::SERVER_SSH_KEY or FHD_PUSH_SSH_KEY missing."
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "${DESKTOP_SSH_KEY}" > ~/.ssh/id_ci
+          chmod 600 ~/.ssh/id_ci
+          ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes \
+            -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
+          WORK="/tmp/xcagi-win-feed-${GITHUB_RUN_ID}"
+          ssh "${SSH_OPTS[@]}" "root@${HOST}" "rm -rf '${WORK}' && mkdir -p '${WORK}'"
+          scp "${SSH_OPTS[@]}" "${RUNNER_TEMP}/installer/${INSTALLER_EXE}" \
+            "${RUNNER_TEMP}/installer/${INSTALLER_EXE}.sha256" \
+            "${RUNNER_TEMP}/installer/latest.yml" "root@${HOST}:${WORK}/"
+          EXPECTED_SHA256="$(cut -d' ' -f1 "${RUNNER_TEMP}/installer/${INSTALLER_EXE}.sha256")"
+          ssh "${SSH_OPTS[@]}" "root@${HOST}" "
+            set -euo pipefail
+            ACTUAL=\$(sha256sum '${WORK}/${INSTALLER_EXE}' | cut -d' ' -f1)
+            if [ \"\${ACTUAL}\" != '${EXPECTED_SHA256}' ]; then
+              echo \"remote sha mismatch: \${ACTUAL}\"; exit 1
+            fi
+            mkdir -p '${DEST}'
+            if [ -f '${DEST}/${INSTALLER_EXE}' ]; then
+              mv '${DEST}/${INSTALLER_EXE}' '${DEST}/${INSTALLER_EXE}.bak-'\"\$(date +%Y%m%d%H%M%S)\"
+            fi
+            mv '${WORK}/${INSTALLER_EXE}' '${DEST}/${INSTALLER_EXE}'
+            mv '${WORK}/${INSTALLER_EXE}.sha256' '${DEST}/${INSTALLER_EXE}.sha256'
+            mv '${WORK}/latest.yml' '${DEST}/latest.yml.new'
+            mv '${DEST}/latest.yml.new' '${DEST}/latest.yml'
+            rm -rf '${WORK}'
+            echo 'remote publish complete'
+          "
+
+      - name: Read back and verify live feed
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}/installer"
+          BASE="https://xiu-ci.com/releases/testing/enterprise"
+          curl -fsSL --retry 3 --retry-all-errors "${BASE}/latest.yml" -o live.yml
+          python3 - <<'PY'
+          import base64, sys
+          from pathlib import Path
+          from cryptography.hazmat.primitives.serialization import load_pem_public_key
+          from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+          pub = b"""-----BEGIN PUBLIC KEY-----
+          MCowBQYDK2VwAyEAO6AeYJ05qwfSgpGR7+FZiL6cY0uGtSJVRqIiws3P6N8=
+          -----END PUBLIC KEY-----"""
+          prefix = "signature: ed25519:"
+          lines = Path("live.yml").read_text(encoding="utf-8").splitlines()
+          sig_line = next((l for l in lines if l.startswith(prefix)), None)
+          assert sig_line, "live latest.yml lacks signature line"
+          body = "\n".join(l for l in lines if not l.startswith(prefix)).rstrip()
+          sig = base64.b64decode(sig_line[len(prefix):].strip())
+          key = load_pem_public_key(pub)
+          assert isinstance(key, Ed25519PublicKey)
+          key.verify(sig, body.encode("utf-8"))
+          fields = {}
+          for l in lines:
+            if ":" in l and not l.startswith(" "):
+              k, v = l.split(":", 1)
+              fields[k] = v.strip()
+          print(f"live feed signature VALID; buildSha={fields.get('buildSha')}")
+          PY
+          LOCAL_SHA256="$(sha256sum "${INSTALLER_EXE}" | cut -d' ' -f1)"
+          REMOTE_SHA256="$(curl -fsSL "${BASE}/${INSTALLER_EXE}.sha256" | cut -d' ' -f1)"
+          if [ "${LOCAL_SHA256}" != "${REMOTE_SHA256}" ]; then
+            echo "::error::live .sha256 differs from signed artifact."
+            exit 1
+          fi
+          HTTP_CODE="$(curl -s -o /dev/null -w '%{http_code}' -I "${BASE}/${INSTALLER_EXE}")"
+          if [ "${HTTP_CODE}" != "200" ]; then
+            echo "::error::live installer HEAD returns ${HTTP_CODE}."
+            exit 1
+          fi
+          echo "Live testing feed verified: latest.yml signature VALID, installer 200, sha256 consistent."
