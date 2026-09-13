@@ -1,0 +1,12 @@
+{
+  "run_id": 34722025830,
+  "job_id": 103629674329,
+  "conclusion": "success",
+  "full_tests_passed": 37728,
+  "behavior_tests_passed": 37727,
+  "behavior_line_percent": 88.4,
+  "behavior_branch_percent": 80.7,
+  "observation_only_error": "Schema drift check: ModuleNotFoundError: No module named app",
+  "raw_log": "/Users/a4243342/XCMAX-runtime/mac-closure-20260913/backend-pr1911-103629674329.log",
+  "raw_log_sha256": "e2bec1e0d7398deb55505edba340a926e98c6540e53eb08573bd2bfc49093eb6"
+}

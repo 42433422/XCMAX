@@ -1,0 +1,69 @@
+{
+  "at": "2026-09-13T07:26:56.468173+00:00",
+  "method": "official native OTA download and install",
+  "from_sha": "fa3c8832ea52df58cefe1af00aaf6599a8e1e95b",
+  "installed_build": {
+    "schema_version": 1,
+    "gitSha": "6eda2203df27c53958b9d7af0e6db26d22b560c4",
+    "version": "1.0.0.2",
+    "releaseId": "xcagi-1.0.0.2-6eda2203df27c53958b9d7af0e6db26d22b560c4",
+    "builtAt": "2026-09-13T02:13:17.009Z"
+  },
+  "runtime_build": {
+    "admin_console_sha256": "",
+    "admin_console_git_sha": "",
+    "artifact_sha256": "",
+    "built_at": "2026-09-13T02:13:17.009Z",
+    "git_sha": "6eda2203df27c53958b9d7af0e6db26d22b560c4",
+    "image_digest": "",
+    "product_version": "1.0.0.2",
+    "release_id": "xcagi-1.0.0.2-6eda2203df27c53958b9d7af0e6db26d22b560c4"
+  },
+  "codesign_deep_strict": "passed",
+  "startup": "automatic relaunch exited once; manually reopened successfully; watchdog race fixed in PR1920 but not installed",
+  "native_session": "SUNBIRD preserved",
+  "post_ota_conversion": {
+    "roster_count": 80,
+    "input_rows": 1,
+    "regular_hours": 8,
+    "download_path": "/Users/a4243342/Downloads/attendance-output-70aae2421c854b3f886c54bbe9c52ef3.xlsx",
+    "sha256": "c854a1d39389d5c4441a5bf05198d60c7db3912be1e88fc463c1e8d5fc960684"
+  },
+  "business_tables": {
+    "erp_employees": {
+      "equal": true,
+      "sha256": "4fb1a8c47bcb7394ba2e679f905dfef6b767a91b3184563d9d97fbac6672a1fb",
+      "rows": 80
+    },
+    "erp_departments": {
+      "equal": true,
+      "sha256": "934e8d9bdb8b598db66a8f34c68897483a1153be6e5e6a767b179d024b8e762b",
+      "rows": 14
+    },
+    "customers": {
+      "equal": true,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "rows": 0
+    },
+    "products": {
+      "equal": true,
+      "sha256": "dbc760a26ceaadeeb1cbfe9de9e4589ee2448dfadc7c5c792c934cd98306056b",
+      "rows": 1
+    },
+    "shipment_records": {
+      "equal": true,
+      "sha256": "680d2c07197994e5e78bd4e2bb447643015727e037860267a4c7ff24266bb1d8",
+      "rows": 1
+    }
+  },
+  "all_table_count_changes": {},
+  "final_fix_pr": 1920,
+  "final_fix_head": "dd749389cba0bf74b2092447c6d83ad81fb3781f",
+  "final_fix_installed": false,
+  "receipt_followup": {
+    "observed": "install receipt failed despite successful bundle update",
+    "cause": "internal bundle version 1.0.0 differs from product version 1.0.0.2",
+    "fix_head": "fab22e69b2a68ca5fe53d6601284efca5923445d",
+    "fix_installed": false
+  }
+}

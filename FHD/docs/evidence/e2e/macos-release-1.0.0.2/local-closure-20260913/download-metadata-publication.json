@@ -1,0 +1,31 @@
+{
+  "published": [
+    {
+      "target": "/var/www/xcagi-v1.0.0.2/manifest.json",
+      "sha256": "62c71f77c630ae4378a1d1c528935182797dffb16db99ecaf80121e00d8ab89d"
+    },
+    {
+      "target": "/var/www/xcagi-v1.0.0.2/download-release.json",
+      "sha256": "f88b1a2fd4a9c635d29d0bb8b27ce1da677ed3f0996b6f9cf577580c50943367"
+    },
+    {
+      "target": "/root/成都修茈科技有限公司/download-release.json",
+      "sha256": "f88b1a2fd4a9c635d29d0bb8b27ce1da677ed3f0996b6f9cf577580c50943367"
+    },
+    {
+      "target": "/root/成都修茈科技有限公司/MODstore_deploy/market/public/download-release.json",
+      "sha256": "f88b1a2fd4a9c635d29d0bb8b27ce1da677ed3f0996b6f9cf577580c50943367"
+    },
+    {
+      "target": "/root/成都修茈科技有限公司/MODstore_deploy/market/dist/download-release.json",
+      "sha256": "f88b1a2fd4a9c635d29d0bb8b27ce1da677ed3f0996b6f9cf577580c50943367"
+    },
+    {
+      "target": "/root/成都修茈科技有限公司/corp-butler/download-release.json",
+      "sha256": "f88b1a2fd4a9c635d29d0bb8b27ce1da677ed3f0996b6f9cf577580c50943367"
+    }
+  ],
+  "metadata_main_sha": "77aca574376b3e01049404eeeb1aa2b6ebfae916",
+  "binary_sha": "fa3c8832ea52df58cefe1af00aaf6599a8e1e95b",
+  "published_at": "2026-09-12T23:15:42.884631+00:00"
+}

@@ -1,0 +1,19 @@
+{
+  "at": "2026-09-12T17:32:21.437030+00:00",
+  "boot_time": {
+    "exit": 0,
+    "output": "{ sec = 1788781701, usec = 754596 } Mon Sep  7 19:48:21 2026\n"
+  },
+  "os": {
+    "exit": 0,
+    "output": "ProductName:\t\tmacOS\nProductVersion:\t\t26.3\nBuildVersion:\t\t25D125\n"
+  },
+  "disk": {
+    "exit": 0,
+    "output": "Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on\n/dev/disk3s1s1   460Gi    17Gi    62Gi    22%    453k  651M    0%   /\n"
+  },
+  "running_instances": {
+    "exit": 0,
+    "output": "91092 /Users/a4243342/Applications/acceptance/XCAGI.app/Contents/MacOS/XCAGI\n"
+  }
+}

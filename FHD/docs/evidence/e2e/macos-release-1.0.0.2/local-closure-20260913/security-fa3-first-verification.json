@@ -1,0 +1,84 @@
+{
+  "schema": "security-release-gate/v1",
+  "generated_at": "2026-09-12T21:09:46.752766+00:00",
+  "passed": true,
+  "required_scanners": [
+    "codeql",
+    "dependabot",
+    "trivy-filesystem",
+    "trivy-image",
+    "python-dependencies",
+    "node-dependencies",
+    "desktop-prerelease",
+    "gitleaks",
+    "credential-rotation",
+    "production-host"
+  ],
+  "applicable_open": {
+    "critical": 0,
+    "high": 0
+  },
+  "blockers": [],
+  "scanners": {
+    "codeql": {
+      "available": true,
+      "fresh": true,
+      "blocking": 0,
+      "unresolved_secrets": 0
+    },
+    "dependabot": {
+      "available": true,
+      "fresh": true,
+      "blocking": 0,
+      "unresolved_secrets": 0
+    },
+    "trivy-filesystem": {
+      "available": true,
+      "fresh": true,
+      "blocking": 0,
+      "unresolved_secrets": 0
+    },
+    "trivy-image": {
+      "available": true,
+      "fresh": true,
+      "blocking": 0,
+      "unresolved_secrets": 0
+    },
+    "python-dependencies": {
+      "available": true,
+      "fresh": true,
+      "blocking": 0,
+      "unresolved_secrets": 0
+    },
+    "node-dependencies": {
+      "available": true,
+      "fresh": true,
+      "blocking": 0,
+      "unresolved_secrets": 0
+    },
+    "desktop-prerelease": {
+      "available": true,
+      "fresh": true,
+      "blocking": 0,
+      "unresolved_secrets": 0
+    },
+    "gitleaks": {
+      "available": true,
+      "fresh": true,
+      "blocking": 0,
+      "unresolved_secrets": 0
+    },
+    "credential-rotation": {
+      "available": true,
+      "fresh": true,
+      "blocking": 0,
+      "unresolved_secrets": 0
+    },
+    "production-host": {
+      "available": true,
+      "fresh": true,
+      "blocking": 0,
+      "unresolved_secrets": 0
+    }
+  }
+}

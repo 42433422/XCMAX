@@ -1,0 +1,9 @@
+{
+  "observed_at": "2026-09-12T22:16:23.975839+00:00",
+  "expected_sha256": "710e73656d75ab316cb5ebdbc8ae030aaa5957b3ef2c062b5440d17671d5db67",
+  "server_results": [
+    "710e73656d75ab316cb5ebdbc8ae030aaa5957b3ef2c062b5440d17671d5db67  /var/www/xcagi-v1.0.0.2/enterprise/XCAGI-Enterprise-1.0.0.2-mac-arm64.dmg",
+    "710e73656d75ab316cb5ebdbc8ae030aaa5957b3ef2c062b5440d17671d5db67  /var/www/update/releases/stable/enterprise/XCAGI-Enterprise-1.0.0.2-mac-arm64.dmg"
+  ],
+  "passed": true
+}

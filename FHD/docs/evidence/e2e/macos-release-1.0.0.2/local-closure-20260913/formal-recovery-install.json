@@ -1,0 +1,20 @@
+{
+  "time": "2026-09-13T05:10:08.095621+00:00",
+  "method": "manual official signed DMG recovery; NOT OTA",
+  "old": {
+    "schema_version": 1,
+    "gitSha": "99854233c5d4ea05a96b1f6ae1e3b7edfe03b526",
+    "version": "1.0.0.1",
+    "releaseId": "xcagi-1.0.0.1-99854233c5d4ea05a96b1f6ae1e3b7edfe03b526",
+    "builtAt": "2026-09-04T16:39:02.096Z"
+  },
+  "new": {
+    "schema_version": 1,
+    "gitSha": "fa3c8832ea52df58cefe1af00aaf6599a8e1e95b",
+    "version": "1.0.0.2",
+    "releaseId": "xcagi-1.0.0.2-fa3c8832ea52df58cefe1af00aaf6599a8e1e95b",
+    "builtAt": "2026-09-12T21:50:56.429Z"
+  },
+  "preserved_old_bundle": "/Users/a4243342/XCMAX-runtime/mac-closure-20260913/XCAGI-10001-before-formal-recovery.app",
+  "user_data_modified_by_install": false
+}
