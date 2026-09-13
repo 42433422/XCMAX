@@ -44,6 +44,7 @@ MANAGED_LOCATION_HEADERS = (
     "location = /download-release.json {",
     "location = /download-windows-hotfix.json {",
     "location /releases/stable/ {",
+    "location /releases/testing/ {",
 )
 
 
