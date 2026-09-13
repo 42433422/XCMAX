@@ -315,6 +315,9 @@ class ShipmentDocumentGenerator:
                     order_text,
                 )
 
+            for sheet in list(workbook.worksheets):
+                if sheet is not worksheet:
+                    workbook.remove(sheet)
             # 6. 保存文档
             output_filename = self._generate_output_filename(order_number)
             output_path = os.path.join(self.OUTPUT_FOLDER, output_filename)

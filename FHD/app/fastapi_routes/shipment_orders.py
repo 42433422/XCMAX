@@ -34,7 +34,6 @@ from app.utils.security.safe_download_path import (
     UnsafeDownloadPathError,
     resolve_under_allowed_dirs,
 )
-from app.utils.security.secure_filename import secure_filename
 
 _agent_node_output = _shipment_agent_runtime.agent_node_output
 _shipment_agent_user_id = _shipment_agent_runtime.shipment_agent_user_id
@@ -216,24 +215,12 @@ def shipment_print(request: Request, payload: dict[str, Any] = Body(default_fact
 
 @router.get("/api/shipment/download/{filename:path}")
 def shipment_download(filename: str):
-    from app.utils.path_io.path_utils import get_app_data_dir
-
-    output_dir = os.path.join(get_app_data_dir(), "shipment_outputs")
-    base_name = os.path.basename(str(filename or "").replace("\\", "/"))
-    safe = secure_filename(base_name)
-    if not safe or safe != base_name:
+    if not filename or "/" in filename or "\\" in filename:
         return JSONResponse({"success": False, "message": "文件名无效"}, status_code=400)
-    file_path = os.path.join(output_dir, safe)
-    if file_path and os.path.exists(file_path):
-        return FileResponse(
-            file_path,
-            filename=safe,
-            media_type="application/octet-stream",
-        )
-    return JSONResponse(
-        {"success": False, "message": "文件不存在"},
-        status_code=404,
-    )
+    file_path = _resolve_shipment_output_path(filename)
+    if file_path is None:
+        return JSONResponse({"success": False, "message": "文件不存在"}, status_code=404)
+    return FileResponse(file_path, filename=filename, media_type="application/octet-stream")
 
 
 @router.get("/api/shipment/orders/purchase-units")

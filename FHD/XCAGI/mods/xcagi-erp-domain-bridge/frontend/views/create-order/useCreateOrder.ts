@@ -1,7 +1,11 @@
-import { ref, reactive, onMounted, onUnmounted, computed } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, onActivated, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/api/index'
 import { templatePreviewApi } from '@/api/templatePreview'
+import { getTemplateScopeKey, isExportTemplate, type TplRecord } from '../template-preview/tpTemplateMeta'
+import { productsApi } from '@/api/products'
+import type { Product } from '@/types/product'
+import { downloadBlob } from '@/utils'
 import { appAlert } from '@/utils/appDialog'
 import { pushErpPage } from '@/utils/erpPagePaths'
 
@@ -25,29 +29,11 @@ interface AIFillOrderPayload {
   products?: AIProductPayload[]
 }
 
-// 使用模板 ID，避免同名模板串用。
-interface TemplateOption {
-  id: string
-  name: string
-}
-
-// 购买单位（/api/purchase_units）
 interface PurchaseUnit {
   unit_name: string
   contact_person?: string
 }
 
-// 产品名称库（/api/product_names）
-interface ProductName {
-  id: number
-  name: string
-  model_number?: string
-  specification?: number
-  price?: number
-  purchase_unit_name?: string
-}
-
-// 订单产品编辑行（本地状态）
 interface OrderProductRow {
   id: number
   nameId: string | number
@@ -149,10 +135,14 @@ export function useCreateOrder() {
     window.__VUE_FILL_ORDER__ = handleAIFillOrder
   }
 
-  onMounted(() => {
+  function refreshOptions() {
     loadTemplates()
     loadPurchaseUnits()
     loadAllProducts()
+  }
+  onActivated(refreshOptions)
+  onMounted(() => {
+    refreshOptions()
     generateOrderNumber()
     setupAIEventListener()
   })
@@ -164,9 +154,9 @@ export function useCreateOrder() {
     }
   })
 
-  const templates = ref<TemplateOption[]>([])
+  const templates = ref<TplRecord[]>([])
   const purchaseUnits = ref<PurchaseUnit[]>([])
-  const allProducts = ref<ProductName[]>([])
+  const allProducts = ref<Product[]>([])
   const products = ref<OrderProductRow[]>([])
   let productIdCounter = 0
 
@@ -209,11 +199,11 @@ export function useCreateOrder() {
 
   async function loadTemplates() {
     try {
-      const data = await templatePreviewApi.listTemplates() as { success: boolean; templates: TemplateOption[] }
+      const data = await templatePreviewApi.listTemplates() as { success: boolean; templates: TplRecord[] }
       if (data.success) {
-        templates.value = data.templates
-        if (data.templates.length > 0 && !form.templateName) {
-          form.templateName = data.templates[0].id
+        templates.value = data.templates.filter(t => isExportTemplate(t) && t.category === 'excel' && getTemplateScopeKey(t) === 'orders')
+        if (!templates.value.some(t => t.id === form.templateName)) {
+          form.templateName = templates.value[0]?.id || ''
         }
       }
     } catch (error) {
@@ -221,14 +211,9 @@ export function useCreateOrder() {
     }
   }
 
-  function onTemplateChange() {
-    console.log('已选择模板:', form.templateName)
-  }
-
   async function loadPurchaseUnits() {
     try {
-      const response = await fetch('/api/purchase_units')
-      const data: { success: boolean; data: PurchaseUnit[] } = await response.json()
+      const data = await api.get<{ success: boolean; data: PurchaseUnit[] }>('/api/purchase_units')
       if (data.success) {
         purchaseUnits.value = data.data
       }
@@ -237,27 +222,20 @@ export function useCreateOrder() {
     }
   }
 
-  async function onPurchaseUnitChange() {
-    if (form.purchaseUnit) {
-      try {
-        const response = await fetch(`/api/purchase_units/by_name/${encodeURIComponent(form.purchaseUnit)}`)
-        const data: { success: boolean; data: PurchaseUnit } = await response.json()
-        if (data.success) {
-          form.contactPerson = data.data.contact_person || ''
-        }
-      } catch (error) {
-        console.error('获取购买单位信息失败:', error)
-      }
-    }
+  function onPurchaseUnitChange() {
+    form.contactPerson = purchaseUnits.value.find(unit => unit.unit_name === form.purchaseUnit)?.contact_person || ''
   }
 
   async function loadAllProducts() {
     try {
-      const response = await fetch('/api/product_names')
-      const data: { success: boolean; data: ProductName[] } = await response.json()
-      if (data.success) {
-        allProducts.value = data.data
+      const rows: Product[] = []
+      for (let page = 1; ; page++) {
+        const data = await productsApi.getProducts({ page, per_page: 1000 })
+        if (!data.success) throw new Error(data.message || '产品列表不可用')
+        rows.push(...(data.data || []))
+        if (!data.data?.length || rows.length >= (data.total ?? rows.length)) break
       }
+      allProducts.value = rows
     } catch (error) {
       console.error('加载产品名称列表失败:', error)
     }
@@ -265,8 +243,7 @@ export function useCreateOrder() {
 
   async function generateOrderNumber() {
     try {
-      const response = await fetch('/orders/next_number?suffix=A')
-      const data: { success: boolean; data: { order_number: string } } = await response.json()
+      const data = await api.get<{ success: boolean; data: { order_number: string } }>('/api/orders/next_number', { suffix: 'A' })
       if (data.success) {
         form.orderNumber = data.data.order_number
       }
@@ -316,7 +293,7 @@ export function useCreateOrder() {
         product.model = selected.model_number
       }
       if (selected.specification) {
-        product.specification = selected.specification
+        product.specification = Number.parseFloat(String(selected.specification)) || 0
         calculateKg(index)
       }
       if (selected.price) {
@@ -326,10 +303,6 @@ export function useCreateOrder() {
     }
   }
 
-  function onProductModelChange(_product: OrderProductRow, _index: number) {
-    // Auto-fill name when model changes
-  }
-
   function searchProductsForSelection() {
     searchingProducts.value = true
     setTimeout(() => {
@@ -337,20 +310,11 @@ export function useCreateOrder() {
     }, 300)
   }
 
-  function selectProductForAdd(product: ProductName) {
+  function selectProductForAdd(product: Product) {
     addProductRow()
     const newProduct = products.value[products.value.length - 1]
     newProduct.nameId = product.id
-    newProduct.name = product.name || ''
-    newProduct.model = product.model_number || ''
-    if (product.specification) {
-      newProduct.specification = product.specification
-      calculateKg(products.value.length - 1)
-    }
-    if (product.price) {
-      newProduct.unitPrice = product.price
-      calculateAmount(products.value.length - 1)
-    }
+    onProductNameSelect(newProduct, products.value.length - 1)
     showProductSelector.value = false
   }
 
@@ -401,6 +365,17 @@ export function useCreateOrder() {
     }
   }
 
+  async function downloadShipment() {
+    const filename = result.value?.doc_name
+    if (!filename) return
+    try {
+      const response = await api.download(`/api/shipment/download/${encodeURIComponent(filename)}`)
+      downloadBlob(await response.blob(), filename)
+    } catch (error) {
+      showStatus('下载失败: ' + (error as Error).message, 'error')
+    }
+  }
+
   function resetForm() {
     form.templateName = ''
     form.purchaseUnit = ''
@@ -434,7 +409,6 @@ export function useCreateOrder() {
     productSearchQuery,
     searchingProducts,
     filteredProductsForSelection,
-    onTemplateChange,
     onPurchaseUnitChange,
     onDateChange,
     loadTemplates,
@@ -443,10 +417,9 @@ export function useCreateOrder() {
     calculateKg,
     calculateAmount,
     onProductNameSelect,
-    onProductModelChange,
     searchProductsForSelection,
     selectProductForAdd,
-    generateShipment,
+    generateShipment, downloadShipment,
     resetForm,
   }
 }
