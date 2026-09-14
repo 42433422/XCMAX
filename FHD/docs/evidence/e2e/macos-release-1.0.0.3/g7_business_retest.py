@@ -39,7 +39,7 @@ def jcall(method, path, data=None, headers=None):
     s, b = call(method, path, data, headers)
     try:
         return s, json.loads(b)
-    except Exception:
+    except ValueError:
         return s, {"_raw": b[:500].decode("utf-8", "ignore")}
 
 
@@ -128,7 +128,7 @@ def main():
         **H, "Content-Type": f"multipart/form-data; boundary={boundary}"})
     try:
         ub = json.loads(b)
-    except Exception:
+    except ValueError:
         ub = {"_raw": b[:300].decode("utf-8", "ignore")}
     template_id = (ub.get("template", {}) or {}).get("id") or ub.get("template_id") if isinstance(ub, dict) else None
     RESULT["steps"]["templates_upload"] = {"status": s, "template_id": template_id,
