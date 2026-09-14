@@ -54,7 +54,12 @@ class TestRecordDocumentGeneration:
                             "unit_price": 25,
                         }
                     ],
-                    document_result={},
+                    document_result={
+                        "order_number": "SHIP-1920",
+                        "date": "2026-08-01",
+                        "total_amount": 1800,
+                        "total_quantity": 72,
+                    },
                 )
                 with factory() as fresh:
                     record = fresh.get(ShipmentRecord, result["record_id"])
@@ -62,6 +67,15 @@ class TestRecordDocumentGeneration:
                     assert record.purchase_unit == "发货客户"
                     assert float(record.quantity_kg) == 36
                     assert float(record.amount) == 900
+                    from app.infrastructure.persistence.shipment_record_query_impl import (
+                        SQLAlchemyShipmentRecordQuery,
+                    )
+
+                    listed = SQLAlchemyShipmentRecordQuery().get_latest_shipments(1)[0]
+                    assert listed["order_number"] == "SHIP-1920"
+                    assert listed["date"] == "2026-08-01"
+                    assert listed["total_amount"] == 1800
+                    assert listed["total_quantity"] == 72
         finally:
             engine.dispose()
 
