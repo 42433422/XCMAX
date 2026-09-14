@@ -448,7 +448,7 @@ if ($Scenario -contains 'migration-mutex') {
     Record 'migration-mutex' 'FAIL' '17500 未释放，前置不满足（先清场）'
   } else {
     Write-Info "注入：0.3s 间隔连续拉起两个 XCAGI.exe（迁移/端口竞态），随后等待 health"
-    $before = Get-Digest $DataRoot   # 场景前基线：corrupt-main 设计留证不计入本场景新增损坏
+    $before = Get-Digest $DataRoot   # 场景前基线：corrupt-main 设计留证不计入本场景新增
     Start-Process -FilePath $AppExe | Out-Null
     Start-Sleep -Milliseconds 300
     Start-Process -FilePath $AppExe | Out-Null
