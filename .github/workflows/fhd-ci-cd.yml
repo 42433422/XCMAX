@@ -527,12 +527,12 @@ jobs:
             -e VECTOR_DB_URL=sqlite:////app/data/ci-smoke.db \
             xcagi-ci-scan:local
 
-          for attempt in $(seq 1 150); do  # 150s window: slow-runner startup ~65s; 60s flaked 3/3 on main CI (2026-09-14)
+          for attempt in $(seq 1 60); do
             if [ "$(docker inspect --format '{{.State.Running}}' "${container_name}")" != "true" ]; then
               break
             fi
             if payload="$(docker exec "${container_name}" curl -fsS http://127.0.0.1:5000/api/health)" \
-              && jq -e '.runtime.status == "healthy" and .version == "1.0.0.3"' <<<"${payload}" >/dev/null; then
+              && jq -e '.runtime.status == "healthy" and .version == "1.0.0.4"' <<<"${payload}" >/dev/null; then
               jq '{status, version, runtime_status: .runtime.status}' <<<"${payload}"
               exit 0
             fi
