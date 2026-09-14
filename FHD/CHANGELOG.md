@@ -8,6 +8,7 @@
 
 ## 1.0.0.4（2026-09-14 发布）
 
+- fix(test): 故障注入 dual-process/migration-mutex 改按「场景前基线增量」判定损坏留证——corrupt-main 场景按设计保留 `.corrupt-*` 留证文件，`-Scenario all` 顺序执行时被后续场景误判为新增损坏（2026-09-14 run 34836989979 真实 runner 复盘：单实例锁 1s 退出、竞态收敛单后端均实际生效，主库字节不变，FAIL 为脚本误报）
 - test(delivery): 故障注入新增 dual-process/migration-mutex 两个 CI 化场景（项 7 双进程启动互斥与迁移互斥实证）——单实例锁拒绝第二实例、竞态双启动收敛单后端；workflow 默认包升级到 testing 1.0.0.2（d281abad…575）
 - 修复新建发货单页面调用已下线旧接口（`/templates?action=api`、`/documents`）导致模板列表为空、生成与下载全断的问题：改用现行模板预览 API 按 ID 选模板、`/api/shipment/generate` 生成、blob 下载；分页读取完整产品、新增产品保留客户归属、导出仅留本次订单工作表、业务日期写入 Excel 与持久化记录、订单列表回读单号与汇总（rebase 自 #1920）。
 - 修复 OTA 安装失败后 `app.isQuitting`/`backendShutdownComplete` 状态残留导致窗口关闭行为异常的问题；更新下载回执改用产品版本号，避免内部 bundle 版本（1.0.0）与产品版本（1.0.0.x）不一致误报安装失败。

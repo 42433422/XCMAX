@@ -17,11 +17,11 @@ on:
       installer_url:
         description: "安装包 URL（默认 CVM testing 通道未签名包）"
         required: false
-        default: "https://xiu-ci.com/releases/testing/enterprise/XCAGI-Enterprise-Setup-1.0.0.2-x64-unsigned.exe"
+        default: "https://xiu-ci.com/releases/testing/enterprise/XCAGI-Enterprise-Setup-1.0.0.3-x64-unsigned.exe"
       installer_sha256:
         description: "安装包 SHA256（与 URL 对应，必须一致才继续）"
         required: false
-        default: "d281abadb758c528821f7f957554a6aefdea1f3d1dcccd00e12beaafaef5d575"
+        default: "7c044bec4c87391ea86e9f445fa356ae34bfcebede6876bfc0c7a1df28889e8b"
       scenarios:
         description: "场景：all 或逗号分隔（kill-all,kill-orphan,corrupt-backup,corrupt-main,dual-process,migration-mutex）"
         required: false
