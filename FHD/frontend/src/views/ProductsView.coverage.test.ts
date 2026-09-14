@@ -400,7 +400,7 @@ describe('ProductsView.coverage', () => {
 
   // ===== saveProduct 保存产品 =====
   describe('saveProduct 保存产品', () => {
-    it('新建产品成功时关闭模态框并刷新列表', async () => {
+    it('新建产品保留所选客户并刷新列表', async () => {
       mockCreateProduct.mockResolvedValue({ success: true })
       const wrapper = await mountProducts()
       await flushPromises()
@@ -413,10 +413,11 @@ describe('ProductsView.coverage', () => {
         specification: '',
         price: 10,
       })
+      setSetupValue(wrapper, 'selectedUnit', '验收客户')
       setSetupValue(wrapper, 'showModal', true)
       await state.saveProduct()
       await flushPromises()
-      expect(mockCreateProduct).toHaveBeenCalled()
+      expect(mockCreateProduct).toHaveBeenCalledWith(expect.objectContaining({ unit: '验收客户', model_number: 'A1' }))
       expect(getSetupRefValue(wrapper, 'showModal')).toBe(false)
     })
 

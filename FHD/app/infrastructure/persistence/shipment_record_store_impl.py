@@ -55,6 +55,7 @@ class SQLAlchemyShipmentRecordStore(ShipmentRecordStorePort):
                     "doc_name": document_result.get("doc_name"),
                     "file_path": document_result.get("file_path"),
                     "order_number": document_result.get("order_number"),
+                    "date": document_result.get("date"),
                     "total_amount": document_result.get("total_amount"),
                     "total_quantity": document_result.get("total_quantity"),
                 },

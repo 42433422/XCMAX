@@ -38,6 +38,8 @@ export async function installUpdate(
   if (!state.downloaded) {
     throw new Error('尚未下载更新包，请先在更新面板确认下载')
   }
+  const wasQuitting = app.isQuitting
+  const wasShutdownComplete = desktopRuntime.backendShutdownComplete
   try {
     if (beforeInstall) {
       const version = state.version || 'unknown'
@@ -50,6 +52,7 @@ export async function installUpdate(
     // 后端优雅关闭在该路径下不可靠，会致 ShipIt 无限等待（2026-09-03 实测）。
     // 先在 JS 层同步等待后端停止，再交出退出控制权。
     if (prepareQuit) {
+      app.isQuitting = true
       await prepareQuit()
       // The normal will-quit hook prevents the first quit while it drains the
       // backend. It is already drained here, so let ShipIt own this quit.
@@ -62,6 +65,8 @@ export async function installUpdate(
     app.isQuitting = true
     autoUpdater.quitAndInstall(false, true)
   } catch (error) {
+    app.isQuitting = wasQuitting
+    desktopRuntime.backendShutdownComplete = wasShutdownComplete
     discardPendingUpdateInstallReceipt()
     let cleanupError: unknown
     try {

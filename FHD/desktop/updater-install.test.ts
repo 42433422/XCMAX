@@ -28,6 +28,7 @@ vi.mock('electron-updater', () => ({ autoUpdater: mocks.autoUpdater }))
 vi.mock('electron', () => ({
   app: {
     isPackaged: true,
+    isQuitting: false,
     getVersion: vi.fn(() => '1.0.0'),
     getPath: vi.fn(() => mockUserDataDir.current),
   },
@@ -44,6 +45,8 @@ describe('updater install rollback contract', () => {
   beforeEach(async () => {
     vi.useFakeTimers()
     vi.resetModules()
+    const { app } = await import('electron')
+    app.isQuitting = false
     mockUserDataDir.current = fs.mkdtempSync(path.join(os.tmpdir(), 'xcagi-updater-install-test-'))
     mocks.handlers.clear()
     mocks.autoUpdater.on.mockClear()
@@ -105,9 +108,13 @@ describe('updater install rollback contract', () => {
       throw new Error('installer launch failed')
     })
     const cleanup = vi.fn()
-    await expect(updater.installUpdate(async () => undefined, cleanup)).rejects.toThrow(
+    await expect(updater.installUpdate(async () => undefined, cleanup, async () => undefined)).rejects.toThrow(
       'installer launch failed',
     )
+    const { app } = await import('electron')
+    const { desktopRuntime } = await import('./runtime-state.js')
+    expect(app.isQuitting).toBe(false)
+    expect(desktopRuntime.backendShutdownComplete).toBe(false)
     expect(cleanup).toHaveBeenCalledOnce()
   })
 
@@ -115,6 +122,8 @@ describe('updater install rollback contract', () => {
     const updater = await markDownloaded('1.0.0.1')
     const callOrder: string[] = []
     const prepareQuit = vi.fn(async () => {
+      const { app } = await import('electron')
+      expect(app.isQuitting).toBe(true)
       callOrder.push('prepareQuit')
     })
     mocks.autoUpdater.quitAndInstall.mockImplementationOnce(() => {
@@ -154,6 +163,8 @@ describe('updater install rollback contract', () => {
     await expect(
       updater.installUpdate(undefined, cleanup, prepareQuit),
     ).rejects.toThrow('backend stop failed')
+    const { app } = await import('electron')
+    expect(app.isQuitting).toBe(false)
     expect(cleanup).toHaveBeenCalledOnce()
     expect(mocks.autoUpdater.quitAndInstall).not.toHaveBeenCalled()
   })

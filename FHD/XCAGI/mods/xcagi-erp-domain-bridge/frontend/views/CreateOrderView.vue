@@ -15,9 +15,9 @@
         <div class="form-row">
           <div class="form-col">
             <label>发货单模板</label>
-            <select v-model="form.templateName" @change="onTemplateChange">
+            <select v-model="form.templateName">
               <option value="">-- 请选择模板 --</option>
-              <option v-for="t in templates" :key="t.name" :value="t.name">{{ t.name }}</option>
+              <option v-for="t in templates" :key="t.id" :value="t.id">{{ t.name }}</option>
             </select>
           </div>
           <div class="form-col" style="flex: 0;">
@@ -39,7 +39,7 @@
                   {{ u.unit_name }}{{ u.contact_person ? ` (${u.contact_person})` : '' }}
                 </option>
               </select>
-              <a href="/purchase-units" class="btn btn-secondary" style="white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center;">+ 新建</a>
+              <RouterLink :to="resolveErpPagePath('/customers')" class="btn btn-secondary" style="white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center;">+ 新建</RouterLink>
             </div>
           </div>
           <div class="form-col">
@@ -64,7 +64,7 @@
         <div style="margin-bottom: 15px;">
           <button class="btn btn-success" @click="addProductRow"><i class="fa fa-plus" aria-hidden="true"></i> 添加产品</button>
           <button class="btn" @click="showProductSelector = true"><i class="fa fa-search" aria-hidden="true"></i> 选择产品名称</button>
-          <a href="/product-names" class="btn btn-secondary" style="text-decoration: none;"><i class="fa fa-cubes" aria-hidden="true"></i> 管理产品库</a>
+          <RouterLink :to="resolveErpPagePath('/products')" class="btn btn-secondary" style="text-decoration: none;"><i class="fa fa-cubes" aria-hidden="true"></i> 管理产品库</RouterLink>
         </div>
 
         <div v-if="products.length === 0" class="empty-products">
@@ -74,7 +74,7 @@
         <div v-for="(product, index) in products" :key="product.id" class="product-row">
           <div class="product-cell">
             <label>产品型号 *</label>
-            <input type="text" v-model="product.model" placeholder="产品型号" @input="onProductModelChange(product, index)">
+            <input type="text" v-model="product.model" placeholder="产品型号">
           </div>
           <div class="product-cell">
             <label>产品名称 *</label>
@@ -131,10 +131,10 @@
       <div v-if="result" class="card" style="margin-top: 20px;">
         <h3><i class="fa fa-check-circle-o" aria-hidden="true"></i> 生成结果</h3>
         <div style="text-align: center; padding: 20px;">
-          <p style="margin-bottom: 15px;">文件名: {{ result.output_filename }}</p>
-          <a :href="`/download/${result.output_filename}`" class="btn btn-success" download style="padding: 15px 30px; font-size: 16px;">
+          <p style="margin-bottom: 15px;">文件名: {{ result.doc_name }}</p>
+          <button @click="downloadShipment" class="btn btn-success" style="padding: 15px 30px; font-size: 16px;">
             <i class="fa fa-download" aria-hidden="true"></i> 下载发货单
-          </a>
+          </button>
           <button class="btn" @click="resetForm" style="padding: 15px 30px; font-size: 16px;">
             <i class="fa fa-plus-square-o" aria-hidden="true"></i> 新建发货单
           </button>
@@ -177,8 +177,8 @@
 </template>
 
 <script setup lang="ts">
-// 原超大 SFC 已拆分至 ./create-order/（composable + 独立 CSS）；
-// 入口保持对外路径/默认导出不变，仅做组装。
+import { RouterLink } from 'vue-router'
+import { resolveErpPagePath } from '@/utils/erpPagePaths'
 import { useCreateOrder } from './create-order/useCreateOrder'
 
 const {
@@ -186,11 +186,11 @@ const {
   result, showProductSelector, productSearchQuery, searchingProducts,
   filteredProductsForSelection,
   goOrdersList, goTemplatePreview, loadTemplates,
-  onTemplateChange, onPurchaseUnitChange, onDateChange,
+  onPurchaseUnitChange, onDateChange,
   addProductRow, removeProductRow, calculateKg, calculateAmount,
-  onProductNameSelect, onProductModelChange,
+  onProductNameSelect,
   searchProductsForSelection, selectProductForAdd,
-  generateShipment, resetForm,
+  generateShipment, downloadShipment, resetForm,
 } = useCreateOrder()
 </script>
 
