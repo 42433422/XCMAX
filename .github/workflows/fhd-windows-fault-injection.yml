@@ -3,9 +3,10 @@
 # Windows runner 故障注入验收（交付清单项 7 数据与并发安全 / 项 8 故障恢复与回退）
 #
 # 用途：在 GitHub Windows runner 上自动生成 fault-injection-windows.ps1 的
-# 四个可自动化场景（kill-all / kill-orphan / corrupt-backup / corrupt-main）
-# 的 runner 级证据。仅 workflow_dispatch 手动触发，不进任何 PR 门禁。
-# 客户实机场景（disk-full / power-cut）仍需人工执行（脚本记 SKIP）。
+# 六个可自动化场景（kill-all / kill-orphan / corrupt-backup / corrupt-main /
+# dual-process / migration-mutex）的 runner 级证据。仅 workflow_dispatch 手动
+# 触发，不进任何 PR 门禁。客户实机场景（disk-full / power-cut）仍需人工执行
+# （脚本记 SKIP）。
 #
 # 安全边界：安装与注入只发生在一次性 runner 环境的 C:\XCAGI-acceptance
 # 隔离安装根（corrupt-main 安全闸允许的唯一目录），不触碰任何真实安装。
@@ -18,13 +19,13 @@ on:
       installer_url:
         description: "安装包 URL（默认 CVM testing 通道未签名包）"
         required: false
-        default: "https://xiu-ci.com/releases/testing/enterprise/XCAGI-Enterprise-Setup-1.0.0.1-x64-unsigned.exe"
+        default: "https://xiu-ci.com/releases/testing/enterprise/XCAGI-Enterprise-Setup-1.0.0.2-x64-unsigned.exe"
       installer_sha256:
         description: "安装包 SHA256（与 URL 对应，必须一致才继续）"
         required: false
-        default: "fe690c9cea166d88862bffb4cdefb5cbdfdb671b9268a0d3cae9712031d17c32"
+        default: "d281abadb758c528821f7f957554a6aefdea1f3d1dcccd00e12beaafaef5d575"
       scenarios:
-        description: "场景：all 或逗号分隔（kill-all,kill-orphan,corrupt-backup,corrupt-main）"
+        description: "场景：all 或逗号分隔（kill-all,kill-orphan,corrupt-backup,corrupt-main,dual-process,migration-mutex）"
         required: false
         default: "all"
 
