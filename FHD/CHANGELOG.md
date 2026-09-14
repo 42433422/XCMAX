@@ -7,6 +7,8 @@
 ## Unreleased（1.0.0.3 之后的累积变更）
 
 - test(delivery): 故障注入新增 dual-process/migration-mutex 两个 CI 化场景（项 7 双进程启动互斥与迁移互斥实证）——单实例锁拒绝第二实例、竞态双启动收敛单后端；workflow 默认包升级到 testing 1.0.0.2（d281abad…575）
+- 修复新建发货单页面调用已下线旧接口（`/templates?action=api`、`/documents`）导致模板列表为空、生成与下载全断的问题：改用现行模板预览 API 按 ID 选模板、`/api/shipment/generate` 生成、blob 下载；分页读取完整产品、新增产品保留客户归属、导出仅留本次订单工作表、业务日期写入 Excel 与持久化记录、订单列表回读单号与汇总（rebase 自 #1920）。
+- 修复 OTA 安装失败后 `app.isQuitting`/`backendShutdownComplete` 状态残留导致窗口关闭行为异常的问题；更新下载回执改用产品版本号，避免内部 bundle 版本（1.0.0）与产品版本（1.0.0.x）不一致误报安装失败。
 - 修复 macOS 应用内「安装更新」点击后应用不退出、ShipIt 无限等待的问题：Squirrel `quitAndInstall` 的 `[NSApp terminate]` 路径不触发 `before-quit`，主窗口 close 拦截因 `app.isQuitting` 未置位而 `preventDefault`，terminate 被取消（1.0.0.2→1.0.0.3 实机 OTA 复现，证据 [macos-release-1.0.0.3](docs/evidence/e2e/macos-release-1.0.0.3/)）。现 `installUpdate` 在交出退出控制权前预置 `app.isQuitting = true`。
 - 修复 1.0.0.3 下载中心发布被元数据校验拦截的问题：release run 34773838698 构建、签名、公证与 CVM 五件套上传全部成功，仅发布下载中心元数据时因版本历史 notes 缺少客户名「太阳鸟」关键词未过校验，现补充该关键词并恢复元数据发布。
 
