@@ -6,6 +6,7 @@
 
 ## Unreleased（1.0.0.3 之后的累积变更）
 
+- 修复 Windows 故障注入 dual-process/migration-mutex 两个新场景的判定误伤：`.corrupt-*` 留证改按场景前基线对比，corrupt-main 的合法恢复留证不再被后续场景误判为本次新产生（CI run 34836989979 双 FAIL 复现 + 修复后真机双 PASS）；dual-process 健康判定加 15s 重试窗，消除后端启动期 Mod 加载令单次 3s 超时的假阴性（N05 同源口径问题）。
 - test(delivery): 故障注入新增 dual-process/migration-mutex 两个 CI 化场景（项 7 双进程启动互斥与迁移互斥实证）——单实例锁拒绝第二实例、竞态双启动收敛单后端；workflow 默认包升级到 testing 1.0.0.2（d281abad…575）
 - 修复 macOS 应用内「安装更新」点击后应用不退出、ShipIt 无限等待的问题：Squirrel `quitAndInstall` 的 `[NSApp terminate]` 路径不触发 `before-quit`，主窗口 close 拦截因 `app.isQuitting` 未置位而 `preventDefault`，terminate 被取消（1.0.0.2→1.0.0.3 实机 OTA 复现，证据 [macos-release-1.0.0.3](docs/evidence/e2e/macos-release-1.0.0.3/)）。现 `installUpdate` 在交出退出控制权前预置 `app.isQuitting = true`。
 - 修复 1.0.0.3 下载中心发布被元数据校验拦截的问题：release run 34773838698 构建、签名、公证与 CVM 五件套上传全部成功，仅发布下载中心元数据时因版本历史 notes 缺少客户名「太阳鸟」关键词未过校验，现补充该关键词并恢复元数据发布。
