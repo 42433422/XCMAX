@@ -45,10 +45,10 @@ try:
     for t in ("templates", "sales_orders", "manufacturing_orders", "customers", "users"):
         try:
             digest[f"rows.{t}"] = con.execute(f"SELECT count(*) FROM {t}").fetchone()[0]
-        except Exception as e:
+        except sqlite3.Error as e:
             digest[f"rows.{t}"] = f"ERR:{type(e).__name__}"
     con.close()
-except Exception as e:
+except (sqlite3.Error, OSError) as e:
     digest["sqlite"] = f"ERR:{type(e).__name__}"
 
 json.dump(digest, open(OUT, "w"), indent=2, ensure_ascii=False)
