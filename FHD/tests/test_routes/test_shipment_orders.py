@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -28,9 +29,7 @@ def _mock_svc(tmp_path, monkeypatch: pytest.MonkeyPatch):
         yield mock
 
 
-# ---------------------------------------------------------------------------
 # next_number
-# ---------------------------------------------------------------------------
 
 
 class TestOrdersNextNumber:
@@ -65,9 +64,7 @@ class TestOrdersNextNumber:
             assert r.json()["data"]["order_number"].endswith("A")
 
 
-# ---------------------------------------------------------------------------
 # shipment generate
-# ---------------------------------------------------------------------------
 
 
 class TestShipmentGenerate:
@@ -130,9 +127,7 @@ class TestShipmentGenerateBatch:
         assert len(r.json()["data"]["errors"]) > 0
 
 
-# ---------------------------------------------------------------------------
 # shipment print
-# ---------------------------------------------------------------------------
 
 
 class TestShipmentPrint:
@@ -175,21 +170,59 @@ class TestShipmentPrint:
         assert r.status_code == 404
 
 
-# ---------------------------------------------------------------------------
-# shipment download
-# ---------------------------------------------------------------------------
-
-
 class TestShipmentDownload:
-    def test_file_not_found(self, client: TestClient, _mock_svc: MagicMock, monkeypatch):
-        monkeypatch.setenv("WORKSPACE_ROOT", "/nonexistent_xcmax_test")
-        r = client.get("/api/shipment/download/nonexistent.xlsx")
-        assert r.status_code == 404
+    def test_unicode_download_stays_inside_outputs(self, client: TestClient, tmp_path):
+        outputs = tmp_path / "shipment_outputs"
+        from openpyxl import load_workbook
+
+        from app.legacy.documents.legacy_shipment_document import (
+            load_legacy_shipment_document_generator,
+        )
+
+        legacy = load_legacy_shipment_document_generator(caller_file=__file__)
+        generator = legacy.ShipmentDocumentGenerator(
+            db_path=str(tmp_path / "db.sqlite"), output_dir=str(outputs)
+        )
+        template = Path(__file__).parents[1] / "fixtures/shipment_etl/闭环测试_送货单模板.xlsx"
+        doc = generator.generate_document(
+            "",
+            {
+                "date": "2026-08-01",
+                "products": [
+                    {
+                        "name": "验收清漆",
+                        "model_number": "RX",
+                        "quantity_tins": 2,
+                        "tin_spec": 25,
+                        "quantity_kg": 50,
+                        "unit_price": 18,
+                        "amount": 900,
+                    }
+                ],
+            },
+            purchase_unit=legacy.PurchaseUnitInfo(name="验收客户"),
+            template_name=str(template),
+            custom_order_number="ACCEPT-42",
+        )
+        document = Path(doc.filepath)
+        workbook = load_workbook(document, data_only=True)
+        assert workbook.sheetnames == ["送货甲"]
+        assert workbook.active["I4"].value == 900
+        assert "2026年8月1日" in workbook.active["A2"].value
+        workbook.close()
+        response = client.get(f"/api/shipment/download/{document.name}")
+        assert response.status_code == 200
+        assert response.content == document.read_bytes()
+        assert "filename*=utf-8''" in response.headers["content-disposition"]
+        outside = tmp_path / "private.xlsx"
+        outside.write_bytes(b"private")
+        (outputs / "link.xlsx").symlink_to(outside)
+        assert client.get("/api/shipment/download/link.xlsx").status_code == 404
+        assert client.get("/api/shipment/download/%2e%2e%2fprivate.xlsx").status_code == 400
+        assert client.get("/api/shipment/download/missing.xlsx").status_code == 404
 
 
-# ---------------------------------------------------------------------------
 # shipment orders list / search / latest
-# ---------------------------------------------------------------------------
 
 
 class TestShipmentOrdersList:
@@ -242,9 +275,7 @@ class TestShipmentOrdersDelete:
         assert r.status_code == 400
 
 
-# ---------------------------------------------------------------------------
 # api/orders (mirror routes)
-# ---------------------------------------------------------------------------
 
 
 class TestApiOrdersList:
@@ -381,9 +412,7 @@ class TestApiOrdersClearAll:
         assert r.status_code == 200
 
 
-# ---------------------------------------------------------------------------
 # shipment records
-# ---------------------------------------------------------------------------
 
 
 class TestShipmentRecordsDashboardAlias:
