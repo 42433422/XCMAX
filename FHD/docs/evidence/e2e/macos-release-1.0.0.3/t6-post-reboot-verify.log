@@ -1,0 +1,66 @@
+[14:04:44] health OK (poll#1): {"status":"healthy","version":"1.0.0.3","service":"xcagi-fastapi","runtime":{"status":"healthy","components":{"desktop_runtime_routes":{"ok":true,"required":true,"detail":""},"desktop_automation_route
+[14:04:44] running version: 1.0.0.3 (expect 1.0.0.3)
+{
+  "xcagi.db.bytes": 987168768,
+  "xcagi.db.wal.bytes": 0,
+  "excel_vectors.db.bytes": -1,
+  "mod_dbs.files": 0,
+  "uploads.files": 162,
+  "uploads.templates.files": 16,
+  "routing_policies.files": 1,
+  "mods.files": 1259,
+  "models.files": 1,
+  "backups.files": 5,
+  "backups.latest": "xcagi-unknown-20260914004807.db",
+  "rows.templates": 17,
+  "rows.sales_orders": 0,
+  "rows.manufacturing_orders": 0,
+  "rows.customers": 0,
+  "rows.users": 6
+}
+
+==== G7 RESULT ====
+{
+  "phase": "G7-retest-10003",
+  "steps": {
+    "health": {
+      "status": 200,
+      "version": "1.0.0.3"
+    },
+    "login": {
+      "status": 200,
+      "success": true
+    },
+    "auth_me": {
+      "status": 200,
+      "user": null
+    },
+    "templates_upload": {
+      "status": 200,
+      "template_id": "db:18",
+      "file_sha256": "2b0423ede8fe09dc58106ab6347c0d5f435d7f9c7692e37dc342c6ca14ec113d"
+    },
+    "templates_list": {
+      "status": 200,
+      "probe_present": false
+    },
+    "customer_ensure": {
+      "status": 400,
+      "customer_id": null
+    },
+    "shipment_generate": {
+      "status": 200,
+      "success": true,
+      "message": "发货单生成成功",
+      "doc_name": "发货单_26-0900001A_20260914_140446.xlsx",
+      "agent_status": "completed",
+      "run_id": "run_b2b99f80988740fe972945361dfd5ed6"
+    }
+  }
+}
+evidence: /Users/Shared/XCMAX/FHD/docs/evidence/e2e/macos-release-1.0.0.3/g7-retest-10003.json
+[14:04:46] /api/mods -> HTTP 200
+[14:04:46] /api/employees -> HTTP 200
+[14:04:46] T6 post-reboot verify DONE (manual review: compare digest with pre-reboot baseline)
+[14:06:49] boottime(fact): { sec = 1789365455, usec = 407653 } Mon Sep 14 13:57:35 2026
+[] uptime since boot: 9 min
