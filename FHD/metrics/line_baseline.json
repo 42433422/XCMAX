@@ -1,5 +1,5 @@
 {
-  "lines": 2312447,
+  "lines": 2312449,
   "updated": "2026-09-14",
-  "note": "故障注入新增 dual-process/migration-mutex 两个 CI 化场景（交付项 7 双进程互斥/迁移互斥的自动化证据能力）——真功能增量，workflow 默认包同步 testing 1.0.0.2；基于 main 2312359 + 净增 88 重算（rebase 2026-09-14）"
+  "note": "故障注入判定修复：dual-process/migration-mutex 损坏留证改场景前基线增量（修 -Scenario all 误报，run 34836989979 复盘）+ workflow 默认包指针刷新 testing 1.0.0.3"
 }

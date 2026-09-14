@@ -431,8 +431,8 @@ if ($Scenario -contains 'dual-process') {
     } elseif ([int]$backendCount -gt 1) {
       Collect-Diagnostics 'dual-process-双后端' | Out-Null
       Record 'dual-process' 'FAIL' ("第二实例退出后仍有 {0} 个 xcagi-backend 残留（应恰为 1）" -f $backendCount)
-    } elseif ([int64]$after['corrupt.evidence'] -gt 0) {
-      Record 'dual-process' 'FAIL' '二次启动后出现损坏库留证'
+    } elseif (([int64]$after['corrupt.evidence'] - [int64]$before['corrupt.evidence']) -gt 0) {
+      Record 'dual-process' 'FAIL' '二次启动后新增损坏库留证（场景前已有留证不重复计，见 corrupt-main 设计留证）'
     } else {
       Write-Ok ("第二实例 {0}s 自行退出，主实例 health={1}，单后端，数据无损" -f $exitedAt, $h.status)
       Record 'dual-process' 'PASS' ("单实例锁生效：第二实例 {0}s 退出（ExitCode={1}），主实例 {2}" -f $exitedAt, $second.ExitCode, $h.status)
@@ -448,6 +448,7 @@ if ($Scenario -contains 'migration-mutex') {
     Record 'migration-mutex' 'FAIL' '17500 未释放，前置不满足（先清场）'
   } else {
     Write-Info "注入：0.3s 间隔连续拉起两个 XCAGI.exe（迁移/端口竞态），随后等待 health"
+    $before = Get-Digest $DataRoot   # 场景前基线：corrupt-main 设计留证不计入本场景新增
     Start-Process -FilePath $AppExe | Out-Null
     Start-Sleep -Milliseconds 300
     Start-Process -FilePath $AppExe | Out-Null
@@ -463,18 +464,18 @@ if ($Scenario -contains 'migration-mutex') {
     $conn = @(Get-NetTCPConnection -LocalPort 17500 -State Listen -ErrorAction SilentlyContinue |
       Select-Object -ExpandProperty OwningProcess -Unique)
     $after = Get-Digest $DataRoot
-    New-Evidence 'migration-mutex' ("health={0}; xcagi_procs={1}; backend_count={2}; listeners={3}; corrupt_evidence={4}; main={5}" -f `
+    New-Evidence 'migration-mutex' ("health={0}; xcagi_procs={1}; backend_count={2}; listeners={3}; corrupt_evidence={4}→{5}; main={6}" -f `
       $(if ($null -ne $h) { $h.status } else { 'no-health' }), $xProcs.Count, $backendCount, ($conn -join '/'), `
-      $after['corrupt.evidence'], $after['xcagi.db.bytes']) | Out-Null
+      $before['corrupt.evidence'], $after['corrupt.evidence'], $after['xcagi.db.bytes']) | Out-Null
     if ($null -eq $h) {
       Collect-Diagnostics 'migration-mutex-无健康' | Out-Null
       Record 'migration-mutex' 'FAIL' '竞态启动 120s 内 health 不可达'
     } elseif ([int]$conn.Count -gt 1) {
       Collect-Diagnostics 'migration-mutex-多监听' | Out-Null
       Record 'migration-mutex' 'FAIL' ("17500 有 {0} 个监听进程：迁移互斥失效" -f $conn.Count)
-    } elseif ([int64]$after['corrupt.evidence'] -gt 0) {
+    } elseif (([int64]$after['corrupt.evidence'] - [int64]$before['corrupt.evidence']) -gt 0) {
       Collect-Diagnostics 'migration-mutex-损坏' | Out-Null
-      Record 'migration-mutex' 'FAIL' '竞态启动产生损坏库留证（迁移并发保护缺失）'
+      Record 'migration-mutex' 'FAIL' '竞态启动新增损坏库留证（迁移并发保护缺失）'
     } else {
       Write-Ok ("竞态启动收敛：health={0}，监听 PID 唯一，无损坏证据（主库 {1} 字节）" -f $h.status, $after['xcagi.db.bytes'])
       Record 'migration-mutex' 'PASS' ("竞态双启动收敛：{0}；XCAGI 进程 {1} 个、后端 {2} 个、监听 {3}" -f `
