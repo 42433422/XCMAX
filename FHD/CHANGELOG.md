@@ -6,6 +6,8 @@
 
 ## Unreleased（1.0.0.4 之后的累积变更）
 
+- 连接件1（客户问题→自动解决闭环·故障证据包）：桌面端客户信号落库时自动生成脱敏支持诊断包（`support_bundle.build_evidence_ref`，含日志尾部/更新事件/备份与崩溃清单，去密级脱敏），引用（kind/path/SHA256/大小，不含用户输入）随提案 `evidence_ref` 并入工单 `context.evidence_ref` 既有通道流转，供后续自动诊断/客户侧重测读取；非桌面模式与采集失败一律返回 None，永不阻塞信号主线；复用既有 capability_proposal→work_order_ssot 主干，未改远端 API 公共字段；删除零引用一次性脚本 `scripts/dev/convert_logging_fstrings.py`（净删除）。
+
 ## 1.0.0.4（2026-09-14 发布）
 
 - fix(test): 故障注入 dual-process/migration-mutex 改按「场景前基线增量」判定损坏留证——corrupt-main 场景按设计保留 `.corrupt-*` 留证文件，`-Scenario all` 顺序执行时被后续场景误判为新增损坏（2026-09-14 run 34836989979 真实 runner 复盘：单实例锁 1s 退出、竞态收敛单后端均实际生效，主库字节不变，FAIL 为脚本误报）

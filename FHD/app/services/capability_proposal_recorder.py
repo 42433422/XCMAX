@@ -144,6 +144,7 @@ def record_capability_proposal(
     reason: str,
     context: dict[str, Any] | None = None,
     source: str = "intent_confirmation_service",
+    evidence_ref: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """记录一条能力提案。
 
@@ -152,6 +153,8 @@ def record_capability_proposal(
         reason: 未命中原因（intent_unknown / slot_missing_severe / llm_timeout 等）
         context: 附加上下文（intent_result 等），仅记录结构化字段
         source: 调用方标识
+        evidence_ref: 可选证据包引用（support_bundle.build_evidence_ref 产物）；
+            只含 kind/path/sha256/bytes，不含用户输入；与 context 合并入 JSONL。
 
     Returns:
         记录结果 dict（含 recorded: bool、dedup_key、path）
@@ -181,6 +184,8 @@ def record_capability_proposal(
             "dedup_key": key,
             "context": context or {},
         }
+        if evidence_ref:
+            record["evidence_ref"] = evidence_ref
         try:
             with _PROPOSAL_FILE.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(record, ensure_ascii=False) + "\n")
@@ -194,7 +199,13 @@ def record_capability_proposal(
     try:
         from app.services.work_order_ssot import upsert_candidate
 
-        upsert_candidate(source=source, dedup_key=key, reason=reason, context=context)
+        upsert_candidate(
+            source=source,
+            dedup_key=key,
+            reason=reason,
+            context=context,
+            evidence_ref=evidence_ref,
+        )
     except BOUNDARY_ERRORS:  # noqa: BLE001 - 工单写入失败不阻塞提案记录（跨仓导入边界兜底）
         logger.debug("work_order upsert skipped", exc_info=True)
     return {
