@@ -912,6 +912,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha || github.sha }}
+          # release_verify.sh 内跑 ssot gate，capability-center --check 需完整历史
+          # （浅克隆下 verified_at 只能命中 checkout commit），同 ssot-drift-gate。
+          fetch-depth: 0
 
       - name: Set up Python ${{ env.PYTHON_VERSION }}
         uses: actions/setup-python@v5
