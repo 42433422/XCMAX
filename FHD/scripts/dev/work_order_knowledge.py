@@ -1,20 +1,13 @@
 #!/usr/bin/env python3
-"""连接件5（知识回流）：把闭环三件套沉淀为可检索案例，并回流消费。
+"""连接件5（知识回流）：闭环三件套沉淀为可检索案例，并回流消费。
 
-记录：诊断（连接件2）+ 复现规格（连接件3）+ 客户侧重测回执（连接件4）
-→ 一条结构化案例，落 test_reports/knowledge/cases.jsonl（append-only，
-同 dedup_key 幂等替换——闭环重开重测后案例更新而非新增）。
+- 记录：诊断+复现规格+重测回执 → test_reports/knowledge/cases.jsonl
+  （append-only，同 dedup_key 幂等替换）；pass 后复用状态机推进
+  verifying→closed，可选 --close-issue 关闭 GitHub 工单。
+- 检索：按签名 tool:code 规则匹配（零延迟无 LLM），连接件2 诊断附
+  known_cases 消费回流。
 
-检索：按故障签名（tool/code）规则匹配历史案例，供连接件2 诊断时直接给出
-「历史同类案例与当时修复」，无 LLM、零延迟；未命中自然为空。
-
-关闭：记录成功后复用工单状态机 record_transition 推进 verifying→closed
-（非法迁移 fail-open 不阻塞）；可选 --close-issue 同步关闭 GitHub 工单。
-
-用法：
-    python scripts/dev/work_order_knowledge.py --record <dedup_key> [--close-issue 12]
-    python scripts/dev/work_order_knowledge.py --search "tool:code"
-    python scripts/dev/work_order_knowledge.py --list
+用法：--record <dedup_key> / --search "tool:code" / --list
 """
 
 from __future__ import annotations

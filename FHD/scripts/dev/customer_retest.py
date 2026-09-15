@@ -1,20 +1,13 @@
 #!/usr/bin/env python3
 """连接件4（客户侧重测）：修复送达客户机后，对运行中的客户应用执行场景重测。
 
-复用既有对外观测载体（GitHub issue 时间线）与既有验收闭环：
-- 客户机应用自带 GET /api/health（version/git_sha/build 身份）作为更新到位证据
-- 复现规格（连接件3）可带 scenario.retest_url：修复前 404/5xx、修复后 <400
-- 回执落 test_reports/retest/receipt-<key12>.json，并可 --issue-comment 写回
-  工单 issue（不替代既有 release-acceptance-closeout 安装回执闭环，只补
-  工单级场景重测证据）
+三查：GET /api/health?lite=1（健康+版本身份）、scenario.retest_url（修复前
+404/5xx、修复后 <400）。回执落 test_reports/retest/receipt-<key12>.json，
+--issue-comment 写回工单 issue；不替代既有 release-acceptance-closeout 闭环。
+代理绕过：全部请求走 ProxyHandler({}) 直连（代理拦截 127.0.0.1 假阴性教训）。
 
-代理绕过：本机代理可能拦截 127.0.0.1，全部请求走 ProxyHandler({}) 直连。
-
-用法（在客户机上，对本机运行中的 XCAGI 应用）：
-    python scripts/dev/customer_retest.py \
-        --spec test_reports/repro/repro-<key12>.json \
-        --base-url http://127.0.0.1:8787 \
-        [--expect-version 1.0.0.4] [--issue-comment <issue_number>]
+用法：python scripts/dev/customer_retest.py --spec <repro spec> \
+    --base-url http://127.0.0.1:8787 [--expect-version 1.0.0.4]
 """
 
 from __future__ import annotations

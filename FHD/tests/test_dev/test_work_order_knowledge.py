@@ -1,12 +1,4 @@
-"""连接件5（知识回流）测试：三件套沉淀为案例 + 规则检索 + 诊断消费侧。
-
-覆盖：
-- compose_case：诊断+复现+重测组合；诊断缺失返回 None
-- upsert：同 dedup_key 幂等替换（闭环重开重测后案例更新而非新增）
-- search：按 tool:code 规则匹配，最新优先
-- 消费侧：work_order_diagnose 诊断附 known_cases（知识回流回诊断）
-- 生产侧：重测通过 → _record_knowledge 自动落案例
-"""
+"""连接件5（知识回流）测试：三件套沉淀为案例 + 规则检索 + 诊断消费侧。"""
 
 from __future__ import annotations
 

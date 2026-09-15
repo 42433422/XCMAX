@@ -1,11 +1,4 @@
-"""连接件4（客户侧重测）测试：对模拟客户应用的 HTTP 服务执行重测并落回执。
-
-覆盖：
-- 健康端点 + 场景路由均可达 → verdict=pass（exit 0）
-- 场景路由 404（故障未修复/未送达）→ verdict=fail（exit 2）
-- expect-version 版本不符 → fail
-- 直连绕过代理（ProxyHandler({})）——回执记录请求 URL 与状态码
-"""
+"""连接件4（客户侧重测）测试：对模拟客户应用的 HTTP 服务执行重测并落回执。"""
 
 from __future__ import annotations
 
