@@ -24,6 +24,7 @@ import json
 import logging
 import os
 import subprocess
+import sys
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
@@ -32,6 +33,8 @@ from typing import Any
 logger = logging.getLogger("work_order_knowledge")
 
 _FHD_ROOT = Path(__file__).resolve().parents[2]
+if str(_FHD_ROOT) not in sys.path:
+    sys.path.insert(0, str(_FHD_ROOT))
 
 
 def _knowledge_path() -> Path:

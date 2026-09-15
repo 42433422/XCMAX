@@ -69,13 +69,16 @@ def _check(base_url: str, name: str, url: str, *, ok_status_lt: int) -> dict[str
     result = _http_get(url)
     status = int(result.get("status") or 0)
     ok = result.get("ok") is True and status < ok_status_lt
+    body = result.get("body") or ""
     return {
         "name": name,
         "url": url,
         "ok": ok,
         "status": status,
         "error": result.get("error") or "",
-        "body_snippet": (result.get("body") or "")[:400],
+        # body 供调用方解析（如 health JSON）；body_snippet 仅供回执展示
+        "body": body,
+        "body_snippet": body[:400],
     }
 
 
@@ -89,11 +92,12 @@ def retest(spec: dict[str, Any], base_url: str, *, expect_version: str = "") -> 
     app_version = ""
     if health["ok"]:
         try:
-            payload = json.loads(health.get("body_snippet") or "{}")
+            payload = json.loads(health.get("body") or "{}")
             app_version = str(payload.get("version") or "")
         except json.JSONDecodeError:
             health["ok"] = False
             health["error"] = "health_payload_not_json"
+    health.pop("body", None)  # 回执只留摘要，不落完整响应体
     health["app_version"] = app_version
     checks.append(health)
 

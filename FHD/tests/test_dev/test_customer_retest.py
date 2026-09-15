@@ -134,6 +134,45 @@ class TestRetest:
             server.server_close()
         assert receipt["verdict"] == "fail"
 
+    def test_health_payload_longer_than_snippet_still_parses(self, fake_app) -> None:
+        """回归：真实 health 载荷超过 400 字符时不得因截断而解析失败。"""
+        base_url, _ = fake_app
+
+        class FatHealthHandler(_FakeAppHandler):
+            def do_GET(self):  # noqa: N802
+                if self.path.startswith("/api/health"):
+                    payload = {
+                        "status": "healthy",
+                        "version": "1.0.0.4",
+                        "runtime": {"components": {f"c{i}": "ok" for i in range(40)}},
+                    }
+                    body = json.dumps(payload).encode()
+                    assert len(body) > 400
+                    self.send_response(200)
+                    self.end_headers()
+                    self.wfile.write(body)
+                elif self.path.startswith("/mods/faulty/"):
+                    self.send_response(200)
+                    self.end_headers()
+                    self.wfile.write(b"ok")
+                else:
+                    self.send_response(404)
+                    self.end_headers()
+
+        server = HTTPServer(("127.0.0.1", 0), FatHealthHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            receipt = retest_mod.retest(
+                _spec(), f"http://127.0.0.1:{server.server_address[1]}",
+                expect_version="1.0.0.4",
+            )
+        finally:
+            server.shutdown()
+            server.server_close()
+        assert receipt["verdict"] == "pass", receipt
+        assert receipt["app_version"] == "1.0.0.4"
+
     def test_receipt_written_and_exit_code(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake_app
     ) -> None:

@@ -6,6 +6,8 @@
 
 ## Unreleased（1.0.0.4 之后的累积变更）
 
+- 闭环端到端验收 PASS（工单 WO-12287f1ac91f 全链真实跑通）：真实注入 module_import 客户故障 → 一句话入 Signal Gate → 连接件1 生产路径 build_evidence_ref 打包脱敏证据（SHA256 校验一致）→ 连接件2 规则引擎诊断（F401 签名）→ 连接件3 module_import 复现 RED（exit 1）→ 修复删除故障行 → 复现 GREEN（exit 0）→ 真实 FastAPI+health 路由客户应用恢复 → 连接件4 重测 pass → 连接件5 知识案例落库 + 状态机 verifying→closed。验收中发现并修复两个真实缺陷：customer_retest 用 400 字符截断的 body_snippet 解析 health JSON 导致真实载荷必然解析失败（改用完整 body 解析、回执只留摘要）；work_order_knowledge 作为子进程脚本缺 sys.path 引导导致 app 导入静默失败、工单无法自动关闭（与 diagnose 同款引导）。
+
 - 连接件5（客户问题→自动解决闭环·知识回流）：新增 `scripts/dev/work_order_knowledge.py`——重测通过后自动把诊断（连接件2）+复现规格（连接件3）+重测回执（连接件4）组合成结构化案例落 `test_reports/knowledge/cases.jsonl`（同 dedup_key 幂等替换），复用工单状态机 `record_transition` 推进 verifying→closed、可选 `--close-issue` 关闭工单 issue；检索按故障签名（tool:code）规则匹配零延迟，连接件2 诊断自动附加历史同类案例（known_cases）实现知识回流消费；`customer_retest` 在 verdict=pass 时自动触发记录（fail-open）。删除零引用一次性脚本 `eval_routing_policy.py`、`generate_routing_data.py`（净删除）。
 
 - 连接件4（客户问题→自动解决闭环·客户侧重测）：新增 `scripts/dev/customer_retest.py`——修复送达客户机后对运行中应用执行场景重测（`/api/health?lite=1` 健康+版本+`scenario.retest_url` 场景三查，全部直连绕过本机代理防 127.0.0.1 假阴性），回执落 `test_reports/retest/receipt-<key12>.json` 并可 `--issue-comment` 写回工单 issue（对外观测载体复用，不替代既有 release-acceptance-closeout 安装回执闭环）；中继链新增「客户侧重测」节把重测判定嵌入 issue 正文。
