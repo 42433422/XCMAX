@@ -28,7 +28,7 @@ print('HEALTH OK')" && touch "$EV/t5-health-ok.marker" || { echo "HEALTH FAIL"; 
 echo "$H" > "$EV/t5-health-10004.json"
 
 echo "--- 2. data digest 比对 (vs t5-pre-ota-digest.json) ---"
-python3 "$EV/data_digest.py" "$EV/t5-post-ota-digest.json"
+python3 "$EV/../macos-release-1.0.0.3/data_digest.py" "$EV/t5-post-ota-digest.json"
 python3 - "$EV/t5-pre-ota-digest.json" "$EV/t5-post-ota-digest.json" <<'EOF'
 import json,sys
 pre=json.load(open(sys.argv[1])); post=json.load(open(sys.argv[2]))
