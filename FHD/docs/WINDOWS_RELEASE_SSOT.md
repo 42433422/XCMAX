@@ -5,24 +5,24 @@
 > 兄弟文档：[MACOS_RELEASE_SSOT.md](MACOS_RELEASE_SSOT.md)（macOS 域，G1–G13 同构）。
 > 判据协议：[desktop-real-machine-acceptance-protocol.md](e2e/desktop-real-machine-acceptance-protocol.md)；证据模板：[desktop-acceptance-template.md](e2e/templates/desktop-acceptance-template.md)。
 > RED 处理规则：只修真正阻断闭环的问题，修复后重测，不得直接改状态。
-> **闭环规则**：G2→G12 连续完整通过 **2 轮**（第二轮从正式地址重新下载开始）才算交付闭环。第 1 轮已完整通过（2026-09-14 00:04，[LOOP-COMPLETE](evidence/e2e/windows-release-1.0.0.2/loop-round1/LOOP-COMPLETE.txt)）；第 2 轮已完整通过（2026-09-14 05:06，[LOOP-COMPLETE](evidence/e2e/windows-release-1.0.0.2/loop-round2/LOOP-COMPLETE.txt)）→ **G2–G12 双轮闭环达成**。
-> 最后实跑：2026-09-14（双轮 OTA 闭环全过：round-1 00:04、round-2 05:06；T3 新鲜登录+业务复验 07:35；T5 回滚演练 G13 路径 B 14:2x）。
+> **闭环规则**：G2→G12 连续完整通过 **2 轮**（第二轮从正式地址重新下载开始）才算交付闭环。第 1 轮已完整通过（2026-09-14 00:04，[LOOP-COMPLETE](evidence/e2e/windows-release-1.0.0.2/loop-round1/LOOP-COMPLETE.txt)）；第 2 轮已完整通过（2026-09-14 05:06，[LOOP-COMPLETE](evidence/e2e/windows-release-1.0.0.2/loop-round2/LOOP-COMPLETE.txt)）→ **G2–G12 双轮闭环达成**。#1923 合并后的最终收口实跑见 §4「T9 最终收口」（main `604b85e1`，基座 1.0.0.2 → OTA 1.0.0.4）。
+> 最后实跑：2026-09-15（T9 最终收口：CI/CD `34882474880` 全绿 → Release Desktop `34889725771` → testing feed `34891598292` → latest.yml 验证 → OTA→1.0.0.4 → 数据保留/业务/Mod 复验 → dual-process/migration-mutex 实机 PASS → 系统重启后复验 PASS；证据 [t9/](evidence/e2e/windows-release-1.0.0.2/t9/t9-chain-runs.json)）。
 
 ## 1. 当前版本信息与真相源
 
 | 字段 | 值 | 证据 |
 |------|-----|------|
-| 稳定产品版本 | `1.0.0.3` | [VERSION.md](../VERSION.md)（版本域 SSOT，#1928 升版）；testing feed 当前广播 1.0.0.2@1f7d9f11e，1.0.0.3 发布中；stable feed 仍广播 1.0.0.1（B1 决策下未签名不进 stable，见 B6） |
+| 稳定产品版本 | `1.0.0.4` | [VERSION.md](../VERSION.md)（版本域 SSOT，#1920 升版）；testing feed 已广播 1.0.0.4@`604b85e1`（2026-09-15 实测 latest.yml）；stable feed 仍广播 1.0.0.1（B1 决策下未签名不进 stable，见 B6） |
 | 工具链兼容版本 | `1.0.0`（npm/Electron 三段映射） | 同上 |
 | 发布 SKU | `enterprise`（personal 冻结） | [download_release.json](../config/download_release.json) |
 | 发布火车内部流水 | `1.0.0.3`（服务器无 v1.0.0.2/3/4 目录，仅内部号） | [release_train.json](../config/release_train.json) |
 | `release_ready` | `false` | download_release.json + manifest.json |
-| 本机已装构建 | `1.0.0.2@1f7d9f11e`（round-1 OTA 升级后，round-2 基线） | [e-post-build-info.json](evidence/e2e/windows-release-1.0.0.2/loop-round1/e-post-build-info.json) + 安装目录 `resources\build-info.json` 一致 |
+| 本机已装构建 | `1.0.0.4@604b85e1`（T9 最终收口 OTA 升级后；OTA 前基座 1.0.0.2@1f7d9f11e） | [chain-buildinfo-post-ota.json](evidence/e2e/windows-release-1.0.0.2/t9/chain/chain-buildinfo-post-ota.json) + 安装目录 `resources\build-info.json` 一致；/api/health `healthy` version=1.0.0.4 |
 | 版本元数据偏差 | `XCAGI.exe` 属性 ProductVersion `1.0.0.0` ≠ build-info `1.0.0.1` | B5（P2，验收协议以 build-info 为准） |
 | 更新发现逻辑 | `desktop/updater.ts` | electron-updater generic + **同 semver 重建钩子**；强制升级按 4 段 `productVersion ≥ minVersion` |
 | 官方下载地址（营销） | `https://xiu-ci.com/xcagi-v{version}/enterprise/` | 服务器目录 `/var/www/update/xcagi-v{version}/enterprise/` |
 | 自动更新 feed（win） | `https://xiu-ci.com/releases/stable/enterprise/latest.yml` | 服务器 `/var/www/update/releases/stable/enterprise/` |
-| 隔离测试通道 | `https://xiu-ci.com/releases/testing/enterprise/` | 仅供验收，非生产；当前广播 1.0.0.2@1f7d9f11e（ed25519 VALID，09-14 复验，B7 已修） |
+| 隔离测试通道 | `https://xiu-ci.com/releases/testing/enterprise/` | 仅供验收，非生产；当前广播 1.0.0.4@`604b85e1`（ed25519 VALID；T9 OTA 实机消费通过） |
 | 应用内 feed SSOT | [desktop-config.ts](../desktop/desktop-config.ts) `SKU_UPDATE_URL.enterprise` | 环境变量 `XCAGI_UPDATE_URL` 可覆盖（**验收时不得设置**，否则指向本地镜像） |
 
 **测试机（本机）**：Windows 11 家庭版 26200 x64 · i9-13900H · 15.6GB RAM · 主机名「佳诺」。
@@ -40,6 +40,7 @@
 | Win 隔离验收包 `…-1.0.0.2-x64-unsigned.exe` | `77aca5743` | 248,408,728 B | sha256 `d281abad…d575`（`.sha256` + `delivery-receipt.json` 在列，09-13 07:59；`git_sha=77aca5743` 交付波收口 main，`runner_install_smoke:passed`，run 34725093731 `windows_installer_only` 精确 SHA 构建；本机下载与 CVM 远端 SHA 双验证一致） | **未签名** | `…/releases/testing/enterprise/` |
 | Win 未签名交付包 `XCAGI-Enterprise-Setup-1.0.0.2-x64-unsigned.exe`（manual_installer） | `e3bde5f33` | 248410443 B | sha256 `7738e8d58ea1e219b1ce2c532816d5ad079288dbdd36c7ecc50f069fa2b0449a`（delivery-receipt + 本机下载复验一致） | **未签名（B1 决策）** | GitHub Actions run 34738192540 artifact `xcagi-windows-installer-e3bde5f33e14b12ad400e0ae8fc6587079f5594b`（需仓库读权限）；stable feed 不动 |
 | Win 未签名交付包 `XCAGI-Enterprise-Setup-1.0.0.3-x64-unsigned.exe`（manual_installer） | `4bfb23365c` | 248408870 B | sha256 `7c044bec4c87391ea86e9f445fa356ae34bfcebede6876bfc0c7a1df28889e8b`（delivery-receipt + 本机下载复验一致；`runner_install_smoke:passed`；testing feed sha512 与之同源） | **未签名（B1 决策）** | GitHub Actions artifact `xcagi-windows-installer-4bfb23365c…`（需仓库读权限）；testing feed 已广播；stable feed 不动 |
+| Win 未签名交付包 `XCAGI-Enterprise-Setup-1.0.0.4-x64-unsigned.exe`（testing feed 派发） | `604b85e1e` | 248,424,269 B | sha512 `IlnSGtts…tisw==`（latest.yml 内嵌，OTA 下载器实机校验通过）；manifest 由 publish 管线原子生成 | **未签名（B1 决策）** | Release Desktop run 34889725771 产物 → testing feed publish run 34891598292 广播（`buildSha=604b85e1…`）；stable feed 不动 |
 | 回滚演练目标 `…-1.0.0.0-x64.exe` | 1.0.0.0 | 213,833,311 B | sha256 `a40250c2…`（stable manifest） | 未签名 | 200；其 `.sha256` 文件 404 |
 
 **live 探测（2026-09-11）**：`xcagi-v1.0.0.1/manifest.json` 200（`release_ready:false`、**无 win 条目**）；营销目录服务器端实测**仅 mac arm64 dmg/zip，无任何 win exe**（B2 实锤）；`latest-mac.yml` 200（格式完整、ed25519 VALID）；mac x64 dmg **404**。
@@ -73,8 +74,10 @@
 **失败处理**：任一 Gate FAIL → 精确定位失败点 → 建 Issue/任务 → **只修当前阻断点** → 回到该 Gate 重测 → 通过后才继续后续 Gate。
 
 > **故障注入补充证据（2026-09-13，GitHub Windows runner，包=§2 1.0.0.2 行）**：run 34727133868 `fault-injection-windows.ps1 -Scenario all` PASS=4/FAIL=0/SKIP=2——kill-all（status=degraded 可观测）/kill-orphan（孤儿 sidecar 占端口后重启恢复）/corrupt-backup（坏备份不误伤启动）/corrupt-main（坏库改名留证→备份还原→health 可达）全过；disk-full/power-cut 为实体机人工场景 SKIP（归 T8）。
+>
+> **故障注入补充证据（2026-09-15，本机实装 1.0.0.4@`604b85e1`，dual-process/migration-mutex）**：PASS=2/FAIL=0/SKIP=2——dual-process：运行中二次启动第二实例 1s 自退（`requestSingleInstanceLock` 生效），主实例 health 可达、单后端、无损坏证据；migration-mutex：0.3s 间隔竞态双启动收敛，后端恰 1 个、监听唯一（37404）、主库 1,699,840 B 完整。收据+场景证据：[t9/chain/fault-local-1.0.0.4/](evidence/e2e/windows-release-1.0.0.2/t9/chain/fault-local-1.0.0.4/fault-injection-receipt.json)。CI 侧同场景基线修复后回执见 run 34851567425（main `280225ac`）。
 
-## 4. Release Gate 状态（2026-09-14 实跑，round-1 闭环全过）
+## 4. Release Gate 状态（2026-09-14 实跑，round-1 闭环全过；T9 最终收口见文末小节）
 
 | # | Gate | 状态 | 现有证据 | 缺失证据 | 阻断 | 下一步 |
 |---|------|------|---------|---------|------|--------|
@@ -91,6 +94,19 @@
 | G11 | 升级后业务 | **GREEN** | round-1 实机：升级后业务任务成功（新建 `SUNBIRD-loop-round1-post-000403` + 升级前产品可读，[g-g8-status.txt](evidence/e2e/windows-release-1.0.0.2/loop-round1/g-g8-status.txt)、[g-g8-business-done.png](evidence/e2e/windows-release-1.0.0.2/loop-round1/g-g8-business-done.png)）；round-2：新建 `SUNBIRD-loop-round2-post-050624` + 升级前产品可读（[g-g8-status.txt](evidence/e2e/windows-release-1.0.0.2/loop-round2/g-g8-status.txt)、[g-g8-business-done.png](evidence/e2e/windows-release-1.0.0.2/loop-round2/g-g8-business-done.png)） | — | 无 | — |
 | G12 | 重启复验 | **GREEN** | round-1 实机：自动重启进入 1.0.0.2@1f7d9f11e（[e-post-build-info.json](evidence/e2e/windows-release-1.0.0.2/loop-round1/e-post-build-info.json)），升级后 UI 完整（[e-g6-post-upgrade-ui.png](evidence/e2e/windows-release-1.0.0.2/loop-round1/e-g6-post-upgrade-ui.png)），冒烟全过（[g-post-smoke.log](evidence/e2e/windows-release-1.0.0.2/loop-round1/g-post-smoke.log)）；round-2：进入 1.0.0.3@4bfb2336（[e-post-build-info.json](evidence/e2e/windows-release-1.0.0.2/loop-round2/e-post-build-info.json)），UI 完整（[e-g6-post-upgrade-ui.png](evidence/e2e/windows-release-1.0.0.2/loop-round2/e-g6-post-upgrade-ui.png)），冒烟全过（[g-post-smoke.log](evidence/e2e/windows-release-1.0.0.2/loop-round2/g-post-smoke.log)） | — | 无 | — |
 | G13 | 回滚/恢复 | **GREEN** | T5 路径 B 实机降级演练（2026-09-14 14:2x）：1.0.0.3 基线 sessions 27/users 3/products 10（[t5-db-snapshot-pre.json](evidence/e2e/windows-release-1.0.0.2/t5/t5-db-snapshot-pre.json)）→ 卸载→正式地址装 1.0.0.0，SHA256 `a40250c2…` 校验一致（[t5-download-sha256.txt](evidence/e2e/windows-release-1.0.0.2/t5/t5-download-sha256.txt)）→ 冷启动 health healthy（[t5-health-post-rollback.json](evidence/e2e/windows-release-1.0.0.2/t5/t5-health-post-rollback.json)）→ 数据保留 27/3/10 且产品名逐一一致（[t5-db-snapshot-post-rollback.json](evidence/e2e/windows-release-1.0.0.2/t5/t5-db-snapshot-post-rollback.json)）→ 登录态保留、旧版 UI 可用（[t5-rollback-ui-1.0.0.0.png](evidence/e2e/windows-release-1.0.0.2/t5/t5-rollback-ui-1.0.0.0.png)）；全序列与降级兼容偏差（1.0.0.0 运行时+1.0.0.3 时代 Mod 文件→neuro 报缺 `host_services`，主状态仍 healthy，P3 记录）见 [t5-status.txt](evidence/e2e/windows-release-1.0.0.2/t5/t5-status.txt) | 路径 A 观察期自动回滚仅库内单测/e2e spec 覆盖；T8 磁盘满/断电人工场景开放（补充证据，不属本 Gate 判据） | 无 | T8 可选 |
+
+### 4.1 T9 最终收口实跑（2026-09-15，#1923 合并后 main `604b85e1`，基座 1.0.0.2 → OTA 1.0.0.4）
+
+| 步骤 | 结果 | 证据（[t9/](evidence/e2e/windows-release-1.0.0.2/t9/t9-chain-runs.json)） |
+|------|------|------|
+| main CI/CD 全 job 绿（含 container-scan） | **GREEN** | run 34882474880（#1942 修复后首绿，见 B13） |
+| Release Desktop 构建（installer-only，`604b85e1`） | **GREEN** | run 34889725771 success |
+| testing feed 发布 + latest.yml 外部验证 | **GREEN** | run 34891598292 success；latest.yml `1.0.0.4@604b85e1`（ota-discover.json 全文含 sha512/size） |
+| OTA 更新发现→下载 248MB→安装→进入新版本 | **GREEN** | update-available→update-downloaded（230s）→向导安装（[wizard-step-4](evidence/e2e/windows-release-1.0.0.2/t9/chain/ota-install-wizard/wizard-step-4-finish-page.png)）→ build-info 1.0.0.4（[chain-buildinfo-post-ota.json](evidence/e2e/windows-release-1.0.0.2/t9/chain/chain-buildinfo-post-ota.json)）+ health healthy |
+| 登录绑定/业务/Mod/AI 员工（升级前后各一轮） | **GREEN** | pre：[chain-biz-result.json](evidence/e2e/windows-release-1.0.0.2/t9/chain/chain-biz-result.json)（登录+业务+Mod15+AI 员工）；post：[chain-biz-post-ota.json](evidence/e2e/windows-release-1.0.0.2/t9/chain/chain-biz-post-ota.json) + [chain-reverify-verdict.json](evidence/e2e/windows-release-1.0.0.2/t9/chain/chain-reverify-verdict.json)（add/list 200 via ERP Mod，Mod15 与基线一致，split_mod_entries=6） |
+| 数据保留（G10 口径） | **GREEN** | sessions 27/27、users 3/3、products 10→12（升级前产品全部可读+新增，[chain-db-snapshot-post-ota.json](evidence/e2e/windows-release-1.0.0.2/t9/chain/chain-db-snapshot-post-ota.json)） |
+| 故障注入 dual-process / migration-mutex（实机 1.0.0.4） | **GREEN** | PASS=2/FAIL=0（见 §3 补充证据 2026-09-15 条） |
+| 系统重启后复验 | **GREEN** | 系统重启（2026-09-15 11:12:56）登录后 Startup 脚本自动采集（[post-reboot-verify.ps1](evidence/e2e/windows-release-1.0.0.2/t9/chain/post-reboot/post-reboot-verify.ps1) + [run.log](evidence/e2e/windows-release-1.0.0.2/t9/chain/post-reboot/run.log)）：build-info `1.0.0.4@604b85e1`（[post-reboot-buildinfo.json](evidence/e2e/windows-release-1.0.0.2/t9/chain/post-reboot/post-reboot-buildinfo.json)）、进程恰 5×XCAGI+1×backend（[post-reboot-processes.json](evidence/e2e/windows-release-1.0.0.2/t9/chain/post-reboot/post-reboot-processes.json)）、17500 单监听（PID 与清单一致）、DB 全保留 27/3/12 含 T9 新增产品（[post-reboot-dbcounts.json](evidence/e2e/windows-release-1.0.0.2/t9/chain/post-reboot/post-reboot-dbcounts.json)）、UI 完整渲染且 SUNBIRD 会话保留（[post-reboot-xcagi-ui.png](evidence/e2e/windows-release-1.0.0.2/t9/chain/post-reboot/post-reboot-xcagi-ui.png)）、health healthy（[post-reboot-health.json](evidence/e2e/windows-release-1.0.0.2/t9/chain/post-reboot/post-reboot-health.json)）；注：冷启动 health 首响 >240s（本机开发机冷缓存，数分钟内自行转绿），单实例/单监听/数据完整判定不受影响 |
 
 ## 5. 已知偏差与阻断项
 
