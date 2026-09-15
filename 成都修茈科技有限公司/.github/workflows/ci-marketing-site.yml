@@ -113,5 +113,6 @@ jobs:
           htmlhint "${files[@]}"
 
       # No Evidence, No Claim：目录与已提交页面必须一致，公开数字无法手写
+      # 注：发布副本带 defaults.run.working-directory=本目录，源文件亦按该语义书写相对路径
       - name: Capability center drift check
-        run: python3 "成都修茈科技有限公司/scripts/build_capability_center.py" --check
+        run: python3 scripts/build_capability_center.py --check
