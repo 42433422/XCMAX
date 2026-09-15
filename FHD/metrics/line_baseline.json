@@ -1,5 +1,5 @@
 {
-  "lines": 2312449,
-  "updated": "2026-09-14",
-  "note": "故障注入判定修复：dual-process/migration-mutex 损坏留证改场景前基线增量（修 -Scenario all 误报，run 34836989979 复盘）+ workflow 默认包指针刷新 testing 1.0.0.3"
+  "lines": 2312525,
+  "updated": "2026-09-15",
+  "note": "rebase 到 main e8dd9e14b（#1943 Windows 收口证据回填）后，将其净文档增量折入本 PR 基线；本 PR 实际净增仍为收口审计证据回填（§6.1 Gate 表+§10 审计总表），staging 笔记三份已删除"
 }

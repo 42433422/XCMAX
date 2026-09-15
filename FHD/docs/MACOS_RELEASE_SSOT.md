@@ -7,26 +7,26 @@
 
 | 字段 | 值 | 证据 |
 |------|-----|------|
-| 稳定产品版本 | `1.0.0.3` | [VERSION.md](../VERSION.md)（版本域 SSOT） |
-| 工具链兼容版本 | `1.0.0`（npm/Electron/Apple 三段映射） | 同上 |
+| 稳定产品版本 | `1.0.0.4` | [VERSION.md](../VERSION.md)（版本域 SSOT） |
+| 工具链兼容版本 | `1.0.0`（npm/Electron/Apple 三段映射；已知显示差异见 §7-14 Runbook 口径） | 同上 |
 | 发布 SKU | `enterprise`（personal 冻结） | [download_release.json](../config/download_release.json) |
-| 发布产物 gitSha | `4bfb23365c5e9d2c0e05c5d142fa9183aea9e740` | latest-mac.yml `buildSha`（= main 合并 #1928，交付 run [34773838698](https://github.com/42433422/XCMAX/actions/runs/34773838698)，2026-09-13） |
-| manifest git_sha | `4bfb23365c5e9d2c0e05c5d142fa9183aea9e740`（与构建 SHA 一致，公网复验 2026-09-14） | [manifest.json](https://xiu-ci.com/xcagi-v1.0.0.3/manifest.json) `generated_at=2026-09-13T19:57:41Z`（step14 CVM 直传再次超时→本机中转后重生成，见 §2 交付说明） |
-| 构建时间 | build-info builtAt `2026-09-13T18:16:04.812Z` | 官方包 build-info.json（真机已装包实测，gitSha/version/releaseId 三锚定一致） |
-| 安全扫描对 | A [34770821357](https://github.com/42433422/XCMAX/actions/runs/34770821357) + C [34772609991](https://github.com/42433422/XCMAX/actions/runs/34772609991) 双 success，均锚定 `4bfb23365c`，间隔 35min（≥30min），release run 内 `verify_security_scan_pair.py` `passed=true, blockers=[]` | release run [34773838698](https://github.com/42433422/XCMAX/actions/runs/34773838698) |
-| release_train 内部流水 | `1.0.0.3`（=VERSION.md 锚定；1.0.0.3 已落 `/xcagi-v1.0.0.3/` 官方目录，下一发版随 VERSION.md 升版同步升至 1.0.0.4） | [release_train.json](../config/release_train.json) |
-| `release_ready` | `true`（2026-09-14：安装→使用→更新→数据保留→更新后继续使用→重启后继续使用全链真机证据齐备，12/13 Gate GREEN、G9 YELLOW 不阻断；遗留 T1 干净环境加固见 §8） | download_release.json + manifest.json |
+| 发布产物 gitSha | `280225ac77ce0b5f66470d2d7a11ad2844cdad67` | latest-mac.yml `buildSha`（= main 合并 #1938，OTA run [34856380264](https://github.com/42433422/XCMAX/actions/runs/34856380264)，2026-09-14） |
+| manifest git_sha | `280225ac77ce0b5f66470d2d7a11ad2844cdad67`（与构建 SHA 一致；公网复验 2026-09-15：manifest/feed 全文与本地产物一致） | [manifest.json](https://xiu-ci.com/xcagi-v1.0.0.4/manifest.json)（ed25519 签名与 feed 一致；本地↔CVM 7 文件 SHA256 全匹配） |
+| 构建时间 | latest-mac.yml releaseDate `2026-09-14`（OTA run 34856380264 内 `--publish always` 构建） | OTA run artifact（CVM 直传步骤主动取消，走本机中转恢复路径，见 §2 交付说明） |
+| 安全扫描对 | A [34851505749](https://github.com/42433422/XCMAX/actions/runs/34851505749)（13:48Z）+ B [34855340685](https://github.com/42433422/XCMAX/actions/runs/34855340685)（14:23Z）双 success，均锚定 `280225ac7`，同日间隔 35min44s（≥30min），零阻断 | 双 run + 本地 `verify_security_scan_pair.py` 口径核对 |
+| release_train 内部流水 | `1.0.0.4`（=VERSION.md 锚定；1.0.0.4 已落 `/xcagi-v1.0.0.4/` 官方目录） | [release_train.json](../config/release_train.json) |
+| `release_ready` | `true`（2026-09-15：OTA 1.0.0.3→1.0.0.4 安装→数据保留→业务复测→Mod/员工全链真机证据齐备；G9 自动退出子项结构性归 1.0.0.5（触发方修复前提）、G12 重启复验待执行见 §8） | download_release.json + manifest.json + 本轮 2b 证据 |
 
 ## 2. 构建产物（线上实测）
 
 | 产物 | URL | 大小（字节） | 指纹 |
 |------|-----|------------|------|
-| DMG（arm64，官方下载） | `https://xiu-ci.com/xcagi-v1.0.0.3/enterprise/XCAGI-Enterprise-1.0.0.3-mac-arm64.dmg` | **305,748,094** | SHA256 `288549712a63035f77a860d28a65af2f7ebc83b1f9ed9606719484576b9f3068`（artifact 实测=远端一致；2026-09-14 公网 Range GET 206 复验） |
-| ZIP（arm64，OTA 载荷） | `https://xiu-ci.com/releases/stable/enterprise/XCAGI-Enterprise-1.0.0.3-mac-arm64.zip` | 264,518,917 | SHA256 `c2f7c69825194ca5450a25db1b6348d4940a1897637fb799b76901a540adb2f4`（本机 OTA 下载实测一致）；SHA512 `NU3q1TbbCQ1+agNPiUJWmVu/Cm475afjBzVsx5xMv009c/nDQfVGGFb8Gt6xZ3SCN7WNWnIBlyNocYnhFG+VUQ==`（latest-mac.yml；ed25519 公钥验签 **VALID**） |
+| DMG（arm64，官方下载） | `https://xiu-ci.com/xcagi-v1.0.0.4/enterprise/XCAGI-Enterprise-1.0.0.4-mac-arm64.dmg` | **306,901,903** | SHA256 `cf01c0762d5c48113de39b2d4a2fda1e19be3d1de42af1e10115b07a54ca0d95`（本地 artifact=CVM 一致；2026-09-15 公网 Range GET 206 复验） |
+| ZIP（arm64，OTA 载荷） | `https://xiu-ci.com/releases/stable/enterprise/XCAGI-Enterprise-1.0.0.4-mac-arm64.zip` | 264,533,286 | SHA256 `5514e649ac4add504144595adfaba7d5cf7417283db821b9c69d2472908f7ba8`（五点同指纹：CI artifact→CVM→公网→本机 OTA 下载缓存；SHA512/ed25519 见 latest-mac.yml，应用内验签通过——G8 发现+下载成功即应用内验签链路有效） |
 
-**1.0.0.3 交付说明（2026-09-13/14）**：release run [34773838698](https://github.com/42433422/XCMAX/actions/runs/34773838698)（checkout `4bfb23365c` = main 合并 #1928）构建+签名+公证+扫描对门禁（`passed=true`）全部成功，step14（runner→CVM 直传）再次因 10KB/s 链路超时失败；按恢复路径 artifact 本机中转（rsync `--partial` + SHA256 逐文件循环校验）补齐双目录五文件，manifest 重生成（`generated_at=2026-09-13T19:57:41Z`），公网复验：feed `productVersion=1.0.0.3`+`buildSha=4bfb23365c`、DMG/ZIP 206 可达、下载中心元数据随 #1929 上线。真机 OTA 1.0.0.2→1.0.0.3 实装（G8/G9/G10/G11 见 §6）。
+**1.0.0.4 交付说明（2026-09-14/15）**：OTA run [34856380264](https://github.com/42433422/XCMAX/actions/runs/34856380264)（checkout `280225ac7` = main 合并 #1938）构建+签名+公证成功，step CVM 直传因 10-40KB/s 链路必超时**主动取消**（非失败）；按恢复路径 artifact 本机中转（rsync `--partial` + SHA256 逐文件循环校验）补齐双目录：官方 `/xcagi-v1.0.0.4/enterprise/` 五文件 + stable feed 三件套 + manifest/download-release 元数据。公网四路复验（DMG 206 / manifest 200 / feed 200 / ZIP 206）。真机 OTA 1.0.0.3→1.0.0.4 实装（G8/G9/G10/G11/G6 见 §6，证据目录 [evidence/e2e/macos-release-1.0.0.4/](evidence/e2e/macos-release-1.0.0.4/)）。
 
-**历史**：1.0.0.2（`6eda2203d`）已于 2026-09-13 发布并完成真机闭环（其 CVM 恢复处置见 [ota-release-cvm-recovery-20260913.md](evidence/e2e/macos-release-1.0.0.2/ota-release-cvm-recovery-20260913.md)）；其 G7 正式包 bundle 写回归在 1.0.0.3 修复并重测（§6-G7、§7-11/12）。
+**历史**：1.0.0.3（`4bfb23365c`）已于 2026-09-13/14 发布并完成真机闭环（CVM 恢复处置与 Gate 证据见 [evidence/e2e/macos-release-1.0.0.3/](evidence/e2e/macos-release-1.0.0.3/)）；1.0.0.2（`6eda2203d`）2026-09-13 闭环。
 
 x64 dmg：download_release.json 声明 `mac_x64`，但 manifest 无 x64 条目，按未发布对待（偏差-3）。
 
@@ -62,7 +62,25 @@ x64 dmg：download_release.json 声明 `mac_x64`，但 manifest 无 x64 条目�
 | 序列号 | LK7W1TVPX1 |
 | 环境性质 | ⚠ **非干净环境**：开发机（有 Xcode/Python/仓库），userData `~/Library/Application Support/XCAGI/` 已有 ~11GB 历史数据与多份旧安装副本；**且与主安装 `/Applications/XCAGI.app`（同 1.0.0.1）共享同一 userData**（含 2026-09-07 同步的 mods 与 986MB 生产库）——G6 attendance 回归即此环境污染与版本错配共同暴露，见 §7-7 |
 
-## 6. Release Gate 状态（2026-09-13/14 实跑 1.0.0.3；证据目录 [evidence/e2e/macos-release-1.0.0.3/](evidence/e2e/macos-release-1.0.0.3/)）
+## 6. Release Gate 状态
+
+### 6.1 1.0.0.4 复测（2026-09-15，OTA 1.0.0.3→1.0.0.4 路径；证据目录 [evidence/e2e/macos-release-1.0.0.4/](evidence/e2e/macos-release-1.0.0.4/)）
+
+> **结论（2026-09-15）：主干 HEAD `280225ac7`（#1938 合入版）OTA 实装后全链复测通过——G3/G5/G6/G7/G8/G10/G11 GREEN，G9 YELLOW（自动退出子项结构性归 1.0.0.5，见 T9），G12 待重启复验（T10 已布防）。** 数据基线 pre/post digest 逐项一致（DB 987,168,768B 零丢失、uploads 163、templates 18、users 6、backups 5+升级后自动备份）；WAL +41KB、mods -2 为运行期正常波动与 mod 包内容差异，非用户数据。
+
+| # | Gate | 状态 | 1.0.0.4 实测证据 | 备注 |
+|---|------|------|-----------------|------|
+| G3 | macOS 安全项 | GREEN | **OTA 替换后安装态实测**（[g3-official-10004.txt](evidence/e2e/macos-release-1.0.0.4/g3-official-10004.txt)）：`codesign --verify --deep --strict` exit=0；hardened runtime（flags=0x10000）；TeamID `G26WSH472M`；spctl accepted exit=0；Info.plist=1.0.0.4 | ShipIt 替换后 owner=root 触发 TCC 特权请求，已通过 helper 授权永久解决（[g9-update-install-10004.json](evidence/e2e/macos-release-1.0.0.4/g9-update-install-10004.json) runtime_findings） |
+| G5 | 登录绑定 | GREEN | API 登录 200 + 会话有效：`/api/auth/login` 200 success=true，登录态业务调用全通（[g6-post-ota-10004.json](evidence/e2e/macos-release-1.0.0.4/g6-post-ota-10004.json)、[g7-retest-10004.json](evidence/e2e/macos-release-1.0.0.4/g7-retest-10004.json)）；UI 截图证据沿用 1.0.0.3（§6.2-G5，登录页无版本特异改动） | — |
+| G6 | Mod / AI 员工加载 | GREEN | **1.0.0.4 OTA 后登录态实测（[g6-post-ota-10004.json](evidence/e2e/macos-release-1.0.0.4/g6-post-ota-10004.json)）**：`/api/mods` 200 返回 62 mod（attendance-industry v1.0.1 primary=True）；`/api/employees` 200 catalog（schema 1、6 split entries、legacy 4 员工）；loading_status summary=ok | 与 1.0.0.3 结果一致，路由注册修复在 1.0.0.4 bundle 内保持生效 |
+| G7 | 真实业务任务（含文件下载） | GREEN | **1.0.0.4 登录态全链（[g7-retest-10004.json](evidence/e2e/macos-release-1.0.0.4/g7-retest-10004.json)）**：`POST /api/templates/upload` 200（template db:20 入库）→ 客户幂等确认（400=「客户名称已存在」，purchase_units row 26 为 1.0.0.3 轮创建——跨版本数据存活旁证）→ `POST /api/shipment/generate` 200「发货单生成成功」（发货单_26-0900001A_20260915_152144.xlsx，agent completed）→ **`GET /api/shipment/download/{doc}` 200，5,194B，xlsx 魔数 PK\x03\x04，SHA256 落证（本轮新增下载回读步骤）** | 首轮两个探针异常均澄清为脚本误报非产品缺陷（JSON 内 anomaly_resolution：①templates_list 截断误报——DB row 20 实存；②customer 400=幂等已存在） |
+| G8 | 更新发现 | GREEN | **真机实跑（2026-09-15，1.0.0.3 应用内）**：自动检查（18:00-18:03Z）+ 启动检查（21:52Z）→ `update_available` 1.0.0.4，productVersion/buildSha=280225ac77ce 锚定一致；UI 三截图（[g8-update-discovered-ui.png](evidence/e2e/macos-release-1.0.0.4/g8-update-discovered-ui.png) 等）；blockmap 增量下载 18:04:41Z→18:13:27Z，下载包 SHA256 与发布产物五点同指纹 | — |
+| G9 | 更新安装 | YELLOW | **安装闭环实证（[g9-update-install-10004.json](evidence/e2e/macos-release-1.0.0.4/g9-update-install-10004.json)）**：install_start 22:14:40Z → ShipIt 特权 helper 授权（用户输密码）→ 15:09 app 退出后 ShipIt 替换完成（Installation completed successfully）→ 自动重启 1.0.0.4 → 完整重启应用栈后 health=healthy+1.0.0.4+280225ac7（[t5-post-ota-verify.log](evidence/e2e/macos-release-1.0.0.4/t5-post-ota-verify.log)） | **YELLOW 子项**：应用不自动退出——1.0.0.3 触发方不含 #1930 isQuitting 修复，预期复现；结构性归 1.0.0.4→1.0.0.5 OTA 验证（触发方修复生效前提）。runtime finding：OTA 替换后旧 backend 进程残留占 17500（建议启动时 bundle 版本 > 运行中 backend 版本则强杀重启，记 B6 跟踪） |
+| G10 | 数据保留（升级后） | GREEN | **OTA 路径 digest 比对（[t5-pre-ota-digest.json](evidence/e2e/macos-release-1.0.0.4/t5-pre-ota-digest.json) vs [t5-post-ota-digest.json](evidence/e2e/macos-release-1.0.0.4/t5-post-ota-digest.json)）**：DB 987,168,768B 字节级一致、uploads 163/templates 18/users 6/routing_policies 1/models 1/backups 5 全保留 + 升级后自动备份（xcagi-unknown-20260915000232.db）；差异仅 WAL +41KB（运行期写入）与 mods.files -2（mod 包内容差异） | — |
+| G11 | 更新后重新执行业务 | GREEN | 同 G7：OTA 至 1.0.0.4 后登录→上传→出单→下载全链 2xx（[g7-retest-10004.json](evidence/e2e/macos-release-1.0.0.4/g7-retest-10004.json)） | — |
+| G12 | 重启 Mac 后核心功能复验 | UNKNOWN | 1.0.0.4 版重启复验**待执行**（布防就绪：复验脚本与凭据注入通道已备于 `/Users/Shared/xcagi-t6-tools/`，重启后登录即自动采集，证据落 [evidence/e2e/macos-release-1.0.0.4/t6-post-reboot-verify.log](evidence/e2e/macos-release-1.0.0.4/)） | 结果待回填；1.0.0.3 基线为 GREEN（§6.2-G12） |
+
+### 6.2 1.0.0.3 全链基线（2026-09-13/14 实跑；证据目录 [evidence/e2e/macos-release-1.0.0.3/](evidence/e2e/macos-release-1.0.0.3/)）
 
 > **当前结论（2026-09-14 T6 复跑后）：Release Ready——安装→使用→更新→数据保留→更新后继续使用→重启后继续使用全链真机证据齐备（11 GREEN + G9 YELLOW 不阻断；G2/G4 YELLOW=T1 干净环境加固遗留）。** 1.0.0.3 发布与真机 OTA 链：release run [34773838698](https://github.com/42433422/XCMAX/actions/runs/34773838698)（checkout `4bfb23365c` 构建+签名+公证+扫描对 passed）→ step14 CVM 直传超时 → artifact 本机中转恢复发布（§2）→ 真机 1.0.0.2 应用内发现并下载 1.0.0.3（G8）→ ShipIt 安装替换（G9，含退出拦截缺陷、手动退出配合完成）→ 数据保留 PASS（G10）→ 登录态业务全链 upload+generate 出单 200（G7/G11）→ **真实重启 Mac（boot 13:57:35）后自动拉起→health 1.0.0.3→登录→上传→出单→Mod/AI 员工 200→数据基线零丢失（G12 GREEN，[t6-post-reboot-verify.log](evidence/e2e/macos-release-1.0.0.3/t6-post-reboot-verify.log)）**。历史 RED（G7 bundle 写回归）已修复并重测转 GREEN（§7-11）；G9 缺陷已修（PR [#1930](https://github.com/42433422/XCMAX/pull/1930)），T9 下版复测转 GREEN（§7-12）。
 
@@ -96,6 +114,7 @@ x64 dmg：download_release.json 声明 `mac_x64`，但 manifest 无 x64 条目�
 10. **~~build-info.json `version` 字段与产品版本不同源~~（1.0.0.2 已对齐）**：1.0.0.1 健康检查的 `version` 读 Python 包版本，落后产品号；1.0.0.2 官方包 build-info `version=1.0.0.2` 已与产品版本一致。验收采证口径仍以 releaseId+gitSha 对齐为准。
 11. **G7 正式包新断点（1.0.0.2，6eda2203d）：模板上传分析写入签名 bundle 内 `_internal/` 报 Permission denied**：`analyzer.py` `_analyze_template_with_upload_inner` 把上传 Excel 存到 `os.path.dirname(os.path.dirname(__file__)) / uploads/templates`——源码态解析为 `app/uploads/templates`，但打包态 `__file__` 位于 `XCAGI.app/Contents/Resources/backend/_internal/app/...`（签名 bundle 内只读），写入报 `Permission denied`；此前候选包 v2（9a4a06bc4）登录态 upload 200 是因为该候选包经 `XCAGI_DATA_DIR`/未公证等环境差异未命中 bundle 只读路径，T4 OTA 后正式包实测暴露。修复（#1922）：改用 `get_upload_dir()`（打包感知：源码态落仓库、打包态落 `~/Library/Application Support/XCAGI/uploads/templates`），与路由策略文件重定向（#1905）同一原则。证据 [g7-retest-post-ota.txt](evidence/e2e/macos-release-1.0.0.2/g7-retest-post-ota.txt)、[g7-retest-login-prefix.txt](evidence/e2e/macos-release-1.0.0.2/g7-retest-login-prefix.txt)。**已于 1.0.0.3 修复并真机重测转 GREEN（§6-G7）。教训：候选包（未公证、环境特异）验证结果不能外推为正式包结论，正式包上线后必须重跑核心业务链。**
 12. **G9 应用内一键安装缺陷（1.0.0.2→1.0.0.3 实机复现）：点击「安装更新」后应用不退出、ShipIt 无限等待**：`installUpdate → autoUpdater.quitAndInstall(false, true)` 走 Squirrel `[NSApp terminate]` 路径，该路径**不触发 `before-quit`**，`app.isQuitting` 仍为 false 时主窗口 close 处理（window-manager.ts）`event.preventDefault()+hide()` 拦截退出，terminate 被取消 → 应用存活、ShipIt 检测到 install request 后无限等待（ShipIt_stderr.log 14755 行「Detected this as an install request」无后续直至手动退出）。复现：真机 1.0.0.2 → 应用内更新 1.0.0.3 → 下载完成 → 点击安装 → 应用不退出；时间线见 [t4-ota-10003.log](evidence/e2e/macos-release-1.0.0.3/t4-ota-10003.log)。本次发布以「手动退出应用」（用户可完成操作）完成安装闭环（G9 YELLOW 定级依据）；修复 PR [#1930](https://github.com/42433422/XCMAX/pull/1930)：`desktop-install-update.ts` 在 `quitAndInstall` 前预置 `app.isQuitting = true`（含回归测试），**下版 OTA 复测应用内一键安装无需手动退出后方可转 GREEN（任务 T9）**。
+13. **B6（1.0.0.3→1.0.0.4 OTA 实测发现）：OTA 替换后旧版本 backend 进程残留**：ShipIt 替换 bundle 后，旧 1.0.0.3 backend 进程（早于安装启动）未被终止，继续占用 17500 端口，新 app 启动时检测到端口占用即复用旧进程 → health `version` 短暂报旧值而 git_sha 已读新 bundle build-info；手动完整重启应用栈后恢复一致（[t5-post-ota-verify.log](evidence/e2e/macos-release-1.0.0.4/t5-post-ota-verify.log)）。建议修复方向：app 启动时若 bundle 版本 > 运行中 backend 版本则强杀重启 backend；下版跟踪。非本轮阻断（用户可手动重启恢复）。
 
 ## 8. 实机验收任务（UNKNOWN 项 → 待执行）
 
@@ -109,12 +128,14 @@ x64 dmg：download_release.json 声明 `mac_x64`，但 manifest 无 x64 条目�
 | T6 | ~~重启 Mac 后复验~~ **已完成（2026-09-14 14:04）**：真实重启后 health 1.0.0.3→登录/上传/出单全链 200→mods/employees 200→数据基线零丢失（G12 GREEN）。教训：该机 /private/tmp 重启即清，复验脚本必须存证据目录（本 PR 已入库）+ `/Users/Shared/xcagi-t6-tools/` 备份 | G12 | 真机 |
 | T7 | ~~下版本发后重测 G6/G7~~ **已完成（1.0.0.3 实机重测 2026-09-14）**：G6——mods 200（62 个）+ attendance-industry v1.0.1 路由注册修复生效（capabilities 200，[g6-post-ota-10003.json](evidence/e2e/macos-release-1.0.0.3/g6-post-ota-10003.json)）；G7——upload 200 入库 + generate 200 出单（[g7-retest-10003.json](evidence/e2e/macos-release-1.0.0.3/g7-retest-10003.json)） | G6/G7 | 真机（1.0.0.3） |
 | T8 | ~~回滚/恢复演练~~ **已完成（2026-09-12 路径 B 降级）**：1.0.0.2→1.0.0.1 覆盖安装 PASS（签名 accepted、数据零丢失、health PASS），证据 g13-rollback-20260912.*；路径 A（坏更新观察期自动回滚）留待专用验收机 | G13 | 真机 |
-| T9 | 应用内一键安装复测：#1930 并入后下版 OTA——点击「安装更新」应用自动退出、ShipIt 自动替换、自动重启，无需手动退出；通过后 G9 转 GREEN | G9 | 真机（下版 feed） |
+| T9 | 应用内一键安装复测：#1930 并入后下版 OTA——点击「安装更新」应用自动退出、ShipIt 自动替换、自动重启，无需手动退出；通过后 G9 转 GREEN。**结构性归 1.0.0.4→1.0.0.5 OTA**（1.0.0.3 触发方不含修复，1.0.0.3→1.0.0.4 轮为预期复现，见 §6.1-G9） | G9 | 真机（1.0.0.5 feed） |
+| T10 | 1.0.0.4 重启 Mac 后核心功能复验（G12）：布防已备（[t6-post-reboot-verify.sh](evidence/e2e/macos-release-1.0.0.4/t6-post-reboot-verify.sh) + `/Users/Shared/xcagi-t6-tools/` 常驻副本 + launchd 自启），重启后登录即自动采集 health/数据基线/业务全链/Mod 员工证据；结果回填 §6.1-G12 | G12 | 真机（1.0.0.4） |
 
 **T7 中期回执（2026-09-12，1.0.0.2 候选包实装重测，证据 [evidence/e2e/macos-release-1.0.0.2/](evidence/e2e/macos-release-1.0.0.2/)）**：① G6——启动日志零路由注册 ERROR（f37372e97 生效✅）；`/attendance/capabilities` 未登录返 SPA HTML 属权益门控设计，终判移入 T2。② G7——upload 仍 405（根因见 §7-8 修正定性：默认应用从未挂载 upload/analyze，b97073acc 只补 create）；修复已入库（template_api.py 默认挂载），**修复并入 main 后需重建候选包重测**。③ G10——跨版本覆盖升级数据保留 PASS（digest 逐项一致，见 G10 行）。
 
 ## 9. 发版复用 Runbook（每次 macOS 发版照此执行）
 
+0. **版本口径提醒（2026-09-14 收口审计定稿）**：运行期版本判定**以 health 端点 + build-info（version/releaseId/gitSha 三锚定）为准**（口径见 §7-10）；其余显示值为映射，出现不一致先改锚点再发布，不改 health 口径。已知显示差异：① npm/Electron/Dart pub/Apple MARKETING_VERSION 三段 `1.0.0` 为工具链映射（VERSION.md 已声明等价关系）；② mobile `profileVersionText` 硬编码 `(12)` 与实际 `versionCode=10`/pubspec `1.0.0+10` 不同步（锚点校验不覆盖 build number，显示以 `versionName` 四段为准，(12) 待下版同步）。
 1. `VERSION.md` 升版 → `version_sync.py --apply` + `verify_version_anchors.py`；
 2. CI `release-desktop-mac-ota` 构建+签名+公证+发布 → `publish-macos-download-center` 更新下载中心/manifest/feed（发版 Runbook 第 2 步后必须核验 manifest `generated_at` 与构建 SHA，防"feed 已更新、manifest 未生成"漂移，见 §7-1）；
 3. 真机跑 `bash FHD/scripts/package/acceptance-macos.sh --version <v>`（下载→SHA256→签名→安装→冷启动→健康检查）；跨版本数据保留走 `--overwrite-upgrade`（T5）；
@@ -123,7 +144,68 @@ x64 dmg：download_release.json 声明 `mac_x64`，但 manifest 无 x64 条目�
 6. 回填本文件 §1–§6；全部 Gate 无 RED 且 G1–G4 GREEN、G5–G13 无 UNKNOWN 遗留方可宣布闭环；
 7. RED：只修阻断项→重测→重写状态，禁止直接改状态。
 
-## 10. 验收候选包（非发布产物，历史记录）
+## 10. 最终发布审计总表（主干 HEAD 收口审计，2026-09-15）
+
+> 审计对象：main HEAD `280225ac77ce0b5f66470d2d7a11ad2844cdad67`（含 #1935/#1923/#1920/#1938 全部收口；Windows runner 证据 run 34841838624/34851567425 与 Mac 1.0.0.4 实机证据同锚）。判定规则：无证据 = UNKNOWN，不强行绿灯。
+
+### A. 关键 PR 清理（不引入回滚）
+
+| PR | 内容 | 状态 | 证据 |
+|---|---|---|---|
+| #1935 | 1.0.0.3 Release Ready 回填 | ✅ MERGED | main 历史 32b3c14e5 |
+| #1923 | Windows 故障注入 CI 场景（dual-process/migration-mutex） | ✅ MERGED（rebase 后） | main 历史 c05a005ae |
+| #1920 | 发货单流程修复+升版 1.0.0.4 | ✅ MERGED | main 历史 3d872b32e |
+| #1938 | 故障注入误报修复（场景前基线增量判定） | ✅ MERGED（backend-test success） | main HEAD 280225ac7 |
+| #1937/#1939 | 旧 metrics 快照/被覆盖 PR | ✅ CLOSED（#1937 内容折入 #1938） | PR closed |
+
+回滚检查：G9 isQuitting 修复在 main HEAD 保留（[desktop-install-update.ts](../desktop/desktop-install-update.ts) L55/L65 预置逻辑在位，#1930 未被覆盖）；1.0.0.4 升版内容与 main 一致（health git_sha=280225ac7 实测）。✅
+
+### B. Mac 方向（1.0.0.4，OTA 1.0.0.3→1.0.0.4 路径）
+
+| 项 | 状态 | 证据 |
+|---|---|---|
+| 代码进 main | ✅ GREEN | 280225ac7（§10-A） |
+| 扫描对 ×2 零漏洞 | ✅ GREEN | run 34851505749 + 34855340685，同 SHA，间隔 35min44s |
+| OTA 产物上线 | ✅ GREEN | 公网四路复验 + 7 文件 SHA256 全匹配 + manifest/feed 锚定（§2） |
+| G3 签名/安全项（安装态） | ✅ GREEN | [g3-official-10004.txt](evidence/e2e/macos-release-1.0.0.4/g3-official-10004.txt) |
+| G5 登录绑定 | ✅ GREEN | API 双证（§6.1-G5） |
+| G6 Mod/AI 员工 | ✅ GREEN | [g6-post-ota-10004.json](evidence/e2e/macos-release-1.0.0.4/g6-post-ota-10004.json)（62 mods + 6 split entries） |
+| G7 业务全链（含文件下载回读） | ✅ GREEN | [g7-retest-10004.json](evidence/e2e/macos-release-1.0.0.4/g7-retest-10004.json) |
+| G8 更新发现 | ✅ GREEN | updater-events + UI 三截图（§6.1-G8） |
+| G9 安装 | ⚠️ YELLOW | 安装闭环完成但需手动退出配合（§6.1-G9；自动退出子项归 T9/1.0.0.5） |
+| G10 数据保留 | ✅ GREEN | pre/post digest 逐项一致（§6.1-G10） |
+| G11 更新后业务复跑 | ✅ GREEN | 同 G7 证据（§6.1-G11） |
+| G12 重启复验 | ⏳ UNKNOWN | 布防就绪待重启（T10），结果回填 §6.1-G12 |
+
+### C. Windows 方向（#1923）
+
+| 项 | 状态 | 证据 |
+|---|---|---|
+| 双进程/迁移互斥 | ✅ CI runner 真实证据 | run 34841838624 双 PASS + 34851567425（#1938 修复后脚本回归）双 PASS（[WINDOWS_RELEASE_SSOT.md](WINDOWS_RELEASE_SSOT.md) §3） |
+| disk-full/power-cut | ⚠️ 等真实机器 | CI 无法执行实体机场景，SKIP 而非伪造（T8） |
+| #1938 判定修复验证 | ✅ | run 34851567425 隔离场景 PASS |
+
+### D. #1841 弱网 OTA
+
+| 项 | 状态 | 证据 |
+|---|---|---|
+| 根因 | ✅ 成文 | ISP 中间设备 QoS 会话重置（非客户端/服务端缺陷）；blockmap 放大因子已修 |
+| 落地缓解 | ✅ | 增量更新（本轮实跑 blockmap 生效）、直连绕代理、8443 通道 |
+| 产品化后续 | ✅ 回填 issue | 多源 fallback + 断点续传规划在案 |
+
+### E. 版本口径
+
+| 项 | 状态 | 证据 |
+|---|---|---|
+| health + git sha 口径 | ✅ 定稿 | 双平台 SSOT Runbook 第 0 条（macOS §9-0 / Windows §8-0） |
+| 已知显示差异 | ✅ 记录 | npm/Electron/Dart `1.0.0` 工具链映射；mobile `(12)` vs versionCode=10（待下版同步）；feed `version: 1.0.0` vs productVersion（electron-updater 标准行为） |
+
+### F. 交付结论（待 G12 后定稿）
+
+- 已定：主干 HEAD 全链 Mac 证据 GREEN（G12 除外）、Windows CI 证据 PASS（实体机场景除外）、#1841 根因/产品化成文、版本口径统一。
+- 待定：G12 重启复验（T10）跑完且无 RED 后，方可宣布「1.0.0.4 可交付」；若 G12 RED，按 Runbook 第 7 条只修阻断项。
+
+## 11. 验收候选包（非发布产物，历史记录）
 
 > 候选包 Developer ID 签名未公证（spctl rejected），仅供实机验收，不得替代发布产物、不得进 feed；正式 1.0.0.2 已于 2026-09-13 发布（§1/§2）。构建环境三坑见 §7-9；候选包 build-info `version` 落后产品号的口径见 §7-10。
 
