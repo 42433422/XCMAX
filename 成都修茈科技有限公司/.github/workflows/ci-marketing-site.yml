@@ -20,6 +20,9 @@ on:
       - 'solutions.html'
       - 'excel-to-ai.html'
       - 'baidu_verify_*.html'
+      - 'capabilities/**'
+      - 'data/capabilities/**'
+      - 'scripts/build_capability_center.py'
       - 'styles.css'
       - 'main.js'
       - 'assets/**'
@@ -41,6 +44,9 @@ on:
       - 'solutions.html'
       - 'excel-to-ai.html'
       - 'baidu_verify_*.html'
+      - 'capabilities/**'
+      - 'data/capabilities/**'
+      - 'scripts/build_capability_center.py'
       - 'styles.css'
       - 'main.js'
       - 'assets/**'
@@ -92,3 +98,20 @@ jobs:
           fi
           echo "Validating ${#files[@]} marketing HTML file(s) with htmlhint..."
           htmlhint "${files[@]}"
+
+      # 能力中心 HTML 校验（生成页 + 详情页）
+      - name: HTML validate (capabilities)
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=( capabilities/*.html capabilities/feature/*.html )
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No capability HTML files to validate."
+            exit 0
+          fi
+          echo "Validating ${#files[@]} capability HTML file(s) with htmlhint..."
+          htmlhint "${files[@]}"
+
+      # No Evidence, No Claim：目录与已提交页面必须一致，公开数字无法手写
+      - name: Capability center drift check
+        run: python3 "成都修茈科技有限公司/scripts/build_capability_center.py" --check

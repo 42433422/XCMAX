@@ -368,3 +368,16 @@ domains:
     mode: generate
     check: python scripts/dev/audit_benchmark_ssot.py check
     sync: python scripts/dev/audit_benchmark_ssot.py generate
+
+  - name: capability-center
+    owner: marketing-site
+    enabled: true
+    # 官网产品能力中心：目录为唯一事实源，页面/公开数据由生成器产出。
+    # No Evidence, No Claim：check 会逐项校验证据并拒绝目录与页面漂移。
+    ssot: 成都修茈科技有限公司/data/capabilities/catalog.json
+    derived:
+      - 成都修茈科技有限公司/capabilities/
+      - 成都修茈科技有限公司/data/capabilities.json
+    mode: generate
+    check: python "../成都修茈科技有限公司/scripts/build_capability_center.py" --check
+    sync: python "../成都修茈科技有限公司/scripts/build_capability_center.py"
