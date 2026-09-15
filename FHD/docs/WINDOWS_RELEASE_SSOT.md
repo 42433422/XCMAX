@@ -6,7 +6,7 @@
 > 判据协议：[desktop-real-machine-acceptance-protocol.md](e2e/desktop-real-machine-acceptance-protocol.md)；证据模板：[desktop-acceptance-template.md](e2e/templates/desktop-acceptance-template.md)。
 > RED 处理规则：只修真正阻断闭环的问题，修复后重测，不得直接改状态。
 > **闭环规则**：G2→G12 连续完整通过 **2 轮**（第二轮从正式地址重新下载开始）才算交付闭环。第 1 轮已完整通过（2026-09-14 00:04，[LOOP-COMPLETE](evidence/e2e/windows-release-1.0.0.2/loop-round1/LOOP-COMPLETE.txt)）；第 2 轮已完整通过（2026-09-14 05:06，[LOOP-COMPLETE](evidence/e2e/windows-release-1.0.0.2/loop-round2/LOOP-COMPLETE.txt)）→ **G2–G12 双轮闭环达成**。#1923 合并后的最终收口实跑见 §4「T9 最终收口」（main `604b85e1`，基座 1.0.0.2 → OTA 1.0.0.4）。
-> 最后实跑：2026-09-15（T9 最终收口：CI/CD `34882474880` 全绿 → Release Desktop `34889725771` → testing feed `34891598292` → latest.yml 验证 → OTA→1.0.0.4 → 数据保留/业务/Mod 复验 → dual-process/migration-mutex 实机 PASS；证据 [t9/](evidence/e2e/windows-release-1.0.0.2/t9/t9-chain-runs.json)）。
+> 最后实跑：2026-09-15（T9 最终收口：CI/CD `34882474880` 全绿 → Release Desktop `34889725771` → testing feed `34891598292` → latest.yml 验证 → OTA→1.0.0.4 → 数据保留/业务/Mod 复验 → dual-process/migration-mutex 实机 PASS → 系统重启后复验 PASS；证据 [t9/](evidence/e2e/windows-release-1.0.0.2/t9/t9-chain-runs.json)）。
 
 ## 1. 当前版本信息与真相源
 
@@ -106,7 +106,7 @@
 | 登录绑定/业务/Mod/AI 员工（升级前后各一轮） | **GREEN** | pre：[chain-biz-result.json](evidence/e2e/windows-release-1.0.0.2/t9/chain/chain-biz-result.json)（登录+业务+Mod15+AI 员工）；post：[chain-biz-post-ota.json](evidence/e2e/windows-release-1.0.0.2/t9/chain/chain-biz-post-ota.json) + [chain-reverify-verdict.json](evidence/e2e/windows-release-1.0.0.2/t9/chain/chain-reverify-verdict.json)（add/list 200 via ERP Mod，Mod15 与基线一致，split_mod_entries=6） |
 | 数据保留（G10 口径） | **GREEN** | sessions 27/27、users 3/3、products 10→12（升级前产品全部可读+新增，[chain-db-snapshot-post-ota.json](evidence/e2e/windows-release-1.0.0.2/t9/chain/chain-db-snapshot-post-ota.json)） |
 | 故障注入 dual-process / migration-mutex（实机 1.0.0.4） | **GREEN** | PASS=2/FAIL=0（见 §3 补充证据 2026-09-15 条） |
-| 系统重启后复验 | 待执行 | Startup 脚本已注册（[post-reboot-verify.ps1](evidence/e2e/windows-release-1.0.0.2/t9/chain/post-reboot/post-reboot-verify.ps1)），重启+登录后自动采集 |
+| 系统重启后复验 | **GREEN** | 系统重启（2026-09-15 11:12:56）登录后 Startup 脚本自动采集（[post-reboot-verify.ps1](evidence/e2e/windows-release-1.0.0.2/t9/chain/post-reboot/post-reboot-verify.ps1) + [run.log](evidence/e2e/windows-release-1.0.0.2/t9/chain/post-reboot/run.log)）：build-info `1.0.0.4@604b85e1`（[post-reboot-buildinfo.json](evidence/e2e/windows-release-1.0.0.2/t9/chain/post-reboot/post-reboot-buildinfo.json)）、进程恰 5×XCAGI+1×backend（[post-reboot-processes.json](evidence/e2e/windows-release-1.0.0.2/t9/chain/post-reboot/post-reboot-processes.json)）、17500 单监听（PID 与清单一致）、DB 全保留 27/3/12 含 T9 新增产品（[post-reboot-dbcounts.json](evidence/e2e/windows-release-1.0.0.2/t9/chain/post-reboot/post-reboot-dbcounts.json)）、UI 完整渲染且 SUNBIRD 会话保留（[post-reboot-xcagi-ui.png](evidence/e2e/windows-release-1.0.0.2/t9/chain/post-reboot/post-reboot-xcagi-ui.png)）、health healthy（[post-reboot-health.json](evidence/e2e/windows-release-1.0.0.2/t9/chain/post-reboot/post-reboot-health.json)）；注：冷启动 health 首响 >240s（本机开发机冷缓存，数分钟内自行转绿），单实例/单监听/数据完整判定不受影响 |
 
 ## 5. 已知偏差与阻断项
 
