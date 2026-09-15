@@ -181,6 +181,40 @@ class TestRelayChain:
         assert body == ""
 
 
+class TestRetestSection:
+    def test_receipt_embedded_in_issue_body(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        retest_dir = tmp_path / "retest"
+        retest_dir.mkdir()
+        receipt = {
+            "verdict": "pass",
+            "app_version": "1.0.0.4",
+            "base_url": "http://127.0.0.1:8787",
+            "checked_at": "2026-09-15T00:00:00+00:00",
+            "checks": [
+                {"name": "app_health", "ok": True, "status": 200},
+                {"name": "scenario_retest", "ok": False, "status": 404},
+            ],
+        }
+        (retest_dir / f"receipt-{'ab' * 6}.json").write_text(
+            json.dumps(receipt), encoding="utf-8"
+        )
+        monkeypatch.setenv("WORK_ORDER_RETEST_DIR", str(retest_dir))
+        body = to_issue._build_retest_section("ab" * 6)
+        assert "客户侧重测" in body
+        assert "**pass**" in body
+        assert "1.0.0.4" in body
+        assert "PASS `app_health`" in body
+        assert "FAIL `scenario_retest`" in body
+
+    def test_issue_body_without_retest_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("WORK_ORDER_RETEST_DIR", str(tmp_path / "none"))
+        assert to_issue._build_retest_section("ab" * 6) == ""
+
+
 @pytest.fixture
 def isolated_proposals(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(recorder, "_REPORT_DIR", tmp_path)

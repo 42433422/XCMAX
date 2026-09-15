@@ -261,6 +261,39 @@ def _build_repro_section(dedup_key: str) -> str:
     return "\n".join(lines) + "\n\n"
 
 
+def _build_retest_section(dedup_key: str) -> str:
+    """连接件4：存在客户侧重测回执时，把重测判定写入 issue 正文。
+
+    回执由 scripts/dev/customer_retest.py 在客户机上产出（健康/版本/场景三查）；
+    文件缺失时返回空串——发布验收回执仍由既有 release-acceptance-closeout 闭环承载。
+    """
+    key = str(dedup_key or "")[:12]
+    if not key:
+        return ""
+    retest_dir = Path(
+        os.environ.get("WORK_ORDER_RETEST_DIR") or (_FHD_ROOT / "test_reports" / "retest")
+    )
+    path = retest_dir / f"receipt-{key}.json"
+    try:
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ""
+    if not isinstance(receipt, dict):
+        return ""
+    lines = [
+        "## 客户侧重测（连接件4）\n",
+        f"- **判定**: **{receipt.get('verdict')}**（应用版本 `{receipt.get('app_version') or 'unknown'}`）",
+        f"- **基址**: `{receipt.get('base_url')}` · 时间 `{receipt.get('checked_at')}`",
+    ]
+    for check in receipt.get("checks") or []:
+        if isinstance(check, dict):
+            lines.append(
+                f"- {'PASS' if check.get('ok') else 'FAIL'} `{check.get('name')}` "
+                f"(status {check.get('status', '-')})"
+            )
+    return "\n".join(lines) + "\n\n"
+
+
 def _build_issue_body(proposal: dict[str, Any]) -> str:
     reason = proposal.get("reason") or "intent_unknown"
     ts = proposal.get("ts") or ""
@@ -316,6 +349,7 @@ def _build_issue_body(proposal: dict[str, Any]) -> str:
         "```\n\n"
         f"{_build_diagnosis_section(dedup_key)}"
         f"{_build_repro_section(dedup_key)}"
+        f"{_build_retest_section(dedup_key)}"
         "## 验收标准（进入 AI 开发前必须可验证）\n\n"
         f"{_build_acceptance_criteria(reason, safe_intent_ctx, safe_skill_ctx)}\n"
         "## 治理门禁\n\n"
