@@ -6,6 +6,8 @@
 
 ## Unreleased（1.0.0.4 之后的累积变更）
 
+- 连接件5（客户问题→自动解决闭环·知识回流）：新增 `scripts/dev/work_order_knowledge.py`——重测通过后自动把诊断（连接件2）+复现规格（连接件3）+重测回执（连接件4）组合成结构化案例落 `test_reports/knowledge/cases.jsonl`（同 dedup_key 幂等替换），复用工单状态机 `record_transition` 推进 verifying→closed、可选 `--close-issue` 关闭工单 issue；检索按故障签名（tool:code）规则匹配零延迟，连接件2 诊断自动附加历史同类案例（known_cases）实现知识回流消费；`customer_retest` 在 verdict=pass 时自动触发记录（fail-open）。删除零引用一次性脚本 `eval_routing_policy.py`、`generate_routing_data.py`（净删除）。
+
 - 连接件4（客户问题→自动解决闭环·客户侧重测）：新增 `scripts/dev/customer_retest.py`——修复送达客户机后对运行中应用执行场景重测（`/api/health?lite=1` 健康+版本+`scenario.retest_url` 场景三查，全部直连绕过本机代理防 127.0.0.1 假阴性），回执落 `test_reports/retest/receipt-<key12>.json` 并可 `--issue-comment` 写回工单 issue（对外观测载体复用，不替代既有 release-acceptance-closeout 安装回执闭环）；中继链新增「客户侧重测」节把重测判定嵌入 issue 正文。
 
 - 连接件3（客户问题→自动解决闭环·自动复现）：新增 `scripts/dev/work_order_repro.py`——从连接件2 诊断的错误签名自动生成可执行复现用例（module_import 类：仓库内目标文件的导入断言，故障期 RED=复现、修复后 GREEN），`--run` 执行并留红/绿证据 JSON；非可执行签名只出场景规格（needs_scenario，不造假自动复现），要求修复 PR 附带先 RED 后 GREEN 的复现用例；中继链在诊断后自动生成复现规格并嵌入 issue 正文。删除全仓零引用一次性脚本 `llm_label_ensemble.py`、`llm_label_arbitrate.py`、`analyze_label_consensus.py`（净删除 -1078 行）。

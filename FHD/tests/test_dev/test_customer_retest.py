@@ -134,10 +134,14 @@ class TestRetest:
             server.server_close()
         assert receipt["verdict"] == "fail"
 
-    def test_receipt_written_and_exit_code(self, tmp_path: Path, monkeypatch, fake_app) -> None:
+    def test_receipt_written_and_exit_code(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake_app
+    ) -> None:
         base_url, _ = fake_app
         out = tmp_path / "retest"
-        monkeypatch.setattr(retest_mod, "_RETEST_DIR", out)
+        monkeypatch.setenv("WORK_ORDER_RETEST_DIR", str(out))
+        monkeypatch.setenv("WORK_ORDER_KNOWLEDGE_DIR", str(tmp_path / "knowledge"))
+        monkeypatch.setenv("WORK_ORDER_DIAGNOSIS_DIR", str(tmp_path / "none"))
         rc = retest_mod.main(["--spec", str(_write_spec(tmp_path)), "--base-url", base_url])
         assert rc == 0
         receipts = list(out.glob("receipt-*.json"))
@@ -145,8 +149,13 @@ class TestRetest:
         data = json.loads(receipts[0].read_text(encoding="utf-8"))
         assert data["verdict"] == "pass"
 
-    def test_exit_2_on_fail(self, tmp_path: Path, monkeypatch, fake_app) -> None:
+    def test_exit_2_on_fail(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake_app
+    ) -> None:
         base_url, _ = fake_app
+        monkeypatch.setenv("WORK_ORDER_RETEST_DIR", str(tmp_path / "retest"))
+        monkeypatch.setenv("WORK_ORDER_KNOWLEDGE_DIR", str(tmp_path / "knowledge"))
+        monkeypatch.setenv("WORK_ORDER_DIAGNOSIS_DIR", str(tmp_path / "none"))
         _FakeAppHandler.retest_status = 500
         try:
             rc = retest_mod.main(

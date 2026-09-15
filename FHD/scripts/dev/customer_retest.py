@@ -20,10 +20,12 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import logging
 import os
 import subprocess
+import sys
 import urllib.error
 import urllib.request
 from datetime import UTC, datetime
@@ -34,12 +36,18 @@ logger = logging.getLogger("customer_retest")
 
 _FHD_ROOT = Path(__file__).resolve().parents[2]
 
-_REPRO_DIR = Path(
-    os.environ.get("WORK_ORDER_REPRO_DIR") or (_FHD_ROOT / "test_reports" / "repro")
-)
-_RETEST_DIR = Path(
-    os.environ.get("WORK_ORDER_RETEST_DIR") or (_FHD_ROOT / "test_reports" / "retest")
-)
+
+def _repro_dir() -> Path:
+    return Path(
+        os.environ.get("WORK_ORDER_REPRO_DIR") or (_FHD_ROOT / "test_reports" / "repro")
+    )
+
+
+def _retest_dir() -> Path:
+    return Path(
+        os.environ.get("WORK_ORDER_RETEST_DIR") or (_FHD_ROOT / "test_reports" / "retest")
+    )
+
 
 # 直连客户端：绕过本机代理（历史教训：代理拦截 127.0.0.1 造成假阴性）
 _OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -142,6 +150,33 @@ def _comment_on_issue(issue_number: int, receipt: dict[str, Any]) -> bool:
         return False
 
 
+def _record_knowledge(key12: str) -> None:
+    """连接件5 生产侧：重测通过后把三件套沉淀为知识案例（fail-open）。"""
+    path = Path(__file__).with_name("work_order_knowledge.py")
+    if not path.is_file():
+        return
+    spec = importlib.util.spec_from_file_location("work_order_knowledge", path)
+    if spec is None or spec.loader is None:
+        return
+    module = importlib.util.module_from_spec(spec)
+    sys.modules.setdefault("work_order_knowledge", module)
+    spec.loader.exec_module(module)
+    try:
+        module.main(["--record", _spec_dedup_key(key12)])
+    except Exception:  # noqa: BLE001 - 知识回流失败不阻塞重测回执
+        logger.debug("knowledge record skipped", exc_info=True)
+
+
+def _spec_dedup_key(key12: str) -> str:
+    """从重测回执里取完整 dedup_key（知识案例按完整 key 幂等）。"""
+    receipt_path = _retest_dir() / f"receipt-{key12}.json"
+    try:
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        return str(receipt.get("dedup_key") or "")
+    except (OSError, json.JSONDecodeError):
+        return ""
+
+
 def run(args: argparse.Namespace) -> int:
     spec_path = Path(args.spec) if args.spec else _pick_latest_spec()
     if spec_path is None or not spec_path.is_file():
@@ -149,11 +184,14 @@ def run(args: argparse.Namespace) -> int:
         return 1
     spec = json.loads(spec_path.read_text(encoding="utf-8"))
     receipt = retest(spec, args.base_url, expect_version=args.expect_version)
-    _RETEST_DIR.mkdir(parents=True, exist_ok=True)
+    retest_dir = _retest_dir()
+    retest_dir.mkdir(parents=True, exist_ok=True)
     key12 = str(spec.get("dedup_key") or "")[:12]
-    out = _RETEST_DIR / f"receipt-{key12}.json"
+    out = retest_dir / f"receipt-{key12}.json"
     out.write_text(json.dumps(receipt, ensure_ascii=False, indent=2), encoding="utf-8")
     logger.info("retest receipt: %s verdict=%s", out, receipt["verdict"])
+    if receipt["verdict"] == "pass":
+        _record_knowledge(key12)
     if args.issue_comment:
         ok = _comment_on_issue(int(args.issue_comment), receipt)
         logger.info("issue comment: %s", "posted" if ok else "failed (non-blocking)")
@@ -161,7 +199,7 @@ def run(args: argparse.Namespace) -> int:
 
 
 def _pick_latest_spec() -> Path | None:
-    specs = sorted(_REPRO_DIR.glob("repro-*.json"))
+    specs = sorted(_repro_dir().glob("repro-*.json"))
     return specs[-1] if specs else None
 
 

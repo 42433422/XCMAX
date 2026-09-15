@@ -60,6 +60,56 @@ def _load_self_heal() -> Any:
     return module
 
 
+def _load_knowledge() -> Any:
+    """连接件5 消费侧：加载知识回流检索件（案例库缺失/损坏时 fail-open）。"""
+    path = _FHD_ROOT / "scripts" / "dev" / "work_order_knowledge.py"
+    if not path.is_file():
+        return None
+    spec = importlib.util.spec_from_file_location("work_order_knowledge", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules.setdefault("work_order_knowledge", module)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _attach_known_cases(record: dict[str, Any]) -> None:
+    """把历史同类案例（同 tool:code 签名）附进诊断，知识回流消费入口。"""
+    errors = record.get("errors") or []
+    if not errors:
+        return
+    kb = _load_knowledge()
+    if kb is None:
+        return
+    known: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for error in errors[:20]:
+        if not isinstance(error, dict):
+            continue
+        tool, code = str(error.get("tool") or ""), str(error.get("code") or "")
+        if not tool and not code:
+            continue
+        for case in kb.search_cases(tool, code):
+            wo = str(case.get("wo_id") or "")
+            if wo in seen:
+                continue
+            seen.add(wo)
+            known.append(
+                {
+                    "wo_id": wo,
+                    "signature": case.get("signature") or {},
+                    "fix_description": str(case.get("fix_description") or ""),
+                    "retest_verdict": str((case.get("retest") or {}).get("verdict") or ""),
+                    "recorded_at": str(case.get("recorded_at") or ""),
+                }
+            )
+            if len(known) >= 3:
+                record["known_cases"] = known
+                return
+    if known:
+        record["known_cases"] = known
+
+
 def _verify_sha256(path: Path, expected: str) -> tuple[bool, str]:
     digest = hashlib.sha256()
     try:
@@ -136,6 +186,7 @@ def diagnose_proposal(proposal: dict[str, Any], *, use_llm: bool) -> dict[str, A
     if not errors:
         # 无错误签名时保留脱敏日志节选供人工/后续 LLM 判读
         record["excerpt"] = heal.select_incident_log_excerpt(text, max_chars=4000)
+    _attach_known_cases(record)
     return record
 
 
