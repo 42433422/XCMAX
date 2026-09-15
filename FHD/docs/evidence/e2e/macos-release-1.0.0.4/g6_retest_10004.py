@@ -50,4 +50,4 @@ except Exception as ex:
 
 out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "g6-post-ota-10004.json")
 json.dump(R, open(out, "w"), ensure_ascii=False, indent=1)
-print(json.dumps(R, ensure_ascii=False, indent=1))
+print("evidence:", out)  # 只回显路径：tok 派生数据按 CodeQL 敏感命名规则不可上控制台
