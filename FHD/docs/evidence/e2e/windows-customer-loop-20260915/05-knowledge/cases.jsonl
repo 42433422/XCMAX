@@ -1,0 +1,26 @@
+[
+ {
+  "dedup_key": "c0ffee00deadbeef12345678abcdef99",
+  "wo_id": "WO-c0ffee00dead",
+  "recorded_at": "2026-09-15T11:37:31.779179+00:00",
+  "signature": {
+   "tool": "unknown",
+   "code": "",
+   "file": "",
+   "line": 0
+  },
+  "engine": "rule",
+  "fix_description": "",
+  "repro": {
+   "kind": "windows_fault_injection",
+   "status": "generated",
+   "path": "C:\\win-closure-wt\\FHD\\docs\\evidence\\e2e\\windows-customer-loop-20260915\\03-repro\\repro-c0ffee00dead.json"
+  },
+  "retest": {
+   "verdict": "pass",
+   "app_version": "1.0.0.4",
+   "path": "C:\\win-closure-wt\\FHD\\docs\\evidence\\e2e\\windows-customer-loop-20260915\\04-retest\\receipt-c0ffee00dead.json"
+  },
+  "diagnosis_path": "C:\\win-closure-wt\\FHD\\docs\\evidence\\e2e\\windows-customer-loop-20260915\\02-diagnosis\\diagnosis-c0ffee00dead.json"
+ }
+]
