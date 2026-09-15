@@ -5,7 +5,7 @@
 import json, os, urllib.request
 
 BASE = "http://127.0.0.1:17500"
-USER, PASS = os.environ["XCAGI_TEST_USER"], os.environ["XCAGI_TEST_PASS"]
+USER = os.environ["XCAGI_TEST_USER"]
 opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 def call(method, path, token=None, payload=None):
@@ -17,10 +17,10 @@ def call(method, path, token=None, payload=None):
 
 R = {"phase": "G6-Mod/AI员工加载（1.0.0.4 OTA 后登录态）", "date": __import__("datetime").datetime.now().isoformat(timespec="seconds")}
 
-s, login = call("POST", "/api/auth/login", payload={"username": USER, "password": PASS})
+s, login = call("POST", "/api/auth/login", payload={"username": USER, "password": os.environ["XCAGI_TEST_PASS"]})
 wt = login.get("web_tokens") or {} if isinstance(login, dict) else {}
 tok = (wt.get("access_token") or login.get("access_token") or login.get("token") or "") if isinstance(login, dict) else ""
-R["login"] = {"status": s, "success": bool(tok), "user": USER}
+R["login"] = {"status": s, "success": bool(tok), "user": "<test-user>"}
 
 s, h = call("GET", "/api/health", token=tok)
 R["health"] = {"status": s, "version": h.get("version")}
