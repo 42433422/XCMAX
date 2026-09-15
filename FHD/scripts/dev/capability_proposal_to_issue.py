@@ -175,6 +175,124 @@ def _is_actionable_skill_proposal(proposal: dict[str, Any]) -> bool:
     )
 
 
+def _build_diagnosis_section(dedup_key: str) -> str:
+    """连接件2：存在证据包诊断文件时，把结构化诊断写入 issue 正文。
+
+    只输出错误签名与修复建议（工单外观载体），不含用户原文与日志原文；
+    文件缺失/损坏时返回空串，绝不阻塞建单。
+    """
+    key = str(dedup_key or "")[:12]
+    if not key:
+        return ""
+    diag_dir = Path(
+        os.environ.get("WORK_ORDER_DIAGNOSIS_DIR") or (_FHD_ROOT / "test_reports" / "diagnosis")
+    )
+    path = diag_dir / f"diagnosis-{key}.json"
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ""
+    if not isinstance(record, dict):
+        return ""
+    evidence = record.get("evidence") if isinstance(record.get("evidence"), dict) else {}
+    lines = [
+        "## 自动诊断（证据包驱动，连接件2）\n",
+        f"- **诊断引擎**: `{record.get('engine') or 'none'}`",
+        f"- **证据包完整**: `{evidence.get('intact')}`（SHA256 校验见诊断文件）",
+        f"- **证据包状态**: `{record.get('status') or 'analyzed'}`",
+    ]
+    errors = record.get("errors") or []
+    if errors:
+        lines.append(f"- **错误签名（前 {len(errors[:10])} 条）**:")
+        for e in errors[:10]:
+            if isinstance(e, dict):
+                lines.append(
+                    f"  - `[{e.get('tool')}:{e.get('code')}]` "
+                    f"`{e.get('file_path')}:{e.get('line')}` {e.get('message')}"
+                )
+    fixes = record.get("fixes") or []
+    if fixes:
+        lines.append(f"- **建议修复（前 {len(fixes[:10])} 条）**:")
+        for f in fixes[:10]:
+            if isinstance(f, dict):
+                lines.append(
+                    f"  - `[risk={f.get('risk_level')}]` {f.get('description')}"
+                    f"（needs_human={f.get('needs_human')}）"
+                )
+    return "\n".join(lines) + "\n\n"
+
+
+def _build_repro_section(dedup_key: str) -> str:
+    """连接件3：存在复现规格时，把自动复现场景写入 issue 正文。
+
+    供实现 agent 在修复 PR 中包含/更新可执行复现用例；文件缺失时返回空串。
+    """
+    key = str(dedup_key or "")[:12]
+    if not key:
+        return ""
+    repro_dir = Path(
+        os.environ.get("WORK_ORDER_REPRO_DIR") or (_FHD_ROOT / "test_reports" / "repro")
+    )
+    path = repro_dir / f"repro-{key}.json"
+    try:
+        spec = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ""
+    if not isinstance(spec, dict):
+        return ""
+    signature = spec.get("signature") or {}
+    scenario = spec.get("scenario") or {}
+    lines = [
+        "## 自动复现（连接件3）\n",
+        f"- **复现场景**: `{spec.get('kind')}`（status: `{spec.get('status')}`）",
+    ]
+    if scenario:
+        lines.append(f"- **目标**: `{json.dumps(scenario, ensure_ascii=False)}`")
+    if signature:
+        lines.append(
+            f"- **故障签名**: `[{signature.get('tool')}:{signature.get('code')}]` "
+            f"`{signature.get('file')}:{signature.get('line')}`"
+        )
+    if spec.get("status") == "needs_scenario":
+        lines.append(
+            "- **要求**: 修复 PR 必须附带可执行复现用例（先 RED 后 GREEN），并在 PR 描述留证。"
+        )
+    return "\n".join(lines) + "\n\n"
+
+
+def _build_retest_section(dedup_key: str) -> str:
+    """连接件4：存在客户侧重测回执时，把重测判定写入 issue 正文。
+
+    回执由 scripts/dev/customer_retest.py 在客户机上产出（健康/版本/场景三查）；
+    文件缺失时返回空串——发布验收回执仍由既有 release-acceptance-closeout 闭环承载。
+    """
+    key = str(dedup_key or "")[:12]
+    if not key:
+        return ""
+    retest_dir = Path(
+        os.environ.get("WORK_ORDER_RETEST_DIR") or (_FHD_ROOT / "test_reports" / "retest")
+    )
+    path = retest_dir / f"receipt-{key}.json"
+    try:
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ""
+    if not isinstance(receipt, dict):
+        return ""
+    lines = [
+        "## 客户侧重测（连接件4）\n",
+        f"- **判定**: **{receipt.get('verdict')}**（应用版本 `{receipt.get('app_version') or 'unknown'}`）",
+        f"- **基址**: `{receipt.get('base_url')}` · 时间 `{receipt.get('checked_at')}`",
+    ]
+    for check in receipt.get("checks") or []:
+        if isinstance(check, dict):
+            lines.append(
+                f"- {'PASS' if check.get('ok') else 'FAIL'} `{check.get('name')}` "
+                f"(status {check.get('status', '-')})"
+            )
+    return "\n".join(lines) + "\n\n"
+
+
 def _build_issue_body(proposal: dict[str, Any]) -> str:
     reason = proposal.get("reason") or "intent_unknown"
     ts = proposal.get("ts") or ""
@@ -228,6 +346,9 @@ def _build_issue_body(proposal: dict[str, Any]) -> str:
         "## 结构化上下文（已移除用户原文和槽位值）\n\n```json\n"
         f"{json.dumps({'intent': safe_intent_ctx, 'skill': safe_skill_ctx}, ensure_ascii=False, indent=2)}\n"
         "```\n\n"
+        f"{_build_diagnosis_section(dedup_key)}"
+        f"{_build_repro_section(dedup_key)}"
+        f"{_build_retest_section(dedup_key)}"
         "## 验收标准（进入 AI 开发前必须可验证）\n\n"
         f"{_build_acceptance_criteria(reason, safe_intent_ctx, safe_skill_ctx)}\n"
         "## 治理门禁\n\n"
@@ -307,6 +428,45 @@ def _mark_verified(
     return not (set(keys) & pending_keys)
 
 
+def _ensure_diagnoses(actionable: list[dict[str, Any]]) -> None:
+    """连接件2（自动诊断编排）：建单前对带证据包引用的提案产出结构化诊断。
+
+    复用 work_order_diagnose（其复用 ai_self_heal 提取/规则件）；fail-open：
+    诊断模块缺失、无证据、单条失败都不阻塞建单。CI 兜底环境无证据包时自然 no-op。
+    """
+    if not any(isinstance(p.get("evidence_ref"), dict) for p in actionable):
+        return
+    try:
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "work_order_diagnose", Path(__file__).with_name("work_order_diagnose.py")
+        )
+        if spec is None or spec.loader is None:
+            return
+        module = importlib.util.module_from_spec(spec)
+        sys.modules["work_order_diagnose"] = module
+        spec.loader.exec_module(module)
+        module.main(
+            [
+                "--max",
+                os.environ.get("WORK_ORDER_DIAGNOSIS_MAX", "20"),
+                *(["--llm"] if os.environ.get("WORK_ORDER_DIAGNOSIS_LLM") == "1" else []),
+            ]
+        )
+        # 连接件3：诊断产出后立即生成自动复现场景（嵌入 issue 供实现/重测复用）
+        repro_spec = importlib.util.spec_from_file_location(
+            "work_order_repro", Path(__file__).with_name("work_order_repro.py")
+        )
+        if repro_spec is not None and repro_spec.loader is not None:
+            repro_module = importlib.util.module_from_spec(repro_spec)
+            sys.modules["work_order_repro"] = repro_module
+            repro_spec.loader.exec_module(repro_module)
+            repro_module.main(["--max", os.environ.get("WORK_ORDER_DIAGNOSIS_MAX", "20")])
+    except BOUNDARY_ERRORS:  # 插件隔离边界：动态加载执行诊断/复现链，失败不阻塞建单
+        logger.debug("evidence diagnosis skipped", exc_info=True)
+
+
 def run(args: argparse.Namespace) -> int:
     pending = list_pending_proposals()
     if not pending:
@@ -333,6 +493,9 @@ def run(args: argparse.Namespace) -> int:
     if not args.token and not args.gh_cli:
         logger.error("--token or --gh-cli required for apply mode")
         return 1
+
+    # 连接件2：带证据包引用的提案先产出结构化诊断，供 issue 正文嵌入
+    _ensure_diagnoses(actionable)
 
     ignored_keys = [str(row.get("dedup_key") or "") for row in ignored]
     if not _mark_verified(ignored_keys, disposition="ignored_non_skill_proposal"):

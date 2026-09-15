@@ -229,8 +229,13 @@ def upsert_candidate(
     dedup_key: str,
     reason: str,
     context: dict[str, Any] | None = None,
+    evidence_ref: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """候选需求升级为唯一工单（幂等：同 source+dedup_key 不重复建单）。
+
+    evidence_ref 为可选证据包引用（kind/path/sha256/bytes），并入
+    context.evidence_ref 随既有 context 通道流转（远端/本地同构），
+    不新增远端 API 顶层字段；仅引用不含用户输入。
 
     返回 {"wo_id", "created", "status"}。
     """
@@ -238,6 +243,9 @@ def upsert_candidate(
     key = str(dedup_key or "").strip()
     if not key:
         return {"wo_id": "", "created": False, "status": "", "reason": "empty_dedup_key"}
+    merged_context = dict(context or {})
+    if evidence_ref:
+        merged_context["evidence_ref"] = evidence_ref
     if _remote_enabled():
         try:
             res = _remote_request(
@@ -247,7 +255,7 @@ def upsert_candidate(
                     "source": src,
                     "dedup_key": key,
                     "reason": str(reason or ""),
-                    "context": context or {},
+                    "context": merged_context,
                 },
             )
             if res.get("wo_id"):
@@ -270,7 +278,7 @@ def upsert_candidate(
             "source": src,
             "dedup_key": key,
             "reason": str(reason or ""),
-            "context": context or {},
+            "context": merged_context,
             "at": _utc_now(),
             "ts_unix": time.time(),
         }
