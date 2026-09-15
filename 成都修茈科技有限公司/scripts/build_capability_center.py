@@ -591,7 +591,7 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
         <div class="cap-info-block"><h3>功能价值</h3><p>{esc(f.get('summary', ''))}</p></div>
         <div class="cap-info-block"><h3>使用方式</h3><p>{esc(usage)}</p></div>
         <div class="cap-info-block"><h3>所属模块</h3><p>{esc(dom['name'])} / {esc(mod['name'])}</p></div>
-        <div class="cap-info-block"><h3>支持平台</h3><p>{' '.join(platform_tags(f.get('platforms', []))) or '—'}</p></div>
+        <div class="cap-info-block"><h3>支持平台</h3><p>{platform_tags(f.get('platforms', [])) or '—'}</p></div>
         <div class="cap-info-block"><h3>当前状态</h3><p>{status_badge(f['status'])}（最近验证时间：{esc(verified_time)}）</p></div>
         <div class="cap-info-block"><h3>已知限制</h3><ul class="cap-limitations">{limitations}</ul></div>
       </div>
