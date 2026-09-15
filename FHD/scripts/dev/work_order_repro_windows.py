@@ -248,12 +248,31 @@ def run_injection(spec: dict[str, Any], *, timeout_seconds: int) -> dict[str, An
         evidence["exit_code"] = proc.returncode
         receipt = _load_json(Path(evidence_dir) / "fault-injection-receipt.json")
         evidence["receipt"] = receipt
-        if receipt and (receipt.get("summary") or {}).get("fail", 1) == 0:
-            # 复现「成功」= 故障被如实注入且恢复行为符合预期（场景 PASS）
+        # 与 Mac 连接件3 RED/GREEN 语义对齐：
+        #   FAIL/PARTIAL = 恢复行为不符合预期 = 客户故障被真实重现（RED，reproduced）
+        #   PASS         = 恢复行为符合预期     = 修复后验证通过（GREEN）
+        #   SKIP         = 前置不满足（如数据根无备份种子），不算复现，交人工补前置
+        target = str(scenario.get("injection_scenario") or "")
+        result = next(
+            (
+                str(s.get("结果") or s.get("scenario_result") or "")
+                for s in (receipt or {}).get("scenarios", [])
+                if str(s.get("场景") or s.get("scenario") or "").startswith(target)
+            ),
+            "",
+        )
+        evidence["scenario_result"] = result
+        if result in ("FAIL", "PARTIAL"):
             evidence["reproduced"] = True
+            evidence["verdict"] = "red_reproduced"
+        elif result == "PASS":
+            evidence["reproduced"] = False
+            evidence["verdict"] = "green_recovery_ok"
         elif proc.returncode != 0:
-            evidence["reproduced"] = True  # 注入失败本身即异常信号，留人工判读
-            evidence["note"] = "inject_exit_nonzero"
+            evidence["reproduced"] = True  # 注入脚本自身异常，留人工判读
+            evidence["verdict"] = "inject_exit_nonzero"
+        else:
+            evidence["verdict"] = "skipped_no_seed"
     except subprocess.TimeoutExpired:
         evidence["error"] = f"timeout_{timeout_seconds}s"
     except OSError as exc:

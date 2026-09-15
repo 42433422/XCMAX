@@ -157,7 +157,10 @@ def test_run_injection_reads_reproduced(tmp_path: Path, monkeypatch: pytest.Monk
         evidence_dir=str(tmp_path / "ev"),
     )
     assert result is not None
-    receipt = {"summary": {"pass": 1, "fail": 0, "partial": 0, "skip": 0}}
+    receipt = {
+        "scenarios": [{"场景": "corrupt-main", "结果": "FAIL", "说明": "启动失败"}],
+        "summary": {"pass": 0, "fail": 1, "partial": 0, "skip": 0},
+    }
 
     class _Proc:
         returncode = 0
@@ -172,8 +175,73 @@ def test_run_injection_reads_reproduced(tmp_path: Path, monkeypatch: pytest.Monk
 
     monkeypatch.setattr(win.subprocess, "run", _fake_run)
     evidence = win.run_injection(result, timeout_seconds=5)
-    assert evidence["reproduced"] is True
+    assert evidence["reproduced"] is True  # FAIL=故障真实重现（RED）
+    assert evidence["verdict"] == "red_reproduced"
     assert evidence["receipt"] == receipt
+
+
+def test_run_injection_pass_is_green(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    spec = _needs_scenario_spec()
+    result = win.upgrade_spec(
+        spec,
+        _diag("database is malformed"),
+        install_root=str(tmp_path / "acc"),
+        data_root=str(tmp_path / "iso"),
+        evidence_dir=str(tmp_path / "ev"),
+    )
+    assert result is not None
+    receipt = {
+        "scenarios": [{"场景": "corrupt-main", "结果": "PASS", "说明": "恢复正常"}],
+        "summary": {"pass": 1, "fail": 0, "partial": 0, "skip": 0},
+    }
+
+    class _Proc:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    def _fake_run(_cmd: list[str], **_kw: Any) -> _Proc:
+        ev = Path(result["scenario"]["evidence_dir"])
+        ev.mkdir(parents=True, exist_ok=True)
+        (ev / "fault-injection-receipt.json").write_text(json.dumps(receipt), encoding="utf-8")
+        return _Proc()
+
+    monkeypatch.setattr(win.subprocess, "run", _fake_run)
+    evidence = win.run_injection(result, timeout_seconds=5)
+    assert evidence["reproduced"] is False  # PASS=恢复符合预期（GREEN）
+    assert evidence["verdict"] == "green_recovery_ok"
+
+
+def test_run_injection_skip_not_reproduced(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    spec = _needs_scenario_spec()
+    result = win.upgrade_spec(
+        spec,
+        _diag("backup corrupt"),
+        install_root=str(tmp_path / "acc"),
+        data_root=str(tmp_path / "iso"),
+        evidence_dir=str(tmp_path / "ev"),
+    )
+    assert result is not None
+    receipt = {
+        "scenarios": [{"场景": "corrupt-backup", "结果": "SKIP", "说明": "数据根无备份文件"}],
+        "summary": {"pass": 0, "fail": 0, "partial": 0, "skip": 1},
+    }
+
+    class _Proc:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    def _fake_run(_cmd: list[str], **_kw: Any) -> _Proc:
+        ev = Path(result["scenario"]["evidence_dir"])
+        ev.mkdir(parents=True, exist_ok=True)
+        (ev / "fault-injection-receipt.json").write_text(json.dumps(receipt), encoding="utf-8")
+        return _Proc()
+
+    monkeypatch.setattr(win.subprocess, "run", _fake_run)
+    evidence = win.run_injection(result, timeout_seconds=5)
+    assert evidence["reproduced"] is False  # SKIP=前置不满足，不算复现
+    assert evidence["verdict"] == "skipped_no_seed"
 
 
 def test_run_upgrades_and_is_idempotent(tmp_path: Path) -> None:
