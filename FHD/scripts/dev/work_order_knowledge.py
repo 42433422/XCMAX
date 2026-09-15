@@ -32,8 +32,7 @@ if str(_FHD_ROOT) not in sys.path:
 
 def _knowledge_path() -> Path:
     root = Path(
-        os.environ.get("WORK_ORDER_KNOWLEDGE_DIR")
-        or (_FHD_ROOT / "test_reports" / "knowledge")
+        os.environ.get("WORK_ORDER_KNOWLEDGE_DIR") or (_FHD_ROOT / "test_reports" / "knowledge")
     )
     root.mkdir(parents=True, exist_ok=True)
     return root / "cases.jsonl"
@@ -44,25 +43,18 @@ _KB_LOCK = threading.Lock()
 
 def _diagnosis_path(dedup_key: str) -> Path:
     d = Path(
-        os.environ.get("WORK_ORDER_DIAGNOSIS_DIR")
-        or (_FHD_ROOT / "test_reports" / "diagnosis")
+        os.environ.get("WORK_ORDER_DIAGNOSIS_DIR") or (_FHD_ROOT / "test_reports" / "diagnosis")
     )
     return d / f"diagnosis-{str(dedup_key)[:12]}.json"
 
 
 def _repro_path(dedup_key: str) -> Path:
-    d = Path(
-        os.environ.get("WORK_ORDER_REPRO_DIR")
-        or (_FHD_ROOT / "test_reports" / "repro")
-    )
+    d = Path(os.environ.get("WORK_ORDER_REPRO_DIR") or (_FHD_ROOT / "test_reports" / "repro"))
     return d / f"repro-{str(dedup_key)[:12]}.json"
 
 
 def _retest_path(dedup_key: str) -> Path:
-    d = Path(
-        os.environ.get("WORK_ORDER_RETEST_DIR")
-        or (_FHD_ROOT / "test_reports" / "retest")
-    )
+    d = Path(os.environ.get("WORK_ORDER_RETEST_DIR") or (_FHD_ROOT / "test_reports" / "retest"))
     return d / f"receipt-{str(dedup_key)[:12]}.json"
 
 
@@ -99,8 +91,7 @@ def compose_case(dedup_key: str) -> dict[str, Any] | None:
         },
         "engine": str(diagnosis.get("engine") or ""),
         "fix_description": str(
-            (fixes[0].get("description") if fixes and isinstance(fixes[0], dict) else "")
-            or ""
+            (fixes[0].get("description") if fixes and isinstance(fixes[0], dict) else "") or ""
         ),
         "repro": {
             "kind": str(repro.get("kind") or ""),
@@ -131,9 +122,7 @@ def upsert_case(case: dict[str, Any]) -> int:
         key = str(case.get("dedup_key") or "")
         cases = [c for c in cases if str(c.get("dedup_key") or "") != key]
         cases.append(case)
-        path.write_text(
-            json.dumps(cases, ensure_ascii=False, indent=1), encoding="utf-8"
-        )
+        path.write_text(json.dumps(cases, ensure_ascii=False, indent=1), encoding="utf-8")
     return len(cases)
 
 
@@ -179,7 +168,7 @@ def close_work_order(wo_id: str) -> bool:
         )
         logger.info("work order transition: %s", res)
         return bool(res.get("ok"))
-    except Exception:  # noqa: BLE001 - 状态机不可达不阻塞知识回流
+    except (ImportError, OSError):  # 状态机导入失败/事件流IO失败不阻塞知识回流
         logger.debug("work order transition skipped", exc_info=True)
         return False
 

@@ -36,7 +36,9 @@ def _load_script(relpath: str, name: str) -> Any:
 
 
 diagnose = _load_script("scripts/dev/work_order_diagnose.py", "work_order_diagnose")
-to_issue = _load_script("scripts/dev/capability_proposal_to_issue.py", "capability_proposal_to_issue")
+to_issue = _load_script(
+    "scripts/dev/capability_proposal_to_issue.py", "capability_proposal_to_issue"
+)
 
 
 @pytest.fixture
@@ -77,9 +79,7 @@ def _proposal_with_evidence(raw_input: str, ref: dict[str, Any]) -> dict[str, An
 
 class TestDiagnoseProposal:
     def test_rule_engine_diagnosis(self, isolated_proposals: Path, tmp_path: Path) -> None:
-        ref = _make_bundle(
-            tmp_path, "app/foo.py:3:1: F401 [*] `os` imported but unused\n"
-        )
+        ref = _make_bundle(tmp_path, "app/foo.py:3:1: F401 [*] `os` imported but unused\n")
         _proposal_with_evidence("日志里看到导入未使用", ref)
         out_dir = tmp_path / "diagnosis"
         rc = diagnose.main(["--out-dir", str(out_dir)])
@@ -92,9 +92,7 @@ class TestDiagnoseProposal:
         assert record["fixes"], "ruff F401 规则应产出修复建议"
         assert record["fixes"][0]["tool"] == "ruff"
 
-    def test_evidence_missing_fail_open(
-        self, isolated_proposals: Path, tmp_path: Path
-    ) -> None:
+    def test_evidence_missing_fail_open(self, isolated_proposals: Path, tmp_path: Path) -> None:
         ref = {
             "kind": "support_bundle",
             "path": str(tmp_path / "missing.zip"),

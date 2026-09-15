@@ -42,10 +42,10 @@ from app.services.capability_proposal_recorder import (  # noqa: E402
     list_pending_proposals,
 )
 from app.services.work_order_ssot import derive_wo_id  # noqa: E402
+from app.utils.operational_errors import BOUNDARY_ERRORS  # noqa: E402
 
 _DIAGNOSIS_DIR = Path(
-    os.environ.get("WORK_ORDER_DIAGNOSIS_DIR")
-    or (_FHD_ROOT / "test_reports" / "diagnosis")
+    os.environ.get("WORK_ORDER_DIAGNOSIS_DIR") or (_FHD_ROOT / "test_reports" / "diagnosis")
 )
 
 
@@ -207,14 +207,12 @@ def run(args: argparse.Namespace) -> int:
             continue
         try:
             record = diagnose_proposal(proposal, use_llm=args.llm)
-        except Exception as exc:  # noqa: BLE001 - fail-open：单条失败不断链
+        except BOUNDARY_ERRORS as exc:  # 批量边界：单条提案失败不断链
             logger.warning("diagnose failed for %s: %s", key[:12], exc)
             continue
         if record is None:
             continue
-        out_path.write_text(
-            json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        out_path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
         produced += 1
         logger.info("diagnosis written: %s engine=%s", out_path, record.get("engine"))
     logger.info("diagnosis done: produced=%d", produced)

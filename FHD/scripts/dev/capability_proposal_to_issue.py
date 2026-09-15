@@ -185,8 +185,7 @@ def _build_diagnosis_section(dedup_key: str) -> str:
     if not key:
         return ""
     diag_dir = Path(
-        os.environ.get("WORK_ORDER_DIAGNOSIS_DIR")
-        or (_FHD_ROOT / "test_reports" / "diagnosis")
+        os.environ.get("WORK_ORDER_DIAGNOSIS_DIR") or (_FHD_ROOT / "test_reports" / "diagnosis")
     )
     path = diag_dir / f"diagnosis-{key}.json"
     try:
@@ -464,7 +463,7 @@ def _ensure_diagnoses(actionable: list[dict[str, Any]]) -> None:
             sys.modules["work_order_repro"] = repro_module
             repro_spec.loader.exec_module(repro_module)
             repro_module.main(["--max", os.environ.get("WORK_ORDER_DIAGNOSIS_MAX", "20")])
-    except Exception:  # noqa: BLE001 - 诊断失败不阻塞建单
+    except BOUNDARY_ERRORS:  # 插件隔离边界：动态加载执行诊断/复现链，失败不阻塞建单
         logger.debug("evidence diagnosis skipped", exc_info=True)
 
 

@@ -175,7 +175,9 @@ class TestRelayChain:
         assert "自动复现" in body
         assert "module_import" in body
 
-    def test_issue_body_without_repro_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_issue_body_without_repro_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("WORK_ORDER_REPRO_DIR", str(tmp_path / "none"))
         body = to_issue._build_repro_section("ab" * 6)
         assert body == ""
@@ -197,9 +199,7 @@ class TestRetestSection:
                 {"name": "scenario_retest", "ok": False, "status": 404},
             ],
         }
-        (retest_dir / f"receipt-{'ab' * 6}.json").write_text(
-            json.dumps(receipt), encoding="utf-8"
-        )
+        (retest_dir / f"receipt-{'ab' * 6}.json").write_text(json.dumps(receipt), encoding="utf-8")
         monkeypatch.setenv("WORK_ORDER_RETEST_DIR", str(retest_dir))
         body = to_issue._build_retest_section("ab" * 6)
         assert "客户侧重测" in body

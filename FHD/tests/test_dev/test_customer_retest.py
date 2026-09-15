@@ -157,7 +157,8 @@ class TestRetest:
         thread.start()
         try:
             receipt = retest_mod.retest(
-                _spec(), f"http://127.0.0.1:{server.server_address[1]}",
+                _spec(),
+                f"http://127.0.0.1:{server.server_address[1]}",
                 expect_version="1.0.0.4",
             )
         finally:
@@ -190,9 +191,7 @@ class TestRetest:
         monkeypatch.setenv("WORK_ORDER_DIAGNOSIS_DIR", str(tmp_path / "none"))
         _FakeAppHandler.retest_status = 500
         try:
-            rc = retest_mod.main(
-                ["--spec", str(_write_spec(tmp_path)), "--base-url", base_url]
-            )
+            rc = retest_mod.main(["--spec", str(_write_spec(tmp_path)), "--base-url", base_url])
         finally:
             _FakeAppHandler.retest_status = 200
         assert rc == 2

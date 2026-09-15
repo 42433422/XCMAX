@@ -28,18 +28,18 @@ from typing import Any
 logger = logging.getLogger("customer_retest")
 
 _FHD_ROOT = Path(__file__).resolve().parents[2]
+if str(_FHD_ROOT) not in sys.path:
+    sys.path.insert(0, str(_FHD_ROOT))
+
+from app.utils.operational_errors import BOUNDARY_ERRORS  # noqa: E402
 
 
 def _repro_dir() -> Path:
-    return Path(
-        os.environ.get("WORK_ORDER_REPRO_DIR") or (_FHD_ROOT / "test_reports" / "repro")
-    )
+    return Path(os.environ.get("WORK_ORDER_REPRO_DIR") or (_FHD_ROOT / "test_reports" / "repro"))
 
 
 def _retest_dir() -> Path:
-    return Path(
-        os.environ.get("WORK_ORDER_RETEST_DIR") or (_FHD_ROOT / "test_reports" / "retest")
-    )
+    return Path(os.environ.get("WORK_ORDER_RETEST_DIR") or (_FHD_ROOT / "test_reports" / "retest"))
 
 
 # 直连客户端：绕过本机代理（历史教训：代理拦截 127.0.0.1 造成假阴性）
@@ -107,9 +107,7 @@ def retest(spec: dict[str, Any], base_url: str, *, expect_version: str = "") -> 
     retest_url = str(scenario.get("retest_url") or "")
     if retest_url:
         url = retest_url if retest_url.startswith("http") else f"{base}{retest_url}"
-        checks.append(
-            _check(base_url, "scenario_retest", url, ok_status_lt=400)
-        )
+        checks.append(_check(base_url, "scenario_retest", url, ok_status_lt=400))
 
     verdict = "pass" if checks and all(c["ok"] for c in checks) else "fail"
     return {
@@ -132,7 +130,9 @@ def _comment_on_issue(issue_number: int, receipt: dict[str, Any]) -> bool:
         f"- 时间: `{receipt['checked_at']}`",
     ]
     for check in receipt.get("checks", []):
-        lines.append(f"- {'PASS' if check.get('ok') else 'FAIL'} {check.get('name')} ({check.get('status', '-')})")
+        lines.append(
+            f"- {'PASS' if check.get('ok') else 'FAIL'} {check.get('name')} ({check.get('status', '-')})"
+        )
     try:
         completed = subprocess.run(
             ["gh", "issue", "comment", str(issue_number), "--body", "\n".join(lines)],
@@ -160,7 +160,7 @@ def _record_knowledge(key12: str) -> None:
     spec.loader.exec_module(module)
     try:
         module.main(["--record", _spec_dedup_key(key12)])
-    except Exception:  # noqa: BLE001 - 知识回流失败不阻塞重测回执
+    except BOUNDARY_ERRORS:  # 插件隔离边界：动态执行知识回流，失败不阻塞重测回执
         logger.debug("knowledge record skipped", exc_info=True)
 
 
