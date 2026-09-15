@@ -349,6 +349,60 @@ class TestBuildSupportBundleZip:
         # No log files included
         assert not any(n.startswith("logs/") for n in zf.namelist())
 
+    def test_evidence_ref_not_desktop_mode_returns_none(self, tmp_path):
+        from app.desktop_runtime.support_bundle import build_evidence_ref
+
+        with patch("app.desktop_runtime.support_bundle.is_desktop_mode", return_value=False):
+            assert build_evidence_ref(data_dir=str(tmp_path)) is None
+
+    def test_evidence_ref_writes_bundle_and_prunes(self, tmp_path):
+        import hashlib
+
+        from app.desktop_runtime.support_bundle import build_evidence_ref
+
+        dirs = self._setup_dirs(tmp_path)
+        bundle_dir = dirs["root"] / "support-bundles"
+        bundle_dir.mkdir()
+        # 预置 10 份旧包，验证只保留最近 keep_last 份
+        for i in range(10):
+            (bundle_dir / f"support-bundle-20200101T00000{i}-0000{i}.zip").write_bytes(b"old")
+
+        with (
+            patch("app.desktop_runtime.support_bundle.is_desktop_mode", return_value=True),
+            patch("app.desktop_runtime.support_bundle.ensure_desktop_dirs", return_value=dirs),
+            patch("app.desktop_runtime.support_bundle.export_config", return_value={}),
+            patch(
+                "app.desktop_runtime.support_bundle.build_support_bundle_zip",
+                return_value=b"zipbytes",
+            ),
+        ):
+            ref = build_evidence_ref(data_dir=str(tmp_path), keep_last=10)
+
+        assert ref is not None
+        assert ref["kind"] == "support_bundle"
+        assert ref["sha256"] == hashlib.sha256(b"zipbytes").hexdigest()
+        assert ref["bytes"] == len(b"zipbytes")
+        assert Path(ref["path"]).read_bytes() == b"zipbytes"
+        # 10 份旧包 + 1 份新包 → 保留最近 10 份，最旧 1 份被清理
+        remaining = sorted(p.name for p in bundle_dir.glob("support-bundle-*.zip"))
+        assert len(remaining) == 10
+        assert Path(ref["path"]).name in remaining
+        assert "support-bundle-20200101T000000-00000.zip" not in remaining
+
+    def test_evidence_ref_build_failure_returns_none(self, tmp_path):
+        from app.desktop_runtime.support_bundle import build_evidence_ref
+
+        dirs = self._setup_dirs(tmp_path)
+        with (
+            patch("app.desktop_runtime.support_bundle.is_desktop_mode", return_value=True),
+            patch("app.desktop_runtime.support_bundle.ensure_desktop_dirs", return_value=dirs),
+            patch(
+                "app.desktop_runtime.support_bundle.build_support_bundle_zip",
+                side_effect=OSError("disk full"),
+            ),
+        ):
+            assert build_evidence_ref(data_dir=str(tmp_path)) is None
+
 
 # ---------------------------------------------------------------------------
 # model_downloader.py

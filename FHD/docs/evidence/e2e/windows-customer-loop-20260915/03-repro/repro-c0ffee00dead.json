@@ -1,0 +1,40 @@
+{
+  "wo_id": "WO-c0ffee00dead",
+  "scenario": {
+    "injection_scenario": "corrupt-backup",
+    "install_root": "C:\\XCAGI-acceptance",
+    "data_root": "C:\\XCAGI-acceptance\\repro-data",
+    "evidence_dir": "C:\\win-closure-wt\\FHD\\docs\\evidence\\e2e\\windows-customer-loop-20260915\\03-repro\\win-evidence-c0ffee00dead",
+    "command": [
+      "pwsh",
+      "-NoProfile",
+      "-File",
+      "C:\\win-closure-wt\\FHD\\scripts\\package\\fault-injection-windows.ps1",
+      "-Scenario",
+      "corrupt-backup",
+      "-InstallRoot",
+      "C:\\XCAGI-acceptance",
+      "-DataRoot",
+      "C:\\XCAGI-acceptance\\repro-data",
+      "-EvidenceDir",
+      "C:\\win-closure-wt\\FHD\\docs\\evidence\\e2e\\windows-customer-loop-20260915\\03-repro\\win-evidence-c0ffee00dead",
+      "-CiMode"
+    ],
+    "assertion": "fault-injection receipt summary.fail == 0"
+  },
+  "status": "generated",
+  "note": "mac work_order_repro produced needs_scenario (non module_import); Windows lane upgrades to fault-injection",
+  "kind": "windows_fault_injection",
+  "signature": {
+    "file": "",
+    "message": "backup file corrupt",
+    "code": "",
+    "line": 0,
+    "tool": "unknown"
+  },
+  "dedup_key": "c0ffee00deadbeef12345678abcdef99",
+  "upgraded_at": "2026-09-15T11:35:52.872986+00:00",
+  "matched_rule": "backup.*(fail|error|corrupt|missing)",
+  "isolated": true,
+  "live_data_root_detected": false
+}

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import logging
 import os
 import platform
 import sys
+import time
 import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -121,3 +123,43 @@ def build_support_bundle_zip(
 
     buf.seek(0)
     return buf.getvalue()
+
+
+def build_evidence_ref(
+    *,
+    data_dir: str | os.PathLike[str] | None = None,
+    keep_last: int = 10,
+) -> dict[str, Any] | None:
+    """落盘一份支持诊断包并返回工单 context 用的证据引用（best-effort）。
+
+    连接件：客户信号 → 故障证据包。非桌面模式或构建失败一律返回 None，
+    证据采集永不阻塞信号主线；引用只含路径/SHA256/大小，不含用户输入，
+    与「提案字段精简、敏感输入不外泄」原则一致。
+    """
+    if not is_desktop_mode():
+        return None
+    try:
+        dirs = ensure_desktop_dirs(data_dir or os.environ.get("XCAGI_DATA_DIR"))
+        bundle_dir = dirs["root"] / "support-bundles"
+        bundle_dir.mkdir(parents=True, exist_ok=True)
+        blob = build_support_bundle_zip(data_dir=data_dir)
+        stamp = f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%S')}-{time.time_ns() % 100000:05d}"
+        path = bundle_dir / f"support-bundle-{stamp}.zip"
+        path.write_bytes(blob)
+        # 只保留最近 keep_last 份，防止诊断包目录无限膨胀
+        bundles = sorted(bundle_dir.glob("support-bundle-*.zip"))
+        for old in bundles[:-keep_last] if keep_last > 0 else []:
+            try:
+                old.unlink()
+            except OSError:
+                logger.debug("prune old support bundle failed: %s", old)
+        return {
+            "kind": "support_bundle",
+            "path": str(path),
+            "sha256": hashlib.sha256(blob).hexdigest(),
+            "bytes": len(blob),
+            "generated_at": stamp,
+        }
+    except RECOVERABLE_ERRORS:  # noqa: BLE001
+        logger.debug("support bundle evidence build failed", exc_info=True)
+        return None

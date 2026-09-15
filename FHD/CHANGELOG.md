@@ -6,6 +6,22 @@
 
 ## Unreleased（1.0.0.4 之后的累积变更）
 
+- 连接件3 Windows 车道增量（实机故障注入矩阵）：新增 `scripts/dev/work_order_repro_windows.py`——把 Mac 连接件3 产出 `needs_scenario` 的规格升级为可执行实机复现：确定性关键词映射到既有 `scripts/package/fault-injection-windows.ps1` 六大场景（corrupt-main/corrupt-backup/kill-orphan/dual-process/migration-mutex/kill-all），`--execute` 在隔离 InstallRoot+DataRoot 实机复现并读 `fault-injection-receipt.json` 留证。复用的是注入脚本本体与 Mac 契约（同 `test_reports/repro/repro-<key12>.json` 读写、`scenario` 保持 dict、证据 `evidence-<key12>.json` 同命名），零改动 Mac 五连接件与公共 Schema；实机安全闸检测 DataRoot 落在用户真实 `%APPDATA%\XCAGI` 时拒绝执行。module_import 规格原样跳过不覆盖。删除全仓零引用一次性脚本 6 个（mypy autofix 两件+patch_pw/patch_surface 四件，净删除 -1429 行对冲本件新增）。
+
+- CI 门禁修复：五连接件脚本 4 处 `except Exception` 收窄——插件隔离边界（动态加载执行诊断/复现链、知识回流）与批量诊断边界改用既有命名边界元组 `BOUNDARY_ERRORS`（复用 `app/utils/operational_errors.py`，不造新轮子），`close_work_order` 按真实失败面收窄为 `(ImportError, OSError)`（`record_transition` 契约失败走返回值不抛异常）；同步 ruff format 3 个测试文件。broad-except 门禁 owned handlers 4→0，连接件 33 测试与端到端验收重跑全 PASS。
+
+- 闭环端到端验收 PASS（工单 WO-12287f1ac91f 全链真实跑通）：真实注入 module_import 客户故障 → 一句话入 Signal Gate → 连接件1 生产路径 build_evidence_ref 打包脱敏证据（SHA256 校验一致）→ 连接件2 规则引擎诊断（F401 签名）→ 连接件3 module_import 复现 RED（exit 1）→ 修复删除故障行 → 复现 GREEN（exit 0）→ 真实 FastAPI+health 路由客户应用恢复 → 连接件4 重测 pass → 连接件5 知识案例落库 + 状态机 verifying→closed。验收中发现并修复两个真实缺陷：customer_retest 用 400 字符截断的 body_snippet 解析 health JSON 导致真实载荷必然解析失败（改用完整 body 解析、回执只留摘要）；work_order_knowledge 作为子进程脚本缺 sys.path 引导导致 app 导入静默失败、工单无法自动关闭（与 diagnose 同款引导）。
+
+- 连接件5（客户问题→自动解决闭环·知识回流）：新增 `scripts/dev/work_order_knowledge.py`——重测通过后自动把诊断（连接件2）+复现规格（连接件3）+重测回执（连接件4）组合成结构化案例落 `test_reports/knowledge/cases.jsonl`（同 dedup_key 幂等替换），复用工单状态机 `record_transition` 推进 verifying→closed、可选 `--close-issue` 关闭工单 issue；检索按故障签名（tool:code）规则匹配零延迟，连接件2 诊断自动附加历史同类案例（known_cases）实现知识回流消费；`customer_retest` 在 verdict=pass 时自动触发记录（fail-open）。删除零引用一次性脚本 `eval_routing_policy.py`、`generate_routing_data.py`（净删除）。
+
+- 连接件4（客户问题→自动解决闭环·客户侧重测）：新增 `scripts/dev/customer_retest.py`——修复送达客户机后对运行中应用执行场景重测（`/api/health?lite=1` 健康+版本+`scenario.retest_url` 场景三查，全部直连绕过本机代理防 127.0.0.1 假阴性），回执落 `test_reports/retest/receipt-<key12>.json` 并可 `--issue-comment` 写回工单 issue（对外观测载体复用，不替代既有 release-acceptance-closeout 安装回执闭环）；中继链新增「客户侧重测」节把重测判定嵌入 issue 正文。
+
+- 连接件3（客户问题→自动解决闭环·自动复现）：新增 `scripts/dev/work_order_repro.py`——从连接件2 诊断的错误签名自动生成可执行复现用例（module_import 类：仓库内目标文件的导入断言，故障期 RED=复现、修复后 GREEN），`--run` 执行并留红/绿证据 JSON；非可执行签名只出场景规格（needs_scenario，不造假自动复现），要求修复 PR 附带先 RED 后 GREEN 的复现用例；中继链在诊断后自动生成复现规格并嵌入 issue 正文。删除全仓零引用一次性脚本 `llm_label_ensemble.py`、`llm_label_arbitrate.py`、`analyze_label_consensus.py`（净删除 -1078 行）。
+
+- 连接件2（客户问题→自动解决闭环·自动诊断编排）：新增 `scripts/dev/work_order_diagnose.py`——对带证据包引用（连接件1）的提案复用 ai_self_heal 既有七元契约件（extract_errors/match_rules/call_llm，fail-open）产出结构化诊断（错误签名+修复建议+SHA256 校验，不含用户原文与日志原文）；`capability_proposal_to_issue` 建单前自动触发诊断并把「自动诊断」节嵌入 issue 正文，经既有 ai-issue-implement 派发实现，不新建派发通道；CI 兜底环境无证据包自然 no-op。删除零引用一次性脚本 `patch_pw_market_admin_pages.py`、`mypy_phase9_autofix.py`（净删除）。
+
+- 连接件1（客户问题→自动解决闭环·故障证据包）：桌面端客户信号落库时自动生成脱敏支持诊断包（`support_bundle.build_evidence_ref`，含日志尾部/更新事件/备份与崩溃清单，去密级脱敏），引用（kind/path/SHA256/大小，不含用户输入）随提案 `evidence_ref` 并入工单 `context.evidence_ref` 既有通道流转，供后续自动诊断/客户侧重测读取；非桌面模式与采集失败一律返回 None，永不阻塞信号主线；复用既有 capability_proposal→work_order_ssot 主干，未改远端 API 公共字段；删除零引用一次性脚本 `scripts/dev/convert_logging_fstrings.py`（净删除）。
+
 ## 1.0.0.4（2026-09-14 发布）
 
 - fix(test): 故障注入 dual-process/migration-mutex 改按「场景前基线增量」判定损坏留证——corrupt-main 场景按设计保留 `.corrupt-*` 留证文件，`-Scenario all` 顺序执行时被后续场景误判为新增损坏（2026-09-14 run 34836989979 真实 runner 复盘：单实例锁 1s 退出、竞态收敛单后端均实际生效，主库字节不变，FAIL 为脚本误报）

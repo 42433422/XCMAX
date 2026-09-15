@@ -1,5 +1,5 @@
 {
-  "lines": 2312525,
+  "lines": 2310716,
   "updated": "2026-09-15",
-  "note": "rebase 到 main e8dd9e14b（#1943 Windows 收口证据回填）后，将其净文档增量折入本 PR 基线；本 PR 实际净增仍为收口审计证据回填（§6.1 Gate 表+§10 审计总表），staging 笔记三份已删除"
+  "note": "rebase 折入 main af1c341cd（#1945 证据回填）净文档增量 +71 行；分支内容不变"
 }
