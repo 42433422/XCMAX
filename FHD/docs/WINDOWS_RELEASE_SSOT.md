@@ -75,7 +75,10 @@
 
 > **故障注入补充证据（2026-09-13，GitHub Windows runner，包=§2 1.0.0.2 行）**：run 34727133868 `fault-injection-windows.ps1 -Scenario all` PASS=4/FAIL=0/SKIP=2——kill-all（status=degraded 可观测）/kill-orphan（孤儿 sidecar 占端口后重启恢复）/corrupt-backup（坏备份不误伤启动）/corrupt-main（坏库改名留证→备份还原→health 可达）全过；disk-full/power-cut 为实体机人工场景 SKIP（归 T8）。
 >
+> **双进程/迁移互斥 runner 证据（2026-09-14，run 34841838624，main HEAD `3d872b32e`，testing 通道 1.0.0.3 包 SHA256 `7c044bec…` 实测校验一致）**：#1938 修复误报判定后重跑——**dual-process PASS**（第二实例 1s 自行退出 ExitCode=0，单实例锁生效，backend_count=1，主库 1445888→1445888 字节无损）；**migration-mutex PASS**（0.3s 竞态双启动收敛单后端，监听 PID 唯一，corrupt_evidence=0，主库 1667072 字节无损）；disk-full/power-cut 维持实体机人工场景 SKIP（T8）。FAIL=0/PARTIAL=0。证据 [fault-injection-run-34841838624/README.md](evidence/e2e/windows-release-1.0.0.3/fault-injection-run-34841838624/README.md)。注：同日首次重跑 run 34836989979 FAIL=2 为脚本误报（corrupt-main 场景设计留证污染后续场景绝对计数判定），判定已改场景前基线增量（#1938）。
+>
 > **故障注入补充证据（2026-09-15，本机实装 1.0.0.4@`604b85e1`，dual-process/migration-mutex）**：PASS=2/FAIL=0/SKIP=2——dual-process：运行中二次启动第二实例 1s 自退（`requestSingleInstanceLock` 生效），主实例 health 可达、单后端、无损坏证据；migration-mutex：0.3s 间隔竞态双启动收敛，后端恰 1 个、监听唯一（37404）、主库 1,699,840 B 完整。收据+场景证据：[t9/chain/fault-local-1.0.0.4/](evidence/e2e/windows-release-1.0.0.2/t9/chain/fault-local-1.0.0.4/fault-injection-receipt.json)。CI 侧同场景基线修复后回执见 run 34851567425（main `280225ac`）。
+>
 
 ## 4. Release Gate 状态（2026-09-14 实跑，round-1 闭环全过；T9 最终收口见文末小节）
 
@@ -143,6 +146,7 @@
 
 ## 8. 发版复用 Runbook（每次 Windows 发版照此执行）
 
+0. **版本口径提醒（2026-09-14 收口审计定稿）**：运行期版本判定**以 health 端点 + build-info（version/releaseId/gitSha）为准**；已知显示差异：npm/Electron/NSIS setup.iss 外展示与 mobile 三段映射 `1.0.0` 为工具链口径（VERSION.md 等价映射声明）；exe 版本元数据与 build-info 的偏差归 B5 跟踪；mobile `profileVersionText` `(12)` 与 `versionCode=10` 不同步（显示以 `versionName` 四段为准）。
 1. `VERSION.md` 升版 → `version_sync.py --apply` + `verify_version_anchors.py`；
 2. 配置 `ES_*` secrets（一次性）→ 触发 `release-orchestrator.yml`（签名+发布+manifest 原子生成）；
 3. 真机跑 `acceptance-windows.ps1 -Version <v>`（G2/G3/G4）；

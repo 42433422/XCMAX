@@ -1,0 +1,1 @@
+health=degraded; xcagi_procs=5; backend_count=1; listeners=8476; corrupt_evidence=0; main=1667072

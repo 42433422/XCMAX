@@ -1,5 +1,5 @@
 {
-  "lines": 2312449,
-  "updated": "2026-09-14",
-  "note": "故障注入判定修复：dual-process/migration-mutex 损坏留证改场景前基线增量（修 -Scenario all 误报，run 34836989979 复盘）+ workflow 默认包指针刷新 testing 1.0.0.3"
+  "lines": 2312508,
+  "updated": "2026-09-15",
+  "note": "收口审计回填：MACOS SSOT 新增 1.0.0.4 复测 Gate 表（§6.1）、B6 已知项（§7-13）、T9/T10 任务、最终发布审计总表（§10），Windows SSOT 补 runner 证据与版本口径——文档增量换主干收口事实锚定；同批从证据目录删除三份 staging 工作笔记（CLOSURE-CHECKLIST/SSOT-STAGING/FINAL-AUDIT-STAGING，内容已折入 SSOT，防双份漂移）"
 }
