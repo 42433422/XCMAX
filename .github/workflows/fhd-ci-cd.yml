@@ -1055,6 +1055,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha || github.sha }}
+          # capability-center --check 需用 git log 重算证据 commit/verified_at，
+          # 浅克隆会导致生成结果与已提交页面漂移，必须完整历史。
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5

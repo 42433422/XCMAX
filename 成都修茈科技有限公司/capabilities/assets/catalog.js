@@ -1,5 +1,6 @@
 /* 能力目录交互：读取内嵌目录数据，渲染 域→模块→功能 三级结构，支持搜索与筛选。
- * 所有计数均来自目录数据自动统计，页面不手写数字。 */
+ * 所有计数均来自目录数据自动统计，页面不手写数字。
+ * 渲染使用 DOM API（createElement/textContent），不使用 innerHTML。 */
 ;(function () {
   'use strict'
 
@@ -16,10 +17,11 @@
   var note = document.getElementById('cap-result-note')
   var tree = document.getElementById('cap-tree')
 
-  function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
-    })
+  function el(tag, className, text) {
+    var node = document.createElement(tag)
+    if (className) node.className = className
+    if (text != null) node.textContent = text
+    return node
   }
 
   function initFilters() {
@@ -44,9 +46,9 @@
     if (domain) domSelect.value = domain
     if (status) statusSelect.value = status
     if (platform) platformSelect.value = platform
-    ;[qInput, domSelect, statusSelect, platformSelect].forEach(function (el) {
-      el.addEventListener('input', render)
-      el.addEventListener('change', render)
+    ;[qInput, domSelect, statusSelect, platformSelect].forEach(function (elm) {
+      elm.addEventListener('input', render)
+      elm.addEventListener('change', render)
     })
   }
 
@@ -69,45 +71,58 @@
     return true
   }
 
+  function featureRow(f) {
+    var a = el('a', 'cap-feature-row')
+    a.href = '/capabilities/feature/' + f.id + '.html'
+    var left = el('div')
+    left.appendChild(el('div', 'cap-feature-name', f.name))
+    if (f.summary) left.appendChild(el('p', 'cap-feature-summary', f.summary))
+    a.appendChild(left)
+    var side = el('div', 'cap-feature-side')
+    side.appendChild(el('span', 'cap-status st-' + f.status, STATUS_LABELS[f.status] || f.status))
+    ;(f.platforms || []).forEach(function (p) {
+      side.appendChild(el('span', 'cap-platform', PLATFORM_LABELS[p] || p))
+    })
+    a.appendChild(side)
+    return a
+  }
+
   function render() {
     var ft = currentFilters()
     var total = 0
-    var html = ''
+    while (tree.firstChild) tree.removeChild(tree.firstChild)
     DATA.domains.forEach(function (d) {
       if (ft.domain && d.id !== ft.domain) return
-      var domHtml = ''
+      var domSec = el('section', 'cap-dom')
       var domCount = 0
+      var head = el('div', 'cap-dom-head')
+      head.appendChild(el('h3', null, d.name))
+      head.appendChild(el('span', 'cap-dom-count', d.description || ''))
+      domSec.appendChild(head)
       d.modules.forEach(function (m) {
-        var rows = ''
+        var modBox = el('div', 'cap-module')
+        var modName = el('div', 'cap-module-name', m.name)
+        var hasRows = false
         m.features.forEach(function (f) {
           var item = Object.assign({}, f, { module_name: m.name })
           if (!featureMatches(item, ft)) return
+          modBox.appendChild(featureRow(f))
+          hasRows = true
           domCount += 1
-          rows +=
-            '<a class="cap-feature-row" href="/capabilities/feature/' + esc(f.id) + '.html">' +
-            '<div><div class="cap-feature-name">' + esc(f.name) + '</div>' +
-            (f.summary ? '<p class="cap-feature-summary">' + esc(f.summary) + '</p>' : '') +
-            '</div>' +
-            '<div class="cap-feature-side">' +
-            '<span class="cap-status st-' + esc(f.status) + '">' + (STATUS_LABELS[f.status] || esc(f.status)) + '</span>' +
-            (f.platforms || []).map(function (p) {
-              return '<span class="cap-platform">' + esc(PLATFORM_LABELS[p] || p) + '</span>'
-            }).join('') +
-            '</div></a>'
         })
-        if (rows) {
-          domHtml +=
-            '<div class="cap-module"><div class="cap-module-name">' + esc(m.name) + '</div>' + rows + '</div>'
+        if (hasRows) {
+          modBox.insertBefore(modName, modBox.firstChild)
+          domSec.appendChild(modBox)
         }
       })
-      if (domHtml) {
+      if (domCount) {
         total += domCount
-        html +=
-          '<section class="cap-dom"><div class="cap-dom-head"><h3>' + esc(d.name) + '</h3>' +
-          '<span class="cap-dom-count">' + esc(d.description || '') + '</span></div>' + domHtml + '</section>'
+        tree.appendChild(domSec)
       }
     })
-    tree.innerHTML = html || '<p class="cap-empty">没有符合筛选条件的能力，请调整关键词或筛选。</p>'
+    if (total === 0) {
+      tree.appendChild(el('p', 'cap-empty', '没有符合筛选条件的能力，请调整关键词或筛选。'))
+    }
     var scope = []
     if (ft.domain) scope.push('产品域「' + domSelect.options[domSelect.selectedIndex].text + '」')
     if (ft.status) scope.push('状态「' + STATUS_LABELS[ft.status] + '」')
