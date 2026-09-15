@@ -62,7 +62,8 @@ def path_exists(rel: str) -> bool:
 def git(*args: str, cwd: Path = REPO_ROOT) -> str | None:
     try:
         out = subprocess.run(
-            ["git", *args], cwd=cwd, capture_output=True, text=True, timeout=30, check=True
+            ["git", *args], cwd=cwd, capture_output=True, timeout=30, check=True,
+            encoding="utf-8", errors="replace",  # 显式 UTF-8，消除 CI/locale 差异
         )
         return out.stdout.strip()
     except (subprocess.SubprocessError, OSError):
@@ -684,8 +685,20 @@ def main() -> int:
             f = WEBSITE_DIR / rel
             if not f.exists():
                 drift.append(f"缺失: {rel}")
-            elif _normalize_ts(f.read_text(encoding="utf-8")) != _normalize_ts(content):
-                drift.append(f"不一致: {rel}")
+                continue
+            disk = _normalize_ts(f.read_text(encoding="utf-8"))
+            mem = _normalize_ts(content)
+            if disk == mem:
+                continue
+            drift.append(f"不一致: {rel}")
+            dl, ml = disk.splitlines(), mem.splitlines()
+            for i in range(max(len(dl), len(ml))):
+                a = dl[i] if i < len(dl) else "<文件结束>"
+                b = ml[i] if i < len(ml) else "<重生成结束>"
+                if a != b:
+                    drift.append(f"    已提交 L{i + 1}: {a.strip()[:160]}")
+                    drift.append(f"    重生成 L{i + 1}: {b.strip()[:160]}")
+                    break
         for w in warnings:
             print(f"WARN {w}")
         if drift:
