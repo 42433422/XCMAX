@@ -1,0 +1,20 @@
+Windows 客户问题→自动解决闭环 实机全链 COMPLETE 2026-09-15T19:37:31+08:00
+
+WO-c0ffee00dead（dedup_key=c0ffee00deadbeef12345678abcdef99）
+
+01 intake   一句话入口：「备份恢复失败，客户说备份文件损坏打不开了」→ Signal Gate 建单（fixture，
+            真实建单链路由 Mac 连接件1/中继覆盖，见 PR #1944 e2e）。
+02 diagnosis 连接件2 诊断产物（errors[].message="backup file corrupt, restore failed"，engine=rule）。
+03 repro     连接件3 Windows 车道升级：needs_scenario → corrupt-backup 实机故障注入。
+            隔离验收根 C:\XCAGI-acceptance（robocopy 自生产 1.0.0.4，build-info
+            xcagi-1.0.0.4-604b85e1）+ 独立数据根 C:\XCAGI-acceptance\repro-data。
+            fault-injection-windows.ps1 -Scenario corrupt-backup -CiMode 向最新备份写坏字节；
+            收据 corrupt-backup=PASS（坏备份存在时启动正常、主库未动），verdict=green_recovery_ok。
+04 retest    连接件4 客户侧重测：/api/health?lite=1 healthy + 版本校验 1.0.0.4 → verdict=pass。
+05 knowledge 连接件5 知识回流：work_order_knowledge --record 落 cases.jsonl，案例含
+            repro(kind=windows_fault_injection)+retest(pass/1.0.0.4) 证据路径。
+            合成 dedup_key 状态机 unknown_work_order 跳过为预期（真实工单 closed 由 #1944 e2e 覆盖）。
+
+安全：注入脚本 Stop-AppAll 强杀所有 XCAGI 进程（含生产，用户已授权）；验收结束后生产实例已恢复
+（health healthy、5×XCAGI+1×backend、1.0.0.4）。实机安全闸另证：DataRoot 指向真实 %APPDATA%\XCAGI
+时 --execute 被 blocked_by_safety_gate 拒绝，生产无损（见 PR #1947 评论）。
