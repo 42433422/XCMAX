@@ -223,6 +223,44 @@ def _build_diagnosis_section(dedup_key: str) -> str:
     return "\n".join(lines) + "\n\n"
 
 
+def _build_repro_section(dedup_key: str) -> str:
+    """连接件3：存在复现规格时，把自动复现场景写入 issue 正文。
+
+    供实现 agent 在修复 PR 中包含/更新可执行复现用例；文件缺失时返回空串。
+    """
+    key = str(dedup_key or "")[:12]
+    if not key:
+        return ""
+    repro_dir = Path(
+        os.environ.get("WORK_ORDER_REPRO_DIR") or (_FHD_ROOT / "test_reports" / "repro")
+    )
+    path = repro_dir / f"repro-{key}.json"
+    try:
+        spec = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ""
+    if not isinstance(spec, dict):
+        return ""
+    signature = spec.get("signature") or {}
+    scenario = spec.get("scenario") or {}
+    lines = [
+        "## 自动复现（连接件3）\n",
+        f"- **复现场景**: `{spec.get('kind')}`（status: `{spec.get('status')}`）",
+    ]
+    if scenario:
+        lines.append(f"- **目标**: `{json.dumps(scenario, ensure_ascii=False)}`")
+    if signature:
+        lines.append(
+            f"- **故障签名**: `[{signature.get('tool')}:{signature.get('code')}]` "
+            f"`{signature.get('file')}:{signature.get('line')}`"
+        )
+    if spec.get("status") == "needs_scenario":
+        lines.append(
+            "- **要求**: 修复 PR 必须附带可执行复现用例（先 RED 后 GREEN），并在 PR 描述留证。"
+        )
+    return "\n".join(lines) + "\n\n"
+
+
 def _build_issue_body(proposal: dict[str, Any]) -> str:
     reason = proposal.get("reason") or "intent_unknown"
     ts = proposal.get("ts") or ""
@@ -277,6 +315,7 @@ def _build_issue_body(proposal: dict[str, Any]) -> str:
         f"{json.dumps({'intent': safe_intent_ctx, 'skill': safe_skill_ctx}, ensure_ascii=False, indent=2)}\n"
         "```\n\n"
         f"{_build_diagnosis_section(dedup_key)}"
+        f"{_build_repro_section(dedup_key)}"
         "## 验收标准（进入 AI 开发前必须可验证）\n\n"
         f"{_build_acceptance_criteria(reason, safe_intent_ctx, safe_skill_ctx)}\n"
         "## 治理门禁\n\n"
@@ -382,6 +421,15 @@ def _ensure_diagnoses(actionable: list[dict[str, Any]]) -> None:
                 *(["--llm"] if os.environ.get("WORK_ORDER_DIAGNOSIS_LLM") == "1" else []),
             ]
         )
+        # 连接件3：诊断产出后立即生成自动复现场景（嵌入 issue 供实现/重测复用）
+        repro_spec = importlib.util.spec_from_file_location(
+            "work_order_repro", Path(__file__).with_name("work_order_repro.py")
+        )
+        if repro_spec is not None and repro_spec.loader is not None:
+            repro_module = importlib.util.module_from_spec(repro_spec)
+            sys.modules["work_order_repro"] = repro_module
+            repro_spec.loader.exec_module(repro_module)
+            repro_module.main(["--max", os.environ.get("WORK_ORDER_DIAGNOSIS_MAX", "20")])
     except Exception:  # noqa: BLE001 - 诊断失败不阻塞建单
         logger.debug("evidence diagnosis skipped", exc_info=True)
 
