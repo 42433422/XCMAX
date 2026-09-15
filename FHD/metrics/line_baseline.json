@@ -1,5 +1,5 @@
 {
-  "lines": 2310716,
-  "updated": "2026-09-15",
-  "note": "rebase 折入 main af1c341cd（#1945 证据回填）净文档增量 +71 行；分支内容不变"
+  "lines": 2313333,
+  "updated": "2026-09-16",
+  "note": "release-verify checkout 完整历史注释"
 }

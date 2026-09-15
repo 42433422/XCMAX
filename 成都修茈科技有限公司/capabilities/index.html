@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>产品能力中心 | 成都修茈科技有限公司</title>
+    <meta name="description" content="XCAGI 产品能力中心：每一项能力都有真实实现与验证依据，公开数字由能力目录自动统计。" />
+    <link rel="canonical" href="/capabilities/" />
+    <link rel="stylesheet" href="/styles.css?v=20260722h" />
+    <link rel="stylesheet" href="/capabilities/assets/capabilities.css?v=20260916a" />
+  </head>
+<body data-page="capabilities">
+<header class="site-header">
+  <div class="container header-inner">
+    <a class="brand-mark" href="/index.html">
+      <span class="brand-seal"><img src="/assets/xiu-ci-logo.png" alt="修茈科技 Logo" /></span>
+      <span class="brand-name"><strong>成都修茈科技有限公司</strong><span>XCAGI Automation</span></span>
+    </a>
+    <nav class="nav" aria-label="站点导航">
+      <div class="nav-menu">
+        <a data-nav="index" href="/index.html">首页</a>
+        <a data-nav="about" href="/about.html">关于修茈</a>
+        <a data-nav="visualization" href="/visualization">可视化展示</a>
+        <a data-nav="solutions" href="/solutions.html">方案与案例</a>
+        <a class="nav-optional" data-nav="news" href="/news.html">新闻资讯</a>
+        <a class="nav-optional active" data-nav="capabilities" href="/capabilities/">产品能力</a>
+        <a data-nav="contact" href="/contact.html">联系我们</a>
+        <a data-nav="developer" href="/developer.html">开发者中心</a>
+        <a data-nav="world-will" href="/world-will">世界意志</a>
+      </div>
+      <div class="nav-actions">
+        <a class="nav-action nav-action--outline" href="/market/">AI 市场</a>
+        <a class="nav-action nav-action--primary" href="/download">产品下载</a>
+      </div>
+    </nav>
+    <button class="mobile-menu-toggle" id="mobile-menu-toggle" type="button" aria-controls="mobile-menu" aria-label="打开菜单" aria-expanded="false"><span></span><span></span><span></span></button>
+  </div>
+</header>
+<div class="mobile-menu-overlay" id="mobile-menu-overlay"></div>
+<nav class="mobile-menu" id="mobile-menu" aria-hidden="true" inert>
+  <a href="/index.html" class="mobile-menu-link" data-nav="index">首页</a>
+  <a href="/about.html" class="mobile-menu-link" data-nav="about">关于修茈</a>
+  <a href="/visualization" class="mobile-menu-link" data-nav="visualization">可视化展示</a>
+  <a href="/solutions.html" class="mobile-menu-link" data-nav="solutions">方案与案例</a>
+  <a href="/news.html" class="mobile-menu-link" data-nav="news">新闻资讯</a>
+  <a href="/capabilities/" class="mobile-menu-link active" data-nav="capabilities">产品能力</a>
+  <a href="/contact.html" class="mobile-menu-link" data-nav="contact">联系我们</a>
+  <a href="/developer.html" class="mobile-menu-link" data-nav="developer">开发者中心</a>
+  <a href="/world-will" class="mobile-menu-link" data-nav="world-will">世界意志</a>
+  <div class="mobile-menu-actions">
+    <a href="/market/" class="mobile-menu-link mobile-menu-link--outline">AI 市场</a>
+    <a href="/download" class="mobile-menu-link mobile-menu-link--primary">产品下载</a>
+  </div>
+</nav>
+
+<main>
+  <section class="page-hero">
+    <div class="container page-hero-inner">
+      <div>
+        <span class="eyebrow">Product Capability Center</span>
+        <h1>产品能力中心</h1>
+        <p>这不是宣传页，而是一份公开的功能证据库：每一项能力都对应仓库里真实的实现、自动化测试、CI 记录或实机运行证据。没有证据的能力，我们标注为"待验证"或"规划中"，绝不夸大。</p>
+      </div>
+      <div class="page-hero-side"><p>原则：No Evidence, No Claim。所有状态由构建脚本按仓库证据逐项校验，证据缺失自动降级。</p></div>
+    </div>
+  </section>
+
+  <section class="section cap-stats-section">
+    <div class="container">
+      <div class="cap-stats-band" id="cap-stats">
+        <div class="cap-stat"><span class="cap-stat-num">50</span><span class="cap-stat-label">能力总数</span></div>
+        <div class="cap-stat cap-stat--verified"><span class="cap-stat-num">13</span><span class="cap-stat-label">已验证</span></div>
+        <div class="cap-stat"><span class="cap-stat-num">14</span><span class="cap-stat-label">部分验证</span></div>
+        <div class="cap-stat"><span class="cap-stat-num">22</span><span class="cap-stat-label">已实现待验证</span></div>
+        <div class="cap-stat"><span class="cap-stat-num">1</span><span class="cap-stat-label">规划中</span></div>
+        <div class="cap-stat cap-stat--time"><span class="cap-stat-num cap-stat-date">2026-09-16</span><span class="cap-stat-label">最近验证时间</span></div>
+      </div>
+      <p class="cap-generated-note">以上数字由能力目录（data/capabilities/catalog.json）自动统计，生成于 2026-09-15 17:42 UTC，目录版本 2026-09-16。无人工填写。</p>
+      <div class="cap-entry-buttons">
+        <a class="btn btn-primary" href="/capabilities/catalog.html">浏览全部能力</a>
+        <a class="btn btn-secondary" href="/capabilities/catalog.html?status=verified">只看已验证能力</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>状态分级说明</h2>
+      <div class="grid grid-4 cap-status-legend">
+        <article class="card"><h3><span class="cap-status st-verified">已验证</span></h3><p>有实现、自动化测试与 CI 门禁记录（或有实机运行证据）支撑，公开页面可逐项查证。</p></article>
+        <article class="card"><h3><span class="cap-status st-partial">部分验证</span></h3><p>实现已合入且有部分证据（测试或实机证据），但验证覆盖不完整，限制已知。</p></article>
+        <article class="card"><h3><span class="cap-status st-implemented">已实现待验证</span></h3><p>代码已合入，但暂缺自动化测试或 CI/实机验证证据。不承诺为可用能力。</p></article>
+        <article class="card"><h3><span class="cap-status st-planned">规划中</span></h3><p>仅有设计与规划，无已合入实现。出现在公开目录中是为了诚实展示方向。</p></article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>能力目录（产品域 → 模块 → 功能）</h2>
+      <p class="cap-section-note">共 10 个产品域、26 个模块、50 项能力，全部来自当前仓库审计。点击产品域查看模块与功能明细。</p>
+      <div class="grid grid-2 cap-domain-grid">
+        <a class="card cap-domain-card" href="/capabilities/catalog.html?domain=base">
+              <div class="cap-domain-head"><h3>产品底座与账户</h3><span class="cap-count"><strong>2</strong>/5 已验证</span></div>
+              <p class="cap-domain-desc">账户体系、权限控制、部署形态与运行底座，是所有上层能力的公共基础。</p>
+              <p class="cap-domain-modules">账户与认证、部署形态、运行底座</p>
+            </a><a class="card cap-domain-card" href="/capabilities/catalog.html?domain=ai">
+              <div class="cap-domain-head"><h3>AI 员工与办公</h3><span class="cap-count"><strong>2</strong>/7 已验证</span></div>
+              <p class="cap-domain-desc">以智能对话为入口的 AI 员工体系：多轮对话、意图路由、员工编排与办公技能。</p>
+              <p class="cap-domain-modules">智能对话、AI 员工、办公技能</p>
+            </a><a class="card cap-domain-card" href="/capabilities/catalog.html?domain=erp">
+              <div class="cap-domain-head"><h3>ERP 与业务文件</h3><span class="cap-count"><strong>2</strong>/8 已验证</span></div>
+              <p class="cap-domain-desc">覆盖进销存、财务、单据打印与 OCR 识别的核心业务能力，均为仓库内真实实现。</p>
+              <p class="cap-domain-modules">进销存、财务、单据与打印、单据识别</p>
+            </a><a class="card cap-domain-card" href="/capabilities/catalog.html?domain=channel">
+              <div class="cap-domain-head"><h3>消息、移动与外部渠道</h3><span class="cap-count"><strong>1</strong>/6 已验证</span></div>
+              <p class="cap-domain-desc">站内 IM、微信渠道接入与移动端，把 AI 员工延伸到企业沟通的第一线。</p>
+              <p class="cap-domain-modules">站内消息、微信渠道、移动端</p>
+            </a><a class="card cap-domain-card" href="/capabilities/catalog.html?domain=mods">
+              <div class="cap-domain-head"><h3>Mod 制作与开放生态</h3><span class="cap-count"><strong>3</strong>/4 已验证</span></div>
+              <p class="cap-domain-desc">以 Mod（房子）+ 员工（家具）为核心的开放架构：加载、市场、开放 API 与交付链路。</p>
+              <p class="cap-domain-modules">Mod 运行时、开放生态</p>
+            </a><a class="card cap-domain-card" href="/capabilities/catalog.html?domain=industry">
+              <div class="cap-domain-head"><h3>行业与客户定制</h3><span class="cap-count"><strong>0</strong>/5 已验证</span></div>
+              <p class="cap-domain-desc">以行业 Mod 与客户专属 Mod 交付定制，定制不侵入核心，可随主线升级。</p>
+              <p class="cap-domain-modules">行业包、客户专属 Mod</p>
+            </a><a class="card cap-domain-card" href="/capabilities/catalog.html?domain=pay">
+              <div class="cap-domain-head"><h3>支付、授权与经营结算</h3><span class="cap-count"><strong>0</strong>/3 已验证</span></div>
+              <p class="cap-domain-desc">支付宝支付、企业授权与 Token 钱包结算；该域变更永远走人工审核。</p>
+              <p class="cap-domain-modules">支付、授权与权益</p>
+            </a><a class="card cap-domain-card" href="/capabilities/catalog.html?domain=ops">
+              <div class="cap-domain-head"><h3>管理自治与客户交付</h3><span class="cap-count"><strong>1</strong>/3 已验证</span></div>
+              <p class="cap-domain-desc">企业管理总后台、AI 自愈自治运维与专属交付链路。</p>
+              <p class="cap-domain-modules">管理后台、自治与自愈、客户交付</p>
+            </a><a class="card cap-domain-card" href="/capabilities/catalog.html?domain=desktop">
+              <div class="cap-domain-head"><h3>桌面控制与运行底座</h3><span class="cap-count"><strong>1</strong>/3 已验证</span></div>
+              <p class="cap-domain-desc">Windows/macOS 桌面壳、自动更新与桌面自动化，是「把 AI 员工装进每台电脑」的载体。</p>
+              <p class="cap-domain-modules">桌面壳、桌面自动化</p>
+            </a><a class="card cap-domain-card" href="/capabilities/catalog.html?domain=sec">
+              <div class="cap-domain-head"><h3>安全审计与验证</h3><span class="cap-count"><strong>1</strong>/6 已验证</span></div>
+              <p class="cap-domain-desc">数据隐私、审计与质量验证体系：本能力中心自身的诚实性也依赖这一域。</p>
+              <p class="cap-domain-modules">安全机制、验证体系</p>
+            </a>
+      </div>
+      <div class="cap-entry-buttons">
+        <a class="btn btn-primary" href="/capabilities/catalog.html">进入完整能力目录（支持搜索与筛选）</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>资质与交付</h2>
+      <p class="cap-section-note">公司资质与交付保障说明（由原"资质与能力"页并入）。具体资质、合同案例和服务边界以实际公示与合同约定为准。</p>
+      <div class="grid grid-4">
+        <article class="card"><h3>软件开发能力</h3><p>具备前后端、数据、接口和部署运维的一体化开发能力，主仓库包含完整的后端服务、前端 SPA、桌面壳与移动端工程。</p></article>
+        <article class="card"><h3>移动互联网 APP 备案</h3><p>XCAGI Android 个人版/企业版已通过工信部应用程序备案（2026）。</p></article>
+        <article class="card"><h3>项目实施理解</h3><p>围绕政企、园区、教育、制造等场景持续沉淀业务认知，已交付涂装、附件包装、考勤等行业 Mod。</p></article>
+        <article class="card"><h3>安全与稳定性</h3><p>重视权限、数据隔离、日志审计和可恢复部署；数据库启用 WAL 与在线热备，启动时自动体检并从备份恢复。</p></article>
+        <article class="card"><h3>服务机制</h3><p>业务正式开展后，将按合同建立响应、验收与运维机制。</p></article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>各端交付等级（对外口径）</h2>
+      <p class="cap-section-note">以下等级自动读取自产品版本说明（FHD/VERSION.md），是版本域的单一事实来源，非人工宣传口径。</p>
+      <ul class="cap-platform-levels"> <li><strong>----</strong>：------</li><li><strong>Windows 桌面</strong>：签约级</li><li><strong>macOS 桌面</strong>：签约级</li><li><strong>Web / 后端</strong>：签约级</li><li><strong>Android</strong>：实验骨架·非签约级</li></ul>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>本页数字是怎么来的</h2>
+      <p>能力目录 <code>data/capabilities/catalog.json</code> 由仓库审计维护；构建脚本 <code>scripts/build_capability_center.py</code> 在生成页面前逐项校验证据：实现路径、自动化测试、CI 工作流、实机证据必须真实存在于当前仓库，否则状态自动降级并在构建报告中留痕。目录与页面由 CI 漂移门禁校验一致性，公开数字无法手写、无法夸大。</p>
+    </div>
+  </section>
+</main>
+<footer class="site-footer">
+      <div class="container footer-inner">
+        <div>
+          <a class="brand-mark" href="/index.html"
+            ><span class="brand-seal"
+              ><img src="/assets/xiu-ci-logo.png" alt="修茈科技 Logo" /></span
+            ><span class="brand-name"
+              ><strong>成都修茈科技有限公司</strong><span>XCAGI Automation</span></span
+            ></a
+          >
+          <p class="footer-copy">
+            &copy; <span id="year"></span> 成都修茈科技有限公司 保留所有权利。
+          </p>
+          <p class="footer-meta footer-legal">
+            <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer"
+              >蜀ICP备2026014056号-3A</a
+            >
+          </p>
+        </div>
+        <div class="footer-links">
+          <a href="/solutions.html">解决方案</a
+          ><a href="/cases.html">客户案例</a><a href="/news.html">新闻资讯</a
+          ><a href="/capabilities/">产品能力</a><a href="/contact.html">联系我们</a>
+        </div>
+      </div>
+    </footer>
+<button id="back-to-top" class="back-to-top" aria-label="回到顶部"></button>
+<script src="/main.js?v=20260722h"></script>
+</body>
+</html>

@@ -20,6 +20,9 @@ on:
       - 'solutions.html'
       - 'excel-to-ai.html'
       - 'baidu_verify_*.html'
+      - 'capabilities/**'
+      - 'data/capabilities/**'
+      - 'scripts/build_capability_center.py'
       - 'styles.css'
       - 'main.js'
       - 'assets/**'
@@ -41,6 +44,9 @@ on:
       - 'solutions.html'
       - 'excel-to-ai.html'
       - 'baidu_verify_*.html'
+      - 'capabilities/**'
+      - 'data/capabilities/**'
+      - 'scripts/build_capability_center.py'
       - 'styles.css'
       - 'main.js'
       - 'assets/**'
@@ -64,6 +70,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # 能力中心 --check 需用 git log 重算证据 commit/verified_at，
+          # 浅克隆（默认 1）只能命中 merge commit，必须完整历史（同 ssot-drift-gate）。
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -92,3 +102,21 @@ jobs:
           fi
           echo "Validating ${#files[@]} marketing HTML file(s) with htmlhint..."
           htmlhint "${files[@]}"
+
+      # 能力中心 HTML 校验（生成页 + 详情页）
+      - name: HTML validate (capabilities)
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=( capabilities/*.html capabilities/feature/*.html )
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No capability HTML files to validate."
+            exit 0
+          fi
+          echo "Validating ${#files[@]} capability HTML file(s) with htmlhint..."
+          htmlhint "${files[@]}"
+
+      # No Evidence, No Claim：目录与已提交页面必须一致，公开数字无法手写
+      # 注：发布副本带 defaults.run.working-directory=本目录，源文件亦按该语义书写相对路径
+      - name: Capability center drift check
+        run: python3 scripts/build_capability_center.py --check

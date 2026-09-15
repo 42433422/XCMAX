@@ -50,6 +50,7 @@
 | macos-release（macOS 发布交付） | [MACOS_RELEASE_SSOT.md](MACOS_RELEASE_SSOT.md) | macOS 版本/产物/SHA256/构建环境/下载与更新地址/测试机 + 12 项 Release Gate 状态与实机验收任务；每次发版复用 |
 | windows-release（Windows 发布交付） | [WINDOWS_RELEASE_SSOT.md](WINDOWS_RELEASE_SSOT.md) | Windows 版本/产物/SHA256/下载与更新地址/测试机 + 13 项 Release Gate（含 G13 回滚）状态与实机验收任务；每次发版复用 |
 | desktop-platform-parity（桌面双端平级） | [desktop_platform_parity_ssot.md](desktop_platform_parity_ssot.md) | Windows 与 macOS 平级发布（同版本/同 release_sha/双端齐备）；功能双端验证通过才算完成；平台差异收口 desktop/platform/ 适配层 |
+| capability-center（产品能力中心） | [../成都修茈科技有限公司/data/capabilities/catalog.json](../成都修茈科技有限公司/data/capabilities/catalog.json) | 官网公开能力证据库唯一事实源（域→模块→功能+证据路径）；No Evidence, No Claim 降级引擎；生成页面见 `成都修茈科技有限公司/capabilities/` |
 
 ## 机器注册表（ssot.yaml）
 
@@ -85,6 +86,7 @@
 | desktop-platform-parity | `FHD/docs/desktop_platform_parity_ssot.md` | blocking |
 | macos-release | `FHD/docs/MACOS_RELEASE_SSOT.md` | blocking |
 | windows-release | `FHD/docs/WINDOWS_RELEASE_SSOT.md` | blocking |
+| capability-center | `成都修茈科技有限公司/data/capabilities/catalog.json` | blocking |
 
 ## 已退役 SSOT（指针化）
 
