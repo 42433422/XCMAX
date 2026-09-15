@@ -6,6 +6,8 @@
 
 ## Unreleased（1.0.0.4 之后的累积变更）
 
+- 连接件3 Windows 车道增量（实机故障注入矩阵）：新增 `scripts/dev/work_order_repro_windows.py`——把 Mac 连接件3 产出 `needs_scenario` 的规格升级为可执行实机复现：确定性关键词映射到既有 `scripts/package/fault-injection-windows.ps1` 六大场景（corrupt-main/corrupt-backup/kill-orphan/dual-process/migration-mutex/kill-all），`--execute` 在隔离 InstallRoot+DataRoot 实机复现并读 `fault-injection-receipt.json` 留证。复用的是注入脚本本体与 Mac 契约（同 `test_reports/repro/repro-<key12>.json` 读写、`scenario` 保持 dict、证据 `evidence-<key12>.json` 同命名），零改动 Mac 五连接件与公共 Schema；实机安全闸检测 DataRoot 落在用户真实 `%APPDATA%\XCAGI` 时拒绝执行。module_import 规格原样跳过不覆盖。删除全仓零引用一次性脚本 6 个（mypy autofix 两件+patch_pw/patch_surface 四件，净删除 -1429 行对冲本件新增）。
+
 - CI 门禁修复：五连接件脚本 4 处 `except Exception` 收窄——插件隔离边界（动态加载执行诊断/复现链、知识回流）与批量诊断边界改用既有命名边界元组 `BOUNDARY_ERRORS`（复用 `app/utils/operational_errors.py`，不造新轮子），`close_work_order` 按真实失败面收窄为 `(ImportError, OSError)`（`record_transition` 契约失败走返回值不抛异常）；同步 ruff format 3 个测试文件。broad-except 门禁 owned handlers 4→0，连接件 33 测试与端到端验收重跑全 PASS。
 
 - 闭环端到端验收 PASS（工单 WO-12287f1ac91f 全链真实跑通）：真实注入 module_import 客户故障 → 一句话入 Signal Gate → 连接件1 生产路径 build_evidence_ref 打包脱敏证据（SHA256 校验一致）→ 连接件2 规则引擎诊断（F401 签名）→ 连接件3 module_import 复现 RED（exit 1）→ 修复删除故障行 → 复现 GREEN（exit 0）→ 真实 FastAPI+health 路由客户应用恢复 → 连接件4 重测 pass → 连接件5 知识案例落库 + 状态机 verifying→closed。验收中发现并修复两个真实缺陷：customer_retest 用 400 字符截断的 body_snippet 解析 health JSON 导致真实载荷必然解析失败（改用完整 body 解析、回执只留摘要）；work_order_knowledge 作为子进程脚本缺 sys.path 引导导致 app 导入静默失败、工单无法自动关闭（与 diagnose 同款引导）。
