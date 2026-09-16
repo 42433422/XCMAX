@@ -1115,16 +1115,20 @@
           return desktopRows
         }
 
+        function boldText(text) {
+          var el = document.createElement('b')
+          el.textContent = text
+          return el
+        }
+
         function render() {
           var hotfix = activeWindowsHotfix()
           var known = state.tab === 'android' ? Boolean(state.androidVersion) : Boolean(state.version)
-          versionEl.innerHTML = !known
-            ? '版本信息加载中…'
-            : state.tab === 'android'
-              ? '当前版本 <b>' + state.androidVersion + '</b>'
-              : hotfix
-                ? 'macOS 稳定版 <b>' + state.version + '</b> · Windows 临时交付 <b>' + hotfix.version + '</b>'
-                : '当前版本 <b>' + state.version + '</b>'
+          // 版本号来自发布清单，一律以文本节点写入 DOM，不拼接 HTML 字符串（避免 DOM XSS）。
+          if (!known) versionEl.replaceChildren('版本信息加载中…')
+          else if (state.tab === 'android') versionEl.replaceChildren('当前版本 ', boldText(state.androidVersion))
+          else if (hotfix) versionEl.replaceChildren('macOS 稳定版 ', boldText(state.version), ' · Windows 临时交付 ', boldText(hotfix.version))
+          else versionEl.replaceChildren('当前版本 ', boldText(state.version))
           pendingEl.hidden = rows().every(function (row) {
             if (row.platform === 'win' && activeWindowsHotfix()) return true
             if (manifestEntry(row.platform)) return true
