@@ -1,6 +1,6 @@
 {
   "schema": "xcagi.download_release/v1",
-  "_doc": "官网下载版本 SSOT。当前只发布 enterprise；personal 已冻结。macOS arm64 产品与下载目录为 1.0.0.3，Android 继续发布已验收的 1.0.0.0；npm/Electron/Apple 工具链内部映射为 1.0.0。",
+  "_doc": "官网下载版本 SSOT（发布链种子）。当前只发布 enterprise；personal 已冻结。download_version/version_lock 是待发布目标而非已发布事实：release_ready 为 false 期间不得对外宣称该版本已发布，对外已发布版本一律以线上 /download-release.json 指针为准。Android 继续发布已验收的 1.0.0.0；npm/Electron/Apple 工具链内部映射为 1.0.0。",
   "version_lock": "1.0.0.3",
   "marketing_version": "1.0.0.4",
   "download_version": "1.0.0.3",
@@ -43,7 +43,7 @@
       "notes": [
         "修复太阳鸟等已授权客户的 macOS 正式包模板上传写入受限路径，模板导入不再报错。",
         "修复新建发货单调用旧接口导致模板列表、生成与下载失效的问题。",
-        "稳定更新源发布 1.0.0.3。"
+        "1.0.0.3 安装包已上传稳定下载目录并公开 SHA-256，但更新清单尚未发布、对外发布指针未推进（release_ready=false），对外版本仍为 1.0.0.2。"
       ],
       "platforms": [
         "macOS Apple Silicon 1.0.0.3 稳定版"

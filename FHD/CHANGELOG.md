@@ -6,6 +6,8 @@
 
 ## Unreleased（1.0.0.4 之后的累积变更）
 
+- 发布口径澄清（对客户可见的版本说明不再前后矛盾）：修正 `VERSION.md` 文末「最后更新」行残留的旧版本号 1.0.0.3，与同一文件正文的稳定产品版本 1.0.0.4 对齐；澄清官网下载发布种子 `FHD/config/download_release.json` 中的 `download_version` 是「待发布目标」而不是「已发布事实」——该文件 `release_ready` 为 false 期间不得对外宣称该版本已发布，对外已发布版本一律以线上 `/download-release.json` 指针为准；把 1.0.0.3 的更新说明从「稳定更新源发布 1.0.0.3」改为有据可查的表述（安装包已上传稳定下载目录并公开 SHA-256，但更新清单尚未发布、对外指针未推进）。同时加固发布链可读性：走 Windows 安装包交付通道（`windows_installer_only=true`）的运行时，run 名称与运行摘要会明确标注「不推进对外发布指针」，避免被 skip 的正式发布作业让整条 run 显示成功而被误读为已完成对外发布。
+
 - 修复 Windows 桌面端窗口左上角拖不动：桌面壳隐藏原生标题栏后只有应用内顶栏可拖拽，而侧边栏顶部品牌行（窗口顶边左侧约 236px）不在拖拽区内，形成「窗口没法拖动」死区；现把侧边栏顶部品牌行与顶栏一并纳入拖拽区（`-webkit-app-region: drag`），其内交互控件仍保持可点击。实机复验（1.0.0.4 本机真实鼠标事件，窗口已复位）：修复前该处拖拽窗口纹丝不动，修复后窗口跟随移动（+141,+131），顶栏拖拽无回归。
 
 - 官网产品能力中心（公开功能证据库，No Evidence No Claim）：一级导航「资质与能力」升级为「产品能力」（`/capabilities/`），原资质页 `honors.html` 变为重定向页，资质内容并入能力中心「资质与交付」板块。能力目录 SSOT = `成都修茈科技有限公司/data/capabilities/catalog.json`（50 项能力/26 模块/10 域，状态 verified 13/partial 14/implemented 22/planned 1，全部由目录自动统计），生成器 `scripts/build_capability_center.py` 构建时逐项校验证据存在性（源码/测试/CI/截图/文档/commit），证据不足自动降级状态，Android 端诚实标注「实验骨架·非签约级」；目录页三级结构+搜索+状态/平台筛选，详情页上半客户语言（价值/使用方式/平台/已知限制）下半技术验证资料（源码路径/测试/CI/截图/commit，敏感信息 0 命中）。CI 加 `--check` 漂移门禁与 capabilities HTML 校验；ssot.yaml 注册 `capability-center` 域（第 28 域）。
