@@ -30,6 +30,8 @@ on:
       - '成都修茈科技有限公司/world-will-ticker.js'
       - '成都修茈科技有限公司/world-will-ticker.css'
       - '成都修茈科技有限公司/assets/**'
+      - '成都修茈科技有限公司/capabilities/**'
+      - '成都修茈科技有限公司/data/capabilities/**'
       - '成都修茈科技有限公司/nginx-xiu-ci*.conf'
       - '成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-site-auto-update.sh'
       - '成都修茈科技有限公司/MODstore_deploy/scripts/install-site-auto-update-cron.sh'
@@ -143,6 +145,15 @@ jobs:
               if [ -d "${GIT_SITE}/assets" ]; then
                 cp -af "${GIT_SITE}/assets/." "${LIVE_SITE}/assets/"
               fi
+              # 产品能力中心（#1951）：整目录发布，漏发即线上 404。
+              if [ -d "${GIT_SITE}/capabilities" ]; then
+                mkdir -p "${LIVE_SITE}/capabilities"
+                cp -af "${GIT_SITE}/capabilities/." "${LIVE_SITE}/capabilities/"
+              fi
+              if [ -d "${GIT_SITE}/data/capabilities" ]; then
+                mkdir -p "${LIVE_SITE}/data/capabilities"
+                cp -af "${GIT_SITE}/data/capabilities/." "${LIVE_SITE}/data/capabilities/"
+              fi
               chmod a+rx "${LIVE_SITE}" 2>/dev/null || true
               echo "[ok] live site chrome published"
             else
@@ -206,6 +217,15 @@ jobs:
             echo "[verify] download center is new product page (not old stub):"
             xc_curl -o /tmp/xc-download.html https://xiu-ci.com/download
             grep -E -q 'download/releases|更新日志|产品下载' /tmp/xc-download.html
+            echo "[verify] capability center must never 404 after merge (regression guard):"
+            xc_curl -o /tmp/xc-capabilities.html https://xiu-ci.com/capabilities/
+            grep -E -q '产品能力|能力目录' /tmp/xc-capabilities.html
+            xc_curl -o /tmp/xc-cap-catalog.html https://xiu-ci.com/capabilities/catalog.html
+            grep -E -q '能力目录|cap-status' /tmp/xc-cap-catalog.html
+            xc_curl -o /tmp/xc-cap-catalog.json https://xiu-ci.com/data/capabilities/catalog.json
+            python3 -c "import json,sys; d=json.load(open('/tmp/xc-cap-catalog.json')); assert d.get('domains'), 'catalog.json 空'"
+            xc_curl -o /tmp/xc-honors.html https://xiu-ci.com/honors.html
+            grep -E -q '/capabilities/' /tmp/xc-honors.html
             echo "[verify] public action board independent pages:"
             xc_curl -o /tmp/xc-breakpoints.html https://xiu-ci.com/download/breakpoints
             xc_curl -o /tmp/xc-goals.html https://xiu-ci.com/download/goals

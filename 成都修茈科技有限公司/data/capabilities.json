@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "catalog_version": "2026-09-16",
-  "generated_at": "2026-09-15 17:42 UTC",
+  "generated_at": "2026-09-16 02:02 UTC",
   "principle": "No Evidence, No Claim：所有状态由构建脚本按仓库证据校验，证据缺失自动降级。",
   "stats": {
     "total": 50,
@@ -405,7 +405,7 @@
               "platforms": [
                 "android"
               ],
-              "summary": "Flutter 主线 Android 应用：登录、流式对话、消息、探索与审批等核心页面已可用，已通过工信部 APP 备案。"
+              "summary": "Flutter 主线 Android 应用（实验版·非签约级）：登录、流式对话、消息、探索与审批等核心页面已可用，已通过工信部 APP 备案；签约级交付以 Windows/macOS 桌面端为准。"
             },
             {
               "id": "ch-mobile-ios",
