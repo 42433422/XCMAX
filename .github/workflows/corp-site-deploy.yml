@@ -27,6 +27,9 @@ on:
       - '成都修茈科技有限公司/assets/**'
       - '成都修茈科技有限公司/*.js'
       - '成都修茈科技有限公司/*.css'
+      # 下列两条被 test_immutable_release_contract 明确断言，保留显式声明。
+      - '成都修茈科技有限公司/world-will-ticker.js'
+      - '成都修茈科技有限公司/world-will-ticker.css'
       - '成都修茈科技有限公司/**/capabilities/**'
       - '成都修茈科技有限公司/nginx-xiu-ci*.conf'
       - '成都修茈科技有限公司/MODstore_deploy/scripts/**'
@@ -122,6 +125,9 @@ jobs:
                 cp -f "${GIT_SITE}/download-release.json" "${LIVE_SITE}/download-release.json"
               else
                 echo "[info] preserving release-managed download-release.json"
+              fi
+              if [ -e "${LIVE_SITE}/download-windows-hotfix.json" ]; then
+                echo "[info] preserving release-managed download-windows-hotfix.json"
               fi
               if [ -d "${GIT_SITE}/partials" ]; then
                 cp -af "${GIT_SITE}/partials/." "${LIVE_SITE}/partials/"
