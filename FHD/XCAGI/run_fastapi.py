@@ -305,6 +305,16 @@ def _apply_desktop_bootstrap(args: argparse.Namespace) -> None:
         print(f"[run_fastapi] desktop bootstrap warning: {exc}", file=sys.stderr)
 
 
+def _apply_no_console_child_defaults() -> None:
+    """打包桌面后端自身无控制台：默认让子进程不开新控制台窗口（避免点功能闪黑窗）。"""
+    try:
+        from app.desktop_runtime.no_console_children import install_no_console_child_defaults
+
+        install_no_console_child_defaults()
+    except BOUNDARY_ERRORS:
+        pass
+
+
 def _resolve_reload(desktop: bool) -> bool:
     if _is_frozen() or desktop:
         return False
@@ -318,6 +328,8 @@ def _resolve_reload(desktop: bool) -> bool:
 
 def main(argv: list[str] | None = None) -> None:
     _force_stdio_utf8()
+    _ensure_sys_path()
+    _apply_no_console_child_defaults()
     args = _parse_args(argv)
 
     if args.verify_frozen_critical_runtime:

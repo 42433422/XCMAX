@@ -1,5 +1,5 @@
 {
-  "lines": 2313349,
-  "updated": "2026-09-16",
-  "note": "官网版本口径归一：真实净删除落在 .html（download-releases.html -143、download.html -27，另 26 张能力页净 0），但门禁计数后缀集不含 .html 故未计入；计入侧相对 main 净增 40 行全部是发布链/门禁的必需守卫——release-desktop.yml 发版后强制校验线上下载中心+更新日志+能力中心三面(+17)、营销页 CI 由「版本一致」改为「禁止写死版本」(+8)、发布路由测试断言迁移到发布清单 SSOT(+9)、能力中心生成器 verified_at 根因修复(+4)、changelog-gate 强制条目(+2)。无可等价的死代码/死文档可删。"
+  "lines": 2313493,
+  "updated": "2026-09-17",
+  "note": "新增 Windows 打包后端默认无控制台窗口修复（app/desktop_runtime/no_console_children.py 69 行 + run_fastapi 早期注入 12 行 + 回归测试 62 行 + CHANGELOG 2 行）：修复「点报表/文件/打印时闪黑窗（跳终端）」根因，一次覆盖全部 spawn 点，属新增能力/证据，无可等效删除的死代码"
 }
