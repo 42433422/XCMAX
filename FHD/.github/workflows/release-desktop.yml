@@ -1,5 +1,5 @@
 name: Release Desktop
-run-name: Release Desktop ${{ inputs.release_sha }}
+run-name: "Release Desktop ${{ inputs.release_sha }}${{ inputs.windows_installer_only && ' · Windows 安装包交付（不推进对外发布指针）' || (inputs.verify_only && ' · 校验模式（不推进对外发布指针）' || '') }}"
 
 on:
   workflow_dispatch:
@@ -156,6 +156,12 @@ jobs:
             FHD/delivery/delivery-receipt.json
           if-no-files-found: error
           retention-days: 30
+      - name: State that the public release pointer was not advanced
+        if: always()
+        shell: pwsh
+        run: |
+          $n = "本次走 Windows 安装包交付通道（windows_installer_only=true）：正式发布链全部跳过，线上发布指针未推进，官网对外版本不变。"
+          Write-Host "::warning::$n"; "### 未执行正式发布链`n$n" | Add-Content $env:GITHUB_STEP_SUMMARY
 
   release-preflight:
     if: ${{ inputs.verify_only != true && inputs.windows_installer_only != true }}
