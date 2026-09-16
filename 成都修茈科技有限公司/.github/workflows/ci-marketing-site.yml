@@ -120,3 +120,18 @@ jobs:
       # 注：发布副本带 defaults.run.working-directory=本目录，源文件亦按该语义书写相对路径
       - name: Capability center drift check
         run: python3 scripts/build_capability_center.py --check
+
+      # 版本口径单一来源：官网兜底版本必须与 FHD/VERSION.md 稳定产品版本一致，禁止手写漂移
+      - name: Version SSOT alignment
+        run: |
+          set -euo pipefail
+          ver="$(sed -n 's/.*XCAGI 稳定产品版本[^`]*`\([0-9.]*\)`.*/\1/p' ../FHD/VERSION.md | head -1)"
+          if [ -z "$ver" ]; then
+            echo "::error::无法从 FHD/VERSION.md 解析稳定产品版本"
+            exit 1
+          fi
+          grep -F -q "DEFAULT_VERSION = '${ver}'" download.html \
+            || { echo "::error::download.html DEFAULT_VERSION 与 VERSION.md 稳定版本 ${ver} 不一致"; exit 1; }
+          grep -F -q "v${ver}" download-releases.html \
+            || { echo "::error::download-releases.html 未包含当前稳定版本 v${ver}"; exit 1; }
+          echo "版本口径一致：${ver}（FHD/VERSION.md）"
