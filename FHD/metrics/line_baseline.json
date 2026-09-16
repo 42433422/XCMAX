@@ -1,5 +1,5 @@
 {
-  "lines": 2313308,
+  "lines": 2313310,
   "updated": "2026-09-16",
-  "note": "棘轮下调"
+  "note": "Windows 桌面壳拖拽死区修复仅改 CSS（.css 不计入行数），净增 2 行全部来自 changelog-gate 强制的 CHANGELOG 条目，无可等价的死代码/死文档可删"
 }

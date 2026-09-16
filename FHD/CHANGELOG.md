@@ -6,6 +6,8 @@
 
 ## Unreleased（1.0.0.4 之后的累积变更）
 
+- 修复 Windows 桌面端窗口左上角拖不动：桌面壳隐藏原生标题栏后只有应用内顶栏可拖拽，而侧边栏顶部品牌行（窗口顶边左侧约 236px）不在拖拽区内，形成「窗口没法拖动」死区；现把侧边栏顶部品牌行与顶栏一并纳入拖拽区（`-webkit-app-region: drag`），其内交互控件仍保持可点击。实机复验（1.0.0.4 本机真实鼠标事件，窗口已复位）：修复前该处拖拽窗口纹丝不动，修复后窗口跟随移动（+141,+131），顶栏拖拽无回归。
+
 - 官网产品能力中心（公开功能证据库，No Evidence No Claim）：一级导航「资质与能力」升级为「产品能力」（`/capabilities/`），原资质页 `honors.html` 变为重定向页，资质内容并入能力中心「资质与交付」板块。能力目录 SSOT = `成都修茈科技有限公司/data/capabilities/catalog.json`（50 项能力/26 模块/10 域，状态 verified 13/partial 14/implemented 22/planned 1，全部由目录自动统计），生成器 `scripts/build_capability_center.py` 构建时逐项校验证据存在性（源码/测试/CI/截图/文档/commit），证据不足自动降级状态，Android 端诚实标注「实验骨架·非签约级」；目录页三级结构+搜索+状态/平台筛选，详情页上半客户语言（价值/使用方式/平台/已知限制）下半技术验证资料（源码路径/测试/CI/截图/commit，敏感信息 0 命中）。CI 加 `--check` 漂移门禁与 capabilities HTML 校验；ssot.yaml 注册 `capability-center` 域（第 28 域）。
 
 - 连接件3 Windows 车道增量（实机故障注入矩阵）：新增 `scripts/dev/work_order_repro_windows.py`——把 Mac 连接件3 产出 `needs_scenario` 的规格升级为可执行实机复现：确定性关键词映射到既有 `scripts/package/fault-injection-windows.ps1` 六大场景（corrupt-main/corrupt-backup/kill-orphan/dual-process/migration-mutex/kill-all），`--execute` 在隔离 InstallRoot+DataRoot 实机复现并读 `fault-injection-receipt.json` 留证。复用的是注入脚本本体与 Mac 契约（同 `test_reports/repro/repro-<key12>.json` 读写、`scenario` 保持 dict、证据 `evidence-<key12>.json` 同命名），零改动 Mac 五连接件与公共 Schema；实机安全闸检测 DataRoot 落在用户真实 `%APPDATA%\XCAGI` 时拒绝执行。module_import 规格原样跳过不覆盖。删除全仓零引用一次性脚本 6 个（mypy autofix 两件+patch_pw/patch_surface 四件，净删除 -1429 行对冲本件新增）。
