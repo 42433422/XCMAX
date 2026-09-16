@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 
+import pytest
+
+from app.desktop_runtime import no_console_children
 from app.desktop_runtime.database_profile import (
     apply_database_profile_to_env,
     is_valid_remote_database_url,
@@ -198,3 +203,60 @@ def test_sunbird_legacy_marker_does_not_enable_ownerless_copy(tmp_path, monkeypa
     assert applied is False
     assert not (runtime / "424").exists()
     assert (runtime / "config" / "sunbird-roster.applied").read_text() == "already-applied\n"
+
+
+def test_with_no_window_keeps_explicit_console_requests():
+    assert no_console_children.with_no_window(0) == no_console_children.CREATE_NO_WINDOW
+    assert no_console_children.with_no_window(0x00000200) == (
+        0x00000200 | no_console_children.CREATE_NO_WINDOW
+    )
+    assert no_console_children.with_no_window(0x00000008) == 0x00000008
+    assert no_console_children.with_no_window(0x00000010) == 0x00000010
+
+
+def test_install_is_skipped_when_children_inherit_a_console(monkeypatch):
+    monkeypatch.setattr(no_console_children, "_installed", False)
+    monkeypatch.setattr(no_console_children, "needs_no_console_default", lambda: False)
+
+    assert no_console_children.install_no_console_child_defaults() is False
+
+
+def test_install_is_idempotent(monkeypatch):
+    dummy = type("_DummyPopen", (), {"__init__": lambda self, *a, **k: None})
+    monkeypatch.setattr(subprocess, "Popen", dummy)
+    monkeypatch.setattr(no_console_children, "_installed", False)
+    monkeypatch.setattr(no_console_children, "needs_no_console_default", lambda: True)
+
+    assert no_console_children.install_no_console_child_defaults() is True
+    patched_init = dummy.__init__
+
+    assert no_console_children.install_no_console_child_defaults() is False
+    assert dummy.__init__ is patched_init
+
+
+def test_install_injects_creationflags_into_real_popen(monkeypatch):
+    if sys.platform != "win32":
+        pytest.skip("CREATE_NO_WINDOW is Windows-only")
+    original_init = subprocess.Popen.__init__
+    seen: list[int] = []
+
+    def _spy(self, *args, creationflags=0, **kwargs):
+        seen.append(creationflags)
+        return original_init(self, *args, creationflags=creationflags, **kwargs)
+
+    monkeypatch.setattr(subprocess.Popen, "__init__", _spy)
+    monkeypatch.setattr(no_console_children, "_installed", False)
+    monkeypatch.setattr(no_console_children, "needs_no_console_default", lambda: True)
+
+    assert no_console_children.install_no_console_child_defaults() is True
+
+    result = subprocess.run(
+        [sys.executable, "-c", "print('ok')"],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "ok"
+    assert seen == [no_console_children.CREATE_NO_WINDOW]
