@@ -128,17 +128,17 @@ jobs:
       - name: Capability center drift check
         run: python3 scripts/build_capability_center.py --check
 
-      # 版本口径单一来源：官网兜底版本必须与 FHD/VERSION.md 稳定产品版本一致，禁止手写漂移
-      - name: Version SSOT alignment
+      # 官网对外版本只认「已发布版本」（release 指针 download_version）；VERSION.md 稳定版本领先时仅告警，不静默掩盖。
+      - name: Published version alignment
         run: |
           set -euo pipefail
-          ver="$(sed -n 's/.*XCAGI 稳定产品版本[^`]*`\([0-9.]*\)`.*/\1/p' ../FHD/VERSION.md | head -1)"
-          if [ -z "$ver" ]; then
-            echo "::error::无法从 FHD/VERSION.md 解析稳定产品版本"
-            exit 1
-          fi
-          grep -F -q "DEFAULT_VERSION = '${ver}'" download.html \
-            || { echo "::error::download.html DEFAULT_VERSION 与 VERSION.md 稳定版本 ${ver} 不一致"; exit 1; }
-          grep -F -q "v${ver}" download-releases.html \
-            || { echo "::error::download-releases.html 未包含当前稳定版本 v${ver}"; exit 1; }
-          echo "版本口径一致：${ver}（FHD/VERSION.md）"
+          pub="$(curl -fsS --retry 3 --retry-delay 5 -m 20 https://xiu-ci.com/download-release.json \
+            | python3 -c 'import json,sys;print(json.load(sys.stdin)["download_version"])')" \
+            || { echo "::error::无法从线上发布指针获取已发布版本"; exit 1; }
+          grep -F -q "DEFAULT_VERSION = '${pub}'" download.html \
+            || { echo "::error::download.html DEFAULT_VERSION 与已发布版本 ${pub} 不一致"; exit 1; }
+          grep -F -q "v${pub}" download-releases.html \
+            || { echo "::error::download-releases.html 未包含已发布版本 v${pub}"; exit 1; }
+          next="$(sed -n 's/.*XCAGI 稳定产品版本[^`]*`\([0-9.]*\)`.*/\1/p' ../FHD/VERSION.md | head -1)"
+          [ -z "$next" ] || [ "$next" = "$pub" ] || echo "::warning::VERSION.md 稳定版本 ${next} 尚未对外发布（当前已发布 ${pub}）；官网按已发布版本对齐"
+          echo "官网版本口径一致：已发布 ${pub}"

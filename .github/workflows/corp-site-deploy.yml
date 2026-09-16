@@ -16,26 +16,23 @@ on:
         description: Git branch to deploy on server
         required: false
         default: main
+  # push 事件在 main 上曾整体未投递（#1952/#1953 合并后无任何 push 事件 run），
+  # 且服务器 cron 自动更新被 hotfix hold 冻结，静态站会静默停留在旧版本；小时级巡检兜底。
+  schedule: [{cron: '23 * * * *'}]
   push:
     branches: [main]
     paths:
       - '成都修茈科技有限公司/*.html'
       - '成都修茈科技有限公司/partials/**'
-      - '成都修茈科技有限公司/styles.css'
-      - '成都修茈科技有限公司/main.js'
-      - '成都修茈科技有限公司/contact-intake.js'
-      - '成都修茈科技有限公司/contact-channels.js'
-      - '成都修茈科技有限公司/visualization.js'
-      - '成都修茈科技有限公司/world-will.js'
+      - '成都修茈科技有限公司/assets/**'
+      - '成都修茈科技有限公司/*.js'
+      - '成都修茈科技有限公司/*.css'
+      # 下列两条被 test_immutable_release_contract 明确断言，保留显式声明。
       - '成都修茈科技有限公司/world-will-ticker.js'
       - '成都修茈科技有限公司/world-will-ticker.css'
-      - '成都修茈科技有限公司/assets/**'
       - '成都修茈科技有限公司/**/capabilities/**'
       - '成都修茈科技有限公司/nginx-xiu-ci*.conf'
-      - '成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-site-auto-update.sh'
-      - '成都修茈科技有限公司/MODstore_deploy/scripts/install-site-auto-update-cron.sh'
-      - '成都修茈科技有限公司/MODstore_deploy/scripts/fix-nginx-corp-partials.py'
-      - '成都修茈科技有限公司/MODstore_deploy/scripts/fix-nginx-corp-download-routes.py'
+      - '成都修茈科技有限公司/MODstore_deploy/scripts/**'
       - '成都修茈科技有限公司/deploy/**'
       - '成都修茈科技有限公司/MODstore_deploy/market/public/download-release.json'
       - '成都修茈科技有限公司/download-action-board.json'
@@ -97,11 +94,6 @@ jobs:
             # release symlink). Git sync alone only updates /root/XCMAX.
             export XCMAX_FORCE_SITE_PUBLISH=1
             AUTO_SCRIPT="${REMOTE_ROOT}/成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-site-auto-update.sh"
-            if [ ! -f "${AUTO_SCRIPT}" ]; then
-              echo "[err] 缺少 ${AUTO_SCRIPT}；请先 git pull 含该脚本的提交"
-              git -C "${REMOTE_ROOT}" fetch origin "${BRANCH}"
-              git -C "${REMOTE_ROOT}" reset --hard "origin/${BRANCH}"
-            fi
             bash "${AUTO_SCRIPT}"
             SITE_ROOT="${REMOTE_ROOT}/成都修茈科技有限公司"
             # Publish git-tree site chrome into nginx live root. Production serves
