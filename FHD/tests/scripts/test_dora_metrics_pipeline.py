@@ -109,13 +109,11 @@ def test_latest_dora_snapshot_uses_newest_dated_file(tmp_path: Path) -> None:
     assert path == latest
 
 
-def test_dora_snapshot_age_exposes_stale_data() -> None:
-    age = gen_claimed_vs_actual._snapshot_age_days(
-        "2026-07-20T08:00:00Z",
-        now=datetime(2026, 7, 26, 12, 0, tzinfo=UTC),
-    )
-
-    assert age == 6
+def test_dora_snapshot_line_reports_absolute_collection_date() -> None:
+    # 曾经输出「N 天内采集」相对量：无任何输入变更也会天天失效（漂移门禁误报）
+    assert gen_claimed_vs_actual._snapshot_date("2026-07-20T08:00:00Z") == "2026-07-20"
+    assert gen_claimed_vs_actual._snapshot_date("") == "未知"
+    assert not hasattr(gen_claimed_vs_actual, "_snapshot_age_days")
 
 
 def test_release_package_and_auto_update_wire_dora_receipts() -> None:

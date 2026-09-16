@@ -121,17 +121,25 @@ jobs:
       - name: Capability center drift check
         run: python3 scripts/build_capability_center.py --check
 
-      # 官网对外版本只认「已发布版本」（release 指针 download_version）；VERSION.md 稳定版本领先时仅告警，不静默掩盖。
-      - name: Published version alignment
+      # 官网「当前版本」只有一个来源：发布清单 /download-release.json（发布流程在 Windows/macOS
+      # 双平台产物通过验证后原子写入）。页面里写死的版本兜底值会与指针冲突，并让本门禁在每次
+      # 发版后持续变红——因此这里直接禁止写死，而不是要求人工跟着每次发版改页面。
+      - name: Current version single-sourced from release manifest
         run: |
           set -euo pipefail
           pub="$(curl -fsS --retry 3 --retry-delay 5 -m 20 https://xiu-ci.com/download-release.json \
             | python3 -c 'import json,sys;print(json.load(sys.stdin)["download_version"])')" \
             || { echo "::error::无法从线上发布指针获取已发布版本"; exit 1; }
-          grep -F -q "DEFAULT_VERSION = '${pub}'" download.html \
-            || { echo "::error::download.html DEFAULT_VERSION 与已发布版本 ${pub} 不一致"; exit 1; }
-          grep -F -q "v${pub}" download-releases.html \
-            || { echo "::error::download-releases.html 未包含已发布版本 v${pub}"; exit 1; }
+          grep -F -q "fetch('/download-release.json'" download.html \
+            || { echo "::error::download.html 未从发布清单读取当前版本"; exit 1; }
+          grep -F -q "fetchJson('/download-release.json')" download-releases.html \
+            || { echo "::error::download-releases.html 未从发布清单读取版本时间线"; exit 1; }
+          if grep -E -q "DEFAULT_VERSION *= *['\"][0-9]" download.html; then
+            echo "::error::download.html 仍写死版本兜底值；当前版本只能来自发布清单"; exit 1
+          fi
+          if grep -E -q 'id="summary-version">[v0-9]' download-releases.html; then
+            echo "::error::download-releases.html 仍写死当前版本；当前版本只能来自发布清单"; exit 1
+          fi
           next="$(sed -n 's/.*XCAGI 稳定产品版本[^`]*`\([0-9.]*\)`.*/\1/p' ../FHD/VERSION.md | head -1)"
           [ -z "$next" ] || [ "$next" = "$pub" ] || echo "::warning::VERSION.md 稳定版本 ${next} 尚未对外发布（当前已发布 ${pub}）；官网按已发布版本对齐"
-          echo "官网版本口径一致：已发布 ${pub}"
+          echo "官网当前版本单一来源校验通过：已发布 ${pub}"

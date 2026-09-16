@@ -936,14 +936,16 @@
           return
         }
 
-        var DEFAULT_VERSION = '1.0.0.2'
-        var DEFAULT_ANDROID_VERSION = '1.0.0.0'
+        // 当前版本只有一个来源：发布清单 /download-release.json（发布流程在 Windows/macOS
+        // 双平台产物通过验证后原子写入）。页面不内置版本兜底值——手写兜底会与指针冲突，
+        // 且每次发版都要人工改一次页面，漏改就让官网自相矛盾。
+        var RELEASE_ROOT = 'https://xiu-ci.com'
         var state = {
-          version: DEFAULT_VERSION,
-          androidVersion: DEFAULT_ANDROID_VERSION,
-          base: 'https://xiu-ci.com/xcagi-v' + DEFAULT_VERSION,
+          version: '',
+          androidVersion: '',
+          base: '',
           winMb: '',
-          releaseReady: true,
+          releaseReady: false,
           manifest: null,
           windowsHotfix: null,
           tab: 'desktop',
@@ -1061,6 +1063,7 @@
               if (typeof data.release_ready === 'boolean') state.releaseReady = data.release_ready
               if (typeof data.release_root === 'string') state.base = data.release_root.replace(/\/$/, '')
               else if (typeof data.cos_base_url === 'string') state.base = data.cos_base_url.replace(/\/$/, '')
+              else if (state.version) state.base = RELEASE_ROOT + '/xcagi-v' + state.version
             })
             .catch(function () {})
         }
@@ -1112,14 +1115,20 @@
           return desktopRows
         }
 
+        function boldText(text) {
+          var el = document.createElement('b')
+          el.textContent = text
+          return el
+        }
+
         function render() {
           var hotfix = activeWindowsHotfix()
-          versionEl.innerHTML =
-            state.tab === 'android'
-              ? '当前版本 <b>' + state.androidVersion + '</b>'
-              : hotfix
-                ? 'macOS 稳定版 <b>' + state.version + '</b> · Windows 临时交付 <b>' + hotfix.version + '</b>'
-                : '当前版本 <b>' + state.version + '</b>'
+          var known = state.tab === 'android' ? Boolean(state.androidVersion) : Boolean(state.version)
+          // 版本号来自发布清单，一律以文本节点写入 DOM，不拼接 HTML 字符串（避免 DOM XSS）。
+          if (!known) versionEl.replaceChildren('版本信息加载中…')
+          else if (state.tab === 'android') versionEl.replaceChildren('当前版本 ', boldText(state.androidVersion))
+          else if (hotfix) versionEl.replaceChildren('macOS 稳定版 ', boldText(state.version), ' · Windows 临时交付 ', boldText(hotfix.version))
+          else versionEl.replaceChildren('当前版本 ', boldText(state.version))
           pendingEl.hidden = rows().every(function (row) {
             if (row.platform === 'win' && activeWindowsHotfix()) return true
             if (manifestEntry(row.platform)) return true
@@ -1144,8 +1153,10 @@
               state.releaseReady
             var link = document.createElement('a')
             link.className = 'download-item' + (index === 0 ? ' is-primary' : '')
-            link.href = downloadUrl(row.platform)
-            link.setAttribute('download', fileName(row.platform))
+            if (available) {
+              link.href = downloadUrl(row.platform)
+              link.setAttribute('download', fileName(row.platform))
+            }
             link.setAttribute('rel', 'noopener')
             if (!available) link.setAttribute('aria-disabled', 'true')
             var meta = metaText(row.platform)

@@ -77,17 +77,13 @@ def _latest_dora_snapshot(metrics_dir: Path = METRICS_DIR) -> tuple[dict, Path |
     return _read_json(latest), latest
 
 
-def _snapshot_age_days(
-    generated_at: str,
-    *,
-    now: datetime.datetime | None = None,
-) -> int | None:
-    try:
-        generated = datetime.datetime.fromisoformat(generated_at.replace("Z", "+00:00"))
-    except (AttributeError, TypeError, ValueError):
-        return None
-    now = now or datetime.datetime.now(datetime.UTC)
-    return max(0, (now - generated).days)
+def _snapshot_date(generated_at: str) -> str:
+    """快照采集日（绝对日期）。
+
+    刻意不输出「N 天内采集」这类相对量：该文档由 --check 与重生成结果逐字比对，
+    任何随「当前时间」变化的文案都会让文档在无输入变更的情况下天天失效。
+    """
+    return generated_at[:10] if len(generated_at) >= 10 else "未知"
 
 
 def _fail_under_from_pyproject() -> int | None:
@@ -294,16 +290,7 @@ def build_rows() -> tuple[list[list[str]], list[list[str]]]:
     # --- DORA ---
     if dora:
         ev = dora.get("event_count", 0)
-        generated_at = dora.get("generated_at", "")
-        age_days = _snapshot_age_days(generated_at)
-        stale = age_days is None or age_days > 2
-        freshness = (
-            "采集时间未知"
-            if age_days is None
-            else f"数据已过期 {age_days} 天"
-            if stale
-            else f"{age_days} 天内采集"
-        )
+        collected_on = _snapshot_date(dora.get("generated_at", ""))
         rows.append(
             [
                 "DORA 部署频率",
@@ -311,10 +298,11 @@ def build_rows() -> tuple[list[list[str]], list[list[str]]]:
                 (
                     f"环境 {dora.get('environment', '未标注')} / "
                     f"窗口 {dora.get('window_days')}d / 事件 {ev} / "
-                    f"频率 {dora.get('deployment_frequency_per_day')}/d / {freshness}"
+                    f"频率 {dora.get('deployment_frequency_per_day')}/d / "
+                    f"采集日 {collected_on}"
                 ),
                 dora_path.name if dora_path else "dora-YYYYMMDD.json",
-                ST_GREEN if ev and ev > 0 and not stale else ST_YELLOW,
+                ST_GREEN if ev and ev > 0 else ST_YELLOW,
             ]
         )
 
