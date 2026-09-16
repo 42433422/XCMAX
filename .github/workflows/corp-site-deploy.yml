@@ -24,15 +24,9 @@ on:
     paths:
       - '成都修茈科技有限公司/*.html'
       - '成都修茈科技有限公司/partials/**'
-      - '成都修茈科技有限公司/styles.css'
-      - '成都修茈科技有限公司/main.js'
-      - '成都修茈科技有限公司/contact-intake.js'
-      - '成都修茈科技有限公司/contact-channels.js'
-      - '成都修茈科技有限公司/visualization.js'
-      - '成都修茈科技有限公司/world-will.js'
-      - '成都修茈科技有限公司/world-will-ticker.js'
-      - '成都修茈科技有限公司/world-will-ticker.css'
       - '成都修茈科技有限公司/assets/**'
+      - '成都修茈科技有限公司/*.js'
+      - '成都修茈科技有限公司/*.css'
       - '成都修茈科技有限公司/**/capabilities/**'
       - '成都修茈科技有限公司/nginx-xiu-ci*.conf'
       - '成都修茈科技有限公司/MODstore_deploy/scripts/**'
@@ -97,11 +91,6 @@ jobs:
             # release symlink). Git sync alone only updates /root/XCMAX.
             export XCMAX_FORCE_SITE_PUBLISH=1
             AUTO_SCRIPT="${REMOTE_ROOT}/成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-site-auto-update.sh"
-            if [ ! -f "${AUTO_SCRIPT}" ]; then
-              echo "[err] 缺少 ${AUTO_SCRIPT}；请先 git pull 含该脚本的提交"
-              git -C "${REMOTE_ROOT}" fetch origin "${BRANCH}"
-              git -C "${REMOTE_ROOT}" reset --hard "origin/${BRANCH}"
-            fi
             bash "${AUTO_SCRIPT}"
             SITE_ROOT="${REMOTE_ROOT}/成都修茈科技有限公司"
             # Publish git-tree site chrome into nginx live root. Production serves
@@ -133,9 +122,6 @@ jobs:
                 cp -f "${GIT_SITE}/download-release.json" "${LIVE_SITE}/download-release.json"
               else
                 echo "[info] preserving release-managed download-release.json"
-              fi
-              if [ -e "${LIVE_SITE}/download-windows-hotfix.json" ]; then
-                echo "[info] preserving release-managed download-windows-hotfix.json"
               fi
               if [ -d "${GIT_SITE}/partials" ]; then
                 cp -af "${GIT_SITE}/partials/." "${LIVE_SITE}/partials/"

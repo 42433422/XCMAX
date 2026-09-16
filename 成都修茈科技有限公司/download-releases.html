@@ -1424,6 +1424,14 @@
             })
         }
 
+        // Android 对外只认「实验版·非签约级」，不与 Windows / macOS 并列；指针历史文案滞后时在此统一纠正，避免逐条手改漂移。
+        function platformLabel(platform) {
+          platform = String(platform)
+          if (platform.indexOf('Android') !== 0) return platform
+          var version = (platform.match(/\d+\.\d+\.\d+\.\d+/) || [''])[0]
+          return 'Android' + (version ? ' ' + version : '') + ' 实验版·非签约级'
+        }
+
         function render(history, interimActive) {
           if (!Array.isArray(history) || !history.length) history = fallbackHistory
           listEl.innerHTML = ''
@@ -1507,7 +1515,7 @@
               platforms.setAttribute('aria-label', '公开平台')
               release.platforms.forEach(function (platform) {
                 var tag = document.createElement('span')
-                tag.textContent = String(platform)
+                tag.textContent = platformLabel(platform)
                 platforms.appendChild(tag)
               })
               entry.appendChild(platforms)
