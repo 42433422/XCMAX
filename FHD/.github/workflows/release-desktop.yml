@@ -1197,11 +1197,12 @@ jobs:
             echo "::error::线上更新日志页仍写死当前版本，未同步到「以发布清单为准」的官网版本"; exit 1
           fi
           # 发版即官网同步：能力中心必须同时在线（#1952 整目录漏发导致线上 404 的回归守卫）。
+          # 断言只落在实际发布的三个面上（corp-site-deploy 只发 capabilities/ 与 data/capabilities/）。
           curl -fsSL --retry 3 --retry-all-errors --connect-timeout 15 --max-time 60 \
             "https://xiu-ci.com/capabilities/catalog.html?release-run=${GITHUB_RUN_ID}" \
             -o "$tmpdir/cap-catalog.html"
-          grep -Fq '产品能力' "$tmpdir/cap-catalog.html"
-          for surface in "/capabilities/" "/data/capabilities.json"; do
+          grep -Fq '能力目录' "$tmpdir/cap-catalog.html"
+          for surface in "/capabilities/" "/data/capabilities/catalog.json"; do
             curl -fsSL --retry 3 --retry-all-errors --connect-timeout 15 --max-time 60 \
               "https://xiu-ci.com${surface}?release-run=${GITHUB_RUN_ID}" -o /dev/null
           done
