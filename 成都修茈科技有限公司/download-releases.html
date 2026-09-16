@@ -1061,16 +1061,16 @@
               <a href="/download">返回下载首页</a>
             </div>
             <div class="hero-proof" aria-label="版本演进概览">
-              <div><strong>15</strong><span>关键版本</span></div>
+              <div><strong>13</strong><span>关键版本</span></div>
               <div><strong>4</strong><span>能力阶段</span></div>
             </div>
           </div>
           <aside class="version-summary" aria-label="当前交付版本">
             <span class="summary-label">Current delivery release</span>
-            <p class="summary-version" id="summary-version">v1.0.0.4</p>
+            <p class="summary-version" id="summary-version">v1.0.0.2</p>
             <div class="summary-status" id="summary-status">稳定版可下载</div>
             <div class="summary-meta">
-              <span>发布日期<b id="summary-date">2026-09-14</b></span>
+              <span>发布日期<b id="summary-date">2026-09-13</b></span>
               <span>发布渠道<b id="summary-channel">稳定版</b></span>
             </div>
             <ul class="summary-changes" id="summary-changes" aria-label="当前版本重点"></ul>
@@ -1139,22 +1139,20 @@
                   <div class="release-entry__head">
                     <div>
                       <div class="release-version-line">
-                        <h3>v1.0.0.4</h3>
-                        <span class="release-channel">稳定版</span>
+                        <h3>v1.0.0.2</h3>
+                        <span class="release-channel">macOS 稳定版</span>
                       </div>
-                      <p class="release-title">发货单模板修复与桌面 OTA 稳定性</p>
+                      <p class="release-title">Mac 模板导入与行业能力修复</p>
                     </div>
-                    <time class="release-date" datetime="2026-09-14">2026-09-14</time>
+                    <time class="release-date" datetime="2026-09-13">2026-09-13</time>
                   </div>
                   <ul class="release-notes">
-                    <li>修复新建发货单页面调用已下线旧接口，导致模板列表为空、生成与下载全断的问题。</li>
-                    <li>修复 OTA 安装失败后窗口关闭行为异常的问题；更新下载回执改用产品版本号。</li>
-                    <li>修复 macOS 应用内「安装更新」点击后应用不退出的问题。</li>
-                    <li>修复下载中心发布被元数据校验拦截的问题，版本历史恢复一致。</li>
+                    <li>修复发货单模板上传入口，恢复模板导入与出单链路。</li>
+                    <li>修复太阳鸟等已授权行业 Mod 的宿主兼容问题，保留原有账号权益和业务数据。</li>
+                    <li>macOS Apple Silicon 安装包完成 Developer ID 签名与公证，稳定更新源发布 1.0.0.2。</li>
                   </ul>
                   <div class="release-platforms" aria-label="公开平台">
-                    <span>Windows 64 位</span><span>macOS Apple Silicon 1.0.0.4 稳定版</span
-                    ><span>Android 1.0.0.0 实验版</span>
+                    <span>macOS Apple Silicon 1.0.0.2 稳定版</span>
                   </div>
                 </article>
               </div>
@@ -1181,42 +1179,16 @@
 
         var fallbackHistory = [
           {
-            version: '1.0.0.4',
-            date: '2026-09-14',
-            title: '发货单模板修复与桌面 OTA 稳定性',
-            channel: '稳定版',
-            notes: [
-              '修复新建发货单页面调用已下线旧接口，导致模板列表为空、生成与下载全断的问题。',
-              '修复 OTA 安装失败后窗口关闭行为异常的问题；更新下载回执改用产品版本号，避免内部 bundle 版本与产品版本不一致误报安装失败。',
-              '修复 macOS 应用内「安装更新」点击后应用不退出的问题。',
-              '修复下载中心发布被元数据校验拦截的问题，版本历史恢复一致。',
-            ],
-            platforms: ['Windows 64 位', 'macOS Apple Silicon 1.0.0.4 稳定版', 'Android 1.0.0.0 实验版'],
-          },
-          {
-            version: '1.0.0.3',
-            date: '2026-09-13',
-            title: '发货单模板链路修复',
-            channel: '稳定版',
-            notes: [
-              '修复新建发货单调用旧接口导致模板列表、生成与下载失效，按模板 ID 保留选模版和订单号。',
-              'macOS 模板上传改走用户数据目录，不再写坏签名包。',
-              '修复 Mac 下载中心版本历史与安装包版本不一致的问题。',
-            ],
-            platforms: ['macOS Apple Silicon 1.0.0.3 稳定版'],
-          },
-          {
             version: '1.0.0.2',
-            date: '2026-09-12',
-            title: '模板导入修复与 Windows 增量更新',
-            channel: '稳定版',
+            date: '2026-09-13',
+            title: 'Mac 模板导入与行业能力修复',
+            channel: 'macOS 稳定版',
             notes: [
-              'Windows OTA 恢复增量更新，弱网环境不再整包重下（236MB→仅差异块）。',
-              '发货单模板导入链路默认可用（上传/分析端点默认挂载）。',
-              '路由策略等运行期文件改写用户数据目录，根治签名包被写坏。',
-              '53 项高危安全告警清零；桌面双端平级发布成为门禁。',
+              '修复发货单模板上传入口，恢复模板导入与出单链路。',
+              '修复太阳鸟等已授权行业 Mod 的宿主兼容问题，保留原有账号权益和业务数据。',
+              'macOS Apple Silicon 安装包完成 Developer ID 签名与公证，稳定更新源发布 1.0.0.2。',
             ],
-            platforms: ['Windows 64 位', 'macOS Apple Silicon 1.0.0.2 稳定版', 'Android 1.0.0.0 实验版'],
+            platforms: ['macOS Apple Silicon 1.0.0.2 稳定版'],
           },
           {
             version: '1.0.0.1',
