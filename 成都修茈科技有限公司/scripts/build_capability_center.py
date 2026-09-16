@@ -134,7 +134,11 @@ def validate_feature(feat: dict, warnings: list[str]) -> dict:
         if impl_ok:
             warnings.append(f"[{feat['id']}] 声明为规划中但存在实现路径（仅警告，不自动升级）: {impl_ok[0]}")
 
-    ev_paths_for_time = impl_ok + tests_ok + [p.split(":")[0] for p in ci_ok]
+    # 「最近验证时间」只取能力自身拥有、且只会因该能力而变更的证据（实现 + 测试）。
+    # CI 工作流是跨能力共享的基础设施：任何一次无关的 workflow 编辑都会顶起全部 30 项
+    # 引用它的能力的验证时间，使已提交页面看似漂移（SSOT Drift Gate 反复误报）。
+    # CI 记录仍然是 "verified" 状态的必需证据（见上方降级判断），只是不参与时间戳。
+    ev_paths_for_time = impl_ok + tests_ok
     verified_at = last_commit(ev_paths_for_time)
 
     commit_info = []

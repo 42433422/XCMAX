@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "catalog_version": "2026-09-16",
-  "generated_at": "2026-09-16 02:02 UTC",
+  "generated_at": "2026-09-16 15:27 UTC",
   "principle": "No Evidence, No Claim：所有状态由构建脚本按仓库证据校验，证据缺失自动降级。",
   "stats": {
     "total": 50,
@@ -14,7 +14,7 @@
     "domains": 10,
     "modules": 26,
     "verified_total": 13,
-    "last_verified_at": "2026-09-16",
+    "last_verified_at": "2026-09-14",
     "platform_counts": {
       "windows": 40,
       "macos": 40,

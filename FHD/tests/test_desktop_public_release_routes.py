@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -119,7 +120,15 @@ def test_release_page_keeps_same_version_windows_interim_visible() -> None:
     assert "compareVersions(hotfix.version, history[0].version) >= 0" in release_page
     assert "history[0] = hotfix.release" not in release_page
     assert "compareVersions(hotfix.version, history[0].version) > 0" in release_page
-    assert "太阳鸟行业考勤归并与企业交付可见" in release_page
+    # 版本时间线不再内置快照：唯一来源是发布清单 SSOT（FHD/config/download_release.json）
+    # 生成的 release_history，发版即自动更新；写死的历史副本会过期并让官网自相矛盾。
+    assert "fallbackHistory" not in release_page
+    history_ssot = json.loads(
+        (REPO_ROOT / "FHD" / "config" / "download_release.json").read_text(encoding="utf-8")
+    )
+    assert "太阳鸟行业考勤归并与企业交付可见" in [
+        entry["title"] for entry in history_ssot["release_history"]
+    ]
 
 
 def test_macos_release_flow_publishes_download_center_metadata_and_has_recovery_path() -> None:

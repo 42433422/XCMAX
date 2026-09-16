@@ -936,14 +936,16 @@
           return
         }
 
-        var DEFAULT_VERSION = '1.0.0.2'
-        var DEFAULT_ANDROID_VERSION = '1.0.0.0'
+        // 当前版本只有一个来源：发布清单 /download-release.json（发布流程在 Windows/macOS
+        // 双平台产物通过验证后原子写入）。页面不内置版本兜底值——手写兜底会与指针冲突，
+        // 且每次发版都要人工改一次页面，漏改就让官网自相矛盾。
+        var RELEASE_ROOT = 'https://xiu-ci.com'
         var state = {
-          version: DEFAULT_VERSION,
-          androidVersion: DEFAULT_ANDROID_VERSION,
-          base: 'https://xiu-ci.com/xcagi-v' + DEFAULT_VERSION,
+          version: '',
+          androidVersion: '',
+          base: '',
           winMb: '',
-          releaseReady: true,
+          releaseReady: false,
           manifest: null,
           windowsHotfix: null,
           tab: 'desktop',
@@ -1061,6 +1063,7 @@
               if (typeof data.release_ready === 'boolean') state.releaseReady = data.release_ready
               if (typeof data.release_root === 'string') state.base = data.release_root.replace(/\/$/, '')
               else if (typeof data.cos_base_url === 'string') state.base = data.cos_base_url.replace(/\/$/, '')
+              else if (state.version) state.base = RELEASE_ROOT + '/xcagi-v' + state.version
             })
             .catch(function () {})
         }
@@ -1114,8 +1117,10 @@
 
         function render() {
           var hotfix = activeWindowsHotfix()
-          versionEl.innerHTML =
-            state.tab === 'android'
+          var known = state.tab === 'android' ? Boolean(state.androidVersion) : Boolean(state.version)
+          versionEl.innerHTML = !known
+            ? '版本信息加载中…'
+            : state.tab === 'android'
               ? '当前版本 <b>' + state.androidVersion + '</b>'
               : hotfix
                 ? 'macOS 稳定版 <b>' + state.version + '</b> · Windows 临时交付 <b>' + hotfix.version + '</b>'
@@ -1144,8 +1149,10 @@
               state.releaseReady
             var link = document.createElement('a')
             link.className = 'download-item' + (index === 0 ? ' is-primary' : '')
-            link.href = downloadUrl(row.platform)
-            link.setAttribute('download', fileName(row.platform))
+            if (available) {
+              link.href = downloadUrl(row.platform)
+              link.setAttribute('download', fileName(row.platform))
+            }
             link.setAttribute('rel', 'noopener')
             if (!available) link.setAttribute('aria-disabled', 'true')
             var meta = metaText(row.platform)

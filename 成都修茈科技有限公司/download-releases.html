@@ -1067,11 +1067,12 @@
           </div>
           <aside class="version-summary" aria-label="当前交付版本">
             <span class="summary-label">Current delivery release</span>
-            <p class="summary-version" id="summary-version">v1.0.0.2</p>
-            <div class="summary-status" id="summary-status">稳定版可下载</div>
+            <!-- 当前版本不写死在页面里：唯一来源是发布清单 /download-release.json（见页面脚本） -->
+            <p class="summary-version" id="summary-version">—</p>
+            <div class="summary-status" id="summary-status">版本信息加载中</div>
             <div class="summary-meta">
-              <span>发布日期<b id="summary-date">2026-09-13</b></span>
-              <span>发布渠道<b id="summary-channel">稳定版</b></span>
+              <span>发布日期<b id="summary-date">—</b></span>
+              <span>发布渠道<b id="summary-channel">—</b></span>
             </div>
             <ul class="summary-changes" id="summary-changes" aria-label="当前版本重点"></ul>
           </aside>
@@ -1134,28 +1135,8 @@
               </div>
             </aside>
             <div>
-              <div class="release-list" id="release-list" aria-live="polite" aria-label="XCAGI 版本时间线">
-                <article class="release-entry">
-                  <div class="release-entry__head">
-                    <div>
-                      <div class="release-version-line">
-                        <h3>v1.0.0.2</h3>
-                        <span class="release-channel">macOS 稳定版</span>
-                      </div>
-                      <p class="release-title">Mac 模板导入与行业能力修复</p>
-                    </div>
-                    <time class="release-date" datetime="2026-09-13">2026-09-13</time>
-                  </div>
-                  <ul class="release-notes">
-                    <li>修复发货单模板上传入口，恢复模板导入与出单链路。</li>
-                    <li>修复太阳鸟等已授权行业 Mod 的宿主兼容问题，保留原有账号权益和业务数据。</li>
-                    <li>macOS Apple Silicon 安装包完成 Developer ID 签名与公证，稳定更新源发布 1.0.0.2。</li>
-                  </ul>
-                  <div class="release-platforms" aria-label="公开平台">
-                    <span>macOS Apple Silicon 1.0.0.2 稳定版</span>
-                  </div>
-                </article>
-              </div>
+              <!-- 版本时间线由发布清单 /download-release.json 的 release_history 渲染（见页面脚本） -->
+              <div class="release-list" id="release-list" aria-live="polite" aria-label="XCAGI 版本时间线"></div>
               <p class="release-source-note">历史演进来自 XCAGI 版本演进轨与更新日志；当前下载状态、文件大小和校验值以制品发布清单为准。</p>
             </div>
           </div>
@@ -1177,158 +1158,9 @@
       ;(function () {
         'use strict'
 
-        var fallbackHistory = [
-          {
-            version: '1.0.0.2',
-            date: '2026-09-13',
-            title: 'Mac 模板导入与行业能力修复',
-            channel: 'macOS 稳定版',
-            notes: [
-              '修复发货单模板上传入口，恢复模板导入与出单链路。',
-              '修复太阳鸟等已授权行业 Mod 的宿主兼容问题，保留原有账号权益和业务数据。',
-              'macOS Apple Silicon 安装包完成 Developer ID 签名与公证，稳定更新源发布 1.0.0.2。',
-            ],
-            platforms: ['macOS Apple Silicon 1.0.0.2 稳定版'],
-          },
-          {
-            version: '1.0.0.1',
-            date: '2026-09-02',
-            title: '太阳鸟行业考勤归并与企业交付可见',
-            channel: '平台分阶段发布',
-            notes: [
-              '太阳鸟账号按饰品包装行业归类，原有单独考勤入口归并到行业通用考勤；既有登录会话在升级后自动补齐行业能力。',
-              '客户交付中心新增客户设备当前安装版本与平台展示；历史回执未携带版本时明确显示未上报，不再把未知值当作有效版本。',
-              '安装与首次登录成功后上报版本、构建 SHA 和平台；展示只采用最近一次成功安装回执，失败升级不会覆盖客户已安装版本。',
-              'macOS Apple Silicon 1.0.0.1 通过 Developer ID 签名、公证与稳定更新源校验后发布；Android 继续使用 1.0.0.0 实验版。',
-              'Windows 64 位企业临时交付包已构建并公开 SHA-256，但尚未完成 Authenticode 代码签名；仅供管理员确认来源后安装，不进入稳定自动更新通道。',
-              '桌面发布流程会原子更新安装包、下载中心与更新日志，并核验版本、构建 SHA、文件大小和 SHA-256；正式 Windows 稳定版继续执行代码签名硬门禁。',
-            ],
-            platforms: ['Windows 64 位临时交付', 'macOS Apple Silicon 1.0.0.1 稳定版', 'Android 1.0.0.0 实验版'],
-          },
-          {
-            version: '1.0.0.0',
-            date: '2026-07-13',
-            title: '企业版稳定发布基线',
-            channel: '稳定版',
-            notes: [
-              '在历史 v1–v10 产品演进之后重新建立稳定发布基线；对外产品版本统一为 1.0.0.0。',
-              '企业版进入公开稳定渠道，个人版冻结；统一 AI 员工工作台、智能对话与行业 Mod 装载入口。',
-              'Windows、macOS Apple Silicon 与 Android 企业版安装包均公开文件大小及 SHA-256 校验信息。',
-              '桌面端接入 stable 自动更新通道，产品四段版本与 Electron/Apple 三段工具链版本分开管理。',
-            ],
-            platforms: ['Windows 64 位', 'macOS Apple Silicon', 'Android'],
-          },
-          {
-            version: '10.0.0',
-            date: '2026-06-03',
-            title: '单轨收敛与六线打通',
-            channel: '历史里程碑',
-            notes: [
-              '移除双事件入口，统一为单轨事件总线与 ProductionLineOrchestrator。',
-              '运营、伙伴、网站、Mod、软件与归档六线贯通，伙伴生态 B1–B5 正式落编。',
-              'CI 覆盖率门禁提升，历史 shim 与重复入口继续清零。',
-            ],
-          },
-          {
-            version: '9.0.x',
-            date: '2026-05-29',
-            title: '认证、异步、锁与 CI 全面硬化',
-            channel: '历史里程碑',
-            notes: [
-              'FastAPI Depends 统一登录、权限与角色认证路径。',
-              '补齐 sync/async 双路径装饰器与 Redis token + Lua 分布式锁。',
-              'Bandit、Safety、Flake8、mypy、OpenAPI 一致性与全量 pytest 进入硬门禁。',
-            ],
-          },
-          {
-            version: '8.0.0',
-            date: '2026-05-21',
-            title: '跨行业 UI 与行业预设',
-            channel: '历史版本',
-            notes: [
-              '引入通用、涂料、考勤、批发等行业预设。',
-              'Mod 源码库支持行业选择与 manifest.industry。',
-              '菜单、欢迎语、快捷按钮及模板随行业切换。',
-            ],
-          },
-          {
-            version: '7.0.0',
-            date: '2026-04-29',
-            title: '桌面版与 Web 并行交付',
-            channel: '历史里程碑',
-            notes: [
-              'Electron 桌面壳支持 Windows 与 macOS，本地 FastAPI 子进程承载核心能力。',
-              'Web 版继续并行交付，同一业务代码覆盖桌面与浏览器。',
-              '接入 electron-updater 与 Mod OTA 灰度更新路径。',
-            ],
-          },
-          {
-            version: '6.0.0',
-            date: '2026-04-28',
-            title: '商业模式与 Mod 生态成型',
-            channel: '历史版本',
-            notes: [
-              '形成订阅、交易与服务三层商业模型。',
-              'ModStore、沙箱执行、创作者上架与分成流程成型。',
-              '会员体系与企业能力交付边界进入产品主线。',
-            ],
-          },
-          {
-            version: '5.0.0',
-            date: '2026-04-20',
-            title: 'Neuro-DDD 与审批流',
-            channel: '历史里程碑',
-            notes: [
-              '建立 Entry、Route、Application、Domain、Infrastructure 分层。',
-              '引入 NeuroBus、性能监控与多级审批流。',
-              '微信小程序与企业业务流程开始共用平台能力。',
-            ],
-          },
-          {
-            version: '4.0.0',
-            date: '2026-04-05',
-            title: 'AI 员工体系与多模态交互',
-            channel: '历史里程碑',
-            notes: [
-              '产品从被动工具升级为角色化 AI 员工平台。',
-              '图像、语音、文本三态融合，员工路由按意图分发任务。',
-              '神经域事件协作成为业务自动化基础。',
-            ],
-          },
-          {
-            version: '3.0.0',
-            date: '2026-03-15',
-            title: '混合意图引擎与任务 Agent',
-            channel: '历史版本',
-            notes: [
-              '混合意图识别整合 BERT、规则与大模型能力。',
-              '加入 TTS 语音合成与异步任务 Agent 编排。',
-              '数据库迁移和队列机制支撑长任务执行。',
-            ],
-          },
-          {
-            version: '2.0.0',
-            date: '2026-02-20',
-            title: 'Vue 3、AI 对话与 OCR',
-            channel: '历史版本',
-            notes: [
-              '使用 Vue 3 与 Vite 重构前端并建立 Web 工作台。',
-              '接入 AI 对话、OCR 双通道识别与标签打印引擎。',
-              'FastAPI REST 接口开始拆分桌面单体逻辑。',
-            ],
-          },
-          {
-            version: '1.0.0',
-            date: '2026-01-15',
-            title: 'Excel 解析与标签打印起点',
-            channel: '历史版本',
-            notes: [
-              '建立 Excel 单据解析、标签模板和出货单生成能力。',
-              '以单一桌面应用承载最早期业务流程。',
-              '形成后续 AI、Web 与自动化演进的产品基础。',
-            ],
-          },
-        ]
+        // 版本时间线不内置任何快照：唯一来源是发布清单 /download-release.json 的
+        // release_history（由发布流程从 FHD/config/download_release.json 生成）。
+        // 页面内写死的历史副本会随发版过期，并让官网自相矛盾。
 
         var presentationByVersion = {
           '1.0.0.1': {
@@ -1433,7 +1265,7 @@
         }
 
         function render(history, interimActive) {
-          if (!Array.isArray(history) || !history.length) history = fallbackHistory
+          if (!Array.isArray(history) || !history.length) return
           listEl.innerHTML = ''
           history.forEach(function (release, releaseIndex) {
             var releaseVersion = String(release.version || '')
@@ -1533,19 +1365,37 @@
           }))
         }
 
-        render(fallbackHistory, true)
+        // 当前版本与版本时间线只有一个来源：发布清单 /download-release.json（发布流程在
+        // Windows/macOS 双平台产物通过验证后原子写入）。读不到就如实显示不可用，不用
+        // 页面内的旧快照冒充"当前版本"。
+        function showUnavailable() {
+          summaryVersionEl.textContent = '—'
+          summaryDateEl.textContent = '—'
+          summaryStatusEl.textContent = '版本信息暂不可用'
+          summaryChannelEl.textContent = '—'
+          document.getElementById('summary-changes').replaceChildren()
+          listEl.innerHTML =
+            '<p class="release-source-note">版本时间线暂不可用：未能读取发布清单；请稍后重试或<a href="/download-release.json">直接查看发布清单</a>。</p>'
+        }
+
+        showUnavailable()
         Promise.all([fetchJson('/download-release.json'), fetchJson('/download-windows-hotfix.json')]).then(function (results) {
           var stable = results[0]
           var hotfix = results[1]
-          var hasStableHistory = stable && Array.isArray(stable.release_history)
-          var history = hasStableHistory ? stable.release_history.slice() : fallbackHistory.slice()
+          var hasStableHistory =
+            stable && Array.isArray(stable.release_history) && stable.release_history.length > 0
+          if (!hasStableHistory) {
+            showUnavailable()
+            return
+          }
+          var history = stable.release_history.slice()
           var interimActive =
             hotfix &&
             hotfix.schema === 'xcagi.windows_interim_release/v1' &&
             hotfix.download_allowed === true &&
             hotfix.signature_status === 'unsigned' &&
             hotfix.release &&
-            (!hasStableHistory || compareVersions(hotfix.version, history[0].version) >= 0)
+            compareVersions(hotfix.version, history[0].version) >= 0
           if (interimActive) {
             if (compareVersions(hotfix.version, history[0].version) > 0) history.unshift(hotfix.release)
           }
