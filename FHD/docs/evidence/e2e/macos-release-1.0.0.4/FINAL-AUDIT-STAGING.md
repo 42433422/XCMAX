@@ -52,7 +52,7 @@
 
 | 项 | 状态 | 证据 |
 |---|---|---|
-| health + git sha 口径 | ✅ 定稿 | Runbook 第 0 条已写入双平台 SSOT |
+| health + git sha 口径 | ✅ 定稿 | Runbook 第 0 条已写入双平台 `SSOT` |
 | 已知显示差异 | ✅ 记录 | npm/Electron/Dart `1.0.0` 工具链映射；mobile `(12)` vs versionCode=10（待下版同步）；feed `version: 1.0.0` vs productVersion（electron-updater 标准行为） |
 
 ## F. 交付结论（闭环完成后定稿）

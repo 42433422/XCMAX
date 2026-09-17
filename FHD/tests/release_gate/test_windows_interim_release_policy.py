@@ -1,7 +1,7 @@
-from datetime import UTC, datetime
-from pathlib import Path
 import hashlib
 import json
+from datetime import UTC, datetime
+from pathlib import Path
 
 FHD_ROOT = Path(__file__).resolve().parents[2]
 ACCEPTANCE = FHD_ROOT / "config" / "windows_signing_acceptance.json"
@@ -105,9 +105,7 @@ def test_owner_signing_acceptance_is_bounded_and_independently_reviewed() -> Non
     assert record["author"].casefold() != record["reviewer"].casefold()
     assert record["windows_stable_feed"] == "closed"
     assert record["disclosed_risks"]
-    assert record["decision_record_sha256"] == hashlib.sha256(
-        canonical.encode("utf-8")
-    ).hexdigest()
+    assert record["decision_record_sha256"] == hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def test_owner_signing_acceptance_term_is_three_years_and_unexpired() -> None:

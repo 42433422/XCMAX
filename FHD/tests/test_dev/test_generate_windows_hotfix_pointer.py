@@ -195,7 +195,10 @@ def test_authorized_acceptance_requires_a_public_https_artifact_url(tmp_path: Pa
 def test_expired_acceptance_fails_closed(tmp_path: Path) -> None:
     acceptance = _acceptance(
         tmp_path / "acceptance.json",
-        fields={"accepted_at": "2019-09-17T00:00:00+08:00", "expires_at": "2020-09-17T00:00:00+08:00"},
+        fields={
+            "accepted_at": "2019-09-17T00:00:00+08:00",
+            "expires_at": "2020-09-17T00:00:00+08:00",
+        },
     )
     result = _authorized_run(tmp_path, acceptance)
     assert result.returncode != 0

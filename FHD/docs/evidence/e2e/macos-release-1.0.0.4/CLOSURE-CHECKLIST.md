@@ -63,4 +63,4 @@
   - 4 段产品口径（应作验收判据）：`CFBundleShortVersionString` / `CFBundleVersion` = `1.0.0.4`（1.0.0.4 产物）、`build-info.version` = `1.0.0.4`、`health.version` = `1.0.0.4`、`health.release_id` = `xcagi-1.0.0.4-280225ac77ce…` —— **四处一致**
   - 3 段 npm/Electron semver 口径（非产品版本）：`app.getVersion()` → UA `xcagi-desktop/1.0.0`、feed `version: 1.0.0`、updater 事件 `update_available.data.version = "1.0.0"` —— 这是 `readLocalProductVersion()` 注释中「Product version is four-part and comes from signed build metadata, not npm SemVer」的既有设计
   - 1.0.0.3 夹具同样一致（plist/`build-info`/`health` 均为 `1.0.0.3`，release_id `xcagi-1.0.0.3-4bfb23365c5e…`）
-  - 结论：**不存在版本错配**；需在 SSOT 注明「看到 1.0.0 属 npm semver 口径，不是产品版本」以免误判
+  - 结论：**不存在版本错配**；需在 `SSOT` 注明「看到 1.0.0 属 npm semver 口径，不是产品版本」以免误判
