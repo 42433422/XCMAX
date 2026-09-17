@@ -28,7 +28,7 @@ log "running version: $V (expect 1.0.0.4)"
 
 # ---------- 2. 数据保留比对 ----------
 DIR="$(cd "$(dirname "$0")" && pwd)"
-python3 "$DIR/data_digest.py" "$EV/t6-post-reboot-digest.json" | tee -a "$LOG"
+python3 "$DIR/../macos-release-1.0.0.3/data_digest.py" "$EV/t6-post-reboot-digest.json" | tee -a "$LOG"
 
 # ---------- 3. G7 业务 API 复测（登录→上传→出单→文件下载） ----------
 python3 "$DIR/g7_business_retest.py" --base "$BASE" 2>&1 | tee -a "$LOG"
