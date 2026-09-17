@@ -52,11 +52,8 @@ ANCHORS: list[tuple[str, str, str]] = [
     ("setup.iss", r'#define\s+MyAppVersion\s+"([\d.]+)"', PRODUCT_VERSION),
     ("tools/XcagiDownloader/Models/AppSettings.cs", r'return\s+"([\d.]+)";', PRODUCT_VERSION),
     ("scripts/package/build-installer.sh", r'VERSION="\$\{1:-([\d.]+)\}"', PRODUCT_VERSION),
-    (
-        "scripts/package/build-installer.ps1",
-        r'\[string\]\$Version\s*=\s*"([\d.]+)"',
-        PRODUCT_VERSION,
-    ),
+    # scripts/package/build-installer.ps1 不再是版本锚点：Windows 打包脚本已改为运行时
+    # 从 FHD/VERSION.md 解析（scripts/package/product-version.ps1），写死默认值即回归缺陷。
     ("release/VERSION", r"(?m)^([\d.]+)$", PRODUCT_VERSION),
 ]
 

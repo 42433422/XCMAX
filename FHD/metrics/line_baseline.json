@@ -1,5 +1,5 @@
 {
-  "lines": 2313929,
+  "lines": 2313928,
   "updated": "2026-09-17",
-  "note": "PR #1963 script_version_scan 整改：Windows 打包脚本去掉写死产品版本默认值(+40 行，去默认值需新增单源解析器)，并修复 acceptance-windows.ps1 语法错误"
+  "note": "棘轮下调"
 }
