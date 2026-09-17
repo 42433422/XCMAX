@@ -515,14 +515,11 @@ jobs:
       - name: Smoke test production image
         run: |
           set -euo pipefail
+          expected_version="$(python3 -c 'import sys; sys.path.insert(0, "scripts/dev"); from verify_version_anchors import canonical_version; print(canonical_version())')"
           container_name="xcagi-ci-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          cleanup() {
-            docker rm -f "${container_name}" >/dev/null 2>&1 || true
-          }
-          trap cleanup EXIT
+          trap 'docker rm -f "${container_name}" >/dev/null 2>&1 || true' EXIT
           docker run -d --name "${container_name}" \
-            -e XCAGI_GUNICORN_WORKERS=1 \
-            -e FHD_SKIP_ADMIN_BOOTSTRAP=1 \
+            -e XCAGI_GUNICORN_WORKERS=1 -e FHD_SKIP_ADMIN_BOOTSTRAP=1 \
             -e DATABASE_URL=sqlite:////app/data/ci-smoke.db \
             -e VECTOR_DB_URL=sqlite:////app/data/ci-smoke.db \
             xcagi-ci-scan:local
@@ -532,7 +529,7 @@ jobs:
               break
             fi
             if payload="$(docker exec "${container_name}" curl -fsS http://127.0.0.1:5000/api/health)" \
-              && jq -e '.runtime.status == "healthy" and .version == "1.0.0.4"' <<<"${payload}" >/dev/null; then
+              && jq -e --arg v "${expected_version}" '.runtime.status == "healthy" and .version == $v' <<<"${payload}" >/dev/null; then
               jq '{status, version, runtime_status: .runtime.status}' <<<"${payload}"
               exit 0
             fi
