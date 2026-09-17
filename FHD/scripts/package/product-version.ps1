@@ -11,7 +11,7 @@ function Resolve-ProductVersion {
   $FhdRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
   $VersionFile = Join-Path $FhdRoot 'VERSION.md'
   $match = [regex]::Match(
-    (Get-Content -LiteralPath $VersionFile -Raw),
+    (Get-Content -LiteralPath $VersionFile -Raw -Encoding UTF8),
     '\*\*XCAGI 稳定产品版本\*\*\s*\|\s*`(\d+\.\d+\.\d+\.\d+)`'
   )
   if (-not $match.Success) {

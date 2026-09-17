@@ -999,14 +999,12 @@ jobs:
       - name: Parse Windows release scripts (pwsh + Windows PowerShell 5.1)
         shell: pwsh
         run: |
-          # 全量解析 scripts/package/*.ps1：此前只硬编码 4 个路径，导致
-          # acceptance-windows.ps1（Windows 真机验收脚本）整体无法解析却在 main 上长期绿。
-          # 且必须用 Windows PowerShell 5.1 复解析：真机以 powershell -File 执行它们，UTF-8 无 BOM 的中文脚本在 5.1 下按 ANSI 解码会报 ParserError，而 pwsh 7 看不到。
-          $paths = @(Get-ChildItem -LiteralPath 'scripts/package' -Filter '*.ps1' -File | Sort-Object Name)
-          if ($paths.Count -eq 0) { throw 'scripts/package 下未找到任何 .ps1：脚本清单为空，门禁失效' }
+          # 全量解析 scripts/package/*.ps1（此前只硬编码 4 个路径，acceptance-windows.ps1 整体无法解析却在 main 上长期绿）；
+          # 必须用 Windows PowerShell 5.1 复解析并试取版：真机以 powershell -File 执行它们，UTF-8 无 BOM 的中文脚本在 5.1 下按 ANSI 解码即 ParserError／按 ANSI 读 VERSION.md 即取不到版本，而 pwsh 7 两者都看不到。
+          $paths = @(Get-ChildItem -LiteralPath 'scripts/package' -Filter '*.ps1' -File | Sort-Object Name); if ($paths.Count -eq 0) { throw 'scripts/package 下未找到任何 .ps1：脚本清单为空，门禁失效' }
           foreach ($item in $paths) { $null = [scriptblock]::Create((Get-Content -LiteralPath $item.FullName -Raw)) }
-          $probe = "`$bad=0;Get-ChildItem 'scripts/package' -Filter *.ps1|%{`$t=`$null;`$e=`$null;[void][System.Management.Automation.Language.Parser]::ParseFile(`$_.FullName,[ref]`$t,[ref]`$e);if(`$e.Count){`$bad++;Write-Host `$_.Name}};if(`$bad){exit 1}"
-          & (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -NoProfile -NonInteractive -Command $probe; if ($LASTEXITCODE -ne 0) { throw 'Windows PowerShell 5.1 无法解析 scripts/package 下脚本：非 ASCII 脚本须以 UTF-8 BOM 保存' }
+          $probe = "`$bad=0;Get-ChildItem 'scripts/package' -Filter *.ps1|%{`$t=`$null;`$e=`$null;[void][System.Management.Automation.Language.Parser]::ParseFile(`$_.FullName,[ref]`$t,[ref]`$e);if(`$e.Count){`$bad++;Write-Host `$_.Name}};if(`$bad){exit 1};try{. 'scripts/package/product-version.ps1';if((Resolve-ProductVersion) -notmatch '^\d+\.\d+\.\d+\.\d+`$'){Write-Host 'Resolve-ProductVersion returned a non-version value';exit 1}}catch{Write-Host (`$_.Exception.Message);exit 1}"
+          & (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -NoProfile -NonInteractive -Command $probe; if ($LASTEXITCODE -ne 0) { throw 'Windows PowerShell 5.1 下 scripts/package 脚本解析失败或 Resolve-ProductVersion 取版失败：非 ASCII 脚本须以 UTF-8 BOM 保存，读 VERSION.md 须显式 -Encoding UTF8' }
           Write-Host "已解析 $($paths.Count) 个 Windows 发布/打包脚本（pwsh 7 + Windows PowerShell 5.1）"
       - name: Parse SSL.com electron-builder signing hook
         shell: pwsh

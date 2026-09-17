@@ -18,7 +18,6 @@
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'product-version.ps1')
 
-# 版本取自 FHD/VERSION.md（唯一出口 product-version.ps1）；此前写死 xcagi-v1.0.0.0 的路径已失效。
 $AcceptanceBaseUrl = "https://xiu-ci.com/xcagi-v$(Resolve-ProductVersion)/acceptance"
 $TutorialExcelUrl = "$AcceptanceBaseUrl/xcagi-tutorial-dept-employee.xlsx"
 $AttendanceInputUrl = "$AcceptanceBaseUrl/sunbird-attendance-input.xlsx"
