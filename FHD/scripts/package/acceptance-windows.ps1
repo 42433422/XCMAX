@@ -16,13 +16,13 @@ XCAGI 桌面端 Windows（Win10/Win11）真实机验收引导脚本（协议 D1-
 
 用法（PowerShell 5.1+）：
   # 全新隔离安装（不影响任何已有安装）
-  powershell -ExecutionPolicy Bypass -File acceptance-windows.ps1 -Version 1.0.0.1
-  powershell -ExecutionPolicy Bypass -File acceptance-windows.ps1 -Version 1.0.0.1 -InstallerPath "C:\Users\me\Downloads\XCAGI-Enterprise-Setup-1.0.0.1-x64.exe"
-  powershell -ExecutionPolicy Bypass -File acceptance-windows.ps1 -Version 1.0.0.1 -SkipLaunch
+  powershell -ExecutionPolicy Bypass -File acceptance-windows.ps1 -Version <版本>
+  powershell -ExecutionPolicy Bypass -File acceptance-windows.ps1 -Version <版本> -InstallerPath "C:\Users\me\Downloads\XCAGI-Enterprise-Setup-<版本>-x64.exe"
+  powershell -ExecutionPolicy Bypass -File acceptance-windows.ps1 -Version <版本> -SkipLaunch
 
   # 覆盖升级验收（项2）：在已装旧版的机器上用正式安装包覆盖升级，校验业务数据保留
-  powershell -ExecutionPolicy Bypass -File acceptance-windows.ps1 -Version 1.0.0.1 `
-      -InstallerPath "C:\Users\me\Downloads\XCAGI-Enterprise-Setup-1.0.0.1-x64-unsigned.exe" `
+  powershell -ExecutionPolicy Bypass -File acceptance-windows.ps1 -Version <版本> `
+      -InstallerPath "C:\Users\me\Downloads\XCAGI-Enterprise-Setup-<版本>-x64-unsigned.exe" `
       -ReceiptPath "C:\Users\me\Downloads\delivery-receipt.json" `
       -InstallRoot "$env:LOCALAPPDATA\Programs\XCAGI" -OverwriteInstall
 
@@ -49,6 +49,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'product-version.ps1')
+$Version = Resolve-ProductVersion -Version $Version
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch { }
 
 $BaseUrl    = 'https://xiu-ci.com'
@@ -203,10 +205,7 @@ else { Write-Host "模式：全新隔离安装（不触碰已有安装）" -Fore
 
 # ---------------------------------------------------------------- STEP 1 版本与 manifest
 Write-Step "1/8 版本确认与 manifest 获取"
-if (-not $Version) {
-  $Version = Read-Host "  未提供 -Version。请输入要验收的四段产品版本（如 1.0.0.1，见 FHD/VERSION.md）"
-  if ($Version -notmatch '^\d+\.\d+\.\d+\.\d+$') { throw ("版本号必须是四段产品版本，当前为：{0}" -f $Version) }
-}
+if ($Version -notmatch '^\d+\.\d+\.\d+\.\d+$') { throw ("版本号必须是四段产品版本，当前为：{0}" -f $Version) }
 Write-Ok ("验收版本：{0}" -f $Version)
 
 $manifest = Get-Manifest $Version
@@ -530,8 +529,8 @@ Write-Host "▶ OTA（协议第 4 节）：" -ForegroundColor Cyan
 Write-Host ("  1) 查看更新源：Invoke-RestMethod {0}/releases/stable/enterprise/latest.yml" -f $BaseUrl)
 Write-Host "  2) 打开 XCAGI → 设置 → 检查更新 → 下载完成后点「立即重启安装」；"
 Write-Host "  3) 观察期（约 5 秒稳定性窗口）内不要强制退出；"
-Write-Host "  4) 复核：Get-Content \"<安装目录>\resources\build-info.json\"；Invoke-RestMethod http://127.0.0.1:17500/api/health；"
-Write-Host "     Get-Content \"$env:APPDATA\XCAGI\rollback-marker.json\"（应提示不存在 = 已提交）。"
+Write-Host "  4) 复核：Get-Content `"<安装目录>\resources\build-info.json`"；Invoke-RestMethod http://127.0.0.1:17500/api/health；"
+Write-Host "     Get-Content `"$env:APPDATA\XCAGI\rollback-marker.json`"（应提示不存在 = 已提交）。"
 Write-Host "  ※ 无新版本可升时记 SKIP（无升级目标），引用 desktop-ota-closed-loop-20260724 证据。"
 $otaResult = Read-Host "  OTA 执行结果 [PASS/FAIL/SKIP]"
 $otaNote   = Read-Host "  OTA 备注（升级前后版本号/更新源 URL/现象，一行）"
@@ -540,7 +539,7 @@ Record '8a.OTA' $(if ($otaResult) { $otaResult.ToUpper() } else { 'SKIP' }) $ota
 Write-Host ""
 Write-Host "▶ 回滚（协议第 5 节）：" -ForegroundColor Cyan
 Write-Host "  路径 A（观察期自动回滚，需专用验收机构造坏更新）：更新后启动失败 → 自动还原旧版本；"
-Write-Host ("     取证：Get-Content \"$env:APPDATA\XCAGI\rollback-applied.json\"（应含 reason/fromVersion/toVersion）")
+Write-Host ("     取证：Get-Content `"$env:APPDATA\XCAGI\rollback-applied.json`"（应含 reason/fromVersion/toVersion）")
 Write-Host "  路径 B（降级安装）：从历史版本目录下载旧版 exe 覆盖安装，确认版本回到旧版且 health healthy。"
 Write-Host "  ※ 未注入坏更新时记 PARTIAL，引用 rollback.test.ts + update-rollback.e2e.spec.ts 佐证。"
 $rbResult = Read-Host "  回滚执行结果 [PASS/FAIL/PARTIAL/SKIP]"

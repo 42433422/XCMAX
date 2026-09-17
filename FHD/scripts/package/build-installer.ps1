@@ -1,5 +1,5 @@
 param(
-  [string]$Version = "1.0.0.4",
+  [string]$Version = '',
   [switch]$SkipBackend,
   # 复用 build-frontend.sh 产出的共享 templates/vue-dist，不再重建前端（统一 Web/桌面构建源）
   [switch]$SkipFrontend,
@@ -13,6 +13,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot 'product-version.ps1')
+$Version = Resolve-ProductVersion -Version $Version
 if ($SunbirdSeedZipPath) {
   throw "Customer seed embedding is retired. Use the standard main host and account-authorized Mod delivery."
 }

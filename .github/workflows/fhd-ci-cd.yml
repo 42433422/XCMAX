@@ -999,16 +999,18 @@ jobs:
       - name: Parse Windows release scripts
         shell: pwsh
         run: |
-          foreach ($path in @(
-            'scripts/package/build-installer.ps1',
-            'scripts/package/pre-release-security.ps1',
-            'scripts/package/verify-windows-signature.ps1',
-            'scripts/package/verify-windows-installed-runtime.ps1'
-          )) {
-            $content = Get-Content -LiteralPath $path -Raw
-            $null = [scriptblock]::Create($content)
-            Write-Host "PowerShell parse OK: $path"
+          # 全量解析 scripts/package/*.ps1：此前只硬编码 4 个路径，导致
+          # acceptance-windows.ps1（Windows 真机验收脚本）整体无法解析却在 main 上长期绿。
+          $paths = @(Get-ChildItem -LiteralPath 'scripts/package' -Filter '*.ps1' -File | Sort-Object Name)
+          if ($paths.Count -eq 0) {
+            throw 'scripts/package 下未找到任何 .ps1：脚本清单为空，门禁失效'
           }
+          foreach ($item in $paths) {
+            $content = Get-Content -LiteralPath $item.FullName -Raw
+            $null = [scriptblock]::Create($content)
+            Write-Host "PowerShell parse OK: scripts/package/$($item.Name)"
+          }
+          Write-Host "已解析 $($paths.Count) 个 Windows 发布/打包脚本"
       - name: Parse SSL.com electron-builder signing hook
         shell: pwsh
         run: node --check desktop/build/windows-sign.cjs

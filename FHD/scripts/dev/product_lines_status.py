@@ -173,37 +173,46 @@ def _tracked_files() -> list[str]:
 
 
 def _scan_mirrors(cfg: dict, items: list[dict]) -> None:
-    """已声明镜像：产品版本必须与 canonical 一致，其余运行时字段允许不同。
+    """已声明镜像：版本身份字段必须与 canonical 逐项一致，其余运行时字段允许不同。
 
-    级别固定为 info：镜像的存在本身是已知架构事实（见 product_lines.yaml 处置），
-    但镜像的 product_version 若与 canonical 分叉，就是版本漂移，必须升级为 error。
-    同时反向校验：canonical 之外若出现**未声明**的同名副本，即为新造漂移源，阻断。
+    判定是二值的，不留「待办/未知」中间态：身份字段（默认 epoch/product_version/current，
+    可由 entry.identity_fields 覆盖）全部一致 ⇒ 记一条 info 作为「已核对通过」的留痕；
+    任一项分叉 ⇒ error 阻断。同时反向校验：canonical 之外若出现**未声明**的同名副本，
+    即为新造漂移源，阻断。
     """
     entries = cfg.get("mirrors", [])
     for entry in entries:
-        canonical = REPO_ROOT / entry["canonical"]
-        mirror = REPO_ROOT / entry["mirror"]
+        canonical_path = entry["canonical"]
+        mirror_path = entry["mirror"]
+        canonical = REPO_ROOT / canonical_path
+        mirror = REPO_ROOT / mirror_path
         if not canonical.is_file() or not mirror.is_file():
             items.append(
                 _drift(
                     "mirror-missing",
                     "error",
-                    entry["mirror"],
+                    mirror_path,
                     f"声明的镜像不存在（canonical 存在={canonical.is_file()}，"
                     f"mirror 存在={mirror.is_file()}）：声明已过期，请更新 product_lines.yaml",
                 )
             )
             continue
-        canonical_version_value = _load_json(entry["canonical"]).get("product_version")
-        mirror_version_value = _load_json(entry["mirror"]).get("product_version")
-        if canonical_version_value != mirror_version_value:
+        fields = list(entry.get("identity_fields") or ["product_version"])
+        canonical_state = _load_json(canonical_path)
+        mirror_state = _load_json(mirror_path)
+        diverged = [
+            (field, canonical_state.get(field), mirror_state.get(field))
+            for field in fields
+            if canonical_state.get(field) != mirror_state.get(field)
+        ]
+        if diverged:
+            detail = "；".join(f"{field} mirror={m!r} ≠ canonical={c!r}" for field, c, m in diverged)
             items.append(
                 _drift(
                     "mirror-version-drift",
                     "error",
-                    entry["mirror"],
-                    f"镜像 product_version {mirror_version_value} ≠ "
-                    f"canonical {canonical_version_value}",
+                    mirror_path,
+                    f"镜像版本身份字段与 canonical 分叉：{detail}",
                 )
             )
             continue
@@ -211,8 +220,8 @@ def _scan_mirrors(cfg: dict, items: list[dict]) -> None:
             _drift(
                 "declared-mirror",
                 "info",
-                entry["mirror"],
-                f"已声明镜像（product_version 与 canonical 一致={canonical_version_value}）；"
+                mirror_path,
+                f"已声明镜像且版本身份字段与 canonical 一致（{', '.join(fields)}）；"
                 f"{entry.get('reason', '')}",
             )
         )
@@ -236,13 +245,12 @@ def _scan_mirrors(cfg: dict, items: list[dict]) -> None:
 def _scan_script_version_defaults(cfg: dict, product_version: str, items: list[dict]) -> dict:
     """打包/发布脚本里写死的四段产品版本默认值——应动态读取 VERSION.md。
 
-    每条 pattern 可带 `|级别` 覆盖默认级别：bash 侧（已整改）按 error 阻断；
-    PowerShell 侧在另一半改造合并前保持 info（可见不阻断），避免门禁与未合并
-    改动交叉打红。按文件聚合，并区分「陈旧」（≠ VERSION.md，真漂移）
-    与「仍写死但值正确」（预防性）。
+    默认级别为 error（阻断）：bash 与 PowerShell 两侧均已整改，任一侧再写死即判红。
+    每条 pattern 仍可带 `|级别` 覆盖默认级别，仅在确有分批整改需要时使用。
+    按文件聚合，并区分「陈旧」（≠ VERSION.md，真漂移）与「仍写死但值正确」（预防性）。
     """
     scan = cfg.get("script_version_scan") or {}
-    level = scan.get("level", "info")
+    level = scan.get("level", "error")
     remediation = scan.get("remediation", "动态读取 VERSION.md")
     per_file: list[tuple[str, str, list[str], list[str]]] = []
     for raw in scan.get("patterns", []):
@@ -522,8 +530,8 @@ def render_doc(status: dict) -> str:
         out.append(
             f"> 其中打包/发布脚本写死产品版本的普查：**{census['files']} 个文件 / "
             f"{census['occurrences']} 处**（陈旧 {census['stale']} 处）。"
-            f"bash 侧已整改并按阻断跟踪；PowerShell 侧在 Windows 侧改造合并前"
-            f"按「可见但不阻断」跟踪，逐文件明细见下表。"
+            f"bash 与 PowerShell 两侧均已整改并按阻断跟踪，"
+            f"再写死即 CI 判红，逐文件明细见下表。"
         )
         out.append("")
     if status["drift"]:

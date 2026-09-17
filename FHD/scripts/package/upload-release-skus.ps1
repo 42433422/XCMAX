@@ -1,11 +1,13 @@
 param(
-  [string]$Version = '1.0.0.0',
+  [string]$Version = '',
   [ValidateSet('personal', 'enterprise', 'all')]
   [string]$ProductSku = 'all',
   [switch]$DryRun
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'product-version.ps1')
+$Version = Resolve-ProductVersion -Version $Version
 $Root = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 $Version = $Version.TrimStart('v', 'V')
 

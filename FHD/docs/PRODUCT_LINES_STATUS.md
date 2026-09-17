@@ -4,7 +4,7 @@
      声明式输入：FHD/config/product_lines.yaml；本域登记在 FHD/config/ssot.yaml。
      数字漂移由 CI（ssot_cli.py gate → product-lines 域）阻断。 -->
 
-> 生成时间：2026-09-17 10:33 UTC ｜ 生成器：`FHD/scripts/dev/product_lines_status.py`
+> 生成时间：2026-09-17 11:57 UTC ｜ 生成器：`FHD/scripts/dev/product_lines_status.py`
 
 > 本文件是 XCMAX 三产品线状态（版本 / 发布 / 能力 / 三线成熟度）的**单一事实来源**，全部数字自动生成，禁止手改；任何文档引用这些数字都应指向本文件或原始权威源。
 
@@ -27,25 +27,13 @@
 
 ## 2. 状态漂移（控制面判定）
 
-阻断级漂移 **0** 项，需可见但不阻断 **13** 项。
-
-> 其中打包/发布脚本写死产品版本的普查：**10 个文件 / 15 处**（陈旧 14 处）。bash 侧已整改并按阻断跟踪；PowerShell 侧在 Windows 侧改造合并前按「可见但不阻断」跟踪，逐文件明细见下表。
+阻断级漂移 **0** 项，需可见但不阻断 **3** 项。
 
 | 级别 | 来源 | 事实 |
 |------|------|------|
 | 可见 | `download_release.version_lock` | 下载中心仍为 1.0.0.3，产品版本已是 1.0.0.4（发布未闭环则属预期，需保持可见） |
 | 可见 | `download_release.release_ready=false` | 1.0.0.4 发布面未闭环：下载/更新指针未推进到产品版本 |
-| 可见 | `成都修茈科技有限公司/FHD/config/release_train.json` | 已声明镜像（product_version 与 canonical 一致=1.0.0.4）；MODstore 独立运行时状态路径；删除需先改 MODstore 解析顺序（另开 PR） |
-| 可见 | `FHD/scripts/package/acceptance-windows.ps1` | 写死产品版本 6 处（陈旧 6 处：20→1.0.0.1、20→1.0.0.1、21→1.0.0.1、24→1.0.0.1、25→1.0.0.1、207→1.0.0.1） |
-| 可见 | `FHD/scripts/package/build-all-skus.ps1` | 写死产品版本 1 处（陈旧 1 处：2→1.0.0.0） |
-| 可见 | `FHD/scripts/package/build-backend.ps1` | 写死产品版本 1 处（陈旧 1 处：3→1.0.0.0） |
-| 可见 | `FHD/scripts/package/build-installer.ps1` | 写死产品版本 1 处（陈旧 0 处）；值正确但仍写死 1 处，应改为 FHD/scripts/deploy/lib/version.sh（bash）/ 读 FHD/VERSION.md（PowerShell） |
-| 可见 | `FHD/scripts/package/post-release.ps1` | 写死产品版本 1 处（陈旧 1 处：2→1.0.0.0） |
-| 可见 | `FHD/scripts/package/pre-release-security.ps1` | 写死产品版本 1 处（陈旧 1 处：4→1.0.0.0） |
-| 可见 | `FHD/scripts/package/sync-desktop-frontend.ps1` | 写死产品版本 1 处（陈旧 1 处：10→1.0.0.0） |
-| 可见 | `FHD/scripts/package/upload-release-skus.ps1` | 写死产品版本 1 处（陈旧 1 处：2→1.0.0.0） |
-| 可见 | `FHD/scripts/package/verify-bundled-mods.ps1` | 写死产品版本 1 处（陈旧 1 处：30→1.0.0.0） |
-| 可见 | `FHD/scripts/package/verify-industry-seeds.ps1` | 写死产品版本 1 处（陈旧 1 处：12→1.0.0.0） |
+| 可见 | `成都修茈科技有限公司/FHD/config/release_train.json` | 已声明镜像且版本身份字段与 canonical 一致（epoch, product_version, current）；MODstore 独立运行时的运行时 SSOT 路径，由日更对齐脚本从 canonical 覆写； 保留是有意决定，day_index / last_bump_at 为各自运行时状态，不参与身份比对 |
 
 ## 3. 三线成熟度（只列能力目录自有的证据分级计数 + Release Gate 结论）
 

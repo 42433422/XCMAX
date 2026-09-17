@@ -1,6 +1,6 @@
 # FrontendEdition: generic = 默认通用壳（ADCDFG）；full = 完整 ERP 侧栏
 param(
-  [string]$Version = "1.0.0.0",
+  [string]$Version = '',
   [switch]$SkipFrontend,
   [ValidateSet('full', 'generic', 'minimal')]
   [string]$FrontendEdition = 'generic',
@@ -9,6 +9,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot 'product-version.ps1')
+$Version = Resolve-ProductVersion -Version $Version
 $Root = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 Set-Location $Root
 $Version = $Version.TrimStart("v", "V")

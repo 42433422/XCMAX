@@ -192,10 +192,10 @@ def test_windows_release_scripts_are_parsed_on_a_real_windows_ci_runner() -> Non
         "\n  # SSOT drift gate", 1
     )[0]
     assert "runs-on: windows-latest" in job
-    assert "build-installer.ps1" in job
-    assert "pre-release-security.ps1" in job
-    assert "verify-windows-signature.ps1" in job
-    assert "verify-windows-installed-runtime.ps1" in job
+    # 全量解析 scripts/package/*.ps1 + 空清单 fail-closed；acceptance-windows.ps1 曾整体语法错误却长期绿，故显式守卫。
+    assert "Get-ChildItem -LiteralPath 'scripts/package' -Filter '*.ps1' -File" in job
+    assert "$paths.Count -eq 0" in job
+    assert (REPO_ROOT / "scripts" / "package" / "acceptance-windows.ps1").is_file()
     assert "[scriptblock]::Create" in job
     assert "node --check desktop/build/windows-sign.cjs" in job
     assert "SSLcom/esigner-codesign@cf5f6c1d38ad10f47e3ed9aca873f429b1a8d85b" in job
