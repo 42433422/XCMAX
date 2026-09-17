@@ -1,6 +1,6 @@
 # XCAGI 日常入口（START HERE）
 
-> **稳定版本**：产品版本 `1.0.0.0`，工具链映射 `1.0.0`（全产品线锚点见 [`VERSION.md`](../VERSION.md)）
+> **稳定版本**：产品版本与工具链映射见 [`VERSION.md`](../VERSION.md)（唯一数字来源；本页不写死数字）
 > **公开文档站**：<https://docs.xiu-ci.com/>  
 > **仓根一键启动**：`make setup && make dev`（Windows：`make -f Makefile.win setup`）
 

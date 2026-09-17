@@ -1,0 +1,406 @@
+{
+  "schema": "xcagi.product_lines_status/v1",
+  "generated_at": "2026-09-17 08:37 UTC",
+  "generator": "FHD/scripts/dev/product_lines_status.py",
+  "config": "FHD/config/product_lines.yaml",
+  "policy": "本文件为生成物：版本/发布/能力/覆盖率的数字全部取自各自权威源，禁止手改；三线「成熟度」只呈现能力目录自有的证据分级计数与 Release Gate 结论，不合成任何自造评分。",
+  "version": {
+    "product": "1.0.0.4",
+    "toolchain": "1.0.0",
+    "source": "FHD/VERSION.md"
+  },
+  "release": {
+    "train": {
+      "epoch": "1.0.0.0",
+      "product_version": "1.0.0.4",
+      "current": "1.0.0.3",
+      "day_index": 2,
+      "last_bump_at": "2026-08-18T00:04:28.127731+00:00"
+    },
+    "download": {
+      "version_lock": "1.0.0.3",
+      "download_version": "1.0.0.3",
+      "marketing_version": "1.0.0.4",
+      "android_version": "1.0.0.0",
+      "release_ready": false,
+      "channel_release_ready": null,
+      "active_skus": [
+        "enterprise"
+      ],
+      "frozen_skus": [
+        "personal"
+      ],
+      "artifacts": {
+        "enterprise": {
+          "win": "XCAGI-Enterprise-Setup-1.0.0.1-x64.exe",
+          "mac_arm64": "XCAGI-Enterprise-1.0.0.3-mac-arm64.dmg",
+          "mac_x64": "XCAGI-Enterprise-1.0.0.1-mac-x64.dmg",
+          "android": "XCAGI-Enterprise-Android-1.0.0.0.apk"
+        }
+      },
+      "channels": {
+        "desktop": "stable",
+        "android": "stable"
+      }
+    }
+  },
+  "platform_levels": {
+    "Windows 桌面": "签约级",
+    "macOS 桌面": "签约级",
+    "Web / 后端": "签约级",
+    "Android": "实验骨架·非签约级"
+  },
+  "coverage": {
+    "source": "FHD/metrics/coverage-dual-summary.json",
+    "committed_head": {
+      "captured_at": "2026-07-25T11:34:00Z",
+      "commit": "92505cab6",
+      "status": "green_above_floor",
+      "backend_line_pct": 88.19,
+      "backend_branch_pct": 81.5,
+      "backend_statements": 115046,
+      "frontend_line_pct": 93.21,
+      "frontend_branch_pct": 82.45,
+      "frontend_function_pct": 91.39,
+      "frontend_statements_pct": 93.21,
+      "note": "2026-07-25 PR#616 CI 实测；ETL/模板解析吸收后下调 floor 至 line 88 / branch 81。"
+    },
+    "ratchet_floors": {
+      "backend_line": 78,
+      "backend_branch": 69,
+      "branch_floor": 69,
+      "frontend_lines": 92,
+      "frontend_branches": 81,
+      "frontend_functions": 90,
+      "frontend_statements": 92,
+      "source": "pyproject.toml fail_under + metrics/coverage_ratchet_baseline.json"
+    },
+    "quality_gate": {
+      "status": "passed",
+      "reason": "2026-09-01（D2-5）coverage_ramp stub 82 个清零迁出后，总口径与真实行为口径合一：floor 自行为口径 line 78 / branch 69 起步，只升不降（ADR-0005）",
+      "backend_line_floor": 78,
+      "backend_branch_floor": 69,
+      "head_backend_line_delta": 10.19,
+      "head_backend_branch_delta": 12.5,
+      "wip_backend_line_delta": 10.19,
+      "wip_backend_branch_delta": 12.5,
+      "frontend_lines_delta": 1.21,
+      "frontend_branches_delta": 1.45,
+      "frontend_functions_delta": 1.39,
+      "frontend_statements_delta": 1.21
+    }
+  },
+  "capability_totals": {
+    "total": 50,
+    "by_status": {
+      "verified": 13,
+      "partial": 14,
+      "implemented": 22,
+      "planned": 1
+    },
+    "domains": 10,
+    "modules": 26,
+    "verified_total": 13,
+    "last_verified_at": "2026-09-14",
+    "platform_counts": {
+      "windows": 40,
+      "macos": 40,
+      "web": 39,
+      "android": 4,
+      "ios": 1
+    }
+  },
+  "capability_warnings": [],
+  "capability_domains_unassigned": [],
+  "lines": [
+    {
+      "id": "desktop-erp",
+      "name": "企业桌面 ERP + AI",
+      "priority": "P0",
+      "role": "主交付",
+      "paths": [
+        "FHD/"
+      ],
+      "paths_ok": true,
+      "entry": "FHD/docs/START_HERE.md",
+      "entry_ok": true,
+      "workflows": [
+        ".github/workflows/fhd-ci-cd.yml",
+        ".github/workflows/fhd-release-desktop.yml",
+        ".github/workflows/fhd-release-desktop-mac-ota.yml"
+      ],
+      "capability": {
+        "domains": [
+          "base",
+          "ai",
+          "erp",
+          "desktop",
+          "sec",
+          "ops"
+        ],
+        "total": 32,
+        "by_status": {
+          "verified": 9,
+          "partial": 9,
+          "implemented": 14
+        },
+        "verified": 9
+      },
+      "releases": {
+        "macos": {
+          "source": "FHD/docs/MACOS_RELEASE_SSOT.md",
+          "section": "6. Release Gate 状态",
+          "gates": {
+            "G3": "GREEN",
+            "G5": "GREEN",
+            "G6": "GREEN",
+            "G7": "GREEN",
+            "G8": "GREEN",
+            "G9": "YELLOW",
+            "G10": "GREEN",
+            "G11": "GREEN",
+            "G12": "UNKNOWN",
+            "G1": "GREEN",
+            "G2": "YELLOW",
+            "G4": "YELLOW",
+            "G13": "GREEN"
+          },
+          "summary": {
+            "GREEN": 9,
+            "YELLOW": 3,
+            "RED": 0,
+            "UNKNOWN": 1,
+            "total": 13
+          }
+        },
+        "windows": {
+          "source": "FHD/docs/WINDOWS_RELEASE_SSOT.md",
+          "section": "4. Release Gate 状态（2026-09-14 实跑，round-1 闭环全过；T9 最终收口见文末小节）",
+          "gates": {
+            "G1": "GREEN",
+            "G2": "GREEN",
+            "G3": "GREEN",
+            "G4": "GREEN",
+            "G5": "GREEN",
+            "G6": "GREEN",
+            "G7": "GREEN",
+            "G8": "GREEN",
+            "G9": "GREEN",
+            "G10": "GREEN",
+            "G11": "GREEN",
+            "G12": "GREEN",
+            "G13": "GREEN"
+          },
+          "summary": {
+            "GREEN": 13,
+            "YELLOW": 0,
+            "RED": 0,
+            "UNKNOWN": 0,
+            "total": 13
+          }
+        }
+      }
+    },
+    {
+      "id": "ai-store",
+      "name": "AI 员工商店",
+      "priority": "P1",
+      "role": "商业化线",
+      "paths": [
+        "成都修茈科技有限公司/"
+      ],
+      "paths_ok": true,
+      "entry": "成都修茈科技有限公司/MODstore_deploy/docs/developer/README.md",
+      "entry_ok": true,
+      "workflows": [
+        ".github/workflows/modstore-ci-backend-python.yml",
+        ".github/workflows/market-ci.yml",
+        ".github/workflows/corp-marketing-site.yml"
+      ],
+      "capability": {
+        "domains": [
+          "mods",
+          "pay",
+          "industry"
+        ],
+        "total": 12,
+        "by_status": {
+          "verified": 3,
+          "implemented": 6,
+          "partial": 3
+        },
+        "verified": 3
+      },
+      "releases": {
+        "web": {
+          "source": "成都修茈科技有限公司/release/VERSION"
+        }
+      }
+    },
+    {
+      "id": "mobile-app",
+      "name": "移动 AI 协同 App",
+      "priority": "P2",
+      "role": "配套线",
+      "paths": [
+        "FHD/mobile-flutter-poc/"
+      ],
+      "paths_ok": true,
+      "entry": "FHD/mobile-flutter-poc/README.md",
+      "entry_ok": true,
+      "workflows": [
+        ".github/workflows/fhd-ci-mobile-flutter.yml",
+        ".github/workflows/fhd-release-android.yml"
+      ],
+      "capability": {
+        "domains": [
+          "channel"
+        ],
+        "total": 6,
+        "by_status": {
+          "partial": 2,
+          "implemented": 2,
+          "verified": 1,
+          "planned": 1
+        },
+        "verified": 1
+      },
+      "releases": {
+        "android": {
+          "source": "FHD/config/download_release.json"
+        }
+      }
+    }
+  ],
+  "drift": [
+    {
+      "id": "download-center-lag",
+      "level": "info",
+      "source": "download_release.version_lock",
+      "detail": "下载中心仍为 1.0.0.3，产品版本已是 1.0.0.4（发布未闭环则属预期，需保持可见）"
+    },
+    {
+      "id": "release-not-closed",
+      "level": "info",
+      "source": "download_release.release_ready=false",
+      "detail": "1.0.0.4 发布面未闭环：下载/更新指针未推进到产品版本"
+    },
+    {
+      "id": "declared-mirror",
+      "level": "info",
+      "source": "成都修茈科技有限公司/FHD/config/release_train.json",
+      "detail": "已声明镜像（product_version 与 canonical 一致=1.0.0.4）；MODstore 独立运行时状态路径；删除需先改 MODstore 解析顺序（另开 PR）"
+    },
+    {
+      "id": "hardcoded-script-version",
+      "level": "info",
+      "source": "FHD/scripts/package/acceptance-macos.sh",
+      "detail": "写死产品版本 4 处（陈旧 4 处：6→1.0.0.1、7→1.0.0.1、152→1.0.0.1、157→1.0.0.1）"
+    },
+    {
+      "id": "hardcoded-script-version",
+      "level": "info",
+      "source": "FHD/scripts/package/build-backend.sh",
+      "detail": "写死产品版本 1 处（陈旧 1 处：4→1.0.0.0）"
+    },
+    {
+      "id": "hardcoded-script-version",
+      "level": "info",
+      "source": "FHD/scripts/package/build-installer.sh",
+      "detail": "写死产品版本 3 处（陈旧 2 处：12→1.0.0.3、13→1.0.0.3）；值正确但仍写死 1 处，应改为 FHD/scripts/deploy/lib/version.sh（bash）/ 读 FHD/VERSION.md（PowerShell）"
+    },
+    {
+      "id": "hardcoded-script-version",
+      "level": "info",
+      "source": "FHD/scripts/package/build-windows-electron-only.sh",
+      "detail": "写死产品版本 1 处（陈旧 1 处：6→1.0.0.0）"
+    },
+    {
+      "id": "hardcoded-script-version",
+      "level": "info",
+      "source": "FHD/scripts/package/build-windows-installer.sh",
+      "detail": "写死产品版本 1 处（陈旧 1 处：6→1.0.0.0）"
+    },
+    {
+      "id": "hardcoded-script-version",
+      "level": "info",
+      "source": "FHD/scripts/package/setup-mac-signing.sh",
+      "detail": "写死产品版本 1 处（陈旧 1 处：130→1.0.0.0）"
+    },
+    {
+      "id": "hardcoded-script-version",
+      "level": "info",
+      "source": "FHD/scripts/package/verify-bundled-mods.sh",
+      "detail": "写死产品版本 1 处（陈旧 1 处：14→1.0.0.0）"
+    },
+    {
+      "id": "hardcoded-script-version",
+      "level": "info",
+      "source": "FHD/scripts/package/acceptance-windows.ps1",
+      "detail": "写死产品版本 6 处（陈旧 6 处：20→1.0.0.1、20→1.0.0.1、21→1.0.0.1、24→1.0.0.1、25→1.0.0.1、207→1.0.0.1）"
+    },
+    {
+      "id": "hardcoded-script-version",
+      "level": "info",
+      "source": "FHD/scripts/package/build-all-skus.ps1",
+      "detail": "写死产品版本 1 处（陈旧 1 处：2→1.0.0.0）"
+    },
+    {
+      "id": "hardcoded-script-version",
+      "level": "info",
+      "source": "FHD/scripts/package/build-backend.ps1",
+      "detail": "写死产品版本 1 处（陈旧 1 处：3→1.0.0.0）"
+    },
+    {
+      "id": "hardcoded-script-version",
+      "level": "info",
+      "source": "FHD/scripts/package/build-installer.ps1",
+      "detail": "写死产品版本 1 处（陈旧 0 处）；值正确但仍写死 1 处，应改为 FHD/scripts/deploy/lib/version.sh（bash）/ 读 FHD/VERSION.md（PowerShell）"
+    },
+    {
+      "id": "hardcoded-script-version",
+      "level": "info",
+      "source": "FHD/scripts/package/post-release.ps1",
+      "detail": "写死产品版本 1 处（陈旧 1 处：2→1.0.0.0）"
+    },
+    {
+      "id": "hardcoded-script-version",
+      "level": "info",
+      "source": "FHD/scripts/package/pre-release-security.ps1",
+      "detail": "写死产品版本 1 处（陈旧 1 处：4→1.0.0.0）"
+    },
+    {
+      "id": "hardcoded-script-version",
+      "level": "info",
+      "source": "FHD/scripts/package/sync-desktop-frontend.ps1",
+      "detail": "写死产品版本 1 处（陈旧 1 处：10→1.0.0.0）"
+    },
+    {
+      "id": "hardcoded-script-version",
+      "level": "info",
+      "source": "FHD/scripts/package/upload-release-skus.ps1",
+      "detail": "写死产品版本 1 处（陈旧 1 处：2→1.0.0.0）"
+    },
+    {
+      "id": "hardcoded-script-version",
+      "level": "info",
+      "source": "FHD/scripts/package/verify-bundled-mods.ps1",
+      "detail": "写死产品版本 1 处（陈旧 1 处：30→1.0.0.0）"
+    },
+    {
+      "id": "hardcoded-script-version",
+      "level": "info",
+      "source": "FHD/scripts/package/verify-industry-seeds.ps1",
+      "detail": "写死产品版本 1 处（陈旧 1 处：12→1.0.0.0）"
+    }
+  ],
+  "drift_summary": {
+    "error": 0,
+    "info": 20
+  },
+  "script_hardcode_census": {
+    "files": 17,
+    "occurrences": 27,
+    "stale": 25
+  }
+}

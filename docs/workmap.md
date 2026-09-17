@@ -6,11 +6,11 @@
 
 **最后更新**：2026-07-18
 
-> **版本控制**：**`XCMAX/` 根目录为 SSOT 单仓**（`git clone` 即得 FHD + MODstore + specs 全栈）。历史子仓 `.git` 备份于 `~/XCMAX-archives/nested-git-backup-20260608/`。远程：**[`42433422/XCMAX`](https://github.com/42433422/XCMAX)**。CI 入口见 [`docs/CI_SSOT.md`](CI_SSOT.md)。周度归档见 [`specs/weekly/`](../specs/weekly/)。
+> **版本控制**：**`XCMAX/` 根目录为 SSOT 单仓**（`git clone` 即得 FHD + MODstore + specs 全栈）。历史子仓 `.git` 备份于 `~/XCMAX-archives/nested-git-backup-20260608/`。远程：**[`42433422/XCMAX`](https://github.com/42433422/XCMAX)**。CI 入口见 [`docs/CI_SSOT.md`](CI_SSOT.md)。
 >
 > **产品线 SSOT**：当前按 **三条主线 + 个人版冻结** 推进，详见 [`specs/product-lines-3-plus-2.md`](../specs/product-lines-3-plus-2.md)。
 >
-> **稳定版本**：全产品线对外统一为 **`1.0.0.0`**；npm/Electron、Flutter pub 和 Apple 市场版本按工具链约束映射为 **`1.0.0`**。构建差异使用 channel、Git tag、`git_sha`、`sha256`、构建号和 manifest 标识。
+> **稳定版本**：产品版本与工具链映射由 [`FHD/VERSION.md`](../FHD/VERSION.md) 唯一给出（本图不复述数字；三线汇总见 [`FHD/docs/PRODUCT_LINES_STATUS.md`](../FHD/docs/PRODUCT_LINES_STATUS.md)）。构建差异使用 channel、Git tag、`git_sha`、`sha256`、构建号和 manifest 标识。
 
 ## 项目状态表（三条主线 + 冻结线）
 
@@ -19,11 +19,11 @@
 | **企业桌面 ERP + AI** | [`FHD/`](../FHD/) | **P0 主交付** — 企业桌面宿主、本地 ERP、AI 员工、行业 Mod | [`FHD/docs/START_HERE.md`](../FHD/docs/START_HERE.md) | [`fhd-ci-cd.yml`](../.github/workflows/fhd-ci-cd.yml) |
 | **AI 员工商店** | [`成都修茈科技有限公司/`](../成都修茈科技有限公司/) | **P1 商业化线** — 员工 / Mod 目录、授权、支付、下载、更新 | [`MODstore_deploy/docs/developer/README.md`](../成都修茈科技有限公司/MODstore_deploy/docs/developer/README.md) | [`modstore-ci-backend-python.yml`](../.github/workflows/modstore-ci-backend-python.yml) |
 | **移动 AI 协同 App** | [`FHD/mobile-flutter-poc/`](../FHD/mobile-flutter-poc/) | **P2 配套线** — Flutter 统一 Android/iOS · 登录 / 扫码 / 对话 / 审批 / 通知 | [`FHD/mobile-flutter-poc/README.md`](../FHD/mobile-flutter-poc/README.md) | [`fhd-ci-mobile-flutter.yml`](../.github/workflows/fhd-ci-mobile-flutter.yml) |
-| **技术债与计划** | [`specs/`](../specs/) | **活跃** — 规范与 checklist | [`specs/plan-2026-06.md`](../specs/plan-2026-06.md) | — |
+| **跨线规范** | [`specs/`](../specs/) | **活跃** — 仅存跨线策略与测试命名两条 | [`specs/product-lines-3-plus-2.md`](../specs/product-lines-3-plus-2.md) | — |
 | **个人版** | [`FHD/docs/_archive/FHD-个人/`](../FHD/docs/_archive/FHD-个人/) | **冻结** — 暂停新增投入，仅保留兼容、归档和未来恢复入口 | [`FHD/docs/_archive/FHD-个人/ARCHIVED.md`](../FHD/docs/_archive/FHD-个人/ARCHIVED.md) | 不进入当前版本目标 |
 | **工作区归档** | [`_archive/`](../_archive/) | **只读** | 各目录 `ARCHIVED.md` | — |
 
-> 声称 vs 实测差距跟踪：[`FHD/docs/CLAIMED_VS_ACTUAL.md`](../FHD/docs/CLAIMED_VS_ACTUAL.md) · 外部依赖阻塞：[`specs/BLOCKERS.md`](../specs/BLOCKERS.md)
+> 声称 vs 实测差距跟踪：[`FHD/docs/CLAIMED_VS_ACTUAL.md`](../FHD/docs/CLAIMED_VS_ACTUAL.md) · 历史计划/阻塞记录已外置归档（见 [`ARCHIVE_POINTER.md`](../ARCHIVE_POINTER.md)）
 
 ## 活跃维护（日常开发 / 发版 / CI）
 
@@ -81,7 +81,7 @@ make -f Makefile.win dev
 
 **测试命名 SSOT**：[`specs/test-naming.md`](../specs/test-naming.md)（禁止新增 `test_coverage_ramp_phase*`；pre-commit 钩子 `guard-no-new-coverage-ramp`）。
 
-覆盖率 SSOT：[`FHD/metrics/coverage-dual-summary.json`](../FHD/metrics/coverage-dual-summary.json) · 最近 CI 实测：后端 **88.19% 行 / 81.5% 分支**，前端 **93.21% 行 / 82.45% 分支**。禁止从历史报告复制旧数字。
+覆盖率 SSOT：[`FHD/metrics/coverage-dual-summary.json`](../FHD/metrics/coverage-dual-summary.json) — 数字只从该文件读取，**不得**在本图或任何文档复制旧数值（最新实测值见 [`FHD/docs/PRODUCT_LINES_STATUS.md`](../FHD/docs/PRODUCT_LINES_STATUS.md) 自动生成节）。
 
 ## Python 依赖锁定
 
@@ -95,7 +95,8 @@ Monorepo 根目录 **无** 独立 `uv.lock`；Python 开发请以 **`FHD/`** 为
 ## 文档真相源
 
 - **日常入口（18 份可直接执行）**：[`FHD/docs/START_HERE.md`](../FHD/docs/START_HERE.md) · 公开站 <https://docs.xiu-ci.com/>
-- **产品版本（唯一数字来源）**：[`FHD/VERSION.md`](../FHD/VERSION.md) — 稳定产品版本 `1.0.0.0`、工具链映射 `1.0.0`；README / CHANGELOG 与之冲突时以 VERSION 为准
+- **产品版本（唯一数字来源）**：[`FHD/VERSION.md`](../FHD/VERSION.md) — 稳定产品版本与工具链映射在此定义；README / CHANGELOG 与之冲突时以 VERSION 为准
+- **三线状态（自动生成，禁手改）**：[`FHD/docs/PRODUCT_LINES_STATUS.md`](../FHD/docs/PRODUCT_LINES_STATUS.md)
 - 发布叙事：[`FHD/CHANGELOG.md`](../FHD/CHANGELOG.md)
 - 全文分层索引：[`FHD/docs/DOCUMENTATION_MAP.md`](../FHD/docs/DOCUMENTATION_MAP.md)
 - 工作区分析 JSON：由 `scripts/build-xcmax-tree-data.py` 写入 `.cache/xcmax/`（勿提交根目录 `xcmax-*.json`）

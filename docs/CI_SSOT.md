@@ -116,7 +116,7 @@ bash /opt/fhd-staging/scripts/deploy/fhd-auto-update.sh
 `fhd-deploy.yml` 仅为 **break-glass**：SSH 到该机执行 `apply-latest`（强制跑 `fhd-auto-update.sh`）或 `restart-only`（`docker compose restart`）。
 
 > 2026-07-14：已删除 `FHD/k8s/`、`FHD/helm/` 及 blue-green/canary/GitOps/预览环境等从未接通真实集群的清单与文档路径。
-> 历史脚本在 `archive/ops/`；需要时从 git 历史取回。
+> 历史脚本已外置归档（见根 `ARCHIVE_POINTER.md` 第六批 `docs-20260917-batch6/`）；需要时从归档或 git 历史取回。
 
 
 ## Secrets / Variables 清单

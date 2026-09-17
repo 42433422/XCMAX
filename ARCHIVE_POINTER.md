@@ -34,6 +34,7 @@
 | **文档收敛归档（第三批）** | `~/XCMAX-archives/docs-20260910-batch3/` | 17 篇从任何活文档根不可达的文档（4,275 行）。已 `git rm`；校验和见 `.../docs-20260910-batch3/MANIFEST.txt`。 |
 | **文档收敛归档（第四批）** | `~/XCMAX-archives/docs-20260910-batch4/` | `FHD/XCAGI/API_DOCS.md`（9,815 行）：由 `generate_api_docs.py` 从 FastAPI `openapi()` 生成的 API 快照，零消费者、可再生成。已 `git rm` 并加入 `FHD/XCAGI/.gitignore`；校验和见 `.../docs-20260910-batch4/MANIFEST.txt`。 |
 | **文档收敛归档（第五批·营销）** | `~/XCMAX-archives/docs-20260910-batch5/` | `docs/marketing/` 未跟踪营销内容（2 篇 md + 封面 png + `gen_cover.py`）：非活文档且触发 `docs-ssot` WARN，移出工作区；校验和见 `.../docs-20260910-batch5/MANIFEST.txt`。 |
+| **文档收敛归档（第六批·控制面收敛）** | `~/XCMAX-archives/docs-20260917-batch6/` | `specs/` 死树 8 篇（839 行，规格已被 [product-lines-3-plus-2.md](specs/product-lines-3-plus-2.md) 与三产品线控制面取代）+ 仓内只读运维归档 `archive/ops/` 10 文件（2,617 行，从未接通真实集群）。已 `git rm`；校验和见 `.../docs-20260917-batch6/MANIFEST.txt`。 |
 
 ## 恢复示例
 

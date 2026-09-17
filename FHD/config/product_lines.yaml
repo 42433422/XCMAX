@@ -1,0 +1,131 @@
+# XCMAX 三产品线统一控制面 — 声明式真相源
+#
+# 本文件只声明「哪条线包含哪些路径 / 能力域 / 发布 SSOT」，**不写任何数字**。
+# 所有数字（版本、发布状态、能力分布、覆盖率、门禁结论）由
+# `scripts/dev/product_lines_status.py` 从下列权威源自动统计生成：
+#   - 机器可读：FHD/metrics/product_lines_status.generated.json
+#   - 人读视图：FHD/docs/PRODUCT_LINES_STATUS.md（自动生成，禁止手改）
+# 本域已登记在 FHD/config/ssot.yaml（domain: product-lines），随 `ssot_cli.py gate` 阻断。
+#
+# 权威源分工（不重复维护同一事实）：
+#   - 版本口径唯一出口：FHD/VERSION.md（version 域 SSOT，已被 verify_version_anchors.py 校验）
+#   - 下载/发布清单：FHD/config/download_release.json（version 域派生锚点）
+#   - 发布火车内部流水：FHD/config/release_train.json
+#   - 能力目录：成都修茈科技有限公司/data/capabilities/catalog.json（capability-center 域 SSOT）
+#   - 覆盖率唯一数字：FHD/metrics/coverage-dual-summary.json（coverage 域）
+#   - 平台发布事实快照：FHD/docs/MACOS_RELEASE_SSOT.md / WINDOWS_RELEASE_SSOT.md
+version: 1
+
+generated:
+  json: FHD/metrics/product_lines_status.generated.json
+  doc: FHD/docs/PRODUCT_LINES_STATUS.md
+
+sources:
+  version: FHD/VERSION.md
+  release_train: FHD/config/release_train.json
+  download_release: FHD/config/download_release.json
+  capability_catalog: 成都修茈科技有限公司/data/capabilities/catalog.json
+  coverage: FHD/metrics/coverage-dual-summary.json
+  desktop_platform_parity: FHD/docs/desktop_platform_parity_ssot.md
+
+# 三条主线（+ 冻结线不入控制面数字）。capability_domains 是把能力目录
+# （catalog.json 的 10 个产品域）划归产品线的声明；同一域不得挂在两条线上。
+lines:
+  - id: desktop-erp
+    name: 企业桌面 ERP + AI
+    priority: P0
+    role: 主交付
+    paths:
+      - FHD/
+    exclude_paths:
+      - FHD/mobile-flutter-poc/
+      - FHD/mobile-android/
+      - FHD/mobile-ios/
+    capability_domains:
+      - base
+      - ai
+      - erp
+      - desktop
+      - sec
+      - ops
+    releases:
+      macos: FHD/docs/MACOS_RELEASE_SSOT.md
+      windows: FHD/docs/WINDOWS_RELEASE_SSOT.md
+    entry: FHD/docs/START_HERE.md
+    workflows:
+      - .github/workflows/fhd-ci-cd.yml
+      - .github/workflows/fhd-release-desktop.yml
+      - .github/workflows/fhd-release-desktop-mac-ota.yml
+
+  - id: ai-store
+    name: AI 员工商店
+    priority: P1
+    role: 商业化线
+    paths:
+      - 成都修茈科技有限公司/
+    capability_domains:
+      - mods
+      - pay
+      - industry
+    releases:
+      web: 成都修茈科技有限公司/release/VERSION
+    entry: 成都修茈科技有限公司/MODstore_deploy/docs/developer/README.md
+    workflows:
+      - .github/workflows/modstore-ci-backend-python.yml
+      - .github/workflows/market-ci.yml
+      - .github/workflows/corp-marketing-site.yml
+
+  - id: mobile-app
+    name: 移动 AI 协同 App
+    priority: P2
+    role: 配套线
+    paths:
+      - FHD/mobile-flutter-poc/
+    capability_domains:
+      - channel
+    releases:
+      android: FHD/config/download_release.json
+    entry: FHD/mobile-flutter-poc/README.md
+    workflows:
+      - .github/workflows/fhd-ci-mobile-flutter.yml
+      - .github/workflows/fhd-release-android.yml
+
+# 硬编码版本清理范围：这些「活文档」不得写死与 VERSION.md 不一致的四段产品版本。
+# 平台发布事实快照（MACOS/WINDOWS_RELEASE_SSOT.md）不在此列——其中的历史制品
+# 版本号是发布事实，不是漂移。行内含 allow_markers 之一的视为历史陈述，放行。
+version_scan:
+  allow_markers:
+    - 历史
+    - CHANGELOG
+  files:
+    - FHD/README.md
+    - FHD/docs/START_HERE.md
+    - FHD/docs/PROJECT_STATE.md
+    - FHD/docs/DELIVERABLE_PRODUCT.md
+    - FHD/docs/SSOT_INDEX.md
+    - FHD/docs/deploy/RELEASE_CHECKLIST.md
+    - docs/workmap.md
+    - specs/product-lines-3-plus-2.md
+
+# 发布火车 SSOT 的已知镜像（可见不阻断，逐条声明处置）。
+# canonical 是唯一 SSOT；mirror 是 MODstore 独立运行时的本地状态路径
+# —— `modstore_server/release_train_part01.py::ssot_path()` 的候选之一，
+# CVM 侧由 `scripts/dev/align_server_daily_automation.sh` 同步。
+# 其 product_version 由升版自动化同步（故产品版本不重复）；day_index 等属
+# 各自运行时状态，天然不同。**直接删除会让独立运行的 MODstore 回落到
+# `default_state()`（1.0.0.0 陈旧默认）**，故处置是「先让 ssot_path() 优先解析
+# monorepo SSOT，再删镜像」，属 MODstore 产品线的独立改动。
+mirrors:
+  - canonical: FHD/config/release_train.json
+    mirror: 成都修茈科技有限公司/FHD/config/release_train.json
+    reason: MODstore 独立运行时状态路径；删除需先改 MODstore 解析顺序（另开 PR）
+
+# 打包/发布脚本的版本默认值：应为动态读取（`FHD/scripts/deploy/lib/version.sh`
+# 或 PowerShell 读 VERSION.md），写死即漂移。本组只**报告**不阻断——现有 14 处
+# 默认值需在 Windows 侧实机验收同一批次内改造，避免与发布工具链验收交叉。
+script_version_scan:
+  level: info
+  patterns:
+    - 'FHD/scripts/package/*.sh'
+    - 'FHD/scripts/package/*.ps1'
+  remediation: FHD/scripts/deploy/lib/version.sh（bash）/ 读 FHD/VERSION.md（PowerShell）
