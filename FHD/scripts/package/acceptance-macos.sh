@@ -3,8 +3,8 @@
 # XCAGI 桌面端 macOS 真机验收引导脚本（协议 D1-3）
 #
 # 用法：
-#   bash scripts/package/acceptance-macos.sh --version 1.0.0.1 \
-#        [--dmg /path/to/XCAGI-Enterprise-1.0.0.1-mac-arm64.dmg] \
+#   bash scripts/package/acceptance-macos.sh --version <版本> \
+#        [--dmg /path/to/XCAGI-Enterprise-<版本>-mac-arm64.dmg] \
 #        [--skip-launch] [--keep-dmg] [--dest /custom/install/dir] [--help]
 #   覆盖升级数据保留验收（对齐 Windows -OverwriteInstall，协议 6b）：
 #   bash scripts/package/acceptance-macos.sh --version <新版本> --overwrite-upgrade
@@ -26,6 +26,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FHD_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+. "${SCRIPT_DIR}/../deploy/lib/version.sh"
 BASE_URL="https://xiu-ci.com"
 TMP_ROOT="/tmp"
 STAMP="$(date +%Y%m%d-%H%M%S)"
@@ -147,14 +148,11 @@ STEP_NAME="确定验收版本"
 log "[1/9] ${STEP_NAME}"
 
 if [[ -z "${VERSION}" ]]; then
-  VERSION="$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' "${FHD_ROOT}/VERSION.md" | head -n1 || true)"
-  if [[ -z "${VERSION}" ]]; then
-    die "未提供 --version 且无法从 ${FHD_ROOT}/VERSION.md 解析出四段产品版本。用法：--version 1.0.0.1"
-  fi
+  VERSION="$(product_version)" || die "未提供 --version 且无法从 ${FHD_ROOT}/VERSION.md 解析出四段产品版本。用法：--version <版本>"
   log "未提供 --version，已从 FHD/VERSION.md 读取默认版本：${VERSION}"
 fi
 if ! [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  die "版本号必须是四段产品版本（如 1.0.0.1），当前为：${VERSION}"
+  die "版本号必须是四段产品版本（如 <版本>），当前为：${VERSION}"
 fi
 
 ARCH="$(uname -m)"

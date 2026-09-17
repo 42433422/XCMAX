@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="${1:-1.0.0.0}"
-VERSION="${VERSION#v}"
-VERSION="${VERSION#V}"
+. "$(dirname "${BASH_SOURCE[0]}")/../deploy/lib/version.sh"
+VERSION="${1:-$(product_version)}"
+VERSION="${VERSION#[vV]}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT}"
 

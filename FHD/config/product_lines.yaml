@@ -120,12 +120,11 @@ mirrors:
     mirror: 成都修茈科技有限公司/FHD/config/release_train.json
     reason: MODstore 独立运行时状态路径；删除需先改 MODstore 解析顺序（另开 PR）
 
-# 打包/发布脚本的版本默认值：应为动态读取（`FHD/scripts/deploy/lib/version.sh`
-# 或 PowerShell 读 VERSION.md），写死即漂移。本组只**报告**不阻断——现有 14 处
-# 默认值需在 Windows 侧实机验收同一批次内改造，避免与发布工具链验收交叉。
+# 打包/发布脚本写死版本默认值即漂移：应为动态读取（`FHD/scripts/deploy/lib/version.sh`
+# 或读 VERSION.md）。pattern 可带 `|级别`：bash 侧已整改按 error，PowerShell 侧待另一半合并后翻 error。
 script_version_scan:
   level: info
   patterns:
-    - 'FHD/scripts/package/*.sh'
+    - 'FHD/scripts/package/*.sh|error'
     - 'FHD/scripts/package/*.ps1'
   remediation: FHD/scripts/deploy/lib/version.sh（bash）/ 读 FHD/VERSION.md（PowerShell）

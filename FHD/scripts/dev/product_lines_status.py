@@ -236,15 +236,18 @@ def _scan_mirrors(cfg: dict, items: list[dict]) -> None:
 def _scan_script_version_defaults(cfg: dict, product_version: str, items: list[dict]) -> dict:
     """打包/发布脚本里写死的四段产品版本默认值——应动态读取 VERSION.md。
 
-    级别取自配置（默认 info）：这些脚本属发布工具链，改造须与实机验收同批次，
-    因此在控制面里保持可见但不阻断，避免与验收交叉。按文件聚合报告，
-    并区分「陈旧」（≠ VERSION.md，真漂移）与「仍写死但值正确」（预防性）。
+    每条 pattern 可带 `|级别` 覆盖默认级别：bash 侧（已整改）按 error 阻断；
+    PowerShell 侧在另一半改造合并前保持 info（可见不阻断），避免门禁与未合并
+    改动交叉打红。按文件聚合，并区分「陈旧」（≠ VERSION.md，真漂移）
+    与「仍写死但值正确」（预防性）。
     """
     scan = cfg.get("script_version_scan") or {}
     level = scan.get("level", "info")
     remediation = scan.get("remediation", "动态读取 VERSION.md")
-    per_file: list[tuple[str, list[str], list[str]]] = []
-    for pattern in scan.get("patterns", []):
+    per_file: list[tuple[str, str, list[str], list[str]]] = []
+    for raw in scan.get("patterns", []):
+        pattern, _, pat_level = raw.partition("|")
+        lvl = pat_level or level
         for rel in sorted(REPO_ROOT.glob(pattern)):
             if not rel.is_file():
                 continue
@@ -254,21 +257,21 @@ def _scan_script_version_defaults(cfg: dict, product_version: str, items: list[d
                 for literal in _product_version_literals(line):
                     (stale if literal != product_version else fresh).append(f"{lineno}→{literal}")
             if stale or fresh:
-                per_file.append((str(rel.relative_to(REPO_ROOT)), stale, fresh))
+                per_file.append((lvl, str(rel.relative_to(REPO_ROOT)), stale, fresh))
 
-    for name, stale, fresh in per_file:
+    for lvl, name, stale, fresh in per_file:
         detail = f"写死产品版本 {len(stale) + len(fresh)} 处（陈旧 {len(stale)} 处"
         if stale:
             detail += "：" + "、".join(stale)
         detail += "）"
         if fresh:
             detail += f"；值正确但仍写死 {len(fresh)} 处，应改为 {remediation}"
-        items.append(_drift("hardcoded-script-version", level, name, detail))
+        items.append(_drift("hardcoded-script-version", lvl, name, detail))
 
     return {
         "files": len(per_file),
-        "occurrences": sum(len(s) + len(f) for _, s, f in per_file),
-        "stale": sum(len(s) for _, s, _ in per_file),
+        "occurrences": sum(len(s) + len(f) for _, _, s, f in per_file),
+        "stale": sum(len(s) for _, _, s, _ in per_file),
     }
 
 
@@ -519,8 +522,8 @@ def render_doc(status: dict) -> str:
         out.append(
             f"> 其中打包/发布脚本写死产品版本的普查：**{census['files']} 个文件 / "
             f"{census['occurrences']} 处**（陈旧 {census['stale']} 处）。"
-            f"改造属发布工具链变更，须与 Windows 实机验收同批次进行，故当前按"
-            f"「可见但不阻断」跟踪，逐文件明细见下表。"
+            f"bash 侧已整改并按阻断跟踪；PowerShell 侧在 Windows 侧改造合并前"
+            f"按「可见但不阻断」跟踪，逐文件明细见下表。"
         )
         out.append("")
     if status["drift"]:

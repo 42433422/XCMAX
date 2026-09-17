@@ -65,7 +65,6 @@ domains:
       - FHD/contracts/openapi.json#info.version
       - FHD/setup.iss#MyAppVersion
       - FHD/tools/XcagiDownloader/Models/AppSettings.cs#fallback-version
-      - FHD/scripts/package/build-installer.sh#default-version
       - FHD/scripts/package/build-installer.ps1#default-version
       - FHD/release/VERSION
     mode: sync+verify

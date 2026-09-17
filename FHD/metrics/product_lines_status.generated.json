@@ -1,6 +1,6 @@
 {
   "schema": "xcagi.product_lines_status/v1",
-  "generated_at": "2026-09-17 08:37 UTC",
+  "generated_at": "2026-09-17 10:29 UTC",
   "generator": "FHD/scripts/dev/product_lines_status.py",
   "config": "FHD/config/product_lines.yaml",
   "policy": "本文件为生成物：版本/发布/能力/覆盖率的数字全部取自各自权威源，禁止手改；三线「成熟度」只呈现能力目录自有的证据分级计数与 Release Gate 结论，不合成任何自造评分。",
@@ -294,48 +294,6 @@
     {
       "id": "hardcoded-script-version",
       "level": "info",
-      "source": "FHD/scripts/package/acceptance-macos.sh",
-      "detail": "写死产品版本 4 处（陈旧 4 处：6→1.0.0.1、7→1.0.0.1、152→1.0.0.1、157→1.0.0.1）"
-    },
-    {
-      "id": "hardcoded-script-version",
-      "level": "info",
-      "source": "FHD/scripts/package/build-backend.sh",
-      "detail": "写死产品版本 1 处（陈旧 1 处：4→1.0.0.0）"
-    },
-    {
-      "id": "hardcoded-script-version",
-      "level": "info",
-      "source": "FHD/scripts/package/build-installer.sh",
-      "detail": "写死产品版本 3 处（陈旧 2 处：12→1.0.0.3、13→1.0.0.3）；值正确但仍写死 1 处，应改为 FHD/scripts/deploy/lib/version.sh（bash）/ 读 FHD/VERSION.md（PowerShell）"
-    },
-    {
-      "id": "hardcoded-script-version",
-      "level": "info",
-      "source": "FHD/scripts/package/build-windows-electron-only.sh",
-      "detail": "写死产品版本 1 处（陈旧 1 处：6→1.0.0.0）"
-    },
-    {
-      "id": "hardcoded-script-version",
-      "level": "info",
-      "source": "FHD/scripts/package/build-windows-installer.sh",
-      "detail": "写死产品版本 1 处（陈旧 1 处：6→1.0.0.0）"
-    },
-    {
-      "id": "hardcoded-script-version",
-      "level": "info",
-      "source": "FHD/scripts/package/setup-mac-signing.sh",
-      "detail": "写死产品版本 1 处（陈旧 1 处：130→1.0.0.0）"
-    },
-    {
-      "id": "hardcoded-script-version",
-      "level": "info",
-      "source": "FHD/scripts/package/verify-bundled-mods.sh",
-      "detail": "写死产品版本 1 处（陈旧 1 处：14→1.0.0.0）"
-    },
-    {
-      "id": "hardcoded-script-version",
-      "level": "info",
       "source": "FHD/scripts/package/acceptance-windows.ps1",
       "detail": "写死产品版本 6 处（陈旧 6 处：20→1.0.0.1、20→1.0.0.1、21→1.0.0.1、24→1.0.0.1、25→1.0.0.1、207→1.0.0.1）"
     },
@@ -396,11 +354,11 @@
   ],
   "drift_summary": {
     "error": 0,
-    "info": 20
+    "info": 13
   },
   "script_hardcode_census": {
-    "files": 17,
-    "occurrences": 27,
-    "stale": 25
+    "files": 10,
+    "occurrences": 15,
+    "stale": 14
   }
 }
