@@ -1,5 +1,5 @@
 {
-  "lines": 2311342,
-  "updated": "2026-09-17",
-  "note": "本 PR 整体净增 59 行（2311283 → 2311342），一次性留痕（此前两次增量合并为一次）：① 合入 #1965 —— 去掉 10 个 Windows 打包/验收脚本里 15 处写死四段版本默认值，新增单一解析器 scripts/package/product-version.ps1（21 行），属「去重复」的必要成本，无处可再删；② product-lines 域 script_version_scan 由 info 翻为 error 阻断、镜像身份字段（epoch/product_version/current）纳入逐项比对，并加 window 全量 PowerShell 解析（desktop-windows-release-script-smoke 由硬编码 4 个 .ps1 改为 scripts/package/*.ps1 全量），均为门禁判定代码而非功能扩张。棘轮就此收紧到 2311342，后续迭代回到只减不增。"
+  "lines": 2311321,
+  "updated": "2026-09-18",
+  "note": "棘轮下调"
 }
