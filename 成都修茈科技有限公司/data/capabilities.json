@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "catalog_version": "2026-09-16",
-  "generated_at": "2026-09-17 16:02 UTC",
+  "generated_at": "2026-09-17 17:24 UTC",
   "principle": "No Evidence, No Claim：所有状态由构建脚本按仓库证据校验，证据缺失自动降级。",
   "stats": {
     "total": 50,
