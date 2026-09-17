@@ -4,7 +4,7 @@
      声明式输入：FHD/config/product_lines.yaml；本域登记在 FHD/config/ssot.yaml。
      数字漂移由 CI（ssot_cli.py gate → product-lines 域）阻断。 -->
 
-> 生成时间：2026-09-17 11:57 UTC ｜ 生成器：`FHD/scripts/dev/product_lines_status.py`
+> 生成时间：2026-09-17 14:54 UTC ｜ 生成器：`FHD/scripts/dev/product_lines_status.py`
 
 > 本文件是 XCMAX 三产品线状态（版本 / 发布 / 能力 / 三线成熟度）的**单一事实来源**，全部数字自动生成，禁止手改；任何文档引用这些数字都应指向本文件或原始权威源。
 
@@ -14,25 +14,24 @@
 
 | 口径 | 值 | 来源 |
 |------|----|------|
-| 稳定产品版本 | `1.0.0.4` | `FHD/VERSION.md` |
+| 稳定产品版本 | `1.0.0.5` | `FHD/VERSION.md` |
 | 工具链兼容版本 | `1.0.0` | `FHD/VERSION.md` |
-| 发布火车 product_version | `1.0.0.4` | `release_train.json` |
-| 发布火车 current | `1.0.0.3` | `release_train.json` |
-| 下载清单 version_lock | `1.0.0.3` | `download_release.json` |
-| 下载清单 download_version | `1.0.0.3` | `download_release.json` |
-| 下载清单 marketing_version | `1.0.0.4` | `download_release.json` |
+| 发布火车 product_version | `1.0.0.5` | `release_train.json` |
+| 发布火车 current | `1.0.0.5` | `release_train.json` |
+| 下载清单 version_lock | `1.0.0.5` | `download_release.json` |
+| 下载清单 download_version | `1.0.0.5` | `download_release.json` |
+| 下载清单 marketing_version | `1.0.0.5` | `download_release.json` |
 | Android 版本 | `1.0.0.0` | `download_release.json` |
 | release_ready | `false` | `download_release.json` |
 | 活跃 / 冻结 SKU | `enterprise` / `personal` | `download_release.json` |
 
 ## 2. 状态漂移（控制面判定）
 
-阻断级漂移 **0** 项，需可见但不阻断 **3** 项。
+阻断级漂移 **0** 项，需可见但不阻断 **2** 项。
 
 | 级别 | 来源 | 事实 |
 |------|------|------|
-| 可见 | `download_release.version_lock` | 下载中心仍为 1.0.0.3，产品版本已是 1.0.0.4（发布未闭环则属预期，需保持可见） |
-| 可见 | `download_release.release_ready=false` | 1.0.0.4 发布面未闭环：下载/更新指针未推进到产品版本 |
+| 可见 | `download_release.release_ready=false` | 1.0.0.5 发布面未闭环：下载/更新指针未推进到产品版本 |
 | 可见 | `成都修茈科技有限公司/FHD/config/release_train.json` | 已声明镜像且版本身份字段与 canonical 一致（epoch, product_version, current）；MODstore 独立运行时的运行时 SSOT 路径，由日更对齐脚本从 canonical 覆写； 保留是有意决定，day_index / last_bump_at 为各自运行时状态，不参与身份比对 |
 
 ## 3. 三线成熟度（只列能力目录自有的证据分级计数 + Release Gate 结论）
