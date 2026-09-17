@@ -1,6 +1,6 @@
 {
   "schema": "xcagi.product_lines_status/v1",
-  "generated_at": "2026-09-17 10:29 UTC",
+  "generated_at": "2026-09-17 10:33 UTC",
   "generator": "FHD/scripts/dev/product_lines_status.py",
   "config": "FHD/config/product_lines.yaml",
   "policy": "本文件为生成物：版本/发布/能力/覆盖率的数字全部取自各自权威源，禁止手改；三线「成熟度」只呈现能力目录自有的证据分级计数与 Release Gate 结论，不合成任何自造评分。",
@@ -149,27 +149,27 @@
       "releases": {
         "macos": {
           "source": "FHD/docs/MACOS_RELEASE_SSOT.md",
-          "section": "6. Release Gate 状态",
+          "section": "6. Release Gate 状态（2026-09-17 实跑 1.0.0.4；证据目录 [evidence/e2e/macos-release-1.0.0.4/](evidence/e2e/macos-release-1.0.0.4/)）",
           "gates": {
+            "G1": "YELLOW",
+            "G2": "YELLOW",
             "G3": "GREEN",
+            "G4": "YELLOW",
             "G5": "GREEN",
             "G6": "GREEN",
             "G7": "GREEN",
             "G8": "GREEN",
-            "G9": "YELLOW",
+            "G9": "RED",
             "G10": "GREEN",
             "G11": "GREEN",
-            "G12": "UNKNOWN",
-            "G1": "GREEN",
-            "G2": "YELLOW",
-            "G4": "YELLOW",
+            "G12": "GREEN",
             "G13": "GREEN"
           },
           "summary": {
             "GREEN": 9,
             "YELLOW": 3,
-            "RED": 0,
-            "UNKNOWN": 1,
+            "RED": 1,
+            "UNKNOWN": 0,
             "total": 13
           }
         },

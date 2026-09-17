@@ -1,5 +1,5 @@
 {
-  "lines": 2313889,
+  "lines": 2311283,
   "updated": "2026-09-17",
-  "note": "本 PR = macOS 1.0.0.4 OTA 真机证据回填 + Windows 未签名交付限期风险接受（WSA-2026-09-17-01）。净删侧：MACOS_RELEASE_SSOT.md 以 2026-09-17 事实表取代被其取代的 2026-09-15 审计快照（§6.1/§6.2/§10/§11 移出活文档，旧内容留存于 git 历史），该文件净 -87 行。净增侧：① Windows 合规所需（授权记录 config/windows_signing_acceptance.json + fail-closed 发布 job + 护栏测试），其中授权记录因 cherry-pick 遗漏单独补入（缺文件会使发布 job 与护栏测试直接红）；② 护栏测试的 ruff 合规形态（导入排序、断言换行）净 +1 行，为 CI 硬门禁 Ruff lint/format 通过的必要形态；无可等效删除的死代码。合并后提交态 2313889；证据目录 FHD/docs/evidence/ 按口径不计行。"
+  "note": "基线继承 main（#1962 抬升至 2313889 的理由见 git 历史）。本 PR = 三产品线统一控制面：净删侧为 specs/ 死树 8 篇（839 行）与 archive/ops/ 只读归档 10 文件（2617 行）外置归档后 git rm，7 篇活文档 25 处硬编码版本改为指向 VERSION.md；净增侧仅声明式配置 config/product_lines.yaml + 生成器 product_lines_status.py + 生成物（生成物按口径计入）。棘轮下调 2313889 → 2311283（净删除 2606 行）；证据目录 FHD/docs/evidence/ 按口径不计行。"
 }
