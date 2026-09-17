@@ -51,12 +51,9 @@ ANCHORS: list[tuple[str, str, str]] = [
     ("contracts/openapi.json", r'"info"[\s\S]*?"version"\s*:\s*"([\d.]+)"', PRODUCT_VERSION),
     ("setup.iss", r'#define\s+MyAppVersion\s+"([\d.]+)"', PRODUCT_VERSION),
     ("tools/XcagiDownloader/Models/AppSettings.cs", r'return\s+"([\d.]+)";', PRODUCT_VERSION),
-    # scripts/package/build-installer.sh 不再是版本锚点：Mac 打包脚本已改为运行时从 FHD/VERSION.md 解析（scripts/deploy/lib/version.sh），写死默认值即回归缺陷。
-    (
-        "scripts/package/build-installer.ps1",
-        r'\[string\]\$Version\s*=\s*"([\d.]+)"',
-        PRODUCT_VERSION,
-    ),
+    # 两侧打包脚本都不再是版本锚点：Mac 走 scripts/deploy/lib/version.sh、
+    # Windows 走 scripts/package/product-version.ps1，均运行时从 FHD/VERSION.md 解析；
+    # 写死默认值即回归缺陷，由 product-lines 域的 script_version_scan 按 error 阻断。
     ("release/VERSION", r"(?m)^([\d.]+)$", PRODUCT_VERSION),
 ]
 

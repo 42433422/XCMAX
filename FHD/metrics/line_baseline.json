@@ -1,5 +1,5 @@
 {
-  "lines": 2311283,
+  "lines": 2311340,
   "updated": "2026-09-17",
-  "note": "基线继承 main（#1962 抬升至 2313889 的理由见 git 历史）。本 PR = 三产品线统一控制面：净删侧为 specs/ 死树 8 篇（839 行）与 archive/ops/ 只读归档 10 文件（2617 行）外置归档后 git rm，7 篇活文档 25 处硬编码版本改为指向 VERSION.md；净增侧仅声明式配置 config/product_lines.yaml + 生成器 product_lines_status.py + 生成物（生成物按口径计入）。棘轮下调 2313889 → 2311283（净删除 2606 行）；证据目录 FHD/docs/evidence/ 按口径不计行。"
+  "note": "合入 #1965（Windows 打包脚本版本单源解析，去掉 10 文件 15 处写死默认值，新增 scripts/package/product-version.ps1 解析器）+ 本轮把 script_version_scan 翻为 error 阻断、镜像身份字段（epoch/product_version/current）纳入逐项比对：净增 57 行（2311283 → 2311340）。增量全部是「去重复」所必需的单一解析器与门禁判定代码，无可再删的等价物；棘轮就此收紧到 2311340，后续迭代回到只减不增。"
 }

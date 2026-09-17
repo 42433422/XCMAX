@@ -1,6 +1,6 @@
 {
   "schema": "xcagi.product_lines_status/v1",
-  "generated_at": "2026-09-17 10:33 UTC",
+  "generated_at": "2026-09-17 11:57 UTC",
   "generator": "FHD/scripts/dev/product_lines_status.py",
   "config": "FHD/config/product_lines.yaml",
   "policy": "本文件为生成物：版本/发布/能力/覆盖率的数字全部取自各自权威源，禁止手改；三线「成熟度」只呈现能力目录自有的证据分级计数与 Release Gate 结论，不合成任何自造评分。",
@@ -289,76 +289,16 @@
       "id": "declared-mirror",
       "level": "info",
       "source": "成都修茈科技有限公司/FHD/config/release_train.json",
-      "detail": "已声明镜像（product_version 与 canonical 一致=1.0.0.4）；MODstore 独立运行时状态路径；删除需先改 MODstore 解析顺序（另开 PR）"
-    },
-    {
-      "id": "hardcoded-script-version",
-      "level": "info",
-      "source": "FHD/scripts/package/acceptance-windows.ps1",
-      "detail": "写死产品版本 6 处（陈旧 6 处：20→1.0.0.1、20→1.0.0.1、21→1.0.0.1、24→1.0.0.1、25→1.0.0.1、207→1.0.0.1）"
-    },
-    {
-      "id": "hardcoded-script-version",
-      "level": "info",
-      "source": "FHD/scripts/package/build-all-skus.ps1",
-      "detail": "写死产品版本 1 处（陈旧 1 处：2→1.0.0.0）"
-    },
-    {
-      "id": "hardcoded-script-version",
-      "level": "info",
-      "source": "FHD/scripts/package/build-backend.ps1",
-      "detail": "写死产品版本 1 处（陈旧 1 处：3→1.0.0.0）"
-    },
-    {
-      "id": "hardcoded-script-version",
-      "level": "info",
-      "source": "FHD/scripts/package/build-installer.ps1",
-      "detail": "写死产品版本 1 处（陈旧 0 处）；值正确但仍写死 1 处，应改为 FHD/scripts/deploy/lib/version.sh（bash）/ 读 FHD/VERSION.md（PowerShell）"
-    },
-    {
-      "id": "hardcoded-script-version",
-      "level": "info",
-      "source": "FHD/scripts/package/post-release.ps1",
-      "detail": "写死产品版本 1 处（陈旧 1 处：2→1.0.0.0）"
-    },
-    {
-      "id": "hardcoded-script-version",
-      "level": "info",
-      "source": "FHD/scripts/package/pre-release-security.ps1",
-      "detail": "写死产品版本 1 处（陈旧 1 处：4→1.0.0.0）"
-    },
-    {
-      "id": "hardcoded-script-version",
-      "level": "info",
-      "source": "FHD/scripts/package/sync-desktop-frontend.ps1",
-      "detail": "写死产品版本 1 处（陈旧 1 处：10→1.0.0.0）"
-    },
-    {
-      "id": "hardcoded-script-version",
-      "level": "info",
-      "source": "FHD/scripts/package/upload-release-skus.ps1",
-      "detail": "写死产品版本 1 处（陈旧 1 处：2→1.0.0.0）"
-    },
-    {
-      "id": "hardcoded-script-version",
-      "level": "info",
-      "source": "FHD/scripts/package/verify-bundled-mods.ps1",
-      "detail": "写死产品版本 1 处（陈旧 1 处：30→1.0.0.0）"
-    },
-    {
-      "id": "hardcoded-script-version",
-      "level": "info",
-      "source": "FHD/scripts/package/verify-industry-seeds.ps1",
-      "detail": "写死产品版本 1 处（陈旧 1 处：12→1.0.0.0）"
+      "detail": "已声明镜像且版本身份字段与 canonical 一致（epoch, product_version, current）；MODstore 独立运行时的运行时 SSOT 路径，由日更对齐脚本从 canonical 覆写； 保留是有意决定，day_index / last_bump_at 为各自运行时状态，不参与身份比对"
     }
   ],
   "drift_summary": {
     "error": 0,
-    "info": 13
+    "info": 3
   },
   "script_hardcode_census": {
-    "files": 10,
-    "occurrences": 15,
-    "stale": 14
+    "files": 0,
+    "occurrences": 0,
+    "stale": 0
   }
 }
