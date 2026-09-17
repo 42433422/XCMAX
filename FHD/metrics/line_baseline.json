@@ -1,5 +1,5 @@
 {
-  "lines": 2311283,
+  "lines": 2311342,
   "updated": "2026-09-17",
-  "note": "基线继承 main（#1962 抬升至 2313889 的理由见 git 历史）。本 PR = 三产品线统一控制面：净删侧为 specs/ 死树 8 篇（839 行）与 archive/ops/ 只读归档 10 文件（2617 行）外置归档后 git rm，7 篇活文档 25 处硬编码版本改为指向 VERSION.md；净增侧仅声明式配置 config/product_lines.yaml + 生成器 product_lines_status.py + 生成物（生成物按口径计入）。棘轮下调 2313889 → 2311283（净删除 2606 行）；证据目录 FHD/docs/evidence/ 按口径不计行。"
+  "note": "本 PR 整体净增 59 行（2311283 → 2311342），一次性留痕（此前两次增量合并为一次）：① 合入 #1965 —— 去掉 10 个 Windows 打包/验收脚本里 15 处写死四段版本默认值，新增单一解析器 scripts/package/product-version.ps1（21 行），属「去重复」的必要成本，无处可再删；② product-lines 域 script_version_scan 由 info 翻为 error 阻断、镜像身份字段（epoch/product_version/current）纳入逐项比对，并加 window 全量 PowerShell 解析（desktop-windows-release-script-smoke 由硬编码 4 个 .ps1 改为 scripts/package/*.ps1 全量），均为门禁判定代码而非功能扩张。棘轮就此收紧到 2311342，后续迭代回到只减不增。"
 }

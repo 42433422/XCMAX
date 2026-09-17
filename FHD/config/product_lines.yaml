@@ -107,24 +107,34 @@ version_scan:
     - docs/workmap.md
     - specs/product-lines-3-plus-2.md
 
-# 发布火车 SSOT 的已知镜像（可见不阻断，逐条声明处置）。
-# canonical 是唯一 SSOT；mirror 是 MODstore 独立运行时的本地状态路径
-# —— `modstore_server/release_train_part01.py::ssot_path()` 的候选之一，
-# CVM 侧由 `scripts/dev/align_server_daily_automation.sh` 同步。
-# 其 product_version 由升版自动化同步（故产品版本不重复）；day_index 等属
-# 各自运行时状态，天然不同。**直接删除会让独立运行的 MODstore 回落到
-# `default_state()`（1.0.0.0 陈旧默认）**，故处置是「先让 ssot_path() 优先解析
-# monorepo SSOT，再删镜像」，属 MODstore 产品线的独立改动。
+# 发布火车 SSOT 的已知镜像（**长期保留**，非待办事项）。
+# canonical 是仓内唯一 SSOT；mirror 是 MODstore 独立运行时（公网 CVM）的
+# 本地 SSOT 路径 —— `modstore_server/release_train_part01.py::ssot_path()` 在
+# 独立部署时的解析目标，由 `FHD/scripts/dev/align_server_daily_automation.sh`
+# 在每次日更对齐时从 canonical 覆写（远端 `${MODSTORE_ROOT}/../FHD/config/release_train.json`，
+# 并把 `MODSTORE_RELEASE_TRAIN_JSON` 指向它）。
+# 删除 mirror 会让独立运行的 MODstore 找不到 SSOT 而回落到
+# `default_state()`（1.0.0.0 陈旧默认），因此**决定保留**，不是「另开 PR 的遗留」。
+# 门禁是二值的：identity_fields 全部与 canonical 一致 ⇒ 通过（留一条 info 记录核对结果）；
+# 任一项分叉 ⇒ error 阻断；出现未声明的同名副本 ⇒ error 阻断。
 mirrors:
   - canonical: FHD/config/release_train.json
     mirror: 成都修茈科技有限公司/FHD/config/release_train.json
-    reason: MODstore 独立运行时状态路径；删除需先改 MODstore 解析顺序（另开 PR）
+    identity_fields:
+      - epoch
+      - product_version
+      - current
+    reason: >-
+      MODstore 独立运行时的运行时 SSOT 路径，由日更对齐脚本从 canonical 覆写；
+      保留是有意决定，day_index / last_bump_at 为各自运行时状态，不参与身份比对
 
 # 打包/发布脚本写死版本默认值即漂移：应为动态读取（`FHD/scripts/deploy/lib/version.sh`
-# 或读 VERSION.md）。pattern 可带 `|级别`：bash 侧已整改按 error，PowerShell 侧待另一半合并后翻 error。
+# 或读 VERSION.md）。bash 与 PowerShell 两侧均已整改完毕，默认级别即 error：
+# 任一侧再写死四段产品版本默认值（陈旧值或「值正确但仍写死」）都直接阻断 CI。
+# pattern 仍可带 `|级别` 覆盖默认级别，仅在确有分批整改需要时使用。
 script_version_scan:
-  level: info
+  level: error
   patterns:
-    - 'FHD/scripts/package/*.sh|error'
+    - 'FHD/scripts/package/*.sh'
     - 'FHD/scripts/package/*.ps1'
   remediation: FHD/scripts/deploy/lib/version.sh（bash）/ 读 FHD/VERSION.md（PowerShell）

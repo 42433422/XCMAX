@@ -7,10 +7,12 @@ param(
   [string]$Edition = 'generic',
   [ValidateSet('personal', 'enterprise')]
   [string]$ProductSku = 'enterprise',
-  [string]$Version = '1.0.0.0'
+  [string]$Version = ''
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'product-version.ps1')
+$Version = Resolve-ProductVersion -Version $Version
 $Root = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 $Src = Join-Path $Root 'templates\vue-dist'
 
