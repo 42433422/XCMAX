@@ -1,4 +1,4 @@
-param(
+﻿param(
   [string]$Version = '',
   [ValidateSet('personal', 'enterprise', 'all')]
   [string]$ProductSku = 'all',

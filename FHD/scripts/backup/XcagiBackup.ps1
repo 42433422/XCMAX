@@ -1,4 +1,4 @@
-# XCMAX 桌面端定时备份脚本（Windows 计划任务调用入口）
+﻿# XCMAX 桌面端定时备份脚本（Windows 计划任务调用入口）
 # =============================================================================
 # 作用：在 XCAGI 应用未运行时（如午休），由 Windows 计划任务触发一次 SQLite
 #       在线热备份。复用 xcagi-backend.exe --desktop --migrate-only --backup

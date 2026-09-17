@@ -1,4 +1,4 @@
-# 生产上架：局域网授权 AI 员工 + bridge 侧栏解耦
+﻿# 生产上架：局域网授权 AI 员工 + bridge 侧栏解耦
 # 用法: powershell -File scripts/deploy/deploy-lan-gate-production.ps1
 
 $ErrorActionPreference = "Stop"

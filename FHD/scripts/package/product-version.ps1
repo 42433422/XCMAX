@@ -1,4 +1,4 @@
-# FHD/scripts/package/product-version.ps1
+﻿# FHD/scripts/package/product-version.ps1
 # Windows 侧产品版本解析的唯一出口 —— 与 bash 侧 deploy/lib/version.sh 对称。
 # 放在 scripts/package 根下而非 lib/ 子目录：FHD/.gitignore:17 的 `lib/` 规则会漏掉新文件。
 # 打包/发布/验收脚本不得再写死四段产品版本；显式传入的 -Version 优先（便于演练降级版本）。

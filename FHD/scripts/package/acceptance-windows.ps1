@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
 XCAGI 桌面端 Windows（Win10/Win11）真实机验收引导脚本（协议 D1-3）。
 
