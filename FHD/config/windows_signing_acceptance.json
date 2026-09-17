@@ -1,0 +1,31 @@
+{
+  "schema": "xcagi.windows_signing_acceptance/v1",
+  "id": "WSA-2026-09-17-01",
+  "scope": "public_download",
+  "status": "accepted_risk",
+  "author": "trae-release-agent",
+  "reviewer": "owner-42433422",
+  "accepted_at": "2026-09-17T00:00:00+08:00",
+  "expires_at": "2029-09-17T00:00:00+08:00",
+  "term_days": 1096,
+  "windows_stable_feed": "closed",
+  "decision_record": "业主 2026-09-17 决定：在 2029-09-17（含当日）之前，Windows 企业版安装包允许在未完成 Authenticode 代码签名的情况下公开下载，用限期风险接受替代签名硬门禁。授权范围只有官网下载页的 Windows 临时交付包：安装包与指针文件公开可下载，但 Windows 稳定自动更新通道保持关闭（不写 latest.yml），已安装的未签名版本不会自动升级。到期后授权自动失效，下载发布步骤 fail-closed（构建报错而不是静默降级），需重新评估或补齐签名。证据纪律不变：仍要求精确 release SHA、两日安全扫描对、真实安装冒烟回执。",
+  "decision_record_sha256": "8e101da8a3295ff4f3d36ea837bd364b6e37458ef3213f21394bff23c5d2af42",
+  "disclosed_risks": [
+    {
+      "id": "unknown-publisher",
+      "impact": "medium",
+      "text": "未签名安装包在客户机上会显示「未知发布者」，SmartScreen 可能要求额外确认，客户需按官网公布的 SHA-256 核对来源后再安装。"
+    },
+    {
+      "id": "enterprise-policy-block",
+      "impact": "high",
+      "text": "启用 AppLocker / WDAC / 组策略仅允许受信任发布者安装的企业环境，可能直接拒绝安装未签名包，这类客户必须改为签名交付。"
+    },
+    {
+      "id": "future-signed-upgrade",
+      "impact": "medium",
+      "text": "将来补齐签名后，签名包与已安装未签名包的发布者身份不一致，可能使这部分客户机的升级路径需要人工重装；本次不放开更新通道即把该债务限制在下载页一侧。"
+    }
+  ]
+}
