@@ -1,4 +1,4 @@
-# FrontendEdition: generic = 默认通用壳（ADCDFG）；full = 完整 ERP 侧栏
+﻿# FrontendEdition: generic = 默认通用壳（ADCDFG）；full = 完整 ERP 侧栏
 param(
   [string]$Version = '',
   [switch]$SkipFrontend,

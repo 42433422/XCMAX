@@ -1,4 +1,4 @@
-param(
+﻿param(
   [ValidateSet('pre', 'post')]
   [string]$Phase = 'pre',
   [string]$Version = '',

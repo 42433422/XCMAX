@@ -1,4 +1,4 @@
-param(
+﻿param(
   [string]$BaseUrl = 'http://127.0.0.1:17500',
   [string]$Username = 'SUNBIRD',
   [string]$Password = 'SUN123456',
@@ -16,8 +16,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'product-version.ps1')
 
-$AcceptanceBaseUrl = 'https://xiu-ci.com/xcagi-v1.0.0.0/acceptance'
+$AcceptanceBaseUrl = "https://xiu-ci.com/xcagi-v$(Resolve-ProductVersion)/acceptance"
 $TutorialExcelUrl = "$AcceptanceBaseUrl/xcagi-tutorial-dept-employee.xlsx"
 $AttendanceInputUrl = "$AcceptanceBaseUrl/sunbird-attendance-input.xlsx"
 $AttendanceTemplateUrl = "$AcceptanceBaseUrl/sunbird-attendance-template.xlsx"
@@ -180,7 +181,8 @@ function Resolve-OrDownloadFile {
     return $resolved
   }
   $dest = Join-Path $WorkDir $FileName
-  Invoke-WebRequest -Uri $Url -OutFile $dest -UseBasicParsing -TimeoutSec 120
+  try { Invoke-WebRequest -Uri $Url -OutFile $dest -UseBasicParsing -TimeoutSec 120 }
+  catch { throw ("无法下载 {0}（{1}）：{2} 请改用 -TutorialExcelPath / -AttendanceInputPath / -AttendanceTemplatePath 指定本地文件后重跑。" -f $FileName, $Url, $_.Exception.Message) }
   Assert-XlsxFile $dest
   return $dest
 }

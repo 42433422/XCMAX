@@ -1,4 +1,4 @@
-param(
+﻿param(
   [string]$BaseUrl = 'http://127.0.0.1:17500',
   [string]$ProductSku = 'enterprise',
   [string]$InstalledExe = '',

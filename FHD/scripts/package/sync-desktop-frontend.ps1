@@ -1,4 +1,4 @@
-# 将最新 frontend 构建产物同步到本机已安装的 XCAGI（桌面包不含 admin-vue-dist）
+﻿# 将最新 frontend 构建产物同步到本机已安装的 XCAGI（桌面包不含 admin-vue-dist）
 # Edition: generic = 默认通用壳（ADCDFG）；full = 完整 ERP
 param(
   [switch]$AlsoWinUnpacked,

@@ -1,4 +1,4 @@
-<#
+﻿<#
 XCAGI 桌面端 Windows 故障注入验收（目标项 7 数据与并发安全 / 项 8 故障恢复与回退）
 协议：docs/e2e/desktop-real-machine-acceptance-protocol.md
 
