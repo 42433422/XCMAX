@@ -1,9 +1,9 @@
 {
   "schema": "xcagi.download_release/v1",
   "_doc": "官网下载版本 SSOT（发布链种子）。当前只发布 enterprise；personal 已冻结。download_version/version_lock 是待发布目标而非已发布事实：release_ready 为 false 期间不得对外宣称该版本已发布，对外已发布版本一律以线上 /download-release.json 指针为准。Android 继续发布已验收的 1.0.0.0；npm/Electron/Apple 工具链内部映射为 1.0.0。",
-  "version_lock": "1.0.0.3",
-  "marketing_version": "1.0.0.4",
-  "download_version": "1.0.0.3",
+  "version_lock": "1.0.0.5",
+  "marketing_version": "1.0.0.5",
+  "download_version": "1.0.0.5",
   "android_version": "1.0.0.0",
   "android_git_sha": "a6af956c70e5c4ced49859240455fc9ba8e42e5c",
   "release_ready": false,
@@ -35,6 +35,20 @@
     "mac": "latest-mac.yml"
   },
   "release_history": [
+    {
+      "version": "1.0.0.5",
+      "date": "2026-09-17",
+      "title": "Mac 应用内更新自动退出与自动重启验证版本",
+      "channel": "macOS 稳定版",
+      "notes": [
+        "在 1.0.0.4 已包含“退出前预置应用退出标志”修复的基础上发布 1.0.0.5，实机验证太阳鸟等已授权客户从应用内完成下载、bundle 替换与自动重启的完整更新链路。",
+        "升级过程中旧后端随应用退出释放 17500 端口，新 bundle 首次可用即回报与本次发布一致的版本与构建 SHA，不再先出现旧版本再自愈。",
+        "macOS Apple Silicon 安装包完成 Developer ID 签名与公证并发布到稳定更新源；对外正式版本一律以线上 download-release.json 指针为准。"
+      ],
+      "platforms": [
+        "macOS Apple Silicon 1.0.0.5 稳定版"
+      ]
+    },
     {
       "version": "1.0.0.3",
       "date": "2026-09-13",

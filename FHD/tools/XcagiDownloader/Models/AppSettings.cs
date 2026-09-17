@@ -12,7 +12,7 @@ public sealed class AppSettings
     {
         var version = raw?.Trim();
         if (string.IsNullOrWhiteSpace(version))
-            return "1.0.0.4";
+            return "1.0.0.5";
         version = version.TrimStart('v', 'V');
         return string.IsNullOrWhiteSpace(version) ? "1.0.0.3" : version;
     }
