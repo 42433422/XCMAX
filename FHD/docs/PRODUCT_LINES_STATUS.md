@@ -4,7 +4,7 @@
      声明式输入：FHD/config/product_lines.yaml；本域登记在 FHD/config/ssot.yaml。
      数字漂移由 CI（ssot_cli.py gate → product-lines 域）阻断。 -->
 
-> 生成时间：2026-09-17 14:54 UTC ｜ 生成器：`FHD/scripts/dev/product_lines_status.py`
+> 生成时间：2026-09-17 15:16 UTC ｜ 生成器：`FHD/scripts/dev/product_lines_status.py`
 
 > 本文件是 XCMAX 三产品线状态（版本 / 发布 / 能力 / 三线成熟度）的**单一事实来源**，全部数字自动生成，禁止手改；任何文档引用这些数字都应指向本文件或原始权威源。
 
