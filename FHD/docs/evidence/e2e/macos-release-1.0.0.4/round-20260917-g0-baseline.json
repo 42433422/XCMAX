@@ -1,0 +1,49 @@
+{
+  "round": "2026-09-17 real-machine acceptance round (installed 1.0.0.4)",
+  "generated_at": "2026-09-17T00:55:51.779934+08:00",
+  "health": {
+    "status": "healthy",
+    "version": "1.0.0.4",
+    "git_sha": "280225ac77ce0b5f66470d2d7a11ad2844cdad67",
+    "release_id": "xcagi-1.0.0.4-280225ac77ce0b5f66470d2d7a11ad2844cdad67",
+    "runtime_status": "healthy",
+    "built_at": "2026-09-14T14:48:06.725Z"
+  },
+  "mods": {
+    "http": 200,
+    "count": 62,
+    "attendance_industry_present": true
+  },
+  "employees": {
+    "http": 200,
+    "keys": [
+      "catalog",
+      "workflow_delivery",
+      "workflow_monolith_mod_id",
+      "workflow_split_mod_ids",
+      "static_catalog"
+    ]
+  },
+  "platform_shell_capabilities": {
+    "http": 200,
+    "edition": "full",
+    "protected_client_mod_ids": [
+      "attendance-industry",
+      "coating-industry",
+      "taiyangniao-pro",
+      "sz-qsm-pro"
+    ]
+  },
+  "attendance_mod_detail": {
+    "http": 200,
+    "id": "attendance-industry",
+    "version": "1.0.1"
+  },
+  "installed_app": {
+    "path": "/Applications/XCAGI.app",
+    "version": "1.0.0.4",
+    "spctl": "accepted / Notarized Developer ID / Developer ID Application: jialong Li (G26WSH472M)",
+    "timestamp": "Sep 14, 2026 at 22:51:33",
+    "owner": "root:wheel"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "round": "2026-09-17 real-machine acceptance round (installed 1.0.0.4)",
+  "gate": "G8/G9 (in-app update check / install)",
+  "generated_at": "2026-09-17T01:00:33.671651+08:00",
+  "actions": [
+    "打开已安装 /Applications/XCAGI.app (com.xcagi.desktop.enterprise) → 系统设置 → 关于 → 点击「检查更新」",
+    "UI 返回：已开始检查更新，如有新版本将提示下载。（id=307）"
+  ],
+  "installed_local_build_info": {
+    "path": "/Applications/XCAGI.app/Contents/Resources/build-info.json",
+    "gitSha": "280225ac77ce0b5f66470d2d7a11ad2844cdad67",
+    "version": "1.0.0.4",
+    "releaseId": "xcagi-1.0.0.4-280225ac77ce0b5f66470d2d7a11ad2844cdad67",
+    "builtAt": "2026-09-14T14:48:06.725Z"
+  },
+  "remote_feed": {
+    "url": "https://xiu-ci.com/releases/stable/enterprise/latest-mac.yml",
+    "http": 200,
+    "productVersion": "1.0.0.4",
+    "buildSha": "280225ac77ce0b5f66470d2d7a11ad2844cdad67",
+    "releaseDate": "2026-09-14T14:58:44.724Z",
+    "signature": "ed25519 present"
+  },
+  "decision_basis": {
+    "rule": "desktop/updater.ts installSameVersionRebuildHook: remoteSha==localSha → isUpdateAvailable=false；且 remoteProductVersion==local version 时 electron-updater 本身不报 update-available",
+    "remote_sha_equals_local_sha": true,
+    "remote_product_version_equals_local": true
+  },
+  "g8_result": "FAIL(无可发现的新版本对象)：检查更新已执行，feed 最新即当前已装 1.0.0.4，未出现『发现新版本』提示",
+  "g9_result": "NOT RUN：G8 未产生可安装的新版本，无法点击「安装更新」，无自动退出/ShipIt/自动重启可验证",
+  "first_real_breakpoint": "本机已装版本 = feed 广播版本 (1.0.0.4 / 280225ac7)，应用内不存在可安装更新对象；G9 一键安装+自动退出（isQuitting 修复）需要 1.0.0.5 才能真正复测",
+  "evidence_files": [
+    "round-20260917-feed-latest-mac.yml",
+    "round-20260917-g8-update-check.png",
+    "round-20260917-updater-events-BEFORE.jsonl"
+  ],
+  "updater_events_after_check": "无新增 update_available / download_start 行（日志尾部与 BEFORE 快照 diff 为空）"
+}

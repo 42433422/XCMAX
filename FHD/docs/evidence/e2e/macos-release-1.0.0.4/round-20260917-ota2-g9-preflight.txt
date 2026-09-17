@@ -1,0 +1,43 @@
+== G9 点击前 preflight 快照  2026-09-17 04:46:50+0800
+-- boottime: { sec = 1789579911, usec = 488037 } Thu Sep 17 01:31:51 2026
+-- uptime:  4:46  up  3:15, 1 user, load averages: 3.19 3.12 3.21
+-- installed build-info:
+{"schema_version":1,"gitSha":"4bfb23365c5e9d2c0e05c5d142fa9183aea9e740","version":"1.0.0.3","releaseId":"xcagi-1.0.0.3-4bfb23365c5e9d2c0e05c5d142fa9183aea9e740","builtAt":"2026-09-13T18:16:04.812Z"}
+
+-- /Applications/XCAGI.app owner: drwxr-xr-x@ 3 a4243342  staff  96  9月 14 02:16 /Applications/XCAGI.app
+-- /Applications owner: drwxrwxr-x  40 root  admin  1280  9月 17 03:17 /Applications
+-- 用户组: staff everyone localaccounts _appserverusr admin _appserveradm com.apple.sharepoint.group.1 _appstore _lpadmin _lpoperator _developer _analyticsusers com.apple.access_ftp com.apple.access_screensharing com.apple.access_ssh com.apple.access_remote_ae
+-- app-update.yml:
+provider: generic
+url: https://xiu-ci.com/releases/stable/enterprise/
+updaterCacheDirName: xcagi-desktop-updater
+-- 运行中 app PID: 47831 
+-- health.version: 1.0.0.3
+-- 缓存 zip: -rw-r--r--@ 1 a4243342  staff  264533286  9月 15 02:13 /Users/a4243342/Library/Caches/xcagi-desktop-updater/pending/XCAGI-Enterprise-1.0.0.4-mac-arm64.zip
+-- 缓存 zip sha512 == feed sha512: True (本轮实测，见 preflight 命令输出)
+-- update-info.json: {"fileName":"XCAGI-Enterprise-1.0.0.4-mac-arm64.zip","sha512":"k6NaLCXo5UVMAES5sLrtwX6bspA8f+Wl+HBEOJIP9UJcgtD4N7GGE1qyu5IUxR0Fo0Hu7pG9ft67V0l9CcpDbQ==","isAdminRightsRequired":false}
+-- ShipIt 缓存目录（mtimes 证明自 9月15 起未再运行）:
+total 7920
+drwxr-xr-x@   5 a4243342  staff      160  9月 15 15:09 .
+drwx------+ 160 a4243342  staff     5120  9月 17 03:20 ..
+-rw-r--r--    1 a4243342  staff  4049854  9月 15 15:09 ShipIt_stderr.log
+-rw-r--r--    1 a4243342  staff        0  9月  4 23:16 ShipIt_stdout.log
+-rw-r--r--@   1 a4243342  staff      296  9月 15 15:09 ShipItState.plist
+-- ShipItState.plist（上一次 9月15 残留）:
+{
+  "bundleIdentifier" => "com.xcagi.desktop.enterprise"
+  "launchAfterInstallation" => true
+  "targetBundleURL" => "file:///Applications/XCAGI.app/"
+  "updateBundleURL" => "file:///Users/a4243342/Library/Caches/com.xcagi.desktop.enterprise.ShipIt/update.xphQXCL/XCAGI.app/"
+  "useUpdateBundleName" => true
+}
+-- 磁盘可用: /dev/disk3s5   460Gi   341Gi    98Gi    78%    3.9M  1.0G    0%   /System/Volumes/Data
+-- updater-events 现有行数: 107
+-- 布防状态: watch-install PID 49149 ; watch-chain PID 75549 
+-- G12 布防: ~/Library/LaunchAgents/com.xcagi.ota2-g12.plist (RunAtLoad, 9月17 04:44) + /Users/Shared/xcagi-t6-tools/ota2-20260917/.g12-creds (chmod 600)
+-- 链路时间线采样器: watch-chain.sh PID 75549 → round-20260917-ota2-g9-chain-timeline.jsonl（3s 采样 app/shipit/securityagent/http/version/事件条数）
+== 结论：1.0.0.3 装机 + 有效缓存 1.0.0.4 zip（sha512 与 feed 一致）+ isAdminRightsRequired=false（预期无 SecurityAgent 授权弹窗）+ 磁盘充足 → 点击链路具备一次性成功条件
+== 保真度声明（诚实口径，不得省略）：
+   1) 本轮夹具 /Applications/XCAGI.app 属主为 a4243342:staff（DMG 降级时由 ditto 复制而来，目录 mtime 9月14 02:16 与 1.0.0.3 builtAt 2026-09-13T18:16:04Z 一致），/Applications 为 root:admin drwxrwxr-x，用户属 admin 组 → ShipIt 判定 isAdminRightsRequired=false，**不会触发 SecurityAgent 管理员授权弹窗**。真实客户以 admin 身份把 app 拖入 /Applications 时属主为 root:wheel，可能走出授权弹窗分支；**该分支本轮不覆盖**，需在 SSOT 记为未覆盖项。
+   2) 本轮 OTA 由 1.0.0.3 触发，该包 installUpdate() 缺 `app.isQuitting = true`（已反编译双证），故「自动退出」子项预期 FAIL；完整自动退出验证需 1.0.0.4→1.0.0.5。
+   3) ShipIt_stderr.log 为 9月15 15:09 历史轮次证据，本轮**保留不删**，避免破坏失败现场。

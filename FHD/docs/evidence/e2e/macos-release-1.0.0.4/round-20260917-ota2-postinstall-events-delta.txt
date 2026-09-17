@@ -1,0 +1,8 @@
+106a107,113
+> {"ts":"2026-09-16T19:21:01.305Z","type":"update_available","data":{"version":"1.0.0"}}
+> {"ts":"2026-09-16T21:03:41.793Z","type":"update_available","data":{"version":"1.0.0"}}
+> {"ts":"2026-09-16T21:05:25.271Z","type":"update_available","data":{"version":"1.0.0"}}
+> {"ts":"2026-09-16T21:06:15.360Z","type":"update_available","data":{"version":"1.0.0"}}
+> {"ts":"2026-09-16T21:14:49.960Z","type":"download_start","data":{}}
+> {"ts":"2026-09-16T21:14:50.273Z","type":"update_downloaded","data":{"version":"1.0.0"}}
+> {"ts":"2026-09-16T21:15:28.089Z","type":"install_start","data":{}}

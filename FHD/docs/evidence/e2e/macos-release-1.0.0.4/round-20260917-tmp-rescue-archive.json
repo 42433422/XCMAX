@@ -1,0 +1,60 @@
+{
+  "round": "2026-09-17",
+  "action": "reboot 前 /tmp 资产抢救归档（用户选择「全搬」）",
+  "at": "2026-09-17T01:30:23.745355+08:00",
+  "archive": "/Users/Shared/xcagi-archives/20260917-ota-10004-artifact",
+  "archive_bytes_total": "1.1G",
+  "moved": {
+    "ota-10004-artifact": [
+      "XCAGI-Enterprise-1.0.0.4-mac-arm64.dmg (306,901,903B)",
+      "...zip (264,533,286B)",
+      "*.blockmap ×2",
+      "manifest.json",
+      "latest-mac.yml",
+      "download-release.json",
+      "builder-debug.yml",
+      "cvm-retry-upload.sh",
+      "cvm-upload-official.sh",
+      "cvm-upload.log",
+      "cvm-upload-official.log",
+      "g9-watch.sh",
+      "release/"
+    ],
+    "xcagi-app-staging": "打包 staging（dist/node_modules/resources，3.2M）",
+    "scraps": [
+      "xcagi_menu.png ×4",
+      "activate_and_menu.py",
+      "activate_xcagi.scpt",
+      "xcagi-stdout.log",
+      "xcmax-closure-g9-watch.log.diff（xcmax-closure worktree 唯一 1 行未提交差异）"
+    ]
+  },
+  "verification": {
+    "pre_move_sha256": {
+      "dmg": "cf01c0768141bc34f559723f8425dc5c03aedbf313d946beda718613348508b7",
+      "zip": "5514e649ac4add504144595adfaba7d5cf7417283db821b9c69d2472908f7ba8"
+    },
+    "post_move_sha256": {
+      "dmg": "cf01c0768141bc34f559723f8425dc5c03aedbf313d946beda718613348508b7",
+      "zip": "5514e649ac4add504144595adfaba7d5cf7417283db821b9c69d2472908f7ba8"
+    },
+    "pre_eq_post": true,
+    "vs_manifest": {
+      "source": "归档内 manifest.json channels.auto_update.enterprise.mac 与 official_download.enterprise.mac",
+      "dmg": "MATCH ✓ (sha256 与 size=306901903 完全一致)",
+      "zip": "manifest 未登记 sha256，仅本机 PRE==POST 核验"
+    }
+  },
+  "left_in_tmp_intentionally": {
+    "note": "经用户确认按「worktree 仍丢弃」处理；重启由系统清空 /tmp",
+    "items": [
+      "8 个已注册 git worktree（xcmax-1937/-closure/-fi-fix/-mainbase/-p1920/-p1923/-site-v4 等，~3.9G，未提交改动=0、未跟踪文件=0 → 无独有成果）",
+      "/private/tmp/admin-api-42422.log 4.9G（LaunchAgent 正在写入的日志，清理可放出约 5G）"
+    ]
+  },
+  "post_reboot_todo": [
+    "git -C /Users/Shared/XCMAX worktree prune  # 清掉指向已消失 /tmp 路径的 8 条死记录",
+    "bash /Users/Shared/xcagi-t6-tools/macos-release-1.0.0.4/t6-post-reboot-verify.sh 由布防自动触发（G12）"
+  ],
+  "chain_independence": "验收链不依赖 /tmp：工装 /Users/Shared/xcagi-t6-tools（持久）、证据仓库 /Users/Shared/XCMAX（持久）、布防 ~/Library/LaunchAgents（持久）"
+}

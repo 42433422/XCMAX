@@ -1,5 +1,5 @@
 {
-  "lines": 2313493,
+  "lines": 2313889,
   "updated": "2026-09-17",
-  "note": "新增 Windows 打包后端默认无控制台窗口修复（app/desktop_runtime/no_console_children.py 69 行 + run_fastapi 早期注入 12 行 + 回归测试 62 行 + CHANGELOG 2 行）：修复「点报表/文件/打印时闪黑窗（跳终端）」根因，一次覆盖全部 spawn 点，属新增能力/证据，无可等效删除的死代码"
+  "note": "本 PR = macOS 1.0.0.4 OTA 真机证据回填 + Windows 未签名交付限期风险接受（WSA-2026-09-17-01）。净删侧：MACOS_RELEASE_SSOT.md 以 2026-09-17 事实表取代被其取代的 2026-09-15 审计快照（§6.1/§6.2/§10/§11 移出活文档，旧内容留存于 git 历史），该文件净 -87 行。净增侧：① Windows 合规所需（授权记录 config/windows_signing_acceptance.json + fail-closed 发布 job + 护栏测试），其中授权记录因 cherry-pick 遗漏单独补入（缺文件会使发布 job 与护栏测试直接红）；② 护栏测试的 ruff 合规形态（导入排序、断言换行）净 +1 行，为 CI 硬门禁 Ruff lint/format 通过的必要形态；无可等效删除的死代码。合并后提交态 2313889；证据目录 FHD/docs/evidence/ 按口径不计行。"
 }
