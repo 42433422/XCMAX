@@ -65,7 +65,6 @@ domains:
       - FHD/contracts/openapi.json#info.version
       - FHD/setup.iss#MyAppVersion
       - FHD/tools/XcagiDownloader/Models/AppSettings.cs#fallback-version
-      - FHD/scripts/package/build-installer.sh#default-version
       - FHD/scripts/package/build-installer.ps1#default-version
       - FHD/release/VERSION
     mode: sync+verify
@@ -381,3 +380,16 @@ domains:
     mode: generate
     check: python "../成都修茈科技有限公司/scripts/build_capability_center.py" --check
     sync: python "../成都修茈科技有限公司/scripts/build_capability_center.py"
+
+  - name: product-lines
+    owner: release
+    enabled: true
+    # 三产品线统一控制面：声明式输入无数字，版本/发布/能力/覆盖率/门禁结论
+    # 全部从各自权威源现算；阻断硬编码版本、未声明副本与生成物漂移。
+    ssot: FHD/config/product_lines.yaml
+    derived:
+      - FHD/metrics/product_lines_status.generated.json
+      - FHD/docs/PRODUCT_LINES_STATUS.md
+    mode: generate
+    check: python scripts/dev/product_lines_status.py check
+    sync: python scripts/dev/product_lines_status.py generate

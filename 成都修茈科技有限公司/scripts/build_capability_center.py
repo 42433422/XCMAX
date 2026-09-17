@@ -184,7 +184,8 @@ def load_platform_levels() -> dict[str, str]:
             continue
         if in_section and line.strip().startswith("|"):
             cells = [c.strip().strip("*") for c in line.strip().strip("|").split("|")]
-            if len(cells) >= 3 and cells[0] not in ("端", ":---", "---") and "：" not in cells[0]:
+            # cells[0].strip("-: ") 为空即分隔行（`----` / `:---:` 等），不按固定字符串枚举。
+            if len(cells) >= 3 and cells[0] not in ("端",) and cells[0].strip("-: ") and "：" not in cells[0]:
                 levels[cells[0]] = cells[1]
         elif in_section and line.strip() and not line.strip().startswith("|"):
             break

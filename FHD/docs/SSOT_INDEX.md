@@ -18,7 +18,7 @@
 | coverage（覆盖率） | [reports/COVERAGE_RAMP.md](reports/COVERAGE_RAMP.md) | 后端/前端覆盖率基线、目标、棘轮 floor |
 | ci（CI/CD） | [../../docs/CI_SSOT.md](../../docs/CI_SSOT.md) | 根仓 .github/workflows/ 唯一调度入口 |
 | mod（Mod 开发） | [guides/MOD_AUTHORING_GUIDE.md](guides/MOD_AUTHORING_GUIDE.md) | Mod 开发规范、mods/ 为唯一编辑源 |
-| version（产品版本） | [VERSION.md](../VERSION.md) | 产品版本 1.0.0.1、工具链映射 1.0.0 |
+| version（产品版本） | [VERSION.md](../VERSION.md) | 产品版本与工具链映射唯一数字来源（`verify_version_anchors.py` 校验） |
 | route（路由） | [reports/WAVE2_ROUTE_SSOT.md](reports/WAVE2_ROUTE_SSOT.md) | RouteRegistry + mounts/* 路由 SSOT |
 | git（Git 仓库） | [reports/GIT_WORKTREE_RECOVERY.md](reports/GIT_WORKTREE_RECOVERY.md) | 根仓 XCMAX/ 为 Git SSOT |
 | mypy（类型检查） | [../pyproject.toml](../pyproject.toml) | [tool.mypy] 配置 |
@@ -51,6 +51,7 @@
 | windows-release（Windows 发布交付） | [WINDOWS_RELEASE_SSOT.md](WINDOWS_RELEASE_SSOT.md) | Windows 版本/产物/SHA256/下载与更新地址/测试机 + 13 项 Release Gate（含 G13 回滚）状态与实机验收任务；每次发版复用 |
 | desktop-platform-parity（桌面双端平级） | [desktop_platform_parity_ssot.md](desktop_platform_parity_ssot.md) | Windows 与 macOS 平级发布（同版本/同 release_sha/双端齐备）；功能双端验证通过才算完成；平台差异收口 desktop/platform/ 适配层 |
 | capability-center（产品能力中心） | [../成都修茈科技有限公司/data/capabilities/catalog.json](../成都修茈科技有限公司/data/capabilities/catalog.json) | 官网公开能力证据库唯一事实源（域→模块→功能+证据路径）；No Evidence, No Claim 降级引擎；生成页面见 `成都修茈科技有限公司/capabilities/` |
+| product-lines（三产品线控制面） | [PRODUCT_LINES_STATUS.md](PRODUCT_LINES_STATUS.md) | 三产品线版本/发布状态/能力/成熟度单一事实来源（自动生成；声明式输入 [../config/product_lines.yaml](../config/product_lines.yaml)，不含任何数字） |
 
 ## 机器注册表（ssot.yaml）
 
@@ -87,6 +88,7 @@
 | macos-release | `FHD/docs/MACOS_RELEASE_SSOT.md` | blocking |
 | windows-release | `FHD/docs/WINDOWS_RELEASE_SSOT.md` | blocking |
 | capability-center | `成都修茈科技有限公司/data/capabilities/catalog.json` | blocking |
+| product-lines | `FHD/config/product_lines.yaml` | blocking |
 
 ## 已退役 SSOT（指针化）
 

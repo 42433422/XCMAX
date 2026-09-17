@@ -3,10 +3,10 @@
 # 等价于 build-installer.ps1 -SkipUiInstaller（跳过 WPF 外壳，保留 NSIS + 内嵌后端）。
 set -euo pipefail
 
-VERSION="${1:-1.0.0.0}"
+. "$(dirname "${BASH_SOURCE[0]}")/../deploy/lib/version.sh"
+VERSION="${1:-$(product_version)}"
 SKU="${2:-enterprise}"
-VERSION="${VERSION#v}"
-VERSION="${VERSION#V}"
+VERSION="${VERSION#[vV]}"
 TOOLCHAIN_VERSION="$(printf '%s' "${VERSION}" | cut -d. -f1-3)"
 
 case "${SKU}" in

@@ -2,15 +2,15 @@
 # macOS：产品版本用于发布路径/制品名，三段工具链版本用于 npm/Electron。
 set -euo pipefail
 
-VERSION="${1:-1.0.0.4}"
+. "$(dirname "${BASH_SOURCE[0]}")/../deploy/lib/version.sh"
+VERSION="${1:-$(product_version)}"
 SKU="${2:-}"
 VERSION="${VERSION#FHD/}"
-VERSION="${VERSION#v}"
-VERSION="${VERSION#V}"
+VERSION="${VERSION#[vV]}"
 # workflow_dispatch on branch can leave ref_name=main; never feed that to npm version
 if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
-  echo "[warn] invalid VERSION='${VERSION}', falling back to 1.0.0.3" >&2
-  VERSION="1.0.0.3"
+  VERSION="$(product_version)"
+  echo "[warn] invalid VERSION='${1:-}', falling back to ${VERSION}" >&2
 fi
 TOOLCHAIN_VERSION="$(printf '%s' "${VERSION}" | cut -d. -f1-3)"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
