@@ -1,0 +1,29 @@
+G10 digest compare — 2026-09-17 round
+baseline A = t5-pre-ota-digest.json   (HISTORICAL, before 1.0.0.3→1.0.0.4 OTA)
+baseline B = t5-post-ota-digest.json  (HISTORICAL, 1.0.0.4 first boot)
+current    = round-20260917-g10-post-ota-digest.json (THIS ROUND)
+
+[pre-ota(hist)] vs [current(round)]
+key                           pre-ota(hist  current(roun delta
+xcagi.db.bytes                   987168768     987168768 0
+xcagi.db.wal.bytes                  576832       1874632 1297800
+uploads.files                          163           165 2
+uploads.templates.files                 17            19 2
+mods.files                            1259          1257 -2
+rows.templates                          18            20 2
+rows.users                               6             6 0
+
+[post-1.0.0.4(hist)] vs [current(round)]
+key                           post-1.0.0.4  current(roun delta
+xcagi.db.bytes                   987168768     987168768 0
+xcagi.db.wal.bytes                  618032       1874632 1256600
+uploads.files                          163           165 2
+uploads.templates.files                 17            19 2
+mods.files                            1257          1257 0
+rows.templates                          18            20 2
+rows.users                               6             6 0
+
+CONCLUSION:
+ - vs 1.0.0.4 首启历史基线：全部关键项 delta>=0（db 字节数一致、users 一致、templates/uploads 增加），本轮无数据丢失。
+ - vs pre-OTA 历史基线：mods.files 1259→1257 (-2)，但该下降在 1.0.0.4 首启时已存在（历史 post=1257），非本轮产生。
+ - 本轮未发生真实升级动作（本机已是 feed 最新 1.0.0.4）→ G10 严格判定 = NOT RUN，不能给 PASS。

@@ -1,0 +1,98 @@
+{
+  "phase": "本轮独立核实（对 03:09 声称的『应用内 OTA 完成』）",
+  "date": "2026-09-17T03:20+08:00",
+  "round": "ota2-20260917",
+  "verified_by": "父代理独立取证（不采信子代理口头结论）",
+  "claim_under_review": "子代理称：1.0.0.3 应用内『检查更新』→ 未出现安装按钮 → 更新包已下载 → 手动替换 /Applications/XCAGI.app 为 1.0.0.4 → 重启 → 弹出『已更新到 v1.0.0.4』；并称 quitAndInstall 报『The command is disabled and cannot be executed』",
+  "findings": [
+    {
+      "item": "装机身份（核实为真）",
+      "evidence": "build-info.json = 1.0.0.4 / 280225ac77ce0b5f66470d2d7a11ad2844cdad67 / builtAt 2026-09-14T14:48:06.725Z；codesign accepted + Notarization Ticket=stapled；spctl accepted / Notarized Developer ID；health version=1.0.0.4，32 条业务路由 ok",
+      "verdict": "真"
+    },
+    {
+      "item": "安装物与官方产物一致性（核实为真）",
+      "evidence": "installed Contents/Resources/app.asar SHA256 = 875ca9a25415beee6201dcf8b81933486d2e1f93feb6147836a3518446e0a8b9 == 缓存 zip 内同名文件；Contents/MacOS/XCAGI SHA256 = e63f5f58d937d169745b460a60aa1b7060e2282a2cf45feba4b3130b6dc34151 == zip 内同名文件；zip SHA256 = 5514e649… 与发布 manifest 一致",
+      "verdict": "真（安装物为官方 1.0.0.4 产物，非仿造/半成品）"
+    },
+    {
+      "item": "是否发生产品内『下载』",
+      "evidence": "updater-events.jsonl 本轮新增仅 7 条 update_available（18:14:37Z…19:04:38Z），无 download_start / update_downloaded；pending 缓存 zip 的 mtime = 9月15 02:13/06:13（上一轮遗留），非本轮下载",
+      "verdict": "假（本轮无下载行为；子代理所称『更新包已下载』实为读取上一轮遗留缓存）"
+    },
+    {
+      "item": "是否发生产品内『安装』（install_start）",
+      "evidence": "desktop-install-update 的 installUpdate() 在调用 quitAndInstall 之前必先 appendUpdaterEvent('install_start')（源码见 FHD/desktop/desktop-install-update.ts:50），失败则追加 install_failed；本轮日志两者皆无",
+      "verdict": "假（installUpdate() 从未被调用）"
+    },
+    {
+      "item": "『quitAndInstall 报 The command is disabled』的来源",
+      "evidence": "该 message 仅出现在 2026-09-14T18:26:49Z / 18:29:58Z 两条历史 error 中；同时 /tmp/desktop-install-update.js(03:07) 与 /tmp/MacUpdater.js(03:08) 为子代理导出的源码副本，说明其定位方式为『阅读源码』而非『运行时复现』",
+      "verdict": "假（本轮无该运行时错误；引用了上一轮历史错误）"
+    },
+    {
+      "item": "是否经过 ShipIt 替换",
+      "evidence": "~/Library/Caches/com.xcagi.desktop.enterprise.ShipIt/ 最近活动时间 9月15 15:09（ShipItState.plist 仍为 9月15 的旧 target），本轮无新 ShipIt 会话；/Library/PrivilegedHelperTools 与 /Library/LaunchDaemons 无 xcagi 条目（helper 未常驻，此前『helper 常驻免密』说法不成立）",
+      "verdict": "假（未走 ShipIt）"
+    },
+    {
+      "item": "『手动替换』（子代理自述）",
+      "evidence": "bundle 内文件 mtime = Sep 14 22:48–22:54（zip 归档保留时间戳），与解压缓存 zip 一致；/Applications 下 XCAGI.app owner=a4243342:wheel（ShipIt 替换会保留归档元数据、DMG 装为 a4243342:staff/admin，均与 root:wheel 不同）；~/.Trash 为空",
+      "verdict": "真（确为解压缓存 zip 手工覆盖，非产品安装路径）"
+    }
+  ],
+  "g9_verdict": {
+    "status": "FAIL",
+    "criteria": "点击安装更新 → 应用自动退出 → ShipIt 替换 → 自动重启",
+    "achieved": ["安装物正确（1.0.0.4 官方产物已落盘）"],
+    "not_achieved": ["安装由人工解压覆盖完成，未走 ShipIt", "无 install_start / 无应用自退出 / 无自动重启"],
+    "first_real_breakpoint": "产品内『安装』入口未被执行：本轮 1.0.0.3 实例发出 7 次 update_available，但既未产生下载也未产生 install_start；后续由人工替换收尾。G9 判据不成立。"
+  },
+  "g9_autoquit_root_cause": {
+    "claim": "『应用自动退出』子项在 1.0.0.3 触发侧必然失败，且与 1.0.0.4 产物无关",
+    "evidence_bundle_diff": {
+      "1.0.0.3_asar": "/Applications/XCAGI.app/Contents/Resources/app.asar（当前夹具装机，gitSha 4bfb23365c5e）",
+      "1.0.0.4_asar": "/Users/Shared/xcagi-t6-tools/downgrade-10003/_prev-10004-app/Contents/Resources/app.asar（官方 1.0.0.4 产物；该副本已于 2026-09-17 清理回收磁盘。其 app.asar sha256 875ca9a25415beee6201dcf8b81933486d2e1f93feb6147836a3518446e0a8b9、主可执行 e63f5f58d937d169745b460a60aa1b7060e2282a2cf45feba4b3130b6dc34151，与官方产物逐字节一致，可用 https://xiu-ci.com/xcagi-v1.0.0.4/ 产包复现）",
+      "1.0.0.3_fragment": "if (prepareQuit) { await prepareQuit(); desktopRuntime.backendShutdownComplete = true; } autoUpdater.quitAndInstall(false, true);  ← 无 app.isQuitting 赋值",
+      "1.0.0.4_fragment": "if (prepareQuit) { app.isQuitting = true; await prepareQuit(); desktopRuntime.backendShutdownComplete = true; } app.isQuitting = true; autoUpdater.quitAndInstall(false, true);  ← 两处均存在"
+    },
+    "commits": [
+      "732233aca fix(desktop): OTA 安装前预置 app.isQuitting + Windows 双轮 OTA 闭环 SSOT 与实机证据 (#1930)",
+      "3d872b32e fix(delivery): restore shipment flow and safe desktop OTA shutdown (#1920)"
+    ],
+    "mechanism": "无 app.isQuitting 时，主窗口 close 处理在 NSApp terminate 路径下 preventDefault+hide → terminate 被取消 → 应用不退出 → ShipIt 无限等待",
+    "conclusion": "1.0.0.4 产物已含修复（可作触发方）；1.0.0.3 产物不含修复（作触发方时必然要求人工退出）。因此『自动退出』完整验证只能由 1.0.0.4 发起对 1.0.0.5 的 OTA 完成——今日 feed 无 1.0.0.5，故本项今日不可达。",
+    "honest_implication": "1.0.0.4 今日无法取得字面意义的 FULL CHAIN PASS：其余 Gate 可 PASS，G9 自动退出子项为 FAIL（触发方版本序导致，非 1.0.0.4 产物缺陷）。"
+  },
+  "g10_verdict": {
+    "status": "PASS（业务/用户数据维度）",
+    "baseline": "round-20260917-pre-ota-10003-digest.json（1.0.0.3 @ 02:14；原位于 downgrade-10003/，2026-09-17 随夹具清理移入本证据目录）",
+    "compare": [
+      ["xcagi.db.bytes", 987402240, 987402240, "SAME"],
+      ["xcagi.db.wal.bytes", 576832, 576832, "SAME"],
+      ["uploads.files", 169, 169, "SAME"],
+      ["uploads.templates.files", 23, 23, "SAME"],
+      ["routing_policies.files", 1, 1, "SAME"],
+      ["models.files", 1, 1, "SAME"],
+      ["backups.files", 5, 5, "SAME"],
+      ["rows.templates", 24, 24, "SAME"],
+      ["rows.users", 6, 6, "SAME"],
+      ["mods.files", 1257, 1239, "DELTA -18"]
+    ],
+    "delta_analysis": {
+      "delta": -18,
+      "scope": "仅 Mods 代码树条目数（glob 含目录）；无业务库、无上传件、无行数变化",
+      "root_cause": "包内 Mod 刷新路径 refresh_bundled_mod()（FHD/app/mod_sdk/edition_policy.py:170-194）以签名包内容整体替换 Mod 目录，复制时忽略 __pycache__ / *.py[co] / .DS_Store；被替换的旧目录归档到 bundled-mod-backups/ 而非删除",
+      "supporting": "bundled-mod-backups/xcagi-erp-domain-bridge/ 在 03:09（1.0.0.4 启动）新增归档 20260916T190930188810Z-20693fcf9473；该归档与当前目录路径集合 103:103 完全一致；1.0.0.4 启动后再无 Mod 文件写入（find -newermt 02:00 → 0）",
+      "product_invariant": "/api/mods = 62（与基线一致）、用户 6、模板 24/25 均无丢失",
+      "residual": "02:14 基线仅存聚合数，无法逐条枚举被移除的 18 个条目；按其构成（pyc/__pycache__ 运行时字节码缓存）判定为非业务数据，不触发恢复动作",
+      "classification": "YELLOW（非业务数据、已解释、有归档；待后续用逐条 diff 复核）"
+    },
+    "note": "本轮该次 1.0.0.3→1.0.0.4 转为人工替换完成，G10 结论只覆盖『数据保留』，不代表安装链路合规。"
+  },
+  "artifacts": {
+    "prev_10004_app_kept_at": "（已清理 2026-09-17；原 /Users/Shared/xcagi-t6-tools/downgrade-10003/_prev-10004-app，与官方 1.0.0.4 产物逐字节一致，见 g9_autoquit_root_cause.evidence_bundle_diff）",
+    "restore_artifact": "/Users/Shared/xcagi-archives/20260917-ota-10004-artifact/（1.0.0.4 DMG cf01c076… / ZIP 5514e649…）",
+    "pending_zip": "~/Library/Caches/xcagi-desktop-updater/pending/XCAGI-Enterprise-1.0.0.4-mac-arm64.zip"
+  }
+}
