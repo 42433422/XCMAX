@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
   "catalog_version": "2026-09-16",
-  "_comment": "产品能力目录 SSOT。所有 evidence 路径相对产品仓库根目录；构建脚本会逐项校验，证据缺失自动降级状态（No Evidence, No Claim）。状态：verified=已验证(实现+测试+CI) / partial=部分验证(实现+部分证据) / implemented=已实现待验证(仅实现) / planned=规划中。",
+  "_comment": "产品能力目录 SSOT。所有 evidence 路径相对产品仓库根目录；构建脚本会逐项校验，证据缺失自动降级状态（No Evidence, No Claim）。状态：verified=已验证(实现+测试+CI) / partial=部分验证(实现+部分证据) / implemented=已实现待验证(仅实现) / planned=规划中。evidence.videos 为可选的实机录像/操作流程文件路径，与 screenshots 同样校验存在性并复制到站点证据目录。",
+  "deployment_modes": [
+    { "name": "绝对安全模式", "network": "内网", "storage": "SQLite", "desc": "数据不出网，最高安全等级" },
+    { "name": "安全模式", "network": "外网", "storage": "SQLite", "desc": "解放 AI 能力，数据留在本地" },
+    { "name": "性能模式", "network": "外网", "storage": "PostgreSQL", "desc": "向量检索 / 长期记忆 / 工具调用" }
+  ],
+  "next_plan": [
+    "完成移动端绑定与真机验收",
+    "打通 下载 → 安装 → 绑定 → 运行 闭环",
+    "完成桌面自动化真实实现并验证",
+    "完成 3 家客户交付与验收",
+    "推进 10-20 家落地并优化功能"
+  ],
   "domains": [
     {
       "id": "base",

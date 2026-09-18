@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "catalog_version": "2026-09-16",
-  "generated_at": "2026-09-17 17:24 UTC",
+  "generated_at": "2026-09-18 21:31 UTC",
   "principle": "No Evidence, No Claim：所有状态由构建脚本按仓库证据校验，证据缺失自动降级。",
   "stats": {
     "total": 50,
@@ -21,14 +21,43 @@
       "web": 39,
       "android": 4,
       "ios": 1
-    }
+    },
+    "completion": 63
   },
+  "product_version": "1.0.0.5",
   "platform_levels": {
     "Windows 桌面": "签约级",
     "macOS 桌面": "签约级",
     "Web / 后端": "签约级",
     "Android": "实验骨架·非签约级"
   },
+  "deployment_modes": [
+    {
+      "name": "绝对安全模式",
+      "network": "内网",
+      "storage": "SQLite",
+      "desc": "数据不出网，最高安全等级"
+    },
+    {
+      "name": "安全模式",
+      "network": "外网",
+      "storage": "SQLite",
+      "desc": "解放 AI 能力，数据留在本地"
+    },
+    {
+      "name": "性能模式",
+      "network": "外网",
+      "storage": "PostgreSQL",
+      "desc": "向量检索 / 长期记忆 / 工具调用"
+    }
+  ],
+  "next_plan": [
+    "完成移动端绑定与真机验收",
+    "打通 下载 → 安装 → 绑定 → 运行 闭环",
+    "完成桌面自动化真实实现并验证",
+    "完成 3 家客户交付与验收",
+    "推进 10-20 家落地并优化功能"
+  ],
   "domains": [
     {
       "id": "base",

@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- 此文件由 scripts/build_capability_center.py 自动生成，请勿手改（DO NOT EDIT）。 -->
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
@@ -7,7 +8,7 @@
     <meta name="description" content="自动更新（OTA）：桌面端在线检测更新、下载与安装回执，更新流水线与 feed 清单自动发布。" />
     <link rel="canonical" href="/capabilities/feature/dt-ota.html" />
     <link rel="stylesheet" href="/styles.css?v=20260722h" />
-    <link rel="stylesheet" href="/capabilities/assets/capabilities.css?v=20260916a" />
+    <link rel="stylesheet" href="/capabilities/assets/capabilities.css?v=20260919a" />
   </head>
 <body data-page="capabilities">
 <header class="site-header">
@@ -83,12 +84,13 @@
   <section class="section cap-evidence-section">
     <div class="container">
       <h2>技术验证资料</h2>
-      <p class="cap-section-note">以下内容由构建脚本从当前仓库自动生成（生成于 2026-09-17 18:32 UTC）。路径相对产品仓库根目录；未公开仓库的客户可向我们索取演示与审计说明。</p>
+      <p class="cap-section-note">以下内容由构建脚本从当前仓库自动生成（生成于 2026-09-18 21:31 UTC）。路径相对产品仓库根目录；未公开仓库的客户可向我们索取演示与审计说明。</p>
       <div class="cap-evidence-grid">
         <div class="cap-evidence-block"><h3>源码实现</h3><ul class="cap-evidence-list"><li><code class="">FHD/desktop/desktop-install-update.ts</code></li><li><code class="">FHD/desktop/ota-proxy.ts</code></li><li><code class="">FHD/desktop/update-install-receipts.ts</code></li></ul></div>
         <div class="cap-evidence-block"><h3>API 端点</h3><p class="cap-evidence-empty">暂无</p></div>
         <div class="cap-evidence-block"><h3>自动化测试</h3><ul class="cap-evidence-list"><li><code class="">FHD/desktop/updater-install.test.ts</code></li><li><code class="">FHD/desktop/update-install-receipts.test.ts</code></li></ul><p class="cap-evidence-note">CI 门禁：FHD/.github/workflows/release-desktop-mac-ota.yml、FHD/.github/workflows/publish-local-mac-feed.yml</p></div>
         <div class="cap-evidence-block"><h3>CI 记录</h3><ul class="cap-evidence-list"><li><code class="">FHD/.github/workflows/release-desktop-mac-ota.yml</code></li><li><code class="">FHD/.github/workflows/publish-local-mac-feed.yml</code></li></ul></div>
+        
         <h3>实机截图 / 运行证据</h3><div class="cap-shots"><figure class="cap-shot"><img src="/capabilities/assets/evidence/dt-ota-g8-check-update-clicked.png" alt="自动更新（OTA） 实机证据" loading="lazy" /><figcaption>实机运行证据（原始文件：FHD/docs/evidence/e2e/macos-release-1.0.0.4/g8-check-update-clicked.png）</figcaption></figure></div>
         <div class="cap-evidence-block"><h3>关联文档</h3><ul class="cap-evidence-list"><li><code class="">FHD/docs/MACOS_RELEASE_SSOT.md</code></li></ul></div>
         <div class="cap-evidence-block"><h3>验证 commit</h3><ul class="cap-evidence-list"><li><code class="">3d872b32e fix(delivery): restore shipment flow and safe desktop OTA shutdown (#1920) (2026-09-14)</code></li></ul></div>
