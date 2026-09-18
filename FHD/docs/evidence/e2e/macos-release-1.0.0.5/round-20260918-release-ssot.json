@@ -4,7 +4,11 @@
   "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
   "product_version": "1.0.0.5",
   "sku": "enterprise",
-  "generated_at_utc": "2026-09-18T13:26:30Z",
+  "generated_at_utc": "2026-09-18T16:48:32Z",
+  "scope": "两平台同一 RELEASE_SHA 的 release + customer-loop 唯一机器可读 SSOT",
+  "absorbed_evidence": [
+    "PR #1973 evidence/customer-loop-1.0.0.5-ssot（Windows 真机三阶段事实已并入 windows.windows_real_machine_phases，该 PR 作为重复事实源关闭）"
+  ],
   "platforms": {
     "macos": {
       "target": "最终 main SHA，必须 FULL_CLOSED",
@@ -100,7 +104,7 @@
     "windows": {
       "target": "同一 RELEASE_SHA；只能 FULL_CLOSED 或 INTERIM_CLOSED",
       "status": "INTERIM_CLOSED",
-      "verdict_reason": "未签名导致 Windows stable OTA 明确关闭（windows_signing_acceptance.json WSA-2026-09-17-01: windows_stable_feed=closed），且本机无 Windows 主机可执行陌生客户实机环。按口径只能写 INTERIM_CLOSED，不得写 FULL_CLOSED。",
+      "verdict_reason": "INTERIM_CLOSED 的唯一原因：安装包未签名（Authenticode=NotSigned）且 Windows stable 自动更新通道按业主决策保持关闭（windows_signing_acceptance.json WSA-2026-09-17-01: windows_stable_feed=closed，2029-09-17 到期）。客户交付三阶段已在真实 Windows 主机上全部 PASS（real release 5/5、new-customer E2E 8/8、promised upgrade path 8/8）。按口径只能写 INTERIM_CLOSED，不得写 FULL_CLOSED。",
       "artifact": {
         "filename": "XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe",
         "size": 248514275,
@@ -151,11 +155,12 @@
         "log": "round-20260918-win-runner-smoke.log"
       },
       "upgrade_path": {
-        "promised_by_repo": "manual_installer —— 未签名导致 Windows stable OTA 明确关闭（windows_signing_acceptance.json / WSA-2026-09-17-01，windows_stable_feed=closed，2029-09-17 到期）",
-        "verified": "BLOCKED",
-        "reason": "runner 冒烟（verify-windows-installed-runtime.ps1）是干净安装 + 卸载保留标记，非从旧版本升级；本机无 Windows 实机，未执行 1.0.0.x → 1.0.0.5 升级",
-        "what_would_prove_it": "一台真实 Windows 主机（admin）：装 1.0.0.x → 运行 XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe → 校验 installed buildSha=54325894cc6e3fc2becfcbc98697a099310d9420 且业务数据保留",
-        "runner_partial_evidence": "uninstall_retention_marker=passed（卸载不删数据），可支撑“升级不丢数据”的方向性证据，但不等价于真实升级"
+        "promised_by_repo": "manual_installer —— 未签名导致 Windows stable OTA 明确关闭（windows_signing_acceptance.json / WSA-2026-09-17-01，windows_stable_feed=closed，2029-09-17 到期）；因此升级路径按仓库承诺走公网下载页人工安装（public_download_page_reinstall）",
+        "verified": "PASS",
+        "evidence": "phase3 P3-0..P3-7（8/8 PASS）：真机 1.0.0.4@604b85e1 → 运行 XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe → 1.0.0.5@54325894c，health=healthy，products 12→12 / users 4→4 保留，业务记录 SUNBIRD-p3-190028 升级后与重启后均可读",
+        "policy_gate": "P3-1 FHD/tests/release_gate/test_windows_interim_release_policy.py 8 passed；P3-4 latest.yml 404 → 未签名不进 in-app OTA（符合设计）",
+        "how_it_was_proven": "一台真实 Windows 主机（admin）：装 1.0.0.4 → 运行 XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe → 校验 installed buildSha=54325894cc6e3fc2becfcbc98697a099310d9420 且业务数据保留",
+        "runner_partial_evidence": "uninstall_retention_marker=passed（卸载不删数据）"
       },
       "stranger_customer_loop": {
         "download": {
@@ -175,25 +180,184 @@
           "evidence": "runner_install_smoke（health/runtime smoke 21 项）"
         },
         "login_binding": {
-          "verdict": "BLOCKED",
-          "reason": "runner 冒烟不覆盖交互式登录绑定；本机无 Windows 主机（无 UTM/Parallels/VMware）可执行 GUI 登录"
+          "verdict": "PASS",
+          "evidence": "phase2 C4：真实 Windows 主机全新环境登录绑定落地（username=SUNBIRD tenant=1 brand=SUNBIRD account_kind=enterprise tier=pro，entitled_mod_ids=attendance-industry,taiyangniao-pro）；phase3 P3-6 升级后同一账号仍为可用会话"
         },
         "entitlements": {
-          "verdict": "BLOCKED",
-          "reason": "同上：无 Windows 实机可验证权益下发 UI"
+          "verdict": "PASS",
+          "evidence": "phase2 C5：subscription_success=True / plan=saas-permanent-growth / delivery_projects=1 / project_mods=taiyangniao-pro"
         },
         "mod_loading": {
           "verdict": "PASS",
-          "evidence": "runner_install_smoke（mods-list / mods-loading-status / mod-detail:* 通过）"
+          "evidence": "runner_install_smoke（mods-list / mods-loading-status / mod-detail:* 通过）+ phase2 C6 真机 loading_status_success=True / mods_total=24 / erp_mod_reachable=True"
         },
         "real_business_task": {
-          "verdict": "BLOCKED",
-          "reason": "runner 冒烟未覆盖出单等真实业务；无 Windows 实机"
+          "verdict": "PASS",
+          "evidence": "phase2 C7：POST /api/mod/xcagi-erp-domain-bridge/products/add 写入 SUNBIRD-p2-184311（write_source=mod:xcagi-erp-domain-bridge），list 回读命中该行"
         },
         "restart_data_retention": {
-          "verdict": "BLOCKED",
-          "reason": "无 Windows 实机可执行重启后数据保留验证；卸载保留标记已过但不等价于重启数据保留"
+          "verdict": "PASS",
+          "evidence": "phase2 C8：进程重启后 session_persisted_user=SUNBIRD、业务行 SUNBIRD-p2-184311 仍在、sandbox db 1445888→1667072 B；phase3 P3-7：重启后 session_user=SUNBIRD、business_record_found=1、updater_events_touched=False"
         }
+      },
+      "windows_real_machine_phases": {
+        "absorbed_from": "PR #1973 branch evidence/customer-loop-1.0.0.5-ssot（FHD/docs/evidence/e2e/customer-loop-1.0.0.5/customer_loop_ssot.json 的 windows 段）——Windows 真机三阶段事实已并入本轮唯一 SSOT，该 PR 作为重复事实源关闭",
+        "host": "一台真实 Windows 主机（admin 账户），2026-09-18；Windows 侧自跑三阶段，macOS 侧不介入",
+        "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+        "product_version": "1.0.0.5",
+        "phase_verdicts": {
+          "phase1_real_release": "PASS",
+          "phase2_new_customer_e2e": "PASS",
+          "phase3_promised_upgrade_path": "PASS"
+        },
+        "phase_counts": {
+          "phase1_real_release": "5/5 PASS",
+          "phase2_new_customer_e2e": "8/8 PASS",
+          "phase3_promised_upgrade_path": "8/8 PASS"
+        },
+        "phases": [
+          {
+            "phase": "phase1_real_release",
+            "verdict": "PASS",
+            "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+            "product_version": "1.0.0.5",
+            "started_at": "2026-09-18T18:49:27.8614506+08:00",
+            "finished_at": "2026-09-18T18:49:57",
+            "source": "C:\\Users\\97088\\AppData\\Local\\Temp\\wsa-verify\\phase1-result.json",
+            "route": "real_windows_release_from_frozen_sha",
+            "steps": [
+              {
+                "id": "P1-1-installer-produced",
+                "state": "PASS",
+                "detail": "public artifact byte-identity: size=248514275 sha256=45f761cf1ad968c5abeae466e8b0749364e1d1edfabf0821ef28db52f5cb572e size_match=True sha256_match=True"
+              },
+              {
+                "id": "P1-2-public-downloadable",
+                "state": "PASS",
+                "detail": "pointer.download_allowed=True;server_sha256_match=True;published_.sha256_sidecar_match=True;channel=enterprise-interim"
+              },
+              {
+                "id": "P1-3-url-and-sha256-align",
+                "state": "PASS",
+                "detail": "pointer url/sha256/size/git_sha match=True/True/True/True;pointer_sha256=45f761cf1ad968c5abeae466e8b0749364e1d1edfabf0821ef28db52f5cb572e"
+              },
+              {
+                "id": "P1-4-runner-installed-ok",
+                "state": "PASS",
+                "detail": "job=windows-installer-delivery;conclusion=success;head_sha=54325894cc6e3fc2becfcbc98697a099310d9420;evidence='OK: installed buildSha=54325894cc6e3fc2becfcbc98697a099310d9420 version=1.0.0.5 sku=enterprise'"
+              },
+              {
+                "id": "P1-5-stable-feed-not-pushed",
+                "state": "PASS",
+                "detail": "latest.yml http 443=404 8443=404 on_disk=ABSENT"
+              }
+            ]
+          },
+          {
+            "phase": "phase2_new_customer_e2e",
+            "verdict": "PASS",
+            "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+            "product_version": "1.0.0.5",
+            "started_at": "2026-09-18T18:33:12",
+            "finished_at": "2026-09-18T18:43:39",
+            "source": "C:\\XCAGI-acceptance-p2\\out\\phase2-result.json",
+            "route": "stranger_customer_offline_install_root",
+            "steps": [
+              {
+                "id": "C1-public-download",
+                "state": "PASS",
+                "detail": "url=https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe;size=248514275;sha256=45f761cf1ad968c5abeae466e8b0749364e1d1edfabf0821ef28db52f5cb572e;download_s=453.2;sidecar_sha256_match=True"
+              },
+              {
+                "id": "C2-silent-install",
+                "state": "PASS",
+                "detail": "exit=0;install_root=C:\\XCAGI-acceptance-p2\\install;version=1.0.0.5;gitSha=54325894cc6e3fc2becfcbc98697a099310d9420;authenticode=NotSigned;procs_after_install=0;listeners_17500=0"
+              },
+              {
+                "id": "C3-first-launch-health",
+                "state": "PASS",
+                "detail": "initial_status=degraded;initial_status_s=26.1;healthy_s=36.2;status=healthy;version=1.0.0.5;gitSha=54325894cc6e3fc2becfcbc98697a099310d9420;runtime=healthy;listeners=1;owner=C:\\XCAGI-acceptance-p2\\install\\resources\\backend\\xcagi-backend.exe;fresh_data_root=C:\\XCAGI-acceptance-p2\\profile\\AppData\\Roaming\\XCAGI;sandbox_db_bytes=1445888;host_profile_untouched=True;host_db_sha256_unchanged=True;sandbox_db_sha256=6f8ae2f9319f0e427580d6ce2e16144b16d5705598782f49cedf1d96e2dc4275"
+              },
+              {
+                "id": "C4-login-binding",
+                "state": "PASS",
+                "detail": "username=SUNBIRD;tenant=1;brand=SUNBIRD;account_kind=enterprise;tier=pro;fresh_session=31ce71a6-e6c8-4ff0-92a0-ebbe153a3b25;entitled_mod_ids=attendance-industry,taiyangniao-pro"
+              },
+              {
+                "id": "C5-entitlement",
+                "state": "PASS",
+                "detail": "subscription_success=True;plan=saas-permanent-growth;delivery_projects=1;project_mods=taiyangniao-pro"
+              },
+              {
+                "id": "C6-mod-loading",
+                "state": "PASS",
+                "detail": "loading_status_success=True;mods_total=24;erp_mod_reachable=True"
+              },
+              {
+                "id": "C7-real-business",
+                "state": "PASS",
+                "detail": "api=POST /api/mod/xcagi-erp-domain-bridge/products/add;name=SUNBIRD-p2-184311;write_source=mod:xcagi-erp-domain-bridge;list_total=1;row_name=SUNBIRD-p2-184311"
+              },
+              {
+                "id": "C8-restart-persistence",
+                "state": "PASS",
+                "detail": "port_released_before_relaunch=True;initial_status=degraded;health=healthy;version=1.0.0.5;gitSha=54325894cc6e3fc2becfcbc98697a099310d9420;session_persisted_user=SUNBIRD;product_found=True;business_row=SUNBIRD-p2-184311;db_bytes_before=1445888;db_bytes_after=1667072"
+              }
+            ]
+          },
+          {
+            "phase": "phase3_promised_upgrade_path",
+            "verdict": "PASS",
+            "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+            "product_version": "1.0.0.5",
+            "started_at": "2026-09-18T18:48:11",
+            "finished_at": "2026-09-18T19:01:19",
+            "source": "C:\\XCAGI-acceptance-p3\\out\\phase3-result.json",
+            "route": "public_download_page_reinstall",
+            "steps": [
+              {
+                "id": "P3-0-pre-state",
+                "state": "PASS",
+                "detail": "installed=1.0.0.4@604b85e1ee82631418002708def18800d7c7f338;db_sha256=ff15e6a05ab4daab9cac38600a31ddcdff26d4b5a1924bb4a17e40baff283cb4;products=12;tenants=2;users=4"
+              },
+              {
+                "id": "P3-1-repo-policy-gate",
+                "state": "PASS",
+                "detail": "gate=test_windows_interim_release_policy.py;result=........ [100%] 8 passed in 0.11s"
+              },
+              {
+                "id": "P3-2-stable-feed-closed",
+                "state": "PASS",
+                "detail": "feed=https://xiu-ci.com/releases/stable/enterprise/latest.yml;http_443=404;http_8443=404;disk=ABSENT"
+              },
+              {
+                "id": "P3-3-public-package",
+                "state": "PASS",
+                "detail": "http=200;size=248514275;sha256=45f761cf1ad968c5abeae466e8b0749364e1d1edfabf0821ef28db52f5cb572e;server_sha256=45f761cf1ad968c5abeae466e8b0749364e1d1edfabf0821ef28db52f5cb572e;route=public_download_page"
+              },
+              {
+                "id": "P3-4-no-ota-for-unsigned",
+                "state": "PASS",
+                "detail": "desktop-config=enterprise: 'https://xiu-ci.com/releases/stable/enterprise/';latest_yml_http=404;expected=404 -> in-app OTA unavailable by design"
+              },
+              {
+                "id": "P3-5-in-place-upgrade",
+                "state": "PASS",
+                "detail": "installer_authenticode=NotSigned;exit=0;from=1.0.0.4@604b85e1ee82631418002708def18800d7c7f338;to=1.0.0.5@54325894cc6e3fc2becfcbc98697a099310d9420;install_root=C:\\XCAGI-acceptance"
+              },
+              {
+                "id": "P3-6-upgraded-health-data-business",
+                "state": "PASS",
+                "detail": "health_seconds=30.8;initial_status=healthy;status=healthy;version=1.0.0.5;gitSha=54325894cc6e3fc2becfcbc98697a099310d9420;login=SUNBIRD;tenant=2;brand=SUNBIRD;products=12->12;users=4->4;business_tag=SUNBIRD-p3-190028"
+              },
+              {
+                "id": "P3-7-restart-persistence",
+                "state": "PASS",
+                "detail": "port_released=True;initial_status=healthy;health=healthy;version=1.0.0.5;gitSha=54325894cc6e3fc2becfcbc98697a099310d9420;session_user=SUNBIRD;business_record_found=1;updater_events_touched=False"
+              }
+            ]
+          }
+        ]
       },
       "evidence_file": "round-20260918-win-release-verify.json"
     }

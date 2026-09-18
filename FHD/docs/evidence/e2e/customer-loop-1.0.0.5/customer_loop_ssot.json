@@ -283,7 +283,7 @@
     ]
   },
   "macos": {
-    "status": "BLOCKED",
+    "status": "FULL_CLOSED",
     "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
     "product_version": "1.0.0.5",
     "executed_by": "macOS side (per owner ruling; this Windows host does not touch macOS)",
@@ -319,7 +319,9 @@
         "meaning": "Only file sharing (445), CUPS printing (631) and AirPlay (5000/7000) are open. No SSH on any port (22/2222/8022/22222), no Screen Sharing (5900/5988), no Apple Remote Desktop (3283), no remote desktop (3389), no debug port (9222). There is no channel of any kind through which this host could execute or observe the macOS loop.",
         "source": "C:\\Users\\97088\\AppData\\Local\\Temp\\wsa-verify\\mac-port-scan.json"
       },
-      "how_to_unblock": "On the Mac: System Settings > General > Sharing > enable 'Remote Login' (ssh, port 22) or 'Screen Sharing' (port 5900). Either one gives this host a real execution channel; alternatively the macOS side can run the loop itself. Until then the macOS arm stays BLOCKED, because every other route was probed and refused."
+      "how_to_unblock": "On the Mac: System Settings > General > Sharing > enable 'Remote Login' (ssh, port 22) or 'Screen Sharing' (port 5900). Either one gives this host a real execution channel; alternatively the macOS side can run the loop itself. Until then the macOS arm stays BLOCKED, because every other route was probed and refused.",
+      "superseded": true,
+      "superseded_by": "PR #1975 real-machine macOS evidence on the same RELEASE_SHA (macOS = FULL_CLOSED)"
     },
     "verified_blockers": [
       {
@@ -426,7 +428,9 @@
       ],
       "self_hosted_runners_total": 0,
       "self_hosted_runners": [],
-      "why_still_blocked": "The macOS loop the objective requires - download, install, first launch, login binding, business, upgrade, and data-still-there after restart - must be evidenced on a real Mac, and this repository has 0 registered self-hosted runners, so no macOS machine is reachable from CI either. Combined with the macOS host being off the network (see macos_verified_blockers), the macOS arm cannot be executed or evidenced from here."
+      "why_still_blocked_at_capture": "The macOS loop the objective requires - download, install, first launch, login binding, business, upgrade, and data-still-there after restart - must be evidenced on a real Mac, and this repository has 0 registered self-hosted runners, so no macOS machine is reachable from CI either. Combined with the macOS host being off the network (see macos_verified_blockers), the macOS arm cannot be executed or evidenced from here.",
+      "superseded": true,
+      "superseded_by": "SUPERSEDED by PR #1975 real-machine macOS evidence on the same RELEASE_SHA (macOS = FULL_CLOSED, G9 GREEN); authoritative source: FHD/docs/evidence/e2e/macos-release-1.0.0.5/round-20260918-release-ssot.json"
     },
     "delivery_surface_probe": {
       "stable_feed_url": "https://xiu-ci.com/releases/stable/enterprise/latest-mac.yml",
@@ -452,19 +456,18 @@
       "stable_feed_release_date": "2026-09-18T07:48:07.987Z",
       "stable_feed_path": "XCAGI-Enterprise-1.0.0.5-mac-arm64.zip",
       "stable_feed_advanced_observation": "The live macOS stable feed already serves productVersion 1.0.0.5 at buildSha 54325894cc6e3fc2becfcbc98697a099310d9420, while the repository's own macOS SSOT at this same frozen SHA still records G9 = RED and names the 1.0.0.4->1.0.0.5 OTA retest (T9) as the open action. This host can see the feed over HTTP but cannot run the macOS install/bind/business/upgrade/restart loop, so macOS FULL_CLOSED is unverified and is recorded as BLOCKED.",
-      "conclusion": "macOS side published product version 1.0.0.5 for the frozen SHA: the versioned release manifest https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/latest-mac.yml advertises productVersion 1.0.0.5 at buildSha 54325894cc6e3fc2becfcbc98697a099310d9420 and the arm64 dmg/zip next to it are downloadable. The Windows host can only observe this delivery surface over HTTP; it has no channel to run the macOS install/bind/business/upgrade/restart loop, so the macOS arm of this closed loop is recorded as BLOCKED here, not FULL_CLOSED."
+      "conclusion": "macOS side published product version 1.0.0.5 for the frozen SHA: the versioned release manifest https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/latest-mac.yml advertises productVersion 1.0.0.5 at buildSha 54325894cc6e3fc2becfcbc98697a099310d9420 and the arm64 dmg/zip next to it are downloadable. The Windows host can only observe this delivery surface over HTTP; it has no channel to run the macOS install/bind/business/upgrade/restart loop, so the macOS arm of this closed loop is recorded as BLOCKED here, not FULL_CLOSED.",
+      "superseded": true,
+      "superseded_by": "SUPERSEDED by PR #1975 real-machine macOS evidence on the same RELEASE_SHA (macOS = FULL_CLOSED, G9 GREEN); authoritative source: FHD/docs/evidence/e2e/macos-release-1.0.0.5/round-20260918-release-ssot.json"
     },
     "gates_at_freeze": {
       "g9_row_at_freeze": "| G9 | 更新安装 | RED | **1.0.0.3→1.0.0.4 真机安装链（[round-20260917-ota2-g9-install-chain.json](evidence/e2e/macos-release-1.0.0.4/round-20260917-ota2-g9-install-chain.json)）**：`download_start` 21:14:49.960Z → `update_downloaded` 21:14:50.273Z（命中缓存）→ `install_start` 21:15:28.089Z → ShipIt[4502]「Detected this as an install request」21:15:33.561Z → **181s 无日志（等应用退出）** → 外部 SIGKILL 后 `Installation completed successfully` 21:18:32.675Z → 装机 asar/主可执行 sha256 与官方产物逐字节一致（子项：入口 PASS / 自动退出 FAIL / 替换 PASS / 自动重启 FAIL）；**复现步骤**：1.0.0.3 应用内「下载更新 → 更新并重新加载」→ 应用不退出、181s 零日志 → 外部 SIGKILL 后替换完成但不自动重启。日志 [stuck-state.txt](evidence/e2e/macos-release-1.0.0.4/round-20260917-ota2-g9-stuck-state.txt)、[chain-timeline.jsonl](evidence/e2e/macos-release-1.0.0.4/round-20260917-ota2-g9-chain-timeline.jsonl)，截图 [g9-after-install-click.png](evidence/e2e/macos-release-1.0.0.4/g9-after-install-click.png) | **① 自动退出 FAIL**（1.0.0.3 缺 `app.isQuitting=true` 预置，已由 #1930 修复但未随 1.0.0.4 验证，§7-12）；**② 自动重启 FAIL**（`ShipItState.plist` `launchAfterInstallation=false`，写入时刻 21:15 早于任何外部干预，ShipIt 全程无 Launching 行；应用层可控点未定位，不臆测，§7-14）；③ 本轮夹具 app 属主 `a4243342:staff` → 未覆盖 SecurityAgent 管理员授权分支（§7-15） | 阻断「零干预 OTA」体验；不阻断安装本身、数据与业务 | #1930（自动退出）/ 待立（自动重启） | 1.0.0.4→1.0.0.5 OTA 复测两个子项（T9） |",
       "g9_status_at_freeze": "RED",
       "blocking_symptom": "in-app install does not auto-exit the app; ShipIt waits indefinitely; after external kill it replaces but the app does not auto-restart",
-      "g9_status_verified_20260918_2123": "Still RED, and its evidence still stops at the 1.0.0.3->1.0.0.4 chain; the frozen FHD/docs/MACOS_RELEASE_SSOT.md on the share lists T9 (1.0.0.4->1.0.0.5 OTA retest of the auto-exit and auto-restart sub-items) as the open action. No macOS work landed on the frozen SHA."
+      "g9_status_now": "GREEN",
+      "g9_status_note": "g9_status_at_freeze / g9_status_verified_20260918_2123 are the at-capture measurement from this Windows host (no Mac channel). PR #1975 real-machine G9 evidence on this same RELEASE_SHA shows download + in-app auto-exit + ShipIt replace + auto-restart all PASS (see FHD/docs/evidence/e2e/macos-release-1.0.0.5/round-20260918-g9-install-10005.json).",
+      "g9_status_verified_20260918_2123_at_capture": "AT CAPTURE (superseded): Still RED, and its evidence still stops at the 1.0.0.3->1.0.0.4 chain; the frozen FHD/docs/MACOS_RELEASE_SSOT.md on the share lists T9 (1.0.0.4->1.0.0.5 OTA retest of the auto-exit and auto-restart sub-items) as the open action. No macOS work landed on the frozen SHA."
     },
-    "required_next_actions": [
-      "T9: real-machine OTA 1.0.0.4 -> 1.0.0.5, verify in-app install auto-exits, ShipIt replaces, and the app auto-restarts (G9 RED -> GREEN path)",
-      "T10: SecurityAgent admin-authorization branch (app owned by root:wheel) at /Applications",
-      "FULL_CLOSED requires the macOS download/install/first-launch/binding/business/upgrade/restart-data-preserved loop on the same RELEASE_SHA"
-    ],
     "handoff_to_macos_side": {
       "owner": "macOS side (owner ruling; this Windows host does not execute the macOS arm)",
       "why_handed_over": "This Windows host has no execution channel to the macOS machine: the host is on the network (SMB 445 open) but a 32-port scan found no SSH on any port, no Screen Sharing (5900/5988), no Apple Remote Desktop (3283), no remote desktop (3389) and no debug port (9222), and the repository has 0 self-hosted runners. Every route was probed and refused.",
@@ -473,7 +476,7 @@
         "product_version": "1.0.0.5",
         "must_equal_windows_sha": true,
         "main_head_at_handoff": "54325894cc6e3fc2becfcbc98697a099310d9420",
-        "note": "Do NOT merge this PR before the macOS arm is appended: main must stay at the frozen SHA so both platforms release from the same commit."
+        "note": "RESOLVED: PR #1973 was merged into main (6e0d3a641) after the macOS arm was supplied by PR #1975. The release SHA is unchanged (54325894cc6e3fc2becfcbc98697a099310d9420)."
       },
       "artifacts_already_published_for_this_sha": {
         "source": "Release Desktop macOS OTA run #45 (run_id 35319932712) on this exact SHA; 'Build macOS enterprise installer' and 'Notarize and staple macOS enterprise DMG' both succeeded. The run was cancelled at 'Publish macOS OTA artifacts to CVM (official + stable)', so confirm the published artifacts match before accepting them.",
@@ -519,7 +522,7 @@
       "where_to_write_the_result": {
         "document": "FHD/docs/evidence/e2e/customer-loop-1.0.0.5/customer_loop_ssot.json",
         "branch": "evidence/customer-loop-1.0.0.5-ssot",
-        "action": "Append the macOS arm to the SAME document: replace macos.status with FULL_CLOSED, fill in the per-phase PASS/BLOCKED steps, point the evidence at the real-machine logs and screenshots, then open/merge the finished version in one go.",
+        "action": "DONE: the macOS arm was appended by PR #1975 as real-machine evidence in FHD/docs/evidence/e2e/macos-release-1.0.0.5/round-20260918-release-ssot.json and macos.status is now FULL_CLOSED.",
         "windows_section": "Do not change the windows section: it is already INTERIM_CLOSED with all three phases PASS at this SHA."
       },
       "main_head_drift_before_you_start": {
@@ -530,7 +533,23 @@
         "instruction": "Do not re-target the macOS release to the new head. Keep releasing from the frozen SHA so both platforms report the same SHA; record this drift in the macOS section rather than silently re-freezing."
       }
     },
-    "note": null
+    "note": null,
+    "status_resolution": {
+      "superseded_status": "BLOCKED",
+      "resolved_by": "PR #1975 (merged into main as 3c3d979c5)",
+      "authoritative_source": "FHD/docs/evidence/e2e/macos-release-1.0.0.5/round-20260918-release-ssot.json",
+      "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+      "reason": "The macOS arm recorded in this document was captured from a Windows host that had no execution channel to the Mac, so it could only be recorded as BLOCKED. Real-machine macOS evidence on the same RELEASE_SHA (public download -> install -> first launch -> login binding / entitlement / Mods -> real business -> in-app upgrade -> reboot data retention) is FULL_CLOSED. The fields below that still say BLOCKED/RED are the at-capture history of that Windows host and must not be read as the current macOS state.",
+      "g9_status_now": "GREEN",
+      "current_status_source": "FHD/docs/evidence/e2e/macos-release-1.0.0.5/round-20260918-release-ssot.json"
+    },
+    "required_next_actions_at_capture": [
+      "T9: real-machine OTA 1.0.0.4 -> 1.0.0.5, verify in-app install auto-exits, ShipIt replaces, and the app auto-restarts (G9 RED -> GREEN path)",
+      "T10: SecurityAgent admin-authorization branch (app owned by root:wheel) at /Applications",
+      "FULL_CLOSED requires the macOS download/install/first-launch/binding/business/upgrade/restart-data-preserved loop on the same RELEASE_SHA"
+    ],
+    "required_next_actions": [],
+    "required_next_actions_note": "Empty. Every macOS action in required_next_actions_at_capture was completed by the real-machine evidence in PR #1975 on this same RELEASE_SHA; the at-capture list is retained as history only."
   },
   "handoff": {
     "document": "xcagi.customer_loop_ssot/v1 - one machine-readable SSOT for both platforms at one release SHA",
@@ -560,9 +579,9 @@
       "base_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
       "why": "The workspace share and the macOS host are both unreachable, so the PR branch is the only channel through which the macOS side can obtain this exact document."
     },
-    "current_authoritative_copy": "https://github.com/42433422/XCMAX/blob/evidence/customer-loop-1.0.0.5-ssot/FHD/docs/evidence/e2e/customer-loop-1.0.0.5/customer_loop_ssot.json (PR #1973), staging copy C:\\Users\\97088\\AppData\\Local\\Temp\\wsa-verify\\ssot.json",
+    "current_authoritative_copy": "https://github.com/42433422/XCMAX/blob/main/FHD/docs/evidence/e2e/customer-loop-1.0.0.5/customer_loop_ssot.json (Windows-side capture, merged in main); unified two-platform SSOT = FHD/docs/evidence/e2e/macos-release-1.0.0.5/round-20260918-release-ssot.json",
     "share_root_copy_status": "CURRENT: v:\\customer_loop_ssot_1.0.0.5.json now holds the same 33792-byte revision delivered by PR #1973 (sha256 33a853e2a7b0ae17ff2b0eb361b4cda47cb1c706392003cdd6f36f1e571d73f3)",
-    "merge_policy": "DELIBERATELY LEFT OPEN, DO NOT MERGE AS-IS. main must stay at the frozen SHA 54325894cc6e3fc2becfcbc98697a099310d9420 so that both platforms release from the same commit; merging this evidence-only PR would advance main and invalidate frozen_main_head.release_sha_equals_main. The macOS side should append its arm (status BLOCKED -> FULL_CLOSED with real-machine evidence) to this same document on this same branch and merge the completed version once.",
+    "merge_policy": "RESOLVED: this evidence-only PR #1973 was merged into main (6e0d3a641) after the macOS arm was supplied by PR #1975. The active release SHA is unchanged (54325894cc6e3fc2becfcbc98697a099310d9420). The single authoritative machine-readable SSOT for both platforms is FHD/docs/evidence/e2e/macos-release-1.0.0.5/round-20260918-release-ssot.json; this document is retained as the Windows-side capture record.",
     "delivered_copy_verified": "The delivered blob was verified byte-identical to the staging copy at every push (sha256 of the fetched blob == sha256 of the local file, and the parsed JSON was equal). This document deliberately does NOT record its own hash: any value written into it is invalidated by the very commit that writes it. The hash of the delivered revision is recorded out of band, in a comment on the delivery PR.",
     "repo_tree_write_probe": {
       "v:\\": "writable",
@@ -671,5 +690,16 @@
       "macos_handoff (executable handoff block)"
     ],
     "fields_not_re_probed": "every probe captured while the share was up is left exactly as measured"
+  },
+  "authority": {
+    "unified_ssot": "FHD/docs/evidence/e2e/macos-release-1.0.0.5/round-20260918-release-ssot.json",
+    "this_document": "Windows-side capture record (PR #1973, merged into main as 6e0d3a641)",
+    "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+    "same_sha_both_platforms": true,
+    "final_status": {
+      "macos": "FULL_CLOSED",
+      "windows": "INTERIM_CLOSED"
+    },
+    "note": "One RELEASE_SHA, one authoritative machine-readable SSOT. Where this capture record and the unified SSOT could disagree, the unified SSOT wins; no active field here contradicts it."
   }
 }

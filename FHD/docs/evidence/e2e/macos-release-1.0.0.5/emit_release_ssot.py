@@ -49,6 +49,10 @@ def main():
         "product_version": VER,
         "sku": SKU,
         "generated_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "scope": "两平台同一 RELEASE_SHA 的 release + customer-loop 唯一机器可读 SSOT",
+        "absorbed_evidence": [
+            "PR #1973 evidence/customer-loop-1.0.0.5-ssot（Windows 真机三阶段事实已并入 windows.windows_real_machine_phases，该 PR 作为重复事实源关闭）",
+        ],
         "platforms": {},
     }
 
@@ -90,6 +94,7 @@ def main():
         "runner_install_smoke": win.get("runner_install_smoke"),
         "upgrade_path": win.get("upgrade_path"),
         "stranger_customer_loop": win.get("stranger_customer_loop"),
+        "windows_real_machine_phases": win.get("windows_real_machine_phases"),
         "evidence_file": "round-20260918-win-release-verify.json",
     }
 
