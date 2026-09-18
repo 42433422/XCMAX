@@ -695,6 +695,13 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
             '<div class="cap-evidence-media"><h3>实机截图 / 运行证据</h3>'
             f'<div class="cap-shots">{"".join(shot_tags)}</div></div>'
         )
+    elif not media_html:
+        shots_html = (
+            '<div class="cap-evidence-media"><h3>实机截图 / 运行证据</h3>'
+            '<p class="cap-evidence-note">本项没有独立的产品界面（后端服务、流水线门禁或管理端能力），'
+            '因此不提供实机截图。它的真伪请以上方「源码实现 / 自动化测试 / CI 记录」为准，'
+            '这些路径都可以在仓库中逐条打开核对。</p></div>'
+        )
 
     commits_html = evidence_list(
         [f"{c['sha']} {c['subject']} ({c['date']})" for c in ev["commits"]]
