@@ -53,11 +53,10 @@ jobs:
         working-directory: FHD
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          XCAGI_MARKET_BASE_URL: ${{ vars.XCAGI_MARKET_BASE_URL }}
           MARKET_ADMIN_TOKEN: ${{ secrets.MARKET_ADMIN_TOKEN }}
         run: |
           set -euo pipefail
-          args=(--channel "${{ inputs.channel || 'stable' }}")
+          args=(--repo "${{ github.repository }}" --market-base "${{ vars.XCAGI_MARKET_BASE_URL || 'https://xiu-ci.com' }}" --channel "${{ inputs.channel || 'stable' }}")
           if [ -n "${{ inputs.version }}" ]; then
             args+=(--version "${{ inputs.version }}")
           fi

@@ -293,8 +293,8 @@ def main() -> None:
     if not args.repo or not args.market_base:
         logger.error("--repo and --market-base are required")
         raise SystemExit(2)
-    if args.apply and (not args.token or not args.market_token):
-        logger.error("--apply requires --token and --market-token")
+    if args.apply and not args.token:
+        logger.error("--apply requires --token")
         raise SystemExit(2)
     raise SystemExit(run(args))
 
