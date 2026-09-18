@@ -1,0 +1,163 @@
+{
+  "schema": "xcagi.release_round.v1",
+  "platform": "windows",
+  "round": "2026-09-18",
+  "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "product_version": "1.0.0.5",
+  "sku": "enterprise",
+  "verdict": "INTERIM_CLOSED",
+  "verdict_reason": "未签名导致 Windows stable OTA 明确关闭（windows_signing_acceptance.json WSA-2026-09-17-01: windows_stable_feed=closed），且本机无 Windows 主机可执行陌生客户实机环。按口径只能写 INTERIM_CLOSED，不得写 FULL_CLOSED。",
+  "release_pipeline": {
+    "workflow": "fhd-release-desktop.yml",
+    "run_id": 35315576570,
+    "run_url": "https://github.com/42433422/XCMAX/actions/runs/35315576570",
+    "head_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+    "head_branch": "main",
+    "run_conclusion": "cancelled",
+    "jobs": {
+      "windows-installer-delivery": {
+        "job_id": 105506384809,
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-09-18T06:36:03Z",
+        "completed_at": "2026-09-18T06:49:23Z"
+      },
+      "publish-unsigned-windows-pointer": {
+        "job_id": 105509385567,
+        "status": "completed",
+        "conclusion": "failure",
+        "started_at": "2026-09-18T06:49:26Z",
+        "completed_at": "2026-09-18T09:09:47Z",
+        "failure_step": "Publish installer and pointer to the public download page",
+        "failure_reason": "scp: Connection closed (exit 255)",
+        "root_cause": "GitHub runner -> CVM 上行链路间歇性中断/极慢（该步骤此前观测 9-15 KB/s，本步骤耗时 2h20m 后连接关闭）"
+      }
+    },
+    "other_jobs": "macos / release-preflight / windows / generate-manifest / verify-download / cross-platform-parity / verify-public-windows-signature / verify-download-center / publish-website-pointer / github-release / rollback-stable-pointers 全部 skipped（windows_installer_only=true 模式有意设计）"
+  },
+  "installer": {
+    "filename": "XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe",
+    "size": 248514275,
+    "sha256": "45f761cf1ad968c5abeae466e8b0749364e1d1edfabf0821ef28db52f5cb572e",
+    "build_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+    "version": "1.0.0.5",
+    "signature_status": "unsigned",
+    "authenticode_status": "NotSigned"
+  },
+  "runner_install_smoke": {
+    "verdict": "PASS",
+    "script": "FHD/scripts/package/verify-windows-installed-runtime.ps1",
+    "smoke_pass": 21,
+    "smoke_fail": 0,
+    "installed_identity": "buildSha=54325894cc6e3fc2becfcbc98697a099310d9420 version=1.0.0.5 sku=enterprise",
+    "uninstall_retention_marker": "passed",
+    "log": "round-20260918-win-runner-smoke.log"
+  },
+  "effective_delivery_receipt": {
+    "source": "run 35315576570 windows-installer-delivery artifact (xcagi-windows-installer-54325894cc6e3fc2becfcbc98697a099310d9420)",
+    "version": "1.0.0.5",
+    "git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+    "signature_status": "unsigned",
+    "authenticode_status": "NotSigned",
+    "delivery_mode": "manual_installer",
+    "stable_auto_update": false,
+    "runner_install_smoke": "passed",
+    "customer_machine_acceptance": "not_verified",
+    "sha256": "45f761cf1ad968c5abeae466e8b0749364e1d1edfabf0821ef28db52f5cb572e",
+    "size": 248514275
+  },
+  "public_download_verification": {
+    "url": "https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe",
+    "http_head": 200,
+    "content_length": 248514275,
+    "downloaded_bytes": 248514275,
+    "downloaded_sha256": "45f761cf1ad968c5abeae466e8b0749364e1d1edfabf0821ef28db52f5cb572e",
+    "sha256_matches_receipt": true,
+    "server_side_sha256": "45f761cf1ad968c5abeae466e8b0749364e1d1edfabf0821ef28db52f5cb572e",
+    "verdict": "PASS"
+  },
+  "pointer": {
+    "url": "https://xiu-ci.com/download-windows-hotfix.json",
+    "http": 200,
+    "schema": "xcagi.windows_interim_release/v1",
+    "version": "1.0.0.5",
+    "channel": "enterprise-interim",
+    "git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+    "download_allowed": true,
+    "signature_status": "unsigned",
+    "artifact_sha256": "45f761cf1ad968c5abeae466e8b0749364e1d1edfabf0821ef28db52f5cb572e",
+    "artifact_url": "https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe",
+    "risk_acceptance_id": "WSA-2026-09-17-01",
+    "risk_acceptance_expires_at": "2029-09-17T00:00:00+08:00",
+    "verdict": "PASS"
+  },
+  "stable_feed_untouched": {
+    "latest_yml": "https://xiu-ci.com/update/releases/stable/enterprise/latest.yml -> HTTP 404",
+    "latest_linux_yml": "https://xiu-ci.com/update/releases/stable/enterprise/latest-linux.yml -> HTTP 404",
+    "server_side_latest_yml_present": false,
+    "verdict": "PASS（Windows 稳定自动更新通道保持关闭，未被误推）"
+  },
+  "operational_deviation": {
+    "what": "Webflow 的 publish 步骤失败后，installer 与指针改由本机 SSH 手工落地。",
+    "why": "runner->CVM 上行链路中断（scp: Connection closed），并非产物或内容问题。",
+    "identity_guarantee": "CVM 上落盘的 exe sha256 与 run 的 delivery-receipt sha256 完全一致（45f761cf...），且公网回下载 248514275B 复算 sha256 一致 → 落地内容与 runner 产物逐字节相同。",
+    "prior_art": "macOS OTA workflow 已内建同源恢复路径（artifact 上传 + 注释「operators can download and deploy them manually via local SSH」）。"
+  },
+  "stranger_customer_loop": {
+    "download": {
+      "verdict": "PASS",
+      "evidence": "public_download_verification"
+    },
+    "install": {
+      "verdict": "PASS",
+      "evidence": "runner_install_smoke（runner 上静默安装 + 启动 + 21 项运行时冒烟 + 卸载保留标记）"
+    },
+    "first_launch": {
+      "verdict": "PASS",
+      "evidence": "runner_install_smoke（installed buildSha=54325894c version=1.0.0.5 sku=enterprise）"
+    },
+    "backend_health": {
+      "verdict": "PASS",
+      "evidence": "runner_install_smoke（health/runtime smoke 21 项）"
+    },
+    "login_binding": {
+      "verdict": "BLOCKED",
+      "reason": "runner 冒烟不覆盖交互式登录绑定；本机无 Windows 主机（无 UTM/Parallels/VMware）可执行 GUI 登录"
+    },
+    "entitlements": {
+      "verdict": "BLOCKED",
+      "reason": "同上：无 Windows 实机可验证权益下发 UI"
+    },
+    "mod_loading": {
+      "verdict": "PASS",
+      "evidence": "runner_install_smoke（mods-list / mods-loading-status / mod-detail:* 通过）"
+    },
+    "real_business_task": {
+      "verdict": "BLOCKED",
+      "reason": "runner 冒烟未覆盖出单等真实业务；无 Windows 实机"
+    },
+    "restart_data_retention": {
+      "verdict": "BLOCKED",
+      "reason": "无 Windows 实机可执行重启后数据保留验证；卸载保留标记已过但不等价于重启数据保留"
+    }
+  },
+  "first_real_unblocked_items": [
+    "login_binding / entitlements / real_business_task / restart_data_retention 需一台真实 Windows 主机（admin 账户）才能从 BLOCKED 转 PASS"
+  ],
+  "evidence_files": [
+    "round-20260918-win-release-verify.json",
+    "round-20260918-win-runner-smoke.log"
+  ],
+  "upgrade_path": {
+    "promised_by_repo": "manual_installer —— 未签名导致 Windows stable OTA 明确关闭（windows_signing_acceptance.json / WSA-2026-09-17-01，windows_stable_feed=closed，2029-09-17 到期）",
+    "verified": "BLOCKED",
+    "reason": "runner 冒烟（verify-windows-installed-runtime.ps1）是干净安装 + 卸载保留标记，非从旧版本升级；本机无 Windows 实机，未执行 1.0.0.x → 1.0.0.5 升级",
+    "what_would_prove_it": "一台真实 Windows 主机（admin）：装 1.0.0.x → 运行 XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe → 校验 installed buildSha=54325894cc6e3fc2becfcbc98697a099310d9420 且业务数据保留",
+    "runner_partial_evidence": "uninstall_retention_marker=passed（卸载不删数据），可支撑“升级不丢数据”的方向性证据，但不等价于真实升级"
+  },
+  "sha_binding": {
+    "installer_build_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+    "pointer_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+    "same_as_macos_release_sha": true
+  }
+}

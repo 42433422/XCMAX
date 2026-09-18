@@ -1,0 +1,68 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "gate": "G9",
+  "platform": "macos",
+  "round": "2026-09-18",
+  "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "product_version": "1.0.0.5",
+  "sku": "enterprise",
+  "trigger": {
+    "at_local": "2026-09-18 19:09:16",
+    "at_utc": "2026-09-18T11:09:16Z",
+    "how": "CDP 真实点击 UI 按钮「更新并重新加载」",
+    "chip_before": "重启以更新 1.0.0.5"
+  },
+  "subgate_auto_exit": {
+    "verdict": "PASS",
+    "old_main_pid": 71300,
+    "exited_without_external_action": true,
+    "security_agent_prompt": false,
+    "previous_round_comparison": "1.0.0.4 轮需等待 181s 且需人工 kill；本轮由应用自身完成退出"
+  },
+  "subgate_shipit_install": {
+    "verdict": "PASS",
+    "log": "~/Library/Caches/com.xcagi.desktop.enterprise.ShipIt/ShipIt_stderr.log",
+    "lines": [
+      "2026-09-18 19:09:30.314 ShipIt[90842:4163737] Detected this as an install request",
+      "2026-09-18 19:09:30.327 ShipIt[90842:4163737] Beginning installation",
+      "2026-09-18 19:09:32.176 ShipIt[90842:4163891] Installation completed successfully"
+    ]
+  },
+  "subgate_auto_restart": {
+    "verdict": "PASS",
+    "lines": [
+      "2026-09-18 19:09:32.175 ShipIt[90842:4163890] Launching new ShipIt at /Applications/XCAGI.app/Contents/Frameworks/Squirrel.framework/Resources/ShipIt with instructions to launch file:///Applications/XCAGI.app/",
+      "2026-09-18 19:09:33.861 ShipIt[90873:4164031] Successfully launched application at file:///Applications/XCAGI.app/"
+    ],
+    "new_main_pid": 90904,
+    "new_backend_pid": 90976,
+    "new_main_has_cdp": false
+  },
+  "shipit_state_launch_after_installation": {
+    "before": false,
+    "after": true,
+    "note": "修复 §7-14 自动重启缺陷的直接证据（1.0.0.4 时为 false，需人工拉起）"
+  },
+  "updater_events": [
+    {
+      "ts": "2026-09-18T11:09:26.125Z",
+      "type": "install_start"
+    },
+    {
+      "ts": "2026-09-18T11:08:33.688Z",
+      "type": "update_downloaded"
+    }
+  ],
+  "end_to_end_seconds": 21,
+  "manual_intervention": "none",
+  "post_install_identity": {
+    "version": "1.0.0.5",
+    "gitSha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+    "build_info": {
+      "builtAt": "2026-09-18T07:39:47.185Z"
+    },
+    "health": "healthy 1.0.0.5 54325894cc6e3fc2becfcbc98697a099310d9420"
+  },
+  "timeline_log": "round-20260918-g9-install-timeline.log",
+  "verdict": "PASS"
+}

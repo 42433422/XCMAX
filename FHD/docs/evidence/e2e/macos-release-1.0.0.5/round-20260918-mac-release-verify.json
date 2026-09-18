@@ -1,0 +1,141 @@
+{
+  "schema": "xcagi.release_round.v1",
+  "platform": "macos",
+  "round": "2026-09-18",
+  "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "product_version": "1.0.0.5",
+  "sku": "enterprise",
+  "release_face_verdict": "PASS",
+  "release_pipeline": {
+    "workflow": "fhd-release-desktop-mac-ota.yml",
+    "run_id": 35319932712,
+    "run_url": "https://github.com/42433422/XCMAX/actions/runs/35319932712",
+    "head_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+    "job_id": 105519957682,
+    "job_status": "completed",
+    "job_conclusion": "cancelled",
+    "job_started_at": "2026-09-18T07:32:53Z",
+    "job_completed_at": "2026-09-18T08:58:23Z",
+    "steps_passed_before_cancel": [
+      "Enforce exact-SHA two-day security clearance（run 内真实执行 verify_security_scan_pair.py）",
+      "Preflight macOS OTA secrets",
+      "Import Developer ID certificate (CSC_LINK p12)",
+      "Build macOS enterprise installer",
+      "Notarize and staple macOS enterprise DMG",
+      "Verify packaged identity and ZIP feed（buildSha + ed25519 断言）",
+      "Upload macOS OTA artifacts for recovery"
+    ],
+    "cancel_point": "Publish macOS OTA artifacts to CVM (official + stable)",
+    "cancel_root_cause": "GitHub runner -> CVM 上行链路极慢（观测 ~9-15 KB/s），该步骤需传约 1.15GB（DMG 298MB + ZIP 265MB，两个目的地），远超 timeout-minutes: 180",
+    "secrets_available": "全部就绪（Apple Developer ID / ASC API key / XCAGI_UPDATE_ED25519_PRIVATE_KEY / SERVER_SSH_KEY）"
+  },
+  "security_scan_pair": {
+    "previous_run_id": 35316330641,
+    "previous_window_utc": "2026-09-18T06:46:10Z - 2026-09-18T06:54:07Z",
+    "previous_conclusion": "success",
+    "current_run_id": 35319093843,
+    "current_window_utc": "2026-09-18T07:22:18Z - 2026-09-18T07:29:23Z",
+    "current_conclusion": "success",
+    "release_sha_binding": "两次 run 的全部 scanner release_sha/source_sha 均等于 54325894cc6e3fc2becfcbc98697a099310d9420",
+    "gap_minutes": 35.2,
+    "local_reverify": {
+      "runner": "verify_security_scan_pair.py --previous-dir /tmp/secA --current-dir /tmp/secB --release-sha 54325894cc6e3fc2becfcbc98697a099310d9420",
+      "result": "passed=true, blockers=[]",
+      "evidence": "scan-pair-verify.json"
+    },
+    "zero_findings": "无 open critical/high；CodeQL 告警 3740 状态 open -> fixed；57 个 open 告警全为低级别",
+    "codeql_provenance": "run 35315724549 (--ref main, headSha=54325894c)；analysis /language:python 06:43:43Z results_count=170、/language:javascript-typescript 06:41:43Z results_count=14 均落库于 54325894c"
+  },
+  "artifacts": {
+    "dmg": {
+      "filename": "XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg",
+      "size": 298366428,
+      "sha256": "6d127de45f58d86ebfb015b4216be8064bf70321e112bde6da35a2cf92ea0464",
+      "signed": "Developer ID Application (jialong Li / G26WSH472M)",
+      "notarized_stapled": true
+    },
+    "zip": {
+      "filename": "XCAGI-Enterprise-1.0.0.5-mac-arm64.zip",
+      "size": 264715517,
+      "sha256": "5d51fbcbe27b8abe211ca51f8cb80c979d13d4c50c7fdb2901d485fe6f32786d",
+      "sha512": "5yCehH+8DS1kyUmX4yG7uTgbqSuHoSdcZHvs2IFE6Vy6qGOQdZSYJYwuGMMHXh6/kfvvB4+JMn5cyz1+KaXENQ=="
+    },
+    "blockmaps": {
+      "dmg_blockmap_size": 308305,
+      "zip_blockmap_size": 273335
+    },
+    "latest_mac_yml": {
+      "version": "1.0.0",
+      "productVersion": "1.0.0.5",
+      "buildSha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+      "releaseId": "xcagi-1.0.0.5-54325894cc6e3fc2becfcbc98697a099310d9420",
+      "signature": "ed25519:x3rUKDehqd6hMqyOTRt4WWo0pzqkEmJRrbrn8P/oj2YSILekcDiKsXHMx4W7bAmzRBzenXq6lpGao+MdG6jFAw==",
+      "stagingPercentage": 100,
+      "minVersion": "1.0.0"
+    }
+  },
+  "publish_landing": {
+    "mode": "本机 SSH 手工落地（workflow artifact -> local rsync -> CVM），与 Windows 同因（runner->CVM 上行链路）",
+    "destinations": [
+      "/var/www/xcagi-v1.0.0.5/enterprise",
+      "/var/www/update/releases/stable/enterprise"
+    ],
+    "remote_sha256_verified": {
+      "/var/www/xcagi-v1.0.0.5/enterprise/XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg": "6d127de45f58d86ebfb015b4216be8064bf70321e112bde6da35a2cf92ea0464",
+      "/var/www/xcagi-v1.0.0.5/enterprise/XCAGI-Enterprise-1.0.0.5-mac-arm64.zip": "5d51fbcbe27b8abe211ca51f8cb80c979d13d4c50c7fdb2901d485fe6f32786d",
+      "/var/www/update/releases/stable/enterprise/XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg": "6d127de45f58d86ebfb015b4216be8064bf70321e112bde6da35a2cf92ea0464",
+      "/var/www/update/releases/stable/enterprise/XCAGI-Enterprise-1.0.0.5-mac-arm64.zip": "5d51fbcbe27b8abe211ca51f8cb80c979d13d4c50c7fdb2901d485fe6f32786d"
+    },
+    "stable_feed_identical_to_local": true,
+    "publish_macos_download_center_script": {
+      "command": "bash scripts/package/publish-macos-download-center.sh 1.0.0.5 54325894cc6e3fc2becfcbc98697a099310d9420 /tmp/macrel",
+      "result": "Download center metadata and changelog verified for 1.0.0.5 @ 54325894cc6e3fc2becfcbc98697a099310d9420.",
+      "note": "需 python>=3.11（generate-download-manifest.py 使用 datetime.UTC）"
+    }
+  },
+  "public_verification": {
+    "stable_latest_mac_yml": {
+      "url": "https://xiu-ci.com/releases/stable/enterprise/latest-mac.yml",
+      "http": 200,
+      "productVersion": "1.0.0.5",
+      "buildSha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+      "byte_identical_to_local": true
+    },
+    "official_latest_mac_yml": {
+      "url": "https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/latest-mac.yml",
+      "http": 200,
+      "productVersion": "1.0.0.5",
+      "buildSha": "54325894cc6e3fc2becfcbc98697a099310d9420"
+    },
+    "dmg_public": {
+      "url": "https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg",
+      "http": 200,
+      "content_length": 298366428
+    },
+    "manifest_json": {
+      "url": "https://xiu-ci.com/xcagi-v1.0.0.5/manifest.json",
+      "http": 200,
+      "version": "1.0.0.5",
+      "git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+      "release_ready": false,
+      "mac_entry": {"filename": "XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg", "size": 298366428, "sha256": "6d127de45f58d86ebfb015b4216be8064bf70321e112bde6da35a2cf92ea0464"},
+      "win_entry": null,
+      "note": "release_ready=false 是本仓 publish-macos-download-center.sh 的显式契约（脚本断言 .release_ready == false），非缺陷"
+    },
+    "download_release_json": {
+      "url": "https://xiu-ci.com/download-release.json",
+      "http": 200,
+      "schema": "xcagi.download_release.public/v1",
+      "version_lock": "1.0.0.5",
+      "download_version": "1.0.0.5",
+      "git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+      "release_ready": false,
+      "release_history_0": "1.0.0.5（notes 含「太阳鸟」）"
+    }
+  },
+  "first_real_unblocked_items": [],
+  "evidence_files": [
+    "round-20260918-mac-release-verify.json",
+    "scan-pair-verify.json"
+  ]
+}

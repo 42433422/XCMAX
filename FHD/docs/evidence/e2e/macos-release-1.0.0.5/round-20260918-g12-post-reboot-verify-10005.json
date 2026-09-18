@@ -1,0 +1,124 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "gate": "G12",
+  "platform": "macos",
+  "round": "2026-09-18",
+  "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "product_version": "1.0.0.5",
+  "sku": "enterprise",
+  "captured_at_utc": "2026-09-18T13:22:21Z",
+  "steps": {
+    "kernel_boottime": {
+      "before": "{ sec = 1789626349, usec = 217651 } Thu Sep 17 14:25:49 2026",
+      "after": "{ sec = 1789731306, usec = 54044 } Fri Sep 18 19:35:06 2026",
+      "changed": true
+    },
+    "installed_identity": {
+      "schema_version": 1,
+      "gitSha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+      "version": "1.0.0.5",
+      "releaseId": "xcagi-1.0.0.5-54325894cc6e3fc2becfcbc98697a099310d9420",
+      "builtAt": "2026-09-18T07:39:47.185Z"
+    },
+    "app_owner": "drwxr-xr-x@ 3 a4243342  staff  96 Sep 18 15:40 /Applications/XCAGI.app",
+    "app_pid": "1256",
+    "backend_pid": "1679",
+    "health": {
+      "status": 200,
+      "state": "healthy",
+      "version": "1.0.0.5",
+      "git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+      "runtime": "healthy",
+      "blockers": []
+    },
+    "db_quick_check": "ok",
+    "data_digest": {
+      "before_reboot": {
+        "xcagi.db.bytes": 987504640,
+        "excel_vectors.db.bytes": -1,
+        "mod_dbs.files": 1,
+        "uploads.files": 174,
+        "mods.files": 875,
+        "models.files": 0,
+        "backups.files": 4,
+        "backups.latest": "xcagi-unknown-20260918110919.db"
+      },
+      "after_reboot": {
+        "xcagi.db.bytes": 987750400,
+        "excel_vectors.db.bytes": -1,
+        "mod_dbs.files": 1,
+        "uploads.files": 174,
+        "mods.files": 875,
+        "models.files": 0,
+        "backups.files": 4,
+        "backups.latest": "xcagi-unknown-20260918110919.db"
+      },
+      "lost": [],
+      "gained": [
+        "xcagi.db.bytes: 987504640 -> 987750400"
+      ]
+    },
+    "mods_loading": {
+      "status": 200,
+      "mods_loaded": 15,
+      "installed": 15,
+      "load_mismatch": false,
+      "load_errors": []
+    },
+    "session_after_reboot": {
+      "status": 200,
+      "username": "SUNBIRD",
+      "valid": true
+    },
+    "business_retest_exit": 0,
+    "business_retest": {
+      "phase": "G11-business-10005",
+      "session_tag": "G11重测提交 cce776c7",
+      "steps": {
+        "health": {
+          "status": 200,
+          "version": "1.0.0.5",
+          "git_sha": "54325894cc6e",
+          "runtime": "healthy"
+        },
+        "session_reuse": {
+          "status": 200,
+          "success": true,
+          "username": "SUNBIRD",
+          "user_id": 5,
+          "permission_count": 15,
+          "has_shipment_edit": true
+        },
+        "templates_upload": {
+          "status": 200,
+          "template_id": "db:33",
+          "file_sha256": "3e910f7cfc2ce9b0b50d50226cfaaa0a066a44757e394dbeb930657723bae7ac"
+        },
+        "templates_list_probe_present": {
+          "status": 200,
+          "probe_present": true
+        },
+        "customer_retained": {
+          "status": 400,
+          "already_exists": true,
+          "message": "客户名称已存在"
+        },
+        "shipment_generate": {
+          "status": 200,
+          "success": true,
+          "message": "发货单生成成功",
+          "doc_name": "发货单_26-0900001A_20260918_212223.xlsx"
+        },
+        "file_download": {
+          "status": 200,
+          "bytes": 5199,
+          "xlsx_magic": true,
+          "sha256": "add8953865c328ff29930f3d78e59932e9df2accd6886da0533f4d691e7e7d1e",
+          "filename": "发货单_26-0900001A_20260918_212223.xlsx"
+        }
+      },
+      "verdict": "PASS"
+    }
+  },
+  "verdict": "PASS"
+}
