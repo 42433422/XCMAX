@@ -1,6 +1,6 @@
 {
   "schema": "xcagi.customer_loop_ssot/v1",
-  "generated_at": "2026-09-18T12:19:57.353693+00:00",
+  "generated_at": "2026-09-18T12:33:45.573557+00:00",
   "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
   "product_version": "1.0.0.5",
   "same_sha_both_platforms": true,
@@ -423,7 +423,18 @@
     "macos_arm_complete": false,
     "macos_arm_owner": "macOS side",
     "copy_at_share_root_verified": "yes at capture time: written 2026-09-18 19:24:43 +0800, 22725 bytes, re-read and parsed (schema=xcagi.customer_loop_ssot/v1, sha=54325894cc6e3fc2becfcbc98697a099310d9420, same_sha_both_platforms=true, windows=INTERIM_CLOSED, macos=BLOCKED)",
-    "share_state_after_copy": "OFFLINE since ~19:26 +0800: the SMB share \\\\4243342deMac-mini.local\\XCMAX dropped and 192.168.10.8 stopped answering (ICMP 'General failure'; TCP 22/445/548/3283/5000/5900/7000 all refused; the mapped drive V: had to be deleted as disconnected and could not be re-created, System error 67). The share-root copy therefore cannot be re-verified from this host at this moment."
+    "share_state_after_copy": "OFFLINE since ~19:26 +0800: the SMB share \\\\4243342deMac-mini.local\\XCMAX dropped and 192.168.10.8 stopped answering (ICMP 'General failure'; TCP 22/445/548/3283/5000/5900/7000 all refused; the mapped drive V: had to be deleted as disconnected and could not be re-created, System error 67). The share-root copy therefore cannot be re-verified from this host at this moment.",
+    "delivered_via_github_pr": {
+      "pr_number": 1973,
+      "pr_url": "https://github.com/42433422/XCMAX/pull/1973",
+      "branch": "evidence/customer-loop-1.0.0.5-ssot",
+      "commit": "5636b6863a2d50279f2f77c8a32b0ca3d9915c61",
+      "path_in_repo": "FHD/docs/evidence/e2e/customer-loop-1.0.0.5/customer_loop_ssot.json",
+      "base_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+      "why": "The workspace share and the macOS host are both unreachable, so the PR branch is the only channel through which the macOS side can obtain this exact document."
+    },
+    "current_authoritative_copy": "https://github.com/42433422/XCMAX/blob/evidence/customer-loop-1.0.0.5-ssot/FHD/docs/evidence/e2e/customer-loop-1.0.0.5/customer_loop_ssot.json (PR #1973), staging copy C:\\Users\\97088\\AppData\\Local\\Temp\\wsa-verify\\ssot.json",
+    "share_root_copy_status": "STALE AND UNREACHABLE: v:\\customer_loop_ssot_1.0.0.5.json holds the pre-patch 22725-byte version and cannot be refreshed while the macOS host is off the network"
   },
   "cleanup": {
     "driver": "C:\\Users\\97088\\AppData\\Local\\Temp\\wsa-verify\\run_clean_tolerant.py",
@@ -472,7 +483,10 @@
       "macos_blocking_condition.host_state_at_2013",
       "frozen_main_head (re-verified via GitHub API)",
       "macos_frozen_sha_evidence",
-      "macos_verified_blockers[no-macos-runner-and-no-reachable-host]"
+      "macos_verified_blockers[no-macos-runner-and-no-reachable-host]",
+      "handoff.delivered_via_github_pr",
+      "handoff.current_authoritative_copy",
+      "handoff.share_root_copy_status"
     ],
     "fields_not_re_probed": "every probe captured while the share was up is left exactly as measured"
   }
