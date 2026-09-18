@@ -1,0 +1,6 @@
+{
+  "schema": "security-release-scan-pair/v1",
+  "passed": true,
+  "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "blockers": []
+}
