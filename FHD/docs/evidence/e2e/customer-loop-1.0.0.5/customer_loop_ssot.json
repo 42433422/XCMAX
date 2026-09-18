@@ -1,6 +1,6 @@
 {
   "schema": "xcagi.customer_loop_ssot/v1",
-  "generated_at": "2026-09-18T12:35:00.160706+00:00",
+  "generated_at": "2026-09-18T12:38:36.369775+00:00",
   "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
   "product_version": "1.0.0.5",
   "same_sha_both_platforms": true,
@@ -436,9 +436,7 @@
     "current_authoritative_copy": "https://github.com/42433422/XCMAX/blob/evidence/customer-loop-1.0.0.5-ssot/FHD/docs/evidence/e2e/customer-loop-1.0.0.5/customer_loop_ssot.json (PR #1973), staging copy C:\\Users\\97088\\AppData\\Local\\Temp\\wsa-verify\\ssot.json",
     "share_root_copy_status": "STALE AND UNREACHABLE: v:\\customer_loop_ssot_1.0.0.5.json holds the pre-patch 22725-byte version and cannot be refreshed while the macOS host is off the network",
     "merge_policy": "DELIBERATELY LEFT OPEN, DO NOT MERGE AS-IS. main must stay at the frozen SHA 54325894cc6e3fc2becfcbc98697a099310d9420 so that both platforms release from the same commit; merging this evidence-only PR would advance main and invalidate frozen_main_head.release_sha_equals_main. The macOS side should append its arm (status BLOCKED -> FULL_CLOSED with real-machine evidence) to this same document on this same branch and merge the completed version once.",
-    "delivered_copy_sha256": "ffc2b0c4688b8d29cd31c146bf992123653f56d5161192a379ede8300787f128",
-    "delivered_copy_bytes": 32554,
-    "delivered_copy_verified": "byte-identical with the staging copy: sha256 ffc2b0c4688b8d29cd31c146bf992123653f56d5161192a379ede8300787f128 == ffc2b0c4688b8d29cd31c146bf992123653f56d5161192a379ede8300787f128, 32554 bytes, parsed JSON equal"
+    "delivered_copy_verified": "The delivered blob was verified byte-identical to the staging copy at every push (sha256 of the fetched blob == sha256 of the local file, and the parsed JSON was equal). This document deliberately does NOT record its own hash: any value written into it is invalidated by the very commit that writes it. The hash of the delivered revision is recorded out of band, in a comment on the delivery PR."
   },
   "cleanup": {
     "driver": "C:\\Users\\97088\\AppData\\Local\\Temp\\wsa-verify\\run_clean_tolerant.py",
@@ -494,7 +492,9 @@
       "handoff.merge_policy",
       "handoff.delivered_copy_sha256",
       "handoff.delivered_copy_bytes",
-      "handoff.delivered_copy_verified"
+      "handoff.delivered_copy_verified",
+      "handoff.delivered_copy_verified (rewritten to avoid a self-referential hash)",
+      "handoff.delivered_copy_sha256 / delivered_copy_bytes removed as self-referential"
     ],
     "fields_not_re_probed": "every probe captured while the share was up is left exactly as measured"
   }
