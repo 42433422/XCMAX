@@ -1,6 +1,6 @@
 /* 能力目录交互：读取内嵌目录数据，渲染 域→模块→功能 三级结构，支持搜索与筛选。
  * 所有计数均来自目录数据自动统计，页面不手写数字。
- * 渲染使用 DOM API（createElement/textContent），不使用 innerHTML。 */
+ * 渲染使用 DOM API（createElement/textContent），不使用 innerHTML；URL 里拼接的 id 一律 encodeURIComponent。 */
 ;(function () {
   'use strict'
 
@@ -73,7 +73,7 @@
 
   function featureRow(f) {
     var a = el('a', 'cap-feature-row')
-    a.href = '/capabilities/feature/' + f.id + '.html'
+    a.href = '/capabilities/feature/' + encodeURIComponent(f.id) + '.html'
     var left = el('div')
     left.appendChild(el('div', 'cap-feature-name', f.name))
     if (f.summary) left.appendChild(el('p', 'cap-feature-summary', f.summary))
