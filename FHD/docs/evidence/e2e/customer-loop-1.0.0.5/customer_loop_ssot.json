@@ -1,6 +1,6 @@
 {
   "schema": "xcagi.customer_loop_ssot/v1",
-  "generated_at": "2026-09-18T12:38:36.369775+00:00",
+  "generated_at": "2026-09-18T13:57:19.371605+00:00",
   "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
   "product_version": "1.0.0.5",
   "same_sha_both_platforms": true,
@@ -268,21 +268,36 @@
     "blocking_condition": {
       "required_capability": "interactive or scripted access to the macOS machine to run install/bind/business/upgrade/restart evidence",
       "available_channels": {
-        "22": false,
-        "445": true,
-        "548": false,
-        "3283": false,
-        "5900": false,
-        "5000": true,
-        "7000": true
+        "22": "refused",
+        "445": "open",
+        "548": "refused",
+        "3283": "refused",
+        "5900": "refused",
+        "5988": "refused",
+        "7000": "open",
+        "5000": "open",
+        "8443": "refused"
       },
       "ssh_open": false,
       "screen_sharing_or_vnc_open": false,
       "apple_remote_desktop_open": false,
       "self_hosted_runners_total": 0,
       "self_hosted_runner_names": [],
-      "statement": "This Windows host can reach the macOS machine only over SMB (445) and AirPlay (5000/7000); there is no SSH (22), no Screen Sharing/VNC (5900) and no Apple Remote Desktop (3283), and the repository has 0 self-hosted runners, so the macOS loop cannot be executed or driven from here. Per owner ruling the macOS loop is executed by the macOS side and its final state is recorded here as BLOCKED, not FULL_CLOSED.",
-      "host_state_at_2013": "the macOS machine is off the network: no ICMP/TCP response from 192.168.10.8, no ARP entry, share unmappable by name or by IP. Both the macOS closed loop and the delivery of this SSOT to the shared workspace are therefore blocked on the macOS host coming back, which this Windows host cannot cause."
+      "statement": "This Windows host can reach the macOS machine only over SMB (445) and AirPlay (5000/7000); SSH (22), Screen Sharing/VNC (5900) and Apple Remote Desktop (3283) are refused, and the repository has 0 self-hosted runners, so the macOS loop cannot be executed or driven from here. Per owner ruling the macOS loop is executed by the macOS side and its final state is recorded here as BLOCKED, not FULL_CLOSED.",
+      "host_state_at_2013": "SUPERSEDED: the macOS host was off the network at 20:13 but returned by 21:22 +0800.",
+      "host_state_at_2123": "ONLINE: DNS 192.168.10.8,fe80::14ef:e98a:d7:ec00,192.168.10.8; ARP 192.168.10.8 86-6E-F1-2D-6B-0F Reachable; SMB 445 open. SSH 22, Screen Sharing 5900 and Apple Remote Desktop 3283 are all still refused, so the absence of an execution channel is unchanged even though the host is reachable.",
+      "port_scan_20260918_2152": {
+        "probed": 32,
+        "open": [
+          445,
+          631,
+          5000,
+          7000
+        ],
+        "meaning": "Only file sharing (445), CUPS printing (631) and AirPlay (5000/7000) are open. No SSH on any port (22/2222/8022/22222), no Screen Sharing (5900/5988), no Apple Remote Desktop (3283), no remote desktop (3389), no debug port (9222). There is no channel of any kind through which this host could execute or observe the macOS loop.",
+        "source": "C:\\Users\\97088\\AppData\\Local\\Temp\\wsa-verify\\mac-port-scan.json"
+      },
+      "how_to_unblock": "On the Mac: System Settings > General > Sharing > enable 'Remote Login' (ssh, port 22) or 'Screen Sharing' (port 5900). Either one gives this host a real execution channel; alternatively the macOS side can run the loop itself. Until then the macOS arm stays BLOCKED, because every other route was probed and refused."
     },
     "verified_blockers": [
       {
@@ -333,6 +348,30 @@
         "self_hosted_runners_total": 0,
         "macos_ota_run_on_frozen_sha": 35319932712,
         "macos_ota_run_conclusion": "cancelled"
+      },
+      {
+        "id": "mac-host-online-but-still-no-execution-channel",
+        "observed_at": "2026-09-18T21:23:02.4828379+08:00",
+        "detail": "After the host returned to the network the channel probe was repeated: 445/631/5000/7000 open; 22/548/3283/5900/5988/8443 refused, and a wider 32-port scan found no SSH, no screen sharing, no remote desktop and no debug port on any alternative port either. The host is reachable for file access but still offers no way to execute or observe the macOS install/bind/business/upgrade/restart loop from here.",
+        "ports": {
+          "22": "refused",
+          "445": "open",
+          "548": "refused",
+          "3283": "refused",
+          "5900": "refused",
+          "5988": "refused",
+          "7000": "open",
+          "5000": "open",
+          "8443": "refused"
+        },
+        "port_scan_open": [
+          445,
+          631,
+          5000,
+          7000
+        ],
+        "port_scan_probed": 32,
+        "arp_state": "192.168.10.8 86-6E-F1-2D-6B-0F Reachable"
       }
     ],
     "frozen_sha_evidence": {
@@ -396,7 +435,8 @@
     "gates_at_freeze": {
       "g9_row_at_freeze": "| G9 | 更新安装 | RED | **1.0.0.3→1.0.0.4 真机安装链（[round-20260917-ota2-g9-install-chain.json](evidence/e2e/macos-release-1.0.0.4/round-20260917-ota2-g9-install-chain.json)）**：`download_start` 21:14:49.960Z → `update_downloaded` 21:14:50.273Z（命中缓存）→ `install_start` 21:15:28.089Z → ShipIt[4502]「Detected this as an install request」21:15:33.561Z → **181s 无日志（等应用退出）** → 外部 SIGKILL 后 `Installation completed successfully` 21:18:32.675Z → 装机 asar/主可执行 sha256 与官方产物逐字节一致（子项：入口 PASS / 自动退出 FAIL / 替换 PASS / 自动重启 FAIL）；**复现步骤**：1.0.0.3 应用内「下载更新 → 更新并重新加载」→ 应用不退出、181s 零日志 → 外部 SIGKILL 后替换完成但不自动重启。日志 [stuck-state.txt](evidence/e2e/macos-release-1.0.0.4/round-20260917-ota2-g9-stuck-state.txt)、[chain-timeline.jsonl](evidence/e2e/macos-release-1.0.0.4/round-20260917-ota2-g9-chain-timeline.jsonl)，截图 [g9-after-install-click.png](evidence/e2e/macos-release-1.0.0.4/g9-after-install-click.png) | **① 自动退出 FAIL**（1.0.0.3 缺 `app.isQuitting=true` 预置，已由 #1930 修复但未随 1.0.0.4 验证，§7-12）；**② 自动重启 FAIL**（`ShipItState.plist` `launchAfterInstallation=false`，写入时刻 21:15 早于任何外部干预，ShipIt 全程无 Launching 行；应用层可控点未定位，不臆测，§7-14）；③ 本轮夹具 app 属主 `a4243342:staff` → 未覆盖 SecurityAgent 管理员授权分支（§7-15） | 阻断「零干预 OTA」体验；不阻断安装本身、数据与业务 | #1930（自动退出）/ 待立（自动重启） | 1.0.0.4→1.0.0.5 OTA 复测两个子项（T9） |",
       "g9_status_at_freeze": "RED",
-      "blocking_symptom": "in-app install does not auto-exit the app; ShipIt waits indefinitely; after external kill it replaces but the app does not auto-restart"
+      "blocking_symptom": "in-app install does not auto-exit the app; ShipIt waits indefinitely; after external kill it replaces but the app does not auto-restart",
+      "g9_status_verified_20260918_2123": "Still RED, and its evidence still stops at the 1.0.0.3->1.0.0.4 chain; the frozen FHD/docs/MACOS_RELEASE_SSOT.md on the share lists T9 (1.0.0.4->1.0.0.5 OTA retest of the auto-exit and auto-restart sub-items) as the open action. No macOS work landed on the frozen SHA."
     },
     "required_next_actions": [
       "T9: real-machine OTA 1.0.0.4 -> 1.0.0.5, verify in-app install auto-exits, ShipIt replaces, and the app auto-restarts (G9 RED -> GREEN path)",
@@ -422,8 +462,8 @@
     "windows_arm_complete": true,
     "macos_arm_complete": false,
     "macos_arm_owner": "macOS side",
-    "copy_at_share_root_verified": "yes at capture time: written 2026-09-18 19:24:43 +0800, 22725 bytes, re-read and parsed (schema=xcagi.customer_loop_ssot/v1, sha=54325894cc6e3fc2becfcbc98697a099310d9420, same_sha_both_platforms=true, windows=INTERIM_CLOSED, macos=BLOCKED)",
-    "share_state_after_copy": "OFFLINE since ~19:26 +0800: the SMB share \\\\4243342deMac-mini.local\\XCMAX dropped and 192.168.10.8 stopped answering (ICMP 'General failure'; TCP 22/445/548/3283/5000/5900/7000 all refused; the mapped drive V: had to be deleted as disconnected and could not be re-created, System error 67). The share-root copy therefore cannot be re-verified from this host at this moment.",
+    "copy_at_share_root_verified": "REFRESHED AND RE-VERIFIED at 2026-09-18T20:38:36.3707717+08:00: 33792 bytes, sha256 33a853e2a7b0ae17ff2b0eb361b4cda47cb1c706392003cdd6f36f1e571d73f3, identical to the PR-delivered revision; re-read from the share and parsed (schema=xcagi.customer_loop_ssot/v1, sha=54325894cc6e3fc2becfcbc98697a099310d9420, windows=INTERIM_CLOSED, macos=BLOCKED)",
+    "share_state_after_copy": "ONLINE AGAIN at 2026-09-18T21:22 +0800. The share dropped at ~19:26 +0800 and the macOS host left the network; both returned by 21:22 (ARP entry 192.168.10.8 86-6E-F1-2D-6B-0F Reachable, SMB 445 open). The drive letter V: was re-mapped and the share-root copy was refreshed with the final document.",
     "delivered_via_github_pr": {
       "pr_number": 1973,
       "pr_url": "https://github.com/42433422/XCMAX/pull/1973",
@@ -434,23 +474,65 @@
       "why": "The workspace share and the macOS host are both unreachable, so the PR branch is the only channel through which the macOS side can obtain this exact document."
     },
     "current_authoritative_copy": "https://github.com/42433422/XCMAX/blob/evidence/customer-loop-1.0.0.5-ssot/FHD/docs/evidence/e2e/customer-loop-1.0.0.5/customer_loop_ssot.json (PR #1973), staging copy C:\\Users\\97088\\AppData\\Local\\Temp\\wsa-verify\\ssot.json",
-    "share_root_copy_status": "STALE AND UNREACHABLE: v:\\customer_loop_ssot_1.0.0.5.json holds the pre-patch 22725-byte version and cannot be refreshed while the macOS host is off the network",
+    "share_root_copy_status": "CURRENT: v:\\customer_loop_ssot_1.0.0.5.json now holds the same 33792-byte revision delivered by PR #1973 (sha256 33a853e2a7b0ae17ff2b0eb361b4cda47cb1c706392003cdd6f36f1e571d73f3)",
     "merge_policy": "DELIBERATELY LEFT OPEN, DO NOT MERGE AS-IS. main must stay at the frozen SHA 54325894cc6e3fc2becfcbc98697a099310d9420 so that both platforms release from the same commit; merging this evidence-only PR would advance main and invalidate frozen_main_head.release_sha_equals_main. The macOS side should append its arm (status BLOCKED -> FULL_CLOSED with real-machine evidence) to this same document on this same branch and merge the completed version once.",
-    "delivered_copy_verified": "The delivered blob was verified byte-identical to the staging copy at every push (sha256 of the fetched blob == sha256 of the local file, and the parsed JSON was equal). This document deliberately does NOT record its own hash: any value written into it is invalidated by the very commit that writes it. The hash of the delivered revision is recorded out of band, in a comment on the delivery PR."
+    "delivered_copy_verified": "The delivered blob was verified byte-identical to the staging copy at every push (sha256 of the fetched blob == sha256 of the local file, and the parsed JSON was equal). This document deliberately does NOT record its own hash: any value written into it is invalidated by the very commit that writes it. The hash of the delivered revision is recorded out of band, in a comment on the delivery PR.",
+    "repo_tree_write_probe": {
+      "v:\\": "writable",
+      "v:\\FHD": "denied",
+      "v:\\FHD\\docs": "denied",
+      "v:\\FHD\\docs\\evidence": "denied",
+      "v:\\FHD\\docs\\evidence\\e2e": "denied",
+      "v:\\FHD\\config": "denied",
+      "v:\\scripts": "denied",
+      "v:\\scripts\\dev": "denied"
+    },
+    "repo_tree_placement": "STILL NOT POSSIBLE from this host: every path under the repo tree on the share remains 'denied' for file creation and directory creation (v:\\FHD, v:\\FHD\\docs, v:\\FHD\\docs\\evidence\\e2e, v:\\FHD\\config, v:\\scripts, v:\\scripts\\dev all denied; only the share root v:\\ is writable). The intended repo path is therefore delivered via PR #1973 instead of a local file."
   },
   "cleanup": {
-    "driver": "C:\\Users\\97088\\AppData\\Local\\Temp\\wsa-verify\\run_clean_tolerant.py",
-    "upstream": "scripts/dev/clean_agent_workspace.py @ RELEASE_SHA",
-    "why_a_driver": "The upstream script walks with Path.rglob, which propagates the SMB share's intermittent scandir failures (WinError -2146893818 / WinError 3) and aborts the whole cleanup. The driver only swaps the walk primitive for os.walk(followlinks=False, onerror=...) and records skipped subtrees; the cleanup logic itself is imported and run unmodified.",
-    "started_at": "2026-09-18T19:11:38+08:00",
+    "driver": "C:\\Users\\97088\\AppData\\Local\\Temp\\wsa-verify\\run_clean_verify.py",
+    "upstream": "scripts/dev/clean_agent_workspace.py @ worktree HEAD b5eb7d844",
+    "why_a_driver": "The upstream script walks with Path.rglob, which propagates the SMB share's intermittent scandir failures and aborts the whole cleanup. The driver only swaps the walk primitive and records skipped subtrees; the cleanup logic is imported and run unmodified.",
+    "started_at": "2026-09-18T21:2x +0800 (share online)",
     "exit_code": 0,
     "status": "clean",
-    "error_count": 0,
+    "removed_count": 279,
     "kept_count": 0,
-    "attempted_removals": "the reported 'removed' list contains cache directories only (FHD/.venv/**/__pycache__, FHD/app/**/__pycache__, FHD/XCAGI/**, FHD/.pytest_cache ...); no source or documentation file appears",
-    "deletion_actually_effective": "UNVERIFIED",
-    "deletion_verification_note": "Upstream _rm_tree calls shutil.rmtree(path, ignore_errors=True) and then appends the path to 'removed' unconditionally, so the list is a list of attempts, not proof of deletion. Independently, write probing during this run showed this Windows session is denied create/delete anywhere under the repo tree on the share (only the share root is writable), which makes effective deletion unlikely. Confirming the on-disk state requires the share, which went offline at ~19:26 +0800.",
-    "whole_report": "the job output file retained only the trailing 60 lines; removed_count was not captured before truncation",
+    "error_count": 0,
+    "attempted_removals": 279,
+    "deletion_actually_effective": "PARTIAL",
+    "deletion_verification_note": "Measured with the share online: of 80 reported removals, 17 are gone and 63 are still present on disk (0 unreadable). Upstream _rm_tree calls shutil.rmtree(path, ignore_errors=True) and appends the path unconditionally, so this verification is what distinguishes an attempt list from a result list. Sample of paths still present: ['FHD\\\\.venv\\\\lib\\\\python3.12\\\\site-packages\\\\PIL\\\\__pycache__', 'FHD\\\\.venv\\\\lib\\\\python3.12\\\\site-packages\\\\__pycache__', 'FHD\\\\.venv\\\\lib\\\\python3.12\\\\site-packages\\\\_distutils_hack\\\\__pycache__', 'FHD\\\\.venv\\\\lib\\\\python3.12\\\\site-packages\\\\aiohappyeyeballs\\\\__pycache__', 'FHD\\\\.venv\\\\lib\\\\python3.12\\\\site-packages\\\\aiohttp\\\\__pycache__']",
+    "leftover_cache_dirs_outside_venv": {
+      "count_sampled": 40,
+      "sample": [
+        "\\FHD\\app\\ai_engines\\bert\\__pycache__",
+        "\\FHD\\app\\ai_engines\\deepseek\\__pycache__",
+        "\\FHD\\app\\ai_engines\\rasa\\__pycache__",
+        "\\FHD\\app\\ai_engines\\__pycache__",
+        "\\FHD\\app\\application\\agent_orchestrator\\tool_spec_data\\__pycache__",
+        "\\FHD\\app\\application\\agent_orchestrator\\__pycache__",
+        "\\FHD\\app\\application\\aiopen\\__pycache__",
+        "\\FHD\\app\\application\\ai_chat\\__pycache__",
+        "\\FHD\\app\\application\\autonomy\\__pycache__",
+        "\\FHD\\app\\application\\employee_runtime\\__pycache__",
+        "\\FHD\\app\\application\\etl\\targets\\__pycache__",
+        "\\FHD\\app\\application\\etl\\__pycache__",
+        "\\FHD\\app\\application\\facades\\__pycache__",
+        "\\FHD\\app\\application\\group_chat\\__pycache__",
+        "\\FHD\\app\\application\\ports\\__pycache__",
+        "\\FHD\\app\\application\\tutorial_v2\\__pycache__",
+        "\\FHD\\app\\application\\workflow\\__pycache__",
+        "\\FHD\\app\\application\\__pycache__",
+        "\\FHD\\app\\contexts\\__pycache__",
+        "\\FHD\\app\\control\\__pycache__",
+        "\\FHD\\app\\db\\models\\__pycache__",
+        "\\FHD\\app\\db\\__pycache__",
+        "\\FHD\\app\\desktop_automation\\__pycache__",
+        "\\FHD\\app\\desktop_runtime\\__pycache__",
+        "\\FHD\\app\\di\\__pycache__"
+      ]
+    },
+    "whole_report": "C:\\Users\\97088\\AppData\\Local\\Temp\\wsa-verify\\cleanup-report-verified.json",
     "temporary_files_removed_by_hand": [
       "wsa-verify/pat-probe.ps1",
       "wsa-verify/probe-gitshow.ps1",
@@ -471,9 +553,7 @@
       "C:\\XCAGI-acceptance-p3 (phase 3 installer + result json)",
       "C:\\Users\\97088\\AppData\\Local\\Temp\\wsa-verify (harness, facts, ssot, CI job logs)"
     ],
-    "never_used": "no git clean -fdx and no git add -A anywhere in this task",
-    "second_pass_at": "2026-09-18T20:1x +0800",
-    "repo_side_cleanup_rerun": "NOT POSSIBLE this turn: scripts/dev/clean_agent_workspace.py lives on the SMB share, which is unreachable because the macOS host is off the network. The 19:11 report above therefore remains the only repo-side cleanup record."
+    "never_used": "no git clean -fdx and no git add -A anywhere in this task"
   },
   "post_capture_patch": {
     "reason": "the SMB share went offline, so build_facts.ps1 (which reads v:\\) could not be re-run",
@@ -494,7 +574,13 @@
       "handoff.delivered_copy_bytes",
       "handoff.delivered_copy_verified",
       "handoff.delivered_copy_verified (rewritten to avoid a self-referential hash)",
-      "handoff.delivered_copy_sha256 / delivered_copy_bytes removed as self-referential"
+      "handoff.delivered_copy_sha256 / delivered_copy_bytes removed as self-referential",
+      "handoff.copy_at_share_root_verified (refreshed)",
+      "handoff.share_state_after_copy (online again)",
+      "handoff.repo_tree_write_probe",
+      "cleanup (re-measured with the share online)",
+      "macos_blocking_condition.host_state_at_2123",
+      "macos_gates_at_freeze.g9_status_verified_20260918_2123"
     ],
     "fields_not_re_probed": "every probe captured while the share was up is left exactly as measured"
   }
