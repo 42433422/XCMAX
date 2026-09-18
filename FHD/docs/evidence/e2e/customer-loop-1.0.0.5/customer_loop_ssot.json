@@ -1,6 +1,6 @@
 {
   "schema": "xcagi.customer_loop_ssot/v1",
-  "generated_at": "2026-09-18T13:57:19.371605+00:00",
+  "generated_at": "2026-09-18T14:07:08.373644+00:00",
   "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
   "product_version": "1.0.0.5",
   "same_sha_both_platforms": true,
@@ -443,6 +443,64 @@
       "T10: SecurityAgent admin-authorization branch (app owned by root:wheel) at /Applications",
       "FULL_CLOSED requires the macOS download/install/first-launch/binding/business/upgrade/restart-data-preserved loop on the same RELEASE_SHA"
     ],
+    "handoff_to_macos_side": {
+      "owner": "macOS side (owner ruling; this Windows host does not execute the macOS arm)",
+      "why_handed_over": "This Windows host has no execution channel to the macOS machine: the host is on the network (SMB 445 open) but a 32-port scan found no SSH on any port, no Screen Sharing (5900/5988), no Apple Remote Desktop (3283), no remote desktop (3389) and no debug port (9222), and the repository has 0 self-hosted runners. Every route was probed and refused.",
+      "target": {
+        "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+        "product_version": "1.0.0.5",
+        "must_equal_windows_sha": true,
+        "main_head_at_handoff": "54325894cc6e3fc2becfcbc98697a099310d9420",
+        "note": "Do NOT merge this PR before the macOS arm is appended: main must stay at the frozen SHA so both platforms release from the same commit."
+      },
+      "artifacts_already_published_for_this_sha": {
+        "source": "Release Desktop macOS OTA run #45 (run_id 35319932712) on this exact SHA; 'Build macOS enterprise installer' and 'Notarize and staple macOS enterprise DMG' both succeeded. The run was cancelled at 'Publish macOS OTA artifacts to CVM (official + stable)', so confirm the published artifacts match before accepting them.",
+        "versioned_manifest": "https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/latest-mac.yml (HTTP 200, productVersion 1.0.0.5, buildSha 54325894cc6e3fc2becfcbc98697a099310d9420)",
+        "dmg": "https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg (HTTP 200)",
+        "zip": "https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/XCAGI-Enterprise-1.0.0.5-mac-arm64.zip (HTTP 200, 264715517 bytes, size matches the published value, sha512 declared)",
+        "stable_feed": "https://xiu-ci.com/releases/stable/enterprise/latest-mac.yml already serves productVersion 1.0.0.5 at buildSha 54325894cc6e3fc2becfcbc98697a099310d9420 (releaseDate 2026-09-18T07:48:07.987Z)",
+        "caveat": "The Windows host can only observe this delivery surface over HTTP. Nothing here is evidence that the macOS install/bind/business/upgrade/restart loop was run, so none of it justifies FULL_CLOSED."
+      },
+      "blockers_to_clear": [
+        {
+          "id": "G9",
+          "status_at_freeze": "RED",
+          "evidence_at_freeze": "the chain stops at the 1.0.0.3->1.0.0.4 test (evidence/e2e/macos-release-1.0.0.4/)",
+          "next_action": "T9: real-machine OTA 1.0.0.4 -> 1.0.0.5; verify the two failing sub-items, in-app install auto-exits the app, and the app auto-restarts after ShipIt replaces it",
+          "known_causes": [
+            "auto-exit FAIL: 1.0.0.3 lacked the app.isQuitting=true pre-set; fixed by #1930 but never verified on 1.0.0.4+",
+            "auto-restart FAIL: ShipItState.plist had launchAfterInstallation=false, written before any external intervention; the app-level control point was never located"
+          ]
+        },
+        {
+          "id": "T10",
+          "next_action": "cover the SecurityAgent admin-authorization branch (app owned by root:wheel at /Applications); the 1.0.0.4 fixture app was owned by a4243342:staff, so that branch was never exercised"
+        }
+      ],
+      "loop_to_evidence": [
+        "download the published 1.0.0.5 artifact",
+        "install (verify the installed app's asar and main executable match the published artifact byte for byte)",
+        "first launch",
+        "background health",
+        "login binding",
+        "entitlements",
+        "Mod loading",
+        "one real business operation",
+        "restart, and confirm the business data is still there",
+        "the repository's currently promised upgrade path"
+      ],
+      "output_rules": [
+        "each phase must be reported as exactly PASS or BLOCKED; no percentages and no approximate wording",
+        "G9/Gate statuses may only be GREEN / YELLOW / RED / UNKNOWN, and GREEN requires physical-machine evidence",
+        "macOS may only be marked FULL_CLOSED once the whole loop above is evidenced on a real Mac at this same SHA"
+      ],
+      "where_to_write_the_result": {
+        "document": "FHD/docs/evidence/e2e/customer-loop-1.0.0.5/customer_loop_ssot.json",
+        "branch": "evidence/customer-loop-1.0.0.5-ssot",
+        "action": "Append the macOS arm to the SAME document: replace macos.status with FULL_CLOSED, fill in the per-phase PASS/BLOCKED steps, point the evidence at the real-machine logs and screenshots, then open/merge the finished version in one go.",
+        "windows_section": "Do not change the windows section: it is already INTERIM_CLOSED with all three phases PASS at this SHA."
+      }
+    },
     "note": null
   },
   "handoff": {
@@ -580,7 +638,8 @@
       "handoff.repo_tree_write_probe",
       "cleanup (re-measured with the share online)",
       "macos_blocking_condition.host_state_at_2123",
-      "macos_gates_at_freeze.g9_status_verified_20260918_2123"
+      "macos_gates_at_freeze.g9_status_verified_20260918_2123",
+      "macos_handoff (executable handoff block)"
     ],
     "fields_not_re_probed": "every probe captured while the share was up is left exactly as measured"
   }
