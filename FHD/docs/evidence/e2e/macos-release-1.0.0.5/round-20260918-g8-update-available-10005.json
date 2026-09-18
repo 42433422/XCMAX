@@ -1,0 +1,29 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "gate": "G8",
+  "platform": "macos",
+  "round": "2026-09-18",
+  "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "product_version": "1.0.0.5",
+  "sku": "enterprise",
+  "update_available": {
+    "observed_in_app": true,
+    "chip_text": "可更新 1.0.0.5",
+    "ui_component": "frontend/src/components/DesktopAppUpdatePrompt.vue",
+    "css_class": ".desktop-update-chip",
+    "driver": "cdp_driver.py（CDP Runtime.evaluate 读取可见按钮/角标文本）",
+    "screenshots": [
+      "round-20260918-g8-update-chip-10005.png",
+      "round-20260918-g8-update-prompt-10005.png"
+    ],
+    "updater_event": {
+      "ts": "2026-09-18T10:03:33.019Z",
+      "type": "update_available",
+      "data": {
+        "version": "1.0.0"
+      }
+    },
+    "note": "electron-updater 的 data.version 为内部版本号 '1.0.0'，对外产品版本 1.0.0.5 来自 feed 的 productVersion 字段"
+  },
+  "verdict": "PASS"
+}

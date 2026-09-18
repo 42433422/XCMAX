@@ -1,0 +1,207 @@
+{
+  "schema": "xcagi.release_ssot_evidence/v1",
+  "round": "2026-09-18",
+  "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "product_version": "1.0.0.5",
+  "sku": "enterprise",
+  "generated_at_utc": "2026-09-18T13:26:30Z",
+  "platforms": {
+    "macos": {
+      "target": "最终 main SHA，必须 FULL_CLOSED",
+      "status": "FULL_CLOSED",
+      "gates": [
+        {
+          "gate": "G3",
+          "desc": "下载产物：DMG 签名/公证/校验和 + 官方下载面 sha256 一致",
+          "evidence_file": "round-20260918-g3-dmg-verify-10005.json",
+          "verdict": "PASS"
+        },
+        {
+          "gate": "install.fresh",
+          "desc": "陌生客户：公网下载 DMG（sha256 一致）→ 全新安装 → 首次启动 → 后台健康",
+          "evidence_file": "first-install-from-dmg-10005.json",
+          "verdict": "PASS"
+        },
+        {
+          "gate": "G8",
+          "desc": "应用内真实提示「可更新 1.0.0.5」",
+          "evidence_file": "round-20260918-g8-update-available-10005.json",
+          "verdict": "PASS"
+        },
+        {
+          "gate": "G9.download",
+          "desc": "OTA 下载包与官方 ZIP 逐字节一致",
+          "evidence_file": "round-20260918-g9-download-10005.json",
+          "verdict": "PASS"
+        },
+        {
+          "gate": "G9",
+          "desc": "自动退出 + ShipIt 安装 + 自动重启",
+          "evidence_file": "round-20260918-g9-install-10005.json",
+          "verdict": "PASS"
+        },
+        {
+          "gate": "G10",
+          "desc": "升级前后数据保留（lost=[]）",
+          "evidence_file": "round-20260918-g10-data-retention-10005.json",
+          "verdict": "PASS"
+        },
+        {
+          "gate": "G11",
+          "desc": "升级后真实业务链（模板/客户/发货单/xlsx 回读）",
+          "evidence_file": "round-20260918-g11-business-10005.json",
+          "verdict": "PASS"
+        },
+        {
+          "gate": "G11.fresh",
+          "desc": "全新安装实例上的真实业务链 + 既有数据存活",
+          "evidence_file": "round-20260918-g11-business-post-fresh-install-10005.json",
+          "verdict": "PASS"
+        },
+        {
+          "gate": "G6",
+          "desc": "登录绑定 / 权益 / Mod 加载",
+          "evidence_file": "round-20260918-g6-login-entitlement-mods-10005.json",
+          "verdict": "PASS"
+        },
+        {
+          "gate": "G12",
+          "desc": "整机重启后身份/健康/DB 完整性/数据/Mod/会话/业务",
+          "evidence_file": "round-20260918-g12-post-reboot-verify-10005.json",
+          "verdict": "PASS"
+        }
+      ],
+      "blocking_gates": [],
+      "artifact": {
+        "dmg": {
+          "filename": "XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg",
+          "sha256": null
+        }
+      },
+      "install_identity": {
+        "schema_version": 1,
+        "gitSha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+        "version": "1.0.0.5",
+        "releaseId": "xcagi-1.0.0.5-54325894cc6e3fc2becfcbc98697a099310d9420",
+        "builtAt": "2026-09-18T07:39:47.185Z"
+      },
+      "release_pipeline": {
+        "workflow": "fhd-release-desktop-mac-ota.yml",
+        "run_id": 35319932712,
+        "release_face_verdict": "PASS"
+      },
+      "security_scan_pair": {
+        "schema": "security-release-scan-pair/v1",
+        "passed": true,
+        "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+        "blockers": []
+      }
+    },
+    "windows": {
+      "target": "同一 RELEASE_SHA；只能 FULL_CLOSED 或 INTERIM_CLOSED",
+      "status": "INTERIM_CLOSED",
+      "verdict_reason": "未签名导致 Windows stable OTA 明确关闭（windows_signing_acceptance.json WSA-2026-09-17-01: windows_stable_feed=closed），且本机无 Windows 主机可执行陌生客户实机环。按口径只能写 INTERIM_CLOSED，不得写 FULL_CLOSED。",
+      "artifact": {
+        "filename": "XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe",
+        "size": 248514275,
+        "sha256": "45f761cf1ad968c5abeae466e8b0749364e1d1edfabf0821ef28db52f5cb572e",
+        "build_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+        "version": "1.0.0.5",
+        "signature_status": "unsigned",
+        "authenticode_status": "NotSigned"
+      },
+      "public_download_verification": {
+        "url": "https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe",
+        "http_head": 200,
+        "content_length": 248514275,
+        "downloaded_bytes": 248514275,
+        "downloaded_sha256": "45f761cf1ad968c5abeae466e8b0749364e1d1edfabf0821ef28db52f5cb572e",
+        "sha256_matches_receipt": true,
+        "server_side_sha256": "45f761cf1ad968c5abeae466e8b0749364e1d1edfabf0821ef28db52f5cb572e",
+        "verdict": "PASS"
+      },
+      "pointer": {
+        "url": "https://xiu-ci.com/download-windows-hotfix.json",
+        "http": 200,
+        "schema": "xcagi.windows_interim_release/v1",
+        "version": "1.0.0.5",
+        "channel": "enterprise-interim",
+        "git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+        "download_allowed": true,
+        "signature_status": "unsigned",
+        "artifact_sha256": "45f761cf1ad968c5abeae466e8b0749364e1d1edfabf0821ef28db52f5cb572e",
+        "artifact_url": "https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe",
+        "risk_acceptance_id": "WSA-2026-09-17-01",
+        "risk_acceptance_expires_at": "2029-09-17T00:00:00+08:00",
+        "verdict": "PASS"
+      },
+      "stable_feed_untouched": {
+        "latest_yml": "https://xiu-ci.com/update/releases/stable/enterprise/latest.yml -> HTTP 404",
+        "latest_linux_yml": "https://xiu-ci.com/update/releases/stable/enterprise/latest-linux.yml -> HTTP 404",
+        "server_side_latest_yml_present": false,
+        "verdict": "PASS（Windows 稳定自动更新通道保持关闭，未被误推）"
+      },
+      "runner_install_smoke": {
+        "verdict": "PASS",
+        "script": "FHD/scripts/package/verify-windows-installed-runtime.ps1",
+        "smoke_pass": 21,
+        "smoke_fail": 0,
+        "installed_identity": "buildSha=54325894cc6e3fc2becfcbc98697a099310d9420 version=1.0.0.5 sku=enterprise",
+        "uninstall_retention_marker": "passed",
+        "log": "round-20260918-win-runner-smoke.log"
+      },
+      "upgrade_path": {
+        "promised_by_repo": "manual_installer —— 未签名导致 Windows stable OTA 明确关闭（windows_signing_acceptance.json / WSA-2026-09-17-01，windows_stable_feed=closed，2029-09-17 到期）",
+        "verified": "BLOCKED",
+        "reason": "runner 冒烟（verify-windows-installed-runtime.ps1）是干净安装 + 卸载保留标记，非从旧版本升级；本机无 Windows 实机，未执行 1.0.0.x → 1.0.0.5 升级",
+        "what_would_prove_it": "一台真实 Windows 主机（admin）：装 1.0.0.x → 运行 XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe → 校验 installed buildSha=54325894cc6e3fc2becfcbc98697a099310d9420 且业务数据保留",
+        "runner_partial_evidence": "uninstall_retention_marker=passed（卸载不删数据），可支撑“升级不丢数据”的方向性证据，但不等价于真实升级"
+      },
+      "stranger_customer_loop": {
+        "download": {
+          "verdict": "PASS",
+          "evidence": "public_download_verification"
+        },
+        "install": {
+          "verdict": "PASS",
+          "evidence": "runner_install_smoke（runner 上静默安装 + 启动 + 21 项运行时冒烟 + 卸载保留标记）"
+        },
+        "first_launch": {
+          "verdict": "PASS",
+          "evidence": "runner_install_smoke（installed buildSha=54325894c version=1.0.0.5 sku=enterprise）"
+        },
+        "backend_health": {
+          "verdict": "PASS",
+          "evidence": "runner_install_smoke（health/runtime smoke 21 项）"
+        },
+        "login_binding": {
+          "verdict": "BLOCKED",
+          "reason": "runner 冒烟不覆盖交互式登录绑定；本机无 Windows 主机（无 UTM/Parallels/VMware）可执行 GUI 登录"
+        },
+        "entitlements": {
+          "verdict": "BLOCKED",
+          "reason": "同上：无 Windows 实机可验证权益下发 UI"
+        },
+        "mod_loading": {
+          "verdict": "PASS",
+          "evidence": "runner_install_smoke（mods-list / mods-loading-status / mod-detail:* 通过）"
+        },
+        "real_business_task": {
+          "verdict": "BLOCKED",
+          "reason": "runner 冒烟未覆盖出单等真实业务；无 Windows 实机"
+        },
+        "restart_data_retention": {
+          "verdict": "BLOCKED",
+          "reason": "无 Windows 实机可执行重启后数据保留验证；卸载保留标记已过但不等价于重启数据保留"
+        }
+      },
+      "evidence_file": "round-20260918-win-release-verify.json"
+    }
+  },
+  "same_sha_across_platforms": true,
+  "sha_binding": {
+    "macos_installed": "54325894cc6e3fc2becfcbc98697a099310d9420",
+    "windows_installer_build": "54325894cc6e3fc2becfcbc98697a099310d9420",
+    "feed_broadcast": "54325894cc6e3fc2becfcbc98697a099310d9420"
+  }
+}

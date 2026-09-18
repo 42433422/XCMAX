@@ -1,0 +1,45 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "gate": "G10",
+  "platform": "macos",
+  "round": "2026-09-18",
+  "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "product_version": "1.0.0.5",
+  "sku": "enterprise",
+  "method": "口径对齐 acceptance-macos.sh capture_data_digest / compare_data_digests（零值/缺失不算丢失）",
+  "digest_before_1_0_0_4": {
+    "xcagi.db.bytes": 987504640,
+    "excel_vectors.db.bytes": -1,
+    "mod_dbs.files": 1,
+    "uploads.files": 169,
+    "mods.files": 875,
+    "models.files": 0,
+    "backups.files": 4,
+    "backups.latest": "xcagi-unknown-20260918002731.db"
+  },
+  "digest_after_1_0_0_5": {
+    "xcagi.db.bytes": 987504640,
+    "excel_vectors.db.bytes": -1,
+    "mod_dbs.files": 1,
+    "uploads.files": 172,
+    "mods.files": 875,
+    "models.files": 0,
+    "backups.files": 4,
+    "backups.latest": "xcagi-unknown-20260918110919.db"
+  },
+  "lost": [],
+  "gained": [
+    "uploads.files: 169 -> 172"
+  ],
+  "gained_explanation": {
+    "uploads.files": "169→170 为本轮 G11 升级前探针上传的模板文件（模板 id db:28），属新增非丢失；升级后又新增 db:29/db:30。"
+  },
+  "content_level_retention_probe": {
+    "probe": "POST /api/customers name=G11重测客户(勿删)（该行于 1.0.0.4 上创建）",
+    "status": 400,
+    "message": "客户名称已存在",
+    "already_exists": true
+  },
+  "backup_taken_on_upgrade": "xcagi-unknown-20260918110919.db",
+  "verdict": "PASS"
+}
