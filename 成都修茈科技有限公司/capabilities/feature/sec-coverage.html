@@ -60,7 +60,7 @@
       <div>
         <span class="eyebrow">安全审计与验证 / 验证体系</span>
         <h1>测试覆盖率与棘轮门禁</h1>
-        <div class="cap-feature-meta"><span class="cap-status st-implemented">已实现待验证</span><span class="cap-platform">Web</span></div>
+        <div class="cap-feature-meta"><span class="cap-status st-partial">部分验证</span><span class="cap-platform">Web</span></div>
         <p>后端行覆盖率实测 88.19%、前端 93.21%（对外口径见覆盖清单），棘轮只升不降，防止质量回退。</p>
       </div>
       <div class="page-hero-side"><p><a class="btn btn-secondary btn-sm" href="/capabilities/catalog.html?domain=sec">返回 安全审计与验证</a></p></div>
@@ -74,24 +74,24 @@
         <div class="cap-info-block"><h3>使用方式</h3><p>CI 门禁自动执行；数字由覆盖清单 SSOT 输出。</p></div>
         <div class="cap-info-block"><h3>所属模块</h3><p>安全审计与验证 / 验证体系</p></div>
         <div class="cap-info-block"><h3>支持平台</h3><p><span class="cap-platform">Web</span></p></div>
-        <div class="cap-info-block"><h3>当前状态</h3><p><span class="cap-status st-implemented">已实现待验证</span>（最近验证时间：2026-09-02）</p></div>
+        <div class="cap-info-block"><h3>当前状态</h3><p><span class="cap-status st-partial">部分验证</span>（最近验证时间：2026-09-02）</p></div>
         <div class="cap-info-block"><h3>已知限制</h3><ul class="cap-limitations"><li>后端分支覆盖率 81.5% 仍低于 85% 目标，持续补齐</li></ul></div>
       </div>
-      <div class="cap-downgrade-note">机器校验：构建时声明状态为「部分验证」，因既无自动化测试也无运行证据已自动降级为「已实现待验证」。这就是 No Evidence, No Claim 的执行方式。</div>
+      
     </div>
   </section>
 
   <section class="section cap-evidence-section">
     <div class="container">
       <h2>技术验证资料</h2>
-      <p class="cap-section-note">以下内容由构建脚本从当前仓库自动生成（生成于 2026-09-18 22:54 UTC）。路径相对产品仓库根目录；未公开仓库的客户可向我们索取演示与审计说明。实机截图均为产品真实运行界面，点击图片可查看原图。</p>
+      <p class="cap-section-note">以下内容由构建脚本从当前仓库自动生成（生成于 2026-09-18 23:09 UTC）。路径相对产品仓库根目录；未公开仓库的客户可向我们索取演示与审计说明。实机截图均为产品真实运行界面，点击图片可查看原图。</p>
       <div class="cap-evidence-grid">
         <div class="cap-evidence-block"><h3>源码实现</h3><ul class="cap-evidence-list"><li><code class="">FHD/scripts/dev/coverage_ratchet.py</code></li></ul></div>
         <div class="cap-evidence-block"><h3>API 端点</h3><p class="cap-evidence-empty">暂无</p></div>
         <div class="cap-evidence-block"><h3>自动化测试</h3><p class="cap-evidence-empty">暂无</p><p class="cap-evidence-note">CI 门禁：FHD/.github/workflows/ci-cd.yml</p></div>
         <div class="cap-evidence-block"><h3>CI 记录</h3><ul class="cap-evidence-list"><li><code class="">FHD/.github/workflows/ci-cd.yml</code></li></ul></div>
         
-        <div class="cap-evidence-media"><h3>实机截图 / 运行证据</h3><p class="cap-evidence-note">本项没有独立的产品界面（后端服务、流水线门禁或管理端能力），因此不提供实机截图。它的真伪请以上方「源码实现 / 自动化测试 / CI 记录」为准，这些路径都可以在仓库中逐条打开核对。</p></div>
+        <div class="cap-evidence-media"><h3>实机截图 / 运行证据</h3><div class="cap-shots"><figure class="cap-shot"><a class="cap-shot-link" href="/capabilities/assets/evidence/sec-coverage-sec-coverage-01-backend-test-coverage-ratchet.png" target="_blank" rel="noopener"><img src="/capabilities/assets/evidence/sec-coverage-sec-coverage-01-backend-test-coverage-ratchet.png" alt="测试覆盖率与棘轮门禁 实机证据" loading="lazy" /></a><figcaption>实机运行证据（原始文件：FHD/docs/evidence/capabilities/sec-coverage-01-backend-test-coverage-ratchet.png）</figcaption></figure></div></div>
         <div class="cap-evidence-block"><h3>关联文档</h3><ul class="cap-evidence-list"><li><code class="">FHD/docs/CLAIMED_VS_ACTUAL.md</code></li><li><code class="">FHD/metrics/coverage-dual-summary.json</code></li></ul></div>
         <div class="cap-evidence-block"><h3>验证 commit</h3><ul class="cap-evidence-list"><li><code class="">aa5ed862a refactor: 桌面端 parity 门禁+真实机验收协议；技术债收口（超大文件128→0/重复组9→0/any→158/stub82→0） (#1682) (2026-09-02)</code></li></ul></div>
       </div>

@@ -122,7 +122,7 @@
                 "tests": [],
                 "ci": [],
                 "docs": [],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/base-db-01-desktop-runtime-data-dir.png"],
                 "commits": []
               }
             }
@@ -255,7 +255,7 @@
                 "tests": [],
                 "ci": [],
                 "docs": [],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/ai-tts-01-chat-voice-toggle.png"],
                 "commits": []
               }
             },
@@ -1079,7 +1079,7 @@
                 "tests": [],
                 "ci": ["FHD/.github/workflows/security-full-scan.yml", "FHD/.github/workflows/release-gate-ci.yml"],
                 "docs": ["FHD/docs/MACOS_RELEASE_SSOT.md"],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/sec-scan-01-security-full-scan-run.png"],
                 "commits": []
               }
             }
@@ -1121,7 +1121,7 @@
                 "tests": [],
                 "ci": ["FHD/.github/workflows/ci-cd.yml"],
                 "docs": ["FHD/docs/CLAIMED_VS_ACTUAL.md", "FHD/metrics/coverage-dual-summary.json"],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/sec-coverage-01-backend-test-coverage-ratchet.png"],
                 "commits": []
               }
             },
