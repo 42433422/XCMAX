@@ -6,7 +6,7 @@
 数据摘要未丢失、Mod 加载、会话仍有效，并复跑 G11 业务链。
 输出：round-20260918-g12-post-reboot-verify-10005.json（verdict PASS/BLOCKED）。
 """
-import json, os, subprocess, sqlite3, sys, time, urllib.error, urllib.request
+import json, os, shlex, subprocess, sqlite3, sys, time, urllib.error, urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SHA = "54325894cc6e3fc2becfcbc98697a099310d9420"
@@ -17,8 +17,9 @@ op = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 PRE = json.load(open(os.path.join(HERE, "round-20260918-g12-pre-reboot-state-10005.json")))
 
 
-def sh(c):
-    return subprocess.run(c, shell=True, capture_output=True, text=True).stdout.strip()
+def sh(argv):
+    """执行只读命令。参数经 shlex 拆分后以 argv 形式调用，不经 shell。"""
+    return subprocess.run(shlex.split(argv), capture_output=True, text=True).stdout.strip()
 
 
 def count_files(p):

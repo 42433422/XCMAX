@@ -41,12 +41,17 @@ class CDP:
         self._id += 1
         mid = self._id
         await self.ws.send(json.dumps({"id": mid, "method": method, "params": params or {}}))
-        while True:
-            msg = json.loads(await self.ws.recv())
+        # 单次请求最多泵 1000 条消息、单条最多等 30s，避免服务端异常时无限阻塞。
+        for _ in range(1000):
+            try:
+                msg = json.loads(await asyncio.wait_for(self.ws.recv(), timeout=30))
+            except asyncio.TimeoutError:
+                raise SystemExit(f"CDP timeout waiting for id={mid}")
             if msg.get("id") == mid:
                 if "error" in msg:
                     raise SystemExit(f"CDP error: {msg['error']}")
                 return msg.get("result", {})
+        raise SystemExit(f"CDP no response for id={mid}")
 
     async def evaluate(self, expr):
         r = await self.send(
