@@ -347,7 +347,7 @@ def compute_stats(domains_out: list[dict], feature_index: list[dict]) -> dict:
 # ---------------------------------------------------------------- rendering
 
 def css(href: str) -> str:
-    return f'<link rel="stylesheet" href="{href}?v=20260919a" />'
+    return f'<link rel="stylesheet" href="{href}?v=20260919b" />'
 
 
 def header_html(page_key: str, title_suffix: str, description: str, canonical: str) -> str:
@@ -640,7 +640,7 @@ def render_catalog(data: dict) -> str:
   </section>
 </main>
 <script id="cap-catalog-data" type="application/json">{payload}</script>
-<script src="/capabilities/assets/catalog.js?v=20260919a"></script>
+<script src="/capabilities/assets/catalog.js?v=20260919b"></script>
 {footer_html()}"""
 
 
@@ -676,16 +676,25 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
             f"<figcaption>实机运行录像 / 操作流程（原始文件：{esc(p)}）</figcaption></figure>"
         )
     if video_tags:
-        media_html = f'<h3>实机录像 / 操作流程</h3><div class="cap-shots">{"".join(video_tags)}</div>'
+        media_html = (
+            '<div class="cap-evidence-media"><h3>实机录像 / 操作流程</h3>'
+            f'<div class="cap-shots">{"".join(video_tags)}</div></div>'
+        )
 
     shots_html = ""
     shot_tags = []
     for p in ev["screenshots"]:
+        src = asset(f["id"], p)
         shot_tags.append(
-            f'<figure class="cap-shot"><img src="{asset(f["id"], p)}" alt="{esc(f["name"])} 实机证据" loading="lazy" /><figcaption>实机运行证据（原始文件：{esc(p)}）</figcaption></figure>'
+            f'<figure class="cap-shot"><a class="cap-shot-link" href="{src}" target="_blank" rel="noopener">'
+            f'<img src="{src}" alt="{esc(f["name"])} 实机证据" loading="lazy" /></a>'
+            f"<figcaption>实机运行证据（原始文件：{esc(p)}）</figcaption></figure>"
         )
     if shot_tags:
-        shots_html = f'<h3>实机截图 / 运行证据</h3><div class="cap-shots">{"".join(shot_tags)}</div>'
+        shots_html = (
+            '<div class="cap-evidence-media"><h3>实机截图 / 运行证据</h3>'
+            f'<div class="cap-shots">{"".join(shot_tags)}</div></div>'
+        )
 
     commits_html = evidence_list(
         [f"{c['sha']} {c['subject']} ({c['date']})" for c in ev["commits"]]
@@ -727,7 +736,7 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
   <section class="section cap-evidence-section">
     <div class="container">
       <h2>技术验证资料</h2>
-      <p class="cap-section-note">以下内容由构建脚本从当前仓库自动生成（生成于 {esc(data['generated_at'])}）。路径相对产品仓库根目录；未公开仓库的客户可向我们索取演示与审计说明。</p>
+      <p class="cap-section-note">以下内容由构建脚本从当前仓库自动生成（生成于 {esc(data['generated_at'])}）。路径相对产品仓库根目录；未公开仓库的客户可向我们索取演示与审计说明。实机截图均为产品真实运行界面，点击图片可查看原图。</p>
       <div class="cap-evidence-grid">
         <div class="cap-evidence-block"><h3>源码实现</h3>{evidence_list(ev['impl'])}</div>
         <div class="cap-evidence-block"><h3>API 端点</h3>{evidence_list(ev.get('api', []))}</div>

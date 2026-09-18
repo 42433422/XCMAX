@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "catalog_version": "2026-09-16",
-  "generated_at": "2026-09-18 21:31 UTC",
+  "generated_at": "2026-09-18 22:41 UTC",
   "principle": "No Evidence, No Claim：所有状态由构建脚本按仓库证据校验，证据缺失自动降级。",
   "stats": {
     "total": 50,
     "by_status": {
       "verified": 13,
-      "partial": 14,
-      "implemented": 22,
+      "partial": 15,
+      "implemented": 21,
       "planned": 1
     },
     "domains": 10,
@@ -22,7 +22,7 @@
       "android": 4,
       "ios": 1
     },
-    "completion": 63
+    "completion": 64
   },
   "product_version": "1.0.0.5",
   "platform_levels": {
@@ -162,7 +162,7 @@
             {
               "id": "ai-intent",
               "name": "意图识别与工具路由",
-              "status": "implemented",
+              "status": "partial",
               "platforms": [
                 "windows",
                 "macos",
