@@ -1,0 +1,479 @@
+{
+  "schema": "xcagi.customer_loop_ssot/v1",
+  "generated_at": "2026-09-18T12:19:57.353693+00:00",
+  "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "product_version": "1.0.0.5",
+  "same_sha_both_platforms": true,
+  "frozen_main_head": {
+    "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+    "verified_from": "GitHub REST API /repos/42433422/XCMAX/commits/main at 2026-09-18T20:2x +0800",
+    "main_head_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+    "main_head_date": "2026-09-18T01:16:18Z",
+    "main_head_message": "fix(capabilities): 能力目录 href 拼接 id 改用 encodeURIComponent (#1972)",
+    "release_sha_equals_main": true,
+    "commits_after_freeze": 0,
+    "note": "The workspace share could not be used, so the freeze claim is proven against GitHub instead: refs/heads/main still points at the frozen SHA, whose only commit is #1972."
+  },
+  "verdict_vocabulary": [
+    "PASS",
+    "BLOCKED",
+    "FULL_CLOSED",
+    "INTERIM_CLOSED"
+  ],
+  "windows": {
+    "status": "INTERIM_CLOSED",
+    "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+    "product_version": "1.0.0.5",
+    "build_identity": {
+      "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+      "version": "1.0.0.5",
+      "main_head": "54325894cc6e3fc2becfcbc98697a099310d9420",
+      "release_id": "xcagi-1.0.0.5-54325894"
+    },
+    "installer": {
+      "file_name": "XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe",
+      "size_bytes": 248514275,
+      "sha256": "45f761cf1ad968c5abeae466e8b0749364e1d1edfabf0821ef28db52f5cb572e",
+      "sha256_sidecar": "45f761cf1ad968c5abeae466e8b0749364e1d1edfabf0821ef28db52f5cb572e  XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe",
+      "sha256_sidecar_match": true,
+      "signature_status": "unsigned",
+      "authenticode": "NotSigned",
+      "expected_size": 248514275,
+      "expected_sha256": "45f761cf1ad968c5abeae466e8b0749364e1d1edfabf0821ef28db52f5cb572e"
+    },
+    "public_download": {
+      "url": "https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe",
+      "http_status": "200",
+      "content_length": 248514275,
+      "identity_match": true,
+      "downloaded_locally": true,
+      "local_size_bytes": 248514275,
+      "local_sha256": "45f761cf1ad968c5abeae466e8b0749364e1d1edfabf0821ef28db52f5cb572e",
+      "local_identity_match": true
+    },
+    "stable_auto_update_feed": {
+      "feed_url": "https://xiu-ci.com/releases/stable/enterprise/latest.yml",
+      "desktop_config_entry": "enterprise: 'https://xiu-ci.com/releases/stable/enterprise/'",
+      "http_status_443": "404",
+      "http_status_8443": "404",
+      "on_disk": "ABSENT",
+      "closed": true,
+      "signing_acceptance_id": "WSA-2026-09-17-01",
+      "signing_acceptance_status": "accepted_risk",
+      "windows_stable_feed": "closed",
+      "acceptance_window": "2026-09-17T00:00:00+08:00 -> 2029-09-17T00:00:00+08:00",
+      "decision_record": "业主 2026-09-17 决定：在 2029-09-17（含当日）之前，Windows 企业版安装包允许在未完成 Authenticode 代码签名的情况下公开下载，用限期风险接受替代签名硬门禁。授权范围只有官网下载页的 Windows 临时交付包：安装包与指针文件公开可下载，但 Windows 稳定自动更新通道保持关闭（不写 latest.yml），已安装的未签名版本不会自动升级。到期后授权自动失效，下载发布步骤 fail-closed（构建报错而不是静默降级），需重新评估或补齐签名。证据纪律不变：仍要求精确 release SHA、两日安全扫描对、真实安装冒烟回执。"
+    },
+    "interim_closure_reason": "Unsigned installer (Authenticode=NotSigned) published on the official download page under bounded owner risk acceptance WSA-2026-09-17-01; the Windows stable auto-update feed is explicitly closed (windows_stable_feed=closed, no latest.yml), so installed unsigned builds do not auto-upgrade. FULL_CLOSED is therefore not claimable for Windows.",
+    "primary_record": {
+      "windows_ssot": "FHD/docs/WINDOWS_RELEASE_SSOT.md",
+      "macos_ssot": "FHD/docs/MACOS_RELEASE_SSOT.md",
+      "signing_acceptance": "FHD/config/windows_signing_acceptance.json",
+      "artifact_signer": null
+    },
+    "deviations": [
+      {
+        "id": "release-metadata-workspace-wording",
+        "severity": "cosmetic",
+        "observed": {
+          "title": "Mac 应用内更新自动退出与自动重启验证版本",
+          "channel": "enterprise-interim",
+          "platforms": [
+            "macOS Apple Silicon 1.0.0.5 稳定版"
+          ],
+          "version": "1.0.0.5",
+          "channel_name": ""
+        },
+        "expected": {
+          "sku": "enterprise",
+          "product_version": "1.0.0.5"
+        },
+        "detail": "The pointer carries the release title/channel/platforms wording taken from FHD/config/download_release.json (a macOS-worded release entry). Identity fields (version, artifact url, sha256, size, git_sha, signature_status, download_allowed) are correct, and the publish job's own assertions do not cover these wording fields. Not release-blocking.",
+        "config_source": "FHD/config/download_release.json",
+        "config_title": "Mac 应用内更新自动退出与自动重启验证版本",
+        "config_channel": "macOS 稳定版",
+        "config_pointer_mechanism": "the Windows interim pointer copies release.title/channel/platforms verbatim from release_history[0], the newest entry of the shared download-release SSOT, which is the macOS release entry for 1.0.0.5",
+        "note": "title/platforms wording is macOS-flavoured on the Windows interim pointer; the machine-checkable identity fields all match."
+      },
+      {
+        "id": "public-promotion-unattributed",
+        "severity": "provenance",
+        "observed": {
+          "ci_publish_job_conclusion": "failure",
+          "ci_run_conclusion": "cancelled (run 35315576570 updated 2026-09-18T09:09:48Z)",
+          "ci_publish_step_error": "scp: Connection closed, exit 255, artifact transfer reached 114098176 of 248514275 bytes",
+          "public_artifact_mtime": "2026-09-18 16:45:59 +0800 (root, complete 248514275 B, sha256 matches)",
+          "ssh_identities_seen_sep18": "only two: GitHub runner key (ED25519) from 74.207.241.28, and this host key (RSA) from 117.174.15.223",
+          "staged_files_remaining": "none: no .stage-* path exists anywhere under /var/www",
+          "local_contingency_log": "absent: phase1-contingency.ps1 was never executed from this host",
+          "attribution": "UNIDENTIFIED - no retained evidence ties the completed promotion to a specific actor or command; the byte identity of the published artifact is independently verified below regardless"
+        },
+        "detail": "The CI job that should have published the artifact (publish-unsigned-windows-pointer) failed mid-transfer with 'scp: Connection closed' and its run is 'cancelled'; the public files are nevertheless complete and byte-identical, but no retained evidence identifies the actor or command that completed the promotion. The published artifact's byte identity is independently verified (public download sha256 == server sha256 == sidecar sha256 == pointer sha256). Recorded as an open provenance deviation, not silently claimed as a clean CI publish.",
+        "effect_on_verdict": "none: the five Phase 1 outcomes are verified independently of who performed the transfer"
+      }
+    ],
+    "phase_verdicts": {
+      "phase1_real_release": "PASS",
+      "phase2_new_customer_e2e": "PASS",
+      "phase3_promised_upgrade_path": "PASS"
+    },
+    "phases": [
+      {
+        "phase": "phase1_real_release",
+        "verdict": "PASS",
+        "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+        "product_version": "1.0.0.5",
+        "started_at": "2026-09-18T18:49:27.8614506+08:00",
+        "finished_at": "2026-09-18T18:49:57",
+        "source": "C:\\Users\\97088\\AppData\\Local\\Temp\\wsa-verify\\phase1-result.json",
+        "steps": [
+          {
+            "id": "P1-1-installer-produced",
+            "state": "PASS",
+            "detail": "public artifact byte-identity: size=248514275 sha256=45f761cf1ad968c5abeae466e8b0749364e1d1edfabf0821ef28db52f5cb572e size_match=True sha256_match=True"
+          },
+          {
+            "id": "P1-2-public-downloadable",
+            "state": "PASS",
+            "detail": "pointer.download_allowed=True;server_sha256_match=True;published_.sha256_sidecar_match=True;channel=enterprise-interim"
+          },
+          {
+            "id": "P1-3-url-and-sha256-align",
+            "state": "PASS",
+            "detail": "pointer url/sha256/size/git_sha match=True/True/True/True;pointer_sha256=45f761cf1ad968c5abeae466e8b0749364e1d1edfabf0821ef28db52f5cb572e"
+          },
+          {
+            "id": "P1-4-runner-installed-ok",
+            "state": "PASS",
+            "detail": "job=windows-installer-delivery;conclusion=success;head_sha=54325894cc6e3fc2becfcbc98697a099310d9420;evidence='OK: installed buildSha=54325894cc6e3fc2becfcbc98697a099310d9420 version=1.0.0.5 sku=enterprise'"
+          },
+          {
+            "id": "P1-5-stable-feed-not-pushed",
+            "state": "PASS",
+            "detail": "latest.yml http 443=404 8443=404 on_disk=ABSENT"
+          }
+        ],
+        "route": "real_windows_release_from_frozen_sha"
+      },
+      {
+        "phase": "phase2_new_customer_e2e",
+        "verdict": "PASS",
+        "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+        "product_version": "1.0.0.5",
+        "started_at": "2026-09-18T18:33:12",
+        "finished_at": "2026-09-18T18:43:39",
+        "source": "C:\\XCAGI-acceptance-p2\\out\\phase2-result.json",
+        "steps": [
+          {
+            "id": "C1-public-download",
+            "state": "PASS",
+            "detail": "url=https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe;size=248514275;sha256=45f761cf1ad968c5abeae466e8b0749364e1d1edfabf0821ef28db52f5cb572e;download_s=453.2;sidecar_sha256_match=True"
+          },
+          {
+            "id": "C2-silent-install",
+            "state": "PASS",
+            "detail": "exit=0;install_root=C:\\XCAGI-acceptance-p2\\install;version=1.0.0.5;gitSha=54325894cc6e3fc2becfcbc98697a099310d9420;authenticode=NotSigned;procs_after_install=0;listeners_17500=0"
+          },
+          {
+            "id": "C3-first-launch-health",
+            "state": "PASS",
+            "detail": "initial_status=degraded;initial_status_s=26.1;healthy_s=36.2;status=healthy;version=1.0.0.5;gitSha=54325894cc6e3fc2becfcbc98697a099310d9420;runtime=healthy;listeners=1;owner=C:\\XCAGI-acceptance-p2\\install\\resources\\backend\\xcagi-backend.exe;fresh_data_root=C:\\XCAGI-acceptance-p2\\profile\\AppData\\Roaming\\XCAGI;sandbox_db_bytes=1445888;host_profile_untouched=True;host_db_sha256_unchanged=True;sandbox_db_sha256=6f8ae2f9319f0e427580d6ce2e16144b16d5705598782f49cedf1d96e2dc4275"
+          },
+          {
+            "id": "C4-login-binding",
+            "state": "PASS",
+            "detail": "username=SUNBIRD;tenant=1;brand=SUNBIRD;account_kind=enterprise;tier=pro;fresh_session=31ce71a6-e6c8-4ff0-92a0-ebbe153a3b25;entitled_mod_ids=attendance-industry,taiyangniao-pro"
+          },
+          {
+            "id": "C5-entitlement",
+            "state": "PASS",
+            "detail": "subscription_success=True;plan=saas-permanent-growth;delivery_projects=1;project_mods=taiyangniao-pro"
+          },
+          {
+            "id": "C6-mod-loading",
+            "state": "PASS",
+            "detail": "loading_status_success=True;mods_total=24;erp_mod_reachable=True"
+          },
+          {
+            "id": "C7-real-business",
+            "state": "PASS",
+            "detail": "api=POST /api/mod/xcagi-erp-domain-bridge/products/add;name=SUNBIRD-p2-184311;write_source=mod:xcagi-erp-domain-bridge;list_total=1;row_name=SUNBIRD-p2-184311"
+          },
+          {
+            "id": "C8-restart-persistence",
+            "state": "PASS",
+            "detail": "port_released_before_relaunch=True;initial_status=degraded;health=healthy;version=1.0.0.5;gitSha=54325894cc6e3fc2becfcbc98697a099310d9420;session_persisted_user=SUNBIRD;product_found=True;business_row=SUNBIRD-p2-184311;db_bytes_before=1445888;db_bytes_after=1667072"
+          }
+        ]
+      },
+      {
+        "phase": "phase3_promised_upgrade_path",
+        "verdict": "PASS",
+        "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+        "product_version": "1.0.0.5",
+        "started_at": "2026-09-18T18:48:11",
+        "finished_at": "2026-09-18T19:01:19",
+        "source": "C:\\XCAGI-acceptance-p3\\out\\phase3-result.json",
+        "steps": [
+          {
+            "id": "P3-0-pre-state",
+            "state": "PASS",
+            "detail": "installed=1.0.0.4@604b85e1ee82631418002708def18800d7c7f338;db_sha256=ff15e6a05ab4daab9cac38600a31ddcdff26d4b5a1924bb4a17e40baff283cb4;products=12;tenants=2;users=4"
+          },
+          {
+            "id": "P3-1-repo-policy-gate",
+            "state": "PASS",
+            "detail": "gate=test_windows_interim_release_policy.py;result=........ [100%] 8 passed in 0.11s"
+          },
+          {
+            "id": "P3-2-stable-feed-closed",
+            "state": "PASS",
+            "detail": "feed=https://xiu-ci.com/releases/stable/enterprise/latest.yml;http_443=404;http_8443=404;disk=ABSENT"
+          },
+          {
+            "id": "P3-3-public-package",
+            "state": "PASS",
+            "detail": "http=200;size=248514275;sha256=45f761cf1ad968c5abeae466e8b0749364e1d1edfabf0821ef28db52f5cb572e;server_sha256=45f761cf1ad968c5abeae466e8b0749364e1d1edfabf0821ef28db52f5cb572e;route=public_download_page"
+          },
+          {
+            "id": "P3-4-no-ota-for-unsigned",
+            "state": "PASS",
+            "detail": "desktop-config=enterprise: 'https://xiu-ci.com/releases/stable/enterprise/';latest_yml_http=404;expected=404 -> in-app OTA unavailable by design"
+          },
+          {
+            "id": "P3-5-in-place-upgrade",
+            "state": "PASS",
+            "detail": "installer_authenticode=NotSigned;exit=0;from=1.0.0.4@604b85e1ee82631418002708def18800d7c7f338;to=1.0.0.5@54325894cc6e3fc2becfcbc98697a099310d9420;install_root=C:\\XCAGI-acceptance"
+          },
+          {
+            "id": "P3-6-upgraded-health-data-business",
+            "state": "PASS",
+            "detail": "health_seconds=30.8;initial_status=healthy;status=healthy;version=1.0.0.5;gitSha=54325894cc6e3fc2becfcbc98697a099310d9420;login=SUNBIRD;tenant=2;brand=SUNBIRD;products=12->12;users=4->4;business_tag=SUNBIRD-p3-190028"
+          },
+          {
+            "id": "P3-7-restart-persistence",
+            "state": "PASS",
+            "detail": "port_released=True;initial_status=healthy;health=healthy;version=1.0.0.5;gitSha=54325894cc6e3fc2becfcbc98697a099310d9420;session_user=SUNBIRD;business_record_found=1;updater_events_touched=False"
+          }
+        ],
+        "route": "public_download_page_reinstall"
+      }
+    ]
+  },
+  "macos": {
+    "status": "BLOCKED",
+    "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+    "product_version": "1.0.0.5",
+    "executed_by": "macOS side (per owner ruling; this Windows host does not touch macOS)",
+    "blocking_condition": {
+      "required_capability": "interactive or scripted access to the macOS machine to run install/bind/business/upgrade/restart evidence",
+      "available_channels": {
+        "22": false,
+        "445": true,
+        "548": false,
+        "3283": false,
+        "5900": false,
+        "5000": true,
+        "7000": true
+      },
+      "ssh_open": false,
+      "screen_sharing_or_vnc_open": false,
+      "apple_remote_desktop_open": false,
+      "self_hosted_runners_total": 0,
+      "self_hosted_runner_names": [],
+      "statement": "This Windows host can reach the macOS machine only over SMB (445) and AirPlay (5000/7000); there is no SSH (22), no Screen Sharing/VNC (5900) and no Apple Remote Desktop (3283), and the repository has 0 self-hosted runners, so the macOS loop cannot be executed or driven from here. Per owner ruling the macOS loop is executed by the macOS side and its final state is recorded here as BLOCKED, not FULL_CLOSED.",
+      "host_state_at_2013": "the macOS machine is off the network: no ICMP/TCP response from 192.168.10.8, no ARP entry, share unmappable by name or by IP. Both the macOS closed loop and the delivery of this SSOT to the shared workspace are therefore blocked on the macOS host coming back, which this Windows host cannot cause."
+    },
+    "verified_blockers": [
+      {
+        "id": "no-interactive-channel",
+        "channels": {
+          "22": false,
+          "445": true,
+          "548": false,
+          "3283": false,
+          "5900": false,
+          "5000": true,
+          "7000": true
+        },
+        "detail": "only 445/5000/7000 reachable"
+      },
+      {
+        "id": "no-self-hosted-runner",
+        "runner_count": 0,
+        "detail": "no macOS runner registered for repo 42433422/XCMAX"
+      },
+      {
+        "id": "mac-host-offline",
+        "observed_at": "2026-09-18T20:13:03.0255754+08:00",
+        "detail": "Re-probe from this Windows host: 192.168.10.8 no longer answers at all - TCP 22/445/548/3283/5900/7000 all timeout (previously refused), the IPv4 neighbour table contains no entry for it, and neither \\\\4243342deMac-mini.local\\XCMAX nor \\\\192.168.10.8\\XCMAX can be mapped (System error 67, network name cannot be found). The SMB share and the mapped drive V: are therefore unreachable as well.",
+        "tcp_192_168_10_8": {
+          "22": "timeout",
+          "445": "timeout",
+          "548": "timeout",
+          "3283": "timeout",
+          "5900": "timeout",
+          "7000": "timeout"
+        },
+        "net_use_name": "System error 67 - the network name cannot be found",
+        "net_use_ip": "System error 67 - the network name cannot be found",
+        "reachable_v": false,
+        "reachable_unc": false,
+        "reachable_unc_ip": false,
+        "local_host_ipv4": [
+          "172.20.160.1/20 if=vEthernet (WSL (Hyper-V firewall))",
+          "192.168.10.7/24 if=WLAN",
+          "198.18.0.1/30 if=FlClash"
+        ]
+      },
+      {
+        "id": "no-macos-runner-and-no-reachable-host",
+        "observed_at": "2026-09-18T20:2x +0800",
+        "detail": "GitHub API reports 0 registered self-hosted runners for 42433422/XCMAX, and the only macOS OTA run on the frozen SHA (Release Desktop macOS OTA #45) ran on a GitHub-hosted macos-latest runner and was cancelled at the publish step. No macOS machine is therefore reachable, by network or by CI, to produce the install/bind/business/upgrade/restart evidence that FULL_CLOSED requires.",
+        "self_hosted_runners_total": 0,
+        "macos_ota_run_on_frozen_sha": 35319932712,
+        "macos_ota_run_conclusion": "cancelled"
+      }
+    ],
+    "frozen_sha_evidence": {
+      "verified_from": "GitHub REST API /repos/42433422/XCMAX/actions/runs?head_sha=<frozen>",
+      "ota_run": {
+        "name": "Release Desktop macOS OTA",
+        "path": ".github/workflows/fhd-release-desktop-mac-ota.yml",
+        "run_number": 45,
+        "run_id": 35319932712,
+        "event": "workflow_dispatch",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "created_at": "2026-09-18T07:32:45Z"
+      },
+      "ota_job": {
+        "name": "macos-ota",
+        "conclusion": "cancelled",
+        "runner": "GitHub-hosted macos-latest (runner_name 'GitHub Actions 1000165411')",
+        "started_at": "2026-09-18T07:32:53Z",
+        "completed_at": "2026-09-18T08:58:23Z"
+      },
+      "build_and_notarize": "SUCCESS - 'Build macOS enterprise installer' and 'Notarize and staple macOS enterprise DMG' both succeeded, so signed+notarized 1.0.0.5 artifacts do exist for the frozen SHA",
+      "publish_step": {
+        "name": "Publish macOS OTA artifacts to CVM (official + stable)",
+        "conclusion": "cancelled"
+      },
+      "steps_after_cancellation_skipped": [
+        "Verify public latest-mac.yml identity",
+        "Publish download center metadata and changelog"
+      ],
+      "self_hosted_runners_total": 0,
+      "self_hosted_runners": [],
+      "why_still_blocked": "The macOS loop the objective requires - download, install, first launch, login binding, business, upgrade, and data-still-there after restart - must be evidenced on a real Mac, and this repository has 0 registered self-hosted runners, so no macOS machine is reachable from CI either. Combined with the macOS host being off the network (see macos_verified_blockers), the macOS arm cannot be executed or evidenced from here."
+    },
+    "delivery_surface_probe": {
+      "stable_feed_url": "https://xiu-ci.com/releases/stable/enterprise/latest-mac.yml",
+      "stable_feed_http_status": "200",
+      "stable_feed_product_version": "1.0.0.5",
+      "stable_feed_build_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+      "stable_feed_sha_matches_release": true,
+      "release_manifest_url": "https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/latest-mac.yml",
+      "release_manifest_http_status": "200",
+      "release_manifest_product_version": "1.0.0.5",
+      "release_manifest_build_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+      "release_manifest_sha_matches_release": true,
+      "artifact_manifest_http": "200",
+      "artifact_dmg_url": "https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg",
+      "artifact_dmg_http": "200",
+      "artifact_zip_url": "https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/XCAGI-Enterprise-1.0.0.5-mac-arm64.zip",
+      "artifact_zip_http": "200",
+      "artifact_zip_size_declared": 264715517,
+      "artifact_zip_size_published": 264715517,
+      "artifact_zip_size_match": true,
+      "artifact_zip_sha512_declared": "5yCehH+8DS1kyUmX4yG7uTgbqSuHoSdcZHvs2IFE6Vy6qGOQdZSYJYwuGMMHXh6/kfvvB4+JMn5cyz1+KaXENQ==",
+      "artifact_for_release_exists": true,
+      "stable_feed_release_date": "2026-09-18T07:48:07.987Z",
+      "stable_feed_path": "XCAGI-Enterprise-1.0.0.5-mac-arm64.zip",
+      "stable_feed_advanced_observation": "The live macOS stable feed already serves productVersion 1.0.0.5 at buildSha 54325894cc6e3fc2becfcbc98697a099310d9420, while the repository's own macOS SSOT at this same frozen SHA still records G9 = RED and names the 1.0.0.4->1.0.0.5 OTA retest (T9) as the open action. This host can see the feed over HTTP but cannot run the macOS install/bind/business/upgrade/restart loop, so macOS FULL_CLOSED is unverified and is recorded as BLOCKED.",
+      "conclusion": "macOS side published product version 1.0.0.5 for the frozen SHA: the versioned release manifest https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/latest-mac.yml advertises productVersion 1.0.0.5 at buildSha 54325894cc6e3fc2becfcbc98697a099310d9420 and the arm64 dmg/zip next to it are downloadable. The Windows host can only observe this delivery surface over HTTP; it has no channel to run the macOS install/bind/business/upgrade/restart loop, so the macOS arm of this closed loop is recorded as BLOCKED here, not FULL_CLOSED."
+    },
+    "gates_at_freeze": {
+      "g9_row_at_freeze": "| G9 | 更新安装 | RED | **1.0.0.3→1.0.0.4 真机安装链（[round-20260917-ota2-g9-install-chain.json](evidence/e2e/macos-release-1.0.0.4/round-20260917-ota2-g9-install-chain.json)）**：`download_start` 21:14:49.960Z → `update_downloaded` 21:14:50.273Z（命中缓存）→ `install_start` 21:15:28.089Z → ShipIt[4502]「Detected this as an install request」21:15:33.561Z → **181s 无日志（等应用退出）** → 外部 SIGKILL 后 `Installation completed successfully` 21:18:32.675Z → 装机 asar/主可执行 sha256 与官方产物逐字节一致（子项：入口 PASS / 自动退出 FAIL / 替换 PASS / 自动重启 FAIL）；**复现步骤**：1.0.0.3 应用内「下载更新 → 更新并重新加载」→ 应用不退出、181s 零日志 → 外部 SIGKILL 后替换完成但不自动重启。日志 [stuck-state.txt](evidence/e2e/macos-release-1.0.0.4/round-20260917-ota2-g9-stuck-state.txt)、[chain-timeline.jsonl](evidence/e2e/macos-release-1.0.0.4/round-20260917-ota2-g9-chain-timeline.jsonl)，截图 [g9-after-install-click.png](evidence/e2e/macos-release-1.0.0.4/g9-after-install-click.png) | **① 自动退出 FAIL**（1.0.0.3 缺 `app.isQuitting=true` 预置，已由 #1930 修复但未随 1.0.0.4 验证，§7-12）；**② 自动重启 FAIL**（`ShipItState.plist` `launchAfterInstallation=false`，写入时刻 21:15 早于任何外部干预，ShipIt 全程无 Launching 行；应用层可控点未定位，不臆测，§7-14）；③ 本轮夹具 app 属主 `a4243342:staff` → 未覆盖 SecurityAgent 管理员授权分支（§7-15） | 阻断「零干预 OTA」体验；不阻断安装本身、数据与业务 | #1930（自动退出）/ 待立（自动重启） | 1.0.0.4→1.0.0.5 OTA 复测两个子项（T9） |",
+      "g9_status_at_freeze": "RED",
+      "blocking_symptom": "in-app install does not auto-exit the app; ShipIt waits indefinitely; after external kill it replaces but the app does not auto-restart"
+    },
+    "required_next_actions": [
+      "T9: real-machine OTA 1.0.0.4 -> 1.0.0.5, verify in-app install auto-exits, ShipIt replaces, and the app auto-restarts (G9 RED -> GREEN path)",
+      "T10: SecurityAgent admin-authorization branch (app owned by root:wheel) at /Applications",
+      "FULL_CLOSED requires the macOS download/install/first-launch/binding/business/upgrade/restart-data-preserved loop on the same RELEASE_SHA"
+    ],
+    "note": null
+  },
+  "handoff": {
+    "document": "xcagi.customer_loop_ssot/v1 - one machine-readable SSOT for both platforms at one release SHA",
+    "intended_repo_path": "FHD/docs/evidence/e2e/customer-loop-1.0.0.5/customer_loop_ssot.json",
+    "written_path": "v:\\customer_loop_ssot_1.0.0.5.json",
+    "staging_copy": "C:\\Users\\97088\\AppData\\Local\\Temp\\wsa-verify\\ssot.json",
+    "placement_reason": "This Windows host cannot create files or directories anywhere under the repo tree on the SMB share; only the share root is writable. The document is therefore written at the share root, where the macOS side (which owns the share) can read it and commit it to the intended repo path.",
+    "repo_root_write_probe": {
+      "v:\\": "writable",
+      "v:\\FHD": "denied",
+      "v:\\FHD\\docs": "denied",
+      "v:\\FHD\\docs\\evidence\\e2e": "denied",
+      "v:\\FHD\\config": "denied",
+      "v:\\scripts": "denied"
+    },
+    "windows_arm_complete": true,
+    "macos_arm_complete": false,
+    "macos_arm_owner": "macOS side",
+    "copy_at_share_root_verified": "yes at capture time: written 2026-09-18 19:24:43 +0800, 22725 bytes, re-read and parsed (schema=xcagi.customer_loop_ssot/v1, sha=54325894cc6e3fc2becfcbc98697a099310d9420, same_sha_both_platforms=true, windows=INTERIM_CLOSED, macos=BLOCKED)",
+    "share_state_after_copy": "OFFLINE since ~19:26 +0800: the SMB share \\\\4243342deMac-mini.local\\XCMAX dropped and 192.168.10.8 stopped answering (ICMP 'General failure'; TCP 22/445/548/3283/5000/5900/7000 all refused; the mapped drive V: had to be deleted as disconnected and could not be re-created, System error 67). The share-root copy therefore cannot be re-verified from this host at this moment."
+  },
+  "cleanup": {
+    "driver": "C:\\Users\\97088\\AppData\\Local\\Temp\\wsa-verify\\run_clean_tolerant.py",
+    "upstream": "scripts/dev/clean_agent_workspace.py @ RELEASE_SHA",
+    "why_a_driver": "The upstream script walks with Path.rglob, which propagates the SMB share's intermittent scandir failures (WinError -2146893818 / WinError 3) and aborts the whole cleanup. The driver only swaps the walk primitive for os.walk(followlinks=False, onerror=...) and records skipped subtrees; the cleanup logic itself is imported and run unmodified.",
+    "started_at": "2026-09-18T19:11:38+08:00",
+    "exit_code": 0,
+    "status": "clean",
+    "error_count": 0,
+    "kept_count": 0,
+    "attempted_removals": "the reported 'removed' list contains cache directories only (FHD/.venv/**/__pycache__, FHD/app/**/__pycache__, FHD/XCAGI/**, FHD/.pytest_cache ...); no source or documentation file appears",
+    "deletion_actually_effective": "UNVERIFIED",
+    "deletion_verification_note": "Upstream _rm_tree calls shutil.rmtree(path, ignore_errors=True) and then appends the path to 'removed' unconditionally, so the list is a list of attempts, not proof of deletion. Independently, write probing during this run showed this Windows session is denied create/delete anywhere under the repo tree on the share (only the share root is writable), which makes effective deletion unlikely. Confirming the on-disk state requires the share, which went offline at ~19:26 +0800.",
+    "whole_report": "the job output file retained only the trailing 60 lines; removed_count was not captured before truncation",
+    "temporary_files_removed_by_hand": [
+      "wsa-verify/pat-probe.ps1",
+      "wsa-verify/probe-gitshow.ps1",
+      "wsa-verify/t1.bin",
+      "wsa-verify/t2.yml",
+      "wsa-verify/dbg0.part",
+      "wsa-verify/dbg1.part",
+      "%TEMP%/xcagi-utf8-fetch.bin, %TEMP%/xcagi-utf8-gitshow.bin, %TEMP%/xcagi-probe-gitshow.bin",
+      "%TEMP%/fetched.py",
+      "%TEMP%/clean_agent_workspace_repo.py",
+      "%TEMP%/xcagi-pat.txt (contained a live GitHub PAT; removed)",
+      "wsa-verify/pat2.ps1",
+      "wsa-verify/fetch_repo_file.ps1",
+      "wsa-verify/fetch_repo_file.py"
+    ],
+    "evidence_and_artifacts_retained": [
+      "C:\\XCAGI-acceptance-p2 (phase 2 sandbox + downloaded installer + result json)",
+      "C:\\XCAGI-acceptance-p3 (phase 3 installer + result json)",
+      "C:\\Users\\97088\\AppData\\Local\\Temp\\wsa-verify (harness, facts, ssot, CI job logs)"
+    ],
+    "never_used": "no git clean -fdx and no git add -A anywhere in this task",
+    "second_pass_at": "2026-09-18T20:1x +0800",
+    "repo_side_cleanup_rerun": "NOT POSSIBLE this turn: scripts/dev/clean_agent_workspace.py lives on the SMB share, which is unreachable because the macOS host is off the network. The 19:11 report above therefore remains the only repo-side cleanup record."
+  },
+  "post_capture_patch": {
+    "reason": "the SMB share went offline, so build_facts.ps1 (which reads v:\\) could not be re-run",
+    "fields_added": [
+      "cleanup",
+      "handoff.copy_at_share_root_verified",
+      "handoff.share_state_after_copy",
+      "macos_verified_blockers[mac-host-offline]",
+      "macos_blocking_condition.host_state_at_2013",
+      "frozen_main_head (re-verified via GitHub API)",
+      "macos_frozen_sha_evidence",
+      "macos_verified_blockers[no-macos-runner-and-no-reachable-host]"
+    ],
+    "fields_not_re_probed": "every probe captured while the share was up is left exactly as measured"
+  }
+}
