@@ -1,6 +1,6 @@
 {
   "schema": "xcagi.customer_loop_ssot/v1",
-  "generated_at": "2026-09-18T14:07:08.373644+00:00",
+  "generated_at": "2026-09-18T14:15:02.586666+00:00",
   "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
   "product_version": "1.0.0.5",
   "same_sha_both_platforms": true,
@@ -11,8 +11,30 @@
     "main_head_date": "2026-09-18T01:16:18Z",
     "main_head_message": "fix(capabilities): 能力目录 href 拼接 id 改用 encodeURIComponent (#1972)",
     "release_sha_equals_main": true,
-    "commits_after_freeze": 0,
-    "note": "The workspace share could not be used, so the freeze claim is proven against GitHub instead: refs/heads/main still points at the frozen SHA, whose only commit is #1972."
+    "commits_after_freeze": 1,
+    "note": "The freeze claim was proven against GitHub (not the share): at the time of the freeze check refs/heads/main pointed at the frozen SHA and its only commit was #1972. A later re-check found main advanced by one automated metrics-snapshot commit; see post_freeze_drift for the verbatim evidence.",
+    "release_sha_equals_main_at_freeze_check": true,
+    "release_sha_equals_main_now": false,
+    "post_freeze_drift": {
+      "observed_at": "2026-09-18T14:14:30.842167+00:00",
+      "detected_via": "https://github.com/42433422/XCMAX/commits/main.atom (unauthenticated public feed)",
+      "frozen_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+      "new_main_head_sha": "aa0467bd426b23d15a8ad02622ea316750bb65b6",
+      "new_main_head_date": "2026-09-18T13:27:40Z",
+      "new_main_head_message": "chore(metrics): measured snapshot 20260918 (#1974)",
+      "diffstat": "3 files changed, 219 insertions(+), 2 deletions(-)",
+      "files_changed": [
+        "FHD/docs/CLAIMED_VS_ACTUAL.md",
+        "FHD/metrics/dora-20260918.json",
+        "FHD/metrics/slo-production/20260918T124649Z-35346452501-1.json"
+      ],
+      "touches_product_code": false,
+      "touches_release_pipeline": false,
+      "release_impact": "none",
+      "assessment": "The drifted commit is an auto-generated metrics/docs snapshot (DORA + SLO JSON plus the generated CLAIMED_VS_ACTUAL.md). It changes no application code, no build/package configuration and no release workflow, so the artifacts already built, signed/published and verified from the frozen SHA remain the artifacts of record for this release.",
+      "decision": "The release SHA stays 54325894cc6e3fc2becfcbc98697a099310d9420 for both platforms. Re-targeting the release to the new head would invalidate the Windows three-phase evidence, which was produced against the frozen SHA.",
+      "caveat_for_both_platforms": "main is no longer byte-identical to the frozen SHA. Anyone re-verifying 'main == release SHA' will now see a mismatch; the mismatch is the metrics-snapshot commit above, not a functional change."
+    }
   },
   "verdict_vocabulary": [
     "PASS",
@@ -499,6 +521,13 @@
         "branch": "evidence/customer-loop-1.0.0.5-ssot",
         "action": "Append the macOS arm to the SAME document: replace macos.status with FULL_CLOSED, fill in the per-phase PASS/BLOCKED steps, point the evidence at the real-machine logs and screenshots, then open/merge the finished version in one go.",
         "windows_section": "Do not change the windows section: it is already INTERIM_CLOSED with all three phases PASS at this SHA."
+      },
+      "main_head_drift_before_you_start": {
+        "frozen_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+        "current_main_head_sha": "aa0467bd426b23d15a8ad02622ea316750bb65b6",
+        "commit": "chore(metrics): measured snapshot 20260918 (#1974)",
+        "release_impact": "none",
+        "instruction": "Do not re-target the macOS release to the new head. Keep releasing from the frozen SHA so both platforms report the same SHA; record this drift in the macOS section rather than silently re-freezing."
       }
     },
     "note": null
