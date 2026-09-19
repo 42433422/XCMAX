@@ -1,0 +1,32 @@
+{
+  "_comment": "Snapshot of actual installed Mac UI; preserve historical outcome.",
+  "kind": "feature-acceptance",
+  "feature": "base-update-mgmt",
+  "status": "failed",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-20",
+  "reviewed_at": "2026-09-20",
+  "passed": 0,
+  "failed": 1,
+  "visible_content": "Mac 正式安装版侧栏显示 v1.0.0.5，但设置的关于页显示当前版本 1.0.0，版本信息不一致。检查更新按钮仅反馈已开始检查，未证明下载、安装或回滚完成。",
+  "media": [
+    {
+      "feature": "base-update-mgmt",
+      "path": "FHD/docs/evidence/e2e/macos-acceptance-20260920/12-about-version-mismatch.png",
+      "sha256": "802bb2164cef46ecffc254064e093f221b885e57e0206e2f949539a71ad473d1",
+      "visual_review": "accepted",
+      "visible_result": "同一张未经修改的实机截图可读出左下角 v1.0.0.5 和关于页当前版本 1.0.0；设备配对卡片已在应用内收起。",
+      "reviewed_at": "2026-09-20"
+    }
+  ],
+  "cases": [
+    {
+      "input": "/Applications/XCAGI.app 正式安装版 1.0.0.5，SUNBIRD 当前登录会话",
+      "actions": "点击系统设置，展开关于，比较关于页与侧栏版本。",
+      "expected": "关于页显示当前实际安装的产品版本 1.0.0.5。",
+      "observed": "关于页显示 1.0.0，侧栏显示 v1.0.0.5。",
+      "result": "failed"
+    }
+  ]
+}
