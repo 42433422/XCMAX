@@ -18,6 +18,7 @@ import argparse
 import datetime as dt
 import html
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -38,6 +39,14 @@ STATUS_META = {
 }
 STATUS_ORDER = ["verified", "partial", "implemented", "planned"]
 
+# 矩阵图例：状态 → 一句话口径，与状态分级说明同源，避免两处口径漂移。
+STATUS_LEGEND = (
+    ("verified", "有实现、自动化测试与 CI 门禁记录，公开页面可逐项查证"),
+    ("partial", "实现已合入且有部分证据，验证覆盖不完整，限制已知"),
+    ("implemented", "代码已合入，暂缺自动化测试或实机验证证据"),
+    ("planned", "仅有设计与规划，无已合入实现"),
+)
+
 PLATFORM_META = {
     "windows": "Windows 桌面",
     "macos": "macOS 桌面",
@@ -45,6 +54,30 @@ PLATFORM_META = {
     "android": "Android",
     "ios": "iOS",
 }
+
+# 完成度加权口径：公开进度数字的唯一算法，页面同时展示该规则，不接受人工填写。
+COMPLETION_WEIGHT = {"verified": 1.0, "partial": 0.7, "implemented": 0.4, "planned": 0.0}
+
+# 状态 → 矩阵勾选图标（已完成 / 部分完成 / 进行中 / 未开始）。
+TICK_CLASS = {
+    "verified": "t-ok",
+    "partial": "t-part",
+    "implemented": "t-wip",
+    "planned": "t-todo",
+}
+
+# 域卡强调色：按目录顺序循环，仅用于视觉分区，不表达任何状态。
+DOMAIN_ACCENTS = (
+    "#2f6df6", "#7c4dff", "#12a150", "#ff8a00", "#e6486b",
+    "#0f9d8c", "#e5484d", "#2f6df6", "#7c4dff", "#12a150",
+)
+
+# 三端产品形态：等级文案取自 FHD/VERSION.md「各端交付等级」表，不另写对外口径。
+PRODUCT_FORMS = (
+    {"name": "桌面端", "sub": "Windows / macOS", "keys": ("Windows 桌面", "macOS 桌面")},
+    {"name": "移动端", "sub": "Android", "keys": ("Android",)},
+    {"name": "管理端", "sub": "Web", "keys": ("Web / 后端",)},
+)
 
 
 def esc(value) -> str:
@@ -88,6 +121,7 @@ def validate_feature(feat: dict, warnings: list[str]) -> dict:
     ci = ev.get("ci", []) or []
     docs = ev.get("docs", []) or []
     shots = ev.get("screenshots", []) or []
+    videos = ev.get("videos", []) or []
 
     impl_ok = [p for p in impl if path_exists(p)]
     impl_missing = [p for p in impl if not path_exists(p)]
@@ -95,6 +129,7 @@ def validate_feature(feat: dict, warnings: list[str]) -> dict:
     ci_ok = [p for p in ci if path_exists(p.split(":")[0])]
     docs_ok = [p for p in docs if path_exists(p)]
     shots_ok = [p for p in shots if path_exists(p)]
+    videos_ok = [p for p in videos if path_exists(p)]
 
     for p in impl_missing:
         warnings.append(f"[{feat['id']}] 实现路径不存在: {p}")
@@ -104,6 +139,9 @@ def validate_feature(feat: dict, warnings: list[str]) -> dict:
     for p in shots:
         if p not in shots_ok:
             warnings.append(f"[{feat['id']}] 运行证据不存在: {p}")
+    for p in videos:
+        if p not in videos_ok:
+            warnings.append(f"[{feat['id']}] 运行录像不存在: {p}")
 
     claimed = feat["status"]
     final = claimed
@@ -125,7 +163,7 @@ def validate_feature(feat: dict, warnings: list[str]) -> dict:
     elif claimed == "partial":
         if not impl_ok:
             downgrade("implemented", "实现路径缺失或未合入")
-        elif not tests_ok and not shots_ok:
+        elif not tests_ok and not shots_ok and not videos_ok:
             downgrade("implemented", "既无自动化测试也无运行证据")
     elif claimed == "implemented":
         if not impl_ok:
@@ -163,6 +201,7 @@ def validate_feature(feat: dict, warnings: list[str]) -> dict:
             "ci": ci_ok,
             "docs": docs_ok,
             "screenshots": shots_ok,
+            "videos": videos_ok,
             "commits": commit_info,
         },
         "verified_at": verified_at[:10] if verified_at else None,
@@ -190,6 +229,24 @@ def load_platform_levels() -> dict[str, str]:
         elif in_section and line.strip() and not line.strip().startswith("|"):
             break
     return levels
+
+
+def load_product_version() -> str:
+    """从 FHD/VERSION.md 读取稳定产品版本，官网不写死版本号。"""
+    try:
+        text = (REPO_ROOT / "FHD" / "VERSION.md").read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    m = re.search(r"XCAGI 稳定产品版本\*\*\s*\|\s*`([^`]+)`", text)
+    return m.group(1) if m else ""
+
+
+def completion(features: list[dict]) -> int:
+    """按 COMPLETION_WEIGHT 加权计算一组能力的完成度百分比（四舍五入）。"""
+    if not features:
+        return 0
+    weighted = sum(COMPLETION_WEIGHT.get(f["status"], 0.0) for f in features)
+    return int(round(weighted / len(features) * 100))
 
 
 def build(repo_root_note: bool = True) -> tuple[dict, list[str], list[dict]]:
@@ -228,7 +285,10 @@ def build(repo_root_note: bool = True) -> tuple[dict, list[str], list[dict]]:
         "generated_at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         "principle": "No Evidence, No Claim：所有状态由构建脚本按仓库证据校验，证据缺失自动降级。",
         "stats": stats,
+        "product_version": load_product_version(),
         "platform_levels": load_platform_levels(),
+        "deployment_modes": catalog.get("deployment_modes", []) or [],
+        "next_plan": catalog.get("next_plan", []) or [],
         "domains": [
             {
                 "id": d["id"],
@@ -280,17 +340,20 @@ def compute_stats(domains_out: list[dict], feature_index: list[dict]) -> dict:
         "verified_total": by_status["verified"],
         "last_verified_at": max(verified_times) if verified_times else None,
         "platform_counts": platform_counts,
+        "completion": completion(feature_index),
     }
 
 
 # ---------------------------------------------------------------- rendering
 
 def css(href: str) -> str:
-    return f'<link rel="stylesheet" href="{href}?v=20260916a" />'
+    return f'<link rel="stylesheet" href="{href}?v=20260919b" />'
 
 
 def header_html(page_key: str, title_suffix: str, description: str, canonical: str) -> str:
+    # 生成物横幅：明确声明页面由脚本生成，避免被当成手工维护页面直接编辑。
     return f"""<!doctype html>
+<!-- 此文件由 scripts/build_capability_center.py 自动生成，请勿手改（DO NOT EDIT）。 -->
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
@@ -394,79 +457,128 @@ def platform_tags(platforms: list[str]) -> str:
 
 def render_index(data: dict, domains_full: list[dict]) -> str:
     s = data["stats"]
-    platform_level_items = "".join(
-        f"<li><strong>{esc(k)}</strong>：{esc(v)}</li>" for k, v in data.get("platform_levels", {}).items()
-    )
-    domain_cards = []
-    for d in domains_full:
-        fcount = sum(len(m["features"]) for m in d["modules"])
-        vcount = sum(
-            1 for m in d["modules"] for f in m["features"] if f["status"] == "verified"
-        )
-        module_names = "、".join(m["name"] for m in d["modules"])
-        domain_cards.append(
-            f"""<a class="card cap-domain-card" href="/capabilities/catalog.html?domain={esc(d['id'])}">
-              <div class="cap-domain-head"><h3>{esc(d['name'])}</h3><span class="cap-count"><strong>{vcount}</strong>/{fcount} 已验证</span></div>
-              <p class="cap-domain-desc">{esc(d.get('description', ''))}</p>
-              <p class="cap-domain-modules">{esc(module_names)}</p>
-            </a>"""
-        )
+    version = data.get("product_version") or ""
+    ver_html = f' <span class="capm-ver">v{esc(version)}</span>' if version else ""
     last_verified = s["last_verified_at"] or "—"
-    return f"""{header_html("capabilities", "产品能力中心", "XCAGI 产品能力中心：每一项能力都有真实实现与验证依据，公开数字由能力目录自动统计。", "/capabilities/")}
+
+    # 左主体：10 张域卡（5 列 × 2 行），逐条列出功能并链接到各自证据详情页。
+    cards = []
+    for i, d in enumerate(domains_full):
+        feats = [f for m in d["modules"] for f in m["features"]]
+        pct = completion(feats)
+        items = "".join(
+            f'<li><a class="capm-feat" href="/capabilities/feature/{esc(f["id"])}.html">'
+            f'<i class="capm-tick {TICK_CLASS[f["status"]]}" aria-hidden="true"></i>'
+            f"<span>{esc(f['name'])}</span></a></li>"
+            for f in feats
+        )
+        cards.append(
+            f"""<article class="capm-card" style="--accent:{DOMAIN_ACCENTS[i % len(DOMAIN_ACCENTS)]}">
+          <header class="capm-card-head"><h3>{esc(d['name'])}</h3><span class="capm-card-count">（{len(feats)}项）</span></header>
+          <ul class="capm-feats">{items}</ul>
+          <footer class="capm-card-foot"><div class="capm-bar" role="img" aria-label="完成度 {pct}%"><span style="width:{pct}%"></span></div><span class="capm-pct">完成度 {pct}%</span></footer>
+        </article>"""
+        )
+
+    # 右侧栏：三端产品形态，等级文案取自 FHD/VERSION.md，不另写口径。
+    forms = []
+    for form in PRODUCT_FORMS:
+        levels = [v for v in (data.get("platform_levels", {}).get(k, "") for k in form["keys"]) if v]
+        level = " / ".join(levels) or "见版本说明"
+        warn = any("实验" in v or "非签约" in v for v in levels)
+        forms.append(
+            f"""<li class="capm-form"><div><strong>{esc(form['name'])}</strong><span>{esc(form['sub'])}</span></div>
+          <em class="capm-badge {'capm-badge--warn' if warn else 'capm-badge--ok'}">{esc(level)}</em></li>"""
+        )
+
+    # 右侧栏：安全与网络三模式，由目录 SSOT 维护。
+    modes = "".join(
+        f'<li class="capm-mode"><strong>{esc(m["name"])}</strong>'
+        f"<span>{esc(m.get('network', ''))} + {esc(m.get('storage', ''))}</span>"
+        f"<em>{esc(m.get('desc', ''))}</em></li>"
+        for m in data.get("deployment_modes", [])
+    )
+
+    # 底部：待验收 / 待补齐清单，按状态严重度排序取前 5，逐条可点进证据页。
+    pending = sorted(
+        (f for d in domains_full for m in d["modules"] for f in m["features"] if f["status"] != "verified"),
+        key=lambda f: STATUS_META[f["status"]]["rank"],
+    )[:5]
+    pending_items = "".join(
+        f'<li><span class="capm-rank">{i + 1}</span>'
+        f'<a href="/capabilities/feature/{esc(f["id"])}.html">{esc(f["name"])}</a>'
+        f"{status_badge(f['status'])}</li>"
+        for i, f in enumerate(pending)
+    )
+
+    # 底部：下一步重点计划，由目录 SSOT 维护。
+    plan_items = "".join(
+        f'<li><span class="capm-rank">{i + 1}</span><span>{esc(x)}</span></li>'
+        for i, x in enumerate(data.get("next_plan", []))
+    )
+
+    legend = "".join(
+        f'<li><i class="capm-tick {TICK_CLASS[k]}" aria-hidden="true"></i>'
+        f'<strong>{STATUS_META[k]["label"]}</strong><span>{esc(desc)}</span></li>'
+        for k, desc in STATUS_LEGEND
+    )
+
+    return f"""{header_html("capabilities", "产品能力中心", "XCMAX 产品能力矩阵：逐项公开实现与验证证据，点击任一功能查看实机截图或录像，所有数字由能力目录自动统计。", "/capabilities/")}
 <main>
-  <section class="page-hero">
-    <div class="container page-hero-inner">
-      <div>
-        <span class="eyebrow">Product Capability Center</span>
-        <h1>产品能力中心</h1>
-        <p>这不是宣传页，而是一份公开的功能证据库：每一项能力都对应仓库里真实的实现、自动化测试、CI 记录或实机运行证据。没有证据的能力，我们标注为"待验证"或"规划中"，绝不夸大。</p>
+  <section class="capm-hero">
+    <div class="container capm-hero-inner">
+      <div class="capm-hero-main">
+        <h1><span class="capm-logo">XCMAX</span> 企业 AI 员工桌面平台{ver_html}</h1>
+        <p class="capm-sub">跨平台 · 三端协同 · 一站式 AI 员工工作台</p>
+        <p class="capm-slogan">把 AI 员工装进每台企业电脑，让企业自己运转</p>
       </div>
-      <div class="page-hero-side"><p>原则：No Evidence, No Claim。所有状态由构建脚本按仓库证据逐项校验，证据缺失自动降级。</p></div>
-    </div>
-  </section>
-
-  <section class="section cap-stats-section">
-    <div class="container">
-      <div class="cap-stats-band" id="cap-stats">
-        <div class="cap-stat"><span class="cap-stat-num">{s['total']}</span><span class="cap-stat-label">能力总数</span></div>
-        <div class="cap-stat cap-stat--verified"><span class="cap-stat-num">{s['by_status']['verified']}</span><span class="cap-stat-label">已验证</span></div>
-        <div class="cap-stat"><span class="cap-stat-num">{s['by_status']['partial']}</span><span class="cap-stat-label">部分验证</span></div>
-        <div class="cap-stat"><span class="cap-stat-num">{s['by_status']['implemented']}</span><span class="cap-stat-label">已实现待验证</span></div>
-        <div class="cap-stat"><span class="cap-stat-num">{s['by_status']['planned']}</span><span class="cap-stat-label">规划中</span></div>
-        <div class="cap-stat cap-stat--time"><span class="cap-stat-num cap-stat-date">{esc(last_verified)}</span><span class="cap-stat-label">最近验证时间</span></div>
-      </div>
-      <p class="cap-generated-note">以上数字由能力目录（data/capabilities/catalog.json）自动统计，生成于 {esc(data['generated_at'])}，目录版本 {esc(data['catalog_version'])}。无人工填写。</p>
-      <div class="cap-entry-buttons">
-        <a class="btn btn-primary" href="/capabilities/catalog.html">浏览全部能力</a>
-        <a class="btn btn-secondary" href="/capabilities/catalog.html?status=verified">只看已验证能力</a>
+      <div class="capm-hero-side">
+        <p class="capm-hero-quote">让 AI 员工<br />创造真实的生产力</p>
+        <ul class="capm-hero-tags"><li>更高效</li><li>更智能</li><li>更自由</li></ul>
       </div>
     </div>
   </section>
 
-  <section class="section">
-    <div class="container">
-      <h2>状态分级说明</h2>
-      <div class="grid grid-4 cap-status-legend">
-        <article class="card"><h3><span class="cap-status st-verified">已验证</span></h3><p>有实现、自动化测试与 CI 门禁记录（或有实机运行证据）支撑，公开页面可逐项查证。</p></article>
-        <article class="card"><h3><span class="cap-status st-partial">部分验证</span></h3><p>实现已合入且有部分证据（测试或实机证据），但验证覆盖不完整，限制已知。</p></article>
-        <article class="card"><h3><span class="cap-status st-implemented">已实现待验证</span></h3><p>代码已合入，但暂缺自动化测试或 CI/实机验证证据。不承诺为可用能力。</p></article>
-        <article class="card"><h3><span class="cap-status st-planned">规划中</span></h3><p>仅有设计与规划，无已合入实现。出现在公开目录中是为了诚实展示方向。</p></article>
-      </div>
-    </div>
-  </section>
+  <div class="container capm-layout">
+    <div class="capm-main">
+      <div class="capm-matrix">{''.join(cards)}</div>
 
-  <section class="section">
-    <div class="container">
-      <h2>能力目录（产品域 → 模块 → 功能）</h2>
-      <p class="cap-section-note">共 {s['domains']} 个产品域、{s['modules']} 个模块、{s['total']} 项能力，全部来自当前仓库审计。点击产品域查看模块与功能明细。</p>
-      <div class="grid grid-2 cap-domain-grid">
-        {''.join(domain_cards)}
-      </div>
-      <div class="cap-entry-buttons">
-        <a class="btn btn-primary" href="/capabilities/catalog.html">进入完整能力目录（支持搜索与筛选）</a>
+      <div class="capm-bottom">
+        <section class="capm-panel capm-panel--progress">
+          <h2>当前版本进度</h2>
+          <div class="capm-progress-top"><div class="capm-bar capm-bar--lg"><span style="width:{s['completion']}%"></span></div><strong>{s['completion']}%</strong></div>
+          <p class="capm-panel-note">总体完成度按加权口径计算：已验证 100%、部分验证 70%、已实现待验证 40%、规划中 0%，按功能数加权。截至 {esc(last_verified)}，共 {s['total']} 项能力、{s['modules']} 个模块、{s['domains']} 个产品域。</p>
+          <ul class="capm-legend">{legend}</ul>
+        </section>
+        <section class="capm-panel">
+          <h2>主要问题与待验收项（Top 5）</h2>
+          <ol class="capm-list">{pending_items}</ol>
+        </section>
+        <section class="capm-panel">
+          <h2>下一步重点计划</h2>
+          <ol class="capm-list">{plan_items}</ol>
+        </section>
       </div>
     </div>
-  </section>
+
+    <aside class="capm-side">
+      <section class="capm-side-block">
+        <h2>三端产品形态</h2>
+        <ul class="capm-forms">{''.join(forms)}</ul>
+        <p class="capm-panel-note">等级自动读取自产品版本说明 FHD/VERSION.md，非人工宣传口径。</p>
+      </section>
+      <section class="capm-side-block">
+        <h2>安全与网络三模式</h2>
+        <ul class="capm-modes">{modes}</ul>
+      </section>
+      <section class="capm-side-block capm-side-brand">
+        <strong>XCMAX</strong>
+        <span>AI EMPLOYEES FOR A BETTER BUSINESS</span>
+        <em>成都修茈科技有限公司 · xiu-ci.com</em>
+        <a class="btn btn-primary btn-sm" href="/capabilities/catalog.html">浏览完整能力目录</a>
+      </section>
+    </aside>
+  </div>
 
   <section class="section">
     <div class="container">
@@ -484,16 +596,8 @@ def render_index(data: dict, domains_full: list[dict]) -> str:
 
   <section class="section">
     <div class="container">
-      <h2>各端交付等级（对外口径）</h2>
-      <p class="cap-section-note">以下等级自动读取自产品版本说明（FHD/VERSION.md），是版本域的单一事实来源，非人工宣传口径。</p>
-      <ul class="cap-platform-levels">{' ' if platform_level_items else ''}{platform_level_items}</ul>
-    </div>
-  </section>
-
-  <section class="section">
-    <div class="container">
       <h2>本页数字是怎么来的</h2>
-      <p>能力目录 <code>data/capabilities/catalog.json</code> 由仓库审计维护；构建脚本 <code>scripts/build_capability_center.py</code> 在生成页面前逐项校验证据：实现路径、自动化测试、CI 工作流、实机证据必须真实存在于当前仓库，否则状态自动降级并在构建报告中留痕。目录与页面由 CI 漂移门禁校验一致性，公开数字无法手写、无法夸大。</p>
+      <p>能力目录 <code>data/capabilities/catalog.json</code> 由仓库审计维护；构建脚本 <code>scripts/build_capability_center.py</code> 在生成页面前逐项校验证据：实现路径、自动化测试、CI 工作流、实机截图与录像必须真实存在于当前仓库，否则状态自动降级并在构建报告中留痕。矩阵中每个功能都可点进详情页查看对应证据。目录与页面由 CI 漂移门禁校验一致性，公开数字无法手写、无法夸大。</p>
     </div>
   </section>
 </main>
@@ -536,7 +640,7 @@ def render_catalog(data: dict) -> str:
   </section>
 </main>
 <script id="cap-catalog-data" type="application/json">{payload}</script>
-<script src="/capabilities/assets/catalog.js?v=20260916a"></script>
+<script src="/capabilities/assets/catalog.js?v=20260919b"></script>
 {footer_html()}"""
 
 
@@ -558,15 +662,46 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
             f'<div class="cap-downgrade-note">机器校验：构建时声明状态为「{STATUS_META[f["claimed_status"]]["label"]}」，'
             f"因{esc(reasons)}已自动降级为「{STATUS_META[f['status']]['label']}」。这就是 No Evidence, No Claim 的执行方式。</div>"
         )
+
+    def asset(fid: str, path: str) -> str:
+        """证据资产在站点内的相对路径（构建时会把原始文件复制到 assets/evidence/）。"""
+        return f"/capabilities/assets/evidence/{esc(fid + '-' + Path(path).name)}"
+
+    media_html = ""
+    video_tags = []
+    for p in ev.get("videos", []):
+        poster = f' poster="{asset(f["id"], ev["screenshots"][0])}"' if ev["screenshots"] else ""
+        video_tags.append(
+            f'<figure class="cap-shot"><video controls preload="metadata"{poster} src="{asset(f["id"], p)}"></video>'
+            f"<figcaption>实机运行录像 / 操作流程（原始文件：{esc(p)}）</figcaption></figure>"
+        )
+    if video_tags:
+        media_html = (
+            '<div class="cap-evidence-media"><h3>实机录像 / 操作流程</h3>'
+            f'<div class="cap-shots">{"".join(video_tags)}</div></div>'
+        )
+
     shots_html = ""
     shot_tags = []
     for p in ev["screenshots"]:
-        fname = f"{f['id']}-{Path(p).name}"
+        src = asset(f["id"], p)
         shot_tags.append(
-            f'<figure class="cap-shot"><img src="/capabilities/assets/evidence/{esc(fname)}" alt="{esc(f["name"])} 实机证据" loading="lazy" /><figcaption>实机运行证据（原始文件：{esc(p)}）</figcaption></figure>'
+            f'<figure class="cap-shot"><a class="cap-shot-link" href="{src}" target="_blank" rel="noopener">'
+            f'<img src="{src}" alt="{esc(f["name"])} 实机证据" loading="lazy" /></a>'
+            f"<figcaption>实机运行证据（原始文件：{esc(p)}）</figcaption></figure>"
         )
     if shot_tags:
-        shots_html = f'<h3>实机截图 / 运行证据</h3><div class="cap-shots">{"".join(shot_tags)}</div>'
+        shots_html = (
+            '<div class="cap-evidence-media"><h3>实机截图 / 运行证据</h3>'
+            f'<div class="cap-shots">{"".join(shot_tags)}</div></div>'
+        )
+    elif not media_html:
+        shots_html = (
+            '<div class="cap-evidence-media"><h3>实机截图 / 运行证据</h3>'
+            '<p class="cap-evidence-note">本项没有独立的产品界面（后端服务、流水线门禁或管理端能力），'
+            '因此不提供实机截图。它的真伪请以上方「源码实现 / 自动化测试 / CI 记录」为准，'
+            '这些路径都可以在仓库中逐条打开核对。</p></div>'
+        )
 
     commits_html = evidence_list(
         [f"{c['sha']} {c['subject']} ({c['date']})" for c in ev["commits"]]
@@ -608,12 +743,13 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
   <section class="section cap-evidence-section">
     <div class="container">
       <h2>技术验证资料</h2>
-      <p class="cap-section-note">以下内容由构建脚本从当前仓库自动生成（生成于 {esc(data['generated_at'])}）。路径相对产品仓库根目录；未公开仓库的客户可向我们索取演示与审计说明。</p>
+      <p class="cap-section-note">以下内容由构建脚本从当前仓库自动生成（生成于 {esc(data['generated_at'])}）。路径相对产品仓库根目录；未公开仓库的客户可向我们索取演示与审计说明。实机截图均为产品真实运行界面，点击图片可查看原图。</p>
       <div class="cap-evidence-grid">
         <div class="cap-evidence-block"><h3>源码实现</h3>{evidence_list(ev['impl'])}</div>
         <div class="cap-evidence-block"><h3>API 端点</h3>{evidence_list(ev.get('api', []))}</div>
         <div class="cap-evidence-block"><h3>自动化测试</h3>{evidence_list(ev['tests'])}<p class="cap-evidence-note">CI 门禁：{esc('、'.join(ev['ci']) if ev['ci'] else '按仓库 CI 流水线执行')}</p></div>
         <div class="cap-evidence-block"><h3>CI 记录</h3>{evidence_list(ev['ci'])}</div>
+        {media_html}
         {shots_html}
         <div class="cap-evidence-block"><h3>关联文档</h3>{evidence_list(ev['docs'])}</div>
         <div class="cap-evidence-block"><h3>验证 commit</h3>{commits_html}</div>
@@ -626,9 +762,7 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
 
 # ---------------------------------------------------------------- main
 
-import re as _re
-
-_TS_PATTERN = _re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC")
+_TS_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC")
 
 
 def _normalize_ts(text: str) -> str:
@@ -648,18 +782,20 @@ def write_outputs(data: dict, domains_full: list[dict]) -> dict[str, str]:
     return outputs
 
 
-def copy_screenshots(domains_full: list[dict]) -> list[str]:
+def copy_evidence_assets(domains_full: list[dict]) -> list[str]:
+    """把目录里声明的截图与录像复制到站点证据目录，供详情页直接引用。"""
     copied = []
     EVIDENCE_ASSET_DIR.mkdir(parents=True, exist_ok=True)
     for d in domains_full:
         for m in d["modules"]:
             for f in m["features"]:
-                for p in f["evidence"]["screenshots"]:
-                    src = e(p)
-                    dst = EVIDENCE_ASSET_DIR / f"{f['id']}-{Path(p).name}"
-                    if src.exists():
-                        shutil.copy2(src, dst)
-                        copied.append(str(dst.relative_to(WEBSITE_DIR)))
+                for kind in ("screenshots", "videos"):
+                    for p in f["evidence"].get(kind, []):
+                        src = e(p)
+                        dst = EVIDENCE_ASSET_DIR / f"{f['id']}-{Path(p).name}"
+                        if src.exists():
+                            shutil.copy2(src, dst)
+                            copied.append(str(dst.relative_to(WEBSITE_DIR)))
     return copied
 
 
@@ -719,14 +855,14 @@ def main() -> int:
         target = WEBSITE_DIR / rel
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
-    copied = copy_screenshots(domains_full)
+    copied = copy_evidence_assets(domains_full)
     removed = prune_stale_generated(outputs)
 
     s = data["stats"]
     print(f"已生成能力中心：{s['total']} 项能力 / {s['modules']} 模块 / {s['domains']} 域")
     print(f"状态分布：{s['by_status']}")
     print(f"最近验证时间：{s['last_verified_at']}")
-    print(f"截图证据复制：{len(copied)} 个；清理过期页：{len(removed)} 个")
+    print(f"证据资产复制（截图/录像）：{len(copied)} 个；清理过期页：{len(removed)} 个")
     if warnings:
         print(f"\n构建警告 {len(warnings)} 条：")
         for w in warnings:

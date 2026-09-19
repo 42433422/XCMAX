@@ -1,13 +1,14 @@
 <!doctype html>
+<!-- 此文件由 scripts/build_capability_center.py 自动生成，请勿手改（DO NOT EDIT）。 -->
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>产品能力中心 | 成都修茈科技有限公司</title>
-    <meta name="description" content="XCAGI 产品能力中心：每一项能力都有真实实现与验证依据，公开数字由能力目录自动统计。" />
+    <meta name="description" content="XCMAX 产品能力矩阵：逐项公开实现与验证证据，点击任一功能查看实机截图或录像，所有数字由能力目录自动统计。" />
     <link rel="canonical" href="/capabilities/" />
     <link rel="stylesheet" href="/styles.css?v=20260722h" />
-    <link rel="stylesheet" href="/capabilities/assets/capabilities.css?v=20260916a" />
+    <link rel="stylesheet" href="/capabilities/assets/capabilities.css?v=20260919b" />
   </head>
 <body data-page="capabilities">
 <header class="site-header">
@@ -54,99 +55,103 @@
 </nav>
 
 <main>
-  <section class="page-hero">
-    <div class="container page-hero-inner">
-      <div>
-        <span class="eyebrow">Product Capability Center</span>
-        <h1>产品能力中心</h1>
-        <p>这不是宣传页，而是一份公开的功能证据库：每一项能力都对应仓库里真实的实现、自动化测试、CI 记录或实机运行证据。没有证据的能力，我们标注为"待验证"或"规划中"，绝不夸大。</p>
+  <section class="capm-hero">
+    <div class="container capm-hero-inner">
+      <div class="capm-hero-main">
+        <h1><span class="capm-logo">XCMAX</span> 企业 AI 员工桌面平台 <span class="capm-ver">v1.0.0.5</span></h1>
+        <p class="capm-sub">跨平台 · 三端协同 · 一站式 AI 员工工作台</p>
+        <p class="capm-slogan">把 AI 员工装进每台企业电脑，让企业自己运转</p>
       </div>
-      <div class="page-hero-side"><p>原则：No Evidence, No Claim。所有状态由构建脚本按仓库证据逐项校验，证据缺失自动降级。</p></div>
-    </div>
-  </section>
-
-  <section class="section cap-stats-section">
-    <div class="container">
-      <div class="cap-stats-band" id="cap-stats">
-        <div class="cap-stat"><span class="cap-stat-num">50</span><span class="cap-stat-label">能力总数</span></div>
-        <div class="cap-stat cap-stat--verified"><span class="cap-stat-num">13</span><span class="cap-stat-label">已验证</span></div>
-        <div class="cap-stat"><span class="cap-stat-num">14</span><span class="cap-stat-label">部分验证</span></div>
-        <div class="cap-stat"><span class="cap-stat-num">22</span><span class="cap-stat-label">已实现待验证</span></div>
-        <div class="cap-stat"><span class="cap-stat-num">1</span><span class="cap-stat-label">规划中</span></div>
-        <div class="cap-stat cap-stat--time"><span class="cap-stat-num cap-stat-date">2026-09-18</span><span class="cap-stat-label">最近验证时间</span></div>
-      </div>
-      <p class="cap-generated-note">以上数字由能力目录（data/capabilities/catalog.json）自动统计，生成于 2026-09-17 18:32 UTC，目录版本 2026-09-16。无人工填写。</p>
-      <div class="cap-entry-buttons">
-        <a class="btn btn-primary" href="/capabilities/catalog.html">浏览全部能力</a>
-        <a class="btn btn-secondary" href="/capabilities/catalog.html?status=verified">只看已验证能力</a>
+      <div class="capm-hero-side">
+        <p class="capm-hero-quote">让 AI 员工<br />创造真实的生产力</p>
+        <ul class="capm-hero-tags"><li>更高效</li><li>更智能</li><li>更自由</li></ul>
       </div>
     </div>
   </section>
 
-  <section class="section">
-    <div class="container">
-      <h2>状态分级说明</h2>
-      <div class="grid grid-4 cap-status-legend">
-        <article class="card"><h3><span class="cap-status st-verified">已验证</span></h3><p>有实现、自动化测试与 CI 门禁记录（或有实机运行证据）支撑，公开页面可逐项查证。</p></article>
-        <article class="card"><h3><span class="cap-status st-partial">部分验证</span></h3><p>实现已合入且有部分证据（测试或实机证据），但验证覆盖不完整，限制已知。</p></article>
-        <article class="card"><h3><span class="cap-status st-implemented">已实现待验证</span></h3><p>代码已合入，但暂缺自动化测试或 CI/实机验证证据。不承诺为可用能力。</p></article>
-        <article class="card"><h3><span class="cap-status st-planned">规划中</span></h3><p>仅有设计与规划，无已合入实现。出现在公开目录中是为了诚实展示方向。</p></article>
-      </div>
-    </div>
-  </section>
+  <div class="container capm-layout">
+    <div class="capm-main">
+      <div class="capm-matrix"><article class="capm-card" style="--accent:#2f6df6">
+          <header class="capm-card-head"><h3>产品底座与账户</h3><span class="capm-card-count">（5项）</span></header>
+          <ul class="capm-feats"><li><a class="capm-feat" href="/capabilities/feature/base-login.html"><i class="capm-tick t-ok" aria-hidden="true"></i><span>登录与会话管理</span></a></li><li><a class="capm-feat" href="/capabilities/feature/base-rbac.html"><i class="capm-tick t-part" aria-hidden="true"></i><span>权限与角色控制（RBAC）</span></a></li><li><a class="capm-feat" href="/capabilities/feature/base-edition-pack.html"><i class="capm-tick t-part" aria-hidden="true"></i><span>三档部署形态（minimal / generic / full）</span></a></li><li><a class="capm-feat" href="/capabilities/feature/base-health.html"><i class="capm-tick t-ok" aria-hidden="true"></i><span>服务健康探针</span></a></li><li><a class="capm-feat" href="/capabilities/feature/base-db.html"><i class="capm-tick t-wip" aria-hidden="true"></i><span>数据库 WAL 与自恢复</span></a></li></ul>
+          <footer class="capm-card-foot"><div class="capm-bar" role="img" aria-label="完成度 76%"><span style="width:76%"></span></div><span class="capm-pct">完成度 76%</span></footer>
+        </article><article class="capm-card" style="--accent:#7c4dff">
+          <header class="capm-card-head"><h3>AI 员工与办公</h3><span class="capm-card-count">（7项）</span></header>
+          <ul class="capm-feats"><li><a class="capm-feat" href="/capabilities/feature/ai-chat-core.html"><i class="capm-tick t-ok" aria-hidden="true"></i><span>多轮智能对话（流式）</span></a></li><li><a class="capm-feat" href="/capabilities/feature/ai-intent.html"><i class="capm-tick t-part" aria-hidden="true"></i><span>意图识别与工具路由</span></a></li><li><a class="capm-feat" href="/capabilities/feature/ai-employees-workflow.html"><i class="capm-tick t-ok" aria-hidden="true"></i><span>工作流员工（数字员工编排）</span></a></li><li><a class="capm-feat" href="/capabilities/feature/ai-employee-pack.html"><i class="capm-tick t-wip" aria-hidden="true"></i><span>办公员工包</span></a></li><li><a class="capm-feat" href="/capabilities/feature/ai-excel.html"><i class="capm-tick t-wip" aria-hidden="true"></i><span>Excel 生成与解析</span></a></li><li><a class="capm-feat" href="/capabilities/feature/ai-tts.html"><i class="capm-tick t-wip" aria-hidden="true"></i><span>语音合成与播报（TTS）</span></a></li><li><a class="capm-feat" href="/capabilities/feature/ai-knowledge.html"><i class="capm-tick t-wip" aria-hidden="true"></i><span>知识库与向量检索</span></a></li></ul>
+          <footer class="capm-card-foot"><div class="capm-bar" role="img" aria-label="完成度 61%"><span style="width:61%"></span></div><span class="capm-pct">完成度 61%</span></footer>
+        </article><article class="capm-card" style="--accent:#12a150">
+          <header class="capm-card-head"><h3>ERP 与业务文件</h3><span class="capm-card-count">（8项）</span></header>
+          <ul class="capm-feats"><li><a class="capm-feat" href="/capabilities/feature/erp-shipment.html"><i class="capm-tick t-ok" aria-hidden="true"></i><span>发货单与出货管理</span></a></li><li><a class="capm-feat" href="/capabilities/feature/erp-purchase.html"><i class="capm-tick t-wip" aria-hidden="true"></i><span>采购管理</span></a></li><li><a class="capm-feat" href="/capabilities/feature/erp-inventory.html"><i class="capm-tick t-wip" aria-hidden="true"></i><span>库存管理</span></a></li><li><a class="capm-feat" href="/capabilities/feature/erp-finance-ledger.html"><i class="capm-tick t-wip" aria-hidden="true"></i><span>财务账本与发票</span></a></li><li><a class="capm-feat" href="/capabilities/feature/erp-templates.html"><i class="capm-tick t-part" aria-hidden="true"></i><span>单据模板与套打</span></a></li><li><a class="capm-feat" href="/capabilities/feature/erp-label.html"><i class="capm-tick t-ok" aria-hidden="true"></i><span>标签打印</span></a></li><li><a class="capm-feat" href="/capabilities/feature/erp-excel-io.html"><i class="capm-tick t-wip" aria-hidden="true"></i><span>Excel 导入导出</span></a></li><li><a class="capm-feat" href="/capabilities/feature/erp-ocr.html"><i class="capm-tick t-part" aria-hidden="true"></i><span>OCR 单据识别</span></a></li></ul>
+          <footer class="capm-card-foot"><div class="capm-bar" role="img" aria-label="完成度 62%"><span style="width:62%"></span></div><span class="capm-pct">完成度 62%</span></footer>
+        </article><article class="capm-card" style="--accent:#ff8a00">
+          <header class="capm-card-head"><h3>消息、移动与外部渠道</h3><span class="capm-card-count">（6项）</span></header>
+          <ul class="capm-feats"><li><a class="capm-feat" href="/capabilities/feature/ch-im-core.html"><i class="capm-tick t-part" aria-hidden="true"></i><span>站内 IM 与实时通道</span></a></li><li><a class="capm-feat" href="/capabilities/feature/ch-im-cs.html"><i class="capm-tick t-wip" aria-hidden="true"></i><span>AI 客服与话术协同</span></a></li><li><a class="capm-feat" href="/capabilities/feature/ch-wechat-ingest.html"><i class="capm-tick t-ok" aria-hidden="true"></i><span>微信消息接入</span></a></li><li><a class="capm-feat" href="/capabilities/feature/ch-wechat-contacts.html"><i class="capm-tick t-wip" aria-hidden="true"></i><span>微信联系人同步与情报</span></a></li><li><a class="capm-feat" href="/capabilities/feature/ch-mobile-android.html"><i class="capm-tick t-part" aria-hidden="true"></i><span>Android 移动端</span></a></li><li><a class="capm-feat" href="/capabilities/feature/ch-mobile-ios.html"><i class="capm-tick t-todo" aria-hidden="true"></i><span>iOS 移动端</span></a></li></ul>
+          <footer class="capm-card-foot"><div class="capm-bar" role="img" aria-label="完成度 53%"><span style="width:53%"></span></div><span class="capm-pct">完成度 53%</span></footer>
+        </article><article class="capm-card" style="--accent:#e6486b">
+          <header class="capm-card-head"><h3>Mod 制作与开放生态</h3><span class="capm-card-count">（4项）</span></header>
+          <ul class="capm-feats"><li><a class="capm-feat" href="/capabilities/feature/mods-loader.html"><i class="capm-tick t-ok" aria-hidden="true"></i><span>Mod 加载与清单校验</span></a></li><li><a class="capm-feat" href="/capabilities/feature/mods-store.html"><i class="capm-tick t-ok" aria-hidden="true"></i><span>Mod 市场与一键装包</span></a></li><li><a class="capm-feat" href="/capabilities/feature/mods-open-api.html"><i class="capm-tick t-ok" aria-hidden="true"></i><span>开放 API（ai_open）</span></a></li><li><a class="capm-feat" href="/capabilities/feature/mods-webhook.html"><i class="capm-tick t-wip" aria-hidden="true"></i><span>业务事件 Webhook</span></a></li></ul>
+          <footer class="capm-card-foot"><div class="capm-bar" role="img" aria-label="完成度 85%"><span style="width:85%"></span></div><span class="capm-pct">完成度 85%</span></footer>
+        </article><article class="capm-card" style="--accent:#0f9d8c">
+          <header class="capm-card-head"><h3>行业与客户定制</h3><span class="capm-card-count">（5项）</span></header>
+          <ul class="capm-feats"><li><a class="capm-feat" href="/capabilities/feature/ind-coating.html"><i class="capm-tick t-wip" aria-hidden="true"></i><span>涂装行业包</span></a></li><li><a class="capm-feat" href="/capabilities/feature/ind-packaging.html"><i class="capm-tick t-wip" aria-hidden="true"></i><span>饰品/包装行业包</span></a></li><li><a class="capm-feat" href="/capabilities/feature/ind-attendance.html"><i class="capm-tick t-part" aria-hidden="true"></i><span>考勤行业包</span></a></li><li><a class="capm-feat" href="/capabilities/feature/ind-taiyangniao.html"><i class="capm-tick t-wip" aria-hidden="true"></i><span>太阳鸟专属 Mod</span></a></li><li><a class="capm-feat" href="/capabilities/feature/ind-szqsm.html"><i class="capm-tick t-wip" aria-hidden="true"></i><span>奇士美专属 Mod</span></a></li></ul>
+          <footer class="capm-card-foot"><div class="capm-bar" role="img" aria-label="完成度 46%"><span style="width:46%"></span></div><span class="capm-pct">完成度 46%</span></footer>
+        </article><article class="capm-card" style="--accent:#e5484d">
+          <header class="capm-card-head"><h3>支付、授权与经营结算</h3><span class="capm-card-count">（3项）</span></header>
+          <ul class="capm-feats"><li><a class="capm-feat" href="/capabilities/feature/pay-alipay.html"><i class="capm-tick t-part" aria-hidden="true"></i><span>支付宝支付与回调</span></a></li><li><a class="capm-feat" href="/capabilities/feature/pay-lan.html"><i class="capm-tick t-wip" aria-hidden="true"></i><span>局域网部署与授权网关</span></a></li><li><a class="capm-feat" href="/capabilities/feature/pay-entitlement.html"><i class="capm-tick t-part" aria-hidden="true"></i><span>企业授权与权益管理</span></a></li></ul>
+          <footer class="capm-card-foot"><div class="capm-bar" role="img" aria-label="完成度 60%"><span style="width:60%"></span></div><span class="capm-pct">完成度 60%</span></footer>
+        </article><article class="capm-card" style="--accent:#2f6df6">
+          <header class="capm-card-head"><h3>管理自治与客户交付</h3><span class="capm-card-count">（3项）</span></header>
+          <ul class="capm-feats"><li><a class="capm-feat" href="/capabilities/feature/ops-admin-console.html"><i class="capm-tick t-ok" aria-hidden="true"></i><span>企业管理总后台</span></a></li><li><a class="capm-feat" href="/capabilities/feature/ops-self-heal.html"><i class="capm-tick t-wip" aria-hidden="true"></i><span>AI 自愈与自治运维</span></a></li><li><a class="capm-feat" href="/capabilities/feature/ops-delivery.html"><i class="capm-tick t-part" aria-hidden="true"></i><span>专属交付与同步</span></a></li></ul>
+          <footer class="capm-card-foot"><div class="capm-bar" role="img" aria-label="完成度 70%"><span style="width:70%"></span></div><span class="capm-pct">完成度 70%</span></footer>
+        </article><article class="capm-card" style="--accent:#7c4dff">
+          <header class="capm-card-head"><h3>桌面控制与运行底座</h3><span class="capm-card-count">（3项）</span></header>
+          <ul class="capm-feats"><li><a class="capm-feat" href="/capabilities/feature/dt-shell.html"><i class="capm-tick t-ok" aria-hidden="true"></i><span>Windows/macOS 桌面壳</span></a></li><li><a class="capm-feat" href="/capabilities/feature/dt-ota.html"><i class="capm-tick t-part" aria-hidden="true"></i><span>自动更新（OTA）</span></a></li><li><a class="capm-feat" href="/capabilities/feature/dt-rpa.html"><i class="capm-tick t-part" aria-hidden="true"></i><span>桌面自动化与运行时状态</span></a></li></ul>
+          <footer class="capm-card-foot"><div class="capm-bar" role="img" aria-label="完成度 80%"><span style="width:80%"></span></div><span class="capm-pct">完成度 80%</span></footer>
+        </article><article class="capm-card" style="--accent:#12a150">
+          <header class="capm-card-head"><h3>安全审计与验证</h3><span class="capm-card-count">（6项）</span></header>
+          <ul class="capm-feats"><li><a class="capm-feat" href="/capabilities/feature/sec-gdpr.html"><i class="capm-tick t-wip" aria-hidden="true"></i><span>数据隐私与导出（GDPR）</span></a></li><li><a class="capm-feat" href="/capabilities/feature/sec-audit.html"><i class="capm-tick t-part" aria-hidden="true"></i><span>操作审计与日志</span></a></li><li><a class="capm-feat" href="/capabilities/feature/sec-scan.html"><i class="capm-tick t-part" aria-hidden="true"></i><span>安全扫描门禁</span></a></li><li><a class="capm-feat" href="/capabilities/feature/sec-e2e.html"><i class="capm-tick t-ok" aria-hidden="true"></i><span>端到端自动化验收</span></a></li><li><a class="capm-feat" href="/capabilities/feature/sec-coverage.html"><i class="capm-tick t-part" aria-hidden="true"></i><span>测试覆盖率与棘轮门禁</span></a></li><li><a class="capm-feat" href="/capabilities/feature/sec-release-gate.html"><i class="capm-tick t-part" aria-hidden="true"></i><span>发布门禁与实机验收</span></a></li></ul>
+          <footer class="capm-card-foot"><div class="capm-bar" role="img" aria-label="完成度 70%"><span style="width:70%"></span></div><span class="capm-pct">完成度 70%</span></footer>
+        </article></div>
 
-  <section class="section">
-    <div class="container">
-      <h2>能力目录（产品域 → 模块 → 功能）</h2>
-      <p class="cap-section-note">共 10 个产品域、26 个模块、50 项能力，全部来自当前仓库审计。点击产品域查看模块与功能明细。</p>
-      <div class="grid grid-2 cap-domain-grid">
-        <a class="card cap-domain-card" href="/capabilities/catalog.html?domain=base">
-              <div class="cap-domain-head"><h3>产品底座与账户</h3><span class="cap-count"><strong>2</strong>/5 已验证</span></div>
-              <p class="cap-domain-desc">账户体系、权限控制、部署形态与运行底座，是所有上层能力的公共基础。</p>
-              <p class="cap-domain-modules">账户与认证、部署形态、运行底座</p>
-            </a><a class="card cap-domain-card" href="/capabilities/catalog.html?domain=ai">
-              <div class="cap-domain-head"><h3>AI 员工与办公</h3><span class="cap-count"><strong>2</strong>/7 已验证</span></div>
-              <p class="cap-domain-desc">以智能对话为入口的 AI 员工体系：多轮对话、意图路由、员工编排与办公技能。</p>
-              <p class="cap-domain-modules">智能对话、AI 员工、办公技能</p>
-            </a><a class="card cap-domain-card" href="/capabilities/catalog.html?domain=erp">
-              <div class="cap-domain-head"><h3>ERP 与业务文件</h3><span class="cap-count"><strong>2</strong>/8 已验证</span></div>
-              <p class="cap-domain-desc">覆盖进销存、财务、单据打印与 OCR 识别的核心业务能力，均为仓库内真实实现。</p>
-              <p class="cap-domain-modules">进销存、财务、单据与打印、单据识别</p>
-            </a><a class="card cap-domain-card" href="/capabilities/catalog.html?domain=channel">
-              <div class="cap-domain-head"><h3>消息、移动与外部渠道</h3><span class="cap-count"><strong>1</strong>/6 已验证</span></div>
-              <p class="cap-domain-desc">站内 IM、微信渠道接入与移动端，把 AI 员工延伸到企业沟通的第一线。</p>
-              <p class="cap-domain-modules">站内消息、微信渠道、移动端</p>
-            </a><a class="card cap-domain-card" href="/capabilities/catalog.html?domain=mods">
-              <div class="cap-domain-head"><h3>Mod 制作与开放生态</h3><span class="cap-count"><strong>3</strong>/4 已验证</span></div>
-              <p class="cap-domain-desc">以 Mod（房子）+ 员工（家具）为核心的开放架构：加载、市场、开放 API 与交付链路。</p>
-              <p class="cap-domain-modules">Mod 运行时、开放生态</p>
-            </a><a class="card cap-domain-card" href="/capabilities/catalog.html?domain=industry">
-              <div class="cap-domain-head"><h3>行业与客户定制</h3><span class="cap-count"><strong>0</strong>/5 已验证</span></div>
-              <p class="cap-domain-desc">以行业 Mod 与客户专属 Mod 交付定制，定制不侵入核心，可随主线升级。</p>
-              <p class="cap-domain-modules">行业包、客户专属 Mod</p>
-            </a><a class="card cap-domain-card" href="/capabilities/catalog.html?domain=pay">
-              <div class="cap-domain-head"><h3>支付、授权与经营结算</h3><span class="cap-count"><strong>0</strong>/3 已验证</span></div>
-              <p class="cap-domain-desc">支付宝支付、企业授权与 Token 钱包结算；该域变更永远走人工审核。</p>
-              <p class="cap-domain-modules">支付、授权与权益</p>
-            </a><a class="card cap-domain-card" href="/capabilities/catalog.html?domain=ops">
-              <div class="cap-domain-head"><h3>管理自治与客户交付</h3><span class="cap-count"><strong>1</strong>/3 已验证</span></div>
-              <p class="cap-domain-desc">企业管理总后台、AI 自愈自治运维与专属交付链路。</p>
-              <p class="cap-domain-modules">管理后台、自治与自愈、客户交付</p>
-            </a><a class="card cap-domain-card" href="/capabilities/catalog.html?domain=desktop">
-              <div class="cap-domain-head"><h3>桌面控制与运行底座</h3><span class="cap-count"><strong>1</strong>/3 已验证</span></div>
-              <p class="cap-domain-desc">Windows/macOS 桌面壳、自动更新与桌面自动化，是「把 AI 员工装进每台电脑」的载体。</p>
-              <p class="cap-domain-modules">桌面壳、桌面自动化</p>
-            </a><a class="card cap-domain-card" href="/capabilities/catalog.html?domain=sec">
-              <div class="cap-domain-head"><h3>安全审计与验证</h3><span class="cap-count"><strong>1</strong>/6 已验证</span></div>
-              <p class="cap-domain-desc">数据隐私、审计与质量验证体系：本能力中心自身的诚实性也依赖这一域。</p>
-              <p class="cap-domain-modules">安全机制、验证体系</p>
-            </a>
-      </div>
-      <div class="cap-entry-buttons">
-        <a class="btn btn-primary" href="/capabilities/catalog.html">进入完整能力目录（支持搜索与筛选）</a>
+      <div class="capm-bottom">
+        <section class="capm-panel capm-panel--progress">
+          <h2>当前版本进度</h2>
+          <div class="capm-progress-top"><div class="capm-bar capm-bar--lg"><span style="width:65%"></span></div><strong>65%</strong></div>
+          <p class="capm-panel-note">总体完成度按加权口径计算：已验证 100%、部分验证 70%、已实现待验证 40%、规划中 0%，按功能数加权。截至 2026-09-18，共 50 项能力、26 个模块、10 个产品域。</p>
+          <ul class="capm-legend"><li><i class="capm-tick t-ok" aria-hidden="true"></i><strong>已验证</strong><span>有实现、自动化测试与 CI 门禁记录，公开页面可逐项查证</span></li><li><i class="capm-tick t-part" aria-hidden="true"></i><strong>部分验证</strong><span>实现已合入且有部分证据，验证覆盖不完整，限制已知</span></li><li><i class="capm-tick t-wip" aria-hidden="true"></i><strong>已实现待验证</strong><span>代码已合入，暂缺自动化测试或实机验证证据</span></li><li><i class="capm-tick t-todo" aria-hidden="true"></i><strong>规划中</strong><span>仅有设计与规划，无已合入实现</span></li></ul>
+        </section>
+        <section class="capm-panel">
+          <h2>主要问题与待验收项（Top 5）</h2>
+          <ol class="capm-list"><li><span class="capm-rank">1</span><a href="/capabilities/feature/ch-mobile-ios.html">iOS 移动端</a><span class="cap-status st-planned">规划中</span></li><li><span class="capm-rank">2</span><a href="/capabilities/feature/base-db.html">数据库 WAL 与自恢复</a><span class="cap-status st-implemented">已实现待验证</span></li><li><span class="capm-rank">3</span><a href="/capabilities/feature/ai-employee-pack.html">办公员工包</a><span class="cap-status st-implemented">已实现待验证</span></li><li><span class="capm-rank">4</span><a href="/capabilities/feature/ai-excel.html">Excel 生成与解析</a><span class="cap-status st-implemented">已实现待验证</span></li><li><span class="capm-rank">5</span><a href="/capabilities/feature/ai-tts.html">语音合成与播报（TTS）</a><span class="cap-status st-implemented">已实现待验证</span></li></ol>
+        </section>
+        <section class="capm-panel">
+          <h2>下一步重点计划</h2>
+          <ol class="capm-list"><li><span class="capm-rank">1</span><span>完成移动端绑定与真机验收</span></li><li><span class="capm-rank">2</span><span>打通 下载 → 安装 → 绑定 → 运行 闭环</span></li><li><span class="capm-rank">3</span><span>完成桌面自动化真实实现并验证</span></li><li><span class="capm-rank">4</span><span>完成 3 家客户交付与验收</span></li><li><span class="capm-rank">5</span><span>推进 10-20 家落地并优化功能</span></li></ol>
+        </section>
       </div>
     </div>
-  </section>
+
+    <aside class="capm-side">
+      <section class="capm-side-block">
+        <h2>三端产品形态</h2>
+        <ul class="capm-forms"><li class="capm-form"><div><strong>桌面端</strong><span>Windows / macOS</span></div>
+          <em class="capm-badge capm-badge--ok">签约级 / 签约级</em></li><li class="capm-form"><div><strong>移动端</strong><span>Android</span></div>
+          <em class="capm-badge capm-badge--warn">实验骨架·非签约级</em></li><li class="capm-form"><div><strong>管理端</strong><span>Web</span></div>
+          <em class="capm-badge capm-badge--ok">签约级</em></li></ul>
+        <p class="capm-panel-note">等级自动读取自产品版本说明 FHD/VERSION.md，非人工宣传口径。</p>
+      </section>
+      <section class="capm-side-block">
+        <h2>安全与网络三模式</h2>
+        <ul class="capm-modes"><li class="capm-mode"><strong>绝对安全模式</strong><span>内网 + SQLite</span><em>数据不出网，最高安全等级</em></li><li class="capm-mode"><strong>安全模式</strong><span>外网 + SQLite</span><em>解放 AI 能力，数据留在本地</em></li><li class="capm-mode"><strong>性能模式</strong><span>外网 + PostgreSQL</span><em>向量检索 / 长期记忆 / 工具调用</em></li></ul>
+      </section>
+      <section class="capm-side-block capm-side-brand">
+        <strong>XCMAX</strong>
+        <span>AI EMPLOYEES FOR A BETTER BUSINESS</span>
+        <em>成都修茈科技有限公司 · xiu-ci.com</em>
+        <a class="btn btn-primary btn-sm" href="/capabilities/catalog.html">浏览完整能力目录</a>
+      </section>
+    </aside>
+  </div>
 
   <section class="section">
     <div class="container">
@@ -164,16 +169,8 @@
 
   <section class="section">
     <div class="container">
-      <h2>各端交付等级（对外口径）</h2>
-      <p class="cap-section-note">以下等级自动读取自产品版本说明（FHD/VERSION.md），是版本域的单一事实来源，非人工宣传口径。</p>
-      <ul class="cap-platform-levels"> <li><strong>Windows 桌面</strong>：签约级</li><li><strong>macOS 桌面</strong>：签约级</li><li><strong>Web / 后端</strong>：签约级</li><li><strong>Android</strong>：实验骨架·非签约级</li></ul>
-    </div>
-  </section>
-
-  <section class="section">
-    <div class="container">
       <h2>本页数字是怎么来的</h2>
-      <p>能力目录 <code>data/capabilities/catalog.json</code> 由仓库审计维护；构建脚本 <code>scripts/build_capability_center.py</code> 在生成页面前逐项校验证据：实现路径、自动化测试、CI 工作流、实机证据必须真实存在于当前仓库，否则状态自动降级并在构建报告中留痕。目录与页面由 CI 漂移门禁校验一致性，公开数字无法手写、无法夸大。</p>
+      <p>能力目录 <code>data/capabilities/catalog.json</code> 由仓库审计维护；构建脚本 <code>scripts/build_capability_center.py</code> 在生成页面前逐项校验证据：实现路径、自动化测试、CI 工作流、实机截图与录像必须真实存在于当前仓库，否则状态自动降级并在构建报告中留痕。矩阵中每个功能都可点进详情页查看对应证据。目录与页面由 CI 漂移门禁校验一致性，公开数字无法手写、无法夸大。</p>
     </div>
   </section>
 </main>

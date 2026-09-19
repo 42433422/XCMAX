@@ -1,7 +1,19 @@
 {
   "schema_version": 1,
   "catalog_version": "2026-09-16",
-  "_comment": "产品能力目录 SSOT。所有 evidence 路径相对产品仓库根目录；构建脚本会逐项校验，证据缺失自动降级状态（No Evidence, No Claim）。状态：verified=已验证(实现+测试+CI) / partial=部分验证(实现+部分证据) / implemented=已实现待验证(仅实现) / planned=规划中。",
+  "_comment": "产品能力目录 SSOT。所有 evidence 路径相对产品仓库根目录；构建脚本会逐项校验，证据缺失自动降级状态（No Evidence, No Claim）。状态：verified=已验证(实现+测试+CI) / partial=部分验证(实现+部分证据) / implemented=已实现待验证(仅实现) / planned=规划中。evidence.videos 为可选的实机录像/操作流程文件路径，与 screenshots 同样校验存在性并复制到站点证据目录。",
+  "deployment_modes": [
+    { "name": "绝对安全模式", "network": "内网", "storage": "SQLite", "desc": "数据不出网，最高安全等级" },
+    { "name": "安全模式", "network": "外网", "storage": "SQLite", "desc": "解放 AI 能力，数据留在本地" },
+    { "name": "性能模式", "network": "外网", "storage": "PostgreSQL", "desc": "向量检索 / 长期记忆 / 工具调用" }
+  ],
+  "next_plan": [
+    "完成移动端绑定与真机验收",
+    "打通 下载 → 安装 → 绑定 → 运行 闭环",
+    "完成桌面自动化真实实现并验证",
+    "完成 3 家客户交付与验收",
+    "推进 10-20 家落地并优化功能"
+  ],
   "domains": [
     {
       "id": "base",
@@ -92,7 +104,7 @@
                 "tests": ["FHD/tests/routes/test_health_k8s_probe.py"],
                 "ci": ["FHD/.github/workflows/ci-cd.yml"],
                 "docs": ["FHD/docs/CLAIMED_VS_ACTUAL.md"],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/base-health-01-api-health.png"],
                 "commits": []
               }
             },
@@ -110,7 +122,7 @@
                 "tests": [],
                 "ci": [],
                 "docs": [],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/base-db-01-desktop-runtime-data-dir.png"],
                 "commits": []
               }
             }
@@ -159,7 +171,7 @@
                 "tests": [],
                 "ci": ["FHD/.github/workflows/intent-benchmark.yml"],
                 "docs": [],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/ai-intent-01-planner-tools.png"],
                 "commits": []
               }
             }
@@ -183,7 +195,7 @@
                 "tests": ["FHD/tests/test_core_workflow_mod.py"],
                 "ci": ["FHD/.github/workflows/ci-cd.yml"],
                 "docs": [],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/ai-employees-workflow-01-employee-workspace.png", "FHD/docs/evidence/capabilities/ai-employees-workflow-02-employee-flow-graph.png"],
                 "commits": []
               }
             },
@@ -201,7 +213,7 @@
                 "tests": [],
                 "ci": [],
                 "docs": ["FHD/docs/guides/PLATFORM_SHELL.md"],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/ai-employee-pack-01-employee-market.png"],
                 "commits": []
               }
             }
@@ -225,7 +237,7 @@
                 "tests": [],
                 "ci": [],
                 "docs": ["FHD/docs/excel_import_api.md"],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/ai-excel-01-etl-upload.png"],
                 "commits": []
               }
             },
@@ -243,7 +255,7 @@
                 "tests": [],
                 "ci": [],
                 "docs": [],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/ai-tts-01-chat-voice-toggle.png"],
                 "commits": []
               }
             },
@@ -261,7 +273,7 @@
                 "tests": [],
                 "ci": [],
                 "docs": [],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/ai-knowledge-01-knowledge-graph.png"],
                 "commits": []
               }
             }
@@ -292,7 +304,7 @@
                 "tests": ["FHD/tests/domain/test_shipment_product_parser.py"],
                 "ci": ["FHD/.github/workflows/ci-cd.yml"],
                 "docs": ["FHD/docs/FEATURE_MAP.md"],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/erp-shipment-01-shipment-records.png"],
                 "commits": []
               }
             },
@@ -310,7 +322,7 @@
                 "tests": [],
                 "ci": [],
                 "docs": [],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/erp-purchase-01-purchase-orders.png"],
                 "commits": []
               }
             },
@@ -328,7 +340,7 @@
                 "tests": [],
                 "ci": [],
                 "docs": [],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/erp-inventory-01-inventory-management.png"],
                 "commits": []
               }
             }
@@ -352,7 +364,7 @@
                 "tests": [],
                 "ci": [],
                 "docs": [],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/erp-finance-ledger-01-finance-analysis.png"],
                 "commits": []
               }
             }
@@ -376,7 +388,7 @@
                 "tests": ["FHD/tests/test_chat_template_save_chain.py"],
                 "ci": ["FHD/.github/workflows/ci-cd.yml"],
                 "docs": [],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/erp-templates-01-template-library.png"],
                 "commits": []
               }
             },
@@ -394,7 +406,7 @@
                 "tests": ["FHD/tests/routes/test_print_routes_5xx.py"],
                 "ci": ["FHD/.github/workflows/ci-cd.yml"],
                 "docs": ["FHD/docs/FEATURE_MAP.md"],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/erp-label-01-label-editor.png", "FHD/docs/evidence/capabilities/erp-label-02-label-print.png"],
                 "commits": []
               }
             },
@@ -412,7 +424,7 @@
                 "tests": [],
                 "ci": [],
                 "docs": ["FHD/docs/excel_import_api.md"],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/erp-excel-io-01-etl-center.png"],
                 "commits": []
               }
             }
@@ -467,7 +479,7 @@
                 "tests": ["FHD/frontend/e2e/im-v0-two-user.spec.ts"],
                 "ci": ["FHD/.github/workflows/ci-cd.yml"],
                 "docs": [],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/ch-im-core-01-im-messenger.png"],
                 "commits": []
               }
             },
@@ -485,7 +497,7 @@
                 "tests": [],
                 "ci": [],
                 "docs": [],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/ch-im-cs-02-customer-service.png"],
                 "commits": []
               }
             }
@@ -509,7 +521,7 @@
                 "tests": ["FHD/tests/routes/test_wechat_ingest.py"],
                 "ci": ["FHD/.github/workflows/ci-cd.yml"],
                 "docs": [],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/ch-wechat-ingest-01-data-sources.png"],
                 "commits": []
               }
             },
@@ -527,7 +539,7 @@
                 "tests": [],
                 "ci": [],
                 "docs": [],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/ch-wechat-contacts-02-message-db-adapter.png"],
                 "commits": []
               }
             }
@@ -603,7 +615,7 @@
                 "tests": ["FHD/tests/test_decoupling_mods.py", "FHD/tests/mod_presence.py"],
                 "ci": ["FHD/.github/workflows/ci-cd.yml"],
                 "docs": ["FHD/docs/FEATURE_MAP.md"],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/mods-loader-01-mod-store.png"],
                 "commits": []
               }
             },
@@ -645,7 +657,7 @@
                 "tests": ["FHD/tests/test_aiopen.py", "FHD/tests/test_aiopen_capability_loop.py"],
                 "ci": ["FHD/.github/workflows/ci-cd.yml"],
                 "docs": ["FHD/docs/aiopen.md"],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/mods-open-api-01-aiopen-platform.png"],
                 "commits": []
               }
             },
@@ -694,7 +706,7 @@
                 "tests": [],
                 "ci": [],
                 "docs": [],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/ind-coating-02-industry-packs.png"],
                 "commits": []
               }
             },
@@ -754,7 +766,7 @@
                 "tests": [],
                 "ci": [],
                 "docs": [],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/ind-taiyangniao-03-taiyangniao.png"],
                 "commits": []
               }
             },
@@ -772,7 +784,7 @@
                 "tests": [],
                 "ci": [],
                 "docs": [],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/ind-szqsm-04-szqsm.png"],
                 "commits": []
               }
             }
@@ -830,7 +842,7 @@
                 "tests": [],
                 "ci": [],
                 "docs": [],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/pay-lan-01-lan-gate.png"],
                 "commits": []
               }
             },
@@ -927,7 +939,7 @@
                 "tests": ["FHD/tests/routes/test_ai_mod_delivery.py"],
                 "ci": ["FHD/.github/workflows/ci-cd.yml"],
                 "docs": [],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/ops-delivery-01-project-factory.png"],
                 "commits": []
               }
             }
@@ -1000,7 +1012,7 @@
                 "tests": ["FHD/tests/routes/test_desktop_runtime_status.py"],
                 "ci": ["FHD/.github/workflows/ci-cd.yml"],
                 "docs": [],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/dt-rpa-01-desktop-runtime.png"],
                 "commits": []
               }
             }
@@ -1067,7 +1079,7 @@
                 "tests": [],
                 "ci": ["FHD/.github/workflows/security-full-scan.yml", "FHD/.github/workflows/release-gate-ci.yml"],
                 "docs": ["FHD/docs/MACOS_RELEASE_SSOT.md"],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/sec-scan-01-security-full-scan-run.png"],
                 "commits": []
               }
             }
@@ -1109,7 +1121,7 @@
                 "tests": [],
                 "ci": ["FHD/.github/workflows/ci-cd.yml"],
                 "docs": ["FHD/docs/CLAIMED_VS_ACTUAL.md", "FHD/metrics/coverage-dual-summary.json"],
-                "screenshots": [],
+                "screenshots": ["FHD/docs/evidence/capabilities/sec-coverage-01-backend-test-coverage-ratchet.png"],
                 "commits": []
               }
             },
