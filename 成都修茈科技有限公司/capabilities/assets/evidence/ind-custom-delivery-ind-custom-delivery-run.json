@@ -1,0 +1,32 @@
+{
+  "_comment": "Auto-generated snapshot of real Mac UI acceptance; DO NOT EDIT historical outcomes.",
+  "kind": "feature-acceptance",
+  "feature": "ind-custom-delivery",
+  "status": "failed",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-20",
+  "reviewed_at": "2026-09-20",
+  "passed": 0,
+  "failed": 1,
+  "visible_content": "Mac 首次设置的 SUNBIRD 配置方案中，弹窗显示客户包安装失败、交付数据未授权；本次客户交付未通过，账号服务端实际权益仍需正式客户端复验。",
+  "media": [
+    {
+      "feature": "ind-custom-delivery",
+      "path": "FHD/docs/evidence/e2e/macos-acceptance-20260920/02-workspace-entitlement-block.png",
+      "sha256": "83f5701bf6bc683056201377d8c4e141cd9baeb0e4b63ea7eaca66ea5dc69905",
+      "visual_review": "accepted",
+      "visible_result": "配置页与完整提示可读：仍缺必需项 taiyangniao-pro；安装失败；sunbird-attendance-custom 交付数据：当前账号未授权该客户交付包。",
+      "reviewed_at": "2026-09-20"
+    }
+  ],
+  "cases": [
+    {
+      "input": "已安装 XCAGI 1.0.0.5，SUNBIRD 配置方案，饰品包装行业。",
+      "actions": "在首次设置的配置步骤执行创建工作空间。",
+      "expected": "按当前账号授权安装客户运行包并完成配置，交付数据按账号归属处理。",
+      "observed": "弹窗提示客户包安装失败和交付数据未授权，配置未完成。",
+      "result": "failed"
+    }
+  ]
+}
