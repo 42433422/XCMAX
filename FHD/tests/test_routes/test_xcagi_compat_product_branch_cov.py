@@ -990,7 +990,7 @@ class TestProductsPriceListWordResponse:
             ),
         ):
             with pytest.raises(HTTPException) as exc_info:
-                xp._products_price_list_word_response("unit", None, None)
+                xp._products_price_list_word_response("unit", None, None, "customer-missing")
             assert exc_info.value.status_code == 404
 
     def test_build_docx_recoverable_error(self, tmp_path):

@@ -556,7 +556,7 @@ class TestProductsPriceListExport:
                 return_value=(Path("/nonexistent/template.docx"), "template.docx"),
             ),
         ):
-            r = client.get("/products/price-list-export")
+            r = client.get("/products/price-list-export?template_id=customer-missing")
             assert r.status_code == 404
 
     def test_export_docx_alias(self, client: TestClient):

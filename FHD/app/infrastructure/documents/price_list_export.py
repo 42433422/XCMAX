@@ -68,12 +68,14 @@ def resolve_price_list_docx_template(slug: str | None = None):
 
 def build_price_list_template_preview_json(slug: str | None = None) -> dict:
     path, rel = resolve_price_list_docx_template(slug)
+    builtin = not path.is_file() and slug in (None, "", "price_list_default")
     return {
-        "success": True,
-        "headers": ["产品", "规格", "单价"],
+        "success": path.is_file() or builtin,
+        "builtin_default": builtin,
+        "headers": ["型号", "名称", "规格", "单价"],
         "sample_rows": [],
-        "template_hint": rel,
-        "path": str(path),
+        "template_hint": "内置价目表" if builtin else rel,
+        "path": "" if builtin else str(path),
     }
 
 
@@ -450,13 +452,14 @@ def build_price_list_docx_bytes(
     quote_date: str | None = None,
     products: list[dict[str, Any]] | None = None,
     rows: list[dict[str, Any]] | None = None,
+    builtin_default: bool = False,
 ) -> bytes:
     """基于用户 .docx 模板生成价目表二进制（保留版式，首表数据区重写为当前产品行）。"""
     path = template_path_arg or template_path
-    if path is None:
+    if path is None and not builtin_default:
         raise ValueError("build_price_list_docx_bytes: template_path 不能为空")
-    src = Path(path)
-    if not src.is_file():
+    src = Path(path) if path is not None else None
+    if src is not None and not src.is_file():
         raise FileNotFoundError(f"Word 模板不存在: {src}")
 
     data_rows = list(rows or products or [])
@@ -465,7 +468,20 @@ def build_price_list_docx_bytes(
 
     from docx import Document
 
-    doc = Document(str(src))
+    doc = Document(str(src)) if src is not None else Document()
+    if src is None:
+        from docx.shared import Mm, Pt
+
+        section = doc.sections[0]
+        section.page_width, section.page_height = Mm(210), Mm(297)
+        section.left_margin = section.right_margin = Mm(20)
+        section.top_margin = section.bottom_margin = Mm(20)
+        normal = doc.styles["Normal"]
+        normal.font.name, normal.font.size = "Arial", Pt(10)
+        normal.element.get_or_add_rPr().rFonts.set(qn("w:eastAsia"), "宋体")
+        doc.add_heading("产品价格表", 0)
+        doc.add_paragraph(f"客户：{cust or '全部单位'}")
+        doc.add_paragraph(f"报价日期：{qd}")
 
     mapping = {
         "{{客户}}": cust,
@@ -478,8 +494,9 @@ def build_price_list_docx_bytes(
 
     if doc.tables:
         _fill_first_table_with_products(doc.tables[0], data_rows)
-    elif data_rows:
+    elif data_rows or builtin_default:
         tbl = doc.add_table(rows=1, cols=4)
+        tbl.style = "Table Grid"
         hdr = tbl.rows[0].cells
         hdr[0].text = "型号"
         hdr[1].text = "名称"
