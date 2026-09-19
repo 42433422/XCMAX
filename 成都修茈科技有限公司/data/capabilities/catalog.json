@@ -301,13 +301,13 @@
               "usage": "管理员上传文档至知识库；对话中自动召回相关内容。",
               "platforms": ["windows", "macos", "web"],
               "limitations": ["SQLite 部署形态下向量检索自动降级（无 pgvector）"],
-              "evidence": {"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-knowledge-visual-review.json",
-                "impl": ["FHD/app/fastapi_routes/knowledge_v1.py", "FHD/app/fastapi_routes/excel_vector.py"],
+              "evidence": {"review": "FHD/docs/evidence/e2e/macos-acceptance-20260920/ai-knowledge-run.json",
+                "runs": ["FHD/docs/evidence/e2e/macos-acceptance-20260920/ai-knowledge-run.json"], "impl": ["FHD/frontend/src/components/persy/PersyImportDrawer.vue", "FHD/app/fastapi_routes/knowledge_v1.py", "FHD/app/fastapi_routes/excel_vector.py"],
                 "api": [],
                 "tests": [],
                 "ci": [],
                 "docs": [],
-                "screenshots": ["FHD/docs/evidence/capabilities/ai-knowledge-01-knowledge-graph.png"],
+                "screenshots": ["FHD/docs/evidence/e2e/macos-acceptance-20260920/11-knowledge-import-assistant-overlap.png", "FHD/docs/evidence/capabilities/ai-knowledge-01-knowledge-graph.png"],
                 "commits": []
               }
             },
