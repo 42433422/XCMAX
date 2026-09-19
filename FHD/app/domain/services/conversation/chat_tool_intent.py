@@ -43,7 +43,7 @@ _UNAMBIGUOUS_BUSINESS_DB_MUTATION_KEYWORDS = frozenset(
 # 不得进入写入/打印/开单等执行计划。只认紧邻形态，避免「特别好用」「别的客户」
 # 这类词内假阳性；与 intent_config.yaml negation 段口径保持一致。
 _NEGATED_ACTION_RE = re.compile(
-    r"(?:不要|不用|不需要|不必|不想|不想再|别再|禁止|千万别|别)\s*"
+    r"(?:不要|不用|不需要|不必|不想|不想再|别再|禁止|千万别|别|不)\s*"
     r"(?:再|先|马上|立刻|帮我|给我|帮|给|去|来)?\s*"
     r"(?:打印|打单|开单|发货|送货|出货|导出|导入|上传|下载|生成|制作|"
     r"删除|移除|删掉|删了|新增|添加|创建|新建|修改|更新|改为|改成|写入|入库|"
@@ -124,11 +124,7 @@ def looks_like_business_db_write(message: str, lower: str | None = None) -> bool
     if db_marker:
         return True
 
-    # A named customer creation is explicit CRUD even without the word database.
-    # The name must be explicitly delimited ("新增客户 蓝天科技" / "新增客户：蓝天科技")
-    # or the ask must carry a request prefix ("请帮我添加客户星光贸易"); the bare
-    # "添加客户公司A" wording stays on the legacy onboarding route.  Keep
-    # underspecified onboarding and customer-product/order requests separate.
+    # Explicitly named creates use CRUD; underspecified onboarding remains on its legacy route.
     stripped_value = value.strip()
     named_customer_create = re.match(
         r"^(?:请)?(?:帮我)?\s*(?:新增|添加)\s*(?:客户|购买单位)"

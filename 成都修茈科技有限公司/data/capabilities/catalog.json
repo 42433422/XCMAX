@@ -189,15 +189,7 @@
               "usage": "登录后进入「智能对话」即可发起对话；移动端与桌面端体验一致。",
               "platforms": ["windows", "macos", "web", "android"],
               "limitations": ["回复质量取决于所接入的模型服务与配置"],
-              "evidence": {"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-chat-core-visual-review.json",
-                "impl": ["FHD/app/fastapi_routes/ai_assistant.py", "FHD/app/fastapi_routes/xcagi_compat_chat_stream.py"],
-                "api": ["POST /api/ai/chat"],
-                "tests": ["FHD/frontend/e2e/ai-chat-multi-turn.spec.ts"],
-                "ci": ["FHD/.github/workflows/ci-cd.yml"],
-                "docs": ["FHD/docs/FEATURE_MAP.md"],
-                "screenshots": ["FHD/docs/evidence/e2e/01-login.png"],
-                "commits": []
-              }
+              "evidence": {"review": "FHD/docs/evidence/e2e/macos-acceptance-20260920/ai-chat-core-run.json", "impl": ["FHD/app/fastapi_routes/ai_assistant.py", "FHD/app/fastapi_routes/xcagi_compat_chat_stream.py", "FHD/app/domain/services/conversation/chat_tool_intent.py", "FHD/frontend/src/composables/useChatPersistence.ts"], "api": ["POST /api/ai/chat"], "tests": ["FHD/frontend/e2e/ai-chat-multi-turn.spec.ts", "FHD/tests/test_application/test_negated_request_no_write_plan.py", "FHD/frontend/src/composables/useChatPersistence.coverage.test.ts"], "ci": ["FHD/.github/workflows/ci-cd.yml"], "docs": ["FHD/docs/FEATURE_MAP.md"], "screenshots": ["FHD/docs/evidence/e2e/01-login.png", "FHD/docs/evidence/e2e/macos-acceptance-20260920/03-product-exists.png", "FHD/docs/evidence/e2e/macos-acceptance-20260920/05-query-failure-visible.png"], "commits": [], "runs": ["FHD/docs/evidence/e2e/macos-acceptance-20260920/ai-chat-core-run.json"]}
             },
             {
               "id": "ai-intent",
@@ -207,15 +199,7 @@
               "usage": "对话中直接说需求即可；企业可在配置中扩展行业词条。",
               "platforms": ["windows", "macos", "web"],
               "limitations": ["生僻表达依赖模型兜底，误判时会回退到人工操作路径"],
-              "evidence": {"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-intent-visual-review.json",
-                "impl": ["FHD/app/fastapi_routes/ai_intent.py", "FHD/app/ai_engines/deepseek/intent_service.py", "FHD/resources/config/intent_config.yaml"],
-                "api": [],
-                "tests": [],
-                "ci": ["FHD/.github/workflows/intent-benchmark.yml"],
-                "docs": [],
-                "screenshots": ["FHD/docs/evidence/capabilities/ai-intent-01-planner-tools.png"],
-                "commits": []
-              }
+              "evidence": {"review": "FHD/docs/evidence/e2e/macos-acceptance-20260920/ai-intent-run.json", "impl": ["FHD/app/fastapi_routes/ai_intent.py", "FHD/app/ai_engines/deepseek/intent_service.py", "FHD/resources/config/intent_config.yaml", "FHD/app/domain/services/conversation/chat_tool_intent.py", "FHD/frontend/src/composables/useChatPersistence.ts"], "api": [], "tests": ["FHD/tests/test_application/test_negated_request_no_write_plan.py", "FHD/frontend/src/composables/useChatPersistence.coverage.test.ts"], "ci": ["FHD/.github/workflows/intent-benchmark.yml"], "docs": [], "screenshots": ["FHD/docs/evidence/capabilities/ai-intent-01-planner-tools.png", "FHD/docs/evidence/e2e/macos-acceptance-20260920/03-product-exists.png", "FHD/docs/evidence/e2e/macos-acceptance-20260920/05-query-failure-visible.png"], "commits": [], "runs": ["FHD/docs/evidence/e2e/macos-acceptance-20260920/ai-intent-run.json"]}
             },
             {"id":"ai-task-workspace","name":"任务工作区与多步骤规划","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ai-chat-core","summary":"对话式任务工作区与多步骤任务编排。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-task-workspace-visual-review.json", "impl":["FHD/app/application/agent_orchestrator"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
             {"id":"ai-model-access","name":"模型接入与使用计费","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"ai-chat-core","summary":"模型服务接入、调用与用量计费口径。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-model-access-visual-review.json", "impl":["FHD/app/services/conversation/llm_adapter.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},

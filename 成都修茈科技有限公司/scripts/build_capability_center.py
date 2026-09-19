@@ -100,19 +100,19 @@ def last_commit(paths: list[str], fmt: str = "%cI") -> str | None:
 
 
 
-def accepted_runs(feat: dict) -> list[dict]:
-    """Only feature-specific, visually reviewed outcomes qualify as runtime acceptance."""
+def reviewed_runs(feat: dict) -> list[dict]:
+    """Validate readable, feature-bound originals, including truthful failed outcomes."""
     accepted = []
     for rel in feat.get("evidence", {}).get("runs", []):
         try:
             run = json.loads(e(rel).read_text(encoding="utf-8"))
             cases, media = run.get("cases", []), run.get("media", [])
             if (run.get("kind") != "feature-acceptance" or run.get("feature") != feat["id"]
-                    or run.get("status") != "passed" or not run.get("verified_at")
+                    or run.get("status") not in {"passed", "failed"} or not run.get("verified_at")
                     or not re.fullmatch(r"[0-9a-f]{40}", run.get("app_git_sha", ""))
                     or not run.get("app_version") or not cases or not media):
                 continue
-            if not all(c.get("result") == "passed" and all(c.get(k) for k in
+            if not all(c.get("result") in {"passed", "failed"} and all(c.get(k) for k in
                        ("input", "actions", "expected", "observed")) for c in cases):
                 continue
             if not all(m.get("feature") == feat["id"] and m.get("visual_review") == "accepted"
@@ -126,6 +126,11 @@ def accepted_runs(feat: dict) -> list[dict]:
         except (OSError, ValueError, KeyError, TypeError, AttributeError):
             continue
     return accepted
+
+
+def accepted_runs(feat: dict) -> list[dict]:
+    return [r for r in reviewed_runs(feat) if r["status"] == "passed"
+            and all(c["result"] == "passed" for c in r["cases"])]
 
 
 def validate_feature(feat: dict, warnings: list[str]) -> dict:
@@ -734,7 +739,7 @@ def evidence_list(items: list[str], cls: str = "") -> str:
 def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
     ev = f["evidence"]
     run_results = [(p, json.loads(e(p).read_text(encoding="utf-8"))) for p in ev.get("runs", [])]
-    accepted_media = {m["path"] for r in f["acceptance"] for m in r["media"]}
+    reviewed_media = {m["path"]: r["status"] for r in reviewed_runs(f) for m in r["media"]}
     review = json.loads(e(ev["review"]).read_text(encoding="utf-8")) if ev.get("review") else {}
     ref = f.get("evidence_ref")
     panel = ""
@@ -760,11 +765,11 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
         return f"/capabilities/assets/evidence/{esc(fid + '-' + Path(path).name)}"
 
     media_html, video_tags = "", []
-    for p in (p for p in ev.get("videos", []) if p in accepted_media):
-        poster = f' poster="{asset(f["id"], ev["screenshots"][0])}"' if ev["screenshots"] and ev["screenshots"][0] in accepted_media else ""
+    for p in (p for p in ev.get("videos", []) if p in reviewed_media):
+        poster = f' poster="{asset(f["id"], ev["screenshots"][0])}"' if ev["screenshots"] and ev["screenshots"][0] in reviewed_media else ""
         video_tags.append(
             f'<figure class="cap-shot"><video controls preload="metadata"{poster} src="{asset(f["id"], p)}"></video>'
-            f"<figcaption>已复核录像（验收范围见本项运行记录；原始文件：{esc(p)}）</figcaption></figure>"
+            f"<figcaption>原图内容已复核，验收结果：{esc({'passed': '通过', 'failed': '失败'}[reviewed_media[p]])}（原始文件：{esc(p)}）</figcaption></figure>"
         )
     if video_tags:
         media_html = (
@@ -773,12 +778,12 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
         )
 
     shots_html, shot_tags = "", []
-    for p in (p for p in ev["screenshots"] if p in accepted_media):
+    for p in (p for p in ev["screenshots"] if p in reviewed_media):
         src = asset(f["id"], p)
         shot_tags.append(
             f'<figure class="cap-shot"><a class="cap-shot-link" href="{src}" target="_blank" rel="noopener">'
             f'<img src="{src}" alt="{esc(f["name"])} 已复核截图" loading="lazy" /></a>'
-            f"<figcaption>已复核截图（验收范围见本项运行记录；原始文件：{esc(p)}）</figcaption></figure>"
+            f"<figcaption>原图内容已复核，验收结果：{esc({'passed': '通过', 'failed': '失败'}[reviewed_media[p]])}（原始文件：{esc(p)}）</figcaption></figure>"
         )
     if shot_tags:
         shots_html = (
