@@ -6,6 +6,8 @@
 
 ## Unreleased（1.0.0.4 之后的累积变更）
 
+- 修正只读产品查询被误判为修改、型号查询夹带字段名称的问题；补齐产品 Excel/Word 导出入口，Excel 导出沿用列表的租户与筛选范围，Word 补齐内置价目表及 SQLite 查询兼容，并保持自定义模板缺失时返回 404，查询失败明确报错，保留租户和 Mod 隔离。官网功能证据逐图复核，失败截图明确标记失败，未通过实际验收的功能不再显示已验证；同步修复 AnyIO 证书主机名校验与 adm-zip 内存分配漏洞；客户包安装改走当前账号的私有交付接口并由后端解析实际运行包 ID，交付数据授权沿用当前会话的账号权益校验，修复有效客户被旧别名检查误拒绝的问题；知识导入时暂时收起悬浮助理，避免提交按钮被遮挡，关闭导入后恢复入口；市场外壳测试绑定各自的状态容器并自动卸载，避免异步刷新导致跨用例误断言。
+
 - 修复 CI 容器冒烟门禁里写死的版本断言（升版必红的结构性缺陷）：`.github/workflows/ci-cd.yml` 的「Smoke test production image」步骤此前把期望版本写死成 `1.0.0.4`，产品版本一升到 `1.0.0.5` 该断言必然失败、整条 CI 判红——即使被测镜像本身完全正常。现改为运行时从 `VERSION.md` 读取期望版本（复用 `scripts/dev/verify_version_anchors.py` 的 `canonical_version()`，与其余版本锚点同一来源），并顺手把该步骤里的清理函数与 `docker run` 参数压缩为等价短写法（净删除 2 行）。`Release Desktop` 工作流的版本下拉同步补 `1.0.0.5` 并设为默认值，避免操作者按默认值误发上一版；根仓工作流副本由 `publish_ci_workflows_to_root.py --apply` 重生成，无漂移。
 
 - 升版准备 1.0.0.5（Mac 应用内更新实机验证版本）：`VERSION.md` 稳定产品版本推进到 `1.0.0.5`，`version_sync.py --apply` 派生同步全部锚点（Mobile Dart 的 `versionName`/`profileVersionText` 落在 `part` 文件，手工同步后 `verify_version_anchors.py` 通过）；`config/download_release.json` 的 `version_lock`/`download_version`、`config/release_train.json`（及声明的 MODstore 镜像）的 `current` 一并推进到 `1.0.0.5`，并在 `release_history` 头部补入 1.0.0.5 更新说明（含「太阳鸟」口径，满足下载中心发布断言）；`Release Desktop macOS OTA` 工作流的版本选项新增 `1.0.0.5`。本轮目的只有一个：让真实安装的 1.0.0.4 通过应用内更新拿到 1.0.0.5，实机取证「检测→下载→用户点击安装→自动退出→ShipIt 替换 bundle→自动重启→health 回报新版本与构建 SHA」链路是否真的修好。`release_ready` 仍为 false（macOS 单通道不推进跨平台正式发布口径），对外正式版本一律以线上 `download-release.json` 指针为准。顺带删除全仓零引用脚本 2 个（`scripts/package/stage-sunbird-delivery.sh` 已退役墓碑、`scripts/ci/fix_trailing_slash_schema.py` 一次性扫描），净删除对冲本件新增。

@@ -1,7 +1,4 @@
-"""价目表 Word 导出 + 销售合同模板预览。
-
-Phase 3B 从 ``app.legacy.price_list_docx_export`` 吸收。
-"""
+"""价目表 Word 导出与销售合同模板预览。"""
 
 from __future__ import annotations
 
@@ -68,22 +65,20 @@ def resolve_price_list_docx_template(slug: str | None = None):
 
 def build_price_list_template_preview_json(slug: str | None = None) -> dict:
     path, rel = resolve_price_list_docx_template(slug)
+    path = Path(path)
+    builtin = not path.is_file() and slug in (None, "", "price_list_default")
     return {
-        "success": True,
-        "headers": ["产品", "规格", "单价"],
+        "success": path.is_file() or builtin,
+        "builtin_default": builtin,
+        "headers": ["型号", "名称", "规格", "单价"],
         "sample_rows": [],
-        "template_hint": rel,
-        "path": str(path),
+        "template_hint": "内置价目表" if builtin else rel,
+        "path": "" if builtin else str(path),
     }
 
 
 def _tc_ensure_tc_pr(cell) -> Any:
-    tc = cell._tc
-    tc_pr = tc.find(qn("w:tcPr"))
-    if tc_pr is None:
-        tc_pr = OxmlElement("w:tcPr")
-        tc.insert(0, tc_pr)
-    return tc_pr
+    return cell._tc.get_or_add_tcPr()
 
 
 def _tc_get_tc_borders_snapshot(cell) -> Any | None:
@@ -187,7 +182,6 @@ def _parse_header_serial_and_column_map(header_row_cells) -> tuple[bool, dict[st
     if sum(1 for k in core if k in col_map) >= 2:
         return with_serial, col_map
 
-    # 回退：按常见四列顺序（有序号列则整体右移一列）
     if with_serial and len(cells) >= 5:
         return True, {"model": 1, "name": 2, "spec": 3, "price": 4}
     return False, {"model": 0, "name": 1, "spec": 2, "price": 3}
@@ -294,11 +288,7 @@ def _tc_get_side_border_copy(cell, side: str) -> Any | None:
 
 
 def _tc_set_side_border(cell, side: str, border_el: Any) -> None:
-    tc = cell._tc
-    tc_pr = tc.find(qn("w:tcPr"))
-    if tc_pr is None:
-        tc_pr = OxmlElement("w:tcPr")
-        tc.insert(0, tc_pr)
+    tc_pr = _tc_ensure_tc_pr(cell)
     tcb = tc_pr.find(qn("w:tcBorders"))
     if tcb is None:
         tcb = OxmlElement("w:tcBorders")
@@ -392,13 +382,11 @@ def _fill_first_table_with_products(table, products: list[dict[str, Any]]) -> No
     header_cells = table.rows[header_rows - 1].cells
     with_serial, col_map = _parse_header_serial_and_column_map(header_cells)
 
-    # 表体目标行数：n 条产品 +（有数据时）表尾留白一行，便于底边线闭合、与常见价目表版式一致
     body_rows_target = n + (1 if n > 0 else 0)
     need_tr = header_rows + body_rows_target
 
     _ensure_table_row_count_at_least(table, need_tr)
 
-    # 在清空表体文字之前，抓取一条「有线」的数据行各格 tcBorders，套到所有表体行（含第 31 行及以后追加行）
     cell_border_snaps: list[Any | None] = []
     if _tbl_row_count(table) > header_rows:
         tpl_r = _pick_border_template_row_index(table, header_rows)
@@ -434,7 +422,6 @@ def _fill_first_table_with_products(table, products: list[dict[str, Any]]) -> No
         tb = tbl_pr.find(qn("w:tblBorders"))
         if tb is not None:
             _tbl_borders_ensure_bottom_edge(tb)
-    # 最后一行「产品」底下横线：仅靠表尾留白行不够时，用 insideH/上一行样式显式写 bottom
     if n >= 1:
         last_product_row = header_rows + n - 1
         _ensure_row_tc_bottom_from_template(table, last_product_row, force=True)
@@ -450,13 +437,14 @@ def build_price_list_docx_bytes(
     quote_date: str | None = None,
     products: list[dict[str, Any]] | None = None,
     rows: list[dict[str, Any]] | None = None,
+    builtin_default: bool = False,
 ) -> bytes:
     """基于用户 .docx 模板生成价目表二进制（保留版式，首表数据区重写为当前产品行）。"""
     path = template_path_arg or template_path
-    if path is None:
+    if path is None and not builtin_default:
         raise ValueError("build_price_list_docx_bytes: template_path 不能为空")
-    src = Path(path)
-    if not src.is_file():
+    src = Path(path) if path is not None else None
+    if src is not None and not src.is_file():
         raise FileNotFoundError(f"Word 模板不存在: {src}")
 
     data_rows = list(rows or products or [])
@@ -465,7 +453,20 @@ def build_price_list_docx_bytes(
 
     from docx import Document
 
-    doc = Document(str(src))
+    doc = Document(str(src)) if src is not None else Document()
+    if src is None:
+        from docx.shared import Mm, Pt
+
+        section = doc.sections[0]
+        section.page_width, section.page_height = Mm(210), Mm(297)
+        section.left_margin = section.right_margin = Mm(20)
+        section.top_margin = section.bottom_margin = Mm(20)
+        normal = doc.styles["Normal"]
+        normal.font.name, normal.font.size = "Arial", Pt(10)
+        normal.element.get_or_add_rPr().rFonts.set(qn("w:eastAsia"), "宋体")
+        doc.add_heading("产品价格表", 0)
+        doc.add_paragraph(f"客户：{cust or '全部单位'}")
+        doc.add_paragraph(f"报价日期：{qd}")
 
     mapping = {
         "{{客户}}": cust,
@@ -478,13 +479,11 @@ def build_price_list_docx_bytes(
 
     if doc.tables:
         _fill_first_table_with_products(doc.tables[0], data_rows)
-    elif data_rows:
+    elif data_rows or builtin_default:
         tbl = doc.add_table(rows=1, cols=4)
-        hdr = tbl.rows[0].cells
-        hdr[0].text = "型号"
-        hdr[1].text = "名称"
-        hdr[2].text = "规格"
-        hdr[3].text = "单价"
+        tbl.style = "Table Grid"
+        for cell, label in zip(tbl.rows[0].cells, ("型号", "名称", "规格", "单价")):
+            cell.text = label
         _fill_first_table_with_products(tbl, data_rows)
 
     buf = BytesIO()

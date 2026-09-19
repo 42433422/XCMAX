@@ -178,10 +178,14 @@ async def products_import_price_list_template(
 
 @router.get("/api/products/export.xlsx")
 def products_export_xlsx(
+    request: Request,
     unit: str | None = Query(default=None),
     keyword: str | None = Query(default=None),
     template_id: str | None = Query(default=None),
 ):
+    from app.infrastructure.auth.db_token import verify_db_read_token_header
+
+    verify_db_read_token_header(request)
     service = _svc()
     result = service.export_to_excel(unit_name=unit, keyword=keyword, template_id=template_id)
     if not result.get("success"):

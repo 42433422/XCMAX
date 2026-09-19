@@ -74,7 +74,7 @@
         <div class="cap-info-block"><h3>使用方式</h3><p>在数据页上传 Excel 批量导入；导出按钮生成业务报表。</p></div>
         <div class="cap-info-block"><h3>所属模块</h3><p>ERP 与业务文件 / 单据与打印</p></div>
         <div class="cap-info-block"><h3>支持平台</h3><p><span class="cap-platform">Windows 桌面</span><span class="cap-platform">macOS 桌面</span><span class="cap-platform">Web</span></p></div>
-        <div class="cap-info-block"><h3>当前状态</h3><p><span class="cap-status st-implemented">已实现待验证</span>（相关代码更新时间：2026-07-04）</p></div>
+        <div class="cap-info-block"><h3>当前状态</h3><p><span class="cap-status st-implemented">已实现待验证</span>（相关代码更新时间：2026-09-20）</p></div>
         <div class="cap-info-block"><h3>已知限制</h3><ul class="cap-limitations"><li>模板格式有校验要求，首次导入建议小批量试跑</li></ul></div>
       </div>
       
@@ -85,16 +85,17 @@
   <section class="section cap-evidence-section">
     <div class="container">
       <h2>技术验证资料</h2>
-      <p class="cap-section-note">待补资料：本项自动化测试、CI 工作流、本项操作录像。测试文件和工作流定义不等于运行通过记录。</p>
-      <p class="cap-section-note">以下内容由构建脚本从当前仓库自动生成（生成于 2026-09-19 11:36 UTC）。路径相对产品仓库根目录；未公开仓库的客户可向我们索取演示与审计说明。实机截图均为产品真实运行界面，点击图片可查看原图。</p>
+      <p class="cap-section-note">图片内容复核（2026-09-20，Mac 1.0.0.5）：Mac 实机产品列表已有 DEMO-001，点击导出 Excel 后出现资源不存在错误，未获得导出文件。 本项完整实机验收尚未成立。</p>
+      <p class="cap-section-note">待补资料：CI 工作流、本项操作录像。测试文件和工作流定义不等于运行通过记录。</p>
+      <p class="cap-section-note">以下内容由构建脚本从当前仓库自动生成（生成于 2026-09-19 19:53 UTC）。路径相对产品仓库根目录；未公开仓库的客户可向我们索取演示与审计说明。未复核的历史图片不展示为功能证据；已复核图片可点开原图，验收范围与构建版本以对应记录为准。</p>
       <div class="cap-evidence-grid">
-        <div class="cap-evidence-block"><h3>实际测试运行记录</h3><p>待补本项运行记录</p></div>
-        <div class="cap-evidence-block"><h3>源码实现</h3><ul class="cap-evidence-list"><li><code class="">FHD/app/fastapi_routes/excel_templates.py</code></li><li><code class="">FHD/app/application/excel_imports.py</code></li></ul></div>
+        <div class="cap-evidence-block"><h3>实际测试运行记录</h3><p>运行记录：通过 0 / 失败 1；验证构建 54325894cc6e。<a href="/capabilities/assets/evidence/erp-excel-io-erp-excel-io-run.json">查看本项操作结果与构建记录</a></p></div>
+        <div class="cap-evidence-block"><h3>源码实现</h3><ul class="cap-evidence-list"><li><code class="">FHD/app/fastapi_routes/excel_templates.py</code></li><li><code class="">FHD/app/application/excel_imports.py</code></li><li><code class="">FHD/app/infrastructure/repositories/product_repository_export_mixin.py</code></li><li><code class="">FHD/mods/xcagi-erp-domain-bridge/backend/blueprints.py</code></li></ul></div>
         <div class="cap-evidence-block"><h3>API 端点</h3><ul class="cap-evidence-list"><li><code class="">/api/excel/*</code></li></ul></div>
-        <div class="cap-evidence-block"><h3>自动化测试</h3><p class="cap-evidence-empty">暂无</p><p class="cap-evidence-note">CI 门禁：待补本项 CI 证据</p></div>
+        <div class="cap-evidence-block"><h3>自动化测试</h3><ul class="cap-evidence-list"><li><code class="">FHD/tests/test_erp_products_facade.py</code></li><li><code class="">FHD/tests/test_infrastructure/test_product_repository_export_mixin.py</code></li></ul><p class="cap-evidence-note">CI 门禁：待补本项 CI 证据</p></div>
         <div class="cap-evidence-block"><h3>CI 工作流定义</h3><p class="cap-evidence-empty">暂无</p></div>
         
-        <div class="cap-evidence-media"><h3>实机截图 / 运行证据</h3><div class="cap-shots"><figure class="cap-shot"><a class="cap-shot-link" href="/capabilities/assets/evidence/erp-excel-io-erp-excel-io-01-etl-center.png" target="_blank" rel="noopener"><img src="/capabilities/assets/evidence/erp-excel-io-erp-excel-io-01-etl-center.png" alt="Excel 导入导出 实机证据" loading="lazy" /></a><figcaption>实机运行证据（原始文件：FHD/docs/evidence/capabilities/erp-excel-io-01-etl-center.png）</figcaption></figure></div></div>
+        <div class="cap-evidence-media"><h3>截图资料与验收缺口</h3><div class="cap-shots"><figure class="cap-shot"><a class="cap-shot-link" href="/capabilities/assets/evidence/erp-excel-io-06-product-export-route-failure.png" target="_blank" rel="noopener"><img src="/capabilities/assets/evidence/erp-excel-io-06-product-export-route-failure.png" alt="Excel 导入导出 已复核截图" loading="lazy" /></a><figcaption>原图内容已复核，验收结果：失败（原始文件：FHD/docs/evidence/e2e/macos-acceptance-20260920/06-product-export-route-failure.png）</figcaption></figure></div></div>
         <div class="cap-evidence-block"><h3>关联文档</h3><ul class="cap-evidence-list"><li><code class="">FHD/docs/excel_import_api.md</code></li></ul></div>
         <div class="cap-evidence-block"><h3>关联实现 commit</h3><ul class="cap-evidence-list"><li><code class="">9367bbcfd chore: 初始化 XCMAX 根仓 SSOT（FHD + MODstore + specs） (2026-06-08)</code></li></ul></div>
       </div>

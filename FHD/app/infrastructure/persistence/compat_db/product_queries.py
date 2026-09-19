@@ -44,6 +44,8 @@ def _load_products_list_impl_pg(
         logger.exception("product query database connection failed")
         return [], 0, "无法连接 PostgreSQL。请检查 DATABASE_URL 与数据库是否已启动。"
 
+    sqlite = eng.dialect.name == "sqlite"
+    like_operator = "LIKE" if sqlite else "ILIKE"
     try:
         with eng.connect() as conn:
             try:
@@ -53,7 +55,7 @@ def _load_products_list_impl_pg(
             except RECOVERABLE_ERRORS:
                 meta_timeout_ms = 2000
             try:
-                if meta_timeout_ms > 0:
+                if meta_timeout_ms > 0 and not sqlite:
                     conn.execute(text(_sql_statement_timeout_ms(meta_timeout_ms)))
                 insp = inspect(conn)
                 table_names = set(insp.get_table_names())
@@ -72,7 +74,7 @@ def _load_products_list_impl_pg(
                     "products 元数据查询超时或失败。可调环境变量 FHD_PRODUCTS_META_TIMEOUT_MS。",
                 )
             finally:
-                if meta_timeout_ms > 0:
+                if meta_timeout_ms > 0 and not sqlite:
                     try:
                         conn.execute(text("SET statement_timeout TO 0"))
                     except RECOVERABLE_ERRORS:
@@ -93,11 +95,11 @@ def _load_products_list_impl_pg(
             like = f"%{kw}%"
             or_parts: list[str] = []
             if "model_number" in col_names:
-                or_parts.append("CAST(model_number AS TEXT) ILIKE :kw")
+                or_parts.append(f"CAST(model_number AS TEXT) {like_operator} :kw")
             if "name" in col_names:
-                or_parts.append("CAST(name AS TEXT) ILIKE :kw")
+                or_parts.append(f"CAST(name AS TEXT) {like_operator} :kw")
             if "specification" in col_names:
-                or_parts.append("CAST(specification AS TEXT) ILIKE :kw")
+                or_parts.append(f"CAST(specification AS TEXT) {like_operator} :kw")
             if or_parts:
                 where_parts.append("(" + " OR ".join(or_parts) + ")")
                 params["kw"] = like
@@ -119,13 +121,13 @@ def _load_products_list_impl_pg(
             except RECOVERABLE_ERRORS:
                 timeout_ms = 1500
             try:
-                if timeout_ms > 0:
+                if timeout_ms > 0 and not sqlite:
                     conn.execute(text(_sql_statement_timeout_ms(timeout_ms)))
                 total = int(conn.execute(text(count_sql), params).scalar_one())
             except RECOVERABLE_ERRORS:
                 total = None
             finally:
-                if timeout_ms > 0:
+                if timeout_ms > 0 and not sqlite:
                     try:
                         conn.execute(text("SET statement_timeout TO 0"))
                     except RECOVERABLE_ERRORS:
@@ -172,13 +174,13 @@ def _load_products_list_impl_pg(
             except RECOVERABLE_ERRORS:
                 query_timeout_ms = 8000
             try:
-                if query_timeout_ms > 0:
+                if query_timeout_ms > 0 and not sqlite:
                     conn.execute(text(_sql_statement_timeout_ms(query_timeout_ms)))
                 rows = conn.execute(text(data_sql), qparams).mappings().all()
             except RECOVERABLE_ERRORS as e:
                 data_query_err = e
             finally:
-                if query_timeout_ms > 0:
+                if query_timeout_ms > 0 and not sqlite:
                     try:
                         conn.execute(text("SET statement_timeout TO 0"))
                     except RECOVERABLE_ERRORS:
@@ -218,5 +220,7 @@ def _load_products_list_impl_pg(
 
 
 def _load_products_all_for_export(keyword: str | None, unit: str | None) -> list[dict]:
-    rows, _, _hint = _load_products_list_impl_pg(1, _EXPORT_MAX_ROWS, keyword, unit)
+    rows, _, hint = _load_products_list_impl_pg(1, _EXPORT_MAX_ROWS, keyword, unit)
+    if hint:
+        raise ValueError(hint)
     return rows

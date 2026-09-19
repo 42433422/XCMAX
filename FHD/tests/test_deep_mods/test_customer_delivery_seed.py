@@ -126,6 +126,25 @@ def seed_client(mod_accounts, tmp_path, monkeypatch):
             market_token="body-other-account-token",
         )
 
+    @app.post("/install-seed")
+    async def install_seed(request: Request):
+        from app.fastapi_routes.mod_store_routes import (
+            mod_store_install_customer_delivery_seed,
+        )
+
+        return await mod_store_install_customer_delivery_seed(request)
+
+    monkeypatch.setattr(
+        "app.enterprise.mod_entitlements.enterprise_mod_filter_active", lambda: True
+    )
+    monkeypatch.setattr(
+        "app.enterprise.mod_entitlements.sync_entitlements_from_request", AsyncMock()
+    )
+    monkeypatch.setattr(
+        "app.enterprise.mod_entitlements.get_cached_entitled_client_mod_ids",
+        lambda: {"taiyangniao-pro"},
+    )
+
     with TestClient(app) as client:
         yield client, downloads
 
@@ -150,3 +169,23 @@ def test_download_uses_current_session_token_and_authenticated_owner(seed_client
     assert "mod_id=taiyangniao-pro" in downloads[0][0]
     with owner_context("tenant:1"):
         assert len(read_attendance_roster()) == 1
+
+
+@pytest.mark.parametrize("mod_id", ["taiyangniao-pro", "sunbird-attendance-custom"])
+@pytest.mark.parametrize(
+    "session,status",
+    [("mod-session-1", 200), ("mod-session-2", 403), ("mod-session-4", 401), ("forged", 401)],
+)
+def test_install_route_uses_session_entitlement_for_runtime_and_legacy_ids(
+    seed_client, session, status, mod_id
+):
+    client, downloads = seed_client
+    client.cookies.set("session_id", session)
+    response = client.post("/install-seed", json={"mod_id": mod_id})
+    assert response.status_code == status, response.text
+    if status != 200:
+        assert downloads == []
+    else:
+        assert response.json()["data"]["owner_scope"] == "tenant:1"
+        assert downloads[0][1] == {"Authorization": "Bearer current-session-token"}
+        assert "mod_id=taiyangniao-pro" in downloads[0][0]

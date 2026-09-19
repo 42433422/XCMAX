@@ -257,19 +257,11 @@ describe('FloatingChatAssistant', () => {
     expect(style).toContain('top:')
   })
 
-  it('responds to xcagi:close-floating-chat event', async () => {
+  it.each(['xcagi:close-floating-chat', 'xcagi:close-assistant-float'])('responds to %s', async (event) => {
     const wrapper = mountAssistant()
     await wrapper.find('.floating-chat-toggle').trigger('click')
     expect(wrapper.find('.floating-chat-panel').exists()).toBe(true)
-    window.dispatchEvent(new Event('xcagi:close-floating-chat'))
-    await wrapper.vm.$nextTick()
-    expect(wrapper.find('.floating-chat-panel').exists()).toBe(false)
-  })
-
-  it('responds to xcagi:close-assistant-float event', async () => {
-    const wrapper = mountAssistant()
-    await wrapper.find('.floating-chat-toggle').trigger('click')
-    window.dispatchEvent(new Event('xcagi:close-assistant-float'))
+    window.dispatchEvent(new Event(event))
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.floating-chat-panel').exists()).toBe(false)
   })
@@ -293,20 +285,6 @@ describe('FloatingChatAssistant', () => {
     await wrapper.vm.$nextTick()
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.floating-chat-root').exists()).toBe(true)
-  })
-
-  it('does not render root when externallyHidden is true', async () => {
-    const wrapper = mountAssistant()
-    window.dispatchEvent(new Event('xcagi:suppress-floating-chat'))
-    await wrapper.vm.$nextTick()
-    await wrapper.vm.$nextTick()
-    expect(wrapper.find('.floating-chat-root').exists()).toBe(false)
-  })
-
-  it('form has submit.prevent handler', async () => {
-    const wrapper = mountAssistant()
-    await wrapper.find('.floating-chat-toggle').trigger('click')
-    expect(wrapper.find('form').exists()).toBe(true)
   })
 
   it('renders message time', async () => {

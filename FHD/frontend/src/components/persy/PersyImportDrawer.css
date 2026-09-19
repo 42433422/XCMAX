@@ -33,11 +33,14 @@
 }
 
 .clear-file-button {
+  margin-top: 9px;
+  padding: 0;
   border: 0;
   background: transparent;
   color: #1d6259;
   cursor: pointer;
   font: inherit;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -48,18 +51,12 @@
 }
 
 .import-tabs {
+  align-self: flex-start;
+  margin: 16px 20px 0;
   padding: 3px;
   border: 1px solid #d6dfda;
   border-radius: 8px;
   background: #eef2f0;
-}
-
-.import-tabs button {
-  border: 0;
-  background: transparent;
-  color: #68766f;
-  cursor: pointer;
-  font: inherit;
 }
 
 .import-tabs button.active {
@@ -96,12 +93,12 @@
   border-bottom: 1px solid #e3e9e6;
 }
 
-.import-tabs {
-  align-self: flex-start;
-  margin: 16px 20px 0;
-}
-
 .import-tabs button {
+  border: 0;
+  background: transparent;
+  color: #68766f;
+  cursor: pointer;
+  font: inherit;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -206,12 +203,6 @@
 .drop-zone > span:last-child {
   color: #7a8880;
   font-size: 10px;
-}
-
-.clear-file-button {
-  margin-top: 9px;
-  padding: 0;
-  font-size: 11px;
 }
 
 .advanced-settings {

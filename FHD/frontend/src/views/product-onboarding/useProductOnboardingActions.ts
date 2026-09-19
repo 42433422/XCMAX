@@ -1,6 +1,6 @@
 import { nextTick, ref, watch } from 'vue'
 import type { Router } from 'vue-router'
-import { installHostFoundation, installMod, installIndustrySeed, installCustomerDeliverySeed } from '@/api/modStore'
+import { installHostFoundation, installMod, installPrivateMod, installIndustrySeed, installCustomerDeliverySeed } from '@/api/modStore'
 import { autoOnboardWorkflowEmployeesFromMods } from '@/utils/workflowEmployeeOnboard'
 import { deliverySeedModIds } from '@/utils/deliverySeedPackages'
 import { patchWorkspacePrefs, queueWorkspacePrefsSync } from '@/utils/workspacePrefsApi'
@@ -28,7 +28,6 @@ type ProductFlow = ReturnType<typeof useProductFlow>
 type IndustryStore = ReturnType<typeof useIndustryStore>
 type ProductOnboardingNav = ReturnType<typeof useProductOnboardingNav>
 
-// ProductOnboardingView 的加载与操作逻辑（与拆分前逐字一致）
 export function useProductOnboardingActions(
   state: ProductOnboardingState,
   options: {
@@ -125,7 +124,8 @@ export function useProductOnboardingActions(
       }
       for (const modId of customMissing) {
         try {
-          const ir = await installMod(modId)
+          const item = baselinePlan.value?.groups.flatMap(group => group.items).find(item => item.mod_id === modId)
+          const ir = item?.runtime_mod_id ? await installPrivateMod(modId) : await installMod(modId)
           if (!ir.success) {
             installErrors.push(`${modId}：${ir.message || '安装失败'}`)
           }

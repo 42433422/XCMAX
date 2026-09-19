@@ -538,35 +538,32 @@ class TestSplitPackageFile:
 
 
 class TestBodyValue:
-    def _sync(self, coro):
-        return asyncio.get_event_loop().run_until_complete(coro)
-
     def test_json_body_returns_key(self):
         req = MagicMock()
         req.headers = {"content-type": "application/json"}
         req.json = AsyncMock(return_value={"mod_id": " abc "})
-        result = self._sync(_mod._body_value(req, "mod_id"))
+        result = asyncio.run(_mod._body_value(req, "mod_id"))
         assert result == "abc"
 
     def test_json_body_non_dict_returns_default(self):
         req = MagicMock()
         req.headers = {"content-type": "application/json"}
         req.json = AsyncMock(return_value="not a dict")
-        result = self._sync(_mod._body_value(req, "mod_id"))
+        result = asyncio.run(_mod._body_value(req, "mod_id"))
         assert result == ""
 
     def test_form_body_returns_key(self):
         req = MagicMock()
         req.headers = {"content-type": "application/x-www-form-urlencoded"}
         req.form = AsyncMock(return_value={"mod_id": "xyz"})
-        result = self._sync(_mod._body_value(req, "mod_id"))
+        result = asyncio.run(_mod._body_value(req, "mod_id"))
         assert result == "xyz"
 
     def test_recoverable_exception_returns_default(self):
         req = MagicMock()
         req.headers = {"content-type": "application/json"}
         req.json = AsyncMock(side_effect=ValueError("bad json"))
-        result = self._sync(_mod._body_value(req, "mod_id", default="fallback"))
+        result = asyncio.run(_mod._body_value(req, "mod_id", default="fallback"))
         assert result == "fallback"
 
 
@@ -576,28 +573,25 @@ class TestBodyValue:
 
 
 class TestRequestPayload:
-    def _sync(self, coro):
-        return asyncio.get_event_loop().run_until_complete(coro)
-
     def test_json_dict_body(self):
         req = MagicMock()
         req.headers = {"content-type": "application/json"}
         req.json = AsyncMock(return_value={"key": "value"})
-        result = self._sync(_mod._request_payload(req))
+        result = asyncio.run(_mod._request_payload(req))
         assert result == {"key": "value"}
 
     def test_json_non_dict_body_returns_empty(self):
         req = MagicMock()
         req.headers = {"content-type": "application/json"}
         req.json = AsyncMock(return_value=["list"])
-        result = self._sync(_mod._request_payload(req))
+        result = asyncio.run(_mod._request_payload(req))
         assert result == {}
 
     def test_form_body(self):
         req = MagicMock()
         req.headers = {"content-type": "application/x-www-form-urlencoded"}
         req.form = AsyncMock(return_value={"a": "1", "b": "2"})
-        result = self._sync(_mod._request_payload(req))
+        result = asyncio.run(_mod._request_payload(req))
         assert result["a"] == "1"
         assert result["b"] == "2"
 
@@ -605,7 +599,7 @@ class TestRequestPayload:
         req = MagicMock()
         req.headers = {"content-type": "application/json"}
         req.json = AsyncMock(side_effect=ValueError("oops"))
-        result = self._sync(_mod._request_payload(req))
+        result = asyncio.run(_mod._request_payload(req))
         assert result == {}
 
 
@@ -615,9 +609,6 @@ class TestRequestPayload:
 
 
 class TestMapMarketCatalogPage:
-    def _sync(self, coro):
-        return asyncio.get_event_loop().run_until_complete(coro)
-
     def _setup(self, *, public=True, row_out=None):
         sys.modules["app.application.mod_store_catalog_app"].is_public_catalog_row = MagicMock(
             return_value=public
@@ -632,7 +623,7 @@ class TestMapMarketCatalogPage:
     def test_non_list_items_returns_empty(self):
         self._setup()
         with patch.object(_mod, "_installed_by_id", return_value={}):
-            items, total = self._sync(
+            items, total = asyncio.run(
                 _mod._map_market_catalog_page({"items": "not-a-list", "total": 0})
             )
         assert items == []
@@ -640,7 +631,7 @@ class TestMapMarketCatalogPage:
     def test_non_dict_row_skipped(self):
         self._setup()
         with patch.object(_mod, "_installed_by_id", return_value={}):
-            items, total = self._sync(
+            items, total = asyncio.run(
                 _mod._map_market_catalog_page({"items": ["string-item"], "total": 1})
             )
         assert items == []
@@ -648,20 +639,20 @@ class TestMapMarketCatalogPage:
     def test_total_as_int(self):
         self._setup()
         with patch.object(_mod, "_installed_by_id", return_value={}):
-            items, total = self._sync(_mod._map_market_catalog_page({"items": [], "total": 42}))
+            items, total = asyncio.run(_mod._map_market_catalog_page({"items": [], "total": 42}))
         assert total == 42
 
     def test_total_bad_type_falls_back_to_len(self):
         self._setup()
         with patch.object(_mod, "_installed_by_id", return_value={}):
-            items, total = self._sync(_mod._map_market_catalog_page({"items": [], "total": "bad"}))
+            items, total = asyncio.run(_mod._map_market_catalog_page({"items": [], "total": "bad"}))
         assert total == 0
 
     def test_is_public_catalog_row_false_branch(self):
         """Branch: row returned by market_item_to_package_row but is_public_catalog_row=False."""
         self._setup(public=False)
         with patch.object(_mod, "_installed_by_id", return_value={}):
-            items, total = self._sync(
+            items, total = asyncio.run(
                 _mod._map_market_catalog_page({"items": [{"id": "p1"}], "total": 1})
             )
         assert items == []
@@ -669,7 +660,7 @@ class TestMapMarketCatalogPage:
     def test_collection_hint_overrides_commerce(self):
         self._setup(row_out={"id": "p1", "commerce": {"collection": "from_commerce"}})
         with patch.object(_mod, "_installed_by_id", return_value={}):
-            items, total = self._sync(
+            items, total = asyncio.run(
                 _mod._map_market_catalog_page(
                     {"items": [{"id": "p1"}], "total": 1},
                     collection_hint="forced_hint",
@@ -681,7 +672,7 @@ class TestMapMarketCatalogPage:
     def test_hint_from_commerce_when_no_collection_hint(self):
         self._setup(row_out={"id": "p1", "commerce": {"collection": "from_commerce"}})
         with patch.object(_mod, "_installed_by_id", return_value={}):
-            items, total = self._sync(
+            items, total = asyncio.run(
                 _mod._map_market_catalog_page(
                     {"items": [{"id": "p1"}], "total": 1},
                     collection_hint="",
@@ -1130,44 +1121,24 @@ class TestInstallCustomerDeliverySeedRoute:
             resp = client.post("/install-customer-delivery-seed", json={})
         assert resp.status_code == 400
 
-    def _setup_entitlements(self, *, active, entitled_ids=None):
-        m = sys.modules["app.enterprise.mod_entitlements"]
-        m.enterprise_mod_filter_active = MagicMock(return_value=active)
-        m.sync_entitlements_from_request = AsyncMock(return_value=None)
-        m.get_cached_entitled_client_mod_ids = MagicMock(return_value=entitled_ids or set())
+    @pytest.mark.parametrize("status", [401, 403])
+    def test_seed_service_rejection_is_preserved(self, monkeypatch, status):
+        from fastapi import HTTPException
 
-    def _setup_delivery(self, result=None):
-        result = result or {"success": True, "message": "done"}
-        sys.modules[
-            "app.mod_sdk.customer_delivery_seed"
-        ].install_customer_delivery_seed_package = AsyncMock(return_value=result)
-
-    def test_entitlement_filter_active_and_entitled(self):
-        self._setup_entitlements(active=True, entitled_ids={"mod-a"})
-        self._setup_delivery()
-        with _make_client() as client:
-            resp = client.post("/install-customer-delivery-seed", json={"mod_id": "mod-a"})
-        assert resp.status_code == 200
-
-    def test_entitlement_filter_active_not_entitled_returns_403(self):
-        self._setup_entitlements(active=True, entitled_ids=set())
-        with _make_client() as client:
-            resp = client.post("/install-customer-delivery-seed", json={"mod_id": "not-entitled"})
-        assert resp.status_code == 403
-
-    def test_filter_inactive_proceeds_directly(self):
-        self._setup_entitlements(active=False)
-        self._setup_delivery()
+        monkeypatch.setattr(
+            sys.modules["app.mod_sdk.customer_delivery_seed"],
+            "install_customer_delivery_seed_package",
+            AsyncMock(side_effect=HTTPException(status, "not authorized")),
+        )
         with _make_client() as client:
             resp = client.post("/install-customer-delivery-seed", json={"mod_id": "mod-x"})
-        assert resp.status_code == 200
+        assert resp.status_code == status
 
     def test_session_market_token_passed_to_seed_installer(self, monkeypatch):
         from starlette.requests import Request
 
         import app.infrastructure.auth.dependencies as auth_dependencies
 
-        self._setup_entitlements(active=False)
         install_mock = AsyncMock(return_value={"success": True, "message": "done"})
         # These may be real, already imported modules. Restore every replacement
         # before later route tests validate their own persisted sessions.
@@ -1199,16 +1170,6 @@ class TestInstallCustomerDeliverySeedRoute:
             {"type": "http", "headers": [(b"x-session-id", b"session-after-seed-test")]}
         )
         assert auth_dependencies.session_id_from_request(request) == "session-after-seed-test"
-
-    def test_recoverable_error_in_entitlement_check_skipped(self):
-        """Branch: RECOVERABLE_ERRORS during entitlement check → warning + continue."""
-        m = sys.modules["app.enterprise.mod_entitlements"]
-        m.enterprise_mod_filter_active = MagicMock(return_value=True)
-        m.sync_entitlements_from_request = AsyncMock(side_effect=OSError("network fail"))
-        self._setup_delivery()
-        with _make_client() as client:
-            resp = client.post("/install-customer-delivery-seed", json={"mod_id": "mod-y"})
-        assert resp.status_code == 200
 
 
 # ===========================================================================

@@ -1,0 +1,12 @@
+{
+  "_comment": "Auto-generated extraction of the 2026-09-20 visual review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "feature": "ind-modstore-gateway",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "24a3ca079c79c564877d5b88a98421365afcf1e4c289f8684724af8326143c80",
+  "visible_content": "发现页只有工作台、MOD 市场、工具箱入口，没有包导入导出、制作、同步或版本管理结果。",
+  "full_feature_acceptance": false,
+  "source": "macos-features-1.0.0.5/media/screenshots/ind-modstore-gateway.png"
+}

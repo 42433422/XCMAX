@@ -1,0 +1,32 @@
+{
+  "_comment": "Auto-generated snapshot of real Mac UI acceptance; DO NOT EDIT historical outcomes.",
+  "kind": "feature-acceptance",
+  "feature": "erp-templates",
+  "status": "failed",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-20",
+  "reviewed_at": "2026-09-20",
+  "passed": 0,
+  "failed": 1,
+  "visible_content": "Mac 实机选择默认 Word 价目表模板后点击导出价格表，出现资源不存在弹窗，未生成单据；其余模板与套打场景仍未完成实机验收。",
+  "media": [
+    {
+      "feature": "erp-templates",
+      "path": "FHD/docs/evidence/e2e/macos-acceptance-20260920/07-product-word-export-route-failure.png",
+      "sha256": "1c081b5571bcca89e0cf9624648f7f6ef50beeb9ab505db1c1fbe55d17fecfb8",
+      "visual_review": "accepted",
+      "visible_result": "默认 Word 模板和产品列表背景可见，弹窗显示 /api/mod/xcagi-erp-domain-bridge/products/export.docx 资源不存在。",
+      "reviewed_at": "2026-09-20"
+    }
+  ],
+  "cases": [
+    {
+      "input": "默认 Word 模板 price_list_default，产品 DEMO-001",
+      "actions": "在已安装 XCAGI 产品管理页面点击导出价格表。",
+      "expected": "按所选 Word 模板生成包含当前产品的价格表。",
+      "observed": "显示导出失败：资源不存在，未获得 Word 文件。",
+      "result": "failed"
+    }
+  ]
+}

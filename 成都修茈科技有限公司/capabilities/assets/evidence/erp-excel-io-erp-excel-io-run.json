@@ -1,0 +1,32 @@
+{
+  "_comment": "Auto-generated snapshot of real Mac UI acceptance; DO NOT EDIT historical outcomes.",
+  "kind": "feature-acceptance",
+  "feature": "erp-excel-io",
+  "status": "failed",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-20",
+  "reviewed_at": "2026-09-20",
+  "passed": 0,
+  "failed": 1,
+  "visible_content": "Mac 实机产品列表已有 DEMO-001，点击导出 Excel 后出现资源不存在错误，未获得导出文件。",
+  "media": [
+    {
+      "feature": "erp-excel-io",
+      "path": "FHD/docs/evidence/e2e/macos-acceptance-20260920/06-product-export-route-failure.png",
+      "sha256": "fb2bcc7c7ac0b036d730e411091282bcbbdf74db86676447b24d4ebac8de5247",
+      "visual_review": "accepted",
+      "visible_result": "截图清晰显示产品列表背景及 Excel 导出失败弹窗，缺失地址为 /api/mod/xcagi-erp-domain-bridge/products/export.xlsx。",
+      "reviewed_at": "2026-09-20"
+    }
+  ],
+  "cases": [
+    {
+      "input": "产品管理列表中的 DEMO-001",
+      "actions": "在已安装 XCAGI v1.0.0.5 产品管理页面点击导出 Excel。",
+      "expected": "下载包含列表产品的 Excel 文件。",
+      "observed": "弹窗显示 Excel 导出失败：资源不存在，未生成可核对的导出文件。",
+      "result": "failed"
+    }
+  ]
+}
