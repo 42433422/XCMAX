@@ -349,25 +349,6 @@ async def mod_store_install_customer_delivery_seed(
     industry_id = _facade()._safe_text(payload.get("industry_id") or payload.get("industryId"))
     if not mod_id:
         raise _facade().HTTPException(status_code=400, detail="缺少 mod_id")
-    try:
-        from app.enterprise.mod_entitlements import (
-            enterprise_mod_filter_active,
-            get_cached_entitled_client_mod_ids,
-            sync_entitlements_from_request,
-        )
-
-        if enterprise_mod_filter_active():
-            await sync_entitlements_from_request(request)
-            entitled = get_cached_entitled_client_mod_ids() or set()
-            from app.mod_sdk.industry_mod_aliases import canonical_mod_id
-
-            entitled_canonical = {canonical_mod_id(value) for value in entitled}
-            if canonical_mod_id(mod_id) not in entitled_canonical:
-                raise _facade().HTTPException(status_code=403, detail="当前账号未授权该客户交付包")
-    except _facade().HTTPException:
-        raise
-    except _facade().RECOVERABLE_ERRORS:
-        _facade().logger.warning("customer delivery seed entitlement check skipped", exc_info=True)
     market_token = ""
     account_username = ""
     try:

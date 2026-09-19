@@ -688,25 +688,23 @@ describe('ProductOnboardingView three-step configuration contracts', () => {
     expect(mockContainer.appAlert.mock.calls[0][0]).toContain('行业包异常')
   })
 
-  it('runBootstrap：customMissing 时调用 installMod 与 autoOnboard', async () => {
+  it.each([['custom-1', undefined, 'custom-1'], ['taiyangniao-pro', 'sunbird-attendance-custom', 'sunbird-attendance-custom']])('runBootstrap：客户包 %s 安装实际运行包', async (modId, runtimeModId, installedId) => {
+    const missing = createBaselinePlan({ baseline_ready: false, missing_account_custom_mod_ids: [modId], groups: [{ id: 'custom', title: '客户包', hint: '', items: [{ mod_id: modId, runtime_mod_id: runtimeModId, label: '客户包', tier: 'account_custom', required: true, installed: false }] }] })
     const { wrapper } = await mountComponent({
       route: { step: 'host-pack' },
-      baseline: createBaselinePlan({
-        baseline_ready: false,
-        missing_account_custom_mod_ids: ['custom-1'],
-      }),
+      baseline: missing,
     })
     await flushPromises()
     await flushPromises()
     mockContainer.installMod.mockClear()
     mockContainer.autoOnboardWorkflowEmployeesFromMods.mockClear()
-    mockBaselineForInstallation(mockContainer.installMod, createBaselinePlan({ baseline_ready: false, missing_account_custom_mod_ids: ['custom-1'] }))
+    mockBaselineForInstallation(mockContainer.installMod, missing)
     const bootstrapBtn = wrapper.find('.btn.primary')
     await bootstrapBtn.trigger('click')
     await flushPromises()
     await flushPromises()
     await flushPromises()
-    expect(mockContainer.installMod).toHaveBeenCalledWith('custom-1')
+    expect(mockContainer.installMod).toHaveBeenCalledWith(installedId)
     expect(mockContainer.autoOnboardWorkflowEmployeesFromMods).toHaveBeenCalled()
     await expect(mockContainer.fetchIndustryBaseline()).resolves.toMatchObject({ baseline_ready: true })
     expect(mockContainer.flowState.completeFlowAndGoChat).toHaveBeenCalledOnce()

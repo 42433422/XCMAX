@@ -125,7 +125,8 @@ export function useProductOnboardingActions(
       }
       for (const modId of customMissing) {
         try {
-          const ir = await installMod(modId)
+          const item = baselinePlan.value?.groups.flatMap(group => group.items).find(item => item.mod_id === modId)
+          const ir = await installMod(item?.runtime_mod_id || modId)
           if (!ir.success) {
             installErrors.push(`${modId}：${ir.message || '安装失败'}`)
           }
