@@ -1,0 +1,16 @@
+{
+  "_comment": "Auto-generated extraction of the Windows real-machine review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "platform": "windows",
+  "feature": "base-rbac",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "8dc8864213eb1d02cbd15173f510b349bdd5ae47affe5da68921111a38cf58e6",
+  "visible_content": "/api/rbac/roles and /api/rbac/permissions return 401 before login; /api/xcmax/admin/session returns 403 ADMIN_DESKTOP_FORBIDDEN; health component business_route:rbac reports ok=true",
+  "full_feature_acceptance": false,
+  "visual_review_state": "accepted",
+  "frame_modality": "product_ui",
+  "video_modality": "product_ui",
+  "source": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/screenshots/base-rbac.png"
+}

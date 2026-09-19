@@ -1,0 +1,109 @@
+{
+  "_comment": "Auto-generated from the Windows real-machine evidence run; DO NOT EDIT historical outcomes.",
+  "kind": "feature-acceptance",
+  "platform": "windows",
+  "feature": "erp-replenishment",
+  "status": "blocked",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-20",
+  "reviewed_at": "2026-09-20",
+  "passed": 0,
+  "failed": 0,
+  "evidence_modality": "local_api_probe",
+  "visual_review_state": "not_a_ui_frame",
+  "full_feature_acceptance": false,
+  "visible_content": null,
+  "media": [
+    {
+      "feature": "erp-replenishment",
+      "kind": "screenshot",
+      "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/screenshots/erp-replenishment.png",
+      "sha256": "cab3ca96b348a414864b39dc987fc5201683ccc991757a33e33cf44f5811040e",
+      "bytes": 242831,
+      "frame_modality": "terminal_probe",
+      "visual_review": "not_a_ui_frame",
+      "review_basis": "terminal API probe recording on this machine; not a product-UI frame",
+      "visible_result": null,
+      "reviewed_at": "2026-09-20"
+    },
+    {
+      "feature": "erp-replenishment",
+      "kind": "video",
+      "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/videos/erp-replenishment.mp4",
+      "sha256": "44e3d727cbc24a7831debeb7a327236ec1b1d902863e6d58cc1a2b4eb62c8d0a",
+      "bytes": 621666,
+      "frame_modality": "terminal_probe",
+      "visual_review": "not_a_ui_frame",
+      "review_basis": "terminal API probe recording on this machine; not a product-UI frame",
+      "visible_result": null,
+      "reviewed_at": "2026-09-20"
+    }
+  ],
+  "cases": [
+    {
+      "input": "Windows real-machine verification of 库存补货建议 (erp-replenishment)",
+      "actions": "GET http://127.0.0.1:17500/api/orders  -> HTTP 200",
+      "expected": "库存补货建议 能在 Windows 桌面端实际操作并产生可见结果。",
+      "observed": "本机实测该模块对应的后端路由在未登录状态下返回鉴权挑战，登录后的实际操作未执行，故无法判定通过。",
+      "result": "blocked"
+    }
+  ],
+  "six_elements": {
+    "screenshot": true,
+    "video": true,
+    "log": true,
+    "product_version": true,
+    "app_sha": true,
+    "verify_time": true
+  },
+  "evidence_kind": "local_api",
+  "machine": {
+    "hostname": "佳诺",
+    "os": "Microsoft Windows 11 家庭版 中文版",
+    "version": "10.0.26200",
+    "arch": "AMD64",
+    "ram_gb": 15.6
+  },
+  "baseline": {
+    "product_version": "1.0.0.5",
+    "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+    "installer": {
+      "name": "XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe",
+      "url": "https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe",
+      "bytes": 248514275,
+      "sha256_expected": "45f761cf1ad968c5abeae466e8b0749364e1d1edfabf0821ef28db52f5cb572e",
+      "sha256_measured": "45f761cf1ad968c5abeae466e8b0749364e1d1edfabf0821ef28db52f5cb572e",
+      "authenticode": "NotSigned"
+    },
+    "install_root": "C:\\XCAGI-evidence-1.0.0.5",
+    "user_data_dir": "C:\\XCAGI-evidence-data-1.0.0.5\\userData",
+    "clean_baseline": "全新独立安装目录 + 全新空 userData 目录（C:\\XCAGI-evidence-data-1.0.0.5\\userData，取证前为空），安装包从公网 https://xiu-ci.com 下载并校验 SHA256",
+    "installed_at": "2026-09-19 20:31:36",
+    "cold_start_seconds": 41.4,
+    "health": {
+      "status": "healthy",
+      "version": "1.0.0.5",
+      "git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+      "release_id": "xcagi-1.0.0.5-54325894cc6e3fc2becfcbc98697a099310d9420"
+    },
+    "build_info": {
+      "releaseId": "xcagi-1.0.0.5-54325894cc6e3fc2becfcbc98697a099310d9420",
+      "schema_version": 1,
+      "gitSha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+      "version": "1.0.0.5"
+    },
+    "sku": {
+      "schema_version": 1,
+      "sku": "enterprise"
+    },
+    "app_exe_sha256": "41a272575d43faa7c71d079716078c7539c4078d5133abde9a0839e25217078c",
+    "machine": {
+      "hostname": "佳诺",
+      "os": "Microsoft Windows 11 家庭版 中文版",
+      "version": "10.0.26200",
+      "arch": "AMD64",
+      "ram_gb": 15.6
+    }
+  }
+}
