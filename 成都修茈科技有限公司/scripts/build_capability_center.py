@@ -843,7 +843,7 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
       <p class="cap-section-note">待补资料：{esc("、".join(label for key, label in (("tests", "本项自动化测试"), ("ci", "CI 工作流"), ("screenshots", "本项实机截图"), ("videos", "本项操作录像")) if not ev.get(key)) or "已收录各类资料，验收结论仍需核对具体运行记录")}。测试文件和工作流定义不等于运行通过记录。</p>
       <p class="cap-section-note">以下内容由构建脚本从当前仓库自动生成（生成于 {esc(data['generated_at'])}）。路径相对产品仓库根目录；未公开仓库的客户可向我们索取演示与审计说明。未复核的历史图片不展示为功能证据；已复核图片可点开原图，验收范围与构建版本以对应记录为准。</p>
       <div class="cap-evidence-grid">
-        <div class="cap-evidence-block"><h3>实际测试运行记录</h3>{"".join(f'<p>运行记录：通过 {esc(r.get("passed", "见记录"))} / 失败 {esc(r.get("failed", "见记录"))}；源码 {esc(r.get("source_sha", r.get("app_git_sha", ""))[:12])}。<a href="{asset(f["id"], p)}">查看本项测试结果（含失败、命令及源码 SHA）</a></p>' for p, r in run_results) or "<p>待补本项运行记录</p>"}</div>
+        <div class="cap-evidence-block"><h3>实际测试运行记录</h3>{"".join(f'<p>运行记录：通过 {esc(r.get("passed", "见记录"))} / 失败 {esc(r.get("failed", "见记录"))}；验证构建 {esc(r.get("source_sha", r.get("app_git_sha", ""))[:12])}。<a href="{asset(f["id"], p)}">查看本项操作结果与构建记录</a></p>' for p, r in run_results) or "<p>待补本项运行记录</p>"}</div>
         <div class="cap-evidence-block"><h3>源码实现</h3>{evidence_list(ev['impl'])}</div>
         <div class="cap-evidence-block"><h3>API 端点</h3>{evidence_list(ev.get('api', []))}</div>
         <div class="cap-evidence-block"><h3>自动化测试</h3>{evidence_list(ev['tests'])}<p class="cap-evidence-note">CI 门禁：{esc('、'.join(ev['ci']) if ev['ci'] else '待补本项 CI 证据')}</p></div>

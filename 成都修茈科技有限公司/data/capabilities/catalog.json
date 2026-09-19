@@ -468,13 +468,13 @@
               "usage": "在数据页上传 Excel 批量导入；导出按钮生成业务报表。",
               "platforms": ["windows", "macos", "web"],
               "limitations": ["模板格式有校验要求，首次导入建议小批量试跑"],
-              "evidence": {"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-excel-io-visual-review.json",
-                "impl": ["FHD/app/fastapi_routes/excel_templates.py", "FHD/app/application/excel_imports.py"],
+              "evidence": {"review": "FHD/docs/evidence/e2e/macos-acceptance-20260920/erp-excel-io-run.json",
+                "impl": ["FHD/app/fastapi_routes/excel_templates.py", "FHD/app/application/excel_imports.py", "FHD/app/infrastructure/repositories/product_repository_export_mixin.py", "FHD/mods/xcagi-erp-domain-bridge/backend/blueprints.py"],
                 "api": ["/api/excel/*"],
-                "tests": [],
+                "tests": ["FHD/tests/test_erp_products_facade.py", "FHD/tests/test_infrastructure/test_product_repository_export_mixin.py"],
                 "ci": [],
                 "docs": ["FHD/docs/excel_import_api.md"],
-                "screenshots": ["FHD/docs/evidence/capabilities/erp-excel-io-01-etl-center.png"],
+                "runs": ["FHD/docs/evidence/e2e/macos-acceptance-20260920/erp-excel-io-run.json"], "screenshots": ["FHD/docs/evidence/e2e/macos-acceptance-20260920/06-product-export-route-failure.png", "FHD/docs/evidence/capabilities/erp-excel-io-01-etl-center.png"],
                 "commits": []
               }
             },

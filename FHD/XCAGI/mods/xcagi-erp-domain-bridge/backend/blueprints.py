@@ -74,6 +74,11 @@ def register_fastapi_routes(app, mod_id: str) -> None:
             unit=unit,
         )
 
+    from app.mod_sdk.host_services import products_export_docx, products_export_xlsx
+
+    router.add_api_route("/products/export.xlsx", products_export_xlsx, methods=["GET"])
+    router.add_api_route("/products/export.docx", products_export_docx, methods=["GET"])
+
     @router.get("/products/{product_id:int}")
     def mod_products_get(request: Request, product_id: int):
         return _invoke("products", "get", request=request, product_id=product_id)
