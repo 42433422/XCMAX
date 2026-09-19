@@ -1,6 +1,6 @@
 {
   "schema": "xcagi.product_lines_status/v1",
-  "generated_at": "2026-09-18 23:09 UTC",
+  "generated_at": "2026-09-19 08:11 UTC",
   "generator": "FHD/scripts/dev/product_lines_status.py",
   "config": "FHD/config/product_lines.yaml",
   "policy": "本文件为生成物：版本/发布/能力/覆盖率的数字全部取自各自权威源，禁止手改；三线「成熟度」只呈现能力目录自有的证据分级计数与 Release Gate 结论，不合成任何自造评分。",
@@ -91,25 +91,26 @@
     }
   },
   "capability_totals": {
-    "total": 50,
+    "total": 158,
     "by_status": {
       "verified": 13,
-      "partial": 17,
-      "implemented": 19,
-      "planned": 1
+      "partial": 27,
+      "implemented": 114,
+      "planned": 4
     },
+    "cancelled_count": 0,
     "domains": 10,
-    "modules": 26,
+    "modules": 28,
     "verified_total": 13,
     "last_verified_at": "2026-09-18",
     "platform_counts": {
-      "windows": 40,
-      "macos": 40,
-      "web": 39,
-      "android": 4,
+      "windows": 99,
+      "macos": 100,
+      "web": 128,
+      "android": 8,
       "ios": 1
     },
-    "completion": 65
+    "completion": 49
   },
   "capability_warnings": [],
   "capability_domains_unassigned": [],
@@ -139,11 +140,12 @@
           "sec",
           "ops"
         ],
-        "total": 32,
+        "total": 102,
         "by_status": {
           "verified": 9,
-          "partial": 12,
-          "implemented": 11
+          "partial": 22,
+          "implemented": 69,
+          "planned": 2
         },
         "verified": 9
       },
@@ -224,11 +226,12 @@
           "pay",
           "industry"
         ],
-        "total": 12,
+        "total": 39,
         "by_status": {
           "verified": 3,
-          "implemented": 6,
-          "partial": 3
+          "implemented": 32,
+          "partial": 3,
+          "planned": 1
         },
         "verified": 3
       },
@@ -257,10 +260,10 @@
         "domains": [
           "channel"
         ],
-        "total": 6,
+        "total": 17,
         "by_status": {
           "partial": 2,
-          "implemented": 2,
+          "implemented": 13,
           "verified": 1,
           "planned": 1
         },

@@ -4,7 +4,7 @@
      声明式输入：FHD/config/product_lines.yaml；本域登记在 FHD/config/ssot.yaml。
      数字漂移由 CI（ssot_cli.py gate → product-lines 域）阻断。 -->
 
-> 生成时间：2026-09-18 23:09 UTC ｜ 生成器：`FHD/scripts/dev/product_lines_status.py`
+> 生成时间：2026-09-19 08:11 UTC ｜ 生成器：`FHD/scripts/dev/product_lines_status.py`
 
 > 本文件是 XCMAX 三产品线状态（版本 / 发布 / 能力 / 三线成熟度）的**单一事实来源**，全部数字自动生成，禁止手改；任何文档引用这些数字都应指向本文件或原始权威源。
 
@@ -43,9 +43,9 @@
 
 | 产品线 | 优先级 | 定位 | 能力（已验证/总数） | 状态分布 | 平台门禁 | 入口可达 |
 |--------|--------|------|---------------------|----------|----------|----------|
-| **企业桌面 ERP + AI** | P0 | 主交付 | 9/32 | verified 9 / partial 12 / implemented 11 / planned 0 | macos: GREEN 10 / YELLOW 3 / RED 0 / 未复测 0；windows: GREEN 13 / YELLOW 0 / RED 0 / 未复测 0 | 是 |
-| **AI 员工商店** | P1 | 商业化线 | 3/12 | verified 3 / partial 3 / implemented 6 / planned 0 | — | 是 |
-| **移动 AI 协同 App** | P2 | 配套线 | 1/6 | verified 1 / partial 2 / implemented 2 / planned 1 | — | 是 |
+| **企业桌面 ERP + AI** | P0 | 主交付 | 9/102 | verified 9 / partial 22 / implemented 69 / planned 2 | macos: GREEN 10 / YELLOW 3 / RED 0 / 未复测 0；windows: GREEN 13 / YELLOW 0 / RED 0 / 未复测 0 | 是 |
+| **AI 员工商店** | P1 | 商业化线 | 3/39 | verified 3 / partial 3 / implemented 32 / planned 1 | — | 是 |
+| **移动 AI 协同 App** | P2 | 配套线 | 1/17 | verified 1 / partial 2 / implemented 13 / planned 1 | — | 是 |
 
 ### 3.2 各线明细
 
@@ -74,15 +74,15 @@
 
 ## 4. 能力目录汇总（`capability-center` 域）
 
-共 50 项能力 / 26 模块 / 10 域；已验证 13、部分验证 17、已实现待验证 19、规划中 1。
+共 158 项能力 / 28 模块 / 10 域；已验证 13、部分验证 27、已实现待验证 114、规划中 4。
 
 | 平台 | 覆盖能力数 |
 |------|-----------|
-| android | 4 |
+| android | 8 |
 | ios | 1 |
-| macos | 40 |
-| web | 39 |
-| windows | 40 |
+| macos | 100 |
+| web | 128 |
+| windows | 99 |
 
 ## 5. 各端交付等级（对外口径，读自 `FHD/VERSION.md`）
 

@@ -319,6 +319,97 @@
 .cap-shot-link:hover img { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(9, 30, 66, 0.16); }
 .cap-shot figcaption { color: var(--text-faint); font-size: 12px; margin-top: 8px; word-break: break-all; }
 
+/* ============================================================ 全景功能地图（首页） */
+.capm-map-section { padding-top: 30px; }
+.capm-map-head h2 { margin: 0 0 8px; font-size: clamp(19px, 2.2vw, 26px); }
+.capm-map-note { margin: 0; color: var(--text-soft); font-size: 14px; line-height: 1.75; }
+.capm-map-toolbar {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.4fr) repeat(4, minmax(120px, 1fr));
+  gap: 10px;
+  margin: 16px 0 10px;
+}
+.capm-map-toolbar select, .capm-map-toolbar input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 13.5px;
+}
+.cap-map-result { margin: 0 0 14px; color: var(--text-faint); font-size: 13px; }
+
+/* 泳道：每个产品域一条泳道，域内按模块分组，模块内是功能节点。 */
+.capm-map { display: grid; grid-template-columns: repeat(auto-fit, minmax(276px, 1fr)); gap: 14px; align-items: start; }
+.capm-map-dom {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--blue);
+  border-radius: 14px;
+  box-shadow: 0 6px 20px rgba(11, 22, 42, 0.06);
+  overflow: hidden;
+}
+.capm-map-dom-head {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 800;
+  text-align: left;
+  cursor: default;
+}
+.capm-map-dom-name { font-size: 14.5px; }
+.capm-map-dom-count { margin-left: 4px; color: var(--text-faint); font-size: 12px; font-weight: 600; }
+.capm-map-dom-body { display: block; padding: 0 10px 10px; }
+.capm-map-mod { padding: 6px 0; border-top: 1px dashed var(--line); }
+.capm-map-mod:first-child { border-top: 0; }
+.capm-map-mod-name { margin: 0 0 4px; padding: 0 4px; font-size: 12.5px; font-weight: 700; color: var(--text-soft); }
+.capm-map-mod-count { margin-left: 4px; color: var(--text-faint); font-weight: 500; }
+.capm-map-feat {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 6px;
+  border-radius: 7px;
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.capm-map-feat:hover { background: rgba(11, 99, 246, 0.07); text-decoration: none; }
+.capm-map-feat-name { min-width: 0; flex: 1 1 auto; }
+.capm-map-feat-core {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--blue);
+  background: rgba(11, 99, 246, 0.1);
+}
+.capm-map-feat .cap-status { padding: 1px 8px; font-size: 11px; }
+.capm-map-feat .cap-status::before { width: 5px; height: 5px; margin-right: 4px; }
+.capm-map-feat .cap-platform { margin-right: 0; padding: 1px 6px; font-size: 10.5px; }
+
+/* 明细能力详情页：证据复用核心能力的提示块 */
+.cap-ref-note {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px dashed var(--line);
+  border-left: 3px solid var(--blue);
+  border-radius: 10px;
+  background: rgba(11, 99, 246, 0.04);
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+.cap-ref-note p { margin: 0 0 8px; }
+.cap-ref-note p:last-child { margin-bottom: 0; }
+
 /* ============================================================ 响应式 */
 @media (max-width: 1240px) {
   .capm-layout { grid-template-columns: minmax(0, 1fr); }
@@ -329,14 +420,21 @@
   .capm-matrix { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .capm-bottom { grid-template-columns: 1fr; }
   .cap-info-grid, .cap-evidence-grid, .cap-shots { grid-template-columns: 1fr; }
-  .cap-toolbar { grid-template-columns: 1fr 1fr; }
+  .cap-toolbar, .capm-map-toolbar { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 720px) {
   .capm-matrix { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .capm-hero-side { text-align: left; }
   .capm-hero-tags { justify-content: flex-start; }
+  /* 移动端：全景地图改为纵向折叠手风琴，不做横向大图。 */
+  .capm-map { grid-template-columns: 1fr; }
+  .capm-map-dom-head { cursor: pointer; }
+  .capm-map-dom-head::after { content: "＋"; margin-left: auto; color: var(--text-faint); font-weight: 700; }
+  .capm-map-dom-head[aria-expanded="true"]::after { content: "－"; }
+  .capm-map-dom-body { display: none; }
+  .capm-map-dom-body.open { display: block; }
 }
 @media (max-width: 480px) {
   .capm-matrix, .capm-legend { grid-template-columns: 1fr; }
-  .cap-toolbar { grid-template-columns: 1fr; }
+  .cap-toolbar, .capm-map-toolbar { grid-template-columns: 1fr; }
 }
