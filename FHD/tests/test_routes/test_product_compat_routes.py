@@ -13,7 +13,6 @@ from app.legacy.routes.product.compat_routes import router
 
 @pytest.fixture
 def app_compat():
-    """Create a FastAPI app with the product compat router mounted."""
     _app = FastAPI()
     _app.include_router(router)
     return _app
@@ -626,8 +625,6 @@ class TestProductsPriceListExport:
         ):
             r = client_compat.get("/products/price-list-export?template_id=customer-missing")
             assert r.status_code == 404
-
-# ========================= GET /products/price-list-template-preview =====
 
 
 class TestProductsPriceListTemplatePreview:
