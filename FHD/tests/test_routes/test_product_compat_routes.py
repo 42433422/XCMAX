@@ -624,9 +624,8 @@ class TestProductsPriceListExport:
                 return_value=(MagicMock(is_file=lambda: False), "missing.docx"),
             ),
         ):
-            r = client_compat.get("/products/price-list-export")
+            r = client_compat.get("/products/price-list-export?template_id=customer-missing")
             assert r.status_code == 404
-
 
 # ========================= GET /products/price-list-template-preview =====
 
