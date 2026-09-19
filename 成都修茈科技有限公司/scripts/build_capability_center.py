@@ -36,7 +36,6 @@ STATUS_META = {
     "partial": {"label": "部分验证", "cls": "st-partial", "rank": 2},
     "implemented": {"label": "已实现待验证", "cls": "st-implemented", "rank": 1},
     "planned": {"label": "规划中", "cls": "st-planned", "rank": 0},
-    # 已决定不做的功能：仅用于识别与剔除，不计入正式功能总数与完成度。
     "cancelled": {"label": "已取消", "cls": "st-cancelled", "rank": -1},
 }
 STATUS_ORDER = ["verified", "partial", "implemented", "planned"]
@@ -175,10 +174,7 @@ def validate_feature(feat: dict, warnings: list[str]) -> dict:
         if impl_ok:
             warnings.append(f"[{feat['id']}] 声明为规划中但存在实现路径（仅警告，不自动升级）: {impl_ok[0]}")
 
-    # 「最近验证时间」只取能力自身拥有、且只会因该能力而变更的证据（实现 + 测试）。
-    # CI 工作流是跨能力共享的基础设施：任何一次无关的 workflow 编辑都会顶起全部 30 项
-    # 引用它的能力的验证时间，使已提交页面看似漂移（SSOT Drift Gate 反复误报）。
-    # CI 记录仍然是 "verified" 状态的必需证据（见上方降级判断），只是不参与时间戳。
+    # 使用实现与测试的代码更新时间；不能据此认定运行验收时间。
     ev_paths_for_time = impl_ok + tests_ok
     verified_at = last_commit(ev_paths_for_time)
 
@@ -198,6 +194,7 @@ def validate_feature(feat: dict, warnings: list[str]) -> dict:
         "downgraded": final != claimed,
         "downgrade_reasons": reasons,
         "evidence": {
+            "runs": [p for p in ev.get("runs", []) if path_exists(p)],
             "impl": impl_ok,
             "api": ev.get("api", []) or [],
             "tests": tests_ok,
@@ -272,7 +269,6 @@ def build(repo_root_note: bool = True) -> tuple[dict, list[str], list[dict]]:
             feats_out = []
             for feat in mod["features"]:
                 enriched = validate_feature(feat, warnings)
-                # 明细节点（featured=false）以 evidence_ref 复用核心能力的证据；核心能力为 featured。
                 featured = feat.get("featured", True) is not False
                 evidence_ref = feat.get("evidence_ref") or None
                 enriched = {
@@ -739,15 +735,14 @@ def evidence_list(items: list[str], cls: str = "") -> str:
 
 def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
     ev = f["evidence"]
+    run_results = [(p, json.loads(e(p).read_text(encoding="utf-8"))) for p in ev.get("runs", [])]
     ref = f.get("evidence_ref")
     panel = ""
-    # 明细节点（featured=false）以 evidence_ref 复用核心能力的证据：详情页保留自身的定位信息，
-    # 同时在证据区提示“完整证据见核心能力”，指引用户直达该能力的完整证据详情页。
     if ref:
         panel = (
             '<div class="cap-ref-note">'
-            f'<p><strong>本项为功能地图中的明细能力</strong>，其实现与验证证据与核心能力「'
-            f'{esc(f.get("evidence_ref_name") or ref)}」共用同一份仓库证据。</p>'
+            f'<p><strong>本项为功能地图中的明细能力</strong>，相关实现资料见核心能力「'
+            f'{esc(f.get("evidence_ref_name") or ref)}」。上级能力的证据不能代替本项独立验收；本项已收录资料如下。</p>'
             f'<p><a class="btn btn-secondary btn-sm" '
             f'href="/capabilities/feature/{esc(ref)}.html">查看完整证据详情 →</a></p>'
             "</div>"
@@ -795,9 +790,9 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
     elif not media_html:
         shots_html = (
             '<div class="cap-evidence-media"><h3>实机截图 / 运行证据</h3>'
-            '<p class="cap-evidence-note">本项没有独立的产品界面（后端服务、流水线门禁或管理端能力），'
-            '因此不提供实机截图。它的真伪请以上方「源码实现 / 自动化测试 / CI 记录」为准，'
-            '这些路径都可以在仓库中逐条打开核对。</p></div>'
+            '<p class="cap-evidence-note">本项尚未收录独立实机截图或录像，'
+            '待补实际运行证据。下列源码与测试资料仅说明实现和测试覆盖，'
+            '不代表实机验收通过。</p></div>'
         )
 
     commits_html = evidence_list(
@@ -830,7 +825,7 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
         <div class="cap-info-block"><h3>使用方式</h3><p>{esc(usage)}</p></div>
         <div class="cap-info-block"><h3>所属模块</h3><p>{esc(dom['name'])} / {esc(mod['name'])}</p></div>
         <div class="cap-info-block"><h3>支持平台</h3><p>{platform_tags(f.get('platforms', [])) or '—'}</p></div>
-        <div class="cap-info-block"><h3>当前状态</h3><p>{status_badge(f['status'])}（最近验证时间：{esc(verified_time)}）</p></div>
+        <div class="cap-info-block"><h3>当前状态</h3><p>{status_badge(f['status'])}（相关代码更新时间：{esc(verified_time)}）</p></div>
         <div class="cap-info-block"><h3>已知限制</h3><ul class="cap-limitations">{limitations}</ul></div>
       </div>
       {panel}
@@ -841,16 +836,18 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
   <section class="section cap-evidence-section">
     <div class="container">
       <h2>技术验证资料</h2>
+      <p class="cap-section-note">待补资料：{esc("、".join(label for key, label in (("tests", "本项自动化测试"), ("ci", "CI 工作流"), ("screenshots", "本项实机截图"), ("videos", "本项操作录像")) if not ev.get(key)) or "已收录各类资料，验收结论仍需核对具体运行记录")}。测试文件和工作流定义不等于运行通过记录。</p>
       <p class="cap-section-note">以下内容由构建脚本从当前仓库自动生成（生成于 {esc(data['generated_at'])}）。路径相对产品仓库根目录；未公开仓库的客户可向我们索取演示与审计说明。实机截图均为产品真实运行界面，点击图片可查看原图。</p>
       <div class="cap-evidence-grid">
+        <div class="cap-evidence-block"><h3>实际测试运行记录</h3>{"".join(f'<p>本地测试：通过 {esc(r["passed"])} / 失败 {esc(r["failed"])}；源码 {esc(r["source_sha"][:12])}。<a href="{asset(f["id"], p)}">查看本项测试结果（含失败、命令及源码 SHA）</a></p>' for p, r in run_results) or "<p>待补本项运行记录</p>"}</div>
         <div class="cap-evidence-block"><h3>源码实现</h3>{evidence_list(ev['impl'])}</div>
         <div class="cap-evidence-block"><h3>API 端点</h3>{evidence_list(ev.get('api', []))}</div>
-        <div class="cap-evidence-block"><h3>自动化测试</h3>{evidence_list(ev['tests'])}<p class="cap-evidence-note">CI 门禁：{esc('、'.join(ev['ci']) if ev['ci'] else '按仓库 CI 流水线执行')}</p></div>
-        <div class="cap-evidence-block"><h3>CI 记录</h3>{evidence_list(ev['ci'])}</div>
+        <div class="cap-evidence-block"><h3>自动化测试</h3>{evidence_list(ev['tests'])}<p class="cap-evidence-note">CI 门禁：{esc('、'.join(ev['ci']) if ev['ci'] else '待补本项 CI 证据')}</p></div>
+        <div class="cap-evidence-block"><h3>CI 工作流定义</h3>{evidence_list(ev['ci'])}</div>
         {media_html}
         {shots_html}
         <div class="cap-evidence-block"><h3>关联文档</h3>{evidence_list(ev['docs'])}</div>
-        <div class="cap-evidence-block"><h3>验证 commit</h3>{commits_html}</div>
+        <div class="cap-evidence-block"><h3>关联实现 commit</h3>{commits_html}</div>
       </div>
     </div>
   </section>
@@ -887,7 +884,7 @@ def copy_evidence_assets(domains_full: list[dict]) -> list[str]:
     for d in domains_full:
         for m in d["modules"]:
             for f in m["features"]:
-                for kind in ("screenshots", "videos"):
+                for kind in ("screenshots", "videos", "runs"):
                     for p in f["evidence"].get(kind, []):
                         src = e(p)
                         dst = EVIDENCE_ASSET_DIR / f"{f['id']}-{Path(p).name}"
