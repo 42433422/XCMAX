@@ -1,22 +1,12 @@
 #!/usr/bin/env python3
-"""产品能力中心生成器。
-
-核心原则：No Evidence, No Claim。
-- 能力目录 SSOT：data/capabilities/catalog.json
-- 生成器逐项校验证据（实现路径 / 自动化测试 / CI 工作流 / 运行证据 / 文档），
-  证据不满足声明状态时自动降级并记录原因，严禁伪造功能状态。
-- 全部公开数字（能力总数、已验证数量、最近验证时间等）由目录自动统计。
-
-用法：
-  python3 scripts/build_capability_center.py            # 生成页面 + 数据
-  python3 scripts/build_capability_center.py --check    # CI 漂移门禁：目录与已提交页面不一致则失败
-"""
+"""Build catalog.json pages; --check rejects drift. File presence is not acceptance."""
 
 from __future__ import annotations
 
 import argparse
 import datetime as dt
 import html
+import hashlib
 import json
 import re
 import shutil
@@ -41,9 +31,8 @@ STATUS_META = {
 STATUS_ORDER = ["verified", "partial", "implemented", "planned"]
 EXCLUDED_STATUSES = frozenset({"cancelled"})
 
-# 矩阵图例：状态 → 一句话口径，与状态分级说明同源，避免两处口径漂移。
 STATUS_LEGEND = (
-    ("verified", "有实现、自动化测试与 CI 门禁记录，公开页面可逐项查证"),
+    ("verified", "有本项操作结果与原图复核记录；具体适用版本见验收资料"),
     ("partial", "实现已合入且有部分证据，验证覆盖不完整，限制已知"),
     ("implemented", "代码已合入，暂缺自动化测试或实机验证证据"),
     ("planned", "仅有设计与规划，无已合入实现"),
@@ -57,10 +46,8 @@ PLATFORM_META = {
     "ios": "iOS",
 }
 
-# 完成度加权口径：公开进度数字的唯一算法，页面同时展示该规则，不接受人工填写。
 COMPLETION_WEIGHT = {"verified": 1.0, "partial": 0.7, "implemented": 0.4, "planned": 0.0}
 
-# 状态 → 矩阵勾选图标（已完成 / 部分完成 / 进行中 / 未开始）。
 TICK_CLASS = {
     "verified": "t-ok",
     "partial": "t-part",
@@ -68,7 +55,6 @@ TICK_CLASS = {
     "planned": "t-todo",
 }
 
-# 域卡强调色：按目录顺序循环，仅用于视觉分区，不表达任何状态。
 DOMAIN_ACCENTS = (
     "#2f6df6", "#7c4dff", "#12a150", "#ff8a00", "#e6486b",
     "#0f9d8c", "#e5484d", "#2f6df6", "#7c4dff", "#12a150",
@@ -113,7 +99,34 @@ def last_commit(paths: list[str], fmt: str = "%cI") -> str | None:
     return out or None
 
 
-# ---------------------------------------------------------------- validation
+
+def accepted_runs(feat: dict) -> list[dict]:
+    """Only feature-specific, visually reviewed outcomes qualify as runtime acceptance."""
+    accepted = []
+    for rel in feat.get("evidence", {}).get("runs", []):
+        try:
+            run = json.loads(e(rel).read_text(encoding="utf-8"))
+            cases, media = run.get("cases", []), run.get("media", [])
+            if (run.get("kind") != "feature-acceptance" or run.get("feature") != feat["id"]
+                    or run.get("status") != "passed" or not run.get("verified_at")
+                    or not re.fullmatch(r"[0-9a-f]{40}", run.get("app_git_sha", ""))
+                    or not run.get("app_version") or not cases or not media):
+                continue
+            if not all(c.get("result") == "passed" and all(c.get(k) for k in
+                       ("input", "actions", "expected", "observed")) for c in cases):
+                continue
+            if not all(m.get("feature") == feat["id"] and m.get("visual_review") == "accepted"
+                       and m.get("visible_result") and m.get("reviewed_at")
+                       and m["path"] in sum((feat["evidence"].get(k, []) for k in ("screenshots", "videos")), [])
+                       and e(m["path"]).is_file()
+                       and hashlib.sha256(e(m["path"]).read_bytes()).hexdigest() == m.get("sha256")
+                       for m in media):
+                continue
+            accepted.append(run)
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            continue
+    return accepted
+
 
 def validate_feature(feat: dict, warnings: list[str]) -> dict:
     """校验单个功能的证据，返回最终状态与证据明细。No Evidence, No Claim。"""
@@ -126,25 +139,17 @@ def validate_feature(feat: dict, warnings: list[str]) -> dict:
     videos = ev.get("videos", []) or []
 
     impl_ok = [p for p in impl if path_exists(p)]
-    impl_missing = [p for p in impl if not path_exists(p)]
     tests_ok = [p for p in tests if path_exists(p)]
     ci_ok = [p for p in ci if path_exists(p.split(":")[0])]
     docs_ok = [p for p in docs if path_exists(p)]
     shots_ok = [p for p in shots if path_exists(p)]
     videos_ok = [p for p in videos if path_exists(p)]
 
-    for p in impl_missing:
-        warnings.append(f"[{feat['id']}] 实现路径不存在: {p}")
-    for p in tests:
-        if p not in tests_ok:
-            warnings.append(f"[{feat['id']}] 测试路径不存在: {p}")
-    for p in shots:
-        if p not in shots_ok:
-            warnings.append(f"[{feat['id']}] 运行证据不存在: {p}")
-    for p in videos:
-        if p not in videos_ok:
-            warnings.append(f"[{feat['id']}] 运行录像不存在: {p}")
+    for paths, present, label in ((impl, impl_ok, "实现"), (tests, tests_ok, "测试"),
+                                  (shots, shots_ok, "截图"), (videos, videos_ok, "录像")):
+        warnings.extend(f"[{feat['id']}] {label}路径不存在: {p}" for p in paths if p not in present)
 
+    acceptance = accepted_runs(feat)
     claimed = feat["status"]
     final = claimed
     reasons: list[str] = []
@@ -156,6 +161,8 @@ def validate_feature(feat: dict, warnings: list[str]) -> dict:
             reasons.append(reason)
 
     if claimed == "verified":
+        if not acceptance:
+            downgrade("partial", "缺少本项操作、结果及原图内容复核的实机验收记录")
         if not impl_ok:
             downgrade("partial", "缺少可验证的实现路径")
         if not tests_ok:
@@ -175,12 +182,11 @@ def validate_feature(feat: dict, warnings: list[str]) -> dict:
             warnings.append(f"[{feat['id']}] 声明为规划中但存在实现路径（仅警告，不自动升级）: {impl_ok[0]}")
 
     # 使用实现与测试的代码更新时间；不能据此认定运行验收时间。
-    ev_paths_for_time = impl_ok + tests_ok
-    verified_at = last_commit(ev_paths_for_time)
+    verified_at = last_commit(impl_ok + tests_ok)
+    accepted_at = max((r["verified_at"] for r in acceptance), default=None)
 
-    commit_info = []
-    for c in ev.get("commits", []) or []:
-        commit_info.append({"sha": c.get("sha", ""), "subject": c.get("subject", ""), "date": c.get("date", "")})
+    commit_info = [{k: c.get(k, "") for k in ("sha", "subject", "date")}
+                   for c in ev.get("commits", []) or []]
     if not commit_info and impl_ok:
         raw = last_commit([impl_ok[0]], fmt="%h%x1f%cI%x1f%s")
         if raw:
@@ -191,10 +197,13 @@ def validate_feature(feat: dict, warnings: list[str]) -> dict:
         **feat,
         "status": final,
         "claimed_status": claimed,
+        "acceptance": acceptance,
+        "accepted_at": accepted_at,
         "downgraded": final != claimed,
         "downgrade_reasons": reasons,
         "evidence": {
             "runs": [p for p in ev.get("runs", []) if path_exists(p)],
+            "review": ev.get("review"),
             "impl": impl_ok,
             "api": ev.get("api", []) or [],
             "tests": tests_ok,
@@ -255,7 +264,6 @@ def build(repo_root_note: bool = True) -> tuple[dict, list[str], list[dict]]:
     domains_out: list[dict] = []
     feature_index: list[dict] = []
 
-    # id → 功能名：明细节点用 evidence_ref 指向核心能力时，详情页要显示可读名称。
     id_to_name = {
         feat["id"]: feat["name"]
         for dom in catalog["domains"]
@@ -301,7 +309,6 @@ def build(repo_root_note: bool = True) -> tuple[dict, list[str], list[dict]]:
 
     stats = compute_stats(domains_out, feature_index)
     data = {
-        # 生成物声明：本文件由脚本自动生成，不属人工维护行数。
         "_comment": "此文件由 成都修茈科技有限公司/scripts/build_capability_center.py 自动生成，请勿手改（DO NOT EDIT）。",
         "schema_version": 1,
         "catalog_version": catalog.get("catalog_version", ""),
@@ -321,7 +328,6 @@ def build(repo_root_note: bool = True) -> tuple[dict, list[str], list[dict]]:
                     {
                         "id": m["id"],
                         "name": m["name"],
-                        # 已取消的功能从正式总数、完成度与公开列表中剔除（EXCLUDED_STATUSES）。
                         "features": [
                             {
                                 "id": f["id"],
@@ -349,7 +355,6 @@ def build(repo_root_note: bool = True) -> tuple[dict, list[str], list[dict]]:
 
 
 def compute_stats(domains_out: list[dict], feature_index: list[dict]) -> dict:
-    # 已取消（cancelled）不计入正式功能总数与完成度，仅单独计数备查。
     active = [f for f in feature_index if not f.get("excluded")]
     by_status = {s: 0 for s in STATUS_ORDER}
     for f in active:
@@ -358,8 +363,8 @@ def compute_stats(domains_out: list[dict], feature_index: list[dict]) -> dict:
     for d in domains_out:
         for m in d["modules"]:
             for f in m["features"]:
-                if f["status"] == "verified" and f.get("verified_at"):
-                    verified_times.append(f["verified_at"])
+                if f["status"] == "verified" and f.get("accepted_at"):
+                    verified_times.append(f["accepted_at"])
     platform_counts: dict[str, int] = {}
     for f in active:
         for p in f["platforms"]:
@@ -377,14 +382,12 @@ def compute_stats(domains_out: list[dict], feature_index: list[dict]) -> dict:
     }
 
 
-# ---------------------------------------------------------------- rendering
 
 def css(href: str) -> str:
     return f'<link rel="stylesheet" href="{href}?v=20260919b" />'
 
 
 def header_html(page_key: str, title_suffix: str, description: str, canonical: str) -> str:
-    # 生成物横幅：明确声明页面由脚本生成，避免被当成手工维护页面直接编辑。
     return f"""<!doctype html>
 <!-- 此文件由 scripts/build_capability_center.py 自动生成，请勿手改（DO NOT EDIT）。 -->
 <html lang="zh-CN">
@@ -503,8 +506,6 @@ def render_index(data: dict, domains_full: list[dict]) -> str:
     ver_html = f' <span class="capm-ver">v{esc(version)}</span>' if version else ""
     last_verified = s["last_verified_at"] or "—"
 
-    # 左主体：10 张域卡（5 列 × 2 行），列出该域的**核心能力**（featured）并链接到证据详情页。
-    # 明细功能（featured=false）在全景功能地图中展示，两处同源于同一份目录数据。
     cards = []
     for i, d in enumerate(domains_full):
         feats = [f for m in d["modules"] for f in m["features"] if f["featured"] and not f["excluded"]]
@@ -535,7 +536,6 @@ def render_index(data: dict, domains_full: list[dict]) -> str:
           <em class="capm-badge {'capm-badge--warn' if warn else 'capm-badge--ok'}">{esc(level)}</em></li>"""
         )
 
-    # 右侧栏：安全与网络三模式，由目录 SSOT 维护。
     modes = "".join(
         f'<li class="capm-mode"><strong>{esc(m["name"])}</strong>'
         f"<span>{esc(m.get('network', ''))} + {esc(m.get('storage', ''))}</span>"
@@ -543,7 +543,6 @@ def render_index(data: dict, domains_full: list[dict]) -> str:
         for m in data.get("deployment_modes", [])
     )
 
-    # 底部：待验收 / 待补齐清单，按状态严重度排序取前 5，逐条可点进证据页。
     pending = sorted(
         (
             f
@@ -561,7 +560,6 @@ def render_index(data: dict, domains_full: list[dict]) -> str:
         for i, f in enumerate(pending)
     )
 
-    # 底部：下一步重点计划（仅列尚未完成项），由目录 SSOT 维护；每条可点进对应证据页。
     plan_items = "".join(
         f'<li><span class="capm-rank">{i + 1}</span>'
         + (
@@ -677,7 +675,7 @@ def render_index(data: dict, domains_full: list[dict]) -> str:
   <section class="section">
     <div class="container">
       <h2>本页数字是怎么来的</h2>
-      <p>能力目录 <code>data/capabilities/catalog.json</code> 由仓库审计维护；构建脚本 <code>scripts/build_capability_center.py</code> 在生成页面前逐项校验证据：实现路径、自动化测试、CI 工作流、实机截图与录像必须真实存在于当前仓库，否则状态自动降级并在构建报告中留痕。矩阵中每个功能都可点进详情页查看对应证据。目录与页面由 CI 漂移门禁校验一致性，公开数字无法手写、无法夸大。</p>
+      <p>能力目录 <code>data/capabilities/catalog.json</code> 由仓库审计维护；构建脚本 <code>scripts/build_capability_center.py</code> 在生成页面前逐项校验证据：实现路径、自动化测试、CI 工作流、文件存在只说明资料已收录；已验证还要求本项操作、预期与实际结果、构建身份及绑定原图哈希的内容复核记录。缺少验收记录会自动降级。矩阵中每个功能都可点进详情页查看对应证据。目录与页面由 CI 漂移门禁校验一致性，此检查不替代人工核验，也不代表全部功能已完成。</p>
     </div>
   </section>
 </main>
@@ -736,6 +734,8 @@ def evidence_list(items: list[str], cls: str = "") -> str:
 def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
     ev = f["evidence"]
     run_results = [(p, json.loads(e(p).read_text(encoding="utf-8"))) for p in ev.get("runs", [])]
+    accepted_media = {m["path"] for r in f["acceptance"] for m in r["media"]}
+    review = json.loads(e(ev["review"]).read_text(encoding="utf-8")) if ev.get("review") else {}
     ref = f.get("evidence_ref")
     panel = ""
     if ref:
@@ -759,13 +759,12 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
         """证据资产在站点内的相对路径（构建时会把原始文件复制到 assets/evidence/）。"""
         return f"/capabilities/assets/evidence/{esc(fid + '-' + Path(path).name)}"
 
-    media_html = ""
-    video_tags = []
-    for p in ev.get("videos", []):
-        poster = f' poster="{asset(f["id"], ev["screenshots"][0])}"' if ev["screenshots"] else ""
+    media_html, video_tags = "", []
+    for p in (p for p in ev.get("videos", []) if p in accepted_media):
+        poster = f' poster="{asset(f["id"], ev["screenshots"][0])}"' if ev["screenshots"] and ev["screenshots"][0] in accepted_media else ""
         video_tags.append(
             f'<figure class="cap-shot"><video controls preload="metadata"{poster} src="{asset(f["id"], p)}"></video>'
-            f"<figcaption>实机运行录像 / 操作流程（原始文件：{esc(p)}）</figcaption></figure>"
+            f"<figcaption>已复核录像（验收范围见本项运行记录；原始文件：{esc(p)}）</figcaption></figure>"
         )
     if video_tags:
         media_html = (
@@ -773,24 +772,23 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
             f'<div class="cap-shots">{"".join(video_tags)}</div></div>'
         )
 
-    shots_html = ""
-    shot_tags = []
-    for p in ev["screenshots"]:
+    shots_html, shot_tags = "", []
+    for p in (p for p in ev["screenshots"] if p in accepted_media):
         src = asset(f["id"], p)
         shot_tags.append(
             f'<figure class="cap-shot"><a class="cap-shot-link" href="{src}" target="_blank" rel="noopener">'
-            f'<img src="{src}" alt="{esc(f["name"])} 实机证据" loading="lazy" /></a>'
-            f"<figcaption>实机运行证据（原始文件：{esc(p)}）</figcaption></figure>"
+            f'<img src="{src}" alt="{esc(f["name"])} 已复核截图" loading="lazy" /></a>'
+            f"<figcaption>已复核截图（验收范围见本项运行记录；原始文件：{esc(p)}）</figcaption></figure>"
         )
     if shot_tags:
         shots_html = (
-            '<div class="cap-evidence-media"><h3>实机截图 / 运行证据</h3>'
+            '<div class="cap-evidence-media"><h3>截图资料与验收缺口</h3>'
             f'<div class="cap-shots">{"".join(shot_tags)}</div></div>'
         )
     elif not media_html:
         shots_html = (
-            '<div class="cap-evidence-media"><h3>实机截图 / 运行证据</h3>'
-            '<p class="cap-evidence-note">本项尚未收录独立实机截图或录像，'
+            '<div class="cap-evidence-media"><h3>截图资料与验收缺口</h3>'
+            '<p class="cap-evidence-note">本项尚无内容复核通过的独立实机截图或录像，'
             '待补实际运行证据。下列源码与测试资料仅说明实现和测试覆盖，'
             '不代表实机验收通过。</p></div>'
         )
@@ -836,10 +834,11 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
   <section class="section cap-evidence-section">
     <div class="container">
       <h2>技术验证资料</h2>
+      <p class="cap-section-note">图片内容复核（{esc(review.get("reviewed_at", "待补"))}，Mac {esc(review.get("app_version", "待补"))}）：{esc(review.get("visible_content", "尚无本项图片内容复核记录"))} {"本项完整实机验收尚未成立。" if not f["acceptance"] else "验收范围见本项运行记录。"}</p>
       <p class="cap-section-note">待补资料：{esc("、".join(label for key, label in (("tests", "本项自动化测试"), ("ci", "CI 工作流"), ("screenshots", "本项实机截图"), ("videos", "本项操作录像")) if not ev.get(key)) or "已收录各类资料，验收结论仍需核对具体运行记录")}。测试文件和工作流定义不等于运行通过记录。</p>
-      <p class="cap-section-note">以下内容由构建脚本从当前仓库自动生成（生成于 {esc(data['generated_at'])}）。路径相对产品仓库根目录；未公开仓库的客户可向我们索取演示与审计说明。实机截图均为产品真实运行界面，点击图片可查看原图。</p>
+      <p class="cap-section-note">以下内容由构建脚本从当前仓库自动生成（生成于 {esc(data['generated_at'])}）。路径相对产品仓库根目录；未公开仓库的客户可向我们索取演示与审计说明。未复核的历史图片不展示为功能证据；已复核图片可点开原图，验收范围与构建版本以对应记录为准。</p>
       <div class="cap-evidence-grid">
-        <div class="cap-evidence-block"><h3>实际测试运行记录</h3>{"".join(f'<p>本地测试：通过 {esc(r["passed"])} / 失败 {esc(r["failed"])}；源码 {esc(r["source_sha"][:12])}。<a href="{asset(f["id"], p)}">查看本项测试结果（含失败、命令及源码 SHA）</a></p>' for p, r in run_results) or "<p>待补本项运行记录</p>"}</div>
+        <div class="cap-evidence-block"><h3>实际测试运行记录</h3>{"".join(f'<p>运行记录：通过 {esc(r.get("passed", "见记录"))} / 失败 {esc(r.get("failed", "见记录"))}；源码 {esc(r.get("source_sha", r.get("app_git_sha", ""))[:12])}。<a href="{asset(f["id"], p)}">查看本项测试结果（含失败、命令及源码 SHA）</a></p>' for p, r in run_results) or "<p>待补本项运行记录</p>"}</div>
         <div class="cap-evidence-block"><h3>源码实现</h3>{evidence_list(ev['impl'])}</div>
         <div class="cap-evidence-block"><h3>API 端点</h3>{evidence_list(ev.get('api', []))}</div>
         <div class="cap-evidence-block"><h3>自动化测试</h3>{evidence_list(ev['tests'])}<p class="cap-evidence-note">CI 门禁：{esc('、'.join(ev['ci']) if ev['ci'] else '待补本项 CI 证据')}</p></div>
@@ -855,7 +854,6 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
 {footer_html()}"""
 
 
-# ---------------------------------------------------------------- main
 
 _TS_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC")
 
@@ -884,8 +882,8 @@ def copy_evidence_assets(domains_full: list[dict]) -> list[str]:
     for d in domains_full:
         for m in d["modules"]:
             for f in m["features"]:
-                for kind in ("screenshots", "videos", "runs"):
-                    for p in f["evidence"].get(kind, []):
+                for kind in ("screenshots", "videos", "runs", "review"):
+                    for p in ([f["evidence"][kind]] if kind == "review" and f["evidence"].get(kind) else f["evidence"].get(kind, []) or []):
                         src = e(p)
                         dst = EVIDENCE_ASSET_DIR / f"{f['id']}-{Path(p).name}"
                         if src.exists():
@@ -963,7 +961,7 @@ def main() -> int:
         for w in warnings:
             print(f"  {w}")
     else:
-        print("构建警告：0 条，所有声明均有证据支撑。")
+        print("构建警告：0 条；文件校验通过不代表功能验收通过。")
     return 0
 
 

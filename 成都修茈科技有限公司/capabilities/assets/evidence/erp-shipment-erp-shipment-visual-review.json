@@ -1,0 +1,12 @@
+{
+  "_comment": "Auto-generated extraction of the 2026-09-20 visual review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "feature": "erp-shipment",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "77cfccb5edce3bad8180fc00617e2c4498ae8510ced9cdedad7486bf0350cd93",
+  "visible_content": "出货记录尚未选择购买单位，页面提示先选择并加载，没有出货明细。",
+  "full_feature_acceptance": false,
+  "source": "macos-features-1.0.0.5/media/screenshots/erp-shipment.png"
+}

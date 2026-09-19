@@ -1,0 +1,12 @@
+{
+  "_comment": "Auto-generated extraction of the 2026-09-20 visual review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "feature": "ops-project-factory",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "0c91089cdb2ad1362ea9420a4659dea0ee0488b0646592fba54ae06c1ee0ac1e",
+  "visible_content": "项目工厂明确提示“桌面端不支持管理员账号登录，请使用网页版管理端”，项目与员工为空，没有派工记录。",
+  "full_feature_acceptance": false,
+  "source": "macos-features-1.0.0.5/media/screenshots/ops-project-factory.png"
+}
