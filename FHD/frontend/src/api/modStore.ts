@@ -213,38 +213,24 @@ export async function installMod(
           verify_signature: false,
         }
 
-  const response = await apiFetch('/api/mod-store/install', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+  return installRequest('install', payload)
+}
+
+async function installRequest(path: string, payload: object): Promise<InstallResult> {
+  const response = await apiFetch(`/api/mod-store/${path}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
   })
-
   const data = await response.json()
-
-  if (!data.success) {
-    throw new Error(data.detail || data.error || '安装失败')
-  }
-
+  if (!response.ok || !data.success) throw new Error(data.detail || data.error || data.message || '安装失败')
   return data
 }
 
-export async function installCustomerDeliverySeed(modId: string, industryId = ''): Promise<InstallResult> {
-  const response = await apiFetch('/api/mod-store/install-customer-delivery-seed', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      mod_id: modId,
-      industry_id: industryId,
-    }),
-  })
+export function installPrivateMod(modId: string): Promise<InstallResult> {
+  return installRequest('private-mod/update', { mod_id: modId })
+}
 
-  const data = await response.json()
-
-  if (!data.success) {
-    throw new Error(data.detail || data.error || data.message || '客户交付种子安装失败')
-  }
-
-  return data
+export function installCustomerDeliverySeed(modId: string, industryId = ''): Promise<InstallResult> {
+  return installRequest('install-customer-delivery-seed', { mod_id: modId, industry_id: industryId })
 }
 
 /**
