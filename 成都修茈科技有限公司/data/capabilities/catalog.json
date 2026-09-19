@@ -432,13 +432,13 @@
               "usage": "管理员上传企业模板后，业务单据按模板自动填充生成。",
               "platforms": ["windows", "macos", "web"],
               "limitations": ["极端复杂的 Word 模板元素可能需要适配"],
-              "evidence": {"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-templates-visual-review.json",
+              "evidence": {"review": "FHD/docs/evidence/e2e/macos-acceptance-20260920/erp-templates-run.json",
                 "impl": ["FHD/app/fastapi_routes/document_templates.py", "FHD/app/fastapi_routes/template_create.py", "FHD/app/fastapi_routes/template_api.py"],
                 "api": ["/api/document-templates/*"],
                 "tests": ["FHD/tests/test_chat_template_save_chain.py"],
                 "ci": ["FHD/.github/workflows/ci-cd.yml"],
                 "docs": [],
-                "screenshots": ["FHD/docs/evidence/capabilities/erp-templates-01-template-library.png"],
+                "runs": ["FHD/docs/evidence/e2e/macos-acceptance-20260920/erp-templates-run.json"], "screenshots": ["FHD/docs/evidence/e2e/macos-acceptance-20260920/07-product-word-export-route-failure.png", "FHD/docs/evidence/capabilities/erp-templates-01-template-library.png"],
                 "commits": []
               }
             },
