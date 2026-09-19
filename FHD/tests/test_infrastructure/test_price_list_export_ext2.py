@@ -431,10 +431,10 @@ class TestBuildPriceListTemplatePreviewJsonExtended:
         ):
             result = build_price_list_template_preview_json()
         assert result["success"] is True
-        assert result["headers"] == ["产品", "规格", "单价"]
+        assert result["headers"] == ["型号", "名称", "规格", "单价"]
         assert result["sample_rows"] == []
-        assert result["template_hint"] == "rel/path"
-        assert result["path"] == "/path/to/template.docx"
+        assert result["template_hint"] == "内置价目表"
+        assert result["path"] == ""
 
 
 # ---------------------------------------------------------------------------
