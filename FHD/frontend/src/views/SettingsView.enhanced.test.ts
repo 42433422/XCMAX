@@ -274,50 +274,15 @@ async function mountSettings() {
 
 describe('SettingsView.vue – component structure', () => {
   beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    vi.clearAllMocks()
-    // Reset store mocks
-    mockIndustryStore.industries = []
-    mockIndustryStore.currentIndustry = null
-    mockIndustryStore.isLoaded = false
-    mockModsStore.mods = []
+    resetSettingsMocks()
     mockModsStore.activeModId = ''
-    mockModsStore.isLoaded = true
-    mockModsStore.modRoutes = []
-    mockModsStore.clientModsUiOff = false
-    mockAccountProfileStore.companyBrand = ''
-    mockAccountProfileStore.displayBrand = ''
-    mockAccountProfileStore.accountKind = 'personal'
   })
 
-  it('mounts and renders settings content', async () => {
+  it.each([
+    '#view-settings', '.settings-profile', '.settings-layout', '.settings-list', '.settings-page__title',
+  ])('renders settings element %s', async (selector) => {
     const wrapper = await mountSettings()
-    expect(wrapper.find('#view-settings').exists()).toBe(true)
-    wrapper.unmount()
-  })
-
-  it('contains settings profile section', async () => {
-    const wrapper = await mountSettings()
-    expect(wrapper.find('.settings-profile').exists()).toBe(true)
-    wrapper.unmount()
-  })
-
-  it('contains settings layout', async () => {
-    const wrapper = await mountSettings()
-    expect(wrapper.find('.settings-layout').exists()).toBe(true)
-    wrapper.unmount()
-  })
-
-  it('contains settings list', async () => {
-    const wrapper = await mountSettings()
-    expect(wrapper.find('.settings-list').exists()).toBe(true)
-    wrapper.unmount()
-  })
-
-  it('contains page title', async () => {
-    const wrapper = await mountSettings()
-    expect(wrapper.find('.settings-page__title').exists()).toBe(true)
+    expect(wrapper.find(selector).exists()).toBe(true)
     wrapper.unmount()
   })
 })
