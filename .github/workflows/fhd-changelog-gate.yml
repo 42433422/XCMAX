@@ -49,10 +49,7 @@ jobs:
             echo "[skip] autonomy/* 分支豁免（AI 自愈链路）"
             exit 0
           fi
-          files="$(git -C "${GITHUB_WORKSPACE}" diff --name-only "${BASE_SHA}" "${HEAD_SHA}")"
-          echo "[info] PR changed files:"
-          echo "${files}"
-          if ! echo "${files}" | grep -qx 'FHD/CHANGELOG\.md'; then
+          if git -C "${GITHUB_WORKSPACE}" diff --quiet "${BASE_SHA}" "${HEAD_SHA}" -- FHD/CHANGELOG.md; then
             echo "::error title=缺少更新日志::产品代码 PR 必须更新 FHD/CHANGELOG.md —— 在「## Unreleased」节为本次变更加一条说明（一行即可，写给非技术读者看）"
             exit 1
           fi

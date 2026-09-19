@@ -1,0 +1,12 @@
+{
+  "_comment": "Auto-generated extraction of the 2026-09-20 visual review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "feature": "erp-purchase",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "ecfc65ab9b64dc4bf6d782439739f6f474c3bf98da0fb9ddb1e1b153ceba6233",
+  "visible_content": "原材料仓库显示“暂无数据”，没有采购订单或入库结果。",
+  "full_feature_acceptance": false,
+  "source": "macos-features-1.0.0.5/media/screenshots/erp-purchase.png"
+}

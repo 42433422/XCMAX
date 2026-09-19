@@ -1,11 +1,4 @@
-"""审计 R02（2026-09-05 报告）：拒绝类请求不得生成禁止/写入类执行计划。
-
-覆盖两条曾被证实的缺陷路径：
-1. route_normal_mode_message 纯关键词命中，「不要打印」被路由成 shipment/
-   label_print 执行意图；
-2. looks_like_business_db_write 无否定判断，「不要删除客户X」被判真并进入
-   planner 的 business_db_write 写计划。
-"""
+"""拒绝类请求不得进入写入执行计划，包括实机复现的只读限定语。"""
 
 from __future__ import annotations
 
@@ -27,6 +20,10 @@ EXECUTION_INTENTS = {
 }
 
 NEGATED_REQUESTS = (
+    "只查询，不新增、修改或删除任何业务数据。请查产品编码 DEMO-001，列出产品名称、单价和当前库存，并说明查询是否成功。",
+    "不删除产品 DEMO-001",
+    "不修改客户资料",
+    "不新增产品",
     "不要打印标签",
     "别打印标签",
     "不要删除客户张三",

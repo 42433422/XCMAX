@@ -160,8 +160,7 @@ export function extractLikelyProductQueryKeyword(raw: string): string | null {
   if (/(出货单|发货单|订单列表|客户列表|工作流|批量|导入|上传|数据库|打印标签|打印\s|有哪些客户|今天.*单)/.test(t)) {
     return null
   }
-  // “当前/全部产品列表”是全量查询，不是名为“当前产品列表”的产品关键词。
-  // 交给服务端产品查询路由以空 keyword 拉取全量，避免快路径误报“未找到”。
+  // 全量列表交给服务端；不要将字段选择并入产品型号。
   if (/^(?:查询|查一下|查下|查看|看看|看下|查)?\s*(?:当前|现有|全部|所有)?\s*产品(?:列表|库)?\s*[。！？…]*$/u.test(t)) {
     return null
   }
@@ -181,6 +180,7 @@ export function extractLikelyProductQueryKeyword(raw: string): string | null {
         k = k.slice(1, -1).trim()
       }
       k = k.replace(/^(产品|型号|货号)[是为：:\s]+/i, '').trim()
+      k = k.replace(/^([a-z0-9][a-z0-9._/-]*)\s*的(?:名称|单价|价格|库存)(?:(?:[、，,和及与\s]+)(?:名称|单价|价格|库存))*$/i, '$1')
       if (k.length >= 1 && k.length <= 120) return k
     }
   }

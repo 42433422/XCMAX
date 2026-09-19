@@ -1,9 +1,4 @@
-"""Lazy compatibility contract for host capabilities consumed by bundled Mods.
-
-Every name in this module is an explicit part of the Mod SDK surface.  Imports
-remain lazy so loading a small Mod does not initialize unrelated databases,
-routers, AI clients, or optional integrations.
-"""
+"""Lazy host SDK exports for bundled Mods; avoid initializing unrelated services."""
 
 from __future__ import annotations
 
@@ -299,6 +294,8 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "app.legacy.routes.product.compat_routes",
         "products_delete",
     ),
+    "products_export_xlsx": ("app.fastapi_routes.domains.product.routes", "products_export_xlsx"),
+    "products_export_docx": ("app.fastapi_routes.xcagi_compat_product", "products_export_docx"),
     "products_get_by_id": (
         "app.legacy.routes.product.compat_routes",
         "products_get_by_id",

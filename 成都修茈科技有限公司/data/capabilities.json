@@ -2,21 +2,21 @@
   "_comment": "此文件由 成都修茈科技有限公司/scripts/build_capability_center.py 自动生成，请勿手改（DO NOT EDIT）。",
   "schema_version": 1,
   "catalog_version": "2026-09-16",
-  "generated_at": "2026-09-19 11:36 UTC",
+  "generated_at": "2026-09-19 17:28 UTC",
   "principle": "No Evidence, No Claim：所有状态由构建脚本按仓库证据校验，证据缺失自动降级。",
   "stats": {
     "total": 158,
     "by_status": {
-      "verified": 13,
-      "partial": 27,
+      "verified": 0,
+      "partial": 40,
       "implemented": 114,
       "planned": 4
     },
     "cancelled_count": 0,
     "domains": 10,
     "modules": 28,
-    "verified_total": 13,
-    "last_verified_at": "2026-09-18",
+    "verified_total": 0,
+    "last_verified_at": null,
     "platform_counts": {
       "windows": 99,
       "macos": 100,
@@ -24,7 +24,7 @@
       "android": 8,
       "ios": 1
     },
-    "completion": 49
+    "completion": 47
   },
   "product_version": "1.0.0.5",
   "platform_levels": {
@@ -88,7 +88,7 @@
             {
               "id": "base-login",
               "name": "登录与会话管理",
-              "status": "verified",
+              "status": "partial",
               "platforms": [
                 "windows",
                 "macos",
@@ -229,7 +229,7 @@
             {
               "id": "base-health",
               "name": "服务健康探针",
-              "status": "verified",
+              "status": "partial",
               "platforms": [
                 "windows",
                 "macos",
@@ -333,7 +333,7 @@
             {
               "id": "ai-chat-core",
               "name": "多轮智能对话（流式）",
-              "status": "verified",
+              "status": "partial",
               "platforms": [
                 "windows",
                 "macos",
@@ -418,7 +418,7 @@
             {
               "id": "ai-employees-workflow",
               "name": "工作流员工（数字员工编排）",
-              "status": "verified",
+              "status": "partial",
               "platforms": [
                 "windows",
                 "macos",
@@ -637,7 +637,7 @@
             {
               "id": "erp-shipment",
               "name": "发货单与出货管理",
-              "status": "verified",
+              "status": "partial",
               "platforms": [
                 "windows",
                 "macos",
@@ -859,7 +859,7 @@
             {
               "id": "erp-label",
               "name": "标签打印",
-              "status": "verified",
+              "status": "partial",
               "platforms": [
                 "windows",
                 "macos",
@@ -1096,7 +1096,7 @@
             {
               "id": "ch-wechat-ingest",
               "name": "微信消息接入",
-              "status": "verified",
+              "status": "partial",
               "platforms": [
                 "windows",
                 "macos",
@@ -1265,7 +1265,7 @@
             {
               "id": "mods-loader",
               "name": "Mod 加载与清单校验",
-              "status": "verified",
+              "status": "partial",
               "platforms": [
                 "windows",
                 "macos",
@@ -1279,7 +1279,7 @@
             {
               "id": "mods-store",
               "name": "Mod 市场与一键装包",
-              "status": "verified",
+              "status": "partial",
               "platforms": [
                 "windows",
                 "macos",
@@ -1375,7 +1375,7 @@
             {
               "id": "mods-open-api",
               "name": "开放 API（ai_open）",
-              "status": "verified",
+              "status": "partial",
               "platforms": [
                 "windows",
                 "macos",
@@ -1835,7 +1835,7 @@
             {
               "id": "ops-admin-console",
               "name": "企业管理总后台",
-              "status": "verified",
+              "status": "partial",
               "platforms": [
                 "web"
               ],
@@ -2016,7 +2016,7 @@
             {
               "id": "dt-shell",
               "name": "Windows/macOS 桌面壳",
-              "status": "verified",
+              "status": "partial",
               "platforms": [
                 "windows",
                 "macos"
@@ -2300,7 +2300,7 @@
             {
               "id": "sec-e2e",
               "name": "端到端自动化验收",
-              "status": "verified",
+              "status": "partial",
               "platforms": [
                 "windows",
                 "macos",
