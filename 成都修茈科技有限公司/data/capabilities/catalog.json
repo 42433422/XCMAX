@@ -1,19 +1,49 @@
 {
-  "schema_version": 1,
-  "catalog_version": "2026-09-16",
-  "_comment": "产品能力目录 SSOT。所有 evidence 路径相对产品仓库根目录；构建脚本会逐项校验，证据缺失自动降级状态（No Evidence, No Claim）。状态：verified=已验证(实现+测试+CI) / partial=部分验证(实现+部分证据) / implemented=已实现待验证(仅实现) / planned=规划中。evidence.videos 为可选的实机录像/操作流程文件路径，与 screenshots 同样校验存在性并复制到站点证据目录。",
-  "deployment_modes": [
-    { "name": "绝对安全模式", "network": "内网", "storage": "SQLite", "desc": "数据不出网，最高安全等级" },
-    { "name": "安全模式", "network": "外网", "storage": "SQLite", "desc": "解放 AI 能力，数据留在本地" },
-    { "name": "性能模式", "network": "外网", "storage": "PostgreSQL", "desc": "向量检索 / 长期记忆 / 工具调用" }
-  ],
-  "next_plan": [
-    "完成移动端绑定与真机验收",
-    "打通 下载 → 安装 → 绑定 → 运行 闭环",
-    "完成桌面自动化真实实现并验证",
-    "完成 3 家客户交付与验收",
-    "推进 10-20 家落地并优化功能"
-  ],
+    "schema_version": 1,
+    "catalog_version": "2026-09-16",
+    "_comment": "产品能力目录 SSOT。所有 evidence 路径相对产品仓库根目录；构建脚本会逐项校验，证据缺失自动降级状态（No Evidence, No Claim）。状态：verified=已验证(实现+测试+CI) / partial=部分验证(实现+部分证据) / implemented=已实现待验证(仅实现) / planned=规划中 / cancelled=已取消(已决定不做，从正式功能总数与完成度中剔除，不计入任何统计)。featured=true（默认）为官网首页「核心能力摘要」的精选能力，有独立证据详情页；featured=false 为全景功能地图的明细节点，用 evidence_ref 指向覆盖它的证据详情页。evidence.videos 为可选的实机录像/操作流程文件路径，与 screenshots 同样校验存在性并复制到站点证据目录。",
+    "deployment_modes": [
+      {
+        "name": "绝对安全模式",
+        "network": "内网",
+        "storage": "SQLite",
+        "desc": "数据不出网，最高安全等级"
+      },
+      {
+        "name": "安全模式",
+        "network": "外网",
+        "storage": "SQLite",
+        "desc": "解放 AI 能力，数据留在本地"
+      },
+      {
+        "name": "性能模式",
+        "network": "外网",
+        "storage": "PostgreSQL",
+        "desc": "向量检索 / 长期记忆 / 工具调用"
+      }
+    ],
+    "next_plan": [
+      {
+        "text": "完成移动端绑定与真机验收",
+        "feature": "ch-mobile-android"
+      },
+      {
+        "text": "完成桌面自动化（RPA）真实实现并验证",
+        "feature": "dt-rpa"
+      },
+      {
+        "text": "为「已实现待验证」能力补齐自动化测试与实机证据",
+        "feature": "base-db"
+      },
+      {
+        "text": "完成 iOS 移动端实现与签名发布",
+        "feature": "ch-mobile-ios"
+      },
+      {
+        "text": "推进 10-20 家客户落地并优化功能",
+        "feature": "ops-delivery"
+      }
+    ],
   "domains": [
     {
       "id": "base",
@@ -59,7 +89,12 @@
                 "screenshots": [],
                 "commits": []
               }
-            }
+            },
+            {"id":"base-win-client","name":"Windows 桌面客户端","status":"implemented","platforms":["windows"],"featured":false,"evidence_ref":"dt-shell","summary":"Windows 桌面安装包与客户端外壳。","evidence":{"impl":["FHD/desktop"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"base-mac-client","name":"macOS 桌面客户端","status":"implemented","platforms":["macos"],"featured":false,"evidence_ref":"dt-shell","summary":"macOS 桌面安装包与客户端外壳。","evidence":{"impl":["FHD/desktop"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"base-web-admin","name":"Web 管理端（自托管）","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"ops-admin-console","summary":"浏览器访问的自托管管理端界面。","evidence":{"impl":["FHD/frontend"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"base-register","name":"账户注册与找回","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"base-login","summary":"账号注册、找回密码与账号找回流程。","evidence":{"impl":["FHD/app/application/account_registration.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"base-account-security","name":"账户安全与锁定","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"base-login","summary":"登录失败锁定、账号安全策略与凭证校验。","evidence":{"impl":["FHD/app/application/account_security.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -83,7 +118,9 @@
                 "screenshots": ["FHD/docs/evidence/e2e/macos-release-1.0.0.4/g8-settings-panel.png"],
                 "commits": []
               }
-            }
+            },
+            {"id":"base-install-guide","name":"安装部署与初始化引导","status":"implemented","platforms":["windows","macos"],"featured":false,"evidence_ref":"base-edition-pack","summary":"安装、首次启动初始化与部署引导。","evidence":{"impl":["FHD/app/desktop_runtime"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"base-device-bind","name":"设备绑定与配对授权","status":"implemented","platforms":["windows","macos","android"],"featured":false,"evidence_ref":"pay-lan","summary":"移动端与桌面端的设备配对与授权。","evidence":{"impl":["FHD/app/services/mobile_relay_pairing.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -125,7 +162,12 @@
                 "screenshots": ["FHD/docs/evidence/capabilities/base-db-01-desktop-runtime-data-dir.png"],
                 "commits": []
               }
-            }
+            },
+            {"id":"base-config","name":"数据目录与配置管理","status":"implemented","platforms":["windows","macos"],"featured":false,"evidence_ref":"base-edition-pack","summary":"运行数据目录与部署配置的读写管理。","evidence":{"impl":["FHD/app/desktop_runtime/deployment_modes.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"base-update-mgmt","name":"版本与更新管理","status":"implemented","platforms":["windows","macos"],"featured":false,"evidence_ref":"dt-ota","summary":"版本比对、更新拉取与发布推送链路。","evidence":{"impl":["FHD/app/application/enterprise_deploy_pull.py","FHD/app/application/admin_deploy_push.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"base-settings","name":"系统设置与偏好","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"base-health","summary":"工作区级设置与用户偏好项。","evidence":{"impl":["FHD/app/fastapi_routes/workspace_prefs_routes.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"base-diagnostics","name":"日志与诊断","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"base-health","summary":"客户端日志上报与诊断排查入口。","evidence":{"impl":["FHD/app/fastapi_routes/debug_client_log.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"base-help","name":"帮助与教程","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"base-login","summary":"内置新手引导与帮助文档入口。","evidence":{"impl":["FHD/app/fastapi_routes/tutorial_v2.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         }
       ]
@@ -174,7 +216,11 @@
                 "screenshots": ["FHD/docs/evidence/capabilities/ai-intent-01-planner-tools.png"],
                 "commits": []
               }
-            }
+            },
+            {"id":"ai-task-workspace","name":"任务工作区与多步骤规划","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ai-chat-core","summary":"对话式任务工作区与多步骤任务编排。","evidence":{"impl":["FHD/app/application/agent_orchestrator"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ai-model-access","name":"模型接入与使用计费","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"ai-chat-core","summary":"模型服务接入、调用与用量计费口径。","evidence":{"impl":["FHD/app/services/conversation/llm_adapter.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ai-chat-debug","name":"对话调试与工具路由","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"ai-intent","summary":"对话调试台与工具调用路由。","evidence":{"impl":["FHD/app/fastapi_routes/tools_execute.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ai-multimodal","name":"多模态（文本 / 图像 / 语音）","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"ai-tts","summary":"文本、图像与语音的多模态输入输出。","evidence":{"impl":["FHD/app/services/conversation"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -216,7 +262,11 @@
                 "screenshots": ["FHD/docs/evidence/capabilities/ai-employee-pack-01-employee-market.png"],
                 "commits": []
               }
-            }
+            },
+            {"id":"ai-employee-runtime","name":"员工空间与执行调度","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"ai-employees-workflow","summary":"数字员工运行空间与任务调度。","evidence":{"impl":["FHD/app/application/agent_runtime"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ai-eskill","name":"工作流编排与 ESkill 制作","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"ai-employees-workflow","summary":"工作流定义与 ESkill 技能编排。","evidence":{"impl":["FHD/app/fastapi_routes/workflow_definitions.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ai-employee-publish","name":"员工打包与发布","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"ai-employee-pack","summary":"员工包打包与发布流程。","evidence":{"impl":["FHD/app/fastapi_routes/workflow_definitions.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ai-run-monitor","name":"运行监测与任务历史","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"ai-employees-workflow","summary":"任务运行状态与历史回执。","evidence":{"impl":["FHD/app/services/task_context_service.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -276,7 +326,13 @@
                 "screenshots": ["FHD/docs/evidence/capabilities/ai-knowledge-01-knowledge-graph.png"],
                 "commits": []
               }
-            }
+            },
+            {"id":"ai-csv","name":"CSV 生成与解析","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ai-excel","summary":"CSV 数据的生成与解析。","evidence":{"impl":["FHD/app/services/report_export.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ai-pdf","name":"PDF 生成与解析","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ai-excel","summary":"PDF 文档生成与内容解析。","evidence":{"impl":["FHD/app/services/document_templates_service.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ai-ppt","name":"PPT 生成与解析","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ai-excel","summary":"演示文稿生成与解析。","evidence":{"impl":["FHD/app/services/document_templates_service.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ai-word","name":"Word 生成与解析","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ai-excel","summary":"Word 文档生成与解析。","evidence":{"impl":["FHD/app/services/document_templates_service.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ai-ocr-doc","name":"单据图像识别解析","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-ocr","summary":"单据图片的 OCR 结构化解析。","evidence":{"impl":["FHD/app/services/ocr_service.py","FHD/app/services/paddle_ocr_runner.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ai-vector-rag","name":"知识库向量检索（RAG 工具链）","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"ai-knowledge","summary":"检索增强生成的工具链实现。","evidence":{"impl":["FHD/app/services/tools_workflow_memory_rag.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         }
       ]
@@ -343,7 +399,13 @@
                 "screenshots": ["FHD/docs/evidence/capabilities/erp-inventory-01-inventory-management.png"],
                 "commits": []
               }
-            }
+            },
+            {"id":"erp-master-data","name":"产品 / 客户 / 供应商主数据","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-shipment","summary":"主数据的维护与变更。","evidence":{"impl":["FHD/app/services/products_service.py","FHD/app/services/business_db_customer_mutations.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"erp-sales-order","name":"销售订单管理","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-shipment","summary":"销售订单创建与流转。","evidence":{"impl":["FHD/app/fastapi_routes/shipment_orders.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"erp-purchase-inbound","name":"采购入库管理","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-purchase","summary":"采购到货与入库登记。","evidence":{"impl":["FHD/app/services/purchase_service.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"erp-inventory-warehouse","name":"仓库 / 库位 / 调拨 / 预警","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-inventory","summary":"多仓库存、库位、调拨与库存预警。","evidence":{"impl":["FHD/app/services/inventory_warehouses.py","FHD/app/services/inventory_movements.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"erp-replenishment","name":"库存补货建议","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-inventory","summary":"基于库存与消耗的补货建议。","evidence":{"impl":["FHD/app/services/replenishment_service.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"erp-uom","name":"计量单位管理","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-inventory","summary":"多计量单位与换算。","evidence":{"impl":["FHD/app/services/uom_service.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -367,7 +429,11 @@
                 "screenshots": ["FHD/docs/evidence/capabilities/erp-finance-ledger-01-finance-analysis.png"],
                 "commits": []
               }
-            }
+            },
+            {"id":"erp-ar-ap","name":"应收应付与毛利","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-finance-ledger","summary":"应收应付账目与毛利核算。","evidence":{"impl":["FHD/app/services/accounting_services.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"erp-report","name":"价格表 / 报表 / 统计分析","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-finance-ledger","summary":"价格表、经营报表与统计分析。","evidence":{"impl":["FHD/app/services/report_service.py","FHD/app/fastapi_routes/reports.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"erp-invoice","name":"发票与税务","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-finance-ledger","summary":"发票开具与税务信息处理。","evidence":{"impl":["FHD/app/services/tax_invoice_provider.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"erp-reconcile","name":"经营对账与结算","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-finance-ledger","summary":"经营流水对账与结算。","evidence":{"impl":["FHD/app/services/fhd_payment_reconciliation.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -427,7 +493,9 @@
                 "screenshots": ["FHD/docs/evidence/capabilities/erp-excel-io-01-etl-center.png"],
                 "commits": []
               }
-            }
+            },
+            {"id":"erp-contract","name":"合同单据","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-templates","summary":"销售合同单据的生成与生命周期。","evidence":{"impl":["FHD/app/services/contract_lifecycle.py","FHD/app/fastapi_routes/sales_contract_api.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"erp-print-agent","name":"打印代理与套打通道","status":"implemented","platforms":["windows","macos"],"featured":false,"evidence_ref":"erp-label","summary":"本机打印代理与套打通道。","evidence":{"impl":["FHD/app/fastapi_routes/print_agent_helpers.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -451,7 +519,18 @@
                 "screenshots": ["FHD/docs/evidence/e2e/04-ocr.png"],
                 "commits": []
               }
-            }
+            },
+            {"id":"erp-ocr-clean","name":"识别结果清洗与入库","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-ocr","summary":"识别结果的结构化清洗与确认入库。","evidence":{"impl":["FHD/app/application/ocr_app_service.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
+          ]
+        },
+        {
+          "id": "erp-integration",
+          "name": "数据对接与集成",
+          "description": "与外部系统对接：ETL、业务 API 与服务桥接。",
+          "features": [
+            {"id":"erp-etl","name":"数据对接与 ETL","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"erp-excel-io","summary":"外部数据源对接与 ETL 目标管理。","evidence":{"impl":["FHD/app/fastapi_routes/etl.py","FHD/app/fastapi_routes/etl_targets.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"erp-business-api","name":"业务对接与外部系统集成","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"mods-open-api","summary":"业务 API 与外部系统服务桥接。","evidence":{"impl":["FHD/app/fastapi_routes/business_api.py","FHD/app/fastapi_routes/service_bridge.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"erp-approval","name":"业务审批与流程","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-shipment","summary":"业务单据审批与流程流转。","evidence":{"impl":["FHD/app/fastapi_routes/approval.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         }
       ]
@@ -500,7 +579,11 @@
                 "screenshots": ["FHD/docs/evidence/capabilities/ch-im-cs-02-customer-service.png"],
                 "commits": []
               }
-            }
+            },
+            {"id":"ch-notify","name":"通知与推送","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ch-im-core","summary":"站内通知与移动推送。","evidence":{"impl":["FHD/app/services/mobile_push.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ch-task-center","name":"任务中心与审批通知","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ch-im-core","summary":"任务中心与审批消息通知。","evidence":{"impl":["FHD/app/application/approval_notifications.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ch-im-super","name":"超级员工与 AI 群聊","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ch-im-cs","summary":"群聊中的超级员工与 AI 协助。","evidence":{"impl":["FHD/app/fastapi_routes/im_super_employee_routes.py","FHD/app/fastapi_routes/im_ai_group_routes.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ch-im-ws","name":"实时通道（WebSocket）","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ch-im-core","summary":"双端实时消息通道。","evidence":{"impl":["FHD/app/fastapi_routes/im_websocket_route.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -542,7 +625,9 @@
                 "screenshots": ["FHD/docs/evidence/capabilities/ch-wechat-contacts-02-message-db-adapter.png"],
                 "commits": []
               }
-            }
+            },
+            {"id":"ch-wechat-phone","name":"微信电话员工（来电监控）","status":"implemented","platforms":["windows","macos"],"featured":false,"evidence_ref":"ch-wechat-ingest","summary":"微信来电事件监控与归档。","evidence":{"impl":["FHD/app/fastapi_routes/wechat_ingest.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ch-wechat-context","name":"联系人情报注入对话","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ch-wechat-contacts","summary":"把联系人背景注入 AI 对话上下文。","evidence":{"impl":["FHD/app/application/wechat_chat_context.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -556,10 +641,7 @@
               "summary": "Flutter 主线 Android 应用（实验版·非签约级）：登录、流式对话、消息、探索与审批等核心页面已可用，已通过工信部 APP 备案；签约级交付以 Windows/macOS 桌面端为准。",
               "usage": "安装 APK 后用企业账号登录，移动端与桌面端数据同源。",
               "platforms": ["android"],
-              "limitations": [
-                "官方交付等级为「实验骨架·非签约级」（见 FHD/VERSION.md）",
-                "真机二维码/深链、真实审批与签名发布证据尚未闭环"
-              ],
+              "limitations": ["官方交付等级为「实验骨架·非签约级」（见 FHD/VERSION.md）", "真机二维码/深链、真实审批与签名发布证据尚未闭环"],
               "evidence": {
                 "impl": ["FHD/mobile-flutter-poc"],
                 "api": [],
@@ -587,7 +669,19 @@
                 "screenshots": [],
                 "commits": []
               }
-            }
+            },
+            {"id":"ch-mobile-pair","name":"移动端配对与设备注册","status":"implemented","platforms":["android"],"featured":false,"evidence_ref":"ch-mobile-android","summary":"移动端与桌面端配对、设备注册。","evidence":{"impl":["FHD/app/services/mobile_relay_pairing.py","FHD/app/fastapi_routes/mobile_extensions/routes_auth.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ch-mobile-sync","name":"移动端数据同步","status":"implemented","platforms":["android"],"featured":false,"evidence_ref":"ch-mobile-android","summary":"移动端拉取会话、审批与业务数据。","evidence":{"impl":["FHD/app/fastapi_routes/mobile_extensions/routes_sync.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ch-mobile-qr","name":"二维码扫码登录","status":"implemented","platforms":["android","web"],"featured":false,"evidence_ref":"ch-mobile-android","summary":"扫码确认登录与深链回调。","evidence":{"impl":["FHD/app/fastapi_routes/mobile_extensions/routes_auth.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
+          ]
+        },
+        {
+          "id": "ch-voice",
+          "name": "语音与实时对话",
+          "description": "语音识别、实时语音对话与语音模型源管理。",
+          "features": [
+            {"id":"ch-asr","name":"语音识别（ASR）","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ai-tts","summary":"语音转写与语音指令链路。","evidence":{"impl":["FHD/app/fastapi_routes/voice_routes.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ch-realtime-voice","name":"实时语音对话","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ai-tts","summary":"实时语音交互与语音模型源管理。","evidence":{"impl":["FHD/app/fastapi_routes/voice_model_source.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         }
       ]
@@ -636,7 +730,13 @@
                 "screenshots": ["FHD/docs/evidence/e2e/05-mod.png"],
                 "commits": []
               }
-            }
+            },
+            {"id":"mods-toolchain","name":"Mod 制作工具链","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"mods-loader","summary":"Mod 脚手架与制作工具链。","evidence":{"impl":["FHD/app/fastapi_routes/mod_runtime_frontend.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"mods-host-mount","name":"宿主能力接入与路由挂载","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"mods-loader","summary":"Mod 身份校验、路由与菜单挂载。","evidence":{"impl":["FHD/app/infrastructure/mods/mod_auth.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"mods-pack-io","name":"包导入导出与发布","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"mods-store","summary":"Mod 包规范化、导入导出与发布。","evidence":{"impl":["FHD/app/services/mod_zip_normalize.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"mods-version","name":"版本管理与蓝绿","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"mods-store","summary":"Mod 版本与蓝绿切换管理。","evidence":{"impl":["FHD/app/infrastructure/mods/mod_manager.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"mods-template","name":"行业 Mod 模板","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"mods-loader","summary":"行业 Mod 种子与模板。","evidence":{"impl":["FHD/app/mod_sdk/industry_seed.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"mods-shell","name":"平台壳与 edition 包","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"base-edition-pack","summary":"平台壳裁剪与 edition 包引导。","evidence":{"impl":["FHD/app/mod_sdk/platform_shell.py","FHD/app/fastapi_routes/platform_shell_routes.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -678,7 +778,11 @@
                 "screenshots": [],
                 "commits": []
               }
-            }
+            },
+            {"id":"mods-bridge","name":"桥接 Mod 族（ERP / 审批 / 客服 / 总线）","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"mods-loader","summary":"以 Mod 形式桥接核心能力的桥接包。","evidence":{"impl":["FHD/mods/xcagi-erp-domain-bridge","FHD/mods/xcagi-approval-bridge","FHD/mods/xcagi-customer-service-bridge","FHD/mods/xcagi-neuro-bus-bridge"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"mods-store-sync","name":"市场库同步与可见性","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"mods-store","summary":"Mod 市场库同步与目录可见性控制。","evidence":{"impl":["FHD/app/services/modstore_library_sync.py","FHD/app/services/catalog_visibility.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"mods-pat","name":"PAT / JWT 与权限控制","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"mods-open-api","summary":"Mod 接入凭证与权限校验。","evidence":{"impl":["FHD/app/infrastructure/mods/mod_auth.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"mods-aiopen-support","name":"开放 API 支撑与能力探询","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"mods-open-api","summary":"开放接口的能力探询与路由支撑。","evidence":{"impl":["FHD/app/fastapi_routes/aiopen_route_support.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         }
       ]
@@ -745,7 +849,10 @@
                 "screenshots": ["FHD/docs/evidence/e2e/m01-mac-local-20260712/shots/03-launched.png"],
                 "commits": []
               }
-            }
+            },
+            {"id":"ind-fields","name":"行业字段与规则配置","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ind-coating","summary":"行业字段、规则与能力模块配置。","evidence":{"impl":["FHD/app/mod_sdk/industry_seed.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ind-workspace","name":"行业工作台与报表","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ind-attendance","summary":"行业工作区与考勤导入、参考数据。","evidence":{"impl":["FHD/app/application/attendance_import_app_service.py","FHD/app/application/attendance_reference_data.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ind-ai-assistant","name":"行业 AI 助手（占位）","status":"planned","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ind-coating","summary":"行业专属 AI 助手，当前为占位，尚未有已合入实现。","evidence":{"impl":[],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -787,7 +894,13 @@
                 "screenshots": ["FHD/docs/evidence/capabilities/ind-szqsm-04-szqsm.png"],
                 "commits": []
               }
-            }
+            },
+            {"id":"ind-custom-delivery","name":"客户定制开发与交付","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ops-delivery","summary":"客户专属定制的开发与交付链路。","evidence":{"impl":["FHD/app/fastapi_routes/private_mod_delivery_routes.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ind-lan-license","name":"局域网授权桥接 Mod","status":"implemented","platforms":["windows","macos"],"featured":false,"evidence_ref":"pay-lan","summary":"内网授权网关的桥接 Mod。","evidence":{"impl":["FHD/mods/xcagi-lan-license-bridge"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ind-modstore-pay","name":"市场支付桥接 Mod","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"pay-alipay","summary":"Mod 市场支付的桥接 Mod。","evidence":{"impl":["FHD/mods/xcagi-model-payment-bridge"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ind-planner","name":"规划器桥接 Mod","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ai-employees-workflow","summary":"规划器能力的桥接 Mod。","evidence":{"impl":["FHD/mods/xcagi-planner-bridge"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ind-workflow-viz","name":"工作流可视化桥接 Mod","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ai-employees-workflow","summary":"工作流可视化桥接 Mod。","evidence":{"impl":["FHD/mods/xcagi-workflow-visualization-bridge"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ind-modstore-gateway","name":"Mod 市场网关（服务端）","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"mods-store","summary":"Mod 市场服务端网关实现。","evidence":{"impl":["成都修茈科技有限公司/MODstore_deploy"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         }
       ]
@@ -808,10 +921,7 @@
               "summary": "支付宝当面付/订单码支付与异步回调对账，支撑余额充值与套餐购买。",
               "usage": "客户端在钱包页发起充值；回调由服务端验签入账。",
               "platforms": ["windows", "macos", "web", "android"],
-              "limitations": [
-                "支付密钥仅存在于受控环境，公开演示环境不开启支付",
-                "该域代码变更执行最严格的人工审核流程"
-              ],
+              "limitations": ["支付密钥仅存在于受控环境，公开演示环境不开启支付", "该域代码变更执行最严格的人工审核流程"],
               "evidence": {
                 "impl": ["FHD/app/fastapi_routes/model_payment.py", "FHD/app/infrastructure/payment/alipay.py", "FHD/app/infrastructure/payment/order_store.py"],
                 "api": ["POST /api/model-payment/notify/alipay"],
@@ -821,7 +931,11 @@
                 "screenshots": ["FHD/docs/evidence/e2e/macos-release-1.0.0.4/g8-check-update-clicked.png"],
                 "commits": []
               }
-            }
+            },
+            {"id":"pay-wallet","name":"Token 钱包与模型计费","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"pay-alipay","summary":"Token 余额、套餐与模型用量计费。","evidence":{"impl":["FHD/app/fastapi_routes/model_payment_plans.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"pay-reconcile","name":"平台对账与发票","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"pay-alipay","summary":"支付对账与发票处理。","evidence":{"impl":["FHD/app/fastapi_routes/payment_reconcile_internal_api.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"pay-backend-bridge","name":"支付后端桥接（json / postgres / modstore）","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"pay-alipay","summary":"按配置选择支付后端并桥接。","evidence":{"impl":["FHD/app/infrastructure/payment/payment_sot.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"pay-refund","name":"退款申请与审核","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"pay-alipay","summary":"退款申请受理与审核调度。","evidence":{"impl":["FHD/app/services/reconciliation_scheduler.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -863,7 +977,11 @@
                 "screenshots": [],
                 "commits": []
               }
-            }
+            },
+            {"id":"pay-member-plan","name":"支付订单与会员计划","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"pay-alipay","summary":"订单与会员套餐计划。","evidence":{"impl":["FHD/app/fastapi_routes/model_payment_plans.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"pay-entitlement-delivery","name":"权益开通与资产交付","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"pay-entitlement","summary":"套餐权益开通与资产交付。","evidence":{"impl":["FHD/app/application/account_tier_derivation.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"pay-author-revenue","name":"作者收益与分成结算","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"pay-entitlement","summary":"作者收益与分成结算口径。","evidence":{"impl":["FHD/app/services/catalog_client.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"pay-lan-settings","name":"内网模式与授权设置","status":"implemented","platforms":["windows","macos"],"featured":false,"evidence_ref":"pay-lan","summary":"内网形态与授权网关设置。","evidence":{"impl":["FHD/app/fastapi_routes/lan_settings_routes.py","FHD/app/fastapi_routes/lan_routes.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         }
       ]
@@ -894,7 +1012,11 @@
                 "screenshots": [],
                 "commits": []
               }
-            }
+            },
+            {"id":"ops-employee-gov","name":"员工治理与自治策略","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"ops-self-heal","summary":"员工治理总览与自治策略配置。","evidence":{"impl":["FHD/app/fastapi_routes/founder_autonomy_api.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ops-pipeline","name":"制作与运营流水线（P1-P10）","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"ops-self-heal","summary":"制作与运营流水线的编排图。","evidence":{"impl":["FHD/app/fastapi_routes/operations_line_api.py","FHD/config/time_rail_workflow_graph.json"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ops-work-order","name":"需求工单与验收回执","status":"partial","platforms":["web"],"featured":false,"evidence_ref":"ops-delivery","summary":"需求工单、验收回执与状态机。","evidence":{"impl":["FHD/app/services/work_order_acceptance.py","FHD/app/services/work_order_ssot.py"],"api":[],"tests":["FHD/tests/test_services/test_work_order_ssot.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ops-monitor","name":"监控告警与运行健康","status":"partial","platforms":["web"],"featured":false,"evidence_ref":"sec-release-gate","summary":"运行健康监控与告警。","evidence":{"impl":["FHD/app/neuro_bus/health_monitor.py"],"api":[],"tests":["FHD/tests/test_sla_health_probe.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -918,7 +1040,10 @@
                 "screenshots": [],
                 "commits": []
               }
-            }
+            },
+            {"id":"ops-project-factory","name":"项目工厂与任务分流","status":"partial","platforms":["web"],"featured":false,"evidence_ref":"ops-delivery","summary":"项目工厂与任务分流控制台。","evidence":{"impl":["FHD/frontend/src/views/ProjectFactoryView.vue"],"api":[],"tests":["FHD/frontend/src/views/ProjectFactoryView.coverage.test.ts"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ops-customer-value","name":"行动事项与客户价值","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"ops-self-heal","summary":"客户价值行动事项与主门禁。","evidence":{"impl":["FHD/app/application/founder_autonomy_primary_gates.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ops-version-evolution","name":"版本演进与自驱迭代","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"ops-self-heal","summary":"版本演进与自驱迭代编排。","evidence":{"impl":["FHD/.github/workflows/evolution-orchestrator.yml"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -942,7 +1067,10 @@
                 "screenshots": ["FHD/docs/evidence/capabilities/ops-delivery-01-project-factory.png"],
                 "commits": []
               }
-            }
+            },
+            {"id":"ops-delivery-center","name":"客户交付中心","status":"partial","platforms":["web"],"featured":false,"evidence_ref":"ops-delivery","summary":"交付中心视图与交付进度同步。","evidence":{"impl":["FHD/app/fastapi_routes/delivery_sync_routes.py"],"api":[],"tests":["FHD/frontend/src/views/DeliveryCenterView.test.ts"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ops-delivery-sync","name":"交付进度与上下文同步","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"ops-delivery","summary":"专属交付进度与上下文同步。","evidence":{"impl":["FHD/app/fastapi_routes/private_mod_delivery_progress_routes.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ops-issue-runtime","name":"工单与问题运行时","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"ops-delivery","summary":"问题工单运行时与留痕。","evidence":{"impl":["FHD/app/fastapi_routes/issue_runtime_routes.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         }
       ]
@@ -991,7 +1119,11 @@
                 "screenshots": ["FHD/docs/evidence/e2e/macos-release-1.0.0.4/g8-check-update-clicked.png"],
                 "commits": []
               }
-            }
+            },
+            {"id":"dt-install-sign","name":"安装 · 签名 · 身份校验","status":"implemented","platforms":["windows","macos"],"featured":false,"evidence_ref":"dt-shell","summary":"安装包签名、公证与身份校验。","evidence":{"impl":["FHD/desktop/build/notarize.cjs","FHD/config/windows_signing_acceptance.json"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"dt-cold-start-rollback","name":"冷启动与回滚","status":"implemented","platforms":["windows","macos"],"featured":false,"evidence_ref":"dt-ota","summary":"冷启动路径与升级失败回滚。","evidence":{"impl":["FHD/desktop/window-manager.ts"],"api":[],"tests":[],"ci":["FHD/.github/workflows/upgrade-rollback-evidence.yml"],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"dt-process-mgmt","name":"进程管理与托底通知","status":"implemented","platforms":["windows","macos"],"featured":false,"evidence_ref":"dt-shell","summary":"后端进程生命周期与异常托底通知。","evidence":{"impl":["FHD/desktop/backend-process.ts"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"dt-integrity","name":"运行完整性与健康检查","status":"partial","platforms":["windows","macos"],"featured":false,"evidence_ref":"base-health","summary":"运行完整性校验与健康检查。","evidence":{"impl":["FHD/app/neuro_bus/health_monitor.py"],"api":[],"tests":["FHD/tests/test_sla_health_probe.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -1015,7 +1147,12 @@
                 "screenshots": ["FHD/docs/evidence/capabilities/dt-rpa-01-desktop-runtime.png"],
                 "commits": []
               }
-            }
+            },
+            {"id":"dt-element-find","name":"元素查找与应用引导（占位）","status":"planned","platforms":["windows","macos"],"featured":false,"evidence_ref":"dt-rpa","summary":"桌面元素查找与应用引导，当前为占位实现。","evidence":{"impl":[],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"dt-desktop-workflow","name":"桌面工作流（占位）","status":"planned","platforms":["windows","macos"],"featured":false,"evidence_ref":"dt-rpa","summary":"桌面自动化工作流，当前为占位实现。","evidence":{"impl":[],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"dt-neurobus","name":"事件总线（NeuroBus）","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"dt-rpa","summary":"事件总线与事件存储。","evidence":{"impl":["FHD/app/neuro_bus/bus.py","FHD/app/neuro_bus/event_store.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"dt-evidence-store","name":"本地 · 服务端存证","status":"partial","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"sec-release-gate","summary":"本地与服务端双向存证。","evidence":{"impl":["FHD/app/neuro_bus/event_store.py"],"api":[],"tests":["FHD/tests/test_services/test_work_order_ssot.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"dt-mac-control","name":"macOS 桌面控制代理","status":"implemented","platforms":["macos"],"featured":false,"evidence_ref":"dt-rpa","summary":"macOS 桌面控制代理通道。","evidence":{"impl":["FHD/app/fastapi_routes/mac_control_proxy.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         }
       ]
@@ -1082,7 +1219,12 @@
                 "screenshots": ["FHD/docs/evidence/capabilities/sec-scan-01-security-full-scan-run.png"],
                 "commits": []
               }
-            }
+            },
+            {"id":"sec-identity","name":"身份认证与权限控制","status":"partial","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"base-rbac","summary":"安全中间件与认证装饰器。","evidence":{"impl":["FHD/app/utils/security/security_middleware.py","FHD/app/auth_decorators.py"],"api":[],"tests":["FHD/tests/test_middleware/test_security_headers.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"sec-tenant-isolation","name":"企业数据隔离","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"sec-gdpr","summary":"多租户数据范围隔离。","evidence":{"impl":["FHD/app/infrastructure/tenant_scope.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"sec-runtime-gate","name":"运行时安全门控","status":"partial","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"sec-audit","summary":"运行时安全门控与会话安全。","evidence":{"impl":["FHD/desktop/session-security.ts"],"api":[],"tests":["FHD/tests/test_middleware/test_security_headers_csp.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"sec-csp","name":"CSP 与安全策略","status":"partial","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"sec-audit","summary":"内容安全策略与安全响应头。","evidence":{"impl":["FHD/app/utils/security/security_middleware.py"],"api":[],"tests":["FHD/tests/test_middleware/test_security_headers_csp.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"sec-ai-trace","name":"AI 调用追溯","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"sec-audit","summary":"AI 调用与动作的审计追溯。","evidence":{"impl":["FHD/app/services/ai_action_audit_service.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -1142,7 +1284,11 @@
                 "screenshots": ["FHD/docs/evidence/e2e/macos-release-1.0.0.4/g8-settings-panel.png"],
                 "commits": []
               }
-            }
+            },
+            {"id":"sec-audit-standard","name":"审计标准与证据体系","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"sec-release-gate","summary":"审计基准目录与证据口径。","evidence":{"impl":["FHD/config/audit_benchmark_ssot.json"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"sec-model-gate","name":"真实模型验货门禁","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"sec-release-gate","summary":"真实模型调用验货门禁。","evidence":{"impl":["FHD/app/services/conversation/llm_adapter.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"sec-continuous-observe","name":"持续运行观察","status":"partial","platforms":["web"],"featured":false,"evidence_ref":"sec-release-gate","summary":"持续运行指标与 SLO 观察。","evidence":{"impl":["FHD/app/neuro_bus/health_monitor.py"],"api":[],"tests":["FHD/tests/test_sla_health_probe.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"sec-slo","name":"服务拓扑与 SLO 配置","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"sec-coverage","summary":"服务拓扑与 SLO 门限配置。","evidence":{"impl":["FHD/config/service_topology.yaml"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         }
       ]

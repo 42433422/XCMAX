@@ -36,8 +36,11 @@ STATUS_META = {
     "partial": {"label": "部分验证", "cls": "st-partial", "rank": 2},
     "implemented": {"label": "已实现待验证", "cls": "st-implemented", "rank": 1},
     "planned": {"label": "规划中", "cls": "st-planned", "rank": 0},
+    # 已决定不做的功能：仅用于识别与剔除，不计入正式功能总数与完成度。
+    "cancelled": {"label": "已取消", "cls": "st-cancelled", "rank": -1},
 }
 STATUS_ORDER = ["verified", "partial", "implemented", "planned"]
+EXCLUDED_STATUSES = frozenset({"cancelled"})
 
 # 矩阵图例：状态 → 一句话口径，与状态分级说明同源，避免两处口径漂移。
 STATUS_LEGEND = (
@@ -255,12 +258,30 @@ def build(repo_root_note: bool = True) -> tuple[dict, list[str], list[dict]]:
     domains_out: list[dict] = []
     feature_index: list[dict] = []
 
+    # id → 功能名：明细节点用 evidence_ref 指向核心能力时，详情页要显示可读名称。
+    id_to_name = {
+        feat["id"]: feat["name"]
+        for dom in catalog["domains"]
+        for mod in dom["modules"]
+        for feat in mod["features"]
+    }
+
     for dom in catalog["domains"]:
         modules_out = []
         for mod in dom["modules"]:
             feats_out = []
             for feat in mod["features"]:
                 enriched = validate_feature(feat, warnings)
+                # 明细节点（featured=false）以 evidence_ref 复用核心能力的证据；核心能力为 featured。
+                featured = feat.get("featured", True) is not False
+                evidence_ref = feat.get("evidence_ref") or None
+                enriched = {
+                    **enriched,
+                    "featured": featured,
+                    "evidence_ref": evidence_ref,
+                    "evidence_ref_name": id_to_name.get(evidence_ref) if evidence_ref else None,
+                    "excluded": enriched["status"] in EXCLUDED_STATUSES,
+                }
                 feats_out.append(enriched)
                 feature_index.append(
                     {
@@ -273,6 +294,10 @@ def build(repo_root_note: bool = True) -> tuple[dict, list[str], list[dict]]:
                         "module_name": mod["name"],
                         "platforms": enriched.get("platforms", []),
                         "summary": enriched.get("summary", ""),
+                        "featured": featured,
+                        "evidence_ref": evidence_ref,
+                        "evidence_ref_name": enriched["evidence_ref_name"],
+                        "excluded": enriched["excluded"],
                     }
                 )
             modules_out.append({**mod, "features": feats_out})
@@ -280,6 +305,8 @@ def build(repo_root_note: bool = True) -> tuple[dict, list[str], list[dict]]:
 
     stats = compute_stats(domains_out, feature_index)
     data = {
+        # 生成物声明：本文件由脚本自动生成，不属人工维护行数。
+        "_comment": "此文件由 成都修茈科技有限公司/scripts/build_capability_center.py 自动生成，请勿手改（DO NOT EDIT）。",
         "schema_version": 1,
         "catalog_version": catalog.get("catalog_version", ""),
         "generated_at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
@@ -298,6 +325,7 @@ def build(repo_root_note: bool = True) -> tuple[dict, list[str], list[dict]]:
                     {
                         "id": m["id"],
                         "name": m["name"],
+                        # 已取消的功能从正式总数、完成度与公开列表中剔除（EXCLUDED_STATUSES）。
                         "features": [
                             {
                                 "id": f["id"],
@@ -305,22 +333,30 @@ def build(repo_root_note: bool = True) -> tuple[dict, list[str], list[dict]]:
                                 "status": f["status"],
                                 "platforms": f.get("platforms", []),
                                 "summary": f.get("summary", ""),
+                                "featured": f["featured"],
+                                "evidence_ref": f["evidence_ref"],
+                                "evidence_ref_name": f["evidence_ref_name"],
                             }
                             for f in m["features"]
+                            if not f["excluded"]
                         ],
                     }
                     for m in d["modules"]
+                    if any(not f["excluded"] for f in m["features"])
                 ],
             }
             for d in domains_out
+            if any(not f["excluded"] for m in d["modules"] for f in m["features"])
         ],
     }
     return data, warnings, domains_out
 
 
 def compute_stats(domains_out: list[dict], feature_index: list[dict]) -> dict:
+    # 已取消（cancelled）不计入正式功能总数与完成度，仅单独计数备查。
+    active = [f for f in feature_index if not f.get("excluded")]
     by_status = {s: 0 for s in STATUS_ORDER}
-    for f in feature_index:
+    for f in active:
         by_status[f["status"]] += 1
     verified_times = []
     for d in domains_out:
@@ -329,18 +365,19 @@ def compute_stats(domains_out: list[dict], feature_index: list[dict]) -> dict:
                 if f["status"] == "verified" and f.get("verified_at"):
                     verified_times.append(f["verified_at"])
     platform_counts: dict[str, int] = {}
-    for f in feature_index:
+    for f in active:
         for p in f["platforms"]:
             platform_counts[p] = platform_counts.get(p, 0) + 1
     return {
-        "total": len(feature_index),
+        "total": len(active),
         "by_status": by_status,
-        "domains": len(domains_out),
-        "modules": sum(len(d["modules"]) for d in domains_out),
+        "cancelled_count": len(feature_index) - len(active),
+        "domains": len({f["domain_id"] for f in active}),
+        "modules": len({(f["domain_id"], f["module_id"]) for f in active}),
         "verified_total": by_status["verified"],
         "last_verified_at": max(verified_times) if verified_times else None,
         "platform_counts": platform_counts,
-        "completion": completion(feature_index),
+        "completion": completion(active),
     }
 
 
@@ -455,17 +492,28 @@ def platform_tags(platforms: list[str]) -> str:
     )
 
 
+def catalog_payload(data: dict) -> str:
+    """内嵌目录数据（首页全景地图与能力目录页共用同一份 SSOT 数据源）。
+
+    script[type=application/json] 内不做 HTML 实体转义（script 内容不会被实体解码），
+    仅转义 </ 防止提前闭合 script 标签。
+    """
+    return json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+
+
 def render_index(data: dict, domains_full: list[dict]) -> str:
     s = data["stats"]
     version = data.get("product_version") or ""
     ver_html = f' <span class="capm-ver">v{esc(version)}</span>' if version else ""
     last_verified = s["last_verified_at"] or "—"
 
-    # 左主体：10 张域卡（5 列 × 2 行），逐条列出功能并链接到各自证据详情页。
+    # 左主体：10 张域卡（5 列 × 2 行），列出该域的**核心能力**（featured）并链接到证据详情页。
+    # 明细功能（featured=false）在全景功能地图中展示，两处同源于同一份目录数据。
     cards = []
     for i, d in enumerate(domains_full):
-        feats = [f for m in d["modules"] for f in m["features"]]
-        pct = completion(feats)
+        feats = [f for m in d["modules"] for f in m["features"] if f["featured"] and not f["excluded"]]
+        all_feats = [f for m in d["modules"] for f in m["features"] if not f["excluded"]]
+        pct = completion(all_feats)
         items = "".join(
             f'<li><a class="capm-feat" href="/capabilities/feature/{esc(f["id"])}.html">'
             f'<i class="capm-tick {TICK_CLASS[f["status"]]}" aria-hidden="true"></i>'
@@ -474,7 +522,7 @@ def render_index(data: dict, domains_full: list[dict]) -> str:
         )
         cards.append(
             f"""<article class="capm-card" style="--accent:{DOMAIN_ACCENTS[i % len(DOMAIN_ACCENTS)]}">
-          <header class="capm-card-head"><h3>{esc(d['name'])}</h3><span class="capm-card-count">（{len(feats)}项）</span></header>
+          <header class="capm-card-head"><h3>{esc(d['name'])}</h3><span class="capm-card-count">核心 {len(feats)} / 共 {len(all_feats)} 项</span></header>
           <ul class="capm-feats">{items}</ul>
           <footer class="capm-card-foot"><div class="capm-bar" role="img" aria-label="完成度 {pct}%"><span style="width:{pct}%"></span></div><span class="capm-pct">完成度 {pct}%</span></footer>
         </article>"""
@@ -501,7 +549,13 @@ def render_index(data: dict, domains_full: list[dict]) -> str:
 
     # 底部：待验收 / 待补齐清单，按状态严重度排序取前 5，逐条可点进证据页。
     pending = sorted(
-        (f for d in domains_full for m in d["modules"] for f in m["features"] if f["status"] != "verified"),
+        (
+            f
+            for d in domains_full
+            for m in d["modules"]
+            for f in m["features"]
+            if not f["excluded"] and f["status"] != "verified"
+        ),
         key=lambda f: STATUS_META[f["status"]]["rank"],
     )[:5]
     pending_items = "".join(
@@ -511,9 +565,15 @@ def render_index(data: dict, domains_full: list[dict]) -> str:
         for i, f in enumerate(pending)
     )
 
-    # 底部：下一步重点计划，由目录 SSOT 维护。
+    # 底部：下一步重点计划（仅列尚未完成项），由目录 SSOT 维护；每条可点进对应证据页。
     plan_items = "".join(
-        f'<li><span class="capm-rank">{i + 1}</span><span>{esc(x)}</span></li>'
+        f'<li><span class="capm-rank">{i + 1}</span>'
+        + (
+            f'<a href="/capabilities/feature/{esc(x["feature"])}.html">{esc(x["text"])}</a>'
+            if isinstance(x, dict) and x.get("feature")
+            else f'<span>{esc(x["text"] if isinstance(x, dict) else x)}</span>'
+        )
+        + "</li>"
         for i, x in enumerate(data.get("next_plan", []))
     )
 
@@ -539,6 +599,30 @@ def render_index(data: dict, domains_full: list[dict]) -> str:
     </div>
   </section>
 
+  <section class="section capm-map-section" aria-labelledby="cap-map-title">
+    <div class="container">
+      <div class="capm-map-head">
+        <h2 id="cap-map-title">全景功能地图</h2>
+        <p class="capm-map-note">按「产品域 → 模块 → 功能」逐级展开，共 <strong>{s['total']}</strong> 项正式功能、{s['modules']} 个模块、{s['domains']} 个产品域。点击任一功能节点直达证据详情；移动端自动纵向折叠。</p>
+      </div>
+      <div class="capm-map-toolbar">
+        <input type="search" id="cap-map-q" class="cap-search" placeholder="搜索功能名称…" aria-label="搜索功能" />
+        <select id="cap-map-domain" aria-label="按产品域筛选"><option value="">全部产品域</option></select>
+        <select id="cap-map-module" aria-label="按模块筛选"><option value="">全部模块</option></select>
+        <select id="cap-map-status" aria-label="按状态筛选">
+          <option value="">全部状态</option>
+          <option value="verified">已验证</option>
+          <option value="partial">部分验证</option>
+          <option value="implemented">已实现待验证</option>
+          <option value="planned">规划中</option>
+        </select>
+        <select id="cap-map-platform" aria-label="按平台筛选"><option value="">全部平台</option></select>
+      </div>
+      <p class="cap-map-result" id="cap-map-result" aria-live="polite"></p>
+      <div class="capm-map" id="cap-map"></div>
+    </div>
+  </section>
+
   <div class="container capm-layout">
     <div class="capm-main">
       <div class="capm-matrix">{''.join(cards)}</div>
@@ -547,7 +631,7 @@ def render_index(data: dict, domains_full: list[dict]) -> str:
         <section class="capm-panel capm-panel--progress">
           <h2>当前版本进度</h2>
           <div class="capm-progress-top"><div class="capm-bar capm-bar--lg"><span style="width:{s['completion']}%"></span></div><strong>{s['completion']}%</strong></div>
-          <p class="capm-panel-note">总体完成度按加权口径计算：已验证 100%、部分验证 70%、已实现待验证 40%、规划中 0%，按功能数加权。截至 {esc(last_verified)}，共 {s['total']} 项能力、{s['modules']} 个模块、{s['domains']} 个产品域。</p>
+          <p class="capm-panel-note">总体完成度按加权口径计算：已验证 100%、部分验证 70%、已实现待验证 40%、规划中 0%，按正式功能数加权（已取消功能已从总数与完成度中剔除）。截至 {esc(last_verified)}，共 {s['total']} 项正式功能、{s['modules']} 个模块、{s['domains']} 个产品域。</p>
           <ul class="capm-legend">{legend}</ul>
         </section>
         <section class="capm-panel">
@@ -555,7 +639,7 @@ def render_index(data: dict, domains_full: list[dict]) -> str:
           <ol class="capm-list">{pending_items}</ol>
         </section>
         <section class="capm-panel">
-          <h2>下一步重点计划</h2>
+          <h2>下一步重点计划（仅列未完成项）</h2>
           <ol class="capm-list">{plan_items}</ol>
         </section>
       </div>
@@ -601,13 +685,13 @@ def render_index(data: dict, domains_full: list[dict]) -> str:
     </div>
   </section>
 </main>
+<script id="cap-catalog-data" type="application/json">{catalog_payload(data)}</script>
+<script src="/capabilities/assets/panorama.js?v=20260919b"></script>
 {footer_html()}"""
 
 
 def render_catalog(data: dict) -> str:
-    # script[type=application/json] 内不做 HTML 实体转义（script 内容不会被实体解码），
-    # 仅转义 </ 防止提前闭合 script 标签。
-    payload = json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+    payload = catalog_payload(data)
     return f"""{header_html("capabilities", "能力目录", "XCAGI 完整能力目录：产品域→模块→功能三级结构，支持搜索与按平台、状态筛选。", "/capabilities/catalog.html")}
 <main>
   <section class="page-hero page-hero--slim">
@@ -655,6 +739,19 @@ def evidence_list(items: list[str], cls: str = "") -> str:
 
 def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
     ev = f["evidence"]
+    ref = f.get("evidence_ref")
+    panel = ""
+    # 明细节点（featured=false）以 evidence_ref 复用核心能力的证据：详情页保留自身的定位信息，
+    # 同时在证据区提示“完整证据见核心能力”，指引用户直达该能力的完整证据详情页。
+    if ref:
+        panel = (
+            '<div class="cap-ref-note">'
+            f'<p><strong>本项为功能地图中的明细能力</strong>，其实现与验证证据与核心能力「'
+            f'{esc(f.get("evidence_ref_name") or ref)}」共用同一份仓库证据。</p>'
+            f'<p><a class="btn btn-secondary btn-sm" '
+            f'href="/capabilities/feature/{esc(ref)}.html">查看完整证据详情 →</a></p>'
+            "</div>"
+        )
     downgrade_note = ""
     if f["downgraded"]:
         reasons = "；".join(f["downgrade_reasons"])
@@ -736,6 +833,7 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
         <div class="cap-info-block"><h3>当前状态</h3><p>{status_badge(f['status'])}（最近验证时间：{esc(verified_time)}）</p></div>
         <div class="cap-info-block"><h3>已知限制</h3><ul class="cap-limitations">{limitations}</ul></div>
       </div>
+      {panel}
       {downgrade_note}
     </div>
   </section>
