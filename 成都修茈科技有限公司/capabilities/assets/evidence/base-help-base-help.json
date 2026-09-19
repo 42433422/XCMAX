@@ -3,8 +3,8 @@
   "feature": "base-help",
   "source_sha": "6701d9e0618d39d4d3cefb0edd03124fd488d04e",
   "environment": "macOS Python 3.12.13; pytest 9.1.1",
-  "scope": "Local automated tests only; not installed-client or production acceptance",
-  "command": "python -m pytest tests/test_services/test_tutorial_v2.py -q",
+  "scope": "Results for this feature extracted from the 13-file local automated test run; not installed-client or production acceptance",
+  "command": "python -m pytest tests/test_application/test_account_security.py tests/test_routes/test_workspace_prefs_routes.py tests/test_services/test_tutorial_v2.py tests/test_services/test_task_context_service.py tests/test_services/test_products_service.py tests/test_services/test_replenishment_service.py tests/test_services/test_uom_service.py tests/test_services/test_tax_invoice_provider.py tests/test_services/test_fhd_payment_reconciliation.py tests/test_application/test_wechat_chat_context_injection.py tests/test_application/test_account_tier_derivation.py tests/test_neuro_bus/test_event_store_coverage.py tests/test_utils/test_security_middleware.py -q --junitxml=/tmp/product-center-evidence-20260919.xml",
   "passed": 4,
   "failed": 12,
   "cases": [
@@ -84,5 +84,9 @@
       "result": "failed",
       "message": "DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC)."
     }
-  ]
+  ],
+  "selected_test_files": [
+    "tests/test_services/test_tutorial_v2.py"
+  ],
+  "reproduce_feature_command": "python -m pytest tests/test_services/test_tutorial_v2.py -q"
 }
