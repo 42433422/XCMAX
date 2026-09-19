@@ -1,0 +1,16 @@
+=== on-machine probe record ===
+item     : dt-install-sign
+module   : dt-shell
+probed_at: 2026-09-19 22:28:14
+product  : 1.0.0.5   release_sha: 54325894cc6e3fc2becfcbc98697a099310d9420
+
+> $w='C:\Users\97088\AppData\Local\Temp\win-evidence'; foreach($f in @("$w\download\XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe",'C:\XCAGI-evidence-1.0.0.5\XCAGI.exe')){ $s=Get-AuthenticodeSignature $f; "$f :: $($s.Status) :: $((Get-FileHash $f -Algorithm SHA256).Hash.ToLower())" }
+C:\Users\97088\AppData\Local\Temp\win-evidence\download\XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe :: NotSigned :: 45f761cf1ad968c5abeae466e8b0749364e1d1edfabf0821ef28db52f5cb572e
+C:\XCAGI-evidence-1.0.0.5\XCAGI.exe :: NotSigned :: 41a272575d43faa7c71d079716078c7539c4078d5133abde9a0839e25217078c
+
+
+> Get-Content 'C:\XCAGI-evidence-1.0.0.5\resources\build-info.json' -Raw -Encoding UTF8
+{"releaseId":"xcagi-1.0.0.5-54325894cc6e3fc2becfcbc98697a099310d9420","schema_version":1,"gitSha":"54325894cc6e3fc2becfcbc98697a099310d9420","version":"1.0.0.5"}
+
+
+

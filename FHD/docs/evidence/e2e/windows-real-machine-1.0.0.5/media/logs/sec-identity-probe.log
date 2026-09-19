@@ -1,0 +1,15 @@
+=== on-machine probe record ===
+item     : sec-identity
+module   : sec-security
+probed_at: 2026-09-19 22:32:58
+product  : 1.0.0.5   release_sha: 54325894cc6e3fc2becfcbc98697a099310d9420
+
+> GET http://127.0.0.1:17500/api/auth/me  -> HTTP 200
+{"success":false,"error":{"code":"UNAUTHORIZED","message":"请先登录"},"valid":false}
+
+> GET http://127.0.0.1:17500/api/rbac/roles  -> HTTP 401
+{"success":false,"error_code":"http_401","message":"{'success': False, 'message': {'code': 'UNAUTHORIZED', 'message': '请先登录'}}","path":"/api/rbac/roles"}
+
+> GET http://127.0.0.1:17500/api/xcmax/admin/session  -> HTTP 403
+{"success":false,"message":"桌面端不支持管理员账号登录，请使用网页版管理端","error":{"code":"ADMIN_DESKTOP_FORBIDDEN","message":"桌面端不支持管理员账号登录，请使用网页版管理端"},"valid":false}
+
