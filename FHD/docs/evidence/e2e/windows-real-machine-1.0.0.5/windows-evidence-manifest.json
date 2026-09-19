@@ -1,7 +1,7 @@
 {
   "manifest_type": "windows-real-machine-evidence",
   "manifest_version": 3,
-  "generated_at": "2026-09-20 05:22:00",
+  "generated_at": "2026-09-20 05:29:29",
   "platform": "windows",
   "product_version": "1.0.0.5",
   "release_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
@@ -262,6 +262,156 @@
       "bytes": 57748,
       "sha256": "6afe900325fa1b922797ee7b76efa93ff09298ff94b6adde91e39020188e4af6"
     }
+  },
+  "module_masters": {
+    "note": "每个模块一条完整操作母带录像，覆盖该模块全部条目；不替代单项证据。",
+    "count": 24,
+    "files": [
+      {
+        "name": "_master-ai-chat.mp4",
+        "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/videos/_master-ai-chat.mp4",
+        "bytes": 3235894,
+        "sha256": "994f63f3e3217df69843c2beb05edd0ce83a03d86aaf8b677b7e06d854706136"
+      },
+      {
+        "name": "_master-ai-employees.mp4",
+        "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/videos/_master-ai-employees.mp4",
+        "bytes": 3319449,
+        "sha256": "f2717554e235a15d648b635c61704d43d3f1b40b3f00a82b16d7884683c94df4"
+      },
+      {
+        "name": "_master-ai-office.mp4",
+        "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/videos/_master-ai-office.mp4",
+        "bytes": 5570662,
+        "sha256": "2b3b9acf87840f920809c7a218641cac55cff2beda1577e13f39497b2b6343cf"
+      },
+      {
+        "name": "_master-base-auth.mp4",
+        "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/videos/_master-base-auth.mp4",
+        "bytes": 34702296,
+        "sha256": "79e481e0f673a821e221a12ed0ab7d57718822ef4613c3bf7ded5ce2e2de0143"
+      },
+      {
+        "name": "_master-base-edition.mp4",
+        "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/videos/_master-base-edition.mp4",
+        "bytes": 3077832,
+        "sha256": "341986e453ecce4b42c51369167567d9014289e1f2a202347ec8ff77c4139852"
+      },
+      {
+        "name": "_master-base-runtime.mp4",
+        "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/videos/_master-base-runtime.mp4",
+        "bytes": 4482626,
+        "sha256": "3dacb7949e3c01ee15b094e95645c75ccb1856038c20ed70b204bbfb895ce7b9"
+      },
+      {
+        "name": "_master-ch-im.mp4",
+        "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/videos/_master-ch-im.mp4",
+        "bytes": 4282176,
+        "sha256": "dc02a5b5ffeed00b6cdf45829b45642a0daf9a19d2ffc4631c40510694f20c20"
+      },
+      {
+        "name": "_master-ch-voice.mp4",
+        "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/videos/_master-ch-voice.mp4",
+        "bytes": 2738229,
+        "sha256": "c17cfabd458441d4e1070bf3b4966cbe175aacfb5fb808137ad81ce300c8f68c"
+      },
+      {
+        "name": "_master-ch-wechat.mp4",
+        "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/videos/_master-ch-wechat.mp4",
+        "bytes": 3558663,
+        "sha256": "e11dc4d2c2d2261e12bf8f5773a1cf7a60e4149a6380362b59356b81df74a3be"
+      },
+      {
+        "name": "_master-dt-automation.mp4",
+        "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/videos/_master-dt-automation.mp4",
+        "bytes": 5087433,
+        "sha256": "b0816b519f729bef5e2bba504b45f2f668c51c49747745aec6967b599ee9083f"
+      },
+      {
+        "name": "_master-dt-shell.mp4",
+        "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/videos/_master-dt-shell.mp4",
+        "bytes": 9450310,
+        "sha256": "5aca3634e1f5228b4674100c05c9177d2a11b88fb0c8e9e606a1d84f36ee279b"
+      },
+      {
+        "name": "_master-erp-docs.mp4",
+        "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/videos/_master-erp-docs.mp4",
+        "bytes": 3597188,
+        "sha256": "55457537b337f879f8cf984b2f9c48627d4dbcd53fcc4bc62fcf53f43959efd2"
+      },
+      {
+        "name": "_master-erp-finance.mp4",
+        "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/videos/_master-erp-finance.mp4",
+        "bytes": 3550320,
+        "sha256": "6221d75b7e4892ab274371607ba9e1b339218e9d188d7d404ee9a8473c238a5f"
+      },
+      {
+        "name": "_master-erp-integration.mp4",
+        "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/videos/_master-erp-integration.mp4",
+        "bytes": 1326464,
+        "sha256": "bcd4c325e10c3f1ad04318aadcaefa9c1535c2ab71c0b9777d368df30c463256"
+      },
+      {
+        "name": "_master-erp-ocr.mp4",
+        "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/videos/_master-erp-ocr.mp4",
+        "bytes": 2181397,
+        "sha256": "b9f9eaa5163784b986f846a5d61a4dbd387934d85248685a42140a19017a64fd"
+      },
+      {
+        "name": "_master-erp-trade.mp4",
+        "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/videos/_master-erp-trade.mp4",
+        "bytes": 5059625,
+        "sha256": "b10d8d4cba4517c7127b6474b882031f11c9d01d5c01091490aac708e52a27a7"
+      },
+      {
+        "name": "_master-ind-customer.mp4",
+        "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/videos/_master-ind-customer.mp4",
+        "bytes": 4122269,
+        "sha256": "160969fdc1f48b843e498ed58f4b731cb11d3665002d264fc6ef74f406ed1702"
+      },
+      {
+        "name": "_master-ind-packs.mp4",
+        "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/videos/_master-ind-packs.mp4",
+        "bytes": 5839637,
+        "sha256": "069d8999c1f5027410ee71df4fe88f02c7e76abb0f8c41418503716dd72d72ac"
+      },
+      {
+        "name": "_master-mods-open.mp4",
+        "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/videos/_master-mods-open.mp4",
+        "bytes": 2744567,
+        "sha256": "38679a61cee68a1f29ad004535e484f9862ba19ca05f23c212adc339e02964ae"
+      },
+      {
+        "name": "_master-mods-runtime.mp4",
+        "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/videos/_master-mods-runtime.mp4",
+        "bytes": 4226501,
+        "sha256": "dd807fc53ccd7dc78aca74913b8c387a02b4244e09d7e5178c7fc63225f881e9"
+      },
+      {
+        "name": "_master-pay-license.mp4",
+        "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/videos/_master-pay-license.mp4",
+        "bytes": 3768784,
+        "sha256": "0a62a78b461c172100d519475c0bf3599facb745a22a03b8578c504af57c23d6"
+      },
+      {
+        "name": "_master-pay-payment.mp4",
+        "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/videos/_master-pay-payment.mp4",
+        "bytes": 2341977,
+        "sha256": "b61762a4ae1195d7fb519e9e2de308d5ac3b8bd0ef18aec0574124c8658acb08"
+      },
+      {
+        "name": "_master-sec-security.mp4",
+        "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/videos/_master-sec-security.mp4",
+        "bytes": 3586991,
+        "sha256": "6179440441a1c90a9dd60ffbf2940c1d3489e3962e5db6a54ff8035dbdaf406e"
+      },
+      {
+        "name": "_master-sec-verification.mp4",
+        "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/videos/_master-sec-verification.mp4",
+        "bytes": 2846568,
+        "sha256": "17e910db41a90751532c37fdbfadeae2d47320bd07ce2a9449daeead3e732ddd"
+      }
+    ]
   },
   "evidence_files": {
     "count": 421,
