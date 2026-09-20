@@ -13,10 +13,7 @@ logger = logging.getLogger(__name__)
 
 STORE_COLLECTION_WORKFLOW_EMPLOYEE = "workflow_employee"
 
-AUX_EMPLOYEE_PACK_MOD_IDS: tuple[str, ...] = (
-    "wechat-contacts-ai-employee",
-    "lan-gate-ai-employee",
-)
+AUX_EMPLOYEE_PACK_MOD_IDS: tuple[str, ...] = ("lan-gate-ai-employee",)
 
 
 def is_aux_employee_pack_mod_id(mod_id: str) -> bool:

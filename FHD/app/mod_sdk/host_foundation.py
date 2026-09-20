@@ -69,10 +69,7 @@ def is_host_foundation_employee_pack(pack_id: str) -> bool:
     return str(pack_id or "").strip() == HOST_FOUNDATION_EMPLOYEE_PACK_ID
 
 
-AUX_EMPLOYEE_PACK_MOD_IDS: tuple[str, ...] = (
-    "wechat-contacts-ai-employee",
-    "lan-gate-ai-employee",
-)
+AUX_EMPLOYEE_PACK_MOD_IDS: tuple[str, ...] = ("lan-gate-ai-employee",)
 
 
 def is_aux_employee_pack_mod_id(mod_id: str) -> bool:

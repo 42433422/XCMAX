@@ -6,6 +6,8 @@
 
 ## Unreleased（1.0.0.4 之后的累积变更）
 
+- 修复「严格装包门」被一条**不可满足的必需项**卡死的问题：`wechat-contacts-ai-employee` 的源码早在 `095db9831`（彻底移除 wechat 域）就已删除，前端 AUX 清单也已收敛，但后端 `host_foundation`/`aux_employee_store` 的宿主种子包清单与 `config/industry_baseline.json` 里 7 个行业的账号定制扩展清单没有同步清理。结果任何带客户交付权益的账号（如 SUNBIRD）在「进入工作空间」时都会被要求装一个**安装包没带、行业种子池没有、修茈市场 catalog 也没有**的 Mod，严格装包门永远无法通过。现补齐这次移除：后端 AUX 清单与前端一致（仅 `lan-gate-ai-employee`），`industry_baseline.json` 不再把该 Mod 列为必需扩展，并补回归断言锁定。实机同账号同行业复算：必需项由 `[taiyangniao-pro, xcagi-core-workflow-employees, xcagi-office-employee-pack-bridge, wechat-contacts-ai-employee]` 收敛为 `[taiyangniao-pro]`（后两者随安装包种子预装），只剩市场侧私有交付这一外部依赖。同轮删除 `tests/test_decoupling_mods.py` 两个零引用常量（`EXPECTED_PLATFORM_MODS`/`PROTECTED`）。
+
 - 修复 Windows 桌面端「下载发货单后客户拿不到文件」：桌面壳从未注册 `will-download`，Chromium 在没有该处理器时不接管落盘，点击「下载发货单」虽然后端返回 200、前端也已拿到完整 xlsx，文件却只留在下载目录下的 `<guid>.tmp`，普通客户在「保存」这一步看不到「发货单_xxx.xlsx」。现由 `window-manager.ts` 注册 `will-download` 并 `setSavePath` 到下载目录，新增纯函数 `safeDownloadFilename()` 剥离路径分隔符与控制字符（空名回退 `download.bin`），防止文件名穿越下载目录之外，并补 4 个单测；同轮删除零引用死代码 `desktop/autonomy/strategic-planner.ts`（100 行）与 `rollback.ts` 中未使用的 `ROLLBACK_BACKEND_NAME`（1 行），净删除 57 行。
 
 - 修掉 Mod 列表里一条**假的「加载失败」告警**：应用会把 Mod 安装器自己的账本目录（以 `.` 开头的隐藏目录）当成一个 Mod 去找配置文件，找不到就记一条错误，于是「扩展与 Mod」状态里长期挂着一条并不存在的故障。现在这类隐藏目录不再被当作 Mod，告警消失（Mod 功能本身一直是正常的，14 个 Mod 照常加载）。同轮删除两个零引用的一次性脚本 `scripts/ai_evidence/run_ocr_evidence.py`、`run_shipment_audit_evidence.py`——它们会往 `metrics/` 与 `docs/evidence/` 写入**合成示例**证据（`Evidence单位A`、`深圳市Evidence测试公司`），留着容易被误当成真机验收记录。

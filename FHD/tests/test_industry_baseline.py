@@ -172,7 +172,6 @@ def test_sunbird_packaging_industry_requires_separate_custom_runtime(
     employee_tools = [
         "xcagi-core-workflow-employees",
         "xcagi-office-employee-pack-bridge",
-        "wechat-contacts-ai-employee",
     ]
     data = build_industry_baseline_plan(
         "饰品包装",

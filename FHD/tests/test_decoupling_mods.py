@@ -12,20 +12,6 @@ from tests.mod_presence import skip_if_bridge_mod_absent
 REPO = Path(__file__).resolve().parents[1]
 MODS_ROOT = REPO / "mods"
 
-PROTECTED = ("attendance-industry", "coating-industry", "taiyangniao-pro", "sz-qsm-pro")
-
-EXPECTED_PLATFORM_MODS = (
-    "xcagi-core-workflow-employees",
-    "xcagi-approval-bridge",
-    "xcagi-lan-license-bridge",
-    "xcagi-model-payment-bridge",
-    "xcagi-planner-bridge",
-    "xcagi-neuro-bus-bridge",
-    "wechat-contacts-ai-employee",
-    "lan-gate-ai-employee",
-    "attendance-industry",
-)
-
 
 @pytest.mark.parametrize(
     "mod_id",
