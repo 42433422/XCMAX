@@ -38,10 +38,7 @@ class TestIsAuxEmployeePackModId:
         assert aux_employee_store.is_aux_employee_pack_mod_id(None) is False
 
     def test_strips_whitespace(self) -> None:
-        assert (
-            aux_employee_store.is_aux_employee_pack_mod_id("  lan-gate-ai-employee  ")
-            is True
-        )
+        assert aux_employee_store.is_aux_employee_pack_mod_id("  lan-gate-ai-employee  ") is True
 
 
 class TestRepoModSeedDirs:
@@ -96,8 +93,7 @@ class TestReadAuxEmployeePackManifest:
             return_value=[Path("/nonexistent")],
         ):
             assert (
-                aux_employee_store.read_aux_employee_pack_manifest("lan-gate-ai-employee")
-                is None
+                aux_employee_store.read_aux_employee_pack_manifest("lan-gate-ai-employee") is None
             )
 
     def test_returns_manifest_when_valid(self, tmp_path: Path) -> None:
@@ -106,9 +102,7 @@ class TestReadAuxEmployeePackManifest:
         manifest = {"id": "lan-gate-ai-employee", "version": "1.0.0"}
         (mod_dir / "manifest.json").write_text(json.dumps(manifest))
         with patch("app.mod_sdk.aux_employee_store._repo_mod_seed_dirs", return_value=[tmp_path]):
-            result = aux_employee_store.read_aux_employee_pack_manifest(
-                "lan-gate-ai-employee"
-            )
+            result = aux_employee_store.read_aux_employee_pack_manifest("lan-gate-ai-employee")
             assert result == manifest
 
     def test_returns_none_when_manifest_not_dict(self, tmp_path: Path) -> None:
@@ -117,8 +111,7 @@ class TestReadAuxEmployeePackManifest:
         (mod_dir / "manifest.json").write_text(json.dumps(["not a dict"]))
         with patch("app.mod_sdk.aux_employee_store._repo_mod_seed_dirs", return_value=[tmp_path]):
             assert (
-                aux_employee_store.read_aux_employee_pack_manifest("lan-gate-ai-employee")
-                is None
+                aux_employee_store.read_aux_employee_pack_manifest("lan-gate-ai-employee") is None
             )
 
     def test_returns_none_on_json_error(self, tmp_path: Path) -> None:
@@ -127,8 +120,7 @@ class TestReadAuxEmployeePackManifest:
         (mod_dir / "manifest.json").write_text("invalid json {")
         with patch("app.mod_sdk.aux_employee_store._repo_mod_seed_dirs", return_value=[tmp_path]):
             assert (
-                aux_employee_store.read_aux_employee_pack_manifest("lan-gate-ai-employee")
-                is None
+                aux_employee_store.read_aux_employee_pack_manifest("lan-gate-ai-employee") is None
             )
 
     def test_skips_missing_manifest_in_first_root(self, tmp_path: Path) -> None:
@@ -140,9 +132,7 @@ class TestReadAuxEmployeePackManifest:
             "app.mod_sdk.aux_employee_store._repo_mod_seed_dirs",
             return_value=[tmp_path / "first", tmp_path / "second"],
         ):
-            result = aux_employee_store.read_aux_employee_pack_manifest(
-                "lan-gate-ai-employee"
-            )
+            result = aux_employee_store.read_aux_employee_pack_manifest("lan-gate-ai-employee")
             assert result == manifest
 
 
@@ -256,9 +246,7 @@ class TestInjectAuxEmployeePackRows:
             "app.mod_sdk.aux_employee_store.read_aux_employee_pack_manifest", return_value=manifest
         ):
             available: list[dict] = []
-            aux_employee_store.inject_aux_employee_pack_rows(
-                available, {"lan-gate-ai-employee"}
-            )
+            aux_employee_store.inject_aux_employee_pack_rows(available, {"lan-gate-ai-employee"})
             row = next(r for r in available if r["id"] == "lan-gate-ai-employee")
             assert row["is_installed"] is True
 
