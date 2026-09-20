@@ -1,0 +1,125 @@
+{
+  "schema": "xcagi.release_gate.v1",
+  "gate": "G3-macos-security",
+  "platform": "macos",
+  "round": "2026-09-20",
+  "release_sha": "eb07dfcf372532292dc87c187b67c0ee620640b2",
+  "product_version": "1.0.0.5",
+  "sku": "enterprise",
+  "build_provenance": {
+    "ci_workflow": ".github/workflows/fhd-release-desktop-mac-ota.yml",
+    "ci_workflow_name": "Release Desktop macOS OTA",
+    "ci_run_id": 35509796021,
+    "ci_run_url": "https://github.com/42433422/XCMAX/actions/runs/35509796021",
+    "ci_head_sha": "eb07dfcf372532292dc87c187b67c0ee620640b2",
+    "artifact_name": "mac-ota-enterprise-1.0.0.5",
+    "security_scan_current_run_id": 35509393144,
+    "security_scan_previous_run_id": 35507655332,
+    "security_clearance_step": "PASS (Enforce exact-SHA two-day security clearance)",
+    "sign_and_notarize_steps": "PASS (Build macOS enterprise installer / Notarize and staple macOS enterprise DMG)",
+    "main_tip_at_build": "eb07dfcf372532292dc87c187b67c0ee620640b2",
+    "main_tip_verified_at": "2026-09-20T20:2x +0800 via git fetch origin main"
+  },
+  "artifact": {
+    "filename": "XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg",
+    "size": 306165005,
+    "sha256": "909bb5773fa94383ea9443844f35fc98a5d749f11946f86956b19172dc9f384a",
+    "zip_filename": "XCAGI-Enterprise-1.0.0.5-mac-arm64.zip",
+    "zip_size": 264819159,
+    "feed_sha512": "96Oq5m5W++w+5pBM3QMP2FjrrMfsCfH0XYTZdzXJ78cnTpLD5Z7jTacI3TLuY+9/zlPzrVfvSidOM1Db6VsImg==",
+    "feed_signature": "ed25519:NBlJM09gSSSJr+uOe8vxbKmU77FgxLl1beBHFPTzrc6uOIsbjhnCBPiifbQnDe8nu+EzcTxwMqANm3AmiKMWCQ==",
+    "feed_release_date": "2026-09-20T12:20:47.622Z",
+    "source": "GitHub Actions artifact (run 35509796021, name mac-ota-enterprise-1.0.0.5); the same bytes are the payload the CVM publish step pushes to https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/",
+    "local_verification_dir": "/tmp/xcagi-macota-art"
+  },
+  "feed_identity": {
+    "latest_mac_yml_buildSha": "eb07dfcf372532292dc87c187b67c0ee620640b2",
+    "latest_mac_yml_productVersion": "1.0.0.5",
+    "latest_mac_yml_releaseId": "xcagi-1.0.0.5-eb07dfcf372532292dc87c187b67c0ee620640b2",
+    "buildSha_equals_release_sha": true,
+    "verdict": "PASS"
+  },
+  "feed_payload_integrity": {
+    "local_zip_sha512": "96Oq5m5W++w+5pBM3QMP2FjrrMfsCfH0XYTZdzXJ78cnTpLD5Z7jTacI3TLuY+9/zlPzrVfvSidOM1Db6VsImg==",
+    "feed_zip_sha512": "96Oq5m5W++w+5pBM3QMP2FjrrMfsCfH0XYTZdzXJ78cnTpLD5Z7jTacI3TLuY+9/zlPzrVfvSidOM1Db6VsImg==",
+    "zip_sha512_matches_feed": true,
+    "zip_size_matches_feed": true,
+    "ed25519_signature_verified_with_app_public_key": true,
+    "ed25519_public_key_source": "FHD/desktop/desktop-config.ts ED25519_PUBLIC_KEY_PEM (the key shipped inside XCAGI.app)",
+    "ed25519_verify_method": "cryptography Ed25519PublicKey.verify(sig, body) where body = latest-mac.yml minus the 'signature: ed25519:' line, rstripped (same canonicalisation as FHD/scripts/dev/sign_update_metadata.py)",
+    "verdict": "PASS"
+  },
+  "hdiutil_verify": {
+    "command": "hdiutil verify XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg",
+    "result": "hdiutil: verify: checksum of \"XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg\" is VALID",
+    "verdict": "PASS"
+  },
+  "notarization_stapling_dmg": {
+    "command": "xcrun stapler validate XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg",
+    "result": "The validate action worked!",
+    "verdict": "PASS"
+  },
+  "gatekeeper_dmg": {
+    "command": "spctl --assess --type open --context context:primary-signature -v XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg",
+    "result": "accepted",
+    "source": "Notarized Developer ID",
+    "verdict": "PASS"
+  },
+  "codesign": {
+    "command": "codesign --verify --deep --strict --verbose=2 XCAGI.app",
+    "result": "valid on disk / satisfies its Designated Requirement",
+    "identifier": "com.xcagi.desktop.enterprise",
+    "team_identifier": "G26WSH472M",
+    "authority": "Developer ID Application: jialong Li (G26WSH472M)",
+    "timestamp": "Sep 20, 2026 at 20:14:21",
+    "verdict": "PASS"
+  },
+  "gatekeeper_app": {
+    "command": "spctl --assess --type execute -vv XCAGI.app",
+    "result": "accepted",
+    "source": "Notarized Developer ID",
+    "origin": "Developer ID Application: jialong Li (G26WSH472M)",
+    "verdict": "PASS"
+  },
+  "notarization_stapling_app": {
+    "command": "xcrun stapler validate XCAGI.app",
+    "result": "The validate action worked!",
+    "verdict": "PASS"
+  },
+  "dmg_app_build_info": {
+    "schema_version": 1,
+    "gitSha": "eb07dfcf372532292dc87c187b67c0ee620640b2",
+    "version": "1.0.0.5",
+    "releaseId": "xcagi-1.0.0.5-eb07dfcf372532292dc87c187b67c0ee620640b2",
+    "builtAt": "2026-09-20T12:12:30.393Z"
+  },
+  "dmg_app_product_sku": {
+    "sku": "enterprise",
+    "schema_version": 1
+  },
+  "dmg_app_info_plist": {
+    "CFBundleShortVersionString": "1.0.0.5",
+    "CFBundleVersion": "1.0.0.5"
+  },
+  "dmg_app_hashes": {
+    "app.asar.sha256": "875ca9a25415beee6201dcf8b81933486d2e1f93feb6147836a3518446e0a8b9",
+    "Contents/MacOS/XCAGI.sha256": "24026e91a2be704514ba50306481adb507b15a685e53ad2d168ca54e49e93af4",
+    "Contents/Resources/backend/xcagi-backend.sha256": "72014821c8ed78ef30e4c6df909729010c7a9785716a61bfeaac234f0531ed1f",
+    "backend_binary_size": 45914864
+  },
+  "observation": {
+    "app_asar_identical_to_previous_sha_54325894": true,
+    "note": "app.asar sha256 875ca9a2… 与本轮前一个 release SHA（54325894cc6e3）的 1.0.0.5 构建逐字节相同，即 Electron 外壳 JS 未变；变更落在主可执行（f748ea53…→24026e91…）与后端运行时（…→72014821…）。"
+  },
+  "dmg_vs_zip_payload_parity": {
+    "method": "unzip the OTA payload (XCAGI-Enterprise-1.0.0.5-mac-arm64.zip) and sha256 the same three files that were hashed inside the mounted DMG",
+    "app.asar.sha256": "875ca9a25415beee6201dcf8b81933486d2e1f93feb6147836a3518446e0a8b9",
+    "Contents/MacOS/XCAGI.sha256": "24026e91a2be704514ba50306481adb507b15a685e53ad2d168ca54e49e93af4",
+    "Contents/Resources/backend/xcagi-backend.sha256": "72014821c8ed78ef30e4c6df909729010c7a9785716a61bfeaac234f0531ed1f",
+    "zip_build_info_gitSha": "eb07dfcf372532292dc87c187b67c0ee620640b2",
+    "all_three_files_identical_to_dmg": true,
+    "meaning": "The manual-download DMG and the in-app auto-update ZIP deliver a byte-identical application, so the two delivery paths cannot diverge.",
+    "verdict": "PASS"
+  },
+  "verdict": "PASS"
+}
