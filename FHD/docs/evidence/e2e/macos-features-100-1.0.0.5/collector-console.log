@@ -1,0 +1,69 @@
+2026-09-20T09:44:07.795Z [console.info] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://127.0.0.1:17500/assets/fonts/fontawesome-webfont-B-jkhYfk.woff2?v=4.7.0
+2026-09-20T09:44:07.898Z [console.log] 📊 Pretext.js 性能统计: {totalMeasurements: 0, cachedMeasurements: 0, cacheHitRate: 0}
+2026-09-20T09:44:10.403Z [console.info] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://127.0.0.1:17500/assets/fonts/fontawesome-webfont-B-jkhYfk.woff2?v=4.7.0
+2026-09-20T09:44:10.606Z [requestfailed] GET http://127.0.0.1:17500/api/agent/tasks/events/stream net::ERR_ABORTED
+2026-09-20T09:44:10.606Z [requestfailed] GET http://127.0.0.1:17500/api/agent/tasks/events/stream net::ERR_ABORTED
+2026-09-20T09:44:10.606Z [requestfailed] GET http://127.0.0.1:17500/api/agent/tasks/events/stream net::ERR_ABORTED
+2026-09-20T09:44:10.606Z [requestfailed] GET http://127.0.0.1:17500/api/agent/tasks/events/stream net::ERR_ABORTED
+2026-09-20T09:44:10.606Z [requestfailed] GET http://127.0.0.1:17500/api/agent/tasks/events/stream net::ERR_ABORTED
+2026-09-20T09:44:10.607Z [requestfailed] GET http://127.0.0.1:17500/api/agent/tasks/events/stream net::ERR_ABORTED
+2026-09-20T09:44:11.941Z [console.info] [mods] Registered 1 route(s) for "taiyangniao-pro"
+2026-09-20T09:44:11.941Z [console.info] [mods] Registered 1 route(s) for "taiyangniao-pro"
+2026-09-20T09:44:13.258Z [requestfailed] GET http://127.0.0.1:17500/api/agent/tasks/events/stream net::ERR_ABORTED
+2026-09-20T09:44:13.313Z [console.info] [mods] Registered 17 route(s) for "xcagi-erp-domain-bridge"
+2026-09-20T09:44:13.520Z [console.info] [mods] Registered 2 route(s) for "sz-qsm-pro"
+2026-09-20T09:44:13.520Z [console.info] [mods] Registered 2 route(s) for "sz-qsm-pro"
+2026-09-20T09:44:13.673Z [console.info] [mods] Registered 3 route(s) for "xcagi-planner-bridge"
+2026-09-20T09:44:13.866Z [console.info] [mods] Registered 2 route(s) for "xcagi-office-employee-pack-bridge"
+2026-09-20T09:44:13.989Z [console.info] [mods] Registered 8 route(s) for "attendance-industry"
+2026-09-20T09:44:13.989Z [console.info] [mods] Registered 8 route(s) for "attendance-industry"
+2026-09-20T09:44:14.066Z [requestfailed] GET http://127.0.0.1:17500/api/agent/tasks/events/stream net::ERR_ABORTED
+2026-09-20T09:44:14.205Z [console.info] [mods] Registered 1 route(s) for "xcagi-lan-license-bridge"
+2026-09-20T09:44:14.313Z [console.info] [mods] Registered 1 route(s) for "xcagi-workflow-visualization-bridge"
+2026-09-20T09:44:14.314Z [console.info] [mods] Registered 1 route(s) for "xcagi-workflow-visualization-bridge"
+2026-09-20T09:44:14.536Z [console.info] [mods] Registered 1 route(s) for "xcagi-core-workflow-employees"
+2026-09-20T09:44:14.702Z [console.info] [mods] Registered 1 route(s) for "xcagi-approval-bridge"
+2026-09-20T09:44:14.702Z [console.info] [mods] Registered 1 route(s) for "xcagi-approval-bridge"
+2026-09-20T09:44:14.786Z [console.info] [mods] Registered 2 route(s) for "xcagi-model-payment-bridge"
+2026-09-20T09:44:14.786Z [console.info] [mods] Registered 2 route(s) for "xcagi-model-payment-bridge"
+2026-09-20T09:44:14.787Z [console.info] [mods] Registered 2 route(s) for "xcagi-model-payment-bridge"
+2026-09-20T09:44:41.656Z [console.info] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://127.0.0.1:17500/assets/fonts/fontawesome-webfont-B-jkhYfk.woff2?v=4.7.0
+2026-09-20T09:44:41.663Z [console.info] [mods] Registered 1 route(s) for "taiyangniao-pro"
+2026-09-20T09:44:41.677Z [console.info] [mods] Registered 2 route(s) for "sz-qsm-pro"
+2026-09-20T09:44:41.704Z [console.info] [mods] Registered 8 route(s) for "attendance-industry"
+2026-09-20T09:44:41.704Z [console.info] [mods] Registered 3 route(s) for "xcagi-planner-bridge"
+2026-09-20T09:44:41.705Z [console.info] [mods] Registered 17 route(s) for "xcagi-erp-domain-bridge"
+2026-09-20T09:44:41.707Z [console.info] [mods] Registered 1 route(s) for "xcagi-workflow-visualization-bridge"
+2026-09-20T09:44:41.708Z [console.info] [mods] Registered 1 route(s) for "xcagi-approval-bridge"
+2026-09-20T09:44:41.709Z [console.info] [mods] Registered 1 route(s) for "xcagi-lan-license-bridge"
+2026-09-20T09:44:41.711Z [console.info] [mods] Registered 2 route(s) for "xcagi-model-payment-bridge"
+2026-09-20T09:44:41.712Z [console.info] [mods] Registered 2 route(s) for "xcagi-office-employee-pack-bridge"
+2026-09-20T09:44:41.715Z [console.info] [mods] Registered 1 route(s) for "xcagi-core-workflow-employees"
+2026-09-20T09:44:42.042Z [requestfailed] GET http://127.0.0.1:17500/api/agent/tasks/events/stream net::ERR_ABORTED
+2026-09-20T09:44:42.042Z [requestfailed] GET http://127.0.0.1:17500/api/agent/tasks/events/stream net::ERR_ABORTED
+2026-09-20T09:44:42.042Z [requestfailed] GET http://127.0.0.1:17500/api/agent/tasks/events/stream net::ERR_ABORTED
+2026-09-20T09:44:42.042Z [requestfailed] GET http://127.0.0.1:17500/api/agent/tasks/events/stream net::ERR_ABORTED
+2026-09-20T09:44:42.042Z [requestfailed] GET http://127.0.0.1:17500/api/agent/tasks/events/stream net::ERR_ABORTED
+2026-09-20T09:44:42.042Z [requestfailed] GET http://127.0.0.1:17500/api/agent/tasks/events/stream net::ERR_ABORTED
+2026-09-20T09:44:43.884Z [requestfailed] GET http://127.0.0.1:17500/api/agent/tasks/events/stream net::ERR_ABORTED
+2026-09-20T09:44:44.780Z [requestfailed] GET http://127.0.0.1:17500/api/agent/tasks/events/stream net::ERR_ABORTED
+2026-09-20T09:44:58.096Z [console.info] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://127.0.0.1:17500/assets/fonts/fontawesome-webfont-B-jkhYfk.woff2?v=4.7.0
+2026-09-20T09:44:58.107Z [console.info] [mods] Registered 1 route(s) for "taiyangniao-pro"
+2026-09-20T09:44:58.127Z [console.info] [mods] Registered 2 route(s) for "sz-qsm-pro"
+2026-09-20T09:44:58.141Z [console.info] [mods] Registered 8 route(s) for "attendance-industry"
+2026-09-20T09:44:58.142Z [console.info] [mods] Registered 3 route(s) for "xcagi-planner-bridge"
+2026-09-20T09:44:58.144Z [console.info] [mods] Registered 17 route(s) for "xcagi-erp-domain-bridge"
+2026-09-20T09:44:58.144Z [console.info] [mods] Registered 1 route(s) for "xcagi-workflow-visualization-bridge"
+2026-09-20T09:44:58.144Z [console.info] [mods] Registered 1 route(s) for "xcagi-approval-bridge"
+2026-09-20T09:44:58.145Z [console.info] [mods] Registered 1 route(s) for "xcagi-lan-license-bridge"
+2026-09-20T09:44:58.146Z [console.info] [mods] Registered 2 route(s) for "xcagi-model-payment-bridge"
+2026-09-20T09:44:58.146Z [console.info] [mods] Registered 2 route(s) for "xcagi-office-employee-pack-bridge"
+2026-09-20T09:44:58.147Z [console.info] [mods] Registered 1 route(s) for "xcagi-core-workflow-employees"
+2026-09-20T09:44:58.421Z [requestfailed] GET http://127.0.0.1:17500/api/agent/tasks/events/stream net::ERR_ABORTED
+2026-09-20T09:44:58.421Z [requestfailed] GET http://127.0.0.1:17500/api/agent/tasks/events/stream net::ERR_ABORTED
+2026-09-20T09:44:58.421Z [requestfailed] GET http://127.0.0.1:17500/api/agent/tasks/events/stream net::ERR_ABORTED
+2026-09-20T09:44:58.422Z [requestfailed] GET http://127.0.0.1:17500/api/agent/tasks/events/stream net::ERR_ABORTED
+2026-09-20T09:44:58.422Z [requestfailed] GET http://127.0.0.1:17500/api/agent/tasks/events/stream net::ERR_ABORTED
+2026-09-20T09:44:58.422Z [requestfailed] GET http://127.0.0.1:17500/api/agent/tasks/events/stream net::ERR_ABORTED
+2026-09-20T09:45:00.367Z [requestfailed] GET http://127.0.0.1:17500/api/agent/tasks/events/stream net::ERR_ABORTED
+2026-09-20T09:45:01.294Z [requestfailed] GET http://127.0.0.1:17500/api/agent/tasks/events/stream net::ERR_ABORTED
