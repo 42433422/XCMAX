@@ -28,6 +28,10 @@ class TestIsAuxEmployeePackModId:
     def test_unknown_id(self):
         assert is_aux_employee_pack_mod_id("unknown-mod") is False
 
+    def test_retired_wechat_mod_is_not_aux_pack(self):
+        """wechat 域源码已从仓库移除；若仍列为宿主种子包，严格装包门将永远无法满足。"""
+        assert is_aux_employee_pack_mod_id("wechat-contacts-ai-employee") is False
+
     def test_empty_string(self):
         assert is_aux_employee_pack_mod_id("") is False
 

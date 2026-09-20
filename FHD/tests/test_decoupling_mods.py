@@ -21,7 +21,6 @@ EXPECTED_PLATFORM_MODS = (
     "xcagi-model-payment-bridge",
     "xcagi-planner-bridge",
     "xcagi-neuro-bus-bridge",
-    "wechat-contacts-ai-employee",
     "lan-gate-ai-employee",
     "attendance-industry",
 )
