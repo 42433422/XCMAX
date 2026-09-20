@@ -1,4 +1,5 @@
 import { defaultOnboardingIndustryId, LS_PRODUCT_FLOW_COMPLETED } from '@/constants/productFlow'
+import type { IndustryBaselinePlan } from '@/constants/platformShell'
 import { authApi } from '@/api/auth'
 import { fetchIndustryBaseline, fetchOnboardingIndustryCatalog } from '@/utils/platformShellApi'
 import { fetchProductSku, isEnterpriseEdition } from '@/utils/productSku'
@@ -65,6 +66,26 @@ export function shouldRouteToHostPackOnboarding(toName: string | symbol | null |
   const name = String(toName || '').trim()
   if (!name) return false
   return !HOST_PACK_ONBOARDING_EXEMPT_ROUTE_NAMES.has(name)
+}
+
+/**
+ * 进入工作空间的就绪判定：宿主基础线（core+host，即 `required_mod_ids`）装齐即可进入。
+ * 账号定制项（L3）由供应商私有交付产出，未交付时不得把客户堵在门外——其状态仍由
+ * `missing_account_custom_mod_ids` / `full_stack_ready` 表达，界面按「待供应商交付」
+ * 提示并允许稍后在扩展市场重试。只有产品侧可安装项缺失才算未就绪。
+ */
+export function isOnboardingEntryReady(
+  plan: Pick<
+    IndustryBaselinePlan,
+    'baseline_ready' | 'missing_required_mod_ids' | 'missing_account_custom_mod_ids'
+  > | null | undefined,
+): boolean {
+  if (!plan) return false
+  if (plan.baseline_ready === true) return true
+  const missingRequired = plan.missing_required_mod_ids || []
+  if (!missingRequired.length) return false
+  const vendorDelivered = new Set(plan.missing_account_custom_mod_ids || [])
+  return missingRequired.every((id) => vendorDelivered.has(id))
 }
 
 export function markHostPackSkippedThisSession(): void {
@@ -192,7 +213,7 @@ export async function needsHostPackCompletion(force = false): Promise<boolean> {
       if (!industryId && !completed) return saveResult(true, 'welcome')
     }
     const plan = await fetchIndustryBaseline(industryId || defaultOnboardingIndustryId(), force)
-    const needs = plan?.baseline_ready !== true
+    const needs = !isOnboardingEntryReady(plan)
     return saveResult(needs, needs ? 'host-pack' : null)
   } catch {
     return false

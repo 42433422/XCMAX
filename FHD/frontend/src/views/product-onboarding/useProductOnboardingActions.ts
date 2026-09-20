@@ -159,6 +159,16 @@ export function useProductOnboardingActions(
       if (baselineOk.value) {
         invalidateHostPackCompletionCache()
         flow.markHostPackAcknowledged()
+        const pendingCustom = (baselinePlan.value?.groups || [])
+          .filter((group) => group.id === 'account_custom')
+          .flatMap((group) => group.items)
+          .filter((item) => !item.installed)
+          .map((item) => item.label)
+        if (pendingCustom.length) {
+          await appAlert(
+            `已进入工作空间。账号定制功能（${pendingCustom.join('、')}）待供应商交付，可稍后在扩展市场重试。`,
+          )
+        }
         return true
       }
 

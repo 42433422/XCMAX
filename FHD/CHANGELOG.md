@@ -6,6 +6,8 @@
 
 ## Unreleased（1.0.0.4 之后的累积变更）
 
+- 修复「账号定制未交付就把客户堵在门外」：onboarding 主按钮「进入…工作空间」此前要求把**账号定制（L3）**也装齐才算就绪，而 L3 由供应商私有交付产出（需经市场生产—验收流程）。当供应商尚未产出该交付时（例如 SUNBIRD 的 `taiyangniao-pro`），客户点主按钮只会看到「仍缺必需项：taiyangniao-pro」并被永久拦在 onboarding，每次新会话还会被路由守卫再次弹回——一个完全不懂项目的真实客户会卡死在这里。现把「进入就绪」判定收敛为**产品侧可安装项（core+host，即 `required_mod_ids`）**：L3 未交付时不再阻塞进入，改为明确提示「账号定制功能（…）待供应商交付，可稍后在扩展市场重试」，定制项状态仍由 `missing_account_custom_mod_ids` / `full_stack_ready` 完整表达，供应商交付到位后照常安装。补 6 条回归测试锁定（含「必需项里混有产品侧项时仍不进入」）。
+
 - 修复「严格装包门」被一条**不可满足的必需项**卡死的问题：`wechat-contacts-ai-employee` 的源码早在 `095db9831`（彻底移除 wechat 域）就已删除，前端 AUX 清单也已收敛，但后端 `host_foundation`/`aux_employee_store` 的宿主种子包清单与 `config/industry_baseline.json` 里 7 个行业的账号定制扩展清单没有同步清理。结果任何带客户交付权益的账号（如 SUNBIRD）在「进入工作空间」时都会被要求装一个**安装包没带、行业种子池没有、修茈市场 catalog 也没有**的 Mod，严格装包门永远无法通过。现补齐这次移除：后端 AUX 清单与前端一致（仅 `lan-gate-ai-employee`），`industry_baseline.json` 不再把该 Mod 列为必需扩展，并补回归断言锁定。实机同账号同行业复算：必需项由 `[taiyangniao-pro, xcagi-core-workflow-employees, xcagi-office-employee-pack-bridge, wechat-contacts-ai-employee]` 收敛为 `[taiyangniao-pro]`（后两者随安装包种子预装），只剩市场侧私有交付这一外部依赖。同轮删除 `tests/test_decoupling_mods.py` 两个零引用常量（`EXPECTED_PLATFORM_MODS`/`PROTECTED`）。
 
 - 修复 Windows 桌面端「下载发货单后客户拿不到文件」：桌面壳从未注册 `will-download`，Chromium 在没有该处理器时不接管落盘，点击「下载发货单」虽然后端返回 200、前端也已拿到完整 xlsx，文件却只留在下载目录下的 `<guid>.tmp`，普通客户在「保存」这一步看不到「发货单_xxx.xlsx」。现由 `window-manager.ts` 注册 `will-download` 并 `setSavePath` 到下载目录，新增纯函数 `safeDownloadFilename()` 剥离路径分隔符与控制字符（空名回退 `download.bin`），防止文件名穿越下载目录之外，并补 4 个单测；同轮删除零引用死代码 `desktop/autonomy/strategic-planner.ts`（100 行）与 `rollback.ts` 中未使用的 `ROLLBACK_BACKEND_NAME`（1 行），净删除 57 行。
