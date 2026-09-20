@@ -1,0 +1,48 @@
+{
+  "_comment": "本文件由 macOS 真机证据采集器生成，请勿手改（DO NOT EDIT）。",
+  "feature": "base-login",
+  "name": "登录与会话管理",
+  "domain": "base",
+  "module": "base-auth",
+  "catalog_status": "verified",
+  "platforms": [
+    "windows",
+    "macos",
+    "web"
+  ],
+  "method": "api",
+  "status": "partial",
+  "status_basis": "对已安装客户端本地后端发起真实 HTTP 请求并返回预期状态码；未覆盖完整业务流程",
+  "source_sha": "7a1926f936a960d96be72e6f60bda283438963c9",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "9d6134d5cc37372d9e14bad83ca1fcf2ea060f56",
+  "environment": {
+    "os": "Darwin 25.3.0",
+    "arch": "arm64",
+    "macos": "26.3",
+    "hostname": "4243342deMac-mini.local",
+    "electron": "41.10.3",
+    "node": "v20.18.0",
+    "app_path": "/Applications/XCAGI.app",
+    "app_version": "1.0.0.5",
+    "app_git_sha": "9d6134d5cc37372d9e14bad83ca1fcf2ea060f56",
+    "app_built_at": "2026-09-20T09:05:36.700Z"
+  },
+  "verified_at": "2026-09-20T09:14:34.057Z",
+  "screenshot": "media/screenshots/base-login.png",
+  "video": "media/videos/base-login.webm",
+  "log": "logs/base-login.log",
+  "command": "在应用内对真实后端发起 GET /api/auth/me",
+  "scope": "对已安装客户端本地后端（127.0.0.1）发起真实请求；记录真实状态码与响应体",
+  "evidence_source": null,
+  "passed": 1,
+  "failed": 0,
+  "cases": [
+    {
+      "test": "GET /api/auth/me",
+      "result": "passed",
+      "status": 200
+    }
+  ],
+  "notes": "对已安装客户端本地后端发起真实 HTTP 请求并返回预期状态码；未覆盖完整业务流程"
+}
