@@ -1,28 +1,4 @@
-"""Tests for app.fastapi_routes.xcagi_compat_chat_helpers — additional coverage (ext3).
-
-Focus on REMAINING uncovered lines:
-- _chat_request_subject with client.host fallback (no xff, with client)
-- _xcagi_chat_http_exc with httpx.ConnectError and httpx.HTTPError branches
-- _xcagi_compat_reply_payload with tool result success=True (no notice appended)
-- _xcagi_compat_reply_payload with tool result errors list truncation (>5 errors)
-- _xcagi_compat_reply_payload with notice already in text (skip append)
-- _extract_excel_paths_from_message with various delimiters and edge cases
-- _extract_excel_paths_from_context with tuple paths and non-string values
-- _merge_runtime_context_with_message_paths with context paths only (no message paths)
-- _ensure_vector_index_if_needed with non-dict JSON result
-- _ensure_vector_index_if_needed with dict result but no error key
-- _xcagi_guarded_planner_stream_events with various event types
-- _xcagi_planner_stream_bytes with mode setting, db read auth, vector index
-- _xcagi_planner_stream_bytes with planner_workflow_interrupt_reply
-- _xcagi_planner_stream_bytes with empty merged reply
-- _xcagi_planner_stream_bytes with thinking steps
-- _xcagi_planner_stream_bytes with error event
-- _xcagi_planner_stream_bytes with requires_token event
-- _xcagi_planner_stream_bytes with RECOVERABLE_ERRORS exception
-- _xcagi_planner_stream_bytes_async with sentinel and error
-- XcagiCompatChatBatchBody validation
-- _chat_read_token_required_payload structure
-"""
+"""Regression coverage for the desktop chat stream and compatibility helpers."""
 
 from __future__ import annotations
 
@@ -1257,27 +1233,35 @@ class TestXcagiPlannerStreamBytesAdditional:
 
 class TestXcagiPlannerStreamBytesAsyncAdditional:
     @pytest.mark.asyncio
-    async def test_async_wrapper_yields_chunks(self):
-        """Test that async wrapper yields chunks from sync generator."""
-        request = Mock()
-        request.headers = {}
-        request.client = None
-        body = ch.XcagiCompatChatBody(message="hello")
+    @pytest.mark.parametrize("tenant", [3, 4, None])
+    async def test_async_wrapper_preserves_tenant_through_both_threads(self, tenant):
+        from app.infrastructure.tenant_scope import current_tenant_id, tenant_scope
 
-        def mock_sync_gen(*args, **kwargs):
-            yield b"chunk1"
-            yield b"chunk2"
+        body = ch.XcagiCompatChatBody(message="query only")
 
-        with patch(
-            "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_planner_stream_bytes",
-            side_effect=mock_sync_gen,
+        def tool_events(*args, **kwargs):
+            assert current_tenant_id() == tenant
+            yield {"type": "token", "text": "scoped"}
+
+        def sync_gen(*args, **kwargs):
+            assert current_tenant_id() == tenant
+            yield from ch._xcagi_guarded_planner_stream_events(
+                body, runtime_context={}, workspace_root="", client=None
+            )
+
+        with (
+            tenant_scope(tenant),
+            patch.object(ch, "_xcagi_planner_stream_bytes", side_effect=sync_gen),
+            patch.object(ch, "chat_stream_sse_events", side_effect=tool_events),
         ):
-            results = []
-            async for chunk in ch._xcagi_planner_stream_bytes_async(
-                request, body, ai_tier="standard"
-            ):
-                results.append(chunk)
-        assert results == [b"chunk1", b"chunk2"]
+            results = [
+                chunk
+                async for chunk in ch._xcagi_planner_stream_bytes_async(
+                    Mock(), body, ai_tier="standard"
+                )
+            ]
+            assert {"type": "token", "text": "scoped"} in results
+            assert current_tenant_id() == tenant
 
     @pytest.mark.asyncio
     async def test_async_wrapper_with_exception(self):

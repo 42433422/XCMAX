@@ -15,7 +15,7 @@ import os
 import threading
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
-from contextvars import ContextVar
+from contextvars import ContextVar, copy_context
 from typing import Any, cast
 
 from app.application.workflow.multimodal_user_content import (
@@ -421,7 +421,9 @@ def append_tool_messages(
     if to_run:
         workers = min(max_workers, len(to_run))
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            for idx, mapped_payload in pool.map(lambda t: _execute_idx(*t), to_run):
+            futures = [pool.submit(copy_context().run, _execute_idx, *item) for item in to_run]
+            for future in futures:
+                idx, mapped_payload = future.result()
                 payloads[idx] = mapped_payload
 
     for i, (tc, _name, _raw_eff, _key) in enumerate(parsed):

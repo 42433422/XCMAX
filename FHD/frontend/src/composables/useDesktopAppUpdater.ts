@@ -258,6 +258,8 @@ export function useDesktopAppUpdater() {
     phase.value = 'downloading'
     try {
       await window.xcagiDesktop.downloadUpdate()
+      const status = await window.xcagiDesktop.getUpdateStatus?.()
+      if (status?.type) onUpdateEvent(status)
     } catch (e) {
       busy.value = false
       phase.value = 'available'

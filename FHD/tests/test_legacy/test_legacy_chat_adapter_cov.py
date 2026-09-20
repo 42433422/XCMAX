@@ -476,6 +476,7 @@ class TestAppendToolMessages:
         assert result.get("requires_token") is True
 
     def test_parallel_execution_multiple_tools(self):
+        from app.infrastructure.tenant_scope import current_tenant_id, tenant_scope
         from app.legacy.chat.legacy_chat_adapter import (
             append_tool_messages,
             reset_planner_tool_dedup_state,
@@ -487,10 +488,12 @@ class TestAppendToolMessages:
         messages: list[Any] = []
 
         def exec_tool(n, a, w, db_write_token=None):
+            assert current_tenant_id() == 3
             return json.dumps({"success": True})
 
-        with patch(
-            "app.legacy.chat.legacy_chat_adapter._planner_tools_max_workers", return_value=4
+        with (
+            tenant_scope(3),
+            patch("app.legacy.chat.legacy_chat_adapter._planner_tools_max_workers", return_value=4),
         ):
             result = append_tool_messages(
                 messages, [tc1, tc2], workspace_root=None, execute_tool=exec_tool

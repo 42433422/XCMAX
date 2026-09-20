@@ -15,6 +15,7 @@ import queue
 import re
 import threading
 import time
+from contextvars import copy_context
 from pathlib import Path
 from typing import Any
 
@@ -369,7 +370,9 @@ def _xcagi_guarded_planner_stream_events(
         finally:
             event_queue.put(done_marker)
 
-    threading.Thread(target=_worker, daemon=True, name="xcagi-chat-stream-guard").start()
+    threading.Thread(
+        target=copy_context().run, args=(_worker,), daemon=True, name="xcagi-chat-stream-guard"
+    ).start()
 
     total_timeout = _xcagi_chat_timeout_seconds()
     first_token_timeout = min(_xcagi_stream_first_token_timeout_seconds(), total_timeout)
@@ -477,7 +480,12 @@ async def _xcagi_planner_stream_bytes_async(
         finally:
             asyncio.run_coroutine_threadsafe(async_q.put(_SENTINEL), loop).result(timeout=5)
 
-    thread = threading.Thread(target=_feed_queue, daemon=True, name="xcagi-stream-async-bridge")
+    thread = threading.Thread(
+        target=copy_context().run,
+        args=(_feed_queue,),
+        daemon=True,
+        name="xcagi-stream-async-bridge",
+    )
     thread.start()
 
     while True:

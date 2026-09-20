@@ -33,6 +33,34 @@ def seed_zip(path, *, name="Seed Person", extra=None):
     return path
 
 
+def test_publisher_emits_only_owner_data_without_mutating_seed(tmp_path):
+    import runpy
+
+    script = (
+        Path(__file__).resolve().parents[2] / "scripts/package/publish-sunbird-delivery-seed.py"
+    )
+    publisher = runpy.run_path(str(script))
+    source = tmp_path / "source"
+    files = {
+        "config/sunbird-roster.json": b'{"employees": []}',
+        "424/考勤-2026-3月份考勤统计表.xlsx": b"fixture-template",
+        "mods/attendance-industry/manifest.json": b"existing-mod",
+        "data/mod_dbs/taiyangniao_pro.db": b"existing-customer-database",
+    }
+    for name, content in files.items():
+        path = source / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+    archive = publisher["_build_zip"](source, tmp_path / "output", "1.0.1")
+    with zipfile.ZipFile(archive) as package:
+        assert set(package.namelist()) == {
+            "delivery-manifest.json",
+            *publisher["PACKAGE_REQUIRED_FILES"],
+        }
+        assert json.loads(package.read("delivery-manifest.json"))["version"] == "1.0.1"
+    assert all((source / name).read_bytes() == content for name, content in files.items())
+
+
 def test_create_only_seed_preserves_modified_template_and_even_empty_roster(mod_accounts, tmp_path):
     archive = seed_zip(tmp_path / "seed.zip")
     with owner_context("tenant:1"):

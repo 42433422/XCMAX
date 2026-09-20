@@ -127,14 +127,18 @@ describe('DesktopAppUpdatePrompt', () => {
     expect(desktopApi.downloadUpdate).not.toHaveBeenCalled()
   })
 
-  it('installs after download completes', async () => {
+  it.each([false, true])('installs after download completes, lost event: %s', async (lostEvent) => {
     const wrapper = mountPrompt()
     await flushPromises()
     emitUpdate('update-available', { version: '1.0.0', releaseNotes: 'notes' })
     await nextTick()
     await wrapper.find('.desktop-update-chip').trigger('click')
-    emitUpdate('update-downloaded', { version: '1.0.0' })
-    await nextTick()
+    if (lostEvent) {
+      desktopApi.getUpdateStatus.mockResolvedValueOnce({ type: 'update-downloaded', data: { version: '1.0.0' } })
+      desktopApi.downloadUpdate.mockImplementationOnce(async () => { emitUpdate('download-progress', { percent: 69 }); return {} })
+      await wrapper.findAll('button').find(b => b.text() === '下载更新')!.trigger('click')
+    } else emitUpdate('update-downloaded', { version: '1.0.0' })
+    await flushPromises()
     const installBtn = wrapper.findAll('button').find((b) => b.text().includes('更新并重新加载'))!
     await installBtn.trigger('click')
     await flushPromises()
