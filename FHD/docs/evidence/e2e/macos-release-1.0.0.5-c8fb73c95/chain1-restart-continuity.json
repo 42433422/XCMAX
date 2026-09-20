@@ -1,0 +1,33 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "gate": "customer-chain-continuity",
+  "session_tag": "FRESH",
+  "data_root": "/private/tmp/xcagi-custchain/userdata-fresh",
+  "at_utc": "2026-09-20T20:30:07Z",
+  "checks": {
+    "relogin": {
+      "status": 200,
+      "success": true,
+      "me_status": 200,
+      "username": "SUNBIRD"
+    },
+    "template_present": {
+      "status": 200,
+      "probe": "验收模板-FRESH",
+      "found": true
+    },
+    "customer_present": {
+      "status": 200,
+      "probe": "验收客户-FRESH",
+      "found": true
+    },
+    "prior_document": {
+      "doc_name": "发货单_26-0900001A_20260921_042918.xlsx",
+      "status": 200,
+      "bytes": 5181,
+      "xlsx_magic": true,
+      "sha256": "82045897462a8f6081e2cf072c7cbaf03fe9f62248c1b039a3488f376173135f"
+    }
+  },
+  "verdict": "PASS"
+}
