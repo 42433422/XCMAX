@@ -178,6 +178,9 @@ FHD/docs/evidence/e2e/m01-mac-local-*/**/*cookies*.txt
 FHD/docs/evidence/e2e/m01-mac-local-*/**/*login-tries*.txt
 FHD/docs/evidence/e2e/m01-mac-local-*/**/*admin-login*.json
 FHD/docs/evidence/e2e/m01-mac-local-*/**/*enterprise-login*.json
+# 采集录像（webm）体积大且属二进制制品，按仓库大文件策略留在操作机本地；
+# 清单 manifest.json 记录其相对路径与采集时间，截图与文本记录入库。
+FHD/docs/evidence/e2e/macos-features-100-1.0.0.5/media/videos/
 
 # ============================================================================
 # 大文件防复发（2026-08-24，git filter-repo 剥离 2.9GB 历史后补强）

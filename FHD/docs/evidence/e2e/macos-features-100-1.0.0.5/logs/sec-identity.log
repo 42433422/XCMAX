@@ -1,0 +1,15 @@
+# sec-identity 身份认证与权限控制
+# verified_at=2026-09-20T09:41:22.400Z
+# app=1.0.0.5@9d6134d5cc37372d9e14bad83ca1fcf2ea060f56
+GET /api/auth/me -> 200
+{
+ "content-length": "899",
+ "content-security-policy": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; frame-src 'self' blob:; connect-src 'self' ws: wss:",
+ "content-type": "application/json",
+ "date": "Sun, 20 Sep 2026 09:41:22 GMT",
+ "referrer-policy": "strict-origin-when-cross-origin",
+ "server": "uvicorn",
+ "x-content-type-options": "nosniff",
+ "x-frame-options": "DENY"
+}
+{"success":true,"data":{"user":{"id":5,"username":"SUNBIRD","display_name":"SUNBIRD","email":"sunbird@xcagi.local","email_display":"sunbird@xcagi.local","no_email":false,"role":"user","is_active":true,"avatar_url":""},"permissions":["shipment.edit","shipment.view","product.edit","customer.view","etl.read","material.edit","product.view","customer.edit","print.label","dataset.read","material.view","shipment.create","etl.execute","dataset.write","etl.template.manage"],"account_kind":"enterprise","company_brand":"SUNBIRD","market_is_admin":false,"market_is_enterprise":true,"market_user_id":29,"local_user_id":5,"tenant_id":3,"tenant_name":"SUNBIRD","impersonating_market_user_id":null,"impersonating_username":"","tier":"enterprise","account_tier":"pro","budget_range":null,"entitled_industries":["通用","饰品包装"],"market_membership_tier":null,"email_verified":false,"mfa_enabled":false}}
