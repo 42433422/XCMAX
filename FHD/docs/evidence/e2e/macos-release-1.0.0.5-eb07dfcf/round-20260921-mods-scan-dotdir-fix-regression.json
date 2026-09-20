@@ -1,0 +1,47 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "gate": "mods-scan-dotdir-fix-regression",
+  "platform": "macos",
+  "product_version": "1.0.0.5",
+  "release_sha": "eb07dfcf372532292dc87c187b67c0ee620640b2",
+  "date": "2026-09-21",
+  "defect": {
+    "summary": "Mod 扫描器只跳过 `_` 前缀目录，未跳过 `.` 前缀隐藏目录，导致 Mod 安装器自身的账本目录 `.install-receipts` 被当作 Mod 解析 manifest 失败，产生虚假 manifest_errors。",
+    "customer_impact": "非阻断：mods 仍正常加载（load_errors=[]、partial_failure=false），但 /api/mods/loading-status 会持续上报一条 `{\"mod_id\":\"unknown\",\"error\":\"加载失败\"}` 假告警，运维/客服排障时会被误导。",
+    "file": "FHD/app/infrastructure/mods/mod_manager_modmanager_mixin01__modmanagerpart01mixin_mixin01.py",
+    "lines_changed": [
+      {"line": 51, "function": "_mods_scan_fingerprint", "before": "if entry.startswith(\"_\"):", "after": "if entry.startswith((\"_\", \".\")):"},
+      {"line": 260, "function": "scan_mods", "before": "if entry.startswith(\"_\"):", "after": "if entry.startswith((\"_\", \".\")):"}
+    ],
+    "root_cause_evidence": [
+      "mods 根目录实际条目：`_employees`（已被 `_` 规则跳过）、`.install-receipts`（Mod 安装器账本，含 16 个子目录、无 manifest.json）、以及真实 mod 目录。",
+      "`.install-receipts` 命中 scan_mods 的 parse_manifest 分支失败路径，被追加进 _scan_manifest_errors。"
+    ]
+  },
+  "regression": {
+    "method": "同一数据根（~/Library/Application Support/XCAGI/mods）分别用「已发布产物 eb07dfcf 打包后端」与「仓库源码后端（含修复）」读取 GET /api/mods/loading-status，比对 manifest_errors。",
+    "before": {
+      "source": "shipped build eb07dfcf 打包后端（/Applications/XCAGI.app/Contents/Resources/backend/xcagi-backend）",
+      "mods_loaded": 14,
+      "load_errors": [],
+      "manifest_errors": [{"mod_id": "unknown", "error": "加载失败"}],
+      "partial_failure": false
+    },
+    "after": {
+      "source": "repo source (FHD/XCAGI/run_fastapi.py) with fix applied",
+      "mods_loaded": 17,
+      "load_errors": [],
+      "manifest_errors": [],
+      "blueprint_errors": [],
+      "partial_failure": false,
+      "raw_evidence": "mods-loading-status-after-fix.json"
+    },
+    "mods_loaded_delta_note": "14 → 17 系本轮 GUI onboarding 额外装入了 sz-qsm-pro / coating-industry / sunbird-attendance-custom，与本次修复无关；修复本身只影响 manifest_errors 归零。"
+  },
+  "release_freeze_note": "已发布产物 eb07dfcf（DMG 已签名+公证+官网分发）不含本修复；本次修复进入 main，供下一次构建携带。未因该非阻断缺陷重签重发已冻结的 1.0.0.5 产物。",
+  "verdict": "PASS",
+  "net_deletion_gate": {
+    "command": "python3 scripts/dev/check_net_deletion.py",
+    "result": "OK：当前 2303758 行 / 基线 2303758 行（差 +0）"
+  }
+}
