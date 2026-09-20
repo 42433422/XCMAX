@@ -48,7 +48,7 @@ class __ModManagerPart01MixinPart01Mixin:
             except OSError:
                 continue
             for entry in entries:
-                if entry.startswith("_"):
+                if entry.startswith(("_", ".")):
                     continue
                 manifest_path = _facade().os.path.join(root, entry, "manifest.json")
                 if _facade().os.path.isfile(manifest_path):
@@ -257,7 +257,7 @@ class __ModManagerPart01MixinPart01Mixin:
                 )
                 continue
             for entry in _facade().os.listdir(mods_root):
-                if entry.startswith("_"):
+                if entry.startswith(("_", ".")):
                     continue
                 mod_path = _facade().os.path.join(mods_root, entry)
                 if not _facade().os.path.isdir(mod_path):
