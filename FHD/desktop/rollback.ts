@@ -35,7 +35,6 @@ import {
 const ROLLBACK_DIR = 'rollback'
 const ROLLBACK_MARKER = 'rollback-marker.json'
 const ROLLBACK_APPLIED = 'rollback-applied.json'
-const ROLLBACK_BACKEND_NAME = process.platform === 'win32' ? 'xcagi-backend.exe' : 'xcagi-backend'
 
 export interface RollbackMarker {
   mode?: 'backend' | 'windows-full'

@@ -6,7 +6,31 @@ import {
   parseDesktopDeepLink,
   isBenignDesktopLoadAbort,
   isTrustedDesktopOrigin,
+  safeDownloadFilename,
 } from './desktop-navigation'
+
+describe('safeDownloadFilename', () => {
+  it('保留业务文件名（含中文与扩展名）', () => {
+    expect(safeDownloadFilename('发货单_26-09-00001A_20260921_014637.xlsx'))
+      .toBe('发货单_26-09-00001A_20260921_014637.xlsx')
+  })
+
+  it('剥离路径分隔符，只保留最后一段', () => {
+    expect(safeDownloadFilename('../../etc/passwd')).toBe('passwd')
+    expect(safeDownloadFilename('C:\\Windows\\evil.exe')).toBe('evil.exe')
+  })
+
+  it('替换文件名保留字符并去掉前导点', () => {
+    expect(safeDownloadFilename('a:b*c?.xlsx')).toBe('a_b_c_.xlsx')
+    expect(safeDownloadFilename('..hidden')).toBe('hidden')
+  })
+
+  it('空值回退为 download', () => {
+    expect(safeDownloadFilename('')).toBe('download')
+    expect(safeDownloadFilename(undefined)).toBe('download')
+    expect(safeDownloadFilename('   ')).toBe('download')
+  })
+})
 
 describe('findDeepLinkArg', () => {
   it('从 argv 中提取 xcagi:// 深链', () => {

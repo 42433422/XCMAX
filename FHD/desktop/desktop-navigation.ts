@@ -15,6 +15,16 @@ export function desktopWindowOpenAction(rawUrl: string, expectedPort: number): '
   return isTrustedDesktopOrigin(rawUrl, expectedPort) ? 'allow' : 'deny'
 }
 
+/**
+ * 下载文件名来自 Content-Disposition 或 URL，可能带路径分隔符与保留字符。
+ * 归一化为单层文件名，避免写穿下载目录。
+ */
+export function safeDownloadFilename(raw: string | undefined): string {
+  const base = String(raw || '').split(/[\\/]/).pop() || ''
+  const cleaned = base.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').replace(/^\.+/, '').trim()
+  return cleaned || 'download'
+}
+
 export function isTrustedDesktopExternalUrl(rawUrl: string | undefined): boolean {
   if (!rawUrl) return false
   try {
