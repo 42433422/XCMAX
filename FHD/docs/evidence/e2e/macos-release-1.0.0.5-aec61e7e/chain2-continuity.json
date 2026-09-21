@@ -1,0 +1,33 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "gate": "customer-chain-continuity",
+  "session_tag": "PRE-OTA",
+  "data_root": "/private/tmp/xcagi-custchain/userdata-upgrade",
+  "at_utc": "2026-09-21T04:10:20Z",
+  "checks": {
+    "relogin": {
+      "status": 200,
+      "success": true,
+      "me_status": 200,
+      "username": "SUNBIRD"
+    },
+    "template_present": {
+      "status": 200,
+      "probe": "验收模板-PRE-OTA",
+      "found": true
+    },
+    "customer_present": {
+      "status": 200,
+      "probe": "验收客户-PRE-OTA",
+      "found": true
+    },
+    "prior_document": {
+      "doc_name": "发货单_26-0900001A_20260921_120110.xlsx",
+      "status": 200,
+      "bytes": 5190,
+      "xlsx_magic": true,
+      "sha256": "6e8d793049a3ce63c06abacaf9549baf98574af649770058db5363a356dd4b19"
+    }
+  },
+  "verdict": "PASS"
+}

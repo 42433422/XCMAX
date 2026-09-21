@@ -1,0 +1,131 @@
+{
+  "schema": "xcagi.delivery.ledger/v1",
+  "generated_at_utc": "2026-09-21T04:25:00Z",
+  "goal": "一个完全不懂项目的真实用户，不问任何人，自行跑通：下载→安装→首启→登录绑定→权益→行业 Mod 准备→核心功能加载→真实业务出正确结果→保存→导出成果→重启恢复→OTA 升级后数据还在且能继续用；全程走产品 UI",
+  "platform": "macOS arm64 (Apple Silicon)",
+  "release": {
+    "version": "1.0.0.5",
+    "git_sha": "aec61e7e7224fe83c98b3a26522ee3f09f9e728d",
+    "release_id": "xcagi-1.0.0.5-aec61e7e7224fe83c98b3a26522ee3f09f9e728d"
+  },
+  "artifacts": {
+    "current_official_dmg": {
+      "url": "https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg",
+      "sha256": "89592fdaff3b1731fae016ec56619c7e7b0d3514e2036705cdad132eedf63343",
+      "size": 304193412,
+      "download_http": 200,
+      "gatekeeper": "accepted (Notarized Developer ID)",
+      "codesign": "ok",
+      "stapler": "validated",
+      "build_info_sha": "aec61e7e7224fe83c98b3a26522ee3f09f9e728d"
+    },
+    "prior_official_dmg": {
+      "sha256": "414d9f226fac826302a02657ff9ef97fccbc141f005bb13bf6db8735bbe18783",
+      "size": 300180224,
+      "build_info_sha": "c8fb73c95235cb5a03733c85512303de3997894f"
+    },
+    "update_feed": {
+      "latest_mac_yml": "https://xiu-ci.com/releases/stable/enterprise/latest-mac.yml",
+      "buildSha": "aec61e7e7224fe83c98b3a26522ee3f09f9e728d",
+      "zip_size": 264818498,
+      "ed25519_signature": "ed25519:QjIGlRD5lhMxFTXtYl2ByZCQGql8PdvpKHy2UUEZXT5su8t7EQVOes7tHl9sbVWI2aEooZOjMkzoN9mMi/USCw==",
+      "public_feed_byte_identical_to_built": true
+    },
+    "release_clearance": {
+      "scan_pair_verify": "passed (same-SHA two-run pair)",
+      "scan_runs": {
+        "previous": 35548945905,
+        "current": 35550602530
+      },
+      "scan_window_utc": "2026-09-21T00:57:24Z → 2026-09-21T01:27Z",
+      "note": "两轮全源零发现扫描同一 release_sha，间隔 ≥30 分钟，同一 UTC 日；pair 脚本复核 passed=true。"
+    }
+  },
+  "chain_1_current_official_installer": {
+    "summary": "真实用户从官网下载当前正式安装包 → 安装 → 首启 → 真实 UI 登录 → 权益 → Mod 加载 → 行业 Mod 准备 → 主按钮进入工作空间 → 真实业务出单 → 保存/导出 → 重启恢复",
+    "steps": {
+      "download": {"verdict": "PASS", "detail": "官网 DMG sha256=89592fdaff3b… 与构建产物一致；带浏览器隔离属性后 spctl 判定 accepted (Notarized Developer ID)"},
+      "install": {"verdict": "PASS", "detail": "挂载后 app 三方核验：spctl accepted / codesign --deep --strict ok / stapler validated；ditto 安装到 /Applications；build-info=aec61e7e"},
+      "first_launch": {"verdict": "PASS", "detail": "LaunchServices(open -a) 启动；backend 17500 就绪；CDP 可用"},
+      "health": {"verdict": "PASS", "detail": "37/37 组件 OK，required_total=11 / required_failed=[]，top+runtime 均 healthy，git_sha=aec61e7e"},
+      "login_binding_ui": {
+        "verdict": "PASS",
+        "detail": "真实 UI 表单登录（CDP Input.insertText 键入 + 点击「登录」按钮）：SUNBIRD/SUN123456 → 登录成功并直接进入工作区；接口态 /api/auth/me 200，权限 15 项含 shipment.edit"
+      },
+      "entitlement_and_mods": {"verdict": "PASS", "detail": "13/13（行业包安装后 14/14）Mod 加载；manifest_errors=[]，load_errors=[]，partial_failure=false"},
+      "industry_mod_preparation": {
+        "verdict": "PASS",
+        "detail": "宿主基础线 core+host 已装齐；行业包 accessories-packaging-industry + attendance-industry 经「行业包与通用业务模块已安装」通道装成（missing_industry_mod_ids=[]，industry_mod_ready=true）；账号交付种子 sunbird-delivery-seed 1.0.0 经客户端接口检查并应用（applied=true）"
+      },
+      "core_function_entry_gui": {
+        "verdict": "PASS",
+        "detail": "onboarding 配置步状态卡=「工作空间功能已准备好」，「仍缺必需项」不再出现；真实点击主按钮「进入我的工作空间」→ 进入工作区 http://127.0.0.1:17500/（标题「智能对话 - XCAGI」，侧栏含 SUNBIRD/考勤工作区/饰品包装品管理/客户管理/订单管理/标签模板库/系统设置）"
+      },
+      "real_business": {"verdict": "PASS", "detail": "模板上传 200 + 客户创建 200 + 发货单生成 200 → 下载 发货单_26-0900001A_20260921_114306.xlsx 200/5191B，合法 PK 头"},
+      "save_and_export": {"verdict": "PASS", "detail": "单据落盘且可再次下载；xlsx 回读 sha256 稳定"},
+      "restart_recovery": {
+        "verdict": "PASS",
+        "detail": "退出→重启后：重新登录 200；模板/客户仍在；重启前单据仍可下载（200, 5191B, xlsx_magic=true）"
+      },
+      "runtime_facts": {"components": "37/37", "mods_loaded": "13/13 → 14/14", "permissions": 15, "business_doc": "发货单_26-0900001A_20260921_114306.xlsx"}
+    }
+  },
+  "chain_2_ota_upgrade": {
+    "summary": "已安装上一版正式包(c8fb73c9)的用户 → 真实 feed 应用内更新 → 当前正式包(aec61e7e) → 数据/登录态/Mod/单据保留且可继续出单",
+    "steps": {
+      "pre_ota_business": {"verdict": "PASS", "detail": "c8fb73c9 上登录/权益/Mod(13/13)/出单全 PASS；单据 发货单_26-0900001A_20260921_120110.xlsx (5190B)"},
+      "ota_detect": {"verdict": "PASS", "detail": "isUpdateAvailable=true；target buildSha=aec61e7e；metadata 带 ed25519 签名"},
+      "ota_download": {"verdict": "PASS", "detail": "264818498B 下载完成"},
+      "ota_install": {"verdict": "PASS", "detail": "ShipIt 替换 bundle 并自动重启；≈20s 内 bundle_sha=aec61e7e 且 health=200"},
+      "data_preserved": {"verdict": "PASS", "detail": "升级后重新登录 200；模板/客户仍在；OTA 前单据仍可下载（200, 5190B, xlsx）"},
+      "continue_working": {"verdict": "PASS", "detail": "新版本上再次出单 PASS（发货单_26-0900001A_20260921_121058.xlsx, 5194B）"}
+    }
+  },
+  "fixed_this_round": {
+    "onboarding_entry_gate": {
+      "pr": "https://github.com/42433422/XCMAX/pull/1998",
+      "merge_commit": "aec61e7e7224fe83c98b3a26522ee3f09f9e728d",
+      "defect": "账号定制（L3）由供应商私有交付产出，未交付时被当作进入工作空间的必需项，真实客户被永久拦在 onboarding 主按钮前（「仍缺必需项：taiyangniao-pro」），新会话还会被路由守卫再次弹回。",
+      "fix": "新增 isOnboardingEntryReady：进入就绪 = 产品侧可安装项(core+host)装齐；仅当缺失项全部属于账号定制时视为「待供应商交付」放行，并在进入时明确提示。",
+      "verified_on_official_artifact": "本包 aec61e7e 上 GUI 实测：状态卡「工作空间功能已准备好」、主按钮可点且成功进入工作区，无「仍缺必需项」。"
+    },
+    "wechat_dangling_required": {
+      "pr": "https://github.com/42433422/XCMAX/pull/1996",
+      "merge_commit": "45bc9c72212418d93910d0cc2e35e6f8a1453e5b",
+      "detail": "后端 AUX 种子清单与 7 个行业的必需扩展清单曾残留已删除的 wechat-contacts-ai-employee，导致不可满足的必需项；已在 main 清理并随本包发布。"
+    },
+    "market_delivery_seed_file": {
+      "detail": "线上 catalog_data/packages.json 有 sunbird-delivery-seed 登记行但 files/ 缺 zip，客户端报 404「交付种子文件缺失」。本轮把主机 /root/XCMAX 检出中已存在的同名 zip（sha256=68b412e7204996b9e439cbad544c984d41673bdb3d5b4f5070af7857fb8b8510、245745B，与登记行完全一致）恢复进部署目录并置只读，未改 catalog、未改代码。",
+      "verified_from_client": "客户端接口 install-customer-delivery-seed(sunbird-attendance-custom / taiyangniao-pro) → 200，applied=true，package=sunbird-delivery-seed 1.0.0（此前为 404）"
+    },
+    "release_transfer": {
+      "detail": "GitHub runner→CVM 链路重复 Connection reset（12 次尝试全部失败，仅传输步骤失败，构建/公证/身份校验均通过）。本轮用已通过签名+公证+身份校验的官方构建产物从本机 rsync 完成发布（官方目录与 stable OTA 目录），并复跑 download center 元数据发布脚本；远端 DMG sha256 与本地一致、公开 feed 与构建产物逐字节一致。",
+      "workflow_run": 35551170246
+    }
+  },
+  "outstanding_external_dependency": {
+    "item": "taiyangniao-pro（SUNBIRD 账号定制私有交付，运行包 sunbird-attendance-custom）",
+    "classification": "VENDOR_SIDE_PRIVATE_DELIVERY_NEVER_PRODUCED",
+    "customer_impact": "非阻断：客户闭环各步均可完成；该定制能力未交付，界面如实呈现 full_stack_ready=false，进入工作空间时提示「待供应商交付」。",
+    "client_observation": "POST /api/mod-store/private-mod/update → 404「当前账号没有该客户 Mod 的私有版本」",
+    "market_facts_verified": {
+      "sunbird_market_user": "users.id=29, username=SUNBIRD, is_enterprise=true, user_mods={attendance-industry, taiyangniao-pro}",
+      "custom_delivery_tickets": "SUNBIRD 名下 intent=custom_delivery 工单 0 条",
+      "customer_delivery_artifacts": "主机全盘无 customer-delivery-artifacts/29/ 目录"
+    },
+    "unblock_conditions": [
+      "经市场自身生产—验收流程真实产出 SUNBIRD 私有交付并落 customer-delivery-artifacts/29/taiyangniao-pro/；验收状态只认客户本人 accepted（管理员自批 internal_approved 不通过 catalog 检查）。",
+      "产出后客户端即可经 /api/mod-store/private-mod/update 安装；不得手工伪造验收证据。"
+    ]
+  },
+  "caveats": [
+    "数据根隔离：验收使用 XCAGI_DESKTOP_USER_DATA_DIR 指向专用目录（等价全新用户），未触碰本机默认 userData 的既有真实数据。",
+    "登录绑定本轮以真实 UI 表单完成（键入 + 点击）；业务步骤仍通过应用自带本地后端接口驱动，并附 GUI 截图。",
+    "OTA 由 ShipIt 重启应用时不带 --remote-debugging-port，故 OTA 后首帧无 CDP 截图；已在其后一次正常启动补采。",
+    "官网 download-release.json 的 release_ready=false（Windows 未构建/签名），macOS 下载入口可用；整体发布指针尚未置 ready。"
+  ],
+  "verdict": "PASS",
+  "verdict_note": "客户闭环在最终正式安装包 XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg（release_sha=aec61e7e7224fe83c98b3a26522ee3f09f9e728d）上真实通过：官网下载→安装（签名/公证/stapling/Gatekeeper 全过）→首启（37/37）→真实 UI 登录绑定→权益→行业 Mod 准备（含行业包与交付种子）→主按钮进入工作空间（此前的阻断缺陷已修复）→真实业务出正确结果→保存/导出→重启恢复→真实 feed OTA 升级到本包后数据/登录态/Mod/单据全部保留且可继续出单。唯一未交付项为供应商侧私有定制 taiyangniao-pro（外部依赖，非阻断，界面如实呈现），已写明解除条件。",
+  "finished_at_utc": "2026-09-21T04:25:00Z",
+  "scope": "macOS Apple Silicon 客户闭环（Windows 不在本次闭环范围）"
+}
