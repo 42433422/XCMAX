@@ -1,0 +1,36 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "gate": "customer-chain-continuity-ui",
+  "session_tag": "POST-OTA",
+  "data_root": "/private/tmp/xcagi-custchain/userdata-upgrade",
+  "ui_evidence_dir": "/private/tmp/xcagi-custchain/evidence-8d50fe9d",
+  "at_utc": "2026-09-21T10:26:41Z",
+  "checks": {
+    "ui_evidence": {
+      "template_created_by_ui": "客户发货单模板-简版",
+      "doc_from_ui": "",
+      "unit_from_ui": "db:2"
+    },
+    "relogin": {
+      "status": 405,
+      "success": false,
+      "me_status": 404,
+      "username": null,
+      "has_shipment_edit": false
+    },
+    "template_present": {
+      "status": 404,
+      "probe": "客户发货单模板-简版",
+      "found": false
+    },
+    "unit_present": {
+      "status": 404,
+      "probe": "db:2",
+      "found": false
+    },
+    "prior_document": {
+      "doc_name": ""
+    }
+  },
+  "verdict": "BLOCKED"
+}

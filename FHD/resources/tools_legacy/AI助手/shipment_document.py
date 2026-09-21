@@ -182,7 +182,6 @@ class ShipmentDocumentGenerator:
 
     # 使用绝对路径，确保无论从哪个目录启动都能正确找到文件
     SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-    TEMPLATE_FOLDER = SCRIPT_DIR
     OUTPUT_FOLDER = os.path.join(SCRIPT_DIR, "outputs")
     DEFAULT_TEMPLATE = "尹玉华1.xlsx"
 
@@ -206,8 +205,6 @@ class ShipmentDocumentGenerator:
 
     def _find_template(self, template_name):
         """查找模板文件"""
-        import os
-
         # 尝试多个可能的模板目录（使用绝对路径）
         possible_dirs = [
             # 相对于AI助手目录的templates目录
@@ -453,8 +450,6 @@ class ShipmentDocumentGenerator:
                 self._write_cell(worksheet, row, 9, amount)
             elif kg_value > 0 and unit_price > 0:
                 self._write_cell(worksheet, row, 9, round(kg_value * unit_price, 2))
-
-            # 备注 (J列) - 保持空白
 
         # 第15行：合计行的数量/件 (E15公式保持SUM(E4:E14))
         if total_quantity_tins > 0 and not self._write_cell(
