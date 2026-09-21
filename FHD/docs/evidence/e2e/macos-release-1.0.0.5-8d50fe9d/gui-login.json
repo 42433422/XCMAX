@@ -1,0 +1,37 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "gate": "customer-chain-gui-login",
+  "at_utc": "2026-09-21T10:32:36Z",
+  "steps": {
+    "before": {
+      "url": "http://127.0.0.1:17500/login?redirect=/",
+      "loginForm": true,
+      "workspace": false,
+      "bodyHead": "XCAGI 企业版\n\n智能企业管理平台\n让 AI 驱动您的业务增长\n\n企业级 AI 对话与智能体\n审批工作流与 ERP 集成\n即时通讯与团队协作\n注册账号\n购买与授权\n企业账号登录\n\n完成账号注册与企业授权后，请回到这里登录，系统会同步账号权益\n\n账号密码\n手机验证码\n扫码登录\n账号\n密码\n免登录\n记住密码\n登 录\n忘"
+    },
+    "fill": {
+      "ok": true,
+      "username": "SUNBIRD",
+      "passwordLength": 9
+    },
+    "submit": {
+      "result": "clicked"
+    },
+    "after_submit": {
+      "url": "http://127.0.0.1:17500/mod/xcagi-planner-bridge/chat",
+      "loginForm": false,
+      "workspace": true,
+      "bodyHead": "饰品包装助手\nSUNBIRD\n智能对话\n考勤工作区\n信息\n智能生态\n知识库\n数据对接中心\n员工工作台\n饰品包装品管理\n原材料仓库\n库存管理\n客户管理\n订单管理\n出货记录\n数据来源\n包装标签打印\n标签模板库\n系统设置\n系统正常\n通用考勤模块\nv1.0.0.5\nSUNBIRD\n智能对话\n副窗\n◈\n工作区\n查产品\n订单\n库存"
+    }
+  },
+  "verdict": "PASS",
+  "criteria": {
+    "login_form_rendered": true,
+    "credentials_typed_via_gui": true,
+    "submitted_real_submit_button": true,
+    "landed_in_workspace": true,
+    "final_url": "http://127.0.0.1:17500/mod/xcagi-planner-bridge/chat"
+  },
+  "note": "真实 GUI 表单登录：在 login 页输入 SUNBIRD/密码并点击提交按钮（button.login-submit），应用经 splash 后进入工作区。注意登录页另有「扫码登录」按钮，按文本模糊匹配会点错。",
+  "finished_at_utc": "2026-09-21T10:33:00Z"
+}

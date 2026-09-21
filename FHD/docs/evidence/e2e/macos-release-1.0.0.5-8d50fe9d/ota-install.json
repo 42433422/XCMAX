@@ -1,1 +1,62 @@
-install_result: None
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "gate": "ota-install",
+  "at_utc": "2026-09-21T18:20:13Z",
+  "install_trigger": {
+    "via": "window.xcagiDesktop.installUpdate() (electron-updater quitAndInstall)",
+    "note": "installUpdate 会立即退出应用，CDP 连接随之断开；因此安装结果以 ShipIt 真实日志 + 替换后 build-info + health 为证。",
+    "raw_call": "install_result: None"
+  },
+  "shipit": {
+    "log": "/Users/a4243342/Library/Caches/com.xcagi.desktop.enterprise.ShipIt/ShipIt_stderr.log",
+    "new_lines": [
+      "2026-09-22 02:19:46.234 ShipIt[1493:11242021] Detected this as an install request",
+      "2026-09-22 02:19:46.252 ShipIt[1493:11242021] Beginning installation",
+      "2026-09-22 02:19:47.995 ShipIt[1493:11242406] Moving bundle from file:///Applications/XCAGI.app/ to file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.tRBhKPx3/XCAGI.app",
+      "2026-09-22 02:19:47.996 ShipIt[1493:11242406] Moving bundles directly as SquirrelMacEnableDirectContentsWrite is disabled for app: com.xcagi.desktop.enterprise.ShipIt",
+      "2026-09-22 02:19:47.996 ShipIt[1493:11242406] Moved bundle contents from file:///Applications/XCAGI.app/ to file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.tRBhKPx3/XCAGI.app",
+      "2026-09-22 02:19:47.996 ShipIt[1493:11242406] Moving bundle from file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.LQrYTibR/XCAGI.app to file:///Applications/XCAGI.app/",
+      "2026-09-22 02:19:48.004 ShipIt[1493:11242406] Moving bundles directly as SquirrelMacEnableDirectContentsWrite is disabled for app: com.xcagi.desktop.enterprise.ShipIt",
+      "2026-09-22 02:19:48.004 ShipIt[1493:11242406] Moved bundle contents from file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.LQrYTibR/XCAGI.app to file:///Applications/XCAGI.app/",
+      "2026-09-22 02:19:48.175 ShipIt[1493:11242406] Couldn't remove owned bundle at location file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.LQrYTibR/XCAGI.app, error NSError { domain: NSCocoaErrorDomain, code: 4, description: \"“XCAGI.app” couldn’t be removed.\", failureReason: \"The file doesn’t exist.\", underlying error: NSError { domain: NSPOSIXErrorDomain, code: 2, description: \"The operation couldn’t be completed. No such file or directory\" }, userInfo: {",
+      "    NSFilePath = \"/var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.LQrYTibR/XCAGI.app\";",
+      "    NSURL = \"file:///var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/com.xcagi.desktop.enterprise.ShipIt.LQrYTibR/XCAGI.app\";",
+      "    NSUserStringVariant =     (",
+      "        Remove",
+      "    );",
+      "} }",
+      "2026-09-22 02:19:48.338 ShipIt[1493:11242675] On main thread and launching: file:///Applications/XCAGI.app/",
+      "2026-09-22 02:19:48.338 ShipIt[1493:11242675] Bundle URL is valid",
+      "2026-09-22 02:19:48.338 ShipIt[1493:11242675] Attempting to launch app on 11.0 or higher",
+      "2026-09-22 02:19:48.338 ShipIt[1493:11242675] Launching new ShipIt at /Applications/XCAGI.app/Contents/Frameworks/Squirrel.framework/Resources/ShipIt with instructions to launch file:///Applications/XCAGI.app/",
+      "2026-09-22 02:19:48.338 ShipIt[1493:11242406] Installation completed successfully",
+      "2026-09-22 02:19:48.341 ShipIt[1493:11242675] New ShipIt pid: 1767",
+      "2026-09-22 02:19:49.913 ShipIt[1767:11242831] Detected this as a launch request",
+      "2026-09-22 02:19:49.982 ShipIt[1767:11242831] Successfully launched application at file:///Applications/XCAGI.app/",
+      "2026-09-22 02:19:49.982 ShipIt[1767:11242831] ShipIt quitting",
+      "2026-09-22 02:19:49.983 ShipIt[1493:11242675] ShipIt status 0",
+      "2026-09-22 02:19:49.983 ShipIt[1493:11242675] New ShipIt exited",
+      "2026-09-22 02:19:49.984 ShipIt[1493:11242675] ShipIt quitting"
+    ],
+    "markers": {
+      "installation_completed": true,
+      "launched_after_install": true,
+      "shipit_status_0": true,
+      "bundle_replaced_to_target": true,
+      "post_install_health": true
+    }
+  },
+  "installed_build_info": {
+    "schema_version": 1,
+    "gitSha": "8d50fe9d043391d5ba8857094a366a59a34ae43f",
+    "version": "1.0.0.5",
+    "releaseId": "xcagi-1.0.0.5-8d50fe9d043391d5ba8857094a366a59a34ae43f",
+    "builtAt": "2026-09-21T08:46:12.138Z"
+  },
+  "post_install_health": {
+    "status": "healthy",
+    "file": "ota-post-health.json"
+  },
+  "target_buildSha": "8d50fe9d043391d5ba8857094a366a59a34ae43f",
+  "verdict": "PASS"
+}

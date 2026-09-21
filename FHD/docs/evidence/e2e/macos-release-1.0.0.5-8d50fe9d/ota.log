@@ -1,0 +1,85 @@
+[18:17:57Z] === OTA rerun start target=8d50fe9d043391d5ba8857094a366a59a34ae43f ===
+[18:17:58Z] updater cache reused
+[18:17:58Z] --- 1) 上一版正式包校验 + 安装 ---
+
+[18:18:07Z] --- 2) 首启 + 升级前真实 UI 业务数据（简版模板） ---
+[18:18:17Z] backend up; bundle_sha=aec61e7e7224fe83c98b3a26522ee3f09f9e728d
+[18:18:17Z]   · pre-OTA step0
+    "verdict": "PASS",
+    "workspace_visible": true
+  }
+}
+-> /private/tmp/xcagi-custchain/evidence-ota/ui-step0.json
+[18:18:43Z]   · pre-OTA step1
+      }
+    ]
+  }
+}
+-> /private/tmp/xcagi-custchain/evidence-ota/ui-step1.json
+[18:18:58Z]   · pre-OTA step2
+      }
+    ]
+  }
+}
+-> /private/tmp/xcagi-custchain/evidence-ota/ui-step2.json
+[18:19:07Z]   · pre-OTA step2b
+      "UI客户-0921"
+    ]
+  }
+}
+-> /private/tmp/xcagi-custchain/evidence-ota/ui-step2b.json
+[18:19:16Z]   · pre-OTA step3
+      "text": " 生成结果文件名: 发货单_26-09-00001A_20260922_021927.xlsx 下载发货单 新建发货单 "
+    }
+  }
+}
+-> /private/tmp/xcagi-custchain/evidence-ota/ui-step3.json
+[18:19:30Z]   · pre-OTA step4
+      ]
+    }
+  }
+}
+-> /private/tmp/xcagi-custchain/evidence-ota/ui-step4.json
+{"xcagi.db.bytes": 1445888, "uploads.files": 1, "mods.files": 430, "models.files": 0, "backups.files": 1, "backups.latest": "xcagi-unknown-20260921181827.db"}
+screenshot: True -> /private/tmp/xcagi-custchain/evidence-ota/chain2-01-pre-ota.png
+[18:19:34Z] --- 3) 检查更新 / 下载 / 触发安装 ---
+[18:19:38Z] downloaded
+[18:19:38Z] shipit_lines_before=   15114
+[18:19:42Z] --- 4) 等待应用退出 + 新版本落地 ---
+[18:19:47Z] bundle_sha=aec61e7e7224fe83c98b3a26522ee3f09f9e728d health=000
+[18:19:52Z] bundle_sha=8d50fe9d043391d5ba8857094a366a59a34ae43f health=000
+[18:19:57Z] bundle_sha=8d50fe9d043391d5ba8857094a366a59a34ae43f health=200
+[18:19:57Z] --- 5) 等待更新观察期提交（观察期内禁止重启，否则触发后端自动回滚） ---
+[18:20:03Z] observation_committed=1 marker=gone
+[18:20:03Z] --- 5a) 干净重启到新版（挂 CDP）并采集安装结果 ---
+[18:20:13Z] backend up; bundle_sha=8d50fe9d043391d5ba8857094a366a59a34ae43f
+
+[18:20:13Z] --- 5b) 后端完整性：安装后 bundle 是否与更新包一致（codesign/spctl/关键源码） ---
+backend-integrity verdict: PASS {"codesign_valid": true, "spctl_accepted": true, "stapler_validated": true, "key_source_matches_update_zip": true, "key_source_has_fix": true} differing(informational)= 52
+[18:20:17Z] --- 6) 升级后连续性（API）+ 关键节点截图 ---
+{"xcagi.db.bytes": 1732608, "uploads.files": 1, "mods.files": 430, "models.files": 0, "backups.files": 2, "backups.latest": "xcagi-unknown-20260921181940.db"}
+{"ui_evidence": {"template_created_by_ui": "客户发货单模板-简版", "doc_from_ui": "发货单_26-09-00001A_20260922_021927.xlsx", "unit_from_ui": "UI客户-0921"}, "relogin": {"status": 200, "success": true, "me_status": 200, "username": "SUNBIRD", "has_shipment_edit": true}, "template_present": {"status": 200, "probe": "客户发货单模板-简版", "found": true}, "unit_present": {"status": 200, "probe": "UI客户-0921", "found": true}, "prior_document": {"doc_name": "发货单_26-09-00001A_20260922_021927.xlsx", "status": 200, "bytes": 5179, "xlsx_magic": true, "sha256": "51784d440bc36c6178cdb2ee0deb757038963dbbdbf42759e4f0fab1c491ad97"}}
+verdict: PASS -> /private/tmp/xcagi-custchain/evidence-ota/chain2-continuity-ui.json
+screenshot: True -> /private/tmp/xcagi-custchain/evidence-ota/chain2-02-post-ota.png
+[18:20:32Z] --- 7) 新版上继续用 UI 出单（客户标准送货单模板：合并单元格） ---
+[18:20:32Z]   · post-OTA step1
+      }
+    ]
+  }
+}
+-> /private/tmp/xcagi-custchain/evidence-ota/ui-post-ota-step1.json
+[18:20:48Z]   · post-OTA step3
+      "text": " 生成结果文件名: 发货单_26-09-00002A_20260922_022059.xlsx 下载发货单 新建发货单 "
+    }
+  }
+}
+-> /private/tmp/xcagi-custchain/evidence-ota/ui-post-ota-step3.json
+[18:21:02Z]   · post-OTA step4
+      ]
+    }
+  }
+}
+-> /private/tmp/xcagi-custchain/evidence-ota/ui-post-ota-step4.json
+screenshot: True -> /private/tmp/xcagi-custchain/evidence-ota/chain2-03-continue.png
+{"schema": "xcagi.gate.evidence.v1", "gate": "customer-chain-real-template", "at_utc": "2026-09-21T18:21:06Z", "steps": {"login": {"status": 200, "success": true}, "template": {"file": "real-customer-template-PHASE-C.xlsx", "bytes": 5291, "sha256": "496984217d0a28c345f278b52334ea0d653697b33cb523c0cda52b2812726fe9", "merged_cells": ["A1:J1", "A2:J2", "A3:C3", "A4:C4", "A15:D15", "B16:G16"]}, "template_upload": {"status": 200, "message": "解析并入库模版库成功", "template_id": "db:3"}, "customer": {"status": 200, "success": true, "already_exists": false}, "generate": {"status": 200, "success": true, "message": "发货单生成成功", "doc_name": "发货单_26-0900001A_20260922_022121.xlsx"}, "download": {"status": 200, "bytes": 5390, "xlsx_magic": true, "sha256": "65c80f2a05329a776e6331d00dd8c0f43ef3ae28f0010fd0130aeff04444aa1b"}}, "verdict": "PASS", "first_real_breakpoint": null, "finished_at_utc": "2026-09-21T18:21:21Z"}
+[18:21:21Z] === OTA rerun done ===

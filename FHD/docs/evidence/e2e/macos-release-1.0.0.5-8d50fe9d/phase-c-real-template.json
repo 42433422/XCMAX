@@ -1,0 +1,49 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "gate": "customer-chain-real-template",
+  "at_utc": "2026-09-21T18:21:06Z",
+  "steps": {
+    "login": {
+      "status": 200,
+      "success": true
+    },
+    "template": {
+      "file": "real-customer-template-PHASE-C.xlsx",
+      "bytes": 5291,
+      "sha256": "496984217d0a28c345f278b52334ea0d653697b33cb523c0cda52b2812726fe9",
+      "merged_cells": [
+        "A1:J1",
+        "A2:J2",
+        "A3:C3",
+        "A4:C4",
+        "A15:D15",
+        "B16:G16"
+      ]
+    },
+    "template_upload": {
+      "status": 200,
+      "message": "解析并入库模版库成功",
+      "template_id": "db:3"
+    },
+    "customer": {
+      "status": 200,
+      "success": true,
+      "already_exists": false
+    },
+    "generate": {
+      "status": 200,
+      "success": true,
+      "message": "发货单生成成功",
+      "doc_name": "发货单_26-0900001A_20260922_022121.xlsx"
+    },
+    "download": {
+      "status": 200,
+      "bytes": 5390,
+      "xlsx_magic": true,
+      "sha256": "65c80f2a05329a776e6331d00dd8c0f43ef3ae28f0010fd0130aeff04444aa1b"
+    }
+  },
+  "verdict": "PASS",
+  "first_real_breakpoint": null,
+  "finished_at_utc": "2026-09-21T18:21:21Z"
+}

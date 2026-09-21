@@ -1,0 +1,45 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "gate": "customer-chain-restart-recovery-gui",
+  "at_utc": "2026-09-21T10:58:00Z",
+  "data_root": "/private/tmp/xcagi-custchain/userdata-final-8d50fe9d",
+  "installed_build_info": {
+    "gitSha": "8d50fe9d043391d5ba8857094a366a59a34ae43f",
+    "version": "1.0.0.5",
+    "releaseId": "xcagi-1.0.0.5-8d50fe9d043391d5ba8857094a366a59a34ae43f"
+  },
+  "pre_restart_ui_business": {
+    "how": "全程真实 GUI（点击/键入/选文件为真实事件，见 ui-business/ 截图与 ui-step*.json）",
+    "template_created_via_ui": "客户送货单模板-UI（客户自带送货单 Excel，含 A1:J1 / A2:J2 / A3:C3 / A4:C4…A14:C14 / A15:D15 / B16:G16 合并单元格）",
+    "product_created_via_ui": "UI验收商品-0921（型号 UI-0921-A，单价 3.50）",
+    "customer_created_via_ui": "UI客户-0921",
+    "shipment_generated_via_ui": "发货单_26-09-00002A_20260921_185032.xlsx",
+    "downloaded_file": {
+      "path": "/Users/a4243342/Downloads/发货单_26-09-00002A_20260921_185032.xlsx",
+      "bytes": 6107,
+      "xlsx_magic": true,
+      "sha256": "302174e31ce99572bcb163777a934499188eea459f1aee8bba116f14f7e4bcec",
+      "sheet": "送货单",
+      "content_verified": [
+        "购货单位：UI客户-0921  订单编号：26-09-00002A",
+        "产品行：UI-0921-A / UI验收商品-0921 / 数量24 / 规格25 / 数量KG 600 / 单价3.5 / 金额2100",
+        "合并版式保留（A:C 型号列为合并区，非锚点留空）"
+      ]
+    }
+  },
+  "restart": {
+    "action": "quit → LaunchServices(open -a) 重新启动，同一数据根",
+    "relogin_status": 200,
+    "username": "SUNBIRD",
+    "template_present": {"endpoint": "GET /api/templates", "status": 200, "probe": "客户送货单模板-UI", "found": true},
+    "customer_present": {"endpoint": "GET /api/customers", "status": 200, "probe": "UI客户-0921", "found": true},
+    "prior_document_download": {
+      "endpoint": "GET /api/shipment/download/发货单_26-09-00002A_20260921_185032.xlsx",
+      "status": 200,
+      "bytes": 6107,
+      "xlsx_magic": true
+    }
+  },
+  "verdict": "PASS",
+  "note": "GUI 出单的成果（客户模板、产品、购买单位、发货单）在退出并重新启动后全部保留且可再次下载，字节数与重启前一致。"
+}

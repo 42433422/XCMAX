@@ -1,0 +1,106 @@
+{
+  "step": "product_create_via_ui",
+  "actions": [
+    {
+      "at": "/products",
+      "state": {
+        "url": "http://127.0.0.1:17500/products",
+        "title": "业务对象 - XCAGI",
+        "h1": "饰品包装品管理",
+        "dialogs": []
+      }
+    },
+    {
+      "shot": "/private/tmp/xcagi-custchain/evidence-ota/ui-07-products-entry.png",
+      "bytes": 359684
+    },
+    {
+      "click": "添加产品",
+      "label": "添加产品",
+      "rect": {
+        "x": 1370.59375,
+        "y": 93.59375,
+        "w": 98.8125,
+        "h": 34,
+        "text": "+ 添加产品"
+      }
+    },
+    {
+      "modal": "添加饰品包装品"
+    },
+    {
+      "modal_inputs": [
+        {
+          "idx": 0,
+          "type": "text",
+          "ph": "如：A001"
+        },
+        {
+          "idx": 1,
+          "type": "text",
+          "ph": "产品名称"
+        },
+        {
+          "idx": 2,
+          "type": "text",
+          "ph": "规格描述"
+        },
+        {
+          "idx": 3,
+          "type": "number",
+          "ph": "0.00"
+        },
+        {
+          "idx": 4,
+          "type": "number",
+          "ph": "0"
+        }
+      ]
+    },
+    {
+      "shot": "/private/tmp/xcagi-custchain/evidence-ota/ui-08-product-form.png",
+      "bytes": 270530
+    },
+    {
+      "click": "保存",
+      "label": "保存",
+      "rect": {
+        "x": 918.6640625,
+        "y": 662.875,
+        "w": 60.671875,
+        "h": 34,
+        "text": "保存"
+      }
+    },
+    {
+      "shot": "/private/tmp/xcagi-custchain/evidence-ota/ui-09-product-saved.png",
+      "bytes": 349105
+    }
+  ],
+  "verdict": "PASS",
+  "field_values": {
+    "input0": "UI-0921-A",
+    "input1": "UI验收商品-0921",
+    "input2": "500ml",
+    "input3": "3.5"
+  },
+  "products_after": {
+    "total": 1,
+    "rows": [
+      {
+        "id": 1,
+        "name": "UI验收商品-0921",
+        "model": "UI-0921-A",
+        "price": "3.50"
+      }
+    ]
+  },
+  "created": [
+    {
+      "id": 1,
+      "name": "UI验收商品-0921",
+      "model": "UI-0921-A",
+      "price": "3.50"
+    }
+  ]
+}

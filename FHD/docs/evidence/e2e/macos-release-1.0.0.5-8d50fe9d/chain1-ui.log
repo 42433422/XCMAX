@@ -1,354 +1,110 @@
-[10:16:49Z] === Chain2 start (OTA) target=8d50fe9d043391d5ba8857094a366a59a34ae43f ===
-[10:16:49Z] --- 6) 等待 update-downloaded ---
-[10:16:51Z] --- 1) 安装上一版正式包 ---
+[10:40:46Z] === Chain1(UI) start; target=8d50fe9d043391d5ba8857094a366a59a34ae43f ===
+[10:40:47Z] --- 1) 安装包校验（官网下载产物） ---
+dmg_path=/private/tmp/xcagi-custchain/dmg3/XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg dmg_sha256=55a873779aa316fe1e2393ff043978187911b3e052b9762deaefdd6d4817e32f dmg_size=301669921
+[10:40:47Z] --- 2) 浏览器下载隔离属性 + Gatekeeper ---
+dmg_quarantine=0083;6ab109af;Safari;
+/private/tmp/xcagi-custchain/dmg3/XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg: accepted
+source=Notarized Developer ID
+origin=Developer ID Application: jialong Li (G26WSH472M)
+[10:40:49Z] --- 3) 挂载 + 三方核验 ---
+--- spctl ---
+/private/tmp/xcagi-custchain/mnt/fresh/XCAGI.app: accepted
+source=Notarized Developer ID
+origin=Developer ID Application: jialong Li (G26WSH472M)
+--- codesign ---
+codesign_ok=1
+--- stapler ---
+Processing: /private/tmp/xcagi-custchain/mnt/fresh/XCAGI.app
+The validate action worked!
+--- build-info ---
+{"schema_version":1,"gitSha":"8d50fe9d043391d5ba8857094a366a59a34ae43f","version":"1.0.0.5","releaseId":"xcagi-1.0.0.5-8d50fe9d043391d5ba8857094a366a59a34ae43f","builtAt":"2026-09-21T08:46:12.138Z"}
 
-[10:16:53Z] --- 2) 首启 + 建立升级前业务数据（UI 出单，简版模板） ---
-[10:17:05Z] backend up; bundle_sha=aec61e7e7224fe83c98b3a26522ee3f09f9e728d
+[10:40:53Z] --- 4) 安装到 /Applications ---
+installed_build_info:
+{"schema_version":1,"gitSha":"8d50fe9d043391d5ba8857094a366a59a34ae43f","version":"1.0.0.5","releaseId":"xcagi-1.0.0.5-8d50fe9d043391d5ba8857094a366a59a34ae43f","builtAt":"2026-09-21T08:46:12.138Z"}
+
+[10:40:55Z] --- 5) 首启 ---
+[10:41:15Z] backend up; bundle_sha=8d50fe9d043391d5ba8857094a366a59a34ae43f
+screenshot: True -> /private/tmp/xcagi-custchain/evidence-8d50fe9d-ui/chain1-01-firstlaunch.png
+{"xcagi.db.bytes": 1445888, "uploads.files": 0, "mods.files": 426, "models.files": 0, "backups.files": 0, "backups.latest": ""}
+[10:41:15Z] --- 6) UI 登录 + 权益 + Mod + 行业准备（写操作全部走 UI） ---
 {
   "step": "ui_login",
-  "verdict": "PASS",
-  "key": {
-    "step": "ui_login",
-    "verdict": "PASS",
-    "workspace_visible": true
-  }
-}
--> /private/tmp/xcagi-custchain/evidence-8d50fe9d/ui-step0.json
-{
-  "step": "template_create_via_ui",
-  "verdict": "PASS",
-  "key": {
-    "step": "template_create_via_ui",
-    "verdict": "PASS",
-    "empty_state": {
-      "text": "选择发货单模板发货单模板-- 请选择模板 -- 刷新模板列表",
-      "option_count": 1,
-      "has_hint": false
-    },
-    "dialog_after_save": {
-      "title": "提示",
-      "message": "模板保存成功！",
-      "buttons": [
-        "确定"
-      ]
-    },
-    "templates_after": [
-      {
-        "id": "db:1",
-        "name": "验收模板-PRE-OTA",
-        "category": "excel",
-        "scope": null,
-        "source": "db"
-      },
-      {
-        "id": "db:2",
-        "name": "客户发货单模板-简版",
-        "category": "excel",
-        "scope": "orders",
-        "source": "db"
-      },
-      {
-        "id": "seed:customer-ledger",
-        "name": "客户资料初始化表",
-        "category": "excel",
-        "source": "builtin_seed"
-      },
-      {
-        "id": "seed:product-ledger",
-        "name": "产品资料初始化表",
-        "category": "excel",
-        "source": "builtin_seed"
-      },
-      {
-        "id": "seed:sales-order",
-        "name": "销售订单标准表",
-        "category": "excel",
-        "source": "builtin_seed"
-      },
-      {
-        "id": "seed:shipment",
-        "name": "出货记录初始化表",
-        "category": "excel",
-        "source": "builtin_seed"
-      },
-      {
-        "id": "seed:inventory",
-        "name": "库存盘点表",
-        "category": "excel",
-        "source": "builtin_seed"
-      },
-      {
-        "id": "seed:purchase-request",
-        "name": "采购申请表",
-        "category": "excel",
-        "source": "builtin_seed"
-      },
-      {
-        "id": "seed:quotation",
-        "name": "客户报价单",
-        "category": "excel",
-        "source": "builtin_seed"
-      },
-      {
-        "id": "seed:reconciliation",
-        "name": "客户对账单",
-        "category": "excel",
-        "source": "builtin_seed"
-      },
-      {
-        "id": "seed:sales-contract",
-        "name": "销售合同（通用）",
-        "category": "word",
-        "source": "builtin_seed"
-      },
-      {
-        "id": "seed:work-report",
-        "name": "工作报告（通用）",
-        "category": "word",
-        "source": "builtin_seed"
-      }
-    ],
-    "created": [
-      {
-        "id": "db:2",
-        "name": "客户发货单模板-简版",
-        "category": "excel",
-        "scope": "orders",
-        "source": "db"
-      }
-    ]
-  }
-}
--> /private/tmp/xcagi-custchain/evidence-8d50fe9d/ui-step1.json
-{
-  "step": "product_create_via_ui",
-  "verdict": "PASS",
-  "key": {
-    "step": "product_create_via_ui",
-    "verdict": "PASS",
-    "field_values": {
-      "input0": "UI-0921-A",
-      "input1": "UI验收商品-0921",
-      "input2": "500ml",
-      "input3": "3.5"
-    },
-    "products_after": {
-      "total": 1,
-      "rows": [
-        {
-          "id": 1,
-          "name": "UI验收商品-0921",
-          "model": "UI-0921-A",
-          "price": "3.50"
-        }
-      ]
-    },
-    "created": [
-      {
-        "id": 1,
-        "name": "UI验收商品-0921",
-        "model": "UI-0921-A",
-        "price": "3.50"
-      }
-    ]
-  }
-}
--> /private/tmp/xcagi-custchain/evidence-8d50fe9d/ui-step2.json
-{
-  "step": "shipment_generate_via_ui",
   "verdict": "BLOCKED",
   "key": {
-    "step": "shipment_generate_via_ui",
+    "step": "ui_login",
     "verdict": "BLOCKED",
-    "dialog": {
-      "title": "提示",
-      "message": "请选择购买单位",
-      "buttons": [
-        "确定"
-      ]
-    },
-    "result_panel": null
+    "workspace_visible": false
   }
 }
--> /private/tmp/xcagi-custchain/evidence-8d50fe9d/ui-step3.json
+-> /private/tmp/xcagi-custchain/evidence-8d50fe9d-ui/ui-step0.json
 Traceback (most recent call last):
-  File "/private/tmp/xcagi-custchain/ui_drive.py", line 605, in <module>
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 640, in <module>
     res, actions = fn()
                    ^^^^
-  File "/private/tmp/xcagi-custchain/ui_drive.py", line 538, in step4_download
-    R["actions"].append({"click": "下载发货单", **click_text_wait("下载发货单", "button", wait=3.0)})
-                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 307, in step1_template
+    R["actions"].append({"click": "模板编辑", **click_text_wait("模板编辑", "button", wait=2.5)})
+                                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "/private/tmp/xcagi-custchain/ui_drive.py", line 100, in click_text_wait
     return click(finder, text, wait)
            ^^^^^^^^^^^^^^^^^^^^^^^^^
   File "/private/tmp/xcagi-custchain/ui_drive.py", line 78, in click
     raise RuntimeError("找不到可点击元素: %s" % label)
-RuntimeError: 找不到可点击元素: 下载发货单
-{"xcagi.db.bytes": 1695744, "uploads.files": 2, "mods.files": 430, "models.files": 0, "backups.files": 1, "backups.latest": "xcagi-unknown-20260921100834.db"}
-screenshot: True -> /private/tmp/xcagi-custchain/evidence-8d50fe9d/chain2-01-pre-ota.png
-[10:19:13Z] --- 3) 检查更新 / 下载 / 安装 ---
-[10:21:20Z] downloaded
-[10:21:22Z] downloaded
-[10:21:22Z] --- 7) 触发安装（ShipIt 替换并重启） ---
-[10:21:24Z] --- 8) 等待应用退出 + 新版本就绪 ---
-[10:21:24Z] --- 4) 等待新版本就绪 ---
-[10:21:34Z] bundle_sha=8d50fe9d043391d5ba8857094a366a59a34ae43f health=000
-[10:21:34Z] bundle_sha=8d50fe9d043391d5ba8857094a366a59a34ae43f health=000
-[10:21:44Z] bundle_sha=8d50fe9d043391d5ba8857094a366a59a34ae43f health=200
-[10:21:44Z] new bundle + backend up
-[10:21:44Z] --- 9) OTA 后数据摘要 + 语义连续性 ---
-{"xcagi.db.bytes": 1736704, "uploads.files": 2, "mods.files": 430, "models.files": 0, "backups.files": 2, "backups.latest": "xcagi-unknown-20260921102123.db"}
-[10:21:44Z] bundle_sha=8d50fe9d043391d5ba8857094a366a59a34ae43f health=200
-[10:21:44Z] new bundle + backend up
-[10:21:44Z] --- 5) 升级后数据摘要 + 语义连续性（含升级前 UI 产出的模板/单据） ---
-{"xcagi.db.bytes": 1736704, "uploads.files": 2, "mods.files": 430, "models.files": 0, "backups.files": 2, "backups.latest": "xcagi-unknown-20260921102123.db"}
-{"relogin": {"status": 200, "success": true, "me_status": 200, "username": "SUNBIRD"}, "template_present": {"status": 200, "probe": "验收模板-PRE-OTA", "found": true}, "customer_present": {"status": 200, "probe": "验收客户-PRE-OTA", "found": true}, "prior_document": {"doc_name": "发货单_26-0900001A_20260921_180847.xlsx", "status": 200, "bytes": 5193, "xlsx_magic": true, "sha256": "7c2362ddf3ae192f36888b932847c6818725fcb5906290573eb4b36e587be464"}}
-verdict: PASS -> /private/tmp/xcagi-custchain/evidence-8d50fe9d/chain2-continuity.json
-{"ui_evidence": {"template_created_by_ui": "", "doc_from_ui": "", "unit_from_ui": ""}, "relogin": {"status": 200, "success": true, "me_status": 200, "username": "SUNBIRD", "has_shipment_edit": true}, "template_present": {"status": 200, "probe": "", "found": false}, "unit_present": {"status": 200, "probe": "", "found": false}, "prior_document": {"doc_name": ""}}
-verdict: BLOCKED -> /private/tmp/xcagi-custchain/evidence-8d50fe9d/chain2-continuity.json
+RuntimeError: 找不到可点击元素: 模板编辑
 Traceback (most recent call last):
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 1348, in do_open
-    h.request(req.get_method(), req.selector, req.data, headers,
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 1323, in request
-    self._send_request(method, url, body, headers, encode_chunked)
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 1369, in _send_request
-    self.endheaders(body, encode_chunked=encode_chunked)
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 1318, in endheaders
-    self._send_output(message_body, encode_chunked=encode_chunked)
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 1078, in _send_output
-    self.send(msg)
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 1016, in send
-    self.connect()
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 982, in connect
-    self.sock = self._create_connection(
-                ^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/socket.py", line 863, in create_connection
-    raise exceptions[0]
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/socket.py", line 848, in create_connection
-    sock.connect(sa)
-ConnectionRefusedError: [Errno 61] Connection refused
-
-During handling of the above exception, another exception occurred:
-
-Traceback (most recent call last):
-  File "/private/tmp/xcagi-custchain/chain.py", line 469, in <module>
-    main()
-  File "/private/tmp/xcagi-custchain/chain.py", line 440, in main
-    print("screenshot:", cdp.screenshot(sys.argv[2]), "->", sys.argv[2])
-                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/private/tmp/xcagi-custchain/cdp.py", line 57, in screenshot
-    msg = send("Page.captureScreenshot", {"format": "png"})
-          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/private/tmp/xcagi-custchain/cdp.py", line 45, in send
-    t = page_target()
-        ^^^^^^^^^^^^^
-  File "/private/tmp/xcagi-custchain/cdp.py", line 13, in page_target
-    with _OPENER.open(CDP_HTTP + "/json", timeout=10) as r:
-         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 519, in open
-    response = self._open(req, data)
-               ^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 536, in _open
-    result = self._call_chain(self.handle_open, protocol, protocol +
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 496, in _call_chain
-    result = func(*args)
-             ^^^^^^^^^^^
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 1377, in http_open
-    return self.do_open(http.client.HTTPConnection, req)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 1351, in do_open
-    raise URLError(err)
-urllib.error.URLError: <urlopen error [Errno 61] Connection refused>
-[10:22:02Z] --- 10) 新版本上继续出单 ---
-Traceback (most recent call last):
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 1348, in do_open
-    h.request(req.get_method(), req.selector, req.data, headers,
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 1323, in request
-    self._send_request(method, url, body, headers, encode_chunked)
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 1369, in _send_request
-    self.endheaders(body, encode_chunked=encode_chunked)
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 1318, in endheaders
-    self._send_output(message_body, encode_chunked=encode_chunked)
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 1078, in _send_output
-    self.send(msg)
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 1016, in send
-    self.connect()
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 982, in connect
-    self.sock = self._create_connection(
-                ^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/socket.py", line 863, in create_connection
-    raise exceptions[0]
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/socket.py", line 848, in create_connection
-    sock.connect(sa)
-ConnectionRefusedError: [Errno 61] Connection refused
-
-During handling of the above exception, another exception occurred:
-
-Traceback (most recent call last):
-  File "/private/tmp/xcagi-custchain/chain.py", line 469, in <module>
-    main()
-  File "/private/tmp/xcagi-custchain/chain.py", line 440, in main
-    print("screenshot:", cdp.screenshot(sys.argv[2]), "->", sys.argv[2])
-                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/private/tmp/xcagi-custchain/cdp.py", line 57, in screenshot
-    msg = send("Page.captureScreenshot", {"format": "png"})
-          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/private/tmp/xcagi-custchain/cdp.py", line 45, in send
-    t = page_target()
-        ^^^^^^^^^^^^^
-  File "/private/tmp/xcagi-custchain/cdp.py", line 13, in page_target
-    with _OPENER.open(CDP_HTTP + "/json", timeout=10) as r:
-         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 519, in open
-    response = self._open(req, data)
-               ^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 536, in _open
-    result = self._call_chain(self.handle_open, protocol, protocol +
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 496, in _call_chain
-    result = func(*args)
-             ^^^^^^^^^^^
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 1377, in http_open
-    return self.do_open(http.client.HTTPConnection, req)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 1351, in do_open
-    raise URLError(err)
-urllib.error.URLError: <urlopen error [Errno 61] Connection refused>
-[10:22:02Z] --- 6) 新版本上继续用 UI 出单（换用客户标准送货单模板：合并单元格；旧包必然 500） ---
-Traceback (most recent call last):
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 1348, in do_open
-    h.request(req.get_method(), req.selector, req.data, headers,
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 1323, in request
-    self._send_request(method, url, body, headers, encode_chunked)
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 1369, in _send_request
-    self.endheaders(body, encode_chunked=encode_chunked)
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 1318, in endheaders
-    self._send_output(message_body, encode_chunked=encode_chunked)
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 1078, in _send_output
-    self.send(msg)
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 1016, in send
-    self.connect()
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 982, in connect
-    self.sock = self._create_connection(
-                ^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/socket.py", line 863, in create_connection
-    raise exceptions[0]
-  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/socket.py", line 848, in create_connection
-    sock.connect(sa)
-ConnectionRefusedError: [Errno 61] Connection refused
-
-During handling of the above exception, another exception occurred:
-
-Traceback (most recent call last):
-  File "/private/tmp/xcagi-custchain/ui_drive.py", line 605, in <module>
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 640, in <module>
     res, actions = fn()
                    ^^^^
-  File "/private/tmp/xcagi-custchain/ui_drive.py", line 294, in step1_template
-    goto("/orders/create")
-  File "/private/tmp/xcagi-custchain/ui_drive.py", line 220, in goto
-    cdp.send("Page.navigate", {"url": APP + path})
-  File "/private/tmp/xcagi-custchain/cdp.py", line 45, in send
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 362, in step2_product
+    R["actions"].append({"click": "添加产品", **click_text_wait("添加产品", "button", wait=1.0)})
+                                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 100, in click_text_wait
+    return click(finder, text, wait)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 78, in click
+    raise RuntimeError("找不到可点击元素: %s" % label)
+RuntimeError: 找不到可点击元素: 添加产品
+Traceback (most recent call last):
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 1348, in do_open
+    h.request(req.get_method(), req.selector, req.data, headers,
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 1323, in request
+    self._send_request(method, url, body, headers, encode_chunked)
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 1369, in _send_request
+    self.endheaders(body, encode_chunked=encode_chunked)
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 1318, in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 1078, in _send_output
+    self.send(msg)
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 1016, in send
+    self.connect()
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 982, in connect
+    self.sock = self._create_connection(
+                ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/socket.py", line 863, in create_connection
+    raise exceptions[0]
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/socket.py", line 848, in create_connection
+    sock.connect(sa)
+ConnectionRefusedError: [Errno 61] Connection refused
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 640, in <module>
+    res, actions = fn()
+                   ^^^^
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 404, in step2b_customer
+    R["actions"].append({"at": "/customers", "state": state()})
+                                                      ^^^^^^^
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 225, in state
+    return js("""(() => ({url: location.href, title: document.title,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 31, in js
+    return cdp.eval_value(expr, timeout=timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/xcagi-custchain/cdp.py", line 37, in eval_value
+    msg = evaluate(expr, timeout=timeout)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/xcagi-custchain/cdp.py", line 22, in evaluate
     t = page_target()
         ^^^^^^^^^^^^^
   File "/private/tmp/xcagi-custchain/cdp.py", line 13, in page_target
@@ -394,7 +150,7 @@ ConnectionRefusedError: [Errno 61] Connection refused
 During handling of the above exception, another exception occurred:
 
 Traceback (most recent call last):
-  File "/private/tmp/xcagi-custchain/ui_drive.py", line 605, in <module>
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 640, in <module>
     res, actions = fn()
                    ^^^^
   File "/private/tmp/xcagi-custchain/ui_drive.py", line 446, in step3_generate
@@ -447,10 +203,10 @@ ConnectionRefusedError: [Errno 61] Connection refused
 During handling of the above exception, another exception occurred:
 
 Traceback (most recent call last):
-  File "/private/tmp/xcagi-custchain/ui_drive.py", line 605, in <module>
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 640, in <module>
     res, actions = fn()
                    ^^^^
-  File "/private/tmp/xcagi-custchain/ui_drive.py", line 529, in step4_download
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 545, in step4_download
     panel = js("""(() => { const c = Array.from(document.querySelectorAll('#view-create-order .card'))
             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "/private/tmp/xcagi-custchain/ui_drive.py", line 31, in js
@@ -505,14 +261,13 @@ ConnectionRefusedError: [Errno 61] Connection refused
 During handling of the above exception, another exception occurred:
 
 Traceback (most recent call last):
-  File "/private/tmp/xcagi-custchain/chain.py", line 469, in <module>
-    main()
-  File "/private/tmp/xcagi-custchain/chain.py", line 440, in main
-    print("screenshot:", cdp.screenshot(sys.argv[2]), "->", sys.argv[2])
-                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/private/tmp/xcagi-custchain/cdp.py", line 57, in screenshot
-    msg = send("Page.captureScreenshot", {"format": "png"})
-          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 640, in <module>
+    res, actions = fn()
+                   ^^^^
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 602, in step5_records
+    goto("/shipment-records")
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 220, in goto
+    cdp.send("Page.navigate", {"url": APP + path})
   File "/private/tmp/xcagi-custchain/cdp.py", line 45, in send
     t = page_target()
         ^^^^^^^^^^^^^
@@ -534,11 +289,49 @@ Traceback (most recent call last):
   File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 1351, in do_open
     raise URLError(err)
 urllib.error.URLError: <urlopen error [Errno 61] Connection refused>
-[10:22:02Z] --- 7) 安装身份 ---
-
-[10:22:02Z] === Chain2 done ===
-{"health": "PASS", "login_binding": "PASS", "entitlement_mods": "PASS", "entry_gate": "PASS", "business": "PASS"}
-verdict: PASS -> /private/tmp/xcagi-custchain/evidence-8d50fe9d/phase-c-business.json
+[10:43:06Z] --- 7) 重启恢复 ---
+[10:43:20Z] backend up; bundle_sha=8d50fe9d043391d5ba8857094a366a59a34ae43f
+Traceback (most recent call last):
+  File "/private/tmp/xcagi-custchain/chain.py", line 469, in <module>
+    main()
+  File "/private/tmp/xcagi-custchain/chain.py", line 434, in main
+    continuity_ui(sys.argv[2], sys.argv[3])
+  File "/private/tmp/xcagi-custchain/chain.py", line 393, in continuity_ui
+    a, ls, lb = login()
+                ^^^^^^^
+  File "/private/tmp/xcagi-custchain/chain.py", line 99, in login
+    s, b = a.j("POST", "/api/auth/login", {"username": USER, "password": PASSWORD},
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/xcagi-custchain/chain.py", line 55, in j
+    s, b = self.raw(method, path, data, headers, timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/xcagi-custchain/chain.py", line 49, in raw
+    with self.op.open(req, timeout=timeout) as r:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 519, in open
+    response = self._open(req, data)
+               ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 536, in _open
+    result = self._call_chain(self.handle_open, protocol, protocol +
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 496, in _call_chain
+    result = func(*args)
+             ^^^^^^^^^^^
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 1377, in http_open
+    return self.do_open(http.client.HTTPConnection, req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 1352, in do_open
+    r = h.getresponse()
+        ^^^^^^^^^^^^^^^
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 1415, in getresponse
+    response.begin()
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 330, in begin
+    version, status, reason = self._read_status()
+                              ^^^^^^^^^^^^^^^^^^^
+  File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/http/client.py", line 299, in _read_status
+    raise RemoteDisconnected("Remote end closed connection without"
+http.client.RemoteDisconnected: Remote end closed connection without response
+{"xcagi.db.bytes": 1667072, "uploads.files": 0, "mods.files": 426, "models.files": 0, "backups.files": 1, "backups.latest": "xcagi-unknown-20260921104125.db"}
 Traceback (most recent call last):
   File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 1348, in do_open
     h.request(req.get_method(), req.selector, req.data, headers,
@@ -593,8 +386,6 @@ Traceback (most recent call last):
   File "/Users/a4243342/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/urllib/request.py", line 1351, in do_open
     raise URLError(err)
 urllib.error.URLError: <urlopen error [Errno 61] Connection refused>
-[10:22:23Z] --- 10b) 新版本上真实客户模板出单（合并单元格） ---
-{"schema": "xcagi.gate.evidence.v1", "gate": "customer-chain-real-template", "at_utc": "2026-09-21T10:22:23Z", "steps": {"login": {"status": 200, "success": true}, "template": {"file": "real-customer-template-PHASE-C.xlsx", "bytes": 5291, "sha256": "80146014f8d10f13c3712ea2ab520965541db4f1e437c888b1a46fad379dfc0b", "merged_cells": ["A1:J1", "A2:J2", "A3:C3", "A4:C4", "A15:D15", "B16:G16"]}, "template_upload": {"status": 200, "message": "解析并入库模版库成功", "template_id": "db:4"}, "customer": {"status": 400, "success": false, "already_exists": true}, "generate": {"status": 200, "success": true, "message": "发货单生成成功", "doc_name": "发货单_26-0900001A_20260921_182238.xlsx"}, "download": {"status": 200, "bytes": 5677, "xlsx_magic": true, "sha256": "7b55a32f29b39d20c1f4e52409d77ce3af5a7b6295833260b9865cc819e922b5"}}, "verdict": "PASS", "first_real_breakpoint": null, "finished_at_utc": "2026-09-21T10:22:38Z"}
-[10:22:38Z] --- 11) 安装身份 ---
+[10:43:27Z] --- 8) 安装身份 ---
 
-[10:22:38Z] === Chain2 done ===
+[10:43:27Z] === Chain1(UI) done ===
