@@ -60,18 +60,21 @@ SRC="$MP/XCAGI.app"; test -d "$SRC" || { log "FATAL: DMG 内无 XCAGI.app"; exit
 $PY - "$SRC" "$EV/ota-prior-install.json" "$PRIOR_SHA" "$PRIOR_SIZE" <<'PYEOF'
 import json, subprocess, sys, time
 src, out, sha, size = sys.argv[1:5]
-def run(c):
-    p = subprocess.run(c, shell=True, capture_output=True, text=True)
-    return (p.stdout + p.stderr).strip()
+def run(cmd):
+    p = subprocess.run(cmd, capture_output=True, text=True)
+    return p.returncode, (p.stdout + p.stderr).strip()
+rc_sp, out_sp = run(["spctl", "-a", "-vvv", "-t", "install", src])
+rc_cs, out_cs = run(["codesign", "--verify", "--deep", "--strict", src])
+rc_st, out_st = run(["xcrun", "stapler", "validate", src])
 d = {"schema": "xcagi.gate.evidence.v1", "gate": "ota-prior-install",
      "at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
      "dmg_sha256": sha, "dmg_size": int(size),
-     "spctl": run('spctl -a -vvv -t install "%s" 2>&1' % src),
-     "spctl_ok": run('spctl -a -vvv -t install "%s" >/dev/null 2>&1; echo $?' % src) == "0",
-     "codesign_ok": run('codesign --verify --deep --strict "%s" && echo ok' % src).endswith("ok"),
-     "stapler": run('xcrun stapler validate "%s" 2>&1 | tail -1' % src),
+     "spctl": out_sp,
+     "spctl_ok": rc_sp == 0,
+     "codesign_ok": rc_cs == 0,
+     "stapler": out_st.splitlines()[-1] if out_st else "",
      "build_info": json.load(open(src + "/Contents/Resources/build-info.json"))}
-d["verdict"] = "PASS" if d["spctl_ok"] and d["codesign_ok"] and "worked" in d["stapler"] else "BLOCKED"
+d["verdict"] = "PASS" if rc_sp == 0 and rc_cs == 0 and "worked" in out_st else "BLOCKED"
 json.dump(d, open(out, "w"), ensure_ascii=False, indent=2)
 print("prior-install verdict:", d["verdict"], "build:", d["build_info"]["gitSha"])
 PYEOF

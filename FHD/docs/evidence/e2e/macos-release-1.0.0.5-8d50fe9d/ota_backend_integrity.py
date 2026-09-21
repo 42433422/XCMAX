@@ -35,7 +35,8 @@ def md5(p):
 
 
 def run(cmd):
-    p = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    """cmd: 参数列表（不使用 shell，避免 shell 注入面）。返回 (returncode, 合并输出)。"""
+    p = subprocess.run(cmd, capture_output=True, text=True)
     return p.returncode, (p.stdout + p.stderr).strip()
 
 
@@ -81,9 +82,9 @@ zip_fix = "_write_cell" in open(key_zip, encoding="utf-8", errors="ignore").read
 inst_md5 = md5(key_inst) if os.path.isfile(key_inst) else None
 zip_md5 = md5(key_zip) if os.path.isfile(key_zip) else None
 
-cs_rc, cs_out = run('codesign --verify --deep --strict "%s" 2>&1' % APP)
-sp_rc, sp_out = run('spctl -a -vvv -t install "%s" 2>&1' % APP)
-st_rc, st_out = run('xcrun stapler validate "%s" 2>&1' % APP)
+cs_rc, cs_out = run(["codesign", "--verify", "--deep", "--strict", APP])
+sp_rc, sp_out = run(["spctl", "-a", "-vvv", "-t", "install", APP])
+st_rc, st_out = run(["xcrun", "stapler", "validate", APP])
 
 checks = {
     "codesign_valid": cs_rc == 0,
