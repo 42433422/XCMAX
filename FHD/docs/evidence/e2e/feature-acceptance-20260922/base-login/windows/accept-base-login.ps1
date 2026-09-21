@@ -349,12 +349,6 @@ function Get-Identity {
 # ---------------- main ----------------
 
 Write-Log '=== base-login Windows acceptance (this round) ==='
-if (-not $Password) {
-    Write-Host 'FATAL: no credential supplied.'
-    Write-Host 'Set XCAGI_TEST_PASS (and optionally XCAGI_TEST_USER) or pass -Password, then re-run.'
-    Write-Host 'This file intentionally does not contain the password (public repo).'
-    exit 2
-}
 Write-Log ('account=' + $Account + ' (password supplied: ' + [bool]$Password + ')')
 $appDir = Resolve-AppDir
 Write-Log ('app_dir=' + $appDir)
@@ -392,6 +386,14 @@ if ($SelfTest) {
     Write-Host ('api /api/auth/me : status=' + $probe.status + ' valid=' + (Get-BodyField $probe.body 'valid'))
     Write-Host '--- SELF TEST DONE (no case ran, nothing mutated except identity.json) ---'
     exit 0
+}
+
+# The acceptance cases need a real enterprise credential. -SelfTest above stays credential-free.
+if (-not $Password) {
+    Write-Host 'FATAL: no credential supplied.'
+    Write-Host 'Set XCAGI_TEST_PASS (and optionally XCAGI_TEST_USER) or pass -Password, then re-run.'
+    Write-Host 'This file intentionally does not contain the password (public repo).'
+    exit 2
 }
 
 Start-RoundVideo
