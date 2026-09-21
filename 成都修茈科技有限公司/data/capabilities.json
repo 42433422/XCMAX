@@ -2,7 +2,7 @@
   "_comment": "此文件由 成都修茈科技有限公司/scripts/build_capability_center.py 自动生成，请勿手改（DO NOT EDIT）。",
   "schema_version": 1,
   "catalog_version": "2026-09-16",
-  "generated_at": "2026-09-21 06:20 UTC",
+  "generated_at": "2026-09-21 06:36 UTC",
   "principle": "No Evidence, No Claim：所有状态由构建脚本按仓库证据校验，证据缺失自动降级。",
   "stats": {
     "total": 158,
