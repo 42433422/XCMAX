@@ -2,35 +2,39 @@
   "schema": "xcagi.gate.evidence.v1",
   "gate": "customer-chain-continuity-ui",
   "session_tag": "POST-OTA",
-  "data_root": "/private/tmp/xcagi-custchain/userdata-upgrade",
-  "ui_evidence_dir": "/private/tmp/xcagi-custchain/evidence-8d50fe9d",
-  "at_utc": "2026-09-21T10:26:41Z",
+  "data_root": "/private/tmp/xcagi-custchain/userdata-ota",
+  "ui_evidence_dir": "/private/tmp/xcagi-custchain/evidence-ota",
+  "at_utc": "2026-09-21T18:20:17Z",
   "checks": {
     "ui_evidence": {
       "template_created_by_ui": "客户发货单模板-简版",
-      "doc_from_ui": "",
-      "unit_from_ui": "db:2"
+      "doc_from_ui": "发货单_26-09-00001A_20260922_021927.xlsx",
+      "unit_from_ui": "UI客户-0921"
     },
     "relogin": {
-      "status": 405,
-      "success": false,
-      "me_status": 404,
-      "username": null,
-      "has_shipment_edit": false
+      "status": 200,
+      "success": true,
+      "me_status": 200,
+      "username": "SUNBIRD",
+      "has_shipment_edit": true
     },
     "template_present": {
-      "status": 404,
+      "status": 200,
       "probe": "客户发货单模板-简版",
-      "found": false
+      "found": true
     },
     "unit_present": {
-      "status": 404,
-      "probe": "db:2",
-      "found": false
+      "status": 200,
+      "probe": "UI客户-0921",
+      "found": true
     },
     "prior_document": {
-      "doc_name": ""
+      "doc_name": "发货单_26-09-00001A_20260922_021927.xlsx",
+      "status": 200,
+      "bytes": 5179,
+      "xlsx_magic": true,
+      "sha256": "51784d440bc36c6178cdb2ee0deb757038963dbbdbf42759e4f0fab1c491ad97"
     }
   },
-  "verdict": "BLOCKED"
+  "verdict": "PASS"
 }

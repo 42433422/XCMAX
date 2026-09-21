@@ -15,21 +15,21 @@
     {
       "select_template": {
         "ok": true,
-        "value": "db:2",
+        "value": "db:1",
         "text": "客户发货单模板-简版"
       }
     },
     {
       "select_unit": {
         "ok": true,
-        "value": "db:2",
-        "text": "客户发货单模板-简版",
-        "via": "first"
+        "value": "UI客户-0921",
+        "text": "UI客户-0921",
+        "via": "exact"
       }
     },
     {
-      "shot": "/private/tmp/xcagi-custchain/evidence-8d50fe9d/ui-business/ui-10-form-filled.png",
-      "bytes": 345169
+      "shot": "/private/tmp/xcagi-custchain/evidence-ota/ui-10-form-filled.png",
+      "bytes": 344188
     },
     {
       "click": "选择产品名称",
@@ -46,8 +46,8 @@
       "picker_open": true
     },
     {
-      "shot": "/private/tmp/xcagi-custchain/evidence-8d50fe9d/ui-business/ui-11-product-picker.png",
-      "bytes": 225605
+      "shot": "/private/tmp/xcagi-custchain/evidence-ota/ui-11-product-picker.png",
+      "bytes": 224703
     },
     {
       "picked_product": "UI验收商品-0921型号: UI-0921-A"
@@ -67,8 +67,8 @@
       ]
     },
     {
-      "shot": "/private/tmp/xcagi-custchain/evidence-8d50fe9d/ui-business/ui-12-product-row.png",
-      "bytes": 326012
+      "shot": "/private/tmp/xcagi-custchain/evidence-ota/ui-12-product-row.png",
+      "bytes": 324736
     },
     {
       "typed": {
@@ -77,8 +77,8 @@
       }
     },
     {
-      "shot": "/private/tmp/xcagi-custchain/evidence-8d50fe9d/ui-business/ui-13-product-values.png",
-      "bytes": 326496
+      "shot": "/private/tmp/xcagi-custchain/evidence-ota/ui-13-product-values.png",
+      "bytes": 325234
     },
     {
       "click": "生成发货单",
@@ -92,26 +92,13 @@
       }
     },
     {
-      "alert": {
-        "title": "提示",
-        "message": "请选择购买单位",
-        "buttons": [
-          "确定"
-        ]
-      }
-    },
-    {
-      "shot": "/private/tmp/xcagi-custchain/evidence-8d50fe9d/ui-business/ui-14-generated.png",
-      "bytes": 325579
+      "shot": "/private/tmp/xcagi-custchain/evidence-ota/ui-14-generated.png",
+      "bytes": 313537
     }
   ],
-  "verdict": "BLOCKED",
-  "dialog": {
-    "title": "提示",
-    "message": "请选择购买单位",
-    "buttons": [
-      "确定"
-    ]
-  },
-  "result_panel": null
+  "verdict": "PASS",
+  "result_panel": {
+    "doc": "发货单_26-09-00001A_20260922_021927.xlsx",
+    "text": " 生成结果文件名: 发货单_26-09-00001A_20260922_021927.xlsx 下载发货单 新建发货单 "
+  }
 }

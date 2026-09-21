@@ -13,8 +13,8 @@
       }
     },
     {
-      "shot": "/private/tmp/xcagi-custchain/evidence-8d50fe9d/ui-business/ui-15-downloaded.png",
-      "bytes": 262733
+      "shot": "/private/tmp/xcagi-custchain/evidence-ota/ui-15-downloaded.png",
+      "bytes": 262589
     }
   ],
   "verdict": "PASS",
@@ -26,22 +26,22 @@
     "/private/tmp/xcagi-custchain/ui-downloads",
     "/Users/a4243342/Downloads"
   ],
-  "result_doc": "发货单_26-09-00004A_20260921_182903.xlsx",
+  "result_doc": "发货单_26-09-00002A_20260922_022059.xlsx",
   "pre_existing_same_name": {
-    "path": "/Users/a4243342/Downloads/发货单_26-09-00004A_20260921_182903.xlsx",
+    "path": "/Users/a4243342/Downloads/发货单_26-09-00002A_20260922_022059.xlsx",
     "exists": false,
     "mtime": null
   },
   "new_files": [
-    "发货单_26-09-00004A_20260921_182903.xlsx"
+    "发货单_26-09-00002A_20260922_022059.xlsx"
   ],
   "download_dir": "/Users/a4243342/Downloads",
   "file": {
-    "name": "发货单_26-09-00004A_20260921_182903.xlsx",
-    "bytes": 6110,
+    "name": "发货单_26-09-00002A_20260922_022059.xlsx",
+    "bytes": 6108,
     "xlsx_magic": true,
-    "sha256": "636b6d673b58eab11106ad51b4a0aee5a899ef3f3959b20960c29ae1c394c4bc",
-    "path": "/Users/a4243342/Downloads/发货单_26-09-00004A_20260921_182903.xlsx",
+    "sha256": "584ab63ffd177b7fc0f88df04ed493e26ffeee282ee073c845b0931523bfafbc",
+    "path": "/Users/a4243342/Downloads/发货单_26-09-00002A_20260922_022059.xlsx",
     "sheet": "送货单",
     "rows": [
       [
@@ -57,7 +57,7 @@
         ""
       ],
       [
-        "购货单位：验收客户-PHASE-C       联系人：              2026年9月21日      订单编号：26-09-00004A",
+        "购货单位：UI客户-0921       联系人：              2026年9月21日      订单编号：26-09-00002A",
         "",
         "",
         "",

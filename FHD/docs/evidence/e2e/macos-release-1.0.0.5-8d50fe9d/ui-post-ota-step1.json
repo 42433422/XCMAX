@@ -4,25 +4,26 @@
     {
       "at": "/orders/create",
       "empty_state": {
-        "text": "",
-        "option_count": -1,
+        "text": "选择发货单模板发货单模板-- 请选择模板 --客户发货单模板-简版 刷新模板列表",
+        "option_count": 2,
         "has_hint": false
       },
       "state": {
         "url": "http://127.0.0.1:17500/orders/create",
-        "title": "XCAGI · 登录",
+        "title": "新建业务单据 - XCAGI",
+        "h1": "新建发货单",
         "dialogs": []
       }
     },
     {
-      "shot": "/private/tmp/xcagi-custchain/evidence-8d50fe9d/ui-01-create-order-entry.png",
-      "bytes": 276291
+      "shot": "/private/tmp/xcagi-custchain/evidence-ota/ui-01-create-order-entry.png",
+      "bytes": 343096
     },
     {
       "click": "模板编辑",
       "label": "模板编辑",
       "rect": {
-        "x": 1002,
+        "x": 1000.5,
         "y": 781.140625,
         "w": 178,
         "h": 51.59375,
@@ -38,8 +39,8 @@
       }
     },
     {
-      "shot": "/private/tmp/xcagi-custchain/evidence-8d50fe9d/ui-02-template-page.png",
-      "bytes": 398738
+      "shot": "/private/tmp/xcagi-custchain/evidence-ota/ui-02-template-page.png",
+      "bytes": 426451
     },
     {
       "click": "创建模板",
@@ -62,8 +63,8 @@
       }
     },
     {
-      "shot": "/private/tmp/xcagi-custchain/evidence-8d50fe9d/ui-03-create-modal.png",
-      "bytes": 282332
+      "shot": "/private/tmp/xcagi-custchain/evidence-ota/ui-03-create-modal.png",
+      "bytes": 296620
     },
     {
       "type_name": "客户送货单模板-UI"
@@ -76,8 +77,8 @@
       "selected_file_visible": true
     },
     {
-      "shot": "/private/tmp/xcagi-custchain/evidence-8d50fe9d/ui-04-file-chosen.png",
-      "bytes": 282312
+      "shot": "/private/tmp/xcagi-custchain/evidence-ota/ui-04-file-chosen.png",
+      "bytes": 296540
     },
     {
       "click": "下一步",
@@ -94,8 +95,8 @@
       "step2_reached": true
     },
     {
-      "shot": "/private/tmp/xcagi-custchain/evidence-8d50fe9d/ui-05-step2-fields.png",
-      "bytes": 261969
+      "shot": "/private/tmp/xcagi-custchain/evidence-ota/ui-05-step2-fields.png",
+      "bytes": 276131
     },
     {
       "click": "保存模板",
@@ -109,14 +110,14 @@
       }
     },
     {
-      "shot": "/private/tmp/xcagi-custchain/evidence-8d50fe9d/ui-06-saved.png",
-      "bytes": 214012
+      "shot": "/private/tmp/xcagi-custchain/evidence-ota/ui-06-saved.png",
+      "bytes": 224715
     }
   ],
   "verdict": "PASS",
   "empty_state": {
-    "text": "",
-    "option_count": -1,
+    "text": "选择发货单模板发货单模板-- 请选择模板 --客户发货单模板-简版 刷新模板列表",
+    "option_count": 2,
     "has_hint": false
   },
   "dialog_after_save": {
@@ -129,34 +130,13 @@
   "templates_after": [
     {
       "id": "db:1",
-      "name": "验收模板-PRE-OTA",
-      "category": "excel",
-      "scope": null,
-      "source": "db"
-    },
-    {
-      "id": "db:2",
       "name": "客户发货单模板-简版",
       "category": "excel",
       "scope": "orders",
       "source": "db"
     },
     {
-      "id": "db:3",
-      "name": "验收模板-PHASE-C",
-      "category": "excel",
-      "scope": null,
-      "source": "db"
-    },
-    {
-      "id": "db:4",
-      "name": "客户送货单模板-PHASE-C",
-      "category": "excel",
-      "scope": null,
-      "source": "db"
-    },
-    {
-      "id": "db:5",
+      "id": "db:2",
       "name": "客户送货单模板-UI",
       "category": "excel",
       "scope": "orders",
@@ -225,7 +205,7 @@
   ],
   "created": [
     {
-      "id": "db:5",
+      "id": "db:2",
       "name": "客户送货单模板-UI",
       "category": "excel",
       "scope": "orders",
