@@ -302,7 +302,6 @@ def _register_routes_part02(router, mod_id, facade):
     @router.post("/user-cs/delivery/check-payment")
     def user_cs_delivery_check_payment(body: facade.DeliveryPaymentBody):
         from app.mod_sdk.host_services import (
-            build_starred_group_feed,
             ensure_delivery_on_doc,
             load_pipeline,
             save_pipeline,
@@ -311,16 +310,10 @@ def _register_routes_part02(router, mod_id, facade):
 
         uid = int(body.market_user_id)
         doc = ensure_delivery_on_doc(load_pipeline(uid, username=body.username))
-        feed = build_starred_group_feed(limit=40, market_user_id=uid)
-        texts = [
-            str(x.get("content") or x.get("message") or "")
-            for x in feed
-            if x.get("content") or x.get("message")
-        ]
         outcome = try_confirm_payment_and_invoice(
             uid,
             doc,
-            message_texts=texts,
+            message_texts=[],
             force=body.force_confirm,
             payment_reference=body.payment_reference,
         )

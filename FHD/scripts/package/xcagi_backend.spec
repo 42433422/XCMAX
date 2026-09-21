@@ -102,6 +102,7 @@ for module in [
     "app.fastapi_app",
     "app.fastapi_routes",
     "app.legacy.routes",
+    "app.legacy.lan",
     "app.db",
     "app.db.models",
     "app.middleware",
@@ -141,6 +142,26 @@ hiddenimports.extend(
         "app.services.xcmax_sync_basic_appliers",
         "app.services.xcmax_sync_extended_appliers",
         "app.runtime_integrity",
+    ]
+)
+
+# Mods reach host services through the string-keyed map in
+# app.mod_sdk.host_services, and some routes import modules through
+# importlib literals; PyInstaller's static analysis cannot see either, so the
+# frozen desktop backend answered ModuleNotFoundError at request time (the LAN
+# bridge status route 500ed on macOS and Windows 1.0.0.5). Coverage of this
+# dynamic surface is enforced by
+# tests/test_mod_sdk/test_frozen_dynamic_import_coverage.py.
+hiddenimports.extend(
+    [
+        "app.application.employee_circle_sync",
+        "app.application.user_cs_demand_intake_bridge",
+        "app.services.service_contract_fill",
+        "app.services.user_cs_connected_welcome",
+        "app.services.user_cs_delivery",
+        "app.services.user_cs_enterprise_credentials",
+        "app.services.user_cs_landing_crm",
+        "app.services.user_cs_software_delivery",
     ]
 )
 
