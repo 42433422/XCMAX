@@ -121,10 +121,6 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "app.services.user_cs_pipeline",
         "build_pipeline_funnel_summary",
     ),
-    "build_starred_group_feed": (
-        "app.services.wechat_group_customer_bridge",
-        "build_starred_group_feed",
-    ),
     "checkout": ("app.fastapi_routes.model_payment", "checkout"),
     "close_trade": ("app.fastapi_routes.model_payment", "close_trade"),
     "compat_purchase_units_by_name": (
@@ -165,10 +161,6 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "app.services.service_contract_fill",
         "generated_contracts_dir",
     ),
-    "get_bindings_for_user": (
-        "app.services.wechat_group_customer_bridge",
-        "get_bindings_for_user",
-    ),
     "get_crm_bundle_for_market_user": (
         "app.services.user_cs_crm_store",
         "get_crm_bundle_for_market_user",
@@ -188,16 +180,12 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "get_excel_vector_ingest_app_service",
     ),
     "get_llm_client": ("app.infrastructure.llm.client", "get_llm_client"),
-    "get_mod_registry": ("app.infrastructure.mods", "get_mod_registry"),
+    "get_mod_registry": ("app.infrastructure.mods.registry", "get_mod_registry"),
     "get_neuro_bus": ("app.neuro_bus.bus", "get_neuro_bus"),
     "get_neuro_bus_manager": ("app.neuro_bus.bus_setup", "get_neuro_bus_manager"),
     "get_neurobus_health": (
         "app.neuro_bus.integrations.fastapi_integration",
         "get_neurobus_health",
-    ),
-    "get_passive_poll_config": (
-        "app.services.wechat_passive_group_monitor",
-        "get_passive_poll_config",
     ),
     "get_plans": ("app.fastapi_routes.model_payment", "get_plans"),
     "get_processor_coordinator": (
@@ -276,14 +264,6 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "app.fastapi_routes.shipment_orders",
         "orders_next_number_under_api",
     ),
-    "passive_poll_once": (
-        "app.services.wechat_passive_group_monitor",
-        "passive_poll_once",
-    ),
-    "probe_passive_llm_ready": (
-        "app.services.wechat_passive_group_monitor",
-        "probe_passive_llm_ready",
-    ),
     "products_add": ("app.legacy.routes.product.compat_routes", "products_add"),
     "products_batch": ("app.fastapi_routes.domains.product.routes", "products_batch"),
     "products_batch_delete": (
@@ -343,10 +323,6 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "repair_pipeline_crm": ("app.services.user_cs_pipeline", "repair_pipeline_crm"),
     "request_access": ("app.fastapi_routes.lan_routes", "request_access"),
     "require_admin": ("app.fastapi_routes.lan_admin_routes", "require_admin"),
-    "reset_passive_watch": (
-        "app.services.wechat_passive_group_monitor",
-        "reset_passive_watch",
-    ),
     "resolve_chat_model": ("app.infrastructure.llm.client", "resolve_chat_model"),
     "resolve_pdf_document_spec": (
         "app.application.office_plaintext_generate",
@@ -376,10 +352,6 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "run_user_cs_employee",
     ),
     "save_field_overrides": ("app.services.service_contract_fill", "save_field_overrides"),
-    "save_passive_poll_config": (
-        "app.services.wechat_passive_group_monitor",
-        "save_passive_poll_config",
-    ),
     "save_pipeline": ("app.services.user_cs_pipeline", "save_pipeline"),
     "resolve_session_user": ("app.infrastructure.auth.dependencies", "resolve_session_user"),
     "session_id_from_request": (
