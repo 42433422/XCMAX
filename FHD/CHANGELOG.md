@@ -6,6 +6,8 @@
 
 ## Unreleased（1.0.0.4 之后的累积变更）
 
+- 修复「用自己的送货单模板就出不了单」：在「新建发货单」里选中客户自己的送货单 Excel（表头为产品型号/产品名称/数量/件/规格/KG/数量/KG/单价/元/金额/元这种最常见版式，型号列与「人民币大写」区通常是合并单元格）后点「生成发货单」，界面只会报「生成失败: 服务器内部错误」，后端日志为 `'MergedCell' object attribute 'value' is read-only`（HTTP 500）——生成器把金额合计写死在合并区里的一个只读格子上，整单因此中断，客户在完全走界面、不问任何人的情况下根本拿不到单据。现在合并版式不再中断生成：只写可写单元格，合计行按表头逐列补回「数量/件」「数量/KG」合计与「合计」标签，金额列保留模板自带的求和公式；同轮在「新建发货单」页把空模板下拉从「只有一个空下拉框」改为可见指引（提示去「模板编辑」上传或创建本方出货单模板），生成时的提示也从「请选择发货单模板」改为可直接照做的说明，并补一条回归用例锁定合并模板的数据落位与合计行。
+
 - 修复「账号定制未交付就把客户堵在门外」：onboarding 主按钮「进入…工作空间」此前要求把**账号定制（L3）**也装齐才算就绪，而 L3 由供应商私有交付产出（需经市场生产—验收流程）。当供应商尚未产出该交付时（例如 SUNBIRD 的 `taiyangniao-pro`），客户点主按钮只会看到「仍缺必需项：taiyangniao-pro」并被永久拦在 onboarding，每次新会话还会被路由守卫再次弹回——一个完全不懂项目的真实客户会卡死在这里。现把「进入就绪」判定收敛为**产品侧可安装项（core+host，即 `required_mod_ids`）**：L3 未交付时不再阻塞进入，改为明确提示「账号定制功能（…）待供应商交付，可稍后在扩展市场重试」，定制项状态仍由 `missing_account_custom_mod_ids` / `full_stack_ready` 完整表达，供应商交付到位后照常安装。补 6 条回归测试锁定（含「必需项里混有产品侧项时仍不进入」）。
 
 - 修复「严格装包门」被一条**不可满足的必需项**卡死的问题：`wechat-contacts-ai-employee` 的源码早在 `095db9831`（彻底移除 wechat 域）就已删除，前端 AUX 清单也已收敛，但后端 `host_foundation`/`aux_employee_store` 的宿主种子包清单与 `config/industry_baseline.json` 里 7 个行业的账号定制扩展清单没有同步清理。结果任何带客户交付权益的账号（如 SUNBIRD）在「进入工作空间」时都会被要求装一个**安装包没带、行业种子池没有、修茈市场 catalog 也没有**的 Mod，严格装包门永远无法通过。现补齐这次移除：后端 AUX 清单与前端一致（仅 `lan-gate-ai-employee`），`industry_baseline.json` 不再把该 Mod 列为必需扩展，并补回归断言锁定。实机同账号同行业复算：必需项由 `[taiyangniao-pro, xcagi-core-workflow-employees, xcagi-office-employee-pack-bridge, wechat-contacts-ai-employee]` 收敛为 `[taiyangniao-pro]`（后两者随安装包种子预装），只剩市场侧私有交付这一外部依赖。同轮删除 `tests/test_decoupling_mods.py` 两个零引用常量（`EXPECTED_PLATFORM_MODS`/`PROTECTED`）。

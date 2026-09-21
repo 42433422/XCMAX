@@ -1,5 +1,5 @@
 {
-  "lines": 2303818,
+  "lines": 2303820,
   "updated": "2026-09-21",
-  "note": "客户闭环阻断修复：客户自带送货单模板(含合并单元格)生成发货单时 openpyxl 对 MergedCell 赋值抛错导致 /api/shipment/generate 返回 500，改为合并安全写入并按表头补回合计行；新建发货单页在无可用模板时补可见指引；附回归用例 tests/test_legacy/test_legacy_shipment_template_merge.py"
+  "note": "客户闭环阻断修复（出货单合并模板 500）+ 变更日志：客户自带送货单模板(含合并单元格)生成发货单时 openpyxl 对 MergedCell 赋值抛错导致 /api/shipment/generate 返回 500，改为合并安全写入并按表头补回合计行；新建发货单页在无可用模板时补可见指引；附回归用例与 CHANGELOG 说明"
 }
