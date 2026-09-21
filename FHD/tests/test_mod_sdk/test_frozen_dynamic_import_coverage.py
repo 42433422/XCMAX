@@ -10,7 +10,8 @@
 本文件把修复固化为四条静态守卫：
 1. 动态引用目标必须在源码树中存在（防死映射，如 wechat 域退役后的遗留）；
 2. 动态引用目标必须被 ``scripts/package/xcagi_backend.spec`` 收集，或在 app/、XCAGI/
-   内有静态 import（PyInstaller 能沿静态图找到）；
+   内有静态 import（PyInstaller 能沿静态图找到）；Mod 目录是随包数据、不参与静态分析，
+   但其 ``import_module("app...")`` 字面量同样计入本守卫（宿主策略明确不随包的 Mod 除外）；
 3. 代码从 ``host_services`` 取用的名字必须有对应导出或模块级定义；
 4. 映射的属性目标必须真实定义（跳过 ``globals().update`` / ``import *`` /
    ``__getattr__`` 之类的动态再导出模块）。
@@ -28,6 +29,11 @@ SPEC_PATH = FHD / "scripts" / "package" / "xcagi_backend.spec"
 HOST_SERVICES_PATH = FHD / "app" / "mod_sdk" / "host_services.py"
 ANALYSIS_ROOTS = ("app", "XCAGI")
 CALLER_ROOTS = ("app", "XCAGI", "mods")
+# Mod 是随包数据，不参与 PyInstaller 静态分析；它们的 importlib 字面量同样要在冻结包内解析，
+# 因此并入动态引用扫描。例外：宿主打包策略明确不随包发布的 Mod
+# （scripts/package/stage-bundled-mods.sh 的 EXCLUDE_ALWAYS）。
+DYNAMIC_LITERAL_ROOTS = ("app", "XCAGI", "mods")
+BUNDLE_EXCLUDED_MODS = frozenset({"_employees"})
 _APP_MODULE_RE = re.compile(r"^(?:appdirs|app(?:\.[A-Za-z_]\w*)+)$")
 _DYNAMIC_REEXPORT_MARKERS = ("globals().update", "import *", "__getattr__")
 
@@ -57,6 +63,14 @@ def _iter_py_files(roots: tuple[str, ...]) -> list[Path]:
             if "__pycache__" not in path.parts:
                 paths.append(path)
     return paths
+
+
+def _iter_dynamic_literal_files() -> list[Path]:
+    return [
+        path
+        for path in _iter_py_files(DYNAMIC_LITERAL_ROOTS)
+        if not (BUNDLE_EXCLUDED_MODS & set(path.parts))
+    ]
 
 
 def _module_path(module: str) -> Path | None:
@@ -97,7 +111,7 @@ def _dynamic_targets() -> dict[str, str]:
     targets: dict[str, str] = {}
     for name, (module, _attr) in _exports().items():
         targets[module] = f"host_services 导出 {name!r}"
-    for path in _iter_py_files(ANALYSIS_ROOTS):
+    for path in _iter_dynamic_literal_files():
         tree = _parse(path)
         if tree is None:
             continue
