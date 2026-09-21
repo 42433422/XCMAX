@@ -265,7 +265,7 @@ def _scan_script_version_defaults(cfg: dict, product_version: str, items: list[d
                 for literal in _product_version_literals(line):
                     (stale if literal != product_version else fresh).append(f"{lineno}→{literal}")
             if stale or fresh:
-                per_file.append((lvl, str(rel.relative_to(REPO_ROOT)), stale, fresh))
+                per_file.append((lvl, rel.relative_to(REPO_ROOT).as_posix(), stale, fresh))
 
     for lvl, name, stale, fresh in per_file:
         detail = f"写死产品版本 {len(stale) + len(fresh)} 处（陈旧 {len(stale)} 处"
@@ -429,7 +429,7 @@ def build_status() -> dict:
         "schema": "xcagi.product_lines_status/v1",
         "generated_at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         "generator": "FHD/scripts/dev/product_lines_status.py",
-        "config": str(CONFIG_PATH.relative_to(REPO_ROOT)),
+        "config": CONFIG_PATH.relative_to(REPO_ROOT).as_posix(),
         "policy": (
             "本文件为生成物：版本/发布/能力/覆盖率的数字全部取自各自权威源，"
             "禁止手改；三线「成熟度」只呈现能力目录自有的证据分级计数与 Release Gate 结论，"
