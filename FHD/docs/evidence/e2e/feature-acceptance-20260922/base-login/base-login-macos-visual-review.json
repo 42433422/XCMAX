@@ -1,0 +1,13 @@
+{
+  "_comment": "本轮 macOS 原图内容复核记录（2026-09-22 实机截图，逐张复核可见内容）。原始截图见同目录，哈希与 base-login-macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "base-login",
+  "platform": "macos",
+  "reviewed_at": "2026-09-22",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "8d50fe9d043391d5ba8857094a366a59a34ae43f",
+  "screenshot_sha256": "ed02e17ada8d62ba9abca84ac9e51b53eab459d1d1ab465a892d174587ffded8",
+  "visible_content": "五张原图覆盖完整操作链：登录页（02）→ 登录成功的「智能对话」工作台且左上角账号 SUNBIRD（03）→ 应用进程重启后仍为已登录工作台（04）→ 退出登录并重启后回到登录页（05b）→ GUI 点击「退出登录」确认后停在登录页（05c）。复核同时确认：登录页含账号/密码输入框与「登 录」按钮；工作台含左侧导航与账号名；退出后的画面不含工作台与账号侧栏。另有 03/05c 两段真机录屏（screenshots 同轮的 .mov，归档于 /Users/Shared/xcagi-t6-tools/feature-acceptance-20260922/，仓库内为 videos-manifest.json 哈希清单）。",
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/macos/03-postlogin-screen.png"
+}
