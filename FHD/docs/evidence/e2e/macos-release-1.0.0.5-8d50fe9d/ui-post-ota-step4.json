@@ -1,0 +1,121 @@
+{
+  "step": "download_via_ui",
+  "actions": [
+    {
+      "click": "下载发货单",
+      "label": "下载发货单",
+      "rect": {
+        "x": 751.5,
+        "y": 760.90625,
+        "w": 165,
+        "h": 49.1875,
+        "text": "下载发货单"
+      }
+    },
+    {
+      "shot": "/private/tmp/xcagi-custchain/evidence-8d50fe9d/ui-business/ui-15-downloaded.png",
+      "bytes": 262733
+    }
+  ],
+  "verdict": "PASS",
+  "download_behavior": {
+    "via": "Browser.setDownloadBehavior",
+    "result": null
+  },
+  "watched_dirs": [
+    "/private/tmp/xcagi-custchain/ui-downloads",
+    "/Users/a4243342/Downloads"
+  ],
+  "result_doc": "发货单_26-09-00004A_20260921_182903.xlsx",
+  "pre_existing_same_name": {
+    "path": "/Users/a4243342/Downloads/发货单_26-09-00004A_20260921_182903.xlsx",
+    "exists": false,
+    "mtime": null
+  },
+  "new_files": [
+    "发货单_26-09-00004A_20260921_182903.xlsx"
+  ],
+  "download_dir": "/Users/a4243342/Downloads",
+  "file": {
+    "name": "发货单_26-09-00004A_20260921_182903.xlsx",
+    "bytes": 6110,
+    "xlsx_magic": true,
+    "sha256": "636b6d673b58eab11106ad51b4a0aee5a899ef3f3959b20960c29ae1c394c4bc",
+    "path": "/Users/a4243342/Downloads/发货单_26-09-00004A_20260921_182903.xlsx",
+    "sheet": "送货单",
+    "rows": [
+      [
+        "送货单",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      [
+        "购货单位：验收客户-PHASE-C       联系人：              2026年9月21日      订单编号：26-09-00004A",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      [
+        "产品型号",
+        "",
+        "",
+        "产品名称",
+        "数量/件",
+        "规格/KG",
+        "数量/KG",
+        "单价/元",
+        "金额/元",
+        "备注"
+      ],
+      [
+        "UI-0921-A",
+        "",
+        "",
+        "UI验收商品-0921",
+        "24",
+        "25",
+        "600",
+        "3.5",
+        "2100",
+        ""
+      ],
+      [
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      [
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    ]
+  }
+}
