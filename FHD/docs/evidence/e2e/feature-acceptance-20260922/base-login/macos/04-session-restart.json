@@ -1,0 +1,161 @@
+{
+  "phase": "M3-会话保持(进程重启)",
+  "at": "2026-09-22T02:39:19+0800",
+  "ready": true,
+  "cookies_before": [
+    {
+      "name": "csrf_token",
+      "value": "4628ca2d14c30a665b3402195bd6a4758637eb58afc4d1fd2270b4f35985992b",
+      "domain": "127.0.0.1",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "session": true
+    },
+    {
+      "name": "session_id",
+      "value": "d8820121-f203-415b-ad15-97c9e98a886e",
+      "domain": "127.0.0.1",
+      "path": "/",
+      "expires": 1824575870.33148,
+      "httpOnly": true,
+      "session": false
+    }
+  ],
+  "cookies_after": [
+    {
+      "name": "session_id",
+      "value": "d8820121-f203-415b-ad15-97c9e98a886e",
+      "domain": "127.0.0.1",
+      "path": "/",
+      "expires": 1824575870.33148,
+      "httpOnly": true,
+      "session": false
+    },
+    {
+      "name": "csrf_token",
+      "value": "66e9646c3c1ee1848127423e76aa5f34156f8ae971dc1057ff4f81046fd185bf",
+      "domain": "127.0.0.1",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "session": true
+    }
+  ],
+  "dom": {
+    "url": "http://127.0.0.1:17500/",
+    "title": "智能对话 - XCAGI",
+    "inputs": [
+      {
+        "name": "",
+        "type": "text",
+        "ph": "输入功能名快速跳转"
+      },
+      {
+        "name": "",
+        "type": "checkbox",
+        "ph": ""
+      },
+      {
+        "name": "",
+        "type": "checkbox",
+        "ph": ""
+      }
+    ],
+    "login_button_visible": false,
+    "workspace_markers": {
+      "chat": true,
+      "sidebar": true
+    }
+  },
+  "api_auth_me": {
+    "status": 200,
+    "body": {
+      "success": true,
+      "data": {
+        "user": {
+          "id": 2,
+          "username": "SUNBIRD",
+          "display_name": "SUNBIRD",
+          "email": "sunbird@xcagi.local",
+          "email_display": "sunbird@xcagi.local",
+          "no_email": false,
+          "role": "user",
+          "is_active": true,
+          "avatar_url": ""
+        },
+        "permissions": [
+          "shipment.view",
+          "dataset.write",
+          "etl.template.manage",
+          "shipment.create",
+          "dataset.read",
+          "product.edit",
+          "shipment.edit",
+          "product.view",
+          "etl.execute",
+          "etl.read",
+          "print.label",
+          "customer.view",
+          "customer.edit",
+          "material.view",
+          "material.edit"
+        ],
+        "account_kind": "enterprise",
+        "company_brand": "SUNBIRD",
+        "market_is_admin": false,
+        "market_is_enterprise": true,
+        "market_user_id": 29,
+        "local_user_id": 2,
+        "tenant_id": 1,
+        "tenant_name": "SUNBIRD",
+        "impersonating_market_user_id": null,
+        "impersonating_username": "",
+        "tier": "enterprise",
+        "account_tier": "pro",
+        "budget_range": null,
+        "entitled_industries": [],
+        "market_membership_tier": "free",
+        "email_verified": false,
+        "mfa_enabled": false
+      }
+    }
+  },
+  "api_session_validate": {
+    "status": 200,
+    "body": {
+      "success": true,
+      "valid": true,
+      "data": {
+        "session_id": "d8820121-f203-415b-ad15-97c9e98a886e",
+        "user_id": 2,
+        "username": "SUNBIRD",
+        "created_at": "2026-09-21T18:37:40.303901",
+        "expires_at": "2036-09-18T18:37:40.303901"
+      },
+      "account_kind": "enterprise",
+      "company_brand": "SUNBIRD",
+      "market_is_admin": false,
+      "market_is_enterprise": true,
+      "market_user_id": 29,
+      "local_user_id": 2,
+      "tenant_id": 1,
+      "tenant_name": "SUNBIRD",
+      "impersonating_market_user_id": null,
+      "impersonating_username": "",
+      "tier": "enterprise",
+      "account_tier": "pro",
+      "budget_range": null,
+      "entitled_industries": [],
+      "market_membership_tier": "free",
+      "email_verified": false,
+      "mfa_enabled": false
+    }
+  },
+  "same_session_id": true,
+  "shots": {
+    "renderer": "/private/tmp/xcagi-feat-base-login/evidence/04-restart-renderer.png",
+    "screen": "/private/tmp/xcagi-feat-base-login/evidence/04-restart-screen.png"
+  },
+  "verdict": "PASS"
+}

@@ -1,0 +1,64 @@
+{
+  "phase": "M5/M6-边界与Web",
+  "at": "2026-09-22T02:39:56+0800",
+  "wrong_password": {
+    "status": 200,
+    "body": {
+      "success": false,
+      "message": "用户名或密码错误",
+      "error": {
+        "code": "MARKET_AUTH_FAILED",
+        "message": "用户名或密码错误"
+      },
+      "market_account": {
+        "success": false,
+        "market_base_url": "https://xiu-ci.com",
+        "message": "用户名或密码错误"
+      }
+    }
+  },
+  "admin_kind_on_desktop": {
+    "status": 200,
+    "body": {
+      "success": false,
+      "message": "桌面端不支持管理员账号登录，请使用网页版管理端",
+      "error": {
+        "code": "ADMIN_DESKTOP_FORBIDDEN",
+        "message": "桌面端不支持管理员账号登录，请使用网页版管理端"
+      }
+    }
+  },
+  "empty_credentials": {
+    "status": 200,
+    "body": {
+      "success": false,
+      "error": {
+        "code": "INVALID_INPUT",
+        "message": "用户名和密码不能为空"
+      }
+    }
+  },
+  "market_web_login": {
+    "base": "https://xiu-ci.com",
+    "status": 200,
+    "body_keys": [
+      "access_token",
+      "account_state",
+      "account_tier",
+      "activation_source",
+      "active_plan_id",
+      "desktop_access",
+      "next_action",
+      "ok",
+      "refresh_token",
+      "user"
+    ],
+    "ok": true,
+    "has_access_token": true,
+    "user": "SUNBIRD",
+    "desktop_access": true,
+    "account_tier": "pro"
+  },
+  "verdict_desktop_boundary": "PASS",
+  "verdict_web": "PASS"
+}

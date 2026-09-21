@@ -1,0 +1,16 @@
+{
+  "phase": "M3-服务端会话落盘(旁证)",
+  "db": "/private/tmp/xcagi-feat-base-login/data/data/xcagi.db",
+  "rows": {
+    "cmd": "sqlite3 -readonly '/private/tmp/xcagi-feat-base-login/data/data/xcagi.db' \"select substr(session_id,1,12)||'...', user_id, account_kind, tenant_id, created_at, expires_at from sessions order by created_at desc limit 5;\"",
+    "rc": 0,
+    "out": "d8820121-f20...|2|enterprise|1|2026-09-21 18:37:40.303901|2036-09-18 18:37:40.303901",
+    "err": ""
+  },
+  "session_count": {
+    "cmd": "sqlite3 -readonly '/private/tmp/xcagi-feat-base-login/data/data/xcagi.db' \"select count(*) from sessions;\"",
+    "rc": 0,
+    "out": "1",
+    "err": ""
+  }
+}
