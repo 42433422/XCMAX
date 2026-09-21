@@ -201,19 +201,39 @@ function Stop-RoundVideo {
 
 function Resolve-AppDir {
     if ($AppExe) { return (Split-Path $AppExe -Parent) }
-    $candidates = @(
-        (Join-Path $env:LOCALAPPDATA 'Programs\XCAGI'),
-        (Join-Path $env:LOCALAPPDATA 'XCAGI'),
-        'C:\Program Files\XCAGI',
-        'C:\XCAGI',
-        'C:\XCAGI-evidence-1.0.0.5\app'
-    )
-    foreach ($c in $candidates) {
-        if ($c -and (Test-Path (Join-Path $c 'XCAGI.exe'))) { return $c }
+    $candidates = New-Object System.Collections.Generic.List[string]
+    if ($env:LOCALAPPDATA) {
+        $candidates.Add((Join-Path $env:LOCALAPPDATA 'Programs\XCAGI'))
+        $candidates.Add((Join-Path $env:LOCALAPPDATA 'XCAGI'))
     }
-    $exe = Get-ChildItem -Path 'C:\' -Filter 'XCAGI.exe' -Recurse -Depth 4 -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($exe) { return $exe.DirectoryName }
+    if ($env:PROGRAMFILES) { $candidates.Add((Join-Path $env:PROGRAMFILES 'XCAGI')) }
+    $candidates.Add('C:\XCAGI')
+    $candidates.Add('C:\XCAGI-evidence-1.0.0.5\app')
+    foreach ($c in $candidates) {
+        if ($c -and (Test-Path ($c.TrimEnd('\') + '\XCAGI.exe'))) { return $c }
+    }
+    if (Test-Path 'C:\') {
+        $exe = Get-ChildItem -Path 'C:\' -Filter 'XCAGI.exe' -Recurse -Depth 4 -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($exe) { return $exe.DirectoryName }
+    }
     return ''
+}
+
+function Wait-AuthRoute {
+    # /api/health can answer 200 before the auth router is mounted (fresh-install race).
+    # Wait until /api/auth/me returns the expected envelope (a `valid` field) so W1 is not
+    # judged against a not-yet-mounted route ("resource not found" is not a rejection proof).
+    param([int]$TimeoutSec = 180)
+    $end = (Get-Date).AddSeconds($TimeoutSec)
+    while ((Get-Date) -lt $end) {
+        try {
+            $r = Invoke-Api -Method 'GET' -Path '/api/auth/me'
+            $v = Get-BodyField $r.body 'valid'
+            if ($null -ne $v) { return $r }
+        } catch { }
+        Start-Sleep -Seconds 3
+    }
+    return $null
 }
 
 function Get-AppProcesses {
@@ -251,7 +271,7 @@ function Wait-Health {
 function Start-App {
     param([string]$AppDir, [int]$DebugPort = 0)
     if (-not $AppDir) { throw 'app dir not resolved; pass -AppExe' }
-    $exe = Join-Path $AppDir 'XCAGI.exe'
+    $exe = $AppDir.TrimEnd('\') + '\XCAGI.exe'
     if ($DebugPort -gt 0) {
         Start-Process -FilePath $exe -ArgumentList ('--remote-debugging-port=' + $DebugPort)
     } else {
@@ -281,8 +301,8 @@ function Get-BuildInfo {
     param([string]$AppDir)
     if (-not $AppDir) { return $null }
     $paths = @(
-        (Join-Path $AppDir 'resources\build-info.json'),
-        (Join-Path $AppDir 'build-info.json')
+        ($AppDir.TrimEnd('\') + '\resources\build-info.json'),
+        ($AppDir.TrimEnd('\') + '\build-info.json')
     )
     foreach ($p in $paths) {
         if (Test-Path $p) { return (Get-Content $p -Raw -Encoding UTF8 | ConvertFrom-Json) }
@@ -294,7 +314,7 @@ function Get-Identity {
     param([string]$AppDir)
     $build = Get-BuildInfo -AppDir $AppDir
     $exe = ''
-    if ($AppDir) { $exe = Join-Path $AppDir 'XCAGI.exe' }
+    if ($AppDir) { $exe = $AppDir.TrimEnd('\') + '\XCAGI.exe' }
     $osCaption = ''
     try {
         $os = Get-CimInstance Win32_OperatingSystem
@@ -336,6 +356,15 @@ if ($health0) { $healthStatus = $health0.status }
 $identity['health'] = $health0
 Write-JsonFile (Join-Path $OutDir 'identity.json') $identity | Out-Null
 Write-Log ('identity: git_sha=' + $identity.git_sha + ' version=' + $identity.product_version + ' health=' + $healthStatus)
+
+if ($health0) {
+    Write-Log 'waiting for the auth route to be mounted ...'
+    $authReady = Wait-AuthRoute
+    $authReadyOk = [bool]$authReady
+    Write-Log ('auth route ready: ' + $authReadyOk)
+    $identity['auth_route_ready'] = $authReadyOk
+    Write-JsonFile (Join-Path $OutDir 'identity.json') $identity | Out-Null
+}
 
 if ($SelfTest) {
     Write-Host ''
