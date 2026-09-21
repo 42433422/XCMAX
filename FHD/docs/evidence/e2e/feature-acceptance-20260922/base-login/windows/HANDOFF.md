@@ -10,10 +10,18 @@
 ## 0. 前置与自检（先跑这一步，不产生副作用）
 
 - 机器上已安装 XCAGI 桌面客户端（Enterprise），后端在 `127.0.0.1:17500`。
-- 企业验收账号：`SUNBIRD / SUN123456`（真实修茈市场企业账号，桌面端仅企业账号可登录）。
+- **企业验收账号凭据不再写在脚本/本文里**（仓库是公开仓库）。请由操作员按既有约定提供：
+  - 环境变量：`$env:XCAGI_TEST_USER`（默认 SUNBIRD）、`$env:XCAGI_TEST_PASS`（必填）；
+  - 或命令行显式传 `-Account/-Password`；
+  - 既有参考：仓库主线的 `FHD/scripts/package/acceptance-sunbird-windows.ps1`（同一验收账号的来源）。
+  未提供密码时脚本会立即以清晰提示退出（exit 2），不会跑出半截证据。
+- **2026-09-19 那轮 base-login 之所以是 BLOCKED，原因就是当时没有企业账号凭据**
+  （记录见 `windows-evidence-1.0.0.5/records.jsonl` 的 base-login：MARKET_AUTH_FAILED + 登录按钮保持禁用）。
+  这一轮把凭据交给操作员后，同一套用例可以真正跑完成功路径。
 - 先运行自检（只读：解析安装目录/版本/SHA、探活、探一次 `/api/auth/me`）：
 
 ```powershell
+$env:XCAGI_TEST_PASS = '<由操作员提供>'
 powershell -ExecutionPolicy Bypass -File .\accept-base-login.ps1 -SelfTest
 ```
 
@@ -47,7 +55,7 @@ powershell -ExecutionPolicy Bypass -File .\accept-base-login.ps1 -WithVideo `
 在脚本运行期间（视频在录）用真实鼠标键盘操作 XCAGI 窗口：
 
 1. **W2-GUI**：退出已有会话（若已登录）→ 停在登录页，截图存 `shot\W2-login-page.png`；
-   输入 `SUNBIRD / SUN123456` → 点「登 录」→ 进入工作台（应出现左侧导航、主区「智能对话」、
+   输入操作员提供的 `XCAGI_TEST_USER / XCAGI_TEST_PASS`（验收账号）→ 点「登 录」→ 进入工作台（应出现左侧导航、主区「智能对话」、
    左上角显示账号 SUNBIRD），截图存 `shot\W2-login-workspace.png`。
 2. **W4-GUI**：在工作台执行「退出登录」（macOS 侧路径为 系统设置 → 账号卡片「退出登录」→
    确认「确定退出本机账号？」→「确定」；Windows 侧以实际界面为准，若入口不同请写明你走的路径），

@@ -28,8 +28,10 @@
 
 param(
     [string]$Base = 'http://127.0.0.1:17500',
-    [string]$Account = 'SUNBIRD',
-    [string]$Password = 'SUN123456',
+    # Credentials come from the environment (XCAGI_TEST_USER / XCAGI_TEST_PASS) or explicit
+    # parameters. Do NOT hardcode a password in this file: the repo is public.
+    [string]$Account = $(if ($env:XCAGI_TEST_USER) { $env:XCAGI_TEST_USER } else { 'SUNBIRD' }),
+    [string]$Password = $env:XCAGI_TEST_PASS,
     [string]$MarketBase = 'https://xiu-ci.com',
     [string]$OutDir = (Join-Path $env:TEMP 'win-evidence\feature-base-login'),
     [string]$AppExe = '',
@@ -347,6 +349,13 @@ function Get-Identity {
 # ---------------- main ----------------
 
 Write-Log '=== base-login Windows acceptance (this round) ==='
+if (-not $Password) {
+    Write-Host 'FATAL: no credential supplied.'
+    Write-Host 'Set XCAGI_TEST_PASS (and optionally XCAGI_TEST_USER) or pass -Password, then re-run.'
+    Write-Host 'This file intentionally does not contain the password (public repo).'
+    exit 2
+}
+Write-Log ('account=' + $Account + ' (password supplied: ' + [bool]$Password + ')')
 $appDir = Resolve-AppDir
 Write-Log ('app_dir=' + $appDir)
 $identity = Get-Identity -AppDir $appDir

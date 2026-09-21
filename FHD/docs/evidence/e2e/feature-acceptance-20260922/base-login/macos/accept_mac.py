@@ -28,8 +28,8 @@ APP = "/Applications/XCAGI.app"
 WORK = "/private/tmp/xcagi-feat-base-login"
 DATA = os.path.join(WORK, "data")
 EV = os.path.join(WORK, "evidence")
-USER = "SUNBIRD"
-PASS = "SUN123456"
+USER = os.environ.get("XCAGI_TEST_USER", "SUNBIRD")
+PASS = os.environ.get("XCAGI_TEST_PASS", "")  # 凭据由环境提供，不写进文件（仓库为公开仓库）
 MARKET = "https://xiu-ci.com"
 
 _OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
