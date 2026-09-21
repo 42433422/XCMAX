@@ -6,6 +6,7 @@ import {
   clearHostPackSkippedSession,
   invalidateHostPackCompletionCache,
   isHostPackSkippedThisSession,
+  isOnboardingEntryReady,
   markHostPackSkippedThisSession,
   needsHostPackCompletion,
   resolveHostPackOnboardingStep,
@@ -228,5 +229,64 @@ describe('hostPackOnboardingGate', () => {
     await expect(result).resolves.toBeNull()
     await expect(resolveHostPackOnboardingStep(true)).resolves.toBeNull()
     expect(sessionStorage.getItem('xcagi_host_pack_needs_cache_v2')).toBeNull()
+  })
+})
+
+describe('isOnboardingEntryReady（账号定制待供应商交付不阻塞进入）', () => {
+  it('宿主基础线装齐、仅账号定制待交付 → 就绪', () => {
+    expect(
+      isOnboardingEntryReady({
+        baseline_ready: false,
+        missing_required_mod_ids: ['taiyangniao-pro'],
+        missing_account_custom_mod_ids: ['taiyangniao-pro'],
+      }),
+    ).toBe(true)
+  })
+
+  it('产品侧必需项缺失 → 未就绪', () => {
+    expect(
+      isOnboardingEntryReady({
+        baseline_ready: false,
+        missing_required_mod_ids: ['xcagi-erp-domain-bridge'],
+        missing_account_custom_mod_ids: [],
+      }),
+    ).toBe(false)
+  })
+
+  it('必需项里混有非账号定制项 → 未就绪', () => {
+    expect(
+      isOnboardingEntryReady({
+        baseline_ready: false,
+        missing_required_mod_ids: ['taiyangniao-pro', 'xcagi-erp-domain-bridge'],
+        missing_account_custom_mod_ids: ['taiyangniao-pro'],
+      }),
+    ).toBe(false)
+  })
+
+  it('baseline_ready 为真 → 就绪', () => {
+    expect(
+      isOnboardingEntryReady({
+        baseline_ready: true,
+        missing_required_mod_ids: [],
+        missing_account_custom_mod_ids: [],
+      }),
+    ).toBe(true)
+  })
+
+  it('plan 缺失或缺少必需项列表 → 未就绪', () => {
+    expect(isOnboardingEntryReady(null)).toBe(false)
+    expect(isOnboardingEntryReady({ baseline_ready: false, missing_required_mod_ids: [] })).toBe(false)
+  })
+
+  it('needsHostPackCompletion：仅账号定制待交付时不拦截', async () => {
+    invalidateHostPackCompletionCache()
+    clearHostPackSkippedSession()
+    vi.mocked(fetchOnboardingIndustryCatalog).mockResolvedValue(industryCatalog('涂料'))
+    vi.mocked(fetchIndustryBaseline).mockResolvedValue({
+      baseline_ready: false,
+      missing_required_mod_ids: ['taiyangniao-pro'],
+      missing_account_custom_mod_ids: ['taiyangniao-pro'],
+    } as IndustryBaselinePlan)
+    await expect(needsHostPackCompletion(true)).resolves.toBe(false)
   })
 })

@@ -103,10 +103,14 @@ vi.mock('@/composables/useTutorialCatalog', () => ({
   useTutorialCatalog: () => mockContainer.tutorialState,
 }))
 
-vi.mock('@/utils/hostPackOnboardingGate', () => ({
-  invalidateHostPackCompletionCache: mockContainer.invalidateHostPackCompletionCache,
-  markHostPackSkippedThisSession: mockContainer.markHostPackSkippedThisSession,
-}))
+vi.mock('@/utils/hostPackOnboardingGate', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/utils/hostPackOnboardingGate')>()
+  return {
+    ...actual,
+    invalidateHostPackCompletionCache: mockContainer.invalidateHostPackCompletionCache,
+    markHostPackSkippedThisSession: mockContainer.markHostPackSkippedThisSession,
+  }
+})
 
 vi.mock('@/utils/workspacePrefsApi', () => ({
   patchWorkspacePrefs: mockContainer.patchWorkspacePrefs,

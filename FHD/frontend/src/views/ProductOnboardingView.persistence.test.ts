@@ -54,7 +54,11 @@ vi.mock('@/api/modStore', () => ({
   installCustomerDeliverySeed: vi.fn(),
 }))
 vi.mock('@/utils/appDialog', () => ({ appAlert: backend.alert }))
-vi.mock('@/utils/hostPackOnboardingGate', () => ({ invalidateHostPackCompletionCache: vi.fn(), markHostPackSkippedThisSession: vi.fn() }))
+vi.mock('@/utils/hostPackOnboardingGate', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/utils/hostPackOnboardingGate')>()),
+  invalidateHostPackCompletionCache: vi.fn(),
+  markHostPackSkippedThisSession: vi.fn(),
+}))
 vi.mock('@/composables/useTutorialCatalog', () => ({ useTutorialCatalog: () => ({ buildContext: vi.fn(() => ({})) }) }))
 
 let wrapper: ReturnType<typeof mount> | undefined
