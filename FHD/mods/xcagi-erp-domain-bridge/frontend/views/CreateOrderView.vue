@@ -19,6 +19,9 @@
               <option value="">-- 请选择模板 --</option>
               <option v-for="t in templates" :key="t.id" :value="t.id">{{ t.name }}</option>
             </select>
+            <div v-if="templates.length === 0" class="muted" style="font-size: 12px; margin-top: 6px;">
+              暂无可用发货单模板：请点下方「模板编辑」上传贵司出货单 Excel（表头需含必备词条），保存后回到本页刷新模板列表。
+            </div>
           </div>
           <div class="form-col" style="flex: 0;">
             <label>&nbsp;</label>

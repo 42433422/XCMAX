@@ -319,6 +319,10 @@ export function useCreateOrder() {
   }
 
   async function generateShipment() {
+    if (!templates.value.length) {
+      await appAlert('暂无可用发货单模板：请先点「模板编辑」上传或创建贵司出货单模板，保存后回到本页点「刷新模板列表」再生成。')
+      return
+    }
     if (!form.templateName) {
       await appAlert('请选择发货单模板')
       return

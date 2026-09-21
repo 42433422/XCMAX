@@ -20,6 +20,7 @@ from datetime import datetime
 from typing import Dict, List
 
 import openpyxl
+from openpyxl.cell.cell import MergedCell
 from openpyxl.styles import Alignment, Border, Font, Side
 
 from app.utils.operational_errors import BOUNDARY_ERRORS
@@ -354,6 +355,45 @@ class ShipmentDocumentGenerator:
                 except BOUNDARY_ERRORS:
                     pass
 
+    @staticmethod
+    def _write_cell(worksheet, row: int, column: int, value) -> bool:
+        """写入可写单元格；合并区域内非左上角单元格只读，跳过而不中断生成。
+
+        客户自带的送货单模板通常把「产品型号」列与「人民币大写」区域设为合并单元格，
+        openpyxl 对合并区内的 MergedCell 赋值会抛 AttributeError，进而让整单生成 500。
+        """
+        cell = worksheet.cell(row=row, column=column)
+        if isinstance(cell, MergedCell):
+            logger.warning("模板合并单元格只读，跳过写入 %s（值为 %s）", cell.coordinate, value)
+            return False
+        cell.value = value
+        return True
+
+    @staticmethod
+    def _find_column_by_label(worksheet, labels: tuple) -> int | None:
+        """按表头词条定位列号（用于合并版式下按列名写合计）。"""
+        for row in range(1, min(worksheet.max_row, 10) + 1):
+            for column in range(1, worksheet.max_column + 1):
+                raw = worksheet.cell(row=row, column=column).value
+                text = str(raw or "").replace(" ", "")
+                if text and any(label in text for label in labels):
+                    return column
+        return None
+
+    def _write_total_by_header(self, worksheet, labels: tuple, row: int, value) -> bool:
+        """合并版式下按表头列写合计；模板自带 SUM 公式时不覆盖。"""
+        column = self._find_column_by_label(worksheet, labels)
+        if not column:
+            return False
+        cell = worksheet.cell(row=row, column=column)
+        if isinstance(cell, MergedCell):
+            return False
+        existing = cell.value
+        if isinstance(existing, str) and existing.startswith("="):
+            return False
+        cell.value = value
+        return True
+
     def _fill_from_template(
         self,
         worksheet,
@@ -377,7 +417,7 @@ class ShipmentDocumentGenerator:
         )
         unit_name = purchase_unit.name if purchase_unit and purchase_unit.name else "未指定单位"
         header_info = f"购货单位：{unit_name}       联系人：{contact}              {today}      订单编号：{order_number}"
-        header_cell.value = header_info
+        self._write_cell(worksheet, header_cell.row, header_cell.column, header_info)
         logger.info(f"填写购买单位信息: {unit_name}, 联系人: {contact}")
 
         # 填充产品数据（从第4行开始）
@@ -386,44 +426,53 @@ class ShipmentDocumentGenerator:
             row = start_row + i
 
             # 产品型号 (A列, A-C合并)
-            worksheet.cell(row=row, column=1, value=product.get("model_number", ""))
+            self._write_cell(worksheet, row, 1, product.get("model_number", ""))
 
             # 产品名称 (D列)
-            worksheet.cell(row=row, column=4, value=product.get("name", ""))
+            self._write_cell(worksheet, row, 4, product.get("name", ""))
 
             # 数量/件 (E列) - 桶数
-            worksheet.cell(row=row, column=5, value=product.get("quantity_tins", 0))
+            self._write_cell(worksheet, row, 5, product.get("quantity_tins", 0))
 
             # 规格/KG (F列) - 每桶的KG数
-            worksheet.cell(row=row, column=6, value=product.get("tin_spec", 0))
+            self._write_cell(worksheet, row, 6, product.get("tin_spec", 0))
 
             # 数量/KG (G列) - 直接填入数值
             kg_value = float(product.get("quantity_kg", 0))
             if kg_value > 0:
-                worksheet.cell(row=row, column=7, value=kg_value)
+                self._write_cell(worksheet, row, 7, kg_value)
 
             # 单价/元 (H列)
             unit_price = float(product.get("unit_price", 0))
             if unit_price > 0:
-                worksheet.cell(row=row, column=8, value=unit_price)
+                self._write_cell(worksheet, row, 8, unit_price)
 
             # 金额/元 (I列) - 直接填入数值
             amount = float(product.get("amount", 0))
             if amount > 0:
-                worksheet.cell(row=row, column=9, value=amount)
+                self._write_cell(worksheet, row, 9, amount)
             elif kg_value > 0 and unit_price > 0:
-                worksheet.cell(row=row, column=9, value=round(kg_value * unit_price, 2))
+                self._write_cell(worksheet, row, 9, round(kg_value * unit_price, 2))
 
             # 备注 (J列) - 保持空白
 
         # 第15行：合计行的数量/件 (E15公式保持SUM(E4:E14))
-        if total_quantity_tins > 0:
-            worksheet.cell(row=15, column=5, value=total_quantity_tins)
+        if total_quantity_tins > 0 and not self._write_cell(
+            worksheet, 15, 5, total_quantity_tins
+        ):
+            self._write_total_by_header(worksheet, ("数量/件", "数量"), 15, total_quantity_tins)
+
+        # 第15行：数量/KG 合计与「合计」标签——模板行被清空后按表头列补回，
+        # 保证客户拿到的单据既能看到总公斤数，也保留模板原有的合计行标识。
+        if total_quantity_kg > 0:
+            self._write_total_by_header(worksheet, ("数量/KG", "数量/kg"), 15, total_quantity_kg)
+        if not worksheet.cell(row=15, column=1).value:
+            self._write_cell(worksheet, 15, 1, "合计")
 
         # 第16行：金额区域
         # 大写人民币在A16，金额在I16（保持公式SUM(I4:I14)）
-        if total_amount > 0:
-            worksheet.cell(row=16, column=4, value=total_amount)
+        if total_amount > 0 and not self._write_cell(worksheet, 16, 4, total_amount):
+            self._write_total_by_header(worksheet, ("金额",), 16, total_amount)
 
     def _create_default_document(
         self,
