@@ -1,0 +1,143 @@
+[10:29:42Z] === Chain1(UI) start; target=8d50fe9d043391d5ba8857094a366a59a34ae43f ===
+[10:29:43Z] --- 1) 安装包校验（官网下载产物） ---
+dmg_path=/private/tmp/xcagi-custchain/dmg2/XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg dmg_sha256=55a873779aa316fe1e2393ff043978187911b3e052b9762deaefdd6d4817e32f dmg_size=301669921
+[10:29:44Z] --- 2) 浏览器下载隔离属性 + Gatekeeper ---
+dmg_quarantine=0083;6ab10718;Safari;
+/private/tmp/xcagi-custchain/dmg2/XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg: accepted
+source=Notarized Developer ID
+origin=Developer ID Application: jialong Li (G26WSH472M)
+[10:29:46Z] --- 3) 挂载 + 三方核验 ---
+--- spctl ---
+/private/tmp/xcagi-custchain/mnt/fresh/XCAGI.app: accepted
+source=Notarized Developer ID
+origin=Developer ID Application: jialong Li (G26WSH472M)
+--- codesign ---
+codesign_ok=1
+--- stapler ---
+Processing: /private/tmp/xcagi-custchain/mnt/fresh/XCAGI.app
+The validate action worked!
+--- build-info ---
+{"schema_version":1,"gitSha":"8d50fe9d043391d5ba8857094a366a59a34ae43f","version":"1.0.0.5","releaseId":"xcagi-1.0.0.5-8d50fe9d043391d5ba8857094a366a59a34ae43f","builtAt":"2026-09-21T08:46:12.138Z"}
+
+[10:29:52Z] --- 4) 安装到 /Applications ---
+installed_build_info:
+{"schema_version":1,"gitSha":"8d50fe9d043391d5ba8857094a366a59a34ae43f","version":"1.0.0.5","releaseId":"xcagi-1.0.0.5-8d50fe9d043391d5ba8857094a366a59a34ae43f","builtAt":"2026-09-21T08:46:12.138Z"}
+
+[10:29:54Z] --- 5) 首启 ---
+[10:30:04Z] backend up; bundle_sha=8d50fe9d043391d5ba8857094a366a59a34ae43f
+screenshot: True -> /private/tmp/xcagi-custchain/evidence-8d50fe9d/chain1-01-firstlaunch.png
+{"xcagi.db.bytes": 1744896, "uploads.files": 2, "mods.files": 430, "models.files": 0, "backups.files": 1, "backups.latest": "xcagi-unknown-20260921100215.db"}
+[10:30:04Z] --- 6) UI 登录 + 权益 + Mod + 行业准备（写操作全部走 UI） ---
+{
+  "step": "ui_login",
+  "verdict": "PASS",
+  "key": {
+    "step": "ui_login",
+    "verdict": "PASS",
+    "workspace_visible": true
+  }
+}
+-> /private/tmp/xcagi-custchain/evidence-8d50fe9d/ui-step0.json
+Traceback (most recent call last):
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 621, in <module>
+    res, actions = fn()
+                   ^^^^
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 324, in step1_template
+    R["actions"].append({"selected_file_visible": js("""(() => {
+                                                  ^^^^^^^^^^^^^^
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 31, in js
+    return cdp.eval_value(expr, timeout=timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/xcagi-custchain/cdp.py", line 37, in eval_value
+    msg = evaluate(expr, timeout=timeout)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/xcagi-custchain/cdp.py", line 22, in evaluate
+    t = page_target()
+        ^^^^^^^^^^^^^
+  File "/private/tmp/xcagi-custchain/cdp.py", line 18, in page_target
+    raise RuntimeError("no page target on CDP 9222")
+RuntimeError: no page target on CDP 9222
+Traceback (most recent call last):
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 621, in <module>
+    res, actions = fn()
+                   ^^^^
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 359, in step2_product
+    goto("/products")
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 220, in goto
+    cdp.send("Page.navigate", {"url": APP + path})
+  File "/private/tmp/xcagi-custchain/cdp.py", line 45, in send
+    t = page_target()
+        ^^^^^^^^^^^^^
+  File "/private/tmp/xcagi-custchain/cdp.py", line 18, in page_target
+    raise RuntimeError("no page target on CDP 9222")
+RuntimeError: no page target on CDP 9222
+Traceback (most recent call last):
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 621, in <module>
+    res, actions = fn()
+                   ^^^^
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 403, in step2b_customer
+    goto("/customers")
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 220, in goto
+    cdp.send("Page.navigate", {"url": APP + path})
+  File "/private/tmp/xcagi-custchain/cdp.py", line 45, in send
+    t = page_target()
+        ^^^^^^^^^^^^^
+  File "/private/tmp/xcagi-custchain/cdp.py", line 18, in page_target
+    raise RuntimeError("no page target on CDP 9222")
+RuntimeError: no page target on CDP 9222
+Traceback (most recent call last):
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 621, in <module>
+    res, actions = fn()
+                   ^^^^
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 446, in step3_generate
+    goto("/orders/create")
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 220, in goto
+    cdp.send("Page.navigate", {"url": APP + path})
+  File "/private/tmp/xcagi-custchain/cdp.py", line 45, in send
+    t = page_target()
+        ^^^^^^^^^^^^^
+  File "/private/tmp/xcagi-custchain/cdp.py", line 18, in page_target
+    raise RuntimeError("no page target on CDP 9222")
+RuntimeError: no page target on CDP 9222
+Traceback (most recent call last):
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 621, in <module>
+    res, actions = fn()
+                   ^^^^
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 545, in step4_download
+    panel = js("""(() => { const c = Array.from(document.querySelectorAll('#view-create-order .card'))
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 31, in js
+    return cdp.eval_value(expr, timeout=timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/xcagi-custchain/cdp.py", line 37, in eval_value
+    msg = evaluate(expr, timeout=timeout)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/xcagi-custchain/cdp.py", line 22, in evaluate
+    t = page_target()
+        ^^^^^^^^^^^^^
+  File "/private/tmp/xcagi-custchain/cdp.py", line 18, in page_target
+    raise RuntimeError("no page target on CDP 9222")
+RuntimeError: no page target on CDP 9222
+Traceback (most recent call last):
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 621, in <module>
+    res, actions = fn()
+                   ^^^^
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 602, in step5_records
+    goto("/shipment-records")
+  File "/private/tmp/xcagi-custchain/ui_drive.py", line 220, in goto
+    cdp.send("Page.navigate", {"url": APP + path})
+  File "/private/tmp/xcagi-custchain/cdp.py", line 45, in send
+    t = page_target()
+        ^^^^^^^^^^^^^
+  File "/private/tmp/xcagi-custchain/cdp.py", line 18, in page_target
+    raise RuntimeError("no page target on CDP 9222")
+RuntimeError: no page target on CDP 9222
+[10:30:40Z] --- 7) 重启恢复 ---
+[10:31:23Z] backend up; bundle_sha=8d50fe9d043391d5ba8857094a366a59a34ae43f
+{"ui_evidence": {"template_created_by_ui": "客户发货单模板-简版", "doc_from_ui": "", "unit_from_ui": "db:2"}, "relogin": {"status": 200, "success": true, "me_status": 200, "username": "SUNBIRD", "has_shipment_edit": true}, "template_present": {"status": 200, "probe": "客户发货单模板-简版", "found": false}, "unit_present": {"status": 200, "probe": "db:2", "found": false}, "prior_document": {"doc_name": ""}}
+verdict: BLOCKED -> /private/tmp/xcagi-custchain/evidence-8d50fe9d/chain1-restart-continuity.json
+{"xcagi.db.bytes": 1744896, "uploads.files": 2, "mods.files": 430, "models.files": 0, "backups.files": 1, "backups.latest": "xcagi-unknown-20260921100215.db"}
+screenshot: True -> /private/tmp/xcagi-custchain/evidence-8d50fe9d/chain1-03-afterrestart.png
+[10:31:39Z] --- 8) 安装身份 ---
+
+[10:31:39Z] === Chain1(UI) done ===

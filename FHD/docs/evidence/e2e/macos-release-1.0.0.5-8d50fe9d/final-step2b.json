@@ -1,0 +1,68 @@
+{
+  "step": "customer_create_via_ui",
+  "actions": [
+    {
+      "at": "/customers",
+      "state": {
+        "url": "http://127.0.0.1:17500/customers",
+        "title": "组织管理 - XCAGI",
+        "h1": "客户管理",
+        "dialogs": []
+      }
+    },
+    {
+      "shot": "/private/tmp/xcagi-custchain/evidence-aec61e7e/ui-06a-customers-entry.png",
+      "bytes": 391156
+    },
+    {
+      "click": "新建客户",
+      "label": "新建客户",
+      "rect": {
+        "x": 1370.59375,
+        "y": 93,
+        "w": 98.8125,
+        "h": 34,
+        "text": "+ 新建客户"
+      }
+    },
+    {
+      "modal": "新建客户×"
+    },
+    {
+      "typed_name": "UI客户-0921"
+    },
+    {
+      "shot": "/private/tmp/xcagi-custchain/evidence-aec61e7e/ui-06b-customer-form.png",
+      "bytes": 280703
+    },
+    {
+      "click": "创建",
+      "label": "创建",
+      "rect": {
+        "x": 873.6640625,
+        "y": 668.28125,
+        "w": 60.671875,
+        "h": 34,
+        "text": "创建"
+      }
+    },
+    {
+      "shot": "/private/tmp/xcagi-custchain/evidence-aec61e7e/ui-06c-customer-saved.png",
+      "bytes": 379007
+    }
+  ],
+  "verdict": "PASS",
+  "dialog": {
+    "title": "提示",
+    "message": "客户创建成功",
+    "buttons": [
+      "确定"
+    ]
+  },
+  "units_after": [
+    "UI客户-0921"
+  ],
+  "created": [
+    "UI客户-0921"
+  ]
+}
