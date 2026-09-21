@@ -1,0 +1,78 @@
+{
+  "feature": "base-login",
+  "name": "登录与会话管理",
+  "platform": "macos",
+  "at": "2026-09-22T02:48:12+0800",
+  "app": {
+    "schema_version": 1,
+    "gitSha": "8d50fe9d043391d5ba8857094a366a59a34ae43f",
+    "version": "1.0.0.5",
+    "releaseId": "xcagi-1.0.0.5-8d50fe9d043391d5ba8857094a366a59a34ae43f",
+    "builtAt": "2026-09-21T08:46:12.138Z"
+  },
+  "phases": {
+    "01-identity.json": {
+      "phase": "M0-identity",
+      "verdict": null,
+      "verdict_desktop_boundary": null,
+      "verdict_web": null
+    },
+    "02-prelogin.json": {
+      "phase": "M1-未登录拒绝",
+      "verdict": "PASS",
+      "verdict_desktop_boundary": null,
+      "verdict_web": null
+    },
+    "03-postlogin.json": {
+      "phase": "M2-企业账号登录",
+      "verdict": "PASS",
+      "verdict_desktop_boundary": null,
+      "verdict_web": null
+    },
+    "04-session-restart.json": {
+      "phase": "M3-会话保持(进程重启)",
+      "verdict": "PASS",
+      "verdict_desktop_boundary": null,
+      "verdict_web": null
+    },
+    "05-postlogout.json": {
+      "phase": "M4-安全退出",
+      "verdict": "PASS",
+      "verdict_desktop_boundary": null,
+      "verdict_web": null
+    },
+    "05b-postlogout-relaunch.json": {
+      "phase": "M4b-退出后重启回到登录页",
+      "verdict": "PASS",
+      "verdict_desktop_boundary": null,
+      "verdict_web": null
+    },
+    "05c-gui-logout.json": {
+      "phase": "M4c-GUI退出登录后界面",
+      "verdict": "PASS",
+      "verdict_desktop_boundary": null,
+      "verdict_web": null
+    },
+    "06-negative-and-web.json": {
+      "phase": "M5/M6-边界与Web",
+      "verdict": null,
+      "verdict_desktop_boundary": "PASS",
+      "verdict_web": "PASS"
+    },
+    "07-db-session.json": {
+      "phase": "M3-服务端会话落盘(旁证)",
+      "verdict": null,
+      "verdict_desktop_boundary": null,
+      "verdict_web": null
+    },
+    "99-verdict.json": {
+      "phase": null,
+      "verdict": "PASS",
+      "verdict_desktop_boundary": null,
+      "verdict_web": null
+    }
+  },
+  "verdict": "PASS",
+  "first_real_breakpoint": null,
+  "log": []
+}

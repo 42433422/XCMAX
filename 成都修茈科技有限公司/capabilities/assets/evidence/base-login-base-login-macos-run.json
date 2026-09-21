@@ -1,0 +1,117 @@
+{
+  "_comment": "本轮 macOS 真机验收记录（能力中心 feature-acceptance 记录格式）。基于 2026-09-22 实机运行；原始采集见同目录 01-06/99 号 JSON 与 screenshots/videos-manifest.json。",
+  "kind": "feature-acceptance",
+  "feature": "base-login",
+  "platform": "macos",
+  "status": "passed",
+  "app_git_sha": "8d50fe9d043391d5ba8857094a366a59a34ae43f",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-22",
+  "reviewed_at": "2026-09-22",
+  "passed": 6,
+  "failed": 0,
+  "visible_content": "真实 GUI 操作链：登录页 → 输入企业账号 SUNBIRD 成功进入「智能对话」工作台 → 退出登录（系统设置 → 退出登录 → 确认）回到登录页；进程重启后仍保持已登录会话。",
+  "media_derivation": "两段 .mp4 为官网展示用的网页转码件（1280x720 / 12fps / H.264），由同轮真机录屏原片裁切转码：03-login-operation.mov（192444408 B，sha256 c7c136aa0a1e85bf4ad8243cc856984feb163ad4f97bd25ba494afc85a21970c）、05c-gui-logout-operation.mov（108916825 B，sha256 b39240c396edf579eca5e02f7af084391c19125394f7400c075683759add95ac）。原片未入仓，归档于 /Users/Shared/xcagi-t6-tools/feature-acceptance-20260922/base-login/macos/，哈希清单见同目录 videos-manifest.json。",
+  "media": [
+    {
+      "feature": "base-login",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/macos/02-prelogin-screen.png",
+      "sha256": "8f200f8225f124f9d1efbe9052900af0da49a4eef7b209761ec797b14dabe35b",
+      "visual_review": "accepted",
+      "visible_result": "未登录：窗口标题「XCAGI 企业版 · V1 · 登录」，主标题「企业账号登录」，账号/密码输入框与「登 录」按钮可见，无工作台。",
+      "reviewed_at": "2026-09-22"
+    },
+    {
+      "feature": "base-login",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/macos/03-postlogin-screen.png",
+      "sha256": "ed02e17ada8d62ba9abca84ac9e51b53eab459d1d1ab465a892d174587ffded8",
+      "visual_review": "accepted",
+      "visible_result": "登录成功：窗口标题「智能对话 - XCAGI」，左上角显示账号 SUNBIRD 与「饰品包装助手」，左侧导航完整，主区标题「智能对话」。",
+      "reviewed_at": "2026-09-22"
+    },
+    {
+      "feature": "base-login",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/macos/04-restart-screen.png",
+      "sha256": "174f4c5ace47dfe0643002478e9351050f2c0e96c53afc6640ba52c1ff6df34f",
+      "visual_review": "accepted",
+      "visible_result": "应用进程重启后仍为已登录工作台（标题「智能对话 - XCAGI」、左侧 SUNBIRD），未出现登录表单。",
+      "reviewed_at": "2026-09-22"
+    },
+    {
+      "feature": "base-login",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/macos/05b-postlogout-relaunch-screen.png",
+      "sha256": "3d4529b4eea052640b58fdf3857906fda980ebd32a58aff238d7647258b032d5",
+      "visual_review": "accepted",
+      "visible_result": "退出登录后重启应用：回到登录页（账号/密码框为空、「登 录」按钮可见），无工作台与 SUNBIRD 侧栏。",
+      "reviewed_at": "2026-09-22"
+    },
+    {
+      "feature": "base-login",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/macos/05c-gui-logout-screen.png",
+      "sha256": "48f684531d1a220eefd1772b647ce7bd1651569d56f9c32c7a493bc7653921b2",
+      "visual_review": "accepted",
+      "visible_result": "GUI 点击「退出登录」并确认「确定退出本机账号？」后：界面回到登录页，账号/密码框为空。",
+      "reviewed_at": "2026-09-22"
+    },
+    {
+      "feature": "base-login",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/macos/03-login-operation-web.mp4",
+      "sha256": "5dc6917c3cf50555dc3278756a6fcd5272d7337a6cd08e7b11017ac4aeceeb60",
+      "visual_review": "accepted",
+      "visible_result": "真机录屏：登录页（账号/密码输入框、「登 录」按钮）→ 输入企业账号 SUNBIRD 与密码 → 点击「登 录」显示「正在登 录…」→ 进入「智能对话」工作台且左上角显示 SUNBIRD。",
+      "reviewed_at": "2026-09-22"
+    },
+    {
+      "feature": "base-login",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/macos/05c-gui-logout-operation-web.mp4",
+      "sha256": "23c5f56860b5a99772e6e146928f83c363bf8dc80cd95ab098c3528d84401a41",
+      "visual_review": "accepted",
+      "visible_result": "真机录屏：登录后进入工作台 → 系统设置页点击「退出登录」→ 弹出确认框「确定退出本机账号？」→ 点击「确定」后界面回到登录页，账号/密码框为空。",
+      "reviewed_at": "2026-09-22"
+    }
+  ],
+  "cases": [
+    {
+      "input": "未登录状态下访问受保护接口与会话校验接口（无 session cookie）。",
+      "actions": "GET /api/auth/me 与 GET /api/auth/session/validate（不带 cookie）；同时读取界面 DOM 状态。",
+      "expected": "两个接口都返回 valid=false，且界面停留在登录页（不出现工作台）。",
+      "observed": "me 返回 {success:false, UNAUTHORIZED, valid:false}；validate 返回 {NO_SESSION, valid:false}；DOM 标题「XCAGI 企业版 · V1 · 登录」、登录按钮可见、无会话 cookie。",
+      "result": "passed"
+    },
+    {
+      "input": "企业账号 SUNBIRD / 密码（真实修茈市场企业账号）。",
+      "actions": "在真实 GUI 点击账号框输入账号、密码框输入密码，点击「登 录」按钮。",
+      "expected": "登录成功并进入企业工作台，账号显示为 SUNBIRD。",
+      "observed": "窗口标题变为「智能对话 - XCAGI」，左上角显示 SUNBIRD；随后携带会话 cookie 调 GET /api/auth/me 返回 200 success=true、account_kind=enterprise、tenant_id=1、account_tier=pro、tier=enterprise。",
+      "result": "passed"
+    },
+    {
+      "input": "登录后的会话（服务端会话建制）。",
+      "actions": "结束应用进程并重新启动（open -a，同数据目录），复用同一会话 cookie 再访问接口。",
+      "expected": "会话由服务端统一管理，进程重启后仍有效。",
+      "observed": "重启后 me 仍 200 success=true、validate valid=true；界面仍为工作台无登录按钮；本机 sessions 表存在该会话行（user_id=2、account_kind=enterprise、tenant_id=1）。",
+      "result": "passed"
+    },
+    {
+      "input": "退出登录（API 与 GUI 两条路径）。",
+      "actions": "API：POST /api/auth/logout 后立即用旧 cookie 再访问；GUI：系统设置 → 账号卡片「退出登录」→ 确认框「确定退出本机账号？」→ 确定。",
+      "expected": "旧会话立即失效，界面回到登录页。",
+      "observed": "logout 返回 200；同一 cookie 随后 me 返回 valid=false、validate valid=false；GUI 退出后界面标题回到「XCAGI 企业版 · V1 · 登录」，账号/密码框为空。",
+      "result": "passed"
+    },
+    {
+      "input": "边界负例：错误密码 / 管理员身份从企业入口登录 / 空凭据。",
+      "actions": "分别 POST /api/auth/login（错误密码；account_kind=admin；空用户名密码）。",
+      "expected": "三者都应被拒绝（桌面端仅允许企业账号）。",
+      "observed": "错误密码 → MARKET_AUTH_FAILED「用户名或密码错误」；admin → ADMIN_DESKTOP_FORBIDDEN「桌面端不支持管理员账号登录，请使用网页版管理端」；空凭据 → INVALID_INPUT。三者 success 均为 false。",
+      "result": "passed"
+    },
+    {
+      "input": "同一企业账号在 Web 端（修茈市场）登录。",
+      "actions": "POST https://xiu-ci.com/api/auth/login（同一账号与密码）。",
+      "expected": "Web 端登录成功，证明桌面端与 Web 端共用同一套账户体系。",
+      "observed": "status 200，ok=true，返回 access_token/refresh_token，user=SUNBIRD，desktop_access=true，account_tier=pro。",
+      "result": "passed"
+    }
+  ]
+}

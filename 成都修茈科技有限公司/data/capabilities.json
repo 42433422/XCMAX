@@ -2,21 +2,21 @@
   "_comment": "此文件由 成都修茈科技有限公司/scripts/build_capability_center.py 自动生成，请勿手改（DO NOT EDIT）。",
   "schema_version": 1,
   "catalog_version": "2026-09-16",
-  "generated_at": "2026-09-21 13:15 UTC",
+  "generated_at": "2026-09-21 23:20 UTC",
   "principle": "No Evidence, No Claim：所有状态由构建脚本按仓库证据校验，证据缺失自动降级。",
   "stats": {
     "total": 158,
     "by_status": {
-      "verified": 0,
-      "partial": 40,
+      "verified": 1,
+      "partial": 39,
       "implemented": 114,
       "planned": 4
     },
     "cancelled_count": 0,
     "domains": 10,
     "modules": 28,
-    "verified_total": 0,
-    "last_verified_at": null,
+    "verified_total": 1,
+    "last_verified_at": "2026-09-22",
     "platform_counts": {
       "windows": 99,
       "macos": 100,
@@ -88,7 +88,7 @@
             {
               "id": "base-login",
               "name": "登录与会话管理",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",

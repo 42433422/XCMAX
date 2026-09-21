@@ -1,0 +1,74 @@
+{
+  "phase": "M1-未登录拒绝",
+  "at": "2026-09-22T02:30:23+0800",
+  "dom": {
+    "url": "http://127.0.0.1:17500/login?redirect=/",
+    "title": "XCAGI 企业版 · V1 · 登录",
+    "inputs": [
+      {
+        "name": "username",
+        "type": "text",
+        "ph": "XCAGI 账号或邮箱"
+      },
+      {
+        "name": "password",
+        "type": "password",
+        "ph": "密码"
+      },
+      {
+        "name": "",
+        "type": "checkbox",
+        "ph": ""
+      },
+      {
+        "name": "",
+        "type": "checkbox",
+        "ph": ""
+      }
+    ],
+    "login_button_visible": true,
+    "workspace_markers": {
+      "chat": false,
+      "sidebar": false
+    }
+  },
+  "cookies_before_login": [
+    {
+      "name": "csrf_token",
+      "value": "4628ca2d14c30a665b3402195bd6a4758637eb58afc4d1fd2270b4f35985992b",
+      "domain": "127.0.0.1",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "session": true
+    }
+  ],
+  "api_auth_me": {
+    "status": 200,
+    "body": {
+      "success": false,
+      "error": {
+        "code": "UNAUTHORIZED",
+        "message": "请先登录"
+      },
+      "valid": false
+    }
+  },
+  "api_session_validate": {
+    "status": 200,
+    "body": {
+      "success": false,
+      "error": {
+        "code": "NO_SESSION",
+        "message": "无会话信息"
+      },
+      "valid": false
+    }
+  },
+  "shots": {
+    "renderer": "/private/tmp/xcagi-feat-base-login/evidence/02-prelogin-renderer.png",
+    "screen": "/private/tmp/xcagi-feat-base-login/evidence/02-prelogin-screen.png"
+  },
+  "has_session_cookie": false,
+  "verdict": "PASS"
+}

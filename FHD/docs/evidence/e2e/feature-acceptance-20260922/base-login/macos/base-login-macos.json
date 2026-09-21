@@ -1,0 +1,157 @@
+{
+  "feature": "base-login",
+  "name": "登录与会话管理",
+  "platform": "macos",
+  "round": "feature-acceptance-20260922",
+  "generated_at": "2026-09-22T02:48:13+0800",
+  "app_identity": {
+    "app_path": "/Applications/XCAGI.app",
+    "build_info": {
+      "schema_version": 1,
+      "gitSha": "8d50fe9d043391d5ba8857094a366a59a34ae43f",
+      "version": "1.0.0.5",
+      "releaseId": "xcagi-1.0.0.5-8d50fe9d043391d5ba8857094a366a59a34ae43f",
+      "builtAt": "2026-09-21T08:46:12.138Z"
+    },
+    "build_info_now": {
+      "schema_version": 1,
+      "gitSha": "8d50fe9d043391d5ba8857094a366a59a34ae43f",
+      "version": "1.0.0.5",
+      "releaseId": "xcagi-1.0.0.5-8d50fe9d043391d5ba8857094a366a59a34ae43f",
+      "builtAt": "2026-09-21T08:46:12.138Z"
+    },
+    "bundle_unchanged": true,
+    "exe": "/Applications/XCAGI.app/Contents/MacOS/XCAGI",
+    "exe_sha256": "223a0d102d967066a4e1c5428a3d8cd573222fd281513591c69296db7a9adce0"
+  },
+  "machine": {
+    "sw_vers": "ProductName:\t\tmacOS\nProductVersion:\t\t26.3\nBuildVersion:\t\t25D125",
+    "uname": "Darwin 4243342deMac-mini.local 25.3.0 Darwin Kernel Version 25.3.0: Wed Jan 28 20:49:24 PST 2026; root:xnu-12377.81.4~5/RELEASE_ARM64_T8132 arm64",
+    "hostname": "4243342deMac-mini.local"
+  },
+  "data_dir": "/private/tmp/xcagi-feat-base-login/data",
+  "cdp_port": 9223,
+  "cases": {
+    "01-identity.json": {
+      "phase": "M0-identity",
+      "verdict": null,
+      "verdict_desktop_boundary": null,
+      "verdict_web": null
+    },
+    "02-prelogin.json": {
+      "phase": "M1-未登录拒绝",
+      "verdict": "PASS",
+      "verdict_desktop_boundary": null,
+      "verdict_web": null
+    },
+    "03-postlogin.json": {
+      "phase": "M2-企业账号登录",
+      "verdict": "PASS",
+      "verdict_desktop_boundary": null,
+      "verdict_web": null
+    },
+    "04-session-restart.json": {
+      "phase": "M3-会话保持(进程重启)",
+      "verdict": "PASS",
+      "verdict_desktop_boundary": null,
+      "verdict_web": null
+    },
+    "05-postlogout.json": {
+      "phase": "M4-安全退出",
+      "verdict": "PASS",
+      "verdict_desktop_boundary": null,
+      "verdict_web": null
+    },
+    "05b-postlogout-relaunch.json": {
+      "phase": "M4b-退出后重启回到登录页",
+      "verdict": "PASS",
+      "verdict_desktop_boundary": null,
+      "verdict_web": null
+    },
+    "05c-gui-logout.json": {
+      "phase": "M4c-GUI退出登录后界面",
+      "verdict": "PASS",
+      "verdict_desktop_boundary": null,
+      "verdict_web": null
+    },
+    "06-negative-and-web.json": {
+      "phase": "M5/M6-边界与Web",
+      "verdict": null,
+      "verdict_desktop_boundary": "PASS",
+      "verdict_web": "PASS"
+    },
+    "07-db-session.json": {
+      "phase": "M3-服务端会话落盘(旁证)",
+      "verdict": null,
+      "verdict_desktop_boundary": null,
+      "verdict_web": null
+    },
+    "99-verdict.json": {
+      "phase": null,
+      "verdict": "PASS",
+      "verdict_desktop_boundary": null,
+      "verdict_web": null
+    }
+  },
+  "verdict": "PASS",
+  "first_real_breakpoint": null,
+  "six_elements": {
+    "screenshot": true,
+    "video": true,
+    "log": true,
+    "product_version": true,
+    "app_sha": true,
+    "verify_time": true
+  },
+  "evidence_files": [
+    "01-identity.json",
+    "02-prelogin-renderer.png",
+    "02-prelogin-screen.png",
+    "02-prelogin.json",
+    "03-postlogin-renderer.png",
+    "03-postlogin-screen.png",
+    "03-postlogin.json",
+    "04-restart-renderer.png",
+    "04-restart-screen.png",
+    "04-session-restart.json",
+    "05-postlogout-api-renderer.png",
+    "05-postlogout-api-screen.png",
+    "05-postlogout.json",
+    "05b-postlogout-relaunch-renderer.png",
+    "05b-postlogout-relaunch-screen.png",
+    "05b-postlogout-relaunch.json",
+    "05c-gui-logout-renderer.png",
+    "05c-gui-logout-screen.png",
+    "05c-gui-logout.json",
+    "06-negative-and-web.json",
+    "07-db-session.json",
+    "99-verdict.json",
+    "accept_mac.py",
+    "videos-manifest.json",
+    "run.log"
+  ],
+  "shots": [
+    "02-prelogin-screen.png",
+    "03-postlogin-screen.png",
+    "04-restart-screen.png",
+    "05-postlogout-api-screen.png",
+    "05b-postlogout-relaunch-screen.png",
+    "05c-gui-logout-screen.png"
+  ],
+  "videos": [
+    "03-login-operation.mov",
+    "05c-gui-logout-operation.mov"
+  ],
+  "run_log": [],
+  "case_notes": {
+    "M1": "未登录：无 session_id cookie，/api/auth/me 与 /api/auth/session/validate 都返回 valid=false；界面停在登录页（02-prelogin-screen.png）。",
+    "M2": "GUI 真实输入 SUNBIRD 登录成功进入工作台；服务端会话 cookie 可用，/api/auth/me 返回 success=true 且 account_kind=enterprise（03-postlogin-*）。",
+    "M3": "进程重启后同一 cookie 仍有效（04-session-restart.json），service 端 sessions 表存在该会话行（07-db-session.json）。",
+    "M4": "HTTP POST /api/auth/logout 后旧 cookie 立即失效（05-postlogout.json）。注意：05-postlogout-* 截图是「API 退出那一刻」的画面，界面尚未刷新，因此仍显示工作台属预期现象；界面级证据由 05b（退出后重启回到登录页）与 05c（GUI 点击退出登录后停在登录页）承担。",
+    "M4b": "退出后重启应用：界面回到登录页、/api/auth/me valid=false（05b-postlogout-relaunch.json）。",
+    "M4c": "GUI 路径：系统设置 → 退出登录 → 确认「确定退出本机账号？」→ 确定，界面回到登录页（05c-gui-logout.json + 录屏 05c-gui-logout-operation.mov）。",
+    "M5": "错误密码 / account_kind=admin（桌面端拒绝管理员）/ 空凭据 全部被拒绝（06-negative-and-web.json）。",
+    "M6": "同一企业账号在修茈市场（Web）POST /api/auth/login 返回 ok=true 且带 access_token、desktop_access=true（06-negative-and-web.json）。"
+  },
+  "final_verdict": "PASS"
+}

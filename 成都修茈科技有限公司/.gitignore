@@ -4,6 +4,8 @@ __pycache__/
 *.mp4
 !new/hero-video.mp4
 !public/hero-video.mp4
+# 能力中心功能详情页的实机验收录像（网页转码件，小体积；原片不入仓）
+!capabilities/assets/evidence/*.mp4
 
 # 敏感配置文件
 .env

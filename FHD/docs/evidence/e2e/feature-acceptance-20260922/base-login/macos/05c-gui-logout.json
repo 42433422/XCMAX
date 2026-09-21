@@ -1,0 +1,40 @@
+{
+  "phase": "M4c-GUI退出登录后界面",
+  "at": "2026-09-22T02:46:40+0800",
+  "dom": {
+    "url": "http://127.0.0.1:17500/login?redirect=/",
+    "title": "XCAGI 企业版 · V1 · 登录",
+    "inputs": [
+      {
+        "name": "username",
+        "type": "text",
+        "ph": "XCAGI 账号或邮箱"
+      },
+      {
+        "name": "password",
+        "type": "password",
+        "ph": "密码"
+      },
+      {
+        "name": "",
+        "type": "checkbox",
+        "ph": ""
+      },
+      {
+        "name": "",
+        "type": "checkbox",
+        "ph": ""
+      }
+    ],
+    "login_button_visible": true,
+    "workspace_markers": {
+      "chat": false,
+      "sidebar": false
+    }
+  },
+  "shots": {
+    "renderer": "/private/tmp/xcagi-feat-base-login/evidence/05c-gui-logout-renderer.png",
+    "screen": "/private/tmp/xcagi-feat-base-login/evidence/05c-gui-logout-screen.png"
+  },
+  "verdict": "PASS"
+}
