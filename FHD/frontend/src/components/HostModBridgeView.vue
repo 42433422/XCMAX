@@ -1,5 +1,5 @@
 <template>
-  <component :is="View" v-bind="bindProps" />
+  <component v-if="View" :is="View" v-bind="bindProps" />
 </template>
 
 <script setup lang="ts">

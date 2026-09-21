@@ -14,7 +14,6 @@ interface CustomerRow {
   name?: string
   contact_person?: string
   contact_phone?: string
-  address?: string
   contact_address?: string
 }
 
@@ -35,10 +34,8 @@ interface CustomerEditForm {
 
 interface CustomersListResponse {
   success: boolean
-  message?: string
   total?: number
   customers?: CustomerRow[]
-  data?: CustomerRow[]
 }
 
 // 购买单位下拉项：接口可能返回字符串或对象（多字段名兼容）
@@ -113,7 +110,9 @@ export function useCustomers() {
     { key: 'customer_name', label: '客户名称' },
     { key: 'contact_person', label: '联系人' },
     { key: 'contact_phone', label: '电话' },
-    { key: 'address', label: '地址' }
+    // 列 key 必须与接口返回字段一致（customers/list 返回 contact_address），
+    // 否则 DataTable 取不到值、#cell-* 槽位也不命中，地址列恒显示 '-'。
+    { key: 'contact_address', label: '地址' }
   ];
 
   function normalizeUnitsPayload(data: UnitsPayload) {
@@ -178,7 +177,7 @@ export function useCustomers() {
         ...(pu ? { purchase_unit: pu } : {})
       });
       if (data.success) {
-        const incoming = data.customers || data.data || [];
+        const incoming = data.customers || [];
         const total = Number(data.total ?? incoming.length ?? 0);
         totalCustomers.value = Number.isFinite(total) ? total : incoming.length;
 
@@ -241,7 +240,7 @@ export function useCustomers() {
       customer_name: customer.customer_name || customer.unit_name || customer.name || '',
       contact_person: customer.contact_person || '',
       contact_phone: customer.contact_phone || '',
-      address: customer.address || customer.contact_address || ''
+      address: customer.contact_address || ''
     };
     showEditModal.value = true;
   };
