@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import types
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import create_engine
@@ -27,7 +28,9 @@ from app.application.agent_orchestrator.task_execution_sql_repository import (
 reconciler = importlib.import_module(
     "app.application.agent_orchestrator.stale_run_reconciler"
 )
-lifespan_module = importlib.import_module("app.fastapi_app.lifespan")
+task_dispatcher = importlib.import_module(
+    "app.application.agent_orchestrator.task_dispatcher"
+)
 
 
 def _iso(offset_seconds: float = 0.0) -> str:
@@ -116,13 +119,39 @@ def test_recoverable_queue_and_live_lease_are_left_alone(tmp_path) -> None:
         engine.dispose()
 
 
-def test_lifespan_reconciles_before_starting_dispatcher(monkeypatch) -> None:
+def test_dispatcher_reconciles_before_it_starts_dispatching(monkeypatch) -> None:
+    """对账必须发生在 dispatcher 开始认领执行之前，否则中断任务会被并发改写。"""
     calls: list[str] = []
     monkeypatch.setattr(
         reconciler,
         "reconcile_stale_running_runs",
         lambda **kwargs: calls.append("reconcile") or 2,
     )
+    monkeypatch.setattr(
+        task_dispatcher,
+        "get_agent_task_dispatcher",
+        lambda: types.SimpleNamespace(start=lambda: calls.append("start")),
+    )
 
-    assert lifespan_module._reconcile_interrupted_runs() == 2
-    assert calls == ["reconcile"]
+    task_dispatcher.start_agent_task_dispatcher()
+
+    assert calls == ["reconcile", "start"]
+
+
+def test_reconcile_failure_does_not_block_dispatcher_start(monkeypatch) -> None:
+    """对账本身出错时只告警，不得让 dispatcher 起不来。"""
+    calls: list[str] = []
+
+    def _boom(**kwargs):
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(reconciler, "reconcile_stale_running_runs", _boom)
+    monkeypatch.setattr(
+        task_dispatcher,
+        "get_agent_task_dispatcher",
+        lambda: types.SimpleNamespace(start=lambda: calls.append("start")),
+    )
+
+    task_dispatcher.start_agent_task_dispatcher()
+
+    assert calls == ["start"]
