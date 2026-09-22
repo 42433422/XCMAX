@@ -265,8 +265,28 @@ def get_agent_task_dispatcher() -> AgentTaskDispatcher:
         return _dispatcher
 
 
+def reconcile_interrupted_runs() -> int:
+    """启动对账：收敛上一进程遗留的 running 任务（M15）。
+
+    放在 dispatcher 启动前，保证在重新认领执行之前先把已经中断的 run 收敛为
+    failed；被动节点不启动 dispatcher，因此也不会误改运行状态。
+    """
+    from app.application.agent_orchestrator.stale_run_reconciler import (
+        reconcile_stale_running_runs,
+    )
+
+    try:
+        return reconcile_stale_running_runs()
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("agent run startup reconciliation skipped: %s", exc)
+        return 0
+
+
 def start_agent_task_dispatcher() -> AgentTaskDispatcher:
     dispatcher = get_agent_task_dispatcher()
+    reconciled = reconcile_interrupted_runs()
+    if reconciled:
+        logger.info("agent run startup reconciliation converged %s run(s)", reconciled)
     dispatcher.start()
     return dispatcher
 
@@ -292,6 +312,7 @@ __all__ = [
     "AgentTaskDispatcher",
     "get_agent_task_dispatcher",
     "notify_agent_task_dispatcher",
+    "reconcile_interrupted_runs",
     "set_agent_task_dispatcher_for_tests",
     "start_agent_task_dispatcher",
     "stop_agent_task_dispatcher",

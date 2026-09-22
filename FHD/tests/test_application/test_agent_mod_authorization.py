@@ -309,3 +309,60 @@ def test_background_binding_rejects_account_scope_changes(mod_session, field, va
     with pytest.raises(AgentModAuthorizationError):
         with agent_mod_execution_scope(binding):
             pytest.fail("changed account scope must not execute")
+
+
+def test_owned_run_without_mod_binding_stays_visible_to_its_owner(monkeypatch):
+    """M9/M10 回归：legacy/compat 路径创建的 run 未写入 _mod_authorization，
+    当请求头注入 active-mod（前端 window.fetch 补丁总会注入）时，
+    用户仍必须能读到**自己创建的** run，而不是 403。"""
+    from app.fastapi_routes.domains.agent import route_support
+
+    monkeypatch.setattr(route_support, "tenant_id_of_run", lambda run: "1")
+    run = AgentRun(user_id="1", message="统计客户与产品")
+    run.metadata["runtime_context"] = {"source": "compat_chat_stream_agent_tool"}
+    orchestrator = SimpleNamespace(get_run=lambda run_id: run)
+    principal = AgentPrincipal(
+        user_id="1", tenant_id="1", mod_authorization={"mod_id": "attendance-industry"}
+    )
+
+    got, error = route_support.owned_run(orchestrator, run.run_id, principal)
+
+    assert error is None
+    assert got is run
+
+
+def test_owned_run_still_enforces_mod_user_and_tenant_boundaries(monkeypatch):
+    """负向：本次改动**不得**放宽 Mod / 用户 / 租户边界。"""
+    from app.fastapi_routes.domains.agent import route_support
+
+    monkeypatch.setattr(route_support, "tenant_id_of_run", lambda run: "1")
+    bound = AgentRun(user_id="1", message="bound")
+    bound.metadata["runtime_context"] = {"_mod_authorization": {"mod_id": "mod-a"}}
+    orchestrator = SimpleNamespace(get_run=lambda run_id: bound)
+
+    cross_mod = AgentPrincipal(user_id="1", tenant_id="1", mod_authorization={"mod_id": "mod-b"})
+    cross_user = AgentPrincipal(user_id="2", tenant_id="1", mod_authorization={"mod_id": "mod-a"})
+    cross_tenant = AgentPrincipal(user_id="1", tenant_id="2", mod_authorization={"mod_id": "mod-a"})
+
+    for principal in (cross_mod, cross_user, cross_tenant):
+        _, error = route_support.owned_run(orchestrator, bound.run_id, principal)
+        assert error is not None
+        assert error.status_code == 403
+
+
+def test_legacy_task_without_runs_is_not_hidden_by_active_mod_header():
+    """M10 回归：无执行记录的 legacy 任务已通过用户/租户归属校验后，
+    不应仅因请求携带 active-mod 而对该用户隐藏。"""
+    from app.fastapi_routes.domains.agent import route_support
+
+    task = SimpleNamespace(user_id="1", tenant_id="1", task_id="t1")
+    orchestrator = SimpleNamespace(list_task_runs=lambda **kwargs: [])
+    owner = AgentPrincipal(
+        user_id="1", tenant_id="1", mod_authorization={"mod_id": "attendance-industry"}
+    )
+
+    assert route_support.task_scope_matches(orchestrator, task, owner) is True
+    other_user = AgentPrincipal(user_id="2", tenant_id="1")
+    other_tenant = AgentPrincipal(user_id="1", tenant_id="9")
+    assert route_support.task_scope_matches(orchestrator, task, other_user) is False
+    assert route_support.task_scope_matches(orchestrator, task, other_tenant) is False
