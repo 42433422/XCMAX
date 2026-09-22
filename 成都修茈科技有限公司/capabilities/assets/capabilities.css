@@ -318,6 +318,38 @@
   color: var(--text-soft);
 }
 
+/* ============================================================ 平台级验证状态 */
+.cap-platform--verified { background: rgba(18, 161, 80, 0.12); color: #0b7a3b; border-color: rgba(18, 161, 80, 0.35); }
+.cap-platform--partial  { background: rgba(255, 138, 0, 0.12); color: #9a5200; border-color: rgba(255, 138, 0, 0.35); }
+.cap-platform--pending  { background: rgba(94, 106, 128, 0.12); color: #5b6577; border-color: rgba(94, 106, 128, 0.35); }
+
+.cap-ps { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600;
+  padding: 3px 10px; border-radius: 999px; border: 1px solid transparent; }
+.cap-ps::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.ps-verified { background: rgba(18, 161, 80, 0.12); color: #0b7a3b; border-color: rgba(18, 161, 80, 0.35); }
+.ps-partial  { background: rgba(255, 138, 0, 0.12); color: #9a5200; border-color: rgba(255, 138, 0, 0.35); }
+.ps-pending  { background: rgba(94, 106, 128, 0.12); color: #5b6577; border-color: rgba(94, 106, 128, 0.35); }
+
+.cap-plat-section .container { display: block; }
+.cap-plat { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--line);
+  border-radius: 14px; padding: 16px 18px; margin-top: 14px; }
+.cap-plat--verified { border-left-color: #12a150; }
+.cap-plat--partial  { border-left-color: #ff8a00; }
+.cap-plat--pending  { border-left-color: #9aa4b5; }
+.cap-plat-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.cap-plat-head h3 { margin: 0; font-size: 15px; }
+.cap-plat-note { margin: 0; color: var(--text-soft); font-size: 13.5px; line-height: 1.75; }
+.cap-plat-run { margin: 8px 0 0; font-size: 13.5px; line-height: 1.7; color: var(--text-soft); }
+.cap-plat-run:first-child { margin-top: 0; }
+
+/* 首页：各平台实机验收覆盖表 */
+.cap-plat-table-wrap { overflow-x: auto; }
+.cap-plat-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.cap-plat-table th, .cap-plat-table td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--line); }
+.cap-plat-table thead th { color: var(--text-soft); font-weight: 600; white-space: nowrap; }
+.cap-plat-table tbody th { font-weight: 600; white-space: nowrap; }
+.cap-plat-table .cap-ps { justify-content: center; min-width: 34px; }
+
 .cap-shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 14px; }
 .cap-evidence-media { grid-column: 1 / -1; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px; }
 .cap-evidence-media h3 { margin: 0 0 12px; font-size: 15px; }
