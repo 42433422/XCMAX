@@ -56,9 +56,9 @@
     {
       "feature": "base-login",
       "path": "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/macos/03-login-operation-web.mp4",
-      "sha256": "5dc6917c3cf50555dc3278756a6fcd5272d7337a6cd08e7b11017ac4aeceeb60",
+      "sha256": "6ddccb83f8ec09274e5bae84c479186306aec6989992e33ef3bb2bf5a2048bad",
       "visual_review": "accepted",
-      "visible_result": "真机录屏：登录页（账号/密码输入框、「登 录」按钮）→ 输入企业账号 SUNBIRD 与密码 → 点击「登 录」显示「正在登 录…」→ 进入「智能对话」工作台且左上角显示 SUNBIRD。",
+      "visible_result": "真机录屏（172 秒，起于登录页、止于已登录工作台）：登录页空表单（账号/密码输入框、「登 录」按钮）→ 输入企业账号 SUNBIRD 与密码 → 点击「登 录」显示「正在登 录…」→ 进入「智能对话」工作台且左上角显示 SUNBIRD。片段不含退出登录后的画面。",
       "reviewed_at": "2026-09-22"
     },
     {
