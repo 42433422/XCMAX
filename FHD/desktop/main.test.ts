@@ -699,23 +699,28 @@ describe('main — backend spawn failure', () => {
   it('shows the failure and exits instead of leaving a zombie shell', async () => {
     const { __test_only } = await import('./main.js')
     electronMocks.dialog.showErrorBox.mockClear()
+    electronMocks.dialog.showMessageBox.mockClear()
     electronMocks.app.quit.mockClear()
     electronMocks.app.isQuitting = false
 
     __test_only.handleBackendSpawnError(new Error('ENOENT'))
 
-    expect(electronMocks.dialog.showErrorBox).toHaveBeenCalledTimes(1)
+    // M17 回归：失败提示必须走**异步** showMessageBox；同步 showErrorBox 会阻塞主进程事件循环
+    expect(electronMocks.dialog.showMessageBox).toHaveBeenCalledTimes(1)
+    expect(electronMocks.dialog.showErrorBox).not.toHaveBeenCalled()
     expect(electronMocks.app.quit).toHaveBeenCalledTimes(1)
   })
 
   it('does not display another error while the app is already quitting', async () => {
     const { __test_only } = await import('./main.js')
     electronMocks.dialog.showErrorBox.mockClear()
+    electronMocks.dialog.showMessageBox.mockClear()
     electronMocks.app.quit.mockClear()
     electronMocks.app.isQuitting = true
 
     __test_only.handleBackendSpawnError(new Error('late error'))
 
+    expect(electronMocks.dialog.showMessageBox).not.toHaveBeenCalled()
     expect(electronMocks.dialog.showErrorBox).not.toHaveBeenCalled()
     expect(electronMocks.app.quit).not.toHaveBeenCalled()
     electronMocks.app.isQuitting = false

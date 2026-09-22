@@ -436,10 +436,33 @@ class TestAppendToolMessages:
             messages,
             [tc],
             workspace_root=None,
-            execute_tool=lambda n, a, w, db_write_token=None: json.dumps({"success": True}),
+            execute_tool=lambda n, a, w, db_write_token=None, runtime_context=None: json.dumps(
+                {"success": True}
+            ),
         )
         assert result is None
         assert any(m.get("role") == "tool" for m in messages)
+
+    def test_runtime_context_is_forwarded_to_execute_tool(self):
+        """M18：已认证 principal 必须在工具执行边界被转发，否则审批申请人无法解析。"""
+        from app.legacy.chat.legacy_chat_adapter import append_tool_messages
+
+        seen: list[Any] = []
+        tc = _make_tc("products", json.dumps({"action": "search"}), "tc-ctx")
+        messages: list[Any] = []
+
+        def exec_tool(n, a, w, db_write_token=None, runtime_context=None):
+            seen.append(runtime_context)
+            return json.dumps({"success": True})
+
+        append_tool_messages(
+            messages,
+            [tc],
+            workspace_root=None,
+            runtime_context={"local_user_id": "7"},
+            execute_tool=exec_tool,
+        )
+        assert seen == [{"local_user_id": "7"}]
 
     def test_duplicate_tool_call_skips_second(self):
         from app.legacy.chat.legacy_chat_adapter import (
@@ -452,7 +475,7 @@ class TestAppendToolMessages:
         tc2 = _make_tc("products", json.dumps({"action": "search"}))
         messages: list[Any] = []
 
-        def exec_tool(n, a, w, db_write_token=None):
+        def exec_tool(n, a, w, db_write_token=None, runtime_context=None):
             return json.dumps({"success": True})
 
         append_tool_messages(messages, [tc1], workspace_root=None, execute_tool=exec_tool)
@@ -468,7 +491,7 @@ class TestAppendToolMessages:
         tc = _make_tc("import_excel_to_database", "{}")
         messages: list[Any] = []
 
-        def exec_tool(n, a, w, db_write_token=None):
+        def exec_tool(n, a, w, db_write_token=None, runtime_context=None):
             return json.dumps({"requires_token": True, "token_name": "DB_WRITE_TOKEN"})
 
         result = append_tool_messages(messages, [tc], workspace_root=None, execute_tool=exec_tool)
@@ -486,7 +509,7 @@ class TestAppendToolMessages:
         tc2 = _make_tc("customers", json.dumps({"action": "list"}), "tc2")
         messages: list[Any] = []
 
-        def exec_tool(n, a, w, db_write_token=None):
+        def exec_tool(n, a, w, db_write_token=None, runtime_context=None):
             return json.dumps({"success": True})
 
         with patch(
@@ -504,7 +527,7 @@ class TestAppendToolMessages:
         tc = _make_tc("import_excel_to_database", "{}", "tc3")
         messages: list[Any] = []
 
-        def exec_tool(n, a, w, db_write_token=None):
+        def exec_tool(n, a, w, db_write_token=None, runtime_context=None):
             return json.dumps({"success": True})
 
         # even with max_workers=4 it should stay serial because token-sensitive
@@ -522,7 +545,7 @@ class TestAppendToolMessages:
         tc = _make_tc("products", "not-json")
         messages: list[Any] = []
 
-        def exec_tool(n, a, w, db_write_token=None):
+        def exec_tool(n, a, w, db_write_token=None, runtime_context=None):
             return json.dumps({"success": True})
 
         result = append_tool_messages(messages, [tc], workspace_root=None, execute_tool=exec_tool)

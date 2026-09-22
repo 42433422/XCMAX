@@ -118,6 +118,17 @@ def _csrf_exempt_desktop_install_receipt(scope: Scope) -> bool:
     return cast("bool", headers.get(b"x-xcagi-desktop-local", b"") == b"1")
 
 
+def _csrf_exempt_desktop_crash_report(scope: Scope) -> bool:
+    """Electron 主进程本机上报崩溃报告：无浏览器 Cookie，安全由路由层的
+    桌面模式 + 回环来源校验承担。要求专用请求头，避免普通跨站表单请求绕过 CSRF。
+    """
+    path = (scope.get("path") or "").rstrip("/")
+    if not path.endswith("/api/desktop/crash-report"):
+        return False
+    headers = dict(scope.get("headers") or [])
+    return cast("bool", headers.get(b"x-xcagi-desktop-local", b"") == b"1")
+
+
 def _csrf_exempt_ops_autonomy(scope: Scope) -> bool:
     """CI / CVM watcher → approval ledger：机器调用只有 X-Autonomy-Token，无浏览器 CSRF。
 
@@ -206,6 +217,9 @@ class CSRFMiddleware:
                 await self.app(scope, receive, send)
                 return
             if _csrf_exempt_desktop_install_receipt(scope):
+                await self.app(scope, receive, send)
+                return
+            if _csrf_exempt_desktop_crash_report(scope):
                 await self.app(scope, receive, send)
                 return
             if _csrf_exempt_ops_autonomy(scope):
