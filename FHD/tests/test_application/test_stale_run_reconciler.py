@@ -24,6 +24,7 @@ from app.application.agent_orchestrator.run_repository import (
 from app.application.agent_orchestrator.task_execution_sql_repository import (
     SQLAlchemyTaskExecutionRepository,
 )
+from app.db.base import Base
 
 reconciler = importlib.import_module("app.application.agent_orchestrator.stale_run_reconciler")
 task_dispatcher = importlib.import_module("app.application.agent_orchestrator.task_dispatcher")
@@ -48,6 +49,13 @@ def _backdate_run(factory, run_id: str, *, status: str, updated_at: str) -> None
 
 def _make_repo(tmp_path, name: str):
     engine = create_engine(f"sqlite:///{tmp_path / name}")
+    # 启动对账除 agent_runs/agent_tasks 外还要读队列租约（agent_task_executions），
+    # 而 SQLAlchemyAgentRunRepository._ensure_schema() 只建运行态三张表；
+    # 生产库由 task_execution_sql_repository 建表，测试库须自行补齐。
+    # agent 模型在各仓库内是惰性导入，故此处显式导入以完成 Base.metadata 注册。
+    import app.db.models.agent  # noqa: F401
+
+    Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine)
     return engine, factory, SQLAlchemyAgentRunRepository(session_factory=factory)
 

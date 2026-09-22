@@ -180,21 +180,40 @@ _OTHER_BUSINESS_ENTITIES = (
 )
 
 
+def _is_artifact_request(text: str) -> bool:
+    """用户是否明确索要**产物**（可下载的表格 / 报表文件）。"""
+    return any(
+        _facade().re.search(pattern, text, _facade().re.IGNORECASE)
+        for pattern in _ARTIFACT_REQUEST_PATTERNS
+    )
+
+
+def _mentions_other_business_entity(text: str) -> bool:
+    return any(k in text for k in _OTHER_BUSINESS_ENTITIES)
+
+
 def _requires_llm_planning(text: str, entity_markers: tuple[str, ...]) -> bool:
     """单关键词槽位路由是否必须让位给 LLM 规划。
 
-    两种情形必须让位，否则会出现 M11：请求被降级为一次只读查询，第二个业务实体被
-    静默丢弃，且产物类工具（reports(action=export)）永远不会被调用（artifacts 恒为空）。
-      ① 用户要的是**产物**（可下载的表格 / 报表文件）—— 槽位路径不落 artifact；
-      ② 同句出现**客户类实体 + 另一个业务实体** —— 单一 intent 无法表达，必然丢实体。
+    仅当请求**同时**出现具体业务实体、且槽位路径无法完整表达时才让位，否则会出现
+    M11：请求被降级为一次只读查询，第二个业务实体被静默丢弃，且产物类工具
+    （reports(action=export)）永远不会被调用（artifacts 恒为空）。
+      ① 要产物 + 具体实体 —— 槽位路径不落 artifact，且产物背后的实体选择被丢弃；
+      ② 客户类实体 + 另一个业务实体 —— 单一 intent 无法表达，必然丢实体。
+    单实体的只读查询（「导出报表」「客户列表」「库存报表」）仍由槽位路径处理：
+    mainline 契约 test_negated_request_no_write_plan.py 明确要求「导出报表」→
+    reports_query，本修复不得回退该行为，故产物判定必须与实体同时命中才让位。
     """
-    for pattern in _ARTIFACT_REQUEST_PATTERNS:
-        if _facade().re.search(pattern, text, _facade().re.IGNORECASE):
-            return True
-    if entity_markers and any(k in text for k in entity_markers):
-        if any(k in text for k in _OTHER_BUSINESS_ENTITIES):
-            return True
-    return False
+    has_entity = any(k in text for k in entity_markers) or _mentions_other_business_entity(text)
+    if not has_entity:
+        return False
+    if _is_artifact_request(text):
+        return True
+    return (
+        bool(entity_markers)
+        and any(k in text for k in entity_markers)
+        and _mentions_other_business_entity(text)
+    )
 
 
 def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
@@ -268,8 +287,9 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
         "数据看板",
         "统计",
     )
-    # M11：同一类问题 —— 明确要「可下载的表格 / 报表文件」时不得停在只读汇总查询上。
-    # 传空实体元组，此处**只**做产物判定，不改变单实体汇总的既有行为。
+    # M11：同一类问题 —— 「其他业务实体 + 要产物」时不得停在只读汇总查询上。
+    # 传空实体元组，此处只看「其他业务实体 + 产物」；单实体汇总（「导出报表」
+    # 「库存报表」）保持既有 reports_query 行为不变。
     if _requires_llm_planning(text, ()):
         return {"intent": "unknown", "slots": {}}
     if any(k in text for k in report_keywords):
