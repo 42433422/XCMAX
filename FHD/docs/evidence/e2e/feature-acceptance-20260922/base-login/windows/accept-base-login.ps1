@@ -148,6 +148,29 @@ function Invoke-Api {
     } finally { $client.Dispose() }
 }
 
+function Protect-SetCookie {
+    # Credential values (session/CSRF tokens) must never reach the record verbatim. The macOS
+    # side keeps the same policy: base-login-macos-raw-redacted.json masks every cookie value
+    # while leaving the rest of the capture byte-for-byte intact. Only the value before the
+    # first ';' is replaced; the attribute list (Path, SameSite, ...) is kept so the record
+    # still shows that a cookie was issued.
+    # Never call this on the cookie used for authentication: W2/W3/W4 reuse the live value.
+    # ASCII-only on purpose (see the file header).
+    param($SetCookie)
+    $out = @()
+    foreach ($c in @($SetCookie)) {
+        $s = [string]$c
+        $i = $s.IndexOf(';')
+        if ($i -lt 0) { $out += '<redacted>'; continue }
+        $head = $s.Substring(0, $i)
+        $eq = $head.IndexOf('=')
+        $name = $head
+        if ($eq -ge 0) { $name = $head.Substring(0, $eq) }
+        $out += ($name + '=<redacted>' + $s.Substring($i))
+    }
+    return ,$out
+}
+
 function Get-SessionCookie {
     param($SetCookie)
     foreach ($c in @($SetCookie)) {
@@ -462,6 +485,7 @@ $identity = Get-Identity -AppDir $appDir
 $health0 = Wait-Health -TimeoutSec 25
 $healthStatus = $null
 if ($health0) { $healthStatus = $health0.status }
+if ($health0) { $health0['set_cookie'] = Protect-SetCookie -SetCookie $health0['set_cookie'] }
 $identity['health'] = $health0
 Write-JsonFile (Join-Path $OutDir 'base-login-windows-identity.json') $identity | Out-Null
 Write-Log ('identity: git_sha=' + $identity.git_sha + ' version=' + $identity.product_version + ' health=' + $healthStatus)
