@@ -11,7 +11,7 @@
   "passed": 6,
   "failed": 0,
   "visible_content": "真实 GUI 操作链：登录页 → 输入企业账号 SUNBIRD 成功进入「智能对话」工作台 → 退出登录（系统设置 → 退出登录 → 确认）回到登录页；进程重启后仍保持已登录会话。",
-  "media_derivation": "两段 .mp4 为官网展示用的网页转码件（1280x720 / 12fps / H.264），由同轮真机录屏原片裁切转码：03-login-operation.mov（192444408 B，sha256 c7c136aa0a1e85bf4ad8243cc856984feb163ad4f97bd25ba494afc85a21970c）、05c-gui-logout-operation.mov（108916825 B，sha256 b39240c396edf579eca5e02f7af084391c19125394f7400c075683759add95ac）。原片未入仓，归档于 /Users/Shared/xcagi-t6-tools/feature-acceptance-20260922/base-login/macos/，哈希清单见同目录 videos-manifest.json。",
+  "media_derivation": "两段 .mp4 为官网展示用的网页转码件（1280x720 / 12fps / H.264，由原速录屏截取连续片段、无剪接，按 2× 播放），源片为同轮真机录屏：03-login-operation.mov（192444408 B，sha256 c7c136aa0a1e85bf4ad8243cc856984feb163ad4f97bd25ba494afc85a21970c）、05c-gui-logout-operation.mov（108916825 B，sha256 b39240c396edf579eca5e02f7af084391c19125394f7400c075683759add95ac）。原片未入仓，归档于 /Users/Shared/xcagi-t6-tools/feature-acceptance-20260922/base-login/macos/，哈希清单见同目录 videos-manifest.json。",
   "media": [
     {
       "feature": "base-login",
@@ -56,17 +56,17 @@
     {
       "feature": "base-login",
       "path": "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/macos/03-login-operation-web.mp4",
-      "sha256": "6ddccb83f8ec09274e5bae84c479186306aec6989992e33ef3bb2bf5a2048bad",
+      "sha256": "27210eeb7c3fdc2ac593aebf20478d7392fc343daf6d80b4b4e7eaf3ff6e3576",
       "visual_review": "accepted",
-      "visible_result": "真机录屏（172 秒，起于登录页、止于已登录工作台）：登录页空表单（账号/密码输入框、「登 录」按钮）→ 输入企业账号 SUNBIRD 与密码 → 点击「登 录」显示「正在登 录…」→ 进入「智能对话」工作台且左上角显示 SUNBIRD。片段不含退出登录后的画面。",
+      "visible_result": "真机录屏（连续片段无剪接，按 2× 播放，成品 44.5 秒）：登录页空表单（账号框聚焦、密码框为空、「登 录」按钮）→ 输入企业账号 SUNBIRD 与密码 → 点击「登 录」显示「正在登 录…」→ 进入「智能对话」工作台且左上角显示 SUNBIRD。片段不含退出登录后的画面。",
       "reviewed_at": "2026-09-22"
     },
     {
       "feature": "base-login",
       "path": "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/macos/05c-gui-logout-operation-web.mp4",
-      "sha256": "23c5f56860b5a99772e6e146928f83c363bf8dc80cd95ab098c3528d84401a41",
+      "sha256": "fcd8ede9041e3be4c340102d9c88b2c42b03d914566e417ce907f1fe38c4b7e5",
       "visual_review": "accepted",
-      "visible_result": "真机录屏：登录后进入工作台 → 系统设置页点击「退出登录」→ 弹出确认框「确定退出本机账号？」→ 点击「确定」后界面回到登录页，账号/密码框为空。",
+      "visible_result": "真机录屏（连续片段无剪接，按 2× 播放，成品 20 秒）：系统设置页点开时账号 SUNBIRD 与「退出登录」按钮可见 → 点击「退出登录」→ 弹出确认框「确定退出本机账号？」→ 点击「确定」后界面回到登录页，账号/密码框为空。",
       "reviewed_at": "2026-09-22"
     }
   ],
