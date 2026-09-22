@@ -310,6 +310,40 @@ function Start-App {
     return (Wait-Health)
 }
 
+function Wait-AppWindow {
+    # Backend health comes back long before the renderer has settled. Measured on this build
+    # (1.0.0.5 / 4e172943): the window exists at ~8s as the splash (title "XCAGI"), sits on
+    # the login route around 18-26s while the stored session is resolved (title "XCAGI <dot>
+    # <login word>"), and only then paints the authenticated shell, whose title ends in
+    # " - XCAGI". Capturing at a fixed 8s after health produced an empty loading frame that
+    # cannot serve as W3 evidence, so wait for the authenticated-shell title.
+    # ASCII-only on purpose (see the file header): the shell title is matched by its ASCII
+    # suffix, never by a Chinese literal.
+    param([int]$TimeoutSec = 180)
+    $end = (Get-Date).AddSeconds($TimeoutSec)
+    $seen = New-Object System.Collections.Generic.List[string]
+    while ((Get-Date) -lt $end) {
+        $w = Get-Process -Name 'XCAGI' -ErrorAction SilentlyContinue |
+             Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle } |
+             Select-Object -First 1
+        $title = ''
+        if ($w) { $title = [string]$w.MainWindowTitle }
+        if ($title) {
+            if ($seen.Count -eq 0 -or $seen[$seen.Count - 1] -ne $title) {
+                $seen.Add($title)
+                Write-Log ('window title: "' + $title + '"')
+            }
+            if ($title -like '*- XCAGI') {
+                Start-Sleep -Seconds 3
+                return $title
+            }
+        }
+        Start-Sleep -Seconds 2
+    }
+    Write-Log ('window wait timed out; titles seen: ' + ($seen -join ' -> '))
+    return ''
+}
+
 # ---------------- case helpers ----------------
 
 # The capability center validates every case as input/actions/expected/observed + result.
@@ -532,7 +566,9 @@ Add-Case 'W2' 'enterprise login (API side)' $w2verdict $w2facts 'GUI login evide
 if (-not $SkipRestart) {
     Stop-App
     $h1 = Start-App -AppDir $appDir
-    Start-Sleep -Seconds 8
+    # Health is not the same as "the UI is up": wait for the renderer to settle so the W3
+    # screenshot shows the real post-restart screen instead of an empty loading frame.
+    $w3Title = Wait-AppWindow
     $me2 = Invoke-Api -Method 'GET' -Path '/api/auth/me' -Cookie $cookie
     $sv2 = Invoke-Api -Method 'GET' -Path '/api/auth/session/validate' -Cookie $cookie
     $me2Success = Get-BodyField $me2.body 'success'
@@ -544,6 +580,7 @@ if (-not $SkipRestart) {
     if ($w3ok) { $w3verdict = 'PASS' }
     $w3facts = [ordered]@{
         health_after_restart = $healthAfter
+        window_title_after_restart = $w3Title
         me_after_restart = $me2.body
         validate_after_restart = $sv2.body
         # Never record the raw cookie value: this record is committed to a public repo.
@@ -629,10 +666,13 @@ foreach ($f in @(Get-ChildItem $shotDir -Filter '*.png' -ErrorAction SilentlyCon
         captured_at = $f.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')
     }
 }
-$videoFile = $null
+# NOTE: this local variable must NOT be named $videoFile: PowerShell variable names are
+# case-insensitive, so "$videoFile = $null" also clears $script:VideoFile, which made the
+# guard below always false and silently dropped the recording from six_elements/media[].
+$videoEntry = $null
 if ($script:VideoFile -and (Test-Path $script:VideoFile)) {
     $v = Get-Item $script:VideoFile
-    $videoFile = [ordered]@{ path = $v.FullName; bytes = $v.Length; sha256 = (Get-Sha256 $v.FullName) }
+    $videoEntry = [ordered]@{ path = $v.FullName; bytes = $v.Length; sha256 = (Get-Sha256 $v.FullName) }
 }
 
 $logPath = Join-Path $OutDir ('log\base-login-' + $script:Stamp + '.log')
@@ -641,7 +681,7 @@ $logText = ($script:Log -join [Environment]::NewLine) + [Environment]::NewLine
 
 $six = [ordered]@{
     screenshot = ($shotFiles.Count -gt 0)
-    video = [bool]$videoFile
+    video = [bool]$videoEntry
     log = (Test-Path $logPath)
     product_version = [bool]$identity.product_version
     app_sha = [bool]$identity.app_exe_sha256
@@ -687,11 +727,11 @@ foreach ($s in $shotFiles) {
         reviewed_at = ''
     }
 }
-if ($videoFile) {
+if ($videoEntry) {
     $media += [ordered]@{
         feature = 'base-login'
-        path = $repoDir + '/video/' + (Split-Path $videoFile.path -Leaf)
-        sha256 = $videoFile.sha256
+        path = $repoDir + '/video/' + (Split-Path $videoEntry.path -Leaf)
+        sha256 = $videoEntry.sha256
         visual_review = 'pending_review'
         visible_result = ''
         reviewed_at = ''
