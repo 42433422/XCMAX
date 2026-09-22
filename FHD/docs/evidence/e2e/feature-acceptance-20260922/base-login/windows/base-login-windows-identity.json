@@ -1,0 +1,460 @@
+{
+    "_comment":  "Windows raw capture (identity + /api/health snapshot) for the capability center. Redacted copy: credential values are masked, everything else is as captured.",
+    "_redaction":  {
+                       "policy":  "Session/token credential values are masked as <redacted>; cookie attribute lists (Path, SameSite, ...) are preserved. Status codes, response bodies, verdicts and build identity are unchanged.",
+                       "masked":  [
+                                      "health.set_cookie[].value"
+                                  ],
+                       "applied_at":  "2026-09-23"
+                   },
+    "captured_at":  "2026-09-23 05:02:56",
+    "host":  "佳诺",
+    "user":  "97088",
+    "os":  "Microsoft Windows 11 家庭版 中文版 10.0.26200",
+    "app_dir":  "C:\\XCAGI-r2",
+    "app_exe":  "C:\\XCAGI-r2\\XCAGI.exe",
+    "app_exe_sha256":  "27ada80cc0e2f8ec923bc0a3858c9a076f489a41fcc02f168beb531cf9617095",
+    "build_info":  {
+                       "gitSha":  "4e1729435426ad23df81b1cd57449cd8068b6f6e",
+                       "releaseId":  "xcagi-1.0.0.5-4e1729435426ad23df81b1cd57449cd8068b6f6e",
+                       "version":  "1.0.0.5",
+                       "schema_version":  1
+                   },
+    "git_sha":  "4e1729435426ad23df81b1cd57449cd8068b6f6e",
+    "product_version":  "1.0.0.5",
+    "installer_path":  "C:\\XCAGI-acceptance\\installer\\XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe",
+    "installer_sha256":  "dbe8f23becd6c684b7d24cae30e38b887a99cbe81dc91b31811e927ff8dae425",
+    "health":  {
+                   "status":  200,
+                   "set_cookie":  [
+                                      "csrf_token=<redacted>; Path=/; SameSite=Lax"
+                                  ],
+                   "body":  {
+                                "status":  "healthy",
+                                "version":  "1.0.0.5",
+                                "service":  "xcagi-fastapi",
+                                "runtime":  {
+                                                "status":  "healthy",
+                                                "components":  {
+                                                                   "desktop_runtime_routes":  {
+                                                                                                  "ok":  true,
+                                                                                                  "required":  true,
+                                                                                                  "detail":  ""
+                                                                                              },
+                                                                   "desktop_automation_routes":  {
+                                                                                                     "ok":  true,
+                                                                                                     "required":  false,
+                                                                                                     "detail":  ""
+                                                                                                 },
+                                                                   "gdpr_routes":  {
+                                                                                       "ok":  true,
+                                                                                       "required":  false,
+                                                                                       "detail":  ""
+                                                                                   },
+                                                                   "platform_shell_routes":  {
+                                                                                                 "ok":  true,
+                                                                                                 "required":  true,
+                                                                                                 "detail":  ""
+                                                                                             },
+                                                                   "business_route:xcmax_admin":  {
+                                                                                                      "ok":  true,
+                                                                                                      "required":  false,
+                                                                                                      "detail":  ""
+                                                                                                  },
+                                                                   "business_route:order_bridge_webhook":  {
+                                                                                                               "ok":  true,
+                                                                                                               "required":  false,
+                                                                                                               "detail":  ""
+                                                                                                           },
+                                                                   "business_route:xcmax_private_delivery_admin":  {
+                                                                                                                       "ok":  true,
+                                                                                                                       "required":  false,
+                                                                                                                       "detail":  ""
+                                                                                                                   },
+                                                                   "business_route:founder_autonomy":  {
+                                                                                                           "ok":  true,
+                                                                                                           "required":  false,
+                                                                                                           "detail":  ""
+                                                                                                       },
+                                                                   "business_route:ops_autonomy":  {
+                                                                                                       "ok":  true,
+                                                                                                       "required":  false,
+                                                                                                       "detail":  ""
+                                                                                                   },
+                                                                   "business_route:ops_wechat_ingest":  {
+                                                                                                            "ok":  true,
+                                                                                                            "required":  false,
+                                                                                                            "detail":  ""
+                                                                                                        },
+                                                                   "business_route:admin_audit":  {
+                                                                                                      "ok":  true,
+                                                                                                      "required":  false,
+                                                                                                      "detail":  ""
+                                                                                                  },
+                                                                   "business_route:genai_traces":  {
+                                                                                                       "ok":  true,
+                                                                                                       "required":  false,
+                                                                                                       "detail":  ""
+                                                                                                   },
+                                                                   "business_route:aibiz_terminal":  {
+                                                                                                         "ok":  true,
+                                                                                                         "required":  false,
+                                                                                                         "detail":  ""
+                                                                                                     },
+                                                                   "business_route:agent":  {
+                                                                                                "ok":  true,
+                                                                                                "required":  false,
+                                                                                                "detail":  ""
+                                                                                            },
+                                                                   "business_route:tutorial_v2":  {
+                                                                                                      "ok":  true,
+                                                                                                      "required":  false,
+                                                                                                      "detail":  ""
+                                                                                                  },
+                                                                   "business_route:knowledge_v1":  {
+                                                                                                       "ok":  true,
+                                                                                                       "required":  false,
+                                                                                                       "detail":  ""
+                                                                                                   },
+                                                                   "business_route:etl":  {
+                                                                                              "ok":  true,
+                                                                                              "required":  true,
+                                                                                              "detail":  ""
+                                                                                          },
+                                                                   "business_route:etl_targets":  {
+                                                                                                      "ok":  true,
+                                                                                                      "required":  false,
+                                                                                                      "detail":  ""
+                                                                                                  },
+                                                                   "business_route:taiyangniao_attendance_compat":  {
+                                                                                                                        "ok":  true,
+                                                                                                                        "required":  false,
+                                                                                                                        "detail":  ""
+                                                                                                                    },
+                                                                   "business_route:purchase":  {
+                                                                                                   "ok":  true,
+                                                                                                   "required":  true,
+                                                                                                   "detail":  ""
+                                                                                               },
+                                                                   "business_route:inventory":  {
+                                                                                                    "ok":  true,
+                                                                                                    "required":  true,
+                                                                                                    "detail":  ""
+                                                                                                },
+                                                                   "business_route:finance_unified_ledger":  {
+                                                                                                                 "ok":  true,
+                                                                                                                 "required":  false,
+                                                                                                                 "detail":  ""
+                                                                                                             },
+                                                                   "business_route:finance_invoices":  {
+                                                                                                           "ok":  true,
+                                                                                                           "required":  false,
+                                                                                                           "detail":  ""
+                                                                                                       },
+                                                                   "business_route:finance":  {
+                                                                                                  "ok":  true,
+                                                                                                  "required":  true,
+                                                                                                  "detail":  ""
+                                                                                              },
+                                                                   "business_route:reports":  {
+                                                                                                  "ok":  true,
+                                                                                                  "required":  true,
+                                                                                                  "detail":  ""
+                                                                                              },
+                                                                   "business_route:rbac":  {
+                                                                                               "ok":  true,
+                                                                                               "required":  false,
+                                                                                               "detail":  ""
+                                                                                           },
+                                                                   "business_route:mods":  {
+                                                                                               "ok":  true,
+                                                                                               "required":  true,
+                                                                                               "detail":  ""
+                                                                                           },
+                                                                   "business_route:workspace_prefs":  {
+                                                                                                          "ok":  true,
+                                                                                                          "required":  true,
+                                                                                                          "detail":  ""
+                                                                                                      },
+                                                                   "business_route:business_bridge":  {
+                                                                                                          "ok":  true,
+                                                                                                          "required":  true,
+                                                                                                          "detail":  ""
+                                                                                                      },
+                                                                   "business_route:mod_store":  {
+                                                                                                    "ok":  true,
+                                                                                                    "required":  true,
+                                                                                                    "detail":  ""
+                                                                                                },
+                                                                   "business_route:control":  {
+                                                                                                  "ok":  true,
+                                                                                                  "required":  false,
+                                                                                                  "detail":  ""
+                                                                                              },
+                                                                   "business_route:voice":  {
+                                                                                                "ok":  true,
+                                                                                                "required":  false,
+                                                                                                "detail":  ""
+                                                                                            },
+                                                                   "business_route:mobile_api":  {
+                                                                                                     "ok":  true,
+                                                                                                     "required":  false,
+                                                                                                     "detail":  ""
+                                                                                                 },
+                                                                   "business_route:im_v0":  {
+                                                                                                "ok":  true,
+                                                                                                "required":  false,
+                                                                                                "detail":  ""
+                                                                                            },
+                                                                   "business_route:internal_im":  {
+                                                                                                      "ok":  true,
+                                                                                                      "required":  false,
+                                                                                                      "detail":  ""
+                                                                                                  },
+                                                                   "business_route:production_line_event":  {
+                                                                                                                "ok":  true,
+                                                                                                                "required":  false,
+                                                                                                                "detail":  ""
+                                                                                                            },
+                                                                   "business_route:production_line_event_xcmax":  {
+                                                                                                                      "ok":  true,
+                                                                                                                      "required":  false,
+                                                                                                                      "detail":  ""
+                                                                                                                  }
+                                                               },
+                                                "failures":  [
+
+                                                             ],
+                                                "blockers":  [
+
+                                                             ],
+                                                "degraded_reasons":  [
+
+                                                                     ]
+                                            },
+                                "degradedReasons":  [
+
+                                                    ],
+                                "build":  {
+                                              "admin_console_sha256":  "",
+                                              "admin_console_git_sha":  "",
+                                              "artifact_sha256":  "",
+                                              "built_at":  "",
+                                              "git_sha":  "4e1729435426ad23df81b1cd57449cd8068b6f6e",
+                                              "image_digest":  "",
+                                              "product_version":  "1.0.0.5",
+                                              "release_id":  "xcagi-1.0.0.5-4e1729435426ad23df81b1cd57449cd8068b6f6e"
+                                          },
+                                "git_sha":  "4e1729435426ad23df81b1cd57449cd8068b6f6e",
+                                "release_id":  "xcagi-1.0.0.5-4e1729435426ad23df81b1cd57449cd8068b6f6e",
+                                "neuro":  {
+                                              "status":  "healthy",
+                                              "running":  true,
+                                              "published":  1892,
+                                              "processed":  1892,
+                                              "errors":  0,
+                                              "dropped":  0,
+                                              "queue_size":  0,
+                                              "handlers":  39,
+                                              "global_handlers":  0,
+                                              "reliability":  {
+                                                                  "fhd_env":  "",
+                                                                  "dedup":  false,
+                                                                  "rate_limit":  false,
+                                                                  "circuit_breaker":  false,
+                                                                  "lifeline":  false,
+                                                                  "tracer":  false,
+                                                                  "sla_log":  false,
+                                                                  "sla_controller":  false,
+                                                                  "retry":  false,
+                                                                  "dlq_auto":  false,
+                                                                  "redis_pubsub":  false,
+                                                                  "trace_sample_rate":  null
+                                                              },
+                                              "components":  {
+                                                                 "bus_running":  true,
+                                                                 "queue_size":  0,
+                                                                 "domains":  [
+                                                                                 "intent",
+                                                                                 "order",
+                                                                                 "inventory",
+                                                                                 "product",
+                                                                                 "customer",
+                                                                                 "ai_service",
+                                                                                 "print",
+                                                                                 "ocr",
+                                                                                 "payment",
+                                                                                 "safety",
+                                                                                 "shipment"
+                                                                             ]
+                                                             },
+                                              "processors":  {
+                                                                 "coordinator":  {
+                                                                                     "reflex":  0,
+                                                                                     "subconscious":  0,
+                                                                                     "conscious":  0,
+                                                                                     "total":  0,
+                                                                                     "fallbacks":  0,
+                                                                                     "errors":  0,
+                                                                                     "reflex_rate":  0.0,
+                                                                                     "fallback_rate":  0.0
+                                                                                 },
+                                                                 "reflex":  {
+                                                                                "cache_size":  0,
+                                                                                "max_cache_size":  1000,
+                                                                                "hits":  0,
+                                                                                "misses":  0,
+                                                                                "hit_rate":  0.0,
+                                                                                "timeouts":  0,
+                                                                                "patterns":  5
+                                                                            },
+                                                                 "subconscious":  {
+                                                                                      "processed":  0,
+                                                                                      "batched":  0,
+                                                                                      "errors":  0,
+                                                                                      "timeouts":  0,
+                                                                                      "avg_latency_ms":  0.0,
+                                                                                      "handlers":  1,
+                                                                                      "batch_handlers":  0,
+                                                                                      "running":  false
+                                                                                  },
+                                                                 "conscious":  {
+                                                                                   "processed":  0,
+                                                                                   "success":  0,
+                                                                                   "errors":  0,
+                                                                                   "deduplicated":  0,
+                                                                                   "circuit_open":  0,
+                                                                                   "sandbox_rejected":  0,
+                                                                                   "sla_violations":  0,
+                                                                                   "success_rate":  0.0,
+                                                                                   "handlers":  7,
+                                                                                   "reliability_enabled":  true
+                                                                               }
+                                                             },
+                                              "cognition":  {
+                                                                "enabled":  true,
+                                                                "conscious_processor":  {
+                                                                                            "processed":  0,
+                                                                                            "success":  0,
+                                                                                            "errors":  0,
+                                                                                            "deduplicated":  0,
+                                                                                            "circuit_open":  0,
+                                                                                            "sandbox_rejected":  0,
+                                                                                            "sla_violations":  0,
+                                                                                            "success_rate":  0.0,
+                                                                                            "handlers":  7,
+                                                                                            "reliability_enabled":  true
+                                                                                        },
+                                                                "subconscious_processor":  {
+                                                                                               "processed":  0,
+                                                                                               "batched":  0,
+                                                                                               "errors":  0,
+                                                                                               "timeouts":  0,
+                                                                                               "avg_latency_ms":  0.0,
+                                                                                               "handlers":  1,
+                                                                                               "batch_handlers":  0,
+                                                                                               "running":  false
+                                                                                           },
+                                                                "cognition":  {
+                                                                                  "llm_port_available":  true
+                                                                              },
+                                                                "subconscious_ml":  {
+                                                                                        "anomaly_detector":  {
+                                                                                                                 "total_samples":  0,
+                                                                                                                 "total_predictions":  0,
+                                                                                                                 "anomalies_detected":  0,
+                                                                                                                 "anomaly_rate":  0.0,
+                                                                                                                 "model_ready":  false,
+                                                                                                                 "samples_since_fit":  0
+                                                                                                             },
+                                                                                        "pattern_predictor":  {
+                                                                                                                  "total_observations":  0,
+                                                                                                                  "ngram_order":  3,
+                                                                                                                  "ngram_patterns":  0,
+                                                                                                                  "markov_states":  0,
+                                                                                                                  "history_size":  0
+                                                                                                              },
+                                                                                        "local_embedder":  {
+                                                                                                               "cache_size":  0
+                                                                                                           }
+                                                                                    },
+                                                                "evolution":  {
+                                                                                  "handler":  {
+                                                                                                  "total_handled":  0,
+                                                                                                  "total_success":  0,
+                                                                                                  "success_rate":  0.0,
+                                                                                                  "supported_events":  [
+                                                                                                                           "evolution.reflect",
+                                                                                                                           "evolution.export",
+                                                                                                                           "evolution.mine",
+                                                                                                                           "evolution.index",
+                                                                                                                           "error.occurred",
+                                                                                                                           "evolution.search"
+                                                                                                                       ],
+                                                                                                  "kb_stats":  {
+                                                                                                                   "total_entries":  0,
+                                                                                                                   "by_kind":  {
+
+                                                                                                                               },
+                                                                                                                   "indexed":  true,
+                                                                                                                   "kb_root":  "C:\\XCAGI-r2\\resources\\backend\\_internal\\XCAGI\\kb"
+                                                                                                               },
+                                                                                                  "miner_stats":  {
+                                                                                                                      "log_path":  "routing_decisions.jsonl",
+                                                                                                                      "log_exists":  false,
+                                                                                                                      "records_scanned":  0,
+                                                                                                                      "min_occurrences":  3,
+                                                                                                                      "min_confidence":  0.8
+                                                                                                                  },
+                                                                                                  "fixer_stats":  {
+                                                                                                                      "total_proposals":  0,
+                                                                                                                      "actionable_proposals":  0,
+                                                                                                                      "actionable_rate":  0.0,
+                                                                                                                      "min_score":  0.3,
+                                                                                                                      "kb_stats":  {
+                                                                                                                                       "total_entries":  0,
+                                                                                                                                       "by_kind":  {
+
+                                                                                                                                                   },
+                                                                                                                                       "indexed":  true,
+                                                                                                                                       "kb_root":  "C:\\XCAGI-r2\\resources\\backend\\_internal\\XCAGI\\kb"
+                                                                                                                                   }
+                                                                                                                  }
+                                                                                              },
+                                                                                  "kb_retriever":  {
+                                                                                                       "total_entries":  0,
+                                                                                                       "by_kind":  {
+
+                                                                                                                   },
+                                                                                                       "indexed":  true,
+                                                                                                       "kb_root":  "C:\\XCAGI-r2\\resources\\backend\\_internal\\XCAGI\\kb"
+                                                                                                   },
+                                                                                  "reflex_pattern_miner":  {
+                                                                                                               "log_path":  "routing_decisions.jsonl",
+                                                                                                               "log_exists":  false,
+                                                                                                               "records_scanned":  0,
+                                                                                                               "min_occurrences":  3,
+                                                                                                               "min_confidence":  0.8
+                                                                                                           },
+                                                                                  "runtime_self_fix":  {
+                                                                                                           "total_proposals":  0,
+                                                                                                           "actionable_proposals":  0,
+                                                                                                           "actionable_rate":  0.0,
+                                                                                                           "min_score":  0.3,
+                                                                                                           "kb_stats":  {
+                                                                                                                            "total_entries":  0,
+                                                                                                                            "by_kind":  {
+
+                                                                                                                                        },
+                                                                                                                            "indexed":  true,
+                                                                                                                            "kb_root":  "C:\\XCAGI-r2\\resources\\backend\\_internal\\XCAGI\\kb"
+                                                                                                                        }
+                                                                                                       }
+                                                                              }
+                                                            }
+                                          }
+                            },
+                   "raw_len":  6226
+               },
+    "auth_route_ready":  true
+}
