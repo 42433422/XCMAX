@@ -1,5 +1,5 @@
 {
-  "_comment": "本文件为 2026-09-22 macOS 实机验收的原始逐条抓取（脱敏汇编），由操作机从本轮原始产物生成。除凭据值被掩码外，各阶段内容逐字保留；未经脱敏的原件留在操作机，逐件 sha256 见 _redaction.originals。",
+  "_comment": "此文件为 2026-09-22 macOS 实机验收原始抓取的脱敏汇编，由操作机脚本从本轮原始产物自动生成，请勿手改（DO NOT EDIT）。除凭据值被掩码外，各阶段内容逐字保留；未经脱敏的原件留在操作机，逐件 sha256 见 _redaction.originals。",
   "kind": "raw-captures-redacted",
   "feature": "base-login",
   "platform": "macos",
