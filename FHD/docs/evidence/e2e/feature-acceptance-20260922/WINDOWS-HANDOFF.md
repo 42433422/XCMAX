@@ -50,6 +50,12 @@
 }
 ```
 
+本轮已随交接提供脚本，**它直接产出上面这份记录，不要手工拼 JSON**：
+`FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/windows/accept-base-login.ps1`
+（用法见同目录 `base-login/windows/HANDOFF.md`）。脚本把机器字段全部填好，只把
+`media[]` 的三项复核字段留空（`visual_review: "pending_review"`）——**必须真的打开每张截图、
+看完每段录像后再填**，这是唯一允许手填的部分；未复核的媒体会被构建脚本拒绝，平台不会变绿。
+
 硬性约束（构建脚本逐条校验，不满足即不计入该平台）：
 
 - `platform` 必须是该功能 `platforms` 里声明过的值；
