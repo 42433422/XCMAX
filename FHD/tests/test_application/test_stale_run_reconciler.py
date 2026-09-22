@@ -25,12 +25,8 @@ from app.application.agent_orchestrator.task_execution_sql_repository import (
     SQLAlchemyTaskExecutionRepository,
 )
 
-reconciler = importlib.import_module(
-    "app.application.agent_orchestrator.stale_run_reconciler"
-)
-task_dispatcher = importlib.import_module(
-    "app.application.agent_orchestrator.task_dispatcher"
-)
+reconciler = importlib.import_module("app.application.agent_orchestrator.stale_run_reconciler")
+task_dispatcher = importlib.import_module("app.application.agent_orchestrator.task_dispatcher")
 
 
 def _iso(offset_seconds: float = 0.0) -> str:
@@ -71,9 +67,7 @@ def test_interrupted_running_run_and_task_are_converged(tmp_path) -> None:
         stale_at = _iso(-300)
         _backdate_run(factory, run.run_id, status="running", updated_at=stale_at)
 
-        reconciled = reconciler.reconcile_stale_running_runs(
-            stale_after_seconds=60, now=_iso()
-        )
+        reconciled = reconciler.reconcile_stale_running_runs(stale_after_seconds=60, now=_iso())
 
         assert reconciled == 1
         stored = repo.get(run.run_id)
@@ -108,9 +102,7 @@ def test_recoverable_queue_and_live_lease_are_left_alone(tmp_path) -> None:
         fresh = AgentRun(user_id="u1", message="刚开始运行", status="running")
         repo.save(fresh)
 
-        assert reconciler.reconcile_stale_running_runs(
-            stale_after_seconds=60, now=_iso()
-        ) == 0
+        assert reconciler.reconcile_stale_running_runs(stale_after_seconds=60, now=_iso()) == 0
         assert repo.get(queued.run_id).status == "queued"
         assert repo.get(leased.run_id).status == "running"
         assert repo.get(fresh.run_id).status == "running"

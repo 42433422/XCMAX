@@ -163,8 +163,7 @@ def _pending_approval_signal(payloads: list[dict[str, Any]]) -> dict[str, Any] |
                 return {
                     "message": _text(source.get("message"), limit=512),
                     "approval_request_ids": [
-                        _text(item, limit=96)
-                        for item in (ids if isinstance(ids, list) else [])
+                        _text(item, limit=96) for item in (ids if isinstance(ids, list) else [])
                     ],
                 }
     return None
@@ -172,8 +171,7 @@ def _pending_approval_signal(payloads: list[dict[str, Any]]) -> dict[str, Any] |
 
 def _pending_approval_summary(pending: dict[str, Any]) -> str:
     return (
-        _text(pending.get("message"), limit=512)
-        or "该业务操作已创建审批请求，审批通过后才会执行"
+        _text(pending.get("message"), limit=512) or "该业务操作已创建审批请求，审批通过后才会执行"
     )
 
 
@@ -200,9 +198,7 @@ def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
         "success": result_status == "completed",
         "pending_approval": bool(pending),
         "summary": (
-            _pending_approval_summary(pending)
-            if pending
-            else _result_summary(run, payloads)
+            _pending_approval_summary(pending) if pending else _result_summary(run, payloads)
         ),
         "facts": _result_facts(payloads),
         "task_id": identity["task_id"],
@@ -217,9 +213,7 @@ def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
                 for call in (getattr(run, "tool_calls", []) or [])
             ),
             "pending_approval": bool(pending),
-            "approval_request_ids": (
-                list(pending["approval_request_ids"]) if pending else []
-            ),
+            "approval_request_ids": (list(pending["approval_request_ids"]) if pending else []),
             "artifact_ids": [
                 _text(getattr(artifact, "artifact_id", ""), limit=96)
                 for artifact in artifacts

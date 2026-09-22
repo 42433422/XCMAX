@@ -120,9 +120,7 @@ def test_client_primary_erp_sqlite_customer_list(tmp_path):
     # M14 回归：私有库缺失时必须**抛出**（由调用方回落宿主服务路径），
     # 而不是静默返回空列表 —— 否则「客户 0 条」与「库缺失」不可区分。
     with pytest.raises(FileNotFoundError):
-        erp._sqlite_customers_list(
-            tmp_path / "missing.sqlite", page=1, per_page=20, keyword=None
-        )
+        erp._sqlite_customers_list(tmp_path / "missing.sqlite", page=1, per_page=20, keyword=None)
 
     db_path = tmp_path / "customers.sqlite"
     _make_customer_db(db_path)

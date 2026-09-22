@@ -258,9 +258,7 @@ def execute_registered_capability(
     context: dict[str, Any] = dict(runtime_context or {})
     context["source"] = "erp_agent_capability_tool"
     context["workspace_root"] = workspace_root
-    context.setdefault(
-        "message", str(params.get("user_request") or params.get("message") or "")
-    )
+    context.setdefault("message", str(params.get("user_request") or params.get("message") or ""))
     try:
         decision, run_result = ApprovalGatedEngine(
             WorkflowEngine(tool_dispatcher=_dispatch_registered_tool)
