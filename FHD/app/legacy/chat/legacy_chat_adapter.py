@@ -385,7 +385,13 @@ def append_tool_messages(
                 }
             else:
                 payload = json.loads(
-                    execute_tool(name, raw_eff, workspace_root, db_write_token=db_write_token)
+                    execute_tool(
+                        name,
+                        raw_eff,
+                        workspace_root,
+                        runtime_context=runtime_context,
+                        db_write_token=db_write_token,
+                    )
                 )
             _append_last_tool_record(tc, name, raw_eff, payload)
             if payload.get("requires_token"):
@@ -415,7 +421,13 @@ def append_tool_messages(
                 to_run.append((i, name, raw_eff))
 
     def _execute_idx(idx: int, name: str, raw_eff: str) -> tuple[int, dict[str, Any]]:
-        raw = execute_tool(name, raw_eff, workspace_root, db_write_token=db_write_token)
+        raw = execute_tool(
+            name,
+            raw_eff,
+            workspace_root,
+            runtime_context=runtime_context,
+            db_write_token=db_write_token,
+        )
         return idx, json.loads(raw)
 
     if to_run:

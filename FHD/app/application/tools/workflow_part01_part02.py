@@ -76,6 +76,7 @@ def execute_workflow_tool(
     workspace_root: str | None = None,
     *,
     db_write_token: str | None = None,
+    runtime_context: dict[str, _facade().Any] | None = None,
 ) -> str:
     if isinstance(args, str):
         try:
@@ -85,7 +86,9 @@ def execute_workflow_tool(
     if not isinstance(args, dict):
         args = {}
     if name == _facade().ERP_CAPABILITY_TOOL_NAME:
-        return _facade().execute_registered_capability(args, workspace_root=workspace_root)
+        return _facade().execute_registered_capability(
+            args, workspace_root=workspace_root, runtime_context=runtime_context
+        )
     try:
         from app.mod_sdk.employee_tool_registry import execute_employee_tool, is_employee_tool
 

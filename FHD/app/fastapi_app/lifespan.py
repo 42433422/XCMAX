@@ -65,6 +65,15 @@ def _stop_agent_tasks(app: FastAPI) -> None:
     del app.state.agent_task_dispatcher
 
 
+def _reconcile_interrupted_runs() -> int:
+    """启动对账：收敛上一进程遗留的 running 任务，避免界面与存储口径不一致（M15）。"""
+    from app.application.agent_orchestrator.stale_run_reconciler import (
+        reconcile_stale_running_runs,
+    )
+
+    return reconcile_stale_running_runs()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI 应用生命周期管理"""
@@ -88,6 +97,14 @@ async def lifespan(app: FastAPI):
     mark_startup("lifespan_db_done")
 
     _wire_workflow_runtime(app)
+
+    try:
+        reconciled = _reconcile_interrupted_runs()
+        if reconciled:
+            logger.info("agent run startup reconciliation converged %s run(s)", reconciled)
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("agent run startup reconciliation skipped: %s", exc)
+
     _start_agent_tasks(app)
 
     start_paid_asset_installs()

@@ -154,6 +154,49 @@ def _is_sales_closed_loop_write(text: str) -> bool:
     return _facade()._parse_sales_write_request(text) is not None
 
 
+_ARTIFACT_REQUEST_PATTERNS = (
+    # 「表格文件 / 可下载的表格 / 导出成 Excel」等**产物**诉求
+    r"(?:表格|报表|清单|文档|文件|excel|csv)[^，,。]{0,12}"
+    r"(?:文件|下载|导出|发我|给我|生成|整理|保存|另存)",
+    r"(?:下载|导出|生成|整理|保存|另存)[^，,。]{0,12}"
+    r"(?:表格|报表|清单|文档|文件|excel|csv)",
+)
+
+# 客户类实体之外的业务实体：与客户类实体同句出现即视为**多实体**请求。
+_OTHER_BUSINESS_ENTITIES = (
+    "产品",
+    "商品",
+    "物料",
+    "原材料",
+    "货物",
+    "订单",
+    "单据",
+    "发货单",
+    "送货单",
+    "采购单",
+    "库存",
+    "仓库",
+    "员工",
+)
+
+
+def _requires_llm_planning(text: str, entity_markers: tuple[str, ...]) -> bool:
+    """单关键词槽位路由是否必须让位给 LLM 规划。
+
+    两种情形必须让位，否则会出现 M11：请求被降级为一次只读查询，第二个业务实体被
+    静默丢弃，且产物类工具（reports(action=export)）永远不会被调用（artifacts 恒为空）。
+      ① 用户要的是**产物**（可下载的表格 / 报表文件）—— 槽位路径不落 artifact；
+      ② 同句出现**客户类实体 + 另一个业务实体** —— 单一 intent 无法表达，必然丢实体。
+    """
+    for pattern in _ARTIFACT_REQUEST_PATTERNS:
+        if _facade().re.search(pattern, text, _facade().re.IGNORECASE):
+            return True
+    if entity_markers and any(k in text for k in entity_markers):
+        if any(k in text for k in _OTHER_BUSINESS_ENTITIES):
+            return True
+    return False
+
+
 def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
     """普通版轻量槽位提取与任务分流。"""
     text = (message or "").strip()
@@ -201,6 +244,11 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
         _facade().re.search("([^\\s，,。]{2,})\\s*的\\s*([0-9A-Za-z-]{2,})", text)
     )
     customer_entity_markers = ("客户", "购买单位", "买家")
+    # M11：单关键词槽位路由不得接管「要产物」或「多实体」的请求 —— 必须交回 LLM 规划，
+    # 否则第二个业务实体被静默丢弃，且 reports(action=export) 永远不会被调用
+    # （artifacts 恒为空）。此处的 unknown 与上方模板预览、否定动作共用同一逃生口。
+    if _requires_llm_planning(text, customer_entity_markers):
+        return {"intent": "unknown", "slots": {}}
     if any(k in text for k in customer_entity_markers):
         return {"intent": "customers_query", "slots": {"keyword": ""}}
     delete_keywords = ("删除", "移除", "删掉", "删了")
@@ -220,6 +268,10 @@ def route_normal_mode_message(message: str) -> dict[str, _facade().Any]:
         "数据看板",
         "统计",
     )
+    # M11：同一类问题 —— 明确要「可下载的表格 / 报表文件」时不得停在只读汇总查询上。
+    # 传空实体元组，此处**只**做产物判定，不改变单实体汇总的既有行为。
+    if _requires_llm_planning(text, ()):
+        return {"intent": "unknown", "slots": {}}
     if any(k in text for k in report_keywords):
         return {"intent": "reports_query", "slots": {"keyword": ""}}
     inventory_count_keywords = ("库存盘点", "盘点", "实盘")

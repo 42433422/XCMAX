@@ -146,6 +146,37 @@ def _result_facts(payloads: list[dict[str, Any]]) -> dict[str, Any]:
     return facts
 
 
+def _pending_approval_signal(payloads: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Return approval facts when any result payload reports a pending approval.
+
+    A pending approval means the business action was NOT executed: the run must not
+    be reported as a success just because the chat turn finished normally.
+    """
+    for payload in reversed(payloads):
+        raw_nested = payload.get("data")
+        nested: dict[str, Any] = raw_nested if isinstance(raw_nested, dict) else {}
+        for source in (payload, nested):
+            if source.get("pending_approval") is True:
+                approval = source.get("approval")
+                approval = approval if isinstance(approval, dict) else {}
+                ids = approval.get("approval_request_ids")
+                return {
+                    "message": _text(source.get("message"), limit=512),
+                    "approval_request_ids": [
+                        _text(item, limit=96)
+                        for item in (ids if isinstance(ids, list) else [])
+                    ],
+                }
+    return None
+
+
+def _pending_approval_summary(pending: dict[str, Any]) -> str:
+    return (
+        _text(pending.get("message"), limit=512)
+        or "该业务操作已创建审批请求，审批通过后才会执行"
+    )
+
+
 def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
     """Attach a bounded, user-readable terminal result to a completed run."""
     status = _text(getattr(run, "status", ""), limit=32)
@@ -159,11 +190,20 @@ def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
     payloads = _iter_result_payloads(run)
     identity = harness_event_context(run)
     artifacts = getattr(run, "artifacts", []) or []
+    pending = _pending_approval_signal(payloads)
+    # 审批门后的业务动作**未执行**：此处报 success=true 正是界面谎称
+    # 「智能任务执行完成」的来源。终态以审批事实为准，而非外层对话是否正常结束。
+    result_status = "pending_approval" if pending else status
     result = {
         "protocol": BUSINESS_HARNESS_PROTOCOL,
-        "status": status,
-        "success": status == "completed",
-        "summary": _result_summary(run, payloads),
+        "status": result_status,
+        "success": result_status == "completed",
+        "pending_approval": bool(pending),
+        "summary": (
+            _pending_approval_summary(pending)
+            if pending
+            else _result_summary(run, payloads)
+        ),
         "facts": _result_facts(payloads),
         "task_id": identity["task_id"],
         "turn_id": identity["turn_id"],
@@ -176,13 +216,17 @@ def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
                 str(getattr(call, "status", "")) == "completed"
                 for call in (getattr(run, "tool_calls", []) or [])
             ),
+            "pending_approval": bool(pending),
+            "approval_request_ids": (
+                list(pending["approval_request_ids"]) if pending else []
+            ),
             "artifact_ids": [
                 _text(getattr(artifact, "artifact_id", ""), limit=96)
                 for artifact in artifacts
                 if _text(getattr(artifact, "artifact_id", ""), limit=96)
             ],
         },
-        "projection_key": f"{BUSINESS_HARNESS_PROTOCOL}:{identity['run_id']}:{status}",
+        "projection_key": f"{BUSINESS_HARNESS_PROTOCOL}:{identity['run_id']}:{result_status}",
     }
     final_output["business_result"] = result
     run.final_output = final_output

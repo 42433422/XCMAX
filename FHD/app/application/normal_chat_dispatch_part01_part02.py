@@ -209,6 +209,10 @@ def try_normal_slot_read_payload(
     if not text:
         return None
     if _facade().looks_like_explicit_workflow_tool_intent(text):
+        _facade().logger.info(
+            "chat dispatch decision: dispatch_path=normal_slot "
+            "intent=workflow_tool_intent matched=False"
+        )
         return None
     req_token = None
     if request is not None:
@@ -257,6 +261,10 @@ def try_normal_slot_read_payload(
             elif intent == "replenishment_suggest":
                 payload = _facade().build_replenishment_suggest_response_dict(rr)
             else:
+                _facade().logger.info(
+                    "chat dispatch decision: dispatch_path=normal_slot intent=%s matched=False",
+                    intent or "unmatched",
+                )
                 return None
     finally:
         if req_token is not None:
@@ -270,4 +278,9 @@ def try_normal_slot_read_payload(
         return None
     if payload.get("success") is False and (not payload.get("response")):
         return None
+    _facade().logger.info(
+        "chat dispatch decision: dispatch_path=normal_slot intent=%s matched=True channel=%s",
+        intent,
+        "agent_tool" if payload.get("agent_tool_dispatch") else "slot",
+    )
     return payload

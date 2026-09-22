@@ -233,11 +233,19 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                 )
             )
             return
+        # 终态回复必须使用**清洗后**的正文：merged 仍含 planner 内部标记
+        # （如 `[正在调用工具: execute_erp_capability]`），直接作为 response 会让
+        # 内部标记进入用户可见正文，并被 business_result.summary 原样带出。
+        from app.application.planner_display_markers import strip_planner_stream_markers
+
+        visible_text, marker_lines = strip_planner_stream_markers(merged)
         thinking = _facade()._thinking_steps_from_planner_stream_text(merged)
+        if not thinking:
+            thinking = marker_lines
         if thinking:
-            done_reply: str | dict = {"response": merged, "thinking_steps": thinking}
+            done_reply: str | dict = {"response": visible_text, "thinking_steps": thinking}
         else:
-            done_reply = merged
+            done_reply = visible_text
         payload = _facade()._xcagi_compat_reply_payload(done_reply)
         if pre_run is not None:
             payload = _facade().finalize_legacy_chat_run(

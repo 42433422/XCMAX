@@ -237,6 +237,12 @@ export async function showDbRecoveryDialogIfNeeded(status: Record<string, unknow
   }
 }
 
+/**
+ * 连续快速重启的稳定窗口：后端**健康运行**超过该时长即视为已恢复，
+ * 自动拉起计数复位，使上限只约束「连续崩溃」而不是终身累计。
+ */
+export const BACKEND_STABLE_WINDOW_MS = 60_000
+
 export async function startBackend(): Promise<void> {
   if (desktopRuntime.backendProcess) {
     return
@@ -250,7 +256,7 @@ export async function startBackend(): Promise<void> {
       `已检查：\n${candidates}\n\n` +
       `请确认安装包包含 resources/backend/${process.platform === 'win32' ? 'xcagi-backend.exe' : 'xcagi-backend'}。`
     writeBackendLog(`[error] ${detail}\n`)
-    void dialog.showErrorBox(APP_NAME, detail)
+    showBackendErrorBox('找不到后端程序', detail)
     return
   }
 
@@ -260,11 +266,13 @@ export async function startBackend(): Promise<void> {
   if (!portFree) {
     const hint = portOccupiedHint(DEFAULT_PORT)
     writeBackendLog(`[error] port ${DEFAULT_PORT} occupied, abort backend spawn\n`)
-    void dialog.showErrorBox(APP_NAME, hint)
+    showBackendErrorBox(`端口 ${DEFAULT_PORT} 已被占用`, hint)
     return
   }
 
   desktopRuntime.startupMarks.backendSpawnMs = Date.now()
+  // 清掉上一轮的健康耗时，避免用陈旧值误判「已稳定运行」。
+  desktopRuntime.startupMarks.backendHealthMs = undefined
   writeBackendLog(`[spawn] ${executable.command} ${executable.args.join(' ')}\n`)
   writeBackendLog(`[cwd] ${executable.cwd}\n`)
   const child = spawn(executable.command, executable.args, {
@@ -316,18 +324,23 @@ export async function startBackend(): Promise<void> {
     })
     // 快速退出（< 5 秒）：通常是端口占用或配置错误，不自动重启以免浪费用户时间
     if (uptimeMs < 5000) {
-      void dialog.showErrorBox(
-        APP_NAME,
+      showBackendErrorBox(
+        '后端服务启动后立即退出',
         `后端服务启动后立即退出（code=${code}）。\n\n请查看数据目录 logs/ 下后端日志，或从菜单导出诊断包。`
       )
       return
+    }
+    // 上一轮后端已稳定运行超过窗口 → 视为已恢复，复位「连续重启」计数，
+    // 否则 restartCount 会终身累计，历史上崩过 3 次后便永久放弃自动拉起。
+    if (backendWasStable(uptimeMs)) {
+      desktopRuntime.restartCount = 0
     }
     desktopRuntime.restartCount += 1
     if (desktopRuntime.restartCount <= 3) {
       setTimeout(() => void startBackend(), 1500)
       return
     }
-    void dialog.showErrorBox(APP_NAME, `后端服务已退出（code=${code}），请重启 XCAGI。`)
+    showBackendErrorBox('后端服务已退出', `后端服务已退出（code=${code}），请重启 XCAGI。`)
   })
 }
 
@@ -430,16 +443,34 @@ export async function stopBackend(): Promise<void> {
   desktopRuntime.backendLogStream = null
 }
 
+/**
+ * 非阻塞错误提示。
+ *
+ * `dialog.showErrorBox` 是**同步** API：无人点击「确定」时它会永久阻塞主进程事件循环
+ * （表现为 9222 端口 TCP 可连但 HTTP 无响应、`app.quit()` 永不执行）。统一改用异步
+ * `showMessageBox`，与本文件 `showDbRecoveryDialogIfNeeded()` 及 app-shell / main 的写法一致。
+ */
+function showBackendErrorBox(message: string, detail: string): void {
+  void dialog.showMessageBox({ type: 'error', title: APP_NAME, message, detail })
+}
+
+/** 上一轮后端是否**确实健康过**且健康运行已超过稳定窗口。 */
+function backendWasStable(uptimeMs: number): boolean {
+  const healthMs = desktopRuntime.startupMarks.backendHealthMs
+  if (typeof healthMs !== 'number') {
+    return false
+  }
+  return uptimeMs - healthMs >= BACKEND_STABLE_WINDOW_MS
+}
+
 export function handleBackendSpawnError(error: Error): void {
   desktopRuntime.backendProcess = null
   writeBackendLog(`[error] backend spawn failed: ${error.message}\n`)
   if (app.isQuitting) {
     return
   }
-  void dialog.showErrorBox(
-    APP_NAME,
-    `后端服务启动失败：${error.message}\n\n应用将退出，请重启 XCAGI。`,
-  )
+  showBackendErrorBox('后端服务启动失败', `后端服务启动失败：${error.message}\n\n应用将退出，请重启 XCAGI。`)
+  // 提示已非阻塞，quit 不再依赖用户点击对话框，退出必然发生。
   app.quit()
 }
 
