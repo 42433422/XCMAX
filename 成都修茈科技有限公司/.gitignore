@@ -41,6 +41,8 @@ MODstore_deploy/keys_staging/
 *.log
 *.db
 *.sqlite3
+# 例外：能力中心功能详情页要直接展示的实机验收运行日志（体积小、内容为验收判定行）
+!capabilities/assets/evidence/*.log
 
 # 仓库根误生成的依赖与构建目录（勿提交）
 /node_modules/
