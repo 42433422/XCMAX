@@ -1,6 +1,6 @@
 {
   "schema": "xcagi.product_lines_status/v1",
-  "generated_at": "2026-09-22 00:06 UTC",
+  "generated_at": "2026-09-22 12:51 UTC",
   "generator": "FHD/scripts/dev/product_lines_status.py",
   "config": "FHD/config/product_lines.yaml",
   "policy": "本文件为生成物：版本/发布/能力/覆盖率的数字全部取自各自权威源，禁止手改；三线「成熟度」只呈现能力目录自有的证据分级计数与 Release Gate 结论，不合成任何自造评分。",
@@ -93,15 +93,15 @@
   "capability_totals": {
     "total": 158,
     "by_status": {
-      "verified": 1,
-      "partial": 39,
-      "implemented": 114,
+      "verified": 0,
+      "partial": 1,
+      "implemented": 153,
       "planned": 4
     },
     "cancelled_count": 0,
     "domains": 10,
     "modules": 28,
-    "verified_total": 1,
+    "verified_total": 0,
     "last_verified_at": "2026-09-22",
     "platform_counts": {
       "windows": 99,
@@ -110,9 +110,54 @@
       "android": 8,
       "ios": 1
     },
-    "completion": 47
+    "platform_coverage": {
+      "windows": {
+        "applicable": 99,
+        "verified": 0,
+        "partial": 0,
+        "pending": 99,
+        "last_verified_at": null
+      },
+      "macos": {
+        "applicable": 100,
+        "verified": 1,
+        "partial": 0,
+        "pending": 99,
+        "last_verified_at": "2026-09-22"
+      },
+      "web": {
+        "applicable": 128,
+        "verified": 0,
+        "partial": 0,
+        "pending": 128,
+        "last_verified_at": null
+      },
+      "android": {
+        "applicable": 8,
+        "verified": 0,
+        "partial": 0,
+        "pending": 8,
+        "last_verified_at": null
+      },
+      "ios": {
+        "applicable": 1,
+        "verified": 0,
+        "partial": 0,
+        "pending": 1,
+        "last_verified_at": null
+      }
+    },
+    "completion": 39
   },
-  "capability_warnings": [],
+  "capability_warnings": [
+    "[base-update-mgmt] 运行记录缺少有效 platform 标注（None），不计入任何平台状态",
+    "[ai-chat-core] 运行记录缺少有效 platform 标注（None），不计入任何平台状态",
+    "[ai-intent] 运行记录缺少有效 platform 标注（None），不计入任何平台状态",
+    "[ai-knowledge] 运行记录缺少有效 platform 标注（None），不计入任何平台状态",
+    "[erp-templates] 运行记录缺少有效 platform 标注（None），不计入任何平台状态",
+    "[erp-excel-io] 运行记录缺少有效 platform 标注（None），不计入任何平台状态",
+    "[ind-custom-delivery] 运行记录缺少有效 platform 标注（None），不计入任何平台状态"
+  ],
   "capability_domains_unassigned": [],
   "lines": [
     {
@@ -142,12 +187,11 @@
         ],
         "total": 102,
         "by_status": {
-          "verified": 1,
-          "partial": 30,
-          "implemented": 69,
+          "partial": 1,
+          "implemented": 99,
           "planned": 2
         },
-        "verified": 1
+        "verified": 0
       },
       "releases": {
         "macos": {
@@ -228,8 +272,7 @@
         ],
         "total": 39,
         "by_status": {
-          "partial": 6,
-          "implemented": 32,
+          "implemented": 38,
           "planned": 1
         },
         "verified": 0
@@ -261,8 +304,7 @@
         ],
         "total": 17,
         "by_status": {
-          "partial": 3,
-          "implemented": 13,
+          "implemented": 16,
           "planned": 1
         },
         "verified": 0
