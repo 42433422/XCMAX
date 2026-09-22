@@ -107,7 +107,13 @@ def owned_run(
     runtime_context = run.metadata.get("runtime_context") or {}
     binding = runtime_context.get("_mod_authorization") or {}
     requested_binding = principal.mod_authorization or {}
-    same_mod = binding.get("mod_id", "") == requested_binding.get("mod_id", "")
+    run_mod = str(binding.get("mod_id") or "")
+    requested_mod = str(requested_binding.get("mod_id") or "")
+    # 仅当 run 侧确有 Mod 绑定时才要求严格相等：legacy/compat 执行路径创建的 run
+    # 未写入 runtime_context._mod_authorization（run_mod 为空），此时若仍要求它与
+    # 请求头注入的 active-mod 相等，用户将读不到**自己创建的** run（M9/M10）。
+    # 无绑定时退化为下方的「用户 + 租户」归属校验，未放宽任何跨用户/跨租户边界。
+    same_mod = (not run_mod) or run_mod == requested_mod
     if not same_mod or (
         not principal.is_admin
         and (run.user_id != principal.user_id or tenant_id_of_run(run) != principal.tenant_id)
@@ -130,7 +136,10 @@ def task_scope_matches(
     ]
     if not runs:
         # Legacy tasks without execution records have no authenticated Mod binding.
-        return not principal.mod_authorization
+        # 任务在上方已通过「用户 + 租户」归属校验；不应仅因请求头携带 active-mod
+        # 就把用户**自己**的历史任务隐藏（前端 window.fetch 补丁总会注入该头，
+        # 故该分支等于让这类任务永久不可见）。此处不再据 mod 绑定额外过滤。
+        return True
     return all(owned_run(orchestrator, run.run_id, principal)[1] is None for run in runs)
 
 

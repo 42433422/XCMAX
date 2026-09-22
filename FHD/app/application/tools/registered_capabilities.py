@@ -218,6 +218,7 @@ def execute_registered_capability(
     args: dict[str, Any] | None,
     *,
     workspace_root: str | None = None,
+    runtime_context: dict[str, Any] | None = None,
 ) -> str:
     """Execute a registered product operation through risk and approval gates."""
 
@@ -251,15 +252,17 @@ def execute_registered_capability(
         risk_level=normalize_workflow_risk(str(resolved["risk"])),
         metadata={"source": "erp_agent_capability_tool"},
     )
-    runtime_context = {
-        "source": "erp_agent_capability_tool",
-        "workspace_root": workspace_root,
-        "message": str(params.get("user_request") or params.get("message") or ""),
-    }
+    # 合并调用方（已认证会话）传入的上下文，而不是凭空重建，否则审批申请人无法解析。
+    # 安全约束：申请人标识只能来自调用方会话；params 由模型产生，
+    # 因此**不得**从 params 读取 local_user_id / actor_id / user_id。
+    context: dict[str, Any] = dict(runtime_context or {})
+    context["source"] = "erp_agent_capability_tool"
+    context["workspace_root"] = workspace_root
+    context.setdefault("message", str(params.get("user_request") or params.get("message") or ""))
     try:
         decision, run_result = ApprovalGatedEngine(
             WorkflowEngine(tool_dispatcher=_dispatch_registered_tool)
-        ).run(plan, runtime_context=runtime_context, strategy="interactive")
+        ).run(plan, runtime_context=context, strategy="interactive")
     except RECOVERABLE_ERRORS:
         return json.dumps(
             {

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+from pathlib import Path
 from typing import Any
 
 from app.mod_sdk.host_profile import get_client_mod_policies
@@ -29,8 +30,10 @@ def resolve_client_erp_mod_for_request(active_mod_id: str | None = None) -> str:
 def _sqlite_customers_list(
     db_path, *, page: int, per_page: int, keyword: str | None
 ) -> dict[str, Any]:
-    if not db_path.exists():
-        return {"success": True, "data": [], "total": 0}
+    if not Path(db_path).exists():
+        # 不再静默返回空列表：私有库缺失必须让调用方回落宿主服务路径（M14），
+        # 否则「客户 0 条」与「库缺失」在客户侧不可区分。
+        raise FileNotFoundError(f"client mod private sqlite missing: {db_path}")
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
@@ -90,6 +93,16 @@ def try_invoke_client_mod_customers_list(
 
         db_mod = import_mod_backend_py(mod_path, target, "database")
         db_path = db_mod.get_database_path()
+        if not db_path or not Path(db_path).exists():
+            # 该 Mod 的私有库不存在时必须**回落宿主服务路径**（return None），
+            # 而不是返回 200 空列表：否则客户已落库的数据在列表页恒显示为 0 条，
+            # 且无任何日志与告警（M14）。
+            logger.warning(
+                "client mod customers.list skipped: private sqlite missing mod=%s db_path=%s",
+                target,
+                db_path,
+            )
+            return None
         out = _sqlite_customers_list(db_path, page=page, per_page=per_page, keyword=keyword)
         out["source"] = f"mod:{target}"
         out["execution_path"] = "client_primary_mod_sqlite"

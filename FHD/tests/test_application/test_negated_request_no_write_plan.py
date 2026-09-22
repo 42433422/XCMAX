@@ -90,3 +90,23 @@ def test_negation_detector_has_no_word_internal_false_positive(message: str) -> 
 def test_business_db_write_still_true_for_affirmative_crud() -> None:
     assert looks_like_business_db_write("删除客户张三") is True
     assert looks_like_business_db_write("把新产品写入数据库") is True
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        # M11 实测指令：客户 + 产品 + 可下载表格文件 —— 单实体槽位必然丢实体、且不落 artifact
+        "帮我统计一下客户数量和产品数量，整理成一份可以下载的表格文件",
+        # 其他业务实体 + 产物诉求 —— 槽位只读汇总不落 artifact
+        "统计每个产品的销量并导出表格",
+    ],
+)
+def test_artifact_or_multi_entity_request_defers_to_llm_planning(message: str) -> None:
+    """槽位路由不得接管无法完整表达的请求，必须交回 LLM 规划（intent=unknown）。"""
+    assert route_normal_mode_message(message)["intent"] == "unknown"
+
+
+def test_artifact_bypass_requires_a_business_entity() -> None:
+    """M11 的让位条件必须与具体实体同时命中，否则会回退单实体只读查询的槽位路由。"""
+    assert route_normal_mode_message("导出报表")["intent"] == "reports_query"
+    assert route_normal_mode_message("客户列表")["intent"] == "customers_query"
