@@ -9,6 +9,7 @@
   var DATA = JSON.parse(dataEl.textContent)
   var PLATFORM_LABELS = { windows: 'Windows 桌面', macos: 'macOS 桌面', web: 'Web', android: 'Android', ios: 'iOS' }
   var STATUS_LABELS = { verified: '已验证', partial: '部分验证', implemented: '已实现待验证', planned: '规划中' }
+  var PLATFORM_STATUS_LABELS = { verified: '已验证', partial: '部分验证', pending: '待验证' }
 
   var qInput = document.getElementById('cap-q')
   var domSelect = document.getElementById('cap-domain')
@@ -80,8 +81,14 @@
     a.appendChild(left)
     var side = el('div', 'cap-feature-side')
     side.appendChild(el('span', 'cap-status st-' + f.status, STATUS_LABELS[f.status] || f.status))
+    // 适用平台固定全列，每个平台带自己的状态；缺证据的平台显示「待验证」，不隐藏。
+    var psById = {}
+    ;(f.platform_status || []).forEach(function (ps) { psById[ps.id] = ps })
     ;(f.platforms || []).forEach(function (p) {
-      side.appendChild(el('span', 'cap-platform', PLATFORM_LABELS[p] || p))
+      var ps = psById[p]
+      var st = ps ? ps.status : 'pending'
+      side.appendChild(el('span', 'cap-platform cap-platform--' + st,
+        (PLATFORM_LABELS[p] || p) + ' · ' + (PLATFORM_STATUS_LABELS[st] || st)))
     })
     a.appendChild(side)
     return a
