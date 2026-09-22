@@ -142,6 +142,8 @@ def validate_feature(feat: dict, warnings: list[str]) -> dict:
     docs = ev.get("docs", []) or []
     shots = ev.get("screenshots", []) or []
     videos = ev.get("videos", []) or []
+    logs = ev.get("logs", []) or []
+    raw = ev.get("raw", []) or []
 
     impl_ok = [p for p in impl if path_exists(p)]
     tests_ok = [p for p in tests if path_exists(p)]
@@ -149,9 +151,12 @@ def validate_feature(feat: dict, warnings: list[str]) -> dict:
     docs_ok = [p for p in docs if path_exists(p)]
     shots_ok = [p for p in shots if path_exists(p)]
     videos_ok = [p for p in videos if path_exists(p)]
+    logs_ok = [p for p in logs if path_exists(p)]
+    raw_ok = [p for p in raw if path_exists(p)]
 
     for paths, present, label in ((impl, impl_ok, "实现"), (tests, tests_ok, "测试"),
-                                  (shots, shots_ok, "截图"), (videos, videos_ok, "录像")):
+                                  (shots, shots_ok, "截图"), (videos, videos_ok, "录像"),
+                                  (logs, logs_ok, "日志"), (raw, raw_ok, "原始抓取")):
         warnings.extend(f"[{feat['id']}] {label}路径不存在: {p}" for p in paths if p not in present)
 
     acceptance = accepted_runs(feat)
@@ -216,6 +221,8 @@ def validate_feature(feat: dict, warnings: list[str]) -> dict:
             "docs": docs_ok,
             "screenshots": shots_ok,
             "videos": videos_ok,
+            "logs": logs_ok,
+            "raw": raw_ok,
             "commits": commit_info,
         },
         "verified_at": verified_at[:10] if verified_at else None,
@@ -389,7 +396,7 @@ def compute_stats(domains_out: list[dict], feature_index: list[dict]) -> dict:
 
 
 def css(href: str) -> str:
-    return f'<link rel="stylesheet" href="{href}?v=20260919b" />'
+    return f'<link rel="stylesheet" href="{href}?v=20260922a" />'
 
 
 def header_html(page_key: str, title_suffix: str, description: str, canonical: str) -> str:
@@ -798,6 +805,43 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
             '不代表实机验收通过。</p></div>'
         )
 
+    # 本项运行日志：原文逐行展示（不重排、不裁剪），并给出可下载的原件路径。
+    logs_html, log_blocks = "", []
+    for p in ev.get("logs", []):
+        try:
+            text = e(p).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        lines = text.count("\n") + (0 if text.endswith("\n") else 1)
+        log_blocks.append(
+            f'<div class="cap-evidence-block"><h3>本项运行日志</h3>'
+            f'<pre class="cap-log">{esc(text.rstrip())}</pre>'
+            f'<p class="cap-evidence-note">共 {lines} 行，原文未改动。'
+            f'下载原件：<a href="{asset(f["id"], p)}">{esc(Path(p).name)}</a>'
+            f'（仓库路径：{esc(p)}）</p></div>'
+        )
+    if log_blocks:
+        logs_html = "".join(log_blocks)
+
+    # 原始抓取：逐条原始产物的可核对副本（凭据值已脱敏，其余逐字保留）。
+    raw_html = ""
+    for p in ev.get("raw", []):
+        try:
+            doc = json.loads(e(p).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        red = doc.get("_redaction", {}) or {}
+        originals = red.get("originals", []) or []
+        names = "、".join(esc(o.get("name", "")) for o in originals) or "见文件"
+        raw_html = (
+            '<div class="cap-evidence-block"><h3>原始抓取（脱敏）</h3>'
+            f'<p>逐条原始产物汇编：{names}。'
+            f'{esc(red.get("policy", "凭据值已脱敏，其余内容逐字保留。"))}'
+            f'未经脱敏的原件留在操作机，逐件 sha256 记录在文件内。</p>'
+            f'<p class="cap-evidence-note"><a href="{asset(f["id"], p)}">'
+            f'查看逐条原始抓取与原件 sha256 →</a>（仓库路径：{esc(p)}）</p></div>'
+        )
+
     commits_html = evidence_list(
         [f"{c['sha']} {c['subject']} ({c['date']})" for c in ev["commits"]]
     )
@@ -849,7 +893,7 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
         <div class="cap-evidence-block"><h3>自动化测试</h3>{evidence_list(ev['tests'])}<p class="cap-evidence-note">CI 门禁：{esc('、'.join(ev['ci']) if ev['ci'] else '待补本项 CI 证据')}</p></div>
         <div class="cap-evidence-block"><h3>CI 工作流定义</h3>{evidence_list(ev['ci'])}</div>
         {media_html}
-        {shots_html}
+        {shots_html}{logs_html}{raw_html}
         <div class="cap-evidence-block"><h3>关联文档</h3>{evidence_list(ev['docs'])}</div>
         <div class="cap-evidence-block"><h3>关联实现 commit</h3>{commits_html}</div>
       </div>
@@ -887,7 +931,7 @@ def copy_evidence_assets(domains_full: list[dict]) -> list[str]:
     for d in domains_full:
         for m in d["modules"]:
             for f in m["features"]:
-                for kind in ("screenshots", "videos", "runs", "review"):
+                for kind in ("screenshots", "videos", "runs", "review", "logs", "raw"):
                     for p in ([f["evidence"][kind]] if kind == "review" and f["evidence"].get(kind) else f["evidence"].get(kind, []) or []):
                         src = e(p)
                         dst = EVIDENCE_ASSET_DIR / f"{f['id']}-{Path(p).name}"

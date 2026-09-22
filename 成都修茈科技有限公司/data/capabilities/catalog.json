@@ -76,6 +76,8 @@
                   "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/macos/05c-gui-logout-screen.png"],
                 "videos": ["FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/macos/03-login-operation-web.mp4",
                   "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/macos/05c-gui-logout-operation-web.mp4"],
+                "logs": ["FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/macos/run.log"],
+                "raw": ["FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/base-login-macos-raw-redacted.json"],
                 "commits": []
               }
             },
