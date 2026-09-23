@@ -136,17 +136,28 @@ function bringBrowserToFront() {
 
 // ---------------------------------------------------------------- browser ops
 let s = null;
+// Evaluate an expression in the page through the raw CDP command (same semantics as the driver
+// helper, but explicit about the protocol call we make).
+async function inPageEval(expression, awaitPromise = true) {
+  const r = await s.send('Runtime.evaluate', {
+    expression, returnByValue: true, awaitPromise, userGesture: true,
+  });
+  if (r.exceptionDetails) {
+    throw new Error('in-page expression failed: ' + JSON.stringify(r.exceptionDetails).slice(0, 500));
+  }
+  return r.result ? r.result.value : undefined;
+}
 async function connectBrowser() {
   s = await Session.connect('xiu-ci.com');
   await s.send('Page.bringToFront');
   return s;
 }
 async function inPage(fn, ...args) {
-  return await s.eval(`(${fn.toString()})(${args.map((a) => JSON.stringify(a)).join(',')})`);
+  return await inPageEval(`(${fn.toString()})(${args.map((a) => JSON.stringify(a)).join(',')})`);
 }
 async function apiFetch(apiPath, init = null, token = '') {
   for (let attempt = 1; attempt <= 5; attempt++) {
-    const r = await s.eval(`(async () => {
+    const r = await inPageEval(`(async () => {
       const headers = {};
       const tok = ${token ? JSON.stringify(token) : `localStorage.getItem('modstore_token') || ''`};
       if (tok) headers['Authorization'] = 'Bearer ' + tok;
@@ -166,7 +177,7 @@ async function apiFetch(apiPath, init = null, token = '') {
 }
 async function apiPost(apiPath, payload) {
   for (let attempt = 1; attempt <= 5; attempt++) {
-    const r = await s.eval(`(async () => {
+    const r = await inPageEval(`(async () => {
       const headers = { 'Content-Type': 'application/json' };
       const tok = localStorage.getItem('modstore_token') || '';
       if (tok) headers['Authorization'] = 'Bearer ' + tok;
@@ -191,7 +202,7 @@ async function goto(url, settleMs = 5000) {
 async function waitApp(timeoutMs = 25000) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
-    const busy = await s.eval(
+    const busy = await inPageEval(
       `document.readyState !== 'complete' || !document.querySelector('#app, .auth-card, .wb-sidebar-logout-btn')`,
       false);
     if (!busy) return true;
@@ -231,7 +242,7 @@ async function shotFull(name) {
 // Real keyboard input: focus the field with a real click, select existing content (Ctrl+A),
 // then replace it via Input.insertText. Verifies the resulting value without logging it.
 async function typeReal(selector, value) {
-  const read = async () => await s.eval(
+  const read = async () => await inPageEval(
     `(() => { const el = document.querySelector(${JSON.stringify(selector)}); return el ? el.value : null; })()`);
   await clickReal(selector);
   for (const type of ['keyDown', 'keyUp']) {
@@ -243,7 +254,7 @@ async function typeReal(selector, value) {
   await sleep(250);
   if ((await read()) !== value) {
     log(`type: field did not match after real input (selector=${selector}) -> clearing and retrying once`);
-    await s.eval(`(() => { const el = document.querySelector(${JSON.stringify(selector)});
+    await inPageEval(`(() => { const el = document.querySelector(${JSON.stringify(selector)});
       if (!el) return false;
       const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
       set.call(el, ''); el.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
@@ -258,7 +269,7 @@ async function typeReal(selector, value) {
 // Real mouse click at element centre. Returns false (never throws) when the element is absent,
 // so a missing control is reported by the case's own assertions instead of aborting the round.
 async function clickReal(selector) {
-  const box = await s.eval(`(() => {
+  const box = await inPageEval(`(() => {
     const el = document.querySelector(${JSON.stringify(selector)});
     if (!el) return null;
     el.scrollIntoView({ block: 'center', inline: 'center' });
@@ -274,7 +285,7 @@ async function clickReal(selector) {
   return true;
 }
 async function clickTextReal(text) {
-  const ok = await s.eval(`(() => {
+  const ok = await inPageEval(`(() => {
     const vis = (el) => { const r = el.getBoundingClientRect(); const st = getComputedStyle(el);
       return r.width > 0 && r.height > 0 && st.display !== 'none' && st.visibility !== 'hidden'; };
     const btns = [...document.querySelectorAll('button, a')].filter(vis);
@@ -289,7 +300,7 @@ async function clickTextReal(text) {
   return ok;
 }
 async function uiState() {
-  return await s.eval(`(() => {
+  return await inPageEval(`(() => {
     const vis = (el) => { const r = el.getBoundingClientRect(); const st = getComputedStyle(el);
       return r.width > 0 && r.height > 0 && st.display !== 'none' && st.visibility !== 'hidden'; };
     const t = (document.body && document.body.innerText) || '';
@@ -315,7 +326,7 @@ async function clearSession() {
 async function waitFor(expr, timeoutMs, label) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
-    if (await s.eval(expr, false)) return true;
+    if (await inPageEval(expr, false)) return true;
     await sleep(500);
   }
   log(`wait: TIMEOUT ${label}`);
@@ -357,7 +368,7 @@ async function main() {
 
   // identity (product version / app sha the deployed web build self-reports)
   const health = await apiFetch('/api/health');
-  const marketAssets = await s.eval(`(async () => {
+  const marketAssets = await inPageEval(`(async () => {
     const r = await fetch(${JSON.stringify(APP + '/')}, { credentials: 'include' });
     const h = await r.text();
     return (h.match(/\\/market\\/assets\\/[A-Za-z0-9_.\\-]+/g) || []).slice(0, 20);
@@ -374,14 +385,14 @@ async function main() {
     platform: 'web',
     captured_at: localStamp(),
     entry_url: `${APP}/login`,
-    page_title: await s.eval('document.title', false),
+    page_title: await inPageEval('document.title', false),
     site_health: health.body,
     site_git_sha: (health.body && health.body.git_sha) || null,
     site_release_id: (health.body && health.body.release_id) || null,
     site_version: (health.body && String(health.body.release_id || '').match(/xcagi-([0-9.]+)-/)?.[1]) || null,
     market_bundle_assets: marketAssets,
     desktop_side_build_info: desktopBuild,
-    user_agent: await s.eval('navigator.userAgent', false),
+    user_agent: await inPageEval('navigator.userAgent', false),
   };
   fs.writeFileSync(path.join(OUT, 'base-login-web-identity.json'),
     JSON.stringify(identity, null, 2), 'utf8');
@@ -444,14 +455,14 @@ async function main() {
   record(wb2);
 
   // ---- WB3 会话保持（刷新后仍已登录，同一 token 仍有效）
-  const tok1 = await s.eval(`localStorage.getItem('modstore_token') || ''`, false);
+  const tok1 = await inPageEval(`localStorage.getItem('modstore_token') || ''`, false);
   await s.send('Page.reload', { ignoreCache: false });
   await sleep(2500);
   await waitApp(30000);
   const okReload = await waitFor(`!!document.querySelector('${LOGGED_IN_SEL}')`, 30000, 'WB3 after reload');
   await sleep(2500);
   st = await uiState();
-  const tok2 = await s.eval(`localStorage.getItem('modstore_token') || ''`, false);
+  const tok2 = await inPageEval(`localStorage.getItem('modstore_token') || ''`, false);
   const me3 = await apiFetch('/api/auth/me');
   const wb3 = {
     id: 'WB3', title: 'session persistence (browser reload)',
@@ -470,14 +481,14 @@ async function main() {
   const tokBefore = tok2;
   await clickReal('.wb-user-menu__trigger');
   const okPanel = await waitFor(`!!document.querySelector('.wb-user-menu__panel')`, 15000, 'WB4 user menu panel');
-  const panelItems = await s.eval(`(() => {
+  const panelItems = await inPageEval(`(() => {
     const p = document.querySelector('.wb-user-menu__panel');
     return p ? [...p.querySelectorAll('.wb-user-menu__item')].map((x) => (x.innerText || '').trim()) : [];
   })()`);
   log('logout menu items: ' + JSON.stringify(panelItems));
   await clickTextReal('退出登录');
   const okDlg = await waitFor(`!!document.querySelector('.app-confirm-dialog')`, 15000, 'WB4 confirm dialog');
-  const dlg = await s.eval(`(() => {
+  const dlg = await inPageEval(`(() => {
     const d = document.querySelector('.app-confirm-dialog');
     if (!d) return null;
     return { title: (d.querySelector('.app-confirm-dialog__title') || {}).innerText || '',
@@ -489,11 +500,11 @@ async function main() {
   await clickReal('.app-confirm-dialog__confirm');
   const okLogout = await waitFor(`!document.querySelector('${LOGGED_IN_SEL}') && !!document.querySelector('input[type=password]')`, 30000, 'WB4 back to login');
   st = await uiState();
-  const tokenAfterLogout = await s.eval(`localStorage.getItem('modstore_token') || ''`, false);
+  const tokenAfterLogout = await inPageEval(`localStorage.getItem('modstore_token') || ''`, false);
   const me4 = await apiFetch('/api/auth/me');                       // no credential left in the browser
   const me4Old = await apiFetch('/api/auth/me', null, tokBefore);   // reuse the OLD bearer token on purpose
   // The market's server-side logout endpoint (contract detail, recorded as-is; the UI flow is client-side)
-  const serverLogout = await s.eval(`(async () => {
+  const serverLogout = await inPageEval(`(async () => {
     try {
       const r = await fetch(${JSON.stringify(BASE + '/api/auth/logout')}, { method: 'POST', credentials: 'include' });
       return { status: r.status, body: (await r.text()).slice(0, 200) };
@@ -533,7 +544,7 @@ async function main() {
   const wb5CredentialError = /用户名或密码错误|密码错误|账号或密码/.test(wb5ErrText || '');
   await shot('WB5-wrong-password.png');     // fields still filled + the error the user sees
   const me5 = await apiPost('/api/auth/login', { username: USER, password: PASS + '-WRONG' });
-  const emptySubmit = await s.eval(`(() => {
+  const emptySubmit = await inPageEval(`(() => {
     const f = document.querySelector('form');
     const u = document.querySelector('input[autocomplete=username]');
     const p = document.querySelector('input[type=password]');
