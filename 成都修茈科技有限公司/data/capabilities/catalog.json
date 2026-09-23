@@ -59,7 +59,7 @@
               "name": "登录与会话管理",
               "summary": "企业统一的账号登录、会话保持与安全退出，桌面端与 Web 端共用同一套账户体系。",
               "usage": "安装后首次启动输入企业分配的账号即可登录；会话由服务端统一管理。",
-              "platforms": ["windows", "macos", "web"],
+              "platforms": ["windows", "macos"],
               "limitations": [],
               "evidence": {"review": "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/base-login-macos-visual-review.json",
                 "runs": ["FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/base-login-macos-run.json", "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/base-login-windows-run.json"],
