@@ -1,0 +1,18 @@
+base-login Windows round 20260923-181553 -- operator observations (verbatim)
+=========================================================================
+1) Logout confirmation dialog text, both times (from the GUI driver log):
+   确认 确定退出本机账号？ 取消 确定   -> clicked 确定
+   Path used: 左侧导航 系统设置 -> 账号卡片 退出登录 -> 确认框 确定
+2) Login page title: 企业账号登录 ; inputs: input[name=username] placeholder
+   "XCAGI 账号或邮箱", input[name=password] placeholder "密码" ; button text "登 录".
+3) ANOMALY, recorded as observed, cause not determined in this round:
+   In shot/W3-after-restart.png and in the tail of the video, the bottom-left status
+   chip reads 部分服务异常 (before the restart, shot/W2-login-workspace.png shows
+   系统正常). Immediately after the round, GET /api/health returned
+   status=healthy with runtime.blockers=[] and runtime.degraded_reasons=[], so the
+   banner is not explained by the backend health payload. The session-persistence
+   assertion of W3 (same session cookie still valid after the process restart) did
+   pass. This observation is reported as-is and is not used to justify the verdict.
+4) Video timeline checkpoints (frames extracted with ffmpeg, reviewed one by one):
+   t=0s logged-in workspace ; t=24s app relaunch splash "正在启动本地服务 9%" ;
+   t=36s back to the logged-in workspace.
