@@ -2,21 +2,21 @@
   "_comment": "此文件由 成都修茈科技有限公司/scripts/build_capability_center.py 自动生成，请勿手改（DO NOT EDIT）。",
   "schema_version": 1,
   "catalog_version": "2026-09-16",
-  "generated_at": "2026-09-23 10:29 UTC",
+  "generated_at": "2026-09-23 18:01 UTC",
   "principle": "No Evidence, No Claim：总体状态由各平台实机验收记录自动汇总，目录不存放可手写的状态；缺证据的平台固定显示「待验证」。",
   "stats": {
     "total": 158,
     "by_status": {
-      "verified": 0,
-      "partial": 1,
+      "verified": 1,
+      "partial": 0,
       "implemented": 153,
       "planned": 4
     },
     "cancelled_count": 0,
     "domains": 10,
     "modules": 28,
-    "verified_total": 0,
-    "last_verified_at": "2026-09-23",
+    "verified_total": 1,
+    "last_verified_at": "2026-09-24",
     "platform_counts": {
       "windows": 99,
       "macos": 100,
@@ -41,10 +41,10 @@
       },
       "web": {
         "applicable": 128,
-        "verified": 0,
+        "verified": 1,
         "partial": 0,
-        "pending": 128,
-        "last_verified_at": null
+        "pending": 127,
+        "last_verified_at": "2026-09-24"
       },
       "android": {
         "applicable": 8,
@@ -125,7 +125,7 @@
             {
               "id": "base-login",
               "name": "登录与会话管理",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -151,10 +151,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-24",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "企业统一的账号登录、会话保持与安全退出，桌面端与 Web 端共用同一套账户体系。",
