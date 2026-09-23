@@ -1,0 +1,31 @@
+[01:54:10] round stamp: 20260924-015410
+[01:54:10] base: https://xiu-ci.com  app: https://xiu-ci.com/market  out: Z:\windows-acceptance-r2\acceptance\feature-base-login-web-20260924-r5
+[01:54:10] browser: connected via CDP (http://127.0.0.1:9222)
+[01:54:10] identity: site git_sha=201d1f691855465f76dd53adc74c1d53ff4d9af4 version=1.0.0.1
+[01:54:10] video: recording -> Z:\windows-acceptance-r2\acceptance\feature-base-login-web-20260924-r5\video\base-login-web-20260924-015410.mp4
+[01:54:14] state: cleared cookies + local/session storage
+[01:54:19] shot(full-desktop): WB1-login-required.png (557248 bytes)
+[01:54:19] shot: WB1b-login-page.png (34816 bytes)
+[01:54:19] case WB1: passed - not-logged-in rejection (web)
+[01:54:21] type: input[autocomplete=username] filled (chars=7, verified=true)
+[01:54:22] type: input[type=password] filled (chars=9, verified=true)
+[01:54:22] shot: WB2a-credentials-filled.png (35566 bytes)
+[01:54:22] type: input[autocomplete=username] filled (chars=7, verified=true)
+[01:54:23] type: input[type=password] filled (chars=9, verified=true)
+[01:54:27] shot: WB2b-login-workspace.png (167615 bytes)
+[01:54:27] case WB2: passed - enterprise login (real browser)
+[01:54:32] shot: WB3-after-reload.png (167615 bytes)
+[01:54:32] case WB3: passed - session persistence (browser reload)
+[01:54:32] logout menu items: ["Lv.1 · 新手","账户设置","钱包","会员","设置","通知","AI 测试","官网首页","退出登录"]
+[01:54:33] shot: WB4a-logout-confirm.png (152115 bytes)
+[01:54:35] shot: WB4b-login-page-after-logout.png (34816 bytes)
+[01:54:35] case WB4: passed - secure logout (real browser)
+[01:54:37] type: input[autocomplete=username] filled (chars=7, verified=true)
+[01:54:38] type: input[type=password] filled (chars=15, verified=true)
+[01:54:40] shot: WB5-wrong-password.png (39506 bytes)
+[01:54:43] case WB5: passed - boundary negatives (real browser)
+[01:54:45] type: input[autocomplete=username] filled (chars=7, verified=true)
+[01:54:45] type: input[type=password] filled (chars=9, verified=true)
+[01:54:49] shot: WB6-same-account.png (167615 bytes)
+[01:54:49] case WB6: passed - same account system as desktop
+[01:54:50] video: stopped (2620001 bytes) -> Z:\windows-acceptance-r2\acceptance\feature-base-login-web-20260924-r5\video\base-login-web-20260924-015410.mp4
