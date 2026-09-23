@@ -1,0 +1,17 @@
+[18:15:53] === base-login Windows acceptance (this round) ===
+[18:15:53] account=SUNBIRD (password supplied: True)
+[18:16:01] app_dir=C:\XCAGI-r2
+[18:16:09] identity: git_sha=84a4b75445cd529a96529c938f8e88b288ab6228 version=1.0.0.5 health=200
+[18:16:09] waiting for the auth route to be mounted ...
+[18:16:09] auth route ready: True
+[18:16:09] video: recording -> Z:\windows-acceptance-r2\acceptance\feature-base-login-main-84a4b754-site\video\base-login-20260923-181553.mp4
+[18:16:11] W1 verdict=PASS
+[18:16:14] W2 verdict=PASS
+[18:16:14] stopping app processes: 9576,12548,21960,22452,22712
+[18:16:37] window title: "XCAGI"
+[18:16:39] window title: "智能对话 - XCAGI"
+[18:16:44] W3 verdict=PASS
+[18:16:49] W4 verdict=PASS
+[18:16:51] W5 verdict=PASS
+[18:16:52] W6 verdict=PASS
+[18:16:52] video: saved -> Z:\windows-acceptance-r2\acceptance\feature-base-login-main-84a4b754-site\video\base-login-20260923-181553.mp4

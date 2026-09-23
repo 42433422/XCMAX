@@ -1,6 +1,6 @@
 {
     "_comment":  "此文件为 2026-09-23 Windows 实机验收的安装/版本/SHA 侦察快照，由 accept-base-login.ps1 自动生成，请勿手改（DO NOT EDIT）。",
-    "captured_at":  "2026-09-23 16:47:47",
+    "captured_at":  "2026-09-23 18:16:08",
     "host":  "佳诺",
     "user":  "97088",
     "os":  "Microsoft Windows 11 家庭版 中文版 10.0.26200",
@@ -15,7 +15,7 @@
                    },
     "git_sha":  "84a4b75445cd529a96529c938f8e88b288ab6228",
     "product_version":  "1.0.0.5",
-    "installer_path":  "C:\\xcagi-test\\tmp\\XCAGI-84a4b754.exe",
+    "installer_path":  "Z:\\windows-acceptance-r2\\download\\site-84a4b754\\XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe",
     "installer_sha256":  "8ab1fad28df4779c43d5041542e0649df7368fe5c29da4f72b937d590090dbdf",
     "health":  {
                    "status":  200,
@@ -243,11 +243,11 @@
                                 "neuro":  {
                                               "status":  "healthy",
                                               "running":  true,
-                                              "published":  3671,
-                                              "processed":  3670,
+                                              "published":  3962,
+                                              "processed":  3962,
                                               "errors":  0,
                                               "dropped":  0,
-                                              "queue_size":  1,
+                                              "queue_size":  0,
                                               "handlers":  39,
                                               "global_handlers":  0,
                                               "reliability":  {
@@ -266,7 +266,7 @@
                                                               },
                                               "components":  {
                                                                  "bus_running":  true,
-                                                                 "queue_size":  1,
+                                                                 "queue_size":  0,
                                                                  "domains":  [
                                                                                  "intent",
                                                                                  "order",
@@ -378,11 +378,11 @@
                                                                                                   "success_rate":  0.0,
                                                                                                   "supported_events":  [
                                                                                                                            "evolution.reflect",
-                                                                                                                           "evolution.search",
                                                                                                                            "evolution.export",
-                                                                                                                           "evolution.mine",
                                                                                                                            "error.occurred",
-                                                                                                                           "evolution.index"
+                                                                                                                           "evolution.mine",
+                                                                                                                           "evolution.index",
+                                                                                                                           "evolution.search"
                                                                                                                        ],
                                                                                                   "kb_stats":  {
                                                                                                                    "total_entries":  0,

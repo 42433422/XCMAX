@@ -10,8 +10,8 @@
     "reviewed_at":  "2026-09-23",
     "passed":  6,
     "failed":  0,
-    "round":  "20260923-164745",
-    "generated_at":  "2026-09-23 16:48:39",
+    "round":  "20260923-181553",
+    "generated_at":  "2026-09-23 18:16:52",
     "verdict":  "PASS",
     "verdict_reason":  "",
     "first_real_breakpoint":  null,
@@ -27,7 +27,7 @@
 
                     ],
     "app_identity":  {
-                         "captured_at":  "2026-09-23 16:47:47",
+                         "captured_at":  "2026-09-23 18:16:08",
                          "host":  "佳诺",
                          "user":  "97088",
                          "os":  "Microsoft Windows 11 家庭版 中文版 10.0.26200",
@@ -42,7 +42,7 @@
                                         },
                          "git_sha":  "84a4b75445cd529a96529c938f8e88b288ab6228",
                          "product_version":  "1.0.0.5",
-                         "installer_path":  "C:\\xcagi-test\\tmp\\XCAGI-84a4b754.exe",
+                         "installer_path":  "Z:\\windows-acceptance-r2\\download\\site-84a4b754\\XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe",
                          "installer_sha256":  "8ab1fad28df4779c43d5041542e0649df7368fe5c29da4f72b937d590090dbdf",
                          "health":  {
                                         "status":  200,
@@ -270,11 +270,11 @@
                                                      "neuro":  {
                                                                    "status":  "healthy",
                                                                    "running":  true,
-                                                                   "published":  3671,
-                                                                   "processed":  3670,
+                                                                   "published":  3962,
+                                                                   "processed":  3962,
                                                                    "errors":  0,
                                                                    "dropped":  0,
-                                                                   "queue_size":  1,
+                                                                   "queue_size":  0,
                                                                    "handlers":  39,
                                                                    "global_handlers":  0,
                                                                    "reliability":  {
@@ -293,7 +293,7 @@
                                                                                    },
                                                                    "components":  {
                                                                                       "bus_running":  true,
-                                                                                      "queue_size":  1,
+                                                                                      "queue_size":  0,
                                                                                       "domains":  [
                                                                                                       "intent",
                                                                                                       "order",
@@ -405,11 +405,11 @@
                                                                                                                        "success_rate":  0.0,
                                                                                                                        "supported_events":  [
                                                                                                                                                 "evolution.reflect",
-                                                                                                                                                "evolution.search",
                                                                                                                                                 "evolution.export",
-                                                                                                                                                "evolution.mine",
                                                                                                                                                 "error.occurred",
-                                                                                                                                                "evolution.index"
+                                                                                                                                                "evolution.mine",
+                                                                                                                                                "evolution.index",
+                                                                                                                                                "evolution.search"
                                                                                                                                             ],
                                                                                                                        "kb_stats":  {
                                                                                                                                         "total_entries":  0,
@@ -479,49 +479,49 @@
                          "auth_route_ready":  true
                      },
     "log":  {
-                "path":  "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/windows/log/base-login-20260923-164745.log",
-                "bytes":  970,
-                "sha256":  "76e5575e0a0f1753d756451938d2dfb8ed66f33594849d78ec03112bce2aeb2f"
+                "path":  "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/windows/log/base-login-20260923-181553.log",
+                "bytes":  937,
+                "sha256":  "62a0ac46caf0141f17f0832e117568362644ac5781ae534ed89cb2b5fc0ed15e"
             },
     "media":  [
                   {
                       "feature":  "base-login",
                       "path":  "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/windows/shot/W2-login-page.png",
-                      "sha256":  "affe14eddd7e098162ff4fd78318265fe4289eb6baa8d5ecb9b05f8c15efd1a7",
+                      "sha256":  "766de5d84d7fed2025d079d7cc1aade53d47eb88b23da01335d68bf479918dc6",
                       "visual_review":  "accepted",
-                      "visible_result":  "未登录：企业账号登录页，标题「企业账号登录」，账号（XCAGI 账号或邮箱）与密码输入框均为空，「登 录」按钮可见，无左侧导航与 SUNBIRD 账号名。",
+                      "visible_result":  "未登录的登录页：标题「企业账号登录」，左侧品牌区「XCAGI 企业版 / 智能企业管理平台 / 让 AI 驱动的业务增长」；账号框占位文字「XCAGI 账号或邮箱」、密码框占位文字「密码」，两者均为空；主按钮「登 录 →」为浅蓝禁用态；右上角「注册账号」；底部「忘记账号 / 忘记密码 / 帮助」。",
                       "reviewed_at":  "2026-09-23"
                   },
                   {
                       "feature":  "base-login",
                       "path":  "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/windows/shot/W2-login-workspace.png",
-                      "sha256":  "2a57c5ad481b643d419d628f1bfa5e0d6b8e5bdc88e67baab490633ad43b931f",
+                      "sha256":  "c892e899bbb8c93d8f008a06739fb83469dbbe5ec187f04b79be599692682cb4",
                       "visual_review":  "accepted",
-                      "visible_result":  "登录成功：页面顶部显示「智能对话」与账号 SUNBIRD，左侧导航完整（智能对话、考勤工作区、信息、智能生态、知识库、数据对接中心、员工工作台、饰品包装品管理、原材料仓库、库存管理、客户管理、订单管理、出货记录、数据来源、包装标签打印、系统设置），左下角显示「系统正常」与「v1.0.0.5」，无登录表单。",
+                      "visible_result":  "登录后的工作台：主区标题「智能对话」，其下账号名「SUNBIRD」；左侧为完整导航（智能对话、考勤工作区、信息、智能生态、知识库、数据对接中心、员工工作台、饰品包装管理、原材料仓库、库存管理、客户管理、订单管理、出货记录、数据来源、包装标签打印、XCAGI modstore、系统设置）；左下状态条显示「系统正常」，其下为版本号 1.0.0.5；登录页的账号/密码输入框已消失。",
                       "reviewed_at":  "2026-09-23"
                   },
                   {
                       "feature":  "base-login",
                       "path":  "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/windows/shot/W3-after-restart.png",
-                      "sha256":  "f7f44bb8db401884bb22563437f340494941255cd4932ae2e4434290b480f42c",
+                      "sha256":  "ff4b1e70456ba2fd979e8937a1b181c3eaca6623d1b0bfac6172bfe4f558871c",
                       "visual_review":  "accepted",
-                      "visible_result":  "应用进程重启后仍为已登录工作台：页面顶部显示「智能对话」与账号 SUNBIRD，左侧导航完整，未出现登录表单，说明会话在进程重启后仍然有效。",
+                      "visible_result":  "应用进程被结束并重新启动后，画面仍是已登录工作台：账号「SUNBIRD」、左侧同一套导航、主区「智能对话」，会话未丢失。同一时刻的异常观察：左下状态条由重启前的「系统正常」变为「部分服务异常」；随后直接查询后端 /api/health 返回 status=healthy、runtime.blockers 与 degraded_reasons 均为空，本轮未能定位该条 UI 提示的成因，按实际所见原样记录（见 log/operator-observations.txt）。",
                       "reviewed_at":  "2026-09-23"
                   },
                   {
                       "feature":  "base-login",
                       "path":  "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/windows/shot/W4-login-page-again.png",
-                      "sha256":  "ef748b0cd981674f002aead2845a7467b402eff0e1a31e85f311b1cc6cc802f8",
+                      "sha256":  "96073c758b5ee13b927f92ba49b1a3e8cd363466d897bf56c8ebbf3b6b7e9260",
                       "visual_review":  "accepted",
-                      "visible_result":  "GUI 点击「退出登录」并确认弹窗「确定退出本机账号？」后回到登录页：账号与密码输入框为空，「登 录」按钮可见，无左侧导航与 SUNBIRD 账号名。",
+                      "visible_result":  "在工作台执行「退出登录」，确认框原文「确认 确定退出本机账号？」，点击「确定」后回到登录页：标题「企业账号登录」，账号与密码输入框为空，主按钮「登 录 →」为禁用态，工作台导航与账号名已消失。",
                       "reviewed_at":  "2026-09-23"
                   },
                   {
                       "feature":  "base-login",
-                      "path":  "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/windows/video/base-login-20260923-164745.mp4",
-                      "sha256":  "52442e3bccccab69ef6758f6d7ac0905aaa150a948d3b36af15f8784f1f87da3",
+                      "path":  "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/windows/video/base-login-20260923-181553.mp4",
+                      "sha256":  "1363608c3e1528c97b541387c6bf7121181dd0754d22d10fbbe06b293ac94dc8",
                       "visual_review":  "accepted",
-                      "visible_result":  "真机录屏（整屏 2560x1600、5 fps、50.2 秒，未剪接）：开始时 XCAGI 处于已登录工作台（账号 SUNBIRD、左侧导航完整）→ 验收脚本执行 W1-W6 → 应用进程被停止期间桌面无 XCAGI 窗口（同一时刻的任务栏与浏览器窗口可见）→ 应用重新启动后再次回到已登录工作台（账号 SUNBIRD），全程未出现登录表单卡住。",
+                      "visible_result":  "整屏录屏 18:15:53–18:16:52（约 59s）：起始画面为已登录工作台（账号 SUNBIRD、智能对话、左侧导航）；随后应用进程被结束、窗口消失只余桌面；接着应用重新启动并显示启动页「XCAGI 企业版 / 正在启动本地服务… 启动进度 9%」；启动完成后回到仍为已登录的工作台。重启后左下角状态条显示「部分服务异常」。",
                       "reviewed_at":  "2026-09-23"
                   }
               ],
@@ -535,7 +535,7 @@
                       "observed":  "{\"me\":{\"success\":false,\"error\":{\"code\":\"UNAUTHORIZED\",\"message\":\"请先登录\"},\"valid\":false},\"validate\":{\"success\":false,\"error\":{\"code\":\"NO_SESSION\",\"message\":\"无会话信息\"},\"valid\":false},\"me_status\":200,\"validate_status\":200}",
                       "result":  "passed",
                       "verdict":  "PASS",
-                      "verify_time":  "2026-09-23 16:47:49",
+                      "verify_time":  "2026-09-23 18:16:11",
                       "facts":  {
                                     "me":  {
                                                "success":  false,
@@ -567,7 +567,7 @@
                       "observed":  "{\"login_status\":200,\"login_success\":true,\"session_cookie_present\":true,\"account_kind\":\"enterprise\",\"username\":\"SUNBIRD\",\"tier\":\"enterprise\",\"tenant_id\":1,\"validate_valid\":true}",
                       "result":  "passed",
                       "verdict":  "PASS",
-                      "verify_time":  "2026-09-23 16:47:53",
+                      "verify_time":  "2026-09-23 18:16:14",
                       "facts":  {
                                     "login_status":  200,
                                     "login_success":  true,
@@ -586,10 +586,10 @@
                       "input":  "The session cookie obtained in W2, reused after killing and restarting the XCAGI processes.",
                       "actions":  "Close the app, wait for the backend to stop, start XCAGI.exe again, wait for health, then call me + session/validate with the same cookie.",
                       "expected":  "Backend health is 200 and the same session is still valid (me.success=true, validate.valid=true).",
-                      "observed":  "{\"health_after_restart\":200,\"window_title_after_restart\":\"智能对话 - XCAGI\",\"me_after_restart\":{\"success\":true,\"data\":{\"user\":{\"id\":2,\"username\":\"SUNBIRD\",\"display_name\":\"SUNBIRD\",\"email\":\"sunbird@xcagi.local\",\"email_display\":\"sunbird@xcagi.local\",\"no_email\":false,\"role\":\"user\",\"is_active\":true,\"avatar_url\":\"\"},\"permissions\":[\"shipment.edit\",\"product.edit\",\"etl.execute\",\"dataset.read\",\"material.edit\",\"shipment.create\",\"shipment.view\",\"material.view\",\"dataset.write\",\"etl.read\",\"etl.template.manage\",\"product.view\",\"customer.edit\",\"print.label\",\"customer.view\"],\"account_kind\":\"enterprise\",\"company_brand\":\"SUNBIRD\",\"market_is_admin\":false,\"market_is_enterprise\":true,\"market_user_id\":29,\"local_user_id\":2,\"tenant_id\":1,\"tenant_name\":\"SUNBIRD\",\"impersonating_market_user_id\":null,\"impersonating_username\":\"\",\"tier\":\"enterprise\",\"account_tier\":\"pro\",\"budget_range\":null,\"entitled_industries\":[\"通用\",\"饰品包装\"],\"market_membership_tier\":\"free\",\"email_verified\":false,\"mfa_enabled\":false}},\"validate_after_restart\":{\"success\":true,\"valid\":true,\"data\":{\"session_id\":\"a47c3898-f558-41ef-8296-f8b3fce8599d\",\"user_id\":2,\"username\":\"SUNBIRD\",\"created_at\":\"2026-09-23T08:47:50.951331\",\"expires_at\":\"2036-09-20T08:47:50.951331\"},\"account_kind\":\"enterprise\",\"company_brand\":\"SUNBIRD\",\"market_is_admin\":false,\"market_is_enterprise\":true,\"market_user_id\":29,\"local_user_id\":2,\"tenant_id\":1,\"tenant_name\":\"SUNBIRD\",\"impersonating_market_user_id\":null,\"impersonating_username\":\"\",\"tier\":\"enterprise\",\"account_tier\":\"pro\",\"budget_range\":null,\"entitled_industries\":[\"通用\",\"饰品包装\"],\"market_membership_tier\":\"free\",\"email_verified\":false,\"mfa_enabled\":false},\"session_cookie_reused\":true,\"session_cookie_fingerprint\":\"0dcfec00a23d087b\"}",
+                      "observed":  "{\"health_after_restart\":200,\"window_title_after_restart\":\"智能对话 - XCAGI\",\"me_after_restart\":{\"success\":true,\"data\":{\"user\":{\"id\":2,\"username\":\"SUNBIRD\",\"display_name\":\"SUNBIRD\",\"email\":\"sunbird@xcagi.local\",\"email_display\":\"sunbird@xcagi.local\",\"no_email\":false,\"role\":\"user\",\"is_active\":true,\"avatar_url\":\"\"},\"permissions\":[\"shipment.edit\",\"product.edit\",\"etl.execute\",\"dataset.read\",\"material.edit\",\"shipment.create\",\"shipment.view\",\"material.view\",\"dataset.write\",\"etl.read\",\"etl.template.manage\",\"product.view\",\"customer.edit\",\"print.label\",\"customer.view\"],\"account_kind\":\"enterprise\",\"company_brand\":\"SUNBIRD\",\"market_is_admin\":false,\"market_is_enterprise\":true,\"market_user_id\":29,\"local_user_id\":2,\"tenant_id\":1,\"tenant_name\":\"SUNBIRD\",\"impersonating_market_user_id\":null,\"impersonating_username\":\"\",\"tier\":\"enterprise\",\"account_tier\":\"pro\",\"budget_range\":null,\"entitled_industries\":[\"通用\",\"饰品包装\"],\"market_membership_tier\":\"free\",\"email_verified\":false,\"mfa_enabled\":false}},\"validate_after_restart\":{\"success\":true,\"valid\":true,\"data\":{\"session_id\":\"6cb7d2bc-438a-4088-bb34-42b83ea0ecee\",\"user_id\":2,\"username\":\"SUNBIRD\",\"created_at\":\"2026-09-23T10:16:12.248985\",\"expires_at\":\"2036-09-20T10:16:12.248985\"},\"account_kind\":\"enterprise\",\"company_brand\":\"SUNBIRD\",\"market_is_admin\":false,\"market_is_enterprise\":true,\"market_user_id\":29,\"local_user_id\":2,\"tenant_id\":1,\"tenant_name\":\"SUNBIRD\",\"impersonating_market_user_id\":null,\"impersonating_username\":\"\",\"tier\":\"enterprise\",\"account_tier\":\"pro\",\"budget_range\":null,\"entitled_industries\":[\"通用\",\"饰品包装\"],\"market_membership_tier\":\"free\",\"email_verified\":false,\"mfa_enabled\":false},\"session_cookie_reused\":true,\"session_cookie_fingerprint\":\"a6c62023fb6f4216\"}",
                       "result":  "passed",
                       "verdict":  "PASS",
-                      "verify_time":  "2026-09-23 16:48:31",
+                      "verify_time":  "2026-09-23 18:16:44",
                       "facts":  {
                                     "health_after_restart":  200,
                                     "window_title_after_restart":  "智能对话 - XCAGI",
@@ -650,11 +650,11 @@
                                                                    "success":  true,
                                                                    "valid":  true,
                                                                    "data":  {
-                                                                                "session_id":  "a47c3898-f558-41ef-8296-f8b3fce8599d",
+                                                                                "session_id":  "6cb7d2bc-438a-4088-bb34-42b83ea0ecee",
                                                                                 "user_id":  2,
                                                                                 "username":  "SUNBIRD",
-                                                                                "created_at":  "2026-09-23T08:47:50.951331",
-                                                                                "expires_at":  "2036-09-20T08:47:50.951331"
+                                                                                "created_at":  "2026-09-23T10:16:12.248985",
+                                                                                "expires_at":  "2036-09-20T10:16:12.248985"
                                                                             },
                                                                    "account_kind":  "enterprise",
                                                                    "company_brand":  "SUNBIRD",
@@ -678,7 +678,7 @@
                                                                    "mfa_enabled":  false
                                                                },
                                     "session_cookie_reused":  true,
-                                    "session_cookie_fingerprint":  "0dcfec00a23d087b"
+                                    "session_cookie_fingerprint":  "a6c62023fb6f4216"
                                 },
                       "note":  "same session cookie still accepted after a real process restart"
                   },
@@ -691,7 +691,7 @@
                       "observed":  "{\"me_before\":{\"success\":true,\"data\":{\"user\":{\"id\":2,\"username\":\"SUNBIRD\",\"display_name\":\"SUNBIRD\",\"email\":\"sunbird@xcagi.local\",\"email_display\":\"sunbird@xcagi.local\",\"no_email\":false,\"role\":\"user\",\"is_active\":true,\"avatar_url\":\"\"},\"permissions\":[\"shipment.edit\",\"product.edit\",\"etl.execute\",\"dataset.read\",\"material.edit\",\"shipment.create\",\"shipment.view\",\"material.view\",\"dataset.write\",\"etl.read\",\"etl.template.manage\",\"product.view\",\"customer.edit\",\"print.label\",\"customer.view\"],\"account_kind\":\"enterprise\",\"company_brand\":\"SUNBIRD\",\"market_is_admin\":false,\"market_is_enterprise\":true,\"market_user_id\":29,\"local_user_id\":2,\"tenant_id\":1,\"tenant_name\":\"SUNBIRD\",\"impersonating_market_user_id\":null,\"impersonating_username\":\"\",\"tier\":\"enterprise\",\"account_tier\":\"pro\",\"budget_range\":null,\"entitled_industries\":[\"通用\",\"饰品包装\"],\"market_membership_tier\":\"free\",\"email_verified\":false,\"mfa_enabled\":false}},\"logout_status\":200,\"logout_body\":true,\"me_after\":{\"success\":false,\"error\":{\"code\":\"UNAUTHORIZED\",\"message\":\"请先登录\"},\"valid\":false},\"validate_after\":{\"success\":false,\"error\":{\"code\":\"INVALID_SESSION\",\"message\":\"会话无效或已过期\"},\"valid\":false}}",
                       "result":  "passed",
                       "verdict":  "PASS",
-                      "verify_time":  "2026-09-23 16:48:36",
+                      "verify_time":  "2026-09-23 18:16:49",
                       "facts":  {
                                     "me_before":  {
                                                       "success":  true,
@@ -776,7 +776,7 @@
                       "observed":  "{\"wrong_password\":{\"success\":false,\"message\":\"用户名或密码错误\",\"error\":{\"code\":\"MARKET_AUTH_FAILED\",\"message\":\"用户名或密码错误\"},\"market_account\":{\"success\":false,\"market_base_url\":\"https://xiu-ci.com\",\"message\":\"用户名或密码错误\"}},\"admin_kind_on_desktop\":{\"success\":false,\"message\":\"桌面端不支持管理员账号登录，请使用网页版管理端\",\"error\":{\"code\":\"ADMIN_DESKTOP_FORBIDDEN\",\"message\":\"桌面端不支持管理员账号登录，请使用网页版管理端\"}},\"empty_credentials\":{\"success\":false,\"error\":{\"code\":\"INVALID_INPUT\",\"message\":\"用户名和密码不能为空\"}}}",
                       "result":  "passed",
                       "verdict":  "PASS",
-                      "verify_time":  "2026-09-23 16:48:37",
+                      "verify_time":  "2026-09-23 18:16:51",
                       "facts":  {
                                     "wrong_password":  {
                                                            "success":  false,
@@ -818,7 +818,7 @@
                       "observed":  "{\"market_base\":\"https://xiu-ci.com\",\"status\":200,\"ok\":true,\"has_access_token\":true,\"user\":\"SUNBIRD\",\"desktop_access\":true}",
                       "result":  "passed",
                       "verdict":  "PASS",
-                      "verify_time":  "2026-09-23 16:48:37",
+                      "verify_time":  "2026-09-23 18:16:52",
                       "facts":  {
                                     "market_base":  "https://xiu-ci.com",
                                     "status":  200,
