@@ -77,42 +77,48 @@
       "actions": "GET /api/auth/me 与 GET /api/auth/session/validate（不带 cookie）；同时读取界面 DOM 状态。",
       "expected": "两个接口都返回 valid=false，且界面停留在登录页（不出现工作台）。",
       "observed": "me 返回 {success:false, UNAUTHORIZED, valid:false}；validate 返回 {NO_SESSION, valid:false}；DOM 标题「XCAGI 企业版 · V1 · 登录」、登录按钮可见、无会话 cookie。",
-      "result": "passed"
+      "result": "passed",
+      "id": "M1"
     },
     {
       "input": "企业账号 SUNBIRD / 密码（真实修茈市场企业账号）。",
       "actions": "在真实 GUI 点击账号框输入账号、密码框输入密码，点击「登 录」按钮。",
       "expected": "登录成功并进入企业工作台，账号显示为 SUNBIRD。",
       "observed": "窗口标题变为「智能对话 - XCAGI」，左上角显示 SUNBIRD；随后携带会话 cookie 调 GET /api/auth/me 返回 200 success=true、account_kind=enterprise、tenant_id=1、account_tier=pro、tier=enterprise。",
-      "result": "passed"
+      "result": "passed",
+      "id": "M2"
     },
     {
       "input": "登录后的会话（服务端会话建制）。",
       "actions": "结束应用进程并重新启动（open -a，同数据目录），复用同一会话 cookie 再访问接口。",
       "expected": "会话由服务端统一管理，进程重启后仍有效。",
       "observed": "重启后 me 仍 200 success=true、validate valid=true；界面仍为工作台无登录按钮；本机 sessions 表存在该会话行（user_id=2、account_kind=enterprise、tenant_id=1）。",
-      "result": "passed"
+      "result": "passed",
+      "id": "M3"
     },
     {
       "input": "退出登录（API 与 GUI 两条路径）。",
       "actions": "API：POST /api/auth/logout 后立即用旧 cookie 再访问；GUI：系统设置 → 账号卡片「退出登录」→ 确认框「确定退出本机账号？」→ 确定。",
       "expected": "旧会话立即失效，界面回到登录页。",
       "observed": "logout 返回 200；同一 cookie 随后 me 返回 valid=false、validate valid=false；GUI 退出后界面标题回到「XCAGI 企业版 · V1 · 登录」，账号/密码框为空。",
-      "result": "passed"
+      "result": "passed",
+      "id": "M4"
     },
     {
       "input": "边界负例：错误密码 / 管理员身份从企业入口登录 / 空凭据。",
       "actions": "分别 POST /api/auth/login（错误密码；account_kind=admin；空用户名密码）。",
       "expected": "三者都应被拒绝（桌面端仅允许企业账号）。",
       "observed": "错误密码 → MARKET_AUTH_FAILED「用户名或密码错误」；admin → ADMIN_DESKTOP_FORBIDDEN「桌面端不支持管理员账号登录，请使用网页版管理端」；空凭据 → INVALID_INPUT。三者 success 均为 false。",
-      "result": "passed"
+      "result": "passed",
+      "id": "M5"
     },
     {
       "input": "同一企业账号在 Web 端（修茈市场）登录。",
       "actions": "POST https://xiu-ci.com/api/auth/login（同一账号与密码）。",
       "expected": "Web 端登录成功，证明桌面端与 Web 端共用同一套账户体系。",
       "observed": "status 200，ok=true，返回 access_token/refresh_token，user=SUNBIRD，desktop_access=true，account_tier=pro。",
-      "result": "passed"
+      "result": "passed",
+      "id": "M6"
     }
   ]
 }

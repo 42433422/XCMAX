@@ -113,7 +113,7 @@ def git(*args: str, cwd: Path = REPO_ROOT) -> str | None:
 
 
 def reviewed_runs(feat: dict) -> list[dict]:
-    """只接受字段完整且截图、录像字节哈希匹配的 acceptance JSON。"""
+    """只接受覆盖 registry 全部必需用例的完整 acceptance。"""
     accepted = []
     for rel in feat.get("evidence", {}).get("runs", []):
         try:
@@ -122,6 +122,8 @@ def reviewed_runs(feat: dict) -> list[dict]:
             cases, media = run.get("cases", []), run.get("media", [])
             profile = feat["evidence"].get("platform_assets", {}).get(run.get("platform"), {})
             acceptance = profile.get("acceptance", {})
+            required_ids = acceptance.get("required_case_ids")
+            case_ids = [case.get("id") for case in cases if isinstance(case, dict)]
             if (run.get("kind") != "feature-acceptance" or run.get("feature") != feat["id"]
                     or run.get("status") not in {"passed", "failed"} or not run.get("verified_at")
                     or not re.fullmatch(r"[0-9a-f]{40}", run.get("app_git_sha", ""))
@@ -129,6 +131,9 @@ def reviewed_runs(feat: dict) -> list[dict]:
                     or not run.get("app_version") or run.get("platform") not in feat.get("platforms", [])
                     or acceptance.get("path") != rel
                     or hashlib.sha256(raw).hexdigest() != acceptance.get("sha256")
+                    or not isinstance(required_ids, list) or not required_ids or case_ids != required_ids
+                    or any(not isinstance(case_id, str) or not case_id for case_id in required_ids)
+                    or len(required_ids) != len(set(required_ids))
                     or not cases or not media or type(run.get("passed")) is not int
                     or type(run.get("failed")) is not int):
                 continue
@@ -168,6 +173,11 @@ def traceable_pass(feat: dict, platform: str, run: dict) -> tuple[bool, str | No
         identity, artifact = read(ident), read(art)
         sha = nested_value(artifact, art["sha256"])
         logs = assets.get("logs", [])
+        run_log = run.get("log")
+        run_log_matches = run_log is None or (isinstance(run_log, dict) and any(
+            item.get("path") == run_log.get("path") and item.get("sha256") == run_log.get("sha256")
+            and type(run_log.get("bytes")) is int and e(run_log["path"]).stat().st_size == run_log["bytes"]
+            for item in logs))
         types = {Path(m["path"]).suffix.lower() for m in run["media"]}
         complete = (ident["path"] in assets.get("raw", [])
                     and nested_value(identity, ident["git_sha"]) == run["app_git_sha"]
@@ -176,6 +186,7 @@ def traceable_pass(feat: dict, platform: str, run: dict) -> tuple[bool, str | No
                     and nested_value(artifact, art["version"]) == run["app_version"]
                     and re.fullmatch(r"[0-9a-f]{64}", str(sha or ""))
                     and types & {".png", ".jpg", ".jpeg", ".webp"} and types & {".mp4", ".webm", ".mov"}
+                    and run_log_matches
                     and logs and all(e(log["path"]).is_file() and e(log["path"]).stat().st_size
                                      and hashlib.sha256(e(log["path"]).read_bytes()).hexdigest() == log["sha256"]
                                      for log in logs))
@@ -196,12 +207,7 @@ def platform_verdicts(feat: dict, runs: list[dict], warnings: list[str]) -> list
         latest = max(p_runs, key=lambda r: (r.get("verified_at", ""), r.get("round", ""), r.get("generated_at", "")), default=None)
         complete, artifact_sha = traceable_pass(feat, p, latest) if latest else (False, None)
         passed, failed = bool(latest and latest["status"] == "passed"), bool(latest and latest["status"] == "failed")
-        if complete and passed:
-            status = "verified"
-        elif failed:
-            status = "partial"
-        else:
-            status = "pending"
+        status = "verified" if complete and passed else "partial" if failed else "pending"
         artifact_path = assets.get("artifact", {}).get("path")
         out.append({
             "id": p,
@@ -316,10 +322,8 @@ def aggregate_status(feat: dict, verdicts: list[dict], impl_ok: list[str]) -> st
     """总体状态 = 平台状态 + 实现存在的纯函数；目录里不再允许手写状态。"""
     if not impl_ok:
         return "planned"
-    if not verdicts:
-        return "implemented"
     statuses = [v["status"] for v in verdicts]
-    if all(s == "verified" for s in statuses):
+    if statuses and all(s == "verified" for s in statuses):
         return "verified"
     if any(s in ("verified", "partial") for s in statuses):
         return "partial"
@@ -329,15 +333,14 @@ def aggregate_status(feat: dict, verdicts: list[dict], impl_ok: list[str]) -> st
 def contains_key(value, key: str) -> bool:
     if isinstance(value, dict):
         return key in value or any(contains_key(item, key) for item in value.values())
-    if isinstance(value, list):
-        return any(contains_key(item, key) for item in value)
-    return False
+    return isinstance(value, list) and any(contains_key(item, key) for item in value)
 
 
 def validate_feature(feat: dict, warnings: list[str]) -> dict:
     """校验单个功能的证据，返回最终状态与证据明细。No Evidence, No Claim。"""
     ev = feat.get("evidence", {}) or {}
-    if "status" in feat or contains_key(ev.get("platform_assets") or {}, "status"):
+    if ("status" in feat or "platform_status" in feat
+            or contains_key(ev.get("platform_assets") or {}, "status")):
         raise ValueError(f"[{feat['id']}] capability and platform status must be evidence-derived")
     impl = ev.get("impl", []) or []
     tests = ev.get("tests", []) or []
