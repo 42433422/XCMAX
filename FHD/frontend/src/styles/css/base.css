@@ -123,6 +123,26 @@ html.xcagi-electron-win .main-content .top-bar {
   padding-right: 140px;
 }
 
+html.xcagi-electron-win .login-view {
+  position: relative;
+}
+
+html.xcagi-electron-win .login-view::before {
+  content: '';
+  position: absolute;
+  inset: 0 140px auto 0;
+  height: 50px;
+  z-index: 10;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+html.xcagi-electron-win .login-account-actions {
+  right: 168px;
+  z-index: 11;
+  -webkit-app-region: no-drag;
+}
+
 html.xcagi-electron-win .main-content .top-bar button,
 html.xcagi-electron-win .main-content .top-bar input,
 html.xcagi-electron-win .main-content .top-bar a,
