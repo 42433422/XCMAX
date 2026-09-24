@@ -4,6 +4,7 @@
   "feature": "base-login",
   "platform": "macos",
   "status": "passed",
+  "verdict": "PASS",
   "app_git_sha": "8d50fe9d043391d5ba8857094a366a59a34ae43f",
   "app_version": "1.0.0.5",
   "verified_at": "2026-09-22",

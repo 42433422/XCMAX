@@ -30,13 +30,7 @@ STATUS_META = {
 }
 STATUS_ORDER = ["verified", "partial", "implemented", "planned"]
 
-# 平台状态：只由「该平台的实机验收记录」决定，代码与单测不点亮任何平台。
-PLATFORM_STATUS_META = {
-    "verified": {"label": "已验证", "cls": "ps-verified"},
-    "partial": {"label": "部分验证", "cls": "ps-partial"},
-    "pending": {"label": "待验证", "cls": "ps-pending"},
-}
-PLATFORM_STATUS_ORDER = ["verified", "partial", "pending"]
+PLATFORM_STATUS_META = {"verified": {"label": "已验证", "cls": "ps-verified"}, "partial": {"label": "部分验证", "cls": "ps-partial"}, "pending": {"label": "待验证", "cls": "ps-pending"}}
 
 STATUS_LEGEND = (
     ("verified", "本项全部适用平台都通过实机验收；只有一个平台通过时只能到「部分验证」"),
@@ -45,28 +39,11 @@ STATUS_LEGEND = (
     ("planned", "仅有设计与规划，无已合入实现"),
 )
 
-PLATFORM_LEGEND = (
-    ("verified", "该平台有实机验收记录，且本项全部用例通过"),
-    ("partial", "该平台有实机验收记录，但存在失败或未覆盖项"),
-    ("pending", "该平台尚无实机验收记录；代码与单测不计入平台状态"),
-)
-
-PLATFORM_META = {
-    "windows": "Windows 桌面",
-    "macos": "macOS 桌面",
-    "web": "Web",
-    "android": "Android",
-    "ios": "iOS",
-}
+PLATFORM_META = {"windows": "Windows 桌面", "macos": "macOS 桌面", "web": "Web", "android": "Android", "ios": "iOS"}
 
 COMPLETION_WEIGHT = {"verified": 1.0, "partial": 0.7, "implemented": 0.4, "planned": 0.0}
 
-TICK_CLASS = {
-    "verified": "t-ok",
-    "partial": "t-part",
-    "implemented": "t-wip",
-    "planned": "t-todo",
-}
+TICK_CLASS = {"verified": "t-ok", "partial": "t-part", "implemented": "t-wip", "planned": "t-todo"}
 
 DOMAIN_ACCENTS = (
     "#2f6df6", "#7c4dff", "#12a150", "#ff8a00", "#e6486b",
@@ -93,6 +70,10 @@ def path_exists(rel: str) -> bool:
     return e(rel).exists()
 
 
+def public_asset_exists(feature: str, rel: str) -> bool:
+    return (EVIDENCE_ASSET_DIR / f"{feature}-{Path(rel).name}").is_file()
+
+
 def git(*args: str, cwd: Path = REPO_ROOT) -> str | None:
     try:
         out = subprocess.run(
@@ -112,13 +93,8 @@ def last_commit(paths: list[str], fmt: str = "%cI") -> str | None:
     return out or None
 
 
-
-def reviewed_runs(feat: dict, warnings: list[str] | None = None) -> list[dict]:
-    """Validate readable, feature-bound originals, including truthful failed outcomes.
-
-    平台状态只认这些记录，且每条记录必须自报 `platform`；缺平台标注的记录仍会展示，
-    但不计入任何平台状态（平台状态不可由代码或单测推断）。
-    """
+def reviewed_runs(feat: dict) -> list[dict]:
+    """只接受功能绑定、字段完整且引用媒体哈希匹配的运行记录。"""
     accepted = []
     for rel in feat.get("evidence", {}).get("runs", []):
         try:
@@ -132,50 +108,76 @@ def reviewed_runs(feat: dict, warnings: list[str] | None = None) -> list[dict]:
             if not all(c.get("result") in {"passed", "failed"} and all(c.get(k) for k in
                        ("input", "actions", "expected", "observed")) for c in cases):
                 continue
+            declared = sum((feat["evidence"].get(k, []) for k in ("screenshots", "videos")), [])
             if not all(m.get("feature") == feat["id"] and m.get("visual_review") == "accepted"
-                       and m.get("visible_result") and m.get("reviewed_at")
-                       and m["path"] in sum((feat["evidence"].get(k, []) for k in ("screenshots", "videos")), [])
+                       and m.get("visible_result") and m.get("reviewed_at") and m["path"] in declared
                        and e(m["path"]).is_file()
-                       and hashlib.sha256(e(m["path"]).read_bytes()).hexdigest() == m.get("sha256")
-                       for m in media):
+                       and hashlib.sha256(e(m["path"]).read_bytes()).hexdigest() == m.get("sha256") for m in media):
                 continue
             accepted.append(run)
         except (OSError, ValueError, KeyError, TypeError, AttributeError):
             continue
     return accepted
 
+def nested_value(value: dict, dotted_path: str):
+    for part in dotted_path.split("|"):
+        value = value.get(part) if isinstance(value, dict) else None
+    return value
+
+
+def traceable_pass(feat: dict, platform: str, run: dict) -> tuple[bool, str | None]:
+    assets = (feat.get("evidence", {}) or {}).get("platform_assets", {}).get(platform, {})
+    try:
+        ident, art = assets["identity"], assets["artifact"]
+        read = lambda ref: json.loads(e(ref["path"]).read_text(encoding="utf-8"))
+        identity, artifact = read(ident), read(art)
+        sha = nested_value(artifact, art["sha256"])
+        types = {Path(m["path"]).suffix.lower() for m in run["media"]}
+        complete = (ident["path"] in assets.get("raw", [])
+                    and nested_value(identity, ident["git_sha"]) == run["app_git_sha"]
+                    and nested_value(identity, ident["version"]) == run["app_version"]
+                    and nested_value(artifact, art["git_sha"]) == run["app_git_sha"]
+                    and nested_value(artifact, art["version"]) == run["app_version"]
+                    and re.fullmatch(r"[0-9a-f]{64}", str(sha or ""))
+                    and types & {".png", ".jpg", ".jpeg", ".webp"} and types & {".mp4", ".webm", ".mov"}
+                    and assets.get("logs") and all(path_exists(p) and e(p).stat().st_size for p in assets["logs"]))
+        return bool(complete), sha if complete else None
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return False, None
+
 
 def platform_verdicts(feat: dict, runs: list[dict], warnings: list[str]) -> list[dict]:
-    """逐平台判定。适用平台清单固定照抄目录声明，缺证据的平台保留为「待验证」，不消失。
-
-    平台证据只来自两处显式声明：该平台运行记录里的媒体，以及
-    `evidence.platform_assets[平台]` 里点名的日志/原始抓取。不做任何路径推断。
-    """
+    """固定列出目录声明的平台；状态必须由本平台有效运行记录派生。"""
     applicable = feat.get("platforms", []) or []
     declared = (feat.get("evidence", {}) or {}).get("platform_assets", {}) or {}
     out = []
     for p in applicable:
         p_runs = [r for r in runs if r.get("platform") == p]
-        p_ok = [r for r in p_runs if r["status"] == "passed"
-                and all(c["result"] == "passed" for c in r["cases"])]
-        if p_ok:
+        latest = max(p_runs, key=lambda r: (r.get("verified_at", ""), r.get("round", ""), r.get("generated_at", "")), default=None)
+        complete, artifact_sha = traceable_pass(feat, p, latest) if latest else (False, None)
+        passed = bool(latest and latest.get("status") == "passed" and latest.get("verdict") == "PASS" and latest.get("failed") == 0 and all(c["result"] == "passed" for c in latest["cases"]))
+        failed = bool(latest and (latest.get("status") == "failed" or latest.get("verdict") == "FAIL" or latest.get("failed", 0) or any(c.get("result") == "failed" for c in latest["cases"])))
+        if complete and passed:
             status = "verified"
-        elif p_runs:
+        elif failed:
             status = "partial"
         else:
             status = "pending"
         assets = declared.get(p, {}) or {}
+        artifact_path = assets.get("artifact", {}).get("path")
         out.append({
             "id": p,
             "name": PLATFORM_META.get(p, p),
             "status": status,
             "runs": p_runs,
-            "accepted": p_ok,
-            # 该平台的证据资产 = 该平台运行记录里绑定的媒体（含 sha256 与内容复核）
+            "accepted": [latest] if complete and passed else [],
             "media": [m for r in p_runs for m in r.get("media", [])],
             "logs": [x for x in (assets.get("logs") or []) if path_exists(x)],
             "raw": [x for x in (assets.get("raw") or []) if path_exists(x)],
-            "verified_at": max((r.get("verified_at", "") for r in p_ok), default=None),
+            "identity_path": assets.get("identity", {}).get("path"),
+            "verified_at": latest.get("verified_at") if complete and passed else None,
+            "artifact_sha256": artifact_sha if complete and passed else None,
+            "artifact_path": artifact_path,
         })
     for r in runs:
         if r.get("platform") not in applicable:
@@ -230,7 +232,6 @@ def validate_feature(feat: dict, warnings: list[str]) -> dict:
     if not feat.get("platforms"):
         warnings.append(f"[{feat['id']}] 未声明适用平台，平台状态无法汇总")
 
-    # 被平台运行记录或平台资产声明引用的资产归入该平台；其余为「未标注平台」的补充资料。
     attributed = {m["path"] for v in verdicts for m in v["media"]}
     attributed |= {x for v in verdicts for x in (v["logs"] + v["raw"])}
     unattributed = {
@@ -239,31 +240,17 @@ def validate_feature(feat: dict, warnings: list[str]) -> dict:
         "logs": [p for p in logs_ok if p not in attributed],
         "raw": [p for p in raw_ok if p not in attributed],
     }
-    platformless_runs = [r for r in runs if r.get("platform") not in (feat.get("platforms") or [])]
 
-    # 使用实现与测试的代码更新时间；不能据此认定运行验收时间。
     verified_at = last_commit(impl_ok + tests_ok)
     accepted_at = max((v["verified_at"] for v in verdicts if v["verified_at"]), default=None)
-
-    commit_info = [{k: c.get(k, "") for k in ("sha", "subject", "date")}
-                   for c in ev.get("commits", []) or []]
-    if not commit_info and impl_ok:
-        raw = last_commit([impl_ok[0]], fmt="%h%x1f%cI%x1f%s")
-        if raw:
-            sha, date, subject = raw.split("\x1f")
-            commit_info.append({"sha": sha, "subject": subject, "date": date[:10]})
 
     return {
         **feat,
         "status": final,
-        "platform_status": [
-            {"id": v["id"], "name": v["name"], "status": v["status"],
-             "verified_at": v["verified_at"], "run_count": len(v["runs"]),
-             "accepted_count": len(v["accepted"])}
-            for v in verdicts
-        ],
+        "platform_status": [{"id": v["id"], "name": v["name"], "status": v["status"],
+                             "verified_at": v["verified_at"], "run_count": len(v["runs"]),
+                             "accepted_count": len(v["accepted"])} for v in verdicts],
         "verdicts": verdicts,
-        "platformless_runs": platformless_runs,
         "acceptance": [r for v in verdicts for r in v["accepted"]],
         "accepted_at": accepted_at,
         "unattributed": unattributed,
@@ -279,7 +266,6 @@ def validate_feature(feat: dict, warnings: list[str]) -> dict:
             "videos": videos_ok,
             "logs": logs_ok,
             "raw": raw_ok,
-            "commits": commit_info,
         },
         "verified_at": verified_at[:10] if verified_at else None,
     }
@@ -983,6 +969,10 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
                      for p, r in pairs for m in r.get("media", [])]
             body = (run_lines(pairs) + media_figs(media)
                     + log_blocks(v.get("logs", [])) + raw_block(v.get("raw", [])))
+            if v.get("artifact_sha256"):
+                body += (f'<p class="cap-plat-run">安装包 / 部署产物 SHA-256：'
+                         f'<code>{esc(v["artifact_sha256"])}</code> · '
+                         f'<a href="{asset(f["id"], v["artifact_path"])}">交付身份 JSON</a></p>')
         plat_sections.append(
             f'<section class="cap-plat cap-plat--{esc(v["status"])}">'
             f'<div class="cap-plat-head"><h3>{esc(v["name"])}</h3>'
@@ -1021,24 +1011,7 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
             f'{media_figs(un_media)}{log_blocks(un.get("logs", []))}{raw_block(un.get("raw", []))}</div>'
         )
 
-    platformless = f.get("platformless_runs", [])
-    pl_note = ""
-    if platformless:
-        items = "".join(
-            f'<li><code>{esc(r.get("feature", ""))}</code> — 状态 {esc(r.get("status", ""))}，'
-            f'验证时间 {esc(r.get("verified_at", ""))}，未标注平台，不计入平台状态</li>'
-            for r in platformless
-        )
-        pl_note = (
-            '<div class="cap-evidence-block"><h3>平台未标注的历史运行记录</h3>'
-            f'<ul class="cap-evidence-list">{items}</ul>'
-            '<p class="cap-evidence-note">这些记录采集时未写入平台字段，'
-            '因此不点亮任何平台；补齐平台标注后才会计入。</p></div>'
-        )
 
-    commits_html = evidence_list(
-        [f"{c['sha']} {c['subject']} ({c['date']})" for c in ev["commits"]]
-    )
     verified_time = f.get("verified_at") or "—"
     limitations = (
         "".join(f"<li>{esc(x)}</li>" for x in f.get("limitations", [])) or "<li>暂未记录</li>"
@@ -1049,6 +1022,8 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
         f'Mac {esc(review.get("app_version", "待补"))}）：{esc(review.get("visible_content", "尚无本项图片内容复核记录"))}</p>'
         if review else ""
     )
+    docs_html = f'<div class="cap-evidence-block"><h3>关联文档</h3>{evidence_list(ev["docs"])}</div>' if ev["docs"] else ""
+    api_html = f'<div class="cap-evidence-block"><h3>API 端点</h3>{evidence_list(ev["api"])}</div>' if ev["api"] else ""
 
     return f"""{header_html("capabilities", f["name"], f"{f['name']}：{f.get('summary', '')}", f"/capabilities/feature/{f['id']}.html")}
 <main>
@@ -1088,13 +1063,11 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
       <p class="cap-section-note">以下资料说明实现与测试覆盖，不代表任何平台的实机验收通过；平台状态请见上方「平台验证状态」。生成于 {esc(data['generated_at'])}。</p>
       <div class="cap-evidence-grid">
         <div class="cap-evidence-block"><h3>源码实现</h3>{evidence_list(ev['impl'])}</div>
-        <div class="cap-evidence-block"><h3>API 端点</h3>{evidence_list(ev.get('api', []))}</div>
+        {api_html}
         <div class="cap-evidence-block"><h3>自动化测试</h3>{evidence_list(ev['tests'])}<p class="cap-evidence-note">CI 门禁：{esc('、'.join(ev['ci']) if ev['ci'] else '待补本项 CI 证据')}</p></div>
         <div class="cap-evidence-block"><h3>CI 工作流定义</h3>{evidence_list(ev['ci'])}</div>
-        {pl_note}
         {un_html}
-        <div class="cap-evidence-block"><h3>关联文档</h3>{evidence_list(ev['docs'])}</div>
-        <div class="cap-evidence-block"><h3>关联实现 commit</h3>{commits_html}</div>
+        {docs_html}
       </div>
     </div>
   </section>
@@ -1119,7 +1092,8 @@ def write_outputs(data: dict, domains_full: list[dict]) -> dict[str, str]:
             for f in m["features"]:
                 outputs[f"capabilities/feature/{f['id']}.html"] = render_feature(f, d, m, data)
     outputs["data/capabilities.json"] = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
-    return outputs
+    return {p: "\n".join(line.rstrip() for line in body.splitlines()) + "\n"
+            for p, body in outputs.items()}
 
 
 def copy_evidence_assets(domains_full: list[dict]) -> list[str]:
@@ -1130,13 +1104,35 @@ def copy_evidence_assets(domains_full: list[dict]) -> list[str]:
         for m in d["modules"]:
             for f in m["features"]:
                 for kind in ("screenshots", "videos", "runs", "review", "logs", "raw"):
-                    for p in ([f["evidence"][kind]] if kind == "review" and f["evidence"].get(kind) else f["evidence"].get(kind, []) or []):
+                    paths = [f["evidence"][kind]] if kind == "review" and f["evidence"].get(kind) else f["evidence"].get(kind, []) or []
+                    if kind == "raw":
+                        paths += [v["artifact_path"] for v in f.get("verdicts", []) if v.get("artifact_path")]
+                    for p in paths:
+                        if not p:
+                            continue
                         src = e(p)
                         dst = EVIDENCE_ASSET_DIR / f"{f['id']}-{Path(p).name}"
                         if src.exists():
                             shutil.copy2(src, dst)
                             copied.append(str(dst.relative_to(WEBSITE_DIR)))
     return copied
+
+
+def missing_public_evidence(domains: list[dict]) -> list[str]:
+    missing = []
+    for d in domains:
+        for m in d["modules"]:
+            for f in m["features"]:
+                for v in f["verdicts"]:
+                    if v["status"] != "verified":
+                        continue
+                    runs = [p for p in f["evidence"]["runs"] if json.loads(e(p).read_text()).get("platform") == v["id"]
+                            and json.loads(e(p).read_text()).get("verified_at") == v["verified_at"]]
+                    paths = [x["path"] for r in v["accepted"] for x in r["media"]]
+                    paths += v["logs"] + v["raw"] + runs + [v["identity_path"], v["artifact_path"]]
+                    missing.extend(f"{f['id']}/{v['id']}: {p}" for p in paths
+                                   if p and not public_asset_exists(f["id"], p))
+    return missing
 
 
 def prune_stale_generated(outputs: dict[str, str]) -> list[str]:
@@ -1180,6 +1176,7 @@ def main() -> int:
                     drift.append(f"    已提交 L{i + 1}: {a.strip()[:160]}")
                     drift.append(f"    重生成 L{i + 1}: {b.strip()[:160]}")
                     break
+        drift.extend(f"已验证平台公开证据文件缺失: {p}" for p in missing_public_evidence(domains_full))
         for w in warnings:
             print(f"WARN {w}")
         if drift:
@@ -1188,7 +1185,7 @@ def main() -> int:
             for d in drift:
                 print(f"  - {d}")
             return 1
-        print(f"能力中心校验通过：{data['stats']['total']} 项能力，页面与目录一致。")
+        print(f"能力中心校验通过：{data['stats']['total']} 项能力，证据状态与页面一致。")
         return 0
 
     for rel, content in outputs.items():
