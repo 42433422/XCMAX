@@ -99,6 +99,7 @@ scripts/ai_agent_v0/demo.local.env
 logs/
 # 例外：证据包内按功能采集的实测日志目录（清单 manifest 引用，必须入仓）
 !docs/evidence/e2e/macos-features-100-1.0.0.5/logs/
+!docs/evidence/e2e/windows-real-machine-1.0.0.5/logs/
 .agent-*.log
 .uvicorn.*.log
 uvicorn-smoke.log

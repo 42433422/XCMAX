@@ -13,3 +13,4 @@
 *.apk binary
 *.dmg binary
 *.exe binary
+*.log -text -eol whitespace=cr-at-eol
