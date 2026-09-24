@@ -85,7 +85,9 @@
               "limitations": ["细粒度到字段级的权限控制仍在迭代"],
               "evidence": {"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/base-rbac-visual-review.json",
                 "platform_assets": {
-                  "macos": {"observations": [{
+                  "macos": {
+                    "acceptance": {"path": "FHD/docs/evidence/e2e/feature-acceptance-20260925/base-rbac/base-rbac-macos-run.json", "required_case_ids": ["M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8"]}, "identity": {"path": "FHD/docs/evidence/e2e/macos-features-100-1.0.0.5/records/base-rbac-delivery-identity.json", "version": "product_version", "git_sha": "git_sha"}, "artifact": {"path": "FHD/docs/evidence/e2e/macos-features-100-1.0.0.5/records/base-rbac-delivery-identity.json", "sha256": "installer|sha256", "git_sha": "git_sha", "version": "product_version"}, "logs": [{"path": "FHD/docs/evidence/e2e/macos-features-100-1.0.0.5/logs/base-rbac.log", "sha256": "b9eef7f6d20a4f43ae2946d7c5d3e9d62dbdd50e44b58a1b366cc1afdfcf8e13"}], "raw": ["FHD/docs/evidence/e2e/macos-features-100-1.0.0.5/records/base-rbac-delivery-identity.json"],
+                    "observations": [{
                     "record": {"path": "FHD/docs/evidence/e2e/macos-features-100-1.0.0.5/records/base-rbac.json", "sha256": "56058c0ec0c40a40ec0be176ca47676015908cf1bc1298b650fab952e42c55a8"},
                     "identity": {"path": "FHD/docs/evidence/e2e/macos-features-100-1.0.0.5/records/base-rbac-delivery-identity.json", "sha256": "d0ad3b1099e0819360618c3b6b4a017b58fd8ef5331b05113e47aff6f4277ed7", "version": "product_version", "git_sha": "git_sha", "artifact_sha256": "installer|sha256"},
                     "assets": [
@@ -94,23 +96,15 @@
                       {"kind": "log", "path": "FHD/docs/evidence/e2e/macos-features-100-1.0.0.5/logs/base-rbac.log", "sha256": "b9eef7f6d20a4f43ae2946d7c5d3e9d62dbdd50e44b58a1b366cc1afdfcf8e13"}
                     ]
                   }]},
-                  "windows": {"observations": [{
-                    "record": {"path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/base-rbac-run.json", "sha256": "641956acb4fb54dd5470b21ed6022d7b79bbc1168300c2c46d2522aa2eded61e"},
-                    "identity": {"path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/base-rbac-run.json", "sha256": "641956acb4fb54dd5470b21ed6022d7b79bbc1168300c2c46d2522aa2eded61e", "version": "app_version", "git_sha": "app_git_sha", "artifact_sha256": "baseline|installer|sha256_measured"},
-                    "assets": [
-                      {"kind": "screenshot", "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/screenshots/base-rbac.png", "sha256": "8dc8864213eb1d02cbd15173f510b349bdd5ae47affe5da68921111a38cf58e6"},
-                      {"kind": "video", "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/videos/base-rbac.mp4", "sha256": "3ec07a3eb50509ef7f39def5724afc61a8f8e189d081f581a1395f9b7aea5e0d"},
-                      {"kind": "log", "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/logs/base-rbac.log", "sha256": "5f089a4fd6c8a54ee7a0de899c6f96c81152d4d67a40217ad92be53e338a5ce4"}
-                    ]
-                  }]}
+                  "windows": {
+                    "acceptance": {"path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/base-rbac-run.json", "sha256": "641956acb4fb54dd5470b21ed6022d7b79bbc1168300c2c46d2522aa2eded61e", "required_case_ids": ["W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8"]}, "identity": {"path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/base-rbac-run.json", "version": "app_version", "git_sha": "app_git_sha"}, "artifact": {"path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/base-rbac-run.json", "sha256": "baseline|installer|sha256_measured", "git_sha": "baseline|release_sha", "version": "baseline|product_version"}, "logs": [{"path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/logs/base-rbac.log", "sha256": "5f089a4fd6c8a54ee7a0de899c6f96c81152d4d67a40217ad92be53e338a5ce4"}], "raw": ["FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/base-rbac-run.json"]
+                  },
+                  "web": {
+                    "acceptance": {"path": "FHD/docs/evidence/e2e/feature-acceptance-20260925/base-rbac/base-rbac-web-run.json", "required_case_ids": ["WB1", "WB2", "WB3", "WB4", "WB5", "WB6", "WB7", "WB8"]}, "identity": {"path": "FHD/docs/evidence/e2e/feature-acceptance-20260925/base-rbac/web/base-rbac-web-identity.json", "version": "site_version", "git_sha": "site_git_sha"}, "artifact": {"path": "FHD/docs/evidence/e2e/feature-acceptance-20260925/base-rbac/web/base-rbac-web-identity.json", "sha256": "site_health|artifact_sha256", "git_sha": "site_git_sha", "version": "site_version"}, "logs": [{"path": "FHD/docs/evidence/e2e/feature-acceptance-20260925/base-rbac/web/base-rbac-web.log", "sha256": ""}], "raw": ["FHD/docs/evidence/e2e/feature-acceptance-20260925/base-rbac/web/base-rbac-web-identity.json"]
+                  }
                 },
-                "impl": ["FHD/app/fastapi_routes/rbac.py", "FHD/app/fastapi_routes/xcmax_admin_auth.py"],
-                "api": [],
-                "tests": ["FHD/tests/test_auth_decorators.py"],
-                "ci": ["FHD/.github/workflows/ci-cd.yml"],
-                "docs": [],
-                "screenshots": [],
-                "commits": []
+                "runs": ["FHD/docs/evidence/e2e/feature-acceptance-20260925/base-rbac/base-rbac-macos-run.json", "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/base-rbac-run.json", "FHD/docs/evidence/e2e/feature-acceptance-20260925/base-rbac/base-rbac-web-run.json"], "impl": ["FHD/app/fastapi_routes/rbac.py", "FHD/app/fastapi_routes/xcmax_admin_auth.py"], "api": [], "tests": ["FHD/tests/test_auth_decorators.py"], "ci": ["FHD/.github/workflows/ci-cd.yml"], "docs": [],
+                "screenshots": ["FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/screenshots/base-rbac.png", "FHD/docs/evidence/e2e/macos-features-100-1.0.0.5/media/screenshots/base-rbac.png"], "videos": ["FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/videos/base-rbac.mp4"], "logs": ["FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/logs/base-rbac.log", "FHD/docs/evidence/e2e/macos-features-100-1.0.0.5/logs/base-rbac.log"], "commits": []
               }
             },
             {"id":"base-win-client","name":"Windows 桌面客户端","platforms":["windows"],"featured":false,"evidence_ref":"dt-shell","summary":"Windows 桌面安装包与客户端外壳。","evidence":{"impl":["FHD/desktop"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},

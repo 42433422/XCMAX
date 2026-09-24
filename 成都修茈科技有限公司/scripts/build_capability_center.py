@@ -124,25 +124,31 @@ def reviewed_runs(feat: dict) -> list[dict]:
             acceptance = profile.get("acceptance", {})
             required_ids = acceptance.get("required_case_ids")
             case_ids = [case.get("id") for case in cases if isinstance(case, dict)]
+            blocked = run.get("status") == "blocked"
             if (run.get("kind") != "feature-acceptance" or run.get("feature") != feat["id"]
-                    or run.get("status") not in {"passed", "failed"} or not run.get("verified_at")
+                    or run.get("status") not in {"passed", "failed", "blocked"} or not run.get("verified_at")
                     or not re.fullmatch(r"[0-9a-f]{40}", run.get("app_git_sha", ""))
                     or git("merge-base", "--is-ancestor", run["app_git_sha"], "HEAD") is None
                     or not run.get("app_version") or run.get("platform") not in feat.get("platforms", [])
                     or acceptance.get("path") != rel
                     or hashlib.sha256(raw).hexdigest() != acceptance.get("sha256")
-                    or not isinstance(required_ids, list) or not required_ids or case_ids != required_ids
+                    or not isinstance(required_ids, list) or not required_ids
+                    or (not blocked and case_ids != required_ids)
                     or any(not isinstance(case_id, str) or not case_id for case_id in required_ids)
                     or len(required_ids) != len(set(required_ids))
                     or not cases or not media or type(run.get("passed")) is not int
                     or type(run.get("failed")) is not int):
                 continue
-            if not all(c.get("result") in {"passed", "failed"} and all(c.get(k) for k in
+            allowed_results = {"blocked"} if blocked else {"passed", "failed"}
+            if not all(c.get("result") in allowed_results and all(c.get(k) for k in
                        ("input", "actions", "expected", "observed")) for c in cases):
                 continue
             passed = sum(c["result"] == "passed" for c in cases)
             failed = sum(c["result"] == "failed" for c in cases)
-            if (run["passed"] != passed or run["failed"] != failed
+            if blocked:
+                if run["passed"] != 0 or run["failed"] != 0 or run.get("verdict", "BLOCKED") != "BLOCKED":
+                    continue
+            elif (run["passed"] != passed or run["failed"] != failed
                     or run["status"] != ("failed" if failed else "passed")
                     or run.get("verdict") != ("FAIL" if failed else "PASS")):
                 continue
@@ -373,6 +379,7 @@ def validate_feature(feat: dict, warnings: list[str]) -> dict:
 
     attributed = {m["path"] for v in verdicts for m in v["media"]}
     attributed |= {x for v in verdicts for x in (v["logs"] + v["raw"])}
+    attributed |= {a["path"] for v in verdicts for o in v.get("observations", []) for a in o.get("assets", []) if a.get("exists")}
     unattributed = {
         "screenshots": [p for p in shots_ok if p not in attributed],
         "videos": [p for p in videos_ok if p not in attributed],
@@ -1004,7 +1011,7 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
         if not pairs:
             return ""
         return "".join(
-            f'<p class="cap-plat-run">验收结果：{esc(r.get("verdict", "未知"))}；通过 {esc(r.get("passed", "见记录"))} / 失败 '
+            f'<p class="cap-plat-run">验收结果：{esc(r.get("verdict") or r.get("status", "未知").upper())}；通过 {esc(r.get("passed", "见记录"))} / 失败 '
             f'{esc(r.get("failed", "见记录"))}；产品版本 {esc(r.get("app_version", "见记录"))}；'
             f'Git SHA <code>{esc(r.get("app_git_sha", ""))}</code>；'
             f'验证时间 {esc(r.get("verified_at", "见记录"))}。'
@@ -1086,51 +1093,55 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
             )
         return "".join(out)
 
+    def platform_run_blocks(v: dict) -> str:
+        pairs = [(r["_acceptance_path"], r) for r in v["runs"]]
+        media = [{**m, "outcome": "验收结果：" + {
+            "passed": "通过", "failed": "失败", "blocked": "阻塞",
+        }.get(r.get("status"), "未通过")} for _, r in pairs for m in r.get("media", [])]
+        run_paths = {path for path, _ in pairs}
+        return (run_lines(pairs, v["id"]) + media_figs(media, v["id"])
+                + (log_blocks(v.get("logs", []), v["id"]) if pairs else "")
+                + raw_block([p for p in v.get("raw", []) if pairs and p not in run_paths and p != v["identity_path"]], v["id"]))
+
+    def artifact_block(v: dict) -> str:
+        return (f'<p class="cap-plat-run">安装包 / 部署产物 SHA-256：<code>{esc(v["artifact_sha256"])}</code> · '
+                f'<a href="{asset(f["id"], v["artifact_path"], v["id"])}">交付身份 JSON</a></p>'
+                if v.get("artifact_sha256") else "")
+
     def observation_blocks(v: dict) -> str:
         blocks = []
         for item in v.get("observations", []):
-            record_path, identity_path = item["record_path"], item["identity_path"]
-            assets = item["assets"]
-            media = [
-                {"path": a["path"], "sha256": a.get("actual_sha256"),
-                 "outcome": "补充实机材料"}
-                for a in assets if a.get("exists") and a.get("kind") != "log"
-            ]
+            record_path, identity_path, assets = item["record_path"], item["identity_path"], item["assets"]
+            media = [{"path": a["path"], "sha256": a.get("actual_sha256"), "outcome": "补充实机材料"}
+                     for a in assets if a.get("exists") and a.get("kind") != "log"]
             logs = [a["path"] for a in assets if a.get("exists") and a.get("kind") == "log"]
-            by_kind = {a.get("kind"): a for a in assets}
-            missing = [kind for kind in ("screenshot", "video", "log")
-                       if kind not in by_kind or not by_kind[kind].get("exists")]
-            trace = "Git SHA 与交付 SHA 可追溯" if item["identity_traceable"] else "版本、Git SHA 或交付 SHA 无法完整追溯"
+            kinds = {a.get("kind"): a for a in assets}
+            missing = [k for k in ("screenshot", "video", "log") if not kinds.get(k, {}).get("exists")]
             links = "来源 JSON 或身份 / 交付 JSON 缺失"
             if path_exists(record_path) and path_exists(identity_path):
                 links = (f'<a href="{asset(f["id"], record_path, v["id"])}">来源 JSON</a> '
                          f'SHA-256 <code>{esc(item.get("record_sha256") or "缺失")}</code>')
                 if identity_path != record_path:
-                    links += (f'；<a href="{asset(f["id"], identity_path, v["id"])}">身份 / 交付 JSON</a>')
-            digest = item.get("artifact_sha256") or "未记录"
-            details = (
-                f'<p class="cap-plat-run">来源记录结果：{esc(item["record_result"])}（补充观察，不构成 PASS 验收）；'
-                f'产品版本：{esc(item.get("version") or "未记录")}；Git SHA：'
-                f'<code>{esc(item.get("git_sha") or "未记录")}</code>（{trace}）；'
-                f'安装包 / 交付 SHA-256：<code>{esc(digest)}</code>；{links}</p>'
-            )
-            if item.get("record_note"):
-                details += f'<p class="cap-plat-note">{esc(item["record_note"])}</p>'
-            if not item.get("record_sha256_valid"):
-                details += '<p class="cap-plat-note">来源 JSON 与登记的 SHA-256 不匹配；本记录不用于平台转绿。</p>'
-            if item.get("identity_sha256") and item["identity_path"] != item["record_path"]:
-                details += f'<p class="cap-plat-note">身份 / 交付 JSON SHA-256：<code>{esc(item["identity_sha256"])}</code></p>'
-            if not item.get("identity_sha256_valid"):
-                details += '<p class="cap-plat-note">身份 / 交付 JSON 未通过 SHA-256 校验；本记录不用于平台转绿。</p>'
+                    links += f'；<a href="{asset(f["id"], identity_path, v["id"])}">身份 / 交付 JSON</a>'
+            trace = "Git SHA 与交付 SHA 可追溯" if item["identity_traceable"] else "版本、Git SHA 或交付 SHA 无法完整追溯"
+            details = (f'<p class="cap-plat-run">来源记录结果：{esc(item["record_result"])}（补充观察，不构成 PASS 验收）；'
+                       f'产品版本：{esc(item.get("version") or "未记录")}；Git SHA：'
+                       f'<code>{esc(item.get("git_sha") or "未记录")}</code>（{trace}）；'
+                       f'安装包 / 交付 SHA-256：<code>{esc(item.get("artifact_sha256") or "未记录")}</code>；{links}</p>')
+            notes = [esc(item["record_note"])] if item.get("record_note") else []
+            notes.extend(("来源 JSON 与登记的 SHA-256 不匹配；本记录不用于平台转绿。",)
+                         if not item.get("record_sha256_valid") else ())
+            if item.get("identity_sha256") and identity_path != record_path:
+                notes.append(f'身份 / 交付 JSON SHA-256：<code>{esc(item["identity_sha256"])}</code>')
+            notes.extend(("身份 / 交付 JSON 未通过 SHA-256 校验；本记录不用于平台转绿。",)
+                         if not item.get("identity_sha256_valid") else ())
             if missing:
-                details += f'<p class="cap-plat-note">证据缺项：{esc("、".join(missing))}。此记录不用于平台转绿。</p>'
-            for a in assets:
-                if a.get("exists") and not a.get("sha256_valid"):
-                    details += f'<p class="cap-plat-note">文件存在但未通过 SHA-256 校验：{esc(a["path"])}</p>'
-            blocks.append(
-                f'<div class="cap-evidence-block"><h3>实机补充记录</h3>{details}'
-                f'{media_figs(media, v["id"])}{log_blocks(logs, v["id"])}</div>'
-            )
+                notes.append(f'证据缺项：{esc("、".join(missing))}。此记录不用于平台转绿。')
+            notes.extend(f'文件存在但未通过 SHA-256 校验：{esc(a["path"])}'
+                         for a in assets if a.get("exists") and not a.get("sha256_valid"))
+            notes = "".join(f'<p class="cap-plat-note">{note}</p>' for note in notes)
+            blocks.append(f'<div class="cap-evidence-block"><h3>实机补充记录</h3>{details}{notes}'
+                          f'{media_figs(media, v["id"])}{log_blocks(logs, v["id"])}</div>')
         return "".join(blocks)
 
     # 逐平台区块：平台清单固定，状态与证据都挂在自己的平台上。
@@ -1146,17 +1157,9 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
                 f'<p class="cap-plat-note">{intro}平台状态只由该平台的实机验收产生，'
                 '代码与自动化测试不计入；本项在此平台保持「待验证」，不会因其他平台通过而变绿。</p>'
                 '<p class="cap-plat-note">变为已验证需要完整 PASS acceptance JSON、可追溯的产品版本和 Git SHA、交付身份 JSON 与安装包 / 部署产物 SHA-256，以及引用有效且哈希匹配的截图、录像和运行日志。</p>'
-            ) + observation_blocks(v)
+            ) + platform_run_blocks(v) + artifact_block(v) + observation_blocks(v)
         else:
-            pairs = [(r["_acceptance_path"], r) for r in v["runs"]]
-            media = [{**m, "outcome": f"验收结果：{'通过' if r.get('status') == 'passed' else '失败'}"}
-                     for p, r in pairs for m in r.get("media", [])]
-            body = (run_lines(pairs, v["id"]) + media_figs(media, v["id"])
-                    + log_blocks(v.get("logs", []), v["id"]) + raw_block(v.get("raw", []), v["id"]))
-            if v.get("artifact_sha256"):
-                body += (f'<p class="cap-plat-run">安装包 / 部署产物 SHA-256：'
-                         f'<code>{esc(v["artifact_sha256"])}</code> · '
-                         f'<a href="{asset(f["id"], v["artifact_path"], v["id"])}">交付身份 JSON</a></p>')
+            body = platform_run_blocks(v) + artifact_block(v) + observation_blocks(v)
         plat_sections.append(
             f'<section class="cap-plat cap-plat--{esc(v["status"])}">'
             f'<div class="cap-plat-head"><h3>{esc(v["name"])}</h3>'
