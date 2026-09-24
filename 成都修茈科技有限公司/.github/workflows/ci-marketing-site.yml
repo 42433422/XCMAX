@@ -8,18 +8,7 @@ name: CI - Marketing Site
 on:
   pull_request:
     paths:
-      - 'index.html'
-      - 'about.html'
-      - 'case-*.html'
-      - 'cases.html'
-      - 'contact.html'
-      - 'download*.html'
-      - 'honors.html'
-      - 'news.html'
-      - 'services.html'
-      - 'solutions.html'
-      - 'excel-to-ai.html'
-      - 'baidu_verify_*.html'
+      - '*.html'
       - 'capabilities/**'
       - 'data/capabilities/**'
       - 'scripts/build_capability_center.py'
@@ -28,22 +17,12 @@ on:
       - 'assets/**'
       - 'new/**'
       - 'site/**'
+      - 'FHD/docs/evidence/**'
       - '.github/workflows/ci-marketing-site.yml'
   push:
     branches: [main]
     paths:
-      - 'index.html'
-      - 'about.html'
-      - 'case-*.html'
-      - 'cases.html'
-      - 'contact.html'
-      - 'download*.html'
-      - 'honors.html'
-      - 'news.html'
-      - 'services.html'
-      - 'solutions.html'
-      - 'excel-to-ai.html'
-      - 'baidu_verify_*.html'
+      - '*.html'
       - 'capabilities/**'
       - 'data/capabilities/**'
       - 'scripts/build_capability_center.py'
@@ -52,6 +31,7 @@ on:
       - 'assets/**'
       - 'new/**'
       - 'site/**'
+      - 'FHD/docs/evidence/**'
       - '.github/workflows/ci-marketing-site.yml'
   workflow_dispatch:
 

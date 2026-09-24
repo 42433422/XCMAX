@@ -10,18 +10,7 @@ name: CI - Marketing Site
 on:
   pull_request:
     paths:
-      - '成都修茈科技有限公司/index.html'
-      - '成都修茈科技有限公司/about.html'
-      - '成都修茈科技有限公司/case-*.html'
-      - '成都修茈科技有限公司/cases.html'
-      - '成都修茈科技有限公司/contact.html'
-      - '成都修茈科技有限公司/download*.html'
-      - '成都修茈科技有限公司/honors.html'
-      - '成都修茈科技有限公司/news.html'
-      - '成都修茈科技有限公司/services.html'
-      - '成都修茈科技有限公司/solutions.html'
-      - '成都修茈科技有限公司/excel-to-ai.html'
-      - '成都修茈科技有限公司/baidu_verify_*.html'
+      - '成都修茈科技有限公司/*.html'
       - '成都修茈科技有限公司/capabilities/**'
       - '成都修茈科技有限公司/data/capabilities/**'
       - '成都修茈科技有限公司/scripts/build_capability_center.py'
@@ -30,22 +19,12 @@ on:
       - '成都修茈科技有限公司/assets/**'
       - '成都修茈科技有限公司/new/**'
       - '成都修茈科技有限公司/site/**'
+      - 'FHD/docs/evidence/**'
       - '.github/workflows/corp-marketing-site.yml'
   push:
     branches: [main]
     paths:
-      - '成都修茈科技有限公司/index.html'
-      - '成都修茈科技有限公司/about.html'
-      - '成都修茈科技有限公司/case-*.html'
-      - '成都修茈科技有限公司/cases.html'
-      - '成都修茈科技有限公司/contact.html'
-      - '成都修茈科技有限公司/download*.html'
-      - '成都修茈科技有限公司/honors.html'
-      - '成都修茈科技有限公司/news.html'
-      - '成都修茈科技有限公司/services.html'
-      - '成都修茈科技有限公司/solutions.html'
-      - '成都修茈科技有限公司/excel-to-ai.html'
-      - '成都修茈科技有限公司/baidu_verify_*.html'
+      - '成都修茈科技有限公司/*.html'
       - '成都修茈科技有限公司/capabilities/**'
       - '成都修茈科技有限公司/data/capabilities/**'
       - '成都修茈科技有限公司/scripts/build_capability_center.py'
@@ -54,6 +33,7 @@ on:
       - '成都修茈科技有限公司/assets/**'
       - '成都修茈科技有限公司/new/**'
       - '成都修茈科技有限公司/site/**'
+      - 'FHD/docs/evidence/**'
       - '.github/workflows/corp-marketing-site.yml'
   workflow_dispatch:
 
