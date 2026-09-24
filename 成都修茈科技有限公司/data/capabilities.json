@@ -2,7 +2,7 @@
   "_comment": "此文件由 成都修茈科技有限公司/scripts/build_capability_center.py 自动生成，请勿手改（DO NOT EDIT）。",
   "schema_version": 1,
   "catalog_version": "2026-09-16",
-  "generated_at": "2026-09-24 07:58 UTC",
+  "generated_at": "2026-09-24 09:51 UTC",
   "principle": "No Evidence, No Claim：总体状态由各平台实机验收记录自动汇总，目录不存放可手写的状态；缺证据的平台固定显示「待验证」。",
   "stats": {
     "total": 158,
@@ -30,7 +30,7 @@
         "verified": 1,
         "partial": 0,
         "pending": 98,
-        "last_verified_at": "2026-09-23"
+        "last_verified_at": "2026-09-24"
       },
       "macos": {
         "applicable": 100,
@@ -136,7 +136,7 @@
                   "id": "windows",
                   "name": "Windows 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-23",
+                  "verified_at": "2026-09-24",
                   "run_count": 1,
                   "accepted_count": 1
                 },
