@@ -1,5 +1,5 @@
 {
-  "lines": 2303371,
-  "updated": "2026-09-24",
-  "note": "Generic capability evidence/status gate (+223 maintained lines total; reviewed exception)."
+  "lines": 2303351,
+  "updated": "2026-09-25",
+  "note": "Generic evidence/status gate reviewed exception (+223 lines); trigger consolidation net-deleted 20 lines."
 }
