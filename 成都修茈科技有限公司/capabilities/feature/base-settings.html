@@ -81,14 +81,13 @@
     </div>
   </section>
 
-  <section class="section cap-plat-section"><div class="container"><h2>平台验证状态</h2><p class="cap-section-note">本项适用于 3 个平台，逐平台独立判定：平台状态只由该平台的实机验收记录产生，总体状态由平台状态自动汇总，目录与页面都不存放可手写的状态。</p><section class="cap-plat cap-plat--pending"><div class="cap-plat-head"><h3>Windows 桌面</h3><span class="cap-ps ps-pending">待验证</span></div><p class="cap-plat-note">该平台尚无实机验收记录。平台状态只由该平台的实机验收产生，代码与自动化测试不计入；本项在此平台保持「待验证」，不会因其他平台通过而变绿。</p></section><section class="cap-plat cap-plat--pending"><div class="cap-plat-head"><h3>macOS 桌面</h3><span class="cap-ps ps-pending">待验证</span></div><p class="cap-plat-note">该平台尚无实机验收记录。平台状态只由该平台的实机验收产生，代码与自动化测试不计入；本项在此平台保持「待验证」，不会因其他平台通过而变绿。</p></section><section class="cap-plat cap-plat--pending"><div class="cap-plat-head"><h3>Web</h3><span class="cap-ps ps-pending">待验证</span></div><p class="cap-plat-note">该平台尚无实机验收记录。平台状态只由该平台的实机验收产生，代码与自动化测试不计入；本项在此平台保持「待验证」，不会因其他平台通过而变绿。</p></section></div></section>
+  <section class="section cap-plat-section"><div class="container"><h2>平台验证状态</h2><p class="cap-section-note">本项适用于 3 个平台，逐平台独立判定：平台状态只由该平台的实机验收记录产生，总体状态由平台状态自动汇总，目录与页面都不存放可手写的状态。</p><section class="cap-plat cap-plat--pending"><div class="cap-plat-head"><h3>Windows 桌面</h3><span class="cap-ps ps-pending">待验证</span></div><p class="cap-plat-note">该平台尚无实机验收记录。平台状态只由该平台的实机验收产生，代码与自动化测试不计入；本项在此平台保持「待验证」，不会因其他平台通过而变绿。</p><p class="cap-plat-note">变为已验证需要完整 PASS acceptance JSON、可追溯的产品版本和 Git SHA、交付身份 JSON 与安装包 / 部署产物 SHA-256，以及引用有效且哈希匹配的截图、录像和运行日志。</p></section><section class="cap-plat cap-plat--pending"><div class="cap-plat-head"><h3>macOS 桌面</h3><span class="cap-ps ps-pending">待验证</span></div><p class="cap-plat-note">该平台尚无实机验收记录。平台状态只由该平台的实机验收产生，代码与自动化测试不计入；本项在此平台保持「待验证」，不会因其他平台通过而变绿。</p><p class="cap-plat-note">变为已验证需要完整 PASS acceptance JSON、可追溯的产品版本和 Git SHA、交付身份 JSON 与安装包 / 部署产物 SHA-256，以及引用有效且哈希匹配的截图、录像和运行日志。</p></section><section class="cap-plat cap-plat--pending"><div class="cap-plat-head"><h3>Web</h3><span class="cap-ps ps-pending">待验证</span></div><p class="cap-plat-note">该平台尚无实机验收记录。平台状态只由该平台的实机验收产生，代码与自动化测试不计入；本项在此平台保持「待验证」，不会因其他平台通过而变绿。</p><p class="cap-plat-note">变为已验证需要完整 PASS acceptance JSON、可追溯的产品版本和 Git SHA、交付身份 JSON 与安装包 / 部署产物 SHA-256，以及引用有效且哈希匹配的截图、录像和运行日志。</p></section></div></section>
 
   <section class="section cap-evidence-section">
     <div class="container">
       <h2>实现与测试（平台无关）</h2>
       <p class="cap-section-note">本项在 Windows 桌面、macOS 桌面、Web 上均无实机验收记录，当前状态仅表示代码已合入，不代表任何平台验证通过。</p>
       <p class="cap-section-note">图片内容复核（2026-09-20，Mac 1.0.0.5）：个人主页与模型服务设置，仅能说明设置页呈现，未显示日志诊断结果或设置保存结果。</p>
-      <p class="cap-section-note">以下资料说明实现与测试覆盖，不代表任何平台的实机验收通过；平台状态请见上方「平台验证状态」。生成于 2026-09-24 07:58 UTC。</p>
       <div class="cap-evidence-grid">
         <div class="cap-evidence-block"><h3>源码实现</h3><ul class="cap-evidence-list"><li><code class="">FHD/app/fastapi_routes/workspace_prefs_routes.py</code></li></ul></div>
 
