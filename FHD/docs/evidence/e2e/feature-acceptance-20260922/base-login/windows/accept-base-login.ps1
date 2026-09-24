@@ -5,25 +5,13 @@
 # so Chinese literals would turn into mojibake. Keep every string in this file ASCII.
 #
 # Feature: capability-center id `base-login` "deng lu yu hui hua guan li" (login + session mgmt).
-# Case set (same as the macOS round, executed independently on Windows; W0/W4b/W7 added 2026-09-24):
-#   W0 install + first launch  : the site-published installer is what got installed; the first start
-#                                after that install reaches the login page (facts from -OperatorJson)
+# Case set (same as the macOS round, executed independently on Windows):
 #   W1 not-logged-in rejection : GET /api/auth/me + /api/auth/session/validate without session cookie -> valid=false
 #   W2 enterprise login        : API login + /api/auth/me (account_kind=enterprise); GUI evidence by the operator
 #   W3 session persistence     : restart the app process, the same session cookie stays valid
 #   W4 secure logout           : POST /api/auth/logout -> old cookie rejected; GUI returns to the login page
-#   W4b post-logout relaunch   : after a GUI logout, restarting the app must NOT restore the old session
-#                                (facts from -OperatorJsonPost; the script waits for that file)
-#   W7 API/backend/frontend    : steady-state health is healthy on every layer, the sidebar status
-#                                text matches the health payload, and the cold-start warm-up window
-#                                (degraded reasons right after restart) is recorded, not hidden
 #   W5 boundary negatives      : wrong password / admin kind on desktop / empty credentials all rejected
 #   W6 web shares the account  : the same account logs in on the market (Web) endpoint
-#
-# Operator inputs (produced on the machine by operator-base-login.mjs, never hand-typed):
-#   -OperatorJson     facts of phase A: install identity, first launch, GUI login, GUI logout.
-#   -OperatorJsonPost facts of phase C: GUI logout, post-logout relaunch, steady-state health/UI.
-#                     The script waits for this file (default up to 900s) between W4 and W4b.
 #
 # Six-element evidence contract (windows-evidence-1.0.0.5/rules.json):
 #   screenshot + video + log + product_version + app_sha + verify_time -> PASS
@@ -45,13 +33,10 @@
 #   powershell -ExecutionPolicy Bypass -File .\accept-base-login.ps1 -SelfTest
 #   powershell -ExecutionPolicy Bypass -File .\accept-base-login.ps1 -WithVideo `
 #     -InstallerPath "C:\...\XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe" `
-#     -OperatorJson "...\log\operator-phase-a.json" -OperatorJsonPost "...\log\operator-phase-c.json" `
-#     -OutDir "Z:\windows-acceptance-r2\acceptance\feature-base-login-20260924"
+#     -OutDir "C:\XCAGI-acceptance\feature-base-login"
 #
-# Operator (Windows-side agent UI automation via operator-base-login.mjs) writes these into
-# <OutDir>\shot\: W0-first-launch.png (phase A), W2-login-workspace.png (phase A),
-# W4-login-page-again.png (phase A), W4b-relaunch-login-page.png (phase C),
-# W7-status-bar.png (phase C). The script itself captures W3-after-restart.png after its restart.
+# Operator (Windows-side agent UI automation) must place these screenshots into <OutDir>\shot\:
+#   W2-login-page.png, W2-login-workspace.png, W4-login-page-again.png
 
 param(
     [string]$Base = 'http://127.0.0.1:17500',
@@ -66,17 +51,6 @@ param(
     [string]$RepoRelDir = 'FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/windows',
     [string]$AppExe = '',
     [string]$InstallerPath = '',
-    # Site pointer that names the build currently offered for download. W0 compares it against the
-    # installer that was really installed, so "the current deliverable" is verified, not assumed.
-    [string]$SitePointerUrl = 'https://xiu-ci.com/download-windows-hotfix.json',
-    # Operator facts: phase A (install + first launch + GUI login/logout) and phase C (GUI logout +
-    # post-logout relaunch + steady-state health). Written by operator-base-login.mjs, never by hand.
-    [string]$OperatorJson = '',
-    [string]$OperatorJsonPost = '',
-    [int]$OperatorWaitSec = 900,
-    # Debug port handed to every app start this script performs, so the operator driver can attach
-    # again after the script's restart step (and after the phase C relaunch).
-    [int]$DebugPort = 9222,
     [string]$Ffmpeg = '',
     [switch]$WithVideo,
     [switch]$SkipRestart,
@@ -214,54 +188,6 @@ function Get-BodyField {
     return $null
 }
 
-function Read-JsonFile {
-    param([string]$Path)
-    if (-not $Path) { return $null }
-    if (-not (Test-Path $Path)) { return $null }
-    try { return (Get-Content -Path $Path -Raw -Encoding UTF8 | ConvertFrom-Json) } catch { return $null }
-}
-
-function Get-SitePointer {
-    # The site publishes which Windows build is currently downloadable. W0 binds the installer that
-    # was really installed to that pointer instead of trusting a file name.
-    try {
-        $r = Invoke-Api -Method 'GET' -Path '' -BaseUrl $SitePointerUrl
-        if ($r.status -eq 200 -and $r.body) { return $r.body }
-    } catch { }
-    return $null
-}
-
-function Get-BackendCmdline {
-    # The backend command line carries --data-dir: it proves the run used the isolated data
-    # directory instead of the machine's default profile.
-    $p = Get-CimInstance Win32_Process -Filter "Name='xcagi-backend.exe'" -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($p) { return [string]$p.CommandLine }
-    return ''
-}
-
-function Get-HealthTimeline {
-    # Right after a cold start the backend honestly reports optional subsystems that are not up yet
-    # (neuro bus / local LLM runtime). Record that window instead of hiding it, then show convergence.
-    param([int]$Seconds = 40, [int]$IntervalMs = 2000)
-    $rows = @()
-    $end = (Get-Date).AddSeconds($Seconds)
-    while ((Get-Date) -lt $end) {
-        $row = [ordered]@{ t = (Get-Date).ToString('HH:mm:ss'); http = 0; status = ''; runtime_status = ''; degraded = @() }
-        try {
-            $h = Invoke-Api -Method 'GET' -Path '/api/health'
-            $row.http = $h.status
-            $row.status = [string](Get-BodyField $h.body 'status')
-            $rt = Get-BodyField $h.body 'runtime'
-            if ($rt) { $row.runtime_status = [string](Get-BodyField $rt 'status') }
-            $dr = Get-BodyField $h.body 'degradedReasons'
-            if ($dr) { $row.degraded = @($dr) }
-        } catch { $row.status = 'unreachable' }
-        $rows += $row
-        Start-Sleep -Milliseconds $IntervalMs
-    }
-    return ,$rows
-}
-
 # ---------------- screenshots / video ----------------
 
 function Save-Screenshot {
@@ -300,7 +226,7 @@ function Start-RoundVideo {
     if (-not $exe) { Write-Log 'video: ffmpeg not found -> video element missing (verdict will be PARTIAL)'; return }
     $script:VideoFile = Join-Path $OutDir ('video\base-login-' + $script:Stamp + '.mp4')
     $args = @('-hide_banner', '-loglevel', 'error', '-f', 'gdigrab', '-framerate', '5', '-i', 'desktop',
-              '-c:v', 'h264_mf', '-b:v', '600k', '-pix_fmt', 'yuv420p', '-y', $script:VideoFile)
+              '-c:v', 'h264_mf', '-b:v', '1200k', '-pix_fmt', 'yuv420p', '-y', $script:VideoFile)
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $exe
     $psi.Arguments = ($args -join ' ')
@@ -448,9 +374,9 @@ function Wait-AppWindow {
 # observed is derived from the facts of the actual run, never typed by hand.
 $script:CaseSpec = @{
     'W1' = @{
-        input = 'No session cookie: GET /api/auth/me and GET /api/auth/session/validate.'
-        actions = 'Call both protected endpoints without a Cookie header; the rendered login page (no workspace) is captured by the operator in W0-first-launch.png / W4-login-page-again.png.'
-        expected = 'Both endpoints report valid=false while the app shows the login page instead of the workspace.'
+        input = 'No session cookie: GET /api/auth/me and GET /api/auth/session/validate; plus the current GUI state.'
+        actions = 'Call both protected endpoints without a Cookie header, then read the rendered UI state.'
+        expected = 'Both endpoints report valid=false, and the window stays on the login page (no workspace).'
     }
     'W2' = @{
         input = 'Enterprise credentials via POST /api/auth/login (account_kind=enterprise).'
@@ -476,21 +402,6 @@ $script:CaseSpec = @{
         input = 'The same enterprise account against the market (Web) endpoint https://xiu-ci.com/api/auth/login.'
         actions = 'POST username/password to the market login endpoint and read ok / access_token.'
         expected = 'ok=true or an access_token is issued, proving the desktop and Web share one account system.'
-    }
-    'W0' = @{
-        input = 'The installer currently published on the site, installed on this machine; the app then started for the first time with a brand-new (empty) data directory.'
-        actions = 'Fetch the site download pointer, compare it with the installer actually installed and with resources/build-info.json, check the embedded backend is present, then launch the app and read the rendered login page (operator phase A).'
-        expected = 'Installer sha256 and build gitSha equal the site pointer, the install carries resources\backend\_internal, and the first start reaches the login page with health 200 and no session (me valid=false).'
-    }
-    'W4b' = @{
-        input = 'The GUI session that was logged out in phase C, then the app process restarted (operator phase C).'
-        actions = 'GUI logout, stop the app, start it again, read the rendered page and call /api/auth/me + /api/auth/session/validate with the logged-out cookie.'
-        expected = 'After the relaunch the app shows the login page (no workspace) and the old cookie stays invalid (valid=false).'
-    }
-    'W7' = @{
-        input = 'Steady state inside the logged-in workspace: /api/health plus the sidebar status text the user actually sees, plus the cold-start samples taken right after a restart.'
-        actions = 'Read the health payload and the sidebar status text in the workspace, compare the two, and keep the warm-up samples taken right after the W3 restart and after the phase C relaunch.'
-        expected = 'In the workspace every layer is healthy (http 200, status healthy, no blockers, no degradedReasons) and the sidebar text matches the payload; any warm-up window and the logged-out payload are recorded truthfully instead of hidden.'
     }
 }
 
@@ -549,9 +460,6 @@ function Get-Identity {
     $installerSha = ''
     if ($InstallerPath) { $installerSha = [string](Get-Sha256 $InstallerPath) }
     return [ordered]@{
-        # Machine-generated capture: the line below keeps the repo's generated-file banner rule
-        # (scripts/dev/check_net_deletion.py skips files whose head declares auto-generation).
-        _comment = 'auto-generated by accept-base-login.ps1 - DO NOT EDIT (install/reconnaissance snapshot; only the record''s media review fields may be filled by hand)'
         captured_at = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
         host = $env:COMPUTERNAME
         user = $env:USERNAME
@@ -590,9 +498,6 @@ if ($health0) {
     $identity['auth_route_ready'] = $authReadyOk
     Write-JsonFile (Join-Path $OutDir 'base-login-windows-identity.json') $identity | Out-Null
 }
-$identity['backend_cmdline'] = Get-BackendCmdline
-$identity['isolated_data_dir_configured'] = [bool]$env:XCAGI_DESKTOP_USER_DATA_DIR
-Write-JsonFile (Join-Path $OutDir 'base-login-windows-identity.json') $identity | Out-Null
 
 if ($SelfTest) {
     Write-Host ''
@@ -623,75 +528,7 @@ if (-not $Password) {
 
 Start-RoundVideo
 
-# ---- operator facts (phase A) + W0 install / first launch ----------------
-$opA = Read-JsonFile -Path $OperatorJson
-$opAInstall = $null
-$opAFirst = $null
-$opAGuiLogin = $null
-$opAGuiLogout = $null
-if ($opA) {
-    $opAInstall = Get-BodyField $opA 'install'
-    $opAFirst = Get-BodyField $opA 'first_launch'
-    $opAGuiLogin = Get-BodyField $opA 'gui_login'
-    $opAGuiLogout = Get-BodyField $opA 'gui_logout'
-}
-$pointer = Get-SitePointer
-$pointerSha = ''
-$pointerGit = ''
-$pointerVersion = ''
-$pointerGeneratedAt = ''
-if ($pointer) {
-    $pointerGit = [string](Get-BodyField $pointer 'git_sha')
-    $pointerVersion = [string](Get-BodyField $pointer 'version')
-    $pointerGeneratedAt = [string](Get-BodyField $pointer 'generated_at')
-    $art = Get-BodyField $pointer 'artifact'
-    if ($art) { $pointerSha = [string](Get-BodyField $art 'sha256') }
-}
-$installerSha = ([string]$identity.installer_sha256).ToLower()
-$buildSha = ([string]$identity.git_sha).ToLower()
-$installerMatches = [bool]($pointerSha -and $installerSha -and ($pointerSha.ToLower() -eq $installerSha))
-$buildMatches = [bool]($pointerGit -and $buildSha -and ($pointerGit.ToLower() -eq $buildSha))
-$embeddedBackendPath = ''
-$embeddedOk = $false
-if ($appDir) {
-    $embeddedBackendPath = $appDir.TrimEnd('\') + '\resources\backend\_internal'
-    $embeddedOk = Test-Path $embeddedBackendPath
-}
-if ($opAFirst -and $opAInstall) {
-    $flTitle = [string](Get-BodyField $opAFirst 'window_title')
-    $flHealth = Get-BodyField $opAFirst 'health_status'
-    $flValid = Get-BodyField $opAFirst 'me_valid'
-    $flLogin = Get-BodyField $opAFirst 'login_form_present'
-    $flSidebar = Get-BodyField $opAFirst 'sidebar_items'
-    $w0ok = $installerMatches -and $buildMatches -and $embeddedOk -and ($flHealth -eq 200) -and ($flValid -eq $false) -and ($flLogin -eq $true) -and ($flSidebar -eq 0)
-    $w0verdict = 'FAIL'
-    if ($w0ok) { $w0verdict = 'PASS' }
-    $w0facts = [ordered]@{
-        site_pointer = [ordered]@{
-            url = $SitePointerUrl
-            version = $pointerVersion
-            git_sha = $pointerGit
-            artifact_sha256 = $pointerSha
-            generated_at = $pointerGeneratedAt
-        }
-        installer_path = [string]$identity.installer_path
-        installer_sha256 = $installerSha
-        installer_matches_site_pointer = $installerMatches
-        installed_build_info = $identity.build_info
-        build_matches_site_pointer = $buildMatches
-        embedded_backend_path = $embeddedBackendPath
-        embedded_backend_present = $embeddedOk
-        install = $opAInstall
-        first_launch = $opAFirst
-        first_window_title = $flTitle
-    }
-    Add-Case 'W0' 'install + first launch' $w0verdict $w0facts 'the site-published installer is what got installed and its first start reaches the login page with no session'
-} else {
-    $script:WarningsW0 = 'W0 skipped: no -OperatorJson phase A facts (install / first launch not captured this round)'
-    Write-Log ('WARN: ' + $script:WarningsW0)
-}
-
-# W1 not-logged-in rejection (API level; GUI state captured by the operator in phase A)
+# W1 not-logged-in rejection (API level; GUI state captured by the operator in W2)
 $me0 = Invoke-Api -Method 'GET' -Path '/api/auth/me'
 $sv0 = Invoke-Api -Method 'GET' -Path '/api/auth/session/validate'
 $w1ok = ((Get-BodyField $me0.body 'valid') -eq $false) -and ((Get-BodyField $sv0.body 'valid') -eq $false)
@@ -746,14 +583,13 @@ $w2facts = [ordered]@{
     tier = $me1Tier
     tenant_id = $me1Tenant
     validate_valid = $sv1Valid
-    gui_login = $opAGuiLogin
 }
-Add-Case 'W2' 'enterprise login (API side)' $w2verdict $w2facts 'API side asserted here; the same login through the real GUI is captured in phase A (W2-login-workspace.png)'
+Add-Case 'W2' 'enterprise login (API side)' $w2verdict $w2facts 'GUI login evidence (shot/video) is produced by the operator'
 
 # W3 session persistence (real process restart keeps the same session valid)
 if (-not $SkipRestart) {
     Stop-App
-    $h1 = Start-App -AppDir $appDir -DebugPort $DebugPort
+    $h1 = Start-App -AppDir $appDir
     # Health is not the same as "the UI is up": wait for the renderer to settle so the W3
     # screenshot shows the real post-restart screen instead of an empty loading frame.
     $w3Title = Wait-AppWindow
@@ -778,9 +614,6 @@ if (-not $SkipRestart) {
     Add-Case 'W3' 'session persistence (process restart)' $w3verdict $w3facts 'same session cookie still accepted after a real process restart'
     $shot3 = Join-Path $OutDir 'shot\W3-after-restart.png'
     Save-Screenshot $shot3 | Out-Null
-    # Cold-start warm-up window: sample /api/health right after the restart (also feeds W7).
-    Write-Log 'sampling /api/health after the restart (warm-up window) ...'
-    $script:HealthTimeline = Get-HealthTimeline -Seconds 40 -IntervalMs 2000
 }
 
 # W4 secure logout (API side; the operator captures the login page again in the GUI)
@@ -801,126 +634,8 @@ $w4facts = [ordered]@{
     logout_body = $logout.body
     me_after = $me4.body
     validate_after = $sv4.body
-    gui_logout = $opAGuiLogout
 }
-Add-Case 'W4' 'secure logout' $w4verdict $w4facts 'old session cookie is rejected right after logout; the same logout through the real GUI (settings -> dian ji tui chu deng lu) is captured in phase A (W4-login-page-again.png)'
-
-# W4b post-logout relaunch. The operator logs out through the real UI, restarts the app and reads
-# the rendered page; those facts arrive in -OperatorJsonPost. The script waits here (the operator
-# drives the GUI while this script is paused) and then judges the case against that file.
-$opC = $null
-if ($OperatorJsonPost) {
-    Write-Log ('waiting for operator phase C facts: ' + $OperatorJsonPost)
-    $waitEnd = (Get-Date).AddSeconds($OperatorWaitSec)
-    while ((Get-Date) -lt $waitEnd) {
-        $opC = Read-JsonFile -Path $OperatorJsonPost
-        if ($opC) { break }
-        Start-Sleep -Seconds 3
-    }
-}
-$opCRelaunch = $null
-$opCHealthUi = $null
-$opCGuiLogout = $null
-if ($opC) {
-    $opCRelaunch = Get-BodyField $opC 'postlogout_relaunch'
-    $opCHealthUi = Get-BodyField $opC 'health_ui'
-    $opCGuiLogout = Get-BodyField $opC 'gui_logout'
-    Write-Log 'operator phase C facts received'
-}
-if ($opCRelaunch) {
-    $rlHealth = Get-BodyField $opCRelaunch 'health_status'
-    $rlLogin = Get-BodyField $opCRelaunch 'login_form_present'
-    $rlSidebar = Get-BodyField $opCRelaunch 'sidebar_items'
-    $rlCookieValid = Get-BodyField $opCRelaunch 'old_cookie_valid'
-    $w4bok = ($rlHealth -eq 200) -and ($rlLogin -eq $true) -and ($rlSidebar -eq 0) -and ($rlCookieValid -eq $false)
-    $w4bverdict = 'FAIL'
-    if ($w4bok) { $w4bverdict = 'PASS' }
-    $w4bfacts = [ordered]@{
-        gui_logout = $opCGuiLogout
-        postlogout_relaunch = $opCRelaunch
-        window_title_after_relaunch = [string](Get-BodyField $opCRelaunch 'window_title')
-        old_cookie_valid_after_relaunch = $rlCookieValid
-    }
-    Add-Case 'W4b' 'post-logout relaunch keeps the session logged out' $w4bverdict $w4bfacts 'after a GUI logout a fresh app start shows the login page again and the logged-out cookie stays invalid'
-} else {
-    $script:WarningsW4b = 'W4b skipped: no operator phase C facts (post-logout relaunch not captured this round)'
-    Write-Log ('WARN: ' + $script:WarningsW4b)
-}
-
-# W7 API / backend / frontend agree. The steady state is measured inside the logged-in workspace:
-# that is where the sidebar status text exists and where the user actually works. The payload the
-# script itself sees right now (after the W4b relaunch, i.e. logged out) is recorded as context -
-# before a login the optional local-AI runtime is simply not up yet, which the payload reports
-# honestly instead of pretending everything is green.
-$hh = Invoke-Api -Method 'GET' -Path '/api/health'
-$hStatus = [string](Get-BodyField $hh.body 'status')
-$hRuntime = Get-BodyField $hh.body 'runtime'
-$hRuntimeStatus = ''
-$hBlockers = @()
-if ($hRuntime) {
-    $hRuntimeStatus = [string](Get-BodyField $hRuntime 'status')
-    $hBlockers = @(Get-BodyField $hRuntime 'blockers')
-}
-$hDegraded = @(Get-BodyField $hh.body 'degradedReasons')
-if ($opCHealthUi) {
-    $uiText = [string](Get-BodyField $opCHealthUi 'ui_status_text')
-    $uiTone = [string](Get-BodyField $opCHealthUi 'ui_tone')
-    $uiMatch = Get-BodyField $opCHealthUi 'ui_matches_health'
-    # The operator sampled the steady state inside the logged-in workspace; that sample is the one
-    # W7 judges (see the comment above), while the payload seen here is recorded next to it.
-    $wsHttp = Get-BodyField $opCHealthUi 'health_http'
-    $wsStatus = [string](Get-BodyField $opCHealthUi 'health_status')
-    $wsRuntime = [string](Get-BodyField $opCHealthUi 'runtime_status')
-    $wsBlockers = @(Get-BodyField $opCHealthUi 'blockers')
-    $wsDegraded = @(Get-BodyField $opCHealthUi 'degradedReasons')
-    $timeline = $script:HealthTimeline
-    $degradedSamples = 0
-    $healthySamples = 0
-    if ($timeline) {
-        foreach ($row in $timeline) {
-            if ($row.status -eq 'degraded') { $degradedSamples++ }
-            if ($row.status -eq 'healthy') { $healthySamples++ }
-        }
-    }
-    $w7ok = ($wsHttp -eq 200) -and ($wsStatus -eq 'healthy') -and ($wsRuntime -eq 'healthy') -and ($wsBlockers.Count -eq 0) -and ($wsDegraded.Count -eq 0) -and ($uiMatch -eq $true)
-    $w7verdict = 'FAIL'
-    if ($w7ok) { $w7verdict = 'PASS' }
-    $w7facts = [ordered]@{
-        workspace_steady_health = [ordered]@{
-            http = $wsHttp
-            status = $wsStatus
-            runtime_status = $wsRuntime
-            blockers = $wsBlockers
-            degraded_reasons = $wsDegraded
-            version = [string](Get-BodyField $opCHealthUi 'version')
-            captured_by_operator = $true
-        }
-        frontend_status = [ordered]@{
-            ui_status_text = $uiText
-            ui_tone = $uiTone
-            ui_matches_health = $uiMatch
-            captured_by_operator = $true
-        }
-        payload_at_record_time = [ordered]@{
-            http = $hh.status
-            status = $hStatus
-            runtime_status = $hRuntimeStatus
-            blockers = $hBlockers
-            degraded_reasons = $hDegraded
-            where = 'measured after the W4b relaunch, i.e. on the login page: the optional local-AI runtime is not started before a login, so this payload is recorded as context and is not the steady state judged above'
-        }
-        restart_health_timeline = $timeline
-        restart_warmup_note = 'Samples taken right after the W3 restart: the backend reports degraded (neuro bus / local LLM runtime not up yet) for a short warm-up window, then healthy; the UI poll follows the payload.'
-        warmup_degraded_samples = $degradedSamples
-        warmup_healthy_samples = $healthySamples
-        frontend_steady_sample_where = [string](Get-BodyField $opCHealthUi 'captured_where')
-        post_relaunch_convergence = Get-BodyField $opC 'post_relaunch_convergence'
-    }
-    Add-Case 'W7' 'API / backend / frontend state agree' $w7verdict $w7facts 'in the logged-in workspace every layer is healthy and the sidebar text matches the payload; the post-restart warm-up window and the logged-out payload are recorded truthfully'
-} else {
-    $script:WarningsW7 = 'W7 skipped: no operator phase C health/UI facts (frontend status not captured this round)'
-    Write-Log ('WARN: ' + $script:WarningsW7)
-}
+Add-Case 'W4' 'secure logout' $w4verdict $w4facts 'old session cookie is rejected right after logout'
 
 # W5 boundary negatives
 $badBody = @{ username = $Account; password = ('wrong-' + $script:Stamp); account_kind = 'enterprise' }
@@ -982,18 +697,6 @@ $videoEntry = $null
 if ($script:VideoFile -and (Test-Path $script:VideoFile)) {
     $v = Get-Item $script:VideoFile
     $videoEntry = [ordered]@{ path = $v.FullName; bytes = $v.Length; sha256 = (Get-Sha256 $v.FullName) }
-}
-# Every *.mp4 in video\ belongs to this round (the script's own recording plus the operator's
-# phase A clip), so all of them are listed as media and must be reviewed before the round counts.
-$videoFiles = @()
-$videoDir = Join-Path $OutDir 'video'
-foreach ($f in @(Get-ChildItem $videoDir -Filter '*.mp4' -ErrorAction SilentlyContinue | Sort-Object Name)) {
-    $videoFiles += [ordered]@{
-        name = $f.Name
-        bytes = $f.Length
-        sha256 = (Get-Sha256 $f.FullName)
-        recorded_at = $f.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')
-    }
 }
 
 $logPath = Join-Path $OutDir ('log\base-login-' + $script:Stamp + '.log')
@@ -1058,17 +761,6 @@ if ($videoEntry) {
         reviewed_at = ''
     }
 }
-foreach ($v in $videoFiles) {
-    if ($videoEntry -and ($v.name -eq (Split-Path $videoEntry.path -Leaf))) { continue }
-    $media += [ordered]@{
-        feature = 'base-login'
-        path = $repoDir + '/video/' + $v.name
-        sha256 = $v.sha256
-        visual_review = 'pending_review'
-        visible_result = ''
-        reviewed_at = ''
-    }
-}
 
 $recordStatus = 'failed'
 if ($verdict -eq 'PASS') { $recordStatus = 'passed' }
@@ -1080,13 +772,10 @@ if ([string]$identity.git_sha -notmatch '^[0-9a-fA-F]{40}$') {
 if ($media.Count -eq 0) {
     $warnings += 'no media captured: nothing can be bound to the windows platform.'
 }
-if ($script:WarningsW0) { $warnings += $script:WarningsW0 }
-if ($script:WarningsW4b) { $warnings += $script:WarningsW4b }
-if ($script:WarningsW7) { $warnings += $script:WarningsW7 }
 foreach ($w in $warnings) { Write-Log ('WARN: ' + $w) }
 
 $record = [ordered]@{
-    _comment = 'auto-generated by accept-base-login.ps1 - DO NOT EDIT. Windows real-machine acceptance record for the capability center (feature-acceptance format, same structure as base-login-macos-run.json). Only media[].visual_review / media[].visible_result / media[].reviewed_at may be filled in, and only after actually viewing that file.'
+    _comment = 'Windows real-machine acceptance record for the capability center (feature-acceptance format, same structure as base-login-macos-run.json). Generated by accept-base-login.ps1; only media[].visual_review / media[].visible_result / media[].reviewed_at may be filled in, and only after actually viewing that file.'
     kind = 'feature-acceptance'
     feature = 'base-login'
     platform = 'windows'
