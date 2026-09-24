@@ -29,13 +29,26 @@ STATUS_META = {
     "cancelled": {"label": "已取消", "cls": "st-cancelled", "rank": -1},
 }
 STATUS_ORDER = ["verified", "partial", "implemented", "planned"]
-EXCLUDED_STATUSES = frozenset({"cancelled"})
+
+# 平台状态：只由「该平台的实机验收记录」决定，代码与单测不点亮任何平台。
+PLATFORM_STATUS_META = {
+    "verified": {"label": "已验证", "cls": "ps-verified"},
+    "partial": {"label": "部分验证", "cls": "ps-partial"},
+    "pending": {"label": "待验证", "cls": "ps-pending"},
+}
+PLATFORM_STATUS_ORDER = ["verified", "partial", "pending"]
 
 STATUS_LEGEND = (
-    ("verified", "有本项操作结果与原图复核记录；具体适用版本见验收资料"),
-    ("partial", "实现已合入且有部分证据，验证覆盖不完整，限制已知"),
-    ("implemented", "代码已合入，暂缺自动化测试或实机验证证据"),
+    ("verified", "本项全部适用平台都通过实机验收；只有一个平台通过时只能到「部分验证」"),
+    ("partial", "实现已合入，且至少一个平台已有实机验收记录，但并非全部适用平台都已通过"),
+    ("implemented", "代码已合入，但尚未有任何平台的实机验收记录"),
     ("planned", "仅有设计与规划，无已合入实现"),
+)
+
+PLATFORM_LEGEND = (
+    ("verified", "该平台有实机验收记录，且本项全部用例通过"),
+    ("partial", "该平台有实机验收记录，但存在失败或未覆盖项"),
+    ("pending", "该平台尚无实机验收记录；代码与单测不计入平台状态"),
 )
 
 PLATFORM_META = {
@@ -100,8 +113,12 @@ def last_commit(paths: list[str], fmt: str = "%cI") -> str | None:
 
 
 
-def reviewed_runs(feat: dict) -> list[dict]:
-    """Validate readable, feature-bound originals, including truthful failed outcomes."""
+def reviewed_runs(feat: dict, warnings: list[str] | None = None) -> list[dict]:
+    """Validate readable, feature-bound originals, including truthful failed outcomes.
+
+    平台状态只认这些记录，且每条记录必须自报 `platform`；缺平台标注的记录仍会展示，
+    但不计入任何平台状态（平台状态不可由代码或单测推断）。
+    """
     accepted = []
     for rel in feat.get("evidence", {}).get("runs", []):
         try:
@@ -128,9 +145,57 @@ def reviewed_runs(feat: dict) -> list[dict]:
     return accepted
 
 
-def accepted_runs(feat: dict) -> list[dict]:
-    return [r for r in reviewed_runs(feat) if r["status"] == "passed"
-            and all(c["result"] == "passed" for c in r["cases"])]
+def platform_verdicts(feat: dict, runs: list[dict], warnings: list[str]) -> list[dict]:
+    """逐平台判定。适用平台清单固定照抄目录声明，缺证据的平台保留为「待验证」，不消失。
+
+    平台证据只来自两处显式声明：该平台运行记录里的媒体，以及
+    `evidence.platform_assets[平台]` 里点名的日志/原始抓取。不做任何路径推断。
+    """
+    applicable = feat.get("platforms", []) or []
+    declared = (feat.get("evidence", {}) or {}).get("platform_assets", {}) or {}
+    out = []
+    for p in applicable:
+        p_runs = [r for r in runs if r.get("platform") == p]
+        p_ok = [r for r in p_runs if r["status"] == "passed"
+                and all(c["result"] == "passed" for c in r["cases"])]
+        if p_ok:
+            status = "verified"
+        elif p_runs:
+            status = "partial"
+        else:
+            status = "pending"
+        assets = declared.get(p, {}) or {}
+        out.append({
+            "id": p,
+            "name": PLATFORM_META.get(p, p),
+            "status": status,
+            "runs": p_runs,
+            "accepted": p_ok,
+            # 该平台的证据资产 = 该平台运行记录里绑定的媒体（含 sha256 与内容复核）
+            "media": [m for r in p_runs for m in r.get("media", [])],
+            "logs": [x for x in (assets.get("logs") or []) if path_exists(x)],
+            "raw": [x for x in (assets.get("raw") or []) if path_exists(x)],
+            "verified_at": max((r.get("verified_at", "") for r in p_ok), default=None),
+        })
+    for r in runs:
+        if r.get("platform") not in applicable:
+            warnings.append(
+                f"[{feat['id']}] 运行记录缺少有效 platform 标注（{r.get('platform')!r}），不计入任何平台状态")
+    return out
+
+
+def aggregate_status(feat: dict, verdicts: list[dict], impl_ok: list[str]) -> str:
+    """总体状态 = 平台状态 + 实现存在的纯函数；目录里不再允许手写状态。"""
+    if not impl_ok:
+        return "planned"
+    if not verdicts:
+        return "implemented"
+    statuses = [v["status"] for v in verdicts]
+    if all(s == "verified" for s in statuses):
+        return "verified"
+    if any(s in ("verified", "partial") for s in statuses):
+        return "partial"
+    return "implemented"
 
 
 def validate_feature(feat: dict, warnings: list[str]) -> dict:
@@ -159,41 +224,26 @@ def validate_feature(feat: dict, warnings: list[str]) -> dict:
                                   (logs, logs_ok, "日志"), (raw, raw_ok, "原始抓取")):
         warnings.extend(f"[{feat['id']}] {label}路径不存在: {p}" for p in paths if p not in present)
 
-    acceptance = accepted_runs(feat)
-    claimed = feat["status"]
-    final = claimed
-    reasons: list[str] = []
+    runs = reviewed_runs(feat)
+    verdicts = platform_verdicts(feat, runs, warnings)
+    final = aggregate_status(feat, verdicts, impl_ok)
+    if not feat.get("platforms"):
+        warnings.append(f"[{feat['id']}] 未声明适用平台，平台状态无法汇总")
 
-    def downgrade(to: str, reason: str) -> None:
-        nonlocal final
-        if STATUS_META[to]["rank"] < STATUS_META[final]["rank"]:
-            final = to
-            reasons.append(reason)
-
-    if claimed == "verified":
-        if not acceptance:
-            downgrade("partial", "缺少本项操作、结果及原图内容复核的实机验收记录")
-        if not impl_ok:
-            downgrade("partial", "缺少可验证的实现路径")
-        if not tests_ok:
-            downgrade("partial", "缺少自动化测试证据")
-        if not ci_ok:
-            downgrade("partial", "缺少 CI 门禁记录")
-    elif claimed == "partial":
-        if not impl_ok:
-            downgrade("implemented", "实现路径缺失或未合入")
-        elif not tests_ok and not shots_ok and not videos_ok:
-            downgrade("implemented", "既无自动化测试也无运行证据")
-    elif claimed == "implemented":
-        if not impl_ok:
-            downgrade("planned", "无任何已合入实现")
-    elif claimed == "planned":
-        if impl_ok:
-            warnings.append(f"[{feat['id']}] 声明为规划中但存在实现路径（仅警告，不自动升级）: {impl_ok[0]}")
+    # 被平台运行记录或平台资产声明引用的资产归入该平台；其余为「未标注平台」的补充资料。
+    attributed = {m["path"] for v in verdicts for m in v["media"]}
+    attributed |= {x for v in verdicts for x in (v["logs"] + v["raw"])}
+    unattributed = {
+        "screenshots": [p for p in shots_ok if p not in attributed],
+        "videos": [p for p in videos_ok if p not in attributed],
+        "logs": [p for p in logs_ok if p not in attributed],
+        "raw": [p for p in raw_ok if p not in attributed],
+    }
+    platformless_runs = [r for r in runs if r.get("platform") not in (feat.get("platforms") or [])]
 
     # 使用实现与测试的代码更新时间；不能据此认定运行验收时间。
     verified_at = last_commit(impl_ok + tests_ok)
-    accepted_at = max((r["verified_at"] for r in acceptance), default=None)
+    accepted_at = max((v["verified_at"] for v in verdicts if v["verified_at"]), default=None)
 
     commit_info = [{k: c.get(k, "") for k in ("sha", "subject", "date")}
                    for c in ev.get("commits", []) or []]
@@ -206,11 +256,17 @@ def validate_feature(feat: dict, warnings: list[str]) -> dict:
     return {
         **feat,
         "status": final,
-        "claimed_status": claimed,
-        "acceptance": acceptance,
+        "platform_status": [
+            {"id": v["id"], "name": v["name"], "status": v["status"],
+             "verified_at": v["verified_at"], "run_count": len(v["runs"]),
+             "accepted_count": len(v["accepted"])}
+            for v in verdicts
+        ],
+        "verdicts": verdicts,
+        "platformless_runs": platformless_runs,
+        "acceptance": [r for v in verdicts for r in v["accepted"]],
         "accepted_at": accepted_at,
-        "downgraded": final != claimed,
-        "downgrade_reasons": reasons,
+        "unattributed": unattributed,
         "evidence": {
             "runs": [p for p in ev.get("runs", []) if path_exists(p)],
             "review": ev.get("review"),
@@ -288,6 +344,11 @@ def build(repo_root_note: bool = True) -> tuple[dict, list[str], list[dict]]:
         for mod in dom["modules"]:
             feats_out = []
             for feat in mod["features"]:
+                if "status" in feat:
+                    # 硬守卫：总体状态只能由平台状态自动汇总，不接受目录里手写。
+                    raise SystemExit(
+                        f"目录 {feat['id']} 仍声明 status={feat['status']!r}；"
+                        "能力状态必须由平台实机验收记录自动汇总，禁止手写。")
                 enriched = validate_feature(feat, warnings)
                 featured = feat.get("featured", True) is not False
                 evidence_ref = feat.get("evidence_ref") or None
@@ -296,7 +357,7 @@ def build(repo_root_note: bool = True) -> tuple[dict, list[str], list[dict]]:
                     "featured": featured,
                     "evidence_ref": evidence_ref,
                     "evidence_ref_name": id_to_name.get(evidence_ref) if evidence_ref else None,
-                    "excluded": enriched["status"] in EXCLUDED_STATUSES,
+                    "excluded": bool(feat.get("cancelled")),
                 }
                 feats_out.append(enriched)
                 feature_index.append(
@@ -309,6 +370,7 @@ def build(repo_root_note: bool = True) -> tuple[dict, list[str], list[dict]]:
                         "module_id": mod["id"],
                         "module_name": mod["name"],
                         "platforms": enriched.get("platforms", []),
+                        "platform_status": enriched["platform_status"],
                         "summary": enriched.get("summary", ""),
                         "featured": featured,
                         "evidence_ref": evidence_ref,
@@ -325,7 +387,7 @@ def build(repo_root_note: bool = True) -> tuple[dict, list[str], list[dict]]:
         "schema_version": 1,
         "catalog_version": catalog.get("catalog_version", ""),
         "generated_at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
-        "principle": "No Evidence, No Claim：所有状态由构建脚本按仓库证据校验，证据缺失自动降级。",
+        "principle": "No Evidence, No Claim：总体状态由各平台实机验收记录自动汇总，目录不存放可手写的状态；缺证据的平台固定显示「待验证」。",
         "stats": stats,
         "product_version": load_product_version(),
         "platform_levels": load_platform_levels(),
@@ -346,6 +408,7 @@ def build(repo_root_note: bool = True) -> tuple[dict, list[str], list[dict]]:
                                 "name": f["name"],
                                 "status": f["status"],
                                 "platforms": f.get("platforms", []),
+                                "platform_status": f["platform_status"],
                                 "summary": f.get("summary", ""),
                                 "featured": f["featured"],
                                 "evidence_ref": f["evidence_ref"],
@@ -375,12 +438,25 @@ def compute_stats(domains_out: list[dict], feature_index: list[dict]) -> dict:
     for d in domains_out:
         for m in d["modules"]:
             for f in m["features"]:
-                if f["status"] == "verified" and f.get("accepted_at"):
-                    verified_times.append(f["accepted_at"])
+                # 记录最近一次「任一平台实机验收通过」的时间，而不是只有全平台通过才记。
+                for ps in f.get("platform_status", []):
+                    if ps.get("verified_at"):
+                        verified_times.append(ps["verified_at"])
     platform_counts: dict[str, int] = {}
     for f in active:
         for p in f["platforms"]:
             platform_counts[p] = platform_counts.get(p, 0) + 1
+    # 逐平台验证覆盖：每个平台有多少项适用能力、其中多少项已通过该平台实机验收。
+    platform_coverage: dict[str, dict] = {}
+    for f in active:
+        for ps in f.get("platform_status", []):
+            row = platform_coverage.setdefault(
+                ps["id"], {"applicable": 0, "verified": 0, "partial": 0, "pending": 0,
+                           "last_verified_at": None})
+            row["applicable"] += 1
+            row[ps["status"]] = row.get(ps["status"], 0) + 1
+            if ps.get("verified_at"):
+                row["last_verified_at"] = max(row["last_verified_at"] or "", ps["verified_at"])
     return {
         "total": len(active),
         "by_status": by_status,
@@ -390,13 +466,14 @@ def compute_stats(domains_out: list[dict], feature_index: list[dict]) -> dict:
         "verified_total": by_status["verified"],
         "last_verified_at": max(verified_times) if verified_times else None,
         "platform_counts": platform_counts,
+        "platform_coverage": platform_coverage,
         "completion": completion(active),
     }
 
 
 
 def css(href: str) -> str:
-    return f'<link rel="stylesheet" href="{href}?v=20260922a" />'
+    return f'<link rel="stylesheet" href="{href}?v=20260922b" />'
 
 
 def header_html(page_key: str, title_suffix: str, description: str, canonical: str) -> str:
@@ -589,6 +666,33 @@ def render_index(data: dict, domains_full: list[dict]) -> str:
         for k, desc in STATUS_LEGEND
     )
 
+    # 逐平台验证覆盖：平台无证据时也必须出现在页面上，显示为「待验证」，不隐藏。
+    cov = data["stats"].get("platform_coverage", {})
+    plat_rows = []
+    for pid, m in PLATFORM_META.items():
+        row = cov.get(pid)
+        if not row:
+            continue
+        plat_rows.append(
+            f'<tr><th scope="row">{esc(m)}</th>'
+            f'<td>{row["applicable"]}</td>'
+            f'<td><span class="cap-ps ps-verified">{row["verified"]}</span></td>'
+            f'<td><span class="cap-ps ps-partial">{row["partial"]}</span></td>'
+            f'<td><span class="cap-ps ps-pending">{row["pending"]}</span></td>'
+            f'<td>{esc(row.get("last_verified_at") or "—")}</td></tr>'
+        )
+    plat_table = (
+        '<section class="capm-panel capm-panel--platforms"><h2>各平台实机验收覆盖</h2>'
+        '<p class="capm-panel-note">平台状态只由该平台的实机验收记录产生；'
+        '没有任何实机验收记录的平台固定显示为「待验证」，不会因为其他平台通过而变绿。'
+        '代码与自动化测试不计入平台状态。</p>'
+        '<div class="cap-plat-table-wrap"><table class="cap-plat-table">'
+        '<thead><tr><th scope="col">平台</th><th scope="col">适用能力</th>'
+        '<th scope="col">已验证</th><th scope="col">部分验证</th><th scope="col">待验证</th>'
+        '<th scope="col">最近通过</th></tr></thead>'
+        f'<tbody>{"".join(plat_rows)}</tbody></table></div></section>'
+    )
+
     return f"""{header_html("capabilities", "产品能力中心", "XCMAX 产品能力矩阵：逐项公开实现与验证证据，点击任一功能查看实机截图或录像，所有数字由能力目录自动统计。", "/capabilities/")}
 <main>
   <section class="capm-hero">
@@ -637,9 +741,10 @@ def render_index(data: dict, domains_full: list[dict]) -> str:
         <section class="capm-panel capm-panel--progress">
           <h2>当前版本进度</h2>
           <div class="capm-progress-top"><div class="capm-bar capm-bar--lg"><span style="width:{s['completion']}%"></span></div><strong>{s['completion']}%</strong></div>
-          <p class="capm-panel-note">总体完成度按加权口径计算：已验证 100%、部分验证 70%、已实现待验证 40%、规划中 0%，按正式功能数加权（已取消功能已从总数与完成度中剔除）。截至 {esc(last_verified)}，共 {s['total']} 项正式功能、{s['modules']} 个模块、{s['domains']} 个产品域。</p>
+          <p class="capm-panel-note">总体完成度按加权口径计算：已验证 100%、部分验证 70%、已实现待验证 40%、规划中 0%，按正式功能数加权（已取消功能已从总数与完成度中剔除）。截至 {esc(last_verified or '—')}，共 {s['total']} 项正式功能、{s['modules']} 个模块、{s['domains']} 个产品域。</p>
           <ul class="capm-legend">{legend}</ul>
         </section>
+        {plat_table}
         <section class="capm-panel">
           <h2>主要问题与待验收项（Top 5）</h2>
           <ol class="capm-list">{pending_items}</ol>
@@ -743,11 +848,22 @@ def evidence_list(items: list[str], cls: str = "") -> str:
     return f'<ul class="cap-evidence-list">{lis}</ul>'
 
 
+def platform_chips(verdicts: list[dict]) -> str:
+    """适用平台固定全列，每个平台带自己的状态；缺证据的平台显示「待验证」，不隐藏。"""
+    out = []
+    for v in verdicts:
+        meta = PLATFORM_STATUS_META[v["status"]]
+        out.append(
+            f'<span class="cap-platform cap-platform--{esc(v["status"])}">'
+            f'{esc(v["name"])} · {meta["label"]}</span>'
+        )
+    return "".join(out)
+
+
 def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
     ev = f["evidence"]
-    run_results = [(p, json.loads(e(p).read_text(encoding="utf-8"))) for p in ev.get("runs", [])]
-    reviewed_media = {m["path"]: r["status"] for r in reviewed_runs(f) for m in r["media"]}
     review = json.loads(e(ev["review"]).read_text(encoding="utf-8")) if ev.get("review") else {}
+    verdicts = f["verdicts"]
     ref = f.get("evidence_ref")
     panel = ""
     if ref:
@@ -759,87 +875,165 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
             f'href="/capabilities/feature/{esc(ref)}.html">查看完整证据详情 →</a></p>'
             "</div>"
         )
-    downgrade_note = ""
-    if f["downgraded"]:
-        reasons = "；".join(f["downgrade_reasons"])
-        downgrade_note = (
-            f'<div class="cap-downgrade-note">机器校验：构建时声明状态为「{STATUS_META[f["claimed_status"]]["label"]}」，'
-            f"因{esc(reasons)}已自动降级为「{STATUS_META[f['status']]['label']}」。这就是 No Evidence, No Claim 的执行方式。</div>"
-        )
 
     def asset(fid: str, path: str) -> str:
         """证据资产在站点内的相对路径（构建时会把原始文件复制到 assets/evidence/）。"""
         return f"/capabilities/assets/evidence/{esc(fid + '-' + Path(path).name)}"
 
-    media_html, video_tags = "", []
-    for p in (p for p in ev.get("videos", []) if p in reviewed_media):
-        poster = f' poster="{asset(f["id"], ev["screenshots"][0])}"' if ev["screenshots"] and ev["screenshots"][0] in reviewed_media else ""
-        video_tags.append(
-            f'<figure class="cap-shot"><video controls preload="metadata"{poster} src="{asset(f["id"], p)}"></video>'
-            f"<figcaption>原图内容已复核，验收结果：{esc({'passed': '通过', 'failed': '失败'}[reviewed_media[p]])}（原始文件：{esc(p)}）</figcaption></figure>"
-        )
-    if video_tags:
-        media_html = (
-            '<div class="cap-evidence-media"><h3>实机录像 / 操作流程</h3>'
-            f'<div class="cap-shots">{"".join(video_tags)}</div></div>'
-        )
-
-    shots_html, shot_tags = "", []
-    for p in (p for p in ev["screenshots"] if p in reviewed_media):
-        src = asset(f["id"], p)
-        shot_tags.append(
-            f'<figure class="cap-shot"><a class="cap-shot-link" href="{src}" target="_blank" rel="noopener">'
-            f'<img src="{src}" alt="{esc(f["name"])} 已复核截图" loading="lazy" /></a>'
-            f"<figcaption>原图内容已复核，验收结果：{esc({'passed': '通过', 'failed': '失败'}[reviewed_media[p]])}（原始文件：{esc(p)}）</figcaption></figure>"
-        )
-    if shot_tags:
-        shots_html = (
-            '<div class="cap-evidence-media"><h3>截图资料与验收缺口</h3>'
-            f'<div class="cap-shots">{"".join(shot_tags)}</div></div>'
-        )
-    elif not media_html:
-        shots_html = (
-            '<div class="cap-evidence-media"><h3>截图资料与验收缺口</h3>'
-            '<p class="cap-evidence-note">本项尚无内容复核通过的独立实机截图或录像，'
-            '待补实际运行证据。下列源码与测试资料仅说明实现和测试覆盖，'
-            '不代表实机验收通过。</p></div>'
+    def run_lines(pairs: list[tuple[str, dict]]) -> str:
+        if not pairs:
+            return ""
+        return "".join(
+            f'<p class="cap-plat-run">运行记录：通过 {esc(r.get("passed", "见记录"))} / 失败 '
+            f'{esc(r.get("failed", "见记录"))}；产品版本 {esc(r.get("app_version", "见记录"))}；'
+            f'验证构建 {esc(r.get("source_sha", r.get("app_git_sha", ""))[:12])}；'
+            f'验证时间 {esc(r.get("verified_at", "见记录"))}。'
+            f'<a href="{asset(f["id"], p)}">查看本项操作结果与构建记录</a></p>'
+            for p, r in pairs
         )
 
-    # 本项运行日志：原文逐行展示（不重排、不裁剪），并给出可下载的原件路径。
-    logs_html, log_blocks = "", []
-    for p in ev.get("logs", []):
-        try:
-            text = e(p).read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
-        lines = text.count("\n") + (0 if text.endswith("\n") else 1)
-        log_blocks.append(
-            f'<div class="cap-evidence-block"><h3>本项运行日志</h3>'
-            f'<pre class="cap-log">{esc(text.rstrip())}</pre>'
-            f'<p class="cap-evidence-note">共 {lines} 行，原文未改动。'
-            f'下载原件：<a href="{asset(f["id"], p)}">{esc(Path(p).name)}</a>'
-            f'（仓库路径：{esc(p)}）</p></div>'
-        )
-    if log_blocks:
-        logs_html = "".join(log_blocks)
+    def media_figs(media: list[dict]) -> str:
+        """按运行记录绑定的媒体渲染；仅渲染已复核且哈希一致的条目。
 
-    # 原始抓取：逐条原始产物的可核对副本（凭据值已脱敏，其余逐字保留）。
-    raw_html = ""
-    for p in ev.get("raw", []):
-        try:
-            doc = json.loads(e(p).read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            continue
-        red = doc.get("_redaction", {}) or {}
-        originals = red.get("originals", []) or []
-        names = "、".join(esc(o.get("name", "")) for o in originals) or "见文件"
-        raw_html = (
-            '<div class="cap-evidence-block"><h3>原始抓取（脱敏）</h3>'
-            f'<p>逐条原始产物汇编：{names}。'
-            f'{esc(red.get("policy", "凭据值已脱敏，其余内容逐字保留。"))}'
-            f'未经脱敏的原件留在操作机，逐件 sha256 记录在文件内。</p>'
-            f'<p class="cap-evidence-note"><a href="{asset(f["id"], p)}">'
-            f'查看逐条原始抓取与原件 sha256 →</a>（仓库路径：{esc(p)}）</p></div>'
+        `outcome` 由调用方给出：只有绑定到平台验收记录的媒体才允许写「通过/失败」；
+        未绑定平台的资料只写「资料收录」，不冒充验收结论。
+        """
+        videos, shots = [], []
+        for m in media:
+            p = m["path"]
+            src = asset(f["id"], p)
+            outcome = esc(m.get("outcome") or "资料收录")
+            cap = (f"原图内容已复核，{outcome}"
+                   f"（原始文件：{esc(p)}）")
+            suffix = Path(p).suffix.lower()
+            if suffix in (".mp4", ".webm", ".mov"):
+                videos.append(
+                    f'<figure class="cap-shot"><video controls preload="metadata" '
+                    f'playsinline src="{src}"></video><figcaption>{cap}</figcaption></figure>')
+            else:
+                shots.append(
+                    f'<figure class="cap-shot"><a class="cap-shot-link" href="{src}" '
+                    f'target="_blank" rel="noopener"><img src="{src}" '
+                    f'alt="{esc(f["name"])} 已复核截图" loading="lazy" /></a>'
+                    f'<figcaption>{cap}</figcaption></figure>')
+        out = ""
+        if videos:
+            out += ('<div class="cap-evidence-media"><h3>实机录像 / 操作流程</h3>'
+                    f'<div class="cap-shots">{"".join(videos)}</div></div>')
+        if shots:
+            out += ('<div class="cap-evidence-media"><h3>实机截图</h3>'
+                    f'<div class="cap-shots">{"".join(shots)}</div></div>')
+        return out
+
+    def log_blocks(paths: list[str]) -> str:
+        """运行日志：原文逐行展示（不重排、不裁剪），并给出可下载的原件路径。"""
+        out = []
+        for p in paths:
+            try:
+                text = e(p).read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            lines = text.count("\n") + (0 if text.endswith("\n") else 1)
+            out.append(
+                f'<div class="cap-evidence-block"><h3>本项运行日志</h3>'
+                f'<pre class="cap-log">{esc(text.rstrip())}</pre>'
+                f'<p class="cap-evidence-note">共 {lines} 行，原文未改动。'
+                f'下载原件：<a href="{asset(f["id"], p)}">{esc(Path(p).name)}</a>'
+                f'（仓库路径：{esc(p)}）</p></div>'
+            )
+        return "".join(out)
+
+    def raw_block(paths: list[str]) -> str:
+        """原始抓取：逐条原始产物的可核对副本（凭据值已脱敏，其余逐字保留）。"""
+        out = []
+        for p in paths:
+            try:
+                doc = json.loads(e(p).read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            red = doc.get("_redaction", {}) or {}
+            originals = red.get("originals", []) or []
+            names = "、".join(esc(o.get("name", "")) for o in originals) or "见文件"
+            out.append(
+                '<div class="cap-evidence-block"><h3>原始抓取（脱敏）</h3>'
+                f'<p>逐条原始产物汇编：{names}。'
+                f'{esc(red.get("policy", "凭据值已脱敏，其余内容逐字保留。"))}'
+                f'未经脱敏的原件留在操作机，逐件 sha256 记录在文件内。</p>'
+                f'<p class="cap-evidence-note"><a href="{asset(f["id"], p)}">'
+                f'查看逐条原始抓取与原件 sha256 →</a>（仓库路径：{esc(p)}）</p></div>'
+            )
+        return "".join(out)
+
+    # 逐平台区块：平台清单固定，状态与证据都挂在自己的平台上。
+    plat_sections = []
+    verified_plats = [v["name"] for v in verdicts if v["status"] == "verified"]
+    pending_plats = [v["name"] for v in verdicts if v["status"] == "pending"]
+    for v in verdicts:
+        meta = PLATFORM_STATUS_META[v["status"]]
+        if v["status"] == "pending":
+            body = (
+                '<p class="cap-plat-note">该平台尚无实机验收记录。平台状态只由该平台的实机验收产生，'
+                '代码与自动化测试不计入；本项在此平台保持「待验证」，不会因其他平台通过而变绿。</p>'
+            )
+        else:
+            pairs = [(p, json.loads(e(p).read_text(encoding="utf-8")))
+                     for p in ev.get("runs", []) if path_exists(p)
+                     and json.loads(e(p).read_text(encoding="utf-8")).get("platform") == v["id"]]
+            media = [{**m, "outcome": f"验收结果：{'通过' if r.get('status') == 'passed' else '失败'}"}
+                     for p, r in pairs for m in r.get("media", [])]
+            body = (run_lines(pairs) + media_figs(media)
+                    + log_blocks(v.get("logs", [])) + raw_block(v.get("raw", [])))
+        plat_sections.append(
+            f'<section class="cap-plat cap-plat--{esc(v["status"])}">'
+            f'<div class="cap-plat-head"><h3>{esc(v["name"])}</h3>'
+            f'<span class="cap-ps {meta["cls"]}">{meta["label"]}</span></div>{body}</section>'
+        )
+    plat_section = (
+        '<section class="section cap-plat-section"><div class="container">'
+        '<h2>平台验证状态</h2>'
+        '<p class="cap-section-note">本项适用于 '
+        f'{len(verdicts)} 个平台，逐平台独立判定：平台状态只由该平台的实机验收记录产生，'
+        '总体状态由平台状态自动汇总，目录与页面都不存放可手写的状态。</p>'
+        + "".join(plat_sections) + "</div></section>"
+    )
+
+    remarks = []
+    if verified_plats and pending_plats:
+        remarks.append(
+            f'当前仅在 {esc("、".join(verified_plats))} 通过实机验收；'
+            f'{esc("、".join(pending_plats))} 仍为「待验证」，因此总体状态不构成「已验证」。')
+    elif pending_plats and not verified_plats:
+        remarks.append(
+            f'本项在 {esc("、".join(pending_plats))} 上均无实机验收记录，'
+            '当前状态仅表示代码已合入，不代表任何平台验证通过。')
+    plat_remark = f'<p class="cap-section-note">{"".join(remarks)}</p>' if remarks else ""
+
+    # 未标注平台的历史资料：不参与任何平台状态。
+    un = f["unattributed"]
+    un_media = [{"path": p, "outcome": "资料收录（未绑定平台验收）"}
+                for k in ("screenshots", "videos") for p in un.get(k, [])]
+    un_html = ""
+    if un_media or un.get("logs") or un.get("raw"):
+        un_html = (
+            '<div class="cap-evidence-media"><h3>未标注平台的补充资料</h3>'
+            '<p class="cap-evidence-note">下列资料未绑定到具体平台，仅作实现与历史资料参考，'
+            '不计入任何平台状态，也不构成实机验收。</p>'
+            f'{media_figs(un_media)}{log_blocks(un.get("logs", []))}{raw_block(un.get("raw", []))}</div>'
+        )
+
+    platformless = f.get("platformless_runs", [])
+    pl_note = ""
+    if platformless:
+        items = "".join(
+            f'<li><code>{esc(r.get("feature", ""))}</code> — 状态 {esc(r.get("status", ""))}，'
+            f'验证时间 {esc(r.get("verified_at", ""))}，未标注平台，不计入平台状态</li>'
+            for r in platformless
+        )
+        pl_note = (
+            '<div class="cap-evidence-block"><h3>平台未标注的历史运行记录</h3>'
+            f'<ul class="cap-evidence-list">{items}</ul>'
+            '<p class="cap-evidence-note">这些记录采集时未写入平台字段，'
+            '因此不点亮任何平台；补齐平台标注后才会计入。</p></div>'
         )
 
     commits_html = evidence_list(
@@ -850,6 +1044,11 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
         "".join(f"<li>{esc(x)}</li>" for x in f.get("limitations", [])) or "<li>暂未记录</li>"
     )
     usage = f.get("usage", "") or "请联系我们获取演示或参阅关联文档。"
+    review_note = (
+        f'<p class="cap-section-note">图片内容复核（{esc(review.get("reviewed_at", "待补"))}，'
+        f'Mac {esc(review.get("app_version", "待补"))}）：{esc(review.get("visible_content", "尚无本项图片内容复核记录"))}</p>'
+        if review else ""
+    )
 
     return f"""{header_html("capabilities", f["name"], f"{f['name']}：{f.get('summary', '')}", f"/capabilities/feature/{f['id']}.html")}
 <main>
@@ -858,7 +1057,7 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
       <div>
         <span class="eyebrow">{esc(dom['name'])} / {esc(mod['name'])}</span>
         <h1>{esc(f['name'])}</h1>
-        <div class="cap-feature-meta">{status_badge(f['status'])}{platform_tags(f.get('platforms', []))}</div>
+        <div class="cap-feature-meta">{status_badge(f['status'])}{platform_chips(verdicts)}</div>
         <p>{esc(f.get('summary', ''))}</p>
       </div>
       <div class="page-hero-side"><p><a class="btn btn-secondary btn-sm" href="/capabilities/catalog.html?domain={esc(dom['id'])}">返回 {esc(dom['name'])}</a></p></div>
@@ -871,29 +1070,29 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
         <div class="cap-info-block"><h3>功能价值</h3><p>{esc(f.get('summary', ''))}</p></div>
         <div class="cap-info-block"><h3>使用方式</h3><p>{esc(usage)}</p></div>
         <div class="cap-info-block"><h3>所属模块</h3><p>{esc(dom['name'])} / {esc(mod['name'])}</p></div>
-        <div class="cap-info-block"><h3>支持平台</h3><p>{platform_tags(f.get('platforms', [])) or '—'}</p></div>
+        <div class="cap-info-block"><h3>适用平台</h3><p>{platform_chips(verdicts) or '—'}</p></div>
         <div class="cap-info-block"><h3>当前状态</h3><p>{status_badge(f['status'])}（相关代码更新时间：{esc(verified_time)}）</p></div>
         <div class="cap-info-block"><h3>已知限制</h3><ul class="cap-limitations">{limitations}</ul></div>
       </div>
       {panel}
-      {downgrade_note}
     </div>
   </section>
 
+  {plat_section}
+
   <section class="section cap-evidence-section">
     <div class="container">
-      <h2>技术验证资料</h2>
-      <p class="cap-section-note">图片内容复核（{esc(review.get("reviewed_at", "待补"))}，Mac {esc(review.get("app_version", "待补"))}）：{esc(review.get("visible_content", "尚无本项图片内容复核记录"))} {"本项完整实机验收尚未成立。" if not f["acceptance"] else "验收范围见本项运行记录。"}</p>
-      <p class="cap-section-note">待补资料：{esc("、".join(label for key, label in (("tests", "本项自动化测试"), ("ci", "CI 工作流"), ("screenshots", "本项实机截图"), ("videos", "本项操作录像")) if not ev.get(key)) or "已收录各类资料，验收结论仍需核对具体运行记录")}。测试文件和工作流定义不等于运行通过记录。</p>
-      <p class="cap-section-note">以下内容由构建脚本从当前仓库自动生成（生成于 {esc(data['generated_at'])}）。路径相对产品仓库根目录；未公开仓库的客户可向我们索取演示与审计说明。未复核的历史图片不展示为功能证据；已复核图片可点开原图，验收范围与构建版本以对应记录为准。</p>
+      <h2>实现与测试（平台无关）</h2>
+{plat_remark}
+{review_note}
+      <p class="cap-section-note">以下资料说明实现与测试覆盖，不代表任何平台的实机验收通过；平台状态请见上方「平台验证状态」。生成于 {esc(data['generated_at'])}。</p>
       <div class="cap-evidence-grid">
-        <div class="cap-evidence-block"><h3>实际测试运行记录</h3>{"".join(f'<p>运行记录：通过 {esc(r.get("passed", "见记录"))} / 失败 {esc(r.get("failed", "见记录"))}；产品版本 {esc(r.get("app_version", "见记录"))}；验证构建 {esc(r.get("source_sha", r.get("app_git_sha", ""))[:12])}；验证时间 {esc(r.get("verified_at", "见记录"))}。<a href="{asset(f["id"], p)}">查看本项操作结果与构建记录</a></p>' for p, r in run_results) or "<p>待补本项运行记录</p>"}</div>
         <div class="cap-evidence-block"><h3>源码实现</h3>{evidence_list(ev['impl'])}</div>
         <div class="cap-evidence-block"><h3>API 端点</h3>{evidence_list(ev.get('api', []))}</div>
         <div class="cap-evidence-block"><h3>自动化测试</h3>{evidence_list(ev['tests'])}<p class="cap-evidence-note">CI 门禁：{esc('、'.join(ev['ci']) if ev['ci'] else '待补本项 CI 证据')}</p></div>
         <div class="cap-evidence-block"><h3>CI 工作流定义</h3>{evidence_list(ev['ci'])}</div>
-        {media_html}
-        {shots_html}{logs_html}{raw_html}
+{pl_note}
+{un_html}
         <div class="cap-evidence-block"><h3>关联文档</h3>{evidence_list(ev['docs'])}</div>
         <div class="cap-evidence-block"><h3>关联实现 commit</h3>{commits_html}</div>
       </div>
@@ -901,7 +1100,6 @@ def render_feature(f: dict, dom: dict, mod: dict, data: dict) -> str:
   </section>
 </main>
 {footer_html()}"""
-
 
 
 _TS_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC")

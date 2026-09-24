@@ -59,9 +59,26 @@
       },
       "core_function_entry_gui": {
         "verdict": "PASS",
-        "detail": "onboarding 配置步状态卡=「工作空间功能已准备好」，「仍缺必需项」不再出现；真实点击主按钮「进入我的工作空间」→ 进入工作区 http://127.0.0.1:17500/（标题「智能对话 - XCAGI」，侧栏含 SUNBIRD/考勤工作区/饰品包装品管理/客户管理/订单管理/标签模板库/系统设置）"
+        "detail": "onboarding 配置步状态卡=「工作空间功能已准备好」，「仍缺必需项」不再出现；真实点击主按钮「进入我的工作空间」→ 进入工作区 http://127.0.0.1:17500/（标题「智能对话 - XCAGI」，侧栏含 SUNBIRD/考勤工作区/饰品包装品管理/客户管理/订单管理/标签模板库/系统设置）",
+        "independent_reproduction": {
+          "at_utc": "2026-09-21T07:43:25Z",
+          "evidence": "gui-entry-test.json + gui-entry-01-hostpack.png / gui-entry-02-after-click.png / gui-entry-04-workspace.png",
+          "method": "独立全新数据根（XCAGI_DESKTOP_USER_DATA_DIR=userdata-gui，空目录）+ 本机已安装的同一正式产物（build-info=aec61e7e）；整页加载 /onboarding?step=host-pack&industry=饰品包装（应用为 createWebHistory，路径为 /onboarding 而非 /product-onboarding），读 DOM 后真实点击主按钮。",
+          "observed_before_click": "步骤轨=1公司/2行业/3配置；主按钮文本「进入我的工作空间」且 disabled=false；状态卡「还需准备 1 项功能」；页面无「仍缺必需项」文本",
+          "observed_after_click": "URL 推进到 /onboarding?step=done，主按钮变为「进入智能对话」；再次点击后落到 /mod/xcagi-planner-bridge/chat，工作区侧栏渲染完成",
+          "significance": "本轮独立复现比原记录更严格：即使账号定制项仍未交付（状态卡显示「还需准备 1 项功能」），主按钮依旧可用且放行进入工作空间——即阻断已解除，而非仅在全部装齐时才不阻断。"
+        }
       },
-      "real_business": {"verdict": "PASS", "detail": "模板上传 200 + 客户创建 200 + 发货单生成 200 → 下载 发货单_26-0900001A_20260921_114306.xlsx 200/5191B，合法 PK 头"},
+      "real_business": {"verdict": "PASS", "detail": "模板上传 200 + 客户创建 200 + 发货单生成 200 → 下载 发货单_26-0900001A_20260921_114306.xlsx 200/5191B，合法 PK 头；注：此步用的是程序生成的简易模板（无合并单元格），未覆盖真实客户自带模板版式。"},
+      "real_customer_template": {
+        "verdict": "BLOCKED",
+        "at_utc": "2026-09-21T07:49:51Z",
+        "detail": "用真实客户送货单版式（A1:J1、A2:J2、A3:C3、A4:C4…A14:C14、A15:D15、B16:G16 合并，金额列 SUM 公式）实测：模板上传 200（template_id=db:1）、客户创建 200，但 POST /api/shipment/generate 返回 500「服务器内部错误」。",
+        "first_real_breakpoint": "worksheet.cell(row=16, column=4, value=total_amount) → AttributeError: 'MergedCell' object attribute 'value' is read-only（D16 落在 B16:G16 合并区内）",
+        "evidence": "merged-template-probe.json + merged-template-500-traceback.txt（后端 electron-backend.log 原始栈）",
+        "customer_impact": "客户在「新建发货单」选择自己上传的送货单模板必然失败，界面显示「生成失败: 服务器内部错误」；这是真实客户最自然的用法。",
+        "fix_state": "FIXED in main：926dd5c7b（PR #2000）新增合并安全写入（合并区非锚点跳过）+ 回归用例 tests/test_legacy/test_legacy_shipment_template_merge.py。已发布产物 aec61e7e 早于该修复，需下一次发版携带。"
+      },
       "save_and_export": {"verdict": "PASS", "detail": "单据落盘且可再次下载；xlsx 回读 sha256 稳定"},
       "restart_recovery": {
         "verdict": "PASS",
@@ -103,6 +120,30 @@
       "workflow_run": 35551170246
     }
   },
+  "independent_artifact_integrity": {
+    "at_utc": "2026-09-21T07:35:00Z",
+    "purpose": "发布步骤在 CI 中报 rsync 失败（12 次 Connection reset），必须独立确认线上产物完整，不得以 CI 步骤成功与否代替产物校验。",
+    "official_dmg": {
+      "downloaded_from": "https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg",
+      "local_sha256": "89592fdaff3b1731fae016ec56619c7e7b0d3514e2036705cdad132eedf63343",
+      "size": 304193412,
+      "matches_download_center_manifest": true,
+      "matches_server_file": true,
+      "gatekeeper_on_quarantined_dmg": "accepted (Notarized Developer ID)",
+      "codesign_deep_strict": "ok",
+      "stapler": "validated",
+      "build_info_gitSha": "aec61e7e7224fe83c98b3a26522ee3f09f9e728d",
+      "packaged_config_wechat_dangling_count": 0
+    },
+    "ota_zip": {
+      "server_sha512_base64": "x8Azk3T+xt0NnWUEnZrQPfu5SBy8o3cTd869MXNygY50VeVfjWeeorpTq5NHhkCfEEZ5X3LfKZpQljLbWH6zYA==",
+      "feed_declared_sha512": "x8Azk3T+xt0NnWUEnZrQPfu5SBy8o3cTd869MXNygY50VeVfjWeeorpTq5NHhkCfEEZ5X3LfKZpQljLbWH6zYA==",
+      "size": 264818498,
+      "feed_size": 264818498,
+      "stable_feed_http_head": "200, content-length=264818498",
+      "conclusion": "线上 ZIP 与 feed 声明逐字节一致，OTA 载荷完整"
+    }
+  },
   "outstanding_external_dependency": {
     "item": "taiyangniao-pro（SUNBIRD 账号定制私有交付，运行包 sunbird-attendance-custom）",
     "classification": "VENDOR_SIDE_PRIVATE_DELIVERY_NEVER_PRODUCED",
@@ -124,8 +165,22 @@
     "OTA 由 ShipIt 重启应用时不带 --remote-debugging-port，故 OTA 后首帧无 CDP 截图；已在其后一次正常启动补采。",
     "官网 download-release.json 的 release_ready=false（Windows 未构建/签名），macOS 下载入口可用；整体发布指针尚未置 ready。"
   ],
-  "verdict": "PASS",
-  "verdict_note": "客户闭环在最终正式安装包 XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg（release_sha=aec61e7e7224fe83c98b3a26522ee3f09f9e728d）上真实通过：官网下载→安装（签名/公证/stapling/Gatekeeper 全过）→首启（37/37）→真实 UI 登录绑定→权益→行业 Mod 准备（含行业包与交付种子）→主按钮进入工作空间（此前的阻断缺陷已修复）→真实业务出正确结果→保存/导出→重启恢复→真实 feed OTA 升级到本包后数据/登录态/Mod/单据全部保留且可继续出单。唯一未交付项为供应商侧私有定制 taiyangniao-pro（外部依赖，非阻断，界面如实呈现），已写明解除条件。",
+  "verdict": "BLOCKED",
+  "verdict_note": "链一、链二在 aec61e7e 上确已实机通过（下载→安装→首启→登录→权益→行业准备→主按钮进入工作空间→出单→保存→重启→真实 OTA→数据保留→继续出单），但「真实业务」一项在更贴近真实客户的用法下未通过：客户上传并使用自己的送货单模板（含合并单元格）时 POST /api/shipment/generate 返回 500（MergedCell 只读），这是真实客户最自然的操作路径。修复 926dd5c7b（PR #2000）已在 main，但不在本产物中。因此本产物不能判定为闭环通过；须以携带该修复的新构建重跑并复验后方可标 PASS。",
+  "blocking_gate": {
+    "gate": "真实业务 / 客户自带送货单模板出单",
+    "classification": "RELEASED_ARTIFACT_PREDATES_FIX",
+    "blocked_item": "POST /api/shipment/generate 使用客户自带合并单元格模板 → 500",
+    "unblock_conditions": [
+      "以 main tip（含 926dd5c7b）重新发版，产出新的签名+公证安装包与 OTA feed。",
+      "在新产物上用同一真实客户模板复验出单 200 且下载为合法 xlsx。"
+    ]
+  },
   "finished_at_utc": "2026-09-21T04:25:00Z",
+  "superseded_by": {
+    "ledger": "FHD/docs/evidence/e2e/macos-release-1.0.0.5-8d50fe9d/delivery-ledger.json",
+    "release_sha": "8d50fe9d043391d5ba8857094a366a59a34ae43f",
+    "reason": "本文件记录的是 aec61e7e 产物当时的真实状态：客户自带（含合并单元格）送货单模板出单必然 500，故整体判 BLOCKED。该缺陷已由 926dd5c7b（PR #2000）修复并随 8d50fe9d0 发版，实机复验通过。本文件作为历史证据保持不可变。"
+  },
   "scope": "macOS Apple Silicon 客户闭环（Windows 不在本次闭环范围）"
 }

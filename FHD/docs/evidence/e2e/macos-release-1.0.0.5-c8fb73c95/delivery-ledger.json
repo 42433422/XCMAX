@@ -222,5 +222,10 @@
     }
   },
   "finished_at_utc": "2026-09-21T05:20:00+00:00",
+  "superseded_by": {
+    "ledger": "FHD/docs/evidence/e2e/macos-release-1.0.0.5-aec61e7e/delivery-ledger.json",
+    "release_sha": "aec61e7e7224fe83c98b3a26522ee3f09f9e728d",
+    "reason": "本文件记录的是 c8fb73c9 产物当时的真实状态（核心功能加载门 BLOCKED）。该断点已在 aec61e7e7 产物上修复并实机复验通过（主按钮放行进入工作空间）。本文件作为历史证据保持不可变，不代表当前发布状态。"
+  },
   "scope": "macOS Apple Silicon 客户闭环（Windows 不在本次闭环范围）"
 }

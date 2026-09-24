@@ -57,7 +57,6 @@
             {
               "id": "base-login",
               "name": "登录与会话管理",
-              "status": "verified",
               "summary": "企业统一的账号登录、会话保持与安全退出，桌面端与 Web 端共用同一套账户体系。",
               "usage": "安装后首次启动输入企业分配的账号即可登录；会话由服务端统一管理。",
               "platforms": ["windows", "macos", "web"],
@@ -78,13 +77,15 @@
                   "FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/macos/05c-gui-logout-operation-web.mp4"],
                 "logs": ["FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/macos/run.log"],
                 "raw": ["FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/base-login-macos-raw-redacted.json"],
+                "platform_assets": {"macos": {
+                  "logs": ["FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/macos/run.log"],
+                  "raw": ["FHD/docs/evidence/e2e/feature-acceptance-20260922/base-login/base-login-macos-raw-redacted.json"]}},
                 "commits": []
               }
             },
             {
               "id": "base-rbac",
               "name": "权限与角色控制（RBAC）",
-              "status": "partial",
               "summary": "按角色分配功能与数据权限，管理员、业务员工各见其职，降低误操作与越权风险。",
               "usage": "管理员在管理后台为员工分配角色；业务页面按角色自动显隐。",
               "platforms": ["windows", "macos", "web"],
@@ -99,11 +100,11 @@
                 "commits": []
               }
             },
-            {"id":"base-win-client","name":"Windows 桌面客户端","status":"implemented","platforms":["windows"],"featured":false,"evidence_ref":"dt-shell","summary":"Windows 桌面安装包与客户端外壳。","evidence":{"impl":["FHD/desktop"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"base-mac-client","name":"macOS 桌面客户端","status":"implemented","platforms":["macos"],"featured":false,"evidence_ref":"dt-shell","summary":"macOS 桌面安装包与客户端外壳。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/base-mac-client-visual-review.json", "impl":["FHD/desktop"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"base-web-admin","name":"Web 管理端（自托管）","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"ops-admin-console","summary":"浏览器访问的自托管管理端界面。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/base-web-admin-visual-review.json", "impl":["FHD/frontend"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"base-register","name":"账户注册与找回","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"base-login","summary":"账号注册、找回密码与账号找回流程。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/base-register-visual-review.json", "impl":["FHD/app/application/account_registration.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"base-account-security","name":"账户安全与锁定","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"base-login","summary":"登录失败锁定、账号安全策略与凭证校验。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/base-account-security-visual-review.json", "runs":["FHD/docs/evidence/e2e/product-center-20260919/base-account-security.json"],"impl":["FHD/app/application/account_security.py"],"api":[],"tests":["FHD/tests/test_application/test_account_security.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
+            {"id":"base-win-client","name":"Windows 桌面客户端","platforms":["windows"],"featured":false,"evidence_ref":"dt-shell","summary":"Windows 桌面安装包与客户端外壳。","evidence":{"impl":["FHD/desktop"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"base-mac-client","name":"macOS 桌面客户端","platforms":["macos"],"featured":false,"evidence_ref":"dt-shell","summary":"macOS 桌面安装包与客户端外壳。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/base-mac-client-visual-review.json", "impl":["FHD/desktop"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"base-web-admin","name":"Web 管理端（自托管）","platforms":["web"],"featured":false,"evidence_ref":"ops-admin-console","summary":"浏览器访问的自托管管理端界面。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/base-web-admin-visual-review.json", "impl":["FHD/frontend"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"base-register","name":"账户注册与找回","platforms":["web"],"featured":false,"evidence_ref":"base-login","summary":"账号注册、找回密码与账号找回流程。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/base-register-visual-review.json", "impl":["FHD/app/application/account_registration.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"base-account-security","name":"账户安全与锁定","platforms":["web"],"featured":false,"evidence_ref":"base-login","summary":"登录失败锁定、账号安全策略与凭证校验。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/base-account-security-visual-review.json", "runs":["FHD/docs/evidence/e2e/product-center-20260919/base-account-security.json"],"impl":["FHD/app/application/account_security.py"],"api":[],"tests":["FHD/tests/test_application/test_account_security.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -113,7 +114,6 @@
             {
               "id": "base-edition-pack",
               "name": "三档部署形态（minimal / generic / full）",
-              "status": "partial",
               "summary": "同一套系统可按需裁剪为空壳对话版、通用行业版或完整 ERP 版，适配不同规模客户的落地节奏。",
               "usage": "构建时选择 edition，或在已安装环境通过 Mod 市场一键装包切换。",
               "platforms": ["windows", "macos", "web"],
@@ -128,8 +128,8 @@
                 "commits": []
               }
             },
-            {"id":"base-install-guide","name":"安装部署与初始化引导","status":"implemented","platforms":["windows","macos"],"featured":false,"evidence_ref":"base-edition-pack","summary":"安装、首次启动初始化与部署引导。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/base-install-guide-visual-review.json", "impl":["FHD/app/desktop_runtime"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"base-device-bind","name":"设备绑定与配对授权","status":"implemented","platforms":["windows","macos","android"],"featured":false,"evidence_ref":"pay-lan","summary":"移动端与桌面端的设备配对与授权。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/base-device-bind-visual-review.json", "impl":["FHD/app/services/mobile_relay_pairing.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
+            {"id":"base-install-guide","name":"安装部署与初始化引导","platforms":["windows","macos"],"featured":false,"evidence_ref":"base-edition-pack","summary":"安装、首次启动初始化与部署引导。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/base-install-guide-visual-review.json", "impl":["FHD/app/desktop_runtime"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"base-device-bind","name":"设备绑定与配对授权","platforms":["windows","macos","android"],"featured":false,"evidence_ref":"pay-lan","summary":"移动端与桌面端的设备配对与授权。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/base-device-bind-visual-review.json", "impl":["FHD/app/services/mobile_relay_pairing.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -139,7 +139,6 @@
             {
               "id": "base-health",
               "name": "服务健康探针",
-              "status": "verified",
               "summary": "持续自检服务与数据库状态，运维与监控可直接对接；内部实测健康接口 P50 响应约 11ms。",
               "usage": "监控系统按固定间隔请求健康接口即可；桌面壳依赖其判断后端就绪。",
               "platforms": ["windows", "macos", "web"],
@@ -157,7 +156,6 @@
             {
               "id": "base-db",
               "name": "数据库 WAL 与自恢复",
-              "status": "implemented",
               "summary": "桌面端数据库启用 WAL 日志与自动检查点，断电等异常后启动时自动体检，损坏时自动从最近有效备份恢复。",
               "usage": "默认启用，无需配置；备份脚本位于仓库 scripts/backup/。",
               "platforms": ["windows", "macos"],
@@ -172,11 +170,11 @@
                 "commits": []
               }
             },
-            {"id":"base-config","name":"数据目录与配置管理","status":"implemented","platforms":["windows","macos"],"featured":false,"evidence_ref":"base-edition-pack","summary":"运行数据目录与部署配置的读写管理。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/base-config-visual-review.json", "impl":["FHD/app/desktop_runtime/deployment_modes.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"base-update-mgmt","name":"版本与更新管理","status":"implemented","platforms":["windows","macos"],"featured":false,"evidence_ref":"dt-ota","summary":"版本比对、更新拉取与发布推送链路。","evidence":{"review":"FHD/docs/evidence/e2e/macos-acceptance-20260920/base-update-mgmt-run.json","impl":["FHD/frontend/src/composables/settings/useSettingsBasics.ts","FHD/app/application/enterprise_deploy_pull.py","FHD/app/application/admin_deploy_push.py"],"api":[],"tests":["FHD/frontend/src/views/SettingsView.enhanced.test.ts"],"ci":[],"docs":[],"screenshots":["FHD/docs/evidence/e2e/macos-acceptance-20260920/12-about-version-mismatch.png"],"commits":[],"runs":["FHD/docs/evidence/e2e/macos-acceptance-20260920/base-update-mgmt-run.json"]}},
-            {"id":"base-settings","name":"系统设置与偏好","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"base-health","summary":"工作区级设置与用户偏好项。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/base-settings-visual-review.json", "runs":["FHD/docs/evidence/e2e/product-center-20260919/base-settings.json"],"impl":["FHD/app/fastapi_routes/workspace_prefs_routes.py"],"api":[],"tests":["FHD/tests/test_routes/test_workspace_prefs_routes.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"base-diagnostics","name":"日志与诊断","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"base-health","summary":"客户端日志上报与诊断排查入口。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/base-diagnostics-visual-review.json", "impl":["FHD/app/fastapi_routes/debug_client_log.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"base-help","name":"帮助与教程","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"base-login","summary":"内置新手引导与帮助文档入口。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/base-help-visual-review.json", "runs":["FHD/docs/evidence/e2e/product-center-20260919/base-help.json"],"impl":["FHD/app/fastapi_routes/tutorial_v2.py"],"api":[],"tests":["FHD/tests/test_services/test_tutorial_v2.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
+            {"id":"base-config","name":"数据目录与配置管理","platforms":["windows","macos"],"featured":false,"evidence_ref":"base-edition-pack","summary":"运行数据目录与部署配置的读写管理。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/base-config-visual-review.json", "impl":["FHD/app/desktop_runtime/deployment_modes.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"base-update-mgmt","name":"版本与更新管理","platforms":["windows","macos"],"featured":false,"evidence_ref":"dt-ota","summary":"版本比对、更新拉取与发布推送链路。","evidence":{"review":"FHD/docs/evidence/e2e/macos-acceptance-20260920/base-update-mgmt-run.json","impl":["FHD/frontend/src/composables/settings/useSettingsBasics.ts","FHD/app/application/enterprise_deploy_pull.py","FHD/app/application/admin_deploy_push.py"],"api":[],"tests":["FHD/frontend/src/views/SettingsView.enhanced.test.ts"],"ci":[],"docs":[],"screenshots":["FHD/docs/evidence/e2e/macos-acceptance-20260920/12-about-version-mismatch.png"],"commits":[],"runs":["FHD/docs/evidence/e2e/macos-acceptance-20260920/base-update-mgmt-run.json"]}},
+            {"id":"base-settings","name":"系统设置与偏好","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"base-health","summary":"工作区级设置与用户偏好项。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/base-settings-visual-review.json", "runs":["FHD/docs/evidence/e2e/product-center-20260919/base-settings.json"],"impl":["FHD/app/fastapi_routes/workspace_prefs_routes.py"],"api":[],"tests":["FHD/tests/test_routes/test_workspace_prefs_routes.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"base-diagnostics","name":"日志与诊断","platforms":["web"],"featured":false,"evidence_ref":"base-health","summary":"客户端日志上报与诊断排查入口。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/base-diagnostics-visual-review.json", "impl":["FHD/app/fastapi_routes/debug_client_log.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"base-help","name":"帮助与教程","platforms":["web"],"featured":false,"evidence_ref":"base-login","summary":"内置新手引导与帮助文档入口。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/base-help-visual-review.json", "runs":["FHD/docs/evidence/e2e/product-center-20260919/base-help.json"],"impl":["FHD/app/fastapi_routes/tutorial_v2.py"],"api":[],"tests":["FHD/tests/test_services/test_tutorial_v2.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         }
       ]
@@ -193,7 +191,6 @@
             {
               "id": "ai-chat-core",
               "name": "多轮智能对话（流式）",
-              "status": "verified",
               "summary": "员工与 AI 助手的多轮对话，支持流式输出、任务上下文与工具调用，是整个平台的主交互入口。",
               "usage": "登录后进入「智能对话」即可发起对话；移动端与桌面端体验一致。",
               "platforms": ["windows", "macos", "web", "android"],
@@ -203,17 +200,16 @@
             {
               "id": "ai-intent",
               "name": "意图识别与工具路由",
-              "status": "partial",
               "summary": "规则引擎 + 模型混合的意图识别，把自然语言请求路由到正确的业务工具；配套基准测试流水线防止识别质量回退。",
               "usage": "对话中直接说需求即可；企业可在配置中扩展行业词条。",
               "platforms": ["windows", "macos", "web"],
               "limitations": ["生僻表达依赖模型兜底，误判时会回退到人工操作路径"],
               "evidence": {"review": "FHD/docs/evidence/e2e/macos-acceptance-20260920/ai-intent-run.json", "impl": ["FHD/app/fastapi_routes/ai_intent.py", "FHD/app/ai_engines/deepseek/intent_service.py", "FHD/resources/config/intent_config.yaml", "FHD/app/domain/services/conversation/chat_tool_intent.py", "FHD/frontend/src/composables/useChatPersistence.ts"], "api": [], "tests": ["FHD/tests/test_application/test_negated_request_no_write_plan.py", "FHD/frontend/src/composables/useChatPersistence.coverage.test.ts"], "ci": ["FHD/.github/workflows/intent-benchmark.yml"], "docs": [], "screenshots": ["FHD/docs/evidence/capabilities/ai-intent-01-planner-tools.png", "FHD/docs/evidence/e2e/macos-acceptance-20260920/03-product-exists.png", "FHD/docs/evidence/e2e/macos-acceptance-20260920/05-query-failure-visible.png"], "commits": [], "runs": ["FHD/docs/evidence/e2e/macos-acceptance-20260920/ai-intent-run.json"]}
             },
-            {"id":"ai-task-workspace","name":"任务工作区与多步骤规划","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ai-chat-core","summary":"对话式任务工作区与多步骤任务编排。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-task-workspace-visual-review.json", "impl":["FHD/app/application/agent_orchestrator"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"ai-model-access","name":"模型接入与使用计费","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"ai-chat-core","summary":"模型服务接入、调用与用量计费口径。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-model-access-visual-review.json", "impl":["FHD/app/services/conversation/llm_adapter.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"ai-chat-debug","name":"对话调试与工具路由","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"ai-intent","summary":"对话调试台与工具调用路由。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-chat-debug-visual-review.json", "impl":["FHD/app/fastapi_routes/tools_execute.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"ai-multimodal","name":"多模态（文本 / 图像 / 语音）","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"ai-tts","summary":"文本、图像与语音的多模态输入输出。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-multimodal-visual-review.json", "impl":["FHD/app/services/conversation"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
+            {"id":"ai-task-workspace","name":"任务工作区与多步骤规划","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ai-chat-core","summary":"对话式任务工作区与多步骤任务编排。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-task-workspace-visual-review.json", "impl":["FHD/app/application/agent_orchestrator"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ai-model-access","name":"模型接入与使用计费","platforms":["web"],"featured":false,"evidence_ref":"ai-chat-core","summary":"模型服务接入、调用与用量计费口径。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-model-access-visual-review.json", "impl":["FHD/app/services/conversation/llm_adapter.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ai-chat-debug","name":"对话调试与工具路由","platforms":["web"],"featured":false,"evidence_ref":"ai-intent","summary":"对话调试台与工具调用路由。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-chat-debug-visual-review.json", "impl":["FHD/app/fastapi_routes/tools_execute.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ai-multimodal","name":"多模态（文本 / 图像 / 语音）","platforms":["web"],"featured":false,"evidence_ref":"ai-tts","summary":"文本、图像与语音的多模态输入输出。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-multimodal-visual-review.json", "impl":["FHD/app/services/conversation"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -223,7 +219,6 @@
             {
               "id": "ai-employees-workflow",
               "name": "工作流员工（数字员工编排）",
-              "status": "verified",
               "summary": "把重复业务流程编排成可分工的 AI 数字员工，多步骤任务自动执行、可分配、可监督。",
               "usage": "在员工工作台选择或创建员工，指派任务后自动执行并回执。",
               "platforms": ["windows", "macos", "web"],
@@ -241,7 +236,6 @@
             {
               "id": "ai-employee-pack",
               "name": "办公员工包",
-              "status": "implemented",
               "summary": "面向通用办公场景的员工扩展包，作为 Mod 生态的「家具」按需安装。",
               "usage": "在 Mod 市场安装办公员工包后，员工出现在工作台。",
               "platforms": ["windows", "macos", "web"],
@@ -256,10 +250,10 @@
                 "commits": []
               }
             },
-            {"id":"ai-employee-runtime","name":"员工空间与执行调度","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"ai-employees-workflow","summary":"数字员工运行空间与任务调度。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-employee-runtime-visual-review.json", "impl":["FHD/app/application/agent_runtime"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"ai-eskill","name":"工作流编排与 ESkill 制作","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"ai-employees-workflow","summary":"工作流定义与 ESkill 技能编排。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-eskill-visual-review.json", "impl":["FHD/app/fastapi_routes/workflow_definitions.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"ai-employee-publish","name":"员工打包与发布","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"ai-employee-pack","summary":"员工包打包与发布流程。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-employee-publish-visual-review.json", "impl":["FHD/app/fastapi_routes/workflow_definitions.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"ai-run-monitor","name":"运行监测与任务历史","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"ai-employees-workflow","summary":"任务运行状态与历史回执。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-run-monitor-visual-review.json", "runs":["FHD/docs/evidence/e2e/product-center-20260919/ai-run-monitor.json"],"impl":["FHD/app/services/task_context_service.py"],"api":[],"tests":["FHD/tests/test_services/test_task_context_service.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
+            {"id":"ai-employee-runtime","name":"员工空间与执行调度","platforms":["web"],"featured":false,"evidence_ref":"ai-employees-workflow","summary":"数字员工运行空间与任务调度。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-employee-runtime-visual-review.json", "impl":["FHD/app/application/agent_runtime"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ai-eskill","name":"工作流编排与 ESkill 制作","platforms":["web"],"featured":false,"evidence_ref":"ai-employees-workflow","summary":"工作流定义与 ESkill 技能编排。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-eskill-visual-review.json", "impl":["FHD/app/fastapi_routes/workflow_definitions.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ai-employee-publish","name":"员工打包与发布","platforms":["web"],"featured":false,"evidence_ref":"ai-employee-pack","summary":"员工包打包与发布流程。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-employee-publish-visual-review.json", "impl":["FHD/app/fastapi_routes/workflow_definitions.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ai-run-monitor","name":"运行监测与任务历史","platforms":["web"],"featured":false,"evidence_ref":"ai-employees-workflow","summary":"任务运行状态与历史回执。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-run-monitor-visual-review.json", "runs":["FHD/docs/evidence/e2e/product-center-20260919/ai-run-monitor.json"],"impl":["FHD/app/services/task_context_service.py"],"api":[],"tests":["FHD/tests/test_services/test_task_context_service.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -269,7 +263,6 @@
             {
               "id": "ai-excel",
               "name": "Excel 生成与解析",
-              "status": "implemented",
               "summary": "对话中直接让 AI 员工读取、生成 Excel，覆盖出货单、价格表等常见单据场景。",
               "usage": "对话中上传或指定表格文件，用自然语言提出处理要求。",
               "platforms": ["windows", "macos", "web"],
@@ -287,7 +280,6 @@
             {
               "id": "ai-tts",
               "name": "语音合成与播报（TTS）",
-              "status": "implemented",
               "summary": "AI 员工回复可转为语音播报，支持安装本地语音模型，适合车间、门店等免手持场景。",
               "usage": "在对话设置中开启语音播报；管理员可安装本地语音模型。",
               "platforms": ["windows", "macos", "web"],
@@ -305,7 +297,6 @@
             {
               "id": "ai-knowledge",
               "name": "知识库与向量检索",
-              "status": "implemented",
               "summary": "把企业文档、表格沉淀为可检索知识库，AI 员工回答时自动引用企业自己的资料。",
               "usage": "管理员上传文档至知识库；对话中自动召回相关内容。",
               "platforms": ["windows", "macos", "web"],
@@ -320,12 +311,12 @@
                 "commits": []
               }
             },
-            {"id":"ai-csv","name":"CSV 生成与解析","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ai-excel","summary":"CSV 数据的生成与解析。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-csv-visual-review.json", "impl":["FHD/app/services/report_export.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"ai-pdf","name":"PDF 生成与解析","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ai-excel","summary":"PDF 文档生成与内容解析。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-pdf-visual-review.json", "impl":["FHD/app/services/document_templates_service.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"ai-ppt","name":"PPT 生成与解析","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ai-excel","summary":"演示文稿生成与解析。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-ppt-visual-review.json", "impl":["FHD/app/services/document_templates_service.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"ai-word","name":"Word 生成与解析","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ai-excel","summary":"Word 文档生成与解析。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-word-visual-review.json", "impl":["FHD/app/services/document_templates_service.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"ai-ocr-doc","name":"单据图像识别解析","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-ocr","summary":"单据图片的 OCR 结构化解析。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-ocr-doc-visual-review.json", "impl":["FHD/app/services/ocr_service.py","FHD/app/services/paddle_ocr_runner.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"ai-vector-rag","name":"知识库向量检索（RAG 工具链）","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"ai-knowledge","summary":"检索增强生成的工具链实现。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-vector-rag-visual-review.json", "impl":["FHD/app/services/tools_workflow_memory_rag.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
+            {"id":"ai-csv","name":"CSV 生成与解析","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ai-excel","summary":"CSV 数据的生成与解析。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-csv-visual-review.json", "impl":["FHD/app/services/report_export.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ai-pdf","name":"PDF 生成与解析","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ai-excel","summary":"PDF 文档生成与内容解析。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-pdf-visual-review.json", "impl":["FHD/app/services/document_templates_service.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ai-ppt","name":"PPT 生成与解析","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ai-excel","summary":"演示文稿生成与解析。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-ppt-visual-review.json", "impl":["FHD/app/services/document_templates_service.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ai-word","name":"Word 生成与解析","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ai-excel","summary":"Word 文档生成与解析。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-word-visual-review.json", "impl":["FHD/app/services/document_templates_service.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ai-ocr-doc","name":"单据图像识别解析","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-ocr","summary":"单据图片的 OCR 结构化解析。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-ocr-doc-visual-review.json", "impl":["FHD/app/services/ocr_service.py","FHD/app/services/paddle_ocr_runner.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ai-vector-rag","name":"知识库向量检索（RAG 工具链）","platforms":["web"],"featured":false,"evidence_ref":"ai-knowledge","summary":"检索增强生成的工具链实现。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-vector-rag-visual-review.json", "impl":["FHD/app/services/tools_workflow_memory_rag.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         }
       ]
@@ -342,7 +333,6 @@
             {
               "id": "erp-shipment",
               "name": "发货单与出货管理",
-              "status": "verified",
               "summary": "从销售订单到出货单、单据生成的一体化流程，支持产品解析校验与文档自动产出。",
               "usage": "业务员工在订单页创建发货单，系统自动生成单据并可打印。",
               "platforms": ["windows", "macos", "web"],
@@ -360,7 +350,6 @@
             {
               "id": "erp-purchase",
               "name": "采购管理",
-              "status": "implemented",
               "summary": "采购订单与供应商到货的业务记录能力，与库存、财务模块衔接。",
               "usage": "在采购页录入或由 AI 员工按对话指令创建采购单。",
               "platforms": ["windows", "macos", "web"],
@@ -378,7 +367,6 @@
             {
               "id": "erp-inventory",
               "name": "库存管理",
-              "status": "implemented",
               "summary": "多仓库、批次、调拨与预警的库存账目能力。",
               "usage": "在库存页查看与调整库存；预警规则按仓库配置。",
               "platforms": ["windows", "macos", "web"],
@@ -393,12 +381,12 @@
                 "commits": []
               }
             },
-            {"id":"erp-master-data","name":"产品 / 客户 / 供应商主数据","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-shipment","summary":"主数据的维护与变更。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-master-data-visual-review.json", "runs":["FHD/docs/evidence/e2e/product-center-20260919/erp-master-data.json"],"impl":["FHD/app/services/products_service.py","FHD/app/services/business_db_customer_mutations.py"],"api":[],"tests":["FHD/tests/test_services/test_products_service.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"erp-sales-order","name":"销售订单管理","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-shipment","summary":"销售订单创建与流转。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-sales-order-visual-review.json", "impl":["FHD/app/fastapi_routes/shipment_orders.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"erp-purchase-inbound","name":"采购入库管理","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-purchase","summary":"采购到货与入库登记。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-purchase-inbound-visual-review.json", "impl":["FHD/app/services/purchase_service.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"erp-inventory-warehouse","name":"仓库 / 库位 / 调拨 / 预警","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-inventory","summary":"多仓库存、库位、调拨与库存预警。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-inventory-warehouse-visual-review.json", "impl":["FHD/app/services/inventory_warehouses.py","FHD/app/services/inventory_movements.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"erp-replenishment","name":"库存补货建议","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-inventory","summary":"基于库存与消耗的补货建议。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-replenishment-visual-review.json", "runs":["FHD/docs/evidence/e2e/product-center-20260919/erp-replenishment.json"],"impl":["FHD/app/services/replenishment_service.py"],"api":[],"tests":["FHD/tests/test_services/test_replenishment_service.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"erp-uom","name":"计量单位管理","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-inventory","summary":"多计量单位与换算。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-uom-visual-review.json", "runs":["FHD/docs/evidence/e2e/product-center-20260919/erp-uom.json"],"impl":["FHD/app/services/uom_service.py"],"api":[],"tests":["FHD/tests/test_services/test_uom_service.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
+            {"id":"erp-master-data","name":"产品 / 客户 / 供应商主数据","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-shipment","summary":"主数据的维护与变更。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-master-data-visual-review.json", "runs":["FHD/docs/evidence/e2e/product-center-20260919/erp-master-data.json"],"impl":["FHD/app/services/products_service.py","FHD/app/services/business_db_customer_mutations.py"],"api":[],"tests":["FHD/tests/test_services/test_products_service.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"erp-sales-order","name":"销售订单管理","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-shipment","summary":"销售订单创建与流转。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-sales-order-visual-review.json", "impl":["FHD/app/fastapi_routes/shipment_orders.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"erp-purchase-inbound","name":"采购入库管理","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-purchase","summary":"采购到货与入库登记。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-purchase-inbound-visual-review.json", "impl":["FHD/app/services/purchase_service.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"erp-inventory-warehouse","name":"仓库 / 库位 / 调拨 / 预警","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-inventory","summary":"多仓库存、库位、调拨与库存预警。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-inventory-warehouse-visual-review.json", "impl":["FHD/app/services/inventory_warehouses.py","FHD/app/services/inventory_movements.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"erp-replenishment","name":"库存补货建议","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-inventory","summary":"基于库存与消耗的补货建议。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-replenishment-visual-review.json", "runs":["FHD/docs/evidence/e2e/product-center-20260919/erp-replenishment.json"],"impl":["FHD/app/services/replenishment_service.py"],"api":[],"tests":["FHD/tests/test_services/test_replenishment_service.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"erp-uom","name":"计量单位管理","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-inventory","summary":"多计量单位与换算。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-uom-visual-review.json", "runs":["FHD/docs/evidence/e2e/product-center-20260919/erp-uom.json"],"impl":["FHD/app/services/uom_service.py"],"api":[],"tests":["FHD/tests/test_services/test_uom_service.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -408,7 +396,6 @@
             {
               "id": "erp-finance-ledger",
               "name": "财务账本与发票",
-              "status": "implemented",
               "summary": "应收应付、统一账本与发票管理，业务单据自动生成财务记录。",
               "usage": "财务人员在账本页核对应收应付；发票随业务单据联动。",
               "platforms": ["windows", "macos", "web"],
@@ -423,10 +410,10 @@
                 "commits": []
               }
             },
-            {"id":"erp-ar-ap","name":"应收应付与毛利","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-finance-ledger","summary":"应收应付账目与毛利核算。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-ar-ap-visual-review.json", "impl":["FHD/app/services/accounting_services.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"erp-report","name":"价格表 / 报表 / 统计分析","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-finance-ledger","summary":"价格表、经营报表与统计分析。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-report-visual-review.json", "impl":["FHD/app/services/report_service.py","FHD/app/fastapi_routes/reports.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"erp-invoice","name":"发票与税务","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-finance-ledger","summary":"发票开具与税务信息处理。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-invoice-visual-review.json", "runs":["FHD/docs/evidence/e2e/product-center-20260919/erp-invoice.json"],"impl":["FHD/app/services/tax_invoice_provider.py"],"api":[],"tests":["FHD/tests/test_services/test_tax_invoice_provider.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"erp-reconcile","name":"经营对账与结算","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-finance-ledger","summary":"经营流水对账与结算。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-reconcile-visual-review.json", "runs":["FHD/docs/evidence/e2e/product-center-20260919/erp-reconcile.json"],"impl":["FHD/app/services/fhd_payment_reconciliation.py"],"api":[],"tests":["FHD/tests/test_services/test_fhd_payment_reconciliation.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
+            {"id":"erp-ar-ap","name":"应收应付与毛利","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-finance-ledger","summary":"应收应付账目与毛利核算。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-ar-ap-visual-review.json", "impl":["FHD/app/services/accounting_services.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"erp-report","name":"价格表 / 报表 / 统计分析","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-finance-ledger","summary":"价格表、经营报表与统计分析。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-report-visual-review.json", "impl":["FHD/app/services/report_service.py","FHD/app/fastapi_routes/reports.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"erp-invoice","name":"发票与税务","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-finance-ledger","summary":"发票开具与税务信息处理。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-invoice-visual-review.json", "runs":["FHD/docs/evidence/e2e/product-center-20260919/erp-invoice.json"],"impl":["FHD/app/services/tax_invoice_provider.py"],"api":[],"tests":["FHD/tests/test_services/test_tax_invoice_provider.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"erp-reconcile","name":"经营对账与结算","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-finance-ledger","summary":"经营流水对账与结算。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-reconcile-visual-review.json", "runs":["FHD/docs/evidence/e2e/product-center-20260919/erp-reconcile.json"],"impl":["FHD/app/services/fhd_payment_reconciliation.py"],"api":[],"tests":["FHD/tests/test_services/test_fhd_payment_reconciliation.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -436,7 +423,6 @@
             {
               "id": "erp-templates",
               "name": "单据模板与套打",
-              "status": "partial",
               "summary": "自定义发货单、合同等单据模板，支持导入与套打，适配企业现有单据格式。",
               "usage": "管理员上传企业模板后，业务单据按模板自动填充生成。",
               "platforms": ["windows", "macos", "web"],
@@ -454,7 +440,6 @@
             {
               "id": "erp-label",
               "name": "标签打印",
-              "status": "verified",
               "summary": "单张标签打印与工作流批量标签调度，支持产品查找联动，面向生产现场贴标场景。",
               "usage": "在对话或工作流中触发标签打印；打印机按车间配置。",
               "platforms": ["windows", "macos", "web"],
@@ -472,7 +457,6 @@
             {
               "id": "erp-excel-io",
               "name": "Excel 导入导出",
-              "status": "implemented",
               "summary": "客户、产品等主数据的 Excel 批量导入与业务报表导出。",
               "usage": "在数据页上传 Excel 批量导入；导出按钮生成业务报表。",
               "platforms": ["windows", "macos", "web"],
@@ -487,8 +471,8 @@
                 "commits": []
               }
             },
-            {"id":"erp-contract","name":"合同单据","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-templates","summary":"销售合同单据的生成与生命周期。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-contract-visual-review.json", "impl":["FHD/app/services/contract_lifecycle.py","FHD/app/fastapi_routes/sales_contract_api.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"erp-print-agent","name":"打印代理与套打通道","status":"implemented","platforms":["windows","macos"],"featured":false,"evidence_ref":"erp-label","summary":"本机打印代理与套打通道。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-print-agent-visual-review.json", "impl":["FHD/app/fastapi_routes/print_agent_helpers.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
+            {"id":"erp-contract","name":"合同单据","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-templates","summary":"销售合同单据的生成与生命周期。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-contract-visual-review.json", "impl":["FHD/app/services/contract_lifecycle.py","FHD/app/fastapi_routes/sales_contract_api.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"erp-print-agent","name":"打印代理与套打通道","platforms":["windows","macos"],"featured":false,"evidence_ref":"erp-label","summary":"本机打印代理与套打通道。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-print-agent-visual-review.json", "impl":["FHD/app/fastapi_routes/print_agent_helpers.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -498,7 +482,6 @@
             {
               "id": "erp-ocr",
               "name": "OCR 单据识别",
-              "status": "partial",
               "summary": "拍照或扫描的单据自动识别为结构化数据，减少手工录入；已纳入端到端验收链路。",
               "usage": "对话中上传单据照片，选择识别后确认入库。",
               "platforms": ["windows", "macos", "web"],
@@ -513,7 +496,7 @@
                 "commits": []
               }
             },
-            {"id":"erp-ocr-clean","name":"识别结果清洗与入库","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-ocr","summary":"识别结果的结构化清洗与确认入库。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-ocr-clean-visual-review.json", "impl":["FHD/app/application/ocr_app_service.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
+            {"id":"erp-ocr-clean","name":"识别结果清洗与入库","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-ocr","summary":"识别结果的结构化清洗与确认入库。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-ocr-clean-visual-review.json", "impl":["FHD/app/application/ocr_app_service.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -521,9 +504,9 @@
           "name": "数据对接与集成",
           "description": "与外部系统对接：ETL、业务 API 与服务桥接。",
           "features": [
-            {"id":"erp-etl","name":"数据对接与 ETL","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"erp-excel-io","summary":"外部数据源对接与 ETL 目标管理。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-etl-visual-review.json", "impl":["FHD/app/fastapi_routes/etl.py","FHD/app/fastapi_routes/etl_targets.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"erp-business-api","name":"业务对接与外部系统集成","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"mods-open-api","summary":"业务 API 与外部系统服务桥接。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-business-api-visual-review.json", "impl":["FHD/app/fastapi_routes/business_api.py","FHD/app/fastapi_routes/service_bridge.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"erp-approval","name":"业务审批与流程","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-shipment","summary":"业务单据审批与流程流转。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-approval-visual-review.json", "impl":["FHD/app/fastapi_routes/approval.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
+            {"id":"erp-etl","name":"数据对接与 ETL","platforms":["web"],"featured":false,"evidence_ref":"erp-excel-io","summary":"外部数据源对接与 ETL 目标管理。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-etl-visual-review.json", "impl":["FHD/app/fastapi_routes/etl.py","FHD/app/fastapi_routes/etl_targets.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"erp-business-api","name":"业务对接与外部系统集成","platforms":["web"],"featured":false,"evidence_ref":"mods-open-api","summary":"业务 API 与外部系统服务桥接。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-business-api-visual-review.json", "impl":["FHD/app/fastapi_routes/business_api.py","FHD/app/fastapi_routes/service_bridge.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"erp-approval","name":"业务审批与流程","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-shipment","summary":"业务单据审批与流程流转。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/erp-approval-visual-review.json", "impl":["FHD/app/fastapi_routes/approval.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         }
       ]
@@ -540,7 +523,6 @@
             {
               "id": "ch-im-core",
               "name": "站内 IM 与实时通道",
-              "status": "partial",
               "summary": "企业内部即时通讯与 WebSocket 实时推送，AI 员工与人、人与人同处一个消息工作台。",
               "usage": "登录后进入「消息」；双端实时同步。",
               "platforms": ["windows", "macos", "web", "android"],
@@ -558,7 +540,6 @@
             {
               "id": "ch-im-cs",
               "name": "AI 客服与话术协同",
-              "status": "implemented",
               "summary": "客服会话中 AI 协助应答、话术建议与人工接管，服务号场景可平滑切换人机。",
               "usage": "客服在工作台开启 AI 协助；访客侧无感。",
               "platforms": ["windows", "macos", "web"],
@@ -573,10 +554,10 @@
                 "commits": []
               }
             },
-            {"id":"ch-notify","name":"通知与推送","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ch-im-core","summary":"站内通知与移动推送。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ch-notify-visual-review.json", "impl":["FHD/app/services/mobile_push.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"ch-task-center","name":"任务中心与审批通知","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ch-im-core","summary":"任务中心与审批消息通知。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ch-task-center-visual-review.json", "impl":["FHD/app/application/approval_notifications.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"ch-im-super","name":"超级员工与 AI 群聊","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ch-im-cs","summary":"群聊中的超级员工与 AI 协助。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ch-im-super-visual-review.json", "impl":["FHD/app/fastapi_routes/im_super_employee_routes.py","FHD/app/fastapi_routes/im_ai_group_routes.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"ch-im-ws","name":"实时通道（WebSocket）","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ch-im-core","summary":"双端实时消息通道。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ch-im-ws-visual-review.json", "impl":["FHD/app/fastapi_routes/im_websocket_route.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
+            {"id":"ch-notify","name":"通知与推送","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ch-im-core","summary":"站内通知与移动推送。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ch-notify-visual-review.json", "impl":["FHD/app/services/mobile_push.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ch-task-center","name":"任务中心与审批通知","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ch-im-core","summary":"任务中心与审批消息通知。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ch-task-center-visual-review.json", "impl":["FHD/app/application/approval_notifications.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ch-im-super","name":"超级员工与 AI 群聊","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ch-im-cs","summary":"群聊中的超级员工与 AI 协助。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ch-im-super-visual-review.json", "impl":["FHD/app/fastapi_routes/im_super_employee_routes.py","FHD/app/fastapi_routes/im_ai_group_routes.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ch-im-ws","name":"实时通道（WebSocket）","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ch-im-core","summary":"双端实时消息通道。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ch-im-ws-visual-review.json", "impl":["FHD/app/fastapi_routes/im_websocket_route.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -586,7 +567,6 @@
             {
               "id": "ch-wechat-ingest",
               "name": "微信消息接入",
-              "status": "verified",
               "summary": "本机采集端把微信消息安全接入平台，幂等去重入库，作为客户沟通情报的唯一入口。",
               "usage": "部署采集端后自动同步；消息先归档存证，再按意图过滤进入业务流。",
               "platforms": ["windows", "macos", "web"],
@@ -604,7 +584,6 @@
             {
               "id": "ch-wechat-contacts",
               "name": "微信联系人同步与情报",
-              "status": "implemented",
               "summary": "微信联系人身份解析入客户档案，并在对话上下文中注入联系人情报。",
               "usage": "同步后联系人自动匹配客户档案；AI 员工对话时自动携带客户背景。",
               "platforms": ["windows", "macos", "web"],
@@ -619,8 +598,8 @@
                 "commits": []
               }
             },
-            {"id":"ch-wechat-phone","name":"微信电话员工（来电监控）","status":"implemented","platforms":["windows","macos"],"featured":false,"evidence_ref":"ch-wechat-ingest","summary":"微信来电事件监控与归档。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ch-wechat-phone-visual-review.json", "impl":["FHD/app/fastapi_routes/wechat_ingest.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"ch-wechat-context","name":"联系人情报注入对话","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ch-wechat-contacts","summary":"把联系人背景注入 AI 对话上下文。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ch-wechat-context-visual-review.json", "runs":["FHD/docs/evidence/e2e/product-center-20260919/ch-wechat-context.json"],"impl":["FHD/app/application/wechat_chat_context.py"],"api":[],"tests":["FHD/tests/test_application/test_wechat_chat_context_injection.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
+            {"id":"ch-wechat-phone","name":"微信电话员工（来电监控）","platforms":["windows","macos"],"featured":false,"evidence_ref":"ch-wechat-ingest","summary":"微信来电事件监控与归档。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ch-wechat-phone-visual-review.json", "impl":["FHD/app/fastapi_routes/wechat_ingest.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ch-wechat-context","name":"联系人情报注入对话","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ch-wechat-contacts","summary":"把联系人背景注入 AI 对话上下文。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ch-wechat-context-visual-review.json", "runs":["FHD/docs/evidence/e2e/product-center-20260919/ch-wechat-context.json"],"impl":["FHD/app/application/wechat_chat_context.py"],"api":[],"tests":["FHD/tests/test_application/test_wechat_chat_context_injection.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -630,7 +609,6 @@
             {
               "id": "ch-mobile-android",
               "name": "Android 移动端",
-              "status": "partial",
               "summary": "Flutter 主线 Android 应用（实验版·非签约级）：登录、流式对话、消息、探索与审批等核心页面已可用，已通过工信部 APP 备案；签约级交付以 Windows/macOS 桌面端为准。",
               "usage": "安装 APK 后用企业账号登录，移动端与桌面端数据同源。",
               "platforms": ["android"],
@@ -648,7 +626,6 @@
             {
               "id": "ch-mobile-ios",
               "name": "iOS 移动端",
-              "status": "planned",
               "summary": "与 Android 共用 Flutter 业务代码的 iOS 版本，规划中。",
               "usage": "暂不可用；发布计划以版本说明为准。",
               "platforms": ["ios"],
@@ -663,9 +640,9 @@
                 "commits": []
               }
             },
-            {"id":"ch-mobile-pair","name":"移动端配对与设备注册","status":"implemented","platforms":["android"],"featured":false,"evidence_ref":"ch-mobile-android","summary":"移动端与桌面端配对、设备注册。","evidence":{"impl":["FHD/app/services/mobile_relay_pairing.py","FHD/app/fastapi_routes/mobile_extensions/routes_auth.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"ch-mobile-sync","name":"移动端数据同步","status":"implemented","platforms":["android"],"featured":false,"evidence_ref":"ch-mobile-android","summary":"移动端拉取会话、审批与业务数据。","evidence":{"impl":["FHD/app/fastapi_routes/mobile_extensions/routes_sync.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"ch-mobile-qr","name":"二维码扫码登录","status":"implemented","platforms":["android","web"],"featured":false,"evidence_ref":"ch-mobile-android","summary":"扫码确认登录与深链回调。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ch-mobile-qr-visual-review.json", "impl":["FHD/app/fastapi_routes/mobile_extensions/routes_auth.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
+            {"id":"ch-mobile-pair","name":"移动端配对与设备注册","platforms":["android"],"featured":false,"evidence_ref":"ch-mobile-android","summary":"移动端与桌面端配对、设备注册。","evidence":{"impl":["FHD/app/services/mobile_relay_pairing.py","FHD/app/fastapi_routes/mobile_extensions/routes_auth.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ch-mobile-sync","name":"移动端数据同步","platforms":["android"],"featured":false,"evidence_ref":"ch-mobile-android","summary":"移动端拉取会话、审批与业务数据。","evidence":{"impl":["FHD/app/fastapi_routes/mobile_extensions/routes_sync.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ch-mobile-qr","name":"二维码扫码登录","platforms":["android","web"],"featured":false,"evidence_ref":"ch-mobile-android","summary":"扫码确认登录与深链回调。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ch-mobile-qr-visual-review.json", "impl":["FHD/app/fastapi_routes/mobile_extensions/routes_auth.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -673,8 +650,8 @@
           "name": "语音与实时对话",
           "description": "语音识别、实时语音对话与语音模型源管理。",
           "features": [
-            {"id":"ch-asr","name":"语音识别（ASR）","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ai-tts","summary":"语音转写与语音指令链路。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ch-asr-visual-review.json", "impl":["FHD/app/fastapi_routes/voice_routes.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"ch-realtime-voice","name":"实时语音对话","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ai-tts","summary":"实时语音交互与语音模型源管理。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ch-realtime-voice-visual-review.json", "impl":["FHD/app/fastapi_routes/voice_model_source.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
+            {"id":"ch-asr","name":"语音识别（ASR）","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ai-tts","summary":"语音转写与语音指令链路。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ch-asr-visual-review.json", "impl":["FHD/app/fastapi_routes/voice_routes.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ch-realtime-voice","name":"实时语音对话","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ai-tts","summary":"实时语音交互与语音模型源管理。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ch-realtime-voice-visual-review.json", "impl":["FHD/app/fastapi_routes/voice_model_source.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         }
       ]
@@ -691,7 +668,6 @@
             {
               "id": "mods-loader",
               "name": "Mod 加载与清单校验",
-              "status": "verified",
               "summary": "行业标准化的模块包机制：清单校验、依赖检查、路由与菜单挂载，行业定制不侵入核心。",
               "usage": "客户定制只交付 Mod 包；宿主自动加载并校验。",
               "platforms": ["windows", "macos", "web"],
@@ -709,7 +685,6 @@
             {
               "id": "mods-store",
               "name": "Mod 市场与一键装包",
-              "status": "verified",
               "summary": "在系统内浏览、安装、卸载 Mod；支持按 edition 一键安装整包，端到端验收覆盖安装闭环。",
               "usage": "进入「扩展市场」搜索安装；企业版可一键装通用包。",
               "platforms": ["windows", "macos", "web"],
@@ -724,12 +699,12 @@
                 "commits": []
               }
             },
-            {"id":"mods-toolchain","name":"Mod 制作工具链","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"mods-loader","summary":"Mod 脚手架与制作工具链。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/mods-toolchain-visual-review.json", "impl":["FHD/app/fastapi_routes/mod_runtime_frontend.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"mods-host-mount","name":"宿主能力接入与路由挂载","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"mods-loader","summary":"Mod 身份校验、路由与菜单挂载。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/mods-host-mount-visual-review.json", "impl":["FHD/app/infrastructure/mods/mod_auth.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"mods-pack-io","name":"包导入导出与发布","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"mods-store","summary":"Mod 包规范化、导入导出与发布。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/mods-pack-io-visual-review.json", "impl":["FHD/app/services/mod_zip_normalize.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"mods-version","name":"版本管理与蓝绿","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"mods-store","summary":"Mod 版本与蓝绿切换管理。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/mods-version-visual-review.json", "impl":["FHD/app/infrastructure/mods/mod_manager.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"mods-template","name":"行业 Mod 模板","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"mods-loader","summary":"行业 Mod 种子与模板。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/mods-template-visual-review.json", "impl":["FHD/app/mod_sdk/industry_seed.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"mods-shell","name":"平台壳与 edition 包","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"base-edition-pack","summary":"平台壳裁剪与 edition 包引导。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/mods-shell-visual-review.json", "impl":["FHD/app/mod_sdk/platform_shell.py","FHD/app/fastapi_routes/platform_shell_routes.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
+            {"id":"mods-toolchain","name":"Mod 制作工具链","platforms":["web"],"featured":false,"evidence_ref":"mods-loader","summary":"Mod 脚手架与制作工具链。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/mods-toolchain-visual-review.json", "impl":["FHD/app/fastapi_routes/mod_runtime_frontend.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"mods-host-mount","name":"宿主能力接入与路由挂载","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"mods-loader","summary":"Mod 身份校验、路由与菜单挂载。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/mods-host-mount-visual-review.json", "impl":["FHD/app/infrastructure/mods/mod_auth.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"mods-pack-io","name":"包导入导出与发布","platforms":["web"],"featured":false,"evidence_ref":"mods-store","summary":"Mod 包规范化、导入导出与发布。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/mods-pack-io-visual-review.json", "impl":["FHD/app/services/mod_zip_normalize.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"mods-version","name":"版本管理与蓝绿","platforms":["web"],"featured":false,"evidence_ref":"mods-store","summary":"Mod 版本与蓝绿切换管理。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/mods-version-visual-review.json", "impl":["FHD/app/infrastructure/mods/mod_manager.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"mods-template","name":"行业 Mod 模板","platforms":["web"],"featured":false,"evidence_ref":"mods-loader","summary":"行业 Mod 种子与模板。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/mods-template-visual-review.json", "impl":["FHD/app/mod_sdk/industry_seed.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"mods-shell","name":"平台壳与 edition 包","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"base-edition-pack","summary":"平台壳裁剪与 edition 包引导。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/mods-shell-visual-review.json", "impl":["FHD/app/mod_sdk/platform_shell.py","FHD/app/fastapi_routes/platform_shell_routes.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -739,7 +714,6 @@
             {
               "id": "mods-open-api",
               "name": "开放 API（ai_open）",
-              "status": "verified",
               "summary": "把对话与业务能力以开放接口暴露给企业自有系统，配套能力闭环测试。",
               "usage": "企业系统按开放 API 文档接入；支持能力探询与调用。",
               "platforms": ["windows", "macos", "web"],
@@ -757,7 +731,6 @@
             {
               "id": "mods-webhook",
               "name": "业务事件 Webhook",
-              "status": "implemented",
               "summary": "订单等业务事件可回调通知企业外部系统，实现双向集成。",
               "usage": "在集成配置中登记回调地址并订阅事件。",
               "platforms": ["windows", "macos", "web"],
@@ -772,10 +745,10 @@
                 "commits": []
               }
             },
-            {"id":"mods-bridge","name":"桥接 Mod 族（ERP / 审批 / 客服 / 总线）","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"mods-loader","summary":"以 Mod 形式桥接核心能力的桥接包。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/mods-bridge-visual-review.json", "impl":["FHD/mods/xcagi-erp-domain-bridge","FHD/mods/xcagi-approval-bridge","FHD/mods/xcagi-customer-service-bridge","FHD/mods/xcagi-neuro-bus-bridge"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"mods-store-sync","name":"市场库同步与可见性","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"mods-store","summary":"Mod 市场库同步与目录可见性控制。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/mods-store-sync-visual-review.json", "impl":["FHD/app/services/modstore_library_sync.py","FHD/app/services/catalog_visibility.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"mods-pat","name":"PAT / JWT 与权限控制","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"mods-open-api","summary":"Mod 接入凭证与权限校验。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/mods-pat-visual-review.json", "impl":["FHD/app/infrastructure/mods/mod_auth.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"mods-aiopen-support","name":"开放 API 支撑与能力探询","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"mods-open-api","summary":"开放接口的能力探询与路由支撑。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/mods-aiopen-support-visual-review.json", "impl":["FHD/app/fastapi_routes/aiopen_route_support.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
+            {"id":"mods-bridge","name":"桥接 Mod 族（ERP / 审批 / 客服 / 总线）","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"mods-loader","summary":"以 Mod 形式桥接核心能力的桥接包。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/mods-bridge-visual-review.json", "impl":["FHD/mods/xcagi-erp-domain-bridge","FHD/mods/xcagi-approval-bridge","FHD/mods/xcagi-customer-service-bridge","FHD/mods/xcagi-neuro-bus-bridge"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"mods-store-sync","name":"市场库同步与可见性","platforms":["web"],"featured":false,"evidence_ref":"mods-store","summary":"Mod 市场库同步与目录可见性控制。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/mods-store-sync-visual-review.json", "impl":["FHD/app/services/modstore_library_sync.py","FHD/app/services/catalog_visibility.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"mods-pat","name":"PAT / JWT 与权限控制","platforms":["web"],"featured":false,"evidence_ref":"mods-open-api","summary":"Mod 接入凭证与权限校验。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/mods-pat-visual-review.json", "impl":["FHD/app/infrastructure/mods/mod_auth.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"mods-aiopen-support","name":"开放 API 支撑与能力探询","platforms":["web"],"featured":false,"evidence_ref":"mods-open-api","summary":"开放接口的能力探询与路由支撑。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/mods-aiopen-support-visual-review.json", "impl":["FHD/app/fastapi_routes/aiopen_route_support.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         }
       ]
@@ -792,7 +765,6 @@
             {
               "id": "ind-coating",
               "name": "涂装行业包",
-              "status": "implemented",
               "summary": "面向涂装行业的工序、批号与出货协同 Mod。",
               "usage": "安装涂装行业包后出现行业菜单与员工。",
               "platforms": ["windows", "macos", "web"],
@@ -810,7 +782,6 @@
             {
               "id": "ind-packaging",
               "name": "饰品/包装行业包",
-              "status": "implemented",
               "summary": "面向饰品包装行业的成品、原材料仓库与库存管理 Mod（实机截图见桌面壳与 OTA 证据页）。",
               "usage": "安装行业包后出现饰品包装品管理、原材料仓库、库存管理等菜单。",
               "platforms": ["windows", "macos"],
@@ -828,7 +799,6 @@
             {
               "id": "ind-attendance",
               "name": "考勤行业包",
-              "status": "partial",
               "summary": "考勤转换、排班、考勤机打印与人事管理的行业工作区，已在实机验收中运行。",
               "usage": "安装考勤行业包后进入考勤工作区；考勤机按现场对接。",
               "platforms": ["windows", "macos", "web"],
@@ -843,9 +813,9 @@
                 "commits": []
               }
             },
-            {"id":"ind-fields","name":"行业字段与规则配置","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ind-coating","summary":"行业字段、规则与能力模块配置。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ind-fields-visual-review.json", "impl":["FHD/app/mod_sdk/industry_seed.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"ind-workspace","name":"行业工作台与报表","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ind-attendance","summary":"行业工作区与考勤导入、参考数据。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ind-workspace-visual-review.json", "impl":["FHD/app/application/attendance_import_app_service.py","FHD/app/application/attendance_reference_data.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"ind-ai-assistant","name":"行业 AI 助手（占位）","status":"planned","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ind-coating","summary":"行业专属 AI 助手，当前为占位，尚未有已合入实现。","evidence":{"impl":[],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
+            {"id":"ind-fields","name":"行业字段与规则配置","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ind-coating","summary":"行业字段、规则与能力模块配置。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ind-fields-visual-review.json", "impl":["FHD/app/mod_sdk/industry_seed.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ind-workspace","name":"行业工作台与报表","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ind-attendance","summary":"行业工作区与考勤导入、参考数据。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ind-workspace-visual-review.json", "impl":["FHD/app/application/attendance_import_app_service.py","FHD/app/application/attendance_reference_data.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ind-ai-assistant","name":"行业 AI 助手（占位）","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ind-coating","summary":"行业专属 AI 助手，当前为占位，尚未有已合入实现。","evidence":{"impl":[],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -855,7 +825,6 @@
             {
               "id": "ind-taiyangniao",
               "name": "太阳鸟专属 Mod",
-              "status": "implemented",
               "summary": "太阳鸟客户的专属业务 Mod（受保护定制，不随通用版分发）。",
               "usage": "仅对签约客户环境安装交付。",
               "platforms": ["windows", "macos"],
@@ -873,7 +842,6 @@
             {
               "id": "ind-szqsm",
               "name": "奇士美专属 Mod",
-              "status": "implemented",
               "summary": "奇士美客户的专属业务 Mod（受保护定制，不随通用版分发）。",
               "usage": "仅对签约客户环境安装交付。",
               "platforms": ["windows", "macos"],
@@ -888,12 +856,12 @@
                 "commits": []
               }
             },
-            {"id":"ind-custom-delivery","name":"客户定制开发与交付","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ops-delivery","summary":"客户专属定制的开发与交付链路。","evidence":{"review": "FHD/docs/evidence/e2e/macos-acceptance-20260920/ind-custom-delivery-run.json", "runs":["FHD/docs/evidence/e2e/macos-acceptance-20260920/ind-custom-delivery-run.json"],"impl":["FHD/app/fastapi_routes/private_mod_delivery_routes.py","FHD/app/fastapi_routes/mod_store_route_handlers_part01.py","FHD/frontend/src/views/product-onboarding/useProductOnboardingActions.ts"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":["FHD/docs/evidence/e2e/macos-acceptance-20260920/02-workspace-entitlement-block.png"],"commits":[]}},
-            {"id":"ind-lan-license","name":"局域网授权桥接 Mod","status":"implemented","platforms":["windows","macos"],"featured":false,"evidence_ref":"pay-lan","summary":"内网授权网关的桥接 Mod。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ind-lan-license-visual-review.json", "impl":["FHD/mods/xcagi-lan-license-bridge"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"ind-modstore-pay","name":"市场支付桥接 Mod","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"pay-alipay","summary":"Mod 市场支付的桥接 Mod。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ind-modstore-pay-visual-review.json", "impl":["FHD/mods/xcagi-model-payment-bridge"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"ind-planner","name":"规划器桥接 Mod","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ai-employees-workflow","summary":"规划器能力的桥接 Mod。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ind-planner-visual-review.json", "impl":["FHD/mods/xcagi-planner-bridge"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"ind-workflow-viz","name":"工作流可视化桥接 Mod","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ai-employees-workflow","summary":"工作流可视化桥接 Mod。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ind-workflow-viz-visual-review.json", "impl":["FHD/mods/xcagi-workflow-visualization-bridge"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"ind-modstore-gateway","name":"Mod 市场网关（服务端）","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"mods-store","summary":"Mod 市场服务端网关实现。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ind-modstore-gateway-visual-review.json", "impl":["成都修茈科技有限公司/MODstore_deploy"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
+            {"id":"ind-custom-delivery","name":"客户定制开发与交付","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ops-delivery","summary":"客户专属定制的开发与交付链路。","evidence":{"review": "FHD/docs/evidence/e2e/macos-acceptance-20260920/ind-custom-delivery-run.json", "runs":["FHD/docs/evidence/e2e/macos-acceptance-20260920/ind-custom-delivery-run.json"],"impl":["FHD/app/fastapi_routes/private_mod_delivery_routes.py","FHD/app/fastapi_routes/mod_store_route_handlers_part01.py","FHD/frontend/src/views/product-onboarding/useProductOnboardingActions.ts"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":["FHD/docs/evidence/e2e/macos-acceptance-20260920/02-workspace-entitlement-block.png"],"commits":[]}},
+            {"id":"ind-lan-license","name":"局域网授权桥接 Mod","platforms":["windows","macos"],"featured":false,"evidence_ref":"pay-lan","summary":"内网授权网关的桥接 Mod。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ind-lan-license-visual-review.json", "impl":["FHD/mods/xcagi-lan-license-bridge"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ind-modstore-pay","name":"市场支付桥接 Mod","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"pay-alipay","summary":"Mod 市场支付的桥接 Mod。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ind-modstore-pay-visual-review.json", "impl":["FHD/mods/xcagi-model-payment-bridge"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ind-planner","name":"规划器桥接 Mod","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ai-employees-workflow","summary":"规划器能力的桥接 Mod。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ind-planner-visual-review.json", "impl":["FHD/mods/xcagi-planner-bridge"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ind-workflow-viz","name":"工作流可视化桥接 Mod","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ai-employees-workflow","summary":"工作流可视化桥接 Mod。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ind-workflow-viz-visual-review.json", "impl":["FHD/mods/xcagi-workflow-visualization-bridge"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ind-modstore-gateway","name":"Mod 市场网关（服务端）","platforms":["web"],"featured":false,"evidence_ref":"mods-store","summary":"Mod 市场服务端网关实现。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ind-modstore-gateway-visual-review.json", "impl":["成都修茈科技有限公司/MODstore_deploy"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         }
       ]
@@ -910,7 +878,6 @@
             {
               "id": "pay-alipay",
               "name": "支付宝支付与回调",
-              "status": "partial",
               "summary": "支付宝当面付/订单码支付与异步回调对账，支撑余额充值与套餐购买。",
               "usage": "客户端在钱包页发起充值；回调由服务端验签入账。",
               "platforms": ["windows", "macos", "web", "android"],
@@ -925,10 +892,10 @@
                 "commits": []
               }
             },
-            {"id":"pay-wallet","name":"Token 钱包与模型计费","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"pay-alipay","summary":"Token 余额、套餐与模型用量计费。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/pay-wallet-visual-review.json", "impl":["FHD/app/fastapi_routes/model_payment_plans.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"pay-reconcile","name":"平台对账与发票","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"pay-alipay","summary":"支付对账与发票处理。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/pay-reconcile-visual-review.json", "impl":["FHD/app/fastapi_routes/payment_reconcile_internal_api.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"pay-backend-bridge","name":"支付后端桥接（json / postgres / modstore）","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"pay-alipay","summary":"按配置选择支付后端并桥接。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/pay-backend-bridge-visual-review.json", "impl":["FHD/app/infrastructure/payment/payment_sot.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"pay-refund","name":"退款申请与审核","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"pay-alipay","summary":"退款申请受理与审核调度。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/pay-refund-visual-review.json", "impl":["FHD/app/services/reconciliation_scheduler.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
+            {"id":"pay-wallet","name":"Token 钱包与模型计费","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"pay-alipay","summary":"Token 余额、套餐与模型用量计费。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/pay-wallet-visual-review.json", "impl":["FHD/app/fastapi_routes/model_payment_plans.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"pay-reconcile","name":"平台对账与发票","platforms":["web"],"featured":false,"evidence_ref":"pay-alipay","summary":"支付对账与发票处理。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/pay-reconcile-visual-review.json", "impl":["FHD/app/fastapi_routes/payment_reconcile_internal_api.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"pay-backend-bridge","name":"支付后端桥接（json / postgres / modstore）","platforms":["web"],"featured":false,"evidence_ref":"pay-alipay","summary":"按配置选择支付后端并桥接。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/pay-backend-bridge-visual-review.json", "impl":["FHD/app/infrastructure/payment/payment_sot.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"pay-refund","name":"退款申请与审核","platforms":["web"],"featured":false,"evidence_ref":"pay-alipay","summary":"退款申请受理与审核调度。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/pay-refund-visual-review.json", "impl":["FHD/app/services/reconciliation_scheduler.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -938,7 +905,6 @@
             {
               "id": "pay-lan",
               "name": "局域网部署与授权网关",
-              "status": "implemented",
               "summary": "支持纯内网部署形态与本地授权网关，满足数据不出网的企业要求。",
               "usage": "内网部署时由实施团队开启对应形态。",
               "platforms": ["windows", "macos"],
@@ -956,7 +922,6 @@
             {
               "id": "pay-entitlement",
               "name": "企业授权与权益管理",
-              "status": "partial",
               "summary": "企业套餐、账号授权与权益开通管理，前后端行为均有自动化测试。",
               "usage": "管理员在权益管理页为企业开通套餐与账号。",
               "platforms": ["web"],
@@ -971,10 +936,10 @@
                 "commits": []
               }
             },
-            {"id":"pay-member-plan","name":"支付订单与会员计划","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"pay-alipay","summary":"订单与会员套餐计划。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/pay-member-plan-visual-review.json", "impl":["FHD/app/fastapi_routes/model_payment_plans.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"pay-entitlement-delivery","name":"权益开通与资产交付","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"pay-entitlement","summary":"套餐权益开通与资产交付。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/pay-entitlement-delivery-visual-review.json", "runs":["FHD/docs/evidence/e2e/product-center-20260919/pay-entitlement-delivery.json"],"impl":["FHD/app/application/account_tier_derivation.py"],"api":[],"tests":["FHD/tests/test_application/test_account_tier_derivation.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"pay-author-revenue","name":"作者收益与分成结算","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"pay-entitlement","summary":"作者收益与分成结算口径。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/pay-author-revenue-visual-review.json", "impl":["FHD/app/services/catalog_client.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"pay-lan-settings","name":"内网模式与授权设置","status":"implemented","platforms":["windows","macos"],"featured":false,"evidence_ref":"pay-lan","summary":"内网形态与授权网关设置。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/pay-lan-settings-visual-review.json", "impl":["FHD/app/fastapi_routes/lan_settings_routes.py","FHD/app/fastapi_routes/lan_routes.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
+            {"id":"pay-member-plan","name":"支付订单与会员计划","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"pay-alipay","summary":"订单与会员套餐计划。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/pay-member-plan-visual-review.json", "impl":["FHD/app/fastapi_routes/model_payment_plans.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"pay-entitlement-delivery","name":"权益开通与资产交付","platforms":["web"],"featured":false,"evidence_ref":"pay-entitlement","summary":"套餐权益开通与资产交付。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/pay-entitlement-delivery-visual-review.json", "runs":["FHD/docs/evidence/e2e/product-center-20260919/pay-entitlement-delivery.json"],"impl":["FHD/app/application/account_tier_derivation.py"],"api":[],"tests":["FHD/tests/test_application/test_account_tier_derivation.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"pay-author-revenue","name":"作者收益与分成结算","platforms":["web"],"featured":false,"evidence_ref":"pay-entitlement","summary":"作者收益与分成结算口径。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/pay-author-revenue-visual-review.json", "impl":["FHD/app/services/catalog_client.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"pay-lan-settings","name":"内网模式与授权设置","platforms":["windows","macos"],"featured":false,"evidence_ref":"pay-lan","summary":"内网形态与授权网关设置。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/pay-lan-settings-visual-review.json", "impl":["FHD/app/fastapi_routes/lan_settings_routes.py","FHD/app/fastapi_routes/lan_routes.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         }
       ]
@@ -991,7 +956,6 @@
             {
               "id": "ops-admin-console",
               "name": "企业管理总后台",
-              "status": "verified",
               "summary": "企业、账号、模块与运营数据的统一管理后台，行为覆盖会话与管理操作测试。",
               "usage": "管理员访问管理后台；普通员工无权限入口。",
               "platforms": ["web"],
@@ -1006,10 +970,10 @@
                 "commits": []
               }
             },
-            {"id":"ops-employee-gov","name":"员工治理与自治策略","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"ops-self-heal","summary":"员工治理总览与自治策略配置。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ops-employee-gov-visual-review.json", "impl":["FHD/app/fastapi_routes/founder_autonomy_api.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"ops-pipeline","name":"制作与运营流水线（P1-P10）","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"ops-self-heal","summary":"制作与运营流水线的编排图。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ops-pipeline-visual-review.json", "impl":["FHD/app/fastapi_routes/operations_line_api.py","FHD/config/time_rail_workflow_graph.json"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"ops-work-order","name":"需求工单与验收回执","status":"partial","platforms":["web"],"featured":false,"evidence_ref":"ops-delivery","summary":"需求工单、验收回执与状态机。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ops-work-order-visual-review.json", "impl":["FHD/app/services/work_order_acceptance.py","FHD/app/services/work_order_ssot.py"],"api":[],"tests":["FHD/tests/test_services/test_work_order_ssot.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"ops-monitor","name":"监控告警与运行健康","status":"partial","platforms":["web"],"featured":false,"evidence_ref":"sec-release-gate","summary":"运行健康监控与告警。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ops-monitor-visual-review.json", "impl":["FHD/app/neuro_bus/health_monitor.py"],"api":[],"tests":["FHD/tests/test_sla_health_probe.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
+            {"id":"ops-employee-gov","name":"员工治理与自治策略","platforms":["web"],"featured":false,"evidence_ref":"ops-self-heal","summary":"员工治理总览与自治策略配置。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ops-employee-gov-visual-review.json", "impl":["FHD/app/fastapi_routes/founder_autonomy_api.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ops-pipeline","name":"制作与运营流水线（P1-P10）","platforms":["web"],"featured":false,"evidence_ref":"ops-self-heal","summary":"制作与运营流水线的编排图。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ops-pipeline-visual-review.json", "impl":["FHD/app/fastapi_routes/operations_line_api.py","FHD/config/time_rail_workflow_graph.json"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ops-work-order","name":"需求工单与验收回执","platforms":["web"],"featured":false,"evidence_ref":"ops-delivery","summary":"需求工单、验收回执与状态机。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ops-work-order-visual-review.json", "impl":["FHD/app/services/work_order_acceptance.py","FHD/app/services/work_order_ssot.py"],"api":[],"tests":["FHD/tests/test_services/test_work_order_ssot.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ops-monitor","name":"监控告警与运行健康","platforms":["web"],"featured":false,"evidence_ref":"sec-release-gate","summary":"运行健康监控与告警。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ops-monitor-visual-review.json", "impl":["FHD/app/neuro_bus/health_monitor.py"],"api":[],"tests":["FHD/tests/test_sla_health_probe.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -1019,7 +983,6 @@
             {
               "id": "ops-self-heal",
               "name": "AI 自愈与自治运维",
-              "status": "partial",
               "summary": "线上问题自动生成修复 PR 的自治流水线：机械变更自动合并、语义变更定级守卫、高危永远人工审核。",
               "usage": "运维侧无需人工介入；自治 PR 在仓库中留痕可审计。",
               "platforms": ["web"],
@@ -1034,9 +997,9 @@
                 "commits": []
               }
             },
-            {"id":"ops-project-factory","name":"项目工厂与任务分流","status":"partial","platforms":["web"],"featured":false,"evidence_ref":"ops-delivery","summary":"项目工厂与任务分流控制台。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ops-project-factory-visual-review.json", "impl":["FHD/frontend/src/views/ProjectFactoryView.vue"],"api":[],"tests":["FHD/frontend/src/views/ProjectFactoryView.coverage.test.ts"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"ops-customer-value","name":"行动事项与客户价值","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"ops-self-heal","summary":"客户价值行动事项与主门禁。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ops-customer-value-visual-review.json", "impl":["FHD/app/application/founder_autonomy_primary_gates.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"ops-version-evolution","name":"版本演进与自驱迭代","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"ops-self-heal","summary":"版本演进与自驱迭代编排。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ops-version-evolution-visual-review.json", "impl":["FHD/.github/workflows/evolution-orchestrator.yml"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
+            {"id":"ops-project-factory","name":"项目工厂与任务分流","platforms":["web"],"featured":false,"evidence_ref":"ops-delivery","summary":"项目工厂与任务分流控制台。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ops-project-factory-visual-review.json", "impl":["FHD/frontend/src/views/ProjectFactoryView.vue"],"api":[],"tests":["FHD/frontend/src/views/ProjectFactoryView.coverage.test.ts"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ops-customer-value","name":"行动事项与客户价值","platforms":["web"],"featured":false,"evidence_ref":"ops-self-heal","summary":"客户价值行动事项与主门禁。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ops-customer-value-visual-review.json", "impl":["FHD/app/application/founder_autonomy_primary_gates.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ops-version-evolution","name":"版本演进与自驱迭代","platforms":["web"],"featured":false,"evidence_ref":"ops-self-heal","summary":"版本演进与自驱迭代编排。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ops-version-evolution-visual-review.json", "impl":["FHD/.github/workflows/evolution-orchestrator.yml"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -1046,7 +1009,6 @@
             {
               "id": "ops-delivery",
               "name": "专属交付与同步",
-              "status": "partial",
               "summary": "客户专属 Mod 的交付进度、上下文与同步链路，交付状态可跟踪可回执。",
               "usage": "交付过程自动同步；客户验收状态可查询。",
               "platforms": ["web"],
@@ -1061,9 +1023,9 @@
                 "commits": []
               }
             },
-            {"id":"ops-delivery-center","name":"客户交付中心","status":"partial","platforms":["web"],"featured":false,"evidence_ref":"ops-delivery","summary":"交付中心视图与交付进度同步。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ops-delivery-center-visual-review.json", "impl":["FHD/app/fastapi_routes/delivery_sync_routes.py"],"api":[],"tests":["FHD/frontend/src/views/DeliveryCenterView.test.ts"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"ops-delivery-sync","name":"交付进度与上下文同步","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"ops-delivery","summary":"专属交付进度与上下文同步。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ops-delivery-sync-visual-review.json", "impl":["FHD/app/fastapi_routes/private_mod_delivery_progress_routes.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"ops-issue-runtime","name":"工单与问题运行时","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"ops-delivery","summary":"问题工单运行时与留痕。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ops-issue-runtime-visual-review.json", "impl":["FHD/app/fastapi_routes/issue_runtime_routes.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
+            {"id":"ops-delivery-center","name":"客户交付中心","platforms":["web"],"featured":false,"evidence_ref":"ops-delivery","summary":"交付中心视图与交付进度同步。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ops-delivery-center-visual-review.json", "impl":["FHD/app/fastapi_routes/delivery_sync_routes.py"],"api":[],"tests":["FHD/frontend/src/views/DeliveryCenterView.test.ts"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ops-delivery-sync","name":"交付进度与上下文同步","platforms":["web"],"featured":false,"evidence_ref":"ops-delivery","summary":"专属交付进度与上下文同步。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ops-delivery-sync-visual-review.json", "impl":["FHD/app/fastapi_routes/private_mod_delivery_progress_routes.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"ops-issue-runtime","name":"工单与问题运行时","platforms":["web"],"featured":false,"evidence_ref":"ops-delivery","summary":"问题工单运行时与留痕。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/ops-issue-runtime-visual-review.json", "impl":["FHD/app/fastapi_routes/issue_runtime_routes.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         }
       ]
@@ -1080,7 +1042,6 @@
             {
               "id": "dt-shell",
               "name": "Windows/macOS 桌面壳",
-              "status": "verified",
               "summary": "Electron 桌面壳统一拉起本地后端、加载界面并管理生命周期，Windows 与 macOS 为平级签约级交付面。",
               "usage": "安装桌面版后双击启动；后端由壳自动管理。",
               "platforms": ["windows", "macos"],
@@ -1098,7 +1059,6 @@
             {
               "id": "dt-ota",
               "name": "自动更新（OTA）",
-              "status": "partial",
               "summary": "桌面端在线检测更新、下载与安装回执，更新流水线与 feed 清单自动发布。",
               "usage": "设置页点击「检查更新」；安装后自动回执。",
               "platforms": ["macos", "windows"],
@@ -1113,10 +1073,10 @@
                 "commits": []
               }
             },
-            {"id":"dt-install-sign","name":"安装 · 签名 · 身份校验","status":"implemented","platforms":["windows","macos"],"featured":false,"evidence_ref":"dt-shell","summary":"安装包签名、公证与身份校验。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/dt-install-sign-visual-review.json", "impl":["FHD/desktop/build/notarize.cjs","FHD/config/windows_signing_acceptance.json"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"dt-cold-start-rollback","name":"冷启动与回滚","status":"implemented","platforms":["windows","macos"],"featured":false,"evidence_ref":"dt-ota","summary":"冷启动路径与升级失败回滚。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/dt-cold-start-rollback-visual-review.json", "impl":["FHD/desktop/window-manager.ts"],"api":[],"tests":[],"ci":["FHD/.github/workflows/upgrade-rollback-evidence.yml"],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"dt-process-mgmt","name":"进程管理与托底通知","status":"implemented","platforms":["windows","macos"],"featured":false,"evidence_ref":"dt-shell","summary":"后端进程生命周期与异常托底通知。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/dt-process-mgmt-visual-review.json", "impl":["FHD/desktop/backend-process.ts"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"dt-integrity","name":"运行完整性与健康检查","status":"partial","platforms":["windows","macos"],"featured":false,"evidence_ref":"base-health","summary":"运行完整性校验与健康检查。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/dt-integrity-visual-review.json", "impl":["FHD/app/neuro_bus/health_monitor.py"],"api":[],"tests":["FHD/tests/test_sla_health_probe.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
+            {"id":"dt-install-sign","name":"安装 · 签名 · 身份校验","platforms":["windows","macos"],"featured":false,"evidence_ref":"dt-shell","summary":"安装包签名、公证与身份校验。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/dt-install-sign-visual-review.json", "impl":["FHD/desktop/build/notarize.cjs","FHD/config/windows_signing_acceptance.json"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"dt-cold-start-rollback","name":"冷启动与回滚","platforms":["windows","macos"],"featured":false,"evidence_ref":"dt-ota","summary":"冷启动路径与升级失败回滚。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/dt-cold-start-rollback-visual-review.json", "impl":["FHD/desktop/window-manager.ts"],"api":[],"tests":[],"ci":["FHD/.github/workflows/upgrade-rollback-evidence.yml"],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"dt-process-mgmt","name":"进程管理与托底通知","platforms":["windows","macos"],"featured":false,"evidence_ref":"dt-shell","summary":"后端进程生命周期与异常托底通知。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/dt-process-mgmt-visual-review.json", "impl":["FHD/desktop/backend-process.ts"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"dt-integrity","name":"运行完整性与健康检查","platforms":["windows","macos"],"featured":false,"evidence_ref":"base-health","summary":"运行完整性校验与健康检查。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/dt-integrity-visual-review.json", "impl":["FHD/app/neuro_bus/health_monitor.py"],"api":[],"tests":["FHD/tests/test_sla_health_probe.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -1126,7 +1086,6 @@
             {
               "id": "dt-rpa",
               "name": "桌面自动化与运行时状态",
-              "status": "partial",
               "summary": "桌面自动化执行与运行时状态上报的接口底座；完整 RPA 能力按客户场景逐步开放。",
               "usage": "由 AI 员工工作流按权限调用；状态可在运行时接口查询。",
               "platforms": ["windows", "macos"],
@@ -1141,11 +1100,11 @@
                 "commits": []
               }
             },
-            {"id":"dt-element-find","name":"元素查找与应用引导（占位）","status":"planned","platforms":["windows","macos"],"featured":false,"evidence_ref":"dt-rpa","summary":"桌面元素查找与应用引导，当前为占位实现。","evidence":{"impl":[],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"dt-desktop-workflow","name":"桌面工作流（占位）","status":"planned","platforms":["windows","macos"],"featured":false,"evidence_ref":"dt-rpa","summary":"桌面自动化工作流，当前为占位实现。","evidence":{"impl":[],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"dt-neurobus","name":"事件总线（NeuroBus）","status":"implemented","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"dt-rpa","summary":"事件总线与事件存储。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/dt-neurobus-visual-review.json", "impl":["FHD/app/neuro_bus/bus.py","FHD/app/neuro_bus/event_store.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"dt-evidence-store","name":"本地 · 服务端存证","status":"partial","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"sec-release-gate","summary":"本地与服务端双向存证。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/dt-evidence-store-visual-review.json", "runs":["FHD/docs/evidence/e2e/product-center-20260919/dt-evidence-store.json"],"impl":["FHD/app/neuro_bus/event_store.py"],"api":[],"tests":["FHD/tests/test_services/test_work_order_ssot.py", "FHD/tests/test_neuro_bus/test_event_store_coverage.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"dt-mac-control","name":"macOS 桌面控制代理","status":"implemented","platforms":["macos"],"featured":false,"evidence_ref":"dt-rpa","summary":"macOS 桌面控制代理通道。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/dt-mac-control-visual-review.json", "impl":["FHD/app/fastapi_routes/mac_control_proxy.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
+            {"id":"dt-element-find","name":"元素查找与应用引导（占位）","platforms":["windows","macos"],"featured":false,"evidence_ref":"dt-rpa","summary":"桌面元素查找与应用引导，当前为占位实现。","evidence":{"impl":[],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"dt-desktop-workflow","name":"桌面工作流（占位）","platforms":["windows","macos"],"featured":false,"evidence_ref":"dt-rpa","summary":"桌面自动化工作流，当前为占位实现。","evidence":{"impl":[],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"dt-neurobus","name":"事件总线（NeuroBus）","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"dt-rpa","summary":"事件总线与事件存储。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/dt-neurobus-visual-review.json", "impl":["FHD/app/neuro_bus/bus.py","FHD/app/neuro_bus/event_store.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"dt-evidence-store","name":"本地 · 服务端存证","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"sec-release-gate","summary":"本地与服务端双向存证。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/dt-evidence-store-visual-review.json", "runs":["FHD/docs/evidence/e2e/product-center-20260919/dt-evidence-store.json"],"impl":["FHD/app/neuro_bus/event_store.py"],"api":[],"tests":["FHD/tests/test_services/test_work_order_ssot.py", "FHD/tests/test_neuro_bus/test_event_store_coverage.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"dt-mac-control","name":"macOS 桌面控制代理","platforms":["macos"],"featured":false,"evidence_ref":"dt-rpa","summary":"macOS 桌面控制代理通道。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/dt-mac-control-visual-review.json", "impl":["FHD/app/fastapi_routes/mac_control_proxy.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         }
       ]
@@ -1162,7 +1121,6 @@
             {
               "id": "sec-gdpr",
               "name": "数据隐私与导出（GDPR）",
-              "status": "implemented",
               "summary": "企业数据的隐私导出与删除合规接口底座。",
               "usage": "按合规流程发起数据导出/删除请求。",
               "platforms": ["web"],
@@ -1180,7 +1138,6 @@
             {
               "id": "sec-audit",
               "name": "操作审计与日志",
-              "status": "partial",
               "summary": "关键操作落审计日志并可检索，支撑事后追溯与合规检查。",
               "usage": "管理员在审计页查询操作记录。",
               "platforms": ["web"],
@@ -1198,7 +1155,6 @@
             {
               "id": "sec-scan",
               "name": "安全扫描门禁",
-              "status": "partial",
               "summary": "全量安全扫描作为发布前置门禁：正式构建要求同一提交的两次零漏洞扫描证据。",
               "usage": "发布流程自动执行；证据存档于发布记录。",
               "platforms": ["web"],
@@ -1213,11 +1169,11 @@
                 "commits": []
               }
             },
-            {"id":"sec-identity","name":"身份认证与权限控制","status":"partial","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"base-rbac","summary":"安全中间件与认证装饰器。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/sec-identity-visual-review.json", "impl":["FHD/app/utils/security/security_middleware.py","FHD/app/auth_decorators.py"],"api":[],"tests":["FHD/tests/test_middleware/test_security_headers.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"sec-tenant-isolation","name":"企业数据隔离","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"sec-gdpr","summary":"多租户数据范围隔离。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/sec-tenant-isolation-visual-review.json", "impl":["FHD/app/infrastructure/tenant_scope.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"sec-runtime-gate","name":"运行时安全门控","status":"partial","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"sec-audit","summary":"运行时安全门控与会话安全。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/sec-runtime-gate-visual-review.json", "impl":["FHD/desktop/session-security.ts"],"api":[],"tests":["FHD/tests/test_middleware/test_security_headers_csp.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"sec-csp","name":"CSP 与安全策略","status":"partial","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"sec-audit","summary":"内容安全策略与安全响应头。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/sec-csp-visual-review.json", "runs":["FHD/docs/evidence/e2e/product-center-20260919/sec-csp.json"],"impl":["FHD/app/utils/security/security_middleware.py"],"api":[],"tests":["FHD/tests/test_middleware/test_security_headers_csp.py", "FHD/tests/test_utils/test_security_middleware.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"sec-ai-trace","name":"AI 调用追溯","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"sec-audit","summary":"AI 调用与动作的审计追溯。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/sec-ai-trace-visual-review.json", "impl":["FHD/app/services/ai_action_audit_service.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
+            {"id":"sec-identity","name":"身份认证与权限控制","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"base-rbac","summary":"安全中间件与认证装饰器。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/sec-identity-visual-review.json", "impl":["FHD/app/utils/security/security_middleware.py","FHD/app/auth_decorators.py"],"api":[],"tests":["FHD/tests/test_middleware/test_security_headers.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"sec-tenant-isolation","name":"企业数据隔离","platforms":["web"],"featured":false,"evidence_ref":"sec-gdpr","summary":"多租户数据范围隔离。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/sec-tenant-isolation-visual-review.json", "impl":["FHD/app/infrastructure/tenant_scope.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"sec-runtime-gate","name":"运行时安全门控","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"sec-audit","summary":"运行时安全门控与会话安全。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/sec-runtime-gate-visual-review.json", "impl":["FHD/desktop/session-security.ts"],"api":[],"tests":["FHD/tests/test_middleware/test_security_headers_csp.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"sec-csp","name":"CSP 与安全策略","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"sec-audit","summary":"内容安全策略与安全响应头。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/sec-csp-visual-review.json", "runs":["FHD/docs/evidence/e2e/product-center-20260919/sec-csp.json"],"impl":["FHD/app/utils/security/security_middleware.py"],"api":[],"tests":["FHD/tests/test_middleware/test_security_headers_csp.py", "FHD/tests/test_utils/test_security_middleware.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"sec-ai-trace","name":"AI 调用追溯","platforms":["web"],"featured":false,"evidence_ref":"sec-audit","summary":"AI 调用与动作的审计追溯。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/sec-ai-trace-visual-review.json", "impl":["FHD/app/services/ai_action_audit_service.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         },
         {
@@ -1227,7 +1183,6 @@
             {
               "id": "sec-e2e",
               "name": "端到端自动化验收",
-              "status": "verified",
               "summary": "16 个 Playwright 端到端场景覆盖登录、核心业务、Mod 安装、双端会话等关键路径，实机截图随验收留档。",
               "usage": "CI 自动执行；发版前必须通过。",
               "platforms": ["windows", "macos", "web"],
@@ -1245,7 +1200,6 @@
             {
               "id": "sec-coverage",
               "name": "测试覆盖率与棘轮门禁",
-              "status": "partial",
               "summary": "后端行覆盖率实测 88.19%、前端 93.21%（对外口径见覆盖清单），棘轮只升不降，防止质量回退。",
               "usage": "CI 门禁自动执行；数字由覆盖清单 SSOT 输出。",
               "platforms": ["web"],
@@ -1263,7 +1217,6 @@
             {
               "id": "sec-release-gate",
               "name": "发布门禁与实机验收",
-              "status": "partial",
               "summary": "12 项发布门禁（安装、启动、登录绑定、真实业务、更新安装、数据保留、重启复验等），每一项必须有截图、录像或日志证据。",
               "usage": "发布流程自动执行 + 实机验收留档；无证据不得标绿。",
               "platforms": ["windows", "macos"],
@@ -1278,10 +1231,10 @@
                 "commits": []
               }
             },
-            {"id":"sec-audit-standard","name":"审计标准与证据体系","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"sec-release-gate","summary":"审计基准目录与证据口径。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/sec-audit-standard-visual-review.json", "impl":["FHD/config/audit_benchmark_ssot.json"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"sec-model-gate","name":"真实模型验货门禁","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"sec-release-gate","summary":"真实模型调用验货门禁。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/sec-model-gate-visual-review.json", "impl":["FHD/app/services/conversation/llm_adapter.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"sec-continuous-observe","name":"持续运行观察","status":"partial","platforms":["web"],"featured":false,"evidence_ref":"sec-release-gate","summary":"持续运行指标与 SLO 观察。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/sec-continuous-observe-visual-review.json", "impl":["FHD/app/neuro_bus/health_monitor.py"],"api":[],"tests":["FHD/tests/test_sla_health_probe.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
-            {"id":"sec-slo","name":"服务拓扑与 SLO 配置","status":"implemented","platforms":["web"],"featured":false,"evidence_ref":"sec-coverage","summary":"服务拓扑与 SLO 门限配置。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/sec-slo-visual-review.json", "impl":["FHD/config/service_topology.yaml"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
+            {"id":"sec-audit-standard","name":"审计标准与证据体系","platforms":["web"],"featured":false,"evidence_ref":"sec-release-gate","summary":"审计基准目录与证据口径。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/sec-audit-standard-visual-review.json", "impl":["FHD/config/audit_benchmark_ssot.json"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"sec-model-gate","name":"真实模型验货门禁","platforms":["web"],"featured":false,"evidence_ref":"sec-release-gate","summary":"真实模型调用验货门禁。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/sec-model-gate-visual-review.json", "impl":["FHD/app/services/conversation/llm_adapter.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"sec-continuous-observe","name":"持续运行观察","platforms":["web"],"featured":false,"evidence_ref":"sec-release-gate","summary":"持续运行指标与 SLO 观察。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/sec-continuous-observe-visual-review.json", "impl":["FHD/app/neuro_bus/health_monitor.py"],"api":[],"tests":["FHD/tests/test_sla_health_probe.py"],"ci":[],"docs":[],"screenshots":[],"commits":[]}},
+            {"id":"sec-slo","name":"服务拓扑与 SLO 配置","platforms":["web"],"featured":false,"evidence_ref":"sec-coverage","summary":"服务拓扑与 SLO 门限配置。","evidence":{"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/sec-slo-visual-review.json", "impl":["FHD/config/service_topology.yaml"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":[],"commits":[]}}
           ]
         }
       ]
