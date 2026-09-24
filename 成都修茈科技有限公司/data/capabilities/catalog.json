@@ -88,6 +88,26 @@
               "platforms": ["windows", "macos", "web"],
               "limitations": ["细粒度到字段级的权限控制仍在迭代"],
               "evidence": {"review": "FHD/docs/evidence/e2e/macos-visual-review-20260920/base-rbac-visual-review.json",
+                "platform_assets": {
+                  "macos": {"observations": [{
+                    "record": {"path": "FHD/docs/evidence/e2e/macos-features-100-1.0.0.5/records/base-rbac.json", "sha256": "56058c0ec0c40a40ec0be176ca47676015908cf1bc1298b650fab952e42c55a8"},
+                    "identity": {"path": "FHD/docs/evidence/e2e/macos-features-100-1.0.0.5/records/base-rbac-delivery-identity.json", "sha256": "d0ad3b1099e0819360618c3b6b4a017b58fd8ef5331b05113e47aff6f4277ed7", "version": "product_version", "git_sha": "git_sha", "artifact_sha256": "installer|sha256"},
+                    "assets": [
+                      {"kind": "screenshot", "path": "FHD/docs/evidence/e2e/macos-features-100-1.0.0.5/media/screenshots/base-rbac.png", "sha256": "9c62e8a431250b1720eeab6c03dd6a72fecab906b6d087cd510acc9dd645ec17"},
+                      {"kind": "video", "path": "FHD/docs/evidence/e2e/macos-features-100-1.0.0.5/media/videos/base-rbac.webm"},
+                      {"kind": "log", "path": "FHD/docs/evidence/e2e/macos-features-100-1.0.0.5/logs/base-rbac.log", "sha256": "b9eef7f6d20a4f43ae2946d7c5d3e9d62dbdd50e44b58a1b366cc1afdfcf8e13"}
+                    ]
+                  }]},
+                  "windows": {"observations": [{
+                    "record": {"path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/base-rbac-run.json", "sha256": "641956acb4fb54dd5470b21ed6022d7b79bbc1168300c2c46d2522aa2eded61e"},
+                    "identity": {"path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/base-rbac-run.json", "sha256": "641956acb4fb54dd5470b21ed6022d7b79bbc1168300c2c46d2522aa2eded61e", "version": "app_version", "git_sha": "app_git_sha", "artifact_sha256": "baseline|installer|sha256_measured"},
+                    "assets": [
+                      {"kind": "screenshot", "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/screenshots/base-rbac.png", "sha256": "8dc8864213eb1d02cbd15173f510b349bdd5ae47affe5da68921111a38cf58e6"},
+                      {"kind": "video", "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/videos/base-rbac.mp4", "sha256": "3ec07a3eb50509ef7f39def5724afc61a8f8e189d081f581a1395f9b7aea5e0d"},
+                      {"kind": "log", "path": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/logs/base-rbac.log", "sha256": "5f089a4fd6c8a54ee7a0de899c6f96c81152d4d67a40217ad92be53e338a5ce4"}
+                    ]
+                  }]}
+                },
                 "impl": ["FHD/app/fastapi_routes/rbac.py", "FHD/app/fastapi_routes/xcmax_admin_auth.py"],
                 "api": [],
                 "tests": ["FHD/tests/test_auth_decorators.py"],
