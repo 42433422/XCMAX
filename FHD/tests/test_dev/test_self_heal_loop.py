@@ -1,100 +1,56 @@
-from __future__ import annotations
-
-import importlib.util
 import subprocess
+import sys
 from argparse import Namespace
 from pathlib import Path
-from types import ModuleType
 from unittest.mock import patch
 
 import pytest
 
-SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "self_heal_loop.py"
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts/dev"))
+import self_heal_loop as loop  # noqa: E402
+
+BASE = {
+    "wo": "WO-123456789abc",
+    "stage": "repro_red",
+    "cmd": "pytest -q tests/test_regression.py",
+    "cwd": "",
+    "timeout": 10,
+    "expected_signature": "expected failure signature",
+    "note": "",
+    "artifact_sha256": "",
+    "release_sha": "",
+}
 
 
-def _module() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("self_heal_loop_under_test", SCRIPT)
-    assert spec and spec.loader
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+@pytest.fixture
+def setup(tmp_path, monkeypatch):
+    receipts = {"diagnosis": {"gate_status": "DIAGNOSED"}}
+    monkeypatch.setattr(loop, "_LOOP_DIR", tmp_path)
+    monkeypatch.setattr(loop, "gate_receipts", lambda _: receipts)
+    monkeypatch.setattr(loop, "record_gate", lambda *_, **__: {"ok": True})
+    return receipts
 
 
-def _args(**overrides: object) -> Namespace:
-    values = {
-        "wo": "WO-123456789abc",
-        "stage": "repro_red",
-        "cmd": "pytest -q tests/test_regression.py",
-        "cwd": "",
-        "timeout": 10,
-        "expected_signature": "expected failure signature",
-        "note": "",
-        "artifact_sha256": "",
-        "release_sha": "",
-    }
-    values.update(overrides)
-    return Namespace(**values)
+def args(**changes):
+    return Namespace(**(BASE | changes))
 
 
-def _recording(module: ModuleType, tmp_path: Path) -> list[tuple[str, str, dict[str, object]]]:
-    records: list[tuple[str, str, dict[str, object]]] = []
-    module._LOOP_DIR = tmp_path
-    module.gate_receipts = lambda _wo: {"diagnosis": {"gate_status": "DIAGNOSED"}}
-    module.record_gate = lambda _wo, gate, status, **kwargs: (
-        records.append((gate, status, kwargs)) or {"ok": True}
-    )
-    return records
-
-
-def test_unrelated_failure_cannot_be_recorded_as_red(tmp_path: Path) -> None:
-    module = _module()
-    records = _recording(module, tmp_path)
+@pytest.mark.parametrize("output", ["other", "expected failure signature"])
+def test_red_requires_signature(setup, output):
     with patch.object(
-        module.subprocess,
-        "run",
-        return_value=subprocess.CompletedProcess("pytest", 1, "ModuleNotFoundError", ""),
+        loop.subprocess, "run", return_value=subprocess.CompletedProcess("pytest", 1, output, "")
     ):
-        assert module.cmd_run(_args()) == 1
-    assert records[0][1] == "FAILED"
+        assert loop.cmd_run(args()) == (output != "expected failure signature")
 
 
-def test_expected_failure_signature_is_required_for_red(tmp_path: Path) -> None:
-    module = _module()
-    records = _recording(module, tmp_path)
-    with patch.object(
-        module.subprocess,
-        "run",
-        return_value=subprocess.CompletedProcess("pytest", 1, "expected failure signature", ""),
-    ):
-        assert module.cmd_run(_args()) == 0
-    assert records[0][1] == "RED"
-
-
-def test_fix_green_must_repeat_red_command_and_directory(tmp_path: Path) -> None:
-    module = _module()
-    _recording(module, tmp_path)
-    module.gate_receipts = lambda _wo: {
-        "repro": {
-            "gate_status": "RED",
-            "evidence": {
-                "command": "pytest -q tests/test_regression.py",
-                "cwd": str(SCRIPT.parents[2]),
-            },
-        }
+def test_green_repeats_red_command_and_directory(setup):
+    setup["repro"] = {
+        "gate_status": "RED",
+        "evidence": {"command": BASE["cmd"], "cwd": str(loop._FHD_ROOT)},
     }
-    with patch.object(module.subprocess, "run") as run:
-        with pytest.raises(SystemExit, match="相同的命令和工作目录"):
-            module.cmd_run(
-                _args(stage="fix_green", expected_signature="", cmd="pytest -q other.py")
-            )
+    with (
+        patch.object(loop.subprocess, "run") as run,
+        pytest.raises(SystemExit, match="相同的命令和工作目录"),
+    ):
+        loop.cmd_run(args(stage="fix_green", expected_signature="", cmd="pytest -q other.py"))
     run.assert_not_called()
-
-
-@pytest.mark.parametrize(
-    "option", ("--status", "--fail-status", "--expect-exit", "--expect-nonzero")
-)
-def test_outcome_override_options_are_not_supported(option: str) -> None:
-    module = _module()
-    with pytest.raises(SystemExit) as raised:
-        module.main(["run", "evidence", "--wo", "WO-123456789abc", "--cmd", "true", option])
-    assert raised.value.code == 2

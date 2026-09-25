@@ -1,40 +1,5 @@
 #!/usr/bin/env python3
-"""AI 自愈生产闭环编排器：真实客户问题 → AI 修复 → 人工审批 → 客户复验。
-
-一个工单（``wo_id``）贯穿全程，不中途另起新单。本脚本只做四件事，
-其余每一步都复用仓库既有能力（不重造）：
-
-  1. **建单**：真实信号 → Work Order SSOT（``upsert_candidate`` + ``routed``）
-  2. **执行**：``run <stage> --cmd ...`` 真实执行该阶段命令，按真实结果落闸门收据，
-     并沿状态机把工单推进到该阶段应有的状态（收据与状态必须同时前进）
-  3. **闸门**：fail-closed 依赖判定——上一步没有真实凭据，下一步不允许开跑
-  4. **审批**：发布前硬门，只接受明确 approve / reject / hold；没有 approve 不放行
-
-闸门收据写在 ``app.services.work_order_gate``（同一条工单事件流），因此
-「走到哪一步」与「凭哪份证据过的」可用同一个 ``wo_id`` 核对。
-
-阶段与依赖（fail-closed）：
-
-    intake → evidence → diagnosis → repro_red → fix_green → pull_request
-        → owner_instance → approval → merge → release → customer_retest → close → knowledge
-
-典型用法：
-
-    # 1) 建单（真实信号）
-    python scripts/dev/self_heal_loop.py start --signal signal.json
-
-    # 2) 逐阶段执行（命令退出码即判定；证据留原文摘要 + SHA256）
-    python scripts/dev/self_heal_loop.py run repro_red --wo WO-xxx --cmd "pytest -q tests/test_bug.py" \
-        --expected-signature "expected error signature"
-
-    # 3) 发布前人工审批（硬门，必须人工调用）
-    python scripts/dev/self_heal_loop.py approval --wo WO-xxx \
-        --decision approve --approver owner --reason "客户现场已复现且回归通过"
-
-    # 4) 客户机复验 → 自动关单 / 自动 reopen
-    python scripts/dev/self_heal_loop.py retest --wo WO-xxx --spec repro.json \
-        --base-url http://127.0.0.1:17500 --expect-version 1.0.0.6
-"""
+"""Approval-gated Work Order repair orchestration."""
 
 from __future__ import annotations
 
@@ -67,7 +32,6 @@ _LOOP_DIR = Path(
     os.environ.get("SELF_HEAL_LOOP_DIR") or (_FHD_ROOT / "test_reports" / "self_heal_loop")
 )
 
-# 阶段 → (闸门名, 依赖闸门, 依赖必须命中的状态集合)
 _STAGES: dict[str, tuple[str, str, frozenset[str]]] = {
     "evidence": ("evidence", "intake", frozenset({"ROUTED"})),
     "diagnosis": ("diagnosis", "evidence", frozenset({"COLLECTED"})),
@@ -75,10 +39,7 @@ _STAGES: dict[str, tuple[str, str, frozenset[str]]] = {
     "fix_green": ("fix", "repro", frozenset({"RED"})),
     "pull_request": ("pull_request", "fix", frozenset({"FIX_VALIDATED_IN_DEV"})),
     "owner_instance": ("owner_instance", "pull_request", frozenset({"OPEN"})),
-    # 审批的依赖是「自有实例已复验通过」；审批本身不改状态机，只落决策收据
     "approval": ("approval", "owner_instance", frozenset({"OWNER_INSTANCE_VERIFIED"})),
-    # 合入 main 是独立闸门：状态机的 merged 只能由真实合并结果换取，
-    # 不允许在 release 阶段「顺路」把状态推过 merged（那是假闭环）。
     "merge": ("merge", "approval", frozenset({"approved"})),
     "release": ("release", "merge", frozenset({"MERGED"})),
     "customer_retest": ("customer_retest", "release", frozenset({"RELEASED"})),
@@ -86,7 +47,6 @@ _STAGES: dict[str, tuple[str, str, frozenset[str]]] = {
     "knowledge": ("knowledge", "close", frozenset({"CLOSED"})),
 }
 
-# 执行成功时该阶段应落的闸门状态；失败时只能写 FAILED。
 _PASS_STATUS: dict[str, str] = {
     "evidence": "COLLECTED",
     "diagnosis": "DIAGNOSED",
@@ -102,10 +62,8 @@ _PASS_STATUS: dict[str, str] = {
 }
 
 _APPROVAL_DECISIONS = frozenset({"approve", "reject", "hold"})
-# 审批身份的硬要求：必须是人（非空），并留下时间戳；空身份直接拒绝。
 _MIN_APPROVER_LEN = 2
 
-# 阶段执行成功后应收敛到的工单状态（缺省表示该阶段不动状态机）
 _PASS_STATE: dict[str, str] = {
     "fix_green": "in_dev",
     "merge": "merged",
@@ -118,7 +76,6 @@ def _utc_now() -> str:
 
 
 def _retest_dir() -> Path:
-    """与 customer_retest.py 同一解析规则：两侧落在不同目录会把 PASS 读成 FAIL。"""
     return Path(os.environ.get("WORK_ORDER_RETEST_DIR") or (_FHD_ROOT / "test_reports" / "retest"))
 
 
@@ -127,7 +84,6 @@ def _sha256_bytes(blob: bytes) -> str:
 
 
 def _receipt(wo_id: str, stage: str, status: str, **extra: Any) -> dict[str, Any]:
-    """落一条闸门收据 + 一份本地 JSON 副本，返回收据内容。"""
     _LOOP_DIR.mkdir(parents=True, exist_ok=True)
     record = {
         "wo_id": wo_id,
@@ -153,7 +109,6 @@ def _receipt(wo_id: str, stage: str, status: str, **extra: Any) -> dict[str, Any
 
 
 def _require_gate(wo_id: str, stage: str) -> None:
-    """fail-closed：依赖闸门没有真实凭据时拒绝推进。"""
     if stage == "intake":
         return
     _gate, dep_gate, allowed = _STAGES[stage]
@@ -167,7 +122,6 @@ def _require_gate(wo_id: str, stage: str) -> None:
 
 
 def _shortest_path(start: str, target: str) -> list[str]:
-    """状态机上的最短合法路径（不含起点）；不可达时返回空列表。"""
     if start == target:
         return []
     queue: list[tuple[str, list[str]]] = [(start, [])]
@@ -184,11 +138,6 @@ def _shortest_path(start: str, target: str) -> list[str]:
 
 
 def _advance(wo_id: str, target: str) -> None:
-    """按状态机允许的路径把工单推进到 target；路径不可达时 fail-closed 阻断。
-
-    闸门收据回答「凭哪份证据过的」，状态机回答「走到哪一步」；两者必须同时前进，
-    否则会出现「收据说已发布、工单还停在 routed」的假闭环。
-    """
     current = str((get_work_order(wo_id) or {}).get("status") or "")
     for nxt in _shortest_path(current, target):
         result = record_transition(
@@ -207,7 +156,6 @@ def _advance(wo_id: str, target: str) -> None:
 
 
 def cmd_start(args: argparse.Namespace) -> int:
-    """真实信号 → 唯一工单（幂等：同 dedup_key 不重复建单）。"""
     signal = json.loads(Path(args.signal).read_text(encoding="utf-8"))
     key = str(signal.get("dedup_key") or "").strip()
     if not key:
@@ -243,7 +191,6 @@ def cmd_start(args: argparse.Namespace) -> int:
 
 
 def cmd_run(args: argparse.Namespace) -> int:
-    """真实执行某阶段命令，按退出码落闸门收据。"""
     wo_id = args.wo
     _require_gate(wo_id, args.stage)
     timeout = float(args.timeout)
@@ -305,7 +252,6 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 
 def cmd_approval(args: argparse.Namespace) -> int:
-    """发布前人工审批硬门：approve / reject / hold，无 approve 不放行。"""
     wo_id, decision = args.wo, str(args.decision)
     if decision not in _APPROVAL_DECISIONS:
         raise SystemExit(f"未知审批决定 {decision}；只允许 {sorted(_APPROVAL_DECISIONS)}")
@@ -313,7 +259,6 @@ def cmd_approval(args: argparse.Namespace) -> int:
     if len(approver) < _MIN_APPROVER_LEN:
         raise SystemExit("审批必须记录真实审批人身份（--approver），不接受匿名放行")
     if decision == "approve":
-        # 硬门：未在自有实例复验通过前，不允许批准发布
         _require_gate(wo_id, "approval")
     status = {"approve": "approved", "reject": "rejected", "hold": "held"}[decision]
     _receipt(
@@ -330,7 +275,6 @@ def cmd_approval(args: argparse.Namespace) -> int:
 
 
 def cmd_status(args: argparse.Namespace) -> int:
-    """打印工单状态 + 全部闸门收据（对外可核对视图）。"""
     view = get_work_order(args.wo)
     if view is None:
         raise SystemExit(f"未知工单 {args.wo}")
@@ -349,7 +293,6 @@ def cmd_status(args: argparse.Namespace) -> int:
 
 
 def cmd_retest(args: argparse.Namespace) -> int:
-    """客户机复验 → PASS 自动关单、FAIL 自动 reopen（不另起新单）。"""
     wo_id = args.wo
     _require_gate(wo_id, "customer_retest")
     script = _FHD_ROOT / "scripts" / "dev" / "customer_retest.py"
