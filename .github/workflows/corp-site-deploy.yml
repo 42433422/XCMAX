@@ -203,7 +203,7 @@ jobs:
             echo "[verify] homepage nav present:"
             xc_curl -o /tmp/xc-home.html https://xiu-ci.com/
             grep -E -q 'site-header|>首页<|/download' /tmp/xc-home.html
-            grep -E -q '产品下载|软件下载' /tmp/xc-home.html
+            grep -E -q '产品下载|软件下载|下载' /tmp/xc-home.html  # 首页入口文案自 #2038 起为「下载」；意图仍是首页必须有下载入口，链接目标由 /download 校验保证
             echo "[verify] download center is new product page (not old stub):"
             xc_curl -o /tmp/xc-download.html https://xiu-ci.com/download
             grep -E -q 'download/releases|更新日志|产品下载' /tmp/xc-download.html
