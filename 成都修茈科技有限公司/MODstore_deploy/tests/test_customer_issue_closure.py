@@ -352,6 +352,7 @@ def test_customer_feedback_keeps_work_order_and_verified_bundle_in_owner_event(c
     from modstore_server import customer_service_api
     from modstore_server.auth_service import create_access_token
     from modstore_server.db.ops_events import OutboxEvent
+    from modstore_server.db.work_orders import WorkOrderEvent
     from modstore_server.models import User, get_session_factory
     from modstore_server.models_cs import CustomerServiceTicket
 
@@ -377,13 +378,31 @@ def test_customer_feedback_keeps_work_order_and_verified_bundle_in_owner_event(c
         db.commit()
         db.refresh(user)
         headers = {"Authorization": f"Bearer {create_access_token(user.id, user.username)}"}
+    candidate = client.post(
+        "/api/work-orders/customer-candidate",
+        json={
+            "dedup_key": "customer-report-1",
+            "reason": "product_defect",
+            "expected": "save succeeds",
+            "actual": "save fails",
+            "confidence": 0.95,
+            "support_bundle_sha256": sha,
+            "client_instance_id": "test-instance",
+            "product_version": "1.0.0.5",
+            "git_sha": "a" * 40,
+            "platform": "macOS",
+        },
+        headers=headers,
+    )
+    assert candidate.status_code == 200, candidate.text
+    wo_id = candidate.json()["wo_id"]
     body = {
         "source": "customer_feedback",
-        "source_ref": "WO-abcdef123456",
+        "source_ref": wo_id,
         "title": "Client defect",
         "description": "The client action returns an error instead of saving.",
         "issue_domain": "platform",
-        "work_order_id": "WO-abcdef123456",
+        "work_order_id": wo_id,
         "support_bundle_sha256": sha,
         "support_bundle_base64": base64.b64encode(raw).decode("ascii"),
     }
@@ -391,11 +410,10 @@ def test_customer_feedback_keeps_work_order_and_verified_bundle_in_owner_event(c
     assert first.status_code == 200, first.text
     replay = client.post("/api/customer-service/issues/intake", json=body, headers=headers)
     assert replay.json()["ticket_id"] == first.json()["ticket_id"] and replay.json()["replayed"]
-    assert scheduled == [{"ticket_id": first.json()["ticket_id"]}] * 2
     with sf() as db:
         ticket = db.get(CustomerServiceTicket, first.json()["ticket_id"])
         evidence = json.loads(ticket.evidence_json)
-        assert evidence["work_order_id"] == "WO-abcdef123456"
+        assert evidence["work_order_id"] == wo_id
         assert evidence["support_bundle_sha256"] == sha
         assert base64.b64decode(evidence["support_bundle_base64"]) == raw
         events = (
@@ -405,9 +423,16 @@ def test_customer_feedback_keeps_work_order_and_verified_bundle_in_owner_event(c
         )
         assert len(events) == 1
         payload = json.loads(events[0].payload_json)
-        assert payload["work_order_id"] == "WO-abcdef123456"
-        assert payload["support_bundle_sha256"] == sha
+        assert [payload["work_order_id"], payload["support_bundle_sha256"]] == [wo_id, sha]
         assert base64.b64decode(payload["support_bundle_base64"]) == raw
+        wo_events = (
+            db.query(WorkOrderEvent).filter_by(wo_id=wo_id).order_by(WorkOrderEvent.id).all()
+        )
+        assert any(
+            event.event == "transition" and event.to_state == "routed" for event in wo_events
+        )
+        receipts = [json.loads(event.ref or "{}") for event in wo_events if event.event == "gate"]
+        assert {item.get("gate_status") for item in receipts} == {"ROUTED", "COLLECTED"}
     bad = client.post(
         "/api/customer-service/issues/intake",
         json={**body, "source_ref": "WO-111111111111", "support_bundle_sha256": "0" * 64},

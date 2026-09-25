@@ -118,6 +118,7 @@ def fold(events: Iterable[Any]) -> dict[str, dict[str, Any]]:
                 "track": "",
                 "source": "",
                 "dedup_key": "",
+                "context": {},
                 "issue_number": 0,
                 "issue_url": "",
                 "release_version": "",
@@ -144,6 +145,7 @@ def fold(events: Iterable[Any]) -> dict[str, dict[str, Any]]:
             view["status"] = "candidate"
             view["source"] = str(getattr(rec, "source", "") or "")
             view["dedup_key"] = str(getattr(rec, "dedup_key", "") or "")
+            view["context"] = _json_object(getattr(rec, "context", "{}"))
             view["created_at"] = at
         elif event == "transition":
             view["status"] = str(getattr(rec, "to_state", "") or view["status"])

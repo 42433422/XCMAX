@@ -6,9 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import logging
 import os
-import re
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -26,25 +24,14 @@ from app.services.work_order_ssot import (  # noqa: E402
 )
 from app.services.work_order_state import _ALLOWED_TRANSITIONS  # noqa: E402
 
-logger = logging.getLogger("self_heal_loop")
-
 _LOOP_DIR = Path(
     os.environ.get("SELF_HEAL_LOOP_DIR") or (_FHD_ROOT / "test_reports" / "self_heal_loop")
 )
 
 _STAGES: dict[str, tuple[str, str, frozenset[str]]] = {
-    "evidence": ("evidence", "intake", frozenset({"ROUTED"})),
-    "diagnosis": ("diagnosis", "evidence", frozenset({"COLLECTED"})),
     "repro_red": ("repro", "diagnosis", frozenset({"DIAGNOSED"})),
     "fix_green": ("fix", "repro", frozenset({"RED"})),
-    "pull_request": ("pull_request", "fix", frozenset({"FIX_VALIDATED_IN_DEV"})),
-    "owner_instance": ("owner_instance", "pull_request", frozenset({"OPEN"})),
-    "approval": ("approval", "owner_instance", frozenset({"OWNER_INSTANCE_VERIFIED"})),
-    "merge": ("merge", "approval", frozenset({"approved"})),
-    "release": ("release", "merge", frozenset({"MERGED"})),
     "customer_retest": ("customer_retest", "release", frozenset({"RELEASED"})),
-    "close": ("close", "customer_retest", frozenset({"PASS"})),
-    "knowledge": ("knowledge", "close", frozenset({"CLOSED"})),
 }
 
 _PASS_STATUS: dict[str, str] = {
@@ -139,64 +126,6 @@ def _advance(wo_id: str, target: str) -> None:
         current = nxt
     if current != target:
         raise SystemExit(f"状态机阻断：{current} 无法到达 {target}（工单 {wo_id}）")
-
-
-def cmd_start(args: argparse.Namespace) -> int:
-    signal = json.loads(Path(args.signal).read_text(encoding="utf-8"))
-    wo_id = str(signal.get("work_order_id") or "").strip()
-    if wo_id:
-        view = get_work_order(wo_id)
-        context = view.get("context") if isinstance(view, dict) else {}
-        context = context if isinstance(context, dict) else {}
-        bundle_sha = str(signal.get("support_bundle_sha256") or "")
-        if (
-            not view
-            or view.get("source") != "client_ai_product_issue"
-            or not context.get("customer_reported")
-            or not re.fullmatch(r"[0-9a-f]{64}", bundle_sha)
-            or (
-                signal.get("user_id") is not None
-                and int(context.get("customer_user_id") or 0) != int(signal["user_id"])
-            )
-        ):
-            raise SystemExit(f"客户事件与 Work Order 不匹配：拒绝重新建单（{wo_id}）")
-        if view.get("status") == "candidate":
-            result = record_transition(
-                wo_id,
-                "routed",
-                ref={
-                    "track": str(signal.get("track") or "product_line"),
-                    "customer_ticket_id": signal.get("ticket_id"),
-                    "customer_ticket_no": signal.get("ticket_no"),
-                },
-                note="客户端缺陷工单已送达 Owner",
-                source="customer_issue_intake",
-            )
-            if not result.get("ok"):
-                raise SystemExit(f"既有 Work Order 无法派发：{result.get('reason')}（{wo_id}）")
-        elif view.get("status") != "routed":
-            raise SystemExit(f"Work Order 已进入后续阶段，拒绝覆盖：{wo_id}={view.get('status')}")
-        _receipt(
-            wo_id,
-            "intake",
-            "ROUTED",
-            note="客户事件复用已创建的 Work Order",
-            evidence={"customer_ticket_id": signal.get("ticket_id")},
-        )
-        _receipt(
-            wo_id,
-            "evidence",
-            "COLLECTED",
-            note="客户事件复用已创建的 Work Order",
-            evidence={
-                "customer_ticket_id": signal.get("ticket_id"),
-                "customer_ticket_no": signal.get("ticket_no"),
-                "support_bundle_sha256": signal.get("support_bundle_sha256"),
-            },
-        )
-        print(json.dumps({"wo_id": wo_id, "created": False}, ensure_ascii=False))
-        return 0
-    raise SystemExit("客户信号缺少既有 Work Order ID；拒绝脱离客户端事件单独建单")
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -318,9 +247,6 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="action", required=True)
 
-    p_start = sub.add_parser("start", help="真实信号建单（幂等）")
-    p_start.add_argument("--signal", required=True)
-
     p_run = sub.add_parser("run", help="执行阶段命令并按真实结果落闸门")
     p_run.add_argument("stage", choices=("repro_red", "fix_green"))
     p_run.add_argument("--wo", required=True)
@@ -343,9 +269,7 @@ def main(argv: list[str] | None = None) -> int:
     p_rt.add_argument("--issue-comment", default="")
 
     args = parser.parse_args(argv)
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     handlers = {
-        "start": cmd_start,
         "run": cmd_run,
         "status": cmd_status,
         "retest": cmd_retest,

@@ -26,6 +26,7 @@ from modstore_server.models_cs import (
     CustomerServiceSession,
     CustomerServiceTicket,
 )
+from modstore_server.work_order_api import route_customer_issue
 
 router = APIRouter()
 
@@ -35,6 +36,23 @@ def _wake_owner_intake(ticket_id: int, source: str) -> None:
         from modstore_server.customer_service_api import _schedule_customer_ticket_incident
 
         _schedule_customer_ticket_incident({"ticket_id": int(ticket_id)})
+
+
+def _route_work_order(
+    db: Session, body: CustomerIssueIntakeBody, user: User, ticket: CustomerServiceTicket
+) -> None:
+    if body.source != "customer_feedback" or not body.work_order_id:
+        return
+    outcome = route_customer_issue(
+        db,
+        wo_id=body.work_order_id,
+        user=user,
+        support_bundle_sha256=body.support_bundle_sha256,
+        ticket_id=int(ticket.id),
+        ticket_no=str(ticket.ticket_no),
+    )
+    if not outcome.get("ok"):
+        raise HTTPException(409, "客户工单与产品问题 Work Order 不匹配")
 
 
 class CustomerIssueIntakeBody(BaseModel):
@@ -128,8 +146,10 @@ async def intake_customer_issue(
         db.query(CustomerServiceTicket).filter_by(ticket_no=number, user_id=int(user.id)).first()
     )
     if existing:
+        payload = response(existing, replayed=True)
+        _route_work_order(db, body, user, existing)
         _wake_owner_intake(existing.id, body.source)
-        return response(existing, replayed=True)
+        return payload
     private_rework = body.source == "private_mod_rework"
     intent = "custom_delivery" if private_rework else "product_issue"
     if private_rework:
@@ -199,8 +219,12 @@ async def intake_customer_issue(
         )
         if not existing:
             raise
-        return response(existing, replayed=True)
+        payload = response(existing, replayed=True)
+        _route_work_order(db, body, user, existing)
+        _wake_owner_intake(existing.id, body.source)
+        return payload
     db.refresh(ticket)
+    _route_work_order(db, body, user, ticket)
     _wake_owner_intake(ticket.id, body.source)
     return response(ticket, replayed=False)
 

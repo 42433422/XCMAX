@@ -1,4 +1,3 @@
-import json
 import subprocess
 import sys
 from argparse import Namespace
@@ -55,36 +54,3 @@ def test_green_repeats_red_command_and_directory(setup):
     ):
         loop.cmd_run(args(stage="fix_green", expected_signature="", cmd="pytest -q other.py"))
     run.assert_not_called()
-
-
-def test_start_reuses_owner_created_customer_work_order(tmp_path, monkeypatch):
-    signal = {
-        "work_order_id": BASE["wo"],
-        "user_id": 41,
-        "ticket_id": 9,
-        "ticket_no": "CS-9",
-        "support_bundle_sha256": "a" * 64,
-    }
-    signal_path = tmp_path / "signal.json"
-    signal_path.write_text(json.dumps(signal), encoding="utf-8")
-    monkeypatch.setattr(
-        loop,
-        "get_work_order",
-        lambda _wo: {
-            "wo_id": BASE["wo"],
-            "source": "client_ai_product_issue",
-            "status": "candidate",
-            "context": {"customer_reported": True, "customer_user_id": 41},
-        },
-    )
-    transitions = []
-    receipts = []
-    monkeypatch.setattr(
-        loop,
-        "record_transition",
-        lambda wo, state, **kw: transitions.append((wo, state, kw)) or {"ok": True},
-    )
-    monkeypatch.setattr(loop, "_receipt", lambda *args, **kw: receipts.append((args, kw)))
-    assert loop.cmd_start(Namespace(signal=str(signal_path))) == 0
-    assert len(transitions) == 1 and transitions[0][0:2] == (BASE["wo"], "routed")
-    assert [item[0][1] for item in receipts] == ["intake", "evidence"]

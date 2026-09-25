@@ -252,6 +252,64 @@ def transition(
     return {"ok": True, "wo_id": wo_id, "from": current, "to": target}
 
 
+def route_customer_issue(
+    db: Session,
+    *,
+    wo_id: str,
+    user: User,
+    support_bundle_sha256: str,
+    ticket_id: int,
+    ticket_no: str,
+) -> dict[str, Any]:
+    view = _view(db, wo_id)
+    context = (view or {}).get("context") or {}
+    if (
+        not view
+        or view.get("source") != "client_ai_product_issue"
+        or not context.get("customer_reported")
+        or int(context.get("customer_user_id") or 0) != int(user.id)
+        or context.get("support_bundle_sha256") != support_bundle_sha256
+    ):
+        return {"ok": False, "reason": "client_work_order_mismatch", "wo_id": wo_id}
+    status = view.get("status")
+    if status == "candidate":
+        transition(
+            TransitionBody(
+                wo_id=wo_id,
+                to_state="routed",
+                ref={
+                    "track": "product_line",
+                    "customer_ticket_id": ticket_id,
+                    "customer_ticket_no": ticket_no,
+                },
+                source="customer_issue_intake",
+            ),
+            db=db,
+            _user=user,
+        )
+    elif status not in "routed in_dev merged released verifying closed reopened".split():
+        return {"ok": False, "reason": "work_order_not_routable", "wo_id": wo_id}
+    history = view.get("history") or []
+    receipts = {
+        event["ref"]["gate"]: event["ref"]
+        for event in history
+        if event.get("event") == "gate" and event.get("ref", {}).get("gate")
+    }
+    for gate, gate_status, evidence in (
+        ("intake", "ROUTED", {"customer_ticket_id": ticket_id, "customer_ticket_no": ticket_no}),
+        ("evidence", "COLLECTED", {"support_bundle_sha256": support_bundle_sha256}),
+    ):
+        previous = receipts.get(gate, {})
+        if previous.get("gate_status") == gate_status and previous.get("evidence") == evidence:
+            continue
+        record_gate_receipt(
+            GateReceiptBody(wo_id=wo_id, gate=gate, gate_status=gate_status, evidence=evidence),
+            db=db,
+            _user=user,
+        )
+    return {"ok": True, "wo_id": wo_id}
+
+
 @router.post("/gate")
 def record_gate_receipt(
     body: GateReceiptBody,
@@ -262,9 +320,7 @@ def record_gate_receipt(
     wo_id = str(body.wo_id or "").strip()
     if not is_valid_wo_id(wo_id) or _view(db, wo_id) is None:
         return {"ok": False, "reason": "unknown_work_order", "wo_id": wo_id}
-    evidence_json = json.dumps(
-        body.evidence or {}, ensure_ascii=False, separators=(",", ":")
-    )
+    evidence_json = json.dumps(body.evidence or {}, ensure_ascii=False, separators=(",", ":"))
     if len(evidence_json.encode("utf-8")) > 16_384:
         return {"ok": False, "reason": "evidence_too_large", "wo_id": wo_id}
     _append_event(
