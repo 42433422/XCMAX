@@ -3,8 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>产品下载 | XCAGI 与客来来</title>
-    <meta name="description" content="下载 XCAGI 企业版与客来来联合测试版。获取官方安装包、系统要求、版本与校验信息。" />
+    <title>XCAGI 产品下载</title>
+    <meta name="description" content="查看 XCAGI Windows、macOS、Android 与 Web 平台状态、正式版本、安装包信息、校验说明和安装支持入口。" />
+    <meta property="og:site_name" content="XCAGI" />
+    <meta property="og:title" content="XCAGI 产品下载" />
+    <meta property="og:description" content="查看 XCAGI 官方平台状态、版本、安装包校验信息与安装支持。" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://xiu-ci.com/download" />
+    <meta property="og:image" content="https://xiu-ci.com/assets/brand-logo.jpg" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="canonical" href="https://xiu-ci.com/download" />
+    <link rel="icon" href="/assets/xiu-ci-logo.png" type="image/png" />
     <style>
       :root {
         color-scheme: light;
@@ -363,12 +372,7 @@
         margin-right: 6px;
         color: var(--ink);
       }
-
-      .kellai-section {
-        scroll-margin-top: 80px;
-        padding: 100px 0;
-      }
-      .section-label {
+.section-label {
         margin: 0 0 13px;
         color: var(--green);
         font-size: 11px;
@@ -391,36 +395,9 @@
         font-size: 16px;
         line-height: 1.75;
       }
-      .kellai-grid {
-        display: grid;
-        grid-template-columns: minmax(0, 1.08fr) minmax(350px, 0.92fr);
-        gap: clamp(48px, 7vw, 86px);
-        align-items: start;
-        margin-top: 56px;
-      }
-      .kellai-intro {
-        min-width: 0;
-      }
-      .kellai-lockup {
-        display: flex;
-        align-items: center;
-        gap: 14px;
-      }
-      .kellai-lockup img {
-        width: 64px;
-        height: 64px;
-        border-radius: 17px;
-        object-fit: contain;
-      }
-      .kellai-lockup h3 {
-        margin: 0;
-        font-size: 25px;
-      }
-      .kellai-lockup p {
-        margin: 4px 0 0;
-        color: #7b8490;
-        font-size: 12px;
-      }
+
+
+
       .joint-badge {
         display: inline-flex;
         margin-left: 8px;
@@ -466,24 +443,7 @@
         line-height: 1.62;
       }
 
-      .kellai-download-card {
-        min-width: 0;
-        padding: 26px;
-        border: 1px solid var(--line);
-        border-radius: 20px;
-        background: #fff;
-        box-shadow: 0 18px 50px rgba(30, 46, 66, 0.1);
-      }
-      .kellai-download-card__top {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 14px;
-      }
-      .kellai-download-card__top strong {
-        font-size: 16px;
-      }
-      .release-chip {
+.release-chip {
         padding: 5px 8px;
         border-radius: 999px;
         color: var(--green);
@@ -491,38 +451,9 @@
         font-size: 10px;
         font-weight: 750;
       }
-      .kellai-download-button {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 15px;
-        margin-top: 20px;
-        padding: 16px 17px;
-        border-radius: 12px;
-        color: #fff;
-        background: #17211e;
-        text-decoration: none;
-        transition: 0.18s ease;
-      }
-      .kellai-download-button:hover {
-        transform: translateY(-1px);
-        background: #0c1714;
-      }
-      .kellai-download-button__copy {
-        display: grid;
-        gap: 3px;
-      }
-      .kellai-download-button__copy strong {
-        font-size: 13px;
-      }
-      .kellai-download-button__copy span {
-        color: rgba(255, 255, 255, 0.62);
-        font-size: 10px;
-      }
-      .kellai-download-button > span:last-child {
-        font-size: 11px;
-        font-weight: 750;
-      }
+
+
+
       .platform-pending {
         display: flex;
         justify-content: space-between;
@@ -655,12 +586,7 @@
         .hero-visual {
           max-width: 760px;
         }
-        .kellai-grid {
-          grid-template-columns: 1fr;
-        }
-        .kellai-download-card {
-          max-width: 560px;
-        }
+
       }
 
       @media (max-width: 640px) {
@@ -680,8 +606,7 @@
           padding: 7px 8px;
           font-size: 11px;
         }
-        .header-nav .nav-home,
-        .header-nav .nav-kellai {
+        .header-nav .nav-home {
           display: none;
         }
         .xcagi-grid {
@@ -722,19 +647,10 @@
           border-top: 1px solid rgba(17, 19, 24, 0.08);
           border-left: 0;
         }
-        .kellai-section {
-          padding: 76px 0;
-        }
-        .kellai-grid {
-          gap: 36px;
-          margin-top: 38px;
-        }
+
         .feature-list {
           grid-template-columns: 1fr;
           gap: 22px;
-        }
-        .kellai-download-card {
-          padding: 20px;
         }
         .partner-copy {
           grid-template-columns: 1fr;
@@ -753,16 +669,14 @@
       <div class="container header-inner">
         <a class="brand" href="/download" aria-label="产品下载首页">
           <img src="/assets/xiu-ci-logo.png?v=20260610d" alt="修茈科技 Logo" />
-          <span class="brand-copy"><strong>产品下载</strong><span>Xiuci Downloads</span></span>
+          <span class="brand-copy"><strong>XCAGI</strong><span>产品下载</span></span>
         </a>
         <nav class="header-nav" aria-label="下载页导航">
           <a class="nav-home" href="/index.html">官网</a>
-          <a class="product-link" href="#xcagi">XCAGI</a>
-          <a href="/download/breakpoints">断点清单</a>
-          <a href="/download/goals">工作目标</a>
+          <a class="product-link" href="#xcagi">产品介绍</a>
+          <a href="#platforms">平台与下载</a>
           <a href="/download/releases">更新日志</a>
-          <a class="nav-kellai" href="#kellai">客来来</a>
-          <a class="market-link" href="/market/">AI 市场</a>
+          <a href="/contact.html">安装支持</a>
         </nav>
       </div>
     </header>
@@ -802,9 +716,10 @@
                   </div>
                 </div>
                 <p class="pending" id="pending" hidden>部分平台尚未开放，请以各平台下载按钮为准。</p>
+                <div id="platforms" class="download-platform-status"><strong>产品平台等级（来源：能力目录 / FHD/VERSION.md）</strong><span>Windows：<b data-platform-status="Windows 桌面">签约级</b></span><span>macOS：<b data-platform-status="macOS 桌面">签约级</b></span><span>Android：<b data-platform-status="Android">实验骨架·非签约级</b></span><span>Web：<b data-platform-status="Web / 后端">签约级</b></span></div>
                 <div class="download-list" id="download-list" aria-live="polite" aria-label="XCAGI 可下载版本"></div>
                 <p class="download-note" id="download-note">
-                  支持 Windows 10+、macOS 12+。安装后可从 <a href="/market/">AI 市场</a> 选择行业 Mod。
+                  支持状态和当前开放安装包分开展示；Android 为实验版。安装后可按需安装行业 Mod。
                 </p>
               </div>
             </div>
@@ -818,6 +733,7 @@
             </div>
           </div>
 
+          <section class="download-install" aria-labelledby="download-install-title"><h2 id="download-install-title">安装说明</h2><ol><li>查看当前版本与平台状态，选择对应安装包。</li><li>下载后按系统提示完成安装；签名和公证状态以当前安装包信息为准。</li><li>安装前核对页面显示的 SHA-256；未签名 Windows 临时包仅供管理员核对来源后使用。</li></ol></section>
           <div class="proof-row" aria-label="XCAGI 产品特性">
             <div class="proof-item"><b>行业 Mod</b>按需安装</div>
             <div class="proof-item"><b>过程留痕</b>结果可复核</div>
@@ -826,103 +742,13 @@
         </div>
       </section>
 
-      <section class="kellai-section" id="kellai" aria-labelledby="kellai-title">
-        <div class="container">
-          <div class="section-head">
-            <p class="section-label">More products</p>
-            <h2 id="kellai-title">客来来，让每一条线索持续被跟进</h2>
-            <p>把渠道消息、客户档案、销售漏斗与 AI 建议放在同一个工作台，减少来回切换和重复录入。</p>
-          </div>
-
-          <div class="kellai-grid">
-            <div class="kellai-intro">
-              <div class="kellai-lockup">
-                <img src="/assets/kellai-icon.png?v=20260719" alt="客来来" />
-                <div>
-                  <h3>客来来 <span class="joint-badge">联合测试版</span></h3>
-                  <p>观微数智 × 成都修茈科技联合发布</p>
-                </div>
-              </div>
-
-              <div class="feature-list">
-                <article class="feature">
-                  <span>01</span>
-                  <div>
-                    <b>渠道统一接待</b>
-                    <p>集中查看客户会话，保留上下文与客户归属。</p>
-                  </div>
-                </article>
-                <article class="feature">
-                  <span>02</span>
-                  <div>
-                    <b>客户漏斗管理</b>
-                    <p>从建联、需求、报价到成交，阶段清晰可追踪。</p>
-                  </div>
-                </article>
-                <article class="feature">
-                  <span>03</span>
-                  <div>
-                    <b>AI 话术与画像</b>
-                    <p>结合客户上下文生成建议，辅助判断需求与意图。</p>
-                  </div>
-                </article>
-                <article class="feature">
-                  <span>04</span>
-                  <div>
-                    <b>运营自动化</b>
-                    <p>统一管理待办、自动回复任务与销售动作。</p>
-                  </div>
-                </article>
-              </div>
-            </div>
-
-            <aside class="kellai-download-card" aria-label="客来来测试版安装包">
-              <div class="kellai-download-card__top"><strong>下载客来来</strong><span class="release-chip">macOS 1.0.1</span></div>
-              <a
-                class="kellai-download-button"
-                href="/downloads/kellai/1.0.1/kellai-1.0.1-mac-arm64.dmg"
-                download="客来来-1.0.1-mac-arm64.dmg"
-              >
-                <span class="kellai-download-button__copy"
-                  ><strong>Apple Silicon 版</strong><span>macOS 11.0+ · 28.4 MB · 已通过 Apple 公证</span></span
-                >
-                <span>下载</span>
-              </a>
-              <div class="platform-pending"><span>Windows 版本</span><strong>准备中</strong></div>
-              <p class="test-note"><b>测试版说明：</b>渠道能力需要完成对应平台授权，建议先在非关键业务环境中试用并定期备份数据。</p>
-              <p class="checksum">SHA-256：bdc4a2f27b542f8c171594c6af0f3d2b63353ecb1d34b70740589b4679f32afc</p>
-              <div class="card-actions">
-                <a href="/contact.html?product=kellai&amp;intent=trial">申请测试与合作</a>
-                <a href="mailto:970882904@qq.com?subject=%E5%AE%A2%E6%9D%A5%E6%9D%A5%E6%B5%8B%E8%AF%95%E7%89%88%E5%92%A8%E8%AF%A2"
-                  >联系团队</a
-                >
-              </div>
-            </aside>
-          </div>
-
-          <details class="partner-details">
-            <summary>关于「客来来」联合发布</summary>
-            <div class="partner-copy">
-              <p>
-                成都观微数智科技有限公司是国内专注于企业智能营销工具研发的科技企业，核心团队拥有丰富的大模型应用、私域运营系统开发经验。公司主打
-                AI
-                全流程自动获客体系，依托智能化自动化能力，解决传统获客成本高、转化效率低、运营人力投入大等行业痛点，服务覆盖多行业中小实体商户与线上创业团队。
-              </p>
-              <p>
-                本次观微数智携手成都修茈科技有限公司联合上线「客来来」测试版产品。双方整合各自技术与场景资源，优化获客链路全流程体验，面向市场推出轻量化、易落地的智能获客工具；后续将持续迭代产品功能，拓展更多适配实体经济的数字化经营方案。
-              </p>
-            </div>
-          </details>
-        </div>
-      </section>
     </main>
 
     <footer class="footer">
       <div class="container footer-inner">
         <span>© 2026 成都修茈科技有限公司 · 官方产品下载</span>
         <nav class="footer-links" aria-label="页脚导航">
-          <a href="/index.html">公司官网</a><a href="#breakpoints">断点清单</a><a href="/download/goals">工作目标</a
-          ><a href="/market/">AI 市场</a><a href="/download/releases">更新日志</a><a href="/contact.html">联系支持</a>
+          <a href="/index.html">XCAGI 官网</a><a href="/download/releases">更新日志</a><a href="/contact.html">安装支持</a>
         </nav>
       </div>
     </footer>
@@ -1141,7 +967,7 @@
               ? 'Android 为实验版（非签约级），安装后请在系统设置中允许“安装未知应用”。'
               : hotfix
                 ? 'Windows 临时交付包尚未完成 Authenticode 签名，仅供管理员核对来源与 SHA-256 后安装；不会进入稳定自动更新。macOS 仍使用稳定版。'
-                : '支持 Windows 10+、macOS 12+。安装后可从 <a href="/market/">AI 市场</a> 选择行业 Mod。'
+                : '支持 Windows 10+、macOS 12+。安装后可按需安装行业 Mod。'
           listEl.innerHTML = ''
 
           rows().forEach(function (row, index) {
