@@ -112,35 +112,40 @@ def _acceptance(path: Path, **overrides) -> Path:
     return path
 
 
-def _authorized_run(tmp_path: Path, acceptance: Path) -> subprocess.CompletedProcess:
+def _authorized_run(
+    tmp_path: Path,
+    acceptance: Path | None,
+    signature_status: str = "unsigned",
+    filename_signature: str = "",
+) -> subprocess.CompletedProcess:
     version = "1.0.0.4"
-    filename = f"XCAGI-Enterprise-Setup-{version}-x64-unsigned.exe"
+    suffix = filename_signature or signature_status
+    filename = f"XCAGI-Enterprise-Setup-{version}-x64-{suffix}.exe"
     artifact = tmp_path / filename
     artifact.write_bytes(b"MZ-unsigned")
     metadata = tmp_path / "release.json"
     _metadata(metadata, version)
-    return subprocess.run(
-        [
-            sys.executable,
-            str(SCRIPT),
-            "--version",
-            version,
-            "--git-sha",
-            "c" * 40,
-            "--artifact",
-            str(artifact),
-            "--artifact-url",
-            f"https://xiu-ci.com/xcagi-v{version}/enterprise/{filename}",
-            "--release-metadata-source",
-            str(metadata),
-            "--risk-acceptance",
-            str(acceptance),
-            "--output",
-            str(tmp_path / "pointer.json"),
-        ],
-        capture_output=True,
-        text=True,
-    )
+    command = [
+        sys.executable,
+        str(SCRIPT),
+        "--version",
+        version,
+        "--git-sha",
+        "c" * 40,
+        "--artifact",
+        str(artifact),
+        "--artifact-url",
+        f"https://xiu-ci.com/xcagi-v{version}/enterprise/{filename}",
+        "--release-metadata-source",
+        str(metadata),
+        "--signature-status",
+        signature_status,
+        "--output",
+        str(tmp_path / "pointer.json"),
+    ]
+    if acceptance is not None:
+        command += ["--risk-acceptance", str(acceptance)]
+    return subprocess.run(command, capture_output=True, text=True)
 
 
 def test_authorized_acceptance_opens_public_download_within_its_term(tmp_path: Path) -> None:
@@ -156,6 +161,25 @@ def test_authorized_acceptance_opens_public_download_within_its_term(tmp_path: P
     assert pointer["risk_acceptance"]["expires_at"] == "2029-09-17T00:00:00+08:00"
     assert pointer["risk_acceptance"]["disclosed_risks"]
     assert pointer["artifact"]["url"].startswith("https://")
+
+
+def test_signed_interim_download_needs_no_unsigned_risk_acceptance(tmp_path: Path) -> None:
+    result = _authorized_run(tmp_path, None, signature_status="signed")
+    assert result.returncode == 0, result.stderr
+
+    pointer = json.loads((tmp_path / "pointer.json").read_text(encoding="utf-8"))
+    assert pointer["download_allowed"] is True
+    assert pointer["signature_status"] == "signed"
+    assert pointer["stable_auto_update"] is False
+    assert "risk_acceptance" not in pointer
+
+
+def test_signed_interim_download_rejects_unsigned_filename(tmp_path: Path) -> None:
+    result = _authorized_run(
+        tmp_path, None, signature_status="signed", filename_signature="unsigned"
+    )
+    assert result.returncode != 0
+    assert "signed installer filename must end with -signed.exe" in result.stderr
 
 
 def test_authorized_acceptance_requires_a_public_https_artifact_url(tmp_path: Path) -> None:
