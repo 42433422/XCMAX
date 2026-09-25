@@ -1,5 +1,5 @@
 {
-  "lines": 2302105,
+  "lines": 2300826,
   "updated": "2026-09-25",
-  "note": "Support Authenticode-signed Windows interim downloads with receipt verification, preserve the bounded unsigned risk path, and keep stable OTA fail-closed."
+  "note": "棘轮下调"
 }
