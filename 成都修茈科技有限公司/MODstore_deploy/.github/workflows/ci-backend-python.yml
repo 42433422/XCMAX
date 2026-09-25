@@ -73,7 +73,10 @@ jobs:
 
       - name: Run mypy type checking
         run: |
-          pip install mypy types-redis types-requests types-pyyaml types-paramiko types-passlib types-psutil types-pytz
+          # mypy 必须精确固定：浮动版本会让工具发新版在零代码变更的 main 上翻红
+          # （2026-09-25 事故 WO-0f1b3d12bab4：mypy 2.3.1 判出 56 条错误）。
+          # 与 pyproject 的 dev 依赖 pin 保持一致；mypy 2.x 迁移单独立项。
+          pip install mypy==1.19.1 types-redis types-requests types-pyyaml types-paramiko types-passlib types-psutil types-pytz
           mypy --no-error-summary
 
       - name: Run tests with coverage (global floor — ratchet)

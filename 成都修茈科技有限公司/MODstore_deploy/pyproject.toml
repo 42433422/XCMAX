@@ -77,7 +77,9 @@ dev = [
   "black==26.3.1",
   "isort==6.1.0",
   "jsonschema>=4.21",
-  "mypy>=1.8",
+  # 与 black/isort 同规则精确固定：门禁工具浮动会让工具发新版在零代码变更的
+  # main 上翻红（2026-09-25 事故 WO-0f1b3d12bab4：mypy 2.3.1 判出 56 条错误）。
+  "mypy==1.19.1",
   "openpyxl>=3.1",
   "pypdf>=4.0",
   # test_cache_extra imports RedisError directly; keep the release-gate
