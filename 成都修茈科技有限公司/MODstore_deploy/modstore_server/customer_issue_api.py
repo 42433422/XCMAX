@@ -3,8 +3,11 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
+import io
 import json
+import zipfile
 from pathlib import Path
 from typing import Any, Literal
 
@@ -23,8 +26,36 @@ from modstore_server.models_cs import (
     CustomerServiceSession,
     CustomerServiceTicket,
 )
+from modstore_server.work_order_api import route_customer_issue
 
 router = APIRouter()
+
+
+def _wake_owner_intake(ticket_id: int, source: str) -> None:
+    if source == "customer_feedback":
+        from modstore_server.customer_service_api import _schedule_customer_ticket_incident
+
+        _schedule_customer_ticket_incident({"ticket_id": int(ticket_id)})
+
+
+def _route_work_order(
+    db: Session,
+    body: CustomerIssueIntakeBody,
+    user: User,
+    ticket: CustomerServiceTicket | None = None,
+) -> None:
+    if body.source != "customer_feedback" or not body.work_order_id:
+        return
+    outcome = route_customer_issue(
+        db,
+        wo_id=body.work_order_id,
+        user=user,
+        support_bundle_sha256=body.support_bundle_sha256,
+        ticket_id=int(ticket.id) if ticket else None,
+        ticket_no=str(ticket.ticket_no) if ticket else "",
+    )
+    if not outcome.get("ok"):
+        raise HTTPException(409, "客户工单与产品问题 Work Order 不匹配")
 
 
 class CustomerIssueIntakeBody(BaseModel):
@@ -38,6 +69,12 @@ class CustomerIssueIntakeBody(BaseModel):
     installed_version: str = Field(default="", max_length=64)
     acceptance_criteria: str = Field(default="", max_length=6000)
     shared_core_prerequisite: str = Field(default="", max_length=2000)
+    work_order_id: str = Field(default="", pattern=r"^$|^WO-[0-9a-f]{12}$")
+    support_bundle_sha256: str = Field(default="", pattern=r"^$|^[0-9a-f]{64}$")
+    support_bundle_base64: str = Field(default="", max_length=350_000)
+    customer_instance_id: str = Field(default="", max_length=128)
+    product_version: str = Field(default="", max_length=64)
+    git_sha: str = Field(default="", pattern=r"^$|^[0-9a-f]{40}$")
 
 
 @router.post("/issues/intake")
@@ -55,9 +92,32 @@ async def intake_customer_issue(
         ):
             raise HTTPException(403, "当前账号未授权该客户私有 Mod")
     values = body.model_dump()
+    bundle_b64 = str(values.get("support_bundle_base64") or "")
+    bundle_sha = str(values.get("support_bundle_sha256") or "")
+    if bool(bundle_b64) != bool(bundle_sha):
+        raise HTTPException(400, "support bundle data and SHA256 must be supplied together")
+    if bundle_b64:
+        try:
+            bundle = base64.b64decode(bundle_b64, validate=True)
+            with zipfile.ZipFile(io.BytesIO(bundle)) as archive:
+                entries = archive.infolist()
+                if len(entries) > 500 or sum(item.file_size for item in entries) > 2_000_000:
+                    raise ValueError("bundle expands beyond limits")
+                if archive.testzip() is not None:
+                    raise ValueError("corrupt zip")
+        except (ValueError, zipfile.BadZipFile):
+            raise HTTPException(400, "support bundle is not a valid ZIP") from None
+        if len(bundle) > 256_000 or hashlib.sha256(bundle).hexdigest() != bundle_sha:
+            raise HTTPException(400, "support bundle size or SHA256 is invalid")
+    stable_values = {
+        key: value
+        for key, value in values.items()
+        if key not in {"support_bundle_sha256", "support_bundle_base64"}
+    }
     request_digest = hashlib.sha256(
-        json.dumps(values, sort_keys=True, ensure_ascii=False).encode()
+        json.dumps(stable_values, sort_keys=True, ensure_ascii=False).encode()
     ).hexdigest()
+    _route_work_order(db, body, user)
     if body.target_mod_id:
         # Runtime identity is trusted source configuration; the caller supplies
         # only the entitlement identity already checked against UserMod above.
@@ -90,7 +150,10 @@ async def intake_customer_issue(
         db.query(CustomerServiceTicket).filter_by(ticket_no=number, user_id=int(user.id)).first()
     )
     if existing:
-        return response(existing, replayed=True)
+        payload = response(existing, replayed=True)
+        _route_work_order(db, body, user, existing)
+        _wake_owner_intake(existing.id, body.source)
+        return payload
     private_rework = body.source == "private_mod_rework"
     intent = "custom_delivery" if private_rework else "product_issue"
     if private_rework:
@@ -160,8 +223,13 @@ async def intake_customer_issue(
         )
         if not existing:
             raise
-        return response(existing, replayed=True)
+        payload = response(existing, replayed=True)
+        _route_work_order(db, body, user, existing)
+        _wake_owner_intake(existing.id, body.source)
+        return payload
     db.refresh(ticket)
+    _route_work_order(db, body, user, ticket)
+    _wake_owner_intake(ticket.id, body.source)
     return response(ticket, replayed=False)
 
 

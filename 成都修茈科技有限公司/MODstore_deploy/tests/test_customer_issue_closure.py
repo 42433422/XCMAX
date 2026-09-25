@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
+import io
 import json
 import uuid
+import zipfile
 from types import SimpleNamespace as NS
 
 import pytest
@@ -342,6 +346,97 @@ def test_intake_owner_bound_atomic_idempotent(client):
             assert len(events) == 1 and events[0].status == "pending"
     finally:
         app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_customer_feedback_keeps_work_order_and_verified_bundle_in_owner_event(client, monkeypatch):
+    from modstore_server import customer_service_api
+    from modstore_server.auth_service import create_access_token
+    from modstore_server.db.ops_events import OutboxEvent
+    from modstore_server.db.work_orders import WorkOrderEvent
+    from modstore_server.models import User, get_session_factory
+    from modstore_server.models_cs import CustomerServiceTicket
+
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w") as bundle:
+        bundle.writestr("manifest.json", '{"redacted":true}')
+    raw = archive.getvalue()
+    sha = hashlib.sha256(raw).hexdigest()
+    monkeypatch.setattr(
+        customer_service_api,
+        "_schedule_customer_ticket_incident",
+        lambda _payload: None,
+    )
+    sf = get_session_factory()
+    with sf() as db:
+        user = User(
+            username=uuid.uuid4().hex,
+            email=uuid.uuid4().hex + "@test.invalid",
+            password_hash="x",
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        headers = {"Authorization": f"Bearer {create_access_token(user.id, user.username)}"}
+    candidate = client.post(
+        "/api/work-orders/customer-candidate",
+        json={
+            "dedup_key": "customer-report-1",
+            "reason": "product_defect",
+            "expected": "save succeeds",
+            "actual": "save fails",
+            "confidence": 0.95,
+            "support_bundle_sha256": sha,
+            "client_instance_id": "test-instance",
+            "product_version": "1.0.0.5",
+            "git_sha": "a" * 40,
+            "platform": "macOS",
+        },
+        headers=headers,
+    )
+    wo_id = candidate.json()["wo_id"]
+    body = {
+        "source": "customer_feedback",
+        "source_ref": wo_id,
+        "title": "Client defect",
+        "description": "The client action returns an error instead of saving.",
+        "issue_domain": "platform",
+        "work_order_id": wo_id,
+        "support_bundle_sha256": sha,
+        "support_bundle_base64": base64.b64encode(raw).decode("ascii"),
+    }
+    first = client.post("/api/customer-service/issues/intake", json=body, headers=headers)
+    assert first.status_code == 200, first.text
+    replay = client.post("/api/customer-service/issues/intake", json=body, headers=headers)
+    assert replay.json()["ticket_id"] == first.json()["ticket_id"] and replay.json()["replayed"]
+    with sf() as db:
+        ticket = db.get(CustomerServiceTicket, first.json()["ticket_id"])
+        evidence = json.loads(ticket.evidence_json)
+        assert evidence["work_order_id"] == wo_id
+        assert evidence["support_bundle_sha256"] == sha
+        assert base64.b64decode(evidence["support_bundle_base64"]) == raw
+        events = (
+            db.query(OutboxEvent)
+            .filter(OutboxEvent.aggregate_id.like(ticket.ticket_no + ":%"))
+            .all()
+        )
+        assert len(events) == 1
+        payload = json.loads(events[0].payload_json)
+        assert [payload["work_order_id"], payload["support_bundle_sha256"]] == [wo_id, sha]
+        assert base64.b64decode(payload["support_bundle_base64"]) == raw
+        wo_events = (
+            db.query(WorkOrderEvent).filter_by(wo_id=wo_id).order_by(WorkOrderEvent.id).all()
+        )
+        assert any(
+            event.event == "transition" and event.to_state == "routed" for event in wo_events
+        )
+        receipts = [json.loads(event.ref or "{}") for event in wo_events if event.event == "gate"]
+        assert {item.get("gate_status") for item in receipts} == {"ROUTED", "COLLECTED"}
+    marker = f"unpersisted-{uuid.uuid4().hex}"
+    body.update(source_ref="bad-work-order", title=marker, work_order_id="WO-111111111111")
+    bad = client.post("/api/customer-service/issues/intake", json=body, headers=headers)
+    assert bad.status_code == 409
+    with sf() as db:
+        assert not db.query(CustomerServiceTicket).filter_by(title=marker).first()
 
 
 def test_unknown_host_failure_stays_pending_and_same_id_can_be_verified(receipt_case, monkeypatch):

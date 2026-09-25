@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """连接件4（客户侧重测）：修复送达客户机后，对运行中的客户应用执行场景重测。
 
-三查：GET /api/health?lite=1（健康+版本身份）、scenario.retest_url（修复前
-404/5xx、修复后 <400）。回执落 test_reports/retest/receipt-<key12>.json，
+四查：GET /api/health?lite=1（健康+版本身份）、scenario.retest_url（修复前
+404/5xx、修复后 <400）、scenario.command（在客户机上重跑原失败场景命令，
+退出码即判定——非 HTTP 类故障必须用这一项，health=200 不算复验通过）。
+回执落 test_reports/retest/receipt-<key12>.json，
 --issue-comment 写回工单 issue；不替代既有 release-acceptance-closeout 闭环。
 代理绕过：全部请求走 ProxyHandler({}) 直连（代理拦截 127.0.0.1 假阴性教训）。
 
@@ -75,6 +77,41 @@ def _check(base_url: str, name: str, url: str, *, ok_status_lt: int) -> dict[str
     }
 
 
+def _run_command(scenario: dict[str, Any]) -> dict[str, Any]:
+    """在客户机上真实重跑原失败场景命令，退出码即判定。
+
+    只有 HTTP 三查会把「依赖/类型门禁」这类原故障挡在门外——那类故障的
+    真实复现是「命令退出码」，不是任何一个 200 响应。scenario.command 缺省
+    为空时不产生该检查项，行为与旧回执兼容。
+    """
+    command = str(scenario.get("command") or "").strip()
+    if not command:
+        return {}
+    expected = int(scenario.get("expected_exit", 0))
+    try:
+        completed = subprocess.run(
+            command,
+            shell=True,
+            cwd=str(scenario.get("command_cwd") or "."),
+            capture_output=True,
+            text=True,
+            timeout=float(scenario.get("command_timeout", 900)),
+            check=False,
+        )
+        exit_code = completed.returncode
+        tail = ((completed.stdout or "") + (completed.stderr or ""))[-600:]
+    except subprocess.TimeoutExpired:
+        exit_code, tail = 124, "timeout"
+    return {
+        "name": "scenario_command",
+        "ok": exit_code == expected,
+        "command": command,
+        "exit_code": exit_code,
+        "expected_exit": expected,
+        "output_tail": tail,
+    }
+
+
 def retest(spec: dict[str, Any], base_url: str, *, expect_version: str = "") -> dict[str, Any]:
     """对运行中的客户应用执行重测检查，返回回执 dict（不落盘）。"""
     scenario = spec.get("scenario") if isinstance(spec.get("scenario"), dict) else {}
@@ -108,6 +145,10 @@ def retest(spec: dict[str, Any], base_url: str, *, expect_version: str = "") -> 
     if retest_url:
         url = retest_url if retest_url.startswith("http") else f"{base}{retest_url}"
         checks.append(_check(base_url, "scenario_retest", url, ok_status_lt=400))
+
+    command_check = _run_command(scenario)
+    if command_check:
+        checks.append(command_check)
 
     verdict = "pass" if checks and all(c["ok"] for c in checks) else "fail"
     return {

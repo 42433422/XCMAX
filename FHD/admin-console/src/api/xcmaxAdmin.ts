@@ -238,34 +238,13 @@ export type ForcePushUserEntitlementsPayload = {
   installed_mods?: Record<string, unknown>[];
 };
 
-export interface AutonomyPendingAction {
-  action_id: string;
-  action: string;
-  state: string;
-  source: string;
-  executor_name?: string;
-  payload?: Record<string, unknown>;
-  risk_decision?: {
-    risk_level: string;
-    decision: string;
-    reason?: string;
-    policy?: string;
-    rollback_path?: string;
-  };
-  timestamp?: string;
-  approval_id?: string;
-  approval_requested_at?: string;
-  approver?: string;
-  approved_at?: string;
-  executed_at?: string;
-  execution_failed_at?: string;
-  rejected_at?: string;
-  superseded_at?: string;
-  superseded_by?: string;
-  outcome?: Record<string, unknown>;
-  admin_execution_ready?: boolean;
-  execution_mode?: string;
-  execution_guidance?: string;
+export interface OwnerWorkOrder extends Record<string, unknown> {
+  wo_id: string;
+  status: string;
+  context?: Record<string, unknown>;
+  history?: Record<string, unknown>[];
+  gates?: Record<string, string>;
+  can_decide?: boolean;
 }
 
 export const xcmaxAdminApi = {
@@ -483,46 +462,16 @@ export const xcmaxAdminApi = {
       `/api/xcmax/admin/deploy/jobs/${encodeURIComponent(jobId)}`,
     );
   },
-  fetchPendingAutonomyActions() {
-    return api.get<{
-      ok: boolean;
-      count: number;
-      items: AutonomyPendingAction[];
-      summary?: {
-        states?: Record<string, number>;
-        execution_modes?: Record<string, number>;
-        actionable?: number;
-        waiting?: number;
-      };
-    }>(
-      '/api/xcmax/admin/autonomy/actions/pending',
+  fetchOwnerWorkOrders(limit = 200) {
+    return api.get<{ ok: boolean; items: OwnerWorkOrder[]; count: number }>(
+      '/api/ops/autonomy/work-orders', { limit },
     );
   },
-  resumeAutonomyAction(actionId: string, approvalId?: string) {
-    return api.post<{ ok: boolean; execution_dispatched: boolean; action: AutonomyPendingAction }>(
-      `/api/xcmax/admin/autonomy/actions/${encodeURIComponent(actionId)}/resume`,
-      { approval_id: approvalId },
+  decideOwnerWorkOrder(woId: string, decision: 'approved' | 'rejected' | 'held', note = '') {
+    return api.post<{ ok: boolean; wo_id: string; decision: string; actor: string }>(
+      `/api/ops/autonomy/work-orders/${encodeURIComponent(woId)}/owner-decision`,
+      { decision, note },
     );
-  },
-  rejectAutonomyAction(actionId: string, reason?: string, approvalId?: string) {
-    return api.post<{ ok: boolean; action: AutonomyPendingAction }>(
-      `/api/xcmax/admin/autonomy/actions/${encodeURIComponent(actionId)}/reject`,
-      { reason, approval_id: approvalId },
-    );
-  },
-  fetchAutonomyAuditLog(params: {
-    limit?: number;
-    days?: number;
-    risk_level?: string;
-    decision?: string;
-    veto_only?: boolean;
-  } = {}) {
-    return api.get<{
-      success?: boolean;
-      items?: Record<string, unknown>[];
-      count?: number;
-      summary?: Record<string, unknown>;
-    }>('/api/xcmax/admin/autonomy/audit-log', params);
   },
   fetchAutonomyHealth() {
     return api.get<{ ok: boolean; service?: string }>('/api/xcmax/admin/autonomy/health');

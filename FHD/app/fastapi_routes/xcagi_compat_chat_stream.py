@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import importlib
 from typing import TYPE_CHECKING
 
@@ -239,6 +240,52 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         from app.application.planner_display_markers import strip_planner_stream_markers
 
         visible_text, marker_lines = strip_planner_stream_markers(merged)
+        from app.application.client_product_issue_intake import (
+            classify_report,
+            looks_like_issue_report,
+            submit_product_issue,
+        )
+
+        issue_receipt = None
+        if looks_like_issue_report(body.message):
+            triage = classify_report(llm_client, body.message, visible_text)
+            if triage and triage.get("type") == "product_defect":
+                try:
+                    issue_receipt = asyncio.run(
+                        submit_product_issue(
+                            request=request,
+                            client=llm_client,
+                            tenant_id=runtime_context.get("tenant_id"),
+                            customer_message=body.message,
+                            assistant_reply=visible_text,
+                            triage=triage,
+                        )
+                    )
+                except _facade().RECOVERABLE_ERRORS:
+                    _facade().logger.warning("client product issue intake failed", exc_info=True)
+                    issue_receipt = {"state": "OWNER_ROUTE_UNAVAILABLE"}
+                if issue_receipt:
+                    state = str(issue_receipt.get("state") or "")
+                    if state == "ROUTED":
+                        visible_text += (
+                            f"\n\n已向 Owner 提交产品问题，Work Order："
+                            f"{issue_receipt['work_order_id']}，市场工单："
+                            f"{issue_receipt['owner_ticket_no']}。"
+                        )
+                    elif state == "NEEDS_MORE_EVIDENCE":
+                        missing = "、".join(issue_receipt.get("missing_evidence") or [])
+                        visible_text += f"\n\n我判断这属于产品问题，但采证未完成（缺少：{missing}）；暂未创建工单。"
+                    elif state == "OWNER_ROUTE_UNAVAILABLE":
+                        work_order = str(issue_receipt.get("work_order_id") or "")
+                        if work_order:
+                            visible_text += (
+                                f"\n\nOwner 已创建候选 Work Order {work_order}，"
+                                "但客户问题受理尚未确认；我没有声称问题已送达。"
+                            )
+                        else:
+                            visible_text += "\n\nOwner 受理服务当前不可用；我没有声称已送达。"
+                    elif state == "not_confirmed":
+                        visible_text += "\n\n目前无法以足够把握确认是产品缺陷，因此没有自动建单。"
         thinking = _facade()._thinking_steps_from_planner_stream_text(merged)
         if not thinking:
             thinking = marker_lines

@@ -210,7 +210,11 @@ class TestWorkOrderApi:
         for target in ("in_dev", "merged", "released", "verifying"):
             r = client.post(
                 "/api/work-orders/transition",
-                json={"wo_id": wo_id, "to_state": target, "ref": {"release_version": "1.0.0.1"}},
+                json={
+                    "wo_id": wo_id,
+                    "to_state": target,
+                    "ref": {"release_version": "1.0.0.1"},
+                },
                 headers=headers,
             )
             assert r.status_code == 200 and r.json()["ok"], r.text
@@ -222,6 +226,55 @@ class TestWorkOrderApi:
             headers=self._plain_headers(client),
         )
         assert r2.status_code == 403
+        assert (
+            client.get("/api/work-orders", headers=self._plain_headers(client)).status_code == 403
+        )
+
+    def test_customer_can_create_only_scoped_candidate(self, client) -> None:
+        headers = self._plain_headers(client)
+        body = {
+            "source": "client_ai_product_issue",
+            "dedup_key": "client-ai:" + "a" * 64,
+            "reason": "product_defect",
+            "expected": "success",
+            "actual": "failure",
+            "confidence": 0.95,
+            "support_bundle_sha256": "b" * 64,
+            "client_instance_id": "client-41",
+            "product_version": "1.0.0.5",
+            "git_sha": "c" * 40,
+            "platform": "macOS",
+        }
+        first = client.post("/api/work-orders/customer-candidate", json=body, headers=headers)
+        replay = client.post("/api/work-orders/customer-candidate", json=body, headers=headers)
+        assert first.status_code == 200 and replay.status_code == 200
+        assert first.json()["wo_id"] == replay.json()["wo_id"]
+        assert first.json()["status"] == "candidate" and replay.json()["created"] is False
+        transition = client.post(
+            "/api/work-orders/transition",
+            json={"wo_id": first.json()["wo_id"], "to_state": "routed"},
+            headers=headers,
+        )
+        assert transition.status_code == 403
+        admin = self._admin_headers(client)
+        assert any(
+            row["wo_id"] == first.json()["wo_id"]
+            for row in client.get("/api/work-orders?limit=10", headers=admin).json()["items"]
+        )
+        receipt = {
+            "wo_id": first.json()["wo_id"],
+            "gate": "owner_instance",
+            "gate_status": "OWNER_INSTANCE_VERIFIED",
+            "evidence": {"sha256": "d" * 64},
+        }
+        assert client.post("/api/work-orders/gate", json=receipt, headers=admin).status_code == 200
+        stored = client.get(f"/api/work-orders/{receipt['wo_id']}", headers=admin).json()[
+            "history"
+        ][-1]
+        assert stored["event"] == "gate" and stored["ref"]["evidence"] == receipt["evidence"]
+        assert (
+            client.post("/api/work-orders/gate", json=receipt, headers=headers).status_code == 403
+        )
 
     def test_candidate_idempotent_and_acceptance_cycle(self, client) -> None:
         headers = self._admin_headers(client)

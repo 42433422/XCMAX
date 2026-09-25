@@ -90,6 +90,12 @@ def enqueue_issue(
         },
         "target_mod_id": resolution.get("target_mod_id", ""),
         "installed_version": evidence.get("installed_version", ""),
+        "work_order_id": evidence.get("work_order_id", ""),
+        "support_bundle_sha256": evidence.get("support_bundle_sha256", ""),
+        "support_bundle_base64": evidence.get("support_bundle_base64", ""),
+        "customer_instance_id": evidence.get("customer_instance_id", ""),
+        "product_version": evidence.get("product_version", ""),
+        "git_sha": evidence.get("git_sha", ""),
     }
     if ticket.intent == "custom_delivery":
         payload["delivery_managed_by"] = "custom_delivery"

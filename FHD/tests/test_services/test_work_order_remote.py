@@ -1,9 +1,5 @@
 # mypy: disable-error-code="no-any-return"
-"""work_order_ssot 共享持久层（远端优先）测试。
-
-覆盖：远端配置时的委托载荷、结果映射、不可达时回退本地 JSONL。
-不访问网络：monkeypatch ``_remote_request`` / ``_remote_enabled``。
-"""
+"""Shared/local Work Order persistence tests; all network calls are mocked."""
 
 from __future__ import annotations
 
@@ -12,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from app.services import work_order_gate
 from app.services import work_order_ssot as wo
 
 
@@ -29,6 +26,8 @@ def remote_on(monkeypatch: pytest.MonkeyPatch):
 
     def fake_request(method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
         calls.append((method, path))
+        if path.startswith("/api/work-orders?"):
+            return {"items": [{"wo_id": "WO-abcdef123456", "status": "routed"}]}
         return _FIXTURE_RESPONSE.get(path, {})
 
     monkeypatch.setattr(wo, "_remote_enabled", lambda: True)
@@ -59,6 +58,21 @@ _FIXTURE_RESPONSE: dict[str, dict[str, Any]] = {
         "status": "closed",
         "issue_number": 88,
     },
+    "/api/work-orders/gate": {
+        "ok": True,
+    },
+    "/api/work-orders/WO-abcdef123456": {
+        "history": [
+            {
+                "event": "gate",
+                "ref": {
+                    "gate": "owner_instance",
+                    "gate_status": "OWNER_INSTANCE_VERIFIED",
+                    "evidence": {"sha256": "a" * 64},
+                },
+            }
+        ],
+    },
 }
 
 
@@ -69,8 +83,10 @@ class TestRemoteDelegation:
         assert result["wo_id"] == "WO-abcdef123456"
         assert result["created"] is True
         assert ("POST", "/api/work-orders/candidate") in remote_on
-        # 本地事件流不写（远端为主）
-        assert wo.list_work_orders() == []
+        assert wo.list_work_orders("routed", 999) == [
+            {"wo_id": "WO-abcdef123456", "status": "routed"}
+        ]
+        assert remote_on[-1] == ("GET", "/api/work-orders?limit=500&status=routed")
 
     def test_transition_delegates_and_maps(self, isolated_store: Path, remote_on: list) -> None:
         result = wo.record_transition("WO-abcdef123456", "routed", ref={"issue_number": 1})
@@ -101,6 +117,39 @@ class TestRemoteDelegation:
         view = wo.find_by_issue(88)
         assert view is not None and view["status"] == "closed"
         assert ("GET", "/api/work-orders/by-issue/88") in remote_on
+
+    def test_gate_receipt_round_trips_through_shared_history(
+        self, isolated_store: Path, remote_on: list
+    ) -> None:
+        result = work_order_gate.record_gate(
+            "WO-abcdef123456",
+            "owner_instance",
+            "OWNER_INSTANCE_VERIFIED",
+            evidence={"sha256": "a" * 64},
+        )
+        receipt = work_order_gate.gate_receipts("WO-abcdef123456")["owner_instance"]
+        assert (
+            result["ok"]
+            and result["remote"]
+            and receipt["gate_status"] == "OWNER_INSTANCE_VERIFIED"
+        )
+        assert receipt["evidence"] == {"sha256": "a" * 64}
+        assert remote_on == [
+            ("POST", "/api/work-orders/gate"),
+            ("GET", "/api/work-orders/WO-abcdef123456"),
+        ]
+
+    def test_gate_receipt_fails_closed_when_shared_store_is_unavailable(
+        self, isolated_store: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(wo, "_remote_enabled", lambda: True)
+
+        def boom(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+            raise wo._RemoteUnavailable()
+
+        monkeypatch.setattr(wo, "_remote_request", boom)
+        result = work_order_gate.record_gate("WO-abcdef123456", "repro", "RED")
+        assert result["reason"] == "remote_unavailable" and wo.list_work_orders() == []
 
 
 class TestRemoteFallback:

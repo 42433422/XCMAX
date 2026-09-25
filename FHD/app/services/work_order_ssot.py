@@ -1,22 +1,4 @@
-"""工单 SSOT：候选需求 → 唯一工单 ID → GitHub issue 的主线脊椎。
-
-三类 SSOT 边界（不可混用）：
-  - Customer SSOT（customers 表）：回答「这个客户是谁」
-  - Work Order SSOT（本模块）：回答「发生了什么事情」
-  - Delivery Center：回答「交付了什么」，不是需求入口；
-    新增需求必须回到 Signal Gate（对话/反馈/微信 → 意图过滤 → 提案）重走主线
-
-设计：
-  - 所有信号先落 Conversation/Signal 层；只有经过去重聚合的有效需求
-    （capability_proposal）才在本模块升级为唯一工单 ``wo_id``
-  - 存储为 JSONL 追加式事件流（与 capability_proposal_recorder 同风格，
-    文件锁保证多进程安全），物化视图由事件流折叠而成，崩溃不丢已写入数据
-  - GitHub issue 是工单的对外观测载体：本模块维护 candidate → routed → in_dev
-    候选期状态与 ``wo_id ↔ issue_number`` 映射；merge 后的验收期历史
-    （回执判定、重开、验收通过）由 release-acceptance-closeout 回写到
-    issue 时间线，并经 ``record_acceptance_verdict`` 落回本地事件流
-  - 每次状态迁移发布 NeuroBus 事件（best-effort，失败不影响主线写入）
-"""
+"""Work Order SSOT backed by shared MODstore events, with a locked local fallback."""
 
 from __future__ import annotations
 
@@ -36,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 try:
     import urllib.error
+    import urllib.parse
     import urllib.request
 except ImportError:  # pragma: no cover - 环境兜底
     urllib = None  # type: ignore[assignment]
@@ -196,15 +179,23 @@ def get_work_order(wo_id: str) -> dict[str, Any] | None:
 
 
 def list_work_orders(status: str | None = None, limit: int = 200) -> list[dict[str, Any]]:
-    """列出工单视图（按更新时间倒序）；``status`` 过滤当前状态。
-
-    远端共享库为主时，本列表为本地降级视图（不做远端全量枚举）。
-    """
+    """读取共享库工单列表；远端不可用时使用本地降级视图。"""
+    bounded_limit = max(1, min(int(limit), 500))
+    if _remote_enabled():
+        params: dict[str, str | int] = (
+            {"limit": bounded_limit, "status": status} if status else {"limit": bounded_limit}
+        )
+        try:
+            remote = _remote_request("GET", f"/api/work-orders?{urllib.parse.urlencode(params)}")
+            if isinstance(remote.get("items"), list):
+                return [item for item in remote["items"] if isinstance(item, dict)]
+        except _RemoteUnavailable:
+            logger.debug("remote work_order list skipped", exc_info=True)
     views = list(_fold(_load_events()).values())
     if status:
         views = [v for v in views if v["status"] == status]
     views.sort(key=lambda v: str(v.get("updated_at") or ""), reverse=True)
-    return views[: max(1, int(limit))]
+    return views[:bounded_limit]
 
 
 def find_by_issue(issue_number: int) -> dict[str, Any] | None:
