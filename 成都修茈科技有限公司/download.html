@@ -933,8 +933,9 @@
           return desktopRows
         }
 
-        function boldText(text) {
-          var el = document.createElement('b')
+        function textElement(tag, className, text) {
+          var el = document.createElement(tag)
+          if (className) el.className = className
           el.textContent = text
           return el
         }
@@ -944,9 +945,9 @@
           var known = state.tab === 'android' ? Boolean(state.androidVersion) : Boolean(state.version)
           // 版本号来自发布清单，一律以文本节点写入 DOM，不拼接 HTML 字符串（避免 DOM XSS）。
           if (!known) versionEl.replaceChildren('版本信息加载中…')
-          else if (state.tab === 'android') versionEl.replaceChildren('当前版本 ', boldText(state.androidVersion))
-          else if (hotfix) versionEl.replaceChildren('macOS 稳定版 ', boldText(state.version), ' · Windows 临时交付 ', boldText(hotfix.version))
-          else versionEl.replaceChildren('当前版本 ', boldText(state.version))
+          else if (state.tab === 'android') versionEl.replaceChildren('当前版本 ', textElement('b', '', state.androidVersion))
+          else if (hotfix) versionEl.replaceChildren('macOS 稳定版 ', textElement('b', '', state.version), ' · Windows 临时交付 ', textElement('b', '', hotfix.version))
+          else versionEl.replaceChildren('当前版本 ', textElement('b', '', state.version))
           pendingEl.hidden = rows().every(function (row) {
             if (row.platform === 'win' && activeWindowsHotfix()) return true
             if (manifestEntry(row.platform)) return true
@@ -978,20 +979,10 @@
             link.setAttribute('rel', 'noopener')
             if (!available) link.setAttribute('aria-disabled', 'true')
             var meta = metaText(row.platform)
-            var copy = document.createElement('span')
-            copy.className = 'download-item__copy'
-            var title = document.createElement('strong')
-            title.textContent = row.name
-            copy.appendChild(title)
-            if (meta) {
-              var metaElement = document.createElement('span')
-              metaElement.textContent = meta
-              copy.appendChild(metaElement)
-            }
-            var action = document.createElement('span')
-            action.className = 'download-item__action'
-            action.textContent = rowHotfix ? '下载临时包' : available ? '下载' : '待开放'
-            link.append(copy, action)
+            var copy = textElement('span', 'download-item__copy', '')
+            copy.append(textElement('strong', '', row.name))
+            if (meta) copy.append(textElement('span', '', meta))
+            link.append(copy, textElement('span', 'download-item__action', rowHotfix ? '下载临时包' : available ? '下载' : '待开放'))
             if (!available)
               link.addEventListener('click', function (event) {
                 event.preventDefault()
