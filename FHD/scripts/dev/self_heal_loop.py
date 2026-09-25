@@ -24,7 +24,8 @@
     python scripts/dev/self_heal_loop.py start --signal signal.json
 
     # 2) 逐阶段执行（命令退出码即判定；证据留原文摘要 + SHA256）
-    python scripts/dev/self_heal_loop.py run repro_red --wo WO-xxx --cmd "bash red.sh"
+    python scripts/dev/self_heal_loop.py run repro_red --wo WO-xxx --cmd "pytest -q tests/test_bug.py" \
+        --expected-signature "expected error signature"
 
     # 3) 发布前人工审批（硬门，必须人工调用）
     python scripts/dev/self_heal_loop.py approval --wo WO-xxx \
@@ -85,7 +86,7 @@ _STAGES: dict[str, tuple[str, str, frozenset[str]]] = {
     "knowledge": ("knowledge", "close", frozenset({"CLOSED"})),
 }
 
-# 执行成功时该阶段应落的闸门状态（调用方可用 --status 覆盖为真实结果）
+# 执行成功时该阶段应落的闸门状态；失败时只能写 FAILED。
 _PASS_STATUS: dict[str, str] = {
     "evidence": "COLLECTED",
     "diagnosis": "DIAGNOSED",
@@ -247,16 +248,19 @@ def cmd_run(args: argparse.Namespace) -> int:
     _require_gate(wo_id, args.stage)
     timeout = float(args.timeout)
     started = _utc_now()
-    # repro_red 的「通过」语义是命令**失败**——复现用例红，才叫复现成功；
-    # 其余阶段沿用退出码 0 为通过。可用 --expect-exit / --expect-nonzero 覆盖。
-    expect_nonzero = (
-        args.expect_nonzero if args.expect_nonzero is not None else (args.stage == "repro_red")
-    )
+    cwd = str(Path(args.cwd or _FHD_ROOT).resolve())
+    signature = str(args.expected_signature or "").strip()
+    if args.stage == "repro_red" and not signature:
+        raise SystemExit("repro_red 必须给出 --expected-signature，避免把无关命令失败误认成复现")
+    if args.stage == "fix_green":
+        red = gate_receipts(wo_id).get("repro", {}).get("evidence", {})
+        if red.get("command") != args.cmd or red.get("cwd") != cwd:
+            raise SystemExit("fix_green 必须重跑与 repro_red 相同的命令和工作目录")
     try:
         completed = subprocess.run(
             args.cmd,
             shell=True,
-            cwd=str(args.cwd or _FHD_ROOT),
+            cwd=cwd,
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -266,10 +270,9 @@ def cmd_run(args: argparse.Namespace) -> int:
         stdout, stderr = completed.stdout or "", completed.stderr or ""
     except subprocess.TimeoutExpired:
         exit_code, stdout, stderr = 124, "", f"timeout after {timeout}s"
-    passed = exit_code != 0 if expect_nonzero else exit_code == int(args.expect_exit)
-    status = args.status or (_PASS_STATUS.get(args.stage, "OK") if passed else args.fail_status)
-    if not status:
-        raise SystemExit("失败时必须给出 --fail-status，避免把失败写成模糊状态")
+    output = f"{stdout}\n{stderr}"
+    passed = exit_code != 0 and signature in output if args.stage == "repro_red" else exit_code == 0
+    status = _PASS_STATUS.get(args.stage, "OK") if passed else "FAILED"
     log_dir = _LOOP_DIR / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / f"{args.stage}-{wo_id}.log"
@@ -286,8 +289,9 @@ def cmd_run(args: argparse.Namespace) -> int:
         note=str(args.note or ""),
         evidence={
             "command": args.cmd,
+            "cwd": cwd,
             "exit_code": exit_code,
-            "expected": "non-zero" if expect_nonzero else int(args.expect_exit),
+            "expected": {"signature": signature} if args.stage == "repro_red" else {"exit_code": 0},
             "started_at": started,
             "log": str(log_path),
             "log_sha256": _sha256_bytes(log_path.read_bytes()),
@@ -399,15 +403,9 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("--wo", required=True)
     p_run.add_argument("--cmd", required=True)
     p_run.add_argument("--cwd", default="")
-    p_run.add_argument("--expect-exit", type=int, default=0)
     p_run.add_argument(
-        "--expect-nonzero",
-        action="store_true",
-        default=None,
-        help="该阶段以命令失败为通过（默认仅 repro_red 如此）",
+        "--expected-signature", default="", help="repro_red 输出中必须命中的原始错误签名"
     )
-    p_run.add_argument("--status", default="")
-    p_run.add_argument("--fail-status", default="FAILED")
     p_run.add_argument("--note", default="")
     p_run.add_argument("--artifact-sha256", default="", help="发布阶段：制品 SHA256（可追溯身份）")
     p_run.add_argument("--release-sha", default="", help="发布阶段：制品对应的 git commit sha")
