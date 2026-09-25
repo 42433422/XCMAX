@@ -12,6 +12,7 @@ from typing import Any
 
 import pytest
 
+from app.services import work_order_gate
 from app.services import work_order_ssot as wo
 
 
@@ -59,6 +60,21 @@ _FIXTURE_RESPONSE: dict[str, dict[str, Any]] = {
         "status": "closed",
         "issue_number": 88,
     },
+    "/api/work-orders/gate": {
+        "ok": True,
+    },
+    "/api/work-orders/WO-abcdef123456": {
+        "history": [
+            {
+                "event": "gate",
+                "ref": {
+                    "gate": "owner_instance",
+                    "gate_status": "OWNER_INSTANCE_VERIFIED",
+                    "evidence": {"sha256": "a" * 64},
+                },
+            }
+        ],
+    },
 }
 
 
@@ -101,6 +117,39 @@ class TestRemoteDelegation:
         view = wo.find_by_issue(88)
         assert view is not None and view["status"] == "closed"
         assert ("GET", "/api/work-orders/by-issue/88") in remote_on
+
+    def test_gate_receipt_round_trips_through_shared_history(
+        self, isolated_store: Path, remote_on: list
+    ) -> None:
+        result = work_order_gate.record_gate(
+            "WO-abcdef123456",
+            "owner_instance",
+            "OWNER_INSTANCE_VERIFIED",
+            evidence={"sha256": "a" * 64},
+        )
+        receipt = work_order_gate.gate_receipts("WO-abcdef123456")["owner_instance"]
+        assert (
+            result["ok"]
+            and result["remote"]
+            and receipt["gate_status"] == "OWNER_INSTANCE_VERIFIED"
+        )
+        assert receipt["evidence"] == {"sha256": "a" * 64}
+        assert remote_on == [
+            ("POST", "/api/work-orders/gate"),
+            ("GET", "/api/work-orders/WO-abcdef123456"),
+        ]
+
+    def test_gate_receipt_fails_closed_when_shared_store_is_unavailable(
+        self, isolated_store: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(wo, "_remote_enabled", lambda: True)
+
+        def boom(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+            raise wo._RemoteUnavailable()
+
+        monkeypatch.setattr(wo, "_remote_request", boom)
+        result = work_order_gate.record_gate("WO-abcdef123456", "repro", "RED")
+        assert result["reason"] == "remote_unavailable" and wo.list_work_orders() == []
 
 
 class TestRemoteFallback:

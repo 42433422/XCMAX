@@ -210,7 +210,11 @@ class TestWorkOrderApi:
         for target in ("in_dev", "merged", "released", "verifying"):
             r = client.post(
                 "/api/work-orders/transition",
-                json={"wo_id": wo_id, "to_state": target, "ref": {"release_version": "1.0.0.1"}},
+                json={
+                    "wo_id": wo_id,
+                    "to_state": target,
+                    "ref": {"release_version": "1.0.0.1"},
+                },
                 headers=headers,
             )
             assert r.status_code == 200 and r.json()["ok"], r.text
@@ -249,6 +253,16 @@ class TestWorkOrderApi:
             headers=headers,
         )
         assert transition.status_code == 403
+
+    def test_gate_receipts_share_work_order_history_and_require_admin(self, client) -> None:
+        admin = self._admin_headers(client)
+        wo_id = self._bootstrap_wo(client, admin, 310)
+        receipt = {"wo_id": wo_id, "gate": "owner_instance", "gate_status": "OWNER_INSTANCE_VERIFIED", "evidence": {"sha256": "d" * 64}}
+        client.post("/api/work-orders/gate", json=receipt, headers=admin)
+        stored = client.get(f"/api/work-orders/{wo_id}", headers=admin).json()["history"][-1]
+        assert stored["event"] == "gate" and stored["ref"]["gate_status"] == "OWNER_INSTANCE_VERIFIED"
+        assert stored["ref"]["evidence"] == receipt["evidence"]
+        assert client.post("/api/work-orders/gate", json=receipt, headers=self._plain_headers(client)).status_code == 403
 
     def test_candidate_idempotent_and_acceptance_cycle(self, client) -> None:
         headers = self._admin_headers(client)

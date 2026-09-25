@@ -78,13 +78,39 @@ def record_gate(
     name = str(gate or "").strip()
     if not name:
         return {"ok": False, "reason": "empty_gate", "wo_id": wo_id}
+    gate_status = str(status or "")
+    if ssot._remote_enabled():
+        try:
+            remote = ssot._remote_request(
+                "POST",
+                "/api/work-orders/gate",
+                {
+                    "wo_id": wo_id,
+                    "gate": name,
+                    "gate_status": gate_status,
+                    "evidence": dict(evidence or {}),
+                    "note": str(note or "")[:500],
+                    "source": str(source or "self_heal_loop"),
+                },
+            )
+        except ssot._RemoteUnavailable:
+            logger.warning("work_order remote gate write failed: %s", wo_id, exc_info=True)
+            return {"ok": False, "reason": "remote_unavailable", "wo_id": wo_id}
+        if not remote.get("ok"):
+            return {
+                "ok": False,
+                "reason": str(remote.get("reason") or "remote_gate_rejected"),
+                "wo_id": wo_id,
+            }
+        logger.info("work_order remote gate %s: %s=%s", wo_id, name, gate_status)
+        return {"ok": True, "wo_id": wo_id, "gate": name, "status": gate_status, "remote": True}
     result = _append_checked(
         wo_id,
         {
             "wo_id": wo_id,
             "event": "gate",
             "gate": name,
-            "gate_status": str(status or ""),
+            "gate_status": gate_status,
             "evidence": dict(evidence or {}),
             "note": str(note or "")[:500],
             "source": str(source or "self_heal_loop"),
@@ -94,17 +120,33 @@ def record_gate(
     )
     if result.get("ok"):
         logger.info("work_order gate %s: %s=%s", wo_id, name, status)
-        return {**result, "gate": name, "status": str(status or "")}
+        return {**result, "gate": name, "status": gate_status}
     return result
 
 
 def gate_receipts(wo_id: str) -> dict[str, dict[str, Any]]:
     """按闸门名取最近一次收据（后写覆盖先写），供 fail-closed 判定。"""
-    view = ssot._fold(ssot._load_events()).get(wo_id)
+    if ssot._remote_enabled():
+        view = ssot.get_work_order(wo_id)
+    else:
+        view = ssot._fold(ssot._load_events()).get(wo_id)
     if view is None:
         return {}
     out: dict[str, dict[str, Any]] = {}
     for rec in view.get("history") or []:
-        if rec.get("event") == "gate" and rec.get("gate"):
-            out[str(rec["gate"])] = rec
+        if rec.get("event") != "gate":
+            continue
+        ref = rec.get("ref") if isinstance(rec.get("ref"), dict) else {}
+        gate_name = str(rec.get("gate") or ref.get("gate") or "")
+        if not gate_name:
+            continue
+        normalized = {
+            **rec,
+            "gate": gate_name,
+            "gate_status": str(rec.get("gate_status") or ref.get("gate_status") or ""),
+            "evidence": rec.get("evidence")
+            if isinstance(rec.get("evidence"), dict)
+            else ref.get("evidence", {}),
+        }
+        out[gate_name] = normalized
     return out

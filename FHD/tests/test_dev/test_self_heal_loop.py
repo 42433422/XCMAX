@@ -85,11 +85,6 @@ def test_start_reuses_owner_created_customer_work_order(tmp_path, monkeypatch):
         lambda wo, state, **kw: transitions.append((wo, state, kw)) or {"ok": True},
     )
     monkeypatch.setattr(loop, "_receipt", lambda *args, **kw: receipts.append((args, kw)))
-    monkeypatch.setattr(
-        loop,
-        "upsert_candidate",
-        lambda **_: pytest.fail("must not create a second Work Order"),
-    )
     assert loop.cmd_start(Namespace(signal=str(signal_path))) == 0
     assert len(transitions) == 1 and transitions[0][0:2] == (BASE["wo"], "routed")
     assert [item[0][1] for item in receipts] == ["intake", "evidence"]

@@ -23,7 +23,6 @@ from app.services.work_order_gate import gate_receipts, record_gate  # noqa: E40
 from app.services.work_order_ssot import (  # noqa: E402
     get_work_order,
     record_transition,
-    upsert_candidate,
 )
 from app.services.work_order_state import _ALLOWED_TRANSITIONS  # noqa: E402
 
@@ -49,26 +48,12 @@ _STAGES: dict[str, tuple[str, str, frozenset[str]]] = {
 }
 
 _PASS_STATUS: dict[str, str] = {
-    "evidence": "COLLECTED",
-    "diagnosis": "DIAGNOSED",
     "repro_red": "RED",
     "fix_green": "FIX_VALIDATED_IN_DEV",
-    "pull_request": "OPEN",
-    "owner_instance": "OWNER_INSTANCE_VERIFIED",
-    "merge": "MERGED",
-    "release": "RELEASED",
-    "customer_retest": "PASS",
-    "close": "CLOSED",
-    "knowledge": "RECORDED",
 }
-
-_APPROVAL_DECISIONS = frozenset({"approve", "reject", "hold"})
-_MIN_APPROVER_LEN = 2
 
 _PASS_STATE: dict[str, str] = {
     "fix_green": "in_dev",
-    "merge": "merged",
-    "release": "released",
 }
 
 
@@ -211,37 +196,7 @@ def cmd_start(args: argparse.Namespace) -> int:
         )
         print(json.dumps({"wo_id": wo_id, "created": False}, ensure_ascii=False))
         return 0
-    key = str(signal.get("dedup_key") or "").strip()
-    if not key:
-        raise SystemExit("signal.dedup_key 缺失：无法保证复验回到同一工单")
-    res = upsert_candidate(
-        source=str(signal.get("source") or "customer_instance"),
-        dedup_key=key,
-        reason=str(signal.get("reason") or "functional_failure"),
-        context=dict(signal.get("context") or {}),
-        evidence_ref=signal.get("evidence_ref") or None,
-    )
-    wo_id = str(res.get("wo_id") or "")
-    if not wo_id:
-        raise SystemExit(f"建单失败：{res.get('reason') or 'unknown'}")
-    if res.get("created"):
-        track = str(signal.get("track") or "").strip()
-        record_transition(
-            wo_id,
-            "routed",
-            ref={"track": track} if track else None,
-            note="闭环编排器建单",
-            source="self_heal_loop",
-        )
-    _receipt(
-        wo_id,
-        "intake",
-        "ROUTED",
-        note="真实信号已入工单",
-        evidence={"source": str(signal.get("source") or ""), "dedup_key": key},
-    )
-    print(json.dumps({"wo_id": wo_id, "created": bool(res.get("created"))}, ensure_ascii=False))
-    return 0
+    raise SystemExit("客户信号缺少既有 Work Order ID；拒绝脱离客户端事件单独建单")
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -278,11 +233,6 @@ def cmd_run(args: argparse.Namespace) -> int:
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / f"{args.stage}-{wo_id}.log"
     log_path.write_text(f"$ {args.cmd}\n\n{stdout}\n{stderr}", encoding="utf-8")
-    identity = {}
-    if args.artifact_sha256:
-        identity["artifact_sha256"] = str(args.artifact_sha256)
-    if args.release_sha:
-        identity["release_sha"] = str(args.release_sha)
     _receipt(
         wo_id,
         args.stage,
@@ -296,36 +246,12 @@ def cmd_run(args: argparse.Namespace) -> int:
             "started_at": started,
             "log": str(log_path),
             "log_sha256": _sha256_bytes(log_path.read_bytes()),
-            **identity,
         },
     )
     if passed and args.stage in _PASS_STATE:
         _advance(wo_id, _PASS_STATE[args.stage])
     print(json.dumps({"wo_id": wo_id, "stage": args.stage, "status": status}, ensure_ascii=False))
     return 0 if passed else 1
-
-
-def cmd_approval(args: argparse.Namespace) -> int:
-    wo_id, decision = args.wo, str(args.decision)
-    if decision not in _APPROVAL_DECISIONS:
-        raise SystemExit(f"未知审批决定 {decision}；只允许 {sorted(_APPROVAL_DECISIONS)}")
-    approver = str(args.approver or "").strip()
-    if len(approver) < _MIN_APPROVER_LEN:
-        raise SystemExit("审批必须记录真实审批人身份（--approver），不接受匿名放行")
-    if decision == "approve":
-        _require_gate(wo_id, "approval")
-    status = {"approve": "approved", "reject": "rejected", "hold": "held"}[decision]
-    _receipt(
-        wo_id,
-        "approval",
-        status,
-        note=str(args.reason or ""),
-        evidence={"approver": approver, "decision": decision, "decided_at": _utc_now()},
-    )
-    print(
-        json.dumps({"wo_id": wo_id, "approval": status, "approver": approver}, ensure_ascii=False)
-    )
-    return 0
 
 
 def cmd_status(args: argparse.Namespace) -> int:
@@ -396,7 +322,7 @@ def main(argv: list[str] | None = None) -> int:
     p_start.add_argument("--signal", required=True)
 
     p_run = sub.add_parser("run", help="执行阶段命令并按真实结果落闸门")
-    p_run.add_argument("stage", choices=sorted(_STAGES))
+    p_run.add_argument("stage", choices=("repro_red", "fix_green"))
     p_run.add_argument("--wo", required=True)
     p_run.add_argument("--cmd", required=True)
     p_run.add_argument("--cwd", default="")
@@ -404,15 +330,7 @@ def main(argv: list[str] | None = None) -> int:
         "--expected-signature", default="", help="repro_red 输出中必须命中的原始错误签名"
     )
     p_run.add_argument("--note", default="")
-    p_run.add_argument("--artifact-sha256", default="", help="发布阶段：制品 SHA256（可追溯身份）")
-    p_run.add_argument("--release-sha", default="", help="发布阶段：制品对应的 git commit sha")
     p_run.add_argument("--timeout", type=float, default=1800.0)
-
-    p_appr = sub.add_parser("approval", help="发布前人工审批（硬门）")
-    p_appr.add_argument("--wo", required=True)
-    p_appr.add_argument("--decision", required=True, choices=sorted(_APPROVAL_DECISIONS))
-    p_appr.add_argument("--approver", required=True)
-    p_appr.add_argument("--reason", default="")
 
     p_st = sub.add_parser("status", help="工单状态与闸门收据")
     p_st.add_argument("--wo", required=True)
@@ -429,7 +347,6 @@ def main(argv: list[str] | None = None) -> int:
     handlers = {
         "start": cmd_start,
         "run": cmd_run,
-        "approval": cmd_approval,
         "status": cmd_status,
         "retest": cmd_retest,
     }

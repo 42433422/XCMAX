@@ -75,6 +75,16 @@ class AcceptanceBody(BaseModel):
     evidence: dict[str, Any] = Field(default_factory=dict)
 
 
+class GateReceiptBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    wo_id: str = Field(..., max_length=32)
+    gate: str = Field(..., min_length=1, max_length=64)
+    gate_status: str = Field(..., min_length=1, max_length=64)
+    evidence: dict[str, Any] = Field(default_factory=dict)
+    note: str = Field(default="", max_length=500)
+    source: str = Field(default="self_heal_loop", max_length=64)
+
+
 def _now_utc() -> datetime:
     return datetime.now(UTC)
 
@@ -240,6 +250,43 @@ def transition(
         },
     )
     return {"ok": True, "wo_id": wo_id, "from": current, "to": target}
+
+
+@router.post("/gate")
+def record_gate_receipt(
+    body: GateReceiptBody,
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_admin),
+) -> dict[str, Any]:
+    """Append a verified gate receipt to the shared Work Order event stream."""
+    wo_id = str(body.wo_id or "").strip()
+    if not is_valid_wo_id(wo_id) or _view(db, wo_id) is None:
+        return {"ok": False, "reason": "unknown_work_order", "wo_id": wo_id}
+    evidence_json = json.dumps(
+        body.evidence or {}, ensure_ascii=False, separators=(",", ":")
+    )
+    if len(evidence_json.encode("utf-8")) > 16_384:
+        return {"ok": False, "reason": "evidence_too_large", "wo_id": wo_id}
+    _append_event(
+        db,
+        event={
+            "wo_id": wo_id,
+            "event": "gate",
+            "source": str(body.source or "self_heal_loop"),
+            "ref": {
+                "gate": str(body.gate).strip(),
+                "gate_status": str(body.gate_status).strip(),
+                "evidence": body.evidence or {},
+            },
+            "note": str(body.note or "")[:500],
+        },
+    )
+    return {
+        "ok": True,
+        "wo_id": wo_id,
+        "gate": str(body.gate).strip(),
+        "gate_status": str(body.gate_status).strip(),
+    }
 
 
 @router.post("/acceptance")
