@@ -107,10 +107,7 @@ html.xcagi-electron-mac .main-container {
   overflow: hidden;
 }
 
-/* 桌面壳顶边即标题栏：macOS 走原生标题栏；Windows 隐藏原生标题栏
- * （titleBarStyle=hidden + titleBarOverlay，window-manager.ts），拖拽区除顶栏外
- * 须含侧边栏顶部品牌行，否则窗口左上角整条顶边拖不动；右侧留 140px 避让
- * overlay 系统按钮，交互控件保持可点击（desktop-platform-parity SSOT）。 */
+/* Windows 隐藏标题栏；工作台和登录页的非交互品牌区可拖动，顶栏为系统按钮留 140px。 */
 html.xcagi-electron-mac .main-content .top-bar,
 html.xcagi-electron-win .sidebar-header,
 html.xcagi-electron-win .main-content .top-bar {
@@ -122,6 +119,8 @@ html.xcagi-electron-win .main-content .top-bar {
   -webkit-app-region: drag;
   padding-right: 140px;
 }
+
+html.xcagi-electron-win .login-view .login-brand { -webkit-app-region: drag; }
 
 html.xcagi-electron-win .main-content .top-bar button,
 html.xcagi-electron-win .main-content .top-bar input,
