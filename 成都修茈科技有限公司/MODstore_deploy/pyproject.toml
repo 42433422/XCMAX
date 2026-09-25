@@ -80,9 +80,10 @@ dev = [
   "black==26.3.1",
   "isort==6.1.0",
   "jsonschema>=4.21",
-  # 与 black/isort 同规则精确固定：门禁工具浮动会让工具发新版在零代码变更的
-  # main 上翻红（2026-09-25 事故 WO-0f1b3d12bab4：mypy 2.3.1 判出 56 条错误）。
-  "mypy==1.19.1",
+  # 与 black/isort 同规则精确固定，取 2026-09-24 绿灯 run 实测版本。
+  # 不要降到 1.x：1.19.1 会对 modstore_server/rag_service.py:287 报 arg-type，
+  # 在零代码变更下把门禁打红（2026-09-25 事故 WO-0f1b3d12bab4 实测）。
+  "mypy==2.3.1",
   "openpyxl>=3.1",
   "pypdf>=4.0",
   # test_cache_extra imports RedisError directly; keep the release-gate
