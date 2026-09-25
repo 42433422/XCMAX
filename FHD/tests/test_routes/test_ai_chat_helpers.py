@@ -365,9 +365,17 @@ class TestUnifiedChatSinglePayload:
                 "app.application.normal_chat_dispatch.route_normal_mode_message",
                 return_value={"intent": "other"},
             ),
+            patch("app.application.get_ai_chat_app_service") as mock_get_service,
         ):
+            mock_service = MagicMock()
+            mock_service.process_chat.return_value = {"success": True, "response": "ok"}
+            mock_get_service.return_value = mock_service
             result = unified_chat_single_payload("hello", "user1", "127.0.0.1", "qclaw", None)
+
             assert result.get("mode_guard") != "normal_only"
+            mock_service.process_chat.assert_called_once_with(
+                user_id="user1", message="hello", context=None, source="pro", file_context={}
+            )
 
     def test_excel_analysis_with_import_keyword(self):
         with (
@@ -493,10 +501,25 @@ class TestUnifiedChatSinglePayload:
                 "app.application.normal_chat_dispatch.route_normal_mode_message",
                 return_value={"intent": "unknown"},
             ),
+            patch("app.application.get_ai_chat_app_service") as mock_get_service,
         ):
+            mock_service = MagicMock()
+            mock_service.process_chat.return_value = {
+                "success": True,
+                "response": "已进入工作流计划",
+            }
+            mock_get_service.return_value = mock_service
             result = unified_chat_single_payload(
                 "随便说点什么", "user1", "127.0.0.1", "normal", None
             )
+
             assert "success" in result
             assert "工作流" in result["response"]
             assert "no such table" not in result["response"]
+            mock_service.process_chat.assert_called_once_with(
+                user_id="user1",
+                message="随便说点什么",
+                context=None,
+                source="pro",
+                file_context={},
+            )
