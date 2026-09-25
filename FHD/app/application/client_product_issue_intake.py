@@ -63,7 +63,7 @@ def classify_report(client: Any, message: str, assistant_reply: str) -> dict[str
             "actual": str(triage.get("actual") or "")[:1000],
             "missing_evidence": [str(x)[:300] for x in triage.get("missing_evidence", [])[:10]],
         }
-    except (*RECOVERABLE_ERRORS, IndexError, AttributeError, TypeError):
+    except RECOVERABLE_ERRORS + (IndexError, AttributeError, TypeError):
         logger.info("client issue classification unavailable", exc_info=True)
         return None
 
