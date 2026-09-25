@@ -8,6 +8,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -157,6 +158,59 @@ def _advance(wo_id: str, target: str) -> None:
 
 def cmd_start(args: argparse.Namespace) -> int:
     signal = json.loads(Path(args.signal).read_text(encoding="utf-8"))
+    wo_id = str(signal.get("work_order_id") or "").strip()
+    if wo_id:
+        view = get_work_order(wo_id)
+        context = view.get("context") if isinstance(view, dict) else {}
+        context = context if isinstance(context, dict) else {}
+        bundle_sha = str(signal.get("support_bundle_sha256") or "")
+        if (
+            not view
+            or view.get("source") != "client_ai_product_issue"
+            or not context.get("customer_reported")
+            or not re.fullmatch(r"[0-9a-f]{64}", bundle_sha)
+            or (
+                signal.get("user_id") is not None
+                and int(context.get("customer_user_id") or 0) != int(signal["user_id"])
+            )
+        ):
+            raise SystemExit(f"客户事件与 Work Order 不匹配：拒绝重新建单（{wo_id}）")
+        if view.get("status") == "candidate":
+            result = record_transition(
+                wo_id,
+                "routed",
+                ref={
+                    "track": str(signal.get("track") or "product_line"),
+                    "customer_ticket_id": signal.get("ticket_id"),
+                    "customer_ticket_no": signal.get("ticket_no"),
+                },
+                note="客户端缺陷工单已送达 Owner",
+                source="customer_issue_intake",
+            )
+            if not result.get("ok"):
+                raise SystemExit(f"既有 Work Order 无法派发：{result.get('reason')}（{wo_id}）")
+        elif view.get("status") != "routed":
+            raise SystemExit(f"Work Order 已进入后续阶段，拒绝覆盖：{wo_id}={view.get('status')}")
+        _receipt(
+            wo_id,
+            "intake",
+            "ROUTED",
+            note="客户事件复用已创建的 Work Order",
+            evidence={"customer_ticket_id": signal.get("ticket_id")},
+        )
+        _receipt(
+            wo_id,
+            "evidence",
+            "COLLECTED",
+            note="客户事件复用已创建的 Work Order",
+            evidence={
+                "customer_ticket_id": signal.get("ticket_id"),
+                "customer_ticket_no": signal.get("ticket_no"),
+                "support_bundle_sha256": signal.get("support_bundle_sha256"),
+            },
+        )
+        print(json.dumps({"wo_id": wo_id, "created": False}, ensure_ascii=False))
+        return 0
     key = str(signal.get("dedup_key") or "").strip()
     if not key:
         raise SystemExit("signal.dedup_key 缺失：无法保证复验回到同一工单")

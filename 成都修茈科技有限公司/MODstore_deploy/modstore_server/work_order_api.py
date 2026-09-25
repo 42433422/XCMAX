@@ -14,14 +14,15 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Path
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from modstore_server.api.deps import get_db, require_admin
+from modstore_server.api.deps import get_current_user, get_db, require_admin
 from modstore_server.db.work_orders import WorkOrderEvent
 from modstore_server.models import User
 from modstore_server.work_order_core import (
@@ -42,6 +43,21 @@ class CandidateBody(BaseModel):
     dedup_key: str = Field(..., max_length=96)
     reason: str = Field(default="", max_length=64)
     context: dict[str, Any] = Field(default_factory=dict)
+
+
+class CustomerCandidateBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    source: Literal["client_ai_product_issue"] = "client_ai_product_issue"
+    dedup_key: str = Field(..., min_length=1, max_length=96)
+    reason: Literal["product_defect"] = "product_defect"
+    expected: str = Field(..., min_length=1, max_length=1000)
+    actual: str = Field(..., min_length=1, max_length=1000)
+    confidence: float = Field(..., ge=0.8, le=1)
+    support_bundle_sha256: str = Field(..., pattern=r"^[0-9a-f]{64}$")
+    client_instance_id: str = Field(..., min_length=1, max_length=128)
+    product_version: str = Field(..., min_length=1, max_length=64)
+    git_sha: str = Field(..., pattern=r"^[0-9a-f]{40}$")
+    platform: str = Field(..., min_length=1, max_length=64)
 
 
 class TransitionBody(BaseModel):
@@ -127,6 +143,10 @@ def create_candidate(
     db: Session = Depends(get_db),
     _user: User = Depends(require_admin),
 ) -> dict[str, Any]:
+    return _create_candidate(db, body)
+
+
+def _create_candidate(db: Session, body: CandidateBody) -> dict[str, Any]:
     key = str(body.dedup_key or "").strip()
     if not key:
         return {"wo_id": "", "created": False, "status": "", "reason": "empty_dedup_key"}
@@ -147,6 +167,36 @@ def create_candidate(
         },
     )
     return {"wo_id": wo_id, "created": True, "status": "candidate"}
+
+
+@router.post("/customer-candidate")
+def create_customer_candidate(
+    body: CustomerCandidateBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Allow a logged-in customer to create a candidate, but not route or advance it."""
+    context = {
+        "customer_user_id": int(user.id),
+        "tenant_id": int(user.id),
+        "customer_reported": True,
+        "expected": body.expected,
+        "actual": body.actual,
+        "confidence": body.confidence,
+        "support_bundle_sha256": body.support_bundle_sha256,
+        "client_instance_id": body.client_instance_id,
+        "product_version": body.product_version,
+        "git_sha": body.git_sha,
+        "platform": body.platform,
+    }
+    scoped_key = hashlib.sha256(str(body.dedup_key).encode()).hexdigest()
+    scoped = CandidateBody(
+        source=body.source,
+        dedup_key=f"customer:{int(user.id)}:{scoped_key}",
+        reason=body.reason,
+        context=context,
+    )
+    return _create_candidate(db, scoped)
 
 
 @router.post("/transition")

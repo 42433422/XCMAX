@@ -223,6 +223,33 @@ class TestWorkOrderApi:
         )
         assert r2.status_code == 403
 
+    def test_customer_can_create_only_scoped_candidate(self, client) -> None:
+        headers = self._plain_headers(client)
+        body = {
+            "source": "client_ai_product_issue",
+            "dedup_key": "client-ai:" + "a" * 64,
+            "reason": "product_defect",
+            "expected": "success",
+            "actual": "failure",
+            "confidence": 0.95,
+            "support_bundle_sha256": "b" * 64,
+            "client_instance_id": "client-41",
+            "product_version": "1.0.0.5",
+            "git_sha": "c" * 40,
+            "platform": "macOS",
+        }
+        first = client.post("/api/work-orders/customer-candidate", json=body, headers=headers)
+        replay = client.post("/api/work-orders/customer-candidate", json=body, headers=headers)
+        assert first.status_code == 200 and replay.status_code == 200
+        assert first.json()["wo_id"] == replay.json()["wo_id"]
+        assert first.json()["status"] == "candidate" and replay.json()["created"] is False
+        transition = client.post(
+            "/api/work-orders/transition",
+            json={"wo_id": first.json()["wo_id"], "to_state": "routed"},
+            headers=headers,
+        )
+        assert transition.status_code == 403
+
     def test_candidate_idempotent_and_acceptance_cycle(self, client) -> None:
         headers = self._admin_headers(client)
         issue = 302
