@@ -880,7 +880,12 @@
         }
 
         function loadReleaseInfo() {
-          return fetchJson('/download-release.json', 'no-store', true).then(function (data) {
+          return fetch('/download-release.json', { cache: 'no-store' }).then(function (response) {
+            var type = response.headers.get('content-type') || ''
+            return response.ok && type.includes('json') ? response.json() : null
+          }).catch(function () {
+            return null
+          }).then(function (data) {
             if (!data) return
             if (typeof data.download_version === 'string') state.version = data.download_version
             if (typeof data.android_version === 'string') state.androidVersion = data.android_version
