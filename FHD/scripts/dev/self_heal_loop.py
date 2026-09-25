@@ -16,7 +16,7 @@
 阶段与依赖（fail-closed）：
 
     intake → evidence → diagnosis → repro_red → fix_green → pull_request
-        → owner_instance → approval → release → customer_retest → close → knowledge
+        → owner_instance → approval → merge → release → customer_retest → close → knowledge
 
 典型用法：
 
@@ -76,7 +76,10 @@ _STAGES: dict[str, tuple[str, str, frozenset[str]]] = {
     "owner_instance": ("owner_instance", "pull_request", frozenset({"OPEN"})),
     # 审批的依赖是「自有实例已复验通过」；审批本身不改状态机，只落决策收据
     "approval": ("approval", "owner_instance", frozenset({"OWNER_INSTANCE_VERIFIED"})),
-    "release": ("release", "approval", frozenset({"approved"})),
+    # 合入 main 是独立闸门：状态机的 merged 只能由真实合并结果换取，
+    # 不允许在 release 阶段「顺路」把状态推过 merged（那是假闭环）。
+    "merge": ("merge", "approval", frozenset({"approved"})),
+    "release": ("release", "merge", frozenset({"MERGED"})),
     "customer_retest": ("customer_retest", "release", frozenset({"RELEASED"})),
     "close": ("close", "customer_retest", frozenset({"PASS"})),
     "knowledge": ("knowledge", "close", frozenset({"CLOSED"})),
@@ -90,6 +93,7 @@ _PASS_STATUS: dict[str, str] = {
     "fix_green": "FIX_VALIDATED_IN_DEV",
     "pull_request": "OPEN",
     "owner_instance": "OWNER_INSTANCE_VERIFIED",
+    "merge": "MERGED",
     "release": "RELEASED",
     "customer_retest": "PASS",
     "close": "CLOSED",
@@ -103,12 +107,18 @@ _MIN_APPROVER_LEN = 2
 # 阶段执行成功后应收敛到的工单状态（缺省表示该阶段不动状态机）
 _PASS_STATE: dict[str, str] = {
     "fix_green": "in_dev",
+    "merge": "merged",
     "release": "released",
 }
 
 
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def _retest_dir() -> Path:
+    """与 customer_retest.py 同一解析规则：两侧落在不同目录会把 PASS 读成 FAIL。"""
+    return Path(os.environ.get("WORK_ORDER_RETEST_DIR") or (_FHD_ROOT / "test_reports" / "retest"))
 
 
 def _sha256_bytes(blob: bytes) -> str:
@@ -352,8 +362,9 @@ def cmd_retest(args: argparse.Namespace) -> int:
     if args.issue_comment:
         command += ["--issue-comment", str(args.issue_comment)]
     completed = subprocess.run(command, capture_output=True, text=True, check=False, timeout=300)
-    key12 = Path(args.spec).stem.removeprefix("repro-")
-    receipt_path = _FHD_ROOT / "test_reports" / "retest" / f"receipt-{key12}.json"
+    spec = json.loads(Path(args.spec).read_text(encoding="utf-8"))
+    key12 = str(spec.get("dedup_key") or Path(args.spec).stem.removeprefix("repro-"))[:12]
+    receipt_path = _retest_dir() / f"receipt-{key12}.json"
     verdict = "fail"
     if receipt_path.is_file():
         verdict = str(json.loads(receipt_path.read_text(encoding="utf-8")).get("verdict") or "fail")
