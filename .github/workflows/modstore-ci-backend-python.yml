@@ -80,7 +80,10 @@ jobs:
 
       - name: Run mypy type checking
         run: |
-          pip install mypy types-redis types-requests types-pyyaml types-paramiko types-passlib types-psutil types-pytz
+          # mypy 必须精确固定，取 2026-09-24 绿灯 run 实测版本；浮动会让工具换版在
+          # 零代码变更的 main 上改变判定（2026-09-25 事故 WO-0f1b3d12bab4）。
+          # 不要降到 1.x：1.19.1 会对 modstore_server/rag_service.py:287 报 arg-type。
+          pip install mypy==2.3.1 types-redis types-requests types-pyyaml types-paramiko types-passlib types-psutil types-pytz
           mypy --no-error-summary
 
       - name: Run tests with coverage (global floor — ratchet)
