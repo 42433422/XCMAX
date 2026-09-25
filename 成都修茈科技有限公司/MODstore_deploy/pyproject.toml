@@ -15,7 +15,10 @@ web = [
     # that compatibility alias into a deprecation failure under our strict tests.
     "anyio>=4.4,<4.15",
     "socksio>=1.0",
-    "sqlalchemy>=2.0",
+    # 上界不可去掉：sqlalchemy 2.1.0 收紧 Query 类型推断，使 ~30 个既有模块在
+    # mypy 门禁下被判 56 条错误（2026-09-25 事故 WO-0f1b3d12bab4，代码零变更）。
+    # 2.1 的类型迁移单独立项，迁移完成前不得放行。
+    "sqlalchemy>=2.0,<2.1",
     "alembic>=1.16,<2",
     "psycopg2-binary>=2.9",
     "PyJWT>=2.8",
