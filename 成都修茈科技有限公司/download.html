@@ -867,16 +867,11 @@
         }
 
         function fetchJson(url, cache, requireJsonContentType) {
-          return fetch(url, { cache: cache })
-            .then(function (response) {
-              var type = response.headers.get('content-type') || ''
-              return response.ok && (!requireJsonContentType || type.includes('json'))
-                ? response.json()
-                : null
-            })
-            .catch(function () {
-              return null
-            })
+          return fetch(url, { cache: cache }).then(function (response) {
+            var type = response.headers.get('content-type') || ''
+            if (!response.ok || (requireJsonContentType && !type.includes('json'))) return null
+            return response.json()
+          }).catch(function () { return null })
         }
 
         function loadReleaseInfo() {
@@ -933,11 +928,8 @@
           return desktopRows
         }
 
-        function textElement(tag, className, text) {
-          var el = document.createElement(tag)
-          if (className) el.className = className
-          el.textContent = text
-          return el
+        function textElement(tag, className, textContent) {
+          return Object.assign(document.createElement(tag), { className: className, textContent: textContent })
         }
 
         function render() {

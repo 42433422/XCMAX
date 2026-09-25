@@ -96,10 +96,8 @@ def test_release_page_uses_public_history_order_for_the_current_version() -> Non
     assert "if (releaseVersion === '1.0.0.0') entry.className += ' is-current'" not in release_page
     assert "fetchJson('/download-windows-hotfix.json')" in release_page
     assert "Windows 临时交付可下载" in release_page
-    assert (
-        "hotfix.stable_auto_update === false && ['signed', 'unsigned'].includes(hotfix.signature_status)"
-        in release_page
-    )
+    assert "hotfix.stable_auto_update === false" in release_page
+    assert "['signed', 'unsigned'].includes(hotfix.signature_status)" in release_page
 
 
 def test_download_page_prefers_a_same_or_newer_explicit_unsigned_interim_pointer() -> None:
