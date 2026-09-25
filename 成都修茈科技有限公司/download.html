@@ -815,9 +815,8 @@
         function activeWindowsHotfix() {
           var hotfix = state.windowsHotfix
           if (!hotfix || hotfix.schema !== 'xcagi.windows_interim_release/v1') return null
-          if (!hotfix.download_allowed || hotfix.signature_status !== 'unsigned') return null
-          if (!hotfix.artifact || !hotfix.artifact.url || !hotfix.artifact.filename) return null
-          return compareVersions(hotfix.version, state.version) >= 0 ? hotfix : null
+          if (!hotfix.download_allowed || hotfix.stable_auto_update !== false || !['signed', 'unsigned'].includes(hotfix.signature_status)) return null
+          return !hotfix.artifact || !hotfix.artifact.url || !hotfix.artifact.filename || compareVersions(hotfix.version, state.version) < 0 ? null : hotfix
         }
 
         function fileName(platform) {
@@ -857,15 +856,7 @@
         function metaText(platform) {
           var hotfix = platform === 'win' ? activeWindowsHotfix() : null
           if (hotfix) {
-            return (
-              'v' +
-              hotfix.version +
-              ' · 未签名临时交付 · 约 ' +
-              Math.round(hotfix.artifact.size / 1048576) +
-              ' MB · SHA256 ' +
-              String(hotfix.artifact.sha256).slice(0, 12) +
-              '…'
-            )
+            return 'v' + hotfix.version + ' · Authenticode ' + hotfix.signature_status + ' · 约 ' + Math.round(hotfix.artifact.size / 1048576) + ' MB · SHA256 ' + String(hotfix.artifact.sha256)
           }
           var entry = manifestEntry(platform)
           var bits = []
@@ -875,46 +866,47 @@
           return bits.join(' · ')
         }
 
-        function loadReleaseInfo() {
-          return fetch('/download-release.json', { cache: 'no-store' })
+        function fetchJson(url, cache, requireJsonContentType) {
+          return fetch(url, { cache: cache })
             .then(function (response) {
               var type = response.headers.get('content-type') || ''
-              return response.ok && type.includes('json') ? response.json() : null
+              return response.ok && (!requireJsonContentType || type.includes('json'))
+                ? response.json()
+                : null
             })
-            .then(function (data) {
-              if (!data) return
-              if (typeof data.download_version === 'string') state.version = data.download_version
-              if (typeof data.android_version === 'string') state.androidVersion = data.android_version
-              if (data.win_installer_mb != null) state.winMb = String(data.win_installer_mb)
-              if (typeof data.release_ready === 'boolean') state.releaseReady = data.release_ready
-              if (typeof data.release_root === 'string') state.base = data.release_root.replace(/\/$/, '')
-              else if (typeof data.cos_base_url === 'string') state.base = data.cos_base_url.replace(/\/$/, '')
-              else if (state.version) state.base = RELEASE_ROOT + '/xcagi-v' + state.version
+            .catch(function () {
+              return null
             })
-            .catch(function () {})
+        }
+
+        function loadReleaseInfo() {
+          return fetch('/download-release.json', { cache: 'no-store' }).then(function (response) {
+            var type = response.headers.get('content-type') || ''
+            return response.ok && type.includes('json') ? response.json() : null
+          }).catch(function () {
+            return null
+          }).then(function (data) {
+            if (!data) return
+            if (typeof data.download_version === 'string') state.version = data.download_version
+            if (typeof data.android_version === 'string') state.androidVersion = data.android_version
+            if (data.win_installer_mb != null) state.winMb = String(data.win_installer_mb)
+            if (typeof data.release_ready === 'boolean') state.releaseReady = data.release_ready
+            if (typeof data.release_root === 'string') state.base = data.release_root.replace(/\/$/, '')
+            else if (typeof data.cos_base_url === 'string') state.base = data.cos_base_url.replace(/\/$/, '')
+            else if (state.version) state.base = RELEASE_ROOT + '/xcagi-v' + state.version
+          })
         }
 
         function loadManifest() {
-          return fetch(state.base + '/manifest.json', { cache: 'no-cache' })
-            .then(function (response) {
-              return response.ok ? response.json() : null
-            })
-            .then(function (data) {
-              if (data && data.schema === 'xcagi.download_manifest/v1') state.manifest = data
-            })
-            .catch(function () {})
+          return fetchJson(state.base + '/manifest.json', 'no-cache').then(function (data) {
+            if (data && data.schema === 'xcagi.download_manifest/v1') state.manifest = data
+          })
         }
 
         function loadWindowsHotfix() {
-          return fetch('/download-windows-hotfix.json', { cache: 'no-store' })
-            .then(function (response) {
-              var type = response.headers.get('content-type') || ''
-              return response.ok && type.includes('json') ? response.json() : null
-            })
-            .then(function (data) {
-              if (data && data.schema === 'xcagi.windows_interim_release/v1') state.windowsHotfix = data
-            })
-            .catch(function () {})
+          return fetchJson('/download-windows-hotfix.json', 'no-store', true).then(function (data) {
+            if (data && data.schema === 'xcagi.windows_interim_release/v1') state.windowsHotfix = data
+          })
         }
 
         var listEl = document.getElementById('download-list')
@@ -961,12 +953,12 @@
             if (row.platform === 'android' && state.androidVersion) return true
             return state.releaseReady
           })
-          noteEl.classList.toggle('is-warning', Boolean(hotfix) && state.tab === 'desktop')
-          noteEl.innerHTML =
+          noteEl.classList.toggle('is-warning', Boolean(hotfix) && hotfix.signature_status === 'unsigned' && state.tab === 'desktop')
+          noteEl.textContent =
             state.tab === 'android'
               ? 'Android 为实验版（非签约级），安装后请在系统设置中允许“安装未知应用”。'
               : hotfix
-                ? 'Windows 临时交付包尚未完成 Authenticode 签名，仅供管理员核对来源与 SHA-256 后安装；不会进入稳定自动更新。macOS 仍使用稳定版。'
+                ? 'Windows 临时交付包 Authenticode 状态：' + hotfix.signature_status + '。安装前请核对完整 SHA-256；不会进入稳定自动更新。macOS 仍使用稳定版。'
                 : '支持 Windows 10+、macOS 12+。安装后可按需安装行业 Mod。'
           listEl.innerHTML = ''
 
