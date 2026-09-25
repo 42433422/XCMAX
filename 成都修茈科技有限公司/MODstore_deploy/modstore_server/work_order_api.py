@@ -1,15 +1,4 @@
-"""工单（Work Order SSOT）共享宿主 API：多进程可写同一状态机。
-
-让 FHD 侧本地 JSONL 不再是唯一落点——本地 relay 建 issue、CI closeout 回写验收、
-管理端查看，都经本 API 落到共享库 ``work_order_events``。
-
-端点（管理员）：
-  POST /api/work-orders/candidate      候选升级唯一工单（幂等）
-  POST /api/work-orders/transition     状态迁移（非法迁移拒绝；routed 强制携带轨道）
-  POST /api/work-orders/acceptance     验收判定落库（verifying → closed/reopened）
-  GET  /api/work-orders/by-issue/{issue_number}
-  GET  /api/work-orders/{wo_id}
-"""
+"""Shared Work Order and customer-intake API."""
 
 from __future__ import annotations
 
@@ -18,7 +7,7 @@ import json
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter, Depends, Path, Query
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
@@ -419,6 +408,19 @@ def by_issue(
 ) -> dict[str, Any]:
     view = _find_by_issue(db, int(issue_number))
     return view if view is not None else {}
+
+
+@router.get("")
+def list_orders(
+    status: str = Query(default="", max_length=16),
+    limit: int = Query(default=200, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_admin),
+) -> dict[str, Any]:
+    views = fold(db.query(WorkOrderEvent).order_by(WorkOrderEvent.id.asc()).all()).values()
+    items = [view for view in views if not status or view["status"] == status]
+    items.sort(key=lambda view: str(view.get("updated_at") or ""), reverse=True)
+    return {"items": items[:limit], "count": len(items)}
 
 
 @router.get("/{wo_id}")

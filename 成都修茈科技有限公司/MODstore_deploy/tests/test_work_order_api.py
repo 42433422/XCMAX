@@ -226,6 +226,9 @@ class TestWorkOrderApi:
             headers=self._plain_headers(client),
         )
         assert r2.status_code == 403
+        assert (
+            client.get("/api/work-orders", headers=self._plain_headers(client)).status_code == 403
+        )
 
     def test_customer_can_create_only_scoped_candidate(self, client) -> None:
         headers = self._plain_headers(client)
@@ -254,6 +257,10 @@ class TestWorkOrderApi:
         )
         assert transition.status_code == 403
         admin = self._admin_headers(client)
+        assert any(
+            row["wo_id"] == first.json()["wo_id"]
+            for row in client.get("/api/work-orders?limit=10", headers=admin).json()["items"]
+        )
         receipt = {
             "wo_id": first.json()["wo_id"],
             "gate": "owner_instance",
