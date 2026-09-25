@@ -111,7 +111,7 @@ fsspec==2026.4.0
     # via
     #   huggingface-hub
     #   torch
-gevent==24.2.1
+gevent==26.8.0
     # via -r XCAGI/requirements.txt
 greenlet==3.5.0
     # via
