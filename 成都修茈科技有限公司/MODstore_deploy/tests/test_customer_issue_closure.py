@@ -348,9 +348,7 @@ def test_intake_owner_bound_atomic_idempotent(client):
         app.dependency_overrides.pop(get_current_user, None)
 
 
-def test_customer_feedback_keeps_work_order_and_verified_bundle_in_owner_event(
-    client, monkeypatch
-):
+def test_customer_feedback_keeps_work_order_and_verified_bundle_in_owner_event(client, monkeypatch):
     from modstore_server.auth_service import create_access_token
     from modstore_server.db.ops_events import OutboxEvent
     from modstore_server import customer_service_api
