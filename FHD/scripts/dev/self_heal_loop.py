@@ -5,7 +5,8 @@
 其余每一步都复用仓库既有能力（不重造）：
 
   1. **建单**：真实信号 → Work Order SSOT（``upsert_candidate`` + ``routed``）
-  2. **执行**：``run <stage> --cmd ...`` 真实执行该阶段命令，按真实结果落闸门收据
+  2. **执行**：``run <stage> --cmd ...`` 真实执行该阶段命令，按真实结果落闸门收据，
+     并沿状态机把工单推进到该阶段应有的状态（收据与状态必须同时前进）
   3. **闸门**：fail-closed 依赖判定——上一步没有真实凭据，下一步不允许开跑
   4. **审批**：发布前硬门，只接受明确 approve / reject / hold；没有 approve 不放行
 
@@ -57,6 +58,7 @@ from app.services.work_order_ssot import (  # noqa: E402
     record_transition,
     upsert_candidate,
 )
+from app.services.work_order_state import _ALLOWED_TRANSITIONS  # noqa: E402
 
 logger = logging.getLogger("self_heal_loop")
 
@@ -97,6 +99,12 @@ _PASS_STATUS: dict[str, str] = {
 _APPROVAL_DECISIONS = frozenset({"approve", "reject", "hold"})
 # 审批身份的硬要求：必须是人（非空），并留下时间戳；空身份直接拒绝。
 _MIN_APPROVER_LEN = 2
+
+# 阶段执行成功后应收敛到的工单状态（缺省表示该阶段不动状态机）
+_PASS_STATE: dict[str, str] = {
+    "fix_green": "in_dev",
+    "release": "released",
+}
 
 
 def _utc_now() -> str:
@@ -145,6 +153,46 @@ def _require_gate(wo_id: str, stage: str) -> None:
             f"门禁阻断：{stage} 需要 {dep_gate}={sorted(allowed)}，"
             f"当前 {dep_gate}={status or '（无收据）'}（工单 {wo_id}）"
         )
+
+
+def _shortest_path(start: str, target: str) -> list[str]:
+    """状态机上的最短合法路径（不含起点）；不可达时返回空列表。"""
+    if start == target:
+        return []
+    queue: list[tuple[str, list[str]]] = [(start, [])]
+    seen = {start}
+    while queue:
+        node, path = queue.pop(0)
+        for nxt in sorted(_ALLOWED_TRANSITIONS.get(node, frozenset())):
+            if nxt == target:
+                return [*path, nxt]
+            if nxt not in seen:
+                seen.add(nxt)
+                queue.append((nxt, [*path, nxt]))
+    return []
+
+
+def _advance(wo_id: str, target: str) -> None:
+    """按状态机允许的路径把工单推进到 target；路径不可达时 fail-closed 阻断。
+
+    闸门收据回答「凭哪份证据过的」，状态机回答「走到哪一步」；两者必须同时前进，
+    否则会出现「收据说已发布、工单还停在 routed」的假闭环。
+    """
+    current = str((get_work_order(wo_id) or {}).get("status") or "")
+    for nxt in _shortest_path(current, target):
+        result = record_transition(
+            wo_id,
+            nxt,
+            note=f"闭环编排器按实测结果推进（{current} → {target}）",
+            source="self_heal_loop",
+        )
+        if not result.get("ok") and result.get("reason") != "already_in_state":
+            raise SystemExit(
+                f"状态迁移被拒 {current}→{nxt}: {result.get('reason')}（工单 {wo_id}）"
+            )
+        current = nxt
+    if current != target:
+        raise SystemExit(f"状态机阻断：{current} 无法到达 {target}（工单 {wo_id}）")
 
 
 def cmd_start(args: argparse.Namespace) -> int:
@@ -216,6 +264,11 @@ def cmd_run(args: argparse.Namespace) -> int:
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / f"{args.stage}-{wo_id}.log"
     log_path.write_text(f"$ {args.cmd}\n\n{stdout}\n{stderr}", encoding="utf-8")
+    identity = {}
+    if args.artifact_sha256:
+        identity["artifact_sha256"] = str(args.artifact_sha256)
+    if args.release_sha:
+        identity["release_sha"] = str(args.release_sha)
     _receipt(
         wo_id,
         args.stage,
@@ -228,8 +281,11 @@ def cmd_run(args: argparse.Namespace) -> int:
             "started_at": started,
             "log": str(log_path),
             "log_sha256": _sha256_bytes(log_path.read_bytes()),
+            **identity,
         },
     )
+    if passed and args.stage in _PASS_STATE:
+        _advance(wo_id, _PASS_STATE[args.stage])
     print(json.dumps({"wo_id": wo_id, "stage": args.stage, "status": status}, ensure_ascii=False))
     return 0 if passed else 1
 
@@ -310,14 +366,12 @@ def cmd_retest(args: argparse.Namespace) -> int:
         evidence={"receipt": str(receipt_path), "verdict": verdict},
     )
     if passed:
-        record_transition(wo_id, "verifying", note="客户回执到达", source="self_heal_loop")
-        record_transition(wo_id, "closed", note="客户机复验通过", source="self_heal_loop")
+        _advance(wo_id, "verifying")
+        _advance(wo_id, "closed")
         _receipt(wo_id, "close", "CLOSED", note="客户机自证问题已解决")
         return 0
-    record_transition(wo_id, "verifying", note="客户回执到达", source="self_heal_loop")
-    result = record_transition(wo_id, "reopened", note="客户机复验失败", source="self_heal_loop")
-    if not result.get("ok") and result.get("reason") != "already_in_state":
-        logger.warning("reopen transition rejected: %s", result.get("reason"))
+    _advance(wo_id, "verifying")
+    _advance(wo_id, "reopened")
     _receipt(wo_id, "close", "REOPENED", note="客户机复验失败，原单重开")
     return 2
 
@@ -344,6 +398,8 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("--status", default="")
     p_run.add_argument("--fail-status", default="FAILED")
     p_run.add_argument("--note", default="")
+    p_run.add_argument("--artifact-sha256", default="", help="发布阶段：制品 SHA256（可追溯身份）")
+    p_run.add_argument("--release-sha", default="", help="发布阶段：制品对应的 git commit sha")
     p_run.add_argument("--timeout", type=float, default=1800.0)
 
     p_appr = sub.add_parser("approval", help="发布前人工审批（硬门）")
