@@ -815,7 +815,7 @@
         function activeWindowsHotfix() {
           var hotfix = state.windowsHotfix
           if (!hotfix || hotfix.schema !== 'xcagi.windows_interim_release/v1') return null
-          if (!hotfix.download_allowed || hotfix.stable_auto_update !== false || !['signed', 'unsigned'].includes(hotfix.signature_status)) return null
+          if (!hotfix.download_allowed || hotfix.stable_auto_update !== false || hotfix.signature_status !== 'signed') return null
           return !hotfix.artifact || !hotfix.artifact.url || !hotfix.artifact.filename || compareVersions(hotfix.version, state.version) < 0 ? null : hotfix
         }
 
