@@ -39,7 +39,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     timeline: '',
     budget: '',
     desktopOs: '',
-    needMobile: true,
+    needMobile: false,
     needIntegration: '',
     integrationNote: '',
     extraNote: '',
@@ -124,7 +124,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     state.timeline = (form.elements.timeline?.value || '').trim()
     state.budget = (form.elements.budget?.value || '').trim()
     state.desktopOs = selectedRadio('desktopOs')
-    state.needMobile = form.elements.needMobile ? Boolean(form.elements.needMobile.checked) : true
+    state.needMobile = form.elements.needMobile ? Boolean(form.elements.needMobile.checked) : false
     state.needIntegration = (form.elements.needIntegration?.value || '').trim()
     state.integrationNote = (form.elements.integrationNote?.value || '').trim()
     state.extraNote = (form.elements.extraNote?.value || '').trim()

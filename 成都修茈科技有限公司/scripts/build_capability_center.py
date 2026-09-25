@@ -55,10 +55,26 @@ PRODUCT_FORMS = (
     {"name": "移动端", "sub": "Android", "keys": ("Android",)},
     {"name": "管理端", "sub": "Web", "keys": ("Web / 后端",)},
 )
+CUSTOMER_PLATFORMS = (
+    {"name": "Windows", "keys": ("Windows 桌面",)},
+    {"name": "macOS", "keys": ("macOS 桌面",)},
+    {"name": "Android", "keys": ("Android",)},
+    {"name": "Web / 后端", "keys": ("Web / 后端",)},
+)
 
 
 def esc(value) -> str:
     return html.escape(str(value), quote=True)
+
+
+def status_badge(status: str) -> str:
+    meta = STATUS_META.get(status, {"label": status, "cls": ""})
+    return f'<span class="cap-status {esc(meta["cls"])}">{esc(meta["label"])}</span>'
+
+
+def catalog_payload(data: dict) -> str:
+    """内嵌同一份能力目录供全景和目录页使用。"""
+    return json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
 
 
 def e(path: str) -> Path:
@@ -615,104 +631,35 @@ def header_html(page_key: str, title_suffix: str, description: str, canonical: s
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>{esc(title_suffix)} | 成都修茈科技有限公司</title>
+    <title>{esc(title_suffix)} | XCAGI</title>
     <meta name="description" content="{esc(description)}" />
-    <link rel="canonical" href="{esc(canonical)}" />
-    <link rel="stylesheet" href="/styles.css?v=20260722h" />
+    <meta property="og:site_name" content="XCAGI" />
+    <meta property="og:title" content="{esc(title_suffix)} | XCAGI" />
+    <meta property="og:description" content="{esc(description)}" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://xiu-ci.com{esc(canonical)}" />
+    <meta property="og:image" content="https://xiu-ci.com/assets/brand-logo.jpg" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="canonical" href="https://xiu-ci.com{esc(canonical)}" />
+    <link rel="icon" href="/assets/xiu-ci-logo.png" type="image/png" />
+    <link rel="stylesheet" href="/styles.css?v=20260925a" />
     {css("/capabilities/assets/capabilities.css")}
   </head>
 <body data-page="{esc(page_key)}">
-<header class="site-header">
-  <div class="container header-inner">
-    <a class="brand-mark" href="/index.html">
-      <span class="brand-seal"><img src="/assets/xiu-ci-logo.png" alt="修茈科技 Logo" /></span>
-      <span class="brand-name"><strong>成都修茈科技有限公司</strong><span>XCAGI Automation</span></span>
-    </a>
-    <nav class="nav" aria-label="站点导航">
-      <div class="nav-menu">
-        <a data-nav="index" href="/index.html">首页</a>
-        <a data-nav="about" href="/about.html">关于修茈</a>
-        <a data-nav="visualization" href="/visualization">可视化展示</a>
-        <a data-nav="solutions" href="/solutions.html">方案与案例</a>
-        <a class="nav-optional" data-nav="news" href="/news.html">新闻资讯</a>
-        <a class="nav-optional active" data-nav="capabilities" href="/capabilities/">产品能力</a>
-        <a data-nav="contact" href="/contact.html">联系我们</a>
-        <a data-nav="developer" href="/developer.html">开发者中心</a>
-        <a data-nav="world-will" href="/world-will">世界意志</a>
-      </div>
-      <div class="nav-actions">
-        <a class="nav-action nav-action--outline" href="/market/">AI 市场</a>
-        <a class="nav-action nav-action--primary" href="/download">产品下载</a>
-      </div>
-    </nav>
-    <button class="mobile-menu-toggle" id="mobile-menu-toggle" type="button" aria-controls="mobile-menu" aria-label="打开菜单" aria-expanded="false"><span></span><span></span><span></span></button>
-  </div>
-</header>
-<div class="mobile-menu-overlay" id="mobile-menu-overlay"></div>
-<nav class="mobile-menu" id="mobile-menu" aria-hidden="true" inert>
-  <a href="/index.html" class="mobile-menu-link" data-nav="index">首页</a>
-  <a href="/about.html" class="mobile-menu-link" data-nav="about">关于修茈</a>
-  <a href="/visualization" class="mobile-menu-link" data-nav="visualization">可视化展示</a>
-  <a href="/solutions.html" class="mobile-menu-link" data-nav="solutions">方案与案例</a>
-  <a href="/news.html" class="mobile-menu-link" data-nav="news">新闻资讯</a>
-  <a href="/capabilities/" class="mobile-menu-link active" data-nav="capabilities">产品能力</a>
-  <a href="/contact.html" class="mobile-menu-link" data-nav="contact">联系我们</a>
-  <a href="/developer.html" class="mobile-menu-link" data-nav="developer">开发者中心</a>
-  <a href="/world-will" class="mobile-menu-link" data-nav="world-will">世界意志</a>
-  <div class="mobile-menu-actions">
-    <a href="/market/" class="mobile-menu-link mobile-menu-link--outline">AI 市场</a>
-    <a href="/download" class="mobile-menu-link mobile-menu-link--primary">产品下载</a>
-  </div>
-</nav>
+<header class="site-header"><div class="container header-inner">
+<a class="brand-mark" href="/index.html"><span class="brand-seal"><img src="/assets/xiu-ci-logo.png" alt="修茈科技 Logo" /></span><span class="brand-name"><strong>XCAGI</strong><span>企业业务自动化平台</span></span></a>
+<nav class="nav" aria-label="站点导航"><div class="nav-menu">
+<a href="/index.html#product">产品</a><a href="/solutions.html">解决方案</a><a href="/cases.html">客户案例</a><a href="/index.html#pricing">价格</a><a href="/download">下载</a><a class="active" href="/capabilities/">验证中心</a><a href="/contact.html">联系我们</a>
+<details class="nav-secondary"><summary>技术与透明度</summary><div class="nav-secondary-panel"><a href="/developer.html">开发者中心</a><a href="/world-will">世界意志</a><a href="/download/breakpoints">断点清单</a><a href="/download/goals">工作目标</a></div></details></div></nav>
+<button class="mobile-menu-toggle" id="mobile-menu-toggle" type="button" aria-controls="mobile-menu" aria-label="打开菜单" aria-expanded="false"><span></span><span></span><span></span></button></div></header>
+<div class="mobile-menu-overlay" id="mobile-menu-overlay"></div><nav class="mobile-menu" id="mobile-menu" aria-hidden="true" inert>
+<a href="/index.html#product" class="mobile-menu-link">产品</a><a href="/solutions.html" class="mobile-menu-link">解决方案</a><a href="/cases.html" class="mobile-menu-link">客户案例</a><a href="/index.html#pricing" class="mobile-menu-link">价格</a><a href="/download" class="mobile-menu-link">下载</a><a href="/capabilities/" class="mobile-menu-link active">验证中心</a><a href="/contact.html" class="mobile-menu-link">联系我们</a>
+<details class="mobile-secondary"><summary>技术与透明度</summary><a href="/developer.html" class="mobile-menu-link">开发者中心</a><a href="/world-will" class="mobile-menu-link">世界意志</a><a href="/download/breakpoints" class="mobile-menu-link">断点清单</a><a href="/download/goals" class="mobile-menu-link">工作目标</a></details></nav>
 """
 
 
 def footer_html() -> str:
-    return """<footer class="site-footer">
-      <div class="container footer-inner">
-        <div>
-          <a class="brand-mark" href="/index.html"
-            ><span class="brand-seal"
-              ><img src="/assets/xiu-ci-logo.png" alt="修茈科技 Logo" /></span
-            ><span class="brand-name"
-              ><strong>成都修茈科技有限公司</strong><span>XCAGI Automation</span></span
-            ></a
-          >
-          <p class="footer-copy">
-            &copy; <span id="year"></span> 成都修茈科技有限公司 保留所有权利。
-          </p>
-          <p class="footer-meta footer-legal">
-            <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer"
-              >蜀ICP备2026014056号-3A</a
-            >
-          </p>
-        </div>
-        <div class="footer-links">
-          <a href="/solutions.html">解决方案</a
-          ><a href="/cases.html">客户案例</a><a href="/news.html">新闻资讯</a
-          ><a href="/capabilities/">产品能力</a><a href="/contact.html">联系我们</a>
-        </div>
-      </div>
-    </footer>
-<button id="back-to-top" class="back-to-top" aria-label="回到顶部"></button>
-<script src="/main.js?v=20260722h"></script>
-</body>
-</html>
-"""
-
-
-def status_badge(status: str) -> str:
-    meta = STATUS_META[status]
-    return f'<span class="cap-status {meta["cls"]}">{meta["label"]}</span>'
-
-
-def catalog_payload(data: dict) -> str:
-    """内嵌目录数据（首页全景地图与能力目录页共用同一份 SSOT 数据源）。
-
-    script[type=application/json] 内不做 HTML 实体转义（script 内容不会被实体解码），
-    仅转义 </ 防止提前闭合 script 标签。
-    """
-    return json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+    return """<footer class="site-footer"><div class="container footer-inner"><div><a class="brand-mark" href="/index.html"><span class="brand-name"><strong>XCAGI</strong><span>企业业务自动化平台</span></span></a><p class="footer-copy">© <span id="year"></span> 成都修茈科技有限公司</p><p class="footer-meta">产品咨询：<a href="mailto:970882904@qq.com">970882904@qq.com</a></p><p class="footer-meta"><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">蜀ICP备2026014056号-3A</a></p></div><nav class="footer-links" aria-label="页脚导航"><a href="/index.html#product">产品</a><a href="/solutions.html">解决方案</a><a href="/cases.html">客户案例</a><a href="/index.html#pricing">价格</a><a href="/download">下载</a><a href="/capabilities/">验证中心</a><a href="/contact.html">联系我们</a><details class="footer-secondary"><summary>技术与透明度</summary><a href="/developer.html">开发者中心</a><a href="/world-will">世界意志</a><a href="/download/breakpoints">断点清单</a><a href="/download/goals">工作目标</a></details></nav></div></footer><button id="back-to-top" class="back-to-top" aria-label="回到顶部"></button><script src="/main.js?v=20260925a"></script></body></html>"""
 
 
 def render_index(data: dict, domains_full: list[dict]) -> str:
@@ -750,6 +697,14 @@ def render_index(data: dict, domains_full: list[dict]) -> str:
             f"""<li class="capm-form"><div><strong>{esc(form['name'])}</strong><span>{esc(form['sub'])}</span></div>
           <em class="capm-badge {'capm-badge--warn' if warn else 'capm-badge--ok'}">{esc(level)}</em></li>"""
         )
+
+    all_features = [f for d in domains_full for m in d["modules"] for f in m["features"] if not f["excluded"]]
+    verified_features = [f for f in all_features if f["status"] == "verified"]
+    verified_industry = [f for f in verified_features if f["id"].startswith("ind-")]
+    verified_links = "".join(f'<li><a href="/capabilities/feature/{esc(f["id"])}.html">{esc(f["name"])} →</a></li>' for f in verified_features[:5]) or '<li>当前没有达到完整证据验收标准的能力项；可查看完整矩阵了解各项状态。</li>'
+    industry_links = "".join(f'<li><a href="/capabilities/feature/{esc(f["id"])}.html">{esc(f["name"])} →</a></li>' for f in verified_industry) or '<li>当前没有行业 Mod 达到本矩阵的完整实机验收标准；目录条目不代表已交付。</li>'
+    platform_cards = "".join(f'<li><strong>{esc(form["name"])}</strong><span>{esc(" / ".join(v for v in (data.get("platform_levels", {}).get(k, "") for k in form["keys"]) if v) or "见版本说明")}</span></li>' for form in CUSTOMER_PLATFORMS)
+    customer_view = f'''<section class="cap-customer-view"><div class="container"><p class="home-kicker">XCAGI 客户能力视图</p><h1>从企业业务场景了解 XCAGI</h1><p>XCAGI 是对外产品名；XCMAX 是产品平台与工程体系的内部标识。客户购买、安装和使用的产品统一称为 XCAGI。</p><div class="cap-customer-grid"><article><h2>已验证能力</h2><p>当前共有 <strong>{len(verified_features)}</strong> 项能力达到本矩阵要求的全部适用平台实机验收标准。</p><ul>{verified_links}</ul></article><article><h2>行业 Mod</h2><p>以下只列出达到完整验收标准的行业能力。</p><ul>{industry_links}</ul><a href="/cases.html">查看客户案例与证据边界 →</a></article><article><h2>正式支持平台</h2><ul class="cap-customer-platforms">{platform_cards}</ul><p>平台等级来自 FHD/VERSION.md；下载开放状态以产品下载清单为准。</p></article></div><p class="cap-customer-cta"><a class="btn btn-primary" href="/download">查看产品下载</a><a class="btn btn-secondary" href="/contact.html#quick-inquiry">快速咨询</a><a class="cap-matrix-link" href="#technical-matrix">查看完整技术验证矩阵</a></p></div></section>'''
 
     modes = "".join(
         f'<li class="capm-mode"><strong>{esc(m["name"])}</strong>'
@@ -819,12 +774,16 @@ def render_index(data: dict, domains_full: list[dict]) -> str:
         f'<tbody>{"".join(plat_rows)}</tbody></table></div></section>'
     )
 
-    return f"""{header_html("capabilities", "产品能力中心", "XCMAX 产品能力矩阵：逐项公开实现与验证证据，点击任一功能查看实机截图或录像，所有数字由能力目录自动统计。", "/capabilities/")}
+    return f"""{header_html("capabilities", "XCAGI 产品验证中心", "查看 XCAGI 已验证能力、正式支持平台与由证据自动生成的完整技术验证矩阵。", "/capabilities/")}
 <main>
+  {customer_view}
+  <details class="cap-engineering" id="technical-matrix">
+    <summary>查看完整技术验证矩阵（{s['total']} 项 · {s['completion']}% 加权工程进度）</summary>
+    <p class="cap-engineering-intro">{s['completion']}% 是目录中不同实现/验证状态的加权工程进度，不表示“产品只有 39% 已开发”。所有状态、覆盖率和证据都由能力 SSOT、平台验收记录及 CI 门禁生成。</p>
   <section class="capm-hero">
     <div class="container capm-hero-inner">
       <div class="capm-hero-main">
-        <h1><span class="capm-logo">XCMAX</span> 企业 AI 员工桌面平台{ver_html}</h1>
+        <h2><span class="capm-logo">XCAGI</span> 企业业务自动化平台{ver_html}</h2>
         <p class="capm-sub">跨平台 · 三端协同 · 一站式 AI 员工工作台</p>
         <p class="capm-slogan">把 AI 员工装进每台企业电脑，让企业自己运转</p>
       </div>
@@ -893,7 +852,7 @@ def render_index(data: dict, domains_full: list[dict]) -> str:
         <ul class="capm-modes">{modes}</ul>
       </section>
       <section class="capm-side-block capm-side-brand">
-        <strong>XCMAX</strong>
+        <strong>XCAGI</strong>
         <span>AI EMPLOYEES FOR A BETTER BUSINESS</span>
         <em>成都修茈科技有限公司 · xiu-ci.com</em>
         <a class="btn btn-primary btn-sm" href="/capabilities/catalog.html">浏览完整能力目录</a>
@@ -903,24 +862,11 @@ def render_index(data: dict, domains_full: list[dict]) -> str:
 
   <section class="section">
     <div class="container">
-      <h2>资质与交付</h2>
-      <p class="cap-section-note">公司资质与交付保障说明（由原"资质与能力"页并入）。具体资质、合同案例和服务边界以实际公示与合同约定为准。</p>
-      <div class="grid grid-4">
-        <article class="card"><h3>软件开发能力</h3><p>具备前后端、数据、接口和部署运维的一体化开发能力，主仓库包含完整的后端服务、前端 SPA、桌面壳与移动端工程。</p></article>
-        <article class="card"><h3>移动互联网 APP 备案</h3><p>XCAGI Android 个人版/企业版已通过工信部应用程序备案（2026）。</p></article>
-        <article class="card"><h3>项目实施理解</h3><p>围绕政企、园区、教育、制造等场景持续沉淀业务认知，已交付涂装、附件包装、考勤等行业 Mod。</p></article>
-        <article class="card"><h3>安全与稳定性</h3><p>重视权限、数据隔离、日志审计和可恢复部署；数据库启用 WAL 与在线热备，启动时自动体检并从备份恢复。</p></article>
-        <article class="card"><h3>服务机制</h3><p>业务正式开展后，将按合同建立响应、验收与运维机制。</p></article>
-      </div>
-    </div>
-  </section>
-
-  <section class="section">
-    <div class="container">
       <h2>本页数字是怎么来的</h2>
       <p>能力目录 <code>data/capabilities/catalog.json</code> 由仓库审计维护；构建脚本 <code>scripts/build_capability_center.py</code> 在生成页面前逐项校验证据：实现路径、自动化测试、CI 工作流、文件存在只说明资料已收录；已验证还要求本项操作、预期与实际结果、构建身份及绑定原图哈希的内容复核记录。缺少验收记录会自动降级。矩阵中每个功能都可点进详情页查看对应证据。目录与页面由 CI 漂移门禁校验一致性，此检查不替代人工核验，也不代表全部功能已完成。</p>
     </div>
   </section>
+  </details>
 </main>
 <script id="cap-catalog-data" type="application/json">{catalog_payload(data)}</script>
 <script src="/capabilities/assets/panorama.js?v=20260919b"></script>

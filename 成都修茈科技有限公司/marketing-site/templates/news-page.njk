@@ -3,8 +3,17 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>新闻资讯 | 成都修茈科技有限公司</title>
-  <meta name="description" content="修茈科技新闻资讯与行业观察：企业 AI 自动化、单据处理、Agent 趋势与中小企业数字化。" />
+  <title>新闻资讯 | XCAGI</title>
+  <meta name="description" content="XCAGI 产品动态与企业业务自动化行业观察。" />
+  <meta property="og:site_name" content="XCAGI" />
+  <meta property="og:title" content="新闻资讯 | XCAGI" />
+  <meta property="og:description" content="XCAGI 产品动态与企业业务自动化行业观察。" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://xiu-ci.com/news.html" />
+  <meta property="og:image" content="https://xiu-ci.com/assets/brand-logo.jpg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="canonical" href="https://xiu-ci.com/news.html" />
+  <link rel="icon" href="/assets/xiu-ci-logo.png" type="image/png" />
   <link rel="stylesheet" href="./styles.css?v={{ cssQuery }}" />
 </head>
 <body>
@@ -40,18 +49,7 @@
     </div>
   </section>
 </main>
-<footer class="site-footer">
-  <div class="container footer-inner">
-    <div>
-      <a class="brand-mark" href="/index.html"><span class="brand-seal"><img src="/assets/xiu-ci-logo.png" alt="修茈科技 Logo" /></span><span class="brand-name"><strong>成都修茈科技有限公司</strong><span>XCAGI Automation</span></span></a>
-      <p class="footer-copy">&copy; <span id="year"></span> 成都修茈科技有限公司 保留所有权利。</p>
-      <p class="footer-meta footer-legal"><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">蜀ICP备2026014056号-3A</a></p>
-    </div>
-    <div class="footer-links">
-      <a href="/about.html">关于修茈</a><a href="/cases.html">客户案例</a><a href="/news.html">新闻资讯</a><a href="/developer.html">开发者中心</a><a href="/honors.html">资质与能力</a><a href="/contact.html">联系我们</a>
-    </div>
-  </div>
-</footer>
+{% include "partials/footer.njk" %}
 <button id="back-to-top" class="back-to-top" aria-label="回到顶部"></button>
 <script src="./main.js?v={{ cssQuery }}"></script>
 {% include "partials/corp-butler.njk" %}
