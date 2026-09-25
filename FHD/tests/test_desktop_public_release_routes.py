@@ -106,6 +106,7 @@ def test_download_page_accepts_signed_interim_without_enabling_ota() -> None:
 
     assert "fetchJson('/download-windows-hotfix.json', 'no-store', true)" in download_page
     assert "hotfix.stable_auto_update !== false" in download_page
+    assert "link.innerHTML" not in download_page and "listEl.innerHTML" not in download_page
     assert "['signed', 'unsigned'].includes(hotfix.signature_status)" in download_page
     assert "String(hotfix.artifact.sha256)" in download_page
     assert "compareVersions(hotfix.version, state.version) < 0" in download_page

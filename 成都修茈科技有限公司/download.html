@@ -960,7 +960,7 @@
               : hotfix
                 ? 'Windows 临时交付包 Authenticode 状态：' + hotfix.signature_status + '。安装前请核对完整 SHA-256；不会进入稳定自动更新。macOS 仍使用稳定版。'
                 : '支持 Windows 10+、macOS 12+。安装后可按需安装行业 Mod。'
-          listEl.innerHTML = ''
+          listEl.replaceChildren()
 
           rows().forEach(function (row, index) {
             var rowHotfix = row.platform === 'win' ? activeWindowsHotfix() : null
@@ -978,14 +978,20 @@
             link.setAttribute('rel', 'noopener')
             if (!available) link.setAttribute('aria-disabled', 'true')
             var meta = metaText(row.platform)
-            link.innerHTML =
-              '<span class="download-item__copy"><strong>' +
-              row.name +
-              '</strong>' +
-              (meta ? '<span>' + meta + '</span>' : '') +
-              '</span><span class="download-item__action">' +
-              (rowHotfix ? '下载临时包' : available ? '下载' : '待开放') +
-              '</span>'
+            var copy = document.createElement('span')
+            copy.className = 'download-item__copy'
+            var title = document.createElement('strong')
+            title.textContent = row.name
+            copy.appendChild(title)
+            if (meta) {
+              var metaElement = document.createElement('span')
+              metaElement.textContent = meta
+              copy.appendChild(metaElement)
+            }
+            var action = document.createElement('span')
+            action.className = 'download-item__action'
+            action.textContent = rowHotfix ? '下载临时包' : available ? '下载' : '待开放'
+            link.append(copy, action)
             if (!available)
               link.addEventListener('click', function (event) {
                 event.preventDefault()
