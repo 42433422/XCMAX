@@ -16,12 +16,22 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
 _FHD_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _loop_dir() -> Path:
+    """与 self_heal_loop.py 同一解析规则：证据与收据必须落在同一个运行目录。"""
+    return Path(
+        os.environ.get("SELF_HEAL_LOOP_DIR") or (_FHD_ROOT / "test_reports" / "self_heal_loop")
+    )
+
+
 _REPO_ROOT = _FHD_ROOT.parent
 _DEPLOY_REL = "成都修茈科技有限公司/MODstore_deploy"
 _REPO = "42433422/XCMAX"
@@ -71,15 +81,51 @@ def _deploy_diff_files() -> int:
     return len(out.splitlines()) if out else 0
 
 
+def _primary_error(red_log: Path) -> dict[str, object]:
+    """取红灯日志里**出现次数最多**的 mypy 错误作为故障签名（并列取最早出现的）。
+
+    知识回流（连接件5）按 ``tool:code`` 检索历史案例，所以诊断必须输出真实签名；
+    取众数而非首行，是为了让签名对日志行序不敏感——首行会随无关文件而漂移，众数
+    才是这次故障的主症。
+    """
+    # CI 日志每行带 `job<TAB>step<TAB>timestamp ` 前缀，因此用 search 而非 match。
+    pattern = re.compile(
+        r"(?P<file>[A-Za-z0-9_./-]+\.py):(?P<line>\d+): error: .*\[(?P<code>[a-z][a-z-]*)\]\s*$"
+    )
+    counts: dict[str, int] = {}
+    hits: dict[str, dict[str, object]] = {}
+    order: list[str] = []
+    for raw in red_log.read_text(encoding="utf-8", errors="replace").splitlines():
+        match = pattern.search(raw)
+        if not match:
+            continue
+        code = match.group("code")
+        counts[code] = counts.get(code, 0) + 1
+        if code not in hits:
+            order.append(code)
+            hits[code] = {
+                "tool": "mypy",
+                "code": code,
+                "file_path": match.group("file"),
+                "line": int(match.group("line")),
+                "occurrences": 0,
+            }
+    if not order:
+        return {}
+    primary = max(order, key=lambda code: counts[code])
+    hits[primary]["occurrences"] = counts[primary]
+    return hits[primary]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", default="test_reports/self_heal_loop/diagnosis.json")
     args = parser.parse_args()
-    green_log = _FHD_ROOT / "test_reports/self_heal_loop/evidence/ci-green.log"
+    green_log = _loop_dir() / "evidence/ci-green.log"
     if not green_log.is_file():
         green_log.parent.mkdir(parents=True, exist_ok=True)
         green_log.write_text(_job_log(_GREEN["job"]), encoding="utf-8")
-    red_log = _FHD_ROOT / "test_reports/self_heal_loop/evidence/ci-mypy-failing.log"
+    red_log = _loop_dir() / "evidence/ci-mypy-failing.log"
     green, red = (
         _deps(green_log.read_text(encoding="utf-8", errors="replace")),
         _deps(red_log.read_text(encoding="utf-8", errors="replace")),
@@ -125,6 +171,26 @@ def main() -> int:
         ),
         "regression_scope": "backend CI mypy 步骤与 dev 依赖声明；无产品运行时代码改动",
         "rollback_risk": "low",
+        # 知识回流要求的三件套字段：真实故障签名 + 实际修复动作。
+        "errors": [err] if (err := _primary_error(red_log)) else [],
+        "fixes": [
+            {
+                "description": (
+                    "给 sqlalchemy 加上界 <2.1（依赖声明），并把 mypy 与 black/isort 同规则"
+                    "精确固定为 2.3.1（工具固定）"
+                ),
+                "kind": "dependency_pin",
+                "changed_files": [
+                    f"{_DEPLOY_REL}/pyproject.toml",
+                    f"{_DEPLOY_REL}/.github/workflows/ci-backend-python.yml",
+                ],
+                "decision_rule": (
+                    "同一份代码在零变更下由绿翻红 ⇒ 先固定工具版本；工具固定后错误不变 ⇒ "
+                    "唯一变量是依赖解析结果（包-版本对逐个比对）；依赖翻红且受影响模块数 >> "
+                    "修复面 ⇒ 收紧上界而非改代码"
+                ),
+            }
+        ],
     }
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
