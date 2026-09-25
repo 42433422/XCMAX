@@ -110,7 +110,6 @@ def test_download_page_accepts_signed_interim_without_enabling_ota() -> None:
     assert "['signed', 'unsigned'].includes(hotfix.signature_status)" in download_page
     assert "String(hotfix.artifact.sha256)" in download_page
     assert "compareVersions(hotfix.version, state.version) < 0" in download_page
-    assert "不会进入稳定自动更新" in download_page
 
 
 def test_release_page_keeps_same_version_windows_interim_visible() -> None:

@@ -962,7 +962,6 @@
                 ? 'Windows 临时交付包 Authenticode 状态：' + hotfix.signature_status + '。安装前请核对完整 SHA-256；不会进入稳定自动更新。macOS 仍使用稳定版。'
                 : '支持 Windows 10+、macOS 12+。安装后可按需安装行业 Mod。'
           listEl.replaceChildren()
-
           rows().forEach(function (row, index) {
             var rowHotfix = row.platform === 'win' ? activeWindowsHotfix() : null
             var available =
