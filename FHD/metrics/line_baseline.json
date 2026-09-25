@@ -1,5 +1,5 @@
 {
-  "lines": 2302273,
+  "lines": 2302057,
   "updated": "2026-09-25",
-  "note": "校正基线：中间态曾把另一车道在途证据文件误删（macos-base-domain-recordings-20260925 与 capabilities 证据产物），已全部还原；2301571 是那个错误中间态的数字。本 PR 相对 origin/main 基线 2303350 仍净删除 1077 行（68 insertions / 1134 deletions），棘轮方向未放松。"
+  "note": "棘轮下调"
 }
