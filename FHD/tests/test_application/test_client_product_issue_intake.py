@@ -79,7 +79,9 @@ def test_product_issue_routes_one_work_order_and_support_bundle(tmp_path, monkey
         "build_identity",
         lambda: {"product_version": "1.0.0.5", "git_sha": "c" * 40},
     )
-    monkeypatch.setattr(private_mod_delivery_context, "_private_delivery_market_token", lambda _r: _token())
+    monkeypatch.setattr(
+        private_mod_delivery_context, "_private_delivery_market_token", lambda _r: _token()
+    )
     calls = []
 
     async def remote(token, route, *, method="GET", payload=None):

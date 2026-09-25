@@ -91,6 +91,7 @@ async def submit_product_issue(
     from app.build_identity import build_identity
     from app.desktop_runtime.support_bundle import build_evidence_ref
     from app.fastapi_routes.private_mod_delivery_context import _private_delivery_market_token
+
     evidence = build_evidence_ref()
     if not evidence:
         return {"state": "NEEDS_MORE_EVIDENCE", "missing_evidence": ["support_bundle"]}
@@ -160,7 +161,11 @@ async def submit_product_issue(
             "git_sha": identity.get("git_sha", ""),
         },
     )
-    if result.get("success") is not True or not result.get("ticket_id") or not result.get("ticket_no"):
+    if (
+        result.get("success") is not True
+        or not result.get("ticket_id")
+        or not result.get("ticket_no")
+    ):
         return {"state": "OWNER_ROUTE_UNAVAILABLE", "work_order_id": wo_id}
     return {
         "state": "ROUTED",
