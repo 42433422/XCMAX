@@ -1,9 +1,9 @@
-feature=base-rbac
+feature=base-settings
 platform=macos
 result=PARTIAL
-verified_at=2026-09-25T00:29:27.223Z
+verified_at=2026-09-25T00:30:04.261Z
 product_version=1.0.0.5
 app_git_sha=8d50fe9d043391d5ba8857094a366a59a34ae43f
 target=/settings
 observed=页面成功打开并渲染
-scope=页面打开并渲染；未执行角色赋权、拒绝访问或越权断言。
+scope=设置页面打开并渲染；未修改或持久化任何偏好。
