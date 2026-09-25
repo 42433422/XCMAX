@@ -1,0 +1,9 @@
+feature=base-db
+platform=macos
+result=PARTIAL
+verified_at=2026-09-25T00:29:53.242Z
+product_version=1.0.0.5
+app_git_sha=8d50fe9d043391d5ba8857094a366a59a34ae43f
+target=GET /api/health
+observed=HTTP 200
+scope=健康接口返回 HTTP 200；未执行 WAL、自恢复、备份恢复或故障注入。
