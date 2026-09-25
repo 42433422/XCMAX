@@ -96,19 +96,19 @@ def test_release_page_uses_public_history_order_for_the_current_version() -> Non
     assert "if (releaseVersion === '1.0.0.0') entry.className += ' is-current'" not in release_page
     assert "fetchJson('/download-windows-hotfix.json')" in release_page
     assert "Windows 临时交付可下载" in release_page
+    assert "hotfix.stable_auto_update === false && ['signed', 'unsigned'].includes(hotfix.signature_status)" in release_page
 
 
-def test_download_page_prefers_a_same_or_newer_explicit_unsigned_interim_pointer() -> None:
+def test_download_page_accepts_signed_interim_without_enabling_ota() -> None:
     download_page = (REPO_ROOT / "成都修茈科技有限公司" / "download.html").read_text(
         encoding="utf-8"
     )
 
-    assert "fetch('/download-windows-hotfix.json', { cache: 'no-store' })" in download_page
-    assert "hotfix.signature_status !== 'unsigned'" in download_page
-    assert "compareVersions(hotfix.version, state.version) >= 0" in download_page
-    assert "Boolean(manifestEntry(row.platform))" in download_page
-    assert "row.platform === 'android' && Boolean(state.androidVersion)" in download_page
-    assert "下载临时包" in download_page
+    assert "fetchJson('/download-windows-hotfix.json', 'no-store', true)" in download_page
+    assert "hotfix.stable_auto_update !== false" in download_page
+    assert "['signed', 'unsigned'].includes(hotfix.signature_status)" in download_page
+    assert "String(hotfix.artifact.sha256)" in download_page
+    assert "compareVersions(hotfix.version, state.version) < 0" in download_page
     assert "不会进入稳定自动更新" in download_page
 
 
