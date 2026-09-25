@@ -45,30 +45,30 @@ def test_unsigned_windows_artifact_cannot_be_mistaken_for_an_update_feed() -> No
     assert "xiu-ci.com" not in workflow
 
 
-def _owner_accepted_public_download_text() -> str:
+def _interim_public_download_text() -> str:
     workflow = (FHD_ROOT / ".github" / "workflows" / "release-desktop.yml").read_text(
         encoding="utf-8"
     )
-    return workflow.split("  publish-unsigned-windows-pointer:", 1)[1].split(
+    return workflow.split("  publish-interim-windows-pointer:", 1)[1].split(
         "\n  release-preflight:", 1
     )[0]
 
 
 def test_unsigned_public_download_requires_an_owner_risk_acceptance() -> None:
-    text = _owner_accepted_public_download_text()
+    text = _interim_public_download_text()
 
     assert "needs: [windows-installer-delivery]" in text
     assert "inputs.windows_installer_only == true" in text
     assert "--risk-acceptance FHD/config/windows_signing_acceptance.json" in text
     assert "--release-metadata-source FHD/config/download_release.json" in text
     # 交付回执必须自证未签名且安装冒烟已通过，才能公开
-    assert '.signature_status == "unsigned"' in text
-    assert '.authenticode_status == "NotSigned"' in text
+    assert '.signature_status == "signed" and .authenticode_status == "Valid"' in text
+    assert '.signature_status == "unsigned" and .authenticode_status == "NotSigned"' in text
     assert '.runner_install_smoke == "passed"' in text
 
 
 def test_unsigned_public_download_stays_off_the_update_feed() -> None:
-    text = _owner_accepted_public_download_text()
+    text = _interim_public_download_text()
 
     assert "latest.yml" not in text
     assert "publish_stable_metadata_atomically" not in text
@@ -77,7 +77,7 @@ def test_unsigned_public_download_stays_off_the_update_feed() -> None:
 
 
 def test_unsigned_public_download_is_verified_over_public_http() -> None:
-    text = _owner_accepted_public_download_text()
+    text = _interim_public_download_text()
 
     assert "https://xiu-ci.com/xcagi-v${version}/enterprise/" in text
     assert "curl --http1.1 -fsSI" in text

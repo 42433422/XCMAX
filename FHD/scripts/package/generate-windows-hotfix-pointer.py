@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Generate metadata for an unsigned Windows artifact.
+"""Generate metadata for a Windows interim download.
 
 Default (no risk acceptance): non-publishable quarantine metadata for controlled
-test devices. With a valid, unexpired owner risk acceptance record the same
-artifact may be published on the official download page while the Windows stable
-update feed stays closed. An expired or weak acceptance fails closed.
+test devices. Unsigned installers require a valid, unexpired owner risk
+acceptance; signed installers may be published without that exception. This
+interim channel never writes the Windows stable update feed.
 """
 
 from __future__ import annotations
@@ -31,6 +31,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--artifact", required=True)
     parser.add_argument("--artifact-url", required=True)
     parser.add_argument("--release-metadata-source", required=True)
+    parser.add_argument(
+        "--signature-status", choices=("signed", "unsigned"), default="unsigned"
+    )
     parser.add_argument(
         "--risk-acceptance",
         default="",
@@ -181,7 +184,7 @@ def main() -> int:
         return 1
 
     acceptance = None
-    if args.risk_acceptance:
+    if args.risk_acceptance and args.signature_status == "unsigned":
         try:
             acceptance = load_acceptance(
                 Path(args.risk_acceptance), datetime.datetime.now(datetime.UTC)
@@ -189,6 +192,12 @@ def main() -> int:
         except ValueError as exc:
             print(f"[error] {exc}", file=sys.stderr)
             return 1
+    elif args.risk_acceptance:
+        print(
+            "[error] risk acceptance is only valid for unsigned installers",
+            file=sys.stderr,
+        )
+        return 1
 
     filename = artifact.name
     filename_pattern = re.compile(
@@ -201,20 +210,27 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    expected_suffix = f"-{args.signature_status}.exe"
+    if args.signature_status == "signed" and not filename.endswith(expected_suffix):
+        print(
+            f"[error] {args.signature_status} installer filename must end with {expected_suffix}",
+            file=sys.stderr,
+        )
+        return 1
     if not args.artifact_url.endswith("/" + filename):
         print(
             "[error] artifact URL filename does not match the installer",
             file=sys.stderr,
         )
         return 1
-    if acceptance is not None and not args.artifact_url.startswith("https://"):
+    authorized = args.signature_status == "signed" or acceptance is not None
+    if authorized and not args.artifact_url.startswith("https://"):
         print(
             "[error] an authorized public download requires an https artifact URL",
             file=sys.stderr,
         )
         return 1
 
-    authorized = acceptance is not None
     payload = {
         "schema": "xcagi.windows_interim_release/v1",
         "version": version,
@@ -222,14 +238,17 @@ def main() -> int:
         "git_sha": git_sha,
         "generated_at": datetime.datetime.now(datetime.UTC).isoformat(),
         "download_allowed": authorized,
-        "signature_status": "unsigned",
+        "signature_status": args.signature_status,
+        "stable_auto_update": False,
         "warning": (
             "此 Windows 产物未完成 Authenticode 代码签名，按业主限期风险接受在官网下载页公开；"
             "不进入稳定自动更新通道；安装前请核对 SHA-256。"
-            if authorized
+            if args.signature_status == "unsigned" and authorized
             else (
                 "此 Windows 产物未完成 Authenticode 代码签名，仅可用于受控测试设备；"
                 "禁止公开下载或写入任何更新通道。"
+                if args.signature_status == "unsigned"
+                else ""
             )
         ),
         "artifact": {
@@ -242,7 +261,7 @@ def main() -> int:
         },
         "release": release,
     }
-    if authorized:
+    if acceptance is not None:
         payload["risk_acceptance"] = {
             "id": acceptance.get("id"),
             "reviewer": acceptance["reviewer"],

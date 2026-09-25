@@ -164,10 +164,9 @@ jobs:
           $n = "本次走 Windows 安装包交付通道（windows_installer_only=true）：正式发布链全部跳过，线上发布指针未推进，官网对外版本不变。"
           Write-Host "::warning::$n"; "### 未执行正式发布链`n$n" | Add-Content $env:GITHUB_STEP_SUMMARY
 
-  publish-unsigned-windows-pointer:
-    # 官方下载页的 Windows 临时交付通道：业主限期风险接受（config/windows_signing_acceptance.json）
-    # 授权期内允许未签名包公开下载；授权过期或证据不合规时本 job 失败关闭，而不是静默降级。
-    # 只发布下载页所需产物与指针，不写任何更新元数据，Windows 稳定更新通道保持关闭。
+  publish-interim-windows-pointer:
+    # Windows 临时下载通道只发布经过安装冒烟的精确构建，不写更新元数据。
+    # 未签名包须有业主风险接受；签名包须由前置 Windows 验收证明签名有效。
     needs: [windows-installer-delivery]
     if: >-
       always() &&
@@ -189,7 +188,7 @@ jobs:
         with:
           name: xcagi-windows-installer-${{ inputs.release_sha }}
           path: ${{ runner.temp }}/delivery
-      - name: Assert truthful unsigned delivery receipt
+      - name: Assert truthful Windows delivery receipt
         run: |
           set -euo pipefail
           receipt="${RUNNER_TEMP}/delivery/delivery-receipt.json"
@@ -197,43 +196,54 @@ jobs:
           jq -e --arg v "$DELIVERY_VERSION" --arg sha "${{ inputs.release_sha }}" '
             .version == $v
             and ((.git_sha | ascii_downcase) == ($sha | ascii_downcase))
-            and .signature_status == "unsigned"
-            and .authenticode_status == "NotSigned"
             and .delivery_mode == "manual_installer"
             and .runner_install_smoke == "passed"
             and .stable_auto_update == false
+            and ((.signature_status == "signed" and .authenticode_status == "Valid")
+              or (.signature_status == "unsigned" and .authenticode_status == "NotSigned"))
           ' "$receipt" >/dev/null
-          echo "Truthful unsigned receipt verified; customer_machine_acceptance stays not_verified."
+          echo "Truthful installer receipt verified; customer_machine_acceptance stays not_verified."
       - name: Generate bounded interim download pointer
         run: |
           set -euo pipefail
           version="${DELIVERY_VERSION}"
-          artifact="${RUNNER_TEMP}/delivery/XCAGI-Enterprise-Setup-${version}-x64-unsigned.exe"
+          receipt="${RUNNER_TEMP}/delivery/delivery-receipt.json"
+          signature_status="$(jq -r '.signature_status' "$receipt")"
+          filename="$(jq -r '.filename' "$receipt")"
+          artifact="${RUNNER_TEMP}/delivery/${filename}"
           test -f "${artifact}"
           test -f "${artifact}.sha256"
-          python3 FHD/scripts/package/generate-windows-hotfix-pointer.py \
-            --version "$version" \
-            --git-sha "${{ inputs.release_sha }}" \
-            --artifact "$artifact" \
-            --artifact-url "https://xiu-ci.com/xcagi-v${version}/enterprise/$(basename "${artifact}")" \
-            --release-metadata-source FHD/config/download_release.json \
-            --risk-acceptance FHD/config/windows_signing_acceptance.json \
+          args=(
+            --version "$version"
+            --git-sha "${{ inputs.release_sha }}"
+            --artifact "$artifact"
+            --artifact-url "https://xiu-ci.com/xcagi-v${version}/enterprise/$(basename "${artifact}")"
+            --release-metadata-source FHD/config/download_release.json
+            --signature-status "$signature_status"
             --output "${RUNNER_TEMP}/download-windows-hotfix.json"
-          jq -e '
+          )
+          if [ "$signature_status" = unsigned ]; then
+            args+=(--risk-acceptance FHD/config/windows_signing_acceptance.json)
+          fi
+          python3 FHD/scripts/package/generate-windows-hotfix-pointer.py \
+            "${args[@]}"
+          jq -e --arg signature "$signature_status" '
             .download_allowed == true
             and .channel == "enterprise-interim"
-            and .signature_status == "unsigned"
-            and .risk_acceptance.expires_at != null
+            and .signature_status == $signature
+            and .stable_auto_update == false
+            and (if $signature == "unsigned" then .risk_acceptance.expires_at != null else .risk_acceptance == null end)
           ' "${RUNNER_TEMP}/download-windows-hotfix.json" >/dev/null
       - name: Publish installer and pointer to the public download page
         run: |
           set -euo pipefail
           if [ -z "${DESKTOP_SSH_KEY:-}" ]; then
-            echo "::error::Publishing the unsigned Windows interim download requires SERVER_SSH_KEY or FHD_PUSH_SSH_KEY."
+            echo "::error::Publishing the Windows interim download requires SERVER_SSH_KEY or FHD_PUSH_SSH_KEY."
             exit 1
           fi
           version="${DELIVERY_VERSION}"
-          artifact="${RUNNER_TEMP}/delivery/XCAGI-Enterprise-Setup-${version}-x64-unsigned.exe"
+          filename="$(jq -r '.filename' "${RUNNER_TEMP}/delivery/delivery-receipt.json")"
+          artifact="${RUNNER_TEMP}/delivery/${filename}"
           sha_file="${artifact}.sha256"
           pointer="${RUNNER_TEMP}/download-windows-hotfix.json"
           local_sha="$(sha256sum "${artifact}" | awk '{print $1}')"
@@ -270,7 +280,7 @@ jobs:
           curl --http1.1 -fsS --max-time 60 "https://xiu-ci.com/download-windows-hotfix.json" \
             | jq -e --arg sha "$local_sha" --arg url "$url" \
                 '.download_allowed == true and .artifact.sha256 == $sha and .artifact.url == $url' >/dev/null
-          echo "Unsigned Windows interim download is publicly available; the Windows stable update feed was not touched."
+          echo "Windows interim download is publicly available; the Windows stable update feed was not touched."
 
   release-preflight:
     if: ${{ inputs.verify_only != true && inputs.windows_installer_only != true }}
