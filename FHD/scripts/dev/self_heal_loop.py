@@ -39,11 +39,6 @@ _PASS_STATUS: dict[str, str] = {
     "fix_green": "FIX_VALIDATED_IN_DEV",
 }
 
-_PASS_STATE: dict[str, str] = {
-    "fix_green": "in_dev",
-}
-
-
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat()
 
@@ -177,8 +172,8 @@ def cmd_run(args: argparse.Namespace) -> int:
             "log_sha256": _sha256_bytes(log_path.read_bytes()),
         },
     )
-    if passed and args.stage in _PASS_STATE:
-        _advance(wo_id, _PASS_STATE[args.stage])
+    if passed and args.stage == "fix_green":
+        _advance(wo_id, "in_dev")
     print(json.dumps({"wo_id": wo_id, "stage": args.stage, "status": status}, ensure_ascii=False))
     return 0 if passed else 1
 

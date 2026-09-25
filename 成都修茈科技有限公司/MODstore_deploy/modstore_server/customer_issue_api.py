@@ -39,7 +39,10 @@ def _wake_owner_intake(ticket_id: int, source: str) -> None:
 
 
 def _route_work_order(
-    db: Session, body: CustomerIssueIntakeBody, user: User, ticket: CustomerServiceTicket
+    db: Session,
+    body: CustomerIssueIntakeBody,
+    user: User,
+    ticket: CustomerServiceTicket | None = None,
 ) -> None:
     if body.source != "customer_feedback" or not body.work_order_id:
         return
@@ -48,8 +51,8 @@ def _route_work_order(
         wo_id=body.work_order_id,
         user=user,
         support_bundle_sha256=body.support_bundle_sha256,
-        ticket_id=int(ticket.id),
-        ticket_no=str(ticket.ticket_no),
+        ticket_id=int(ticket.id) if ticket else None,
+        ticket_no=str(ticket.ticket_no) if ticket else "",
     )
     if not outcome.get("ok"):
         raise HTTPException(409, "客户工单与产品问题 Work Order 不匹配")
@@ -114,6 +117,7 @@ async def intake_customer_issue(
     request_digest = hashlib.sha256(
         json.dumps(stable_values, sort_keys=True, ensure_ascii=False).encode()
     ).hexdigest()
+    _route_work_order(db, body, user)
     if body.target_mod_id:
         # Runtime identity is trusted source configuration; the caller supplies
         # only the entitlement identity already checked against UserMod above.

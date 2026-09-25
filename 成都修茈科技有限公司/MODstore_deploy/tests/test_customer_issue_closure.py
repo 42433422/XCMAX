@@ -361,11 +361,10 @@ def test_customer_feedback_keeps_work_order_and_verified_bundle_in_owner_event(c
         bundle.writestr("manifest.json", '{"redacted":true}')
     raw = archive.getvalue()
     sha = hashlib.sha256(raw).hexdigest()
-    scheduled = []
     monkeypatch.setattr(
         customer_service_api,
         "_schedule_customer_ticket_incident",
-        lambda payload: scheduled.append(payload),
+        lambda _payload: None,
     )
     sf = get_session_factory()
     with sf() as db:
@@ -394,7 +393,6 @@ def test_customer_feedback_keeps_work_order_and_verified_bundle_in_owner_event(c
         },
         headers=headers,
     )
-    assert candidate.status_code == 200, candidate.text
     wo_id = candidate.json()["wo_id"]
     body = {
         "source": "customer_feedback",
@@ -433,12 +431,12 @@ def test_customer_feedback_keeps_work_order_and_verified_bundle_in_owner_event(c
         )
         receipts = [json.loads(event.ref or "{}") for event in wo_events if event.event == "gate"]
         assert {item.get("gate_status") for item in receipts} == {"ROUTED", "COLLECTED"}
-    bad = client.post(
-        "/api/customer-service/issues/intake",
-        json={**body, "source_ref": "WO-111111111111", "support_bundle_sha256": "0" * 64},
-        headers=headers,
-    )
-    assert bad.status_code == 400
+    marker = f"unpersisted-{uuid.uuid4().hex}"
+    body.update(source_ref="bad-work-order", title=marker, work_order_id="WO-111111111111")
+    bad = client.post("/api/customer-service/issues/intake", json=body, headers=headers)
+    assert bad.status_code == 409
+    with sf() as db:
+        assert not db.query(CustomerServiceTicket).filter_by(title=marker).first()
 
 
 def test_unknown_host_failure_stays_pending_and_same_id_can_be_verified(receipt_case, monkeypatch):

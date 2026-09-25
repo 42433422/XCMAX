@@ -36,6 +36,7 @@ from modstore_server.work_order_core import (
 )
 
 router = APIRouter(prefix="/api/work-orders", tags=["work-orders"])
+_CUSTOMER_ROUTABLE_STATES = "routed in_dev merged released verifying closed reopened".split()
 
 
 class CandidateBody(BaseModel):
@@ -258,8 +259,8 @@ def route_customer_issue(
     wo_id: str,
     user: User,
     support_bundle_sha256: str,
-    ticket_id: int,
-    ticket_no: str,
+    ticket_id: int | None,
+    ticket_no: str = "",
 ) -> dict[str, Any]:
     view = _view(db, wo_id)
     context = (view or {}).get("context") or {}
@@ -272,6 +273,10 @@ def route_customer_issue(
     ):
         return {"ok": False, "reason": "client_work_order_mismatch", "wo_id": wo_id}
     status = view.get("status")
+    if status != "candidate" and status not in _CUSTOMER_ROUTABLE_STATES:
+        return {"ok": False, "reason": "work_order_not_routable", "wo_id": wo_id}
+    if ticket_id is None:
+        return {"ok": True, "wo_id": wo_id}
     if status == "candidate":
         transition(
             TransitionBody(
@@ -287,8 +292,6 @@ def route_customer_issue(
             db=db,
             _user=user,
         )
-    elif status not in "routed in_dev merged released verifying closed reopened".split():
-        return {"ok": False, "reason": "work_order_not_routable", "wo_id": wo_id}
     history = view.get("history") or []
     receipts = {
         event["ref"]["gate"]: event["ref"]
