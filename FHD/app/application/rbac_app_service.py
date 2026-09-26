@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, cast
+from typing import Any, NoReturn, cast
 
 from sqlalchemy import or_
 
@@ -16,7 +16,7 @@ from app.errors import AppError, ErrorCode
 _TENANT_ROLE = re.compile(r"^tenant:(\d+):(.*)$", re.DOTALL)
 
 
-def _fail(message: str, status: int = 400) -> None:
+def _fail(message: str, status: int = 400) -> NoReturn:
     raise AppError(ErrorCode.VALIDATION_ERROR, message, status_code=status)
 
 
