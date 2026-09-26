@@ -24,22 +24,19 @@ from .paths import ensure_desktop_dirs, is_desktop_mode
 logger = logging.getLogger(__name__)
 
 
-def _redact_log_bytes(chunk: bytes, *, max_bytes: int = 250_000) -> bytes:
-    text = chunk.decode("utf-8", errors="replace")
-    redacted = redact_log_text(text).encode("utf-8", errors="replace")
-    return redacted[-max_bytes:]
+def _redact_log_bytes(chunk: bytes) -> bytes:
+    return redact_log_text(chunk.decode("utf-8", errors="replace")).encode(
+        "utf-8", errors="replace"
+    )[-250_000:]
 
 
 def _tail_bytes(path: Path, max_bytes: int = 250_000) -> bytes | None:
     if not path.is_file():
         return None
     try:
-        size = path.stat().st_size
         with path.open("rb") as f:
-            if size <= max_bytes:
-                return f.read()
-            f.seek(max(0, size - max_bytes))
-            return f.read()
+            f.seek(max(0, path.stat().st_size - max_bytes))
+            return f.read(max_bytes)
     except OSError as exc:
         logger.debug("failed to tail %s: %s", path, exc)
         return None
@@ -91,13 +88,7 @@ def build_support_bundle_zip(
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(
-            "README.txt",
-            (
-                "XCAGI 诊断包\n"
-                "manifest.json：环境摘要；logs/ 下为脱敏日志节选。\n"
-                "崩溃转储仅列名，不自动打包。\n"
-                "数据库不在包内；如需分析，请单独提供 backups/ 下的备份。\n"
-            ).encode(),
+            "README.txt", "清单不含密钥，日志已脱敏；数据库和崩溃转储不随包提供。\n".encode()
         )
         zf.writestr(
             "manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2).encode("utf-8")

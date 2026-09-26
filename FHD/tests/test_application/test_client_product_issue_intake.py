@@ -97,10 +97,8 @@ def test_product_issue_routes_one_work_order_and_support_bundle(tmp_path, monkey
     result = asyncio.run(
         submit_product_issue(
             request=object(),
-            client=object(),
             tenant_id=41,
             customer_message="按钮没反应，保存操作失败",
-            assistant_reply="这是产品缺陷。",
             triage={
                 "type": "product_defect",
                 "confidence": 0.94,
