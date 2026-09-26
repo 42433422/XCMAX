@@ -16,6 +16,7 @@ def test_private_delivery_keeps_customer_identity_and_separate_runtime():
     row = customer_delivery.delivery_for_account("SUNBIRD")
     assert row["delivery_mode"] == "private_mod"
     assert row["runtime_mod_id"] == "sunbird-attendance-custom"
+    assert row["market_user_id"] == 29
     assert (
         customer_delivery.account_custom_mod_ids_for_industry("饰品包装", {"attendance-industry"})
         == []
@@ -44,6 +45,36 @@ def test_private_delivery_keeps_customer_identity_and_separate_runtime():
         )
         is None
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "username,market_user_id,expected",
+    [("SUNBIRD", 29, {"taiyangniao-pro"}), ("OTHER", 29, set()), ("SUNBIRD", 45, set())],
+)
+async def test_private_delivery_context_requires_customer_account_even_with_entitlement(
+    monkeypatch, username, market_user_id, expected
+):
+    from starlette.requests import Request
+
+    from app.fastapi_routes import private_mod_delivery_context as context
+
+    monkeypatch.setattr(
+        "app.infrastructure.auth.dependencies.session_id_from_request", lambda _: "session"
+    )
+    monkeypatch.setattr(
+        "app.enterprise.mod_entitlements.enterprise_mod_filter_active", lambda: False
+    )
+    monkeypatch.setattr(
+        "app.enterprise.private_delivery_binding.load_session_private_delivery_binding",
+        lambda _: {
+            "mod_ids": {"taiyangniao-pro"},
+            "market_user_id": market_user_id,
+            "username": username,
+        },
+    )
+    result = await context._private_mod_context(Request({"type": "http", "headers": []}))
+    assert result["mod_ids"] == expected
 
 
 @pytest.mark.parametrize("row_kind", ["missing", "expired", "other", "malformed"])
