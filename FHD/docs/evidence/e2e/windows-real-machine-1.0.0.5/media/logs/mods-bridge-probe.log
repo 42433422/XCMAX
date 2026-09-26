@@ -1,0 +1,12 @@
+=== on-machine probe record ===
+item     : mods-bridge
+module   : mods-open
+probed_at: 2026-09-19 22:31:08
+product  : 1.0.0.5   release_sha: 54325894cc6e3fc2becfcbc98697a099310d9420
+
+> GET http://127.0.0.1:17500/api/mods/routes  -> HTTP 200
+{"success":true,"data":[{"mod_id":"attendance-industry","routes_path":"frontend/routes"},{"mod_id":"lan-gate-ai-employee","routes_path":"frontend/routes"},{"mod_id":"xcagi-approval-bridge","routes_path":"frontend/routes"},{"mod_id":"xcagi-core-workflow-employees","routes_path":"frontend/routes"},{"mod_id":"xcagi-customer-service-bridge","routes_path":"frontend/routes"},{"mod_id":"xcagi-erp-domain-bridge","routes_path":"frontend/routes"},{"mod_id":"xcagi-lan-license-bridge","routes_path":"frontend/routes"},{"mod_id":"xcagi-model-payment-bridge","routes_path":"frontend/routes"},{"mod_id":"xcagi-office-employee-pack-bridge","routes_path":"frontend/routes"},{"mod_id":"xcagi-planner-bridge","routes_path":"frontend/routes"},{"mod_id":"xcagi-workflow-visualization-bridge","routes_path":"frontend/routes"}]}
+
+> GET http://127.0.0.1:17500/api/mods/loading-status  -> HTTP 200
+{"success":true,"data":{"mods_root":"C:\\XCAGI-evidence-data-1.0.0.5\\userData\\mods","mods_search_roots":["C:\\XCAGI-evidence-data-1.0.0.5\\userData\\mods","C:\\XCAGI-evidence-1.0.0.5\\resources\\backend\\_internal\\mods"],"discovered_mod_ids":["attendance-industry","lan-gate-ai-employee","xcagi-approval-bridge","xcagi-core-workflow-employees","xcagi-customer-service-bridge","xcagi-erp-domain-bridge","xcagi-lan-license-bridge","xcagi-model-payment-bridge","xcagi-neuro-bus-bridge","xcagi-office-employee-pack-bridge","xcagi-planner-bridge","xcagi-planner-excel-tools","xcagi-workflow-visualization-bridge"],"installed_mod_ids":["attendance-industry","lan-gate-ai-employee","xcagi-approval-bridge","xcagi-core-workflow-employees","xcagi-customer-service-bridge","xcagi-erp-domain-bridge","xcagi-lan-license-bridge","xcagi-model-payment-bridge","xcagi-neuro-bus-bridge","xcagi-office-employee-pack-bridge","xcagi-planner-bridge","xcagi-planner-excel-tools","xcagi-workflow-visualization-bridge"],"primary_mod_id":null,"primary_mod_count":2,"mods_loaded":13,"load_mismatch":false,"load_errors":[],"manifest_errors":[{"mod_id":"unknown","error":"加载失败"}],"blueprint_errors":[],"partial_failure":false,"mods_disabled":false}}
+

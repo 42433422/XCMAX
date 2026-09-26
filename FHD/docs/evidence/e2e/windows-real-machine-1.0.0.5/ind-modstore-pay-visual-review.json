@@ -1,0 +1,16 @@
+{
+  "_comment": "Auto-generated extraction of the Windows real-machine review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "platform": "windows",
+  "feature": "ind-modstore-pay",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "ca3be1989be1b6a0e5b39efcd7c91b3e5b901c7cf1e0495ff6d8b7747e91cfe2",
+  "visible_content": null,
+  "full_feature_acceptance": false,
+  "visual_review_state": "not_a_ui_frame",
+  "frame_modality": "terminal_probe",
+  "video_modality": "terminal_probe",
+  "source": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/screenshots/ind-modstore-pay.png"
+}

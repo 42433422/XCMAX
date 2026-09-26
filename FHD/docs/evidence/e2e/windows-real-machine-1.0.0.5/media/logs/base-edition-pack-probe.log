@@ -1,0 +1,26 @@
+=== on-machine probe record ===
+item     : base-edition-pack
+module   : base-edition
+probed_at: 2026-09-19 22:30:34
+product  : 1.0.0.5   release_sha: 54325894cc6e3fc2becfcbc98697a099310d9420
+
+> Get-Content 'C:\XCAGI-evidence-1.0.0.5\resources\product-sku.json' -Raw -Encoding UTF8; Get-ChildItem 'C:\XCAGI-evidence-1.0.0.5\resources' -Force | Select-Object Length,Name | Format-Table -AutoSize | Out-String
+{"schema_version":1,"sku":"enterprise"}
+
+
+Length  Name
+------  ----
+        backend
+113     app-update.yml
+2618792 app.asar
+163     build-info.json
+107520  elevate.exe
+40      product-sku.json
+5935    splash.html
+
+
+
+
+> GET http://127.0.0.1:17500/api/desktop/deployment  -> HTTP 200
+{"success":true,"desktopMode":true,"catalog":{"_generated_from":"config/deployment_modes.yaml","_note":"DO NOT EDIT BY HAND — run scripts/dev/deployment_modes_ssot.py generate --apply","defaultMode":"safe","mobileConnectionPolicy":{"lan_direct":{"description":"手机和桌面端在同一局域网内使用桌面端地址直连。","desktop_listen_service":"desktop-fhd","pair_via_qr":true,"super_employee_execution":"lan_first_with_relay_fallback"},"public_relay_with_lan_fallback":{"description":"优先使用公网/中继 AI 能力，局域网配对仍可作为手机端直连入口。","desktop_listen_service":"desktop-fhd","pair_via_qr":true,"super_employee_execution":"lan_first_with_relay_fallback"}},"modes":[{"aiMode":"offline","allowsOutbound":false,"badge":"1级 | 内网 + SQLite","databaseMode":"local_sqlite","features":["本地部署","零出网","最高数据安全"],"id":"absolute_safe","label":"绝对安全模式","level":1,"mobileConnection":"lan_direct","networkScope":"lan","performanceProfile":"conservative","requiresPostgresql":false,"summary":"数据最安全，桌面端与移动端优先局域网直连，AI 不走外网。"},{"aiMode":"online","allowsOutbound":true,"badge":"2级 | 外网 + SQLite","databaseMode":"local_sqlite","features":["AI 能力增强","数据本地留存","安全与效率平衡"],"id":"safe","label":"安全模式","level":2,"mobileConnection":"public_relay_with_lan_fallback","networkScope":"public","performanceProfile":"balanced","requiresPostgresql":false,"summary":"解放 AI 能力，业务数据仍保留在本机 SQLite。"},{"aiMode":"online","allowsOutbound":true,"badge":"3级 | 外网 + PostgreSQL","databaseMode":"remote_postgresql","features":["PostgreSQL 向量索引","长期记忆","工具调用","高性能协作"],"id":"performance","label":"性能模式","level":3,"mobileConnection":"public_relay_with_lan_fallback","networkScope":"public","performanceProfile":"performance","requiresPostgresql":true,"summary":"全面释放 AI 性能、长期记忆能力与工具调用，适合真实 AI 员工协作。"}],"version":1},"databaseStorageCatalog":{"_generated_from":"config/database_storage_modes.yaml","_note":"DO NOT EDIT BY HAND — run scripts/dev/database_storage_ssot.py generate --apply","defaultMode":"local_sqlite","storageModes":[{"desktopProfilePath":"<desktop-data-dir>/config/database.json","engine":"sqlite","id":"local_sqlite","label":"本地数据库（SQLite）","profileMode":"local","requiresDatabaseUrl":false,"summary":"默认本地数据库，数据留在桌面端 userData。","vectorIndexReady":false},{"desktopProfilePath":"<desktop-data-dir>/config/database.json","engine":"postgresql","id":"remote_postgresql","label":"PostgreSQL（PG）","profileMode":"remote","requiresDatabaseUrl":true,"summary":"性能模式数据库，支持长期记忆、向量索引和高并发协作。","vectorIndexReady":true}],"transitions":{"postgresql_to_sqlite":{"allowed":false,"from":"remote_postgresql","reason":"PostgreSQL 回退 SQLite 需要显式导出/导入，避免误覆盖生产数据。","to":"local_sqlite"},"sqlite_to_postgresql":{"from":"local_sqlite","profile_path":"<desktop-data-dir>/config/database.json","requires_alembic_upgrade":true,"requires_backup":true,"restart_required":true,"sync_command":"python scripts/migrate_sqlite_to_postgres.py --sqlite-path <desktop-sqlite-db> --database-url <postgres-url>","sync_strategy":"copy_sqlite_tables_to_postgresql_then_switch_profile","to":"remote_postgresql"}},"version":1},"modes":[{"aiMode":"offline","allowsOutbound":false,"badge":"1级 | 内网 + SQLite","databaseMode":"local_sqlite","features":["本地部署","零出网","最高数据安全"],"id":"absolute_safe","label":"绝对安全模式","level":1,"mobileConnection":"lan_direct","networkScope":"lan","performanceProfile":"conservative","requiresPostgresql":false,"summary":"数据最安全，桌面端与移动端优先局域网直连，AI 不走外网。"},{"aiMode":"online","allowsOutbound":true,"badge":"2级 | 外网 + SQLite","databaseMode":"local_sqlite","features":["AI 能力增强","数据本地留存","安全与效率平衡"],"id":"safe","label":"安全模式","level":2,"mobileConnection":"public_relay_with_lan_fallback","networkScope":"public","performanceProfile":"balanced","requiresPostgresql":false,"summary":"解放 AI 能力，业务数据仍保留在本机 SQLite。"},{"aiMode":"online","allowsOutbound":true,"badge":"3级 | 外网 + PostgreSQL","databaseMode":"remote_postgresql","features":["PostgreSQL 向量索引","长期记忆","工具调用","高性能协作"],"id":"performance","label":"性能模式","level":3,"mobileConnection":"public_relay_with_lan_fallback","networkScope":"public","performanceProfil... [truncated]
+

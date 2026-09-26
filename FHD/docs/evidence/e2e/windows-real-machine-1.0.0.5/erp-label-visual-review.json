@@ -1,0 +1,16 @@
+{
+  "_comment": "Auto-generated extraction of the Windows real-machine review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "platform": "windows",
+  "feature": "erp-label",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "7983202d1e6e5168e9af039b8d7ba4b4763429ef601d5a1d8cebdc1b65edc6e4",
+  "visible_content": null,
+  "full_feature_acceptance": false,
+  "visual_review_state": "not_a_ui_frame",
+  "frame_modality": "terminal_probe",
+  "video_modality": "terminal_probe",
+  "source": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/screenshots/erp-label.png"
+}

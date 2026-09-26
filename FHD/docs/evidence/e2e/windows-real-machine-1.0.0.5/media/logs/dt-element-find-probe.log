@@ -1,0 +1,12 @@
+=== on-machine probe record ===
+item     : dt-element-find
+module   : dt-automation
+probed_at: 2026-09-19 22:29:56
+product  : 1.0.0.5   release_sha: 54325894cc6e3fc2becfcbc98697a099310d9420
+
+> GET http://127.0.0.1:17500/api/desktop/automation/status  -> HTTP 200
+{"success":true,"data":{"profiles":0,"drivers":{"windows":false,"mac":false,"mcp_wechat":false}}}
+
+> GET http://127.0.0.1:17500/api/desktop/automation/bootstrap  -> HTTP 404
+{"success":false,"message":"资源不存在：/api/desktop/automation/bootstrap"}
+

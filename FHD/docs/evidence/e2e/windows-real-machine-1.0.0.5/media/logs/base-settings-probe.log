@@ -1,0 +1,9 @@
+=== on-machine probe record ===
+item     : base-settings
+module   : base-runtime
+probed_at: 2026-09-19 22:30:28
+product  : 1.0.0.5   release_sha: 54325894cc6e3fc2becfcbc98697a099310d9420
+
+> GET http://127.0.0.1:17500/api/workspace/prefs  -> HTTP 200
+{"success":true,"data":{},"owner_id":null}
+

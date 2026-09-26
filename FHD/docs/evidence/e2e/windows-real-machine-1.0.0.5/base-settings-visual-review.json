@@ -1,0 +1,16 @@
+{
+  "_comment": "Auto-generated extraction of the Windows real-machine review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "platform": "windows",
+  "feature": "base-settings",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "d4614c56701b4eb5898c7b1fd91d221df2a2d520589512d68b88b5dba7e9c77b",
+  "visible_content": null,
+  "full_feature_acceptance": false,
+  "visual_review_state": "not_a_ui_frame",
+  "frame_modality": "terminal_probe",
+  "video_modality": "terminal_probe",
+  "source": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/screenshots/base-settings.png"
+}

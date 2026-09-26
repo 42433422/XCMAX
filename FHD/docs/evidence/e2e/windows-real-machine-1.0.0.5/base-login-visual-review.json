@@ -1,0 +1,16 @@
+{
+  "_comment": "Auto-generated extraction of the Windows real-machine review; original screenshot unchanged.",
+  "kind": "visual-review",
+  "platform": "windows",
+  "feature": "base-login",
+  "reviewed_at": "2026-09-20",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+  "screenshot_sha256": "e912bac20995f00fbf1062c87f09fa8b0e3262a9f51eb8c2bc95b0d3c33c8405",
+  "visible_content": "Login page renders; POST /api/auth/login returns success=false MARKET_AUTH_FAILED for a probe account (remote validation against https://xiu-ci.com is live); the UI login button stayed disabled without a valid account",
+  "full_feature_acceptance": false,
+  "visual_review_state": "accepted",
+  "frame_modality": "product_ui",
+  "video_modality": "product_ui",
+  "source": "FHD/docs/evidence/e2e/windows-real-machine-1.0.0.5/media/screenshots/base-login.png"
+}

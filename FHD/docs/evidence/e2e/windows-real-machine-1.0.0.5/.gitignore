@@ -1,0 +1,3 @@
+# FHD/.gitignore ignores any `logs/` directory; these on-machine probe logs are required evidence.
+!logs/
+!logs/**
