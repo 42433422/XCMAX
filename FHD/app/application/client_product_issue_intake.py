@@ -63,10 +63,12 @@ def classify_report(client: Any, message: str, assistant_reply: str) -> dict[str
         confidence = float(triage.get("confidence") or 0)
         if triage.get("type") not in {"usage_question", "product_defect", "uncertain"}:
             return None
-        triage["confidence"] = max(0.0, min(confidence, 1.0))
-        for key in ("expected", "actual"):
-            triage[key] = str(triage.get(key) or "")[:1000]
-        triage["missing_evidence"] = [str(x)[:300] for x in triage.get("missing_evidence", [])[:10]]
+        triage.update(
+            confidence=max(0.0, min(confidence, 1.0)),
+            expected=str(triage.get("expected") or "")[:1000],
+            actual=str(triage.get("actual") or "")[:1000],
+            missing_evidence=[str(x)[:300] for x in triage.get("missing_evidence", [])[:10]],
+        )
         return triage
     except RECOVERABLE_ERRORS + (IndexError, AttributeError, TypeError):
         logger.info("client issue classification unavailable", exc_info=True)
@@ -76,10 +78,8 @@ def classify_report(client: Any, message: str, assistant_reply: str) -> dict[str
 async def submit_product_issue(
     *,
     request: Any,
-    client: Any,
     tenant_id: int | None,
     customer_message: str,
-    assistant_reply: str,
     triage: dict[str, Any],
 ) -> dict[str, Any]:
     """Create one tenant-scoped Work Order and route its redacted bundle to Owner intake."""
