@@ -41,6 +41,7 @@ ADMIN_VIEW = ROOT / "frontend" / "src" / "views" / "AdminEntitlementsView.vue"
 AUTH_API = ROOT / "frontend" / "src" / "api" / "auth.ts"
 MARKET_ROOT = ROOT.parent / "成都修茈科技有限公司" / "MODstore_deploy"
 OFFICIAL_SITE = ROOT.parent / "成都修茈科技有限公司" / "index.html"
+OFFICIAL_SITE_PRICING = ROOT.parent / "成都修茈科技有限公司" / "pricing.html"
 ACCOUNT_LICENSE_VIEW = (
     MARKET_ROOT / "market" / "src" / "views" / "public" / "AccountLicensePlansView.vue"
 )
@@ -262,15 +263,26 @@ def _check_budgets(errors: list[str]) -> None:
 
     official_site_text = _read_text(OFFICIAL_SITE, errors)
     for snippet in (
-        "99 元体验 30 天",
+        'data-ssot-price="saas-trial-30"',  # 试用价由价格 SSOT 注入（2026-09 官网改版后价格不再手写）
+        "体验 30 天",
         "查看企业启航方案",
         "查看企业成长方案",
-        "查看集团协同方案",
-        "查看企业旗舰方案",
+        "集团及源码授权方案",
         "/market/account-plans?plan=saas-permanent-starter",
     ):
         if snippet not in official_site_text:
             errors.append(f"{_display_path(OFFICIAL_SITE)} 缺少统一方案文案: {snippet}")
+
+    # 官网价格页（集团协同/企业旗舰档自首页下沉至此，2026-09 官网 SSOT 改版）
+    official_pricing_text = _read_text(OFFICIAL_SITE_PRICING, errors)
+    for snippet in (
+        "查看集团协同方案",
+        "查看企业旗舰方案",
+        "/market/account-plans?plan=saas-permanent-max",
+        "/market/account-plans?plan=saas-permanent-ultra",
+    ):
+        if snippet not in official_pricing_text:
+            errors.append(f"{_display_path(OFFICIAL_SITE_PRICING)} 缺少统一方案文案: {snippet}")
 
 
 def _check_industries(errors: list[str]) -> None:

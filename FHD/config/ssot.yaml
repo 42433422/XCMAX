@@ -99,6 +99,20 @@ domains:
     check: python scripts/dev/ssot_plugins/account_system.py check
     sync: null
 
+  - name: public-site
+    owner: marketing-site
+    enabled: true
+    ssot: FHD/config/public_cases.json
+    derived:
+      - 成都修茈科技有限公司/site/data/public-site.json
+      - 成都修茈科技有限公司/site/data/site-release-acceptance.json
+      - 成都修茈科技有限公司/scripts/build_public_site.py
+      - 成都修茈科技有限公司/scripts/site_acceptance.py
+    mode: verify
+    # fail-closed：SSOT（案例/版本/价格/证据）更新而官网数据未再生成 → 非 0 退出
+    check: python ../成都修茈科技有限公司/scripts/build_public_site.py --check
+    sync: python ../成都修茈科技有限公司/scripts/build_public_site.py
+
   # ===== 已启用域（lint/verify；ssot_cli gate 全量阻断）=====
   - name: test-files
     owner: qa

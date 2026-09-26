@@ -70,11 +70,12 @@
       <li><figure><img src="/capabilities/assets/evidence/ai-excel-ai-excel-01-etl-upload.png" alt="Excel 单据导入与处理的产品界面" loading="lazy" /><figcaption>04 复核输出 · 单据与报表</figcaption></figure><p>业务人员复核结果并导出文件，过程留痕、可回溯。</p></li>
     </ol>
     <div class="case-flow-materials"><h3>可公开验证材料</h3>
-      <figure class="case-flow-video"><video controls preload="metadata" playsinline src="/capabilities/assets/evidence/base-login-install-first-launch-20260924-170259.mp4"></video><figcaption>实机录像：从安装到首次启动（Windows，能力中心公开验收材料，非客户现场）</figcaption></figure>
+      <figure class="case-flow-video" id="case-flow-video-slot" hidden><video controls preload="metadata" playsinline id="case-flow-video" style="width:100%"></video><figcaption>实机录像：登录进入工作台（macOS，连续无剪辑验收录屏，非客户现场）</figcaption></figure>
       <ul>
-        <li>实机录像：<a href="/capabilities/assets/evidence/base-login-install-first-launch-20260924-170259.mp4">安装到首次启动</a> · <a href="/capabilities/assets/evidence/base-login-base-login-20260924-173522.mp4">登录与会话</a> · <a href="/capabilities/assets/evidence/base-login-03-login-operation-web.mp4">macOS 登录操作</a></li>
+        <li>实机录像：<a href="/capabilities/assets/evidence/base-login-03-login-operation-web.mp4">macOS 登录操作（47 秒，连续无剪辑）</a></li>
         <li>能力证据：<a href="/capabilities/feature/ind-attendance.html">考勤能力状态与证据详情</a> · <a href="/capabilities/feature/ind-coating.html">涂料行业能力状态与证据详情</a></li>
         <li>发布与透明度：<a href="/download-release.json">正式版本与更新记录 JSON</a> · <a href="/download/breakpoints">公开断点清单</a> · <a href="/download/goals">工作目标</a></li>
+        <li><a href="/verify.html">查看完整技术证据（验证中心）→</a></li>
       </ul>
       <p class="case-evidence-note">上述材料能证明产品界面、安装与登录流程、能力目录状态与发布记录，不代表客户已验收；客户侧数据结果在拿到可公开材料前保持空缺。</p>
     </div>
@@ -102,6 +103,26 @@
 </footer>
 
 <button id="back-to-top" class="back-to-top" aria-label="回到顶部"></button>
+<script>
+/* 案例流程演示视频：仅注入通过发布闸门的 ≤60s 合规录像（SSOT 驱动）。 */
+;(function () {
+  'use strict'
+  fetch('/site/data/public-site.json', { credentials: 'same-origin' })
+    .then(function (r) { return r.ok ? r.json() : null })
+    .then(function (data) {
+      if (!data) return
+      var demo = (data.evidence && data.evidence.videos || []).filter(function (v) { return v.file === 'base-login-03-login-operation-web.mp4' })[0]
+      if (!demo || !demo.public_path) return
+      var v = document.getElementById('case-flow-video')
+      if (!v) return
+      v.src = demo.public_path
+      if (demo.poster) v.poster = demo.poster
+      var slot = document.getElementById('case-flow-video-slot')
+      if (slot) slot.removeAttribute('hidden')
+    })
+    .catch(function () { /* 无合规录像则保持隐藏，不使用演示视频顶替 */ })
+})()
+</script>
 <script src="./main.js?v=20260925a"></script>
 
 

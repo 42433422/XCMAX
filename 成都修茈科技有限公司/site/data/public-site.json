@@ -1,0 +1,836 @@
+{
+  "schema": "xcagi.public_site/v1",
+  "_comment": "由 scripts/build_public_site.py 自动生成，请勿手改（DO NOT EDIT）。事实来源见 sources。",
+  "sources": {
+    "version": "FHD/VERSION.md",
+    "pricing": "FHD/config/saas_plans.json",
+    "cases": "FHD/config/public_cases.json",
+    "capabilities": "data/capabilities.json",
+    "release": "download-release.json",
+    "evidence": "capabilities/assets/evidence/"
+  },
+  "product": {
+    "name": "XCAGI",
+    "internal_platform": "XCMAX",
+    "brand_note": "XCAGI 是对外产品名称；XCMAX 是其内部工程与平台体系名称。",
+    "version": "1.0.0.5",
+    "toolchain_version": "1.0.0"
+  },
+  "data_updated_at": "2026-09-24",
+  "pricing": {
+    "trial": {
+      "id": "saas-trial-30",
+      "title": "30 天全功能体验",
+      "description": "用 30 天完整体验 XCAGI，包含 100 元 AI 使用额度。",
+      "amount_cents": 9900,
+      "amount_display": "¥99",
+      "quota_cents": 10000,
+      "quota_display": "¥100",
+      "duration_days": 30,
+      "license_type": "trial",
+      "badge": "体验"
+    },
+    "trial_days": 30,
+    "currency": "CNY",
+    "homepage_plans": [
+      {
+        "id": "saas-trial-30",
+        "title": "30 天全功能体验",
+        "description": "用 30 天完整体验 XCAGI，包含 100 元 AI 使用额度。",
+        "amount_cents": 9900,
+        "amount_display": "¥99",
+        "quota_cents": 10000,
+        "quota_display": "¥100",
+        "duration_days": 30,
+        "license_type": "trial",
+        "badge": "体验"
+      },
+      {
+        "id": "saas-permanent-starter",
+        "title": "企业启航版",
+        "description": "适合首次部署 XCAGI 的企业，包含 1 个行业 Mod、四部门 AI 员工配置、上线交付与 1 年维护。",
+        "amount_cents": 4999900,
+        "amount_display": "¥49,999",
+        "quota_cents": null,
+        "quota_display": null,
+        "duration_days": null,
+        "license_type": "permanent",
+        "badge": "永久使用"
+      },
+      {
+        "id": "saas-permanent-growth",
+        "title": "企业成长版",
+        "description": "适合需要多业务协同或现有系统对接的企业，包含专属 AI 员工训练与 2 年维护。",
+        "amount_cents": 9999900,
+        "amount_display": "¥99,999",
+        "quota_cents": null,
+        "quota_display": null,
+        "duration_days": null,
+        "license_type": "permanent",
+        "badge": "永久使用"
+      }
+    ],
+    "extended_plans": [
+      {
+        "id": "saas-permanent-max",
+        "title": "集团协同版",
+        "description": "适合多组织、多分支机构协同的集团企业，包含集团架构支持与 3 年维护。",
+        "amount_cents": 49999900,
+        "amount_display": "¥499,999",
+        "quota_cents": null,
+        "quota_display": null,
+        "duration_days": null,
+        "license_type": "permanent",
+        "badge": "永久使用"
+      },
+      {
+        "id": "saas-permanent-ultra",
+        "title": "企业旗舰版",
+        "description": "适合需要深度定制与长期技术保障的企业，包含源码托管、二次开发授权与 99.9% SLA。",
+        "amount_cents": 99999900,
+        "amount_display": "¥999,999",
+        "quota_cents": null,
+        "quota_display": null,
+        "duration_days": null,
+        "license_type": "permanent",
+        "badge": "永久使用"
+      }
+    ],
+    "all_plans": [
+      {
+        "id": "saas-trial-30",
+        "title": "30 天全功能体验",
+        "description": "用 30 天完整体验 XCAGI，包含 100 元 AI 使用额度。",
+        "amount_cents": 9900,
+        "amount_display": "¥99",
+        "quota_cents": 10000,
+        "quota_display": "¥100",
+        "duration_days": 30,
+        "license_type": "trial",
+        "badge": "体验"
+      },
+      {
+        "id": "saas-permanent-starter",
+        "title": "企业启航版",
+        "description": "适合首次部署 XCAGI 的企业，包含 1 个行业 Mod、四部门 AI 员工配置、上线交付与 1 年维护。",
+        "amount_cents": 4999900,
+        "amount_display": "¥49,999",
+        "quota_cents": null,
+        "quota_display": null,
+        "duration_days": null,
+        "license_type": "permanent",
+        "badge": "永久使用"
+      },
+      {
+        "id": "saas-permanent-growth",
+        "title": "企业成长版",
+        "description": "适合需要多业务协同或现有系统对接的企业，包含专属 AI 员工训练与 2 年维护。",
+        "amount_cents": 9999900,
+        "amount_display": "¥99,999",
+        "quota_cents": null,
+        "quota_display": null,
+        "duration_days": null,
+        "license_type": "permanent",
+        "badge": "永久使用"
+      },
+      {
+        "id": "saas-permanent-max",
+        "title": "集团协同版",
+        "description": "适合多组织、多分支机构协同的集团企业，包含集团架构支持与 3 年维护。",
+        "amount_cents": 49999900,
+        "amount_display": "¥499,999",
+        "quota_cents": null,
+        "quota_display": null,
+        "duration_days": null,
+        "license_type": "permanent",
+        "badge": "永久使用"
+      },
+      {
+        "id": "saas-permanent-ultra",
+        "title": "企业旗舰版",
+        "description": "适合需要深度定制与长期技术保障的企业，包含源码托管、二次开发授权与 99.9% SLA。",
+        "amount_cents": 99999900,
+        "amount_display": "¥999,999",
+        "quota_cents": null,
+        "quota_display": null,
+        "duration_days": null,
+        "license_type": "permanent",
+        "badge": "永久使用"
+      }
+    ],
+    "purchase_url_tpl": "/market/account-plans?plan={plan_id}&source=official-site"
+  },
+  "platforms": [
+    {
+      "key": "windows",
+      "applicable": 99,
+      "verified": 1,
+      "partial": 0,
+      "pending": 98,
+      "last_verified_at": "2026-09-24",
+      "label": "Windows 桌面",
+      "level": "签约级"
+    },
+    {
+      "key": "macos",
+      "applicable": 100,
+      "verified": 1,
+      "partial": 0,
+      "pending": 99,
+      "last_verified_at": "2026-09-22",
+      "label": "macOS 桌面",
+      "level": "签约级"
+    },
+    {
+      "key": "web",
+      "applicable": 128,
+      "verified": 1,
+      "partial": 0,
+      "pending": 127,
+      "last_verified_at": "2026-09-24",
+      "label": "Web / 后端",
+      "level": "签约级"
+    },
+    {
+      "key": "android",
+      "applicable": 8,
+      "verified": 0,
+      "partial": 0,
+      "pending": 8,
+      "last_verified_at": null,
+      "label": "Android",
+      "level": "实验骨架·非签约级"
+    },
+    {
+      "key": "ios",
+      "applicable": 1,
+      "verified": 0,
+      "partial": 0,
+      "pending": 1,
+      "last_verified_at": null,
+      "label": "iOS",
+      "level": "待定级"
+    }
+  ],
+  "capabilities": {
+    "total": 158,
+    "by_status": {
+      "verified": 1,
+      "partial": 0,
+      "implemented": 153,
+      "planned": 4
+    },
+    "domains": 10,
+    "modules": 28,
+    "completion": 39,
+    "catalog_version": "2026-09-16",
+    "platforms": [
+      {
+        "key": "windows",
+        "applicable": 99,
+        "verified": 1,
+        "partial": 0,
+        "pending": 98,
+        "last_verified_at": "2026-09-24",
+        "label": "Windows 桌面",
+        "level": "签约级"
+      },
+      {
+        "key": "macos",
+        "applicable": 100,
+        "verified": 1,
+        "partial": 0,
+        "pending": 99,
+        "last_verified_at": "2026-09-22",
+        "label": "macOS 桌面",
+        "level": "签约级"
+      },
+      {
+        "key": "web",
+        "applicable": 128,
+        "verified": 1,
+        "partial": 0,
+        "pending": 127,
+        "last_verified_at": "2026-09-24",
+        "label": "Web / 后端",
+        "level": "签约级"
+      },
+      {
+        "key": "android",
+        "applicable": 8,
+        "verified": 0,
+        "partial": 0,
+        "pending": 8,
+        "last_verified_at": null,
+        "label": "Android",
+        "level": "实验骨架·非签约级"
+      },
+      {
+        "key": "ios",
+        "applicable": 1,
+        "verified": 0,
+        "partial": 0,
+        "pending": 1,
+        "last_verified_at": null,
+        "label": "iOS",
+        "level": "待定级"
+      }
+    ],
+    "principle": "No Evidence, No Claim：总体状态由各平台实机验收记录自动汇总，目录不存放可手写的状态；缺证据的平台固定显示「待验证」。"
+  },
+  "downloads": {
+    "version_lock": "1.0.0.1",
+    "matches_version_ssot": false,
+    "release_ready": false,
+    "git_sha": "2e6f03bf67b88965e450721e5b8432ab6395782b",
+    "generated_at": "2026-09-02T11:12:08.673618+00:00",
+    "release_root": "https://xiu-ci.com/xcagi-v1.0.0.1",
+    "manifest_url": "https://xiu-ci.com/xcagi-v1.0.0.1/manifest.json",
+    "latest_release": {
+      "version": "1.0.0.1",
+      "date": "2026-09-02",
+      "title": "太阳鸟行业考勤归并与企业交付可见",
+      "channel": "平台分阶段发布",
+      "notes": [
+        "太阳鸟账号按饰品包装行业归类，原有单独考勤入口归并到行业通用考勤；工作台统一进入 /attendance-industry，并保留 /attendance-industry/settings 设置入口。",
+        "已登录的太阳鸟桌面会话会在升级后自愈行业能力，不要求退出重登；既有宿主、工作区和入门完成状态继续保留。",
+        "客户交付中心新增客户设备当前安装版本与平台展示；历史回执未携带版本时明确显示未上报，不再把未知值当作有效版本。",
+        "安装与首次登录成功后上报版本、构建 SHA 和平台；展示只采用最近一次成功安装回执，失败升级不会覆盖客户已安装版本。",
+        "macOS Apple Silicon 1.0.0.1 通过 Developer ID 签名、公证与稳定更新源校验后发布；Android 继续使用已验收的 1.0.0.0。",
+        "Windows 64 位企业临时交付包已构建并公开 SHA-256，但尚未完成 Authenticode 代码签名；仅供管理员确认来源后安装，不进入稳定自动更新通道。",
+        "桌面发布流程会原子更新安装包、下载中心与更新日志，并核验版本、构建 SHA、文件大小和 SHA-256；正式 Windows 稳定版继续执行代码签名硬门禁。"
+      ],
+      "platforms": [
+        "Windows 64 位临时交付",
+        "macOS Apple Silicon 1.0.0.1 稳定版",
+        "Android 1.0.0.0 稳定版"
+      ]
+    }
+  },
+  "cases": [
+    {
+      "case_id": "taiyangniao-attendance",
+      "customer_display_name": "太阳鸟·饰品包装行业考勤",
+      "industry": "饰品包装制造",
+      "scenario": "花名册与考勤规则整理 → AI 按行业规则汇总 → 异常自动标注 → 人事复核 → 报表 / Excel 导出",
+      "public_status": "delivered",
+      "scenario_title": "考勤核对：从每天人工比对到 AI 执行",
+      "evidence_status": "功能已展示，客户验收材料待补",
+      "workflow_steps": [
+        "导入花名册与考勤规则",
+        "AI 按行业规则整理每日考勤",
+        "迟到、缺卡、异常自动标注",
+        "人事在系统内复核确认",
+        "一键导出报表与 Excel"
+      ],
+      "outcome_summary": "把每天人工核对考勤的过程交给 AI 员工执行，人事只处理异常，结果直接可导出交付。",
+      "before_summary": "人事每天从多处导出花名册和打卡记录，按行业规则逐人核对，异常靠肉眼发现，汇总到 Excel 再上报。",
+      "screenshots": [
+        {
+          "feature": "base-login",
+          "file": "capabilities/assets/evidence/base-login-03-postlogin-screen.png",
+          "caption": "太阳鸟企业账号（SUNBIRD·饰品包装助手）登录后的工作台实机截图，已通过 macOS 实机验收",
+          "public_path": "/capabilities/assets/evidence/base-login-03-postlogin-screen.png",
+          "sha256": "ed02e17ada8d62ba9abca84ac9e51b53eab459d1d1ab465a892d174587ffded8",
+          "acceptance_status": "passed",
+          "verified_at": "2026-09-24"
+        },
+        {
+          "feature": "ind-attendance",
+          "file": "capabilities/assets/evidence/ind-attendance-03-launched.png",
+          "caption": "行业考勤入口客户端实机截图（macOS 实机）",
+          "public_path": "/capabilities/assets/evidence/ind-attendance-03-launched.png",
+          "sha256": "8b914547b71951b9143bce19c8533f563cb71fa0e58983bd5dbcc37dd5ac8596",
+          "acceptance_status": "no-acceptance-record",
+          "verified_at": null
+        }
+      ],
+      "videos": [],
+      "acceptance_ref": [
+        "ind-attendance",
+        "base-login"
+      ],
+      "limitations": "考勤规则汇总与异常标注的完整实机验收录像待补；当前公开证据为客户端实机截图与登录验收。"
+    },
+    {
+      "case_id": "coatings-erp",
+      "customer_display_name": "涂料行业 ERP 业务协同",
+      "industry": "涂料 / 化工制造",
+      "scenario": "订单 → 出货 → 库存 → 标签打印 → Excel / 报表导出",
+      "public_status": "delivered",
+      "scenario_title": "订单到导出：一个桌面闭环",
+      "evidence_status": "功能已展示，客户验收材料待补",
+      "workflow_steps": [
+        "采购 / 销售订单录入与跟踪",
+        "出货记录与出库联动",
+        "库存实时查询与管理",
+        "产品标签编辑与打印",
+        "Excel 导入导出与报表交付"
+      ],
+      "outcome_summary": "订单、出货、库存、标签在同一桌面闭环，AI 员工负责录入、核对与导出，业务员只处理需要决策的环节。",
+      "before_summary": "订单在表格、出货在系统、库存在盘点表、标签靠手工排版，数据反复搬运，出错后要逐单回查。",
+      "screenshots": [
+        {
+          "feature": "erp-sales-order",
+          "file": "capabilities/assets/evidence/erp-sales-order-erp-sales-order-01-sales-order-list.png",
+          "caption": "订单管理模块实机界面（公共演示环境，含真实订单记录）",
+          "public_path": "/capabilities/assets/evidence/erp-sales-order-erp-sales-order-01-sales-order-list.png",
+          "sha256": "b318aa6db10d4865268b66a0b660b5e54240fcf7c0df364c097a94c637ca4bca",
+          "acceptance_status": "no-acceptance-record",
+          "verified_at": null
+        },
+        {
+          "feature": "erp-inventory",
+          "file": "capabilities/assets/evidence/erp-inventory-erp-inventory-01-inventory-management.png",
+          "caption": "库存管理模块实机界面（演示环境，初始列表为空）",
+          "public_path": "/capabilities/assets/evidence/erp-inventory-erp-inventory-01-inventory-management.png",
+          "sha256": "80b44bcd485f2cf203a1ca7c91907321425ae3399e954807083147dbf9983bca",
+          "acceptance_status": "no-acceptance-record",
+          "verified_at": null
+        },
+        {
+          "feature": "erp-label",
+          "file": "capabilities/assets/evidence/erp-label-erp-label-01-label-editor.png",
+          "caption": "标签编辑器模块实机界面（演示环境，模板待创建）",
+          "public_path": "/capabilities/assets/evidence/erp-label-erp-label-01-label-editor.png",
+          "sha256": "1ae11035044673214f12f5b958b1195f660bbbd5e705d78cedb6e1d1777917bf",
+          "acceptance_status": "no-acceptance-record",
+          "verified_at": null
+        },
+        {
+          "feature": "erp-excel-io",
+          "file": "capabilities/assets/evidence/erp-excel-io-erp-excel-io-01-etl-center.png",
+          "caption": "Excel 导入导出中心实机界面（macOS 实机截图）",
+          "public_path": "/capabilities/assets/evidence/erp-excel-io-erp-excel-io-01-etl-center.png",
+          "sha256": "8a5c162df67bb4d4571c54aeb2546ea9b363b7e8b47fe9b6a6bdbaa47ba23274",
+          "acceptance_status": "failed",
+          "verified_at": "2026-09-20"
+        }
+      ],
+      "videos": [],
+      "acceptance_ref": [
+        "erp-sales-order",
+        "erp-shipment",
+        "erp-inventory",
+        "erp-label",
+        "erp-excel-io"
+      ],
+      "limitations": "订单到导出的端到端实机验收录像待补；当前公开证据为各模块实机截图，标签模板数据为空属正常初始状态。"
+    }
+  ],
+  "evidence": {
+    "features": [
+      {
+        "feature": "ai-chat-core",
+        "platform": null,
+        "status": "failed",
+        "passed": 0,
+        "failed": 2,
+        "verified_at": "2026-09-20",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+        "media": [
+          {
+            "file": "ai-chat-core-03-product-exists.png",
+            "sha256": "9ad982968dc3d6f652dff255cb0ea3a470e87acb83d67af7d880adfca30e56c8",
+            "visual_review": "accepted",
+            "visible_result": "产品管理页面中 DEMO-001 确实存在，单价 99，库存 10。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ai-chat-core-03-product-exists.png"
+          },
+          {
+            "file": "ai-chat-core-05-query-failure-visible.png",
+            "sha256": "c376f24ec312129e1c377fa7a93aef99ebb222ec55f85aa535fd48efe4b78745",
+            "visual_review": "accepted",
+            "visible_result": "两个只读查询输入和失败响应同时可见：写入目标未找到、查询关键词错误地包含字段说明。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ai-chat-core-05-query-failure-visible.png"
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/ai-chat-core-ai-chat-core-run.json"
+      },
+      {
+        "feature": "ai-intent",
+        "platform": null,
+        "status": "failed",
+        "passed": 0,
+        "failed": 2,
+        "verified_at": "2026-09-20",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+        "media": [
+          {
+            "file": "ai-intent-03-product-exists.png",
+            "sha256": "9ad982968dc3d6f652dff255cb0ea3a470e87acb83d67af7d880adfca30e56c8",
+            "visual_review": "accepted",
+            "visible_result": "产品管理页面中 DEMO-001 确实存在，单价 99，库存 10。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ai-intent-03-product-exists.png"
+          },
+          {
+            "file": "ai-intent-05-query-failure-visible.png",
+            "sha256": "c376f24ec312129e1c377fa7a93aef99ebb222ec55f85aa535fd48efe4b78745",
+            "visual_review": "accepted",
+            "visible_result": "两个只读查询输入和失败响应同时可见：写入目标未找到、查询关键词错误地包含字段说明。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ai-intent-05-query-failure-visible.png"
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/ai-intent-ai-intent-run.json"
+      },
+      {
+        "feature": "ai-knowledge",
+        "platform": null,
+        "status": "failed",
+        "passed": 0,
+        "failed": 1,
+        "verified_at": "2026-09-20",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+        "media": [
+          {
+            "file": "ai-knowledge-11-knowledge-import-assistant-overlap.png",
+            "sha256": "20c08148005439ec2c8c1cef7061b9eb5ed6cfc2dad78ed5383044de6f6f0148",
+            "visual_review": "accepted",
+            "visible_result": "添加知识来源抽屉仍打开；小C 助理浮层挡住表单，下方悬浮按钮与加入 Persy 按钮重叠。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ai-knowledge-11-knowledge-import-assistant-overlap.png"
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/ai-knowledge-ai-knowledge-run.json"
+      },
+      {
+        "feature": "base-login",
+        "platform": "windows",
+        "status": "passed",
+        "passed": 9,
+        "failed": 0,
+        "verified_at": "2026-09-24",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "84a4b75445cd529a96529c938f8e88b288ab6228",
+        "media": [
+          {
+            "file": "base-login-W0-first-launch.png",
+            "sha256": "b48128482abbb73d9d4ac47badfeeff5d82a06f625171d5311532c4bc8e0f235",
+            "visual_review": "accepted",
+            "visible_result": "安装后首次启动的登录页：主标题「企业账号登录」，账号/密码输入框为空，主按钮「登 录 →」为浅蓝禁用态，无左侧导航与账号名；同一时刻 /api/auth/me 返回 valid=false，后端 /api/health 200。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-login-W0-first-launch.png"
+          },
+          {
+            "file": "base-login-W2-login-workspace.png",
+            "sha256": "75d381b02dc49d2317e54f572858242804cf34631c61694429c8bbe414ea2a8d",
+            "visual_review": "accepted",
+            "visible_result": "真实 GUI 输入 SUNBIRD 与密码并点击「登 录」后进入工作台：窗口标题「智能对话 - XCAGI」，主区「智能对话」，左上账号「SUNBIRD」，左侧完整导航（智能对话、考勤工作区、信息、智能生态、知识库、数据对接中心、员工工作台、饰品包装管理、原材料仓库、库存管理、客户管理、订单管理、出货记录、数据来源、包装标签打印、XCAGI modstore、系统设置），左下状态条「系统正常」与版本 1.0.0.5。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-login-W2-login-workspace.png"
+          },
+          {
+            "file": "base-login-W3-after-restart.png",
+            "sha256": "1820fa7a955eace7274150dadc3370598fd8a96194121443d44c65102195de53",
+            "visual_review": "accepted",
+            "visible_result": "应用进程被结束并重新启动后：画面仍为已登录工作台（账号 SUNBIRD、左侧导航、主区「智能对话」），会话未丢失；同一 cookie 的 /api/auth/me 与 /api/auth/session/validate 均有效，左下状态条为「系统正常」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-login-W3-after-restart.png"
+          },
+          {
+            "file": "base-login-W4-login-page-again.png",
+            "sha256": "9d6d50c5d476063b3a14f62f96d91da7031b36202c661182f67a6ba386f8227f",
+            "visual_review": "accepted",
+            "visible_result": "在工作台执行「退出登录」并确认「确定退出本机账号？」后：界面回到登录页，账号/密码框为空、主按钮禁用，工作台导航与账号名消失；旧 cookie 立即失效（valid=false）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-login-W4-login-page-again.png"
+          },
+          {
+            "file": "base-login-W4b-relaunch-login-page.png",
+            "sha256": "c4bb00985fdd632ce8aef462e54edc721b567ee09f483983a4c2e3d39f0c8ad4",
+            "visual_review": "accepted",
+            "visible_result": "退出登录后关闭应用并重新启动：窗口停在登录页（账号/密码框为空、主按钮禁用），无工作台；退出前捕获的 session cookie 在重启后调用 /api/auth/me 与 /api/auth/session/validate 均返回 valid=false，旧会话未被错误恢复。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-login-W4b-relaunch-login-page.png"
+          },
+          {
+            "file": "base-login-W4c-gui-logout-login-page.png",
+            "sha256": "3cf04c97fd9df16de1afea37e02bf29f242281cbb607f9a56626fbb0a313a9aa",
+            "visual_review": "accepted",
+            "visible_result": "Phase C 再次经真实 GUI「系统设置 → 退出登录 → 确认」退出：回到登录页，输入框为空、无工作台；会话 cookie 已从浏览器 jar 移除。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-login-W4c-gui-logout-login-page.png"
+          },
+          {
+            "file": "base-login-W7-status-bar.png",
+            "sha256": "6ce33163278ab49cb94f005e5043594f61cfff1cd46222ee61d4fd84170f5917",
+            "visual_review": "accepted",
+            "visible_result": "稳态工作台（Phase C 采样，登录态）：左下状态条「系统正常」（绿色 online 圆点）与版本 1.0.0.5，账号 SUNBIRD，左侧导航完整；同一时刻 /api/health 返回 status=healthy、runtime.status=healthy、blockers=[]、degradedReasons=[]，前端文字与健康载荷一致。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-login-W7-status-bar.png"
+          },
+          {
+            "file": "base-login-base-login-20260924-173522.mp4",
+            "sha256": "2d1837ce2d977abaa3b45caf1f127baab38c29b89c7ea7285a933106a4ba4d1d",
+            "visual_review": "accepted",
+            "visible_result": "整屏录屏 17:35:22–17:39:11（约 3 分 49 秒，5fps）：起始为已登录工作台 → 应用进程被结束、窗口消失只余桌面 → 应用重新启动并显示启动页 → 回到仍为已登录的工作台（会话保持，抽帧可见左下「系统正常」）→ 期间执行 API 级退出登录、边界负例与 Web 同账户登录 → 结尾由 Phase C 操作员驱动真实 GUI「系统设置 → 退出登录 → 确定」并在关闭应用后重新启动，画面停在登录页。",
+            "kind": "video",
+            "size_bytes": 16804254,
+            "duration_seconds": null,
+            "codec": "avc1",
+            "public_path": null
+          },
+          {
+            "file": "base-login-install-first-launch-20260924-170259.mp4",
+            "sha256": "363991dc4a9e9074d5daeefe477ab8fb6b04011bbf706c3b5eabd1c728f6dc05",
+            "visual_review": "accepted",
+            "visible_result": "整屏录屏 17:02:59–17:05:44（约 2 分 45 秒，5fps）：安装后首次启动停在「企业账号登录」登录页 → 真实输入账号与密码 → 点击「登 录」→ 进入「智能对话」工作台（账号 SUNBIRD、左侧导航完整）→ 打开系统设置点击「退出登录」并确认 → 回到登录页 → 再次登录回到工作台（为脚本重启步骤留下已登录状态）。",
+            "kind": "video",
+            "size_bytes": 12236556,
+            "duration_seconds": null,
+            "codec": "avc1",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "base-login-run.log",
+          "public_path": "/capabilities/assets/evidence/base-login-run.log",
+          "sha256": "c9662b73d6741c8d1a5e60531bb81477875691cc6076c4a4474c2a6cb83afe20",
+          "size_bytes": 1059
+        },
+        "source_run": "/capabilities/assets/evidence/base-login-base-login-windows-run.json"
+      },
+      {
+        "feature": "base-rbac",
+        "platform": "windows",
+        "status": "blocked",
+        "passed": 0,
+        "failed": 0,
+        "verified_at": "2026-09-20",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+        "media": [
+          {
+            "file": "base-rbac.png",
+            "sha256": "8dc8864213eb1d02cbd15173f510b349bdd5ae47affe5da68921111a38cf58e6",
+            "visual_review": "accepted",
+            "visible_result": "/api/rbac/roles and /api/rbac/permissions return 401 before login; /api/xcmax/admin/session returns 403 ADMIN_DESKTOP_FORBIDDEN; health component business_route:rbac reports ok=true",
+            "kind": "screenshot",
+            "public_path": null
+          },
+          {
+            "file": "base-rbac-base-rbac.mp4",
+            "sha256": "3ec07a3eb50509ef7f39def5724afc61a8f8e189d081f581a1395f9b7aea5e0d",
+            "visual_review": "accepted",
+            "visible_result": "/api/rbac/roles and /api/rbac/permissions return 401 before login; /api/xcmax/admin/session returns 403 ADMIN_DESKTOP_FORBIDDEN; health component business_route:rbac reports ok=true",
+            "kind": "video",
+            "size_bytes": 3356866,
+            "duration_seconds": 24.0,
+            "codec": "avc1",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/base-rbac-windows-base-rbac-run.json"
+      },
+      {
+        "feature": "base-update-mgmt",
+        "platform": null,
+        "status": "failed",
+        "passed": 0,
+        "failed": 1,
+        "verified_at": "2026-09-20",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+        "media": [
+          {
+            "file": "base-update-mgmt-12-about-version-mismatch.png",
+            "sha256": "802bb2164cef46ecffc254064e093f221b885e57e0206e2f949539a71ad473d1",
+            "visual_review": "accepted",
+            "visible_result": "同一张未经修改的实机截图可读出左下角 v1.0.0.5 和关于页当前版本 1.0.0；设备配对卡片已在应用内收起。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-update-mgmt-12-about-version-mismatch.png"
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/base-update-mgmt-base-update-mgmt-run.json"
+      },
+      {
+        "feature": "erp-excel-io",
+        "platform": null,
+        "status": "failed",
+        "passed": 0,
+        "failed": 1,
+        "verified_at": "2026-09-20",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+        "media": [
+          {
+            "file": "erp-excel-io-06-product-export-route-failure.png",
+            "sha256": "fb2bcc7c7ac0b036d730e411091282bcbbdf74db86676447b24d4ebac8de5247",
+            "visual_review": "accepted",
+            "visible_result": "截图清晰显示产品列表背景及 Excel 导出失败弹窗，缺失地址为 /api/mod/xcagi-erp-domain-bridge/products/export.xlsx。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-excel-io-06-product-export-route-failure.png"
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/erp-excel-io-erp-excel-io-run.json"
+      },
+      {
+        "feature": "erp-templates",
+        "platform": null,
+        "status": "failed",
+        "passed": 0,
+        "failed": 1,
+        "verified_at": "2026-09-20",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+        "media": [
+          {
+            "file": "erp-templates-07-product-word-export-route-failure.png",
+            "sha256": "1c081b5571bcca89e0cf9624648f7f6ef50beeb9ab505db1c1fbe55d17fecfb8",
+            "visual_review": "accepted",
+            "visible_result": "默认 Word 模板和产品列表背景可见，弹窗显示 /api/mod/xcagi-erp-domain-bridge/products/export.docx 资源不存在。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-templates-07-product-word-export-route-failure.png"
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/erp-templates-erp-templates-run.json"
+      },
+      {
+        "feature": "ind-custom-delivery",
+        "platform": null,
+        "status": "failed",
+        "passed": 0,
+        "failed": 1,
+        "verified_at": "2026-09-20",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+        "media": [
+          {
+            "file": "ind-custom-delivery-02-workspace-entitlement-block.png",
+            "sha256": "83f5701bf6bc683056201377d8c4e141cd9baeb0e4b63ea7eaca66ea5dc69905",
+            "visual_review": "accepted",
+            "visible_result": "配置页与完整提示可读：仍缺必需项 taiyangniao-pro；安装失败；sunbird-attendance-custom 交付数据：当前账号未授权该客户交付包。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ind-custom-delivery-02-workspace-entitlement-block.png"
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/ind-custom-delivery-ind-custom-delivery-run.json"
+      }
+    ],
+    "videos": [
+      {
+        "file": "base-login-03-login-operation-web.mp4",
+        "sha256": "27210eeb7c3fdc2ac593aebf20478d7392fc343daf6d80b4b4e7eaf3ff6e3576",
+        "visual_review": "accepted",
+        "visible_result": "真机录屏（连续片段无剪接，按 2× 播放，成品 47.0 秒）：登录页空表单（账号框聚焦、密码框为空、「登 录」按钮）→ 输入企业账号 SUNBIRD 与密码 → 点击「登 录」显示「正在登 录…」→ 进入「智能对话」工作台且左上角显示 SUNBIRD。片段不含退出登录后的画面。",
+        "kind": "video",
+        "size_bytes": 2299196,
+        "duration_seconds": 47.0,
+        "codec": "avc1",
+        "public_path": "/capabilities/assets/evidence/base-login-03-login-operation-web.mp4",
+        "duration_ok": true,
+        "poster": "/capabilities/assets/evidence/base-login-03-postlogin-screen.png",
+        "original_recording": {
+          "name": "03-login-operation.mov",
+          "sha256": "c7c136aa0a1e85bf4ad8243cc856984feb163ad4f97bd25ba494afc85a21970c",
+          "bytes": 192444408,
+          "archive_path": "/Users/Shared/xcagi-t6-tools/feature-acceptance-20260922/base-login/macos/03-login-operation.mov"
+        },
+        "feature": "base-login",
+        "platform": "macos"
+      },
+      {
+        "file": "base-login-05c-gui-logout-operation-web.mp4",
+        "sha256": "fcd8ede9041e3be4c340102d9c88b2c42b03d914566e417ce907f1fe38c4b7e5",
+        "visual_review": "accepted",
+        "visible_result": "真机录屏（连续片段无剪接，按 2× 播放，成品 21.1 秒）：系统设置页点开时账号 SUNBIRD 与「退出登录」按钮可见 → 点击「退出登录」→ 弹出确认框「确定退出本机账号？」→ 点击「确定」后界面回到登录页，账号/密码框为空。",
+        "kind": "video",
+        "size_bytes": 1010159,
+        "duration_seconds": 21.1,
+        "codec": "avc1",
+        "public_path": "/capabilities/assets/evidence/base-login-05c-gui-logout-operation-web.mp4",
+        "duration_ok": true,
+        "poster": "/capabilities/assets/evidence/base-login-03-postlogin-screen.png",
+        "original_recording": {
+          "name": "05c-gui-logout-operation.mov",
+          "sha256": "b39240c396edf579eca5e02f7af084391c19125394f7400c075683759add95ac",
+          "bytes": 108916825,
+          "archive_path": "/Users/Shared/xcagi-t6-tools/feature-acceptance-20260922/base-login/macos/05c-gui-logout-operation.mov"
+        },
+        "feature": "base-login",
+        "platform": "macos"
+      }
+    ],
+    "integrity_problems": [
+      {
+        "feature": "base-login",
+        "file": "base-login-base-login-web-20260924-015410.mp4",
+        "issues": [
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "base-login",
+        "file": "base-login-base-login-20260924-173522.mp4",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "base-login",
+        "file": "base-login-install-first-launch-20260924-170259.mp4",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "base-rbac",
+        "file": "base-rbac-base-rbac.png",
+        "kind": "sha-mismatch-not-published",
+        "recorded_sha256": "8dc8864213eb1d02cbd15173f510b349bdd5ae47affe5da68921111a38cf58e6",
+        "actual_sha256": "9c62e8a431250b1720eeab6c03dd6a72fecab906b6d087cd510acc9dd645ec17",
+        "action": "not-published"
+      },
+      {
+        "feature": "base-rbac",
+        "file": "base-rbac-base-rbac.mp4",
+        "issues": [
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "base-rbac",
+        "file": "base-rbac-base-rbac.png",
+        "kind": "sha-mismatch-not-published",
+        "recorded_sha256": "8dc8864213eb1d02cbd15173f510b349bdd5ae47affe5da68921111a38cf58e6",
+        "actual_sha256": "9c62e8a431250b1720eeab6c03dd6a72fecab906b6d087cd510acc9dd645ec17",
+        "action": "not-published"
+      },
+      {
+        "feature": "base-rbac",
+        "file": "base-rbac-base-rbac.mp4",
+        "issues": [
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      }
+    ],
+    "summary": {
+      "total": 9,
+      "passed": 1,
+      "failed": 7,
+      "last_verified_at": "2026-09-24"
+    }
+  },
+  "hero_media": null
+}

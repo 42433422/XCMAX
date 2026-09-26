@@ -1,0 +1,105 @@
+# 官网 SSOT 门禁（fail-closed）：
+#  1) public-site.json 必须与 SSOT（VERSION.md / saas_plans.json / public_cases.json /
+#     capabilities / evidence）重新生成结果逐字节一致 —— SSOT 更新而未再生成 → FAIL。
+#  2) 发布验收 site_acceptance.py：硬编码事实扫描 / 断链 / 视频 ≤60s+poster+SHA256+原始录像追溯。
+#  3) 运行时验收（Playwright）：桌面 + 390px 移动端 + 视频播放 + HTTP Range。
+# 只有 site-release-acceptance.json result=PASS 才算通过；禁止改断言/删测试过门禁。
+
+name: Corp site SSOT gate (xiu-ci.com)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '成都修茈科技有限公司/*.html'
+      - '成都修茈科技有限公司/*.js'
+      - '成都修茈科技有限公司/*.css'
+      - '成都修茈科技有限公司/partials/**'
+      - '成都修茈科技有限公司/assets/**'
+      - '成都修茈科技有限公司/site/**'
+      - '成都修茈科技有限公司/data/**'
+      - '成都修茈科技有限公司/scripts/**'
+      - 'FHD/VERSION.md'
+      - 'FHD/config/saas_plans.json'
+      - 'FHD/config/public_cases.json'
+      - '.github/workflows/corp-site-ssot-gate.yml'
+  push:
+    branches: [main]
+    paths:
+      - '成都修茈科技有限公司/*.html'
+      - '成都修茈科技有限公司/*.js'
+      - '成都修茈科技有限公司/*.css'
+      - '成都修茈科技有限公司/partials/**'
+      - '成都修茈科技有限公司/assets/**'
+      - '成都修茈科技有限公司/site/**'
+      - '成都修茈科技有限公司/data/**'
+      - '成都修茈科技有限公司/scripts/**'
+      - 'FHD/VERSION.md'
+      - 'FHD/config/saas_plans.json'
+      - 'FHD/config/public_cases.json'
+      - '.github/workflows/corp-site-ssot-gate.yml'
+
+concurrency:
+  group: corp-site-ssot-gate
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: SSOT drift check（fail-closed）
+        working-directory: 成都修茈科技有限公司
+        run: python3 scripts/build_public_site.py --check
+
+      - name: Static acceptance（硬编码事实 / 断链 / 视频 SSOT）
+        working-directory: 成都修茈科技有限公司
+        run: python3 scripts/site_acceptance.py
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Playwright
+        working-directory: 成都修茈科技有限公司
+        run: |
+          npm ci --no-audit --no-fund 2>/dev/null || npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Runtime acceptance（桌面 + 390px + 视频 + Range）
+        working-directory: 成都修茈科技有限公司
+        run: |
+          python3 scripts/range_static_server.py 8139 > /tmp/range-server.log 2>&1 &
+          sleep 1
+          curl -s --noproxy '*' -o /dev/null -w "server: %{http_code}\n" http://127.0.0.1:8139/index.html
+          NO_PROXY="127.0.0.1,localhost" no_proxy="127.0.0.1,localhost" \
+            node scripts/site_runtime_acceptance.mjs http://127.0.0.1:8139
+
+      - name: Final gate = PASS
+        working-directory: 成都修茈科技有限公司
+        run: |
+          python3 scripts/site_acceptance.py --runtime site/data/runtime-results.json
+          python3 - <<'PY'
+          import json, sys
+          r = json.load(open('site/data/site-release-acceptance.json'))
+          print('site-release-acceptance result =', r['result'])
+          if r['result'] != 'PASS':
+              sys.exit('FAIL: 官网发布验收未通过（result != PASS）')
+          PY
+
+      - name: Upload acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-release-acceptance
+          path: |
+            成都修茈科技有限公司/site/data/site-release-acceptance.json
+            成都修茈科技有限公司/site/data/runtime-results.json
+            成都修茈科技有限公司/site/data/runtime-evidence/
+          if-no-files-found: warn

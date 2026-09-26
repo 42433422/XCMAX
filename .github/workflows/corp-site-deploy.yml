@@ -27,6 +27,10 @@ on:
       - '成都修茈科技有限公司/assets/**'
       - '成都修茈科技有限公司/*.js'
       - '成都修茈科技有限公司/*.css'
+      - '成都修茈科技有限公司/site/**'
+      - '成都修茈科技有限公司/data/**'
+      - '成都修茈科技有限公司/scripts/build_public_site.py'
+      - '成都修茈科技有限公司/scripts/site_acceptance.py'
       # 下列两条被 test_immutable_release_contract 明确断言，保留显式声明。
       - '成都修茈科技有限公司/world-will-ticker.js'
       - '成都修茈科技有限公司/world-will-ticker.css'
@@ -144,6 +148,15 @@ jobs:
                 mkdir -p "${LIVE_SITE}/data/capabilities"
                 cp -af "${GIT_SITE}/data/capabilities/." "${LIVE_SITE}/data/capabilities/"
               fi
+              # SSOT 聚合数据（public-site.json）与官网数据目录发布
+              if [ -d "${GIT_SITE}/site/data" ]; then
+                mkdir -p "${LIVE_SITE}/site/data"
+                cp -af "${GIT_SITE}/site/data/." "${LIVE_SITE}/site/data/"
+              fi
+              if [ -d "${GIT_SITE}/data" ]; then
+                mkdir -p "${LIVE_SITE}/data"
+                cp -af "${GIT_SITE}/data/." "${LIVE_SITE}/data/"
+              fi
               chmod a+rx "${LIVE_SITE}" 2>/dev/null || true
               echo "[ok] live site chrome published"
             else
@@ -204,6 +217,17 @@ jobs:
             xc_curl -o /tmp/xc-home.html https://xiu-ci.com/
             grep -E -q 'site-header|>首页<|/download' /tmp/xc-home.html
             grep -E -q '产品下载|软件下载|下载' /tmp/xc-home.html  # 首页入口文案自 #2038 起为「下载」；意图仍是首页必须有下载入口，链接目标由 /download 校验保证
+            grep -E -q '/site/data/public-site.json' /tmp/xc-home.html
+            echo "[verify] SSOT aggregated data must be live:"
+            xc_curl -o /tmp/xc-public-site.json https://xiu-ci.com/site/data/public-site.json
+            python3 -c "import json; d=json.load(open('/tmp/xc-public-site.json')); assert d.get('product',{}).get('version'), 'public-site.json 空'; assert d.get('pricing',{}).get('trial'), '价格缺失'"
+            echo "[verify] customer verification center + pricing pages:"
+            xc_curl -o /tmp/xc-verify.html https://xiu-ci.com/verify.html
+            grep -E -q '验证中心|plat-grid|feat-list' /tmp/xc-verify.html
+            xc_curl -o /tmp/xc-pricing.html https://xiu-ci.com/pricing.html
+            grep -E -q 'plan-trial|plan-permanent|价格' /tmp/xc-pricing.html
+            xc_curl -o /tmp/xc-cases2.html https://xiu-ci.com/cases.html
+            grep -E -q '客户案例|case' /tmp/xc-cases2.html
             echo "[verify] download center is new product page (not old stub):"
             xc_curl -o /tmp/xc-download.html https://xiu-ci.com/download
             grep -E -q 'download/releases|更新日志|产品下载' /tmp/xc-download.html
