@@ -67,6 +67,27 @@ def test_enterprise_employee_execute_respects_role_permission() -> None:
     assert denied["route_reason"] == "employee_invoke_denied"
 
 
+def test_enterprise_custom_tenant_role_uses_persisted_permissions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.services.auth_service.get_auth_service",
+        lambda: SimpleNamespace(get_user_permissions=lambda _user: ["employee.invoke"]),
+    )
+    user = SimpleNamespace(
+        account_kind="enterprise", role="tenant:42:operator", tenant_id=42
+    )
+
+    allowed = permissions.resolve_permissions(user=user, route="/api/employees/demo/execute")
+    assert allowed["route_allowed"] is True
+    assert "employee.invoke" in allowed["permissions"]
+
+    user.tenant_id = 43
+    denied = permissions.resolve_permissions(user=user, route="/api/employees/demo/execute")
+    assert denied["route_allowed"] is False
+    assert denied["route_reason"] == "employee_invoke_denied"
+
+
 def test_admin_employee_execute_is_allowed_off_desktop(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
