@@ -70,6 +70,7 @@ def classify_report(client: Any, message: str, assistant_reply: str) -> dict[str
         return triage
     except RECOVERABLE_ERRORS + (IndexError, AttributeError, TypeError):
         logger.info("client issue classification unavailable", exc_info=True)
+        return None
 
 
 async def submit_product_issue(
