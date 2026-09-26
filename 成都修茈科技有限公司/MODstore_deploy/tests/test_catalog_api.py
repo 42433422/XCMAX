@@ -24,18 +24,53 @@ def test_catalog_index_empty(monkeypatch, tmp_path: Path):
     assert r.json() == {"packages": []}
 
 
-def test_remote_only_package_remains_browsable(monkeypatch, tmp_path: Path):
+def test_remote_only_package_requires_available_publication_state(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path))
-    from modstore_server.catalog_store import save_store
     from fastapi.testclient import TestClient
-    from modstore_server.app import app
 
-    save_store({"packages": [{"id": "remote-catalog-only", "version": "1.0.0",
-                              "download_url": "https://example.invalid/package.xcmod"}]})
+    from modstore_server.app import app
+    from modstore_server.catalog_store import save_store
+    from modstore_server.models import CatalogItem, get_session_factory
+
+    save_store(
+        {
+            "packages": [
+                {
+                    "id": "remote-catalog-only",
+                    "version": "1.0.0",
+                    "download_url": "https://example.invalid/package.xcmod",
+                }
+            ]
+        }
+    )
+    with get_session_factory()() as db:
+        db.add(
+            CatalogItem(
+                pkg_id="remote-catalog-only",
+                version="1.0.0",
+                name="Remote",
+                is_public=True,
+                compliance_status="approved",
+            )
+        )
+        db.commit()
     client = TestClient(app)
     assert client.get("/v1/packages", params={"q": "remote-catalog-only"}).json()["total"] == 1
     assert client.get("/v1/packages/remote-catalog-only/1.0.0").status_code == 200
-    assert len(client.get("/v1/packages/by-id/remote-catalog-only/versions").json()["versions"]) == 1
+    assert (
+        len(client.get("/v1/packages/by-id/remote-catalog-only/versions").json()["versions"]) == 1
+    )
+    monkeypatch.setattr(
+        "modstore_server.catalog_public_index._public_pkg_ids_from_db", lambda: None
+    )
+    monkeypatch.setattr(
+        "modstore_server.api.catalog_public_routes._public_pkg_ids_from_db",
+        lambda: None,
+    )
+    assert client.get("/v1/index.json").json()["packages"] == []
+    assert client.get("/v1/packages", params={"q": "remote-catalog-only"}).json()["total"] == 0
+    assert client.get("/v1/packages/remote-catalog-only/1.0.0").status_code == 404
+    assert client.get("/v1/packages/by-id/remote-catalog-only/versions").json()["versions"] == []
 
 
 @pytest.mark.xfail(strict=False, reason="requires chromadb extra not installed in CI")

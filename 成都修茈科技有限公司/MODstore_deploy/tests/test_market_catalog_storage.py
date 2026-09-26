@@ -1,17 +1,15 @@
 """Market file and graph products use their actual delivery storage."""
 
+import hashlib
 import json
 import uuid
-import hashlib
 
-from modstore_server.auth_service import decode_access_token
 from modstore_server import catalog_store
-from modstore_server.models import CatalogItem, User, get_session_factory
+from modstore_server.auth_service import decode_access_token
+from modstore_server.models import CatalogItem, Purchase, User, get_session_factory
 
 
-def test_admin_market_upload_download_and_corruption(
-    client, auth_headers, monkeypatch, tmp_path
-):
+def test_admin_market_upload_download_and_corruption(client, auth_headers, monkeypatch, tmp_path):
     monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path / "catalog"))
     token = auth_headers["Authorization"].split()[-1]
     user_id = int(decode_access_token(token)["sub"])
@@ -40,24 +38,17 @@ def test_admin_market_upload_download_and_corruption(
     assert listing["total"] == 1
     assert pkg_id in client.get("/api/market/facets").json()["industries"]
     assert client.get(f"/api/market/catalog/{item_id}").status_code == 200
-    download = client.get(
-        f"/api/market/catalog/{item_id}/download", headers=auth_headers
-    )
+    download = client.get(f"/api/market/catalog/{item_id}/download", headers=auth_headers)
     assert download.status_code == 200 and download.content == raw
     archive.write_bytes(b"corrupted")
     assert client.get("/api/market/catalog", params={"q": pkg_id}).json()["total"] == 0
     assert pkg_id not in client.get("/api/market/facets").json()["industries"]
     assert client.get(f"/api/market/catalog/{item_id}").status_code == 404
     assert (
-        client.post(
-            f"/api/market/catalog/{item_id}/buy", headers=auth_headers
-        ).status_code
-        == 404
+        client.post(f"/api/market/catalog/{item_id}/buy", headers=auth_headers).status_code == 404
     )
     assert (
-        client.get(
-            f"/api/market/catalog/{item_id}/download", headers=auth_headers
-        ).status_code
+        client.get(f"/api/market/catalog/{item_id}/download", headers=auth_headers).status_code
         == 404
     )
 
@@ -81,24 +72,17 @@ def test_graph_template_needs_snapshot_not_archive(client, auth_headers):
     assert client.get("/api/market/catalog", params={"q": pkg_id}).json()["total"] == 1
     assert client.get(f"/api/market/catalog/{item_id}").status_code == 200
     assert (
-        client.post(
-            f"/api/market/catalog/{item_id}/buy", headers=auth_headers
-        ).status_code
-        == 200
+        client.post(f"/api/market/catalog/{item_id}/buy", headers=auth_headers).status_code == 200
     )
     with get_session_factory()() as db:
-        db.query(CatalogItem).filter(
-            CatalogItem.id == item_id
-        ).one().graph_snapshot = "{}"
+        db.query(CatalogItem).filter(CatalogItem.id == item_id).one().graph_snapshot = "{}"
         db.commit()
     assert client.get("/api/market/catalog", params={"q": pkg_id}).json()["total"] == 0
 
 
 def test_legacy_market_file_is_read_until_controlled_migration(monkeypatch, tmp_path):
     monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path / "persistent"))
-    monkeypatch.setattr(
-        catalog_store, "__file__", str(tmp_path / "legacy" / "catalog_store.py")
-    )
+    monkeypatch.setattr(catalog_store, "__file__", str(tmp_path / "legacy" / "catalog_store.py"))
     old_dir = tmp_path / "legacy" / "market_files"
     old_dir.mkdir(parents=True)
     old_file = old_dir / "original.xcmod"
@@ -111,9 +95,53 @@ def test_legacy_market_file_is_read_until_controlled_migration(monkeypatch, tmp_
     canonical = tmp_path / "persistent" / "files" / old_file.name
     canonical.parent.mkdir(parents=True, exist_ok=True)
     canonical.write_bytes(b"same name, different package")
-    monkeypatch.setattr(
-        catalog_store, "__file__", str(tmp_path / "new" / "catalog_store.py")
-    )
+    monkeypatch.setattr(catalog_store, "__file__", str(tmp_path / "new" / "catalog_store.py"))
     assert catalog_store.market_archive_path(old_file.name, digest) == migrated
     migrated.write_bytes(b"modified published bytes")
     assert catalog_store.market_archive_path(old_file.name, digest) is None
+
+
+def test_hidden_and_delisted_id_routes_require_prior_purchase(
+    client, auth_headers, monkeypatch, tmp_path
+):
+    monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path / "catalog"))
+    user_id = int(decode_access_token(auth_headers["Authorization"].split()[-1])["sub"])
+    pkg_id = f"hidden-market-{uuid.uuid4().hex[:10]}"
+    data = b"PK\x03\x04historical-purchase"
+    filename = f"{pkg_id}.xcmod"
+    (catalog_store.files_dir() / filename).write_bytes(data)
+    with get_session_factory()() as db:
+        item = CatalogItem(
+            pkg_id=pkg_id,
+            version="1.0.0",
+            name=pkg_id,
+            artifact="mod",
+            stored_filename=filename,
+            sha256=hashlib.sha256(data).hexdigest(),
+            is_public=False,
+            compliance_status="approved",
+            price=0,
+        )
+        db.add(item)
+        db.commit()
+        item_id = item.id
+    detail = f"/api/market/catalog/{item_id}"
+    download = detail + "/download"
+    buy = detail + "/buy"
+    assert client.get(detail).status_code == 404
+    assert client.get(detail, headers=auth_headers).status_code == 404
+    assert client.get(download, headers=auth_headers).status_code == 404
+    assert client.post(buy, headers=auth_headers).status_code == 404
+    with get_session_factory()() as db:
+        item = db.get(CatalogItem, item_id)
+        item.is_public = True
+        item.compliance_status = "delisted"
+        db.commit()
+    assert client.get(detail, headers=auth_headers).status_code == 404
+    with get_session_factory()() as db:
+        db.add(Purchase(user_id=user_id, catalog_id=item_id, amount=0))
+        db.commit()
+    assert client.get(detail, headers=auth_headers).status_code == 200
+    result = client.get(download, headers=auth_headers)
+    assert result.status_code == 200 and result.content == data
+    assert client.post(buy, headers=auth_headers).status_code == 404

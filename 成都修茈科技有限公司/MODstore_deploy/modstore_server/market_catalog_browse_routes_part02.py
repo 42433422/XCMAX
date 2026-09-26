@@ -57,10 +57,6 @@ def api_market_catalog_detail(
         if not item:
             raise _facade().HTTPException(404, "商品不存在")
         _facade()._reject_internal_duty_catalog_item(item)
-        from modstore_server.catalog_store import market_item_available
-
-        if not market_item_available(item):
-            raise _facade().HTTPException(404, "商品文件不可用")
         purchased = False
         favorited = False
         user_has_review = False
@@ -68,25 +64,38 @@ def api_market_catalog_detail(
             purchased = (
                 session.query(_facade().Purchase)
                 .filter(
-                    _facade().Purchase.user_id == user.id, _facade().Purchase.catalog_id == item.id
+                    _facade().Purchase.user_id == user.id,
+                    _facade().Purchase.catalog_id == item.id,
                 )
                 .first()
                 is not None
             )
+            if not _facade()._market_item_visible_to_user(item, user, purchased=purchased):
+                raise _facade().HTTPException(404, "商品不存在")
             favorited = (
                 session.query(_facade().Favorite)
                 .filter(
-                    _facade().Favorite.user_id == user.id, _facade().Favorite.catalog_id == item.id
+                    _facade().Favorite.user_id == user.id,
+                    _facade().Favorite.catalog_id == item.id,
                 )
                 .first()
                 is not None
             )
             user_has_review = (
                 session.query(_facade().Review)
-                .filter(_facade().Review.user_id == user.id, _facade().Review.catalog_id == item.id)
+                .filter(
+                    _facade().Review.user_id == user.id,
+                    _facade().Review.catalog_id == item.id,
+                )
                 .first()
                 is not None
             )
+        elif not _facade()._market_item_public(item):
+            raise _facade().HTTPException(404, "商品不存在")
+        from modstore_server.catalog_store import market_item_available
+
+        if not market_item_available(item):
+            raise _facade().HTTPException(404, "商品文件不可用")
         try:
             complaint_count = (
                 session.query(_facade().CatalogComplaint)

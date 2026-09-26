@@ -20,8 +20,7 @@ logger = logging.getLogger(__name__)
 def _public_pkg_ids_from_db() -> Set[str] | None:
     """返回已上架 pkg_id；数据库不可用时返回 None。"""
     try:
-        from modstore_server.db import get_session_factory
-        from modstore_server.models import CatalogItem
+        from modstore_server.models import CatalogItem, get_session_factory
 
         sf = get_session_factory()
         with sf() as session:
@@ -29,7 +28,7 @@ def _public_pkg_ids_from_db() -> Set[str] | None:
                 session.query(CatalogItem.pkg_id)
                 .filter(
                     CatalogItem.is_public == True,  # noqa: E712
-                    CatalogItem.compliance_status != "delisted",
+                    CatalogItem.compliance_status == "approved",
                 )
                 .all()
             )
@@ -43,7 +42,7 @@ def package_row_eligible_for_public_index(
     row: Dict[str, Any], *, public_pkg_ids: Set[str] | None
 ) -> bool:
     """是否应出现在 XCAGI / 公网 ``index.json``。"""
-    if not isinstance(row, dict):
+    if not isinstance(row, dict) or public_pkg_ids is None:
         return False
     pid = norm_pkg_id(row.get("id"))
     if not pid:
@@ -64,12 +63,6 @@ def package_row_eligible_for_public_index(
 
     if not public_package_available(row):
         return False
-
-    if public_pkg_ids is None:
-        # 无市场库时：至少挡掉编制内 employee_pack；其余 mod 保持兼容
-        if artifact == "employee_pack":
-            return False
-        return True
 
     return pid in public_pkg_ids
 

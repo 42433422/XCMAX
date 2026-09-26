@@ -795,16 +795,27 @@ rollback() {
 }
 
 CATALOG_SOURCE="${PREVIOUS_ROOT}/${MODSTORE_SUBDIR}/modstore_server/catalog_data"
-ACTIVE_CATALOG_DIR="$(python3 - "$(systemctl show modstore.service -p MainPID --value)" "$CATALOG_SOURCE" <<'PY'
+ACTIVE_CATALOG_DIR="$(python3 - "$(systemctl show modstore.service -p MainPID --value)" "$CATALOG_SOURCE" "${ENV_DIR}/modstore-release.env" "$PREVIOUS_SHA" <<'PY'
 import os
 import sys
 
-pid, fallback = sys.argv[1:]
-entries = []
+pid, fallback, release_env, previous_sha = sys.argv[1:]
+value = ""
 if pid.isdigit() and int(pid) > 0:
-    with open(f"/proc/{pid}/environ", "rb") as handle:
-        entries = handle.read().split(b"\0")
-value = next((e.partition(b"=")[2].decode() for e in entries if e.startswith(b"MODSTORE_CATALOG_DIR=")), "")
+    try:
+        with open(f"/proc/{pid}/environ", "rb") as handle:
+            entries = handle.read().split(b"\0")
+        value = next((e.partition(b"=")[2].decode() for e in entries if e.startswith(b"MODSTORE_CATALOG_DIR=")), "")
+    except OSError:
+        pass
+if not value and previous_sha:
+    try:
+        with open(release_env, encoding="utf-8") as handle:
+            values = dict(line.rstrip("\n").split("=", 1) for line in handle if "=" in line)
+        if values.get("MODSTORE_GIT_SHA") == previous_sha:
+            value = values.get("MODSTORE_CATALOG_DIR", "")
+    except OSError:
+        pass
 print(os.path.realpath(value or fallback))
 PY
 )"
@@ -812,8 +823,13 @@ PY
   || fail "active catalog uses a different external directory: $ACTIVE_CATALOG_DIR"
 CATALOG_SERVICES_STOPPED=0
 RELEASE_SWITCHED=0
+CATALOG_STAGE=""
 recover_catalog_migration() {
   local status=$?
+  if [[ -n "$CATALOG_STAGE" && -d "$CATALOG_STAGE" ]]; then
+    rm -rf -- "$CATALOG_STAGE" || log "could not remove incomplete catalog stage: $CATALOG_STAGE"
+    CATALOG_STAGE=""
+  fi
   if [[ "$status" != 0 && "$CATALOG_SERVICES_STOPPED" == 1 ]]; then
     if [[ "$RELEASE_SWITCHED" == 1 ]]; then rollback || true
     else systemctl start modstore.service modstore-scheduler.service || true
@@ -850,6 +866,7 @@ PY
   else
     mv "$CATALOG_STAGE" "$CATALOG_DIR"
   fi
+  CATALOG_STAGE=""
 fi
 python3 - "$CATALOG_DIR/packages.json" <<'PY' || fail "persistent catalog index is invalid"
 import json

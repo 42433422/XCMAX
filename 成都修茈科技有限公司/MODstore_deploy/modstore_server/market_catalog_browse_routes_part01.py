@@ -18,7 +18,8 @@ def api_market_facets():
     with sf() as session:
         pub_filters = _facade()._market_catalog_visibility_filters()
         rows = [
-            row for row in session.query(_facade().CatalogItem).filter(*pub_filters).all()
+            row
+            for row in session.query(_facade().CatalogItem).filter(*pub_filters).all()
             if market_item_available(row)
         ]
         industries = sorted({r.industry for r in rows if r.industry})
@@ -38,9 +39,7 @@ def api_market_facets():
                 if _facade()._normalize_license_scope(r.license_scope, 0)
             }
         )
-        compliance_statuses = sorted(
-            {r.compliance_status for r in rows if r.compliance_status}
-        )
+        compliance_statuses = sorted({r.compliance_status for r in rows if r.compliance_status})
         result = {
             "industries": industries,
             "artifacts": artifacts,
@@ -112,7 +111,9 @@ def api_market_catalog(
 
             query = query.filter(_facade().CatalogItem.pkg_id.in_(list(OFFICE_EMPLOYEE_PKG_IDS)))
         elif collection == "office_employee_aux_pack_1":
-            from modstore_server.office_employee_aux_pack_1 import OFFICE_AUX_PACK_1_PKG_IDS_LIST
+            from modstore_server.office_employee_aux_pack_1 import (
+                OFFICE_AUX_PACK_1_PKG_IDS_LIST,
+            )
 
             query = query.filter(_facade().CatalogItem.pkg_id.in_(OFFICE_AUX_PACK_1_PKG_IDS_LIST))
         elif collection == "workflow_employee":
@@ -120,7 +121,9 @@ def api_market_catalog(
 
             query = query.filter(_facade().CatalogItem.pkg_id.in_(list(WORKFLOW_EMPLOYEE_PKG_IDS)))
         elif collection == "host_foundation":
-            from modstore_server.host_foundation_pack import HOST_FOUNDATION_EMPLOYEE_PACK_ID
+            from modstore_server.host_foundation_pack import (
+                HOST_FOUNDATION_EMPLOYEE_PACK_ID,
+            )
 
             query = query.filter(_facade().CatalogItem.pkg_id == HOST_FOUNDATION_EMPLOYEE_PACK_ID)
         elif not collection:
@@ -128,16 +131,11 @@ def api_market_catalog(
 
             query = query.filter(~_facade().CatalogItem.pkg_id.in_(list(INFRASTRUCTURE_PKG_IDS)))
             query = query.filter(~_facade().CatalogItem.pkg_id.like("xcagi-%-bridge"))
-        available_rows = (
-            query.order_by(
-                _facade().CatalogItem.rank_score.desc(), _facade().CatalogItem.created_at.desc()
-            )
-            .all()
-        )
-        available_rows = [
-            row for row in available_rows
-            if market_item_available(row)
-        ]
+        available_rows = query.order_by(
+            _facade().CatalogItem.rank_score.desc(),
+            _facade().CatalogItem.created_at.desc(),
+        ).all()
+        available_rows = [row for row in available_rows if market_item_available(row)]
         total = len(available_rows)
         rows = available_rows[offset : offset + limit]
         purchased_ids = set()
@@ -181,7 +179,8 @@ def api_market_catalog(
             try:
                 counts = (
                     session.query(
-                        _facade().CatalogComplaint.catalog_id, _facade().CatalogComplaint.id
+                        _facade().CatalogComplaint.catalog_id,
+                        _facade().CatalogComplaint.id,
                     )
                     .filter(_facade().CatalogComplaint.catalog_id.in_(ids))
                     .all()

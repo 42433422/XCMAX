@@ -111,4 +111,4 @@ python scripts/restore_postgres.py "$env:TEMP\fake-modstore-postgres.dump" --cle
   - [`docs/runbooks/incident-response.md`](../../incident-response.md)
   - [`docs/runbooks/chaos-game-day.md`](../../chaos-game-day.md)
   - [`docs/runbooks/disaster-recovery.md`](../../disaster-recovery.md)
-  - [`docs/runbooks/remote-server-operations.md`](../../remote-server-operations.md)
+  - [旧部署指引归档](../../../../../../ARCHIVE_POINTER.md)

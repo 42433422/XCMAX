@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-import uuid
 import hashlib
+import uuid
 from decimal import Decimal
 
 from modstore_server.auth_service import decode_access_token
 from modstore_server.db.billing import Entitlement
 from modstore_server.db.catalog import CatalogItem, Purchase
-from modstore_server.db.delivery_commerce import AssetInstallCommand, UpdateInstallationReceipt
+from modstore_server.db.delivery_commerce import (
+    AssetInstallCommand,
+    UpdateInstallationReceipt,
+)
 from modstore_server.models import User, get_session_factory
 
 
@@ -293,7 +296,9 @@ def test_non_installable_purchased_asset_remains_download_only(client, auth_head
     assert "仅支持下载" in response.json()["detail"]
 
 
-def test_claimed_download_requires_exact_published_bytes(client, auth_headers, monkeypatch, tmp_path):
+def test_claimed_download_requires_exact_published_bytes(
+    client, auth_headers, monkeypatch, tmp_path
+):
     monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path / "catalog"))
     catalog_id, _, _, installation_id = _paid_asset(auth_headers)
     good = b"PK\x03\x04exact-customer-asset"
@@ -306,13 +311,15 @@ def test_claimed_download_requires_exact_published_bytes(client, auth_headers, m
         db.commit()
     archive.write_bytes(b"corrupt-customer-asset")
     created = client.post(
-        "/api/asset-installations/commands", headers=auth_headers,
+        "/api/asset-installations/commands",
+        headers=auth_headers,
         json={"catalog_id": catalog_id, "idempotency_key": uuid.uuid4().hex},
     )
     assert created.status_code == 200, created.text
     command_id = created.json()["command"]["id"]
     claimed = client.post(
-        f"/api/asset-installations/commands/{command_id}/claim", headers=auth_headers,
+        f"/api/asset-installations/commands/{command_id}/claim",
+        headers=auth_headers,
         json={"installation_id": installation_id},
     )
     assert claimed.status_code == 200, claimed.text

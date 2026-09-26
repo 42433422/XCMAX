@@ -34,15 +34,21 @@ from modstore_server.api.catalog_public_helpers import (
 from modstore_server.api.catalog_public_helpers import (
     validated_automation_provenance as _validated_automation_provenance,
 )
-from modstore_server.catalog_publication_policy import is_private_package, require_public_manifest
+from modstore_server.catalog_public_index import (
+    _public_pkg_ids_from_db,
+    package_row_eligible_for_public_index,
+)
+from modstore_server.catalog_publication_policy import (
+    is_private_package,
+    require_public_manifest,
+)
 from modstore_server.catalog_store import (
     PackageConflictError,
     append_package,
-    load_store,
     get_package,
     list_packages,
     list_versions,
-    public_package_available,
+    load_store,
     promote_draft_to_stable,
     read_package_manifest_from_zip,
     sha256_file,
@@ -70,36 +76,49 @@ def api_list_packages(
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ):
+    public_ids = _public_pkg_ids_from_db()
     rows = [
-        r for r in load_store().get("packages") or []
-        if isinstance(r, dict) and not is_private_package(r) and public_package_available(r)
+        r
+        for r in load_store().get("packages") or []
+        if package_row_eligible_for_public_index(r, public_pkg_ids=public_ids)
     ]
     if artifact:
         rows = [r for r in rows if str(r.get("artifact") or "mod") == artifact]
     if q:
         needle = q.lower()
-        rows = [r for r in rows if any(
-            needle in str(r.get(key) or "").lower() for key in ("name", "id", "description")
-        )]
-    return {"packages": rows[offset : offset + limit], "total": len(rows), "limit": limit, "offset": offset}
+        rows = [
+            r
+            for r in rows
+            if any(needle in str(r.get(key) or "").lower() for key in ("name", "id", "description"))
+        ]
+    return {
+        "packages": rows[offset : offset + limit],
+        "total": len(rows),
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 @router.get("/packages/{pkg_id}/{version}", summary="包详情")
 def api_get_package(pkg_id: str, version: str):
     r = get_package(pkg_id, version)
-    if not r or is_private_package(r) or not public_package_available(r):
+    if not r or not package_row_eligible_for_public_index(
+        r, public_pkg_ids=_public_pkg_ids_from_db()
+    ):
         raise HTTPException(404, "未找到该版本")
     return r
 
 
-@router.get("/packages/by-id/{pkg_id}/versions", summary="同 id 下所有版本（含 draft/stable）")
+@router.get("/packages/by-id/{pkg_id}/versions", summary="同 id 下已公开版本")
 def api_package_versions(pkg_id: str):
     pid = (pkg_id or "").strip()
     if not pid:
         raise HTTPException(400, "pkg_id 无效")
+    public_ids = _public_pkg_ids_from_db()
     versions = [
-        r for r in list_versions(pid)
-        if not is_private_package(r) and public_package_available(r)
+        r
+        for r in list_versions(pid)
+        if package_row_eligible_for_public_index(r, public_pkg_ids=public_ids)
     ]
     return {"pkg_id": pid, "versions": versions}
 
@@ -148,8 +167,8 @@ def api_download(pkg_id: str, version: str):
     r = get_package(pkg_id, version)
     if not r:
         raise HTTPException(404, "未找到")
-    if is_private_package(r):
-        raise HTTPException(404, "客户交付种子包需授权下载")
+    if not package_row_eligible_for_public_index(r, public_pkg_ids=_public_pkg_ids_from_db()):
+        raise HTTPException(404, "该版本尚未公开发布")
     name = r.get("stored_filename")
     if not name:
         raise HTTPException(404, "该记录无本地文件")
@@ -179,10 +198,9 @@ async def api_upload_package(
     if not (str(meta.get("id") or "").strip() and str(meta.get("version") or "").strip()):
         raise HTTPException(400, "metadata 须含 id 与 version")
     rec: Dict[str, Any] = dict(meta)
-    requested_public_listing = rec.get("public_listing", False)
-    if not isinstance(requested_public_listing, bool):
+    public_listing = rec.get("public_listing", False)
+    if not isinstance(public_listing, bool):
         raise HTTPException(400, "public_listing 必须为 boolean")
-    public_listing = requested_public_listing
     if not public_listing:
         rec.pop("public_listing", None)
     if public_listing and auth_mode != "auto_publish":
@@ -252,6 +270,8 @@ async def api_upload_package(
         raise HTTPException(400, "包内缺少有效 manifest.json")
     if is_private_package(manifest):
         raise HTTPException(403, "客户私包须走已绑定 owner 的工单生产中心")
+    if not public_listing:
+        rec["public_listing"] = False
     if public_listing:
         try:
             require_public_manifest(manifest)

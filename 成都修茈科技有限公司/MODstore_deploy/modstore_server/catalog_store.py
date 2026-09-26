@@ -6,15 +6,15 @@ import hashlib
 import json
 import os
 import shutil
-import stat
 import tempfile
 import threading
 import zipfile
 from contextlib import contextmanager
-from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
+from modstore_server.catalog_archive_integrity import archive_path as _archive_path
+from modstore_server.catalog_archive_integrity import sha256_file
 from modstore_server.catalog_publication_policy import stable_version
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
@@ -144,43 +144,6 @@ def save_store(data: Dict[str, Any]) -> None:
             tmp.unlink(missing_ok=True)
 
 
-def sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
-@lru_cache(maxsize=512)
-def _archive_digest(path: str, identity: tuple[int, ...]) -> str:
-    return sha256_file(Path(path))
-
-
-def _archive_path(filename: Any, expected_sha256: Any, roots: tuple[Path, ...]) -> Path | None:
-    name = str(filename or "").strip()
-    digest = str(expected_sha256 or "").strip().lower()
-    if not name or Path(name).name != name or "\\" in name:
-        return None
-    if len(digest) != 64 or any(ch not in "0123456789abcdef" for ch in digest):
-        return None
-    for root in roots:
-        path = root / name
-        try:
-            before = path.lstat()
-            if not stat.S_ISREG(before.st_mode):
-                continue
-            identity = (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns)
-            if _archive_digest(str(path), identity) != digest:
-                continue
-            after = path.lstat()
-            if identity == (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns):
-                return path
-        except OSError:
-            continue
-    return None
-
-
 def catalog_archive_available(filename: Any, expected_sha256: Any) -> bool:
     return _archive_path(filename, expected_sha256, (files_dir(),)) is not None
 
@@ -194,8 +157,13 @@ def public_package_available(row: Dict[str, Any]) -> bool:
 
 def market_archive_path(filename: Any, expected_sha256: Any) -> Path | None:
     return _archive_path(
-        filename, expected_sha256,
-        (files_dir(), default_catalog_dir() / "market_files", Path(__file__).resolve().parent / "market_files"),
+        filename,
+        expected_sha256,
+        (
+            files_dir(),
+            default_catalog_dir() / "market_files",
+            Path(__file__).resolve().parent / "market_files",
+        ),
     )
 
 
@@ -203,7 +171,11 @@ def market_item_available(item: Any) -> bool:
     if str(item.artifact or "").lower() == "workflow_template" and not item.stored_filename:
         try:
             graph = json.loads(item.graph_snapshot or "{}")
-            return isinstance(graph, dict) and isinstance(graph.get("nodes"), list) and bool(graph["nodes"])
+            return (
+                isinstance(graph, dict)
+                and isinstance(graph.get("nodes"), list)
+                and bool(graph["nodes"])
+            )
         except (TypeError, ValueError):
             return False
     return market_archive_path(item.stored_filename, item.sha256) is not None

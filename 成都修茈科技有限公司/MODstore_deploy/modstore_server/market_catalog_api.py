@@ -24,6 +24,10 @@ from modstore_server.market_shared import (
     _optional_current_user,
     _require_admin,
 )
+from modstore_server.market_shared import market_item_public as _market_item_public
+from modstore_server.market_shared import (
+    market_item_visible_to_user as _market_item_visible_to_user,
+)
 from modstore_server.models import (
     CatalogComplaint,
     CatalogItem,
@@ -91,7 +95,7 @@ def _market_catalog_visibility_filters():
     duty = list(all_planned_employee_ids())
     parts = [
         CatalogItem.is_public == True,  # noqa: E712
-        CatalogItem.compliance_status != "delisted",
+        CatalogItem.compliance_status == "approved",
     ]
     if duty:
         parts.append(
