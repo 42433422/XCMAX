@@ -62,7 +62,7 @@ jobs:
         working-directory: 成都修茈科技有限公司
         run: python3 scripts/site_acceptance.py
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '20'
 
