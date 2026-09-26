@@ -15,6 +15,9 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import get_current_user, get_db
+from modstore_server.customer_delivery_workbench_start import (
+    _start_custom_delivery_run as _start_custom_delivery_run,
+)
 from modstore_server.customer_service_api import (
     _visible_ticket_or_404,
 )
@@ -24,11 +27,6 @@ from modstore_server.customer_service_delivery_completion import (
 from modstore_server.customer_service_delivery_models import (
     CustomDeliveryDecisionBody,
     CustomDeliveryInstallReceiptBody,
-)
-from modstore_server.customer_service_delivery_models import (
-    custom_delivery_brief as _custom_delivery_brief,
-)
-from modstore_server.customer_service_delivery_models import (
     custom_delivery_commerce_blockers,
     custom_delivery_crm,
 )
@@ -52,11 +50,6 @@ from modstore_server.models_cs import (
 logger = logging.getLogger(__name__)
 router = APIRouter()
 _get_current_user = get_current_user
-
-
-from modstore_server.customer_delivery_workbench_start import (
-    _start_custom_delivery_run as _start_custom_delivery_run,
-)
 
 
 async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, Any]:
@@ -95,8 +88,11 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
     elif (evidence.get("resolution") or {}).get("runtime_failure") and (
         evidence.get("resolution") or {}
     ).get("state") in {"queued_rework", "repair_failed"}:
-        stage, label = "rework", str(
-            (evidence.get("resolution") or {}).get("last_error") or "业务验证未通过，原单返工中"
+        stage, label = (
+            "rework",
+            str(
+                (evidence.get("resolution") or {}).get("last_error") or "业务验证未通过，原单返工中"
+            ),
         )
     elif (evidence.get("resolution") or {}).get("state") == "awaiting_runtime":
         stage, label = "delivering", "业务验证失败，等待宿主发行身份核验"
@@ -148,6 +144,18 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
             {
                 "kind": row["kind"],
                 "id": row["id"],
+                **{
+                    key: row[key]
+                    for key in (
+                        "version",
+                        "package_sha256",
+                        "source_mode",
+                        "source_git_sha",
+                        "source_git_tree",
+                        "source_sha256",
+                    )
+                    if row.get(key)
+                },
                 **(
                     {"source_artifact_kind": "employee"}
                     if row.get("source_employee_pack_id")
@@ -416,7 +424,9 @@ async def download_custom_delivery_artifact(
         }
     )
     evidence["download_grants"] = grants[-20:]
-    from modstore_server.customer_delivery_entitlements import grant_verified_delivery_access
+    from modstore_server.customer_delivery_entitlements import (
+        grant_verified_delivery_access,
+    )
 
     grant_verified_delivery_access(db, ticket, evidence, manifest, owner_id=int(user.id))
     ticket.evidence_json = json_dumps(evidence)

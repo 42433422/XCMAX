@@ -16,6 +16,7 @@ def test_private_delivery_keeps_customer_identity_and_separate_runtime():
     row = customer_delivery.delivery_for_account("SUNBIRD")
     assert row["delivery_mode"] == "private_mod"
     assert row["runtime_mod_id"] == "sunbird-attendance-custom"
+    assert row["market_user_id"] == 29
     assert (
         customer_delivery.account_custom_mod_ids_for_industry("饰品包装", {"attendance-industry"})
         == []
@@ -44,6 +45,36 @@ def test_private_delivery_keeps_customer_identity_and_separate_runtime():
         )
         is None
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "username,market_user_id,expected",
+    [("SUNBIRD", 29, {"taiyangniao-pro"}), ("OTHER", 29, set()), ("SUNBIRD", 45, set())],
+)
+async def test_private_delivery_context_requires_customer_account_even_with_entitlement(
+    monkeypatch, username, market_user_id, expected
+):
+    from starlette.requests import Request
+
+    from app.fastapi_routes import private_mod_delivery_context as context
+
+    monkeypatch.setattr(
+        "app.infrastructure.auth.dependencies.session_id_from_request", lambda _: "session"
+    )
+    monkeypatch.setattr(
+        "app.enterprise.mod_entitlements.enterprise_mod_filter_active", lambda: False
+    )
+    monkeypatch.setattr(
+        "app.enterprise.private_delivery_binding.load_session_private_delivery_binding",
+        lambda _: {
+            "mod_ids": {"taiyangniao-pro"},
+            "market_user_id": market_user_id,
+            "username": username,
+        },
+    )
+    result = await context._private_mod_context(Request({"type": "http", "headers": []}))
+    assert result["mod_ids"] == expected
 
 
 @pytest.mark.parametrize("row_kind", ["missing", "expired", "other", "malformed"])
@@ -133,6 +164,21 @@ def test_legacy_endpoints_reject_unauthenticated_requests(monkeypatch):
             )
 
 
+def test_attendance_file_owner_binds_tenant_and_local_user(monkeypatch):
+    from starlette.requests import Request
+
+    from app.mod_sdk import attendance_artifacts as artifacts
+
+    request = Request({"type": "http", "headers": []})
+    monkeypatch.setattr(artifacts, "get_logged_in_user", lambda _: SimpleNamespace(id=7))
+    monkeypatch.setattr(artifacts, "resolve_workspace_owner_id", lambda *_: "tenant:11")
+    assert artifacts.owner_for_request(request) == "tenant:11|user:7"
+    monkeypatch.setattr(artifacts, "resolve_workspace_owner_id", lambda *_: "tenant:22")
+    assert artifacts.owner_for_request(request) == "tenant:22|user:7"
+    with pytest.raises(ValueError):
+        artifacts.owner_for_user_id(7, "untrusted")
+
+
 def test_shared_runtime_conversion_routes_are_all_guarded(monkeypatch, tmp_path):
     import importlib.util
     import logging
@@ -182,6 +228,76 @@ def test_shared_runtime_conversion_routes_are_all_guarded(monkeypatch, tmp_path)
             ("get", "download"),
         ]:
             assert getattr(client, method)(f"/attendance/{path}").status_code == 403
+
+
+@pytest.mark.parametrize(
+    "relative_path",
+    [
+        "XCAGI/mods/attendance-industry/backend/attendance_routes.py",
+        "mods/taiyangniao-pro/backend/attendance_routes.py",
+        "XCAGI/mods/taiyangniao-pro/backend/attendance_routes.py",
+    ],
+)
+def test_attendance_download_is_limited_to_current_user_outputs(
+    monkeypatch, tmp_path, relative_path
+):
+    import importlib.util
+    import logging
+    import sys
+    from pathlib import Path
+
+    from fastapi import APIRouter
+
+    from app.mod_sdk.attendance_artifacts import allocate_file, owner_for_user_id
+
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    database = tmp_path / "data" / "xcagi.db"
+    database.parent.mkdir()
+    database.write_bytes(b"private database")
+    own_owner = owner_for_user_id(1, "tenant:11")
+    own_output = allocate_file(own_owner, "output")
+    own_output.write_bytes(b"own result")
+    other_output = allocate_file(owner_for_user_id(2, "tenant:11"), "output")
+    other_output.write_bytes(b"other result")
+    other_tenant_output = allocate_file(owner_for_user_id(1, "tenant:22"), "output")
+    other_tenant_output.write_bytes(b"other tenant result")
+
+    path = Path(__file__).resolve().parents[2] / relative_path
+    spec = importlib.util.spec_from_file_location(
+        f"attendance_download_test_{path.parent.parent.name}", path
+    )
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(
+        sys.modules,
+        "attendance_engine.convert",
+        SimpleNamespace(convert_attendance_file=lambda *_a, **_k: {}),
+    )
+    if "taiyangniao-pro" in relative_path:
+        from app.mod_sdk import attendance
+
+        monkeypatch.setattr(attendance, "ensure_attendance_engine_on_path", lambda: None)
+    spec.loader.exec_module(module)
+    router = APIRouter()
+    module.register(
+        router,
+        logger=logging.getLogger(__name__),
+        get_database_path=lambda: tmp_path / "empty.db",
+        DEFAULT_TEMPLATE_RELPATH="424/template.xlsx",
+        _normalize_relpath=lambda value, **_kwargs: value,
+        _resolve_personnel_roster=lambda *_args: [],
+    )
+    app = FastAPI()
+    app.dependency_overrides[module.owner_for_request] = lambda: own_owner
+    if "attendance-industry" in relative_path:
+        app.dependency_overrides[module.require_attendance_conversion] = lambda: None
+    app.include_router(router)
+
+    with TestClient(app) as client:
+        endpoint = "/attendance/download"
+        assert client.get(endpoint, params={"relpath": own_output.name}).content == b"own result"
+        assert client.get(endpoint, params={"relpath": other_output.name}).status_code == 404
+        assert client.get(endpoint, params={"relpath": other_tenant_output.name}).status_code == 404
+        assert client.get(endpoint, params={"relpath": "data/xcagi.db"}).status_code == 400
 
 
 @pytest.mark.asyncio

@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 from typing import Any, cast
 
-from fastapi import APIRouter, Body, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, Response
 
 from app.application.workflow.types import normalize_workflow_risk
@@ -15,6 +15,7 @@ from app.fastapi_routes.xcagi_compat_product_actions import (
     execute_product_action,
     price_list_word_response,
 )
+from app.infrastructure.auth.business_scope_gate import require_scoped_business_permission
 from app.infrastructure.auth.db_token import verify_db_read_token_header
 from app.infrastructure.persistence.compat_db.base import (
     _business_mod_json_block,
@@ -39,7 +40,10 @@ from app.infrastructure.persistence.compat_db.writes import (
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-router = APIRouter(tags=["xcagi-compat"])
+router = APIRouter(
+    tags=["xcagi-compat"],
+    dependencies=[Depends(require_scoped_business_permission("product.view", "product.edit"))],
+)
 logger = logging.getLogger(__name__)
 
 

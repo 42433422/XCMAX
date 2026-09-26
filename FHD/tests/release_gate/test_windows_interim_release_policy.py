@@ -79,8 +79,16 @@ def test_unsigned_public_download_stays_off_the_update_feed() -> None:
 def test_unsigned_public_download_is_verified_over_public_http() -> None:
     text = _interim_public_download_text()
 
-    assert "https://xiu-ci.com/xcagi-v${version}/enterprise/" in text
+    assert (
+        "https://xiu-ci.com/xcagi-v${version}/enterprise/${release_sha,,}/${artifact_sha}/${filename}"
+        in text
+    )
+    assert "${release_sha,,}/${local_sha}/${filename}" in text
+    assert 'mv -n "$staging_dir/$filename" "$official_dir/$filename"' in text
+    assert 'test "$existing_sha" = "$expected_sha"' in text
     assert "curl --http1.1 -fsSI" in text
+    assert 'public_sha="$(curl --http1.1 -fsSL --max-time 900' in text
+    assert 'test "$artifact_sha" = "$receipt_sha" && test "$artifact_sha" = "$sidecar_sha"' in text
     assert "sha256sum" in text
     assert "Published installer SHA256 mismatch" in text
     assert "download-windows-hotfix.json" in text
@@ -88,16 +96,12 @@ def test_unsigned_public_download_is_verified_over_public_http() -> None:
 
 def test_owner_signing_acceptance_is_bounded_and_independently_reviewed() -> None:
     record = json.loads(ACCEPTANCE.read_text(encoding="utf-8"))
-    canonical = json.dumps(
-        {
-            key: value
-            for key, value in record.items()
-            if key not in ("schema", "decision_record_sha256")
-        },
-        sort_keys=True,
-        ensure_ascii=False,
-        separators=(",", ":"),
-    )
+    body = {
+        key: value
+        for key, value in record.items()
+        if key not in ("schema", "decision_record_sha256")
+    }
+    canonical = json.dumps(body, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
 
     assert record["schema"] == "xcagi.windows_signing_acceptance/v1"
     assert record["status"] == "accepted_risk"

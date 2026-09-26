@@ -57,6 +57,9 @@ const {
     accountKind: 'personal',
     marketIsAdmin: false,
     marketIsEnterprise: false,
+    tenantId: null as number | null,
+    userRole: '',
+    permissions: [] as string[],
     refreshFromServer: vi.fn().mockResolvedValue(undefined),
   },
 }))
@@ -158,6 +161,7 @@ vi.mock('@/constants/genericModPack', async (importOriginal) => {
 vi.mock('@/utils/roleMenuProfile', () => ({
   buildRoleMenuProfile: vi.fn(() => ({})),
   canShowCoreMenuKey: () => true,
+  UNSCOPED_HOST_BUSINESS_KEYS: new Set(['products', 'customers', 'orders', 'orders-create', 'shipment-records', 'materials', 'inventory', 'print', 'printer-list', 'template-preview', 'traditional-mode', 'approval-hub', 'tools']),
 }))
 
 vi.mock('@/constants/adminOperatorNav', () => ({
@@ -260,6 +264,9 @@ describe('router/index enhanced', () => {
     mockAccountProfileStore.accountKind = 'personal'
     mockAccountProfileStore.marketIsAdmin = false
     mockAccountProfileStore.marketIsEnterprise = false
+    mockAccountProfileStore.tenantId = null
+    mockAccountProfileStore.userRole = ''
+    mockAccountProfileStore.permissions = []
     mockAccountProfileStore.refreshFromServer.mockResolvedValue(undefined)
     mockResolvePlannerChatHomePath.mockReturnValue('/')
     mockResolvePlannerPagePath.mockImplementation((p: string) => p)

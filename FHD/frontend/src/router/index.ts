@@ -25,7 +25,7 @@ import { DESKTOP_ADMIN_FORBIDDEN_MESSAGE, isAdminConsoleSpa, resolveAdminConsole
 import { isDesktopShell } from '@/utils/desktopShell'
 import { ADMIN_HOST_ROUTE_RECORDS } from '@admin-console-inject/adminHostRoutes'
 import { ADMIN_OPERATOR_BLOCKED_ROUTE_NAMES, ADMIN_OPERATOR_HOME_ROUTE } from '@/constants/adminOperatorNav'
-import { buildRoleMenuProfile, canShowCoreMenuKey } from '@/utils/roleMenuProfile'
+import { buildRoleMenuProfile, canShowCoreMenuKey, UNSCOPED_HOST_BUSINESS_KEYS } from '@/utils/roleMenuProfile'
 import { isClientErpSidebarContext } from '@/constants/genericModPack'
 import { resolveInitialRoutes } from './initialRouteSelection'
 import { CORE_ROUTES } from './routes/core'
@@ -123,6 +123,34 @@ router.beforeEach(async (to, _from, next) => {
         },
         replace: true,
       })
+      return
+    }
+  }
+
+  if (!isAdminConsoleSpa() && !to.meta?.publicAccess) {
+    const { useAccountProfileStore } = await import('@/stores/accountProfile')
+    const profile = useAccountProfileStore()
+    // Settings is safe during the desktop session hint's background refresh.
+    if (!profile.loaded && !(isDesktopShell() && to.name === 'settings')) {
+      const sku = await fetchProductSku().catch(() => null)
+      if (sku === null || isEnterpriseEdition(sku)) {
+        await profile.refreshFromServer().catch(() => undefined)
+        if (!profile.loaded) {
+          next({ name: 'login', query: { redirect: to.fullPath }, replace: true })
+          return
+        }
+      }
+    }
+    if (to.name && UNSCOPED_HOST_BUSINESS_KEYS.has(String(to.name)) && profile.loaded && profile.tenantId != null) {
+      next({ name: 'settings', replace: true })
+      return
+    }
+    const member = profile.loaded && String(profile.userRole || '').startsWith('tenant:')
+    const allowed = to.name === 'settings'
+      || (to.name === 'business-docking' && profile.permissions?.includes('etl.read'))
+      || (to.name === 'tenant-roles' && profile.permissions?.includes('tenant.manage_roles'))
+    if (member && !allowed) {
+      next({ name: 'settings', replace: true })
       return
     }
   }
@@ -237,33 +265,6 @@ router.beforeEach(async (to, _from, next) => {
     next(resolvePlannerChatHomePath())
     return
   }
-
-  // 干净通用版：禁用 Mod 页 redirect，宿主 /products 等走 frontend/src/views/*
-  // if (
-  //   readErpDomainModFacadeEnabled() &&
-  //   to.name &&
-  //   !to.meta?.mod &&
-  //   !to.meta?.publicAccess
-  // ) {
-  //   const modPage = resolveHostBusinessPageRedirect(String(to.name));
-  //   if (modPage && to.path !== modPage.split('?')[0]) {
-  //     next({ path: modPage, query: to.query, hash: to.hash });
-  //     return;
-  //   }
-  // }
-
-  // if (
-  //   readCoreWorkflowModPagesEnabled() &&
-  //   to.name &&
-  //   !to.meta?.mod &&
-  //   !to.meta?.publicAccess
-  // ) {
-  //   const wfPage = resolveWorkflowPageRedirectForRouteName(String(to.name));
-  //   if (wfPage && to.path !== wfPage.split('?')[0]) {
-  //     next({ path: wfPage, query: to.query, hash: to.hash });
-  //     return;
-  //   }
-  // }
 
   // SSOT：桌面壳禁止 admin（须早于 requiresAdminAccount / 管理端客服侧，避免企业构建内 /admin/entitlements 可达）
   if (!to.meta?.publicAccess && isDesktopShell() && !isAdminConsoleSpa()) {

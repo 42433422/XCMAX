@@ -6,10 +6,11 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Body, File, Query, Request, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.application.workflow.types import normalize_workflow_risk
+from app.infrastructure.auth.business_scope_gate import require_scoped_business_permission
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.security.safe_download_path import (
     UnsafeDownloadPathError,
@@ -18,7 +19,11 @@ from app.utils.security.safe_download_path import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["legacy-products"], deprecated=True)
+router = APIRouter(
+    tags=["legacy-products"],
+    deprecated=True,
+    dependencies=[Depends(require_scoped_business_permission("product.view", "product.edit"))],
+)
 
 
 def _svc():

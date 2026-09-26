@@ -35,8 +35,8 @@ def load_registry(path: Path | None = None, *, enabled_only: bool = False) -> li
 
 
 def _normalize_cmd(cmd: list[str]) -> list[str]:
-    """将 cmd[0]=='python' 替换为当前解释器，跨环境兼容（CI 有 python，macOS 仅 python3）。"""
-    if cmd and cmd[0] == "python":
+    """使用当前解释器执行注册表中的 Python 命令，避免系统别名指向错误环境。"""
+    if cmd and cmd[0] in {"python", "python3"}:
         return [sys.executable] + cmd[1:]
     return cmd
 

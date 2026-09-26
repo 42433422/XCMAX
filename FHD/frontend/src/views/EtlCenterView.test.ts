@@ -193,7 +193,7 @@ function buttonByText(wrapper: Awaited<ReturnType<typeof mountView>>, text: stri
 describe('EtlCenterView folder workflow', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    currentUserMock.mockResolvedValue({ success: true, data: { permissions: ['etl.read', 'etl.execute', 'etl.rollback'] } })
+    currentUserMock.mockResolvedValue({ success: true, data: { permissions: ['etl.read', 'etl.execute', 'etl.rollback', 'etl.template.manage', 'etl.target.manage'] } })
     etlApiMock.capabilities.mockResolvedValue({
       enabled: true,
       limits: { max_file_bytes: 100 * 1024 * 1024, max_rows: 100_000 },
@@ -1006,6 +1006,21 @@ describe('EtlCenterView folder workflow', () => {
       expect(wrapper.text()).toContain(permission === 'denied' ? '需要管理员授予撤销权限' : '暂时无法确认撤销权限')
       await buttonByText(wrapper, '撤销本次写入')?.trigger('click')
       expect(etlApiMock.rollback).not.toHaveBeenCalled()
+    } finally {
+      wrapper.unmount()
+    }
+  })
+
+  it('hides write controls for a tenant member with ETL read permission only', async () => {
+    currentUserMock.mockResolvedValue({ success: true, data: { permissions: ['etl.read'] } })
+    const run = completedRun()
+    etlApiMock.run.mockResolvedValue(run)
+    const wrapper = await mountView(run.id)
+    try {
+      expect(buttonByText(wrapper, '选择文件')).toBeUndefined()
+      expect(buttonByText(wrapper, '写入数据库')).toBeUndefined()
+      expect(buttonByText(wrapper, '保存个人模板')).toBeUndefined()
+      expect(buttonByText(wrapper, '撤销本次写入')?.attributes('disabled')).toBeDefined()
     } finally {
       wrapper.unmount()
     }

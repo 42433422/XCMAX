@@ -158,15 +158,7 @@ def _dataset_agent_user_id(request: _facade().Request, params: dict[str, _facade
     )
     if not isinstance(access_context, dict):
         access_context = {}
-    return str(
-        request.headers.get("X-User-Id")
-        or request.headers.get("X-User-ID")
-        or access_context.get("actor_id")
-        or params.get("actor_id")
-        or params.get("user_id")
-        or params.get("tenant_id")
-        or "dataset-rag-route"
-    ).strip()
+    return str(access_context.get("actor_id") or "dataset-rag-route").strip()
 
 
 def _run_dataset_rag_agent(
@@ -243,6 +235,8 @@ def _run_dataset_rag_agent(
         payload = _facade()._merge_persy_recall(payload, request=request, params=data)
     if run.status in {"waiting_user", "blocked"}:
         status_code = 202
+    elif payload.get("error_code") == "dataset_permission_denied":
+        status_code = 403
     elif payload.get("error_code") == "tool_exception":
         status_code = 500
     else:

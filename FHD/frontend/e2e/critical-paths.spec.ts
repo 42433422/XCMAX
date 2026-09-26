@@ -1,5 +1,6 @@
-import { test, expect, type Route } from '@playwright/test'
+import { test, expect } from '@playwright/test'
 import { installE2eShellMocks, captureEvidence, csrfHeaders, isFullStack, loginBrowserSession } from './helpers'
+import { exportEtlRowsCsv, importBusinessCsv } from './etl-business'
 
 test.describe('P0 critical paths', () => {
   test.beforeEach(async ({ page }) => {
@@ -65,250 +66,136 @@ test.describe('P0 critical paths', () => {
     await captureEvidence(page, '05-mod.png')
   })
 
-  test('06 order data loop — 创建、编辑、导出并回读出货单', async ({ page }) => {
-    const apiBase = (process.env.MOD_PILOT_FHD_API || process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:5000').replace(/\/$/, '')
-    const fetchJson = async (path: string, init: RequestInit = {}) => {
-      if (isFullStack()) {
-        const liveRequest = page.request
-        const method = String(init.method || 'GET').toUpperCase()
-        const options = {
-          data: init.body ? JSON.parse(String(init.body)) : undefined,
-          headers: method === 'GET' ? {} : await csrfHeaders(liveRequest, {}, apiBase),
-          timeout: 30_000,
-        }
-        const resp = await liveRequest.fetch(`${apiBase}${path}`, { ...options, method })
-        const text = await resp.text()
-        let body: any = {}
-        try {
-          body = JSON.parse(text || '{}')
-        } catch {
-          body = {}
-        }
-        return { status: resp.status(), text, body }
-      }
-      return page.evaluate(
-        async ({ path, init }) => {
-          const resp = await fetch(path, init)
-          const text = await resp.text()
-          let body: any = {}
-          try {
-            body = JSON.parse(text || '{}')
-          } catch {
-            body = {}
-          }
-          return { status: resp.status, text, body }
-        },
-        { path, init },
-      )
-    }
-
-    const unitName = `E2E客户-${Date.now()}`
-    const updatedUnitName = `${unitName}-已编辑`
-    let orderId = ''
-
-    if (!isFullStack()) {
-      const mockOrder = {
-        id: 1001,
-        purchase_unit: unitName,
-        product_name: 'E2E产品',
-        quantity_kg: 10,
-        status: 'pending',
-      }
-      const handleOrderCollection = (route: Route) => {
-        if (route.request().method() === 'POST') {
-          return route.fulfill({
-            status: 201,
-            contentType: 'application/json',
-            body: JSON.stringify({ success: true, shipment: mockOrder }),
-          })
-        }
-        return route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({ success: true, data: [mockOrder], count: 1 }),
-        })
-      }
-      await page.route(/\/api\/(?:mod\/[^/]+\/)?orders(?:\?.*)?$/, handleOrderCollection)
-      await page.route('**/api/orders/1001', async (route) => {
-        if (route.request().method() === 'PATCH') {
-          Object.assign(mockOrder, JSON.parse(route.request().postData() || '{}'))
-        }
-        return route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({ success: true, data: mockOrder }),
-        })
-      })
-      await page.route('**/api/orders/export**', (route) =>
-        route.fulfill({
-          status: 200,
-          contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          body: 'mock-xlsx',
-        }),
-      )
-      // Browser-side fetches need an HTTP origin; about:blank cannot resolve /api/* URLs.
-      await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 })
-    } else {
-      // beforeEach already established and verified a real browser session.
-      // The dedicated login-flow spec owns the form-login assertion; this case
-      // keeps its proof focused on the authenticated order data loop.
-      await page.goto('/orders', {
-        waitUntil: 'domcontentloaded',
-        timeout: 30_000,
-      })
-      await expect(page).toHaveURL((url) => url.pathname === '/orders', { timeout: 25_000 })
-      await expect(page.locator('#view-orders')).toBeVisible({ timeout: 25_000 })
-    }
-
-    const createResp = await fetchJson('/api/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        purchase_unit: unitName,
-        products: [
-          {
-            product_name: 'E2E产品',
-            model_number: 'E2E-M1',
-            quantity_tins: 1,
-            tin_spec: 10,
-            unit_price: 19.9,
-            amount: 19.9,
-          },
-        ],
-      }),
-    })
-    expect([200, 201], createResp.text).toContain(createResp.status)
-    expect(createResp.body?.success, createResp.text).toBe(true)
-    orderId = String(createResp.body?.shipment?.id || createResp.body?.data?.id || '1001')
-    expect(orderId).not.toBe('')
-
-    const updateResp = await fetchJson(`/api/orders/${encodeURIComponent(orderId)}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        purchase_unit: updatedUnitName,
-        product_name: 'E2E产品-已编辑',
-        quantity_kg: 20,
-        status: 'completed',
-      }),
-    })
-    expect(updateResp.status, updateResp.text).toBe(200)
-    expect(updateResp.body?.success, updateResp.text).toBe(true)
-
-    const readResp = await fetchJson(`/api/orders/${encodeURIComponent(orderId)}`)
-    expect(readResp.status, readResp.text).toBe(200)
-    expect(readResp.body?.data?.purchase_unit).toBe(updatedUnitName)
-    expect(readResp.body?.data?.product_name).toBe('E2E产品-已编辑')
-    expect(readResp.body?.data?.status).toBe('completed')
-
+  test('06 tenant customer loop — 创建、编辑、回读并经 ETL 导出', async ({ page }) => {
     if (isFullStack()) {
-      const exportResp = await page.request.get(`${apiBase}/api/orders/export`, {
-        timeout: 30_000,
+      test.setTimeout(180_000)
+      const denied = await page.request.post('/api/orders', {
+        headers: await csrfHeaders(page.request),
+        data: { purchase_unit: '越权订单' },
       })
-      expect(exportResp.status(), await exportResp.text()).toBe(200)
-      expect(exportResp.headers()['content-type'] || '').toContain('spreadsheetml')
-      expect((await exportResp.body()).byteLength).toBeGreaterThan(100)
-    }
+      expect(denied.status(), await denied.text()).toBe(403)
 
-    // The route-level orders UI is covered by login-flow.spec.ts. This P0 keeps
-    // the data loop proof on create/edit/read/export so it does not fail on an
-    // unrelated sidebar/deep-link bootstrap race.
+      await page.goto('/business-docking', { waitUntil: 'domcontentloaded', timeout: 30_000 })
+      await expect(page.locator('#view-business-docking')).toBeVisible({ timeout: 25_000 })
+      const name = `E2E客户-${Date.now()}`
+      const created = await importBusinessCsv(page, 'customers',
+        `客户名称,联系人,电话,地址\n${name},验收员,13000000001,原地址\n`, 'new')
+      expect(created.row.after.customer_name).toBe(name)
+      const updated = await importBusinessCsv(page, 'customers',
+        `客户名称,联系人,电话,地址\n${name},验收员,13000000002,新地址\n`, 'update',
+        ['contact_phone', 'contact_address'])
+      expect(updated.row.match_ref).toBe(created.row.match_ref)
+      expect(updated.row.before.contact_phone).toBe('13000000001')
+      expect(updated.row.after.contact_phone).toBe('13000000002')
+      expect(updated.row.after.contact_address).toBe('新地址')
+      // The exported source is the completed, owner-scoped ETL row readback.
+      const exported = await exportEtlRowsCsv(page,
+        `客户名称,电话\n${updated.row.after.customer_name},${updated.row.after.contact_phone}\n`)
+      expect(exported.text).toContain(`${name},13000000002`)
+      expect(exported.sha256).toHaveLength(64)
+      await captureEvidence(page, '06-customer-data-loop.png')
+      await page.goto('/orders', { waitUntil: 'domcontentloaded', timeout: 30_000 })
+      await expect(page).toHaveURL((url) => url.pathname === '/settings', { timeout: 25_000 })
+      return
+    }
+    const order = {
+      id: 1001,
+      purchase_unit: 'E2E客户',
+      product_name: 'E2E产品',
+      quantity_kg: 10,
+      status: 'pending',
+    }
+    await page.route('**/api/orders', (route) => {
+      if (route.request().method() === 'POST') {
+        return route.fulfill({
+          status: 201,
+          contentType: 'application/json',
+          body: JSON.stringify({ success: true, shipment: order }),
+        })
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, data: [order] }),
+      })
+    })
+    await page.route('**/api/orders/1001', (route) => {
+      if (route.request().method() === 'PATCH') {
+        Object.assign(order, JSON.parse(route.request().postData() || '{}'))
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, data: order }),
+      })
+    })
+    await page.route('**/api/orders/export', (route) => route.fulfill({
+      status: 200,
+      contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      body: 'mock-xlsx',
+    }))
+    await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 })
+    const result = await page.evaluate(async () => {
+      const created = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ purchase_unit: 'E2E客户' }),
+      })
+      const createBody = await created.json()
+      const edited = await fetch('/api/orders/1001', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ purchase_unit: 'E2E客户-已编辑', status: 'completed' }),
+      })
+      const read = await fetch('/api/orders/1001')
+      const exported = await fetch('/api/orders/export')
+      return {
+        createStatus: created.status,
+        createId: createBody.shipment.id,
+        editStatus: edited.status,
+        read: (await read.json()).data,
+        exportStatus: exported.status,
+        exportBody: await exported.text(),
+      }
+    })
+    expect(result.createStatus).toBe(201)
+    expect(result.createId).toBe(1001)
+    expect(result.editStatus).toBe(200)
+    expect(result.read).toMatchObject({ purchase_unit: 'E2E客户-已编辑', status: 'completed' })
+    expect(result.exportStatus).toBe(200)
+    expect(result.exportBody).toBe('mock-xlsx')
     await expect(page.locator('.app-shell.is-ready')).toBeVisible({ timeout: 25_000 })
     await captureEvidence(page, '06-order-data-loop.png')
   })
 
-  test('07 material data loop — 创建、编辑、导出并回读材料', async ({ page }) => {
+  test('07 tenant product loop — 创建、编辑、回读并经 ETL 导出', async ({ page }) => {
     test.skip(!isFullStack(), 'covered by the mandatory release full-stack job')
-    const browserErrors: string[] = []
-    page.on('pageerror', (error) => browserErrors.push(`pageerror: ${error.message}`))
-    page.on('console', (message) => {
-      if (message.type() === 'error') browserErrors.push(`console: ${message.text()}`)
+    test.setTimeout(180_000)
+    const denied = await page.request.post('/api/materials', {
+      headers: await csrfHeaders(page.request),
+      data: { material_code: '越权材料', name: '越权材料' },
     })
-    page.on('requestfailed', (request) => {
-      if (request.resourceType() === 'script') {
-        browserErrors.push(`script: ${request.url()} (${request.failure()?.errorText || 'request failed'})`)
-      }
-    })
-    const apiBase = (process.env.MOD_PILOT_FHD_API || process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:5000').replace(/\/$/, '')
-    const requestJson = async (path: string, method = 'GET', data?: Record<string, unknown>) => {
-      const headers = method === 'GET' ? {} : await csrfHeaders(page.request, {}, apiBase)
-      const response = await page.request.fetch(`${apiBase}${path}`, {
-        method,
-        headers,
-        data,
-        timeout: 30_000,
-      })
-      const text = await response.text()
-      return {
-        status: response.status(),
-        text,
-        body: JSON.parse(text || '{}') as Record<string, any>,
-      }
-    }
+    expect(denied.status(), await denied.text()).toBe(403)
 
-    // beforeEach already established and verified a real browser session.
-    // Navigate through the authenticated route directly so this proof remains
-    // about material CRUD/export rather than a second concurrent login.
-    await page.goto('/orders', {
-      waitUntil: 'domcontentloaded',
-      timeout: 30_000,
-    })
-    await expect(page).toHaveURL((url) => url.pathname === '/orders', { timeout: 25_000 })
-    await expect(page.locator('#view-orders')).toBeVisible({ timeout: 25_000 })
-    await page.goto('/materials', { waitUntil: 'domcontentloaded', timeout: 30_000 })
-    await expect(page).toHaveURL((url) => url.pathname === '/materials')
-    try {
-      await expect(page.locator('#view-materials')).toBeVisible({ timeout: 25_000 })
-    } catch (error) {
-      await captureEvidence(page, '07-material-data-loop-failure.png').catch(() => undefined)
-      const bodyText = await page
-        .locator('body')
-        .innerText()
-        .catch(() => '<body unavailable>')
-      const original = error instanceof Error ? error.message : String(error)
-      throw new Error(
-        `${original}\nMaterial page diagnostics:\n${browserErrors.join('\n') || '<no browser errors>'}\nBody:\n${bodyText.slice(0, 4000)}`,
-      )
-    }
-
+    await page.goto('/business-docking', { waitUntil: 'domcontentloaded', timeout: 30_000 })
+    await expect(page.locator('#view-business-docking')).toBeVisible({ timeout: 25_000 })
     const stamp = Date.now()
-    const materialName = `E2E材料-${stamp}`
-    const updatedName = `${materialName}-已编辑`
-    const created = await requestJson('/api/materials', 'POST', {
-      material_code: `E2E-MAT-${stamp}`,
-      name: materialName,
-      category: 'E2E验收',
-      unit: 'kg',
-      quantity: 12,
-      unit_price: 8.5,
-      supplier: 'E2E供应商',
-    })
-    expect(created.status, created.text).toBe(200)
-    expect(created.body.success, created.text).toBe(true)
-    const materialId = String(created.body?.data?.id || '')
-    expect(materialId).not.toBe('')
-
-    const updated = await requestJson(`/api/materials/${encodeURIComponent(materialId)}`, 'PUT', {
-      name: updatedName,
-      category: 'E2E验收-已编辑',
-      quantity: 24,
-      unit_price: 9.75,
-    })
-    expect(updated.status, updated.text).toBe(200)
-    expect(updated.body.success, updated.text).toBe(true)
-
-    const listed = await requestJson(`/api/materials?search=${encodeURIComponent(updatedName)}`)
-    expect(listed.status, listed.text).toBe(200)
-    const rows = Array.isArray(listed.body?.data) ? listed.body.data : []
-    expect(rows.some((row: any) => String(row.id) === materialId && row.name === updatedName)).toBe(true)
-
-    const exported = await page.request.get(`${apiBase}/api/materials/export`, { timeout: 30_000 })
-    expect(exported.status(), await exported.text()).toBe(200)
-    expect(exported.headers()['content-type'] || '').toContain('spreadsheetml')
-    expect((await exported.body()).byteLength).toBeGreaterThan(100)
-
-    await page.locator('#view-materials .search-box input').fill(updatedName)
-    await expect(page.getByText(updatedName, { exact: true })).toBeVisible({ timeout: 20_000 })
-    await captureEvidence(page, '07-material-data-loop.png')
+    const unit = `E2E单位-${stamp}`
+    const model = `E2E型号-${stamp}`
+    const created = await importBusinessCsv(page, 'products',
+      `购买单位,型号,产品名称,价格\n${unit},${model},E2E产品,8.50\n`, 'new')
+    expect(created.row.after.model_number).toBe(model)
+    const updated = await importBusinessCsv(page, 'products',
+      `购买单位,型号,产品名称,价格\n${unit},${model},E2E产品,9.75\n`, 'update', ['price'])
+    expect(updated.row.match_ref).toBe(created.row.match_ref)
+    expect(Number(updated.row.before.price)).toBe(8.5)
+    expect(Number(updated.row.after.price)).toBe(9.75)
+    const exported = await exportEtlRowsCsv(page,
+      `购买单位,型号,产品名称,价格\n${unit},${model},E2E产品,${updated.row.after.price}\n`)
+    expect(exported.text).toContain(`${unit},${model},E2E产品,9.75`)
+    expect(exported.sha256).toHaveLength(64)
+    await captureEvidence(page, '07-product-data-loop.png')
+    await page.goto('/materials', { waitUntil: 'domcontentloaded', timeout: 30_000 })
+    await expect(page).toHaveURL((url) => url.pathname === '/settings', { timeout: 25_000 })
   })
 })

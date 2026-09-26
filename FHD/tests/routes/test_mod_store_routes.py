@@ -1179,6 +1179,22 @@ class TestPrivateDeliveryRequests:
         assert response.json()["data"]["custom_delivery"]["stage"] == "production"
         assert remote.await_args.args[:2] == ("jwt", "/api/customer-service/custom-deliveries")
         assert remote.await_args.kwargs["payload"]["kind"] == "bundle"
+        assert remote.await_args.kwargs["payload"]["source_mode"] == "generated"
+
+        response = client.post(
+            "/private-delivery/requests",
+            json={
+                "kind": "module",
+                "source_mode": "versioned_main",
+                "suggested_id": "sunbird-attendance-custom",
+                "title": "太阳鸟考勤转换",
+                "requirements": "交付已入主线的考勤转换私有模块",
+                "acceptance_criteria": "客户安装后真实转换并导出结果",
+            },
+        )
+        assert response.status_code == 200, response.text
+        assert remote.await_args.kwargs["payload"]["source_mode"] == "versioned_main"
+        assert remote.await_args.kwargs["payload"]["suggested_id"] == "sunbird-attendance-custom"
 
     def test_install_request_requires_market_login(self, client: TestClient, monkeypatch) -> None:
         monkeypatch.setattr(

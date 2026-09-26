@@ -76,6 +76,7 @@ DEFAULT_PERMISSIONS: list[_PermissionSeed] = [
     {"name": "查看物料", "code": "material.view", "module": "material"},
     {"name": "编辑物料", "code": "material.edit", "module": "material"},
     {"name": "管理用户", "code": "admin.manage_users", "module": "admin"},
+    {"name": "管理本企业角色", "code": "tenant.manage_roles", "module": "tenant"},
     {"name": "系统配置", "code": "admin.system_config", "module": "admin"},
     {"name": "查看企业知识", "code": "dataset.read", "module": "knowledge"},
     {"name": "管理企业知识", "code": "dataset.write", "module": "knowledge"},

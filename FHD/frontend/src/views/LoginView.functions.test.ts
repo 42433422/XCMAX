@@ -68,6 +68,7 @@ vi.mock('@/utils/productSku', () => ({
 vi.mock('@/stores/accountProfile', () => ({
   useAccountProfileStore: () => ({
     applyFromLoginPayload: vi.fn(),
+    refreshFromServer: vi.fn(),
     isAdminAccount: false,
     accountKind: 'personal',
     loaded: true,
@@ -219,6 +220,17 @@ describe('LoginView functions – selectEnterpriseLogin / selectAdminLogin', () 
     expect(vm.accountKind).toBe('enterprise')
     expect(vm.errorMessage).toBe('')
     expect(vm.altLoginHint).toBe('')
+  })
+
+  it('passes the visible one-use invitation code with a market password login', async () => {
+    mockAuthApiLogin.mockResolvedValue({ success: false, message: 'invitation rejected' })
+    const { wrapper } = await mountLoginView()
+    await wrapper.find('#lv-username').setValue('member')
+    await wrapper.find('#lv-password').setValue('password')
+    await wrapper.find('#lv-invitation-code').setValue('one-use-code')
+    await wrapper.find('.login-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(mockAuthApiLogin).toHaveBeenCalledWith('member', 'password', 'enterprise', 'one-use-code')
   })
 
   it('selectAdminLogin navigates to admin console URL', async () => {

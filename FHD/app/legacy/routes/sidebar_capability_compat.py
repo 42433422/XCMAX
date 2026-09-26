@@ -9,7 +9,9 @@ from __future__ import annotations
 import logging
 from typing import Any, cast
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
+
+from app.infrastructure.auth.business_scope_gate import require_scoped_business_permission
 
 logger = logging.getLogger(__name__)
 
@@ -67,8 +69,14 @@ def data_sources_alias() -> dict[str, Any]:
     return {"success": True, "data": sources, "total": len(sources)}
 
 
-@router.get("/api/print/templates")
-@router.get("/api/label/templates")
+@router.get(
+    "/api/print/templates",
+    dependencies=[Depends(require_scoped_business_permission("print.label"))],
+)
+@router.get(
+    "/api/label/templates",
+    dependencies=[Depends(require_scoped_business_permission("print.label"))],
+)
 def print_templates_alias(request: Request) -> Any:
     """模板列表：对齐 /api/templates。"""
     from app.fastapi_routes.template_api import templates_list_compat
@@ -76,6 +84,8 @@ def print_templates_alias(request: Request) -> Any:
     return templates_list_compat(request)
 
 
-@router.get("/api/print/jobs")
+@router.get(
+    "/api/print/jobs", dependencies=[Depends(require_scoped_business_permission("print.label"))]
+)
 def print_jobs_alias() -> dict[str, Any]:
     return {"success": True, "data": [], "jobs": [], "total": 0}

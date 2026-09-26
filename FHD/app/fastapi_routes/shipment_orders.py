@@ -21,7 +21,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Body, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse
 
@@ -29,6 +29,7 @@ from app.application.facades.query_facade import query_service
 from app.bootstrap import get_shipment_application_service_core
 from app.db.models import ShipmentRecord
 from app.fastapi_routes import shipment_agent_runtime as _shipment_agent_runtime
+from app.infrastructure.auth.business_scope_gate import require_scoped_business_permission
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.security.safe_download_path import (
     UnsafeDownloadPathError,
@@ -42,7 +43,10 @@ _run_shipment_orders_agent = _shipment_agent_runtime.run_shipment_orders_agent
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["shipment-orders-compat"])
+router = APIRouter(
+    tags=["shipment-orders-compat"],
+    dependencies=[Depends(require_scoped_business_permission("shipment.view", "shipment.edit"))],
+)
 
 
 def _svc():

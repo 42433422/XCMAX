@@ -60,14 +60,21 @@ async def _private_mod_context(request: Request) -> dict[str, Any]:
         for mid in (binding.get("mod_ids") or set())
         if str(mid).strip() in account_custom and str(mid).strip() not in industry_packs
     }
-    # 共享运行模块的定制身份还必须属于当前账号，不能仅凭同名运行包推断。
+    # 客户私有交付身份还必须属于当前账号，不能仅凭同名权益推断。
     username = str(binding.get("username") or "").strip().casefold()
+    try:
+        market_user_id = int(binding.get("market_user_id") or 0)
+    except (TypeError, ValueError):
+        market_user_id = 0
     entitled = {
         mid
         for mid in entitled
         if not (row := delivery_for_account_custom_mod(mid))
-        or row.get("delivery_mode") != "integrated_feature"
-        or str(row.get("customer_account") or "").strip().casefold() == username
+        or not row.get("customer_account")
+        or (
+            str(row.get("customer_account") or "").strip().casefold() == username
+            and (not row.get("market_user_id") or row.get("market_user_id") == market_user_id)
+        )
     }
     return {
         "mod_ids": entitled,

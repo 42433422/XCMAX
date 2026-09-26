@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
@@ -14,10 +13,11 @@ from app.application.etl.errors import EtlError
 from app.application.etl.service import get_etl_service
 from app.db.session import get_db_dependency
 from app.infrastructure.auth.dependencies import require_identified_user
+from app.infrastructure.auth.shipment_etl_access_gate import require_legacy_shipment_etl_access
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_legacy_shipment_etl_access)])
 
 
 def _form_truthy(value: str, default: bool = True) -> bool:
@@ -67,38 +67,6 @@ def _store_general_upload(db: Session, file: UploadFile, *, owner_user_id: int) 
     db.commit()
     file.file.seek(0)
     return upload
-
-
-def _shipment_write_permission_error(request: Request) -> JSONResponse | None:
-    """Preserve the legacy production RBAC guard around shipment writes."""
-    from app.application.facades.session_facade import get_auth_service
-    from app.infrastructure.auth.dependencies import resolve_session_user
-    from app.utils.deployment import deployment_is_production, deployment_is_staging
-
-    configured = os.environ.get("FHD_SHIPMENT_ETL_REQUIRE_RBAC", "").strip().lower()
-    required = (
-        configured in {"1", "true", "yes", "on"}
-        if configured
-        else deployment_is_production() or deployment_is_staging()
-    )
-    if not required:
-        return None
-    session_user = resolve_session_user(request)
-    if session_user is None:
-        return JSONResponse(
-            {"success": False, "message": "请先登录", "error_code": "unauthorized"},
-            status_code=401,
-        )
-    if not get_auth_service().has_permission(session_user, "shipment.create"):
-        return JSONResponse(
-            {
-                "success": False,
-                "message": "缺少 shipment.create 权限",
-                "error_code": "forbidden",
-            },
-            status_code=403,
-        )
-    return None
 
 
 @router.post("/shipment-etl/preview")
@@ -166,7 +134,6 @@ async def shipment_etl_preview(
 
 @router.post("/shipment-etl/execute")
 async def shipment_etl_execute(
-    request: Request,
     file: UploadFile | None = File(default=None),
     file_path: str = Form(""),
     workspace_root: str = Form(""),
@@ -201,9 +168,6 @@ async def shipment_etl_execute(
         template_scope,
     )
     try:
-        permission_error = _shipment_write_permission_error(request)
-        if permission_error is not None:
-            return permission_error
         owner_user_id = _user_id(user)
         run_id = str(etl_run_id or "").strip()
         if run_id:

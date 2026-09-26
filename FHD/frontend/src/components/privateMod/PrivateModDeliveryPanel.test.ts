@@ -109,7 +109,7 @@ it('submits the selected employee requirements and displays the newly accepted p
   await wrapper.get('.private-mod-intake__form').trigger('submit')
   await flushPromises()
   expect(apiFetch).toHaveBeenNthCalledWith(2, '/api/mod-store/private-delivery/requests', expect.objectContaining({
-    method: 'POST', body: JSON.stringify({ kind: 'employee', title: '工资核算员工',
+    method: 'POST', body: JSON.stringify({ kind: 'employee', source_mode: 'generated', title: '工资核算员工',
       requirements: '按员工工时表计算每月应发工资并定位异常记录', acceptance_criteria: '月工资与已知样例金额一致', suggested_id: 'payroll-employee' }),
   }))
   expect(wrapper.find('.private-mod-intake__form').exists()).toBe(false)
