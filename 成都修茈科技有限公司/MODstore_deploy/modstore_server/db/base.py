@@ -238,6 +238,7 @@ def _ensure_columns(engine: Engine) -> None:
         ("workflows", "migrated_to_id", "INTEGER"),
         ("workflows", "kind", "TEXT DEFAULT ''"),
         ("users", "is_enterprise", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        ("users", "deleted_at", "DATETIME"),
         ("daily_digest_records", "vibe_prep_updates_md", "TEXT DEFAULT ''"),
         ("daily_digest_records", "vibe_prep_patches_md", "TEXT DEFAULT ''"),
         ("daily_digest_records", "vibe_prep_meta_json", "TEXT DEFAULT ''"),

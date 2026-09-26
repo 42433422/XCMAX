@@ -290,7 +290,7 @@ async def voice_s2s_ws(
         return
 
     try:
-        from modstore_server.auth_service import decode_access_token
+        from modstore_server.auth_service import decode_access_token, get_user_by_id
 
         payload = decode_access_token(token)
         sub = payload.get("sub") if payload else None
@@ -299,6 +299,10 @@ async def voice_s2s_ws(
             await ws.close()
             return
         user_id = int(sub)
+        if not get_user_by_id(user_id):
+            await _send_json(ws, {"type": "error", "message": "认证无效"})
+            await ws.close()
+            return
     except RECOVERABLE_ERRORS:
         await _send_json(ws, {"type": "error", "message": "认证失败"})
         await ws.close()

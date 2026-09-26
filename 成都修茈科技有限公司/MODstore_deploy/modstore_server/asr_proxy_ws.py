@@ -269,10 +269,10 @@ async def asr_funasr_ws(
         return
 
     try:
-        from modstore_server.auth_service import decode_access_token
+        from modstore_server.auth_service import decode_access_token, get_user_by_id
 
         payload = decode_access_token(token)
-        if not payload or not payload.get("sub"):
+        if not payload or not payload.get("sub") or not get_user_by_id(int(payload["sub"])):
             try:
                 await ws.send_text(json.dumps({"type": "error", "message": "认证无效"}))
             except RECOVERABLE_ERRORS:

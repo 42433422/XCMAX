@@ -63,6 +63,7 @@ class User(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(UTC))
     first_login_at = Column(DateTime, nullable=True, index=True)
     last_login_at = Column(DateTime, nullable=True, index=True)
+    deleted_at = Column(DateTime, nullable=True)
     default_llm_json = Column(Text, default="")
     experience = Column(Integer, default=0, nullable=False)
 
