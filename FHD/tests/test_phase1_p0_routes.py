@@ -33,14 +33,15 @@ from app.utils.time import utc_now_naive
 
 @pytest.fixture
 def admin_user() -> SimpleNamespace:
-    return SimpleNamespace(id=1, username="admin", role="admin", tier="admin")
+    return SimpleNamespace(id=1, username="admin", role="admin", tier="admin", tenant_id=None)
 
 
 @pytest.fixture
 def rbac_client(admin_user: SimpleNamespace) -> TestClient:
     app = FastAPI()
     app.include_router(rbac_routes.router)
-    app.dependency_overrides[rbac_routes._require_admin] = lambda: admin_user
+    app.dependency_overrides[rbac_routes._require_rbac_manager] = lambda: admin_user
+    app.dependency_overrides[rbac_routes._require_platform_admin] = lambda: admin_user
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -183,9 +184,10 @@ def test_rbac_assign_user_role(rbac_client: TestClient) -> None:
 def test_rbac_tenant_roles_and_user_assignments_are_isolated(rbac_client: TestClient) -> None:
     service = get_rbac_app_service()
     tenant_a, tenant_b = 870001, 870002
-    code = f"tenant.read.{uuid4().hex}"
-    with get_db() as db:
-        db.add(Permission(code=code, name="Tenant read", module="tenant-test"))
+    code = "etl.read"
+    with get_host_db() as db:
+        if db.query(Permission.id).filter(Permission.code == code).first() is None:
+            db.add(Permission(code=code, name="查看数据对接", module="etl"))
     role_a = service.create_role("Test Operator", "A", [code], tenant_id=tenant_a)
     role_b = service.create_role("Test Operator", "B", [], tenant_id=tenant_b)
     with get_host_db() as db:
@@ -210,13 +212,15 @@ def test_rbac_tenant_roles_and_user_assignments_are_isolated(rbac_client: TestCl
         == 1
     )
 
-    with patch("app.fastapi_routes.rbac.resolve_tenant_id", return_value=tenant_a):
-        listed = rbac_client.get("/api/rbac/roles")
-        hidden_role = rbac_client.get(f"/api/rbac/roles/{role_b['id']}")
-        hidden_user = rbac_client.get(f"/api/rbac/users/{user_b_id}/permissions")
-        reassignment = rbac_client.put(
-            f"/api/rbac/users/{user_b_id}/role", json={"role": role_a["key"]}
-        )
+    rbac_client.app.dependency_overrides[rbac_routes._require_rbac_manager] = lambda: SimpleNamespace(
+        id=user_a_id, username="tenant-a", role="user", tier="enterprise", tenant_id=tenant_a
+    )
+    listed = rbac_client.get("/api/rbac/roles")
+    hidden_role = rbac_client.get(f"/api/rbac/roles/{role_b['id']}")
+    hidden_user = rbac_client.get(f"/api/rbac/users/{user_b_id}/permissions")
+    reassignment = rbac_client.put(
+        f"/api/rbac/users/{user_b_id}/role", json={"role": role_a["key"]}
+    )
     assert listed.status_code == 200
     assert any(item["id"] == role_a["id"] for item in listed.json()["data"])
     assert all(item["id"] != role_b["id"] for item in listed.json()["data"])
@@ -241,19 +245,22 @@ def test_rbac_tenant_roles_and_user_assignments_are_isolated(rbac_client: TestCl
         db.query(User).filter(User.id.in_([user_a_id, user_b_id])).delete(synchronize_session=False)
     service.delete_role(role_a["id"], tenant_id=tenant_a)
     service.delete_role(role_b["id"], tenant_id=tenant_b)
-    with get_db() as db:
-        db.query(Permission).filter(Permission.code == code).delete()
 
 
 def test_rbac_tenant_scope_fails_closed(rbac_client: TestClient) -> None:
-    rbac_client.app.dependency_overrides[rbac_routes._require_admin] = lambda: SimpleNamespace(
-        id=2, username="tenant-admin", role="enterprise_admin", tier="enterprise"
+    from fastapi import HTTPException
+
+    rbac_client.app.dependency_overrides[rbac_routes._require_rbac_manager] = lambda: SimpleNamespace(
+        id=2, username="tenant-admin", role="user", tier="enterprise", tenant_id=None
     )
-    with patch("app.fastapi_routes.rbac.resolve_tenant_id", return_value=None):
-        roles = rbac_client.get("/api/rbac/roles")
-        permissions = rbac_client.post(
-            "/api/rbac/permissions", json={"code": "rbac.invalid", "name": "Invalid"}
-        )
+    def deny_platform():
+        raise HTTPException(status_code=403)
+
+    rbac_client.app.dependency_overrides[rbac_routes._require_platform_admin] = deny_platform
+    roles = rbac_client.get("/api/rbac/roles")
+    permissions = rbac_client.post(
+        "/api/rbac/permissions", json={"code": "rbac.invalid", "name": "Invalid"}
+    )
     assert roles.status_code == permissions.status_code == 403
 
 
@@ -503,8 +510,8 @@ def test_tenant_context_resolve(monkeypatch: pytest.MonkeyPatch) -> None:
     req = MagicMock()
     monkeypatch.setattr(tenant_context, "session_id_from_request", lambda r: "sid")
     monkeypatch.setattr(
-        "app.application.session_account_meta.load_session_account_meta",
-        lambda sid: {"tenant_id": 7},
+        "app.application.facades.session_facade.get_session_service",
+        lambda: SimpleNamespace(validate_session=lambda sid: SimpleNamespace(tenant_id=7)),
     )
     assert tenant_context.resolve_tenant_id(req) == 7
     assert tenant_context.tenant_id_for_user(SimpleNamespace(tenant_id=3)) == 3
@@ -514,11 +521,8 @@ def test_tenant_context_resolve_none_on_error(monkeypatch: pytest.MonkeyPatch) -
     req = MagicMock()
     monkeypatch.setattr(tenant_context, "session_id_from_request", lambda r: "sid")
 
-    def _boom(*a, **k):
-        raise RuntimeError("db down")
-
     monkeypatch.setattr(
-        "app.application.session_account_meta.load_session_account_meta",
-        _boom,
+        "app.application.facades.session_facade.get_session_service",
+        lambda: SimpleNamespace(validate_session=lambda sid: None),
     )
     assert tenant_context.resolve_tenant_id(req) is None

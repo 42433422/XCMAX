@@ -15,6 +15,8 @@ export type AccountRoleSource = {
   marketIsAdmin?: boolean
   marketIsEnterprise?: boolean
   isAdminAccount?: boolean
+  localRole?: string
+  permissions?: readonly string[]
 }
 
 const ENTERPRISE_GENERIC_CORE_KEYS = new Set([
@@ -68,6 +70,12 @@ export function buildRoleMenuProfile(source: AccountRoleSource, hasIndustryBusin
       canSeeDeveloperMenus: false,
       visibleCoreKeys: null,
     }
+  }
+
+  if (source.localRole?.startsWith('tenant:')) {
+    const visibleCoreKeys = new Set(['chat', 'settings'])
+    if (source.permissions?.includes('etl.read')) visibleCoreKeys.add('business-docking')
+    return { role: 'enterprise-user', canSeeAdminMenus: false, canSeeDeveloperMenus: false, visibleCoreKeys }
   }
 
   const visibleCoreKeys = new Set(ENTERPRISE_GENERIC_CORE_KEYS)

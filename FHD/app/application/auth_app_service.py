@@ -5,7 +5,7 @@ import uuid
 from typing import Any, cast
 
 from app.db.models import Permission, Role, User
-from app.db.session import get_db
+from app.db.session import get_host_db as get_db
 from app.infrastructure.session import get_session_manager
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.security.password_hash import check_password_hash, generate_password_hash
@@ -276,6 +276,13 @@ class AuthApplicationService:
         return cast("User | None", self.session_manager.validate_session(session_id))
 
     def get_user_permissions(self, user: User) -> list:
+        from app.application.tenant_rbac_policy import (
+            TENANT_PERMISSION_CODES,
+            is_tenant_role,
+            owner_permission_for_user,
+            role_belongs_to_user,
+        )
+
         try:
             from app.db.init_db import ensure_runtime_auth_bootstrap
 
@@ -284,24 +291,27 @@ class AuthApplicationService:
             logger.warning("权限表自检跳过: %s", bootstrap_exc)
         try:
             with get_db() as db:
-                if user.role == "admin":
+                if user.role == "admin" and user.tier == "admin" and user.tenant_id is None:
                     perms = db.query(Permission).all()
                     return [p.code for p in perms]
 
                 role = db.query(Role).filter(Role.name == user.role).first()
-                if not role:
-                    return []
-                return [p.code for p in role.permissions]
+                codes = [p.code for p in role.permissions] if role else []
+                if is_tenant_role(user.role):
+                    codes = [code for code in codes if code in TENANT_PERMISSION_CODES] if role_belongs_to_user(user.role, user.tenant_id) else []
+                if owner_permission_for_user(user) and "tenant.manage_roles" not in codes:
+                    codes.append("tenant.manage_roles")
+                return codes
         except RECOVERABLE_ERRORS as exc:
             logger.warning("get_user_permissions 回退为空列表: %s", exc)
-            if user.role == "admin":
+            if user.role == "admin" and user.tier == "admin" and user.tenant_id is None:
                 from app.db.models.permission import DEFAULT_PERMISSIONS
 
                 return [p["code"] for p in DEFAULT_PERMISSIONS]
             return []
 
     def has_permission(self, user: User, permission_code: str) -> bool:
-        if user.role == "admin":
+        if user.role == "admin" and user.tier == "admin" and user.tenant_id is None:
             return True
         perms = self.get_user_permissions(user)
         return permission_code in perms

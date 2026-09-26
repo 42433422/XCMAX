@@ -73,6 +73,17 @@
         </button>
         <p class="rbac-hint">权限修改或角色分配会撤销受影响用户的现有会话；请重新登录后继续使用。</p>
       </section>
+      <section v-if="accountProfile.tenantIsOwner" class="rbac-panel">
+        <h2>邀请企业成员</h2>
+        <p class="rbac-hint">企业所有者可邀请已开通企业版的市场账号。对方首次登录时填写一次性邀请码。</p>
+        <label>市场账号用户名<input v-model.trim="inviteUsername" maxlength="128" autocomplete="off" /></label>
+        <button type="button" :disabled="saving || !inviteUsername" @click="inviteMember">生成邀请码</button>
+        <div v-if="invitation" class="rbac-invitation" role="status">
+          <span>发送给 {{ invitation.target_username }}（24 小时内有效）</span>
+          <code>{{ invitation.code }}</code>
+          <button type="button" @click="copyInvitation">复制邀请码</button>
+        </div>
+      </section>
     </section>
   </main>
 </template>
@@ -80,6 +91,9 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { rbacApi, type RbacPermission, type RbacRole, type RbacUser } from '@/api/rbac'
+import { useAccountProfileStore } from '@/stores/accountProfile'
+
+const accountProfile = useAccountProfileStore()
 
 const roles = ref<RbacRole[]>([])
 const permissions = ref<RbacPermission[]>([])
@@ -92,6 +106,8 @@ const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
 const notice = ref('')
+const inviteUsername = ref('')
+const invitation = ref<{ code: string; target_username: string; expires_at: string } | null>(null)
 const draft = reactive({ name: '', description: '', permissions: [] as string[] })
 const assignableRoles = computed(() => roles.value.filter((role) => role.key !== 'admin'))
 const selectedUser = computed(() => users.value.find((user) => user.id === selectedUserId.value))
@@ -178,7 +194,31 @@ async function assignRole() {
   }
 }
 
-onMounted(load)
+async function inviteMember() {
+  if (saving.value || !inviteUsername.value) return
+  saving.value = true
+  error.value = ''
+  invitation.value = null
+  try {
+    invitation.value = await rbacApi.inviteMember(inviteUsername.value)
+    notice.value = '邀请码已生成，仅显示一次。'
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : '无法生成邀请码。'
+  } finally {
+    saving.value = false
+  }
+}
+
+async function copyInvitation() {
+  if (!invitation.value) return
+  await navigator.clipboard.writeText(invitation.value.code)
+  notice.value = '邀请码已复制。'
+}
+
+onMounted(async () => {
+  await accountProfile.refreshFromServer()
+  await load()
+})
 </script>
 
 <style scoped>
@@ -200,5 +240,6 @@ onMounted(load)
 .rbac-page button:disabled { cursor: not-allowed; opacity: 0.55; }
 .rbac-message--error { color: #b42318; }
 .rbac-hint { margin: 0; font-size: 13px; line-height: 1.5; }
+.rbac-invitation { display: grid; gap: 8px; overflow-wrap: anywhere; }
 @media (max-width: 1000px) { .rbac-grid { grid-template-columns: 1fr; } }
 </style>

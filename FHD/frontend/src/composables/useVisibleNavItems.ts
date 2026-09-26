@@ -133,6 +133,8 @@ export function useVisibleNavItems() {
         marketIsAdmin: accountProfileStore.marketIsAdmin,
         marketIsEnterprise: accountProfileStore.marketIsEnterprise,
         isAdminAccount: accountProfileStore.isAdminAccount,
+        localRole: accountProfileStore.userRole,
+        permissions: accountProfileStore.permissions,
       },
       hasIndustryBusinessMod.value,
     ),
@@ -226,6 +228,7 @@ export function useVisibleNavItems() {
           const profile = resolveIndustryNavigationProfile(id)
           const items = id === '考勤' ? INDUSTRY_DELIVERY_CORE_ITEMS : profile.businessMenuKeys.flatMap((key) => INDUSTRY_DELIVERY_CORE_ITEMS.filter((item) => item.key === key))
           for (const item of items) {
+            if (!canShowCoreMenuKey(roleMenuProfile.value, item.key)) continue
             const override = coreMenuOverrides.value.get(item.key)
             industryDelivery.push({
               ...item,
@@ -280,6 +283,7 @@ export function useVisibleNavItems() {
       const industryKeys = new Set<string>(resolveIndustryNavigationProfile(industryId.value).businessMenuKeys)
       return modMenuItems.value
         .filter((item) => {
+          if (accountProfileStore.userRole.startsWith('tenant:')) return false
           const navKey = normalizeModSidebarNavKey(String(item.key || ''))
           if (shouldHideAttendanceModSidebarMenu(navKey)) return false
           if (industryId.value !== '考勤' && item.modId === 'xcagi-erp-domain-bridge' && navKey.startsWith('mod-erp-') && !industryKeys.has(navKey.slice('mod-erp-'.length))) return false

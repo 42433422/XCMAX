@@ -295,7 +295,8 @@ const {
   onLogout,
 } = useSettingsAccount()
 const canManageTenantRoles = computed(
-  () => isLocalAdmin.value && accountProfile.accountKind === 'enterprise' && accountProfile.tenantId !== null,
+  () => accountProfile.accountKind === 'enterprise' && accountProfile.tenantId !== null &&
+    accountProfile.marketIsEnterprise && accountProfile.permissions.includes('tenant.manage_roles'),
 )
 
 const {

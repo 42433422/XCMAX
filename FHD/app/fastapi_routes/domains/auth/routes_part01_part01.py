@@ -84,11 +84,22 @@ def auth_me(request: _facade().Request):
     auth_app_service = get_auth_app_service()
     permissions = auth_app_service.get_user_permissions(user)
     session_meta = _facade()._session_meta_for_response(request, user)
+    from app.application.tenant_rbac_policy import owner_permission_for_user
+
+    tenant_is_owner = (
+        bool(session_meta.get("market_is_enterprise"))
+        and not session_meta.get("market_is_admin")
+        and session_meta.get("impersonating_market_user_id") is None
+        and user.market_user_id is not None
+        and session_meta.get("market_user_id") == user.market_user_id
+        and owner_permission_for_user(user)
+    )
     return {
         "success": True,
         "data": {
             "user": _facade()._user_public_dict(user),
             "permissions": permissions,
+            "tenant_is_owner": tenant_is_owner,
             "account_kind": session_meta.get("account_kind") or "enterprise",
             "company_brand": session_meta.get("company_brand") or "",
             "market_is_admin": bool(session_meta.get("market_is_admin")),

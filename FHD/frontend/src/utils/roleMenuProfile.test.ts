@@ -34,4 +34,13 @@ describe('roleMenuProfile', () => {
     expect(canShowCoreMenuKey(profile, 'products')).toBe(true)
     expect(canShowCoreMenuKey(profile, 'orders')).toBe(true)
   })
+
+  it('limits an invited tenant member to granted ETL navigation', () => {
+    const member = { accountKind: 'enterprise', marketIsEnterprise: true, localRole: 'tenant:3:member', permissions: [] }
+    const denied = buildRoleMenuProfile(member, true)
+    expect(canShowCoreMenuKey(denied, 'business-docking')).toBe(false)
+    expect(canShowCoreMenuKey(denied, 'products')).toBe(false)
+    expect(canShowCoreMenuKey(denied, 'chat')).toBe(true)
+    expect(canShowCoreMenuKey(buildRoleMenuProfile({ ...member, permissions: ['etl.read'] }), 'business-docking')).toBe(true)
+  })
 })

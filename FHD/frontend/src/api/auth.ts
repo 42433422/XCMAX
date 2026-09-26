@@ -14,6 +14,7 @@ export interface LoginRequest {
   username: string
   password: string
   account_kind?: AccountKind
+  invitation_code?: string
 }
 
 export interface User {
@@ -91,7 +92,7 @@ async function invalidateSessionScopedUiCaches(): Promise<void> {
 }
 
 export const authApi = {
-  async login(username: string, password: string, accountKind: AccountKind = 'enterprise'): Promise<ApiResponse<LoginResponse>> {
+  async login(username: string, password: string, accountKind: AccountKind = 'enterprise', invitationCode = ''): Promise<ApiResponse<LoginResponse>> {
     await primeCsrfCookie()
     invalidateEnterpriseSessionCache()
     const res = await withTransientLoginRetry(() =>
@@ -101,6 +102,7 @@ export const authApi = {
           username,
           password,
           account_kind: accountKind,
+          ...(invitationCode.trim() ? { invitation_code: invitationCode.trim() } : {}),
         },
         {
           timeoutMs: 30_000,

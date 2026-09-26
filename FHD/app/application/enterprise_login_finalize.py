@@ -9,6 +9,7 @@ from typing import Any, cast
 from fastapi import HTTPException
 
 from app.application.session_account_meta import AccountKind
+from app.application.tenant_rbac_app_service import TenantIdentityError
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _DELIVERY_ERRORS: tuple[type[Exception], ...] = RECOVERABLE_ERRORS + (HTTPException,)
@@ -32,6 +33,7 @@ async def finalize_enterprise_login(
     username: str,
     sku: str,
     skip_market_sync: bool = False,
+    invitation_code: str = "",
 ) -> dict[str, Any]:
     """Bind market tokens, account metadata, MOD entitlements, and tenant state."""
     from app.fastapi_routes.market_account import (
@@ -75,11 +77,41 @@ async def finalize_enterprise_login(
             tenant_name = company_brand
             user_id = (result.get("user") or {}).get("id")
             if user_id is not None:
-                tenant_info = flow.bind_tenant_for_login(
-                    user_id=int(user_id),
-                    company_brand=company_brand,
-                    username=username,
+                from app.application.tenant_rbac_app_service import (
+                    accept_verified_tenant_invitation,
+                    bind_verified_market_identity,
                 )
+
+                verified_username = flow.resolve_market_username(market_result) or username
+                market_is_admin = bool(market_result.get("is_market_admin"))
+                market_is_enterprise = bool(market_result.get("is_enterprise"))
+                if not invitation_code and market_token and not local_demo_market:
+                    bind_verified_market_identity(
+                        user_id=int(user_id), market_user_id=market_user_id,
+                        market_username=verified_username,
+                        market_is_enterprise=market_is_enterprise,
+                        market_is_admin=market_is_admin,
+                    )
+                if invitation_code:
+                    if not market_token or local_demo_market or not market_is_enterprise or market_is_admin:
+                        raise TenantIdentityError("邀请需要真实市场企业账号登录")
+                    tenant_info = accept_verified_tenant_invitation(
+                        user_id=int(user_id), market_user_id=market_user_id,
+                        market_username=verified_username, code=invitation_code,
+                        session_id=str(session_id),
+                    )
+                    result["user"]["role"] = tenant_info["role"]
+                else:
+                    tenant_info = flow.bind_tenant_for_login(
+                        user_id=int(user_id), company_brand=company_brand, username=username,
+                    )
+                if market_token and not local_demo_market:
+                    bind_verified_market_identity(
+                        user_id=int(user_id), market_user_id=market_user_id,
+                        market_username=verified_username,
+                        market_is_enterprise=market_is_enterprise,
+                        market_is_admin=market_is_admin,
+                    )
                 if tenant_info.get("tenant_id") is not None:
                     tenant_id = int(tenant_info["tenant_id"])
                     result["tenant_id"] = tenant_id
@@ -206,6 +238,9 @@ async def finalize_enterprise_login(
                 "is_enterprise": bool(market_result.get("is_enterprise")),
                 "is_market_admin": bool(market_result.get("is_market_admin")),
             }
+    except TenantIdentityError as exc:
+        flow.delete_session_quiet(str(session_id))
+        return {"success": False, "message": str(exc), "error": {"code": "TENANT_IDENTITY_REJECTED", "message": str(exc)}}
     except RECOVERABLE_ERRORS as exc:
         result["market_account"] = {
             "success": False,
