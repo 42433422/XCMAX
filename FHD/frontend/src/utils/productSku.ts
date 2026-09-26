@@ -2,6 +2,7 @@ import { apiFetch } from '@/utils/apiBase'
 
 let cachedSku: string | null = null
 let skuFetchPromise: Promise<string> | null = null
+const PRODUCT_SKU_RETRY_DELAYS_MS = [200, 400] as const
 
 function viteDevSkuOverride(): string | null {
   if (!import.meta.env.DEV) return null
@@ -20,19 +21,28 @@ export async function fetchProductSku(force = false): Promise<string> {
   if (!force && cachedSku) return cachedSku
   if (!force && skuFetchPromise) return skuFetchPromise
   skuFetchPromise = (async () => {
-    try {
-      const res = await apiFetch('/api/runtime/product-sku', { timeoutMs: 8_000 })
-      if (res.ok) {
-        const body = await res.json()
-        const sku = String(body?.data?.sku || body?.sku || 'generic').trim() || 'generic'
-        cachedSku = viteSku || sku
-        return cachedSku
+    for (let attempt = 0; attempt <= PRODUCT_SKU_RETRY_DELAYS_MS.length; attempt += 1) {
+      try {
+        const res = await apiFetch('/api/runtime/product-sku', { timeoutMs: 8_000 })
+        if (res.ok) {
+          const body = await res.json()
+          const sku = String(body?.data?.sku || body?.sku || 'generic').trim() || 'generic'
+          cachedSku = viteSku || sku
+          return cachedSku
+        }
+        if (![404, 502, 503, 504].includes(res.status) || attempt === PRODUCT_SKU_RETRY_DELAYS_MS.length) {
+          break
+        }
+      } catch {
+        break
       }
-    } catch {
-      /* ignore */
+      if (attempt < PRODUCT_SKU_RETRY_DELAYS_MS.length) {
+        await new Promise(resolve => setTimeout(resolve, PRODUCT_SKU_RETRY_DELAYS_MS[attempt]))
+      }
     }
-    cachedSku = viteSku || cachedSku || 'generic'
-    return cachedSku
+    // A temporary startup failure must not make the fallback SKU sticky for the
+    // lifetime of the renderer. A later route mount can then resolve the real SKU.
+    return viteSku || cachedSku || 'generic'
   })()
   try {
     return await skuFetchPromise
