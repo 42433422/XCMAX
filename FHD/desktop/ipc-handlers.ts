@@ -1,6 +1,5 @@
 import { Notification, app, clipboard, ipcMain, shell } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
-import crypto from 'node:crypto'
 import fs from 'node:fs'
 import { networkInterfaces } from 'node:os'
 import { APP_NAME, DEFAULT_PORT, readPackagedAppVersion } from './desktop-config'
@@ -65,8 +64,6 @@ export function registerDesktopIpcHandlers(): void {
   handleTrusted('xcagi:pairing-qr', async () => {
     const host = getLanIPv4()
     const port = DEFAULT_PORT
-    const nonce = crypto.randomBytes(12).toString('base64url')
-    const exp = Math.floor(Date.now() / 1000) + 300
     try {
       const res = await fetch(`http://127.0.0.1:${port}/api/mobile/v1/pairing/issue`, {
         method: 'POST',
@@ -80,9 +77,9 @@ export function registerDesktopIpcHandlers(): void {
         }
       }
     } catch {
-      /* backend offline — return local payload */
+      /* The backend must issue and store the nonce; an IPC-only code cannot pair. */
     }
-    return JSON.stringify({ host, port, nonce, exp })
+    return null
   })
 
   handleTrusted('xcagi:get-data-dir', () => app.getPath('userData'))

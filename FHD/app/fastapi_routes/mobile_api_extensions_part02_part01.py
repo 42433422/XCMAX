@@ -230,6 +230,23 @@ async def mobile_pairing_issue(body: _facade().PairingIssueBody, request: _facad
         data["relay_id"] = relay.get("relay_id")
         data["relay_base_url"] = relay.get("relay_base_url")
         data["relay_binding_mode"] = "account_auth"
+        relay_code = str(relay.get("pairing_code") or "").strip()
+        if relay_code:
+            data["shortCode"] = data["code"] = relay_code
+            data["qr_json"] = {
+                "v": 3,
+                "kind": "xcagi_relay_pairing",
+                "relay_id": relay.get("relay_id"),
+                "code": relay_code,
+                "t": relay_code,
+                "relay_base_url": relay.get("relay_base_url"),
+            }
+            data["exp"] = int(relay.get("exp") or data.get("exp") or 0)
+            from urllib.parse import urlencode
+
+            data["deep_link"] = "xcagi://pairing?" + urlencode(
+                {"relay_id": relay.get("relay_id"), "code": relay_code}
+            )
     return _facade().format_mobile_response(data=data)
 
 

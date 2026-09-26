@@ -98,11 +98,30 @@ async def mobile_relay_bind_account(
             _facade().format_mobile_response(None, "未授权", success=False, code=401),
             status_code=401,
         )
+    if not body.relay_id:
+        code = body.pairing_code.strip()
+        if len(code) != 6 or not code.isdigit():
+            return _facade().JSONResponse(
+                _facade().format_mobile_response(None, "设备码无效", success=False, code=400),
+                status_code=400,
+            )
+        from app.utils.resilience.rate_limiter import check_rate_limit
+
+        if not check_rate_limit(str(uid), "mobile-relay-pairing-code", 5, 3600)["allowed"]:
+            return _facade().JSONResponse(
+                _facade().format_mobile_response(None, "尝试过多，请稍后重试", success=False, code=429),
+                status_code=429,
+            )
     try:
         desktop = (
             _facade()
             .MobileRelayService()
-            .bind_mobile_by_account(user_id=uid, username=username, relay_id=body.relay_id)
+            .bind_mobile_by_account(
+                user_id=uid,
+                username=username,
+                relay_id=body.relay_id,
+                pairing_code=body.pairing_code,
+            )
         )
         if not desktop:
             return _facade().JSONResponse(

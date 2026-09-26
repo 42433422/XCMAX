@@ -38,7 +38,8 @@ class RelayDesktopRegisterBody(BaseModel):
 
 
 class RelayMobileBindAccountBody(BaseModel):
-    relay_id: str = Field(..., min_length=8, max_length=80)
+    relay_id: str = Field(default="", max_length=80)
+    pairing_code: str = Field(default="", max_length=16)
 
 
 class RelayTaskCreateBody(BaseModel):

@@ -22,7 +22,6 @@
       </div>
 
       <div class="mobile-pairing__meta">
-        <!-- 大号设备码展示，优先使用服务器中继码。 -->
         <div v-if="pairingShortCode" class="mobile-pairing__code-block">
           <span class="mobile-pairing__code-label">{{ $t('settings.mobilePairingDeviceCode') }}</span>
           <span class="mobile-pairing__code-value">{{ pairingShortCode }}</span>
@@ -40,7 +39,6 @@
           </Transition>
         </div>
 
-        <!-- 倒计时 + 刷新（保留） -->
         <p v-if="countdown > 0" class="mobile-pairing__countdown">
           {{ $t('settings.mobilePairingExpiresIn', { seconds: countdown }) }}
         </p>
@@ -83,10 +81,8 @@ const { t } = useI18n()
 const loading = ref(false)
 const qrDataUrl = ref('')
 const errorMessage = ref('')
-const pairingHost = ref('')
-const pairingPort = ref(0)
 const pairingNonce = ref('')
-const pairingShortCode = ref('') // v2: 6位配对码
+const pairingShortCode = ref('')
 const copied = ref(false) // 复制反馈状态
 const expiresAt = ref(0)
 const nowSec = ref(Math.floor(Date.now() / 1000))
@@ -96,10 +92,6 @@ let refreshTimer: ReturnType<typeof setTimeout> | null = null
 
 const countdown = computed(() => Math.max(0, expiresAt.value - nowSec.value))
 
-/**
- * 绑定/中继状态：与手机端「我的 → 服务」的 server_mode_label 用同一套词汇（服务器中继 / 已绑定），
- * 避免用户在电脑上只能看到出码，猜不到手机到底连没连上。
- */
 const pairingStatusPaired = ref(false)
 const pairingStatusMobileUsername = ref('')
 const pairingStatusLastSyncAt = ref(0) // unix 秒
@@ -135,20 +127,10 @@ async function refreshPairingStatus() {
     pairingStatusMobileUsername.value = String(data.mobileUsername || '')
     pairingStatusLastSyncAt.value = Number(data.lastRelaySyncAt || 0)
   } catch {
-    // 状态查询失败不影响二维码本身的展示
+    // 状态查询失败不影响二维码展示。
   } finally {
     pairingStatusLoaded.value = true
   }
-}
-
-function pairingDisplayCode(payload: PairingPayload): string {
-  const qrJson = payload.qr_json || {}
-  const qrKind = String(qrJson.kind || '')
-  if (qrKind === 'xcagi_relay_pairing') {
-    return String(qrJson.code || qrJson.t || payload.shortCode || '').trim()
-  }
-  const relay = payload.relay || {}
-  return String(relay.pairing_code || payload.shortCode || '').trim()
 }
 
 function clearTimers() {
@@ -171,10 +153,13 @@ function scheduleAutoRefresh() {
 }
 
 async function renderPayload(payload: PairingPayload) {
-  pairingHost.value = payload.host
-  pairingPort.value = payload.port
+  if (window.xcagiDesktop && (payload.qr_json?.kind !== 'xcagi_relay_pairing' || !payload.qr_json.code || !payload.qr_json.relay_id)) {
+    throw new Error(t('settings.mobilePairingUnavailable'))
+  }
   pairingNonce.value = payload.nonce
-  pairingShortCode.value = pairingDisplayCode(payload)
+  pairingShortCode.value = payload.qr_json?.kind === 'xcagi_relay_pairing'
+    ? String(payload.qr_json.code || '').trim()
+    : ''
   expiresAt.value = Number(payload.exp || 0)
   qrDataUrl.value = await QRCode.toDataURL(buildPairingQrText(payload), {
     width: 220,
@@ -185,7 +170,6 @@ async function renderPayload(payload: PairingPayload) {
   scheduleAutoRefresh()
 }
 
-/** 复制配对码到剪贴板 */
 async function copyCode() {
   try {
     await navigator.clipboard.writeText(pairingShortCode.value || pairingNonce.value)
