@@ -57,7 +57,11 @@ def _knowledge_runtime_snapshot(
     }
 
 
-@_facade().router.post("/ingest", response_model=_facade().IngestResponse)
+@_facade().router.post(
+    "/ingest",
+    response_model=_facade().IngestResponse,
+    dependencies=[_facade().Depends(_facade().require_legacy_global_knowledge)],
+)
 def ingest(req: _facade().IngestRequest, request: _facade().Request) -> _facade().IngestResponse:
     try:
         count = _facade()._index.ingest(
@@ -91,7 +95,11 @@ def ingest(req: _facade().IngestRequest, request: _facade().Request) -> _facade(
         )
 
 
-@_facade().router.post("/query", response_model=_facade().QueryResponse)
+@_facade().router.post(
+    "/query",
+    response_model=_facade().QueryResponse,
+    dependencies=[_facade().Depends(_facade().require_legacy_global_knowledge)],
+)
 def query(req: _facade().QueryRequest) -> _facade().QueryResponse:
     chunks = _facade()._index.query(req.query, req.top_k)
     return _facade().QueryResponse(

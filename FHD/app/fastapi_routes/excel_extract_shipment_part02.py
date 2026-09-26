@@ -10,7 +10,10 @@ def _facade():
     return importlib.import_module("app.fastapi_routes.excel_extract_shipment")
 
 
-@_facade().router.post("/shipment-etl/generate-template")
+@_facade().router.post(
+    "/shipment-etl/generate-template",
+    dependencies=[_facade().Depends(_facade().require_legacy_shipment_etl_access)],
+)
 async def shipment_etl_generate_template(
     kind: str = _facade().Form("delivery"),
     output_path: str = _facade().Form(""),
@@ -77,7 +80,10 @@ async def shipment_etl_generate_template(
         )
 
 
-@_facade().router.post("/shipment-etl/regenerate")
+@_facade().router.post(
+    "/shipment-etl/regenerate",
+    dependencies=[_facade().Depends(_facade().require_legacy_shipment_etl_access)],
+)
 async def shipment_etl_regenerate(
     file_path: str = _facade().Form(""),
     output_path: str = _facade().Form(""),
