@@ -107,17 +107,23 @@ def test_only_entitled_owner_can_import_sunbird_source(pinned_source, monkeypatc
         )
     )
 
+    owner_state = {"value": "active"}
+
     class FakeSession:
         def get(self, _model, owner):
             return types.SimpleNamespace(
                 username="SUNBIRD" if owner in {29, 44, 45} else "OTHER",
-                deleted_at="deleted" if owner == 44 else None,
+                account_state=owner_state["value"],
                 is_enterprise=True,
+                **({"deleted_at": "deleted"} if owner == 44 else {}),
             )
 
     monkeypatch.setattr(models, "get_session_factory", lambda: lambda: nullcontext(FakeSession()))
     monkeypatch.setattr(models, "get_user_mod_ids", lambda _owner: ["taiyangniao-pro"])
     assert_owner_source(29, MOD_ID)
+    owner_state["value"] = "disabled"
+    with pytest.raises(PermissionError):
+        assert_owner_source(29, MOD_ID)
     with pytest.raises(PermissionError):
         assert_owner_source(43, MOD_ID)
     with pytest.raises(PermissionError):

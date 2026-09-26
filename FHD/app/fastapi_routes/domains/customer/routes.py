@@ -19,8 +19,8 @@ from app.fastapi_routes.domains.customer.agent_helpers import (
 from app.fastapi_routes.domains.customer.agent_helpers import (
     run_customers_agent as _run_customers_agent,
 )
-from app.infrastructure.auth.db_token import verify_db_read_token_header
 from app.infrastructure.auth.business_scope_gate import require_scoped_business_permission
+from app.infrastructure.auth.db_token import verify_db_read_token_header
 from app.infrastructure.persistence.compat_db.base import (
     _business_mod_json_block,
     _customer_body_name_contact,

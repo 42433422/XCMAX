@@ -12,7 +12,7 @@ import tempfile
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from modstore_server.operational_errors import BOUNDARY_ERRORS
 
@@ -66,13 +66,13 @@ def assert_owner_source(owner_id: int, mod_id: str) -> None:
     with get_session_factory()() as db:
         owner = db.get(User, owner_id)
         account = str(owner.username or "").strip().casefold() if owner else ""
-        deleted = bool(owner and owner.deleted_at is not None)
-        enterprise = bool(owner and owner.is_enterprise)
     if (
         not allowed
         or account != "sunbird"
-        or deleted
-        or not enterprise
+        or owner is None
+        or getattr(owner, "deleted_at", None) is not None
+        or str(owner.account_state or "") in {"deleted", "disabled", "suspended", "blocked"}
+        or not owner.is_enterprise
         or LEGACY_ID not in get_user_mod_ids(owner_id)
     ):
         raise PermissionError("当前账号无权交付该主线私有 Mod")
@@ -174,9 +174,8 @@ async def start_versioned_main_run(
 
             def compile_separate_copy() -> list[str]:
                 with tempfile.TemporaryDirectory(prefix="sunbird-source-check-") as temporary:
-                    return mod_compileall_warnings(
-                        shutil.copytree(target, Path(temporary) / MOD_ID)
-                    )
+                    source_copy = shutil.copytree(target, Path(temporary) / MOD_ID)
+                    return cast(list[str], mod_compileall_warnings(source_copy))
 
             warnings = await asyncio.to_thread(compile_separate_copy)
             if warnings:
