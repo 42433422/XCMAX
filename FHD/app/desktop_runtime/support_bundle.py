@@ -24,12 +24,13 @@ from .paths import ensure_desktop_dirs, is_desktop_mode
 logger = logging.getLogger(__name__)
 
 
-def _redact_log_bytes(chunk: bytes) -> bytes:
+def _redact_log_bytes(chunk: bytes, *, max_bytes: int = 250_000) -> bytes:
     text = chunk.decode("utf-8", errors="replace")
-    return redact_log_text(text).encode("utf-8", errors="replace")
+    redacted = redact_log_text(text).encode("utf-8", errors="replace")
+    return redacted[-max_bytes:]
 
 
-def _tail_bytes(path: Path, max_bytes: int = 2_097_152) -> bytes | None:
+def _tail_bytes(path: Path, max_bytes: int = 250_000) -> bytes | None:
     if not path.is_file():
         return None
     try:
@@ -74,7 +75,7 @@ def build_support_bundle_zip(
     }
 
     updater_log = logs_dir / "updater-events.jsonl"
-    updater_chunk = _tail_bytes(updater_log, max_bytes=512_000)
+    updater_chunk = _tail_bytes(updater_log, max_bytes=200_000)
     manifest["updaterLogIncluded"] = bool(updater_chunk)
     manifest["modsLoaded"] = []
     try:
@@ -93,14 +94,9 @@ def build_support_bundle_zip(
             "README.txt",
             (
                 "XCAGI 诊断包\n"
-                "------------\n"
-                "将此 ZIP 提供给技术支持即可。\n"
-                "- manifest.json：环境与路径摘要（不含密钥）。\n"
-                "- logs/xcagi.log（若存在）：后端近期日志节选。\n"
-                "- logs/electron-backend.log（若存在）：桌面壳、后端进程与崩溃事件。\n"
-                "- logs/updater-events.jsonl（若存在）：桌面更新事件。\n"
-                "崩溃转储仅在 manifest 中列名，不自动打包；需要时从 crash-dumps/ 单独提供。\n"
-                "数据库文件默认不在包内；如需一并分析请单独发送 backups 下的 .db 备份。\n"
+                "manifest.json：环境摘要；logs/ 下为脱敏日志节选。\n"
+                "崩溃转储仅列名，不自动打包。\n"
+                "数据库不在包内；如需分析，请单独提供 backups/ 下的备份。\n"
             ).encode(),
         )
         zf.writestr(
