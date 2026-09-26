@@ -136,8 +136,10 @@ jobs:
                   continue
               encoded = urllib.parse.quote(name, safe="")
 
-              # 4) 已合并分支
-              if name in merged_refs:
+              # 4) 已合并分支（跳过仍有 open PR 引用的分支——同一分支可在合并后
+              #    继续承载新提交并开启新 PR，误删会导致 GitHub 连锁关闭该 PR，
+              #    2026-09-03 PR #1702 即因此被杀）
+              if name in merged_refs and name not in open_heads:
                   print(f"  delete merged branch {name}")
                   gh_api(f"git/refs/heads/{encoded}", "DELETE")
                   deleted += 1
