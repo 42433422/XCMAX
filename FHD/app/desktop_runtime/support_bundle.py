@@ -25,14 +25,11 @@ logger = logging.getLogger(__name__)
 
 
 def _redact_log_bytes(chunk: bytes) -> bytes:
-    return redact_log_text(chunk.decode("utf-8", errors="replace")).encode(
-        "utf-8", errors="replace"
-    )[-250_000:]
+    text = chunk.decode("utf-8", errors="replace")
+    return redact_log_text(text).encode("utf-8", errors="replace")[-250_000:]
 
 
 def _tail_bytes(path: Path, max_bytes: int = 250_000) -> bytes | None:
-    if not path.is_file():
-        return None
     try:
         with path.open("rb") as f:
             f.seek(max(0, path.stat().st_size - max_bytes))
