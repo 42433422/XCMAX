@@ -33,12 +33,7 @@ def resolve_enterprise_role(user: Any, session_meta: dict[str, Any] | None = Non
         return explicit
     role_name = str(getattr(user, "role", "") or "").strip()
     parts = role_name.split(":", 2)
-    if (
-        len(parts) == 3
-        and parts[0].lower() == "tenant"
-        and parts[1].isdigit()
-        and parts[2].strip()
-    ):
+    if len(parts) == 3 and parts[0].lower() == "tenant" and parts[1].isdigit() and parts[2].strip():
         return role_name
     role = role_name.lower()
     if role in ENTERPRISE_ROLE_PERMISSIONS:

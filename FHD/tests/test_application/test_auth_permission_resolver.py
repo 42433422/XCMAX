@@ -74,9 +74,7 @@ def test_enterprise_custom_tenant_role_uses_persisted_permissions(
         "app.services.auth_service.get_auth_service",
         lambda: SimpleNamespace(get_user_permissions=lambda _user: ["employee.invoke"]),
     )
-    user = SimpleNamespace(
-        account_kind="enterprise", role="tenant:42:operator", tenant_id=42
-    )
+    user = SimpleNamespace(account_kind="enterprise", role="tenant:42:operator", tenant_id=42)
 
     allowed = permissions.resolve_permissions(user=user, route="/api/employees/demo/execute")
     assert allowed["route_allowed"] is True
