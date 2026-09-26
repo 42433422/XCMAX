@@ -31,7 +31,7 @@ def _client_issue_reply(receipt: dict | None) -> str:
     return ""
 
 
-def _classify_and_submit_client_issue(request, client, runtime_context, message, reply):
+def _classify_and_submit_client_issue(request, runtime_context, message, reply, client=None):
     from app.application.client_product_issue_intake import (
         classify_report,
         looks_like_issue_report,
@@ -40,6 +40,7 @@ def _classify_and_submit_client_issue(request, client, runtime_context, message,
 
     if not looks_like_issue_report(message):
         return None
+    client = client or _facade().create_modstore_openai_client_from_request(request)
     triage = classify_report(client, message, reply)
     if not triage or triage.get("type") != "product_defect":
         return None
@@ -92,6 +93,21 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     authenticated_tenant_id = (
         int(authenticated_tenant_id) if authenticated_tenant_id is not None else None
     )
+    receipt = _classify_and_submit_client_issue(request, runtime_context, body.message, "")
+    issue_reply = _client_issue_reply(receipt)
+    if issue_reply:
+        payload = _facade()._xcagi_compat_reply_payload(issue_reply)
+        payload = _facade().attach_chat_trace_run(
+            payload,
+            message=body.message,
+            runtime_context=runtime_context,
+            user_id=body.user_id,
+            source=body.source,
+            channel="compat_chat_stream",
+        )
+        yield _facade()._sse_event_line({"type": "token", "text": issue_reply})
+        yield _facade()._sse_event_line({"type": "done", "result": payload})
+        return
     if (
         has_pending_workflow
         or sales_closed_loop_route
@@ -164,23 +180,6 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         return
     workspace_root = _facade().os.environ.get("WORKSPACE_ROOT", _facade().os.getcwd())
     llm_client = _facade().create_modstore_openai_client_from_request(request)
-    receipt = _classify_and_submit_client_issue(
-        request, llm_client, runtime_context, body.message, ""
-    )
-    issue_reply = _client_issue_reply(receipt)
-    if issue_reply:
-        payload = _facade()._xcagi_compat_reply_payload(issue_reply)
-        payload = _facade().attach_chat_trace_run(
-            payload,
-            message=body.message,
-            runtime_context=runtime_context,
-            user_id=body.user_id,
-            source=body.source,
-            channel="compat_chat_stream",
-        )
-        yield _facade()._sse_event_line({"type": "token", "text": issue_reply})
-        yield _facade()._sse_event_line({"type": "done", "result": payload})
-        return
     reply_parts: list[str] = []
     pre_run = None
     planner_runtime_context = dict(runtime_context or {})
@@ -301,7 +300,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
 
         visible_text, marker_lines = strip_planner_stream_markers(merged)
         issue_receipt = _classify_and_submit_client_issue(
-            request, llm_client, runtime_context, body.message, visible_text
+            request, runtime_context, body.message, visible_text, llm_client
         )
         issue_reply = _client_issue_reply(issue_receipt)
         if issue_reply:
