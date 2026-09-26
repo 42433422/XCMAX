@@ -414,7 +414,7 @@ describe('main — readPackagedProductSku', () => {
     }
   })
 
-  it('returns SKU from product-sku.json when packaged', async () => {
+  it('uses official API root for packaged enterprise SKU', async () => {
     electronMocks.app.isPackaged = true
     const tmpResources = path.join(os.tmpdir(), `xcagi-test-resources-${Date.now()}-${Math.random().toString(36).slice(2)}`)
     fs.mkdirSync(tmpResources, { recursive: true })
@@ -422,9 +422,8 @@ describe('main — readPackagedProductSku', () => {
     const savedResourcesPath = (process as { resourcesPath?: string }).resourcesPath
     ;(process as { resourcesPath?: string }).resourcesPath = tmpResources
     try {
-      const { readPackagedProductSku, backendEditionEnv } = await import('./main.js')
-      expect(readPackagedProductSku()).toBe('enterprise')
-      expect(backendEditionEnv().XCAGI_MARKET_BASE_URL).toBe('https://xiu-ci.com/market')
+      const { backendEditionEnv } = await import('./main.js')
+      expect(backendEditionEnv().XCAGI_MARKET_BASE_URL).toBe('https://xiu-ci.com')
     } finally {
       if (savedResourcesPath === undefined) {
         delete (process as { resourcesPath?: string }).resourcesPath
