@@ -361,6 +361,7 @@ describe('main — desktopInitialUrl', () => {
 describe('main — readPackagedProductSku', () => {
   beforeEach(() => {
     delete process.env.XCAGI_PRODUCT_SKU
+    delete process.env.XCAGI_MARKET_BASE_URL
     electronMocks.app.isPackaged = false
   })
 
@@ -421,8 +422,9 @@ describe('main — readPackagedProductSku', () => {
     const savedResourcesPath = (process as { resourcesPath?: string }).resourcesPath
     ;(process as { resourcesPath?: string }).resourcesPath = tmpResources
     try {
-      const { readPackagedProductSku } = await import('./main.js')
+      const { readPackagedProductSku, backendEditionEnv } = await import('./main.js')
       expect(readPackagedProductSku()).toBe('enterprise')
+      expect(backendEditionEnv().XCAGI_MARKET_BASE_URL).toBe('https://xiu-ci.com/market')
     } finally {
       if (savedResourcesPath === undefined) {
         delete (process as { resourcesPath?: string }).resourcesPath

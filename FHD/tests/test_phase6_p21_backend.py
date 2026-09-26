@@ -1426,7 +1426,6 @@ class TestDistilledIntentRecognizerLoadDefaults:
             else:
                 sys.modules.pop("transformers", None)
 
-        # id2label should be DEFAULT_INTENT_LABELS
         assert r.id2label is not None
         assert r.id2label[0] == DEFAULT_INTENT_LABELS[0]
         assert r.label2id is not None
@@ -1440,13 +1439,10 @@ class TestDistilledIntentRecognizerLoadDefaults:
 
 class TestServiceBridgeGetInstanceIdWrite:
     def test_writes_new_id_when_no_cache(self, tmp_path: Path) -> None:
-        """When file doesn't exist, generates and writes a new instance_id."""
         instance_file = tmp_path / "data" / ".service_bridge_instance_id"
-        # Don't patch os.path.exists globally; let real fs check happen.
         with patch.object(sb, "get_data_dir", return_value=str(instance_file.parent)):
             result = sb._get_or_create_instance_id()
         assert result.startswith("xcagi-host-")
-        # File should have been written
         assert instance_file.is_file()
         assert instance_file.read_text(encoding="utf-8") == result
 
@@ -1459,7 +1455,6 @@ class TestServiceBridgeGetInstanceIdWrite:
         assert result == "xcagi-host-cached123"
 
     def test_recoverable_error_falls_back_to_random_id(self, tmp_path: Path) -> None:
-        """When makedirs raises OSError → returns random id without writing."""
         instance_file = tmp_path / "data" / ".service_bridge_instance_id"
         with (
             patch.object(sb, "get_data_dir", return_value=str(instance_file.parent)),
@@ -1468,14 +1463,12 @@ class TestServiceBridgeGetInstanceIdWrite:
         ):
             result = sb._get_or_create_instance_id()
         assert result.startswith("xcagi-host-")
-        # File should NOT have been written because makedirs failed
         assert not instance_file.is_file()
 
 
 class TestServiceBridgeListRequestsSingleFilter:
     async def test_with_status_filter_only(self) -> None:
         mock_db = MagicMock()
-        # Single filter: query().filter().count() and ...order_by...all()
         single = mock_db.query.return_value.filter.return_value
         single.count.return_value = 5
         single.order_by.return_value.offset.return_value.limit.return_value.all.return_value = []
