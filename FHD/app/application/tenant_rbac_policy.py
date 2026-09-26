@@ -33,12 +33,13 @@ def role_belongs_to_user(role_name: str, tenant_id: int | None) -> bool:
 
 
 def owner_permission_for_user(user: User) -> bool:
-    if not getattr(user, "tenant_id", None) or not getattr(user, "market_user_id", None):
+    owner_id = user.id
+    if owner_id is None or not user.tenant_id or not user.market_user_id:
         return False
     with get_host_db() as db:
         return (
             db.query(Tenant.id)
-            .filter(Tenant.id == int(user.tenant_id), Tenant.owner_user_id == int(user.id))
+            .filter(Tenant.id == int(user.tenant_id), Tenant.owner_user_id == owner_id)
             .first()
             is not None
         )

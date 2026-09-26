@@ -8,7 +8,7 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
-from app.infrastructure.auth import legacy_business_gate as gate
+from app.infrastructure.auth import business_scope_gate as gate
 
 
 @pytest.fixture

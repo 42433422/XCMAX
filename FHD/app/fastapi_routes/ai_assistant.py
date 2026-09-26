@@ -1,9 +1,6 @@
-"""
-AI 助手接口兼容层（继承自归档 ``ai_assistant_compat`` 蓝图的端点契约）。
+"""AI 助手兼容接口，仅承接其他兼容路由未覆盖的端点。
 
-与 ``xcagi_compat``、``shipment_orders_fastapi_compat``、``migrated_print`` 互补：
-仅注册上述模块尚未覆盖或语义不同的路径（例如 ``GET /api/units``、``POST /api/generate``、
-``POST /api/tts``）。``GET /api/purchase_units`` 由 ``xcagi_compat`` 提供，此处不重复注册。
+GET /api/purchase_units 由 xcagi_compat 提供，此处不重复注册。
 """
 
 from __future__ import annotations
@@ -21,7 +18,7 @@ from app.build_identity import build_identity
 from app.fastapi_routes.ai_assistant_responses import fail as _fail
 from app.fastapi_routes.ai_assistant_responses import ok as _ok
 from app.fastapi_routes.ai_assistant_tts import router as tts_router
-from app.infrastructure.auth.legacy_business_gate import require_scoped_business_permission
+from app.infrastructure.auth.business_scope_gate import require_scoped_business_permission
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.security.safe_download_path import (
     UnsafeDownloadPathError,

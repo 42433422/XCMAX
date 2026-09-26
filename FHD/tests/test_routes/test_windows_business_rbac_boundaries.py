@@ -10,7 +10,7 @@ from app.fastapi_routes import dataset_access
 from app.fastapi_routes.excel_extract import router as excel_router
 from app.fastapi_routes.knowledge_v1 import router as knowledge_router
 from app.infrastructure.auth import dependencies
-from app.infrastructure.auth import legacy_shipment_etl_gate as shipment_gate
+from app.infrastructure.auth import shipment_etl_access_gate as shipment_gate
 from app.legacy.routes.shipment_etl_compat import router as old_etl_router
 
 

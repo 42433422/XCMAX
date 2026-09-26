@@ -359,6 +359,40 @@ describe('router/index 覆盖率补齐', () => {
       expect(router.currentRoute.value.name).toBe('settings')
     })
 
+    it('冷启动直达受限页面前加载企业权限，失败时闭锁登录', async () => {
+      mockFetchProductSku.mockResolvedValue('enterprise')
+      mockIsEnterpriseEdition.mockReturnValue(true)
+      mockAccountProfileStore.loaded = false
+      mockAccountProfileStore.refreshFromServer.mockImplementationOnce(async () => {
+        mockAccountProfileStore.loaded = true
+        mockAccountProfileStore.tenantId = 7
+        mockAccountProfileStore.userRole = 'tenant:7:member'
+      })
+      await router.push('/orders')
+      expect(mockAccountProfileStore.refreshFromServer).toHaveBeenCalled()
+      expect(router.currentRoute.value.name).toBe('settings')
+
+      await router.push('/login')
+      mockAccountProfileStore.loaded = false
+      mockAccountProfileStore.refreshFromServer.mockImplementationOnce(async () => {})
+      await router.push('/materials')
+      expect(router.currentRoute.value.name).toBe('login')
+      expect(router.currentRoute.value.query.redirect).toBe('/materials')
+    })
+
+    it('冷启动租户成员不能直达未授权核心页面', async () => {
+      mockFetchProductSku.mockResolvedValue('enterprise')
+      mockIsEnterpriseEdition.mockReturnValue(true)
+      mockAccountProfileStore.loaded = false
+      mockAccountProfileStore.refreshFromServer.mockImplementationOnce(async () => {
+        mockAccountProfileStore.loaded = true
+        mockAccountProfileStore.tenantId = 7
+        mockAccountProfileStore.userRole = 'tenant:7:member'
+      })
+      await router.push('/')
+      expect(router.currentRoute.value.name).toBe('settings')
+    })
+
     it('/model-payment 重定向到 settings 带 section query', async () => {
       await router.push('/model-payment')
       expect(router.currentRoute.value.name).toBe('settings')
@@ -849,15 +883,14 @@ describe('router/index 覆盖率补齐', () => {
       expect(mockAccountProfileStore.refreshFromServer).toHaveBeenCalled()
     })
 
-    it('enterprise + 有效 session + profile refresh 异常时忽略', async () => {
+    it('enterprise + 有效 session + profile refresh 异常时闭锁登录', async () => {
       mockIsEnterpriseEdition.mockReturnValue(true)
       mockValidateEnterpriseSession.mockResolvedValue(true)
       mockAccountProfileStore.loaded = false
       mockAccountProfileStore.refreshFromServer.mockRejectedValue(new Error('network'))
       mockAccountProfileStore.isAdminAccount = false
       await router.push('/settings')
-      // 内部 catch 忽略异常，继续允许导航
-      expect(router.currentRoute.value.name).toBe('settings')
+      expect(router.currentRoute.value.name).toBe('login')
     })
 
     it('fetchProductSku 异常 + 非 enterprise 时允许导航', async () => {

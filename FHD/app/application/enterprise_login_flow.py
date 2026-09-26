@@ -407,7 +407,6 @@ async def run_market_first_login(
 
     session_id = result.get("session_id") if result else None
     if result:
-        invitation_kwargs = {"invitation_code": invitation_code} if invitation_code else {}
         result = await finalize_enterprise_login(
             result=result,
             session_id=str(session_id) if session_id else None,
@@ -415,7 +414,7 @@ async def run_market_first_login(
             account_kind=account_kind,
             username=login_username,
             sku=sku,
-            **invitation_kwargs,
+            invitation_code=invitation_code,
         )
     return result, None
 

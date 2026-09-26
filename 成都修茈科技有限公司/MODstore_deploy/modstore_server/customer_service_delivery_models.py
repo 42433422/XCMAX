@@ -13,9 +13,7 @@ from modstore_server.models_cs import CustomerServiceTicket
 
 class CustomDeliveryCreateBody(BaseModel):
     kind: str = Field(..., pattern="^(module|employee|bundle)$")
-    source_mode: str = Field(
-        default="generated", pattern="^(generated|versioned_main)$"
-    )
+    source_mode: str = Field(default="generated", pattern="^(generated|versioned_main)$")
     title: str = Field(..., min_length=2, max_length=128)
     requirements: str = Field(..., min_length=8, max_length=12000)
     acceptance_criteria: str = Field(..., min_length=4, max_length=6000)
@@ -73,9 +71,7 @@ def custom_delivery_crm(evidence: dict[str, Any]) -> dict[str, Any]:
     return {
         "assignment": {
             "status": (
-                "assigned"
-                if str(assignment.get("owner_name") or "").strip()
-                else "unassigned"
+                "assigned" if str(assignment.get("owner_name") or "").strip() else "unassigned"
             ),
             **assignment,
         },
@@ -110,9 +106,7 @@ def custom_delivery_commerce_blockers(evidence: dict[str, Any]) -> list[str]:
     if crm["assignment"].get("status") != "assigned":
         blockers.append("未指派交付负责人")
     accepted_quote_statuses = (
-        {"accepted"}
-        if pricing_mode == "post_delivery_addon"
-        else {"accepted", "waived"}
+        {"accepted"} if pricing_mode == "post_delivery_addon" else {"accepted", "waived"}
     )
     if crm["quote"].get("status") not in accepted_quote_statuses:
         blockers.append("报价尚未确认")
@@ -153,7 +147,5 @@ def custom_delivery_brief(evidence: dict[str, Any], rework_note: str = "") -> st
     if rework_note:
         parts.append(f"本轮返工意见：{rework_note.strip()}")
     if evidence.get("runtime_failure"):
-        parts.append(
-            f"客户宿主真实验证失败证据：{json_dumps(evidence['runtime_failure'])[:6000]}"
-        )
+        parts.append(f"客户宿主真实验证失败证据：{json_dumps(evidence['runtime_failure'])[:6000]}")
     return "\n\n".join(parts)

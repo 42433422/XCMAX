@@ -13,7 +13,7 @@ from app.application.etl.errors import EtlError
 from app.application.etl.service import get_etl_service
 from app.db.session import get_db_dependency
 from app.infrastructure.auth.dependencies import require_identified_user
-from app.infrastructure.auth.legacy_shipment_etl_gate import require_legacy_shipment_etl_access
+from app.infrastructure.auth.shipment_etl_access_gate import require_legacy_shipment_etl_access
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

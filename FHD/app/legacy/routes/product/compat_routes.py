@@ -17,7 +17,7 @@ from app.fastapi_routes.xcagi_compat_product_actions import (
     price_list_word_response,
 )
 from app.infrastructure.auth.db_token import verify_db_read_token_header
-from app.infrastructure.auth.legacy_business_gate import require_scoped_business_permission
+from app.infrastructure.auth.business_scope_gate import require_scoped_business_permission
 from app.infrastructure.persistence.compat_db.base import (
     _business_mod_json_block,
     _product_parse_id,

@@ -16,7 +16,7 @@ from app.application.shipment_excel_etl_security import (
     resolve_etl_output_path,
     resolve_etl_path,
 )
-from app.infrastructure.auth.legacy_business_gate import require_scoped_business_permission
+from app.infrastructure.auth.business_scope_gate import require_scoped_business_permission
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir
 from app.utils.security.secure_filename import secure_filename
@@ -25,6 +25,8 @@ logger = logging.getLogger(__name__)
 _EXCEL_UNAVAILABLE = "Excel 服务暂时不可用，请稍后重试"
 
 router: APIRouter = APIRouter(prefix="/api/excel/data", tags=["excel-data"])
+_PRODUCT_IMPORT_GUARD = require_scoped_business_permission("product.view", "product.edit")
+_CUSTOMER_IMPORT_GUARD = require_scoped_business_permission("customer.view", "customer.edit")
 
 TEMP_EXCEL_DIR = os.path.join(get_app_data_dir(), "temp_excel")
 os.makedirs(TEMP_EXCEL_DIR, exist_ok=True)
@@ -334,10 +336,7 @@ def extract_test():
     )
 
 
-@router.post(
-    "/import/products",
-    dependencies=[Depends(require_scoped_business_permission("product.view", "product.edit"))],
-)
+@router.post("/import/products", dependencies=[Depends(_PRODUCT_IMPORT_GUARD)])
 def import_products(data: dict[str, Any] = Body(default_factory=dict)):
     try:
         from app.application.facades.excel_facade import get_product_import_service
@@ -416,10 +415,7 @@ def import_products(data: dict[str, Any] = Body(default_factory=dict)):
         )
 
 
-@router.post(
-    "/import/customers",
-    dependencies=[Depends(require_scoped_business_permission("customer.view", "customer.edit"))],
-)
+@router.post("/import/customers", dependencies=[Depends(_CUSTOMER_IMPORT_GUARD)])
 def import_customers(data: dict[str, Any] = Body(default_factory=dict)):
     try:
         from app.application import get_customer_app_service

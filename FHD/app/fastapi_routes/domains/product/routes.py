@@ -10,7 +10,7 @@ from fastapi import APIRouter, Body, Depends, File, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.application.workflow.types import normalize_workflow_risk
-from app.infrastructure.auth.legacy_business_gate import require_scoped_business_permission
+from app.infrastructure.auth.business_scope_gate import require_scoped_business_permission
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.security.safe_download_path import (
     UnsafeDownloadPathError,

@@ -49,9 +49,7 @@ def _desktop_fast_start_enabled() -> bool:
 def _start_agent_tasks(app: FastAPI) -> None:
     if passive_node_enabled():
         return
-    from app.application.agent_orchestrator.task_dispatcher import (
-        start_agent_task_dispatcher,
-    )
+    from app.application.agent_orchestrator.task_dispatcher import start_agent_task_dispatcher
 
     app.state.agent_task_dispatcher = start_agent_task_dispatcher()
 
@@ -135,9 +133,7 @@ async def lifespan(app: FastAPI):
             except RECOVERABLE_ERRORS as exc:
                 logger.warning("⚠️ 桌面端定时备份调度器启动失败: %s", exc)
             try:
-                from app.desktop_runtime.sync_outbox_scheduler import (
-                    start_sync_outbox_scheduler,
-                )
+                from app.desktop_runtime.sync_outbox_scheduler import start_sync_outbox_scheduler
 
                 start_sync_outbox_scheduler()
             except RECOVERABLE_ERRORS as exc:

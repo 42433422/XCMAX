@@ -14,7 +14,9 @@ def ensure_tenant_rbac_schema(engine: Engine) -> None:
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
     if "tenants" not in tables:
-        Base.metadata.create_all(engine, tables=[Tenant.__table__], checkfirst=True)
+        Base.metadata.create_all(
+            engine, tables=[Base.metadata.tables[Tenant.__tablename__]], checkfirst=True
+        )
     elif "owner_user_id" not in {column["name"] for column in inspector.get_columns("tenants")}:
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE tenants ADD COLUMN owner_user_id INTEGER"))
@@ -22,4 +24,6 @@ def ensure_tenant_rbac_schema(engine: Engine) -> None:
         connection.execute(
             text("CREATE INDEX IF NOT EXISTS ix_tenants_owner_user_id ON tenants (owner_user_id)")
         )
-    Base.metadata.create_all(engine, tables=[TenantInvitation.__table__], checkfirst=True)
+    Base.metadata.create_all(
+        engine, tables=[Base.metadata.tables[TenantInvitation.__tablename__]], checkfirst=True
+    )

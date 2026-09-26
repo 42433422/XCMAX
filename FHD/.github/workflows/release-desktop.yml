@@ -1,5 +1,5 @@
 name: Release Desktop
-run-name: "Release Desktop ${{ inputs.release_sha }}${{ inputs.windows_installer_only && ' · Windows 安装包交付（不推进对外发布指针）' || (inputs.verify_only && ' · 校验模式（不推进对外发布指针）' || '') }}"
+run-name: "Release Desktop ${{ inputs.release_sha }}${{ inputs.windows_installer_only && ' · Windows 安装包交付（稳定 OTA 保持关闭）' || (inputs.verify_only && ' · 校验模式（不推进对外发布指针）' || '') }}"
 
 on:
   workflow_dispatch:
@@ -157,11 +157,11 @@ jobs:
             FHD/delivery/delivery-receipt.json
           if-no-files-found: error
           retention-days: 30
-      - name: State that the public release pointer was not advanced
+      - name: State that the stable release pointer was not advanced
         if: always()
         shell: pwsh
         run: |
-          $n = "本次走 Windows 安装包交付通道（windows_installer_only=true）：正式发布链全部跳过，线上发布指针未推进，官网对外版本不变。"
+          $n = "本次走 Windows 安装包交付通道（windows_installer_only=true）：稳定发布链全部跳过，Windows stable OTA 未推进；临时下载指针由后续作业独立发布。"
           Write-Host "::warning::$n"; "### 未执行正式发布链`n$n" | Add-Content $env:GITHUB_STEP_SUMMARY
 
   publish-interim-windows-pointer:
@@ -213,11 +213,16 @@ jobs:
           artifact="${RUNNER_TEMP}/delivery/${filename}"
           test -f "${artifact}"
           test -f "${artifact}.sha256"
+          artifact_sha="$(sha256sum "${artifact}" | cut -d' ' -f1)"
+          receipt_sha="$(jq -er '.sha256' "$receipt")"
+          sidecar_sha="$(cut -d' ' -f1 "${artifact}.sha256")"
+          test "$artifact_sha" = "$receipt_sha" && test "$artifact_sha" = "$sidecar_sha"
+          release_sha="${{ inputs.release_sha }}"
           args=(
             --version "$version"
             --git-sha "${{ inputs.release_sha }}"
             --artifact "$artifact"
-            --artifact-url "https://xiu-ci.com/xcagi-v${version}/enterprise/$(basename "${artifact}")"
+            --artifact-url "https://xiu-ci.com/xcagi-v${version}/enterprise/${release_sha,,}/${artifact_sha}/${filename}"
             --release-metadata-source FHD/config/download_release.json
             --signature-status "$signature_status"
             --output "${RUNNER_TEMP}/download-windows-hotfix.json"
@@ -247,8 +252,10 @@ jobs:
           sha_file="${artifact}.sha256"
           pointer="${RUNNER_TEMP}/download-windows-hotfix.json"
           local_sha="$(sha256sum "${artifact}" | awk '{print $1}')"
-          url="https://xiu-ci.com/xcagi-v${version}/enterprise/$(basename "${artifact}")"
-          official_dir="/var/www/xcagi-v${version}/enterprise"
+          release_sha="${{ inputs.release_sha }}"
+          url="https://xiu-ci.com/xcagi-v${version}/enterprise/${release_sha,,}/${local_sha}/${filename}"
+          official_dir="/var/www/xcagi-v${version}/enterprise/${release_sha,,}/${local_sha}"
+          staging_dir="/var/www/.xcagi-interim-staging/${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
           pointer_target="/var/www/update/releases/stable/enterprise/download-windows-hotfix.json"
 
           HOST="${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}"
@@ -258,15 +265,39 @@ jobs:
           ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
           SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15)
 
-          ssh "${SSH_OPTS[@]}" "root@${HOST}" "mkdir -p '${official_dir}'"
-          scp "${SSH_OPTS[@]}" "$artifact" "$sha_file" "root@${HOST}:${official_dir}/"
-          ssh "${SSH_OPTS[@]}" "root@${HOST}" \
-            "chmod 0644 '${official_dir}/$(basename "$artifact")' '${official_dir}/$(basename "$sha_file")'"
+          ssh "${SSH_OPTS[@]}" "root@${HOST}" "mkdir -p '${official_dir}' '${staging_dir}' && chmod 0700 '${staging_dir}'"
+          scp "${SSH_OPTS[@]}" "$artifact" "$sha_file" "root@${HOST}:${staging_dir}/"
+          ssh "${SSH_OPTS[@]}" "root@${HOST}" "bash -s" -- \
+            "$official_dir" "$staging_dir" "$filename" "$local_sha" <<'REMOTE_INTERIM'
+          set -euo pipefail
+          official_dir="$1"; staging_dir="$2"; filename="$3"; expected_sha="$4"
+          test "$(stat -c %d "$official_dir")" = "$(stat -c %d "$staging_dir")"
+          staged_sha="$(sha256sum "$staging_dir/$filename" | cut -d' ' -f1)"
+          sidecar_sha="$(cut -d' ' -f1 "$staging_dir/$filename.sha256")"
+          test "$staged_sha" = "$expected_sha"
+          test "$sidecar_sha" = "$expected_sha"
+          if [ -e "$official_dir/$filename" ]; then
+            test ! -L "$official_dir/$filename"
+            existing_sha="$(sha256sum "$official_dir/$filename" | cut -d' ' -f1)"
+            test "$existing_sha" = "$expected_sha"
+          else
+            mv -n "$staging_dir/$filename" "$official_dir/$filename"
+          fi
+          mv -f "$staging_dir/$filename.sha256" "$official_dir/$filename.sha256"
+          chmod 0644 "$official_dir/$filename" "$official_dir/$filename.sha256"
+          rm -f -- "$staging_dir/$filename"
+          rmdir "$staging_dir"
+          REMOTE_INTERIM
 
           # 公开可下载性用真实 HTTP + 远端 SHA256 双验证，不接受“上传即成功”的假设。
           curl --http1.1 -fsSI --max-time 60 "$url" >/dev/null
+          public_sha="$(curl --http1.1 -fsSL --max-time 900 "$url" | sha256sum | cut -d' ' -f1)"
+          if [ "$public_sha" != "$local_sha" ]; then
+            echo "::error::Public installer SHA256 mismatch: public=$public_sha local=$local_sha"
+            exit 1
+          fi
           remote_sha="$(ssh "${SSH_OPTS[@]}" "root@${HOST}" \
-            "sha256sum '${official_dir}/$(basename "$artifact")' | cut -d' ' -f1")"
+            "sha256sum '${official_dir}/${filename}' | cut -d' ' -f1")"
           if [ "$remote_sha" != "$local_sha" ]; then
             echo "::error::Published installer SHA256 mismatch: remote=$remote_sha local=$local_sha"
             exit 1

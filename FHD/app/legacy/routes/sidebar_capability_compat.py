@@ -11,7 +11,7 @@ from typing import Any, cast
 
 from fastapi import APIRouter, Depends, Request
 
-from app.infrastructure.auth.legacy_business_gate import require_scoped_business_permission
+from app.infrastructure.auth.business_scope_gate import require_scoped_business_permission
 
 logger = logging.getLogger(__name__)
 

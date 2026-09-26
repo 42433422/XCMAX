@@ -19,8 +19,7 @@ def pinned_source(tmp_path, monkeypatch):
 
     root = tmp_path / "release"
     module = (
-        root
-        / "成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_delivery_versioned.py"
+        root / "成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_delivery_versioned.py"
     )
     monkeypatch.setattr(versioned, "__file__", str(module))
     source = root / "FHD/mods/sunbird-attendance-custom"
@@ -71,9 +70,7 @@ def test_release_source_matches_pinned_file_hashes_and_rejects_mutation(pinned_s
 
     _, source, provenance = pinned_source
     assert release_source() == (source, provenance)
-    (source / "backend/probe.py").write_text(
-        "def verify_delivery(request): return None\n"
-    )
+    (source / "backend/probe.py").write_text("def verify_delivery(request): return None\n")
     with pytest.raises(ValueError, match="指纹不一致"):
         release_source()
 
@@ -118,9 +115,7 @@ def test_only_entitled_owner_can_import_sunbird_source(pinned_source, monkeypatc
                 is_enterprise=True,
             )
 
-    monkeypatch.setattr(
-        models, "get_session_factory", lambda: lambda: nullcontext(FakeSession())
-    )
+    monkeypatch.setattr(models, "get_session_factory", lambda: lambda: nullcontext(FakeSession()))
     monkeypatch.setattr(models, "get_user_mod_ids", lambda _owner: ["taiyangniao-pro"])
     assert_owner_source(29, MOD_ID)
     with pytest.raises(PermissionError):
@@ -137,11 +132,8 @@ def test_create_request_blocks_unentitled_owner_and_unpinned_release(monkeypatch
     from fastapi import HTTPException
 
     import modstore_server.customer_service_api  # noqa: F401 - initializes its router imports
-
-    from modstore_server import (
-        customer_delivery_versioned as versioned,
-        customer_service_delivery_create_api as create_api,
-    )
+    from modstore_server import customer_delivery_versioned as versioned
+    from modstore_server import customer_service_delivery_create_api as create_api
     from modstore_server.customer_service_delivery_models import (
         CustomDeliveryCreateBody,
     )
@@ -154,9 +146,7 @@ def test_create_request_blocks_unentitled_owner_and_unpinned_release(monkeypatch
         acceptance_criteria="客户安装后转换并导出真实结果",
         suggested_id=versioned.MOD_ID,
     )
-    monkeypatch.setattr(
-        create_api, "_active_permanent_purchase", lambda *_: {"plan": "paid"}
-    )
+    monkeypatch.setattr(create_api, "_active_permanent_purchase", lambda *_: {"plan": "paid"})
     user = types.SimpleNamespace(id=81)
 
     def forbidden(*_args):
@@ -177,9 +167,7 @@ def test_create_request_blocks_unentitled_owner_and_unpinned_release(monkeypatch
     assert mismatched.value.status_code == 409
 
 
-def test_copy_rejects_wrong_entitlement_even_with_valid_release_hash(
-    pinned_source, tmp_path
-):
+def test_copy_rejects_wrong_entitlement_even_with_valid_release_hash(pinned_source, tmp_path):
     from modstore_server.customer_delivery_versioned import _copy_validated_source
 
     _, source, provenance = pinned_source
@@ -187,9 +175,7 @@ def test_copy_rejects_wrong_entitlement_even_with_valid_release_hash(
     library.mkdir()
     copied = _copy_validated_source(library, provenance)
     assert copied.is_relative_to(library)
-    assert (copied / "manifest.json").read_bytes() == (
-        source / "manifest.json"
-    ).read_bytes()
+    assert (copied / "manifest.json").read_bytes() == (source / "manifest.json").read_bytes()
     manifest = json.loads((source / "manifest.json").read_text())
     manifest["entitlement_mod_id"] = "other-customer"
     (source / "manifest.json").write_text(json.dumps(manifest))
@@ -224,9 +210,7 @@ def test_signed_record_cannot_drop_or_forge_source_provenance(tmp_path, monkeypa
         build.read_verified_artifact(record, owner_id=81, ticket_id=82)
 
 
-def test_sunbird_signed_package_preserves_legacy_entitlement_and_source_hash(
-    tmp_path, monkeypatch
-):
+def test_sunbird_signed_package_preserves_legacy_entitlement_and_source_hash(tmp_path, monkeypatch):
     from cryptography.hazmat.primitives import serialization
 
     from modstore_server import customer_delivery_build as build
@@ -289,9 +273,7 @@ def test_sunbird_signed_package_preserves_legacy_entitlement_and_source_hash(
         build.prepare_private_artifact(82, 81, evidence, snapshot)
 
 
-def test_versioned_worker_failure_never_reaches_acceptance(
-    pinned_source, tmp_path, monkeypatch
-):
+def test_versioned_worker_failure_never_reaches_acceptance(pinned_source, tmp_path, monkeypatch):
     from modstore_server import (
         customer_delivery_sources,
         customer_delivery_versioned,
@@ -307,9 +289,7 @@ def test_versioned_worker_failure_never_reaches_acceptance(
     monkeypatch.setattr(customer_delivery_sources, "public_library", lambda: library)
     monkeypatch.setattr(workbench_api, "_workbench_session_store_dir", lambda: store)
     monkeypatch.setattr(workbench_api, "WORKBENCH_SESSIONS", {})
-    monkeypatch.setattr(
-        customer_delivery_versioned, "assert_owner_source", lambda *_args: None
-    )
+    monkeypatch.setattr(customer_delivery_versioned, "assert_owner_source", lambda *_args: None)
     monkeypatch.setattr(
         customer_delivery_versioned,
         "_copy_validated_source",
@@ -337,9 +317,7 @@ def test_versioned_worker_failure_never_reaches_acceptance(
     assert custom_delivery_gate(snapshot)[0] is False
 
 
-def test_signing_failure_rolls_done_session_back_to_error(
-    pinned_source, tmp_path, monkeypatch
-):
+def test_signing_failure_rolls_done_session_back_to_error(pinned_source, tmp_path, monkeypatch):
     from modstore_server import (
         customer_delivery_build,
         customer_delivery_sources,
@@ -355,9 +333,7 @@ def test_signing_failure_rolls_done_session_back_to_error(
     monkeypatch.setattr(customer_delivery_sources, "public_library", lambda: library)
     monkeypatch.setattr(workbench_api, "_workbench_session_store_dir", lambda: store)
     monkeypatch.setattr(workbench_api, "WORKBENCH_SESSIONS", {})
-    monkeypatch.setattr(
-        customer_delivery_versioned, "assert_owner_source", lambda *_: None
-    )
+    monkeypatch.setattr(customer_delivery_versioned, "assert_owner_source", lambda *_: None)
     monkeypatch.setattr(
         customer_delivery_build,
         "prepare_private_artifact",

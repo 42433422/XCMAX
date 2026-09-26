@@ -91,9 +91,7 @@ def prepare_private_artifact(
         snapshot, owner_id, str(evidence.get("delivery_generation") or ""), ticket_id
     ).resolve()
     source = find_mod_dir_by_manifest_id(library, target).resolve()
-    if not source.is_relative_to(library) or any(
-        path.is_symlink() for path in source.rglob("*")
-    ):
+    if not source.is_relative_to(library) or any(path.is_symlink() for path in source.rglob("*")):
         raise ValueError("生产包路径或符号链接不允许发布")
     if evidence.get("source_mode") == "versioned_main":
         from modstore_server.customer_delivery_versioned import MOD_ID, source_sha256
@@ -109,13 +107,9 @@ def prepare_private_artifact(
             wrap_private_employee,
         )
 
-        with tempfile.TemporaryDirectory(
-            prefix="private-employee-wrapper-"
-        ) as temporary:
+        with tempfile.TemporaryDirectory(prefix="private-employee-wrapper-") as temporary:
             wrapped = wrap_private_employee(source, Path(temporary) / target)
-            record = _build_private_source(
-                ticket_id, owner_id, evidence, wrapped, target
-            )
+            record = _build_private_source(ticket_id, owner_id, evidence, wrapped, target)
             record["source_employee_pack_id"] = target
             record["source_artifact_kind"] = "employee"
             return record
@@ -148,11 +142,7 @@ def _build_private_source(
         raise ValueError("返工产物必须提升已安装版本，不得覆盖同版")
     runtime = (manifest.get("frontend") or {}).get("runtime") or {}
     probe = manifest.get("delivery_verification") or {}
-    if (
-        runtime.get("sdk_version") != 1
-        or not runtime.get("source")
-        or not runtime.get("entry")
-    ):
+    if runtime.get("sdk_version") != 1 or not runtime.get("source") or not runtime.get("entry"):
         raise ValueError("生产包缺少 SDK v1 runtime frontend，须在同单返工")
     if probe.get("handler") != "verify_delivery" or not probe.get("case_id"):
         raise ValueError("生产包缺少固定真实业务探针，须在同单返工")
@@ -174,10 +164,7 @@ def _build_private_source(
         )
         or (
             isinstance(node, ast.ImportFrom)
-            and any(
-                (alias.asname or alias.name) == "verify_delivery"
-                for alias in node.names
-            )
+            and any((alias.asname or alias.name) == "verify_delivery" for alias in node.names)
         )
         for node in tree.body
     ):
@@ -212,9 +199,7 @@ def _build_private_source(
         scope="account",
         owner_user_id=int(owner_id),
         entitlement_mod_id=(
-            LEGACY_ID
-            if versioned_main
-            else str(evidence.get("target_mod_id") or target)
+            LEGACY_ID if versioned_main else str(evidence.get("target_mod_id") or target)
         ),
         delivery_owner_user_id=int(owner_id),
         delivery_ticket_id=int(ticket_id),
@@ -224,17 +209,14 @@ def _build_private_source(
         ),
     )
     source_fields = {
-        key: str(evidence.get("source_" + key) or "")
-        for key in ("git_sha", "git_tree", "sha256")
+        key: str(evidence.get("source_" + key) or "") for key in ("git_sha", "git_tree", "sha256")
     }
     if versioned_main and not all(source_fields.values()):
         raise ValueError("主线源码溯源字段不完整")
     if any(source_fields.values()):
         if not versioned_main or not all(source_fields.values()):
             raise ValueError("主线源码溯源字段不完整")
-        manifest.update(
-            {"delivery_source_" + key: value for key, value in source_fields.items()}
-        )
+        manifest.update({"delivery_source_" + key: value for key, value in source_fields.items()})
     (source / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -262,9 +244,7 @@ def _build_private_source(
             raise ValueError("签包器未返回唯一 Mod 产物")
         raw = packages[0].read_bytes()
         signed = verify_delivery_package(raw)
-        destination = (
-            library.parent / "customer-delivery-artifacts" / str(owner_id) / target
-        )
+        destination = library.parent / "customer-delivery-artifacts" / str(owner_id) / target
         destination.mkdir(parents=True, exist_ok=True)
         path = destination / f"{target}-{version}{suffix}"
         if path.exists() and path.read_bytes() != raw:

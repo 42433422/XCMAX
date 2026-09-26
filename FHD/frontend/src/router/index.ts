@@ -127,17 +127,24 @@ router.beforeEach(async (to, _from, next) => {
     }
   }
 
-  if (!isAdminConsoleSpa() && to.name && UNSCOPED_HOST_BUSINESS_KEYS.has(String(to.name))) {
-    const { useAccountProfileStore } = await import('@/stores/accountProfile')
-    const profile = useAccountProfileStore()
-    if (profile.loaded && profile.tenantId != null) {
-      next({ name: 'settings', replace: true })
-      return
-    }
-  }
   if (!isAdminConsoleSpa() && !to.meta?.publicAccess) {
     const { useAccountProfileStore } = await import('@/stores/accountProfile')
     const profile = useAccountProfileStore()
+    // Settings is safe during the desktop session hint's background refresh.
+    if (!profile.loaded && !(isDesktopShell() && to.name === 'settings')) {
+      const sku = await fetchProductSku().catch(() => null)
+      if (sku === null || isEnterpriseEdition(sku)) {
+        await profile.refreshFromServer().catch(() => undefined)
+        if (!profile.loaded) {
+          next({ name: 'login', query: { redirect: to.fullPath }, replace: true })
+          return
+        }
+      }
+    }
+    if (to.name && UNSCOPED_HOST_BUSINESS_KEYS.has(String(to.name)) && profile.loaded && profile.tenantId != null) {
+      next({ name: 'settings', replace: true })
+      return
+    }
     const member = profile.loaded && String(profile.userRole || '').startsWith('tenant:')
     const allowed = to.name === 'settings'
       || (to.name === 'business-docking' && profile.permissions?.includes('etl.read'))
