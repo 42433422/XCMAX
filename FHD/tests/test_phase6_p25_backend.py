@@ -530,6 +530,8 @@ class TestRbacTenantRoutesUncoveredBranches:
     def _skip_admin_auth(self):
         """RBAC 端点需要 admin 权限，测试中绕过该依赖。"""
         fake_user = MagicMock()
+        fake_user.tier = "admin"
+        fake_user.role = "admin"
         fake_auth = MagicMock()
         fake_auth.has_permission.return_value = True
         with (
@@ -541,7 +543,7 @@ class TestRbacTenantRoutesUncoveredBranches:
                 "app.application.facades.session_facade.get_auth_service",
                 return_value=fake_auth,
             ),
-            patch("app.fastapi_routes.rbac.resolve_tenant_id", return_value=1),
+            patch("app.fastapi_routes.rbac.resolve_tenant_id", return_value=None),
         ):
             yield
 
@@ -595,7 +597,7 @@ class TestRbacTenantRoutesUncoveredBranches:
 
         with (
             patch("app.fastapi_routes.rbac.get_rbac_app_service") as mock_factory,
-            patch("app.fastapi_routes.rbac.resolve_tenant_id", return_value=1),
+            patch("app.fastapi_routes.rbac.resolve_tenant_id", return_value=None),
         ):
             svc = MagicMock()
             svc.create_role.side_effect = AppError(
