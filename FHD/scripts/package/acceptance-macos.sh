@@ -13,7 +13,7 @@
 #           → 安装到 ~/Applications/acceptance/（不触碰 /Applications）
 #           → 版本身份读取（Info.plist / build-info.json / product-sku.json）
 #           → 冷启动计时 + 截图 + 后端健康检查（可用 --skip-launch 跳过）
-#           → 卸载 dmg，打印 OTA / 回滚两步的人工操作指引
+#           → 卸载 dmg；客户业务、OTA 与回滚须另行实测
 #
 # --overwrite-upgrade：在既有安装（${ACCEPT_DIR}/XCAGI.app，须先退出应用）上覆盖升级。
 #   安装前采集 userData 业务数据基线 + 写入数据保留标记，安装后重采集并比对，
@@ -429,7 +429,7 @@ STEP_NAME="冷启动（计时 + 截图 + 健康检查）"
 log "[8/9] ${STEP_NAME}"
 
 if [[ "${SKIP_LAUNCH}" -eq 1 ]]; then
-  warn "已指定 --skip-launch：跳过真实启动。请在证据中注明「启动步骤以代码评审 + CI 冒烟替代」。"
+  warn "已指定 --skip-launch：真实启动未验证。"
   LAUNCH_RESULT=SKIP
 else
   if pgrep -f "XCAGI.app/Contents/MacOS/XCAGI" >/dev/null 2>&1; then
@@ -515,32 +515,8 @@ fi
 echo "  卸载验收实例（验收结束后可选）：rm -rf \"${ACCEPT_DIR}/XCAGI.app\""
 echo "======================================================================="
 echo
-echo "【接下来两步必须人工完成（脚本不代替）】"
+echo "本脚本仅核对安装层；OTA、回滚、权益、Mod 与客户业务须用当前包另行实测。"
 echo
-echo "▶ 步骤三 OTA（在线自动更新）——协议第 4 节："
-echo "  1) 确认更新源有新版本："
-echo "     curl -sS ${BASE_URL}/releases/stable/enterprise/latest-mac.yml"
-echo "  2) 打开 XCAGI → 设置 → 检查更新 → 下载完成后点「立即重启安装」；"
-echo "  3) 观察期（约 5 秒稳定性窗口）内不要强制退出；"
-echo "  4) 复核：cat \"${ACCEPT_DIR}/XCAGI.app/Contents/Resources/build-info.json\""
-echo "     curl -sS ${HEALTH_URL}"
-echo "     cat ~/Library/Application\\ Support/XCAGI/rollback-marker.json 2>/dev/null || echo 'marker 已提交'"
-echo "  ※ 当前线上已是 ${VERSION} 且无更高版本时：本步记 SKIP（无升级目标），"
-echo "    并引用最近一次 OTA 闭环证据（desktop-ota-closed-loop-20260724）。"
-echo
-echo "▶ 步骤四 回滚 ——协议第 5 节："
-echo "  路径 A（观察期自动回滚，需专用验收机构造坏更新）：更新后启动失败会自动还原旧版"
-echo "  并写 rollback-applied.json，用以下命令取证："
-echo "     cat ~/Library/Application\\ Support/XCAGI/rollback-applied.json"
-echo "  路径 B（降级安装）：从 ${BASE_URL}/xcagi-v<旧版本>/enterprise/ 下载上一版本 dmg，"
-echo "  重复安装步骤覆盖后确认版本回到旧版且 /api/health healthy。"
-echo "  ※ 不注入坏更新时：记 PARTIAL，引用 rollback.test.ts + update-rollback.e2e.spec.ts 佐证。"
-echo
-echo "【证据归档】按模板填写：FHD/docs/e2e/templates/desktop-acceptance-template.md"
-echo "  → 复制为 FHD/docs/evidence/e2e/desktop-real-machine-acceptance-${VERSION}-macos.md"
-echo "  → 截图放 FHD/docs/evidence/e2e/assets/"
-echo "======================================================================="
-
 if [[ "${LAUNCH_RESULT:-}" == FAIL || "${HEALTH_RESULT:-}" == FAIL || "${CODESIGN_VERIFY}" == FAIL || "${SPCTL_STATUS}" == FAIL ]]; then
   exit 1
 fi

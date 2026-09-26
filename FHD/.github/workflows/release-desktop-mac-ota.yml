@@ -1,6 +1,5 @@
-# macOS-only stable OTA republish.
-# Use when Windows SSL.com / publisher secrets are unavailable but Apple + update
-# Ed25519 + CVM push secrets are present. Does not modify Windows latest.yml.
+# macOS OTA release; candidate_only uploads an artifact without publishing.
+# Release mode retains exact-SHA security clearance and public readback.
 name: Release Desktop macOS OTA
 
 on:
@@ -18,17 +17,22 @@ on:
           - "1.0.0.2"
           - "1.0.0.1"
           - "1.0.0.0"
+      candidate_only:
+        description: "Build and notarize an acceptance artifact without publishing"
+        required: false
+        default: false
+        type: boolean
       release_sha:
         description: "Immutable 40-character source SHA"
         required: true
         type: string
       security_scan_run_id:
         description: "Most recent completed all-source zero-finding scan run ID"
-        required: true
+        required: false
         type: string
       previous_security_scan_run_id:
         description: "Prior-day all-source zero-finding scan run ID for the same SHA"
-        required: true
+        required: false
         type: string
 
 permissions:
@@ -59,7 +63,21 @@ jobs:
         with:
           ref: ${{ inputs.release_sha }}
 
+      - name: Lock checkout and acceptance candidate to main
+        run: |
+          test "$(git rev-parse HEAD)" = "${XCAGI_BUILD_SHA}"
+          if [ "${{ inputs.candidate_only }}" = true ]; then
+            test "${GITHUB_REF}" = refs/heads/main
+            test "${GITHUB_SHA}" = "${XCAGI_BUILD_SHA}"
+            . scripts/deploy/lib/version.sh; test "$(product_version)" = "${{ inputs.version }}"
+          fi
+
+      - name: Require release security evidence inputs
+        if: ${{ !inputs.candidate_only }}
+        run: test -n "${{ inputs.security_scan_run_id }}" && test -n "${{ inputs.previous_security_scan_run_id }}"
+
       - name: Download normalized security evidence
+        if: ${{ !inputs.candidate_only }}
         uses: actions/download-artifact@v4
         with:
           name: xcagi-security-release-reports
@@ -68,6 +86,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Download prior-day normalized security evidence
+        if: ${{ !inputs.candidate_only }}
         uses: actions/download-artifact@v4
         with:
           name: xcagi-security-release-reports
@@ -76,6 +95,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Enforce exact-SHA two-day security clearance
+        if: ${{ !inputs.candidate_only }}
         run: >-
           python scripts/security/verify_security_scan_pair.py
           --previous-dir "${RUNNER_TEMP}/security-reports/previous"
@@ -98,7 +118,7 @@ jobs:
           if [ -z "${APPLE_TEAM_ID:-}" ] && [ -z "${IOS_TEAM_ID:-}" ]; then
             missing+=("APPLE_TEAM_ID|IOS_TEAM_ID")
           fi
-          if [ -z "${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}" ]; then
+          if [ "${{ inputs.candidate_only }}" != true ] && [ -z "${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}" ]; then
             missing+=("SERVER_SSH_KEY|FHD_PUSH_SSH_KEY")
           fi
           if [ "${#missing[@]}" -gt 0 ]; then
@@ -113,7 +133,7 @@ jobs:
           cache: "pip"
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
           cache-dependency-path: |
             FHD/frontend/package-lock.json
@@ -170,17 +190,22 @@ jobs:
           grep -Eq "^releaseDate: ['\"]?[0-9]{4}-[0-9]{2}-[0-9]{2}T" "${src}/latest-mac.yml"
           grep -Eq '^signature: ed25519:[A-Za-z0-9+/=]+$' "${src}/latest-mac.yml"
 
-      # Upload the signed artifacts to the run so a flaky CVM publish can never
-      # lose them: operators can download and deploy them manually via local SSH.
+      - name: Verify notarized DMG and packaged runtime
+        run: |
+          v="${{ inputs.version }}"
+          dmg="$(find "release/xcagi-v${v}/enterprise" -name '*.dmg' -print -quit)"
+          bash scripts/package/verify-macos-release-dmg.sh "${dmg}" "${v}" "${XCAGI_BUILD_SHA}"
+
       - name: Upload macOS OTA artifacts for recovery
         uses: actions/upload-artifact@v4
         with:
-          name: mac-ota-enterprise-${{ github.event.inputs.version }}
+          name: ${{ inputs.candidate_only && format('mac-acceptance-{0}', inputs.release_sha) || format('mac-ota-enterprise-{0}', inputs.version) }}
           path: FHD/release/xcagi-v${{ github.event.inputs.version }}/enterprise
           if-no-files-found: error
           retention-days: 7
 
       - name: Publish macOS OTA artifacts to CVM (official + stable)
+        if: ${{ !inputs.candidate_only }}
         timeout-minutes: 180
         working-directory: .
         env:
@@ -245,6 +270,7 @@ jobs:
           echo "macOS OTA published to official and stable paths."
 
       - name: Verify public latest-mac.yml identity
+        if: ${{ !inputs.candidate_only }}
         working-directory: .
         shell: bash
         run: |
@@ -260,6 +286,7 @@ jobs:
           echo "Public macOS OTA feed verified for ${XCAGI_BUILD_SHA}"
 
       - name: Publish download center metadata and changelog
+        if: ${{ !inputs.candidate_only }}
         working-directory: FHD
         shell: bash
         env:
