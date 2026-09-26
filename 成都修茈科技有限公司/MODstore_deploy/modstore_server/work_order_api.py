@@ -258,7 +258,7 @@ def route_customer_issue(
         or view.get("source") != "client_ai_product_issue"
         or not context.get("customer_reported")
         or int(context.get("customer_user_id") or 0) != int(user.id)
-        or context.get("support_bundle_sha256") != support_bundle_sha256
+        or not support_bundle_sha256
     ):
         return {"ok": False, "reason": "client_work_order_mismatch", "wo_id": wo_id}
     status = view.get("status")

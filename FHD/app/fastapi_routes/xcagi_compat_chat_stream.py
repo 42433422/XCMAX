@@ -16,6 +16,40 @@ def _facade():
     return importlib.import_module("app.fastapi_routes.xcagi_compat_chat_helpers")
 
 
+def _client_issue_reply(receipt: dict | None) -> str:
+    if not receipt:
+        return ""
+    return {
+        "ROUTED": f"已向 Owner 提交产品问题，Work Order：{receipt.get('work_order_id')}，市场工单：{receipt.get('owner_ticket_no')}。支持包 SHA256：{receipt.get('support_bundle_sha256')}。",
+        "NEEDS_MORE_EVIDENCE": f"采证未完成（缺少：{'、'.join(receipt.get('missing_evidence') or [])}）；暂未创建工单。",
+        "OWNER_ROUTE_UNAVAILABLE": f"Owner 候选 Work Order {receipt.get('work_order_id') or '受理服务'}尚未送达。",
+        "not_confirmed": "目前无法以足够把握确认是产品缺陷，因此没有自动建单。",
+    }.get(str(receipt.get("state") or ""), "")
+
+
+def _classify_and_submit_client_issue(request, runtime_context, message, reply, client=None):
+    from app.application import client_product_issue_intake as intake
+
+    if not intake.looks_like_issue_report(message):
+        return None
+    client = client or _facade().create_modstore_openai_client_from_request(request)
+    triage = intake.classify_report(client, message, reply)
+    if not triage or triage.get("type") != "product_defect":
+        return None
+    try:
+        return asyncio.run(
+            intake.submit_product_issue(
+                request=request,
+                tenant_id=runtime_context.get("tenant_id"),
+                customer_message=message,
+                triage=triage,
+            )
+        )
+    except _facade().RECOVERABLE_ERRORS:
+        _facade().logger.warning("client product issue intake failed", exc_info=True)
+        return {"state": "OWNER_ROUTE_UNAVAILABLE"}
+
+
 def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, ai_tier: str):
     m = (body.mode or "").strip().lower()
     if m in ("online", "offline"):
@@ -49,6 +83,20 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     authenticated_tenant_id = (
         int(authenticated_tenant_id) if authenticated_tenant_id is not None else None
     )
+    if issue_reply := _client_issue_reply(
+        _classify_and_submit_client_issue(request, runtime_context, body.message, "")
+    ):
+        payload = _facade().attach_chat_trace_run(
+            _facade()._xcagi_compat_reply_payload(issue_reply),
+            message=body.message,
+            runtime_context=runtime_context,
+            user_id=body.user_id,
+            source=body.source,
+            channel="compat_chat_stream",
+        )
+        for event in ({"type": "token", "text": issue_reply}, {"type": "done", "result": payload}):
+            yield _facade()._sse_event_line(event)
+        return
     if (
         has_pending_workflow
         or sales_closed_loop_route
@@ -240,52 +288,12 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         from app.application.planner_display_markers import strip_planner_stream_markers
 
         visible_text, marker_lines = strip_planner_stream_markers(merged)
-        from app.application.client_product_issue_intake import (
-            classify_report,
-            looks_like_issue_report,
-            submit_product_issue,
+        issue_receipt = _classify_and_submit_client_issue(
+            request, runtime_context, body.message, visible_text, llm_client
         )
-
-        issue_receipt = None
-        if looks_like_issue_report(body.message):
-            triage = classify_report(llm_client, body.message, visible_text)
-            if triage and triage.get("type") == "product_defect":
-                try:
-                    issue_receipt = asyncio.run(
-                        submit_product_issue(
-                            request=request,
-                            client=llm_client,
-                            tenant_id=runtime_context.get("tenant_id"),
-                            customer_message=body.message,
-                            assistant_reply=visible_text,
-                            triage=triage,
-                        )
-                    )
-                except _facade().RECOVERABLE_ERRORS:
-                    _facade().logger.warning("client product issue intake failed", exc_info=True)
-                    issue_receipt = {"state": "OWNER_ROUTE_UNAVAILABLE"}
-                if issue_receipt:
-                    state = str(issue_receipt.get("state") or "")
-                    if state == "ROUTED":
-                        visible_text += (
-                            f"\n\n已向 Owner 提交产品问题，Work Order："
-                            f"{issue_receipt['work_order_id']}，市场工单："
-                            f"{issue_receipt['owner_ticket_no']}。"
-                        )
-                    elif state == "NEEDS_MORE_EVIDENCE":
-                        missing = "、".join(issue_receipt.get("missing_evidence") or [])
-                        visible_text += f"\n\n我判断这属于产品问题，但采证未完成（缺少：{missing}）；暂未创建工单。"
-                    elif state == "OWNER_ROUTE_UNAVAILABLE":
-                        work_order = str(issue_receipt.get("work_order_id") or "")
-                        if work_order:
-                            visible_text += (
-                                f"\n\nOwner 已创建候选 Work Order {work_order}，"
-                                "但客户问题受理尚未确认；我没有声称问题已送达。"
-                            )
-                        else:
-                            visible_text += "\n\nOwner 受理服务当前不可用；我没有声称已送达。"
-                    elif state == "not_confirmed":
-                        visible_text += "\n\n目前无法以足够把握确认是产品缺陷，因此没有自动建单。"
+        issue_reply = _client_issue_reply(issue_receipt)
+        if issue_reply:
+            visible_text += f"\n\n{issue_reply}"
         thinking = _facade()._thinking_steps_from_planner_stream_text(merged)
         if not thinking:
             thinking = marker_lines

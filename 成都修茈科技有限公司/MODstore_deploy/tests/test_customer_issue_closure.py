@@ -394,6 +394,10 @@ def test_customer_feedback_keeps_work_order_and_verified_bundle_in_owner_event(c
         headers=headers,
     )
     wo_id = candidate.json()["wo_id"]
+    with zipfile.ZipFile(archive, "w") as bundle:
+        bundle.writestr("manifest.json", '{"redacted":true,"retry":true}')
+    raw = archive.getvalue()
+    sha = hashlib.sha256(raw).hexdigest()
     body = {
         "source": "customer_feedback",
         "source_ref": wo_id,

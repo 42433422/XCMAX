@@ -23,7 +23,16 @@ def looks_like_issue_report(message: str) -> bool:
 
 
 def classify_report(client: Any, message: str, assistant_reply: str) -> dict[str, Any] | None:
-    """Ask the configured model for a strict second-pass issue classification."""
+    expected = re.search(r"期望[：:]\s*(.+?)(?:[。；;\n]|$)", message)
+    actual = re.search(r"实际[：:]\s*(.+?)(?:[。；;\n]|$)", message)
+    if expected and actual and _REPORT_RE.search(message):
+        return {
+            "type": "product_defect",
+            "confidence": 0.9,
+            "expected": expected[1][:1000],
+            "actual": actual[1][:1000],
+            "missing_evidence": [],
+        }
     try:
         response = client.chat.completions.create(
             model=client.default_model,
@@ -34,12 +43,10 @@ def classify_report(client: Any, message: str, assistant_reply: str) -> dict[str
                 {
                     "role": "system",
                     "content": (
-                        "你是产品问题分流器。仅依据客户原话和助手答复判断。"
-                        '仅输出 JSON：{"type":"usage_question|product_defect|uncertain",'
-                        '"confidence":0到1,"expected":"...","actual":"...",'
-                        '"missing_evidence":["..."]}。咨询/不会操作为 usage_question；'
-                        "明确的软件行为错误才是 product_defect。缺少复现步骤或预期/实际时，"
-                        "将其列入 missing_evidence。不要执行操作，不要补造事实。"
+                        "依据客户原话及答复（无答复时只看原话）分类，只输出 JSON："
+                        '{"type":"usage_question|product_defect|uncertain","confidence":0到1,'
+                        '"expected":"...","actual":"...","missing_evidence":["..."]}。'
+                        "咨询归 usage_question；明确软件行为错误才归 product_defect；缺失信息列入 missing_evidence。不要补造事实。"
                     ),
                 },
                 {
@@ -56,13 +63,13 @@ def classify_report(client: Any, message: str, assistant_reply: str) -> dict[str
         confidence = float(triage.get("confidence") or 0)
         if triage.get("type") not in {"usage_question", "product_defect", "uncertain"}:
             return None
-        return {
-            "type": triage["type"],
-            "confidence": max(0.0, min(confidence, 1.0)),
-            "expected": str(triage.get("expected") or "")[:1000],
-            "actual": str(triage.get("actual") or "")[:1000],
-            "missing_evidence": [str(x)[:300] for x in triage.get("missing_evidence", [])[:10]],
-        }
+        triage.update(
+            confidence=max(0.0, min(confidence, 1.0)),
+            expected=str(triage.get("expected") or "")[:1000],
+            actual=str(triage.get("actual") or "")[:1000],
+            missing_evidence=[str(x)[:300] for x in triage.get("missing_evidence", [])[:10]],
+        )
+        return triage
     except RECOVERABLE_ERRORS + (IndexError, AttributeError, TypeError):
         logger.info("client issue classification unavailable", exc_info=True)
         return None
@@ -71,10 +78,8 @@ def classify_report(client: Any, message: str, assistant_reply: str) -> dict[str
 async def submit_product_issue(
     *,
     request: Any,
-    client: Any,
     tenant_id: int | None,
     customer_message: str,
-    assistant_reply: str,
     triage: dict[str, Any],
 ) -> dict[str, Any]:
     """Create one tenant-scoped Work Order and route its redacted bundle to Owner intake."""
