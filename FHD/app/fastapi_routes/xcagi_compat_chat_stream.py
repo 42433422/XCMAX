@@ -16,6 +16,49 @@ def _facade():
     return importlib.import_module("app.fastapi_routes.xcagi_compat_chat_helpers")
 
 
+def _client_issue_reply(receipt: dict | None) -> str:
+    if not receipt:
+        return ""
+    state = str(receipt.get("state") or "")
+    if state == "ROUTED":
+        return f"已向 Owner 提交产品问题，Work Order：{receipt['work_order_id']}，市场工单：{receipt['owner_ticket_no']}。支持包 SHA256：{receipt['support_bundle_sha256']}。"
+    if state == "NEEDS_MORE_EVIDENCE":
+        return f"采证未完成（缺少：{'、'.join(receipt.get('missing_evidence') or [])}）；暂未创建工单。"
+    if state == "OWNER_ROUTE_UNAVAILABLE":
+        return f"Owner 候选 Work Order {receipt.get('work_order_id') or '受理服务'}尚未送达。"
+    if state == "not_confirmed":
+        return "目前无法以足够把握确认是产品缺陷，因此没有自动建单。"
+    return ""
+
+
+def _classify_and_submit_client_issue(request, client, runtime_context, message, reply):
+    from app.application.client_product_issue_intake import (
+        classify_report,
+        looks_like_issue_report,
+        submit_product_issue,
+    )
+
+    if not looks_like_issue_report(message):
+        return None
+    triage = classify_report(client, message, reply)
+    if not triage or triage.get("type") != "product_defect":
+        return None
+    try:
+        return asyncio.run(
+            submit_product_issue(
+                request=request,
+                client=client,
+                tenant_id=runtime_context.get("tenant_id"),
+                customer_message=message,
+                assistant_reply=reply,
+                triage=triage,
+            )
+        )
+    except _facade().RECOVERABLE_ERRORS:
+        _facade().logger.warning("client product issue intake failed", exc_info=True)
+        return {"state": "OWNER_ROUTE_UNAVAILABLE"}
+
+
 def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, ai_tier: str):
     m = (body.mode or "").strip().lower()
     if m in ("online", "offline"):
@@ -121,6 +164,23 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         return
     workspace_root = _facade().os.environ.get("WORKSPACE_ROOT", _facade().os.getcwd())
     llm_client = _facade().create_modstore_openai_client_from_request(request)
+    receipt = _classify_and_submit_client_issue(
+        request, llm_client, runtime_context, body.message, ""
+    )
+    issue_reply = _client_issue_reply(receipt)
+    if issue_reply:
+        payload = _facade()._xcagi_compat_reply_payload(issue_reply)
+        payload = _facade().attach_chat_trace_run(
+            payload,
+            message=body.message,
+            runtime_context=runtime_context,
+            user_id=body.user_id,
+            source=body.source,
+            channel="compat_chat_stream",
+        )
+        yield _facade()._sse_event_line({"type": "token", "text": issue_reply})
+        yield _facade()._sse_event_line({"type": "done", "result": payload})
+        return
     reply_parts: list[str] = []
     pre_run = None
     planner_runtime_context = dict(runtime_context or {})
@@ -240,52 +300,12 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         from app.application.planner_display_markers import strip_planner_stream_markers
 
         visible_text, marker_lines = strip_planner_stream_markers(merged)
-        from app.application.client_product_issue_intake import (
-            classify_report,
-            looks_like_issue_report,
-            submit_product_issue,
+        issue_receipt = _classify_and_submit_client_issue(
+            request, llm_client, runtime_context, body.message, visible_text
         )
-
-        issue_receipt = None
-        if looks_like_issue_report(body.message):
-            triage = classify_report(llm_client, body.message, visible_text)
-            if triage and triage.get("type") == "product_defect":
-                try:
-                    issue_receipt = asyncio.run(
-                        submit_product_issue(
-                            request=request,
-                            client=llm_client,
-                            tenant_id=runtime_context.get("tenant_id"),
-                            customer_message=body.message,
-                            assistant_reply=visible_text,
-                            triage=triage,
-                        )
-                    )
-                except _facade().RECOVERABLE_ERRORS:
-                    _facade().logger.warning("client product issue intake failed", exc_info=True)
-                    issue_receipt = {"state": "OWNER_ROUTE_UNAVAILABLE"}
-                if issue_receipt:
-                    state = str(issue_receipt.get("state") or "")
-                    if state == "ROUTED":
-                        visible_text += (
-                            f"\n\n已向 Owner 提交产品问题，Work Order："
-                            f"{issue_receipt['work_order_id']}，市场工单："
-                            f"{issue_receipt['owner_ticket_no']}。"
-                        )
-                    elif state == "NEEDS_MORE_EVIDENCE":
-                        missing = "、".join(issue_receipt.get("missing_evidence") or [])
-                        visible_text += f"\n\n我判断这属于产品问题，但采证未完成（缺少：{missing}）；暂未创建工单。"
-                    elif state == "OWNER_ROUTE_UNAVAILABLE":
-                        work_order = str(issue_receipt.get("work_order_id") or "")
-                        if work_order:
-                            visible_text += (
-                                f"\n\nOwner 已创建候选 Work Order {work_order}，"
-                                "但客户问题受理尚未确认；我没有声称问题已送达。"
-                            )
-                        else:
-                            visible_text += "\n\nOwner 受理服务当前不可用；我没有声称已送达。"
-                    elif state == "not_confirmed":
-                        visible_text += "\n\n目前无法以足够把握确认是产品缺陷，因此没有自动建单。"
+        issue_reply = _client_issue_reply(issue_receipt)
+        if issue_reply:
+            visible_text += f"\n\n{issue_reply}"
         thinking = _facade()._thinking_steps_from_planner_stream_text(merged)
         if not thinking:
             thinking = marker_lines

@@ -34,7 +34,7 @@ def classify_report(client: Any, message: str, assistant_reply: str) -> dict[str
                 {
                     "role": "system",
                     "content": (
-                        "你是产品问题分流器。仅依据客户原话和助手答复判断。"
+                        "你是产品问题分流器。依据客户原话和已有答复判断；无答复时只依据原话。"
                         '仅输出 JSON：{"type":"usage_question|product_defect|uncertain",'
                         '"confidence":0到1,"expected":"...","actual":"...",'
                         '"missing_evidence":["..."]}。咨询/不会操作为 usage_question；'
