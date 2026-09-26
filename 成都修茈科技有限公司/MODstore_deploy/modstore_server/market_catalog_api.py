@@ -1,9 +1,9 @@
 # mypy: disable-error-code="arg-type, assignment"
+# ruff: noqa: F401 -- dynamic route modules import these facade exports
 """XC AGI 在线市场 API：目录浏览、搜索、评价、收藏、投诉。"""
 
 from __future__ import annotations
 
-import hashlib
 import importlib
 import json
 import logging
@@ -107,10 +107,6 @@ def _reject_internal_duty_catalog_item(item: CatalogItem) -> None:
     """用户侧市场路由：编制内运维包视为不存在（404）。"""
     if is_planned_duty_employee_pack(item.pkg_id, item.artifact):
         raise HTTPException(404, "商品不存在")
-
-
-def _market_params_hash(*args: Any) -> str:
-    return hashlib.sha1(json.dumps(args, sort_keys=True, default=str).encode()).hexdigest()[:12]
 
 
 def _invalidate_market_catalog_caches() -> None:

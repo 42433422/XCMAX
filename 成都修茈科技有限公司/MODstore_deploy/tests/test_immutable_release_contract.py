@@ -185,6 +185,14 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert 'RUNTIME_DIR="${MODSTORE_RUNTIME_DIR:-${RELEASE_BASE}/runtime}"' in script
     assert '[[ "$RUNTIME_DIR" == /* ]]' in script
     assert 'install -d -m 700 "$RUNTIME_DIR"' in script
+    assert 'CATALOG_DIR="${MODSTORE_CATALOG_DIR:-${RUNTIME_DIR%/}/catalog}"' in script
+    assert 'MODSTORE_CATALOG_DIR=%s' in script
+    assert 'verify_catalog_runtime_dir modstore.service' in script
+    assert 'verify_catalog_runtime_dir modstore-scheduler.service' in script
+    assert script.index('systemctl stop modstore.service modstore-scheduler.service') < script.index('cp -a "$CATALOG_SOURCE/."')
+    assert script.index('cp -a "$CATALOG_SOURCE/."') < script.index('ln -s "$FINAL_ROOT" "${CURRENT_LINK}.next"')
+    assert 'modstore_server/market_files" "$CATALOG_STAGE/market_files"' in script
+    assert 'inactive catalog differs from live snapshot' in script
     assert "MODSTORE_RUNTIME_DIR=%s" in script
     assert "MODSTORE_REPO_ROOT=%s" in script
     assert "XCMAX_MONOREPO_ROOT=%s" in script
@@ -196,7 +204,7 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert "verify_cli_identity" in script
     assert "xcmax-terminal exact-SHA identity verification failed" in script
     assert "JAVA_PAYMENT_SERVICE_URL=http://127.0.0.1:8080" in script
-    assert '"$RUNTIME_DIR" "$CURRENT_LINK" "$CURRENT_LINK"' in script
+    assert '"$RUNTIME_DIR" "$CATALOG_DIR" "$CURRENT_LINK" "$CURRENT_LINK"' in script
     assert "verify_customer_value_reconciler" in script
     assert "customer value reconciler did not prove" in script
     reconciler_gate = script[

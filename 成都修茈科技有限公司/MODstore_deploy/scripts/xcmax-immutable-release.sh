@@ -9,6 +9,7 @@ RELEASES_DIR="${RELEASE_BASE%/}/releases"
 CURRENT_LINK="${XCMAX_CURRENT_LINK:-${RELEASE_BASE}/current}"
 CLI_LAUNCHER_PATH="${XCMAX_CLI_LAUNCHER_PATH:-/usr/local/bin/xcmax-terminal}"
 RUNTIME_DIR="${MODSTORE_RUNTIME_DIR:-${RELEASE_BASE}/runtime}"
+CATALOG_DIR="${MODSTORE_CATALOG_DIR:-${RUNTIME_DIR%/}/catalog}"
 SITE_LINK="${XCMAX_SITE_LINK:-/root/成都修茈科技有限公司}"
 PUBLIC_SITE_STATE_DIR="${XCMAX_PUBLIC_SITE_STATE_DIR:-/var/lib/xcmax-public}"
 ENV_DIR="${MODSTORE_ENV_DIR:-/etc/xcmax}"
@@ -107,6 +108,7 @@ JS
 [[ "$RELEASE_BASE" == /* ]] || fail "XCMAX_RELEASE_BASE must be an absolute path"
 [[ "$CLI_LAUNCHER_PATH" == /* ]] || fail "XCMAX_CLI_LAUNCHER_PATH must be an absolute path"
 [[ "$RUNTIME_DIR" == /* ]] || fail "MODSTORE_RUNTIME_DIR must be an absolute path"
+[[ "$CATALOG_DIR" == /* ]] || fail "MODSTORE_CATALOG_DIR must be an absolute path"
 [[ "$RELEASES_TO_KEEP" =~ ^[0-9]+$ ]] && (( RELEASES_TO_KEEP >= 2 )) \
   || fail "XCMAX_RELEASES_TO_KEEP must be an integer greater than or equal to 2"
 if [[ -n "$GITHUB_REPOSITORY_SLUG" ]] \
@@ -482,6 +484,10 @@ fi
 PREVIOUS_ROOT="$(readlink -f "$CURRENT_LINK")"
 [[ -d "$PREVIOUS_ROOT" ]] || fail "current release target is invalid: $PREVIOUS_ROOT"
 
+# Published package bytes and the catalog index must survive release pruning.
+case "$(canonical_path "$CATALOG_DIR")" in
+  "$(canonical_path "$RELEASES_DIR")"/*) fail "catalog directory cannot live inside immutable releases" ;;
+esac
 # Public runtime projections must survive immutable release promotion.  Seed
 # the persistent nginx root once from the previous release when available;
 # subsequent authenticated founder snapshots update this same external file.
@@ -512,9 +518,9 @@ write_service_units() {
   if [[ -f "$release_manifest" ]]; then
     release_artifact_sha="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("artifact_sha256", ""))' "$release_manifest")"
   fi
-  printf 'MODSTORE_GIT_SHA=%s\nMODSTORE_EXPECTED_GIT_SHA=%s\nMODSTORE_DEPLOY_TIER=production\nMODSTORE_RELEASE_MANIFEST=%s/.xcmax-release.json\nMODSTORE_RELEASE_ARTIFACT_SHA256=%s\nMODSTORE_RUNTIME_DIR=%s\nMODSTORE_REPO_ROOT=%s\nXCMAX_MONOREPO_ROOT=%s\nMODSTORE_CAPABILITY_PROPOSAL_REPO=%s\nXCMAX_RELEASE_SHA=%s\nXCMAX_PRODUCT_VERSION=%s\nJAVA_PAYMENT_SERVICE_URL=http://127.0.0.1:8080\n' \
+  printf 'MODSTORE_GIT_SHA=%s\nMODSTORE_EXPECTED_GIT_SHA=%s\nMODSTORE_DEPLOY_TIER=production\nMODSTORE_RELEASE_MANIFEST=%s/.xcmax-release.json\nMODSTORE_RELEASE_ARTIFACT_SHA256=%s\nMODSTORE_RUNTIME_DIR=%s\nMODSTORE_CATALOG_DIR=%s\nMODSTORE_REPO_ROOT=%s\nXCMAX_MONOREPO_ROOT=%s\nMODSTORE_CAPABILITY_PROPOSAL_REPO=%s\nXCMAX_RELEASE_SHA=%s\nXCMAX_PRODUCT_VERSION=%s\nJAVA_PAYMENT_SERVICE_URL=http://127.0.0.1:8080\n' \
     "$TARGET_SHA" "$TARGET_SHA" "$CURRENT_LINK" "$release_artifact_sha" \
-    "$RUNTIME_DIR" "$CURRENT_LINK" "$CURRENT_LINK" "$GITHUB_REPOSITORY_SLUG" \
+    "$RUNTIME_DIR" "$CATALOG_DIR" "$CURRENT_LINK" "$CURRENT_LINK" "$GITHUB_REPOSITORY_SLUG" \
     "$TARGET_SHA" "$PRODUCT_VERSION" > "${release_env}.tmp"
   printf 'MODSTORE_NODE_EXECUTABLE=%s\n' "$RUNTIME_NODE_BIN" >> "${release_env}.tmp"
   chmod 644 "${release_env}.tmp"
@@ -603,6 +609,19 @@ EnvironmentFile=-${ENV_FILE}
 EnvironmentFile=-${release_env}
 EOF
   fi
+}
+
+verify_catalog_runtime_dir() {
+  local pid=""
+  pid="$(systemctl show "$1" -p MainPID --value)"
+  [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 1
+  python3 - "/proc/$pid/environ" "$CATALOG_DIR" <<'PY'
+import sys
+
+with open(sys.argv[1], "rb") as handle:
+    entries = handle.read().split(b"\0")
+assert ("MODSTORE_CATALOG_DIR=" + sys.argv[2]).encode() in entries
+PY
 }
 
 install_cli_launcher() {
@@ -740,8 +759,75 @@ rollback() {
   systemctl is-active --quiet modstore.service modstore-scheduler.service
 }
 
+CATALOG_SOURCE="${PREVIOUS_ROOT}/${MODSTORE_SUBDIR}/modstore_server/catalog_data"
+ACTIVE_CATALOG_DIR="$(python3 - "$(systemctl show modstore.service -p MainPID --value)" "$CATALOG_SOURCE" <<'PY'
+import os
+import sys
+
+pid, fallback = sys.argv[1:]
+entries = []
+if pid.isdigit() and int(pid) > 0:
+    with open(f"/proc/{pid}/environ", "rb") as handle:
+        entries = handle.read().split(b"\0")
+value = next((e.partition(b"=")[2].decode() for e in entries if e.startswith(b"MODSTORE_CATALOG_DIR=")), "")
+print(os.path.realpath(value or fallback))
+PY
+)"
+[[ "$ACTIVE_CATALOG_DIR" == "$(canonical_path "$CATALOG_DIR")" || "$ACTIVE_CATALOG_DIR" == "$(canonical_path "$CATALOG_SOURCE")" ]] \
+  || fail "active catalog uses a different external directory: $ACTIVE_CATALOG_DIR"
+CATALOG_SERVICES_STOPPED=0
+RELEASE_SWITCHED=0
+recover_catalog_migration() {
+  local status=$?
+  if [[ "$status" != 0 && "$CATALOG_SERVICES_STOPPED" == 1 ]]; then
+    if [[ "$RELEASE_SWITCHED" == 1 ]]; then rollback || true
+    else systemctl start modstore.service modstore-scheduler.service || true
+    fi
+  fi
+}
+trap recover_catalog_migration EXIT
+if [[ "$ACTIVE_CATALOG_DIR" != "$(canonical_path "$CATALOG_DIR")" ]]; then
+  CATALOG_SERVICES_STOPPED=1
+  systemctl stop modstore.service modstore-scheduler.service
+  [[ -f "$CATALOG_SOURCE/packages.json" ]] || fail "active catalog index is missing"
+  install -d -m 700 "$(dirname "$CATALOG_DIR")"
+  CATALOG_STAGE="$(mktemp -d "$(dirname "$CATALOG_DIR")/.catalog.XXXXXX")"
+  cp -a "$CATALOG_SOURCE/." "$CATALOG_STAGE/"
+  install -d -m 700 "$CATALOG_STAGE/files"
+  python3 - "${PREVIOUS_ROOT}/${MODSTORE_SUBDIR}/modstore_server/market_files" "$CATALOG_STAGE/market_files" <<'PY'
+import shutil
+import sys
+from pathlib import Path
+
+source, target = map(Path, sys.argv[1:])
+if source.is_dir():
+    target.mkdir(parents=True, exist_ok=True)
+    for item in source.iterdir():
+        if not item.is_file() or item.is_symlink():
+            continue
+        shutil.copy2(item, target / item.name)
+PY
+  chmod -R u+rwX "$CATALOG_STAGE"
+  if [[ -e "$CATALOG_DIR" ]]; then
+    diff -qr "$CATALOG_STAGE" "$CATALOG_DIR" >/dev/null \
+      || fail "inactive catalog differs from live snapshot; reconcile before promotion"
+    rm -rf -- "$CATALOG_STAGE"
+  else
+    mv "$CATALOG_STAGE" "$CATALOG_DIR"
+  fi
+fi
+python3 - "$CATALOG_DIR/packages.json" <<'PY' || fail "persistent catalog index is invalid"
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    payload = json.load(handle)
+assert isinstance(payload, dict) and isinstance(payload.get("packages"), list)
+PY
+
 ln -s "$FINAL_ROOT" "${CURRENT_LINK}.next"
 mv -Tf "${CURRENT_LINK}.next" "$CURRENT_LINK"
+RELEASE_SWITCHED=1
 ln -s "${CURRENT_LINK}/${SITE_SUBDIR}" "${SITE_LINK}.next"
 mv -Tf "${SITE_LINK}.next" "$SITE_LINK"
 install_cli_launcher
@@ -779,7 +865,9 @@ READY=0
 for _ in $(seq 1 60); do
   if systemctl is-active --quiet modstore.service modstore-scheduler.service \
       && verify_health_identity "$HEALTH_URL" "$TARGET_SHA" "$EXPECTED_ARTIFACT_SHA" \
-      && verify_health_identity "$SCHEDULER_HEALTH_URL" "$TARGET_SHA" "$EXPECTED_ARTIFACT_SHA"; then
+      && verify_health_identity "$SCHEDULER_HEALTH_URL" "$TARGET_SHA" "$EXPECTED_ARTIFACT_SHA" \
+      && verify_catalog_runtime_dir modstore.service \
+      && verify_catalog_runtime_dir modstore-scheduler.service; then
     READY=1
     break
   fi
@@ -814,4 +902,6 @@ if [[ -n "$PUBLIC_HEALTH_URL" ]] \
   fail "exact-SHA public health verification failed"
 fi
 log "release promoted and verified git_sha=$TARGET_SHA root=$FINAL_ROOT"
+CATALOG_SERVICES_STOPPED=0
+trap - EXIT
 prune_releases "$FINAL_ROOT" "$PREVIOUS_ROOT" "$(canonical_path "$CURRENT_LINK")"

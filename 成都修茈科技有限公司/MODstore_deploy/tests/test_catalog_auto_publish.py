@@ -158,6 +158,20 @@ def test_auto_publish_is_public_verified_and_idempotent(
     assert second.status_code == 200, second.text
     assert second.json()["idempotent"] is True
 
+    archive = tmp_path / "catalog" / "files" / detail.json()["stored_filename"]
+    archive.write_bytes(b"corrupted release package")
+    assert client.get("/api/market/catalog", params={"q": pkg_id}).json() == {
+        "items": [], "total": 0,
+    }
+    assert client.get(f"/api/market/catalog/{matches[0]['id']}").status_code == 404
+    assert client.get("/v1/index.json").json()["packages"] == []
+    assert client.get(f"/v1/packages/{pkg_id}/1.0.0").status_code == 404
+    assert client.get("/v1/packages", params={"q": pkg_id}).json()["total"] == 0
+    assert client.get(f"/v1/packages/by-id/{pkg_id}/versions").json()["versions"] == []
+    assert client.get(f"/v1/packages/{pkg_id}/1.0.0/download").status_code == 404
+    archive.unlink()
+    assert client.get("/api/market/catalog", params={"q": pkg_id}).json()["total"] == 0
+
 
 def test_publication_survives_vector_outage_and_idempotent_retry_recovers(
     client, monkeypatch, tmp_path, signing_key

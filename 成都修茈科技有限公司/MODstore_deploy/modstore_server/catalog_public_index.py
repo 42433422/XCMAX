@@ -60,9 +60,9 @@ def package_row_eligible_for_public_index(
     if channel == "draft" or ver.startswith("draft-"):
         return False
 
-    stored = str(row.get("stored_filename") or "").strip()
-    download_url = str(row.get("download_url") or "").strip()
-    if not stored and not download_url:
+    from modstore_server.catalog_store import public_package_available
+
+    if not public_package_available(row):
         return False
 
     if public_pkg_ids is None:

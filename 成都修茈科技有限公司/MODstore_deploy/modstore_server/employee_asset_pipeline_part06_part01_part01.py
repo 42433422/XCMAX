@@ -116,18 +116,8 @@ def build_employee_pack_zip_from_dir(pack_id: str, pack_dir: _facade().Path) -> 
 
 
 def mirror_catalog_file_to_market_files(stored_filename: str) -> None:
-    """Keep the browsable market_files copy aligned with catalog_data/files."""
-    name = _facade()._safe_basename(stored_filename, "")
-    if not name:
-        return
-    from modstore_server.catalog_store import files_dir
-
-    src = files_dir() / name
-    if not src.is_file():
-        return
-    dest_dir = _facade().Path(__file__).resolve().parent / "market_files"
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    _facade().shutil.copy2(src, dest_dir / name)
+    """Compatibility hook: market and XC catalog now share the same files directory."""
+    return
 
 
 def _copy_template_assets(

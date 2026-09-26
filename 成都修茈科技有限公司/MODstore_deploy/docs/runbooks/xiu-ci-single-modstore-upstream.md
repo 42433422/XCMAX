@@ -30,4 +30,4 @@ curl -sS http://127.0.0.1:9999/api/health
 ## 参考
 
 - 仓库示例（Flask 网关思路，端口按实际替换）：[`deploy/nginx-api-via-flask.conf.example`](../../../deploy/nginx-api-via-flask.conf.example)
-- 远程运维总入口：[remote-server-operations.md](./remote-server-operations.md)
+- 当前正式发布入口：[xcmax-immutable-release.sh](../../scripts/xcmax-immutable-release.sh)
