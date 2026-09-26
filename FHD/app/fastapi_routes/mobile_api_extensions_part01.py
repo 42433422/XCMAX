@@ -47,10 +47,10 @@ from app.fastapi_routes.mobile_api_extensions_part01_part01 import (
     _pairing_issue_host as _pairing_issue_host,
 )
 from app.fastapi_routes.mobile_api_extensions_part01_part01 import (
-    _register_desktop_relay_for_pairing as _register_desktop_relay_for_pairing,
+    _pairing_rate_allowed as _pairing_rate_allowed,
 )
 from app.fastapi_routes.mobile_api_extensions_part01_part01 import (
-    _resolve_mobile_relay_user as _resolve_mobile_relay_user,
+    _register_desktop_relay_for_pairing as _register_desktop_relay_for_pairing,
 )
 from app.fastapi_routes.mobile_api_extensions_part01_part01 import (
     _safe_mobile_sync_items as _safe_mobile_sync_items,

@@ -44,7 +44,7 @@ def test_mobile_server_desktop_codex_relay_http_round_trip(monkeypatch, tmp_path
         tenant_id="tenant-a",
     )
     app.dependency_overrides[ext.get_mobile_user] = lambda: mobile_user
-    client = TestClient(app)
+    client = TestClient(app, client=("127.0.0.1", 50000))
 
     registered_response = client.post(
         "/api/mobile/v1/relay/desktop/register",
@@ -67,6 +67,12 @@ def test_mobile_server_desktop_codex_relay_http_round_trip(monkeypatch, tmp_path
         "/api/mobile/v1/relay/mobile/bind-account", json={"pairing_code": "123"}
     )
     assert malformed_response.status_code == 400
+
+    missing_code_response = client.post(
+        "/api/mobile/v1/relay/mobile/bind-account",
+        json={"relay_id": registered["relay_id"]},
+    )
+    assert missing_code_response.status_code == 400
 
     with monkeypatch.context() as limiter_patch:
         limiter_patch.setattr(
@@ -103,6 +109,32 @@ def test_mobile_server_desktop_codex_relay_http_round_trip(monkeypatch, tmp_path
         json={"relay_id": registered["relay_id"], "pairing_code": registered["pairing_code"]},
     )
     assert repeated_response.status_code == 200
+
+    wrong_renewal = client.post(
+        "/api/mobile/v1/relay/desktop/renew",
+        json={"relay_id": registered["relay_id"], "desktop_token": "wrong-token-value-123"},
+    )
+    assert wrong_renewal.status_code == 404
+    renewed_response = client.post(
+        "/api/mobile/v1/relay/desktop/renew",
+        json={
+            "relay_id": registered["relay_id"],
+            "desktop_token": registered["desktop_token"],
+        },
+    )
+    assert renewed_response.status_code == 200
+    renewed = renewed_response.json()["data"]
+    assert renewed["relay_id"] == registered["relay_id"]
+    assert renewed["pairing_code"] != registered["pairing_code"]
+    stale_response = client.post(
+        "/api/mobile/v1/relay/mobile/bind-account",
+        json={"relay_id": registered["relay_id"], "pairing_code": registered["pairing_code"]},
+    )
+    assert stale_response.status_code == 404
+    assert client.post(
+        "/api/mobile/v1/relay/mobile/bind-account",
+        json={"relay_id": registered["relay_id"], "pairing_code": renewed["pairing_code"]},
+    ).status_code == 200
 
     mobile_user.id = 8
     other_account_response = client.post(

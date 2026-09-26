@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import stat
 import time
 
 
@@ -97,7 +98,7 @@ def test_register_desktop_relay_uses_stable_device_id(monkeypatch, tmp_path):
     assert posted[1]["capabilities"]["port"] == 17501
 
 
-def test_register_desktop_relay_reuses_cached_pairing_on_timeout(monkeypatch, tmp_path):
+def test_register_desktop_relay_hides_cached_pairing_on_timeout(monkeypatch, tmp_path):
     from app.services import mobile_relay_desktop_client as relay
 
     config_file = tmp_path / "mobile_relay_desktop.json"
@@ -133,10 +134,7 @@ def test_register_desktop_relay_reuses_cached_pairing_on_timeout(monkeypatch, tm
 
     payload = relay.register_desktop_relay(host="192.168.0.38", port=17500)
 
-    assert payload is not None
-    assert payload["relay_id"] == "relay-cached"
-    assert payload["pairing_code"] == "123456"
-    assert "desktop_token" not in payload
+    assert payload is None
 
 
 def test_register_desktop_relay_invalid_base_url_returns_none(monkeypatch, tmp_path):
@@ -170,6 +168,7 @@ def test_pending_relay_identity_available_after_lan_pairing(monkeypatch):
         "app.application.facades.mobile_relay_facade.cached_desktop_relay_payload",
         lambda: {
             "relay_id": "pending-relay-1",
+            "pairing_code": "123456",
             "relay_base_url": "https://xiu-ci.com/fhd-api/",
             "paired": False,
         },
@@ -436,6 +435,8 @@ def test_read_config_migrates_legacy_when_stable_missing(monkeypatch, tmp_path):
     cfg = relay._read_config()
     assert cfg.get("relay_id") == "paired-877"
     assert stable.is_file()  # 已迁移落盘
+    assert stat.S_IMODE(stable.stat().st_mode) == 0o600
+    assert stat.S_IMODE(legacy.stat().st_mode) == 0o600
 
 
 def test_read_config_never_overwrites_existing_stable_config(monkeypatch, tmp_path):
@@ -456,6 +457,7 @@ def test_read_config_never_overwrites_existing_stable_config(monkeypatch, tmp_pa
     relay._migrate_legacy_config_once()
     cfg = relay._read_config()
     assert cfg.get("relay_id") == "paired-877"
+    assert stat.S_IMODE(stable.stat().st_mode) == 0o600
 
 
 class _CaptureCodexService:

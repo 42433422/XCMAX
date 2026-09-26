@@ -74,4 +74,77 @@ void main() {
       ),
     );
   });
+
+  test('legacy LAN exchange restores session when cloud bind rejects',
+      () async {
+    final desktop = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final cloud = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final httpClient = HttpClient();
+    addTearDown(() => httpClient.close(force: true));
+    addTearDown(() => desktop.close(force: true));
+    addTearDown(() => cloud.close(force: true));
+    final desktopBase = 'http://${desktop.address.address}:${desktop.port}/';
+    final cloudBase = 'http://${cloud.address.address}:${cloud.port}/';
+    final desktopDone = desktop.first.then((request) async {
+      expect(request.uri.path, '/api/mobile/v1/pairing/exchange');
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(jsonEncode({
+        'success': true,
+        'data': {
+          'api_base_url': desktopBase,
+          'relay_id': 'relay-legacy-1',
+          'relay': {'relay_id': 'relay-legacy-1', 'pairing_code': '345678'},
+        },
+      }));
+      await request.response.close();
+    });
+    final cloudDone = cloud.first.then((request) async {
+      expect(request.uri.path, '/api/mobile/v1/relay/mobile/bind-account');
+      expect(request.headers.value(HttpHeaders.authorizationHeader),
+          'Bearer signed-in-token');
+      expect(jsonDecode(await utf8.decoder.bind(request).join()), {
+        'relay_id': 'relay-legacy-1',
+        'pairing_code': '345678',
+      });
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(jsonEncode({
+        'success': false,
+        'message': 'expired code',
+      }));
+      await request.response.close();
+    });
+    const previous = MobileSessionData(
+      accessToken: 'signed-in-token',
+      username: 'test-user',
+      fhdHost: 'original.local:17500',
+      relayDesktopId: 'relay-original',
+      serverMode: 'lan',
+      setupComplete: true,
+    );
+    final store = MemoryMobileSessionStore(previous);
+    final repository = MobileRepository(
+      client: MobileApiClient(
+        config: MobileApiConfig(baseUrl: cloudBase),
+        sessionStore: store,
+        httpClient: httpClient,
+      ),
+    );
+    final qr = jsonEncode({
+      'v': 2,
+      'nonce': 'legacy-nonce-123',
+      'api_base_url': desktopBase,
+    });
+
+    await expectLater(
+      repository.exchangePairingCode(qr),
+      throwsA(isA<MobileRepositoryException>()),
+    );
+    await desktopDone;
+    await cloudDone;
+    final restored = await store.load();
+    expect(restored.accessToken, previous.accessToken);
+    expect(restored.fhdHost, previous.fhdHost);
+    expect(restored.relayDesktopId, previous.relayDesktopId);
+    expect(restored.setupComplete, previous.setupComplete);
+  });
 }

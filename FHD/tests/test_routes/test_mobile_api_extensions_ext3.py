@@ -15,8 +15,6 @@ Focus on REMAINING uncovered lines:
 - mobile_auth_oidc_exchange with authenticate_oidc_user returning no message
 - _mobile_mod_items with None list_all_mods return
 - _mobile_mod_items with mixed dict/object mods
-- mobile_pairing_issue with default host (127.0.0.1)
-- mobile_pairing_issue with port coercion
 - _guess_lan_ipv4 with whitespace IP
 - _pairing_issue_host with whitespace-only host
 - _ensure_mobile_device_table with import error
@@ -48,7 +46,17 @@ def _mock_user():
     user = MagicMock()
     user.id = 1
     user.username = "testuser"
+    user.role = "enterprise"
+    user.is_active = True
     return user
+
+
+@pytest.fixture(autouse=True)
+def _isolate_pairing_limiter(monkeypatch):
+    monkeypatch.setattr(
+        "app.fastapi_routes.mobile_api_extensions._pairing_rate_allowed",
+        lambda *_args: True,
+    )
 
 
 def _mock_user_no_username():
@@ -504,7 +512,7 @@ class TestMobilePairingLookupAdditional:
             "lookup_by_shortcode",
             return_value={"host": "192.168.1.1", "port": 5000, "nonce": "abc"},
         ):
-            result = await ext_mod.mobile_pairing_lookup(body=body)
+            result = await ext_mod.mobile_pairing_lookup(body=body, user=_mock_user())
         # format_mobile_response returns a dict (not JSONResponse)
         if hasattr(result, "body"):
             import json
@@ -527,7 +535,7 @@ class TestMobilePairingLookupAdditional:
                 "exp": 9999,
             },
         ):
-            result = await ext_mod.mobile_pairing_lookup(body=body)
+            result = await ext_mod.mobile_pairing_lookup(body=body, user=_mock_user())
         if hasattr(result, "body"):
             import json
 
@@ -544,63 +552,8 @@ class TestMobilePairingLookupAdditional:
             "lookup_by_shortcode",
             return_value=None,
         ):
-            result = await ext_mod.mobile_pairing_lookup(body=body)
+            result = await ext_mod.mobile_pairing_lookup(body=body, user=_mock_user())
         assert result.status_code == 404
-
-
-# ---------------------------------------------------------------------------
-# mobile_pairing_issue additional
-# ---------------------------------------------------------------------------
-
-
-class TestMobilePairingIssueAdditional:
-    @pytest.mark.asyncio
-    async def test_issue_with_default_host(self, ext_mod):
-        """Test pairing issue with default host (127.0.0.1) — should call _guess_lan_ipv4."""
-        body = ext_mod.PairingIssueBody()
-        with (
-            patch.object(ext_mod, "_guess_lan_ipv4", return_value="10.0.0.5"),
-            patch(
-                "app.security.mobile_pairing.issue_pairing_nonce",
-                return_value={"nonce": "n", "host": "10.0.0.5", "port": 5112},
-            ),
-        ):
-            result = await ext_mod.mobile_pairing_issue(body, _mock_pairing_request())
-        assert hasattr(result, "body") or isinstance(result, dict)
-
-    @pytest.mark.asyncio
-    async def test_issue_with_localhost_host(self, ext_mod):
-        body = ext_mod.PairingIssueBody(host="localhost", port=8080)
-        with (
-            patch.object(ext_mod, "_guess_lan_ipv4", return_value="10.0.0.5"),
-            patch(
-                "app.security.mobile_pairing.issue_pairing_nonce",
-                return_value={"nonce": "n", "host": "10.0.0.5", "port": 8080},
-            ),
-        ):
-            result = await ext_mod.mobile_pairing_issue(
-                body,
-                _mock_pairing_request("localhost:8080", "localhost"),
-            )
-        assert hasattr(result, "body") or isinstance(result, dict)
-
-    @pytest.mark.asyncio
-    async def test_issue_with_custom_host(self, ext_mod):
-        body = ext_mod.PairingIssueBody(host="example.com", port=443)
-        with patch(
-            "app.security.mobile_pairing.issue_pairing_nonce",
-            return_value={"nonce": "n", "host": "example.com", "port": 443},
-        ):
-            result = await ext_mod.mobile_pairing_issue(
-                body,
-                _mock_pairing_request("example.com:443", "example.com"),
-            )
-        assert hasattr(result, "body") or isinstance(result, dict)
-
-
-# ---------------------------------------------------------------------------
-# mobile_sync_push with user having no username
-# ---------------------------------------------------------------------------
 
 
 class TestMobileSyncPushAdditional:

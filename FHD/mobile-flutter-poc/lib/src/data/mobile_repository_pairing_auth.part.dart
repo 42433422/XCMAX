@@ -2,9 +2,9 @@ part of 'mobile_repository.dart';
 
 abstract class _RepoPairingAuthBase extends _RepoGroupsBase {
   _RepoPairingAuthBase({
-    MobileApiClient? client,
-    ImWebSocketClient? imWebSocket,
-  }) : super(client: client, imWebSocket: imWebSocket);
+    super.client,
+    super.imWebSocket,
+  });
 
   Future<void> exchangePairingCode(String raw) async {
     final text = raw.trim();
@@ -34,7 +34,6 @@ abstract class _RepoPairingAuthBase extends _RepoGroupsBase {
       );
     }
 
-    await _primePairingLanSession(baseUrl);
     final response = await _client.exchangePairing(
       nonce: nonce,
       code: code,
@@ -46,16 +45,23 @@ abstract class _RepoPairingAuthBase extends _RepoGroupsBase {
     final hostWithPort = _hostPortFromApiBaseUrl(
       _readStringMap(response.data, const ['api_base_url', 'base_url']),
     ).ifEmpty(parsed?.hostWithPort ?? '');
-    await _client.persistPairingSession(
-      response.data,
-      hostWithPort: hostWithPort,
-      clearRelayDesktop: true,
-      setupComplete: true,
-      preserveActiveAuth: true,
-    );
     final relayId = _relayIdFromBindingData(response.data);
-    if (relayId.isNotEmpty) {
-      await _bindRelay(relayId, '');
+    final previous = await _client.loadSession();
+    try {
+      await _client.persistPairingSession(
+        response.data,
+        hostWithPort: hostWithPort,
+        clearRelayDesktop: true,
+        setupComplete: true,
+        preserveActiveAuth: true,
+      );
+      if (relayId.isNotEmpty) {
+        final relay = _objectMap(response.data?['relay']);
+        await _bindRelay(relayId, _stringField(relay, 'pairing_code'));
+      }
+    } catch (_) {
+      await _client.saveSession(previous);
+      rethrow;
     }
   }
 
@@ -71,15 +77,6 @@ abstract class _RepoPairingAuthBase extends _RepoGroupsBase {
     if (!binding.success) {
       throw MobileRepositoryException('设备配对失败[${binding.message}]');
     }
-  }
-
-  Future<void> _primePairingLanSession(String baseUrl) async {
-    final hostWithPort = _hostPortFromApiBaseUrl(baseUrl);
-    if (hostWithPort.isEmpty) return;
-    final session = await _client.loadSession();
-    await _client.saveSession(
-      session.copyWith(fhdHost: hostWithPort, serverMode: 'lan'),
-    );
   }
 
   Future<String> _resolvePairingExchangeBaseUrl(
@@ -223,5 +220,4 @@ abstract class _RepoPairingAuthBase extends _RepoGroupsBase {
       fallbackAccountKind: 'enterprise',
     );
   }
-
 }

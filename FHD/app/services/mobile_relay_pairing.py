@@ -34,12 +34,23 @@ class MobileRelayPairingMixin:
     ) -> dict[str, Any]:
         relay_id = uuid.uuid4().hex
         desktop_token = secrets.token_urlsafe(32)
-        pairing_code = self._fresh_pairing_code()
         now = _utc_now()
         expires_at = _utc_after(ttl_seconds)
         normalized_base = _public_base_url(relay_base_url)
         with self._get_db() as db:
             self.ensure_tables(db)
+            db.execute(
+                text(
+                    """
+                    UPDATE mobile_relay_desktops
+                    SET pairing_code = 'x' || substr(relay_id, 1, 15)
+                    WHERE expires_at < :now AND length(pairing_code) = 6
+                      AND pairing_code BETWEEN '100000' AND '999999'
+                    """
+                ),
+                {"now": now},
+            )
+            pairing_code = self._fresh_pairing_code(db)
             db.execute(
                 text(
                     """
@@ -84,6 +95,46 @@ class MobileRelayPairingMixin:
             },
         }
 
+    def renew_desktop_pairing(
+        self, *, relay_id: str, desktop_token: str, ttl_seconds: int = 24 * 3600
+    ) -> dict[str, Any] | None:
+        now = _utc_now()
+        expires_at = _utc_after(ttl_seconds)
+        with self._get_db() as db:
+            self.ensure_tables(db)
+            desktop = self._desktop_for_token(
+                db, relay_id=relay_id, desktop_token=desktop_token
+            )
+            if not desktop:
+                return None
+            code = self._fresh_pairing_code(db)
+            updated = db.execute(
+                text(
+                    """
+                    UPDATE mobile_relay_desktops
+                    SET pairing_code = :code, expires_at = :expires_at, updated_at = :now
+                    WHERE relay_id = :relay_id AND desktop_token_hash = :token_hash
+                      AND status IN ('pending', 'paired')
+                    """
+                ),
+                {
+                    "code": code,
+                    "expires_at": expires_at,
+                    "now": now,
+                    "relay_id": relay_id.strip(),
+                    "token_hash": _token_hash(desktop_token.strip()),
+                },
+            )
+            if updated.rowcount != 1:
+                return None
+        return {
+            "relay_id": relay_id.strip(),
+            "pairing_code": code,
+            "expires_at": expires_at,
+            "exp": _epoch_from_iso(expires_at),
+            "relay_base_url": desktop.get("relay_base_url") or "",
+        }
+
     def bind_mobile_by_account(
         self,
         *,
@@ -100,7 +151,7 @@ class MobileRelayPairingMixin:
         """
         clean_relay_id = relay_id.strip()
         clean_code = pairing_code.strip()
-        if not clean_relay_id and (len(clean_code) != 6 or not clean_code.isdigit()):
+        if len(clean_code) != 6 or not clean_code.isdigit():
             return None
         now = _utc_now()
         with self._get_db() as db:
@@ -125,7 +176,7 @@ class MobileRelayPairingMixin:
             data = _row_dict(row)
             if clean_code and str(data.get("pairing_code") or "") != clean_code:
                 return None
-            if data.get("status") == "pending" and str(data.get("expires_at") or "") < now:
+            if str(data.get("expires_at") or "") < now:
                 return None
             owner_id = int(data.get("mobile_user_id") or 0)
             if owner_id > 0 and owner_id != int(user_id):
@@ -140,12 +191,15 @@ class MobileRelayPairingMixin:
                         mobile_username = :username,
                         updated_at = :updated_at
                     WHERE relay_id = :relay_id
+                      AND pairing_code = :pairing_code
+                      AND expires_at >= :updated_at
                       AND (mobile_user_id IS NULL OR mobile_user_id = 0
                            OR mobile_user_id = :user_id)
                     """
                 ),
                 {
                     "relay_id": clean_relay_id,
+                    "pairing_code": clean_code,
                     "user_id": int(user_id),
                     "username": username.strip()[:200],
                     "updated_at": now,

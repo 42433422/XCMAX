@@ -489,7 +489,7 @@ def test_mobile_approval_list_success(
     assert r.json()["success"] is True
 
 
-def test_mobile_pairing_issue(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_mobile_pairing_issue_rejects_non_desktop_request(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         mobile_ext,
         "issue_pairing_nonce",
@@ -499,16 +499,16 @@ def test_mobile_pairing_issue(monkeypatch: pytest.MonkeyPatch) -> None:
     app.include_router(mobile_ext.extension_router)
     client = TestClient(app, raise_server_exceptions=False)
     r = client.post("/pairing/issue", json={"host": "127.0.0.1", "port": 5000})
-    assert r.status_code == 200
+    assert r.status_code == 401
 
 
-def test_mobile_pairing_lookup_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_mobile_pairing_lookup_rejects_anonymous(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(mobile_ext, "lookup_by_shortcode", lambda code: None)
     app = FastAPI()
     app.include_router(mobile_ext.extension_router)
     client = TestClient(app, raise_server_exceptions=False)
     r = client.post("/pairing/lookup", json={"code": "000000"})
-    assert r.status_code == 404
+    assert r.status_code == 401
 
 
 def test_tenant_context_resolve(monkeypatch: pytest.MonkeyPatch) -> None:

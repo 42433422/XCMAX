@@ -359,8 +359,8 @@ class TestCachedDesktopRelayForAccountBinding:
             result = m._cached_desktop_relay_for_account_binding()
         assert result is None
 
-    def test_relay_unpaired_returns_none(self, m):
-        """branch: relay has relay_id but is not paired → None."""
+    def test_relay_without_code_returns_none(self, m):
+        """A cached relay without a valid code cannot be used to bind."""
         with patch(
             "app.services.mobile_relay_desktop_client.cached_desktop_relay_payload",
             return_value={
@@ -380,6 +380,7 @@ class TestCachedDesktopRelayForAccountBinding:
             "app.services.mobile_relay_desktop_client.cached_desktop_relay_payload",
             return_value={
                 "relay_id": "r1",
+                "pairing_code": "123456",
                 "relay_base_url": "http://relay",
                 "expires_at": "2026-12-31",
                 "exp": 9999,
@@ -398,6 +399,7 @@ class TestCachedDesktopRelayForAccountBinding:
             "app.services.mobile_relay_desktop_client.cached_desktop_relay_payload",
             return_value={
                 "relay_id": "r2",
+                "pairing_code": "654321",
                 "relay_base_url": "",
                 "expires_at": "",
                 "exp": None,
@@ -2496,9 +2498,14 @@ class TestMobileRelayDesktopRegister:
             capabilities=[],
             relay_base_url="http://relay",
         )
-        with patch("app.fastapi_routes.mobile_api_extensions.MobileRelayService") as svc_cls:
+        with (
+            patch("app.fastapi_routes.mobile_api_extensions.MobileRelayService") as svc_cls,
+            patch.object(m, "_pairing_rate_allowed", return_value=True),
+        ):
             svc_cls.return_value.register_desktop.return_value = {"relay_id": "r1"}
-            result = await m.mobile_relay_desktop_register(body=body)
+            result = await m.mobile_relay_desktop_register(
+                body=body, request=SimpleNamespace(scope={"client": ("127.0.0.1", 1234)})
+            )
         assert result is not None
 
     @pytest.mark.asyncio
@@ -2507,9 +2514,14 @@ class TestMobileRelayDesktopRegister:
         body = SimpleNamespace(
             label="desktop1", device_id="dev1", capabilities=[], relay_base_url=""
         )
-        with patch("app.fastapi_routes.mobile_api_extensions.MobileRelayService") as svc_cls:
+        with (
+            patch("app.fastapi_routes.mobile_api_extensions.MobileRelayService") as svc_cls,
+            patch.object(m, "_pairing_rate_allowed", return_value=True),
+        ):
             svc_cls.return_value.register_desktop.side_effect = err_class("fail")
-            result = await m.mobile_relay_desktop_register(body=body)
+            result = await m.mobile_relay_desktop_register(
+                body=body, request=SimpleNamespace(scope={"client": ("127.0.0.1", 1234)})
+            )
         assert result.status_code == 500
 
 
@@ -2521,17 +2533,18 @@ class TestMobileRelayDesktopRegister:
 class TestMobileRelayBindAccount:
     @pytest.mark.asyncio
     async def test_uid_zero_returns_401(self, m):
-        body = SimpleNamespace(relay_id="r1")
+        body = SimpleNamespace(relay_id="r1", pairing_code="123456")
         with patch.object(m, "_mobile_user_identity", return_value=(0, "")):
             result = await m.mobile_relay_bind_account(body=body, user=_user(uid=0))
         assert result.status_code == 401
 
     @pytest.mark.asyncio
     async def test_desktop_none_returns_404(self, m):
-        body = SimpleNamespace(relay_id="r1")
+        body = SimpleNamespace(relay_id="r1", pairing_code="123456")
         with (
             patch.object(m, "_mobile_user_identity", return_value=(5, "u")),
             patch("app.fastapi_routes.mobile_api_extensions.MobileRelayService") as svc_cls,
+            patch.object(m, "_pairing_rate_allowed", return_value=True),
         ):
             svc_cls.return_value.bind_mobile_by_account.return_value = None
             result = await m.mobile_relay_bind_account(body=body, user=_user(uid=5))
@@ -2539,12 +2552,13 @@ class TestMobileRelayBindAccount:
 
     @pytest.mark.asyncio
     async def test_success(self, m):
-        body = SimpleNamespace(relay_id="r1")
+        body = SimpleNamespace(relay_id="r1", pairing_code="123456")
         desktop = {"relay_id": "r1", "desktop_id": "d1"}
         with (
             patch.object(m, "_mobile_user_identity", return_value=(5, "u")),
             patch.object(m, "_mobile_user_public_dict", return_value={"id": 5}),
             patch("app.fastapi_routes.mobile_api_extensions.MobileRelayService") as svc_cls,
+            patch.object(m, "_pairing_rate_allowed", return_value=True),
         ):
             svc_cls.return_value.bind_mobile_by_account.return_value = desktop
             result = await m.mobile_relay_bind_account(body=body, user=_user(uid=5))
@@ -2553,10 +2567,11 @@ class TestMobileRelayBindAccount:
     @pytest.mark.asyncio
     async def test_recoverable_error(self, m):
         err_class = _err_class(m)
-        body = SimpleNamespace(relay_id="r1")
+        body = SimpleNamespace(relay_id="r1", pairing_code="123456")
         with (
             patch.object(m, "_mobile_user_identity", return_value=(5, "u")),
             patch("app.fastapi_routes.mobile_api_extensions.MobileRelayService") as svc_cls,
+            patch.object(m, "_pairing_rate_allowed", return_value=True),
         ):
             svc_cls.return_value.bind_mobile_by_account.side_effect = err_class("fail")
             result = await m.mobile_relay_bind_account(body=body, user=_user(uid=5))
@@ -2985,7 +3000,7 @@ class TestMobilePairingExchangeBranchCov:
         rec = {"host": "h", "port": 5000, "nonce": "n1"}
         with (
             patch.object(m, "consume_pairing_nonce", return_value=rec),
-            patch.object(m, "_resolve_mobile_relay_user", return_value={"id": 1, "username": "u"}),
+            patch.object(m, "_mobile_user_public_dict", return_value={"id": 1, "username": "u"}),
             patch.object(m, "_enrich_pairing_payload", return_value={"host": "h"}),
             patch.object(m, "_relay_mobile_auth_payload", return_value={"token": "t"}),
             patch.object(m, "_cached_desktop_relay_for_account_binding", return_value=None),
@@ -3001,7 +3016,7 @@ class TestMobilePairingExchangeBranchCov:
         relay = {"relay_id": "r1", "relay_base_url": "http://r", "exp": 0}
         with (
             patch.object(m, "consume_by_shortcode", return_value=rec),
-            patch.object(m, "_resolve_mobile_relay_user", return_value={"id": 1, "username": "u"}),
+            patch.object(m, "_mobile_user_public_dict", return_value={"id": 1, "username": "u"}),
             patch.object(m, "_enrich_pairing_payload", return_value={"host": "h"}),
             patch.object(m, "_relay_mobile_auth_payload", return_value={"token": "t"}),
             patch.object(m, "_cached_desktop_relay_for_account_binding", return_value=relay),
@@ -3735,189 +3750,3 @@ class TestMobileModItemsDictBranches:
         ):
             result = m._mobile_mod_items()
         assert len(result) == 100
-
-
-# ============================================================
-# _resolve_mobile_relay_user additional branches
-# ============================================================
-
-
-class TestResolveMobileRelayUserBranchCov:
-    def test_uid_positive_prefer_admin_admin_role(self, m):
-        """branch: uid > 0, prefer_admin=True, role='admin' → return early."""
-        u = _user(uid=5, role="admin")
-        pub = {"id": 5, "username": "u5"}
-        with (
-            patch.object(m, "_mobile_user_identity", return_value=(5, "u5")),
-            patch.object(m, "_mobile_user_public_dict", return_value=pub),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=True)
-        assert result["id"] == 5
-
-    def test_uid_positive_prefer_admin_super_admin_role(self, m):
-        """branch: uid > 0, prefer_admin=True, role='super_admin' → return early."""
-        u = _user(uid=5, role="super_admin")
-        pub = {"id": 5, "username": "u5"}
-        with (
-            patch.object(m, "_mobile_user_identity", return_value=(5, "u5")),
-            patch.object(m, "_mobile_user_public_dict", return_value=pub),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=True)
-        assert result["id"] == 5
-
-    def test_uid_positive_prefer_admin_owner_role(self, m):
-        """branch: uid > 0, prefer_admin=True, role='owner' → return early."""
-        u = _user(uid=5, role="owner")
-        pub = {"id": 5, "username": "u5"}
-        with (
-            patch.object(m, "_mobile_user_identity", return_value=(5, "u5")),
-            patch.object(m, "_mobile_user_public_dict", return_value=pub),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=True)
-        assert result["id"] == 5
-
-    def test_recoverable_error_not_prefer_admin_raises(self, m):
-        """branch: RECOVERABLE_ERRORS without prefer_admin → raise."""
-        u = _user(uid=0)
-        err_class = _err_class(m)
-        with (
-            patch.object(m, "_mobile_user_identity", return_value=(0, "")),
-            patch("app.db.session.get_db", side_effect=err_class("boom")),
-        ):
-            with pytest.raises(err_class):
-                m._resolve_mobile_relay_user(u, prefer_admin=False)
-
-    def test_db_no_expunge_attribute(self, m):
-        """branch: db has no expunge method → skip expunge."""
-        u = _user(uid=0)
-        mock_row = MagicMock()
-        mock_row.id = 3
-        pub = {"id": 3, "username": "x"}
-        mock_db = _ctx_db(MagicMock())
-        # uid=0 → uid<=0 True → admin-filtered query (two .filter() calls) is used
-        mock_db.query.return_value.filter.return_value.filter.return_value.order_by.return_value.first.return_value = mock_row
-        # Remove expunge attribute to hit the `hasattr(db, "expunge")` False branch
-        del mock_db.expunge
-        with (
-            patch("app.db.session.get_db", return_value=mock_db),
-            patch.object(m, "_mobile_user_identity", return_value=(0, "")),
-            patch.object(m, "_mobile_user_public_dict", return_value=pub),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=False)
-        assert result == pub
-
-    def test_db_has_expunge_attribute_calls_expunge(self, m):
-        """branch: db has expunge method → expunge called."""
-        u = _user(uid=0)
-        mock_row = MagicMock()
-        mock_row.id = 7
-        pub = {"id": 7, "username": "expunged"}
-        mock_db = _ctx_db(MagicMock())
-        # uid=0 → uid<=0 True → admin-filtered query (two .filter() calls) is used
-        mock_db.query.return_value.filter.return_value.filter.return_value.order_by.return_value.first.return_value = mock_row
-        with (
-            patch("app.db.session.get_db", return_value=mock_db),
-            patch.object(m, "_mobile_user_identity", return_value=(0, "")),
-            patch.object(m, "_mobile_user_public_dict", return_value=pub),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=False)
-        assert result == pub
-        mock_db.expunge.assert_called_once_with(mock_row)
-
-    def test_admin_query_returns_row_skips_all_users_query(self, m):
-        """branch: prefer_admin=True and admin query returns a row → skip all-users query."""
-        u = _user(uid=0)
-        admin_row = MagicMock()
-        admin_row.id = 11
-        pub = {"id": 11, "username": "admin"}
-        mock_db = _ctx_db(MagicMock())
-        # Admin-filtered query returns a row
-        mock_db.query.return_value.filter.return_value.filter.return_value.order_by.return_value.first.return_value = admin_row
-        with (
-            patch("app.db.session.get_db", return_value=mock_db),
-            patch.object(m, "_mobile_user_identity", return_value=(0, "")),
-            patch.object(m, "_mobile_user_public_dict", return_value=pub),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=True)
-        assert result == pub
-
-    def test_admin_query_none_all_users_query_returns_row(self, m):
-        """branch: admin query returns None → fallback to all-users query returns row."""
-        u = _user(uid=0)
-        any_row = MagicMock()
-        any_row.id = 22
-        pub = {"id": 22, "username": "any"}
-        mock_db = _ctx_db(MagicMock())
-        # First call (admin-filtered) returns None; second call (all users) returns row
-        mock_db.query.return_value.filter.return_value.filter.return_value.order_by.return_value.first.return_value = None
-        mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = (
-            any_row
-        )
-        with (
-            patch("app.db.session.get_db", return_value=mock_db),
-            patch.object(m, "_mobile_user_identity", return_value=(0, "")),
-            patch.object(m, "_mobile_user_public_dict", return_value=pub),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=True)
-        assert result == pub
-
-    def test_no_users_creates_new_relay_admin(self, m):
-        """branch: both queries return None → create new User row."""
-        u = _user(uid=0)
-        pub = {"id": 99, "username": "new_relay"}
-        mock_db = _ctx_db(MagicMock())
-        # Both queries return None
-        mock_db.query.return_value.filter.return_value.filter.return_value.order_by.return_value.first.return_value = None
-        mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = (
-            None
-        )
-        with (
-            patch("app.db.session.get_db", return_value=mock_db),
-            patch.object(m, "_mobile_user_identity", return_value=(0, "")),
-            patch.object(m, "_mobile_user_public_dict", return_value=pub),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=False)
-        assert result == pub
-        # Verify db.add was called (new user created)
-        mock_db.add.assert_called_once()
-        mock_db.flush.assert_called_once()
-
-    def test_recoverable_error_prefer_admin_returns_fallback(self, m):
-        """branch: RECOVERABLE_ERRORS with prefer_admin=True → return fallback user."""
-        u = _user(uid=0)
-        err_class = _err_class(m)
-        fallback = {"id": -1, "username": "fallback"}
-        with (
-            patch.object(m, "_mobile_user_identity", return_value=(0, "")),
-            patch("app.db.session.get_db", side_effect=err_class("boom")),
-            patch.object(m, "_relay_admin_fallback_user", return_value=fallback),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=True)
-        assert result == fallback
-
-    def test_uid_positive_not_prefer_admin_returns_public(self, m):
-        """branch: uid > 0 and not prefer_admin → return public dict early."""
-        u = _user(uid=8, role="user")
-        pub = {"id": 8, "username": "u8"}
-        with (
-            patch.object(m, "_mobile_user_identity", return_value=(8, "u8")),
-            patch.object(m, "_mobile_user_public_dict", return_value=pub),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=False)
-        assert result == pub
-
-    def test_uid_positive_prefer_admin_non_admin_role_falls_through(self, m):
-        """branch: uid > 0, prefer_admin=True, role not in admin set → fall through to DB."""
-        u = _user(uid=8, role="user")
-        any_row = MagicMock()
-        any_row.id = 100
-        pub = {"id": 100, "username": "from_db"}
-        mock_db = _ctx_db(MagicMock())
-        mock_db.query.return_value.filter.return_value.filter.return_value.order_by.return_value.first.return_value = any_row
-        with (
-            patch.object(m, "_mobile_user_identity", return_value=(8, "u8")),
-            patch.object(m, "_mobile_user_public_dict", return_value=pub),
-            patch("app.db.session.get_db", return_value=mock_db),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=True)
-        assert result == pub

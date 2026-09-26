@@ -117,141 +117,31 @@ class TestAiCircleEmployeeProfiles:
 
 
 # ============================================================
-# _resolve_mobile_relay_user — lines 155-211
+# Pairing exchange keeps the authenticated principal
 # ============================================================
 
 
-class TestResolveMobileRelayUser:
-    def test_uid_positive_not_prefer_admin(self, m):
-        """branch [174,182] not taken — uid > 0 and not prefer_admin: returns early."""
-        u = _user(uid=5, role="user")
-        pub = {"id": 5, "username": "u5"}
+class TestPairingExchangeIdentity:
+    @pytest.mark.asyncio
+    async def test_ordinary_user_keeps_own_role(self, m):
+        user = _user(uid=5, role="user")
+        public = {"id": 5, "role": "user", "username": "u5"}
         with (
-            patch.object(m, "_mobile_user_identity", return_value=(5, "u5")),
-            patch.object(m, "_mobile_user_public_dict", return_value=pub),
+            patch.object(m, "consume_pairing_nonce", return_value={"host": "127.0.0.1", "port": 5000}),
+            patch.object(m, "_mobile_user_public_dict", return_value=public),
+            patch.object(m, "_relay_mobile_auth_payload", side_effect=lambda principal: {"user": principal}),
+            patch.object(m, "_cached_desktop_relay_for_account_binding", return_value=None),
+            patch("app.db.session.get_db", side_effect=AssertionError("no admin lookup")),
         ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=False)
-        assert result["id"] == 5
+            result = await m.mobile_pairing_exchange(m.PairingExchangeBody(nonce="nonce"), user=user)
+        assert result["data"]["user"] == public
 
-    def test_uid_positive_prefer_admin_non_admin_role(self, m):
-        """uid > 0 but prefer_admin=True and role not admin → falls through to DB path."""
-        u = _user(uid=5, role="user")
-        mock_row = MagicMock()
-        mock_row.id = 10
-        pub = {"id": 10, "username": "admin"}
-        mock_db = _ctx_db(MagicMock())
-        mock_db.query.return_value.filter.return_value.filter.return_value.order_by.return_value.first.return_value = mock_row
-        with (
-            patch.object(m, "_mobile_user_identity", return_value=(5, "u5")),
-            patch.object(m, "_mobile_user_public_dict", return_value=pub),
-            patch("app.db.session.get_db", return_value=mock_db),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=True)
-        assert result["id"] == 10
-
-    def test_uid_zero_admin_row_found(self, m):
-        """branch [182,183]: admin row found → use that row, skip any-user query."""
-        u = _user(uid=0)
-        mock_row = MagicMock()
-        mock_row.id = 99
-        pub = {"id": 99, "username": "admin99"}
-        mock_db = _ctx_db(MagicMock())
-        # first query (admin) returns row
-        mock_db.query.return_value.filter.return_value.filter.return_value.order_by.return_value.first.return_value = mock_row
-        with (
-            patch.object(m, "_mobile_user_identity", return_value=(0, "")),
-            patch.object(m, "_mobile_user_public_dict", return_value=pub),
-            patch("app.db.session.get_db", return_value=mock_db),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=False)
-        assert result["id"] == 99
-
-    def test_uid_zero_no_admin_row_but_any_user_row(self, m):
-        """branch [182,189],[189,190] not taken: fall to any-user query which returns row."""
-        u = _user(uid=0)
-        mock_row = MagicMock()
-        mock_row.id = 7
-        pub = {"id": 7, "username": "somebody"}
-
-        first_call = [True]
-
-        def first_side_effect():
-            if first_call[0]:
-                first_call[0] = False
-                return None  # admin query returns nothing
-            return mock_row  # any-user query
-
-        mock_q = MagicMock()
-        mock_q.filter.return_value = mock_q
-        mock_q.order_by.return_value = mock_q
-        mock_q.first.side_effect = first_side_effect
-        mock_db = _ctx_db(MagicMock())
-        mock_db.query.return_value = mock_q
-
-        with (
-            patch.object(m, "_mobile_user_identity", return_value=(0, "")),
-            patch.object(m, "_mobile_user_public_dict", return_value=pub),
-            patch("app.db.session.get_db", return_value=mock_db),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=False)
-        assert result["id"] == 7
-
-    def test_uid_zero_no_rows_creates_new_user(self, m):
-        """branch [189,190]: both queries return None → create new user."""
-        u = _user(uid=0)
-        new_row = MagicMock()
-        new_row.id = 55
-        pub = {"id": 55, "username": "mobile_relay_xxx"}
-
-        mock_q = MagicMock()
-        mock_q.filter.return_value = mock_q
-        mock_q.order_by.return_value = mock_q
-        mock_q.first.return_value = None
-        mock_db = _ctx_db(MagicMock())
-        mock_db.query.return_value = mock_q
-        # db.flush sets row.id
-        mock_db.flush = MagicMock()
-
-        with (
-            patch.object(m, "_mobile_user_identity", return_value=(0, "")),
-            patch.object(m, "_mobile_user_public_dict", return_value=pub),
-            patch("app.db.session.get_db", return_value=mock_db),
-            patch("app.db.models.User", MagicMock(return_value=new_row)),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=False)
-        assert result["id"] == 55
-
-    def test_db_expunge_called_when_available(self, m):
-        """branch [204,205]: db.expunge exists → called."""
-        u = _user(uid=0)
-        mock_row = MagicMock()
-        mock_row.id = 3
-        pub = {"id": 3, "username": "x"}
-        mock_db = _ctx_db(MagicMock())
-        mock_db.query.return_value.filter.return_value.filter.return_value.order_by.return_value.first.return_value = mock_row
-        mock_db.expunge = MagicMock()
-
-        with (
-            patch.object(m, "_mobile_user_identity", return_value=(0, "")),
-            patch.object(m, "_mobile_user_public_dict", return_value=pub),
-            patch("app.db.session.get_db", return_value=mock_db),
-        ):
-            m._resolve_mobile_relay_user(u, prefer_admin=False)
-        mock_db.expunge.assert_called_once_with(mock_row)
-
-    def test_recoverable_error_prefer_admin_returns_fallback(self, m):
-        """branch [209,211]: RECOVERABLE_ERRORS + prefer_admin → _relay_admin_fallback_user."""
-        u = _user(uid=0)
-        fallback = {"id": 0, "username": "relay_admin"}
-        err_class = list(m.RECOVERABLE_ERRORS)[0] if m.RECOVERABLE_ERRORS else Exception
-
-        with (
-            patch.object(m, "_mobile_user_identity", return_value=(0, "")),
-            patch("app.db.session.get_db", side_effect=err_class("boom")),
-            patch.object(m, "_relay_admin_fallback_user", return_value=fallback),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=True)
-        assert result == fallback
+    @pytest.mark.asyncio
+    async def test_anonymous_exchange_rejected_before_consuming_nonce(self, m):
+        with patch.object(m, "consume_pairing_nonce") as consume:
+            result = await m.mobile_pairing_exchange(m.PairingExchangeBody(nonce="nonce"), user=None)
+        assert result.status_code == 401
+        consume.assert_not_called()
 
 
 # ============================================================
@@ -596,7 +486,7 @@ class TestMobilePairingIssue:
         payload = {"nonce": "n1", "host": "192.168.1.1", "port": 5000}
         relay = {
             "relay_id": "r1",
-            "pairing_code": "CODE99",
+            "pairing_code": "654321",
             "relay_base_url": "https://relay.example",
         }
         body = SimpleNamespace(host="192.168.1.1", port=5000)
@@ -604,6 +494,7 @@ class TestMobilePairingIssue:
         request.url.hostname = "192.168.1.1"
 
         with (
+            patch("app.fastapi_routes.mobile_api_extensions_part02_part01._trusted_desktop_pairing_request", return_value=True),
             patch.object(m, "_pairing_issue_host", return_value="192.168.1.1"),
             patch.object(m, "_pairing_issue_port", return_value=5000),
             patch(
@@ -614,8 +505,7 @@ class TestMobilePairingIssue:
         ):
             result = await m.mobile_pairing_issue(body=body, request=request)
         body_data = result.get("data") if isinstance(result, dict) else None
-        # Should not raise
-        assert result is not None
+        assert result["data"]["qr_json"]["code"] == "654321"
 
     @pytest.mark.asyncio
     async def test_relay_present_without_relay_code(self, m):
@@ -631,6 +521,7 @@ class TestMobilePairingIssue:
         request.url.hostname = "192.168.1.1"
 
         with (
+            patch("app.fastapi_routes.mobile_api_extensions_part02_part01._trusted_desktop_pairing_request", return_value=True),
             patch.object(m, "_pairing_issue_host", return_value="192.168.1.1"),
             patch.object(m, "_pairing_issue_port", return_value=5000),
             patch(
@@ -640,7 +531,7 @@ class TestMobilePairingIssue:
             patch.object(m, "_register_desktop_relay_for_pairing", return_value=relay),
         ):
             result = await m.mobile_pairing_issue(body=body, request=request)
-        assert result is not None
+        assert result.status_code == 503
 
     @pytest.mark.asyncio
     async def test_relay_absent(self, m):
@@ -651,6 +542,7 @@ class TestMobilePairingIssue:
         request.url.hostname = "192.168.1.1"
 
         with (
+            patch("app.fastapi_routes.mobile_api_extensions_part02_part01._trusted_desktop_pairing_request", return_value=True),
             patch.object(m, "_pairing_issue_host", return_value="192.168.1.1"),
             patch.object(m, "_pairing_issue_port", return_value=5000),
             patch(
@@ -660,7 +552,7 @@ class TestMobilePairingIssue:
             patch.object(m, "_register_desktop_relay_for_pairing", return_value=None),
         ):
             result = await m.mobile_pairing_issue(body=body, request=request)
-        assert result is not None
+        assert result.status_code == 503
 
 
 # ============================================================
