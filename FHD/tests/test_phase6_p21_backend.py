@@ -1444,7 +1444,7 @@ class TestServiceBridgeGetInstanceIdWrite:
         instance_file = tmp_path / "data" / ".service_bridge_instance_id"
         # Don't patch os.path.exists globally; let real fs check happen.
         # The file doesn't exist yet, so the function will generate + write.
-        with patch.object(sb, "_INSTANCE_ID_FILE", str(instance_file)):
+        with patch.object(sb, "get_data_dir", return_value=str(instance_file.parent)):
             result = sb._get_or_create_instance_id()
         assert result.startswith("xcagi-host-")
         # File should have been written
@@ -1455,7 +1455,7 @@ class TestServiceBridgeGetInstanceIdWrite:
         instance_file = tmp_path / "data" / ".service_bridge_instance_id"
         instance_file.parent.mkdir(parents=True, exist_ok=True)
         instance_file.write_text("xcagi-host-cached123", encoding="utf-8")
-        with patch.object(sb, "_INSTANCE_ID_FILE", str(instance_file)):
+        with patch.object(sb, "get_data_dir", return_value=str(instance_file.parent)):
             result = sb._get_or_create_instance_id()
         assert result == "xcagi-host-cached123"
 
@@ -1463,7 +1463,7 @@ class TestServiceBridgeGetInstanceIdWrite:
         """When makedirs raises OSError → returns random id without writing."""
         instance_file = tmp_path / "data" / ".service_bridge_instance_id"
         with (
-            patch.object(sb, "_INSTANCE_ID_FILE", str(instance_file)),
+            patch.object(sb, "get_data_dir", return_value=str(instance_file.parent)),
             patch("os.path.exists", return_value=False),
             patch("os.makedirs", side_effect=OSError("no write")),
         ):
