@@ -111,9 +111,7 @@ def rbac_role_update(
 def rbac_role_delete(role_id: int, request: Request, _user=Depends(_require_admin)):
     """删除自定义角色（系统角色不可删除）。"""
     try:
-        get_rbac_app_service().delete_role(
-            role_id, tenant_id=_tenant_scope(request, _user)
-        )
+        get_rbac_app_service().delete_role(role_id, tenant_id=_tenant_scope(request, _user))
         return {"success": True, "message": "角色已删除"}
     except AppError as exc:
         return _handle_app_error(exc)
@@ -132,13 +130,13 @@ def rbac_permissions_list(
 
 
 @router.post("/permissions")
-def rbac_permission_create(
-    body: PermissionCreate, request: Request, _user=Depends(_require_admin)
-):
+def rbac_permission_create(body: PermissionCreate, request: Request, _user=Depends(_require_admin)):
     """创建新权限定义（扩展系统权限集）。"""
     try:
         if _tenant_scope(request, _user) is not None:
-            return JSONResponse({"success": False, "message": "只有平台管理端可以扩展全局权限"}, status_code=403)
+            return JSONResponse(
+                {"success": False, "message": "只有平台管理端可以扩展全局权限"}, status_code=403
+            )
         data = get_rbac_app_service().create_permission(
             body.code, body.name, body.description, body.module
         )
@@ -148,13 +146,13 @@ def rbac_permission_create(
 
 
 @router.delete("/permissions/{perm_id}")
-def rbac_permission_delete(
-    perm_id: int, request: Request, _user=Depends(_require_admin)
-):
+def rbac_permission_delete(perm_id: int, request: Request, _user=Depends(_require_admin)):
     """删除权限（同时从所有角色中解除绑定）。"""
     try:
         if _tenant_scope(request, _user) is not None:
-            return JSONResponse({"success": False, "message": "只有平台管理端可以删除全局权限"}, status_code=403)
+            return JSONResponse(
+                {"success": False, "message": "只有平台管理端可以删除全局权限"}, status_code=403
+            )
         get_rbac_app_service().delete_permission(perm_id)
         return {"success": True, "message": "权限已删除"}
     except AppError as exc:
@@ -207,6 +205,8 @@ def rbac_user_assign_role(
 def rbac_seed_permissions(request: Request, _user=Depends(_require_admin)):
     """补全缺失的系统权限定义（幂等；仅新增不覆盖）。"""
     if _tenant_scope(request, _user) is not None:
-        return JSONResponse({"success": False, "message": "只有平台管理端可以补全全局权限"}, status_code=403)
+        return JSONResponse(
+            {"success": False, "message": "只有平台管理端可以补全全局权限"}, status_code=403
+        )
     added = get_rbac_app_service().seed_missing_permissions()
     return {"success": True, "added": added, "message": f"新增 {len(added)} 条权限定义"}

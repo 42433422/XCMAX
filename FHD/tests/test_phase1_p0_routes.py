@@ -189,18 +189,26 @@ def test_rbac_tenant_roles_and_user_assignments_are_isolated(rbac_client: TestCl
     role_a = service.create_role("Test Operator", "A", [code], tenant_id=tenant_a)
     role_b = service.create_role("Test Operator", "B", [], tenant_id=tenant_b)
     with get_host_db() as db:
-        user_a = User(username=f"tenant-a-{uuid4().hex}", password="test", role="user", tenant_id=tenant_a)
-        user_b = User(username=f"tenant-b-{uuid4().hex}", password="test", role="user", tenant_id=tenant_b)
+        user_a = User(
+            username=f"tenant-a-{uuid4().hex}", password="test", role="user", tenant_id=tenant_a
+        )
+        user_b = User(
+            username=f"tenant-b-{uuid4().hex}", password="test", role="user", tenant_id=tenant_b
+        )
         db.add_all([user_a, user_b])
         db.flush()
         user_a_id, user_b_id = user_a.id, user_b.id
-        db.add(UserSession(
-            session_id=uuid4().hex, user_id=user_a_id,
-            expires_at=utc_now_naive() + timedelta(days=1),
-        ))
-    assert service.assign_user_role(user_a_id, role_a["key"], tenant_id=tenant_a)[
-        "sessions_revoked"
-    ] == 1
+        db.add(
+            UserSession(
+                session_id=uuid4().hex,
+                user_id=user_a_id,
+                expires_at=utc_now_naive() + timedelta(days=1),
+            )
+        )
+    assert (
+        service.assign_user_role(user_a_id, role_a["key"], tenant_id=tenant_a)["sessions_revoked"]
+        == 1
+    )
 
     with patch("app.fastapi_routes.rbac.resolve_tenant_id", return_value=tenant_a):
         listed = rbac_client.get("/api/rbac/roles")
@@ -217,10 +225,13 @@ def test_rbac_tenant_roles_and_user_assignments_are_isolated(rbac_client: TestCl
     assert service.get_user_permissions(user_a_id, tenant_id=tenant_a) == [code]
 
     with get_host_db() as db:
-        db.add(UserSession(
-            session_id=uuid4().hex, user_id=user_a_id,
-            expires_at=utc_now_naive() + timedelta(days=1),
-        ))
+        db.add(
+            UserSession(
+                session_id=uuid4().hex,
+                user_id=user_a_id,
+                expires_at=utc_now_naive() + timedelta(days=1),
+            )
+        )
     updated = service.update_role(role_a["id"], permissions=[], tenant_id=tenant_a)
     assert updated["sessions_revoked"] == 1
     assert service.get_user_permissions(user_a_id, tenant_id=tenant_a) == []

@@ -41,8 +41,13 @@ def _role_data(role: Role) -> dict[str, Any]:
         "description": role.description or "",
         "is_system": bool(role.is_system),
         "permissions": [
-            {"id": permission.id, "code": permission.code, "name": permission.name,
-             "description": permission.description or "", "module": permission.module or ""}
+            {
+                "id": permission.id,
+                "code": permission.code,
+                "name": permission.name,
+                "description": permission.description or "",
+                "module": permission.module or "",
+            }
             for permission in sorted(role.permissions, key=lambda item: item.code)
         ],
     }
@@ -68,8 +73,10 @@ def _resolve_permissions(db, codes: list[str] | None) -> list[Permission]:
 def _revoke_role_sessions(role_name: str) -> int:
     with get_host_db() as db:
         user_ids = db.query(User.id).filter(User.role == role_name).subquery()
-        result = db.query(UserSession).filter(UserSession.user_id.in_(user_ids)).delete(
-            synchronize_session=False
+        result = (
+            db.query(UserSession)
+            .filter(UserSession.user_id.in_(user_ids))
+            .delete(synchronize_session=False)
         )
         return int(result or 0)
 
@@ -156,8 +163,13 @@ class RbacAppService:
             if module:
                 query = query.filter(Permission.module == module)
             return [
-                {"id": item.id, "code": item.code, "name": item.name,
-                 "description": item.description or "", "module": item.module or ""}
+                {
+                    "id": item.id,
+                    "code": item.code,
+                    "name": item.name,
+                    "description": item.description or "",
+                    "module": item.module or "",
+                }
                 for item in query.order_by(Permission.module, Permission.code).all()
             ]
 
@@ -170,11 +182,18 @@ class RbacAppService:
         with get_db() as db:
             if db.query(Permission.id).filter(Permission.code == code).first():
                 _fail("权限编码已存在", 409)
-            item = Permission(code=code, name=name, description=description or "", module=module or "")
+            item = Permission(
+                code=code, name=name, description=description or "", module=module or ""
+            )
             db.add(item)
             db.flush()
-            return {"id": item.id, "code": item.code, "name": item.name,
-                    "description": item.description or "", "module": item.module or ""}
+            return {
+                "id": item.id,
+                "code": item.code,
+                "name": item.name,
+                "description": item.description or "",
+                "module": item.module or "",
+            }
 
     def delete_permission(self, perm_id: int) -> None:
         with get_db() as db:
@@ -191,15 +210,17 @@ class RbacAppService:
             if tenant_id is not None:
                 query = query.filter(User.tenant_id == tenant_id)
             return [
-                {"id": user.id, "username": user.username,
-                 "display_name": user.display_name or "", "role": user.role,
-                 "is_active": bool(user.is_active)}
+                {
+                    "id": user.id,
+                    "username": user.username,
+                    "display_name": user.display_name or "",
+                    "role": user.role,
+                    "is_active": bool(user.is_active),
+                }
                 for user in query.order_by(User.id).all()
             ]
 
-    def get_user_permissions(
-        self, user_id: int, *, tenant_id: int | None = None
-    ) -> list[str]:
+    def get_user_permissions(self, user_id: int, *, tenant_id: int | None = None) -> list[str]:
         with get_host_db() as db:
             user = db.query(User).filter(User.id == user_id).first()
             if user is None or (tenant_id is not None and user.tenant_id != tenant_id):
@@ -238,8 +259,12 @@ class RbacAppService:
             else:
                 revoked = 0
             user_id = user.id
-        return {"user_id": user_id, "role": user_role,
-                "display_role": role_data["name"], "sessions_revoked": revoked}
+        return {
+            "user_id": user_id,
+            "role": user_role,
+            "display_role": role_data["name"],
+            "sessions_revoked": revoked,
+        }
 
     def seed_missing_permissions(self) -> list[str]:
         added: list[str] = []
