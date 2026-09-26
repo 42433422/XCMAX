@@ -34,7 +34,7 @@ def test_mobile_server_desktop_codex_relay_http_round_trip(monkeypatch, tmp_path
     monkeypatch.setattr(relay, "get_db", test_db)
     app = FastAPI()
     app.include_router(ext.extension_router, prefix="/api/mobile/v1")
-    app.dependency_overrides[ext.get_mobile_user] = lambda: SimpleNamespace(
+    mobile_user = SimpleNamespace(
         id=7,
         username="admin",
         display_name="管理员",
@@ -43,6 +43,7 @@ def test_mobile_server_desktop_codex_relay_http_round_trip(monkeypatch, tmp_path
         account_id="account-7",
         tenant_id="tenant-a",
     )
+    app.dependency_overrides[ext.get_mobile_user] = lambda: mobile_user
     client = TestClient(app)
 
     registered_response = client.post(
@@ -62,9 +63,31 @@ def test_mobile_server_desktop_codex_relay_http_round_trip(monkeypatch, tmp_path
     assert registered_response.status_code == 200
     registered = registered_response.json()["data"]
 
+    malformed_response = client.post(
+        "/api/mobile/v1/relay/mobile/bind-account", json={"pairing_code": "123"}
+    )
+    assert malformed_response.status_code == 400
+
+    with monkeypatch.context() as limiter_patch:
+        limiter_patch.setattr(
+            "app.utils.resilience.rate_limiter.check_rate_limit",
+            lambda *args: {"allowed": False},
+        )
+        throttled_response = client.post(
+            "/api/mobile/v1/relay/mobile/bind-account",
+            json={"pairing_code": registered["pairing_code"]},
+        )
+    assert throttled_response.status_code == 429
+
+    invalid_response = client.post(
+        "/api/mobile/v1/relay/mobile/bind-account",
+        json={"relay_id": registered["relay_id"], "pairing_code": "000000"},
+    )
+    assert invalid_response.status_code == 404
+
     confirm_response = client.post(
         "/api/mobile/v1/relay/mobile/bind-account",
-        json={"relay_id": registered["relay_id"]},
+        json={"pairing_code": registered["pairing_code"]},
     )
     assert confirm_response.status_code == 200
     binding = confirm_response.json()["data"]
@@ -74,6 +97,20 @@ def test_mobile_server_desktop_codex_relay_http_round_trip(monkeypatch, tmp_path
     assert binding["relay_base_url"] == "https://relay.example.test/api/"
     assert binding["local_base_url"] == "http://192.168.1.8:17500"
     assert binding["paired_at"]
+
+    repeated_response = client.post(
+        "/api/mobile/v1/relay/mobile/bind-account",
+        json={"relay_id": registered["relay_id"], "pairing_code": registered["pairing_code"]},
+    )
+    assert repeated_response.status_code == 200
+
+    mobile_user.id = 8
+    other_account_response = client.post(
+        "/api/mobile/v1/relay/mobile/bind-account",
+        json={"pairing_code": registered["pairing_code"]},
+    )
+    assert other_account_response.status_code == 404
+    mobile_user.id = 7
 
     create_response = client.post(
         "/api/mobile/v1/relay/tasks",

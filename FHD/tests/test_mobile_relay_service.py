@@ -46,22 +46,52 @@ def test_mobile_relay_account_auth_binding(monkeypatch, tmp_path):
         relay_base_url="https://relay.example.test/api",
         capabilities={"codex": True, "host": "192.168.1.9", "port": 42422},
     )
-    bound = service.bind_mobile_by_account(
+    wrong_code = service.bind_mobile_by_account(
         user_id=9,
         username="account-user",
         relay_id=registered["relay_id"],
+        pairing_code="000000",
+    )
+    assert wrong_code is None
+    assert (
+        service.bind_mobile_by_account(
+            user_id=9, username="account-user", pairing_code="000000"
+        )
+        is None
+    )
+    bound = service.bind_mobile_by_account(
+        user_id=9,
+        username="account-user",
+        pairing_code=registered["pairing_code"],
     )
     assert bound is not None
     assert bound["status"] == "paired"
     assert bound["relay_id"] == registered["relay_id"]
     assert bound["local_base_url"] == "http://192.168.1.9:42422"
 
+    repeated_code = service.bind_mobile_by_account(
+        user_id=9,
+        username="account-user",
+        pairing_code=registered["pairing_code"],
+    )
+    assert repeated_code is not None
+    assert repeated_code["relay_id"] == registered["relay_id"]
+
     hijack = service.bind_mobile_by_account(
         user_id=10,
         username="other-user",
-        relay_id=registered["relay_id"],
+        pairing_code=registered["pairing_code"],
     )
     assert hijack is None
+
+    expired = service.register_desktop(label="过期设备码", device_id="expired-mac", ttl_seconds=60)
+    monkeypatch.setattr("app.services.mobile_relay_pairing._utc_now", lambda: "9999-01-01T00:00:00+00:00")
+    assert (
+        service.bind_mobile_by_account(
+            user_id=9, username="account-user", pairing_code=expired["pairing_code"]
+        )
+        is None
+    )
 
 
 def test_completion_push_static_helper_covers_statuses_and_body_sources(monkeypatch):

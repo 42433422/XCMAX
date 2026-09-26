@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib
+from datetime import UTC
 
 
 def _facade():
@@ -142,7 +143,7 @@ def _resolve_mobile_relay_user(
             if row is None:
                 row = db.query(User).filter(User.is_active == True).order_by(User.id.asc()).first()
             if row is None:
-                now = _facade().datetime.utcnow()
+                now = _facade().datetime.now(UTC).replace(tzinfo=None)
                 row = User(
                     username=f"mobile_relay_{_facade().uuid.uuid4().hex[:8]}",
                     password=_facade().uuid.uuid4().hex,
@@ -201,8 +202,6 @@ def _cached_desktop_relay_for_account_binding() -> dict[str, _facade().Any] | No
         _facade().logger.warning("cached desktop relay unavailable: %s", exc)
         return None
     if not relay:
-        return None
-    if relay.get("paired") is not True:
         return None
     relay_id = str(relay.get("relay_id") or "").strip()
     if not relay_id:
