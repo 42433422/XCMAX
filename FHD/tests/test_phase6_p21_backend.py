@@ -1443,7 +1443,6 @@ class TestServiceBridgeGetInstanceIdWrite:
         """When file doesn't exist, generates and writes a new instance_id."""
         instance_file = tmp_path / "data" / ".service_bridge_instance_id"
         # Don't patch os.path.exists globally; let real fs check happen.
-        # The file doesn't exist yet, so the function will generate + write.
         with patch.object(sb, "get_data_dir", return_value=str(instance_file.parent)):
             result = sb._get_or_create_instance_id()
         assert result.startswith("xcagi-host-")
