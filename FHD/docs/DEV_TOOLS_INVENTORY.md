@@ -7,24 +7,6 @@
 | 脚本 | 相对路径 | 角色 | 已纳入 ssot | 依赖 |
 |------|----------|------|-------------|------|
 | arch_fitness.py | `scripts/arch_fitness.py` | normative | no | stdlib |
-| check_3dbs.py | `scripts/archive/2026-07/check_3dbs.py` | guard | no | stdlib |
-| check_all_services.py | `scripts/archive/2026-07/check_all_services.py` | guard | no | stdlib |
-| check_api_8000.py | `scripts/archive/2026-07/check_api_8000.py` | guard | no | stdlib |
-| check_backend_data_source.py | `scripts/archive/2026-07/check_backend_data_source.py` | guard | no | stdlib |
-| check_customer_db.py | `scripts/archive/2026-07/check_customer_db.py` | guard | no | stdlib |
-| check_customer_unified.py | `scripts/archive/2026-07/check_customer_unified.py` | guard | no | stdlib |
-| check_customer_units_count.py | `scripts/archive/2026-07/check_customer_units_count.py` | guard | no | stdlib |
-| check_db.py | `scripts/archive/2026-07/check_db.py` | guard | no | stdlib |
-| check_db_full.py | `scripts/archive/2026-07/check_db_full.py` | guard | no | stdlib |
-| check_db_query.py | `scripts/archive/2026-07/check_db_query.py` | guard | no | stdlib |
-| check_db_structure.py | `scripts/archive/2026-07/check_db_structure.py` | guard | no | stdlib |
-| check_frontend_statistics.py | `scripts/archive/2026-07/check_frontend_statistics.py` | guard | no | stdlib |
-| check_import_status.py | `scripts/archive/2026-07/check_import_status.py` | guard | no | stdlib |
-| check_no_xcagi_overrides.py | `scripts/archive/2026-07/check_no_xcagi_overrides.py` | guard | no | stdlib |
-| check_purchase_units.py | `scripts/archive/2026-07/check_purchase_units.py` | guard | no | stdlib |
-| check_purchase_units_table.py | `scripts/archive/2026-07/check_purchase_units_table.py` | guard | no | stdlib |
-| check_templates.py | `scripts/archive/2026-07/check_templates.py` | guard | no | stdlib |
-| check_units.py | `scripts/archive/2026-07/check_units.py` | guard | no | stdlib |
 | verify_db_copy.py | `scripts/archive/2026-08/verify_db_copy.py` | verify | no | stdlib |
 | verify_import.py | `scripts/archive/2026-08/verify_import.py` | verify | no | stdlib |
 | check_coverage_ssot.py | `scripts/ci/check_coverage_ssot.py` | ssot | no | stdlib |
@@ -85,4 +67,4 @@
 | verify_sales_contract_template_env.py | `scripts/verify_sales_contract_template_env.py` | verify | no | stdlib |
 | verify_six_line_event_rail.py | `scripts/verify_six_line_event_rail.py` | verify | no | stdlib |
 
-合计：14 已纳入 ssot / 65 已登记清单 / 0 新游离
+合计：14 已纳入 ssot / 46 已登记清单 / 0 新游离

@@ -105,6 +105,16 @@
               </div>
             </details>
 
+            <router-link v-if="canManageTenantRoles" class="settings-card settings-row settings-rbac-link"
+              :to="{ name: 'tenant-roles' }">
+              <span class="settings-row__icon settings-row__icon--indigo" aria-hidden="true">
+                <i class="fa fa-shield"></i>
+              </span>
+              <span class="settings-row__label">角色与权限</span>
+              <span class="settings-row__meta">管理本企业的角色、权限和用户分配</span>
+              <span class="settings-row__arrow" aria-hidden="true"></span>
+            </router-link>
+
             <details id="settings-model-payment" class="settings-card" data-tutorial-id="settings-model-payment" open>
               <summary class="settings-row">
                 <span class="settings-row__icon settings-row__icon--blue" aria-hidden="true">
@@ -224,13 +234,14 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onActivated, watch, nextTick } from 'vue'
+import { computed, onMounted, onActivated, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useModsStore } from '@/stores/mods'
 import { useIndustryStore } from '../stores/industry'
 import { readStoredSidebarTheme, applySidebarTheme } from '@/utils/sidebarTheme'
 import HostModBridgeView from '@/components/HostModBridgeView.vue'
 import { useSettingsAccount } from '@/composables/settings/useSettingsAccount'
+import { useAccountProfileStore } from '@/stores/accountProfile'
 import { useSettingsMods } from '@/composables/settings/useSettingsMods'
 import { useSettingsMemory } from '@/composables/settings/useSettingsMemory'
 import { useSettingsBasics } from '@/composables/settings/useSettingsBasics'
@@ -244,6 +255,7 @@ import SettingsAboutCard from './settings-view/SettingsAboutCard.vue'
 const route = useRoute()
 const modsStore = useModsStore()
 const industryStore = useIndustryStore()
+const accountProfile = useAccountProfileStore()
 
 const {
   localUser,
@@ -282,6 +294,9 @@ const {
   saveProfile,
   onLogout,
 } = useSettingsAccount()
+const canManageTenantRoles = computed(
+  () => isLocalAdmin.value && accountProfile.accountKind === 'enterprise' && accountProfile.tenantId !== null,
+)
 
 const {
   clientModsUiOff,

@@ -365,9 +365,14 @@ def test_template_app_service_category_filter() -> None:
 
 def test_rbac_app_service_crud_stubs() -> None:
     svc = RbacAppService()
-    role = svc.create_role("editor", "编辑", ["read"])
-    assert role["name"] == "editor"
-    assert svc.get_role(1)["id"] == 1
+    code = f"test.read.{uuid.uuid4().hex}"
+    permission = svc.create_permission(code, "Read", "", "test")
+    name = f"editor-{uuid.uuid4().hex}"
+    role = svc.create_role(name, "编辑", [code])
+    assert role["name"] == name
+    assert svc.get_role(role["id"])["id"] == role["id"]
+    svc.delete_role(role["id"])
+    svc.delete_permission(permission["id"])
     assert get_rbac_app_service() is get_rbac_app_service()
 
 

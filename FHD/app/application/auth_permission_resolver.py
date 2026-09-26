@@ -31,7 +31,11 @@ def resolve_enterprise_role(user: Any, session_meta: dict[str, Any] | None = Non
     explicit = str(meta.get("enterprise_role") or meta.get("rbac_role") or "").strip()
     if explicit:
         return explicit
-    role = str(getattr(user, "role", "") or "").strip().lower()
+    role_name = str(getattr(user, "role", "") or "").strip()
+    parts = role_name.split(":", 2)
+    if len(parts) == 3 and parts[0].lower() == "tenant" and parts[1].isdigit() and parts[2].strip():
+        return role_name
+    role = role_name.lower()
     if role in ENTERPRISE_ROLE_PERMISSIONS:
         return role
     tier = str(getattr(user, "tier", "") or "").strip().lower()
@@ -53,6 +57,23 @@ def resolve_permissions(
     meta = session_meta or {}
     enterprise_role = resolve_enterprise_role(user, meta) if kind == "enterprise" else ""
     perms = set(ENTERPRISE_ROLE_PERMISSIONS.get(enterprise_role, frozenset()))
+    if kind == "enterprise" and enterprise_role.startswith("tenant:"):
+        parts = enterprise_role.split(":", 2)
+        try:
+            role_tenant_id = int(parts[1]) if len(parts) == 3 else None
+            user_tenant_id = int(getattr(user, "tenant_id", 0) or 0)
+        except (TypeError, ValueError):
+            role_tenant_id = user_tenant_id = None
+        if role_tenant_id and role_tenant_id == user_tenant_id:
+            try:
+                from app.services.auth_service import get_auth_service
+
+                perms = set(get_auth_service().get_user_permissions(user))
+            except RECOVERABLE_ERRORS as exc:
+                logger.warning("custom role permission lookup failed: %s", exc)
+                perms.clear()
+        else:
+            perms.clear()
 
     mod_allowed = True
     mod_reason = ""

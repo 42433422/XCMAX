@@ -431,6 +431,11 @@
   background: #f9fafb;
 }
 
+.settings-rbac-link {
+  color: inherit;
+  text-decoration: none;
+}
+
 .settings-row::-webkit-details-marker {
   display: none;
 }

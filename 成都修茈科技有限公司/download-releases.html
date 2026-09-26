@@ -1398,7 +1398,7 @@
             hotfix &&
             hotfix.schema === 'xcagi.windows_interim_release/v1' &&
             hotfix.download_allowed === true &&
-            hotfix.signature_status === 'unsigned' &&
+            hotfix.stable_auto_update === false && hotfix.signature_status === 'signed' &&
             hotfix.release &&
             compareVersions(hotfix.version, history[0].version) >= 0
           if (interimActive) {
