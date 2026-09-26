@@ -19,5 +19,7 @@ def ensure_tenant_rbac_schema(engine: Engine) -> None:
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE tenants ADD COLUMN owner_user_id INTEGER"))
     with engine.begin() as connection:
-        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_tenants_owner_user_id ON tenants (owner_user_id)"))
+        connection.execute(
+            text("CREATE INDEX IF NOT EXISTS ix_tenants_owner_user_id ON tenants (owner_user_id)")
+        )
     Base.metadata.create_all(engine, tables=[TenantInvitation.__table__], checkfirst=True)

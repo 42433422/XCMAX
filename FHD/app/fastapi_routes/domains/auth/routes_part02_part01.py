@@ -184,7 +184,11 @@ async def auth_login(request: _facade().Request, body: dict = _facade().Body(def
         market_user_email_from_raw=_facade()._market_user_email_from_raw,
         login_market_fn=login_market_with_password,
         totp_code=str(body.get("totp_code") or "").strip() or None,
-        **({"invitation_code": str(body.get("invitation_code") or "").strip()} if body.get("invitation_code") else {}),
+        **(
+            {"invitation_code": str(body.get("invitation_code") or "").strip()}
+            if body.get("invitation_code")
+            else {}
+        ),
     )
     if err:
         auth_login_duration_seconds.labels(auth_method="password").observe(

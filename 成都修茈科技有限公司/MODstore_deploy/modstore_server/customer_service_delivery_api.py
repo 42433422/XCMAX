@@ -15,6 +15,9 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import get_current_user, get_db
+from modstore_server.customer_delivery_workbench_start import (
+    _start_custom_delivery_run as _start_custom_delivery_run,
+)
 from modstore_server.customer_service_api import (
     _visible_ticket_or_404,
 )
@@ -24,9 +27,6 @@ from modstore_server.customer_service_delivery_completion import (
 from modstore_server.customer_service_delivery_models import (
     CustomDeliveryDecisionBody,
     CustomDeliveryInstallReceiptBody,
-)
-from modstore_server.customer_service_delivery_models import (
-    custom_delivery_brief as _custom_delivery_brief,
 )
 from modstore_server.customer_service_delivery_models import (
     custom_delivery_commerce_blockers,
@@ -52,11 +52,6 @@ from modstore_server.models_cs import (
 logger = logging.getLogger(__name__)
 router = APIRouter()
 _get_current_user = get_current_user
-
-
-from modstore_server.customer_delivery_workbench_start import (
-    _start_custom_delivery_run as _start_custom_delivery_run,
-)
 
 
 async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, Any]:

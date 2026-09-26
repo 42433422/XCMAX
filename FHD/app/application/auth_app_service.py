@@ -298,7 +298,11 @@ class AuthApplicationService:
                 role = db.query(Role).filter(Role.name == user.role).first()
                 codes = [p.code for p in role.permissions] if role else []
                 if is_tenant_role(user.role):
-                    codes = [code for code in codes if code in TENANT_PERMISSION_CODES] if role_belongs_to_user(user.role, user.tenant_id) else []
+                    codes = (
+                        [code for code in codes if code in TENANT_PERMISSION_CODES]
+                        if role_belongs_to_user(user.role, user.tenant_id)
+                        else []
+                    )
                 if owner_permission_for_user(user) and "tenant.manage_roles" not in codes:
                     codes.append("tenant.manage_roles")
                 return codes

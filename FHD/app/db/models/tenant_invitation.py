@@ -14,7 +14,9 @@ class TenantInvitation(Base):
     __tablename__ = "tenant_invitations"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    tenant_id: Mapped[int] = mapped_column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenants.id"), nullable=False, index=True
+    )
     inviter_user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     target_username: Mapped[str] = mapped_column(String(128), nullable=False)
     token_sha256: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)

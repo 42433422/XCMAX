@@ -212,8 +212,10 @@ def test_rbac_tenant_roles_and_user_assignments_are_isolated(rbac_client: TestCl
         == 1
     )
 
-    rbac_client.app.dependency_overrides[rbac_routes._require_rbac_manager] = lambda: SimpleNamespace(
-        id=user_a_id, username="tenant-a", role="user", tier="enterprise", tenant_id=tenant_a
+    rbac_client.app.dependency_overrides[rbac_routes._require_rbac_manager] = lambda: (
+        SimpleNamespace(
+            id=user_a_id, username="tenant-a", role="user", tier="enterprise", tenant_id=tenant_a
+        )
     )
     listed = rbac_client.get("/api/rbac/roles")
     hidden_role = rbac_client.get(f"/api/rbac/roles/{role_b['id']}")
@@ -250,9 +252,12 @@ def test_rbac_tenant_roles_and_user_assignments_are_isolated(rbac_client: TestCl
 def test_rbac_tenant_scope_fails_closed(rbac_client: TestClient) -> None:
     from fastapi import HTTPException
 
-    rbac_client.app.dependency_overrides[rbac_routes._require_rbac_manager] = lambda: SimpleNamespace(
-        id=2, username="tenant-admin", role="user", tier="enterprise", tenant_id=None
+    rbac_client.app.dependency_overrides[rbac_routes._require_rbac_manager] = lambda: (
+        SimpleNamespace(
+            id=2, username="tenant-admin", role="user", tier="enterprise", tenant_id=None
+        )
     )
+
     def deny_platform():
         raise HTTPException(status_code=403)
 

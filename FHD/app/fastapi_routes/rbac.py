@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/rbac", tags=["rbac"])
 
+
 def _require_platform_admin(request: Request):
     user = get_logged_in_user(request)
     if user.role != "admin" or user.tier != "admin" or user.tenant_id is not None:
@@ -152,11 +153,18 @@ def rbac_permissions_list(
     module: str | None = Query(default=None),
 ):
     """列出所有权限，可按模块过滤。"""
-    return {"success": True, "data": get_rbac_app_service().list_permissions(module, tenant_id=_tenant_scope(request, _user))}
+    return {
+        "success": True,
+        "data": get_rbac_app_service().list_permissions(
+            module, tenant_id=_tenant_scope(request, _user)
+        ),
+    }
 
 
 @router.post("/permissions")
-def rbac_permission_create(body: PermissionCreate, request: Request, _user=Depends(_require_platform_admin)):
+def rbac_permission_create(
+    body: PermissionCreate, request: Request, _user=Depends(_require_platform_admin)
+):
     """创建新权限定义（扩展系统权限集）。"""
     try:
         if _tenant_scope(request, _user) is not None:
@@ -253,7 +261,8 @@ def rbac_invite_member(
         raise HTTPException(status_code=403, detail="平台账号不能从租户入口邀请成员")
     try:
         data = create_tenant_invitation(
-            inviter_user_id=int(_user.id), tenant_id=tenant_id,
+            inviter_user_id=int(_user.id),
+            tenant_id=tenant_id,
             target_username=str(body.get("target_username") or ""),
         )
         return JSONResponse({"success": True, "data": data}, status_code=201)

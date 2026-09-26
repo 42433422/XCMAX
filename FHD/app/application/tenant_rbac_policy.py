@@ -9,10 +9,16 @@ from app.db.session import get_host_db
 # These API families enforce the authenticated user id on every resource and
 # tenant scope on writes. Other legacy business permissions are not grantable
 # until their route-level authorization has the same guarantee.
-TENANT_PERMISSION_CODES = frozenset({
-    "tenant.manage_roles", "etl.read", "etl.template.manage", "etl.execute",
-    "etl.rollback", "etl.target.manage",
-})
+TENANT_PERMISSION_CODES = frozenset(
+    {
+        "tenant.manage_roles",
+        "etl.read",
+        "etl.template.manage",
+        "etl.execute",
+        "etl.rollback",
+        "etl.target.manage",
+    }
+)
 
 
 def is_tenant_role(role_name: str) -> bool:

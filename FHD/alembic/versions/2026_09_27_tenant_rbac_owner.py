@@ -1,6 +1,7 @@
 """Persist tenant ownership and one-use market identity invitations."""
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "2026_09_27_tenant_rbac_owner"
@@ -27,8 +28,15 @@ def upgrade():
             sa.Column("accepted_at", sa.DateTime(), nullable=True),
             sa.Column("accepted_market_user_id", sa.Integer(), nullable=True),
         )
-    op.create_index("ix_tenant_invitations_tenant_id", "tenant_invitations", ["tenant_id"], if_not_exists=True)
-    op.create_index("ix_tenant_invitations_token_sha256", "tenant_invitations", ["token_sha256"], if_not_exists=True)
+    op.create_index(
+        "ix_tenant_invitations_tenant_id", "tenant_invitations", ["tenant_id"], if_not_exists=True
+    )
+    op.create_index(
+        "ix_tenant_invitations_token_sha256",
+        "tenant_invitations",
+        ["token_sha256"],
+        if_not_exists=True,
+    )
     op.execute(
         "INSERT INTO permissions (name, code, description, module) "
         "SELECT '管理本企业角色', 'tenant.manage_roles', '', 'tenant' "

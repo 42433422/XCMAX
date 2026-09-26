@@ -7,7 +7,11 @@ from typing import Any, NoReturn, cast
 
 from sqlalchemy import select
 
-from app.application.tenant_rbac_policy import TENANT_PERMISSION_CODES, owner_permission_for_user, role_belongs_to_user
+from app.application.tenant_rbac_policy import (
+    TENANT_PERMISSION_CODES,
+    owner_permission_for_user,
+    role_belongs_to_user,
+)
 from app.db.models.permission import DEFAULT_PERMISSIONS, Permission, Role
 from app.db.models.user import Session as UserSession
 from app.db.models.user import User
@@ -61,7 +65,9 @@ def _visible_role(db, role_id: int, tenant_id: int | None) -> Role:
     return role
 
 
-def _resolve_permissions(db, codes: list[str] | None, tenant_id: int | None = None) -> list[Permission]:
+def _resolve_permissions(
+    db, codes: list[str] | None, tenant_id: int | None = None
+) -> list[Permission]:
     requested = sorted({str(code).strip() for code in (codes or []) if str(code).strip()})
     if not requested:
         return []
@@ -100,7 +106,11 @@ class RbacAppService:
             query = db.query(Role)
             if tenant_id is not None:
                 query = query.filter(Role.name.like(f"tenant:{tenant_id}:%"))
-            return [_role_data(role) for role in query.order_by(Role.name).all() if _tenant_role(role, tenant_id)]
+            return [
+                _role_data(role)
+                for role in query.order_by(Role.name).all()
+                if _tenant_role(role, tenant_id)
+            ]
 
     def get_role(self, role_id: int, *, tenant_id: int | None = None) -> dict[str, Any]:
         with get_host_db() as db:
@@ -160,7 +170,9 @@ class RbacAppService:
                 _fail("角色仍分配给用户，不能删除", 409)
             db.delete(role)
 
-    def list_permissions(self, module: str | None = None, *, tenant_id: int | None = None) -> list[dict[str, Any]]:
+    def list_permissions(
+        self, module: str | None = None, *, tenant_id: int | None = None
+    ) -> list[dict[str, Any]]:
         with get_host_db() as db:
             query = db.query(Permission)
             if module:
@@ -236,7 +248,11 @@ class RbacAppService:
             role = db.query(Role).filter(Role.name == role_name).first()
             codes = [permission.code for permission in role.permissions] if role else []
             if _TENANT_ROLE.match(role_name):
-                codes = [code for code in codes if code in TENANT_PERMISSION_CODES] if role_belongs_to_user(role_name, user.tenant_id) else []
+                codes = (
+                    [code for code in codes if code in TENANT_PERMISSION_CODES]
+                    if role_belongs_to_user(role_name, user.tenant_id)
+                    else []
+                )
             if owner_permission_for_user(user) and "tenant.manage_roles" not in codes:
                 codes.append("tenant.manage_roles")
             return codes

@@ -265,9 +265,8 @@ def _initialize_databases_sync(app: FastAPI):
         from app.db.init_db import ensure_runtime_auth_bootstrap
 
         ensure_runtime_auth_bootstrap(engine, database_url=cfg_db_url or None)
-        from app.db.tenant_rbac_bootstrap import ensure_tenant_rbac_schema
-
         from app.db import get_host_engine
+        from app.db.tenant_rbac_bootstrap import ensure_tenant_rbac_schema
 
         ensure_tenant_rbac_schema(get_host_engine())
         ensure_sessions_market_access_token_column(engine, database_url=cfg_db_url or None)
