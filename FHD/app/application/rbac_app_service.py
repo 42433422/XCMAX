@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import or_
 
@@ -54,7 +54,7 @@ def _role_data(role: Role) -> dict[str, Any]:
 
 
 def _visible_role(db, role_id: int, tenant_id: int | None) -> Role:
-    role = db.query(Role).filter(Role.id == role_id).first()
+    role = cast(Role | None, db.query(Role).filter(Role.id == role_id).first())
     if role is None or not _tenant_role(role, tenant_id):
         _fail("角色不存在", 404)
     return role
@@ -64,7 +64,9 @@ def _resolve_permissions(db, codes: list[str] | None) -> list[Permission]:
     requested = sorted({str(code).strip() for code in (codes or []) if str(code).strip()})
     if not requested:
         return []
-    found = db.query(Permission).filter(Permission.code.in_(requested)).all()
+    found = cast(
+        list[Permission], db.query(Permission).filter(Permission.code.in_(requested)).all()
+    )
     if {item.code for item in found} != set(requested):
         _fail("权限列表包含未知权限")
     return found
