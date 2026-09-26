@@ -590,57 +590,9 @@ jobs:
           v="${v#FHD/}"
           v="${v#v}"
           v="${v#V}"
-          sku="enterprise"
-          dmg="$(find "release/xcagi-v${v}/${sku}" -name '*.dmg' -print -quit)"
+          dmg="$(find "release/xcagi-v${v}/enterprise" -name '*.dmg' -print -quit)"
           test -n "${dmg}"
-          echo "Verifying ${dmg}"
-          codesign -dv --verbose=4 "${dmg}" 2>&1 | tee /tmp/codesign.txt
-          if grep -q 'Signature=adhoc' /tmp/codesign.txt; then
-            echo "::error::DMG is still adhoc-signed"
-            exit 1
-          fi
-          codesign --verify --verbose=2 "${dmg}"
-          xcrun stapler validate "${dmg}"
-          spctl -a -vv -t open --context context:primary-signature "${dmg}"
-          mount_dir="$(mktemp -d)"
-          cleanup_mount() {
-            hdiutil detach "${mount_dir}" -quiet || true
-            rmdir "${mount_dir}" 2>/dev/null || true
-          }
-          trap cleanup_mount EXIT
-          hdiutil attach -nobrowse -readonly -quiet -mountpoint "${mount_dir}" "${dmg}"
-          app="$(find "${mount_dir}" -maxdepth 2 -name 'XCAGI.app' -print -quit)"
-          test -n "${app}"
-          codesign --verify --deep --strict --verbose=2 "${app}"
-          build_info="${app}/Contents/Resources/build-info.json"
-          test -f "${build_info}"
-          BUILD_INFO_PATH="${build_info}" \
-            EXPECTED_BUILD_SHA="${XCAGI_BUILD_SHA}" \
-            EXPECTED_PRODUCT_VERSION="${v}" \
-            python3 <<'PY'
-          import json
-          import os
-
-          path = os.environ["BUILD_INFO_PATH"]
-          expected_sha = os.environ["EXPECTED_BUILD_SHA"]
-          expected_version = os.environ["EXPECTED_PRODUCT_VERSION"]
-          with open(path, encoding="utf-8") as handle:
-              data = json.load(handle)
-          assert data.get("gitSha") == expected_sha, (
-              f"packaged gitSha mismatch: {data.get('gitSha')!r} != {expected_sha!r}"
-          )
-          assert data.get("version") == expected_version, (
-              f"packaged version mismatch: {data.get('version')!r} != {expected_version!r}"
-          )
-          print(f"Verified packaged identity: {expected_version} @ {expected_sha}")
-          PY
-          backend="${app}/Contents/Resources/backend/xcagi-backend"
-          test -x "${backend}"
-          "${backend}" --verify-frozen-critical-runtime
-          xcrun stapler validate "${app}"
-          spctl -a -vv -t exec "${app}"
-          cleanup_mount
-          trap - EXIT
+          bash scripts/package/verify-macos-release-dmg.sh "${dmg}" "${v}" "${XCAGI_BUILD_SHA}"
       - uses: actions/upload-artifact@v4
         with:
           name: xcagi-desktop-macos-enterprise
