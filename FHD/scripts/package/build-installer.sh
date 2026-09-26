@@ -98,7 +98,7 @@ build_one_sku() {
 
   echo "========== Building macOS SKU: ${sku} =========="
   if [ "${SKIP_BACKEND:-0}" != "1" ]; then
-    XCAGI_PRODUCT_SKU="${sku}" scripts/package/build-backend.sh "${VERSION}"
+    SKIP_FRONTEND=0 FHD_REBUILD_FRONTEND=1 XCAGI_PRODUCT_SKU="${sku}" scripts/package/build-backend.sh "${VERSION}"
   else
     if ! "${PYTHON:-python3}" -m pip --version >/dev/null 2>&1; then
       "${PYTHON:-python3}" -m ensurepip --upgrade
