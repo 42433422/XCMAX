@@ -17,7 +17,14 @@ export type AccountRoleSource = {
   isAdminAccount?: boolean
   localRole?: string
   permissions?: readonly string[]
+  tenantId?: number | null
 }
+
+export const UNSCOPED_HOST_BUSINESS_KEYS = new Set([
+  'products', 'customers', 'orders', 'orders-create', 'shipment-records',
+  'materials', 'inventory', 'print', 'printer-list', 'template-preview',
+  'traditional-mode', 'approval-hub', 'tools',
+])
 
 const ENTERPRISE_GENERIC_CORE_KEYS = new Set([
   'chat',
@@ -73,13 +80,16 @@ export function buildRoleMenuProfile(source: AccountRoleSource, hasIndustryBusin
   }
 
   if (source.localRole?.startsWith('tenant:')) {
-    const visibleCoreKeys = new Set(['chat', 'settings'])
+    const visibleCoreKeys = new Set(['settings'])
     if (source.permissions?.includes('etl.read')) visibleCoreKeys.add('business-docking')
     return { role: 'enterprise-user', canSeeAdminMenus: false, canSeeDeveloperMenus: false, visibleCoreKeys }
   }
 
   const visibleCoreKeys = new Set(ENTERPRISE_GENERIC_CORE_KEYS)
-  if (hasIndustryBusinessMod) {
+  if (source.tenantId != null) {
+    for (const key of UNSCOPED_HOST_BUSINESS_KEYS) visibleCoreKeys.delete(key)
+  }
+  if (hasIndustryBusinessMod && source.tenantId == null) {
     for (const key of ENTERPRISE_BUSINESS_CORE_KEYS) visibleCoreKeys.add(key)
   }
   return {

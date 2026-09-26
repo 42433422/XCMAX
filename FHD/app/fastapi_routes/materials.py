@@ -7,17 +7,21 @@ import os
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Body, Query, Request
+from fastapi import APIRouter, Body, Depends, Query, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.application import get_material_application_service
 from app.application.workflow.types import normalize_workflow_risk
+from app.infrastructure.auth.legacy_business_gate import require_scoped_business_permission
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["materials"])
+router = APIRouter(
+    tags=["materials"],
+    dependencies=[Depends(require_scoped_business_permission("material.view", "material.edit"))],
+)
 
 
 def _svc():

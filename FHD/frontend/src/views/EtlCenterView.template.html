@@ -49,8 +49,8 @@
         <strong>{{ selectionHeadline }}</strong>
         <span>XLSX / XLSM / CSV · PDF / JPG / PNG OCR · Word / PPT 仅知识库</span>
         <div class="etl-picker-actions">
-          <button type="button" :disabled="busy" @click="fileInput?.click()">选择文件</button>
-          <button type="button" :disabled="busy" @click="folderInput?.click()">选择整个文件夹</button>
+          <button v-if="canExecutePermission" type="button" :disabled="busy" @click="fileInput?.click()">选择文件</button>
+          <button v-if="canExecutePermission" type="button" :disabled="busy" @click="folderInput?.click()">选择整个文件夹</button>
           <button v-if="selectedFiles.length" type="button" class="etl-picker-actions__clear" :disabled="busy" @click="clearSelection">
             清空
           </button>
@@ -115,7 +115,7 @@
           </select>
         </label>
         <button
-          v-if="targetType === 'webhook' && targetConfigId"
+          v-if="canManageTarget && targetType === 'webhook' && targetConfigId"
           type="button"
           class="etl-link-button"
           :disabled="busy"
@@ -124,7 +124,7 @@
           测试当前 Webhook
         </button>
         <small v-if="webhookTestMessage" class="etl-webhook-test">{{ webhookTestMessage }}</small>
-        <button v-if="targetType === 'webhook'" type="button" class="etl-link-button" @click="showWebhookForm = !showWebhookForm">
+        <button v-if="canManageTarget && targetType === 'webhook'" type="button" class="etl-link-button" @click="showWebhookForm = !showWebhookForm">
           {{ showWebhookForm ? '收起配置' : '新建 Webhook 配置' }}
         </button>
         <div v-if="incompatibleFiles.length" class="etl-inline-error" role="alert">
@@ -133,6 +133,7 @@
         <div class="etl-form-actions">
           <span v-if="selectedFiles.length"> {{ selectedFiles.length }} 个文件将分别解析并写入业务库 </span>
           <button
+            v-if="canExecutePermission"
             type="button"
             class="etl-primary"
             data-tutorial-id="etl-start-preview"
@@ -181,7 +182,7 @@
       写入完成后可保存为仅自己可见的个人模板。
     </p>
 
-    <form v-if="showWebhookForm" class="etl-webhook-form" @submit.prevent="saveWebhook">
+    <form v-if="canManageTarget && showWebhookForm" class="etl-webhook-form" @submit.prevent="saveWebhook">
       <label>名称<input v-model.trim="webhookDraft.name" required maxlength="160" /></label>
       <label>HTTPS 地址<input v-model.trim="webhookDraft.endpoint_url" required type="url" /></label>
       <label>
@@ -208,7 +209,7 @@
         <h2>字段映射</h2>
         <p>确认源字段、目标字段与安全转换。转换规则只接受受限 JSON DSL。</p>
       </div>
-      <button type="button" class="etl-secondary" :disabled="!editableMappings.length || busy" @click="saveMappings">保存并重新校验</button>
+      <button v-if="canExecutePermission" type="button" class="etl-secondary" :disabled="!editableMappings.length || busy" @click="saveMappings">保存并重新校验</button>
     </div>
     <div v-if="!currentRun" class="etl-empty">请先在“上传文件”中创建导入任务。</div>
     <div v-else class="etl-mapping-table-wrap">
@@ -293,7 +294,7 @@
       </div>
       <div class="etl-actions">
         <button
-          v-if="currentRun?.target_type === 'shipment_records'"
+          v-if="canExecutePermission && currentRun?.target_type === 'shipment_records'"
           type="button"
           class="etl-secondary"
           :disabled="busy"
@@ -302,7 +303,7 @@
           {{ linkedCustomerProductPreview ? '查看客户及产品导入' : '导入客户及产品' }}
         </button>
         <button
-          v-if="currentRun?.target_type === 'shipment_records'"
+          v-if="canManageTemplate && currentRun?.target_type === 'shipment_records'"
           type="button"
           class="etl-secondary"
           :disabled="busy"
@@ -310,8 +311,8 @@
         >
           保存发货单版式
         </button>
-        <button type="button" class="etl-secondary" :disabled="!currentRun || busy" @click="saveCurrentAsTemplate">保存个人模板</button>
-        <button type="button" class="etl-primary" data-tutorial-id="etl-confirm" :disabled="!canExecute || busy" @click="executeCurrentRun">
+        <button v-if="canManageTemplate" type="button" class="etl-secondary" :disabled="!currentRun || busy" @click="saveCurrentAsTemplate">保存个人模板</button>
+        <button v-if="canExecutePermission" type="button" class="etl-primary" data-tutorial-id="etl-confirm" :disabled="!canExecute || busy" @click="executeCurrentRun">
           写入数据库
         </button>
       </div>
@@ -450,8 +451,8 @@
             <option value="skip">跳过</option>
             <option value="error">错误</option>
           </select>
-          <button type="button" :disabled="busy || !runRows.length" @click="bulkOverride('skip')">本页全部跳过</button>
-          <button type="button" :disabled="busy || !bulkNewRows.length" @click="bulkOverride('new')">本页可新增行设为新增</button>
+          <button v-if="canExecutePermission" type="button" :disabled="busy || !runRows.length" @click="bulkOverride('skip')">本页全部跳过</button>
+          <button v-if="canExecutePermission" type="button" :disabled="busy || !bulkNewRows.length" @click="bulkOverride('new')">本页可新增行设为新增</button>
         </div>
         <a v-if="currentRun.summary.error" :href="etlApi.errorExportUrl(currentRun.id)" target="_blank" rel="noopener">导出错误行</a>
       </div>
@@ -491,7 +492,7 @@
               </td>
               <td><small>{{ compactRecord(row.normalized) }}</small></td>
               <td>
-                <select :value="row.final_action" :disabled="row.validation_issues.length > 0 || busy" @change="overrideRow(row, $event)">
+                <select :value="row.final_action" :disabled="!canExecutePermission || row.validation_issues.length > 0 || busy" @change="overrideRow(row, $event)">
                   <option v-for="action in allowedActionsForRow(row)" :key="action" :value="action">{{ actionLabel(action) }}</option>
                   <option v-if="row.final_action === 'error'" value="error">错误</option>
                 </select>
@@ -569,7 +570,7 @@
             >下载导出</a
           >
           <button
-            v-if="['failed', 'interrupted'].includes(currentRun.status)"
+            v-if="canExecutePermission && ['failed', 'interrupted'].includes(currentRun.status)"
             type="button"
             class="etl-secondary"
             :disabled="busy"

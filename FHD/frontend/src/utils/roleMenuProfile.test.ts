@@ -40,7 +40,15 @@ describe('roleMenuProfile', () => {
     const denied = buildRoleMenuProfile(member, true)
     expect(canShowCoreMenuKey(denied, 'business-docking')).toBe(false)
     expect(canShowCoreMenuKey(denied, 'products')).toBe(false)
-    expect(canShowCoreMenuKey(denied, 'chat')).toBe(true)
+    expect(canShowCoreMenuKey(denied, 'chat')).toBe(false)
     expect(canShowCoreMenuKey(buildRoleMenuProfile({ ...member, permissions: ['etl.read'] }), 'business-docking')).toBe(true)
+  })
+
+  it('hides unscoped host business entries from an enterprise founder with a tenant', () => {
+    const profile = buildRoleMenuProfile({ accountKind: 'enterprise', marketIsEnterprise: true, tenantId: 7 }, true)
+    expect(canShowCoreMenuKey(profile, 'products')).toBe(false)
+    expect(canShowCoreMenuKey(profile, 'printer-list')).toBe(false)
+    expect(canShowCoreMenuKey(profile, 'business-docking')).toBe(true)
+    expect(canShowCoreMenuKey(profile, 'mod-store')).toBe(true)
   })
 })

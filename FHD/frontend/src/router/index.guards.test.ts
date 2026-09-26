@@ -82,6 +82,7 @@ vi.mock('@/constants/genericModPack', async (importOriginal) => {
 vi.mock('@/utils/roleMenuProfile', () => ({
   buildRoleMenuProfile: vi.fn(),
   canShowCoreMenuKey: () => true,
+  UNSCOPED_HOST_BUSINESS_KEYS: new Set(),
 }))
 
 vi.mock('@/constants/adminOperatorNav', () => ({

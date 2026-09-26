@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Body, File, Form, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Form, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.application.shipment_excel_etl_security import (
@@ -16,6 +16,7 @@ from app.application.shipment_excel_etl_security import (
     resolve_etl_output_path,
     resolve_etl_path,
 )
+from app.infrastructure.auth.legacy_business_gate import require_scoped_business_permission
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir
 from app.utils.security.secure_filename import secure_filename
@@ -333,7 +334,10 @@ def extract_test():
     )
 
 
-@router.post("/import/products")
+@router.post(
+    "/import/products",
+    dependencies=[Depends(require_scoped_business_permission("product.view", "product.edit"))],
+)
 def import_products(data: dict[str, Any] = Body(default_factory=dict)):
     try:
         from app.application.facades.excel_facade import get_product_import_service
@@ -412,7 +416,10 @@ def import_products(data: dict[str, Any] = Body(default_factory=dict)):
         )
 
 
-@router.post("/import/customers")
+@router.post(
+    "/import/customers",
+    dependencies=[Depends(require_scoped_business_permission("customer.view", "customer.edit"))],
+)
 def import_customers(data: dict[str, Any] = Body(default_factory=dict)):
     try:
         from app.application import get_customer_app_service

@@ -25,7 +25,7 @@ import { DESKTOP_ADMIN_FORBIDDEN_MESSAGE, isAdminConsoleSpa, resolveAdminConsole
 import { isDesktopShell } from '@/utils/desktopShell'
 import { ADMIN_HOST_ROUTE_RECORDS } from '@admin-console-inject/adminHostRoutes'
 import { ADMIN_OPERATOR_BLOCKED_ROUTE_NAMES, ADMIN_OPERATOR_HOME_ROUTE } from '@/constants/adminOperatorNav'
-import { buildRoleMenuProfile, canShowCoreMenuKey } from '@/utils/roleMenuProfile'
+import { buildRoleMenuProfile, canShowCoreMenuKey, UNSCOPED_HOST_BUSINESS_KEYS } from '@/utils/roleMenuProfile'
 import { isClientErpSidebarContext } from '@/constants/genericModPack'
 import { resolveInitialRoutes } from './initialRouteSelection'
 import { CORE_ROUTES } from './routes/core'
@@ -123,6 +123,27 @@ router.beforeEach(async (to, _from, next) => {
         },
         replace: true,
       })
+      return
+    }
+  }
+
+  if (!isAdminConsoleSpa() && to.name && UNSCOPED_HOST_BUSINESS_KEYS.has(String(to.name))) {
+    const { useAccountProfileStore } = await import('@/stores/accountProfile')
+    const profile = useAccountProfileStore()
+    if (profile.loaded && profile.tenantId != null) {
+      next({ name: 'settings', replace: true })
+      return
+    }
+  }
+  if (!isAdminConsoleSpa() && !to.meta?.publicAccess) {
+    const { useAccountProfileStore } = await import('@/stores/accountProfile')
+    const profile = useAccountProfileStore()
+    const member = profile.loaded && String(profile.userRole || '').startsWith('tenant:')
+    const allowed = to.name === 'settings'
+      || (to.name === 'business-docking' && profile.permissions?.includes('etl.read'))
+      || (to.name === 'tenant-roles' && profile.permissions?.includes('tenant.manage_roles'))
+    if (member && !allowed) {
+      next({ name: 'settings', replace: true })
       return
     }
   }

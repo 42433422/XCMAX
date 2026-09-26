@@ -68,6 +68,7 @@ vi.mock('@/utils/productSku', () => ({
 vi.mock('@/stores/accountProfile', () => ({
   useAccountProfileStore: () => ({
     applyFromLoginPayload: vi.fn(),
+    refreshFromServer: vi.fn(),
     isAdminAccount: false,
     accountKind: 'personal',
     loaded: true,

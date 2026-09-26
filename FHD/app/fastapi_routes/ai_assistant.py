@@ -14,13 +14,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Body, Query
+from fastapi import APIRouter, Body, Depends, Query
 from fastapi.responses import JSONResponse
 
 from app.build_identity import build_identity
 from app.fastapi_routes.ai_assistant_responses import fail as _fail
 from app.fastapi_routes.ai_assistant_responses import ok as _ok
 from app.fastapi_routes.ai_assistant_tts import router as tts_router
+from app.infrastructure.auth.legacy_business_gate import require_scoped_business_permission
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.security.safe_download_path import (
     UnsafeDownloadPathError,
@@ -31,6 +32,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["ai-assistant-compat"])
 router.include_router(tts_router)
+_shipment_access = [Depends(require_scoped_business_permission("shipment.view", "shipment.edit"))]
+_print_access = [Depends(require_scoped_business_permission("print.label"))]
+_product_access = [Depends(require_scoped_business_permission("product.view", "product.edit"))]
 
 _TRACE_MAX_STRING = 500
 _TRACE_SECRET_KEYS = {"audiobase64", "audio_base64", "key", "token", "password", "secret"}
@@ -145,7 +149,7 @@ def compat_health():
     )
 
 
-@router.post("/api/generate")
+@router.post("/api/generate", dependencies=_shipment_access)
 def compat_ai_generate(payload: dict[str, Any] = Body(default_factory=dict)):
     order_text = str(payload.get("order_text") or "").strip()
     template_name = payload.get("template_name")
@@ -221,21 +225,21 @@ def compat_ai_generate(payload: dict[str, Any] = Body(default_factory=dict)):
         return _fail("生成失败", 500)
 
 
-@router.get("/api/shipment-records/units")
+@router.get("/api/shipment-records/units", dependencies=_shipment_access)
 def compat_shipment_records_units():
     app_service = _shipment_svc()
     units = app_service.get_purchase_units()
     return _ok(units, count=len(units))
 
 
-@router.get("/api/shipment-records/records")
+@router.get("/api/shipment-records/records", dependencies=_shipment_access)
 def compat_shipment_records_records(unit: str | None = Query(default=None)):
     app_service = _shipment_svc()
     rows = app_service.get_shipment_records(unit_name=unit)
     return _ok(rows, count=len(rows))
 
 
-@router.get("/api/units")
+@router.get("/api/units", dependencies=_shipment_access)
 def compat_units_alias():
     from app.application.facades.query_facade import get_purchase_units
 
@@ -243,7 +247,7 @@ def compat_units_alias():
     return _ok(data, count=len(data))
 
 
-@router.post("/api/purchase_units")
+@router.post("/api/purchase_units", dependencies=_shipment_access)
 def compat_purchase_units_create(payload: dict[str, Any] = Body(default_factory=dict)):
     from app.application.facades.query_facade import find_purchase_unit
     from app.db.models import PurchaseUnit
@@ -282,7 +286,7 @@ def compat_purchase_units_create(payload: dict[str, Any] = Body(default_factory=
         )
 
 
-@router.put("/api/purchase_units/{unit_id}")
+@router.put("/api/purchase_units/{unit_id}", dependencies=_shipment_access)
 def compat_purchase_units_update(
     unit_id: int, payload: dict[str, Any] = Body(default_factory=dict)
 ):
@@ -309,7 +313,7 @@ def compat_purchase_units_update(
         )
 
 
-@router.delete("/api/purchase_units/{unit_id}")
+@router.delete("/api/purchase_units/{unit_id}", dependencies=_shipment_access)
 def compat_purchase_units_delete(unit_id: int):
     from app.application.facades.query_facade import query_service
     from app.db.models import PurchaseUnit
@@ -325,7 +329,7 @@ def compat_purchase_units_delete(unit_id: int):
     )
 
 
-@router.get("/api/purchase_units/by_name/{unit_name}")
+@router.get("/api/purchase_units/by_name/{unit_name}", dependencies=_shipment_access)
 def compat_purchase_units_by_name(unit_name: str):
     from app.application.facades.query_facade import find_purchase_unit
 
@@ -336,25 +340,25 @@ def compat_purchase_units_by_name(unit_name: str):
     return _ok(unit)
 
 
-@router.get("/api/product_names")
+@router.get("/api/product_names", dependencies=_product_access)
 def compat_product_names():
     names = _distinct_product_names()
     return _ok(names, count=len(names))
 
 
-@router.get("/api/product_names/search")
+@router.get("/api/product_names/search", dependencies=_product_access)
 def compat_product_names_search(keyword: str = Query(default="")):
     names = _distinct_product_names(keyword=keyword or None)
     return _ok(names, count=len(names))
 
 
-@router.get("/api/product_names/by_unit/{unit_id}")
+@router.get("/api/product_names/by_unit/{unit_id}", dependencies=_product_access)
 def compat_product_names_by_unit(unit_id: int):
     names = _distinct_product_names()
     return _ok(names, count=len(names), unit_id=unit_id)
 
 
-@router.get("/api/product_names/by_unit_and_name")
+@router.get("/api/product_names/by_unit_and_name", dependencies=_product_access)
 def compat_product_by_unit_and_name(name: str = Query(default="")):
     from app.application.facades.query_facade import find_product
 
@@ -367,7 +371,7 @@ def compat_product_by_unit_and_name(name: str = Query(default="")):
     return _ok(product)
 
 
-@router.get("/api/printers")
+@router.get("/api/printers", dependencies=_print_access)
 def compat_printers():
     base = _printer_svc().get_printers()
     return JSONResponse(
@@ -382,7 +386,7 @@ def compat_printers():
     )
 
 
-@router.get("/api/print/diagnose")
+@router.get("/api/print/diagnose", dependencies=_print_access)
 def compat_print_diagnose():
     try:
         base = _printer_svc().get_printers()
@@ -392,7 +396,7 @@ def compat_print_diagnose():
         return _fail("打印机诊断失败", 500)
 
 
-@router.post("/api/print/{filename:path}")
+@router.post("/api/print/{filename:path}", dependencies=_print_access)
 def compat_print_shipment_file(filename: str, payload: dict[str, Any] = Body(default_factory=dict)):
     from app.utils.path_io.path_utils import get_app_data_dir
 
@@ -421,7 +425,7 @@ def compat_print_shipment_file(filename: str, payload: dict[str, Any] = Body(def
     return JSONResponse(traced, status_code=status)
 
 
-@router.post("/api/print-last")
+@router.post("/api/print-last", dependencies=_print_access)
 def compat_print_last():
     return _fail(
         "XCAGI 未实现 print-last（请通过 /api/print/<filename> 打印指定文件）",
@@ -429,12 +433,12 @@ def compat_print_last():
     )
 
 
-@router.post("/api/print/pdf_labels")
+@router.post("/api/print/pdf_labels", dependencies=_print_access)
 def compat_print_pdf_labels():
     return _fail("XCAGI 暂未实现 pdf_labels（请使用现有打印功能）", 501)
 
 
-@router.post("/api/print/single_label")
+@router.post("/api/print/single_label", dependencies=_print_access)
 def compat_print_single_label(payload: dict[str, Any] = Body(default_factory=dict)):
     """打印单张标签：根据型号查找产品信息后发送到标签打印机。"""
     model_number = str(payload.get("model_number") or "").strip()
