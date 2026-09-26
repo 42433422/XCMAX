@@ -11,7 +11,9 @@ import re
 import shutil
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 WEBSITE_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -19,6 +21,7 @@ CATALOG_PATH = WEBSITE_DIR / "data" / "capabilities" / "catalog.json"
 OUT_DIR = WEBSITE_DIR / "capabilities"
 PUBLIC_DATA_PATH = WEBSITE_DIR / "data" / "capabilities.json"
 EVIDENCE_ASSET_DIR = OUT_DIR / "assets" / "evidence"
+PROJECT_TIMEZONE = ZoneInfo("Asia/Shanghai")
 
 STATUS_META = {
     "verified": {"label": "已验证", "cls": "st-verified", "rank": 3},
@@ -126,6 +129,21 @@ def git(*args: str, cwd: Path = REPO_ROOT) -> str | None:
         return out.stdout.strip()
     except (subprocess.SubprocessError, OSError):
         return None
+
+
+def project_code_date(commit_time: str | None) -> str | None:
+    """Render commit instants in the product timezone so merge metadata is stable."""
+    if not commit_time:
+        return None
+    try:
+        # Python 3.9 does not accept the ISO-8601 ``Z`` suffix in fromisoformat.
+        normalized = f"{commit_time[:-1]}+00:00" if commit_time.endswith("Z") else commit_time
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed.astimezone(PROJECT_TIMEZONE).date().isoformat()
 
 
 def reviewed_runs(feat: dict) -> list[dict]:
@@ -404,7 +422,8 @@ def validate_feature(feat: dict, warnings: list[str]) -> dict:
     }
 
     paths = impl_ok + tests_ok
-    verified_at = git("log", "-1", "--format=%cI", "--", *paths) if paths else None
+    commit_time = git("log", "-1", "--format=%cI", "--", *paths) if paths else None
+    verified_at = project_code_date(commit_time)
     accepted_at = max((v["verified_at"] for v in verdicts if v["verified_at"]), default=None)
 
     return {
@@ -430,7 +449,7 @@ def validate_feature(feat: dict, warnings: list[str]) -> dict:
             "logs": logs_ok,
             "raw": raw_ok,
         },
-        "verified_at": verified_at[:10] if verified_at else None,
+        "verified_at": verified_at,
     }
 
 
