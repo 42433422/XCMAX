@@ -67,6 +67,7 @@
 | version | `FHD/VERSION.md` | blocking |
 | docs-ssot | `FHD/docs/SSOT_INDEX.md` | blocking |
 | account-system | `FHD/docs/account_system_ssot.md` | blocking |
+| public-site | `FHD/config/public_cases.json` | blocking |
 | test-files | `FHD/tests/` | blocking |
 | deploy-scripts | `FHD/scripts/deploy/` | blocking |
 | deps | `FHD/pyproject.toml` | blocking |

@@ -1167,67 +1167,9 @@
         // release_history（由发布流程从 FHD/config/download_release.json 生成）。
         // 页面内写死的历史副本会随发版过期，并让官网自相矛盾。
 
-        var presentationByVersion = {
-          '1.0.0.1': {
-            era: 'stable',
-            shift: '安装完成 → 客户版本可见且可持续追踪',
-            tags: ['交付可见', '回执 SSOT', '发布闭环'],
-          },
-          '1.0.0.0': {
-            era: 'stable',
-            shift: '研发版本线 → 企业稳定发布线',
-            tags: ['三端交付', '稳定更新', '版本治理'],
-          },
-          '10.0.0': {
-            era: 'hardening',
-            shift: '多入口协作 → 单轨生产线',
-            tags: ['事件总线', '六线贯通', 'CI 门禁'],
-          },
-          '9.0.x': {
-            era: 'hardening',
-            shift: '功能验证 → 企业级工程硬门禁',
-            tags: ['统一认证', '异步能力', '安全门禁'],
-          },
-          '8.0.0': {
-            era: 'ecosystem',
-            shift: '通用界面 → 行业化工作台',
-            tags: ['行业预设', 'Mod 清单', '动态界面'],
-          },
-          '7.0.0': {
-            era: 'ecosystem',
-            shift: 'Web 单端 → 桌面与 Web 并行交付',
-            tags: ['Electron', '本地服务', 'OTA 更新'],
-          },
-          '6.0.0': {
-            era: 'ecosystem',
-            shift: '产品能力 → 可交易的 Mod 商业生态',
-            tags: ['ModStore', '订阅体系', '创作者分成'],
-          },
-          '5.0.0': {
-            era: 'platform',
-            shift: '业务功能堆叠 → 分层架构与流程治理',
-            tags: ['Neuro-DDD', '审批流', '性能监控'],
-          },
-          '4.0.0': {
-            era: 'platform',
-            shift: '被动业务工具 → 角色化 AI 员工平台',
-            tags: ['AI 员工', '多模态', '事件协作'],
-          },
-          '3.0.0': {
-            era: 'foundation',
-            shift: '单步识别 → 意图理解与任务编排',
-            tags: ['意图引擎', 'TTS', '任务 Agent'],
-          },
-          '2.0.0': {
-            era: 'foundation',
-            shift: '桌面单体 → Web 工作台与 AI 能力',
-            tags: ['Vue 3', 'OCR', 'FastAPI'],
-          },
-          '1.0.0': {
-            era: 'foundation',
-            shift: '人工制单 → Excel 自动解析与标签打印',
-            tags: ['Excel 解析', '标签模板', '桌面应用'],
-          },
+        // era/shift/tags 展示注解在 /data/release-presentation.json，运行时拉取；
+        // 页面内不写死版本相关事实。
+        var presentationByVersion = {}
         }
 
         var listEl = document.getElementById('release-list')
@@ -1384,9 +1326,14 @@
         }
 
         showUnavailable()
-        Promise.all([fetchJson('/download-release.json'), fetchJson('/download-windows-hotfix.json')]).then(function (results) {
+        Promise.all([
+          fetchJson('/download-release.json'),
+          fetchJson('/download-windows-hotfix.json'),
+          fetchJson('/data/release-presentation.json'),
+        ]).then(function (results) {
           var stable = results[0]
           var hotfix = results[1]
+          presentationByVersion = (results[2] && results[2].presentationByVersion) || {}
           var hasStableHistory =
             stable && Array.isArray(stable.release_history) && stable.release_history.length > 0
           if (!hasStableHistory) {
