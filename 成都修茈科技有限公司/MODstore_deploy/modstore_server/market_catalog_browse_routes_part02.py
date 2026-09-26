@@ -57,6 +57,10 @@ def api_market_catalog_detail(
         if not item:
             raise _facade().HTTPException(404, "商品不存在")
         _facade()._reject_internal_duty_catalog_item(item)
+        from modstore_server.catalog_store import market_item_available
+
+        if not market_item_available(item):
+            raise _facade().HTTPException(404, "商品文件不可用")
         purchased = False
         favorited = False
         user_has_review = False

@@ -12,75 +12,34 @@ def _facade():
 
 @_facade().router.get("/market/facets")
 def api_market_facets():
-    from modstore_server import cache
+    from modstore_server.catalog_store import market_item_available
 
-    ck = "market:facets"
-    cached = cache.get_json(ck)
-    if cached is not None:
-        return cached
     sf = _facade().get_session_factory()
     with sf() as session:
         pub_filters = _facade()._market_catalog_visibility_filters()
-        industries = sorted(
-            {
-                t[0]
-                for t in session.query(_facade().CatalogItem.industry)
-                .filter(*pub_filters)
-                .distinct()
-                .all()
-                if t[0]
-            }
-        )
-        artifacts = sorted(
-            {
-                t[0]
-                for t in session.query(_facade().CatalogItem.artifact)
-                .filter(*pub_filters)
-                .distinct()
-                .all()
-                if t[0]
-            }
-        )
-        security_levels = sorted(
-            {
-                t[0]
-                for t in session.query(_facade().CatalogItem.security_level)
-                .filter(*pub_filters)
-                .distinct()
-                .all()
-                if t[0]
-            }
-        )
+        rows = [
+            row for row in session.query(_facade().CatalogItem).filter(*pub_filters).all()
+            if market_item_available(row)
+        ]
+        industries = sorted({r.industry for r in rows if r.industry})
+        artifacts = sorted({r.artifact for r in rows if r.artifact})
+        security_levels = sorted({r.security_level for r in rows if r.security_level})
         material_categories = sorted(
             {
-                _facade()._normalize_material_category(cat, art)
-                for cat, art in session.query(
-                    _facade().CatalogItem.material_category, _facade().CatalogItem.artifact
-                )
-                .filter(*pub_filters)
-                .all()
-                if _facade()._normalize_material_category(cat, art)
+                _facade()._normalize_material_category(r.material_category, r.artifact)
+                for r in rows
+                if _facade()._normalize_material_category(r.material_category, r.artifact)
             }
         )
         license_scopes = sorted(
             {
-                _facade()._normalize_license_scope(t[0], 0)
-                for t in session.query(_facade().CatalogItem.license_scope)
-                .filter(*pub_filters)
-                .distinct()
-                .all()
-                if _facade()._normalize_license_scope(t[0], 0)
+                _facade()._normalize_license_scope(r.license_scope, 0)
+                for r in rows
+                if _facade()._normalize_license_scope(r.license_scope, 0)
             }
         )
         compliance_statuses = sorted(
-            {
-                t[0]
-                for t in session.query(_facade().CatalogItem.compliance_status)
-                .filter(*pub_filters)
-                .distinct()
-                .all()
-                if t[0]
-            }
+            {r.compliance_status for r in rows if r.compliance_status}
         )
         result = {
             "industries": industries,
@@ -92,7 +51,6 @@ def api_market_facets():
             "security_levels": security_levels,
             "compliance_statuses": compliance_statuses,
         }
-    cache.set_json(ck, result, ttl_seconds=600)
     return result
 
 
@@ -114,13 +72,8 @@ def api_market_catalog(
     offset: int = _facade().Query(0, ge=0),
     user: _facade().Optional[_facade().User] = _facade().Depends(_facade()._optional_current_user),
 ):
-    from modstore_server import cache
+    from modstore_server.catalog_store import market_item_available
 
-    user_key = str(user.id) if user else "anon"
-    ck = f"market:catalog:{_facade()._market_params_hash(q, artifact, material_category, industry, license_scope, security_level, collection, limit, offset)}:{user_key}"
-    cached = cache.get_json(ck)
-    if cached is not None:
-        return cached
     sf = _facade().get_session_factory()
     with sf() as session:
         query = session.query(_facade().CatalogItem).filter(
@@ -175,15 +128,18 @@ def api_market_catalog(
 
             query = query.filter(~_facade().CatalogItem.pkg_id.in_(list(INFRASTRUCTURE_PKG_IDS)))
             query = query.filter(~_facade().CatalogItem.pkg_id.like("xcagi-%-bridge"))
-        total = query.count()
-        rows = (
+        available_rows = (
             query.order_by(
                 _facade().CatalogItem.rank_score.desc(), _facade().CatalogItem.created_at.desc()
             )
-            .offset(offset)
-            .limit(limit)
             .all()
         )
+        available_rows = [
+            row for row in available_rows
+            if market_item_available(row)
+        ]
+        total = len(available_rows)
+        rows = available_rows[offset : offset + limit]
         purchased_ids = set()
         favorited_ids = set()
         if user:
@@ -247,7 +203,6 @@ def api_market_catalog(
             ],
             "total": total,
         }
-    cache.set_json(ck, result, ttl_seconds=60)
     return result
 
 
@@ -294,7 +249,7 @@ def api_host_foundation_employee_pack_download(
 
     from fastapi.responses import StreamingResponse
 
-    from modstore_server.catalog_store import files_dir
+    from modstore_server.catalog_store import market_archive_path
     from modstore_server.host_foundation_pack import (
         BUNDLE_ARCHIVE_NAME,
         HOST_FOUNDATION_EMPLOYEE_PACK_ID,
@@ -314,9 +269,9 @@ def api_host_foundation_employee_pack_download(
         )
         if not item or not item.stored_filename:
             raise _facade().HTTPException(404, "宿主基础员工包尚未上架或文件缺失")
-        path = files_dir() / item.stored_filename
-        if not path.is_file():
-            raise _facade().HTTPException(404, "宿主基础员工包文件不存在")
+        path = market_archive_path(item.stored_filename, item.sha256)
+        if path is None:
+            raise _facade().HTTPException(404, "宿主基础员工包文件不可用")
         data = path.read_bytes()
     buf = BytesIO(data)
     buf.seek(0)
