@@ -541,6 +541,7 @@ class TestRbacTenantRoutesUncoveredBranches:
                 "app.application.facades.session_facade.get_auth_service",
                 return_value=fake_auth,
             ),
+            patch("app.fastapi_routes.rbac.resolve_tenant_id", return_value=1),
         ):
             yield
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any, NoReturn, cast
 
-from sqlalchemy import or_
+from sqlalchemy import or_, select
 
 from app.db.models.permission import DEFAULT_PERMISSIONS, Permission, Role
 from app.db.models.user import Session as UserSession
@@ -74,7 +74,7 @@ def _resolve_permissions(db, codes: list[str] | None) -> list[Permission]:
 
 def _revoke_role_sessions(role_name: str) -> int:
     with get_host_db() as db:
-        user_ids = db.query(User.id).filter(User.role == role_name).subquery()
+        user_ids = select(User.id).where(User.role == role_name)
         result = (
             db.query(UserSession)
             .filter(UserSession.user_id.in_(user_ids))
