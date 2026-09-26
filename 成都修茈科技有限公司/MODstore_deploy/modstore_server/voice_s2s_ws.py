@@ -364,10 +364,11 @@ async def voice_s2s_ws(
                 cancel = asyncio.Event()
             db = get_session_factory()()
             try:
-                user = db.query(User).filter(User.id == user_id).first()
+                user = db.query(User).filter(User.id == user_id, User.deleted_at.is_(None)).first()
                 if not user:
                     await _send_json(ws, {"type": "error", "message": "用户不存在"})
-                    return
+                    await ws.close(code=1008)
+                    raise WebSocketDisconnect(code=1008)
                 await _run_billed_s2s_turn(
                     ws,
                     user=user,

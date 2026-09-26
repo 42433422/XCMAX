@@ -112,7 +112,9 @@ async def _connect_funasr_parallel(funasr_urls: list[str], ssl_ctx):
     return None
 
 
-async def _proxy_to_funasr(client_ws: WebSocket) -> None:
+async def _proxy_to_funasr(client_ws: WebSocket, user_id: int) -> None:
+    from modstore_server.auth_service import get_user_by_id
+
     funasr_urls = _detect_funasr_host()
     ssl_ctx = create_funasr_ssl_context()
 
@@ -139,6 +141,9 @@ async def _proxy_to_funasr(client_ws: WebSocket) -> None:
             try:
                 while True:
                     msg = await client_ws.receive()
+                    if not get_user_by_id(user_id):
+                        await client_ws.close(code=1008)
+                        break
                     if "text" in msg:
                         data = msg["text"]
                         text_count += 1
@@ -184,6 +189,9 @@ async def _proxy_to_funasr(client_ws: WebSocket) -> None:
             msg_count = 0
             try:
                 async for raw in funasr_ws:
+                    if not get_user_by_id(user_id):
+                        await client_ws.close(code=1008)
+                        break
                     msg_count += 1
                     if isinstance(raw, bytes):
                         logger.info(
@@ -220,7 +228,7 @@ async def _proxy_to_funasr(client_ws: WebSocket) -> None:
             return_when=asyncio.FIRST_COMPLETED,
         )
         # 客户端断开后 FunASR 仍会异步返回 offline 结果，须继续转发
-        if client_task in done and not funasr_task.done():
+        if client_task in done and not funasr_task.done() and get_user_by_id(user_id):
             try:
                 await asyncio.wait_for(funasr_task, timeout=12.0)
             except TimeoutError:
@@ -287,4 +295,4 @@ async def asr_funasr_ws(
         await ws.close()
         return
 
-    await _proxy_to_funasr(ws)
+    await _proxy_to_funasr(ws, int(payload["sub"]))
