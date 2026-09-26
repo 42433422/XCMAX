@@ -105,11 +105,8 @@
               </div>
             </details>
 
-            <router-link
-              v-if="canManageTenantRoles"
-              class="settings-card settings-row settings-rbac-link"
-              :to="{ name: 'tenant-roles' }"
-            >
+            <router-link v-if="canManageTenantRoles" class="settings-card settings-row settings-rbac-link"
+              :to="{ name: 'tenant-roles' }">
               <span class="settings-row__icon settings-row__icon--indigo" aria-hidden="true">
                 <i class="fa fa-shield"></i>
               </span>
