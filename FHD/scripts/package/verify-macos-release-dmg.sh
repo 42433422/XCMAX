@@ -14,7 +14,6 @@ fi
 codesign --verify --verbose=2 "${dmg}"
 xcrun stapler validate "${dmg}"
 spctl -a -vv -t open --context context:primary-signature "${dmg}"
-
 mount_dir="$(mktemp -d)"
 cleanup_mount() {
   hdiutil detach "${mount_dir}" -quiet || true

@@ -280,6 +280,7 @@ def test_desktop_package_includes_commercial_safe_office_employee_runtimes() -> 
     workflow = (REPO_ROOT / ".github" / "workflows" / "release-desktop.yml").read_text(
         encoding="utf-8"
     )
+    workflow += (REPO_ROOT / "scripts/package/verify-macos-release-dmg.sh").read_text(encoding="utf-8")
     employee_root = REPO_ROOT / "mods" / "_employees"
     employee_runtime = "\n".join(
         path.read_text(encoding="utf-8")
