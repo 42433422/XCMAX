@@ -279,6 +279,7 @@
   "/api/rbac/seed-missing-permissions",
   "/api/rbac/tenants",
   "/api/rbac/tenants/{tenant_id}/data-scopes",
+  "/api/rbac/users",
   "/api/rbac/users/{user_id}/permissions",
   "/api/rbac/users/{user_id}/role",
   "/api/report/dashboard",
