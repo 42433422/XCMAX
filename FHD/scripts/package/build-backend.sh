@@ -23,8 +23,7 @@ if [[ -n "${PRODUCT_SKU}" ]]; then
   printf '{"sku":"%s","schema_version":1}\n' "${PRODUCT_SKU}" > build/product-sku.json
 fi
 
-# 前端唯一构建：templates/vue-dist 是 Web 与桌面端共享的 SSOT 产物。
-# 默认复用预构建产物；完整 macOS 安装包由 build-installer.sh 强制从当前源码重建。
+# Web 与桌面共享 templates/vue-dist；完整 macOS 安装包从当前源码重建。
 if [ "${SKIP_FRONTEND:-0}" != "1" ]; then
   if [ "${FHD_REBUILD_FRONTEND:-0}" = "1" ] || [ "${FHD_USE_PREBUILT_VUE_DIST:-1}" != "1" ] || [ ! -f "templates/vue-dist/index.html" ]; then
     bash scripts/package/build-frontend.sh "${PRODUCT_SKU:-generic}"
