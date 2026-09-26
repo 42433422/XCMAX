@@ -163,6 +163,22 @@ def test_register_desktop_relay_invalid_base_url_returns_none(monkeypatch, tmp_p
     assert payload is None
 
 
+def test_pending_relay_identity_available_after_lan_pairing(monkeypatch):
+    from app.fastapi_routes import mobile_api_extensions as ext
+
+    monkeypatch.setattr(
+        "app.application.facades.mobile_relay_facade.cached_desktop_relay_payload",
+        lambda: {
+            "relay_id": "pending-relay-1",
+            "relay_base_url": "https://xiu-ci.com/fhd-api/",
+            "paired": False,
+        },
+    )
+    result = ext._cached_desktop_relay_for_account_binding()
+    assert result is not None
+    assert result["relay_id"] == "pending-relay-1"
+
+
 def test_execute_task_waits_for_real_codex_result(monkeypatch):
     from app.services import mobile_relay_desktop_client as relay
 

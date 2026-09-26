@@ -25,8 +25,7 @@ def api_admin_delete_catalog(
       （``CatalogItem.compliance_status != 'delisted'``）即不再展示，
       与前端按钮文案 “下架后 AI 市场将不再展示该商品” 语义一致。
     - 同步从 ``packages.json``（``/v1/packages`` 数据源）移除条目，删除其下
-      ``catalog_data/files/`` 中的二进制；``market_files/`` 中的副本保留以便
-      管理员后续 ``restore``。
+      ``catalog_data/files/`` 中的二进制保留以便已购用户下载和后续恢复。
     - 幂等：行不存在或已下架时返回 ``ok: True`` 且不报 404，避免前端列表因
       60s 缓存或多实例 (``upstream modstore_api``) 视图差异在重复点击时失败。
     """
@@ -53,7 +52,7 @@ def api_admin_delete_catalog(
             item.delist_reason = "管理员手动下架"
             item.rank_score = 0.0
             session.commit()
-    n_json = catalog_store.remove_package(pkg_id, version=None) if pkg_id else 0
+    n_json = catalog_store.remove_package(pkg_id, version=None, remove_files=False) if pkg_id else 0
     try:
         from modstore_server.market_catalog_api import _invalidate_market_catalog_caches
 

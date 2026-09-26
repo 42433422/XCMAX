@@ -6,10 +6,12 @@ import hashlib
 import json
 import os
 import shutil
+import stat
 import tempfile
 import threading
 import zipfile
 from contextlib import contextmanager
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -148,6 +150,63 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: f.read(65536), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+@lru_cache(maxsize=512)
+def _archive_digest(path: str, identity: tuple[int, ...]) -> str:
+    return sha256_file(Path(path))
+
+
+def _archive_path(filename: Any, expected_sha256: Any, roots: tuple[Path, ...]) -> Path | None:
+    name = str(filename or "").strip()
+    digest = str(expected_sha256 or "").strip().lower()
+    if not name or Path(name).name != name or "\\" in name:
+        return None
+    if len(digest) != 64 or any(ch not in "0123456789abcdef" for ch in digest):
+        return None
+    for root in roots:
+        path = root / name
+        try:
+            before = path.lstat()
+            if not stat.S_ISREG(before.st_mode):
+                continue
+            identity = (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns)
+            if _archive_digest(str(path), identity) != digest:
+                continue
+            after = path.lstat()
+            if identity == (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns):
+                return path
+        except OSError:
+            continue
+    return None
+
+
+def catalog_archive_available(filename: Any, expected_sha256: Any) -> bool:
+    return _archive_path(filename, expected_sha256, (files_dir(),)) is not None
+
+
+def public_package_available(row: Dict[str, Any]) -> bool:
+    if str(row.get("download_url") or "").strip():
+        return True
+    stored = str(row.get("stored_filename") or "").strip()
+    return bool(stored) and catalog_archive_available(stored, row.get("sha256"))
+
+
+def market_archive_path(filename: Any, expected_sha256: Any) -> Path | None:
+    return _archive_path(
+        filename, expected_sha256,
+        (files_dir(), default_catalog_dir() / "market_files", Path(__file__).resolve().parent / "market_files"),
+    )
+
+
+def market_item_available(item: Any) -> bool:
+    if str(item.artifact or "").lower() == "workflow_template" and not item.stored_filename:
+        try:
+            graph = json.loads(item.graph_snapshot or "{}")
+            return isinstance(graph, dict) and isinstance(graph.get("nodes"), list) and bool(graph["nodes"])
+        except (TypeError, ValueError):
+            return False
+    return market_archive_path(item.stored_filename, item.sha256) is not None
 
 
 def read_package_manifest_from_zip(path: Path) -> Dict[str, Any] | None:
@@ -423,7 +482,7 @@ def append_package(record: Dict[str, Any], src_file: Path | None) -> Dict[str, A
             staged.unlink(missing_ok=True)
 
 
-def remove_package(pkg_id: str, version: str | None = None) -> int:
+def remove_package(pkg_id: str, version: str | None = None, *, remove_files: bool = True) -> int:
     """从 packages.json 移除记录；若 ``version`` 为 ``None`` 则移除该 ``pkg_id`` 下全部版本。
 
     同时删除 ``stored_filename`` 指向的 ``files/`` 下本地文件（若存在）。
@@ -446,7 +505,7 @@ def remove_package(pkg_id: str, version: str | None = None) -> int:
                 new_pkgs.append(r)
                 continue
             fn = str(r.get("stored_filename") or "").strip()
-            if fn:
+            if fn and remove_files:
                 p = files_dir() / fn
                 if p.is_file():
                     try:

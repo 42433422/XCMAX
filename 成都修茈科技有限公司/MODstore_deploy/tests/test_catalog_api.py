@@ -24,6 +24,20 @@ def test_catalog_index_empty(monkeypatch, tmp_path: Path):
     assert r.json() == {"packages": []}
 
 
+def test_remote_only_package_remains_browsable(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path))
+    from modstore_server.catalog_store import save_store
+    from fastapi.testclient import TestClient
+    from modstore_server.app import app
+
+    save_store({"packages": [{"id": "remote-catalog-only", "version": "1.0.0",
+                              "download_url": "https://example.invalid/package.xcmod"}]})
+    client = TestClient(app)
+    assert client.get("/v1/packages", params={"q": "remote-catalog-only"}).json()["total"] == 1
+    assert client.get("/v1/packages/remote-catalog-only/1.0.0").status_code == 200
+    assert len(client.get("/v1/packages/by-id/remote-catalog-only/versions").json()["versions"]) == 1
+
+
 @pytest.mark.xfail(strict=False, reason="requires chromadb extra not installed in CI")
 def test_catalog_upload_with_token(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path))

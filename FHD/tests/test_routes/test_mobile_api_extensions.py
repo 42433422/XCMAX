@@ -184,7 +184,7 @@ class TestPairingIssue:
         assert "xcagi://pairing?" in payload["deep_link"]
 
     @pytest.mark.asyncio
-    async def test_issue_keeps_qr_lan_when_relay_exists(self, ext_mod):
+    async def test_issue_uses_cloud_qr_when_relay_exists(self, ext_mod):
         body = ext_mod.PairingIssueBody()
         request = _mock_pairing_request("127.0.0.1:42422", "127.0.0.1")
         with (
@@ -207,19 +207,22 @@ class TestPairingIssue:
                     "relay_id": "relay-account-1",
                     "pairing_code": "654321",
                     "relay_base_url": "https://relay.example.test/fhd-api/",
+                    "exp": 456,
                 },
             ),
         ):
             result = await ext_mod.mobile_pairing_issue(body, request)
         data = result if isinstance(result, dict) else __import__("json").loads(result.body)
         payload = data["data"]
-        assert payload["code"] == "123456"
+        assert payload["code"] == "654321"
+        assert payload["shortCode"] == "654321"
         assert payload["relay_id"] == "relay-account-1"
         assert payload["relay_binding_mode"] == "account_auth"
-        assert payload["qr_json"]["kind"] == "xcagi_pairing"
-        assert payload["qr_json"]["code"] == "123456"
-        assert "xcagi://pairing?" in payload["deep_link"]
-        assert "relay-pairing" not in payload["deep_link"]
+        assert payload["qr_json"]["kind"] == "xcagi_relay_pairing"
+        assert payload["qr_json"]["code"] == "654321"
+        assert payload["qr_json"]["relay_id"] == "relay-account-1"
+        assert payload["exp"] == 456
+        assert "relay_id=relay-account-1" in payload["deep_link"]
 
 
 class TestPairingLookup:

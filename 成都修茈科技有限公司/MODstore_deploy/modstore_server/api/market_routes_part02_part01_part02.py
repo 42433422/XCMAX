@@ -286,6 +286,10 @@ def api_buy_item(
             raise _facade().HTTPException(404, "商品不存在")
         if _facade().is_planned_duty_employee_pack(item.pkg_id, item.artifact):
             raise _facade().HTTPException(404, "商品不存在")
+        from modstore_server.catalog_store import market_item_available
+
+        if not market_item_available(item):
+            raise _facade().HTTPException(404, "商品文件不可用")
         if item.price <= 0:
             existing = (
                 session.query(_facade().Purchase)
@@ -381,11 +385,11 @@ def api_download_item(
         if not item.stored_filename:
             raise _facade().HTTPException(404, "该商品无文件可下载")
         from fastapi.responses import StreamingResponse
-        from modstore_server.catalog_store import files_dir
+        from modstore_server.catalog_store import market_archive_path
 
-        path = _facade()._existing_child_file(files_dir(), item.stored_filename)
+        path = market_archive_path(item.stored_filename, item.sha256)
         if path is None:
-            raise _facade().HTTPException(404, "文件缺失")
+            raise _facade().HTTPException(404, "文件缺失或摘要不符")
 
         def generate():
             with open(path, "rb") as f:
