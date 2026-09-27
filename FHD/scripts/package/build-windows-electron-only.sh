@@ -77,6 +77,8 @@ ARTIFACT="XCAGI-${LABEL}-Setup-${VERSION}-\${arch}.\${ext}"
     "--config.appId=${APP_ID}" \
     "--config.publish.url=${PUBLISH_URL}" \
     "--config.nsis.artifactName=${ARTIFACT}" \
+    "--config.buildVersion=${VERSION}" \
+    "--config.extraMetadata.shortVersionWindows=${VERSION}" \
     "--config.extraMetadata.productSku=${SKU}"
 )
 

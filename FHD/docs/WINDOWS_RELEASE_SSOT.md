@@ -15,10 +15,10 @@
 | 稳定产品版本 | `1.0.0.5` | [VERSION.md](../VERSION.md)（版本域 SSOT）；Windows 官方下载页有未签名临时包 `1.0.0.5@54325894`（§2，2026-09-19 干净隔离安装证据）；stable feed 仍广播 `1.0.0.1`，Windows 稳定 OTA 关闭；`1.0.0.5` 的 Windows 完整更新闭环尚未验收 |
 | 工具链兼容版本 | `1.0.0`（npm/Electron 三段映射） | 同上 |
 | 发布 SKU | `enterprise`（personal 冻结） | [download_release.json](../config/download_release.json) |
-| 发布火车内部流水 | `1.0.0.3`（服务器无 v1.0.0.2/3/4 目录，仅内部号） | [release_train.json](../config/release_train.json) |
+| 发布火车内部流水 | `1.0.0.5`（`current = product_version = 1.0.0.5`；服务器无 v1.0.0.2/3/4 目录，仅内部号） | [release_train.json](../config/release_train.json) |
 | `release_ready` | `false` | download_release.json + manifest.json |
 | 最近 Windows 实机验收构建 | `1.0.0.5@84a4b754` | [base-login-windows-run.json](evidence/e2e/feature-acceptance-20260922/base-login/base-login-windows-run.json)（9/9 通过）；[base-rbac-run.json](evidence/e2e/windows-real-machine-1.0.0.5/base-rbac-run.json)（登录前记录，RBAC 状态 blocked，不计通过） |
-| 版本元数据偏差 | `XCAGI.exe` 属性 ProductVersion `1.0.0.0` ≠ build-info `1.0.0.1` | B5（P2，验收协议以 build-info 为准） |
+| 版本元数据偏差 | `XCAGI.exe` 属性 ProductVersion `1.0.0.0` ≠ build-info（历史包实测） | B5（P2）。修复已入仓：Windows 构建透传 `--config.buildVersion`（FileVersion）与 `--config.extraMetadata.shortVersionWindows`（ProductVersion），`acceptance-windows.ps1` 第 6 步改为 fail-closed 比对四段产品版本；在下一次真实 Windows 构建实测确认前，B5 保持开放，不得据此标 GREEN |
 | 更新发现逻辑 | `desktop/updater.ts` | electron-updater generic + **同 semver 重建钩子**；强制升级按 4 段 `productVersion ≥ minVersion` |
 | 官方下载地址（营销） | `https://xiu-ci.com/xcagi-v{version}/enterprise/` | 服务器目录 `/var/www/update/xcagi-v{version}/enterprise/` |
 | 自动更新 feed（win） | `https://xiu-ci.com/releases/stable/enterprise/latest.yml` | 服务器 `/var/www/update/releases/stable/enterprise/` |
