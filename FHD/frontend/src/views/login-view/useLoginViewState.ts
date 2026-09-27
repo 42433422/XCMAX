@@ -12,6 +12,7 @@ export function useLoginViewState(route: RouteLocationNormalizedLoaded) {
   const username = ref('')
   const accountKind = ref<AccountKind>(isAdminConsoleSpa() ? 'admin' : 'enterprise')
   const password = ref('')
+  const invitationCode = ref('')
   const showPassword = ref(false)
   const loading = ref(false)
   /** 桌面壳：隐藏「管理员登录」入口（管理端仅网页 SSOT） */
@@ -92,6 +93,7 @@ export function useLoginViewState(route: RouteLocationNormalizedLoaded) {
     username,
     accountKind,
     password,
+    invitationCode,
     showPassword,
     loading,
     showAdminEntry,

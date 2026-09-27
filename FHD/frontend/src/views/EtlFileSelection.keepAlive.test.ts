@@ -18,10 +18,9 @@ const api = vi.hoisted(() => ({
   exportUrl: vi.fn(),
   errorExportUrl: vi.fn(),
 }))
+const auth = vi.hoisted(() => ({ getCurrentUser: vi.fn() }))
 vi.mock('@/api/etl', () => ({ etlApi: api }))
-vi.mock('@/api/auth', () => ({
-  authApi: { getCurrentUser: vi.fn().mockResolvedValue({ success: true, data: { permissions: ['etl.read', 'etl.execute'] } }) },
-}))
+vi.mock('@/api/auth', () => ({ authApi: auth }))
 const Shell = defineComponent({
   template:
     '<RouterView v-slot="{ Component, route }"><KeepAlive :max="12"><component :is="Component" :key="String(route.name || route.path)" /></KeepAlive></RouterView>',
@@ -70,6 +69,7 @@ async function choose(file: File, folder = false) {
 }
 beforeEach(() => {
   vi.clearAllMocks()
+  auth.getCurrentUser.mockResolvedValue({ success: true, data: { permissions: ['etl.read', 'etl.execute'] } })
   api.capabilities.mockResolvedValue({
     enabled: true,
     limits: { max_file_bytes: 100 * 1024 * 1024 },

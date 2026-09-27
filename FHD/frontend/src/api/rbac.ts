@@ -38,4 +38,8 @@ export const rbacApi = {
     data(api.put<ApiResponse<RbacRole>>(`/api/rbac/roles/${id}`, body)),
   assignRole: (userId: number, role: string) =>
     data(api.put<ApiResponse<RoleAssignment>>(`/api/rbac/users/${userId}/role`, { role })),
+  inviteMember: (targetUsername: string) =>
+    data(api.post<ApiResponse<{ code: string; target_username: string; expires_at: string }>>(
+      '/api/rbac/invitations', { target_username: targetUsername },
+    )),
 }

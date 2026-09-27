@@ -13,6 +13,7 @@ from modstore_server.models_cs import CustomerServiceTicket
 
 class CustomDeliveryCreateBody(BaseModel):
     kind: str = Field(..., pattern="^(module|employee|bundle)$")
+    source_mode: str = Field(default="generated", pattern="^(generated|versioned_main)$")
     title: str = Field(..., min_length=2, max_length=128)
     requirements: str = Field(..., min_length=8, max_length=12000)
     acceptance_criteria: str = Field(..., min_length=4, max_length=6000)

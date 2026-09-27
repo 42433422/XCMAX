@@ -38,6 +38,7 @@ class BusinessActorIdentity:
     username: str = ""
     display_name: str = ""
     trusted_client_user_id: str = ""
+    workspace_scope: str = ""
 
 
 _ATTENDANCE_ENTITY_RE = re.compile(
@@ -266,11 +267,14 @@ def _resolve_actor_identity(
     user = _authenticated_user_from_request(request)
     if user is not None:
         local_id = str(getattr(user, "id", "") or "").strip()
+        from app.application.tenant_workspace_prefs import resolve_workspace_owner_id
+
         return BusinessActorIdentity(
             authenticated=True,
             local_user_id=local_id,
             username=str(getattr(user, "username", "") or "").strip(),
             display_name=str(getattr(user, "display_name", "") or "").strip(),
+            workspace_scope=resolve_workspace_owner_id(request, user) or "",
         )
 
     ctx = runtime_context if isinstance(runtime_context, dict) else {}
@@ -278,11 +282,16 @@ def _resolve_actor_identity(
     username = str(ctx.get("authenticated_username") or "").strip()
     display_name = str(ctx.get("authenticated_display_name") or "").strip()
     if local_id or username or display_name:
+        raw_tenant = str(ctx.get("tenant_id") or "").strip()
+        scope = (
+            f"tenant:{int(raw_tenant)}" if raw_tenant.isdecimal() and int(raw_tenant) > 0 else ""
+        )
         return BusinessActorIdentity(
             authenticated=True,
             local_user_id=local_id,
             username=username,
             display_name=display_name,
+            workspace_scope=scope,
         )
 
     candidate = str(client_user_id or "").strip()

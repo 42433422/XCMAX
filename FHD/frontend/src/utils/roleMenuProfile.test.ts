@@ -34,4 +34,21 @@ describe('roleMenuProfile', () => {
     expect(canShowCoreMenuKey(profile, 'products')).toBe(true)
     expect(canShowCoreMenuKey(profile, 'orders')).toBe(true)
   })
+
+  it('limits an invited tenant member to granted ETL navigation', () => {
+    const member = { accountKind: 'enterprise', marketIsEnterprise: true, localRole: 'tenant:3:member', permissions: [] }
+    const denied = buildRoleMenuProfile(member, true)
+    expect(canShowCoreMenuKey(denied, 'business-docking')).toBe(false)
+    expect(canShowCoreMenuKey(denied, 'products')).toBe(false)
+    expect(canShowCoreMenuKey(denied, 'chat')).toBe(false)
+    expect(canShowCoreMenuKey(buildRoleMenuProfile({ ...member, permissions: ['etl.read'] }), 'business-docking')).toBe(true)
+  })
+
+  it('hides unscoped host business entries from an enterprise founder with a tenant', () => {
+    const profile = buildRoleMenuProfile({ accountKind: 'enterprise', marketIsEnterprise: true, tenantId: 7 }, true)
+    expect(canShowCoreMenuKey(profile, 'products')).toBe(false)
+    expect(canShowCoreMenuKey(profile, 'printer-list')).toBe(false)
+    expect(canShowCoreMenuKey(profile, 'business-docking')).toBe(true)
+    expect(canShowCoreMenuKey(profile, 'mod-store')).toBe(true)
+  })
 })

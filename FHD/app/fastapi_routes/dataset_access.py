@@ -4,18 +4,17 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import Request
+from fastapi import HTTPException, Request
 
 from app.application.dataset_rag_app_service import (
     DATASET_READ_PERMISSION,
     DATASET_WRITE_PERMISSION,
     DatasetAccessContext,
 )
-from app.infrastructure.auth.dependencies import resolve_session_user
+from app.infrastructure.auth.dependencies import get_logged_in_user, resolve_session_user
 from app.infrastructure.auth.tenant_context import resolve_tenant_id
+from app.mod_sdk.product_skus import resolve_product_sku
 from app.utils.deployment import (
-    deployment_is_production,
-    deployment_is_staging,
     deployment_is_test,
     env_flag,
     is_desktop_mode,
@@ -48,10 +47,16 @@ def dataset_access_context_from_request(
 
     user = resolve_session_user(request)
     if user is not None:
+        if not getattr(user, "is_active", True):
+            return DatasetAccessContext()
         actor_id = str(getattr(user, "id", "") or "")
         tenant = str(getattr(user, "tenant_id", "") or "")
         role = str(getattr(user, "role", "") or "").strip().lower()
-        is_admin = role in {"admin", "super_admin"}
+        is_admin = (
+            role in {"admin", "super_admin"}
+            and getattr(user, "tier", None) == "admin"
+            and getattr(user, "tenant_id", None) is None
+        )
         permissions: set[str] = set()
         try:
             from app.application.facades.session_facade import get_auth_service
@@ -69,7 +74,6 @@ def dataset_access_context_from_request(
             sid = session_id_from_request(request)
             if sid and is_session_market_admin(sid):
                 is_admin = True
-                role = "admin"
                 from app.application.session_account_meta import load_session_account_meta
 
                 meta = load_session_account_meta(sid) or {}
@@ -82,14 +86,6 @@ def dataset_access_context_from_request(
         except RECOVERABLE_ERRORS:
             pass
 
-        # Existing installations may predate dataset permissions in RBAC rows.
-        # Preserve the established role policy while the bootstrap converges.
-        if role in {"viewer", "operator", "user"}:
-            permissions.add(DATASET_READ_PERMISSION)
-        # A regular signed-in user owns knowledge inside their tenant and must
-        # be able to grow Persy. Viewer remains the explicit read-only role.
-        if role in {"operator", "user"}:
-            permissions.add(DATASET_WRITE_PERMISSION)
         if is_admin:
             permissions.add(DATASET_READ_PERMISSION)
             permissions.add(DATASET_WRITE_PERMISSION)
@@ -118,7 +114,7 @@ def dataset_access_context_from_request(
                 permissions=frozenset({DATASET_READ_PERMISSION}),
                 is_admin=False,
             )
-        return None
+        return DatasetAccessContext()
 
     headers = request.headers
     tenant = (headers.get("X-Dataset-Tenant-ID") or headers.get("X-Tenant-ID") or "").strip()
@@ -151,7 +147,40 @@ def dataset_access_context_from_request(
             permissions=frozenset({DATASET_READ_PERMISSION}),
             is_admin=False,
         )
-    return None
+    return DatasetAccessContext()
+
+
+def require_legacy_global_knowledge(request: Request) -> None:
+    """The old in-memory index has no tenant boundary; keep it platform-only."""
+    if resolve_product_sku() != "enterprise":
+        return
+    user = get_logged_in_user(request)
+    if not (
+        getattr(user, "role", None) == "admin"
+        and getattr(user, "tier", None) == "admin"
+        and getattr(user, "tenant_id", None) is None
+    ):
+        raise HTTPException(403, "旧知识索引未提供租户隔离")
+    from app.application.facades.session_facade import get_auth_service
+
+    if not get_auth_service().has_permission(user, "dataset.admin"):
+        raise HTTPException(403, "权限不足")
+
+
+def require_desktop_knowledge_access(request: Request) -> None:
+    """Require a real session and RBAC permission before desktop knowledge actions."""
+    if not is_desktop_mode() or resolve_product_sku() != "enterprise":
+        return
+    path = request.url.path.rstrip("/")
+    if path in {"/api/knowledge/v1/status", "/api/knowledge/v1/health"}:
+        return
+    user = get_logged_in_user(request)
+    read = request.method in {"GET", "HEAD"} or path.endswith(("/query", "/versions/diff"))
+    code = DATASET_READ_PERMISSION if read else DATASET_WRITE_PERMISSION
+    from app.application.facades.session_facade import get_auth_service
+
+    if not get_auth_service().has_permission(user, code):
+        raise HTTPException(403, "权限不足")
 
 
 def dataset_access_payload_from_request(
@@ -184,27 +213,11 @@ def inject_trusted_dataset_access(
     return clean
 
 
-def _is_local_request(request: Request) -> bool:
-    if is_desktop_mode() or deployment_is_test():
-        return True
-    client = getattr(request, "client", None)
-    host = str(getattr(client, "host", "") or "").strip().lower()
-    return host in {"127.0.0.1", "::1", "localhost", "testclient"}
-
-
 def _trusted_dataset_headers_enabled(request: Request) -> bool:
-    if env_flag("XCAGI_TRUST_DATASET_ACCESS_HEADERS"):
-        return True
-    if deployment_is_test() or is_desktop_mode():
-        return True
-    if deployment_is_production() or deployment_is_staging():
+    if is_desktop_mode():
         return False
-    return _is_local_request(request)
+    return deployment_is_test() or env_flag("XCAGI_TRUST_DATASET_ACCESS_HEADERS")
 
 
 def _local_default_access_enabled(request: Request) -> bool:
-    if deployment_is_test() or is_desktop_mode():
-        return True
-    if deployment_is_production() or deployment_is_staging():
-        return False
-    return _is_local_request(request)
+    return deployment_is_test() and not is_desktop_mode()

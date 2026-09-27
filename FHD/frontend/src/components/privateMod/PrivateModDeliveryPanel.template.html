@@ -48,6 +48,10 @@
           <input v-model="requestForm.suggestedId" maxlength="64" placeholder="sales-contract-review" />
         </label>
       </div>
+      <label v-if="versionedMainAvailable">
+        <input v-model="versionedMain" type="checkbox" />
+        使用已入主线的太阳鸟考勤转换私有 Mod（模块交付，不重新生成源码）
+      </label>
       <label>
         <span>需求说明</span>
         <textarea
@@ -106,6 +110,11 @@
       <div v-if="latestRun(item)?.error" class="private-mod-request__problem">生产失败：{{ latestRun(item).error }}</div>
       <div v-else-if="customOf(item).gate_message" class="private-mod-request__gate" :data-ok="customOf(item).gate_ok">
         {{ customOf(item).gate_message }}
+      </div>
+      <div v-for="artifact in customOf(item).artifacts" :key="`source:${item.id}:${artifact.id}`" class="private-mod-request__meta">
+        <small v-if="artifact.source_mode === 'versioned_main'">
+          主线 {{ artifact.source_git_sha }} · 源树 {{ artifact.source_git_tree }} · 源 SHA256 {{ artifact.source_sha256 }} · 签包 SHA256 {{ artifact.package_sha256 }}
+        </small>
       </div>
 
       <div v-if="customOf(item).stage === 'acceptance'" class="private-mod-request__actions">

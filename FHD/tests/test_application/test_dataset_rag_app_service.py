@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -18,6 +19,11 @@ from app.infrastructure.rag.dataset_vector_index import (
     DatasetVectorSQLiteIndex,
 )
 from app.infrastructure.rag.hybrid_retriever import RetrievedChunk
+
+
+@pytest.fixture(autouse=True)
+def _explicit_gateway_headers(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("XCAGI_TRUST_DATASET_ACCESS_HEADERS", "1")
 
 
 def _minimal_pdf_bytes() -> bytes:
@@ -809,6 +815,13 @@ def test_knowledge_v1_dataset_routes_use_dataset_service(tmp_path: Path) -> None
     app = FastAPI()
     app.include_router(knowledge_router)
     client = TestClient(app, raise_server_exceptions=False)
+    client.headers.update(
+        {
+            "X-Dataset-Actor-ID": "route-test",
+            "X-Dataset-Tenant-ID": "tenant-route",
+            "X-Dataset-Permissions": "dataset.read,dataset.write",
+        }
+    )
     svc = DatasetRagApplicationService(
         embedder=None,
         allowed_roots=[tmp_path],
@@ -933,15 +946,17 @@ def test_knowledge_v1_dataset_routes_enforce_access_context(tmp_path: Path) -> N
     assert own_query.json()["success"] is True
     assert "XCauto" in own_query.json()["answer"]
     assert "DeepSeek" not in own_query.json()["answer"]
-    assert cross_query.status_code == 200
+    assert cross_query.status_code == 403
     assert cross_query.json()["success"] is False
     assert cross_query.json()["error_code"] == "dataset_permission_denied"
     assert read_only_ingest.json()["success"] is False
+    assert read_only_ingest.status_code == 403
     assert read_only_ingest.json()["required_permission"] == "dataset.write"
     assert own_ingest.json()["document"]["tenant_id"] == "tenant-a"
     assert status.json()["document_count"] == 2
     assert status.json()["tenant_ids"] == ["tenant-a"]
     assert delete_cross.json()["success"] is False
+    assert delete_cross.status_code == 403
     assert delete_cross.json()["error_code"] == "dataset_permission_denied"
 
 
@@ -949,6 +964,13 @@ def test_knowledge_v1_dataset_version_ops_and_rebuild_routes(tmp_path: Path) -> 
     app = FastAPI()
     app.include_router(knowledge_router)
     client = TestClient(app, raise_server_exceptions=False)
+    client.headers.update(
+        {
+            "X-Dataset-Actor-ID": "route-test",
+            "X-Dataset-Tenant-ID": "tenant-route",
+            "X-Dataset-Permissions": "dataset.read,dataset.write",
+        }
+    )
     svc = DatasetRagApplicationService(
         embedder=None,
         allowed_roots=[tmp_path],

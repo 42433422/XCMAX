@@ -395,12 +395,40 @@ else
   fi
 
   TREE_SHA="$(git -C "$SOURCE_ROOT" rev-parse "${TARGET_SHA}^{tree}")"
-  python3 - "$BUILD_ROOT/.xcmax-release.json" "$TARGET_SHA" "$TREE_SHA" "$ARTIFACT_SHA" "$PRODUCT_VERSION" "$RELEASE_ID" <<'PY'
+  SUNBIRD_TREE_SHA="$(git -C "$SOURCE_ROOT" rev-parse "${TARGET_SHA}:FHD/mods/sunbird-attendance-custom")"
+  python3 - "$BUILD_ROOT/.xcmax-release.json" "$TARGET_SHA" "$TREE_SHA" "$ARTIFACT_SHA" "$PRODUCT_VERSION" "$RELEASE_ID" "$SUNBIRD_TREE_SHA" "$SOURCE_ROOT" <<'PY'
 import datetime
+import hashlib
 import json
+import runpy
+import subprocess
 import sys
+from pathlib import Path
 
-path, git_sha, tree_sha, artifact_sha, product_version, release_id = sys.argv[1:]
+path, git_sha, tree_sha, artifact_sha, product_version, release_id, sunbird_tree, source_root = sys.argv[1:]
+root = Path(path).parent
+source_path = "FHD/mods/sunbird-attendance-custom"
+source_files, source_hash = runpy.run_path(str(root / "成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_delivery_versioned.py"))["source_fingerprints"](root / source_path)
+tree_rows = subprocess.run(
+    ["git", "-C", source_root, "ls-tree", "-r", "-z", git_sha, "--", source_path],
+    check=True, capture_output=True,
+).stdout
+git_files = {}
+for row in tree_rows.split(b"\0"):
+    if not row:
+        continue
+    metadata, path_bytes = row.split(b"\t", 1)
+    mode, kind, object_id = metadata.decode("ascii").split()
+    if mode not in {"100644", "100755"} or kind != "blob":
+        raise SystemExit("Sunbird main tree contains a non-file entry")
+    rel = path_bytes.decode("utf-8").removeprefix(source_path + "/")
+    blob = subprocess.run(
+        ["git", "-C", source_root, "cat-file", "blob", object_id],
+        check=True, capture_output=True,
+    ).stdout
+    git_files[rel] = hashlib.sha256(blob).hexdigest()
+if not git_files or git_files != source_files:
+    raise SystemExit("Sunbird release source differs from the pinned main Git tree")
 payload = {
     "artifact_sha256": artifact_sha,
     "built_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -408,6 +436,13 @@ payload = {
     "git_tree": tree_sha,
     "product_version": product_version,
     "release_id": release_id,
+    "private_mod_sources": {
+        "sunbird-attendance-custom": {
+            "git_tree": sunbird_tree,
+            "sha256": source_hash,
+            "files": source_files,
+        }
+    },
 }
 with open(path, "w", encoding="utf-8") as handle:
     json.dump(payload, handle, indent=2, sort_keys=True)

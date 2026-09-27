@@ -87,6 +87,8 @@ async def test_desktop_login_finalize_reports_delivery_receipt(retry_error):
             "app.application.enterprise_login_flow.bind_tenant_for_login",
             return_value={"tenant_id": None, "tenant_name": "SUNBIRD"},
         ),
+        # 市场身份绑定需要真实宿主库账号；本用例只验证回执上报链路，故旁路绑定
+        patch("app.application.tenant_rbac_app_service.bind_verified_market_identity"),
         patch(
             "app.application.enterprise_login_flow._derive_and_heal_account_kind",
             return_value="enterprise",

@@ -1,7 +1,7 @@
 <template src="./PrivateModDeliveryPanel.template.html"></template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { apiFetch } from '@/utils/apiBase'
 import { useAccountProfileStore } from '@/stores/accountProfile'
 
@@ -11,6 +11,10 @@ let accountGeneration = 0
 let deliveryAbort = null
 
 const projects = ref([])
+const versionedMain = ref(false)
+const versionedMainAvailable = computed(() =>
+  projects.value.some((row) => row?.runtime_mod_id === 'sunbird-attendance-custom'),
+)
 const requests = ref([])
 const happyPath = ref(['production', 'testing', 'acceptance', 'delivered'])
 const stageFlow = ref({})
@@ -128,11 +132,12 @@ async function submitCustomRequest() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        kind: form.kind,
+        kind: versionedMain.value ? 'module' : form.kind,
+        source_mode: versionedMain.value ? 'versioned_main' : 'generated',
         title,
         requirements,
         acceptance_criteria: acceptanceCriteria,
-        suggested_id: String(form.suggestedId || '').trim() || undefined,
+        suggested_id: versionedMain.value ? 'sunbird-attendance-custom' : String(form.suggestedId || '').trim() || undefined,
       }),
       timeoutMs: 60_000,
     })
@@ -149,6 +154,7 @@ async function submitCustomRequest() {
       requirements: '',
       acceptanceCriteria: '',
     }
+    versionedMain.value = false
     await loadDelivery()
   } catch (cause) {
     if (generation === accountGeneration) error.value = cause instanceof Error ? cause.message : '定制需求受理失败'
@@ -432,6 +438,7 @@ watch(() => [account.tenantId, account.marketUserId, account.localUserId, accoun
   accountGeneration++
   deliveryAbort?.abort()
   projects.value = []
+  versionedMain.value = false
   requests.value = []
   requestForm.value = { open: false, kind: 'bundle', title: '', suggestedId: '', requirements: '', acceptanceCriteria: '' }
   requestBusy.value = updating.value = savingStatus.value = ''

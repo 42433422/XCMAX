@@ -528,22 +528,22 @@ class TestRbacTenantRoutesUncoveredBranches:
 
     @pytest.fixture(autouse=True)
     def _skip_admin_auth(self):
-        """RBAC 端点需要 admin 权限，测试中绕过该依赖。"""
+        """RBAC 端点需要平台管理员，测试中绕过该依赖。"""
         fake_user = MagicMock()
         fake_user.tier = "admin"
         fake_user.role = "admin"
+        fake_user.tenant_id = None
         fake_auth = MagicMock()
         fake_auth.has_permission.return_value = True
         with (
             patch(
-                "app.infrastructure.auth.dependencies.get_logged_in_user",
+                "app.fastapi_routes.rbac.get_logged_in_user",
                 return_value=fake_user,
             ),
             patch(
                 "app.application.facades.session_facade.get_auth_service",
                 return_value=fake_auth,
             ),
-            patch("app.fastapi_routes.rbac.resolve_tenant_id", return_value=None),
         ):
             yield
 
@@ -580,9 +580,24 @@ class TestRbacTenantRoutesUncoveredBranches:
         assert resp.json()["data"] == [{"id": 1}]
 
     def test_roles_list_with_tenant_resolution(self, client):
+        manager = MagicMock()
+        manager.role = "tenant:5:manager"
+        manager.tier = "enterprise"
+        manager.tenant_id = 5
+        manager.market_user_id = 29
+        meta = {
+            "market_is_enterprise": True,
+            "market_is_admin": False,
+            "impersonating_market_user_id": None,
+            "market_user_id": 29,
+        }
         with (
+            patch("app.fastapi_routes.rbac.get_logged_in_user", return_value=manager),
+            patch(
+                "app.application.session_account_meta.load_session_account_meta",
+                return_value=meta,
+            ),
             patch("app.fastapi_routes.rbac.get_rbac_app_service") as mock_factory,
-            patch("app.fastapi_routes.rbac.resolve_tenant_id", return_value=5),
         ):
             svc = MagicMock()
             svc.list_roles.return_value = [{"id": 1}]
@@ -595,10 +610,7 @@ class TestRbacTenantRoutesUncoveredBranches:
     def test_role_create_app_error(self, client):
         from app.errors import AppError, ErrorCode
 
-        with (
-            patch("app.fastapi_routes.rbac.get_rbac_app_service") as mock_factory,
-            patch("app.fastapi_routes.rbac.resolve_tenant_id", return_value=None),
-        ):
+        with patch("app.fastapi_routes.rbac.get_rbac_app_service") as mock_factory:
             svc = MagicMock()
             svc.create_role.side_effect = AppError(
                 ErrorCode.VALIDATION_ERROR, "dup", status_code=409
@@ -641,7 +653,7 @@ class TestRbacTenantRoutesUncoveredBranches:
             resp = client.get("/api/rbac/permissions?module=admin")
 
         assert resp.status_code == 200
-        svc.list_permissions.assert_called_once_with("admin")
+        svc.list_permissions.assert_called_once_with("admin", tenant_id=None)
 
     def test_permission_create_error(self, client):
         from app.errors import AppError, ErrorCode

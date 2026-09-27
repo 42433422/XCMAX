@@ -46,7 +46,8 @@ def test_run_command_returns_exit_code():
     """run_command 执行命令并返回退出码。"""
     from scripts.dev.ssot_plugins.base import run_command
 
-    code = run_command(["python", "-c", "import sys; sys.exit(0)"], cwd=ROOT)
-    assert code == 0
-    code = run_command(["python", "-c", "import sys; sys.exit(3)"], cwd=ROOT)
-    assert code == 3
+    for executable in ("python", "python3"):
+        code = run_command([executable, "-c", "import sys; sys.exit(0)"], cwd=ROOT)
+        assert code == 0
+        code = run_command([executable, "-c", "import sys; sys.exit(3)"], cwd=ROOT)
+        assert code == 3

@@ -31,6 +31,7 @@ const {
   username,
   accountKind,
   password,
+  invitationCode,
   showPassword,
   loading,
   errorMessage,
@@ -218,6 +219,10 @@ onUnmounted(() => {
               </button>
             </div>
 
+            <label v-if="accountKind === 'enterprise'" class="login-field">
+              <span class="login-label">企业邀请码（首次加入时填写）</span>
+              <input id="lv-invitation-code" v-model.trim="invitationCode" type="text" class="login-input" autocomplete="off" :disabled="loading" />
+            </label>
             <div class="login-options" role="group" :aria-label="$t('login.loginOptions')">
               <label class="login-option">
                 <input v-model="autoLogin" type="checkbox" class="login-option-input" :disabled="loading" />

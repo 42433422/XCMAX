@@ -16,12 +16,16 @@ import uuid
 from pathlib import Path
 from typing import Any, cast
 
-from fastapi import APIRouter, File, Form, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi import Query as FastAPIQuery
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.application.workflow.types import normalize_workflow_risk
+from app.fastapi_routes.dataset_access import (
+    require_desktop_knowledge_access,
+    require_legacy_global_knowledge,
+)
 from app.infrastructure.rag import (
     HybridRetriever,
     RetrievedChunk,
@@ -34,7 +38,11 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
-router = APIRouter(prefix="/api/knowledge/v1", tags=["knowledge-v1"])
+router = APIRouter(
+    prefix="/api/knowledge/v1",
+    tags=["knowledge-v1"],
+    dependencies=[Depends(require_desktop_knowledge_access)],
+)
 
 _DATASET_UPLOAD_EXTENSIONS = frozenset(
     {".pdf", ".docx", ".xlsx", ".xls", ".txt", ".md", ".csv", ".json", ".log"}

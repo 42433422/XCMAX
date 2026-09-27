@@ -5,12 +5,17 @@ from __future__ import annotations
 import re
 from typing import Any, NoReturn, cast
 
-from sqlalchemy import or_, select
+from sqlalchemy import select
 
+from app.application.tenant_rbac_policy import (
+    TENANT_PERMISSION_CODES,
+    owner_permission_for_user,
+    role_belongs_to_user,
+)
 from app.db.models.permission import DEFAULT_PERMISSIONS, Permission, Role
 from app.db.models.user import Session as UserSession
 from app.db.models.user import User
-from app.db.session import get_db, get_host_db
+from app.db.session import get_host_db
 from app.errors import AppError, ErrorCode
 
 _TENANT_ROLE = re.compile(r"^tenant:(\d+):(.*)$", re.DOTALL)
@@ -29,7 +34,7 @@ def _role_key(name: str, tenant_id: int | None) -> str:
 
 def _tenant_role(role: Role, tenant_id: int | None) -> bool:
     match = _TENANT_ROLE.match(role.name or "")
-    return tenant_id is None or role.is_system or bool(match and int(match.group(1)) == tenant_id)
+    return tenant_id is None or bool(match and int(match.group(1)) == tenant_id)
 
 
 def _role_data(role: Role) -> dict[str, Any]:
@@ -60,10 +65,14 @@ def _visible_role(db, role_id: int, tenant_id: int | None) -> Role:
     return role
 
 
-def _resolve_permissions(db, codes: list[str] | None) -> list[Permission]:
+def _resolve_permissions(
+    db, codes: list[str] | None, tenant_id: int | None = None
+) -> list[Permission]:
     requested = sorted({str(code).strip() for code in (codes or []) if str(code).strip()})
     if not requested:
         return []
+    if tenant_id is not None and not set(requested).issubset(TENANT_PERMISSION_CODES):
+        _fail("租户角色不能包含平台级权限", 403)
     found = cast(
         list[Permission], db.query(Permission).filter(Permission.code.in_(requested)).all()
     )
@@ -93,16 +102,18 @@ class RbacAppService:
         return []
 
     def list_roles(self, tenant_id: int | None = None) -> list[dict[str, Any]]:
-        with get_db() as db:
+        with get_host_db() as db:
             query = db.query(Role)
             if tenant_id is not None:
-                query = query.filter(
-                    or_(Role.is_system.is_(True), Role.name.like(f"tenant:{tenant_id}:%"))
-                )
-            return [_role_data(role) for role in query.order_by(Role.name).all()]
+                query = query.filter(Role.name.like(f"tenant:{tenant_id}:%"))
+            return [
+                _role_data(role)
+                for role in query.order_by(Role.name).all()
+                if _tenant_role(role, tenant_id)
+            ]
 
     def get_role(self, role_id: int, *, tenant_id: int | None = None) -> dict[str, Any]:
-        with get_db() as db:
+        with get_host_db() as db:
             return _role_data(_visible_role(db, role_id, tenant_id))
 
     def create_role(
@@ -114,11 +125,11 @@ class RbacAppService:
         tenant_id: int | None = None,
     ) -> dict[str, Any]:
         key = _role_key(name, tenant_id)
-        with get_db() as db:
+        with get_host_db() as db:
             if db.query(Role.id).filter(Role.name == key).first():
                 _fail("该租户已存在同名角色", 409)
             role = Role(name=key, description=str(description or "").strip(), is_system=False)
-            role.permissions = _resolve_permissions(db, permissions)
+            role.permissions = _resolve_permissions(db, permissions, tenant_id)
             db.add(role)
             db.flush()
             return _role_data(role)
@@ -132,7 +143,7 @@ class RbacAppService:
         tenant_id: int | None = None,
     ) -> dict[str, Any]:
         revoke_sessions = permissions is not None
-        with get_db() as db:
+        with get_host_db() as db:
             role = _visible_role(db, role_id, tenant_id)
             if role.is_system and tenant_id is not None:
                 _fail("系统角色只能由平台管理端修改", 403)
@@ -141,7 +152,7 @@ class RbacAppService:
             if permissions is not None:
                 if role.is_system:
                     _fail("系统角色的权限不可修改", 409)
-                role.permissions = _resolve_permissions(db, permissions)
+                role.permissions = _resolve_permissions(db, permissions, tenant_id)
             role_name = role.name
             db.flush()
             data = _role_data(role)
@@ -149,7 +160,7 @@ class RbacAppService:
         return {**data, "sessions_revoked": sessions_revoked}
 
     def delete_role(self, role_id: int, *, tenant_id: int | None = None) -> None:
-        with get_db() as db:
+        with get_host_db() as db:
             role = _visible_role(db, role_id, tenant_id)
             if role.is_system:
                 _fail("系统角色不可删除", 409)
@@ -159,11 +170,15 @@ class RbacAppService:
                 _fail("角色仍分配给用户，不能删除", 409)
             db.delete(role)
 
-    def list_permissions(self, module: str | None = None) -> list[dict[str, Any]]:
-        with get_db() as db:
+    def list_permissions(
+        self, module: str | None = None, *, tenant_id: int | None = None
+    ) -> list[dict[str, Any]]:
+        with get_host_db() as db:
             query = db.query(Permission)
             if module:
                 query = query.filter(Permission.module == module)
+            if tenant_id is not None:
+                query = query.filter(Permission.code.in_(TENANT_PERMISSION_CODES))
             return [
                 {
                     "id": item.id,
@@ -181,7 +196,7 @@ class RbacAppService:
         code, name = code.strip(), name.strip()
         if not code or not name:
             _fail("权限编码和名称不能为空")
-        with get_db() as db:
+        with get_host_db() as db:
             if db.query(Permission.id).filter(Permission.code == code).first():
                 _fail("权限编码已存在", 409)
             item = Permission(
@@ -198,7 +213,7 @@ class RbacAppService:
             }
 
     def delete_permission(self, perm_id: int) -> None:
-        with get_db() as db:
+        with get_host_db() as db:
             item = db.query(Permission).filter(Permission.id == perm_id).first()
             if item is None:
                 _fail("权限不存在", 404)
@@ -228,17 +243,25 @@ class RbacAppService:
             if user is None or (tenant_id is not None and user.tenant_id != tenant_id):
                 _fail("用户不存在", 404)
             role_name = user.role
-        with get_db() as db:
-            if role_name == "admin":
+            if role_name == "admin" and user.tier == "admin" and user.tenant_id is None:
                 return [code for (code,) in db.query(Permission.code).all()]
             role = db.query(Role).filter(Role.name == role_name).first()
-            return [permission.code for permission in role.permissions] if role else []
+            codes = [permission.code for permission in role.permissions] if role else []
+            if _TENANT_ROLE.match(role_name):
+                codes = (
+                    [code for code in codes if code in TENANT_PERMISSION_CODES]
+                    if role_belongs_to_user(role_name, user.tenant_id)
+                    else []
+                )
+            if owner_permission_for_user(user) and "tenant.manage_roles" not in codes:
+                codes.append("tenant.manage_roles")
+            return codes
 
     def assign_user_role(
         self, user_id: int, role: str, *, tenant_id: int | None = None
     ) -> dict[str, Any]:
         user_role = role.strip()
-        with get_db() as db:
+        with get_host_db() as db:
             role_obj = db.query(Role).filter(Role.name == user_role).first()
             if role_obj is None or not _tenant_role(role_obj, tenant_id):
                 _fail("角色不存在", 404)
@@ -270,7 +293,7 @@ class RbacAppService:
 
     def seed_missing_permissions(self) -> list[str]:
         added: list[str] = []
-        with get_db() as db:
+        with get_host_db() as db:
             present = {code for (code,) in db.query(Permission.code).all()}
             for seed in DEFAULT_PERMISSIONS:
                 if seed["code"] in present:

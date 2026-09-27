@@ -17,14 +17,17 @@ from app.legacy.routes.taiyangniao_attendance_compat import (
     DEFAULT_TEMPLATE_RELPATH,
     router,
 )
+from app.mod_sdk import attendance_artifacts
+from app.mod_sdk.attendance_artifacts import allocate_file
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
-def _make_app() -> FastAPI:
+def _make_app(owner: str = "session:1") -> FastAPI:
     app = FastAPI()
     # 本文件测试授权后的转换行为；拒绝路径由 test_customer_features 单独覆盖。
     app.dependency_overrides[tac.require_attendance_conversion] = lambda: None
+    app.dependency_overrides[tac.owner_for_request] = lambda: owner
     app.include_router(router)
     return app
 
@@ -87,13 +90,12 @@ def test_attendance_rules_host_route() -> None:
 
 def test_attendance_download_missing_file(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
-    (tmp_path / "424").mkdir()
     app = _make_app()
 
     with TestClient(app) as client:
         response = client.get(
             "/api/mod/taiyangniao-pro/attendance/download",
-            params={"relpath": "424/does-not-exist.xlsx"},
+            params={"relpath": f"attendance-output-{'0' * 32}.xlsx"},
         )
 
     assert response.status_code == 404
@@ -165,7 +167,7 @@ class TestConvertUploadHappyPath:
         assert data["rows_stats"] == 10
         assert data["month"] == "2026-03"
         assert data["template_relpath"] == DEFAULT_TEMPLATE_RELPATH
-        assert data["output_relpath"].startswith("424/attendance-output-")
+        assert data["output_relpath"].startswith("attendance-output-")
         assert data["unmatched_names"] == ["张三"]
         assert data["output_sheet_names"] == ["明细"]
         assert data["used_llm"] is False
@@ -427,15 +429,14 @@ class TestConvertUploadFailures:
 class TestAttendanceDownload:
     def test_download_success(self, tmp_path, monkeypatch) -> None:
         monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
-        target = tmp_path / "424" / "out.xlsx"
-        target.parent.mkdir(parents=True)
+        target = allocate_file("session:1", "output")
         target.write_bytes(b"PK\x03\x04-result")
         app = _make_app()
 
         with TestClient(app) as client:
             response = client.get(
                 "/api/mod/taiyangniao-pro/attendance/download",
-                params={"relpath": "424/out.xlsx"},
+                params={"relpath": target.name},
             )
 
         assert response.status_code == 200
@@ -466,7 +467,7 @@ class TestAttendanceDownload:
 
         assert response.status_code == 400
 
-    def test_download_directory_returns_404(self, tmp_path, monkeypatch) -> None:
+    def test_download_directory_returns_400(self, tmp_path, monkeypatch) -> None:
         monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
         (tmp_path / "424").mkdir()
         app = _make_app()
@@ -477,7 +478,29 @@ class TestAttendanceDownload:
                 params={"relpath": "424"},
             )
 
-        assert response.status_code == 404
+        assert response.status_code == 400
+
+    def test_download_rejects_database_and_other_owner_output(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+        database = tmp_path / "data" / "xcagi.db"
+        database.parent.mkdir()
+        database.write_bytes(b"private database")
+        other_output = allocate_file("session:2", "output")
+        other_output.write_bytes(b"other owner's result")
+        app = _make_app("session:1")
+
+        with TestClient(app) as client:
+            database_response = client.get(
+                "/api/mod/taiyangniao-pro/attendance/download",
+                params={"relpath": "data/xcagi.db"},
+            )
+            other_response = client.get(
+                "/api/mod/taiyangniao-pro/attendance/download",
+                params={"relpath": other_output.name},
+            )
+
+        assert database_response.status_code == 400
+        assert other_response.status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -676,10 +699,10 @@ class TestConvertUploadEdgeBranches:
     def test_save_upload_failure_returns_500(self, tmp_path, monkeypatch) -> None:
         _setup_workspace(tmp_path, monkeypatch)
 
-        def _boom(_kind):
+        def _boom(*_args):
             raise OSError("disk full")
 
-        monkeypatch.setattr(tac, "allocate_generated_workspace_file", _boom)
+        monkeypatch.setattr(tac, "allocate_file", _boom)
         app = _make_app()
 
         with TestClient(app) as client:
@@ -694,16 +717,16 @@ class TestConvertUploadEdgeBranches:
 
     def test_output_allocation_failure_returns_400(self, tmp_path, monkeypatch) -> None:
         _setup_workspace(tmp_path, monkeypatch)
-        real_allocate = tac.allocate_generated_workspace_file
+        real_allocate = tac.allocate_file
         calls = {"n": 0}
 
-        def _allocate(kind):
+        def _allocate(*args):
             calls["n"] += 1
             if calls["n"] == 1:
-                return real_allocate(kind)
+                return real_allocate(*args)
             raise OSError("no space")
 
-        monkeypatch.setattr(tac, "allocate_generated_workspace_file", _allocate)
+        monkeypatch.setattr(tac, "allocate_file", _allocate)
         app = _make_app()
 
         with TestClient(app) as client:
@@ -747,13 +770,15 @@ class TestDownloadEdgeBranches:
         def _boom(_rel):
             raise OSError("io boom")
 
-        monkeypatch.setattr(tac, "resolve_existing_workspace_file", _boom)
+        monkeypatch.setattr(
+            attendance_artifacts, "resolve_output", lambda _owner, _rel: _boom(_rel)
+        )
         app = _make_app()
 
         with TestClient(app) as client:
             response = client.get(
                 "/api/mod/taiyangniao-pro/attendance/download",
-                params={"relpath": "424/out.xlsx"},
+                params={"relpath": f"attendance-output-{'0' * 32}.xlsx"},
             )
 
         assert response.status_code == 400
@@ -762,13 +787,13 @@ class TestDownloadEdgeBranches:
     def test_resolved_but_vanished_returns_404(self, tmp_path, monkeypatch) -> None:
         monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
         ghost = tmp_path / "424" / "gone.xlsx"
-        monkeypatch.setattr(tac, "resolve_existing_workspace_file", lambda _rel: ghost)
+        monkeypatch.setattr(attendance_artifacts, "resolve_output", lambda _owner, _rel: ghost)
         app = _make_app()
 
         with TestClient(app) as client:
             response = client.get(
                 "/api/mod/taiyangniao-pro/attendance/download",
-                params={"relpath": "424/gone.xlsx"},
+                params={"relpath": f"attendance-output-{'0' * 32}.xlsx"},
             )
 
         assert response.status_code == 404

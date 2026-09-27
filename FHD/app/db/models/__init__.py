@@ -82,6 +82,7 @@ from app.db.models.service_request import ServiceBridgeConfig, ServiceRequest
 from app.db.models.shipment import ShipmentRecord
 from app.db.models.shipment_etl_fingerprint import ShipmentEtlImportFingerprint
 from app.db.models.tenant import Tenant
+from app.db.models.tenant_invitation import TenantInvitation
 from app.db.models.user import Session as UserSession
 from app.db.models.user import User
 from app.db.models.tutorial import TutorialRun, TutorialStepEvidence, TutorialWorkspace
@@ -144,6 +145,7 @@ __all__ = [
     "ACCOUNT_TYPES",
     "User",
     "Tenant",
+    "TenantInvitation",
     "TutorialWorkspace",
     "TutorialRun",
     "TutorialStepEvidence",

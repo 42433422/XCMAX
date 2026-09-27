@@ -13,15 +13,13 @@ from typing import Any, cast
 from urllib.parse import unquote
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import JSONResponse
 
-from app.infrastructure.workspace import workspace_root
+from app.mod_sdk.attendance_artifacts import allocate_file, owner_for_request, serve_output
+from app.mod_sdk.attendance_rules import attendance_rules_payload
 from app.mod_sdk.customer_features import require_attendance_conversion
 from app.mod_sdk.private_sqlite import resolve_mod_private_sqlite_path
-from app.mod_sdk.workspace import (
-    allocate_generated_workspace_file,
-    resolve_existing_workspace_file,
-)
+from app.mod_sdk.workspace import resolve_existing_workspace_file
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -175,12 +173,6 @@ def _resolve_personnel_roster() -> list[tuple[str, str, str]]:
     return _load_products_personnel_roster(resolve_mod_private_sqlite_path(DEFAULT_DB_NAME))
 
 
-def _safe_workspace_file(relpath: str, *, field_name: str) -> Path:
-    """Resolve user-supplied relative path inside workspace sandbox."""
-    rel = _normalize_relpath(relpath, field_name=field_name)
-    return resolve_existing_workspace_file(rel)
-
-
 def _normalize_relpath(raw: str, *, field_name: str) -> str:
     rel = unquote(raw or "").strip().replace("\\", "/").lstrip("/")
     if not rel:
@@ -190,51 +182,7 @@ def _normalize_relpath(raw: str, *, field_name: str) -> str:
 
 @router.get("/attendance/rules")
 async def attendance_rules() -> dict[str, Any]:
-    lines = [
-        "优先读取钉钉「每日统计」，再用「原始记录」补充打卡时间与去重。",
-        "重复打卡按上午/下午/晚上分段去重，优先保留每段的有效边界打卡。",
-        "目标文件会在固定模板基础上回填「明细」工作表。",
-        "周一到周六正班固定为 08:00-12:00、13:30-17:30；周日算加班。",
-    ]
-    config = {
-        "default_header_row": 0,
-        "default_output_relpath": "424/考勤转换输出.xlsx",
-        "accepted_extensions": [".xlsx", ".xlsm", ".xls"],
-        "allow_template_append": True,
-        "default_template_relpath": DEFAULT_TEMPLATE_RELPATH,
-        "default_template_behavior": "固定模板版式；勾选按人员管理名单时用 products 重排明细，钉钉按名回填，无则空",
-    }
-    schedule_groups = [
-        {
-            "name": "公司-考勤 / 公司正班",
-            "headcount": "按导出表统计",
-            "shift_type": "固定班制",
-            "lines": [
-                "周一到周六：正班固定 08:00-12:00 / 13:30-17:30",
-                "晚上：18:00 后按最后一次打卡计加班",
-                "周日：全部按星期天加班处理",
-            ],
-        },
-        {
-            "name": "惠州工厂-正班 / 工厂正班",
-            "headcount": "按导出表统计",
-            "shift_type": "固定班制",
-            "lines": [
-                "周一到周六：正班固定 08:00-12:00 / 13:30-17:30",
-                "晚上：18:00 后按最后一次打卡计加班",
-                "周日：全部按星期天加班处理",
-            ],
-        },
-    ]
-    return {
-        "success": True,
-        "data": {
-            "lines": lines,
-            "saturday_window_label": "13:30 - 16:00",
-            "config": config,
-            "schedule_groups": schedule_groups,
-        },
-    }
+    return attendance_rules_payload(DEFAULT_TEMPLATE_RELPATH, detailed=True)
 
 
 @router.post("/attendance/convert-upload", response_model=None)
@@ -246,6 +194,7 @@ async def attendance_convert_upload(
     header_row: int = Form(0),
     use_llm: str = Form(""),
     use_personnel_roster: str = Form("1"),
+    owner: str = Depends(owner_for_request),
 ):
     if not file.filename:
         return JSONResponse(
@@ -262,12 +211,7 @@ async def attendance_convert_upload(
     _ = output_relpath
 
     try:
-        upload_kind = {
-            ".xlsx": "attendance-upload-xlsx",
-            ".xlsm": "attendance-upload-xlsm",
-            ".xls": "attendance-upload-xls",
-        }[suffix]
-        src_path = allocate_generated_workspace_file(upload_kind)
+        src_path = allocate_file(owner, "upload", suffix)
         content = await file.read()
         src_path.write_bytes(content)
     except RECOVERABLE_ERRORS:
@@ -278,8 +222,8 @@ async def attendance_convert_upload(
         )
 
     try:
-        out_path = allocate_generated_workspace_file("attendance-output")
-        out_rel = out_path.relative_to(workspace_root()).as_posix()
+        out_path = allocate_file(owner, "output")
+        out_rel = out_path.name
     except RECOVERABLE_ERRORS:
         return JSONResponse({"success": False, "error": "输出路径无效"}, status_code=400)
 
@@ -411,22 +355,8 @@ async def attendance_convert_upload(
 
 
 @router.get("/attendance/download", response_model=None)
-async def attendance_download(relpath: str):
-    if not unquote(relpath or "").strip().replace("\\", "/").lstrip("/"):
-        return JSONResponse({"success": False, "error": "missing relpath"}, status_code=400)
-    try:
-        p = _safe_workspace_file(relpath, field_name="relpath")
-    except FileNotFoundError:
-        return JSONResponse({"success": False, "error": "file not found"}, status_code=404)
-    except ValueError:
-        return JSONResponse({"success": False, "error": "relpath 无效"}, status_code=400)
-    except RECOVERABLE_ERRORS:
-        return JSONResponse({"success": False, "error": "下载路径无效"}, status_code=400)
-
-    if not p.exists() or not p.is_file():
-        return JSONResponse({"success": False, "error": "file not found"}, status_code=404)
-
-    return FileResponse(path=str(p), filename=p.name, media_type="application/octet-stream")
+async def attendance_download(relpath: str, owner: str = Depends(owner_for_request)):
+    return serve_output(owner, relpath, legacy=True)
 
 
 __all__ = ["router"]

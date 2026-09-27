@@ -33,6 +33,8 @@ export function useLoginViewSession(state: LoginViewState, options: { router: Ro
     await router.replace(
       isAdminConsoleSpa() && (redirectPath.value === '/' || !redirectPath.value) ? `/${ADMIN_OPERATOR_HOME_ROUTE}` : redirectPath.value,
     )
+    // The login payload does not include effective RBAC permissions.
+    void accountProfileStore.refreshFromServer()
 
     // Token handoff and MOD discovery are optional post-login bootstrap work.
     // They must never hold the login button in "正在登录" or delay the first

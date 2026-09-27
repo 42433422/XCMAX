@@ -43,6 +43,19 @@ def read_verified_artifact(
         or manifest.get("delivery_generation") != record.get("generation")
     ):
         raise ValueError("签名包身份、版本、摘要或账号工单绑定不匹配")
+    provenance_keys = ("git_sha", "git_tree", "sha256")
+    has_provenance = record.get("source_mode") == "versioned_main" or any(
+        manifest.get("delivery_source_" + key) for key in provenance_keys
+    )
+    if has_provenance and (
+        record.get("source_mode") != "versioned_main"
+        or any(
+            not record.get("source_" + key)
+            or manifest.get("delivery_source_" + key) != record.get("source_" + key)
+            for key in provenance_keys
+        )
+    ):
+        raise ValueError("签名包主线源码溯源与工单产物不匹配")
     return raw, signed
 
 
@@ -80,8 +93,19 @@ def prepare_private_artifact(
     source = find_mod_dir_by_manifest_id(library, target).resolve()
     if not source.is_relative_to(library) or any(path.is_symlink() for path in source.rglob("*")):
         raise ValueError("生产包路径或符号链接不允许发布")
+    if evidence.get("source_mode") == "versioned_main":
+        from modstore_server.customer_delivery_versioned import MOD_ID, source_sha256
+
+        if (
+            artifact_kind != "module"
+            or target != MOD_ID
+            or source_sha256(source) != evidence.get("source_sha256")
+        ):
+            raise ValueError("主线私有 Mod 在签包前身份或源码摘要不匹配")
     if artifact_kind == "employee":
-        from modstore_server.customer_delivery_employee_wrapper import wrap_private_employee
+        from modstore_server.customer_delivery_employee_wrapper import (
+            wrap_private_employee,
+        )
 
         with tempfile.TemporaryDirectory(prefix="private-employee-wrapper-") as temporary:
             wrapped = wrap_private_employee(source, Path(temporary) / target)
@@ -92,6 +116,10 @@ def prepare_private_artifact(
     with tempfile.TemporaryDirectory(prefix="private-mod-build-source-") as temporary:
         copied = Path(temporary) / target
         shutil.copytree(source, copied)
+        if evidence.get("source_mode") == "versioned_main" and source_sha256(
+            copied
+        ) != evidence.get("source_sha256"):
+            raise ValueError("主线私有 Mod 复制后源码摘要不匹配")
         return _build_private_source(ticket_id, owner_id, evidence, copied, target)
 
 
@@ -159,12 +187,20 @@ def _build_private_source(
             timeout=120,
             cwd=source,
         )
+    versioned_main = evidence.get("source_mode") == "versioned_main"
+    if versioned_main:
+        from modstore_server.customer_delivery_versioned import LEGACY_ID, MOD_ID
+
+        if target != MOD_ID or manifest.get("entitlement_mod_id") != LEGACY_ID:
+            raise ValueError("主线私有 Mod 权益身份不匹配")
     manifest.update(
         public_listing=False,
         visibility="private",
         scope="account",
         owner_user_id=int(owner_id),
-        entitlement_mod_id=str(evidence.get("target_mod_id") or target),
+        entitlement_mod_id=(
+            LEGACY_ID if versioned_main else str(evidence.get("target_mod_id") or target)
+        ),
         delivery_owner_user_id=int(owner_id),
         delivery_ticket_id=int(ticket_id),
         delivery_generation=str(evidence.get("delivery_generation") or ""),
@@ -172,6 +208,15 @@ def _build_private_source(
             {"requirements": evidence.get("requirements", "")}
         ),
     )
+    source_fields = {
+        key: str(evidence.get("source_" + key) or "") for key in ("git_sha", "git_tree", "sha256")
+    }
+    if versioned_main and not all(source_fields.values()):
+        raise ValueError("主线源码溯源字段不完整")
+    if any(source_fields.values()):
+        if not versioned_main or not all(source_fields.values()):
+            raise ValueError("主线源码溯源字段不完整")
+        manifest.update({"delivery_source_" + key: value for key, value in source_fields.items()})
     (source / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -218,4 +263,12 @@ def _build_private_source(
         "owner_user_id": int(owner_id),
         "ticket_id": int(ticket_id),
         "generation": str(evidence.get("delivery_generation") or ""),
+        **(
+            {
+                "source_mode": "versioned_main",
+                **{"source_" + key: value for key, value in source_fields.items()},
+            }
+            if versioned_main
+            else {}
+        ),
     }

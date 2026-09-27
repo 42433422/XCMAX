@@ -10,7 +10,10 @@ def _facade():
     return importlib.import_module("app.fastapi_routes.excel_extract_shipment")
 
 
-@_facade().router.post("/shipment-etl/preview")
+@_facade().router.post(
+    "/shipment-etl/preview",
+    dependencies=[_facade().Depends(_facade().require_legacy_shipment_etl_access)],
+)
 async def shipment_etl_preview(
     file: _facade().UploadFile | None = _facade().File(default=None),
     file_path: str = _facade().Form(""),
@@ -72,9 +75,11 @@ async def shipment_etl_preview(
         )
 
 
-@_facade().router.post("/shipment-etl/execute")
+@_facade().router.post(
+    "/shipment-etl/execute",
+    dependencies=[_facade().Depends(_facade().require_legacy_shipment_etl_access)],
+)
 async def shipment_etl_execute(
-    request: _facade().Request,
     file: _facade().UploadFile | None = _facade().File(default=None),
     file_path: str = _facade().Form(""),
     workspace_root: str = _facade().Form(""),
@@ -107,49 +112,6 @@ async def shipment_etl_execute(
             get_shipment_excel_etl_app_service,
         )
 
-        try:
-            from app.application.facades.session_facade import get_auth_service
-            from app.infrastructure.auth.dependencies import resolve_session_user
-            from app.utils.deployment import deployment_is_production, deployment_is_staging
-
-            require_rbac = (
-                _facade().os.environ.get("FHD_SHIPMENT_ETL_REQUIRE_RBAC", "").strip().lower()
-            )
-            if require_rbac == "":
-                require_rbac_flag = deployment_is_production() or deployment_is_staging()
-            else:
-                require_rbac_flag = require_rbac in {"1", "true", "yes", "on"}
-            sess_user = resolve_session_user(request)
-            if require_rbac_flag:
-                if sess_user is None:
-                    return _facade().JSONResponse(
-                        {"success": False, "message": "请先登录", "error_code": "unauthorized"},
-                        status_code=401,
-                    )
-                if not get_auth_service().has_permission(sess_user, "shipment.create"):
-                    return _facade().JSONResponse(
-                        {
-                            "success": False,
-                            "message": "缺少 shipment.create 权限",
-                            "error_code": "forbidden",
-                        },
-                        status_code=403,
-                    )
-            elif sess_user is not None and hasattr(get_auth_service(), "has_permission"):
-                if not get_auth_service().has_permission(sess_user, "shipment.create"):
-                    if _facade().os.environ.get(
-                        "FHD_SHIPMENT_ETL_REQUIRE_RBAC", ""
-                    ).strip().lower() in {"1", "true", "yes", "on"}:
-                        return _facade().JSONResponse(
-                            {
-                                "success": False,
-                                "message": "缺少 shipment.create 权限",
-                                "error_code": "forbidden",
-                            },
-                            status_code=403,
-                        )
-        except _facade().RECOVERABLE_ERRORS:
-            pass
         path = str(file_path or "").strip()
         if file is not None and (file.filename or "").strip():
             raw = await file.read()
@@ -220,7 +182,10 @@ async def shipment_etl_execute(
         )
 
 
-@_facade().router.post("/shipment-etl/ocr-preview")
+@_facade().router.post(
+    "/shipment-etl/ocr-preview",
+    dependencies=[_facade().Depends(_facade().require_legacy_shipment_etl_access)],
+)
 async def shipment_etl_ocr_preview(
     file: _facade().UploadFile | None = _facade().File(default=None),
     file_path: str = _facade().Form(""),
@@ -300,7 +265,10 @@ async def shipment_etl_ocr_preview(
         )
 
 
-@_facade().router.post("/shipment-etl/batch-preview")
+@_facade().router.post(
+    "/shipment-etl/batch-preview",
+    dependencies=[_facade().Depends(_facade().require_legacy_shipment_etl_access)],
+)
 async def shipment_etl_batch_preview(
     directory: str = _facade().Form(""),
     workspace_root: str = _facade().Form(""),
@@ -332,7 +300,10 @@ async def shipment_etl_batch_preview(
         )
 
 
-@_facade().router.post("/shipment-etl/batch-execute")
+@_facade().router.post(
+    "/shipment-etl/batch-execute",
+    dependencies=[_facade().Depends(_facade().require_legacy_shipment_etl_access)],
+)
 async def shipment_etl_batch_execute(
     directory: str = _facade().Form(""),
     workspace_root: str = _facade().Form(""),

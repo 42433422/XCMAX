@@ -270,6 +270,7 @@ async def run_market_first_login(
     market_user_email_from_raw: Any,
     login_market_fn: Any | None = None,
     totp_code: str | None = None,
+    invitation_code: str = "",
 ) -> tuple[dict[str, Any] | None, JSONResponse | None]:
     """企业 SKU：市场先行，再本地 session + finalize。"""
     # 桌面端：显式 admin 入口直接拒绝（即使市场可达也不开管理员会话）
@@ -372,7 +373,7 @@ async def run_market_first_login(
                 },
                 status_code=_login_client_http_status(403),
             )
-        login_username = username or resolve_market_username(market_result or {})
+        login_username = resolve_market_username(market_result or {}) or username
         if not login_username:
             return None, JSONResponse(
                 {
@@ -413,6 +414,7 @@ async def run_market_first_login(
             account_kind=account_kind,
             username=login_username,
             sku=sku,
+            invitation_code=invitation_code,
         )
     return result, None
 

@@ -176,8 +176,11 @@ async def mod_store_create_private_delivery_request(
     title = _safe_text(payload.get("title"))
     requirements = _safe_text(payload.get("requirements"))
     acceptance_criteria = _safe_text(payload.get("acceptance_criteria"))
+    source_mode = _safe_text(payload.get("source_mode")) or "generated"
     if kind not in {"module", "employee", "bundle"}:
         raise HTTPException(status_code=400, detail="kind 必须是 module、employee 或 bundle")
+    if source_mode not in {"generated", "versioned_main"}:
+        raise HTTPException(status_code=400, detail="source_mode 无效")
     if len(title) < 2 or len(requirements) < 8 or len(acceptance_criteria) < 4:
         raise HTTPException(status_code=400, detail="请完整填写需求名称、需求说明和验收标准")
     token = await _market_token(request)
@@ -196,6 +199,7 @@ async def mod_store_create_private_delivery_request(
                 "requirements": requirements,
                 "acceptance_criteria": acceptance_criteria,
                 "suggested_id": _safe_text(payload.get("suggested_id")) or None,
+                "source_mode": source_mode,
             },
         )
     except PermissionError as exc:

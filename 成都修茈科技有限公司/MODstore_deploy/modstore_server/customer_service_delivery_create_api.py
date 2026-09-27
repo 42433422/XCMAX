@@ -111,6 +111,22 @@ async def create_custom_delivery(
     purchase = _active_permanent_purchase(db, int(user.id))
     if purchase is None:
         raise HTTPException(403, "定制交付仅对已购买四个永久账户档位的客户开放")
+    if body.source_mode == "versioned_main":
+        from modstore_server.customer_delivery_versioned import (
+            MOD_ID,
+            assert_owner_source,
+            release_source,
+        )
+
+        if body.kind != "module" or body.suggested_id != MOD_ID:
+            raise HTTPException(400, "主线私有交付仅支持已登记的太阳鸟 Mod")
+        try:
+            assert_owner_source(int(user.id), MOD_ID)
+            release_source()
+        except PermissionError as exc:
+            raise HTTPException(403, str(exc)) from exc
+        except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+            raise HTTPException(409, f"主线私有 Mod 源尚未就绪：{exc}") from exc
     prior_tickets = (
         db.query(CustomerServiceTicket)
         .filter(
@@ -147,6 +163,11 @@ async def create_custom_delivery(
     now_iso = datetime.now(UTC).isoformat()
     if active_initial is not None:
         active_evidence = _custom_delivery_evidence(active_initial)
+        if (
+            body.source_mode == "versioned_main"
+            or active_evidence.get("source_mode") == "versioned_main"
+        ):
+            raise HTTPException(409, "现成主线私包不接受交付前追加，请先完成原工单")
         previous_kind = str(active_evidence.get("kind") or "")
         if previous_kind and previous_kind != body.kind:
             active_evidence["kind"] = "bundle"
@@ -290,6 +311,7 @@ async def create_custom_delivery(
         "requirements": body.requirements.strip(),
         "acceptance_criteria": body.acceptance_criteria.strip(),
         "suggested_id": str(body.suggested_id or "").strip(),
+        "source_mode": body.source_mode,
         "acceptance_status": "pending",
         "runs": [],
         "install_receipts": [],

@@ -272,6 +272,7 @@
   "/api/purchase/suppliers",
   "/api/purchase/suppliers/summary",
   "/api/purchase/suppliers/{supplier_id}",
+  "/api/rbac/invitations",
   "/api/rbac/permissions",
   "/api/rbac/permissions/{perm_id}",
   "/api/rbac/roles",

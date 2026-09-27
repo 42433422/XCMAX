@@ -56,6 +56,9 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
   const budgetRange = ref('')
   const entitledIndustries = ref<string[]>([])
   const marketMembershipTier = ref<string | null>(null)
+  const permissions = ref<string[]>([])
+  const tenantIsOwner = ref(false)
+  const userRole = ref('')
   const loaded = ref(false)
 
   const isAdminAccount = computed(() => accountKind.value === 'admin' && marketIsAdmin.value)
@@ -102,6 +105,11 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     entitledIndustries.value = Array.isArray(data.entitled_industries) ? (data.entitled_industries as unknown[]).map((x) => String(x)) : []
     const mmt = data.market_membership_tier
     marketMembershipTier.value = mmt === null || mmt === undefined || mmt === '' ? null : String(mmt).trim()
+    permissions.value = Array.isArray(data.permissions) ? (data.permissions as unknown[]).map(String) : []
+    tenantIsOwner.value = data.tenant_is_owner === true
+    const nestedUser = data.user
+    userRole.value = nestedUser && typeof nestedUser === 'object' && !Array.isArray(nestedUser)
+      ? String((nestedUser as Record<string, unknown>).role || '') : ''
     loaded.value = true
     return syncTenantScopedStoresFromProfile(
       tenantId.value,
@@ -166,6 +174,9 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     budgetRange.value = ''
     entitledIndustries.value = []
     marketMembershipTier.value = null
+    permissions.value = []
+    tenantIsOwner.value = false
+    userRole.value = ''
     loaded.value = false
     setRuntimeTenantStorageScopeInput(null)
     refreshTenantScopedClientStores({ tenantId: null, accountKind: 'enterprise' })
@@ -187,6 +198,9 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     budgetRange,
     entitledIndustries,
     marketMembershipTier,
+    permissions,
+    tenantIsOwner,
+    userRole,
     loaded,
     isAdminAccount,
     isImpersonating,
