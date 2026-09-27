@@ -1,4 +1,4 @@
-﻿param(
+param(
   [string]$BaseUrl = 'http://127.0.0.1:17500',
   [string]$ProductSku = 'enterprise',
   [string]$InstalledExe = '',
@@ -55,6 +55,27 @@ function Get-EnvelopeData {
     return $Payload.data
   }
   return $Payload
+}
+
+function Invoke-XcagiExpectDenied {
+  # Legacy business compat routes are gated by business_scope_gate: on the
+  # enterprise runtime an anonymous request must be rejected (401 without a
+  # session). A 2xx here means the scope gate silently regressed.
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Path,
+    [int]$TimeoutSec = 15
+  )
+  $uri = $BaseUrl.TrimEnd('/') + $Path
+  try {
+    $resp = Invoke-WebRequest -Uri $uri -UseBasicParsing -TimeoutSec $TimeoutSec
+  } catch {
+    $status = 0
+    if ($_.Exception.Response) { $status = [int]$_.Exception.Response.StatusCode }
+    if ($status -eq 401 -or $status -eq 403) { return $status }
+    throw "$Path expected 401/403 without a session, got HTTP $status"
+  }
+  throw "$Path returned HTTP $($resp.StatusCode); the legacy business scope gate did not reject an anonymous request"
 }
 
 function Wait-XcagiReady {
@@ -207,14 +228,14 @@ Invoke-Check 'erp-mod-purchase-units' {
   'code=200'
 }
 
-Invoke-Check 'compat-products-list' {
-  Invoke-XcagiJson '/api/products/list?page=1&per_page=1' | Out-Null
-  'code=200'
+Invoke-Check 'compat-products-list-anonymous-denied' {
+  $status = Invoke-XcagiExpectDenied '/api/products/list?page=1&per_page=1'
+  "code=$status"
 }
 
-Invoke-Check 'compat-purchase-units' {
-  Invoke-XcagiJson '/api/purchase_units' | Out-Null
-  'code=200'
+Invoke-Check 'compat-purchase-units-anonymous-denied' {
+  $status = Invoke-XcagiExpectDenied '/api/purchase_units'
+  "code=$status"
 }
 
 Write-Host "SMOKE_PASS=$script:PassCount"
