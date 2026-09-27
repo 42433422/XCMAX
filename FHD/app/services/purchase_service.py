@@ -20,7 +20,11 @@ from app.db.models import (
 from app.db.session import get_db
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.services.inventory_service import InventoryService
-from app.services.purchase_service_supplier_mixin import PurchaseSupplierMixin
+from app.services.purchase_service_supplier_mixin import (
+    DATE_FIELDS,
+    PurchaseSupplierMixin,
+    as_date,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -102,8 +106,8 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                     order_no=order_no,
                     supplier_id=data.get("supplier_id"),
                     warehouse_id=data.get("warehouse_id"),
-                    order_date=data.get("order_date", datetime.now().date()),
-                    delivery_date=data.get("delivery_date"),
+                    order_date=as_date(data.get("order_date"), datetime.now().date()),
+                    delivery_date=as_date(data.get("delivery_date")),
                     total_amount=0,
                     status="draft",
                     remark=data.get("remark"),
@@ -180,6 +184,8 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                 for key, value in data.items():
                     if key == "items":
                         continue
+                    if key in DATE_FIELDS:
+                        value = as_date(value)
                     if hasattr(order, key):
                         setattr(order, key, value)
                 order.updated_at = datetime.now()
@@ -290,7 +296,7 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                     order_id=data.get("order_id"),
                     supplier_id=data.get("supplier_id"),
                     warehouse_id=data.get("warehouse_id"),
-                    inbound_date=data.get("inbound_date", datetime.now().date()),
+                    inbound_date=as_date(data.get("inbound_date"), datetime.now().date()),
                     total_amount=0,
                     status="draft",
                     handler=data.get("handler"),

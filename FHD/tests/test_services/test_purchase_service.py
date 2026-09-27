@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import contextlib
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
+from sqlalchemy.dialects import sqlite as sqlite_dialect
 
+from app.db.models.purchase import PurchaseOrder
 from app.services.purchase_service import PurchaseService
+from app.services.purchase_service_supplier_mixin import as_date
 
 
 def _mock_get_db(mock_db):
@@ -306,6 +309,59 @@ class TestCreatePurchaseOrder:
         with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.create_purchase_order({"supplier_id": 1})
         assert result["success"] is False
+
+
+class TestAsDate:
+    """SQLite 日期列只接受 date 对象（桌面运行时），字符串必须在服务层收敛。"""
+
+    def test_parses_iso_string(self):
+        assert as_date("2026-09-27") == date(2026, 9, 27)
+
+    def test_blank_and_none_fall_back(self):
+        assert as_date("") is None
+        assert as_date("   ") is None
+        assert as_date(None) is None
+        assert as_date("", date(2026, 1, 1)) == date(2026, 1, 1)
+
+    def test_keeps_date_and_datetime(self):
+        assert as_date(date(2026, 9, 27)) == date(2026, 9, 27)
+        assert as_date(datetime(2026, 9, 27, 10, 30)) == date(2026, 9, 27)
+
+    def test_string_dates_are_rejected_by_the_sqlite_binder(self):
+        dialect = sqlite_dialect.dialect()
+        order_date = PurchaseOrder.__table__.c.order_date
+        binder = dialect.type_descriptor(order_date.type).bind_processor(dialect)
+        with pytest.raises(TypeError):
+            binder("2026-09-27")
+        assert binder(as_date("2026-09-27")) is not None
+        assert binder(as_date("")) is None
+
+
+class TestCreatePurchaseOrderDateCoercion:
+    def test_frontend_iso_dates_become_date_objects(self, svc):
+        """前端提交 order_date="2026-09-27" / delivery_date="" 时必须落为 date/None。"""
+        captured: dict = {}
+        mock_db = MagicMock()
+
+        def _capture(model):
+            for column in model.__table__.columns:
+                captured[column.name] = getattr(model, column.name, None)
+            model.id = 1
+
+        mock_db.add.side_effect = _capture
+        mock_db.query.return_value.filter.return_value.first.return_value = None
+        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+            result = svc.create_purchase_order(
+                {
+                    "supplier_id": 1,
+                    "order_date": "2026-09-27",
+                    "delivery_date": "",
+                    "items": [{"product_id": 1, "quantity": 1, "unit_price": 10}],
+                }
+            )
+        assert result["success"] is True
+        assert captured["order_date"] == date(2026, 9, 27)
+        assert captured["delivery_date"] is None
 
 
 class TestUpdatePurchaseOrder:
