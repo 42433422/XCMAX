@@ -1328,6 +1328,8 @@ class TestFinalizeEnterpriseLogin:
                 "app.application.enterprise_login_flow.bind_tenant_for_login",
                 return_value={"tenant_id": 5, "tenant_name": "Co"},
             ),
+            # 市场身份绑定依赖真实宿主库账号，本用例聚焦“市场成功即保存 token”
+            patch("app.application.tenant_rbac_app_service.bind_verified_market_identity"),
         ):
             out = await finalize_enterprise_login(
                 result=result,

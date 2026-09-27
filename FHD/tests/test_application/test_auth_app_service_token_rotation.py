@@ -365,7 +365,8 @@ class TestOIDCLogin:
 class TestPermissions:
     def test_admin_role_returns_all_permissions(self) -> None:
         svc = AuthApplicationService()
-        admin_user = MagicMock(role="admin")
+        # 平台管理员的“全量权限”分支要求 role/tier 均为 admin 且无租户范围
+        admin_user = MagicMock(role="admin", tier="admin", tenant_id=None)
         p1 = MagicMock(code="read")
         p2 = MagicMock(code="write")
         db = MagicMock()
@@ -377,7 +378,8 @@ class TestPermissions:
 
     def test_standard_role_returns_role_permissions(self) -> None:
         svc = AuthApplicationService()
-        user = MagicMock(role="editor")
+        # 无租户/市场绑定的普通账号不触发 owner 查询，直接返回角色权限
+        user = MagicMock(role="editor", tenant_id=None, market_user_id=None)
         p1 = MagicMock(code="edit")
         role = MagicMock(permissions=[p1])
         db = MagicMock()
@@ -390,7 +392,7 @@ class TestPermissions:
 
     def test_unknown_role_returns_empty_list(self) -> None:
         svc = AuthApplicationService()
-        user = MagicMock(role="nobody")
+        user = MagicMock(role="nobody", tenant_id=None, market_user_id=None)
         db = MagicMock()
         db.query.return_value.filter.return_value.first.return_value = None
         with patch("app.application.auth_app_service.get_db") as gdb:
@@ -413,7 +415,7 @@ class TestPermissions:
 
     def test_has_permission_admin(self) -> None:
         svc = AuthApplicationService()
-        admin = MagicMock(role="admin")
+        admin = MagicMock(role="admin", tier="admin", tenant_id=None)
         assert svc.has_permission(admin, "anything") is True
 
     def test_has_permission_non_admin(self) -> None:

@@ -218,6 +218,7 @@ def test_sync_tenant_display_name_same_name_no_update():
     # tenant.name must be a real string so strip() works; use PropertyMock for `.name`
     tenant = MagicMock(id=5)
     tenant.name = "Acme"
+    tenant.owner_user_id = 1  # 当前用户即企业所有者，名称一致 → 不更新
     db = MagicMock()
     db.query.return_value.filter.return_value.first.side_effect = [user, tenant]
 
@@ -234,6 +235,7 @@ def test_sync_tenant_display_name_updates_and_notifies():
     user = MagicMock(id=1, tenant_id=5)
     tenant = MagicMock(id=5)
     tenant.name = "OldName"
+    tenant.owner_user_id = 1  # 仅企业所有者可改名
     db = MagicMock()
     db.query.return_value.filter.return_value.first.side_effect = [user, tenant]
 

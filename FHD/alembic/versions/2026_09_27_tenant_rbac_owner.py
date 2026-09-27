@@ -12,9 +12,13 @@ depends_on = None
 
 def upgrade():
     inspector = sa.inspect(op.get_bind())
-    if "owner_user_id" not in {item["name"] for item in inspector.get_columns("tenants")}:
-        op.add_column("tenants", sa.Column("owner_user_id", sa.Integer(), nullable=True))
-    op.create_index("ix_tenants_owner_user_id", "tenants", ["owner_user_id"], if_not_exists=True)
+    # 修复型环境（stamp 后缺表）下 tenants/permissions 可能尚未建立，逐表守卫。
+    if inspector.has_table("tenants"):
+        if "owner_user_id" not in {item["name"] for item in inspector.get_columns("tenants")}:
+            op.add_column("tenants", sa.Column("owner_user_id", sa.Integer(), nullable=True))
+        op.create_index(
+            "ix_tenants_owner_user_id", "tenants", ["owner_user_id"], if_not_exists=True
+        )
     if not inspector.has_table("tenant_invitations"):
         op.create_table(
             "tenant_invitations",
@@ -37,16 +41,31 @@ def upgrade():
         ["token_sha256"],
         if_not_exists=True,
     )
-    op.execute(
-        "INSERT INTO permissions (name, code, description, module) "
-        "SELECT '管理本企业角色', 'tenant.manage_roles', '', 'tenant' "
-        "WHERE NOT EXISTS (SELECT 1 FROM permissions WHERE code = 'tenant.manage_roles')"
-    )
+    if inspector.has_table("permissions"):
+        op.execute(
+            "INSERT INTO permissions (name, code, description, module) "
+            "SELECT '管理本企业角色', 'tenant.manage_roles', '', 'tenant' "
+            "WHERE NOT EXISTS (SELECT 1 FROM permissions WHERE code = 'tenant.manage_roles')"
+        )
 
 
 def downgrade():
-    op.drop_index("ix_tenant_invitations_token_sha256", table_name="tenant_invitations")
-    op.drop_index("ix_tenant_invitations_tenant_id", table_name="tenant_invitations")
-    op.drop_table("tenant_invitations")
-    op.drop_index("ix_tenants_owner_user_id", table_name="tenants")
-    op.drop_column("tenants", "owner_user_id")
+    inspector = sa.inspect(op.get_bind())
+    if inspector.has_table("tenant_invitations"):
+        invitation_indexes = {
+            str(item["name"]) for item in inspector.get_indexes("tenant_invitations")
+        }
+        for name in ("ix_tenant_invitations_token_sha256", "ix_tenant_invitations_tenant_id"):
+            if name in invitation_indexes:
+                op.drop_index(name, table_name="tenant_invitations")
+        op.drop_table("tenant_invitations")
+    if inspector.has_table("tenants"):
+        tenant_columns = {str(item["name"]) for item in inspector.get_columns("tenants")}
+        tenant_indexes = {str(item["name"]) for item in inspector.get_indexes("tenants")}
+        # SQLite 建表（create_all 兜底）时 owner_user_id 带表级外键，原生 DROP COLUMN 会被
+        # 拒绝；batch 重建表可安全回收该列（PostgreSQL 走原生 ALTER）。
+        with op.batch_alter_table("tenants", recreate="auto") as batch_op:
+            if "ix_tenants_owner_user_id" in tenant_indexes:
+                batch_op.drop_index("ix_tenants_owner_user_id")
+            if "owner_user_id" in tenant_columns:
+                batch_op.drop_column("owner_user_id")
