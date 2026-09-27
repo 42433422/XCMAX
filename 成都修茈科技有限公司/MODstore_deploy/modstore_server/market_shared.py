@@ -27,7 +27,7 @@ _get_current_user = get_current_user
 _require_admin = require_admin
 
 
-def market_item_public(item: CatalogItem) -> bool:
+def market_item_public(item: Any) -> bool:
     return (
         bool(item.is_public)
         and item.compliance_status == "approved"
@@ -35,9 +35,7 @@ def market_item_public(item: CatalogItem) -> bool:
     )
 
 
-def market_item_visible_to_user(
-    item: CatalogItem, user: User | None, *, purchased: bool = False
-) -> bool:
+def market_item_visible_to_user(item: Any, user: User | None, *, purchased: bool = False) -> bool:
     return not is_planned_duty_employee_pack(item.pkg_id, item.artifact) and (
         market_item_public(item)
         or bool(user and (user.is_admin or item.author_id == user.id or purchased))
