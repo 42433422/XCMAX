@@ -1717,7 +1717,7 @@ class TestRegisterDesktopRelaySuccess:
                 "relay_id": "r1",
                 "desktop_token": "tok",
                 "relay_base_url": "https://relay.example.com",
-                "pairing_code": "p1",
+                "pairing_code": "123456",
                 "expires_at": "2099-01-01",
                 "exp": int(time.time()) + 9999,
             }
@@ -1759,7 +1759,7 @@ class TestRegisterDesktopRelaySuccess:
             "data": {
                 "relay_id": "r1",
                 "desktop_token": "tok",
-                "pairing_code": "p1",
+                "pairing_code": "123456",
                 "exp": int(time.time()) + 9999,
             }
         }
