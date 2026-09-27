@@ -5,7 +5,7 @@
 """
 
 import logging
-from datetime import date, datetime
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
@@ -24,27 +24,6 @@ from app.services.purchase_service_supplier_mixin import PurchaseSupplierMixin
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-
-_DATE_FIELDS = frozenset({"order_date", "delivery_date", "inbound_date"})
-
-
-def _as_date(value: Any, default: date | None = None) -> date | None:
-    """把前端传来的 ISO 字符串/空值收敛为 ``date``。
-
-    桌面运行时是 SQLite，日期列只接受 ``date`` 对象：直接写入
-    ``"2026-09-27"`` 或空字符串会抛 TypeError，导致采购订单/入库单保存失败。
-    """
-    if isinstance(value, datetime):
-        return value.date()
-    if isinstance(value, date):
-        return value
-    text = str(value or "").strip()
-    if not text:
-        return default
-    try:
-        return date.fromisoformat(text[:10])
-    except ValueError:
-        return default
 
 
 class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
@@ -123,8 +102,8 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                     order_no=order_no,
                     supplier_id=data.get("supplier_id"),
                     warehouse_id=data.get("warehouse_id"),
-                    order_date=_as_date(data.get("order_date"), datetime.now().date()),
-                    delivery_date=_as_date(data.get("delivery_date")),
+                    order_date=data.get("order_date", datetime.now().date()),
+                    delivery_date=data.get("delivery_date"),
                     total_amount=0,
                     status="draft",
                     remark=data.get("remark"),
@@ -201,8 +180,6 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                 for key, value in data.items():
                     if key == "items":
                         continue
-                    if key in _DATE_FIELDS:
-                        value = _as_date(value)
                     if hasattr(order, key):
                         setattr(order, key, value)
                 order.updated_at = datetime.now()
@@ -313,7 +290,7 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                     order_id=data.get("order_id"),
                     supplier_id=data.get("supplier_id"),
                     warehouse_id=data.get("warehouse_id"),
-                    inbound_date=_as_date(data.get("inbound_date"), datetime.now().date()),
+                    inbound_date=data.get("inbound_date", datetime.now().date()),
                     total_amount=0,
                     status="draft",
                     handler=data.get("handler"),
