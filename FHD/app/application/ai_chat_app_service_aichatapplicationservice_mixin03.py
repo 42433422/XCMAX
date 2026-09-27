@@ -407,6 +407,6 @@ class _AIChatApplicationServicePart03Mixin:
             )
         else:
             response_data = self._execute_normal_mode_tools(
-                response_data, tool_key, parsed_params, ai_result, result_data
+                response_data, tool_key, parsed_params, ai_result, result_data, original_message
             )
         return response_data

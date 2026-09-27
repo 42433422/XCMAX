@@ -115,6 +115,38 @@ class TestParseOrderTextFallbackPatterns:
         assert "桶数" in result.get("message", "") or "缺少" in result.get("message", "")
 
 
+class TestParseOrderTextCustomerSlot2067:
+    """#2067 回归：客户槽位抽取不得落入会话话术。"""
+
+    def test_quoted_customer_name_extracted(self):
+        result = _parse_order_text(
+            "给「客户闭环验收客户」开一张发货单：客户闭环测试商品A，规格500ml"
+        )
+        msg = result.get("message", "")
+        assert "客户闭环验收客户" in msg
+        assert "开一张" not in msg
+        assert "「" not in msg and "」" not in msg
+
+    def test_keyed_customer_name_not_filler(self):
+        result = _parse_order_text("生成发货单 客户=客户闭环验收客户 商品=测试商品A")
+        assert result.get("unit_name") != "生成"
+
+    def test_assistant_reply_is_not_an_order(self):
+        for text in (
+            "已识别订单，请确认执行",
+            "好的，正在执行【shipment_generate】，请稍候",
+            "好的",
+        ):
+            result = _parse_order_text(text)
+            assert result["success"] is False, text
+            assert not result.get("unit_name"), text
+
+    def test_plain_two_token_fallback_still_works(self):
+        result = _parse_order_text("张三 产品A")
+        assert result["success"] is True
+        assert result["unit_name"] == "张三"
+
+
 class TestParseOrderTextAI:
     def test_ai_fallback_disabled_no_api_key(self):
         with patch.dict(os.environ, {"DEEPSEEK_API_KEY": ""}):
