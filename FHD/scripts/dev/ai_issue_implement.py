@@ -52,11 +52,16 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
+# 直接以 `python scripts/dev/ai_issue_implement.py` 执行时 sys.path[0] 是脚本目录，
+# 仓库根的 `app` 包不在导入路径上；必须在导入 app.* 之前把 FHD 根加入 sys.path。
+FHD_ROOT = Path(__file__).resolve().parents[2]
+if str(FHD_ROOT) not in sys.path:
+    sys.path.insert(0, str(FHD_ROOT))
+
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
-FHD_ROOT = Path(__file__).resolve().parents[2]
 REPO_ROOT = FHD_ROOT.parent
 REPORT_DIR = FHD_ROOT / "test_reports"
 DEFAULT_ALLOWLIST_PATH = REPO_ROOT / "config" / "auto-implement-allowlist.yaml"
