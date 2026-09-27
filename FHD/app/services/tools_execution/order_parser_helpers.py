@@ -61,8 +61,9 @@ def parse_cn_number(token: str):
 def cleanup_unit_name(raw: str) -> str:
     s = (raw or "").strip()
     # 剥掉书名号/引号包裹：客户名常写成「客户A」「客户A」""客户A""，引号本身不是名称内容。
-    s = re.sub(r"^[「『“\"'《【\[]+", "", s)
-    s = re.sub(r"[」』”\"'》】\]]+$", "", s)
+    # 用 str.strip 而非正则，避免「引号重复串」上的多项式回溯（CodeQL py/polynomial-redos）。
+    s = s.lstrip("「『“\"'《【[")
+    s = s.rstrip("」』”\"'》】]")
     s = re.sub(r"^(哎|嗯|啊|呃)[，,\s]*", "", s)
     s = re.sub(r"^(帮我|给我|请)?\s*打印(一下)?", "", s)
     s = re.sub(r"^(帮我|给我|请|给)?\s*(开一张|开单|打单|下单|出单)(一下)?", "", s)
