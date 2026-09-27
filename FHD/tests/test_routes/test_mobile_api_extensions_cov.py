@@ -127,19 +127,27 @@ class TestPairingExchangeIdentity:
         user = _user(uid=5, role="user")
         public = {"id": 5, "role": "user", "username": "u5"}
         with (
-            patch.object(m, "consume_pairing_nonce", return_value={"host": "127.0.0.1", "port": 5000}),
+            patch.object(
+                m, "consume_pairing_nonce", return_value={"host": "127.0.0.1", "port": 5000}
+            ),
             patch.object(m, "_mobile_user_public_dict", return_value=public),
-            patch.object(m, "_relay_mobile_auth_payload", side_effect=lambda principal: {"user": principal}),
+            patch.object(
+                m, "_relay_mobile_auth_payload", side_effect=lambda principal: {"user": principal}
+            ),
             patch.object(m, "_cached_desktop_relay_for_account_binding", return_value=None),
             patch("app.db.session.get_db", side_effect=AssertionError("no admin lookup")),
         ):
-            result = await m.mobile_pairing_exchange(m.PairingExchangeBody(nonce="nonce"), user=user)
+            result = await m.mobile_pairing_exchange(
+                m.PairingExchangeBody(nonce="nonce"), user=user
+            )
         assert result["data"]["user"] == public
 
     @pytest.mark.asyncio
     async def test_anonymous_exchange_rejected_before_consuming_nonce(self, m):
         with patch.object(m, "consume_pairing_nonce") as consume:
-            result = await m.mobile_pairing_exchange(m.PairingExchangeBody(nonce="nonce"), user=None)
+            result = await m.mobile_pairing_exchange(
+                m.PairingExchangeBody(nonce="nonce"), user=None
+            )
         assert result.status_code == 401
         consume.assert_not_called()
 
@@ -494,7 +502,10 @@ class TestMobilePairingIssue:
         request.url.hostname = "192.168.1.1"
 
         with (
-            patch("app.fastapi_routes.mobile_api_extensions_part02_part01._trusted_desktop_pairing_request", return_value=True),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions_part02_part01._trusted_desktop_pairing_request",
+                return_value=True,
+            ),
             patch.object(m, "_pairing_issue_host", return_value="192.168.1.1"),
             patch.object(m, "_pairing_issue_port", return_value=5000),
             patch(
@@ -521,7 +532,10 @@ class TestMobilePairingIssue:
         request.url.hostname = "192.168.1.1"
 
         with (
-            patch("app.fastapi_routes.mobile_api_extensions_part02_part01._trusted_desktop_pairing_request", return_value=True),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions_part02_part01._trusted_desktop_pairing_request",
+                return_value=True,
+            ),
             patch.object(m, "_pairing_issue_host", return_value="192.168.1.1"),
             patch.object(m, "_pairing_issue_port", return_value=5000),
             patch(
@@ -542,7 +556,10 @@ class TestMobilePairingIssue:
         request.url.hostname = "192.168.1.1"
 
         with (
-            patch("app.fastapi_routes.mobile_api_extensions_part02_part01._trusted_desktop_pairing_request", return_value=True),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions_part02_part01._trusted_desktop_pairing_request",
+                return_value=True,
+            ),
             patch.object(m, "_pairing_issue_host", return_value="192.168.1.1"),
             patch.object(m, "_pairing_issue_port", return_value=5000),
             patch(

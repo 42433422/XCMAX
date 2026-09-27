@@ -18,9 +18,7 @@ def _trusted_desktop_pairing_request(request: _facade().Request) -> bool:
     try:
         peer = ip_address(request.client.host)
         host = request.url.hostname
-        return is_desktop_mode() and peer.is_loopback and host in {
-            "127.0.0.1", "localhost", "::1"
-        }
+        return is_desktop_mode() and peer.is_loopback and host in {"127.0.0.1", "localhost", "::1"}
     except (AttributeError, TypeError, ValueError):
         return False
 

@@ -116,16 +116,16 @@ async def mobile_relay_desktop_renew(
 
     trusted = _facade().os.environ.get("LAN_TRUSTED_PROXIES", "").split(",")
     ip = get_client_ip(request.scope, trusted)
-    if not ip or not _facade()._pairing_rate_allowed(
-        ip, "mobile-relay-desktop-renew", 1000, 86400
-    ):
+    if not ip or not _facade()._pairing_rate_allowed(ip, "mobile-relay-desktop-renew", 1000, 86400):
         return _facade().JSONResponse(
             _facade().format_mobile_response(None, "刷新过于频繁", success=False, code=429),
             status_code=429,
         )
     try:
-        data = _facade().MobileRelayService().renew_desktop_pairing(
-            relay_id=body.relay_id, desktop_token=body.desktop_token
+        data = (
+            _facade()
+            .MobileRelayService()
+            .renew_desktop_pairing(relay_id=body.relay_id, desktop_token=body.desktop_token)
         )
         if data:
             return _facade().format_mobile_response(data=data)

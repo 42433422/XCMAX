@@ -54,9 +54,7 @@ def test_mobile_relay_account_auth_binding(monkeypatch, tmp_path):
     )
     assert wrong_code is None
     assert (
-        service.bind_mobile_by_account(
-            user_id=9, username="account-user", pairing_code="000000"
-        )
+        service.bind_mobile_by_account(user_id=9, username="account-user", pairing_code="000000")
         is None
     )
     bound = service.bind_mobile_by_account(
@@ -84,24 +82,34 @@ def test_mobile_relay_account_auth_binding(monkeypatch, tmp_path):
     )
     assert hijack is None
 
-    assert service.renew_desktop_pairing(
-        relay_id=registered["relay_id"], desktop_token="wrong-token"
-    ) is None
+    assert (
+        service.renew_desktop_pairing(relay_id=registered["relay_id"], desktop_token="wrong-token")
+        is None
+    )
     renewed = service.renew_desktop_pairing(
         relay_id=registered["relay_id"], desktop_token=registered["desktop_token"]
     )
     assert renewed is not None
     assert renewed["relay_id"] == registered["relay_id"]
     assert renewed["pairing_code"] != registered["pairing_code"]
-    assert service.bind_mobile_by_account(
-        user_id=9, username="account-user", pairing_code=registered["pairing_code"]
-    ) is None
-    assert service.bind_mobile_by_account(
-        user_id=9, username="account-user", pairing_code=renewed["pairing_code"]
-    ) is not None
-    assert service.bind_mobile_by_account(
-        user_id=10, username="other-user", pairing_code=renewed["pairing_code"]
-    ) is None
+    assert (
+        service.bind_mobile_by_account(
+            user_id=9, username="account-user", pairing_code=registered["pairing_code"]
+        )
+        is None
+    )
+    assert (
+        service.bind_mobile_by_account(
+            user_id=9, username="account-user", pairing_code=renewed["pairing_code"]
+        )
+        is not None
+    )
+    assert (
+        service.bind_mobile_by_account(
+            user_id=10, username="other-user", pairing_code=renewed["pairing_code"]
+        )
+        is None
+    )
 
     expired = service.register_desktop(label="过期设备码", device_id="expired-mac", ttl_seconds=60)
     with monkeypatch.context() as future:

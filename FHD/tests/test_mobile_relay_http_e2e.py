@@ -131,10 +131,13 @@ def test_mobile_server_desktop_codex_relay_http_round_trip(monkeypatch, tmp_path
         json={"relay_id": registered["relay_id"], "pairing_code": registered["pairing_code"]},
     )
     assert stale_response.status_code == 404
-    assert client.post(
-        "/api/mobile/v1/relay/mobile/bind-account",
-        json={"relay_id": registered["relay_id"], "pairing_code": renewed["pairing_code"]},
-    ).status_code == 200
+    assert (
+        client.post(
+            "/api/mobile/v1/relay/mobile/bind-account",
+            json={"relay_id": registered["relay_id"], "pairing_code": renewed["pairing_code"]},
+        ).status_code
+        == 200
+    )
 
     mobile_user.id = 8
     other_account_response = client.post(

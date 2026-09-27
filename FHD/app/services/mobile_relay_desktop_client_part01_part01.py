@@ -183,8 +183,11 @@ def _write_config(data: dict[str, _facade().Any]) -> None:
     temp_path = None
     try:
         with _facade().tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", dir=_facade()._CONFIG_FILE.parent,
-            prefix=".mobile_relay_", delete=False,
+            mode="w",
+            encoding="utf-8",
+            dir=_facade()._CONFIG_FILE.parent,
+            prefix=".mobile_relay_",
+            delete=False,
         ) as stream:
             temp_path = _facade().Path(stream.name)
             stream.write(_facade().json.dumps(data, ensure_ascii=False, indent=2) + "\n")
@@ -211,7 +214,12 @@ def _renew_desktop_relay(config: dict[str, _facade().Any]) -> dict[str, _facade(
         _facade().logger.warning("mobile relay pairing renewal failed: %s", exc)
         return None
     code = str(data.get("pairing_code") or "").strip() if isinstance(data, dict) else ""
-    if not isinstance(data, dict) or data.get("relay_id") != relay_id or len(code) != 6 or not code.isdigit():
+    if (
+        not isinstance(data, dict)
+        or data.get("relay_id") != relay_id
+        or len(code) != 6
+        or not code.isdigit()
+    ):
         return None
     updated = {**config, **data, "registered_at": int(_facade().time.time())}
     _facade()._write_config(updated)

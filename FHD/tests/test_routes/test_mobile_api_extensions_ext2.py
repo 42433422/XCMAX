@@ -241,7 +241,8 @@ class TestMobilePairingLookupSuccess:
     async def test_lookup_success(self, ext_mod):
         body = ext_mod.PairingLookupBody(code="123456")
         with patch.object(
-            ext_mod, "lookup_by_shortcode",
+            ext_mod,
+            "lookup_by_shortcode",
             return_value={"host": "192.168.1.1", "port": 5000, "nonce": "abc", "exp": 1234},
         ):
             result = await ext_mod.mobile_pairing_lookup(body=body, user=_mock_user())
@@ -258,7 +259,8 @@ class TestMobilePairingExchangeSuccess:
     async def test_exchange_by_code(self, ext_mod):
         body = ext_mod.PairingExchangeBody(code="123456", nonce="")
         with patch.object(
-            ext_mod, "consume_by_shortcode",
+            ext_mod,
+            "consume_by_shortcode",
             return_value={"host": "192.168.1.1", "port": 5000, "shortCode": "123456"},
         ):
             result = await ext_mod.mobile_pairing_exchange(body=body, user=_mock_user())
@@ -268,7 +270,8 @@ class TestMobilePairingExchangeSuccess:
     async def test_exchange_by_nonce_success(self, ext_mod):
         body = ext_mod.PairingExchangeBody(code="", nonce="abc123")
         with patch.object(
-            ext_mod, "consume_pairing_nonce",
+            ext_mod,
+            "consume_pairing_nonce",
             return_value={"host": "192.168.1.1", "port": 5000, "shortCode": "123456"},
         ):
             result = await ext_mod.mobile_pairing_exchange(body=body, user=_mock_user())
@@ -284,7 +287,8 @@ class TestMobilePairingExchangeSuccess:
     async def test_exchange_invalid_code_returns_none(self, ext_mod):
         body = ext_mod.PairingExchangeBody(code="000000", nonce="")
         with patch.object(
-            ext_mod, "consume_by_shortcode",
+            ext_mod,
+            "consume_by_shortcode",
             return_value=None,
         ):
             result = await ext_mod.mobile_pairing_exchange(body=body, user=_mock_user())
@@ -294,7 +298,8 @@ class TestMobilePairingExchangeSuccess:
     async def test_exchange_invalid_nonce_returns_none(self, ext_mod):
         body = ext_mod.PairingExchangeBody(code="", nonce="bad")
         with patch.object(
-            ext_mod, "consume_pairing_nonce",
+            ext_mod,
+            "consume_pairing_nonce",
             return_value=None,
         ):
             result = await ext_mod.mobile_pairing_exchange(body=body, user=_mock_user())
@@ -643,7 +648,9 @@ class TestMobileSyncConflictsWithUser:
 
 
 class TestMobileAuthQrConfirmAdditional:
-    @pytest.mark.filterwarnings("ignore:The default datetime adapter is deprecated:DeprecationWarning")
+    @pytest.mark.filterwarnings(
+        "ignore:The default datetime adapter is deprecated:DeprecationWarning"
+    )
     @pytest.mark.asyncio
     async def test_bearer_auth_with_user_lookup(self, ext_mod):
         """Test bearer auth path that looks up user from DB."""

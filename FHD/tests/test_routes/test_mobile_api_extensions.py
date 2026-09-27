@@ -142,7 +142,11 @@ class TestPairingIssue:
         request = _mock_pairing_request()
         with (
             patch.object(ext_mod, "_pairing_issue_host", return_value="192.168.1.10"),
-            patch.object(ext_mod, "_register_desktop_relay_for_pairing", return_value={"relay_id": "r", "pairing_code": "123456"}),
+            patch.object(
+                ext_mod,
+                "_register_desktop_relay_for_pairing",
+                return_value={"relay_id": "r", "pairing_code": "123456"},
+            ),
             patch(
                 "app.security.mobile_pairing.issue_pairing_nonce",
                 return_value={"nonce": "abc123", "host": "192.168.1.10", "port": 5000},
@@ -176,7 +180,11 @@ class TestPairingIssue:
                     "exp": 123,
                 },
             ),
-            patch.object(ext_mod, "_register_desktop_relay_for_pairing", return_value={"relay_id": "r", "pairing_code": "123456"}),
+            patch.object(
+                ext_mod,
+                "_register_desktop_relay_for_pairing",
+                return_value={"relay_id": "r", "pairing_code": "123456"},
+            ),
         ):
             result = await ext_mod.mobile_pairing_issue(body, request)
         data = result if isinstance(result, dict) else __import__("json").loads(result.body)
@@ -259,7 +267,11 @@ class TestPairingExchange:
                 return_value={"host": "192.168.1.10", "port": 5000, "shortCode": "123456"},
             ),
             patch.object(ext_mod, "_pairing_issue_host", return_value="192.168.1.10"),
-            patch.object(ext_mod, "_register_desktop_relay_for_pairing", return_value={"relay_id": "r", "pairing_code": "123456"}),
+            patch.object(
+                ext_mod,
+                "_register_desktop_relay_for_pairing",
+                return_value={"relay_id": "r", "pairing_code": "123456"},
+            ),
         ):
             # First issue a pairing to get a nonce
             body_issue = ext_mod.PairingIssueBody(host="192.168.1.10", port=5000)

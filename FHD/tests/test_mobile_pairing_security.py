@@ -43,7 +43,8 @@ async def test_pairing_issue_requires_local_desktop_and_confirmed_cloud(monkeypa
         with patch.object(routes, "_register_desktop_relay_for_pairing", return_value=None):
             assert (await routes.mobile_pairing_issue(body, _request())).status_code == 503
         with patch.object(
-            routes, "_register_desktop_relay_for_pairing",
+            routes,
+            "_register_desktop_relay_for_pairing",
             return_value={"relay_id": "r", "pairing_code": "invalid"},
         ):
             assert (await routes.mobile_pairing_issue(body, _request())).status_code == 503
@@ -99,12 +100,8 @@ async def test_cloud_register_and_renew_are_rate_limited():
         patch.object(routes, "_pairing_rate_allowed", return_value=False),
         patch.object(routes, "MobileRelayService") as service,
     ):
-        assert (
-            await routes.mobile_relay_desktop_register(body, _request())
-        ).status_code == 429
-        assert (
-            await routes.mobile_relay_desktop_renew(renew, _request())
-        ).status_code == 429
+        assert (await routes.mobile_relay_desktop_register(body, _request())).status_code == 429
+        assert (await routes.mobile_relay_desktop_renew(renew, _request())).status_code == 429
         service.assert_not_called()
 
 
@@ -132,8 +129,6 @@ def test_http_anonymous_exchange_does_not_consume_code():
     app = FastAPI()
     app.include_router(routes.extension_router, prefix="/api/mobile/v1")
     with patch.object(routes, "consume_by_shortcode") as consume:
-        response = TestClient(app).post(
-            "/api/mobile/v1/pairing/exchange", json={"code": "123456"}
-        )
+        response = TestClient(app).post("/api/mobile/v1/pairing/exchange", json={"code": "123456"})
     assert response.status_code == 401
     consume.assert_not_called()

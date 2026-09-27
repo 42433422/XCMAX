@@ -102,9 +102,7 @@ class MobileRelayPairingMixin:
         expires_at = _utc_after(ttl_seconds)
         with self._get_db() as db:
             self.ensure_tables(db)
-            desktop = self._desktop_for_token(
-                db, relay_id=relay_id, desktop_token=desktop_token
-            )
+            desktop = self._desktop_for_token(db, relay_id=relay_id, desktop_token=desktop_token)
             if not desktop:
                 return None
             code = self._fresh_pairing_code(db)
