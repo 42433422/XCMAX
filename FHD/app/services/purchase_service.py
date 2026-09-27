@@ -5,7 +5,7 @@
 """
 
 import logging
-from datetime import date, datetime
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
@@ -22,31 +22,9 @@ from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.services.inventory_service import InventoryService
 from app.services.purchase_service_supplier_mixin import PurchaseSupplierMixin
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.time import coerce_date
 
 logger = logging.getLogger(__name__)
-
-# 采购订单/入库的日期入参来自前端或 Agent（字符串），而 SQLite 的 DATE 列只接受
-# datetime.date；此处统一规范化，避免写入字符串日期时抛出 TypeError 变成 500。
-_DATE_FIELDS = ("order_date", "delivery_date", "expected_date", "inbound_date")
-
-
-def _parse_date(value: Any) -> date | None:
-    """把入参规范化为 datetime.date；空值返回 None，非法格式抛 ValueError。"""
-    if value is None:
-        return None
-    if isinstance(value, datetime):
-        return value.date()
-    if isinstance(value, date):
-        return value
-    if isinstance(value, str):
-        text = value.strip()
-        if not text:
-            return None
-        try:
-            return date.fromisoformat(text[:10])
-        except ValueError:
-            return datetime.fromisoformat(text.replace("Z", "+00:00")).date()
-    raise ValueError(f"无法解析日期: {value!r}")
 
 
 class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
@@ -125,8 +103,8 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                     order_no=order_no,
                     supplier_id=data.get("supplier_id"),
                     warehouse_id=data.get("warehouse_id"),
-                    order_date=_parse_date(data.get("order_date")) or datetime.now().date(),
-                    delivery_date=_parse_date(
+                    order_date=coerce_date(data.get("order_date")) or datetime.now().date(),
+                    delivery_date=coerce_date(
                         data.get("delivery_date") or data.get("expected_date")
                     ),
                     total_amount=0,
@@ -205,8 +183,8 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                 for key, value in data.items():
                     if key == "items":
                         continue
-                    if key in _DATE_FIELDS:
-                        value = _parse_date(value)
+                    if key in ("order_date", "delivery_date", "expected_date", "inbound_date"):
+                        value = coerce_date(value)
                         if key == "expected_date":
                             key = "delivery_date"
                     if hasattr(order, key):
@@ -319,7 +297,7 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                     order_id=data.get("order_id"),
                     supplier_id=data.get("supplier_id"),
                     warehouse_id=data.get("warehouse_id"),
-                    inbound_date=_parse_date(data.get("inbound_date")) or datetime.now().date(),
+                    inbound_date=coerce_date(data.get("inbound_date")) or datetime.now().date(),
                     total_amount=0,
                     status="draft",
                     handler=data.get("handler"),
