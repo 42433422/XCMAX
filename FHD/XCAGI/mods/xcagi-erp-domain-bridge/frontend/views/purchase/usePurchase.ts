@@ -1,5 +1,5 @@
 import { ref, onMounted } from 'vue'
-import { get, post } from '@/api'
+import { get, post, productsApi } from '@/api'
 import { appAlert, appConfirm } from '@/utils/appDialog'
 
 // 实体类型（字段以 PurchaseView 模板与表单赋值实际访问项为准）
@@ -158,7 +158,7 @@ export function usePurchase() {
 
     const loadProducts = async () => {
       try {
-        const res = await get<ApiListResponse<Product>>('/api/products')
+        const res = await productsApi.getProducts({ page: 1, per_page: 1000 })
         if (res.success) {
           products.value = res.data || []
         }
