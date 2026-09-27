@@ -1227,6 +1227,30 @@ class TestExecuteNormalModeTools:
         )
         assert isinstance(result, dict)
 
+    def test_shipment_generate_prefers_original_message_over_assistant_text(self):
+        """#2067 回归：发货单生成必须用用户原话，不能用助手回复当订单文本。"""
+        service = _make_service()
+        response_data = {"success": True, "data": {}, "response": ""}
+        ai_result = {"text": "已识别订单，正在生成发货单…", "action": "tool_call", "data": {}}
+        fake_svc = MagicMock()
+        fake_svc.generate_shipment_document.return_value = {
+            "success": False,
+            "message": "未找到客户：客户闭环验收客户",
+        }
+        with patch("app.bootstrap.get_shipment_app_service", return_value=fake_svc):
+            service._execute_normal_mode_tools(
+                response_data,
+                "shipment_generate",
+                {},
+                ai_result,
+                {"tool_key": "shipment_generate"},
+                "客户闭环验收客户 发货单：产品A 5桶",
+            )
+        kwargs = fake_svc.generate_shipment_document.call_args.kwargs
+        assert kwargs["unit_name"] == "客户闭环验收客户"
+        assert "已识别订单" not in kwargs["unit_name"]
+        assert kwargs["raw_text"] == "客户闭环验收客户 发货单：产品A 5桶"
+
 
 # ========================= _execute_customers_query - extended ============
 

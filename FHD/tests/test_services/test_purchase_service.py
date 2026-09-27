@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import contextlib
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 
-from app.services.purchase_service import PurchaseService
+from app.services.purchase_service import PurchaseService, _parse_date
 
 
 def _mock_get_db(mock_db):
@@ -39,6 +39,36 @@ def _make_mock_model(**fields):
 @pytest.fixture
 def svc():
     return PurchaseService()
+
+
+# ---------------------------------------------------------------------------
+# _parse_date —— #2068 回归：字符串日期必须规范化为 date，避免 SQLite 500
+# ---------------------------------------------------------------------------
+
+
+class TestParseDate:
+    def test_parses_iso_date_string(self):
+        assert _parse_date("2026-09-28") == date(2026, 9, 28)
+
+    def test_parses_iso_datetime_string(self):
+        assert _parse_date("2026-09-28T10:20:30") == date(2026, 9, 28)
+        assert _parse_date("2026-09-28T10:20:30Z") == date(2026, 9, 28)
+
+    def test_passes_through_date_object(self):
+        d = date(2026, 9, 28)
+        assert _parse_date(d) is d
+
+    def test_converts_datetime_to_date(self):
+        assert _parse_date(datetime(2026, 9, 28, 10, 0, 0)) == date(2026, 9, 28)
+
+    def test_none_and_blank_return_none(self):
+        assert _parse_date(None) is None
+        assert _parse_date("") is None
+        assert _parse_date("   ") is None
+
+    def test_invalid_string_raises_value_error(self):
+        with pytest.raises(ValueError):
+            _parse_date("not-a-date")
 
 
 # ---------------------------------------------------------------------------
@@ -307,6 +337,30 @@ class TestCreatePurchaseOrder:
             result = svc.create_purchase_order({"supplier_id": 1})
         assert result["success"] is False
 
+    def test_coerces_string_dates_to_date_objects(self, svc):
+        """#2068 回归：字符串 order_date/delivery_date 必须转成 date 再入库。"""
+        mock_db = MagicMock()
+        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+            result = svc.create_purchase_order(
+                {
+                    "supplier_id": 1,
+                    "order_date": "2026-09-28",
+                    "delivery_date": "2026-10-08",
+                }
+            )
+        assert result["success"] is True
+        order = mock_db.add.call_args_list[0][0][0]
+        assert order.order_date == date(2026, 9, 28)
+        assert order.delivery_date == date(2026, 10, 8)
+
+    def test_expected_date_alias_maps_to_delivery_date(self, svc):
+        """Agent 工具 schema 使用 expected_date，应落到 delivery_date。"""
+        mock_db = MagicMock()
+        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+            svc.create_purchase_order({"supplier_id": 1, "expected_date": "2026-10-08"})
+        order = mock_db.add.call_args_list[0][0][0]
+        assert order.delivery_date == date(2026, 10, 8)
+
 
 class TestUpdatePurchaseOrder:
     def test_updates_draft_order(self, svc):
@@ -368,6 +422,20 @@ class TestUpdatePurchaseOrder:
                 },
             )
         assert result["success"] is True
+
+    def test_coerces_string_dates_on_update(self, svc):
+        """#2068 回归：更新订单时字符串日期也必须转成 date。"""
+        mock_order = _make_mock_model(id=1, status="draft")
+        mock_order.items = []
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_order
+        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+            result = svc.update_purchase_order(
+                1, {"order_date": "2026-09-28", "delivery_date": "2026-10-08"}
+            )
+        assert result["success"] is True
+        assert mock_order.order_date == date(2026, 9, 28)
+        assert mock_order.delivery_date == date(2026, 10, 8)
 
 
 class TestApprovePurchaseOrder:
@@ -487,6 +555,20 @@ class TestCreatePurchaseInbound:
         ):
             result = svc.create_purchase_inbound({"supplier_id": 1})
         assert result["success"] is False
+
+    def test_coerces_string_inbound_date(self, svc):
+        """#2068 回归：字符串 inbound_date 必须转成 date 再入库。"""
+        mock_db = MagicMock()
+        with (
+            patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)),
+            patch("app.services.purchase_service.InventoryService"),
+        ):
+            result = svc.create_purchase_inbound(
+                {"supplier_id": 1, "warehouse_id": 1, "inbound_date": "2026-09-28"}
+            )
+        assert result["success"] is True
+        inbound = mock_db.add.call_args_list[0][0][0]
+        assert inbound.inbound_date == date(2026, 9, 28)
 
     def test_logs_warning_when_inventory_in_fails(self, svc):
         mock_product = MagicMock()

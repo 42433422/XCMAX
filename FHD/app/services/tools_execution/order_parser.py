@@ -28,6 +28,50 @@ _ORDER_SCHEMA = {
     },
 }
 
+# 引号包裹的客户名（「客户A」/“客户A”/【客户A】）优先级最高。
+_QUOTED_UNIT = re.compile(r"[「『“\"'《【\[]([^」』”\"'》】\]]{1,120})[」』”\"'》】\]]")
+# 键值写法：客户=客户A / 单位：客户A。
+_KEYED_UNIT = re.compile(r"(?:客户|购买单位|单位|公司)\s*[:：=]\s*([^\s，,。；;]{1,120})")
+# 会话填充词与助手话术，绝不能被当成客户名（#2067）。
+_CONVERSATIONAL_FILLERS = {
+    "好的",
+    "好",
+    "嗯",
+    "行",
+    "可以",
+    "收到",
+    "明白",
+    "是的",
+    "确认",
+    "请确认",
+    "请确认执行",
+    "已识别",
+    "已识别订单",
+    "正在生成发货单",
+    "生成",
+    "执行",
+    "正在执行",
+    "处理",
+    "处理中",
+    "完成",
+    "已收到",
+    "订单确认",
+    "稍候",
+    "请稍候",
+    "订单",
+}
+_FILLER_FRAGMENTS = ("正在", "稍候", "确认执行", "处理", "发货单", "送货单", "出货单", "识别")
+
+
+def _looks_like_conversational_filler(token: str) -> bool:
+    """判断一个 token 是否为会话话术而非客户名。"""
+    t = re.sub(r"\s+", "", token or "")
+    if not t:
+        return True
+    if t in _CONVERSATIONAL_FILLERS:
+        return True
+    return any(frag in t for frag in _FILLER_FRAGMENTS)
+
 
 def _parse_order_text(order_text: str) -> dict:
     try:
@@ -166,6 +210,14 @@ def _parse_order_text(order_text: str) -> dict:
         unit_candidate = re.sub(r"[0-9A-Za-z-]{3,16}", " ", unit_candidate)
         unit_candidate = re.sub(r"[，,\s]+", " ", unit_candidate).strip()
         slot_unit = cleanup_unit_name(unit_candidate)
+        # 显式引号/键值写法给出的客户名优先级最高，覆盖正则抽取结果（#2067）。
+        m_quoted = _QUOTED_UNIT.search(original_text)
+        if m_quoted:
+            slot_unit = cleanup_unit_name(m_quoted.group(1)) or slot_unit
+        else:
+            m_keyed = _KEYED_UNIT.search(original_text)
+            if m_keyed:
+                slot_unit = cleanup_unit_name(m_keyed.group(1)) or slot_unit
         if not slot_unit:
             m_unit = re.search(
                 r"(?:打印(?:一下)?)\s{0,16}([^，,。]{1,120}?)\s{0,16}的?\s{0,16}(?:发货单|送货单|出货单)",
@@ -476,7 +528,9 @@ def _parse_order_text(order_text: str) -> dict:
             logger.warning("AI 结构化抽取兜底失败，回退规则流程: %s", ai_err)
 
         parts = text.split()
-        if len(parts) >= 2:
+        # #2067：末位兜底曾把任意文本的首个 token 当作客户名，导致助手话术
+        # 「好的」「已识别订单」「生成」等被误当成客户。此处拒绝会话填充词。
+        if len(parts) >= 2 and not _looks_like_conversational_filler(parts[0]):
             unit_name = parts[0].strip()
             return {
                 "success": True,
