@@ -9,7 +9,8 @@ from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 
-from app.services.purchase_service import PurchaseService, _parse_date
+from app.services.purchase_service import PurchaseService
+from app.utils.time import coerce_date as _parse_date
 
 
 def _mock_get_db(mock_db):
