@@ -2,7 +2,7 @@
 
 > 本记录**只声明证据现状，不授予分数**。标准与字段定义见
 > `FHD/config/audit_benchmark_ssot.json`（生成视图 `FHD/docs/AUDIT_BENCHMARK_SSOT.md`）。
-> 同步 SSOT `source_sha = 6fccb47f38a7bc5cfe38a15b57c41c51afd54481`（origin/main 写入时点）。
+> 基准清单锚点 `source_sha = 6fccb47f38a7bc5cfe38a15b57c41c51afd54481`（origin/main 写入时点）。
 
 - standard_version: `1.0.0`；scoring_version: `external-anchors-v1`；measurement_status: `anchors_defined_not_benchmarked`
 - 缺失证据规则：合格线所需证据未知/跳过/不可访问 ⇒ `domain_status = UNRATED`、`score = null`；未知不得填 0 或通过。
