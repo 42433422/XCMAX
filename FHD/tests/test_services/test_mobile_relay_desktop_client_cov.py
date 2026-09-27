@@ -482,8 +482,8 @@ class TestPollOnce:
 
 
 class TestRegisterDesktopRelay:
-    def test_http_error_with_cached_payload(self, tmp_path, monkeypatch):
-        """Branch: httpx raises, but cached config exists -> returns cached + starts poller."""
+    def test_http_error_hides_cached_payload(self, tmp_path, monkeypatch):
+        """Cloud failure must not present a cached pairing code as usable."""
         future_exp = int(time.time()) + 9999
         cfg_file = tmp_path / "relay.json"
         cfg_file.write_text(
@@ -504,7 +504,7 @@ class TestRegisterDesktopRelay:
             mock_cls.return_value = mock_c
             with patch.object(_module, "start_desktop_relay_poller"):
                 result = register_desktop_relay(host="127.0.0.1", port=8000)
-        assert result is not None
+        assert result is None
 
     def test_http_error_no_cached(self, tmp_path, monkeypatch):
         """Branch: httpx raises and no cached config -> returns None."""

@@ -6,7 +6,6 @@ import hashlib
 import json
 import re
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -391,15 +390,11 @@ def download_claimed_asset_install_command(
         raise HTTPException(409, "该资产类型不能作为 XCMAX 扩展安装")
     if not _has_verifiable_artifact(item):
         raise HTTPException(409, "资产缺少可验证的 SHA256，已阻止下载")
-    from modstore_server.catalog_store import files_dir
+    from modstore_server.catalog_store import market_archive_path
 
-    name = str(item.stored_filename).strip()
-    if Path(name).name != name:
-        raise HTTPException(410, "资产安装包路径无效")
-    path = (files_dir() / name).resolve()
-    root = files_dir().resolve()
-    if path.parent != root or not path.is_file():
-        raise HTTPException(410, "资产安装包文件缺失")
+    path = market_archive_path(item.stored_filename, item.sha256)
+    if path is None:
+        raise HTTPException(410, "资产安装包文件缺失或摘要不符")
 
     def generate():
         with path.open("rb") as handle:

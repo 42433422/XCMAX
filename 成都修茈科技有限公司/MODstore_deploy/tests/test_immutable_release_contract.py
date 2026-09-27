@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -185,6 +186,22 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert 'RUNTIME_DIR="${MODSTORE_RUNTIME_DIR:-${RELEASE_BASE}/runtime}"' in script
     assert '[[ "$RUNTIME_DIR" == /* ]]' in script
     assert 'install -d -m 700 "$RUNTIME_DIR"' in script
+    assert 'CATALOG_DIR="${MODSTORE_CATALOG_DIR:-${RUNTIME_DIR%/}/catalog}"' in script
+    assert "MODSTORE_CATALOG_DIR=%s" in script
+    assert "verify_catalog_runtime_dir modstore.service" in script
+    assert "verify_catalog_runtime_dir modstore-scheduler.service" in script
+    assert script.index(
+        "systemctl stop modstore.service modstore-scheduler.service"
+    ) < script.index('cp -a "$CATALOG_SOURCE/."')
+    assert script.index('cp -a "$CATALOG_SOURCE/."') < script.index(
+        'ln -s "$FINAL_ROOT" "${CURRENT_LINK}.next"'
+    )
+    assert 'modstore_server/market_files" "$CATALOG_STAGE/market_files"' in script
+    assert "inactive catalog differs from live snapshot" in script
+    assert 'rm -rf -- "$CATALOG_STAGE" || log' in script
+    assert script.index(
+        'CATALOG_STAGE=""', script.index('mv "$CATALOG_STAGE" "$CATALOG_DIR"')
+    ) < script.index('python3 - "$CATALOG_DIR/packages.json"')
     assert "MODSTORE_RUNTIME_DIR=%s" in script
     assert "MODSTORE_REPO_ROOT=%s" in script
     assert "XCMAX_MONOREPO_ROOT=%s" in script
@@ -196,7 +213,7 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert "verify_cli_identity" in script
     assert "xcmax-terminal exact-SHA identity verification failed" in script
     assert "JAVA_PAYMENT_SERVICE_URL=http://127.0.0.1:8080" in script
-    assert '"$RUNTIME_DIR" "$CURRENT_LINK" "$CURRENT_LINK"' in script
+    assert '"$RUNTIME_DIR" "$CATALOG_DIR" "$CURRENT_LINK" "$CURRENT_LINK"' in script
     assert "verify_customer_value_reconciler" in script
     assert "customer value reconciler did not prove" in script
     reconciler_gate = script[
@@ -241,6 +258,24 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert payment_config["info"]["xcmax"]["artifact-sha256"] == (
         "${MODSTORE_RELEASE_ARTIFACT_SHA256:}"
     )
+
+
+def test_stopped_service_resolves_current_release_catalog(tmp_path: Path) -> None:
+    script = RELEASE_SCRIPT.read_text(encoding="utf-8")
+    start = script.index('ACTIVE_CATALOG_DIR="$(python3 -')
+    start = script.index("<<'PY'\n", start) + len("<<'PY'\n")
+    probe = script[start : script.index("\nPY", start)]
+    fallback = tmp_path / "old-release/catalog_data"
+    persistent = tmp_path / "runtime/catalog"
+    release_env = tmp_path / "modstore-release.env"
+    sha = "a" * 40
+    release_env.write_text(f"MODSTORE_GIT_SHA={sha}\nMODSTORE_CATALOG_DIR={persistent}\n")
+    command = [sys.executable, "-", "0", str(fallback), str(release_env), sha]
+    result = subprocess.run(command, input=probe, text=True, capture_output=True, check=True)
+    assert result.stdout.strip() == str(persistent)
+    command[-1] = "b" * 40
+    stale = subprocess.run(command, input=probe, text=True, capture_output=True, check=True)
+    assert stale.stdout.strip() == str(fallback)
 
 
 def test_release_retention_prunes_only_verified_sha_directories(tmp_path: Path) -> None:

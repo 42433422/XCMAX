@@ -407,6 +407,10 @@ def test_mobile_pairing_exchange_invalid(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setattr(mobile_ext, "consume_by_shortcode", lambda c: None)
     app = FastAPI()
     app.include_router(mobile_ext.extension_router)
+    # 交换接口要求已登录移动用户；本用例只验证无效配对码分支，须先通过鉴权。
+    app.dependency_overrides[mobile_ext.get_mobile_user] = lambda: SimpleNamespace(
+        id=7, is_active=True, role="enterprise"
+    )
     client = TestClient(app, raise_server_exceptions=False)
     r = client.post("/pairing/exchange", json={"nonce": "bad", "code": "000000"})
     assert r.status_code in (400, 404)

@@ -21,11 +21,9 @@ from fastapi import (
 from pydantic import BaseModel, Field
 
 from modstore_server.api.catalog_public_helpers import authorize_upload as _authorize_upload
-from modstore_server.api.catalog_public_helpers import catalog_cache_scope as _catalog_cache_scope
 from modstore_server.api.catalog_public_helpers import (
     invalidate_catalog_list_caches as _invalidate_catalog_list_caches,
 )
-from modstore_server.api.catalog_public_helpers import params_hash as _params_hash
 from modstore_server.api.catalog_public_helpers import require_upload as _require_upload
 from modstore_server.api.catalog_public_helpers import (
     try_index_catalog_item as _try_index_catalog_item,
@@ -36,14 +34,21 @@ from modstore_server.api.catalog_public_helpers import (
 from modstore_server.api.catalog_public_helpers import (
     validated_automation_provenance as _validated_automation_provenance,
 )
-from modstore_server.catalog_publication_policy import is_private_package, require_public_manifest
+from modstore_server.catalog_public_index import (
+    _public_pkg_ids_from_db,
+    package_row_eligible_for_public_index,
+)
+from modstore_server.catalog_publication_policy import (
+    is_private_package,
+    require_public_manifest,
+)
 from modstore_server.catalog_store import (
     PackageConflictError,
     append_package,
     get_package,
     list_packages,
     list_versions,
-    packages_path,
+    load_store,
     promote_draft_to_stable,
     read_package_manifest_from_zip,
     sha256_file,
@@ -71,45 +76,50 @@ def api_list_packages(
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ):
-    from modstore_server import cache
-
-    ck = (
-        f"catalog:v1:{_catalog_cache_scope()}:packages:list:"
-        f"{_params_hash(artifact, q, limit, offset)}"
-    )
-    cached = cache.get_json(ck)
-    if cached is not None:
-        return cached
-    rows, total = list_packages(artifact=artifact, q=q, limit=limit, offset=offset)
-    rows = [r for r in rows if not is_private_package(r)]
-    if artifact and str(artifact).strip().lower() == "customer_delivery_seed":
-        total = 0
-    result = {"packages": rows, "total": total, "limit": limit, "offset": offset}
-    cache.set_json(ck, result, ttl_seconds=300)
-    return result
+    public_ids = _public_pkg_ids_from_db()
+    rows = [
+        r
+        for r in load_store().get("packages") or []
+        if package_row_eligible_for_public_index(r, public_pkg_ids=public_ids)
+    ]
+    if artifact:
+        rows = [r for r in rows if str(r.get("artifact") or "mod") == artifact]
+    if q:
+        needle = q.lower()
+        rows = [
+            r
+            for r in rows
+            if any(needle in str(r.get(key) or "").lower() for key in ("name", "id", "description"))
+        ]
+    return {
+        "packages": rows[offset : offset + limit],
+        "total": len(rows),
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 @router.get("/packages/{pkg_id}/{version}", summary="包详情")
 def api_get_package(pkg_id: str, version: str):
-    from modstore_server import cache
-
-    ck = f"catalog:v1:{_catalog_cache_scope()}:pkg:{pkg_id}:{version}"
-    cached = cache.get_json(ck)
-    if cached is not None:
-        return cached
     r = get_package(pkg_id, version)
-    if not r or is_private_package(r):
+    if not r or not package_row_eligible_for_public_index(
+        r, public_pkg_ids=_public_pkg_ids_from_db()
+    ):
         raise HTTPException(404, "未找到该版本")
-    cache.set_json(ck, r, ttl_seconds=600)
     return r
 
 
-@router.get("/packages/by-id/{pkg_id}/versions", summary="同 id 下所有版本（含 draft/stable）")
+@router.get("/packages/by-id/{pkg_id}/versions", summary="同 id 下已公开版本")
 def api_package_versions(pkg_id: str):
     pid = (pkg_id or "").strip()
     if not pid:
         raise HTTPException(400, "pkg_id 无效")
-    versions = [r for r in list_versions(pid) if not is_private_package(r)]
+    public_ids = _public_pkg_ids_from_db()
+    versions = [
+        r
+        for r in list_versions(pid)
+        if package_row_eligible_for_public_index(r, public_pkg_ids=public_ids)
+    ]
     return {"pkg_id": pid, "versions": versions}
 
 
@@ -145,37 +155,25 @@ def api_promote_package(
 
 @router.get("/index.json", summary="轻量全量索引")
 def api_index_json():
-    from modstore_server import cache
-
-    p = packages_path()
-    # Key includes file mtime so a new upload naturally produces a new cache key;
-    # old key expires in 60 s, effectively rate-limiting filesystem reads.
-    mtime = int(p.stat().st_mtime) if p.is_file() else 0
-    ck = f"catalog:v1:{_catalog_cache_scope()}:index:{mtime}"
-    cached = cache.get_json(ck)
-    if cached is not None:
-        return cached
     from modstore_server.catalog_public_index import build_public_index_packages
 
-    result = {"packages": build_public_index_packages()}
-    cache.set_json(ck, result, ttl_seconds=60)
-    return result
+    return {"packages": build_public_index_packages()}
 
 
 @router.get("/packages/{pkg_id}/{version}/download", summary="下载已上传包文件")
 def api_download(pkg_id: str, version: str):
-    from modstore_server.catalog_store import files_dir
+    from modstore_server.catalog_store import catalog_archive_available, files_dir
 
     r = get_package(pkg_id, version)
     if not r:
         raise HTTPException(404, "未找到")
-    if is_private_package(r):
-        raise HTTPException(404, "客户交付种子包需授权下载")
+    if not package_row_eligible_for_public_index(r, public_pkg_ids=_public_pkg_ids_from_db()):
+        raise HTTPException(404, "该版本尚未公开发布")
     name = r.get("stored_filename")
     if not name:
         raise HTTPException(404, "该记录无本地文件")
     path = files_dir() / str(name)
-    if not path.is_file():
+    if not catalog_archive_available(name, r.get("sha256")):
         raise HTTPException(404, "文件缺失")
     from fastapi.responses import FileResponse
 
@@ -200,10 +198,9 @@ async def api_upload_package(
     if not (str(meta.get("id") or "").strip() and str(meta.get("version") or "").strip()):
         raise HTTPException(400, "metadata 须含 id 与 version")
     rec: Dict[str, Any] = dict(meta)
-    requested_public_listing = rec.get("public_listing", False)
-    if not isinstance(requested_public_listing, bool):
+    public_listing = rec.get("public_listing", False)
+    if not isinstance(public_listing, bool):
         raise HTTPException(400, "public_listing 必须为 boolean")
-    public_listing = requested_public_listing
     if not public_listing:
         rec.pop("public_listing", None)
     if public_listing and auth_mode != "auto_publish":
@@ -273,6 +270,8 @@ async def api_upload_package(
         raise HTTPException(400, "包内缺少有效 manifest.json")
     if is_private_package(manifest):
         raise HTTPException(403, "客户私包须走已绑定 owner 的工单生产中心")
+    if not public_listing:
+        rec["public_listing"] = False
     if public_listing:
         try:
             require_public_manifest(manifest)

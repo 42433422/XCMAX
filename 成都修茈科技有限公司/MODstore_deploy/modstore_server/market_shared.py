@@ -13,7 +13,10 @@ from typing import Any, Dict, Optional
 from fastapi import Header, HTTPException, Request
 
 from modstore_server.api.deps import get_current_user, require_admin
-from modstore_server.duty_roster import employee_partition_meta
+from modstore_server.duty_roster import (
+    employee_partition_meta,
+    is_planned_duty_employee_pack,
+)
 from modstore_server.models import (
     CatalogItem,
     Entitlement,
@@ -22,6 +25,22 @@ from modstore_server.models import (
 
 _get_current_user = get_current_user
 _require_admin = require_admin
+
+
+def market_item_public(item: Any) -> bool:
+    return (
+        bool(item.is_public)
+        and item.compliance_status == "approved"
+        and not is_planned_duty_employee_pack(item.pkg_id, item.artifact)
+    )
+
+
+def market_item_visible_to_user(item: Any, user: User | None, *, purchased: bool = False) -> bool:
+    return not is_planned_duty_employee_pack(item.pkg_id, item.artifact) and (
+        market_item_public(item)
+        or bool(user and (user.is_admin or item.author_id == user.id or purchased))
+    )
+
 
 MATERIAL_CATEGORY_LABELS = {
     "ai_employee": "AI 员工",

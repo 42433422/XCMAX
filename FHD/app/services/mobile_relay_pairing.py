@@ -34,12 +34,23 @@ class MobileRelayPairingMixin:
     ) -> dict[str, Any]:
         relay_id = uuid.uuid4().hex
         desktop_token = secrets.token_urlsafe(32)
-        pairing_code = self._fresh_pairing_code()
         now = _utc_now()
         expires_at = _utc_after(ttl_seconds)
         normalized_base = _public_base_url(relay_base_url)
         with self._get_db() as db:
             self.ensure_tables(db)
+            db.execute(
+                text(
+                    """
+                    UPDATE mobile_relay_desktops
+                    SET pairing_code = 'x' || substr(relay_id, 1, 15)
+                    WHERE expires_at < :now AND length(pairing_code) = 6
+                      AND pairing_code BETWEEN '100000' AND '999999'
+                    """
+                ),
+                {"now": now},
+            )
+            pairing_code = self._fresh_pairing_code(db)
             db.execute(
                 text(
                     """
@@ -84,129 +95,43 @@ class MobileRelayPairingMixin:
             },
         }
 
-    def confirm_mobile(
-        self,
-        *,
-        user_id: int,
-        username: str,
-        relay_id: str,
-        code: str,
+    def renew_desktop_pairing(
+        self, *, relay_id: str, desktop_token: str, ttl_seconds: int = 24 * 3600
     ) -> dict[str, Any] | None:
         now = _utc_now()
+        expires_at = _utc_after(ttl_seconds)
         with self._get_db() as db:
             self.ensure_tables(db)
-            row = (
-                db.execute(
-                    text(
-                        """
-                        SELECT * FROM mobile_relay_desktops
-                        WHERE relay_id = :relay_id AND pairing_code = :code
-                        """
-                    ),
-                    {"relay_id": relay_id.strip(), "code": code.strip()},
-                )
-                .mappings()
-                .first()
-            )
-            if not row:
+            desktop = self._desktop_for_token(db, relay_id=relay_id, desktop_token=desktop_token)
+            if not desktop:
                 return None
-            data = _row_dict(row)
-            if data.get("status") == "revoked":
-                return None
-            if data.get("status") == "pending" and str(data.get("expires_at") or "") < now:
-                return None
-            db.execute(
+            code = self._fresh_pairing_code(db)
+            updated = db.execute(
                 text(
                     """
                     UPDATE mobile_relay_desktops
-                    SET status = 'paired',
-                        mobile_user_id = :user_id,
-                        mobile_username = :username,
-                        updated_at = :updated_at
-                    WHERE relay_id = :relay_id
+                    SET pairing_code = :code, expires_at = :expires_at, updated_at = :now
+                    WHERE relay_id = :relay_id AND desktop_token_hash = :token_hash
+                      AND status IN ('pending', 'paired')
                     """
                 ),
                 {
+                    "code": code,
+                    "expires_at": expires_at,
+                    "now": now,
                     "relay_id": relay_id.strip(),
-                    "user_id": int(user_id),
-                    "username": username.strip()[:200],
-                    "updated_at": now,
+                    "token_hash": _token_hash(desktop_token.strip()),
                 },
             )
-            data.update(
-                {
-                    "status": "paired",
-                    "mobile_user_id": int(user_id),
-                    "mobile_username": username.strip()[:200],
-                    "updated_at": now,
-                }
-            )
-            return cast(dict[str, Any], self._public_desktop(data))
-
-    def confirm_mobile_by_code(
-        self,
-        *,
-        user_id: int,
-        username: str,
-        code: str,
-    ) -> dict[str, Any] | None:
-        clean_code = code.strip()
-        if not clean_code:
-            return None
-        now = _utc_now()
-        with self._get_db() as db:
-            self.ensure_tables(db)
-            row = (
-                db.execute(
-                    text(
-                        """
-                        SELECT * FROM mobile_relay_desktops
-                        WHERE pairing_code = :code
-                          AND status IN ('pending', 'paired')
-                        ORDER BY created_at DESC
-                        LIMIT 1
-                        """
-                    ),
-                    {"code": clean_code},
-                )
-                .mappings()
-                .first()
-            )
-            if not row:
+            if updated.rowcount != 1:
                 return None
-            data = _row_dict(row)
-            if data.get("status") == "pending" and str(data.get("expires_at") or "") < now:
-                return None
-            relay_id = str(data.get("relay_id") or "").strip()
-            if not relay_id:
-                return None
-            db.execute(
-                text(
-                    """
-                    UPDATE mobile_relay_desktops
-                    SET status = 'paired',
-                        mobile_user_id = :user_id,
-                        mobile_username = :username,
-                        updated_at = :updated_at
-                    WHERE relay_id = :relay_id
-                    """
-                ),
-                {
-                    "relay_id": relay_id,
-                    "user_id": int(user_id),
-                    "username": username.strip()[:200],
-                    "updated_at": now,
-                },
-            )
-            data.update(
-                {
-                    "status": "paired",
-                    "mobile_user_id": int(user_id),
-                    "mobile_username": username.strip()[:200],
-                    "updated_at": now,
-                }
-            )
-            return cast(dict[str, Any], self._public_desktop(data))
+        return {
+            "relay_id": relay_id.strip(),
+            "pairing_code": code,
+            "expires_at": expires_at,
+            "exp": _epoch_from_iso(expires_at),
+            "relay_base_url": desktop.get("relay_base_url") or "",
+        }
 
     def bind_mobile_by_account(
         self,
@@ -214,16 +139,17 @@ class MobileRelayPairingMixin:
         user_id: int,
         username: str,
         relay_id: str = "",
+        pairing_code: str = "",
     ) -> dict[str, Any] | None:
         """Bind a desktop relay to the authenticated mobile account.
 
-        The phone obtains ``relay_id`` from the LAN pairing exchange. Cloud
-        binding is then authorized by the logged-in mobile account instead of a
-        QR/short-code secret, which prevents stale QR relay IDs from becoming
-        the source of truth.
+        The signed-in phone obtains a relay ID from a QR or LAN exchange, or
+        resolves a six-digit device code through the cloud relay. An existing
+        binding remains owned by its original mobile account.
         """
         clean_relay_id = relay_id.strip()
-        if not clean_relay_id:
+        clean_code = pairing_code.strip()
+        if len(clean_code) != 6 or not clean_code.isdigit():
             return None
         now = _utc_now()
         with self._get_db() as db:
@@ -233,11 +159,12 @@ class MobileRelayPairingMixin:
                     text(
                         """
                         SELECT * FROM mobile_relay_desktops
-                        WHERE relay_id = :relay_id
+                        WHERE ((:relay_id != '' AND relay_id = :relay_id)
+                               OR (:relay_id = '' AND pairing_code = :pairing_code))
                           AND status IN ('pending', 'paired')
                         """
                     ),
-                    {"relay_id": clean_relay_id},
+                    {"relay_id": clean_relay_id, "pairing_code": clean_code},
                 )
                 .mappings()
                 .first()
@@ -245,12 +172,15 @@ class MobileRelayPairingMixin:
             if not row:
                 return None
             data = _row_dict(row)
-            if data.get("status") == "pending" and str(data.get("expires_at") or "") < now:
+            if clean_code and str(data.get("pairing_code") or "") != clean_code:
+                return None
+            if str(data.get("expires_at") or "") < now:
                 return None
             owner_id = int(data.get("mobile_user_id") or 0)
             if owner_id > 0 and owner_id != int(user_id):
                 return None
-            db.execute(
+            clean_relay_id = str(data.get("relay_id") or "").strip()
+            updated = db.execute(
                 text(
                     """
                     UPDATE mobile_relay_desktops
@@ -259,15 +189,22 @@ class MobileRelayPairingMixin:
                         mobile_username = :username,
                         updated_at = :updated_at
                     WHERE relay_id = :relay_id
+                      AND pairing_code = :pairing_code
+                      AND expires_at >= :updated_at
+                      AND (mobile_user_id IS NULL OR mobile_user_id = 0
+                           OR mobile_user_id = :user_id)
                     """
                 ),
                 {
                     "relay_id": clean_relay_id,
+                    "pairing_code": clean_code,
                     "user_id": int(user_id),
                     "username": username.strip()[:200],
                     "updated_at": now,
                 },
             )
+            if updated.rowcount != 1:
+                return None
             data.update(
                 {
                     "status": "paired",

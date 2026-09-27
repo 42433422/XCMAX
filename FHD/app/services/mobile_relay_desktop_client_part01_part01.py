@@ -28,16 +28,20 @@ def _migrate_legacy_config_once() -> None:
     try:
         if _facade()._CONFIG_FILE.is_file() or not _facade()._LEGACY_CONFIG_FILE.is_file():
             return
+        if _facade()._LEGACY_CONFIG_FILE.is_symlink():
+            raise OSError("legacy relay config symlink rejected")
         if _facade()._CONFIG_FILE.resolve() == _facade()._LEGACY_CONFIG_FILE.resolve():
             return
         _facade()._CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-        _facade()._CONFIG_FILE.write_text(
-            _facade()._LEGACY_CONFIG_FILE.read_text(encoding="utf-8"), encoding="utf-8"
-        )
+        _facade().os.chmod(_facade()._LEGACY_CONFIG_FILE, 0o600)
+        legacy = _facade().json.loads(_facade()._LEGACY_CONFIG_FILE.read_text(encoding="utf-8"))
+        if not isinstance(legacy, dict):
+            raise ValueError("legacy relay config must be an object")
+        _facade()._write_config(legacy)
         _facade().logger.info(
             "迁移历史云中继配对凭证 %s -> %s", _facade()._LEGACY_CONFIG_FILE, _facade()._CONFIG_FILE
         )
-    except OSError:
+    except (OSError, ValueError):
         _facade().logger.warning("云中继配对凭证迁移失败", exc_info=True)
 
 
@@ -104,6 +108,9 @@ def _read_config() -> dict[str, _facade().Any]:
     try:
         if not _facade()._CONFIG_FILE.is_file():
             return {}
+        if _facade()._CONFIG_FILE.is_symlink():
+            return {}
+        _facade().os.chmod(_facade()._CONFIG_FILE, 0o600)
         data = _facade().json.loads(_facade()._CONFIG_FILE.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {}
     except (OSError, _facade().json.JSONDecodeError):
@@ -173,9 +180,51 @@ def cached_desktop_relay_payload() -> dict[str, _facade().Any] | None:
 
 def _write_config(data: dict[str, _facade().Any]) -> None:
     _facade()._CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _facade()._CONFIG_FILE.write_text(
-        _facade().json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    temp_path = None
+    try:
+        with _facade().tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=_facade()._CONFIG_FILE.parent,
+            prefix=".mobile_relay_",
+            delete=False,
+        ) as stream:
+            temp_path = _facade().Path(stream.name)
+            stream.write(_facade().json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+        _facade().os.chmod(temp_path, 0o600)
+        _facade().os.replace(temp_path, _facade()._CONFIG_FILE)
+    finally:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+
+
+def _renew_desktop_relay(config: dict[str, _facade().Any]) -> dict[str, _facade().Any] | None:
+    relay_id = str(config.get("relay_id") or "").strip()
+    token = str(config.get("desktop_token") or "").strip()
+    base_url = str(config.get("relay_base_url") or "").strip() or _facade()._relay_base_url()
+    try:
+        with _facade()._relay_http_client(5) as client:
+            response = client.post(
+                _facade()._api_url("/api/mobile/v1/relay/desktop/renew", base_url),
+                json={"relay_id": relay_id, "desktop_token": token},
+            )
+            response.raise_for_status()
+            data = response.json().get("data")
+    except (_facade().httpx.HTTPError, ValueError, KeyError, AttributeError) as exc:
+        _facade().logger.warning("mobile relay pairing renewal failed: %s", exc)
+        return None
+    code = str(data.get("pairing_code") or "").strip() if isinstance(data, dict) else ""
+    if (
+        not isinstance(data, dict)
+        or data.get("relay_id") != relay_id
+        or len(code) != 6
+        or not code.isdigit()
+    ):
+        return None
+    updated = {**config, **data, "registered_at": int(_facade().time.time())}
+    _facade()._write_config(updated)
+    _facade().start_desktop_relay_poller()
+    return _public_payload_from_config(updated)
 
 
 def register_desktop_relay(
@@ -183,11 +232,8 @@ def register_desktop_relay(
 ) -> dict[str, _facade().Any] | None:
     """Register this desktop with the public relay and start the poller.
 
-    根治 relay 身份漂移：桌面只要本地已存有效身份（relay_id + desktop_token），默认**复用**它并
-    起 poller，**绝不重新向服务器注册**。否则每次启动 / 每次点「出配对码」都会申请一个全新 relay_id
-    覆盖本地，把已和手机配对好的旧身份丢弃——任务仍派给旧（离线）relay、新 relay 又是 pending 领不到，
-    超级员工任务永远卡「排队中」。仅当本地无身份、或调用方显式 ``force_new=True``（用户主动重新配对）
-    时才注册新身份。
+    Reissue a short code for an existing relay identity. Cloud confirmation
+    prevents an offline or revoked cached QR from appearing usable.
     """
     if not force_new:
         existing = _facade()._read_config()
@@ -195,15 +241,8 @@ def register_desktop_relay(
             str(existing.get("relay_id") or "").strip()
             and str(existing.get("desktop_token") or "").strip()
         )
-        valid_payload = _facade()._public_payload_from_config(existing)
-        if has_identity and (existing.get("paired") or valid_payload):
-            _facade().start_desktop_relay_poller()
-            return valid_payload or {
-                "relay_id": str(existing.get("relay_id") or ""),
-                "relay_base_url": str(existing.get("relay_base_url") or "")
-                or _facade()._relay_base_url(),
-                "paired": bool(existing.get("paired")),
-            }
+        if has_identity:
+            return _renew_desktop_relay(existing)
     base_url = _facade()._relay_base_url()
     device_label = label.strip() or f"XCAGI 桌面执行端 - {_facade().socket.gethostname()}"
     body = {
@@ -241,13 +280,16 @@ def register_desktop_relay(
         return None
     except _facade().httpx.HTTPError as exc:
         _facade().logger.warning("mobile relay desktop register failed: %s", exc)
-        cached = _facade().cached_desktop_relay_payload()
-        if cached:
-            _facade().start_desktop_relay_poller()
-            return cached
         return None
     data = payload.get("data") if isinstance(payload, dict) else None
-    if not isinstance(data, dict) or not data.get("desktop_token") or (not data.get("relay_id")):
+    code = str(data.get("pairing_code") or "").strip() if isinstance(data, dict) else ""
+    if (
+        not isinstance(data, dict)
+        or not data.get("desktop_token")
+        or not data.get("relay_id")
+        or len(code) != 6
+        or not code.isdigit()
+    ):
         _facade().logger.warning("mobile relay desktop register returned invalid payload")
         return None
     config = {

@@ -27,6 +27,7 @@ LEGACY_SOURCE_RELEASE_WORKFLOW = (
 )
 WORKFLOW_PUBLISHER = FHD_ROOT.parent / "scripts" / "dev" / "publish_ci_workflows_to_root.py"
 FINALIZE_MACOS_DMG = FHD_ROOT / "scripts" / "package" / "finalize-macos-dmg.sh"
+VERIFY_MACOS_DMG = FHD_ROOT / "scripts" / "package" / "verify-macos-release-dmg.sh"
 BUILD_INFO_SCRIPT = FHD_ROOT / "scripts" / "package" / "generate-desktop-build-info.py"
 
 
@@ -252,12 +253,14 @@ def test_release_workflow_uses_fhd_relative_download_verifier_path() -> None:
 def test_release_workflow_notarizes_outer_dmg_and_hard_fails_gatekeeper() -> None:
     workflow = RELEASE_WORKFLOW.read_text()
     finalize_script = FINALIZE_MACOS_DMG.read_text()
+    verify_script = VERIFY_MACOS_DMG.read_text()
 
     assert "scripts/package/finalize-macos-dmg.sh" in workflow
-    assert 'xcrun stapler validate "${dmg}"' in workflow
-    assert 'spctl -a -vv -t open --context context:primary-signature "${dmg}"' in workflow
-    assert 'xcrun stapler validate "${app}"' in workflow
-    assert 'spctl -a -vv -t exec "${app}"' in workflow
+    assert "scripts/package/verify-macos-release-dmg.sh" in workflow
+    assert 'xcrun stapler validate "${dmg}"' in verify_script
+    assert 'spctl -a -vv -t open --context context:primary-signature "${dmg}"' in verify_script
+    assert 'xcrun stapler validate "${app}"' in verify_script
+    assert 'spctl -a -vv -t exec "${app}"' in verify_script
     assert "spctl assess may require stapled notarization ticket" not in workflow
 
     assert 'xcrun notarytool submit "${DMG_PATH}"' in finalize_script
@@ -314,13 +317,11 @@ def test_desktop_build_info_requires_and_preserves_full_git_identity(tmp_path: P
 
 def test_release_workflow_hard_checks_packaged_git_sha_and_version() -> None:
     workflow = RELEASE_WORKFLOW.read_text()
+    verify_script = VERIFY_MACOS_DMG.read_text()
 
-    assert 'build_info="${app}/Contents/Resources/build-info.json"' in workflow
-    assert 'BUILD_INFO_PATH="${build_info}"' in workflow
-    assert 'EXPECTED_BUILD_SHA="${XCAGI_BUILD_SHA}"' in workflow
-    assert 'EXPECTED_PRODUCT_VERSION="${v}"' in workflow
-    assert "packaged gitSha mismatch" in workflow
-    assert "packaged version mismatch" in workflow
+    assert 'verify-macos-release-dmg.sh "${dmg}" "${v}" "${XCAGI_BUILD_SHA}"' in workflow
+    assert 'assert identity.get("gitSha") == sys.argv[3]' in verify_script
+    assert 'assert identity.get("version") == sys.argv[2]' in verify_script
 
 
 def test_download_verifier_accepts_udif_trailer_and_propagates_failures(tmp_path: Path) -> None:

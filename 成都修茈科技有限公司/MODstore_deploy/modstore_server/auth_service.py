@@ -201,6 +201,8 @@ def get_user_by_id(user_id: int) -> Optional[User]:
     sf = get_session_factory()
     with sf() as session:
         user = session.query(User).filter(User.id == user_id).first()
+        if user is not None and user.deleted_at is not None:
+            return None
         if user is not None:
             session.expunge(user)
         return user
@@ -329,7 +331,7 @@ def resolve_pat_identity(raw_token: str) -> Optional[PatIdentity]:
         if exp and exp < datetime.now(UTC):
             return None
         user = session.query(User).filter(User.id == row.user_id).first()
-        if not user:
+        if not user or user.deleted_at is not None:
             return None
         try:
             scopes_raw = json.loads(row.scopes_json or "[]")
@@ -372,7 +374,7 @@ def resolve_user_from_pat(raw_token: str) -> Optional[User]:
         if exp and exp < datetime.now(UTC):
             return None
         user = session.query(User).filter(User.id == row.user_id).first()
-        if not user:
+        if not user or user.deleted_at is not None:
             return None
         # 写一次 last_used_at（容忍并发竞态：单字段 UPDATE 安全）
         try:

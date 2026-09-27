@@ -36,7 +36,8 @@ def signing_key(tmp_path, monkeypatch):
         (
             key.public_key()
             .public_bytes(
-                serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
+                serialization.Encoding.PEM,
+                serialization.PublicFormat.SubjectPublicKeyInfo,
             )
             .decode(),
         ),
@@ -157,6 +158,77 @@ def test_auto_publish_is_public_verified_and_idempotent(
     second = upload("auto-token-dedicated")
     assert second.status_code == 200, second.text
     assert second.json()["idempotent"] is True
+
+    archive = tmp_path / "catalog" / "files" / detail.json()["stored_filename"]
+    archive.write_bytes(b"corrupted release package")
+    assert client.get("/api/market/catalog", params={"q": pkg_id}).json() == {
+        "items": [],
+        "total": 0,
+    }
+    assert client.get(f"/api/market/catalog/{matches[0]['id']}").status_code == 404
+    assert client.get("/v1/index.json").json()["packages"] == []
+    assert client.get(f"/v1/packages/{pkg_id}/1.0.0").status_code == 404
+    assert client.get("/v1/packages", params={"q": pkg_id}).json()["total"] == 0
+    assert client.get(f"/v1/packages/by-id/{pkg_id}/versions").json()["versions"] == []
+    assert client.get(f"/v1/packages/{pkg_id}/1.0.0/download").status_code == 404
+    archive.unlink()
+    assert client.get("/api/market/catalog", params={"q": pkg_id}).json()["total"] == 0
+
+
+def test_unlisted_upload_and_draft_remain_private_on_every_v1_read(
+    client, monkeypatch, tmp_path, signing_key
+) -> None:
+    from modstore_server.catalog_store import append_package
+    from modstore_server.models import CatalogItem, get_session_factory
+
+    monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path / "catalog"))
+    monkeypatch.setenv("MODSTORE_CATALOG_UPLOAD_TOKEN", "ordinary-test-token")
+    monkeypatch.setattr(
+        "modstore_server.package_sandbox_audit.run_package_audit_async", _review_pass
+    )
+    monkeypatch.setattr(
+        "modstore_server.api.catalog_public_routes.insert_embedding",
+        lambda **_kwargs: "",
+    )
+    pkg_id = f"unlisted-{uuid.uuid4().hex[:10]}"
+    raw = _package(pkg_id, signing_key=signing_key)
+    uploaded = client.post(
+        "/v1/packages",
+        headers={"Authorization": "Bearer ordinary-test-token"},
+        data={"metadata": json.dumps({"id": pkg_id, "version": "1.0.0", "artifact": "mod"})},
+        files={"file": ("unlisted.xcmod", raw, "application/zip")},
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    assert uploaded.json()["package"]["public_listing"] is False
+    draft_id = f"draft-{uuid.uuid4().hex[:10]}"
+    source = tmp_path / "draft.xcmod"
+    source.write_bytes(b"draft bytes")
+    append_package(
+        {
+            "id": draft_id,
+            "version": "draft-1.0.0",
+            "release_channel": "draft",
+            "public_listing": True,
+        },
+        source,
+    )
+    with get_session_factory()() as db:
+        db.add(
+            CatalogItem(
+                pkg_id=draft_id,
+                version="draft-1.0.0",
+                name="Draft",
+                is_public=True,
+                compliance_status="approved",
+            )
+        )
+        db.commit()
+    for hidden_id, version in ((pkg_id, "1.0.0"), (draft_id, "draft-1.0.0")):
+        assert client.get("/v1/packages", params={"q": hidden_id}).json()["total"] == 0
+        assert client.get(f"/v1/packages/{hidden_id}/{version}").status_code == 404
+        assert client.get(f"/v1/packages/by-id/{hidden_id}/versions").json()["versions"] == []
+        assert client.get(f"/v1/packages/{hidden_id}/{version}/download").status_code == 404
+    assert client.get("/v1/index.json").json()["packages"] == []
 
 
 def test_publication_survives_vector_outage_and_idempotent_retry_recovers(
@@ -342,7 +414,8 @@ def test_public_upload_is_immutable_and_old_retry_cannot_downgrade_market(
         "modstore_server.package_sandbox_audit.run_package_audit_async", _review_pass
     )
     monkeypatch.setattr(
-        "modstore_server.api.catalog_public_routes.insert_embedding", lambda **_kwargs: ""
+        "modstore_server.api.catalog_public_routes.insert_embedding",
+        lambda **_kwargs: "",
     )
 
     def upload(raw, version="1.0.0", sha="a"):
@@ -446,7 +519,9 @@ def test_public_metadata_cannot_disguise_private_archive(
 def test_existing_private_rows_are_not_publicly_readable(
     client, monkeypatch, tmp_path, classification
 ):
-    from modstore_server.catalog_public_index import package_row_eligible_for_public_index
+    from modstore_server.catalog_public_index import (
+        package_row_eligible_for_public_index,
+    )
     from modstore_server.catalog_store import append_package
 
     monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path / "catalog"))
