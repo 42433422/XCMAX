@@ -1,5 +1,5 @@
 {
-  "lines": 2295457,
-  "updated": "2026-09-27",
-  "note": "#2062 合并后修复 Windows 交付冒烟：legacy compat 路由已按 business_scope_gate 收紧，未认证企业请求断言 401/403（原匿名 200 断言过时），并按仓库门禁补 CHANGELOG 条目，净增 23 行显式抬升。"
+  "lines": 2295430,
+  "updated": "2026-09-28",
+  "note": "棘轮下调"
 }
