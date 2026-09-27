@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -13,6 +13,20 @@ from app.db.models import PurchaseOrder, Supplier
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+DATE_FIELDS = frozenset({"order_date", "delivery_date", "inbound_date"})
+
+
+def as_date(value: Any, default: date | None = None) -> date | None:
+    """SQLite 日期列只接受 date 对象：收敛前端 ISO 字符串与空值。"""
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(str(value or "").strip()[:10])
+    except ValueError:
+        return default
 
 
 def _get_db():
