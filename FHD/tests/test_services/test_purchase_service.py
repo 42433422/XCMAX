@@ -8,8 +8,10 @@ from decimal import Decimal
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
+from sqlalchemy.dialects import sqlite as sqlite_dialect
 
-from app.services.purchase_service import PurchaseService
+from app.db.models.purchase import PurchaseOrder
+from app.services.purchase_service import PurchaseService, _as_date
 
 
 def _mock_get_db(mock_db):
@@ -312,33 +314,22 @@ class TestAsDate:
     """SQLite 日期列只接受 date 对象（桌面运行时），字符串必须在服务层收敛。"""
 
     def test_parses_iso_string(self):
-        from app.services.purchase_service import _as_date
-
         assert _as_date("2026-09-27") == date(2026, 9, 27)
 
     def test_blank_and_none_fall_back(self):
-        from app.services.purchase_service import _as_date
-
         assert _as_date("") is None
         assert _as_date("   ") is None
         assert _as_date(None) is None
         assert _as_date("", date(2026, 1, 1)) == date(2026, 1, 1)
 
     def test_keeps_date_and_datetime(self):
-        from app.services.purchase_service import _as_date
-
         assert _as_date(date(2026, 9, 27)) == date(2026, 9, 27)
         assert _as_date(datetime(2026, 9, 27, 10, 30)) == date(2026, 9, 27)
 
     def test_string_dates_are_rejected_by_the_sqlite_binder(self):
-        from sqlalchemy.dialects import sqlite as sqlite_dialect
-
-        from app.db.models.purchase import PurchaseOrder
-        from app.services.purchase_service import _as_date
-
         dialect = sqlite_dialect.dialect()
-        adapted = dialect.type_descriptor(PurchaseOrder.__table__.c.order_date.type)
-        binder = adapted.bind_processor(dialect)
+        order_date = PurchaseOrder.__table__.c.order_date
+        binder = dialect.type_descriptor(order_date.type).bind_processor(dialect)
         with pytest.raises(TypeError):
             binder("2026-09-27")
         assert binder(_as_date("2026-09-27")) is not None
@@ -352,9 +343,8 @@ class TestCreatePurchaseOrderDateCoercion:
         mock_db = MagicMock()
 
         def _capture(model):
-            captured.update(
-                {c.name: getattr(model, c.name, None) for c in model.__table__.columns}
-            )
+            for column in model.__table__.columns:
+                captured[column.name] = getattr(model, column.name, None)
             model.id = 1
 
         mock_db.add.side_effect = _capture
