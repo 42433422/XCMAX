@@ -9,13 +9,6 @@ from fastapi import APIRouter, Body, Query, Request
 
 logger = logging.getLogger(__name__)
 
-HOST_DOMAIN_PREFIXES = [
-    "/api/products",
-    "/api/customers",
-    "/api/orders",
-    "/api/shipment",
-]
-
 
 def _invoke(domain: str, action: str, **kwargs: Any):
     from app.mod_sdk.erp_domain_dispatch import invoke_erp_domain_handler
