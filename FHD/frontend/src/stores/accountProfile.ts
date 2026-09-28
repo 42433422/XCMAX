@@ -152,7 +152,10 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
       }
       invalidateEnterpriseSessionCache()
       clear()
-    } catch {
+    } catch (error) {
+      // 仅当服务端明确判定会话失效（401/403）才清空资料；超时/被取代/网络抖动属瞬时失败，清空会隐藏依赖权限的入口。
+      const status = (error as { status?: unknown } | null | undefined)?.status
+      if (status !== 401 && status !== 403) return
       invalidateEnterpriseSessionCache()
       clear()
     }
