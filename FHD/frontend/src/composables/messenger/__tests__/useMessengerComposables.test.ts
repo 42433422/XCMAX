@@ -11,7 +11,15 @@ import {
   fallbackDutyEmployees,
   pinnedAvatarText,
   normalizeDutyEmployee,
+  formatTime,
 } from '@/composables/messenger/useMessengerEntries'
+
+describe('formatTime', () => {
+  it('reads naive server timestamps as UTC', () => {
+    expect(formatTime('2026-09-28T23:13:02.664344')).toBe(new Date('2026-09-28T23:13:02.664Z').toLocaleString())
+    expect(formatTime('2026-09-29T07:13:02+08:00')).toBe(new Date('2026-09-28T23:13:02Z').toLocaleString())
+  })
+})
 
 const contactsMock = vi.hoisted(() => ({
   fetchImContacts: vi.fn(async () => []),
