@@ -120,3 +120,41 @@ def test_product_issue_routes_one_work_order_and_support_bundle(tmp_path, monkey
     assert calls[0][3]["client_instance_id"] == "client-instance-41"
     assert calls[1][3]["source_ref"] == calls[1][3]["work_order_id"]
     assert base64.b64decode(calls[1][3]["support_bundle_base64"]) == raw
+
+
+def test_defect_report_is_not_swallowed_when_classification_unavailable():
+    """分类不可用时缺陷上报必须给出明确引导，不得静默回落业务分发。
+
+    客户原问题：缺陷上报只收到普通业务答复、拿不到工单编号。修复把受理分支放到
+    业务写分发之前；但若分类不可用就返回 None，仍会落到业务查询把缺陷吃掉。
+    本用例锁定「不可用 → NEEDS_MORE_EVIDENCE 引导」，并在二次判定点不追加噪声。
+    """
+    import importlib
+
+    stream = importlib.import_module("app.fastapi_routes.xcagi_compat_chat_stream")
+    message = "保存采购订单的时候报错，点保存没有任何反应，这应该是软件缺陷，请处理"
+
+    class _Boom:
+        """分类调用抛意外异常（如无凭据/网络被代理拦截）。"""
+
+        default_model = "boom"
+
+        def __init__(self):
+            def _create(**kwargs):
+                raise RuntimeError("no llm credential")
+
+            self.chat = NS(completions=NS(create=_create))
+
+    receipt = stream._classify_and_submit_client_issue(object(), {}, message, "", client=_Boom())
+    assert receipt is not None, "缺陷上报不得静默回落业务分发"
+    assert receipt["state"] == "NEEDS_MORE_EVIDENCE"
+    reply = stream._client_issue_reply(receipt)
+    assert "期望" in reply and "实际" in reply
+
+    # 规划器已给出答案后的二次判定：不追加引导噪声
+    assert (
+        stream._classify_and_submit_client_issue(
+            object(), {}, message, "已有答案", client=_Boom(), guide_unavailable=False
+        )
+        is None
+    )

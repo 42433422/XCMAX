@@ -21,21 +21,56 @@ def _client_issue_reply(receipt: dict | None) -> str:
         return ""
     return {
         "ROUTED": f"已向 Owner 提交产品问题，Work Order：{receipt.get('work_order_id')}，市场工单：{receipt.get('owner_ticket_no')}。支持包 SHA256：{receipt.get('support_bundle_sha256')}。",
-        "NEEDS_MORE_EVIDENCE": f"采证未完成（缺少：{'、'.join(receipt.get('missing_evidence') or [])}）；暂未创建工单。",
+        "NEEDS_MORE_EVIDENCE": (
+            "这看起来是产品缺陷上报，但还缺少必要信息，暂未自动建单。"
+            "请按「期望：… 实际：…」补充后重发，我会立即建单并把工单号回给你。"
+            "（若只是使用咨询，请再发一次，我会直接回答。）"
+        ),
         "OWNER_ROUTE_UNAVAILABLE": f"Owner 候选 Work Order {receipt.get('work_order_id') or '受理服务'}尚未送达。",
         "not_confirmed": "目前无法以足够把握确认是产品缺陷，因此没有自动建单。",
     }.get(str(receipt.get("state") or ""), "")
 
 
-def _classify_and_submit_client_issue(request, runtime_context, message, reply, client=None):
+def _classify_and_submit_client_issue(
+    request, runtime_context, message, reply, client=None, *, guide_unavailable: bool = True
+):
+    """把客户缺陷上报转成工单；不得让缺陷被无关业务分发静默吃掉。
+
+    只有「明确判定为使用咨询」才回落正常对话：缺陷上报一旦命中而与受理无关地
+    走业务/员工分发，客户就再次拿不到工单编号——那正是本工单要修的原问题。
+    分类不可用（无 LLM 凭据 / 调用失败 / 结果不确定）时应引导客户补齐
+    「期望/实际」走确定性建单路径，而不是静默按业务查询回答。
+
+    ``guide_unavailable``：仅在「对话此前尚未给出回答」的主拦截点开启（默认）。
+    规划器已经产出答案后的二次判定关闭它，避免给正常使用咨询的回答追加交通噪声。
+    """
     from app.application import client_product_issue_intake as intake
 
     if not intake.looks_like_issue_report(message):
         return None
-    client = client or _facade().create_modstore_openai_client_from_request(request)
-    triage = intake.classify_report(client, message, reply)
-    if not triage or triage.get("type") != "product_defect":
+
+    def _unavailable():
+        return {"state": "NEEDS_MORE_EVIDENCE"} if guide_unavailable else None
+
+    if client is None:
+        try:
+            client = _facade().create_modstore_openai_client_from_request(request)
+        except _facade().BOUNDARY_ERRORS:
+            _facade().logger.warning("client issue classifier unavailable", exc_info=True)
+            return _unavailable()
+    try:
+        triage = intake.classify_report(client, message, reply)
+    except _facade().BOUNDARY_ERRORS:
+        # 分类器是外部 LLM 边界：任何意外异常都必须退化成「引导补齐证据」，
+        # 既不能让缺陷被静默吃掉，也不能把对话打成 500。
+        _facade().logger.warning("client issue classification raised", exc_info=True)
+        return _unavailable()
+    if triage is None:
+        return _unavailable()
+    if str(triage.get("type") or "") == "usage_question":
         return None
+    if str(triage.get("type") or "") != "product_defect":
+        return _unavailable()
     try:
         return asyncio.run(
             intake.submit_product_issue(
@@ -289,7 +324,12 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
 
         visible_text, marker_lines = strip_planner_stream_markers(merged)
         issue_receipt = _classify_and_submit_client_issue(
-            request, runtime_context, body.message, visible_text, llm_client
+            request,
+            runtime_context,
+            body.message,
+            visible_text,
+            llm_client,
+            guide_unavailable=False,
         )
         issue_reply = _client_issue_reply(issue_receipt)
         if issue_reply:
