@@ -1,5 +1,5 @@
 {
-  "lines": 2295743,
-  "updated": "2026-09-28",
-  "note": "CI/PR 提速执行 SSOT 新增 174 行文档（owner 指令，写入 docs/CI_SSOT.md）；基线按该分支合并树向前校准，棘轮仍只升不降"
+  "lines": 2295982,
+  "updated": "2026-09-29",
+  "note": "CI/PR 提速：统一变更分类器(含 windows/mobile/docs)+分类器单测+统一 Nightly 入口+相关 workflow 目标化"
 }
