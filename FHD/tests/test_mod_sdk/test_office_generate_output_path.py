@@ -48,3 +48,24 @@ def test_requested_output_name_is_written(tmp_path, employee, package, suffix):
     )
     assert out.is_file()
     assert str(out) in json.dumps(result, ensure_ascii=False)
+
+
+@pytest.mark.parametrize("name", ["custom-read.json", "custom-read.txt"])
+def test_pdf_read_writes_requested_output_name(tmp_path, name):
+    canvas = pytest.importorskip("reportlab.pdfgen.canvas")
+    src = tmp_path / "input.pdf"
+    doc = canvas.Canvas(str(src))
+    doc.drawString(72, 720, "SUNBIRD packing box x24")
+    doc.save()
+    out = tmp_path / "outputs" / name
+    asyncio.run(
+        _convert("pdf-full-read-employee", "pdf_full_read")(
+            src,
+            out,
+            payload={},
+            ctx={},
+            rule_spec=_rule_spec("pdf-full-read-employee"),
+        )
+    )
+    assert out.is_file()
+    assert "SUNBIRD" in out.read_text(encoding="utf-8")

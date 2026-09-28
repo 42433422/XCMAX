@@ -165,6 +165,10 @@ async def convert_file(
     meta_path = output_dir / "document_meta.json"
     if str(rule_spec.get("default_meta_relpath") or "").endswith(".json"):
         meta_path = output_dir / Path(str(rule_spec.get("default_meta_relpath"))).name
+    if output_path.suffix.lower() == ".txt":
+        txt_path = output_path
+    elif output_path.suffix.lower() == ".json":
+        meta_path = output_path
     images_root = output_dir / "images"
     if str(rule_spec.get("default_images_dir") or "").strip():
         images_root = output_dir / Path(str(rule_spec.get("default_images_dir"))).name
