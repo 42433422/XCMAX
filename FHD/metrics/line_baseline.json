@@ -1,5 +1,5 @@
 {
-  "lines": 2295743,
-  "updated": "2026-09-28",
-  "note": "CI/PR 提速执行 SSOT 新增 174 行文档（owner 指令，写入 docs/CI_SSOT.md）；基线按该分支合并树向前校准，棘轮仍只升不降"
+  "lines": 2296364,
+  "updated": "2026-09-29",
+  "note": "rebase 到 #2076 之后的 main 后校准：本轮 required CI 目标化 + 统一 classifier + Nightly Full（owner 指令）；棘轮仍只升不降"
 }

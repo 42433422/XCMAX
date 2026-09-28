@@ -1,0 +1,81 @@
+# CI SSOT: generated from FHD/.github/workflows/nightly-full.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+# Nightly 全量验证（SSOT: docs/CI_SSOT.md「四级验证」之夜间全量 CI）。
+#
+# 已自带每日 cron 的套件不在此重复派发（避免一天跑两遍）：
+#   fhd-ci-cd.yml 16:00 UTC —— 全量 backend-test / frontend-test / frontend-e2e / release-verify
+#   fhd-performance-smoke.yml 17:00 UTC
+#   e2e.yml 18:00 UTC —— 完整 P0 关键路径
+#   fhd-neuro-migration-check.yml 02:00 UTC
+#   fhd-ci-mobile-android-smoke.yml
+# 本 workflow 补齐「没有每日覆盖」的重活，提供统一夜间入口与单一失败信号。
+name: Nightly Full CI
+
+on:
+  schedule:
+    - cron: "30 16 * * *"   # 每日 16:30 UTC = 北京 00:30（接在 fhd-ci-cd 夜间全量之后）
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "要验证的 ref（默认 main）"
+        required: false
+        default: main
+        type: string
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: nightly-full
+  cancel-in-progress: false
+
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  dispatch-nightly:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve latest main SHA
+        id: target
+        run: |
+          set -euo pipefail
+          ref="${{ inputs.ref || 'main' }}"
+          sha="$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" "refs/heads/${ref}" | cut -f1)"
+          if [ -z "${sha}" ]; then
+            echo "::error::无法解析 ${ref} 的 SHA"
+            exit 1
+          fi
+          echo "ref=${ref}" >> "$GITHUB_OUTPUT"
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+          echo "Nightly 目标：${ref} @ ${sha}"
+
+      - name: Fan out heavy suites on latest main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REF: ${{ steps.target.outputs.ref }}
+        run: |
+          set -uo pipefail
+          failed=""
+          for wf in \
+            fhd-release-gate-ci.yml \
+            fhd-mutation-smoke.yml \
+            codeql.yml \
+            fhd-security-full-scan.yml \
+            fhd-alembic-ssot.yml \
+            desktop-macos-smoke.yml \
+            fhd-ci-mobile-flutter.yml \
+          ; do
+            echo "==> dispatch ${wf} @ ${REF}"
+            if ! gh workflow run "${wf}" --ref "${REF}"; then
+              failed="${failed} ${wf}"
+            fi
+          done
+          if [ -n "${failed}" ]; then
+            echo "::error::Nightly 派发失败:${failed}"
+            exit 1
+          fi
+          echo "✅ Nightly 已派发 ${REF}：各套件结果见对应 workflow 运行。"
