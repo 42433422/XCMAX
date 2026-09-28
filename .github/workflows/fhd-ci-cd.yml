@@ -11,6 +11,10 @@ on:
       - "FHD/v*"
   pull_request:
     branches: [ main, develop, master ]
+  schedule:
+    # Nightly 全量（每日 16:00 UTC = 北京 00:00）：PR 上被目标化跳过的重活在此全跑。
+    # 镜像构建/推送（docker-build-fhd-api）已显式排除 schedule，避免夜间误推制品。
+    - cron: "0 16 * * *"
   workflow_dispatch:
     inputs:
       release_channel:
@@ -140,6 +144,30 @@ jobs:
           printf '%s\n' "${ADDED_FILES}" | python3 scripts/ci/guard_temp_scripts.py --added-from-stdin
           echo "✅ Temporary script location guard passed."
 
+  # 统一 changed-path 分类（macOS/Windows 专项检查按需触发；SSOT: scripts/dev/change_classifier.py）
+  classify:
+    runs-on: ubuntu-latest
+    outputs:
+      macos: ${{ steps.c.outputs.run }}
+      windows: ${{ steps.w.outputs.run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha || github.sha }}
+          fetch-depth: 0
+      - name: Classify changed paths (macOS)
+        id: c
+        run: |
+          python ../scripts/dev/change_classifier.py --category macos \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --head "${{ github.event.pull_request.head.sha }}"
+      - name: Classify changed paths (Windows)
+        id: w
+        run: |
+          python ../scripts/dev/change_classifier.py --category windows \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --head "${{ github.event.pull_request.head.sha }}"
+
   # Backend Tests & Quality
   backend-test:
     needs: guard-temp-scripts
@@ -159,20 +187,37 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Classify changed paths (unified classifier)
+        id: paths
+        if: github.event_name == 'pull_request'
+        run: |
+          # 统一分类器（scripts/dev/change_classifier.py）——禁止此处再写死路径正则。
+          python ../scripts/dev/change_classifier.py --category backend \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --head "${{ github.event.pull_request.head.sha }}"
+
+      - name: Skip notice (no backend-relevant changes)
+        if: steps.paths.outputs.skip == 'true'
+        run: echo "No backend-relevant path changes; backend-test satisfied without running the suite."
 
       - name: Set up Python ${{ env.PYTHON_VERSION }}
+        if: steps.paths.outputs.skip != 'true'
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
 
       - name: Install dependencies
+        if: steps.paths.outputs.skip != 'true'
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-server-api.txt
           pip install -r deploy/requirements-dev.txt
 
       - name: Set up the real private Mod frontend compiler
+        if: steps.paths.outputs.skip != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -180,48 +225,60 @@ jobs:
           cache-dependency-path: FHD/frontend/package-lock.json
 
       - name: Install runtime Mod compiler dependencies
+        if: steps.paths.outputs.skip != 'true'
         working-directory: FHD/frontend
         run: npm ci --no-audit --no-fund
 
       - name: Verify requirements lock is in sync
+        if: steps.paths.outputs.skip != 'true'
         run: |
           python scripts/dev/check_requirements_lock.py
 
       - name: Validate coverage SSOT metadata
+        if: steps.paths.outputs.skip != 'true'
         run: python scripts/ci/check_coverage_ssot.py
 
       - name: Run Ruff lint
+        if: steps.paths.outputs.skip != 'true'
         run: ruff check app/ tests/
 
       - name: Run Ruff format check
+        if: steps.paths.outputs.skip != 'true'
         run: ruff format --check app/ tests/
 
       - name: Run mypy type checking
+        if: steps.paths.outputs.skip != 'true'
         run: mypy app/ --no-error-summary
 
       - name: Type/SQL debt ratchet
+        if: steps.paths.outputs.skip != 'true'
         run: |
           python scripts/dev/count_type_debt.py --max-type-ignore 69 --max-ts-nocheck 0 --max-any 99999
           python scripts/dev/count_raw_sql.py
 
       - name: "[观察期] Schema drift check（模型 vs 迁移链）"
+        if: steps.paths.outputs.skip != 'true'
         continue-on-error: true
         run: python scripts/dev/check_schema_drift.py
 
       - name: Big files ratchet (巨文件只减不增)
+        if: steps.paths.outputs.skip != 'true'
         run: python scripts/dev/count_big_files.py
 
       - name: Route integrity tests
+        if: steps.paths.outputs.skip != 'true'
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
         run: python -m pytest tests/test_routes/test_route_registry.py tests/test_routes/test_registry_unit.py tests/test_routes/test_route_golden.py -x -q
 
       - name: Intent benchmark ratchet (golden set 只升不降)
+        if: steps.paths.outputs.skip != 'true'
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
         run: python scripts/dev/intent_benchmark.py --check
 
       - name: Run tests with coverage
+        if: steps.paths.outputs.skip != 'true'
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
           INTENT_BENCHMARK_RUN: "1"
@@ -237,19 +294,22 @@ jobs:
             --cov-report=html --cov-report=term-missing
 
       - name: Coverage floor guard (下调必须有 ADR)
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && steps.paths.outputs.skip != 'true'
         run: |
           # PR checkout 是 merge commit，工作区==HEAD，必须对比目标分支才能识别下调。
           git fetch --depth=1 origin "${{ github.base_ref }}"
           python scripts/dev/guard_coverage_floor.py --base FETCH_HEAD
 
       - name: coverage_ramp stub quota (只减不增)
+        if: steps.paths.outputs.skip != 'true'
         run: python scripts/dev/count_coverage_ramp_stubs.py --check
 
       - name: test-bloat gate (P1-2 测试膨胀门禁)
+        if: steps.paths.outputs.skip != 'true'
         run: python scripts/dev/test_bloat_report.py --check
 
       - name: Coverage ratchet check (行/分支只升不降)
+        if: steps.paths.outputs.skip != 'true'
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
         run: python scripts/dev/coverage_ratchet.py --check --require-backend --record
@@ -260,6 +320,7 @@ jobs:
       # (Settings → Secrets and variables → Actions). Without token this step is
       # best-effort (continue-on-error); coverage.xml + htmlcov/ remain local SSOT.
       - name: Upload coverage report
+        if: steps.paths.outputs.skip != 'true'
         continue-on-error: true
         uses: codecov/codecov-action@v4
         with:
@@ -272,6 +333,7 @@ jobs:
       # 行为覆盖率诚实化（Delta A）：排除 coverage_ramp 注水 stub 后的真实行为口径。
       # 这是后端覆盖率门禁的唯一硬 gate（--behavior --require-backend），回退即阻断。
       - name: Behavior coverage gate (排除 coverage_ramp stub，硬门禁)
+        if: steps.paths.outputs.skip != 'true'
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
         run: |
@@ -287,8 +349,23 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Classify changed paths (unified classifier)
+        id: paths
+        if: github.event_name == 'pull_request'
+        run: |
+          # 统一分类器（scripts/dev/change_classifier.py）——禁止此处再写死路径正则。
+          python ../scripts/dev/change_classifier.py --category frontend \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --head "${{ github.event.pull_request.head.sha }}"
+
+      - name: Skip notice (no frontend-relevant changes)
+        if: steps.paths.outputs.skip == 'true'
+        run: echo "No frontend-relevant path changes; frontend-test satisfied without running the suite."
 
       - name: Set up Node.js
+        if: steps.paths.outputs.skip != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -296,32 +373,39 @@ jobs:
           cache-dependency-path: FHD/frontend/package-lock.json
 
       - name: Install dependencies
+        if: steps.paths.outputs.skip != 'true'
         working-directory: FHD/frontend
         run: npm ci
 
       - name: Run ESLint
+        if: steps.paths.outputs.skip != 'true'
         working-directory: FHD/frontend
         run: npm run lint
 
       - name: Run unit tests
+        if: steps.paths.outputs.skip != 'true'
         working-directory: FHD/frontend
         run: npm run test
 
       - name: Run unit tests with coverage
+        if: steps.paths.outputs.skip != 'true'
         working-directory: FHD/frontend
         run: npm run test:coverage
 
       # 前端覆盖率诚实化（Delta B）：以 coverage_ratchet.py 为硬门禁，回退即阻断。
       - name: Frontend coverage ratchet gate
+        if: steps.paths.outputs.skip != 'true'
         working-directory: FHD/frontend
         run: python ../scripts/dev/coverage_ratchet.py --check --require-frontend
 
       # 前端显式 any 棘轮门禁（D2-4）：超过基线即阻断，只降方向收口。
       # count_ts_any.py 在根仓 scripts/dev/（FHD/scripts/dev 无此脚本），需 ../ 前缀。
       - name: Frontend ts-any ratchet gate
+        if: steps.paths.outputs.skip != 'true'
         run: python ../scripts/dev/count_ts_any.py --check
 
       - name: Run vue-tsc
+        if: steps.paths.outputs.skip != 'true'
         working-directory: FHD/frontend
         run: |
           set +e
@@ -331,6 +415,7 @@ jobs:
           fi
 
       - name: Upload frontend coverage
+        if: steps.paths.outputs.skip != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: frontend-coverage
@@ -593,6 +678,8 @@ jobs:
   # FHD API 生产镜像（xcagi-fhd-api → GHCR；manifest v2 含 image_digest）
   docker-build-fhd-api:
     needs: [backend-test, frontend-test, frontend-e2e, security-scan, container-scan, pack-verify, arch-fitness]
+    # Nightly（schedule）只做全量测试，不构建/推送生产镜像。
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     # image_tag = the exact tag metadata-action produced (rely on outputs.version, not a
     # hand-rolled short sha — see docker/metadata-action#479).
@@ -943,7 +1030,9 @@ jobs:
 
   desktop-build-smoke:
     name: desktop-build-smoke
-    needs: [frontend-test]
+    needs: [frontend-test, classify]
+    # 仅 desktop/runtime/updater/打包/签名相关改动才跑（日常前端/后端改动不触发）。
+    if: needs.classify.outputs.macos != 'false'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -962,7 +1051,9 @@ jobs:
 
   desktop-test:
     name: desktop-test
-    needs: [frontend-test]
+    needs: [frontend-test, classify]
+    # 仅 desktop/runtime/updater/打包/签名相关改动才跑（日常前端/后端改动不触发）。
+    if: needs.classify.outputs.macos != 'false'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -982,7 +1073,9 @@ jobs:
 
   desktop-windows-release-script-smoke:
     name: desktop-windows-release-script-smoke
-    needs: [guard-temp-scripts]
+    needs: [guard-temp-scripts, classify]
+    # 仅 Windows 打包/发布脚本（.ps1、windows/win32、Authenticode）相关改动才跑。
+    if: needs.classify.outputs.windows != 'false'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
