@@ -11,6 +11,10 @@ on:
       - "FHD/v*"
   pull_request:
     branches: [ main, develop, master ]
+  schedule:
+    # Nightly 全量（每日 16:00 UTC = 北京 00:00）：PR 上被目标化跳过的重活在此全跑。
+    # 镜像构建/推送（docker-build-fhd-api）已显式排除 schedule，避免夜间误推制品。
+    - cron: "0 16 * * *"
   workflow_dispatch:
     inputs:
       release_channel:
@@ -161,21 +165,14 @@ jobs:
           ref: ${{ inputs.release_sha || github.sha }}
           fetch-depth: 0
 
-      - name: Detect backend-relevant changes (targeted gate)
+      - name: Classify changed paths (unified classifier)
         id: paths
         if: github.event_name == 'pull_request'
         run: |
-          # required 目标化：仅当存在「可能影响后端」的改动时才跑重活；
-          # 纯文档/前端/官网/移动端改动快速成功，满足 required check（同 mutation-smoke 范式）。
-          # 采用 fail-open：只要出现无法归入下列无关目录的改动，就照常跑全量后端测试。
-          base="${{ github.event.pull_request.base.sha }}"
-          head="${{ github.event.pull_request.head.sha }}"
-          changed="$(git diff --name-only "$base" "$head" 2>/dev/null || true)"
-          if [ -n "$changed" ] && ! printf '%s\n' "$changed" | grep -qvE '^(docs/|FHD/docs/|.*\.md$|FHD/frontend/|FHD/admin-console/|成都修茈科技有限公司/|FHD/mobile-flutter-poc/)'; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
+          # 统一分类器（scripts/dev/change_classifier.py）——禁止此处再写死路径正则。
+          python ../scripts/dev/change_classifier.py --category backend \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --head "${{ github.event.pull_request.head.sha }}"
 
       - name: Skip notice (no backend-relevant changes)
         if: steps.paths.outputs.skip == 'true'
@@ -330,21 +327,14 @@ jobs:
           ref: ${{ inputs.release_sha || github.sha }}
           fetch-depth: 0
 
-      - name: Detect frontend-relevant changes (targeted gate)
+      - name: Classify changed paths (unified classifier)
         id: paths
         if: github.event_name == 'pull_request'
         run: |
-          # required 目标化：仅当存在「可能影响前端」的改动时才跑前端测试；
-          # 纯文档/后端/官网/移动端改动快速成功，满足 required check（同 mutation-smoke 范式）。
-          # 采用 fail-open：出现无法归入下列无关目录的改动（如 FHD/mods、FHD/desktop、根 scripts、.github）即照常跑全量。
-          base="${{ github.event.pull_request.base.sha }}"
-          head="${{ github.event.pull_request.head.sha }}"
-          changed="$(git diff --name-only "$base" "$head" 2>/dev/null || true)"
-          if [ -n "$changed" ] && ! printf '%s\n' "$changed" | grep -qvE '^(docs/|FHD/docs/|.*\.md$|FHD/app/|FHD/tests/|FHD/alembic/|FHD/config/|成都修茈科技有限公司/|FHD/mobile-flutter-poc/)'; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
+          # 统一分类器（scripts/dev/change_classifier.py）——禁止此处再写死路径正则。
+          python ../scripts/dev/change_classifier.py --category frontend \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --head "${{ github.event.pull_request.head.sha }}"
 
       - name: Skip notice (no frontend-relevant changes)
         if: steps.paths.outputs.skip == 'true'
@@ -664,6 +654,8 @@ jobs:
   # FHD API 生产镜像（xcagi-fhd-api → GHCR；manifest v2 含 image_digest）
   docker-build-fhd-api:
     needs: [backend-test, frontend-test, frontend-e2e, security-scan, container-scan, pack-verify, arch-fitness]
+    # Nightly（schedule）只做全量测试，不构建/推送生产镜像。
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     # image_tag = the exact tag metadata-action produced (rely on outputs.version, not a
     # hand-rolled short sha — see docker/metadata-action#479).
