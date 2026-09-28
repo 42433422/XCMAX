@@ -30,6 +30,15 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
+
+def _items_without_product(items: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """明细 product_id 为非空外键：缺失时返回业务错误，而不是在 flush 时抛完整性异常。"""
+    missing = [str(i) for i, item in enumerate(items, 1) if not (item or {}).get("product_id")]
+    if missing:
+        return {"success": False, "message": f"第 {'、'.join(missing)} 行明细未选择产品"}
+    return None
+
+
 class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
     """采购管理服务类"""
 
@@ -97,6 +106,8 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
             return {"success": True, "data": order_dict}
 
     def create_purchase_order(self, data: dict[str, Any]) -> dict[str, Any]:
+        if invalid := _items_without_product(data.get("items") or []):
+            return invalid
         with get_db() as db:
             try:
                 order_no = data.get("order_no") or self._generate_order_no()
@@ -172,6 +183,8 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                 return {"success": False, "message": str(e)}
 
     def update_purchase_order(self, order_id: int, data: dict[str, Any]) -> dict[str, Any]:
+        if invalid := _items_without_product(data.get("items") or []):
+            return invalid
         with get_db() as db:
             try:
                 order = db.query(PurchaseOrder).filter(PurchaseOrder.id == order_id).first()
@@ -285,6 +298,8 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                 return {"success": False, "message": str(e)}
 
     def create_purchase_inbound(self, data: dict[str, Any]) -> dict[str, Any]:
+        if invalid := _items_without_product(data.get("items") or []):
+            return invalid
         with get_db() as db:
             try:
                 inbound_no = data.get("inbound_no") or self._generate_inbound_no()

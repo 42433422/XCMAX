@@ -143,7 +143,7 @@ def build_deliverable_status(
     elif edition == "generic" and not generic_ready:
         from app.mod_sdk.host_foundation import host_foundation_employee_present
 
-        msg = "general?? Mod ????,?????????? bootstrap-edition-pack"
+        msg = "通用版基础 Mod 未就绪，请点击一键安装或运行 bootstrap-edition-pack"
         if host_foundation_employee_present():
             msg = (
                 "Installed host baseline employee pack; "

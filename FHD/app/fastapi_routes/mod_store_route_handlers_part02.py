@@ -107,8 +107,28 @@ async def mod_store_update(
 
 
 @_facade().router.get("/validate", response_model=_facade().ModStoreSimpleResponse)
-async def mod_store_validate() -> _facade().ModStoreSimpleResponse:
-    return _facade().ModStoreSimpleResponse(success=False, message="未实现", data=None)
+async def mod_store_validate(mod_id: str = "") -> _facade().ModStoreSimpleResponse:
+    from app.infrastructure.mods.manifest import parse_manifest, validate_dependencies
+    from app.infrastructure.mods.mod_manager import get_mod_manager
+
+    manager = get_mod_manager()
+    loaded = manager.get_mod(mod_id.strip()) if mod_id.strip() else None
+    metadata = parse_manifest(loaded.mod_path) if loaded else None
+    if metadata is None:
+        return _facade().ModStoreSimpleResponse(
+            success=False, message="未找到该 Mod 或 manifest.json 无法解析", data={"mod_id": mod_id}
+        )
+    satisfied = validate_dependencies(metadata, [m.id for m in manager.list_loaded_mods()])
+    return _facade().ModStoreSimpleResponse(
+        success=satisfied,
+        message="清单校验通过" if satisfied else "依赖未满足",
+        data={
+            "mod_id": metadata.id,
+            "version": metadata.version,
+            "dependencies": metadata.dependencies,
+            "dependencies_satisfied": satisfied,
+        },
+    )
 
 
 @_facade().router.get("/updates", response_model=_facade().ModStoreUpdatesResponse)

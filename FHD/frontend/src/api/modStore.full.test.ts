@@ -124,14 +124,6 @@ describe('modStore api full surface', () => {
     await expect(modStore.rateMod('m1', 5)).rejects.toThrow('rate fail')
   })
 
-  it('validateModPackage returns raw data', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ success: true, message: 'ok', data: 1 }),
-    } as Response)
-    expect((await modStore.validateModPackage('f')).success).toBe(true)
-  })
-
   it('checkUpdates / resolveDependencies success and failure', async () => {
     mockFetch.mockResolvedValueOnce(okJson({ updates_available: [], count: 0 }))
     expect((await modStore.checkUpdates()).count).toBe(0)

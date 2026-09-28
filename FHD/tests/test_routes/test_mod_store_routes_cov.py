@@ -1331,11 +1331,34 @@ class TestUpdateRoute:
 
 
 class TestSimpleGetRoutes:
-    def test_validate_returns_not_implemented(self):
+    def test_validate_unknown_mod_is_rejected(self):
         with _make_client() as client:
             resp = client.get("/validate")
         assert resp.status_code == 200
         assert resp.json()["success"] is False
+
+    def test_validate_loaded_mod_checks_manifest_and_dependencies(self, tmp_path):
+        import json as _json
+
+        (tmp_path / "manifest.json").write_text(
+            _json.dumps({"id": "demo", "name": "Demo", "version": "1.2.0", "dependencies": {"base": ">=1.0"}}),
+            encoding="utf-8",
+        )
+        manager = MagicMock()
+        manager.get_mod.return_value = types.SimpleNamespace(id="demo", mod_path=str(tmp_path))
+        manager.list_loaded_mods.return_value = [types.SimpleNamespace(id="demo")]
+        with patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=manager):
+            with _make_client() as client:
+                missing = client.get("/validate", params={"mod_id": "demo"}).json()
+            manager.list_loaded_mods.return_value.append(types.SimpleNamespace(id="base"))
+            with _make_client() as client:
+                ok = client.get("/validate", params={"mod_id": "demo"}).json()
+        assert missing["success"] is False and missing["data"]["dependencies_satisfied"] is False
+        assert ok == {
+            "success": True,
+            "message": "清单校验通过",
+            "data": {"mod_id": "demo", "version": "1.2.0", "dependencies": {"base": ">=1.0"}, "dependencies_satisfied": True},
+        }
 
     def test_updates_returns_empty_list_only_after_all_sources_checked(self, update_catalog):
         rows, headers = update_catalog

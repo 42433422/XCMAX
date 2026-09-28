@@ -281,19 +281,6 @@ export async function updateMod(modId: string, packageFile: string): Promise<Ins
 }
 
 /**
- * 验证 MOD 包
- */
-export async function validateModPackage(packageFile: string): Promise<{
-  success: boolean
-  message: string
-  data: unknown
-}> {
-  const response = await apiFetch(`/api/mod-store/validate?package_file=${encodeURIComponent(packageFile)}`)
-  const data = await response.json()
-  return data
-}
-
-/**
  * 检查可用更新
  */
 export async function checkUpdates(): Promise<{

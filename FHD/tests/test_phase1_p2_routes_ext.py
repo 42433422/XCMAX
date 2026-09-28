@@ -140,12 +140,26 @@ def misc_client() -> TestClient:
     return TestClient(app, raise_server_exceptions=False)
 
 
-def test_preferences_get_post(misc_client: TestClient) -> None:
+def test_preferences_require_session_and_ignore_client_user_id(misc_client: TestClient) -> None:
     r = misc_client.get("/preferences", params={"user_id": "u2"})
-    assert r.status_code == 200
-    assert r.json()["data"]["user_id"] == "u2"
-    r2 = misc_client.post("/preferences", json={"theme": "dark"})
-    assert r2.status_code == 200
+    assert r.json() == {"success": True, "preferences": {}, "data": {"user_id": None, "preferences": {}}}
+    assert misc_client.post("/preferences", json={"key": "theme", "value": "dark"}).status_code == 401
+
+
+def test_preferences_persist_per_workspace_owner(misc_client: TestClient) -> None:
+    store: dict[str, dict[str, str]] = {}
+    svc = MagicMock()
+    svc.get_all_preferences.side_effect = lambda owner: dict(store.get(owner, {}))
+    svc.set_preference.side_effect = lambda owner, k, v: store.setdefault(owner, {}).__setitem__(k, v) or True
+    with (
+        patch("app.fastapi_routes.domains.misc.routes._preferences_owner", return_value="tenant:7"),
+        patch("app.services.user_preference_service.get_user_preference_service", return_value=svc),
+    ):
+        assert misc_client.post("/preferences", json={"key": "aiMode", "value": "offline"}).status_code == 200
+        assert misc_client.post("/preferences", json={"key": "pack", "value": {"a": 1}}).status_code == 200
+        body = misc_client.get("/preferences", params={"user_id": "default"}).json()
+    assert body["preferences"] == {"aiMode": "offline", "pack": '{"a": 1}'}
+    assert body["data"]["user_id"] == "tenant:7"
 
 
 def test_distillation_and_intent_packages(misc_client: TestClient) -> None:

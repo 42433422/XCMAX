@@ -8,6 +8,7 @@ import type { Product } from '@/types/product'
 import { downloadBlob } from '@/utils'
 import { appAlert } from '@/utils/appDialog'
 import { pushErpPage } from '@/utils/erpPagePaths'
+import { resolveErpApiPath } from '@/utils/erpDomainPaths'
 
 // AI 填单事件（xcagi:ai-fill-order / window.__VUE_FILL_ORDER__）载荷
 interface AIProductPayload {
@@ -213,7 +214,7 @@ export function useCreateOrder() {
 
   async function loadPurchaseUnits() {
     try {
-      const data = await api.get<{ success: boolean; data: PurchaseUnit[] }>('/api/purchase_units')
+      const data = await api.get<{ success: boolean; data: PurchaseUnit[] }>(resolveErpApiPath('/api/purchase_units'))
       if (data.success) {
         purchaseUnits.value = data.data
       }
@@ -243,7 +244,7 @@ export function useCreateOrder() {
 
   async function generateOrderNumber() {
     try {
-      const data = await api.get<{ success: boolean; data: { order_number: string } }>('/api/orders/next_number', { suffix: 'A' })
+      const data = await api.get<{ success: boolean; data: { order_number: string } }>(resolveErpApiPath('/api/orders/next_number'), { suffix: 'A' })
       if (data.success) {
         form.orderNumber = data.data.order_number
       }

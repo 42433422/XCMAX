@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.application import approval_workspace_app_service as svc
+from app.fastapi_routes.domains.shipment import routes as tool_rules
 
 router = APIRouter(prefix="/api/approval", tags=["approval"])
 
@@ -25,3 +26,8 @@ router.add_api_route("/flows", svc.create_flow, methods=["POST"])
 router.add_api_route("/flows/{flow_id}", svc.update_flow, methods=["PUT"])
 router.add_api_route("/flows/{flow_id}/active", svc.toggle_flow_active, methods=["PATCH"])
 router.add_api_route("/flows/{flow_id}", svc.delete_flow, methods=["DELETE"])
+router.add_api_route("/tool-rules", tool_rules.ai_config_approval_get, methods=["GET"])
+router.add_api_route("/tool-rules", tool_rules.ai_config_approval_post, methods=["POST"])
+router.add_api_route("/tool-rules/pending", tool_rules.ai_approval_pending, methods=["GET"])
+router.add_api_route("/tool-rules/approve", tool_rules.ai_approval_approve, methods=["POST"])
+router.add_api_route("/tool-rules/reject", tool_rules.ai_approval_reject, methods=["POST"])
