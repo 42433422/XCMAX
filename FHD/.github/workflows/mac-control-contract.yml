@@ -4,10 +4,28 @@ on:
     branches: [main]
   push:
     branches: [main]
+  schedule:
+    # Nightly 全量（每日 16:30 UTC = 北京 00:30）；日常 PR 仅在 runtime 相关改动时跑。
+    - cron: "30 16 * * *"
 permissions:
   contents: read
 jobs:
+  classify:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.c.outputs.run }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Classify changed paths (unified classifier)
+        id: c
+        # 非 PR（push/schedule）时 base/head 为空 → 分类器 fail-open 返回 run=true。
+        run: |
+          python ../scripts/dev/change_classifier.py --category runtime_contract \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --head "${{ github.event.pull_request.head.sha }}"
   runtime-contract:
+    needs: classify
+    if: needs.classify.outputs.run != 'false'
     strategy:
       matrix:
         os: [ubuntu-latest, windows-2022]

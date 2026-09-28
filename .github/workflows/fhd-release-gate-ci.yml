@@ -26,20 +26,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Detect release-relevant changes (targeted gate)
+      - name: Classify changed paths (unified classifier)
         id: paths
         if: github.event_name == 'pull_request'
         run: |
-          # required 目标化：仅当存在「发布契约相关」（后端/测试/发布脚本）改动时才跑契约测试；
-          # 纯文档/前端/官网/移动端改动快速成功，满足 required check（同 mutation-smoke 范式）。
-          base="${{ github.event.pull_request.base.sha }}"
-          head="${{ github.event.pull_request.head.sha }}"
-          changed="$(git diff --name-only "$base" "$head" 2>/dev/null || true)"
-          if [ -n "$changed" ] && ! printf '%s\n' "$changed" | grep -qvE '^(docs/|FHD/docs/|.*\.md$|FHD/frontend/|FHD/admin-console/|成都修茈科技有限公司/|FHD/mobile-flutter-poc/)'; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
+          # 统一分类器（scripts/dev/change_classifier.py）——禁止此处再写死路径正则。
+          python ../scripts/dev/change_classifier.py --category release \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --head "${{ github.event.pull_request.head.sha }}"
 
       - name: Skip notice (no release-relevant changes)
         if: steps.paths.outputs.skip == 'true'
