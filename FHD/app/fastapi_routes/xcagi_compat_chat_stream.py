@@ -31,18 +31,13 @@ def _client_issue_reply(receipt: dict | None) -> str:
     }.get(str(receipt.get("state") or ""), "")
 
 
-def _classify_and_submit_client_issue(
+async def _classify_and_submit_client_issue_async(
     request, runtime_context, message, reply, client=None, *, guide_unavailable: bool = True
 ):
-    """把客户缺陷上报转成工单；不得让缺陷被无关业务分发静默吃掉。
+    """客户缺陷上报 → 工单受理（async 版，供 async 生成器直接 await）。
 
-    只有「明确判定为使用咨询」才回落正常对话：缺陷上报一旦命中而与受理无关地
-    走业务/员工分发，客户就再次拿不到工单编号——那正是本工单要修的原问题。
-    分类不可用（无 LLM 凭据 / 调用失败 / 结果不确定）时应引导客户补齐
-    「期望/实际」走确定性建单路径，而不是静默按业务查询回答。
-
-    ``guide_unavailable``：仅在「对话此前尚未给出回答」的主拦截点开启（默认）。
-    规划器已经产出答案后的二次判定关闭它，避免给正常使用咨询的回答追加交通噪声。
+    与同步变体共用同一套判定与回执文案：只有明确判为使用咨询才回落正常对话；
+    分类不可用/异常一律引导客户补齐「期望/实际」走确定性建单路径。
     """
     from app.application import client_product_issue_intake as intake
 
@@ -59,7 +54,7 @@ def _classify_and_submit_client_issue(
             _facade().logger.warning("client issue classifier unavailable", exc_info=True)
             return _unavailable()
     try:
-        triage = intake.classify_report(client, message, reply)
+        triage = await asyncio.to_thread(intake.classify_report, client, message, reply)
     except _facade().BOUNDARY_ERRORS:
         # 分类器是外部 LLM 边界：任何意外异常都必须退化成「引导补齐证据」，
         # 既不能让缺陷被静默吃掉，也不能把对话打成 500。
@@ -72,17 +67,31 @@ def _classify_and_submit_client_issue(
     if str(triage.get("type") or "") != "product_defect":
         return _unavailable()
     try:
-        return asyncio.run(
-            intake.submit_product_issue(
-                request=request,
-                tenant_id=runtime_context.get("tenant_id"),
-                customer_message=message,
-                triage=triage,
-            )
+        return await intake.submit_product_issue(
+            request=request,
+            tenant_id=runtime_context.get("tenant_id"),
+            customer_message=message,
+            triage=triage,
         )
     except _facade().RECOVERABLE_ERRORS:
         _facade().logger.warning("client product issue intake failed", exc_info=True)
         return {"state": "OWNER_ROUTE_UNAVAILABLE"}
+
+
+def _classify_and_submit_client_issue(
+    request, runtime_context, message, reply, client=None, *, guide_unavailable: bool = True
+):
+    """同步变体：供同步生成器（运行在后台线程）调用。实现见 async 版。"""
+    return asyncio.run(
+        _classify_and_submit_client_issue_async(
+            request,
+            runtime_context,
+            message,
+            reply,
+            client,
+            guide_unavailable=guide_unavailable,
+        )
+    )
 
 
 def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, ai_tier: str):
