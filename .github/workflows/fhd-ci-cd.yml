@@ -144,12 +144,13 @@ jobs:
           printf '%s\n' "${ADDED_FILES}" | python3 scripts/ci/guard_temp_scripts.py --added-from-stdin
           echo "✅ Temporary script location guard passed."
 
-  # 统一 changed-path 分类（macOS/Windows 专项检查按需触发；SSOT: scripts/dev/change_classifier.py）
+  # 统一 changed-path 分类（macOS/Windows/release 专项检查按需触发；SSOT: scripts/dev/change_classifier.py）
   classify:
     runs-on: ubuntu-latest
     outputs:
       macos: ${{ steps.c.outputs.run }}
       windows: ${{ steps.w.outputs.run }}
+      release: ${{ steps.r.outputs.run }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -165,6 +166,12 @@ jobs:
         id: w
         run: |
           python ../scripts/dev/change_classifier.py --category windows \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --head "${{ github.event.pull_request.head.sha }}"
+      - name: Classify changed paths (release)
+        id: r
+        run: |
+          python ../scripts/dev/change_classifier.py --category release \
             --base "${{ github.event.pull_request.base.sha }}" \
             --head "${{ github.event.pull_request.head.sha }}"
 
@@ -677,9 +684,11 @@ jobs:
 
   # FHD API 生产镜像（xcagi-fhd-api → GHCR；manifest v2 含 image_digest）
   docker-build-fhd-api:
-    needs: [backend-test, frontend-test, frontend-e2e, security-scan, container-scan, pack-verify, arch-fitness]
+    needs: [backend-test, frontend-test, frontend-e2e, security-scan, container-scan, pack-verify, arch-fitness, classify]
     # Nightly（schedule）只做全量测试，不构建/推送生产镜像。
-    if: github.event_name != 'schedule'
+    # 改动全落在 release 无关目录（docs-only / frontend-only）时不构建镜像；
+    # 非 PR（push/schedule）取不到 diff → classify fail-open 输出 true → 照常构建。
+    if: github.event_name != 'schedule' && needs.classify.outputs.release != 'false'
     runs-on: ubuntu-latest
     # image_tag = the exact tag metadata-action produced (rely on outputs.version, not a
     # hand-rolled short sha — see docker/metadata-action#479).
@@ -983,7 +992,10 @@ jobs:
 
   release-verify:
     name: release-verify
-    needs: [backend-test, frontend-test, frontend-e2e, pack-verify, arch-fitness]
+    needs: [backend-test, frontend-test, frontend-e2e, pack-verify, arch-fitness, classify]
+    # 改动全落在 release 无关目录（docs-only / frontend-only）时不跑发布契约校验；
+    # 非 PR（push/schedule）取不到 diff → classify fail-open 输出 true → 照常全量。
+    if: needs.classify.outputs.release != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
