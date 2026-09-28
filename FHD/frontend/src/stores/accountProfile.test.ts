@@ -107,38 +107,26 @@ describe('useAccountProfileStore', () => {
     expect(store.loaded).toBe(true)
   })
 
-  it('applyFromLoginPayload extracts data from nested data field', () => {
+  it.each<[string, Record<string, unknown>, string, string]>([
+    ['nested data field', { data: { account_kind: 'admin', company_brand: 'AdminCo' } }, 'admin', 'AdminCo'],
+    ['raw payload', { account_kind: 'enterprise', company_brand: 'DirectCo' }, 'enterprise', 'DirectCo'],
+  ])('applyFromLoginPayload reads %s and keeps the known account scope', (_label, payload, kind, brand) => {
     const store = useAccountProfileStore()
-    store.applyFromLoginPayload({
-      data: {
-        account_kind: 'admin',
-        company_brand: 'AdminCo',
-        market_is_admin: true,
-        market_is_enterprise: true,
-        tenant_id: 1,
-        tenant_name: 'AdminTenant',
-        market_user_id: 2,
-        local_user_id: 3,
-      },
-    })
-    expect(store.accountKind).toBe('admin')
-    expect(store.companyBrand).toBe('AdminCo')
+    store.applyFromMeData({ tenant_id: 10, permissions: ['tenant.manage_roles'], tenant_name: 'T10' })
+    store.applyFromLoginPayload(payload)
+    expect(store.accountKind).toBe(kind)
+    expect(store.companyBrand).toBe(brand)
+    // 登录响应不含 tenant/权限键：缺失键必须保留已知状态，否则设置页的权限入口会被清掉
+    expect(store.tenantId).toBe(10)
+    expect(store.permissions).toEqual(['tenant.manage_roles'])
   })
 
-  it('applyFromLoginPayload uses raw when data is not object', () => {
+  it('applyFromMeData clears the account scope when the payload says so explicitly', () => {
     const store = useAccountProfileStore()
-    store.applyFromLoginPayload({
-      account_kind: 'enterprise',
-      company_brand: 'DirectCo',
-      market_is_admin: false,
-      market_is_enterprise: true,
-      tenant_id: 5,
-      tenant_name: 'DirectTenant',
-      market_user_id: 6,
-      local_user_id: 7,
-    })
-    expect(store.accountKind).toBe('enterprise')
-    expect(store.companyBrand).toBe('DirectCo')
+    store.applyFromMeData({ tenant_id: 10, permissions: ['tenant.manage_roles'] })
+    store.applyFromMeData({ tenant_id: null, permissions: [] })
+    expect(store.tenantId).toBeNull()
+    expect(store.permissions).toEqual([])
   })
 
   it('applyFromMeData reads local_user_id from nested user object', () => {

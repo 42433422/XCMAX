@@ -79,8 +79,12 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     companyBrand.value = String(data.company_brand || '').trim()
     marketIsAdmin.value = Boolean(data.market_is_admin)
     marketIsEnterprise.value = Boolean(data.market_is_enterprise)
-    const tid = data.tenant_id
-    tenantId.value = tid === null || tid === undefined || tid === '' ? null : Number(tid)
+    // 会话校验与登录等局部载荷不含租户/权限键；缺失键必须保留已知状态，否则会把设置页里
+    // 依赖权限的入口（如「角色与权限」）清掉（显式 null 仍然表示“无”）。
+    if ('tenant_id' in data) {
+      const tid = data.tenant_id
+      tenantId.value = tid === null || tid === undefined || tid === '' ? null : Number(tid)
+    }
     tenantName.value = String(data.tenant_name || data.company_brand || '').trim()
     const mid = data.market_user_id
     marketUserId.value = mid === null || mid === undefined || mid === '' ? null : Number(mid)
@@ -105,8 +109,8 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     entitledIndustries.value = Array.isArray(data.entitled_industries) ? (data.entitled_industries as unknown[]).map((x) => String(x)) : []
     const mmt = data.market_membership_tier
     marketMembershipTier.value = mmt === null || mmt === undefined || mmt === '' ? null : String(mmt).trim()
-    permissions.value = Array.isArray(data.permissions) ? (data.permissions as unknown[]).map(String) : []
-    tenantIsOwner.value = data.tenant_is_owner === true
+    if (Array.isArray(data.permissions)) permissions.value = (data.permissions as unknown[]).map(String)
+    if ('tenant_is_owner' in data) tenantIsOwner.value = data.tenant_is_owner === true
     const nestedUser = data.user
     userRole.value = nestedUser && typeof nestedUser === 'object' && !Array.isArray(nestedUser)
       ? String((nestedUser as Record<string, unknown>).role || '') : ''
