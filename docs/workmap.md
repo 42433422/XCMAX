@@ -4,7 +4,7 @@
 > 若你是潜在用户或合作方，请前往官网 <https://xiu-ci.com> 了解 XCAGI 产品与下载。
 > 历史 README 工程内容迁于此，以保持对外首页为纯产品叙事。
 
-**最后更新**：2026-07-18
+**最后更新**：2026-09-29
 
 > **版本控制**：**`XCMAX/` 根目录为 SSOT 单仓**（`git clone` 即得 FHD + MODstore + specs 全栈）。历史子仓 `.git` 备份于 `~/XCMAX-archives/nested-git-backup-20260608/`。远程：**[`42433422/XCMAX`](https://github.com/42433422/XCMAX)**。CI 入口见 [`docs/CI_SSOT.md`](CI_SSOT.md)。
 >
