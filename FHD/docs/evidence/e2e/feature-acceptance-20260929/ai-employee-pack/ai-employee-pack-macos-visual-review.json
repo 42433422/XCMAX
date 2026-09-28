@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ai-employee-pack",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "cbc9031c65a0413b31f9deac5a2bab558375d349405b6783ca52f9b2c72ade6d",
+  "visible_content": "办公员工包目录（10 个员工包）与宿主 employee-tools 接口同会话读回一致，界面工具页可见同一批工具卡片。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-employee-pack/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-employee-pack/macos/result.png"
+}

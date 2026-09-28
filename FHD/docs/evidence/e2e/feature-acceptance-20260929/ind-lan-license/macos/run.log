@@ -1,0 +1,6 @@
+2026-09-29T06:53:05+0800 [ind-lan-license] 开始验收 ind-lan-license 局域网授权桥接 Mod；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T06:53:05+0800 [ind-lan-license] M1 passed :: HTTP 200 13ms；{"success": true, "enabled": false, "ip": "127.0.0.1", "in_whitelist": true, "in_static_cidr": true, "in_dynamic_allowlist": false, "is_admin_host": true, "authorized": false, "is_admin": false, "expi
+2026-09-29T06:53:05+0800 [ind-lan-license] M2 passed :: HTTP 200 12ms；{"enabled": false, "secret_ready": false, "bootstrap_available": false, "has_active_key": false, "has_admin_key": false, "cidrs": ["127.0.0.1/32", "::1/128", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.
+2026-09-29T06:53:09+0800 [ind-lan-license] M3 passed :: 导航后路径 /mod/xcagi-lan-license-bridge/lan-gate；命中文本 ['局域网']；缺失 []；界面请求失败 []；页面摘录：FHD · 局域网授权 | 当前未启用局域网模式，无需授权。 | 进入系统 | 状态：未启用 | 本机 IP：127.0.0.1 | 主机管理员位
+2026-09-29T06:53:10+0800 [ind-lan-license] screenshot result.png
+2026-09-29T06:53:11+0800 [ind-lan-license] video operation.webm bytes=119618

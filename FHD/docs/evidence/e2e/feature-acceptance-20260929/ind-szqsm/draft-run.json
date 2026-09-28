@@ -1,0 +1,53 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "ind-szqsm",
+ "name": "奇士美专属 Mod",
+ "platform": "macos",
+ "status": "failed",
+ "verdict": "FAIL",
+ "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+ "app_version": "1.0.0.5",
+ "verified_at": "2026-09-29",
+ "passed": 1,
+ "failed": 1,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "界面路由 /sz-qsm-pro",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /sz-qsm-pro，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /sz-qsm-pro，页面可见 奇士美，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /sz-qsm-pro；命中文本 ['奇士美']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 奇士美 PRO | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 奇士美 PRO |  | Mod ID: sz-qsm-pro — 账号定制包：产品/客户侧栏、涂料 AI 助手与微信电话业",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "奇士美专属业务操作",
+   "actions": "尝试执行：奇士美专属业务操作",
+   "expected": "奇士美专属业务操作 成功",
+   "observed": "受阻：该 Mod 为奇士美客户受保护定制，需奇士美企业账号授权；SUNBIRD 账号无该权益",
+   "result": "failed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "ind-szqsm",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ind-szqsm/macos/result.png",
+   "sha256": "7fc0718d001ab8ec6574de07a6f74981b704d48e2afb4ef6ef59bce4d3a23c67",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "ind-szqsm",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ind-szqsm/macos/operation.webm",
+   "sha256": "5c202b51fecafff3654d6a7c09e7273ab10d1d3176ce4535a4ba9cecb0a38c24",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ind-szqsm/macos/run.log",
+  "sha256": "ec1bd5b234383193d6120c248e5edf7f15b6486441bc2c91db8a446998126727",
+  "bytes": 1083
+ },
+ "method": "经 CDP(127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

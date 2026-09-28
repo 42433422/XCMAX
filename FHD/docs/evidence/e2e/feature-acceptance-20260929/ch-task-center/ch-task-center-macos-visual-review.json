@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ch-task-center",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "63cf01c028c1ed437cf9651fb6cd1e22ea03d0ce5fe5941ee06c76e92d8efc14",
+  "visible_content": "任务列表与审批请求接口可读，审批工作台页正常渲染。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-task-center/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-task-center/macos/result.png"
+}

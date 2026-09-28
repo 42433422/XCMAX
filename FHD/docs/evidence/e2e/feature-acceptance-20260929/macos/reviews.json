@@ -1,0 +1,482 @@
+{
+ "ai-chat-core": {
+  "result": "智能对话页：两轮问答（「你好，请用一句话介绍你能帮我做什么」及其回复、「第二轮测试」续问与回复），右侧会话列表，底部输入框与「发送」。",
+  "operation": "录屏中在输入框键入带时间标签的问题并点击发送，AI 流式回复出现；随后发送续问，回复承接上一轮内容。",
+  "summary": "AI 服务自检通过；界面内两轮对话均收到回复，第二轮「刚才你说的第一项能力再展开一句」得到产品管理展开说明，上下文连续。"
+ },
+ "ai-csv": {
+  "result": "「工具表 · AI Planner 可调用的工具」卡片网格。",
+  "operation": "录屏为工具表页，各帧一致。",
+  "summary": "CSV 生成员工由文本生成 .csv，CSV 读取员工解析后写出 JSON，经界面读取接口读回含「太阳鸟」「包装盒」。"
+ },
+ "ai-employee-pack": {
+  "result": "「工具」页（办公员工包桥）：标题「AI Planner 可调用的工具」，卡片含 excel_analysis、import_excel_to_database、generate_office_document、update_order、delete_customer 等，左上角 饰品包装助手 / SUNBIRD。",
+  "operation": "录屏从智能对话页切到工具页，逐帧可见工具卡片网格加载完成。",
+  "summary": "办公员工包目录（10 个员工包）与宿主 employee-tools 接口同会话读回一致，界面工具页可见同一批工具卡片。"
+ },
+ "ai-employees-workflow": {
+  "result": "员工工作台 → 员工空间：企业工位 1、工位实况中「考勤 AI 助手」卡片、右侧员工与状态面板。",
+  "operation": "录屏为员工空间页，工位卡片与统计区在各帧稳定显示。",
+  "summary": "工作流员工目录与出货管理员工状态接口可读，员工空间页展示在岗工位。"
+ },
+ "ai-excel": {
+  "result": "「工具表 · AI Planner 可调用的工具」：excel_analysis、excel_schema_understand、excel_join_compare、import_excel_to_database、generate_office_document 等卡片。",
+  "operation": "录屏为工具表页，各帧一致。",
+  "summary": "同会话生成 xlsx（1 行）并按生成路径抽取表头读回，Excel 生成员工 ready，工具表页可见 Excel 工具。"
+ },
+ "ai-intent": {
+  "result": "「对话调试 / 聊天调试工作台」页：快速测试样例、模式（普通版/专业版）、测试输入框与「单模式模拟」「双模式对比」按钮、意图测试包区。",
+  "operation": "录屏为聊天调试工作台，样例按钮与测试区完整。",
+  "summary": "意图识别接口对「查库存」「打印标签」「你好」分别给出 materials、print_label、问候判定；界面调试工作台可用。"
+ },
+ "ai-knowledge": {
+  "result": "知识库页「企业知识网络」：Persy 节点图（Persy、偏能知识、财务记忆、客户资料）与右侧节点详情，底部「问 Persy」输入栏。",
+  "operation": "录屏为知识库节点图页面，各帧一致。",
+  "summary": "Persy 知识库状态与界面可用；但写入与检索旧知识索引接口对企业租户返回 403「旧知识索引未提供租户隔离」，知识入库/问答链路未通过。"
+ },
+ "ai-ocr-doc": {
+  "result": "智能对话页：底部「上传附件」「解析办公文件」按钮与输入框。",
+  "operation": "录屏为智能对话页，各帧一致。",
+  "summary": "OCR 后端为 macOS Vision；英文/数字单据识别出「1# NO.20260929」，中文「太阳鸟」未被识别（已安装构建未设 zh-Hans 识别语言，已修复待新构建验收）。OCR 接口在前端没有直接调用入口，界面以对话附件为用户入口。"
+ },
+ "ai-pdf": {
+  "result": "「工具表 · AI Planner 可调用的工具」：excel_analysis、generate_office_document 等工具卡片。",
+  "operation": "录屏为工具表页，各帧一致。",
+  "summary": "PDF 生成员工由文本生成 .pdf 成功；PDF 读取员工在已安装构建中忽略调用方的 output_relpath、只写 document_full.txt，返回「转换未生成输出文件」，解析结果无法读回——已修复待新构建验收。"
+ },
+ "ai-ppt": {
+  "result": "「员工工作流管理」页：流程与员工、员工空间（进入员工空间）、六部门编制图说明。",
+  "operation": "录屏为员工工作流管理页，各帧一致。",
+  "summary": "PPT 生成员工由文本生成 .pptx，PPT 读取员工解析该文件写出 JSON，并经界面同一读取接口读回，结果含原文「太阳鸟」「包装盒」。"
+ },
+ "ai-task-workspace": {
+  "result": "「独立工作区」页：标题「MAC验收0929任务」与待审批进度，下方对话区与右侧任务/对话面板。",
+  "operation": "录屏为独立工作区页，各帧一致。",
+  "summary": "只读产品查询任务创建（202）并在任务列表读回，独立工作区显示该任务；未注册工具的错误原因在已安装构建仍为笼统「任务参数无效」——已修复待新构建验收。"
+ },
+ "ai-tts": {
+  "result": "系统设置页：个人主页（SUNBIRD）、角色与权限、模型服务与账户余额卡片。",
+  "operation": "录屏从智能对话页切到系统设置页。",
+  "summary": "界面播报同一接口 POST /api/tts 返回 Edge 引擎 base64 音频（约 16.7K 字符），语音子系统健康就绪，设置页可见。"
+ },
+ "ai-word": {
+  "result": "「工具表 · AI Planner 可调用的工具」卡片网格。",
+  "operation": "录屏为工具表页，各帧一致。",
+  "summary": "先生成 JSON 输入，Word 生成员工写出 .docx，Word 读取员工解析后写出 JSON，经界面读取接口读回含「太阳鸟」「包装盒」。"
+ },
+ "base-config": {
+  "result": "系统设置页：个人主页 SUNBIRD（显示名称、邮箱、登录名）、角色与权限、模型服务与账户余额 ¥97.60。",
+  "operation": "录屏为系统设置页滚动加载，各帧一致。",
+  "summary": "桌面状态读回数据/Mod 目录，部署模式为 safe（可选 absolute_safe/safe/performance），设置页可见。"
+ },
+ "base-db": {
+  "result": "「数据来源 · 私人数据库读取助手」：本地信息数据库卡片与 QQ/钉钉/企业微信/飞书/Telegram/WhatsApp/Skype 等规划中来源。",
+  "operation": "录屏为数据来源页，各帧一致。",
+  "summary": "数据库探针 healthy；偏好写入返回回显但读回为空（已安装构建 /api/preferences 为桩）——已修复为按工作区持久化，待新构建验收。"
+ },
+ "base-device-bind": {
+  "result": "系统设置页：个人主页 SUNBIRD、模型服务与余额 ¥97.51。",
+  "operation": "录屏从智能对话页切到系统设置页。",
+  "summary": "本机配对状态可读（未配对）；向云端申请设备码返回 503「云端设备码暂不可用」，且需要移动端真机扫码，设备绑定未通过。"
+ },
+ "base-edition-pack": {
+  "result": "「能力库 · AI 员工市场」：左侧分类（宿主基础员工、办公员工包等），主区「宿主基础能力（预装员工）」卡片带「已安装」标记。",
+  "operation": "录屏为能力库页，分类列表与预装员工卡片逐帧可见。",
+  "summary": "版本包为 full、通用包已安装、8 个桥接 Mod；可交付状态 deliverable=true，能力库页展示预装员工。"
+ },
+ "base-health": {
+  "result": "系统设置页（左下角「系统正常」状态）：个人主页、模型服务与余额卡片。",
+  "operation": "录屏为系统设置页，左下系统状态灯为「系统正常」。",
+  "summary": "/api/health healthy、liveness alive；/health/details 整体 degraded（database healthy，redis unhealthy——桌面单机未部署 Redis），界面状态灯为「系统正常」。"
+ },
+ "base-install-guide": {
+  "result": "新手引导「XCAGI · 创建您的数字公司」第 1 步「您的公司叫什么？」，公司名称输入框为 SUNBIRD，按钮「让 XC 认识我的公司」。",
+  "operation": "录屏为引导页第 1 步，各帧一致。",
+  "summary": "可选行业清单（通用/饰品包装/考勤/涂料等 8 个）与工作区根目录可读，引导页第 1 步正常渲染。"
+ },
+ "base-mac-client": {
+  "result": "「桌面运行时」页：运行状态表（桌面模式 是、数据目录/数据库/存储模式 本地 SQLite/Mod 目录/模型目录均指向 /Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer），本地模型区。",
+  "operation": "录屏为桌面运行时页，运行状态表逐帧一致。",
+  "summary": "桌面模式 readyForUi、本地 SQLite 存储，health 返回版本 1.0.0.5 与 git_sha 37f22bcb，与安装包 build-info 一致；桌面运行时页可见同一目录信息。"
+ },
+ "base-rbac": {
+  "result": "「角色与权限」页：角色列表含 MAC验收0929角色（新建），右侧权限勾选项（执行 ETL / 查看数据对接 / 回滚 ETL / 管理 ETL 目标 等）与「保存角色」、用户角色分配区。",
+  "operation": "录屏为角色与权限页，新建角色出现在左侧列表并被选中。",
+  "summary": "权限点列表可读；同会话新建角色 201 并在角色列表读回，角色与权限页可见新角色。"
+ },
+ "base-settings": {
+  "result": "系统设置页：个人主页 SUNBIRD、角色与权限、模型服务与账户余额 ¥97.60。",
+  "operation": "录屏为系统设置页，各帧一致。",
+  "summary": "工作区偏好 /api/workspace/prefs 可读；/api/preferences 在已安装构建中是桩（写入仅回显、读回恒为空），偏好读回失败——已修复为按工作区持久化，待新构建验收。"
+ },
+ "base-update-mgmt": {
+  "result": "系统设置页：个人主页、角色与权限、模型服务卡片，版本号 v1.0.0.5 在左下角。",
+  "operation": "录屏先在智能对话页，再切到系统设置页。",
+  "summary": "Mod 更新检查 complete=true、无可用更新（count 0、source_errors 为空），设置页可见版本信息。"
+ },
+ "ch-asr": {
+  "result": "智能对话页：底部「按住说话」按钮与输入框。",
+  "operation": "录屏为智能对话页，各帧一致。",
+  "summary": "语音服务健康（ready，small 模型 CPU），界面有「按住说话」入口；真实转写需要麦克风权限与真人语音，受阻。"
+ },
+ "ch-im-core": {
+  "result": "「信息 · 企业专属客服」会话：顶部「AI 已转人工」提示，右侧三条「MAC验收0929 站内消息」气泡与客服自动回复「这个问题已为您转接人工客服…」；消息时间显示为 9/28 11:xx PM（UTC 未换算本地时区）。",
+  "operation": "录屏先在信息页会话列表，点击「企业专属客服」后打开会话，新消息气泡出现。",
+  "summary": "联系人读回企业专属客服；同会话发送站内消息并读回，界面点开会话看到新消息。消息时间按 UTC 显示为本地时间（差 8 小时）——已修复待新构建验收。"
+ },
+ "ch-im-cs": {
+  "result": "「信息」页：左侧会话列表（客户消息 · 客来来、用户客服员工、需求接入员、需求分析员工…企业专属客服），右侧「选择左侧会话开始聊天」。",
+  "operation": "录屏为信息页会话列表，各帧一致。",
+  "summary": "客户漏斗接口可读、信息页展示客服类会话；但 AI 客服专员员工 user-customer-service-officer 未安装，客服状态接口返回未安装，AI 应答链路未通过。"
+ },
+ "ch-im-super": {
+  "result": "「信息」页：实时已连接，会话列表含客户消息、各 AI 员工与企业专属客服。",
+  "operation": "录屏为信息页，各帧一致。",
+  "summary": "qclaw 超级路由权限表可读，信息页可见会话中心。"
+ },
+ "ch-im-ws": {
+  "result": "「信息」页：左上「实时已连接」，会话列表完整。",
+  "operation": "录屏为信息页，实时连接状态持续显示。",
+  "summary": "页面内建立 /ws/im WebSocket 握手成功，未读总数接口返回 0，信息页显示「实时已连接」。"
+ },
+ "ch-notify": {
+  "result": "「信息」页：实时已连接与会话列表。",
+  "operation": "录屏为信息页，各帧一致。",
+  "summary": "未读总数接口返回 0，信息页可见；移动端推送需要已配对真机，送达用例受阻。"
+ },
+ "ch-realtime-voice": {
+  "result": "智能对话页：「按住说话」与输入框。",
+  "operation": "录屏为智能对话页，各帧一致。",
+  "summary": "语音服务 ready，界面入口可见；实时语音对话需要麦克风与真人，受阻。"
+ },
+ "ch-task-center": {
+  "result": "「业务审批 · 审批工作台」：待审批 0 / 我发起的 0 / 已通过 0 / 已拒绝 0 统计卡与「暂无待审批事项」。",
+  "operation": "录屏为审批工作台页，各帧一致。",
+  "summary": "任务列表与审批请求接口可读，审批工作台页正常渲染。"
+ },
+ "ch-wechat-contacts": {
+  "result": "「数据对接中心」：上传与目标区、智能识别（推荐）目标下拉。",
+  "operation": "录屏为数据对接中心页，各帧一致。",
+  "summary": "微信联系人接口可读，页面可见；联系人同步需要微信采集端与 sync token，受阻。"
+ },
+ "ch-wechat-context": {
+  "result": "「数据对接中心」：四步流程条与上传区。",
+  "operation": "录屏为数据对接中心页，各帧一致。",
+  "summary": "微信上下文接口可读，页面可见；需要采集端先同步联系人情报，受阻。"
+ },
+ "ch-wechat-ingest": {
+  "result": "「数据对接中心 · 企业版通用 ETL」：上传文件 → 字段映射 → 规则写入 → 运行历史四步，拖入文件区与「上传并写入数据库」。",
+  "operation": "录屏为数据对接中心页，各帧一致。",
+  "summary": "微信采集状态接口可读，数据对接中心页可见；真实采集需要本机运行微信 PC 版与采集端并配置 sync token，受阻。"
+ },
+ "ch-wechat-phone": {
+  "result": "「数据对接中心」：四步流程条与上传区。",
+  "operation": "录屏为数据对接中心页，各帧一致。",
+  "summary": "微信来电相关接口可读，页面可见；需要微信 PC 版登录与真实来电，受阻。"
+ },
+ "dt-cold-start-rollback": {
+  "result": "智能对话主页：欢迎语、历史问答、右侧会话列表，左下「系统正常」。",
+  "operation": "录屏为智能对话页，各帧一致。",
+  "summary": "冷启动后 readyForUi=true、degraded=false，主界面正常进入。"
+ },
+ "dt-evidence-store": {
+  "result": "「桌面运行时」页：运行状态表与本地模型区。",
+  "operation": "录屏为桌面运行时页，各帧一致。",
+  "summary": "Neuro 迁移冒烟（neuro_stack_enabled、bus_running）与签收存储（sqlite signoffs.db）可读，桌面运行时页可见。"
+ },
+ "dt-install-sign": {
+  "result": "系统设置页：个人主页 SUNBIRD、模型服务与余额，左下角版本 v1.0.0.5。",
+  "operation": "录屏从智能对话页切到系统设置页。",
+  "summary": "health 返回构建时间与 git_sha 37f22bcb；本机 codesign --verify --deep --strict 通过，spctl 显示 Notarized Developer ID（G26WSH472M）；设置页显示 v1.0.0.5。"
+ },
+ "dt-integrity": {
+  "result": "「桌面运行时」页：运行状态表（桌面模式、本地 SQLite、各目录）。",
+  "operation": "录屏为桌面运行时页，各帧一致。",
+  "summary": "桌面完整性 healthy（各组件 ok），Neuro Bus running、errors=0，桌面运行时页可见。"
+ },
+ "dt-mac-control": {
+  "result": "「桌面运行时」页：运行状态表。",
+  "operation": "录屏为桌面运行时页，各帧一致。",
+  "summary": "控制输入最新状态与自动化驱动状态（mac=false）可读；桌面运行时页可见。"
+ },
+ "dt-neurobus": {
+  "result": "「桌面运行时」页：运行状态表。",
+  "operation": "录屏为桌面运行时页，各帧一致。",
+  "summary": "Neuro Bus 健康（published 115977、processed 115971、errors 0）、统计与处理器目录可读，桌面运行时页可见。"
+ },
+ "dt-ota": {
+  "result": "系统设置页：个人主页、模型服务与余额卡片。",
+  "operation": "录屏先在智能对话页，后切到系统设置页。",
+  "summary": "更新检查接口 complete=true、无待更新，设置页可见。"
+ },
+ "dt-process-mgmt": {
+  "result": "「桌面运行时」页：运行状态表与本地模型区。",
+  "operation": "录屏为桌面运行时页，各帧一致。",
+  "summary": "健康检查 healthy；支持包接口返回 zip（PK 头），桌面运行时页可见。"
+ },
+ "dt-rpa": {
+  "result": "「桌面运行时」页：运行状态与本地模型区。",
+  "operation": "录屏为桌面运行时页，各帧一致。",
+  "summary": "自动化状态可读（profiles 0，windows/mac 驱动均 false）；创建自动化 profile 返回「desktop automation backend not installed in this build」——桌面自动化后端在本构建为占位，未实现。"
+ },
+ "dt-shell": {
+  "result": "「桌面运行时」页：运行状态（桌面模式 是、本地 SQLite、各目录）与本地模型区。",
+  "operation": "录屏为桌面运行时页，各帧一致。",
+  "summary": "桌面壳 appRoutesReady=true、modsFullLoadDone=true，桌面运行时页可见。"
+ },
+ "erp-approval": {
+  "result": "「业务审批 · 审批工作台」：我发起的 2、已通过 2，「我发起的」列表两条「MAC验收0929审批」均为已通过。",
+  "operation": "录屏为审批工作台页，新审批单与已通过状态逐帧可见。",
+  "summary": "同会话创建流程 → 提交审批单 → 审批通过，审批工作台读回新审批单为已通过。"
+ },
+ "erp-ar-ap": {
+  "result": "「财务分析 · 小猫财务分析」：「还没有分析数据」与「立即开始」。",
+  "operation": "录屏为财务分析页，各帧一致。",
+  "summary": "应收 0 条、应付 2 条（验收采购单）、财务看板 total_payable=100 可读，财务分析页入口可见。"
+ },
+ "erp-contract": {
+  "result": "「模板库 · 模板预览」：分类按钮、Excel 网格解析工具、出货明细表/出货记录管理/产品目录表等模板卡片。",
+  "operation": "录屏为模板库页，各帧一致。",
+  "summary": "销售合同模板读回「销售合同默认模板」，合同生命周期状态可读（SUNBIRD，stage idle），从文本解析出合同产品「定制软件服务」；模板库页可见。"
+ },
+ "erp-excel-io": {
+  "result": "产品页「饰品包装品管理」：导入Excel / 导出价格表 / 导出Excel / 添加产品按钮，列表含 M35511「MAC验收0929产品35507」与 MAC-0929「MAC验收0929产品」，价格 ¥3.50。页头标题显示「人员管理」与正文不一致。",
+  "operation": "录屏为产品管理页，导入导出按钮与验收产品行各帧可见。",
+  "summary": "同会话导出产品 Excel（xlsx 字节）与导入模板接口通过，产品页可见验收产品；页头沿用考勤行业标签「人员管理」，为未修复的标签缺陷。"
+ },
+ "erp-finance-ledger": {
+  "result": "「财务分析 · 小猫财务分析」页：「还没有分析数据」与「立即开始」按钮。",
+  "operation": "录屏为小猫财务分析页，各帧一致。",
+  "summary": "同会话记一笔收入流水（revenue）并在流水列表读回；财务分析页入口可见，但页面本身未展示该流水（仅空态看板）。"
+ },
+ "erp-inventory": {
+  "result": "「库存管理」页：仓库筛选「全部仓库」、库存明细表（暂无库存数据）、库存预警表（暂无预警信息），入库/出库按钮。",
+  "operation": "录屏为库存管理页，各帧一致。",
+  "summary": "库存接口读写通过，库存管理页可见；验收账号当前无库存明细，页面显示空表。"
+ },
+ "erp-inventory-warehouse": {
+  "result": "「库存管理」页：「全部仓库」下拉、库存明细与库存预警两张空表。",
+  "operation": "录屏先在智能对话页，后切到库存管理页。",
+  "summary": "同会话新建仓库并在仓库列表读回；库存页仓库下拉可见，截图中未展开下拉，未直接显示新仓库名称。"
+ },
+ "erp-invoice": {
+  "result": "「财务分析 · 小猫财务分析」空态页。",
+  "operation": "录屏先在智能对话页，后切到财务分析页。",
+  "summary": "发票 CRM 与税务通道接口均要求管理员账号（403），真实开票需税务通道开通与证书，发票链路未通过。"
+ },
+ "erp-label": {
+  "result": "「标签输出与打印」页：红字提示「该旧业务接口尚未提供安全的租户数据隔离」，产品/模板下拉为空（已显示 0/0 个产品）。",
+  "operation": "录屏为标签页，红字错误提示持续显示。",
+  "summary": "标签任务接口对企业租户被租户隔离门禁拒绝（403），界面同样显示该错误；需要标签链路做租户隔离迁移后才能通过。"
+ },
+ "erp-master-data": {
+  "result": "产品页「饰品包装品管理」：两条验收产品行，页头标题「人员管理」。",
+  "operation": "录屏先在智能对话页，后切到产品管理页。",
+  "summary": "同会话新增产品并读回；已安装构建中新增接口不回传 product_id（已修复待新构建验收），产品页可见新建产品。"
+ },
+ "erp-ocr": {
+  "result": "智能对话页：底部「上传附件」按钮与输入框。",
+  "operation": "录屏为智能对话页，各帧一致。",
+  "summary": "OCR 自检 backend=macos_vision，单据图片识别出「1# NO.20260929」，对话页可见附件上传入口。"
+ },
+ "erp-ocr-clean": {
+  "result": "「数据对接中心 · 企业版通用 ETL」：上传文件/字段映射/规则写入/运行历史四步与上传区。",
+  "operation": "录屏从智能对话页切到数据对接中心页。",
+  "summary": "OCR 识别并提取结构化字段接口通过（单据无结构化字段，全为空）；送货单 ETL OCR 预览接口对企业租户被租户隔离门禁拒绝（403），清洗入库链路未通过。"
+ },
+ "erp-print-agent": {
+  "result": "「打印机列表」页：发货单打印机/标签打印机均为「未设置（自动识别）」，全部打印机表「暂无打印机」，底部红字「加载失败：该旧业务接口尚未提供安全的租户数据隔离」。",
+  "operation": "录屏为打印机列表页，红字加载失败持续显示。",
+  "summary": "打印机接口对企业租户被租户隔离门禁拒绝，本机也无连接的打印机；打印代理链路未通过。"
+ },
+ "erp-purchase": {
+  "result": "「采购管理」页：三条采购单（PO20260929072616、PO20260929064445、PO20260929063458，MAC验收0929供应商，¥50.00，草稿）；页头「耗材申领」。",
+  "operation": "录屏为采购管理页，新订单行可见。",
+  "summary": "同会话新建供应商与采购单，采购页读回新订单号 PO20260929072616；明细未选产品时已安装构建返回 500（已修复为业务提示，待新构建验收）。"
+ },
+ "erp-purchase-inbound": {
+  "result": "「采购管理」页：采购订单/采购入库/供应商标签，两条验收采购单（¥50.00 草稿）。",
+  "operation": "录屏主要为智能对话页，最后切到采购管理页。",
+  "summary": "采购入库接口可读写，采购页展示验收采购单。"
+ },
+ "erp-reconcile": {
+  "result": "「财务分析 · 小猫财务分析」页：「还没有分析数据」空态。",
+  "operation": "录屏为财务分析页，各帧一致。",
+  "summary": "内部对账接口在无内部密钥时拒绝（503 internal api not configured，符合预期）；运营线对账 run 返回 success 但 status 的 last_run 仍为空——运营线对账为桩实现，未落地对账记录。"
+ },
+ "erp-replenishment": {
+  "result": "「库存管理」页：库存明细与库存预警空表。",
+  "operation": "录屏在智能对话页发起补货询问并得到回复，随后切到库存管理页。",
+  "summary": "对话中询问补货建议得到 AI 回复，库存预警接口可读；验收账号无库存，预警表为空。"
+ },
+ "erp-report": {
+  "result": "「财务分析 · 小猫财务分析」页：「还没有分析数据」与「立即开始」。",
+  "operation": "录屏为小猫财务分析页，各帧一致。",
+  "summary": "报表/统计接口可读，财务分析看板入口可见，当前为空态。"
+ },
+ "erp-sales-order": {
+  "result": "「新建发货单」页：选择发货单模板、基础信息（购买单位、联系人、日期 09/28/2026、订单编号）、产品信息区；页头标题「新建考勤单」。",
+  "operation": "录屏为新建发货单表单页，各帧一致。",
+  "summary": "订单列表与新单号接口可读，建单页表单可见；提交走 /api/shipment/generate 被租户隔离门禁拒绝，下单单位接口路径修复待新构建验收。"
+ },
+ "erp-shipment": {
+  "result": "「出货记录管理」页：购买单位下拉、状态筛选、查看记录/新建/导出Excel，提示「请先选择购买单位后点击查看记录加载数据」；页头标题「考勤记录」。",
+  "operation": "录屏从智能对话页切到出货记录页。",
+  "summary": "出货记录页可见；出货生成接口被租户隔离门禁拒绝、business/shipment/create 只发布事件不落库，出货链路未通过。"
+ },
+ "erp-templates": {
+  "result": "「模板库 · 模板预览」页：分类按钮、Excel 网格解析工具、模板卡片（出货明细表模板、出货记录管理模板、产品目录表模板…）与「快速创建」。",
+  "operation": "录屏为模板库页，各帧一致。",
+  "summary": "模板列表接口可读，模板库页展示模板卡片。"
+ },
+ "erp-uom": {
+  "result": "产品页「饰品包装品管理」：产品单位下拉「请选择产品单位」、两条验收产品；页头「人员管理」。",
+  "operation": "录屏为产品管理页，各帧一致。",
+  "summary": "计量单位/购买单位接口可读，产品页可见单位下拉。"
+ },
+ "ind-attendance": {
+  "result": "「考勤工作区 · 人员管理」：两名员工 MAC验收0929员工（工号 M35907、M38964，部门 MAC验收0929部门…），状态「未设置」。",
+  "operation": "录屏为考勤人员管理页，新员工行各帧可见。",
+  "summary": "同会话新建部门与员工并在列表读回，考勤工作区人员管理页可见新员工。"
+ },
+ "ind-coating": {
+  "result": "智能对话主页：历史问答与右侧会话列表。",
+  "operation": "录屏为智能对话页，各帧一致。",
+  "summary": "涂料行业包需要行业权益，验收账号未开通，按外部条件记为 blocked。"
+ },
+ "ind-custom-delivery": {
+  "result": "「生产员工 · 私有交付 / 客户私有 Mod 生产中心」：说明你要的模块或员工 输入区与「发起定制」按钮，下方「正在读取客户私有 Mod…」。",
+  "operation": "录屏从智能对话页切到私有 Mod 生产中心页。",
+  "summary": "私有交付接口读回 taiyangniao-pro（运行时 sunbird-attendance-custom，交付模式 private_mod），私有 Mod 生产中心页可见。"
+ },
+ "ind-fields": {
+  "result": "产品页「饰品包装品管理」：产品单位下拉、两条验收产品；页头「人员管理」。",
+  "operation": "录屏为产品管理页，各帧一致。",
+  "summary": "行业基线与行业配置（units、product_fields、order_types 等）可读，产品页按饰品包装字段渲染。"
+ },
+ "ind-lan-license": {
+  "result": "「FHD · 局域网授权」卡片：「当前未启用局域网模式，无需授权」「进入系统」，状态 未启用、本机 IP 127.0.0.1、主机管理员位。",
+  "operation": "录屏为局域网授权页，各帧一致。",
+  "summary": "局域网桥 status/host-info 可读（未启用、本机在白名单），授权页显示同一状态。"
+ },
+ "ind-modstore-pay": {
+  "result": "「模型服务」页：账户余额（本机汇总）¥97.60、会员 普通用户、快捷充值、修茈会员套餐（10 档）、模型支持说明。",
+  "operation": "录屏为模型服务页，各帧一致。",
+  "summary": "支付诊断可读（SDK 已装、支付宝未配置），套餐 8 档读回，模型服务页可见余额与套餐入口。"
+ },
+ "ind-packaging": {
+  "result": "「库存管理」页：库存明细与库存预警表（空）。",
+  "operation": "录屏先在产品页「饰品包装品管理」（两条验收产品），后切到库存管理页。",
+  "summary": "当前行业为饰品包装行业，产品页标题「饰品包装品管理」、库存页均可见。"
+ },
+ "ind-planner": {
+  "result": "智能对话主页：欢迎语、历史问答、右侧会话列表。",
+  "operation": "录屏为智能对话页，各帧一致。",
+  "summary": "Planner 桥宿主能力（edition full）与工具注册表（34 个工具）可读，对话主页可用。"
+ },
+ "ind-szqsm": {
+  "result": "「奇士美 PRO」页：Mod ID sz-qsm-pro 说明「当前为仓库样板，…按 entitlement 安装后方可使用」。",
+  "operation": "录屏为奇士美 PRO 说明页，各帧一致。",
+  "summary": "页面可达；专属业务操作需要奇士美企业账号授权，SUNBIRD 无该权益，业务用例未通过（外部条件）。"
+ },
+ "ind-taiyangniao": {
+  "result": "「考勤表转换」页：上传转化区（打卡考勤表、输出相对路径、模板相对路径、统计月份）与右侧考勤规则、打卡时段说明。",
+  "operation": "录屏从智能对话页切到考勤表转换页。",
+  "summary": "太阳鸟考勤规则与私有交付接口可读，考勤表转换页可见上传与规则区。"
+ },
+ "ind-workflow-viz": {
+  "result": "「员工空间」：企业工位 1、工位实况「考勤 AI 助手」、员工与状态面板。",
+  "operation": "录屏为员工空间页，各帧一致。",
+  "summary": "工作流可视化桥状态可读，员工空间页展示工位。"
+ },
+ "ind-workspace": {
+  "result": "「考勤工作区 · 人员管理」：员工 MAC验收0929员工（M35907），共 1 条。",
+  "operation": "录屏为考勤人员管理页，各帧一致。",
+  "summary": "考勤行业规则与考勤记录接口可读（当前 0 条记录），考勤工作区页可见。"
+ },
+ "mods-bridge": {
+  "result": "「能力库 · AI 员工市场」：宿主基础能力分类（截图时目录加载中显示空态）。",
+  "operation": "录屏从智能对话页切到能力库页。",
+  "summary": "ERP 领域桥、审批桥、客服桥 status 均 success，能力库页可见。"
+ },
+ "mods-host-mount": {
+  "result": "产品页「饰品包装品管理」：两条验收产品。",
+  "operation": "录屏为产品管理页，各帧一致。",
+  "summary": "Mod 路由挂载列表（erp-domain、planner、office-employee-pack、lan-license…）与权限矩阵（enterprise_owner）可读，Mod 挂载页面可见。"
+ },
+ "mods-loader": {
+  "result": "「能力库 · AI 员工市场」：「宿主基础能力（预装员工）」卡片。",
+  "operation": "录屏为能力库页，目录加载后出现预装员工卡片。",
+  "summary": "Mod 加载状态（已加载 14，无 manifest 错误）与 Mod 列表（24 个）可读；/api/mod-store/validate 在已安装构建返回「未实现」——已实现待新构建验收。"
+ },
+ "mods-open-api": {
+  "result": "「智能生态 · AI生态应用」：智慧分析、AIOPEN 开放智控、生产员工、员工商店四张卡片。",
+  "operation": "录屏为智能生态页，各帧一致。",
+  "summary": "AIOPEN manifest 与工具清单可读；同会话创建 API Key（前缀已脱敏）并在列表读回 3 个；manifest 版本仍显示 1.0.0.3（与产品 1.0.0.5 不一致，已修复待新构建验收）。"
+ },
+ "mods-shell": {
+  "result": "「能力库 · AI 员工市场」：分类列表，右侧「宿主基础能力（预装员工）共 0 件 暂无商品」（截图时目录尚在加载）。",
+  "operation": "录屏为能力库页，目录加载中各帧显示空态。",
+  "summary": "解耦进度里程碑与宿主 profile 可读；能力库截图时刻目录未加载完成，显示空态。"
+ },
+ "mods-store": {
+  "result": "「能力库 · AI 员工市场」：「宿主基础能力（预装员工）」卡片，已安装标记。",
+  "operation": "录屏从智能对话页切到能力库页，目录加载后出现预装员工卡片。",
+  "summary": "Mod 商店可装 26 个、市场条目 25 个，能力库页可见商品卡片。"
+ },
+ "mods-webhook": {
+  "result": "「能力库 · AI 员工市场」：宿主基础能力分类，截图时目录尚在加载显示空态。",
+  "operation": "录屏为能力库页，各帧一致。",
+  "summary": "Mod 通信端点接口可读（空）；订单 webhook 接口对企业租户被租户隔离门禁拒绝（403），webhook 链路未通过。"
+ },
+ "pay-alipay": {
+  "result": "系统设置 · 模型服务：账户余额 ¥97.51、会员套餐入口。",
+  "operation": "录屏为系统设置/模型服务区，各帧一致。",
+  "summary": "支付诊断可读（alipay_configured=false，SDK 已装）；伪造的支付宝异步通知被拒绝（400 fail，验签生效）；真实扫码付款需要真实账户且不得自动扣款，受阻。"
+ },
+ "pay-lan": {
+  "result": "「FHD · 局域网授权」卡片：未启用局域网模式，无需授权；本机 IP 127.0.0.1。",
+  "operation": "录屏为局域网授权页，各帧一致。",
+  "summary": "LAN status 与 admin whoami（本机为管理主机）可读，授权页一致。"
+ },
+ "pay-lan-settings": {
+  "result": "「FHD · 局域网授权」卡片：状态 未启用、本机 IP、主机管理员位。",
+  "operation": "录屏为局域网授权页，各帧一致。",
+  "summary": "LAN 管理设置（未启用、密钥未就绪）与动态白名单（空）可读，授权页一致。"
+ },
+ "pay-member-plan": {
+  "result": "系统设置 · 模型服务：余额 ¥97.51、修茈会员套餐入口。",
+  "operation": "录屏从智能对话页切到模型服务设置区。",
+  "summary": "会员套餐 10 档、支付订单（0 笔）与订阅状态（active，saas-permanent-growth）可读，模型服务页可见。"
+ },
+ "pay-wallet": {
+  "result": "系统设置 · 模型服务：账户余额 ¥97.51、会员 普通用户、快捷充值、修茈会员套餐、AI 意图能力卡片。",
+  "operation": "录屏从智能对话页切到模型服务设置区。",
+  "summary": "钱包概览读回 AI 计费流水、用量 19 条，模型服务页可见余额。"
+ },
+ "sec-csp": {
+  "result": "智能对话主页。",
+  "operation": "录屏为智能对话页，各帧一致。",
+  "summary": "页面响应头含 CSP（default-src 'self'，connect-src 仅 self/ws），页面内向外部域名 fetch 被拦截（TypeError）。"
+ },
+ "sec-e2e": {
+  "result": "智能对话主页。",
+  "operation": "录屏为智能对话页，各帧一致。",
+  "summary": "新手课程接口读回 4 门课程，对话主页可用。"
+ },
+ "sec-identity": {
+  "result": "智能对话主页。",
+  "operation": "录屏为智能对话页，各帧一致。",
+  "summary": "当前身份 tenant_id=1；页面内不带 CSRF 头的写请求返回 403；管理员审计日志在桌面端被拒绝（ADMIN_DESKTOP_FORBIDDEN）。"
+ },
+ "sec-release-gate": {
+  "result": "「桌面运行时」页：运行状态表。",
+  "operation": "录屏为桌面运行时页，各帧一致。",
+  "summary": "health 返回 release_id=xcagi-1.0.0.5-37f22bcb 与构建时间，发布身份与安装包一致；桌面运行时页可见。"
+ },
+ "sec-runtime-gate": {
+  "result": "「桌面运行时」页：运行状态表。",
+  "operation": "录屏为桌面运行时页，各帧一致。",
+  "summary": "未提供租户隔离的旧接口 /api/customers 对企业租户返回 403（运行时门禁生效），会话校验 valid=true，桌面运行时页可见。"
+ }
+}

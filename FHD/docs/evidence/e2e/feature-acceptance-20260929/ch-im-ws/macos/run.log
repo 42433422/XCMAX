@@ -1,0 +1,5 @@
+2026-09-29T06:49:59+0800 [ch-im-ws] 开始验收 ch-im-ws 实时通道（WebSocket）；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T06:50:01+0800 [ch-im-ws] M1 passed :: WebSocket /ws/im 握手结果 {'ok': True}
+2026-09-29T06:50:01+0800 [ch-im-ws] M2 passed :: HTTP 200 15ms；{"success": true, "unread_total": 0}
+2026-09-29T06:50:02+0800 [ch-im-ws] screenshot result.png
+2026-09-29T06:50:04+0800 [ch-im-ws] video operation.webm bytes=230788

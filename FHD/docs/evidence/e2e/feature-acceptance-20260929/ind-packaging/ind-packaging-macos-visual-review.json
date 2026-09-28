@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ind-packaging",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "32a5a2d070f36411614ab3ce2c9b53afabd0cb6f529c0297b9d4dd65166e3ec3",
+  "visible_content": "当前行业为饰品包装行业，产品页标题「饰品包装品管理」、库存页均可见。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/ind-packaging/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ind-packaging/macos/result.png"
+}

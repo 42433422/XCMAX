@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "dt-rpa",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "901343d8134be41a3e613dfe185878627c8a5fac132990eb5f97ff9efece9a93",
+  "visible_content": "自动化状态可读（profiles 0，windows/mac 驱动均 false）；创建自动化 profile 返回「desktop automation backend not installed in this build」——桌面自动化后端在本构建为占位，未实现。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/dt-rpa/macos/operation.webm"
+  ],
+  "full_feature_acceptance": false,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/dt-rpa/macos/result.png"
+}

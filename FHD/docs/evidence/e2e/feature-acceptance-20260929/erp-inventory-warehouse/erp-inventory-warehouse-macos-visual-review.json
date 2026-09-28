@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "erp-inventory-warehouse",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "32a5a2d070f36411614ab3ce2c9b53afabd0cb6f529c0297b9d4dd65166e3ec3",
+  "visible_content": "同会话新建仓库并在仓库列表读回；库存页仓库下拉可见，截图中未展开下拉，未直接显示新仓库名称。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-inventory-warehouse/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-inventory-warehouse/macos/result.png"
+}

@@ -1,0 +1,69 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "erp-master-data",
+ "name": "产品 / 客户 / 供应商主数据",
+ "platform": "macos",
+ "status": "failed",
+ "verdict": "FAIL",
+ "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+ "app_version": "1.0.0.5",
+ "verified_at": "2026-09-29",
+ "passed": 3,
+ "failed": 1,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "POST /api/mod/xcagi-erp-domain-bridge/customers 请求体 {\"customer_name\": \"MAC验收0929客户35507\", \"contact_person\": \"张三\", \"contact_phone\": \"13800000000\"}",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/mod/xcagi-erp-domain-bridge/customers（写操作自动附带 CSRF）：新建客户",
+   "expected": "新建客户：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 3913ms；客户 id=2",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "POST /api/mod/xcagi-erp-domain-bridge/products/add 请求体 {\"name\": \"MAC验收0929产品35507\", \"model_number\": \"M35511\", \"unit\": \"个\", \"price\": 3.5}",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/mod/xcagi-erp-domain-bridge/products/add（写操作自动附带 CSRF）：新建产品并返回 id",
+   "expected": "新建产品并返回 id：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 18ms；{\"success\": true, \"data\": {\"id\": null}, \"source\": \"mod:xcagi-erp-domain-bridge\", \"execution_path\": \"mod_domain_handler\", \"handler_via\": \"products_service\"}",
+   "result": "failed"
+  },
+  {
+   "id": "M3",
+   "input": "GET /api/mod/xcagi-erp-domain-bridge/products/list",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/mod/xcagi-erp-domain-bridge/products/list?page=1&per_page=50（写操作自动附带 CSRF）：读回产品列表",
+   "expected": "读回产品列表：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 16ms；产品 2 条，含 MAC验收0929产品35507",
+   "result": "passed"
+  },
+  {
+   "id": "M4",
+   "input": "界面读回：产品页出现新产品",
+   "actions": "导航到 /mod/xcagi-erp-domain-bridge/products 并在页面文本中查找「MAC验收0929产品35507」",
+   "expected": "界面列表/详情中出现「MAC验收0929产品35507」",
+   "observed": "已在 /mod/xcagi-erp-domain-bridge/products 页面看到「MAC验收0929产品35507」；上下文：ult） | 产品价格表（Word 价目，默认） | 考勤统计表·明细导入人员 | \t型号\t名称\t规格\t价格\t操作 | \tM35511\tMAC验收0929产品35507\t-\t¥3.50\t | 编辑 | 删除 |  | \tMAC-0929\tMAC验收0929产品\t标准\t¥3.50\t | 编辑 | 删除 |  | 没有更多数据了 | 小C助理",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "erp-master-data",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-master-data/macos/result.png",
+   "sha256": "42daee040a8de5ef22475e859b9de45edf8f8e0d71c7981949aca0e89b81e8de",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "erp-master-data",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-master-data/macos/operation.webm",
+   "sha256": "c6eb3dca32641f2d7228f23eaa9803edc259ee537d645103a30d6fb19a87f4e3",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-master-data/macos/run.log",
+  "sha256": "8b6955a3947031ee60d96f3e290feb84baf099bf2ec0d80cbb4c93d6cc66f247",
+  "bytes": 1272
+ },
+ "method": "经 CDP(127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

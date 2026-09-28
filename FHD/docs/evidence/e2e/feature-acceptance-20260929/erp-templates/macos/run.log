@@ -1,0 +1,6 @@
+2026-09-29T06:47:57+0800 [erp-templates] 开始验收 erp-templates 单据模板与套打；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T06:47:57+0800 [erp-templates] M1 passed :: HTTP 200 30ms；默认 sales_contract_default；共 2
+2026-09-29T06:47:57+0800 [erp-templates] M2 passed :: HTTP 200 30ms；模板 ['客户资料初始化表', '产品资料初始化表', '销售订单标准表', '出货记录初始化表']
+2026-09-29T06:48:01+0800 [erp-templates] M3 passed :: 导航后路径 /mod/xcagi-erp-domain-bridge/template-preview；命中文本 ['模板']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 模板库 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 模板预览 |  | 展示导出用 Excel 与 Word 模板：可按业务分组管理，也可选「自定义」自由新建任意模板；Word 若有「
+2026-09-29T06:48:02+0800 [erp-templates] screenshot result.png
+2026-09-29T06:48:05+0800 [erp-templates] video operation.webm bytes=413373

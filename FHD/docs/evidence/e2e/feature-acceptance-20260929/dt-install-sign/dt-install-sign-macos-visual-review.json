@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "dt-install-sign",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "749ce214ba3a0dff81571cf42c3db4b0a549f6973d840a244ddfbe5f400a7124",
+  "visible_content": "health 返回构建时间与 git_sha 37f22bcb；本机 codesign --verify --deep --strict 通过，spctl 显示 Notarized Developer ID（G26WSH472M）；设置页显示 v1.0.0.5。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/dt-install-sign/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/dt-install-sign/macos/result.png"
+}

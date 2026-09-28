@@ -1,0 +1,61 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "ind-packaging",
+ "name": "饰品/包装行业包",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+ "app_version": "1.0.0.5",
+ "verified_at": "2026-09-29",
+ "passed": 3,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/system/industry",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/system/industry（写操作自动附带 CSRF）：当前行业",
+   "expected": "当前行业：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 49ms；饰品包装行业",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "界面路由 /mod/xcagi-erp-domain-bridge/products",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /mod/xcagi-erp-domain-bridge/products，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /mod/xcagi-erp-domain-bridge/products，页面可见 饰品包装品管理，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /mod/xcagi-erp-domain-bridge/products；命中文本 ['饰品包装品管理']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 人员管理 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 饰品包装品管理 | 导入Excel | 导出价格表 | 导出Excel | + 添加产品 | 产品单位： | 请选择产品单位 | MAC验收0929客",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "界面路由 /mod/xcagi-erp-domain-bridge/inventory",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /mod/xcagi-erp-domain-bridge/inventory，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /mod/xcagi-erp-domain-bridge/inventory，页面可见 库存，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /mod/xcagi-erp-domain-bridge/inventory；命中文本 ['库存']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 库存管理 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 库存管理 | 导出 Excel入库出库 |  | 按当前筛选导出全部库存明细，单次最多 50,000 条。 |  | 全部仓库 | MAC验收09",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "ind-packaging",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ind-packaging/macos/result.png",
+   "sha256": "32a5a2d070f36411614ab3ce2c9b53afabd0cb6f529c0297b9d4dd65166e3ec3",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "ind-packaging",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ind-packaging/macos/operation.webm",
+   "sha256": "d02b5b11582a3a1ce4f60897c3af2387732dd130322e06f0191999e3f2c6d23e",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ind-packaging/macos/run.log",
+  "sha256": "fdca39e42e531645de7ea39cb2bd5484f4ae7af7c92e82fe878fe39e990c686f",
+  "bytes": 1729
+ },
+ "method": "经 CDP(127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

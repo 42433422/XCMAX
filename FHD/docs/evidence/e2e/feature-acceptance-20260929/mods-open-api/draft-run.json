@@ -1,0 +1,69 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "mods-open-api",
+ "name": "开放 API（ai_open）",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+ "app_version": "1.0.0.5",
+ "verified_at": "2026-09-29",
+ "passed": 4,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/aiopen/manifest",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/aiopen/manifest（写操作自动附带 CSRF）：开放 API 清单",
+   "expected": "开放 API 清单：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 20ms；version=1.0.0.3 tools=['api_catalog', 'api_call', 'chat', 'capability_loop', 'ui_sessions']",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "POST /api/aiopen/keys 请求体 {\"label\": \"MAC验收0929\"}",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/aiopen/keys（写操作自动附带 CSRF）：签发开放 API Key",
+   "expected": "签发开放 API Key：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 22ms；key 前缀 aiopen_sJ5…（已脱敏）",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "GET /api/aiopen/keys",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/aiopen/keys（写操作自动附带 CSRF）：读回 Key 列表",
+   "expected": "读回 Key 列表：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 18ms；3 个",
+   "result": "passed"
+  },
+  {
+   "id": "M4",
+   "input": "界面路由 /ai-ecosystem",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /ai-ecosystem，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /ai-ecosystem，页面可见 ，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /ai-ecosystem；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 智能生态 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | AI生态应用 | 智慧分析 | 接入可视化 AI 员工，上传表格、对话洞察、生成 ECharts 图表与报告 | AIOPEN 开放智控 | 企业级",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "mods-open-api",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/mods-open-api/macos/result.png",
+   "sha256": "7b5f83deea5fb5a4d7daa58552757e9d1e0a4707d8ceedf4b21063ff8c1bb31d",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "mods-open-api",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/mods-open-api/macos/operation.webm",
+   "sha256": "e875b5fd526821c3865cb8287e78f26e99076317cf32565a5829dcafde4c1d3e",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/mods-open-api/macos/run.log",
+  "sha256": "b753f4ae74994d76b61ade8e521a3a682e60bf06965f243013eaaafc8bfe252b",
+  "bytes": 1305
+ },
+ "method": "经 CDP(127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

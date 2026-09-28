@@ -1,0 +1,7 @@
+2026-09-29T06:45:29+0800 [erp-purchase-inbound] 开始验收 erp-purchase-inbound 采购入库管理；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T06:45:29+0800 [erp-purchase-inbound] M1 passed :: HTTP 200 118ms；供应商 id=4
+2026-09-29T06:46:18+0800 [erp-purchase-inbound] M2 passed :: HTTP 200 48113ms；{"id": 1, "inbound_no": "PI20260929064530", "order_id": null, "supplier_id": 4, "warehouse_id": 1, "inbound_date": "2026-09-29", "total_amount": 50, "status": "completed", "handler": null, "remark": "
+2026-09-29T06:46:20+0800 [erp-purchase-inbound] M3 passed :: HTTP 200 2571ms；入库单 1
+2026-09-29T06:46:24+0800 [erp-purchase-inbound] M4 passed :: 导航后路径 /mod/xcagi-erp-domain-bridge/purchase；命中文本 ['采购入库']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 耗材申领 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 采购管理 | 新建采购订单 | 全部状态 | 草稿 | 已审核 | 部分入库 | 已完成 | 已取消 | 全部供应商 | MAC验收0929供应商 | MAC验收
+2026-09-29T06:46:25+0800 [erp-purchase-inbound] screenshot result.png
+2026-09-29T06:46:41+0800 [erp-purchase-inbound] video operation.webm bytes=1347225
