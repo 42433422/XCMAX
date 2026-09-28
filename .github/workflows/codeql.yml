@@ -32,17 +32,45 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect ${{ matrix.language }} source changes (targeted gate)
+        id: paths
+        if: github.event_name == 'pull_request'
+        run: |
+          # required 目标化：PR 上仅当对应语言源码/依赖有改动时才真正跑 CodeQL；
+          # 未命中时后续 analyze 步骤跳过、本 job 仍返回 Success，满足 required check。
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+          changed="$(git diff --name-only "$base" "$head" 2>/dev/null || true)"
+          case "${{ matrix.language }}" in
+            python) pattern='\.pyi?$|(^|/)requirements[^/]*\.txt$|(^|/)pyproject\.toml$|^\.github/codeql/|^\.github/workflows/codeql\.yml$' ;;
+            javascript-typescript) pattern='\.(ts|tsx|js|jsx|mjs|cjs|vue)$|(^|/)package(-lock)?\.json$|^\.github/codeql/|^\.github/workflows/codeql\.yml$' ;;
+            *) pattern='.' ;;
+          esac
+          if [ -z "$changed" ] || printf '%s\n' "$changed" | grep -qE "$pattern"; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Initialize CodeQL
+        if: github.event_name != 'pull_request' || steps.paths.outputs.run == 'true'
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
           config-file: ./.github/codeql/codeql-config.yml
 
       - name: Perform CodeQL Analysis
+        if: github.event_name != 'pull_request' || steps.paths.outputs.run == 'true'
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:${{ matrix.language }}"
+
+      - name: No ${{ matrix.language }} changes (targeted skip)
+        if: github.event_name == 'pull_request' && steps.paths.outputs.run != 'true'
+        run: echo "No ${{ matrix.language }} source changes; CodeQL skipped for this PR; required check satisfied."
 
   security-no-new-critical-high:
     name: security-no-new-critical-high

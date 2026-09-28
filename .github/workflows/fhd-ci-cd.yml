@@ -159,20 +159,44 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Detect backend-relevant changes (targeted gate)
+        id: paths
+        if: github.event_name == 'pull_request'
+        run: |
+          # required 目标化：仅当存在「可能影响后端」的改动时才跑重活；
+          # 纯文档/前端/官网/移动端改动快速成功，满足 required check（同 mutation-smoke 范式）。
+          # 采用 fail-open：只要出现无法归入下列无关目录的改动，就照常跑全量后端测试。
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+          changed="$(git diff --name-only "$base" "$head" 2>/dev/null || true)"
+          if [ -n "$changed" ] && ! printf '%s\n' "$changed" | grep -qvE '^(docs/|FHD/docs/|.*\.md$|FHD/frontend/|FHD/admin-console/|成都修茈科技有限公司/|FHD/mobile-flutter-poc/)'; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip notice (no backend-relevant changes)
+        if: steps.paths.outputs.skip == 'true'
+        run: echo "No backend-relevant path changes; backend-test satisfied without running the suite."
 
       - name: Set up Python ${{ env.PYTHON_VERSION }}
+        if: steps.paths.outputs.skip != 'true'
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
 
       - name: Install dependencies
+        if: steps.paths.outputs.skip != 'true'
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-server-api.txt
           pip install -r deploy/requirements-dev.txt
 
       - name: Set up the real private Mod frontend compiler
+        if: steps.paths.outputs.skip != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -180,48 +204,60 @@ jobs:
           cache-dependency-path: FHD/frontend/package-lock.json
 
       - name: Install runtime Mod compiler dependencies
+        if: steps.paths.outputs.skip != 'true'
         working-directory: FHD/frontend
         run: npm ci --no-audit --no-fund
 
       - name: Verify requirements lock is in sync
+        if: steps.paths.outputs.skip != 'true'
         run: |
           python scripts/dev/check_requirements_lock.py
 
       - name: Validate coverage SSOT metadata
+        if: steps.paths.outputs.skip != 'true'
         run: python scripts/ci/check_coverage_ssot.py
 
       - name: Run Ruff lint
+        if: steps.paths.outputs.skip != 'true'
         run: ruff check app/ tests/
 
       - name: Run Ruff format check
+        if: steps.paths.outputs.skip != 'true'
         run: ruff format --check app/ tests/
 
       - name: Run mypy type checking
+        if: steps.paths.outputs.skip != 'true'
         run: mypy app/ --no-error-summary
 
       - name: Type/SQL debt ratchet
+        if: steps.paths.outputs.skip != 'true'
         run: |
           python scripts/dev/count_type_debt.py --max-type-ignore 69 --max-ts-nocheck 0 --max-any 99999
           python scripts/dev/count_raw_sql.py
 
       - name: "[观察期] Schema drift check（模型 vs 迁移链）"
+        if: steps.paths.outputs.skip != 'true'
         continue-on-error: true
         run: python scripts/dev/check_schema_drift.py
 
       - name: Big files ratchet (巨文件只减不增)
+        if: steps.paths.outputs.skip != 'true'
         run: python scripts/dev/count_big_files.py
 
       - name: Route integrity tests
+        if: steps.paths.outputs.skip != 'true'
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
         run: python -m pytest tests/test_routes/test_route_registry.py tests/test_routes/test_registry_unit.py tests/test_routes/test_route_golden.py -x -q
 
       - name: Intent benchmark ratchet (golden set 只升不降)
+        if: steps.paths.outputs.skip != 'true'
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
         run: python scripts/dev/intent_benchmark.py --check
 
       - name: Run tests with coverage
+        if: steps.paths.outputs.skip != 'true'
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
           INTENT_BENCHMARK_RUN: "1"
@@ -237,19 +273,22 @@ jobs:
             --cov-report=html --cov-report=term-missing
 
       - name: Coverage floor guard (下调必须有 ADR)
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && steps.paths.outputs.skip != 'true'
         run: |
           # PR checkout 是 merge commit，工作区==HEAD，必须对比目标分支才能识别下调。
           git fetch --depth=1 origin "${{ github.base_ref }}"
           python scripts/dev/guard_coverage_floor.py --base FETCH_HEAD
 
       - name: coverage_ramp stub quota (只减不增)
+        if: steps.paths.outputs.skip != 'true'
         run: python scripts/dev/count_coverage_ramp_stubs.py --check
 
       - name: test-bloat gate (P1-2 测试膨胀门禁)
+        if: steps.paths.outputs.skip != 'true'
         run: python scripts/dev/test_bloat_report.py --check
 
       - name: Coverage ratchet check (行/分支只升不降)
+        if: steps.paths.outputs.skip != 'true'
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
         run: python scripts/dev/coverage_ratchet.py --check --require-backend --record
@@ -260,6 +299,7 @@ jobs:
       # (Settings → Secrets and variables → Actions). Without token this step is
       # best-effort (continue-on-error); coverage.xml + htmlcov/ remain local SSOT.
       - name: Upload coverage report
+        if: steps.paths.outputs.skip != 'true'
         continue-on-error: true
         uses: codecov/codecov-action@v4
         with:
@@ -272,6 +312,7 @@ jobs:
       # 行为覆盖率诚实化（Delta A）：排除 coverage_ramp 注水 stub 后的真实行为口径。
       # 这是后端覆盖率门禁的唯一硬 gate（--behavior --require-backend），回退即阻断。
       - name: Behavior coverage gate (排除 coverage_ramp stub，硬门禁)
+        if: steps.paths.outputs.skip != 'true'
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
         run: |
@@ -287,8 +328,30 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Detect frontend-relevant changes (targeted gate)
+        id: paths
+        if: github.event_name == 'pull_request'
+        run: |
+          # required 目标化：仅当存在「可能影响前端」的改动时才跑前端测试；
+          # 纯文档/后端/官网/移动端改动快速成功，满足 required check（同 mutation-smoke 范式）。
+          # 采用 fail-open：出现无法归入下列无关目录的改动（如 FHD/mods、FHD/desktop、根 scripts、.github）即照常跑全量。
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+          changed="$(git diff --name-only "$base" "$head" 2>/dev/null || true)"
+          if [ -n "$changed" ] && ! printf '%s\n' "$changed" | grep -qvE '^(docs/|FHD/docs/|.*\.md$|FHD/app/|FHD/tests/|FHD/alembic/|FHD/config/|成都修茈科技有限公司/|FHD/mobile-flutter-poc/)'; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip notice (no frontend-relevant changes)
+        if: steps.paths.outputs.skip == 'true'
+        run: echo "No frontend-relevant path changes; frontend-test satisfied without running the suite."
 
       - name: Set up Node.js
+        if: steps.paths.outputs.skip != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -296,32 +359,39 @@ jobs:
           cache-dependency-path: FHD/frontend/package-lock.json
 
       - name: Install dependencies
+        if: steps.paths.outputs.skip != 'true'
         working-directory: FHD/frontend
         run: npm ci
 
       - name: Run ESLint
+        if: steps.paths.outputs.skip != 'true'
         working-directory: FHD/frontend
         run: npm run lint
 
       - name: Run unit tests
+        if: steps.paths.outputs.skip != 'true'
         working-directory: FHD/frontend
         run: npm run test
 
       - name: Run unit tests with coverage
+        if: steps.paths.outputs.skip != 'true'
         working-directory: FHD/frontend
         run: npm run test:coverage
 
       # 前端覆盖率诚实化（Delta B）：以 coverage_ratchet.py 为硬门禁，回退即阻断。
       - name: Frontend coverage ratchet gate
+        if: steps.paths.outputs.skip != 'true'
         working-directory: FHD/frontend
         run: python ../scripts/dev/coverage_ratchet.py --check --require-frontend
 
       # 前端显式 any 棘轮门禁（D2-4）：超过基线即阻断，只降方向收口。
       # count_ts_any.py 在根仓 scripts/dev/（FHD/scripts/dev 无此脚本），需 ../ 前缀。
       - name: Frontend ts-any ratchet gate
+        if: steps.paths.outputs.skip != 'true'
         run: python ../scripts/dev/count_ts_any.py --check
 
       - name: Run vue-tsc
+        if: steps.paths.outputs.skip != 'true'
         working-directory: FHD/frontend
         run: |
           set +e
@@ -331,6 +401,7 @@ jobs:
           fi
 
       - name: Upload frontend coverage
+        if: steps.paths.outputs.skip != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: frontend-coverage

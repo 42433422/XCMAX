@@ -23,16 +23,41 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect release-relevant changes (targeted gate)
+        id: paths
+        if: github.event_name == 'pull_request'
+        run: |
+          # required 目标化：仅当存在「发布契约相关」（后端/测试/发布脚本）改动时才跑契约测试；
+          # 纯文档/前端/官网/移动端改动快速成功，满足 required check（同 mutation-smoke 范式）。
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+          changed="$(git diff --name-only "$base" "$head" 2>/dev/null || true)"
+          if [ -n "$changed" ] && ! printf '%s\n' "$changed" | grep -qvE '^(docs/|FHD/docs/|.*\.md$|FHD/frontend/|FHD/admin-console/|成都修茈科技有限公司/|FHD/mobile-flutter-poc/)'; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip notice (no release-relevant changes)
+        if: steps.paths.outputs.skip == 'true'
+        run: echo "No release-relevant path changes; Release gate satisfied without running contract tests."
+
       - uses: actions/setup-python@v5
+        if: steps.paths.outputs.skip != 'true'
         with:
           python-version: "3.11"
           cache: pip
       - name: Install test deps
+        if: steps.paths.outputs.skip != 'true'
         run: |
           python -m pip install -U pip
           pip install -r requirements-server-api.txt
           pip install -r deploy/requirements-dev.txt
       - name: Release contract tests (isolated conftest)
+        if: steps.paths.outputs.skip != 'true'
         run: |
           if [ -d tests/release ]; then
             python -m pytest tests/release/ --confcutdir=tests/release -q --tb=short
@@ -40,4 +65,5 @@ jobs:
             echo "tests/release/ 不存在，跳过 isolated contract tests"
           fi
       - name: Release gate manifest
+        if: steps.paths.outputs.skip != 'true'
         run: python -m pytest tests/release_gate/ -q --tb=short
