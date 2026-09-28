@@ -1,4 +1,4 @@
-"""Map industry manifest subsystems → onboarding demo ORM payloads."""
+"""Map industry manifest subsystems to onboarding demo ORM payloads."""
 
 from __future__ import annotations
 
