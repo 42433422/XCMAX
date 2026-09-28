@@ -204,13 +204,50 @@ describe('useAccountProfileStore', () => {
     expect(store.loaded).toBe(false)
   })
 
-  it('refreshFromServer clears on failure', async () => {
+  it('refreshFromServer clears when the server rejects the session with 401', async () => {
+    const { authApi } = await import('@/api/auth')
+    vi.mocked(authApi.getCurrentUser).mockRejectedValueOnce(
+      Object.assign(new Error('Unauthorized'), { status: 401 }),
+    )
+    const store = useAccountProfileStore()
+    store.loaded = true
+    await store.refreshFromServer()
+    expect(store.loaded).toBe(false)
+  })
+
+  it('refreshFromServer keeps the last known profile on transient network failure', async () => {
     const { authApi } = await import('@/api/auth')
     vi.mocked(authApi.getCurrentUser).mockRejectedValueOnce(new Error('Network error'))
     const store = useAccountProfileStore()
     store.loaded = true
     await store.refreshFromServer()
-    expect(store.loaded).toBe(false)
+    // 瞬时失败不得清空已加载的资料，否则依赖权限的入口会在已登录状态下消失
+    expect(store.loaded).toBe(true)
+  })
+
+  it('refreshFromServer keeps the profile when the refresh is superseded (abort)', async () => {
+    const { authApi } = await import('@/api/auth')
+    const abortError = new Error('signal is aborted without reason')
+    abortError.name = 'AbortError'
+    vi.mocked(authApi.getCurrentUser).mockRejectedValueOnce(abortError)
+    const store = useAccountProfileStore()
+    store.loaded = true
+    await store.refreshFromServer()
+    expect(store.loaded).toBe(true)
+  })
+
+  it('refreshFromServer keeps the profile when the enterprise session check times out', async () => {
+    const { fetchProductSku, isEnterpriseEdition } = await import('@/utils/productSku')
+    const { validateEnterpriseSessionCached } = await import('@/utils/authSessionCache')
+    vi.mocked(fetchProductSku).mockResolvedValueOnce('enterprise')
+    vi.mocked(isEnterpriseEdition).mockReturnValueOnce(true)
+    const abortError = new Error('signal is aborted without reason')
+    abortError.name = 'AbortError'
+    vi.mocked(validateEnterpriseSessionCached).mockRejectedValueOnce(abortError)
+    const store = useAccountProfileStore()
+    store.loaded = true
+    await store.refreshFromServer()
+    expect(store.loaded).toBe(true)
   })
 
   it('waits for tenant preference hydration before refresh resolves', async () => {
@@ -240,3 +277,4 @@ describe('useAccountProfileStore', () => {
     expect(resolved).toBe(true)
   })
 })
+

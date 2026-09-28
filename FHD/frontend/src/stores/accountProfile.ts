@@ -130,6 +130,14 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     return applySessionFields(payload)
   }
 
+  /** 只有服务端明确判定会话失效（401/403）才允许清空资料；超时、请求被更新的一次刷新
+   *  取代、网络抖动等瞬时失败若也清空，会让依赖权限的入口（如「角色与权限」）在已登录
+   *  状态下反复消失，客户看到的界面不稳定。 */
+  function isAuthoritativeSessionFailure(error: unknown): boolean {
+    const status = (error as { status?: unknown } | null | undefined)?.status
+    return status === 401 || status === 403
+  }
+
   async function refreshFromServer() {
     try {
       let sku = 'generic'
@@ -152,7 +160,8 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
       }
       invalidateEnterpriseSessionCache()
       clear()
-    } catch {
+    } catch (error) {
+      if (!isAuthoritativeSessionFailure(error)) return
       invalidateEnterpriseSessionCache()
       clear()
     }
@@ -211,3 +220,4 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     clear,
   }
 })
+
