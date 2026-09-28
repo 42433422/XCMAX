@@ -7,6 +7,8 @@ from typing import Any
 from app.services.tools_execution.order_parser_helpers import (
     build_missing_prompt,
     cleanup_unit_name,
+    extract_explicit_unit_name,
+    loose_order_fallback,
     normalize_chinese_digits,
     normalize_model_number_token,
     normalize_quantity_token,
@@ -166,6 +168,10 @@ def _parse_order_text(order_text: str) -> dict:
         unit_candidate = re.sub(r"[0-9A-Za-z-]{3,16}", " ", unit_candidate)
         unit_candidate = re.sub(r"[，,\s]+", " ", unit_candidate).strip()
         slot_unit = cleanup_unit_name(unit_candidate)
+        # 显式引号/键值写法给出的客户名优先级最高，覆盖正则抽取结果（#2067）。
+        explicit_unit = extract_explicit_unit_name(original_text)
+        if explicit_unit:
+            slot_unit = explicit_unit
         if not slot_unit:
             m_unit = re.search(
                 r"(?:打印(?:一下)?)\s{0,16}([^，,。]{1,120}?)\s{0,16}的?\s{0,16}(?:发货单|送货单|出货单)",
@@ -475,20 +481,9 @@ def _parse_order_text(order_text: str) -> dict:
         except RECOVERABLE_ERRORS as ai_err:
             logger.warning("AI 结构化抽取兜底失败，回退规则流程: %s", ai_err)
 
-        parts = text.split()
-        if len(parts) >= 2:
-            unit_name = parts[0].strip()
-            return {
-                "success": True,
-                "unit_name": unit_name,
-                "products": [
-                    {
-                        "name": " ".join(parts[1:]),
-                        "quantity_tins": 1,
-                        "tin_spec": 10.0,
-                    }
-                ],
-            }
+        loose = loose_order_fallback(text)
+        if loose:
+            return loose
 
         return {
             "success": False,

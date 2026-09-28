@@ -2128,7 +2128,8 @@ class TestExecuteShipmentGenerate:
             )
         assert "生成发货单失败" in result["response"]
 
-    def test_order_text_fallback_to_ai_text(self):
+    def test_order_text_prefers_original_message(self):
+        """#2067：订单文本必须优先取用户原话，而不是助手回复。"""
         svc = _make_svc()
         with patch(
             "app.application.facades.tools_facade._parse_order_text",
@@ -2140,9 +2141,20 @@ class TestExecuteShipmentGenerate:
                     "success": True,
                     "doc_name": "d",
                 }
-                svc._execute_shipment_generate({"data": {}}, {}, {"text": "ai text"})
-        parse_arg = mock_parse.call_args[0][0]
-        assert parse_arg == "ai text"
+                svc._execute_shipment_generate(
+                    {"data": {}}, {}, {"text": "ai text"}, "用户原话 5桶"
+                )
+        assert mock_parse.call_args[0][0] == "用户原话 5桶"
+
+    def test_assistant_text_is_not_used_as_order_text(self):
+        """#2067：无用户原话时不得把助手回复当作订单文本解析。"""
+        svc = _make_svc()
+        with patch(
+            "app.application.facades.tools_facade._parse_order_text",
+            return_value={"success": False, "message": "x"},
+        ) as mock_parse:
+            svc._execute_shipment_generate({"data": {}}, {}, {"text": "ai text"})
+        assert mock_parse.call_args[0][0] == ""
 
 
 # ---------------------------------------------------------------------------
