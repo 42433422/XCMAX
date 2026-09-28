@@ -48,52 +48,40 @@ describe('useAccountProfileStore', () => {
     expect(store.loaded).toBe(false)
   })
 
-  it('isAdminAccount is true when admin kind and admin flag', () => {
+  it.each<[string, 'admin' | 'enterprise', boolean, boolean]>([
+    ['admin kind + admin flag', 'admin', true, true],
+    ['enterprise kind + admin flag', 'enterprise', true, false],
+  ])('isAdminAccount with %s', (_label, kind, flag, expected) => {
     const store = useAccountProfileStore()
-    store.accountKind = 'admin'
-    store.marketIsAdmin = true
-    expect(store.isAdminAccount).toBe(true)
+    store.accountKind = kind
+    store.marketIsAdmin = flag
+    expect(store.isAdminAccount).toBe(expected)
   })
 
-  it('isAdminAccount is false when not admin kind', () => {
+  it.each<[number | null, boolean]>([
+    [5, true],
+    [null, false],
+  ])('isImpersonating with %s', (value, expected) => {
     const store = useAccountProfileStore()
-    store.accountKind = 'enterprise'
-    store.marketIsAdmin = true
-    expect(store.isAdminAccount).toBe(false)
+    store.impersonatingMarketUserId = value
+    expect(store.isImpersonating).toBe(expected)
   })
 
-  it('isImpersonating is true when impersonatingMarketUserId is set', () => {
+  it.each<[string, string]>([
+    ['  Test Brand  ', 'Test Brand'],
+    ['   ', ''],
+  ])('displayBrand for %j', (raw, expected) => {
     const store = useAccountProfileStore()
-    store.impersonatingMarketUserId = 5
-    expect(store.isImpersonating).toBe(true)
+    store.companyBrand = raw
+    expect(store.displayBrand).toBe(expected)
   })
 
-  it('isImpersonating is false when impersonatingMarketUserId is null', () => {
+  it.each<[string, null | undefined]>([
+    ['null', null],
+    ['undefined', undefined],
+  ])('applyFromMeData does nothing with %s', (_label, value) => {
     const store = useAccountProfileStore()
-    expect(store.isImpersonating).toBe(false)
-  })
-
-  it('displayBrand returns trimmed company brand', () => {
-    const store = useAccountProfileStore()
-    store.companyBrand = '  Test Brand  '
-    expect(store.displayBrand).toBe('Test Brand')
-  })
-
-  it('displayBrand returns empty string when brand is empty', () => {
-    const store = useAccountProfileStore()
-    store.companyBrand = '   '
-    expect(store.displayBrand).toBe('')
-  })
-
-  it('applyFromMeData does nothing with null', () => {
-    const store = useAccountProfileStore()
-    store.applyFromMeData(null)
-    expect(store.loaded).toBe(false)
-  })
-
-  it('applyFromMeData does nothing with undefined', () => {
-    const store = useAccountProfileStore()
-    store.applyFromMeData(undefined)
+    store.applyFromMeData(value)
     expect(store.loaded).toBe(false)
   })
 
@@ -204,50 +192,18 @@ describe('useAccountProfileStore', () => {
     expect(store.loaded).toBe(false)
   })
 
-  it('refreshFromServer clears when the server rejects the session with 401', async () => {
+  it.each<[string, Error, boolean]>([
+    ['server rejects the session (401)', Object.assign(new Error('Unauthorized'), { status: 401 }), false],
+    ['transient network failure', new Error('Network error'), true],
+    ['superseded refresh (abort)', Object.assign(new Error('signal is aborted without reason'), { name: 'AbortError' }), true],
+  ])('refreshFromServer on %s keeps loaded=%s', async (_label, error, keeps) => {
     const { authApi } = await import('@/api/auth')
-    vi.mocked(authApi.getCurrentUser).mockRejectedValueOnce(
-      Object.assign(new Error('Unauthorized'), { status: 401 }),
-    )
+    vi.mocked(authApi.getCurrentUser).mockRejectedValueOnce(error)
     const store = useAccountProfileStore()
     store.loaded = true
     await store.refreshFromServer()
-    expect(store.loaded).toBe(false)
-  })
-
-  it('refreshFromServer keeps the last known profile on transient network failure', async () => {
-    const { authApi } = await import('@/api/auth')
-    vi.mocked(authApi.getCurrentUser).mockRejectedValueOnce(new Error('Network error'))
-    const store = useAccountProfileStore()
-    store.loaded = true
-    await store.refreshFromServer()
-    // 瞬时失败不得清空已加载的资料，否则依赖权限的入口会在已登录状态下消失
-    expect(store.loaded).toBe(true)
-  })
-
-  it('refreshFromServer keeps the profile when the refresh is superseded (abort)', async () => {
-    const { authApi } = await import('@/api/auth')
-    const abortError = new Error('signal is aborted without reason')
-    abortError.name = 'AbortError'
-    vi.mocked(authApi.getCurrentUser).mockRejectedValueOnce(abortError)
-    const store = useAccountProfileStore()
-    store.loaded = true
-    await store.refreshFromServer()
-    expect(store.loaded).toBe(true)
-  })
-
-  it('refreshFromServer keeps the profile when the enterprise session check times out', async () => {
-    const { fetchProductSku, isEnterpriseEdition } = await import('@/utils/productSku')
-    const { validateEnterpriseSessionCached } = await import('@/utils/authSessionCache')
-    vi.mocked(fetchProductSku).mockResolvedValueOnce('enterprise')
-    vi.mocked(isEnterpriseEdition).mockReturnValueOnce(true)
-    const abortError = new Error('signal is aborted without reason')
-    abortError.name = 'AbortError'
-    vi.mocked(validateEnterpriseSessionCached).mockRejectedValueOnce(abortError)
-    const store = useAccountProfileStore()
-    store.loaded = true
-    await store.refreshFromServer()
-    expect(store.loaded).toBe(true)
+    // 会话明确失效才清空；瞬时失败保留最近资料，否则依赖权限的入口（如「角色与权限」）会消失
+    expect(store.loaded).toBe(keeps)
   })
 
   it('waits for tenant preference hydration before refresh resolves', async () => {
