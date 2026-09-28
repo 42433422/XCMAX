@@ -233,4 +233,3 @@ describe('useAccountProfileStore', () => {
     expect(resolved).toBe(true)
   })
 })
-
