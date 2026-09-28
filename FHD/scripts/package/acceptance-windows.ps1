@@ -392,7 +392,13 @@ if ($installRoot) {
   Write-Ok ("build-info   : version={0} gitSha={1} builtAt={2}" -f $buildInfo.version, $buildInfo.gitSha, $buildInfo.builtAt)
   $exePathInstalled = Join-Path $installRoot 'XCAGI.exe'
   if (Test-Path $exePathInstalled) {
-    Write-Ok ("ProductVersion: {0}" -f (Get-Item $exePathInstalled).VersionInfo.ProductVersion)
+    $exeProductVersion = (Get-Item $exePathInstalled).VersionInfo.ProductVersion
+    Write-Ok ("ProductVersion: {0}" -f $exeProductVersion)
+    if ($exeProductVersion -eq $Version) {
+      Record '6.exe版本' 'PASS' ("ProductVersion={0}" -f $exeProductVersion)
+    } else {
+      Record '6.exe版本' 'FAIL' ("ProductVersion={0} 与四段产品版本 {1} 不一致" -f $exeProductVersion, $Version)
+    }
   }
   $skuPath = Join-Path $installRoot 'resources\product-sku.json'
   if (Test-Path $skuPath) { Write-Ok ("product-sku  : {0}" -f (Get-Content $skuPath -Raw -Encoding UTF8).Trim()) }
