@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "erp-uom",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "42daee040a8de5ef22475e859b9de45edf8f8e0d71c7981949aca0e89b81e8de",
+  "visible_content": "计量单位/购买单位接口可读，产品页可见单位下拉。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-uom/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-uom/macos/result.png"
+}

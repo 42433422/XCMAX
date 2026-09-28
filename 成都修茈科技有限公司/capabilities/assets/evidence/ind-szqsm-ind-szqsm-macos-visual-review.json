@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ind-szqsm",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "7fc0718d001ab8ec6574de07a6f74981b704d48e2afb4ef6ef59bce4d3a23c67",
+  "visible_content": "页面可达；专属业务操作需要奇士美企业账号授权，SUNBIRD 无该权益，业务用例未通过（外部条件）。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/ind-szqsm/macos/operation.webm"
+  ],
+  "full_feature_acceptance": false,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ind-szqsm/macos/result.png"
+}

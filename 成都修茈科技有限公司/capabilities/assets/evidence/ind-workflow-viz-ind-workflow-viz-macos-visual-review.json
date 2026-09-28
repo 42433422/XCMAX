@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ind-workflow-viz",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "3542fd4ea9d882f025ce7970427af9ff0b576b1ff1164c2a2917a0a1242ccac7",
+  "visible_content": "工作流可视化桥状态可读，员工空间页展示工位。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/ind-workflow-viz/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ind-workflow-viz/macos/result.png"
+}

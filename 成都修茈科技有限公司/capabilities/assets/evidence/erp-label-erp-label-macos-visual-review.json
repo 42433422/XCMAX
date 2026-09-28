@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "erp-label",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "425fb87fbe0223744f99bf3b877e794f9869f43b0259563825e44a456f3f15f4",
+  "visible_content": "标签任务接口对企业租户被租户隔离门禁拒绝（403），界面同样显示该错误；需要标签链路做租户隔离迁移后才能通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-label/macos/operation.webm"
+  ],
+  "full_feature_acceptance": false,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-label/macos/result.png"
+}

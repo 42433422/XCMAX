@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "erp-ocr-clean",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "2f855e60095ffbd083728a492375258ea8d90158640c23d56c38e34a369f40ba",
+  "visible_content": "OCR 识别并提取结构化字段接口通过（单据无结构化字段，全为空）；送货单 ETL OCR 预览接口对企业租户被租户隔离门禁拒绝（403），清洗入库链路未通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-ocr-clean/macos/operation.webm"
+  ],
+  "full_feature_acceptance": false,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-ocr-clean/macos/result.png"
+}

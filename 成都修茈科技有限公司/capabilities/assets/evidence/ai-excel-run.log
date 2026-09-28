@@ -1,0 +1,7 @@
+2026-09-29T07:13:57+0800 [ai-excel] 开始验收 ai-excel Excel 生成与解析；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T07:13:58+0800 [ai-excel] M1 passed :: HTTP 200 42ms；mac0929-1790637238.xlsx rows=1
+2026-09-29T07:13:58+0800 [ai-excel] M2 passed :: HTTP 200 16ms；{"success": true, "file": "mac0929-1790637238.xlsx", "sheet": "Sheet1", "header_row": 1, "headers": [{"column": "A", "column_index": 1, "value": "名称"}, {"column": "B", "column_index": 2, "value": "数量"}, {"column": "C", "column_index": 3, "v
+2026-09-29T07:13:58+0800 [ai-excel] M3 passed :: HTTP 200 13ms；{"success": true, "data": {"employee_id": "excel-generate-employee", "status": "ready"}}
+2026-09-29T07:14:01+0800 [ai-excel] M4 passed :: 导航后路径 /mod/xcagi-office-employee-pack-bridge/tools；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 工具 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 工具表 | 全部分类 | AI Planner | 产品管理 | 客户管理 | 出货单 | Excel处理 | 图片OCR | 原材料仓库 | 标签打印 | 数据库管理 | 系统设
+2026-09-29T07:14:02+0800 [ai-excel] screenshot result.png
+2026-09-29T07:14:08+0800 [ai-excel] video operation.webm bytes=403367

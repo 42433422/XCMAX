@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ch-im-cs",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "76ca854cd36ca7091b7dd30d5955b4ea357feca42749d0e8d86e535131847568",
+  "visible_content": "客户漏斗接口可读、信息页展示客服类会话；但 AI 客服专员员工 user-customer-service-officer 未安装，客服状态接口返回未安装，AI 应答链路未通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-im-cs/macos/operation.webm"
+  ],
+  "full_feature_acceptance": false,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-im-cs/macos/result.png"
+}

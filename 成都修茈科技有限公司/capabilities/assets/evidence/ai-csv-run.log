@@ -1,0 +1,7 @@
+2026-09-29T07:23:33+0800 [ai-csv] 开始验收 ai-csv CSV 生成与解析；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T07:23:33+0800 [ai-csv] M1 passed :: HTTP 200 16ms；ok=True；{"output_path": "/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-csv-1790637813/outputs/output.csv", "row_count": 3, "column_count": 1, "delimiter": ",", "encoding": "utf-8-sig", "output_s
+2026-09-29T07:23:33+0800 [ai-csv] M2 passed :: HTTP 200 13ms；ok=True；{"output_path": "/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-csv-1790637813/outputs/csv-read.json", "row_count": 3, "column_count": 1, "delimiter": ",", "encoding": "utf-8-sig", "outpu
+2026-09-29T07:23:33+0800 [ai-csv] M3 passed :: HTTP 200 8ms；{"success": true, "data": {"files": [{"path": "temp_excel/mac0929-ai-csv-1790637813/outputs/csv-read.json", "kind": "json", "json": {"columns": ["内容"], "rows": [{"内容": "MAC验收0929 汇报"}, {"内容": "客户：太阳鸟"
+2026-09-29T07:23:37+0800 [ai-csv] M4 passed :: 导航后路径 /mod/xcagi-office-employee-pack-bridge/tools；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 工具 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 工具表 | 全部分类 | AI Planner | 产品管理 | 客户管理 | 出货单 | Excel处理 | 图片OCR | 原材料仓库 | 标签打印 | 数据库管理 | 系统设
+2026-09-29T07:23:38+0800 [ai-csv] screenshot result.png
+2026-09-29T07:23:42+0800 [ai-csv] video operation.webm bytes=381591

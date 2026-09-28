@@ -1,0 +1,5 @@
+2026-09-29T06:52:38+0800 [ind-szqsm] 开始验收 ind-szqsm 奇士美专属 Mod；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T06:52:41+0800 [ind-szqsm] M1 passed :: 导航后路径 /sz-qsm-pro；命中文本 ['奇士美']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 奇士美 PRO | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 奇士美 PRO |  | Mod ID: sz-qsm-pro — 账号定制包：产品/客户侧栏、涂料 AI 助手与微信电话业
+2026-09-29T06:52:41+0800 [ind-szqsm] M2 failed :: 受阻：该 Mod 为奇士美客户受保护定制，需奇士美企业账号授权；SUNBIRD 账号无该权益
+2026-09-29T06:52:43+0800 [ind-szqsm] screenshot result.png
+2026-09-29T06:52:45+0800 [ind-szqsm] video operation.webm bytes=191024

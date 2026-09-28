@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "sec-identity",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "bd761fad9ff69e622f077a5c37b3e747b6a8a0731cdb47185d3f0b425f0a736e",
+  "visible_content": "当前身份 tenant_id=1；页面内不带 CSRF 头的写请求返回 403；管理员审计日志在桌面端被拒绝（ADMIN_DESKTOP_FORBIDDEN）。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/sec-identity/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/sec-identity/macos/result.png"
+}

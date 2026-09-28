@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ind-taiyangniao",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "dc5d719328abdf9515d1148c2fb78eb30cb16a34bfb3d4bdd657255c6a3d7848",
+  "visible_content": "太阳鸟考勤规则与私有交付接口可读，考勤表转换页可见上传与规则区。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/ind-taiyangniao/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ind-taiyangniao/macos/result.png"
+}

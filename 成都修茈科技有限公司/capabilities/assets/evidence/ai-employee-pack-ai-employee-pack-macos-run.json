@@ -1,0 +1,66 @@
+{
+  "_comment": "2026-09-29 macOS 已安装 XCAGI.app 实机验收（CDP 驱动界面 + 同会话接口读写 + 界面读回）；原图与录屏逐项人工目检。",
+  "kind": "feature-acceptance",
+  "feature": "ai-employee-pack",
+  "platform": "macos",
+  "round": "feature-acceptance-20260929",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "app_version": "1.0.0.5",
+  "method": "经 CDP(127.0.0.1:9222) 驱动已安装的 /Applications/XCAGI.app：界面导航、键入与点击 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏转 VP8 webm。",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "visible_content": "办公员工包目录（10 个员工包）与宿主 employee-tools 接口同会话读回一致，界面工具页可见同一批工具卡片。",
+  "cases": [
+    {
+      "id": "M1",
+      "input": "GET /api/mod/xcagi-office-employee-pack-bridge/catalog",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/mod/xcagi-office-employee-pack-bridge/catalog（写操作自动附带 CSRF）：办公员工包目录",
+      "expected": "办公员工包目录：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 3501ms；{\"success\": true, \"data\": {\"collection\": \"office_employee_pack\", \"pack_count\": 10, \"pack_ids\": [\"excel-generate-employee\", \"excel-full-read-employee\", \"csv-generate-employee\", \"csv-full-read-employee\", \"pdf-generate-employee\", \"pdf-full-rea",
+      "result": "passed"
+    },
+    {
+      "id": "M2",
+      "input": "GET /api/platform-shell/employee-tools",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/platform-shell/employee-tools（写操作自动附带 CSRF）：已装员工包数量",
+      "expected": "已装员工包数量：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 20ms；installed_employee_pack_count=10 tools=10",
+      "result": "passed"
+    },
+    {
+      "id": "M3",
+      "input": "界面路由 /mod/xcagi-office-employee-pack-bridge/tools",
+      "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /mod/xcagi-office-employee-pack-bridge/tools，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+      "expected": "停留在 /mod/xcagi-office-employee-pack-bridge/tools，页面可见 工具，该页请求无 4xx/5xx",
+      "observed": "导航后路径 /mod/xcagi-office-employee-pack-bridge/tools；命中文本 ['工具']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 工具 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 工具表 | 全部分类 | AI Planner | 产品管理 | 客户管理 | 出货单 | Excel处理 | 图片OCR | 原材料仓库 | 标签打印 | 数据库管",
+      "result": "passed"
+    }
+  ],
+  "media": [
+    {
+      "feature": "ai-employee-pack",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-employee-pack/macos/result.png",
+      "sha256": "cbc9031c65a0413b31f9deac5a2bab558375d349405b6783ca52f9b2c72ade6d",
+      "visual_review": "accepted",
+      "visible_result": "「工具」页（办公员工包桥）：标题「AI Planner 可调用的工具」，卡片含 excel_analysis、import_excel_to_database、generate_office_document、update_order、delete_customer 等，左上角 饰品包装助手 / SUNBIRD。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ai-employee-pack",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-employee-pack/macos/operation.webm",
+      "sha256": "58e5179234674834ed9b7d7595b61713df3285e1c4ed4de085eb1c725da7a48f",
+      "visual_review": "accepted",
+      "visible_result": "录屏从智能对话页切到工具页，逐帧可见工具卡片网格加载完成。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-employee-pack/macos/run.log",
+    "sha256": "958311f485c7a160c213b87c9d530130d1e499e2406380dfca797cdd8c14fc41",
+    "bytes": 1442
+  }
+}

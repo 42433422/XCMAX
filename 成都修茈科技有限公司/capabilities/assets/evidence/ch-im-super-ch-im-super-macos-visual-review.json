@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ch-im-super",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "76ca854cd36ca7091b7dd30d5955b4ea357feca42749d0e8d86e535131847568",
+  "visible_content": "qclaw 超级路由权限表可读，信息页可见会话中心。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-im-super/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-im-super/macos/result.png"
+}

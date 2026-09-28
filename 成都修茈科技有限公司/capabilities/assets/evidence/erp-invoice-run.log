@@ -1,0 +1,7 @@
+2026-09-29T07:14:36+0800 [erp-invoice] 开始验收 erp-invoice 发票与税务；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T07:14:45+0800 [erp-invoice] M1 failed :: HTTP 403 9063ms；{"success": false, "message": "需要管理员账号登录后访问"}
+2026-09-29T07:14:45+0800 [erp-invoice] M2 failed :: HTTP 403 52ms；{"success": false, "message": "需要管理员账号登录后访问"}
+2026-09-29T07:14:45+0800 [erp-invoice] M3 failed :: 受阻：需要企业在税务开票通道（百望/航信等）开通并配置税号与证书，本机未配置
+2026-09-29T07:14:49+0800 [erp-invoice] M4 passed :: 导航后路径 /kitten-finance；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 财务分析 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 🐱 | 小猫财务分析 |  | 一键查看本月经营状况 |  | 🚀 开始分析 | 🐱 | 还没有分析数据 |  | 点击上方「开始分析」按钮，一键生成财务报告 |  | 立即开
+2026-09-29T07:14:50+0800 [erp-invoice] screenshot result.png
+2026-09-29T07:15:17+0800 [erp-invoice] video operation.webm bytes=390051

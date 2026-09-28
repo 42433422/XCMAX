@@ -1,0 +1,6 @@
+2026-09-29T06:39:46+0800 [base-config] 开始验收 base-config 数据目录与配置管理；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T06:39:46+0800 [base-config] M1 passed :: HTTP 200 15ms；dataDir=/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer modsDir=/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/mods
+2026-09-29T06:39:46+0800 [base-config] M2 passed :: HTTP 200 13ms；currentMode=safe 可选 ['absolute_safe', 'safe', 'performance']
+2026-09-29T06:39:49+0800 [base-config] M3 passed :: 导航后路径 /settings；命中文本 ['设置']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 系统设置 | SUNBIRD | 副窗 | ◈ | 工作区 | S | 更换 |  | SUNBIRD |  | SUNBIRD |  | 退出登录 | 系统设置 | 个人主页 | SUNBIRD · 头像与资料 | 展示名称 | 邮箱 | 登录名 | S
+2026-09-29T06:39:50+0800 [base-config] screenshot result.png
+2026-09-29T06:39:52+0800 [base-config] video operation.webm bytes=269792

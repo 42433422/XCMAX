@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "erp-shipment",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "cb8687f8ad97bdcd212a1134b170ac4d533ebc4b9249669279365a530764b3d3",
+  "visible_content": "出货记录页可见；出货生成接口被租户隔离门禁拒绝、business/shipment/create 只发布事件不落库，出货链路未通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-shipment/macos/operation.webm"
+  ],
+  "full_feature_acceptance": false,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-shipment/macos/result.png"
+}

@@ -1,5 +1,5 @@
 {
-  "lines": 2296364,
+  "lines": 2296352,
   "updated": "2026-09-29",
-  "note": "rebase 到 #2076 之后的 main 后校准：本轮 required CI 目标化 + 统一 classifier + Nightly Full（owner 指令）；棘轮仍只升不降"
+  "note": "棘轮下调"
 }

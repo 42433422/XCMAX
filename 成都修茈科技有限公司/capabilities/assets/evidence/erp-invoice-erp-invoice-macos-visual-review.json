@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "erp-invoice",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "9d1409ef7a584a4280ca2cba1ce8fee90d3693cfc9ad9fa67714ac1a8fb421f1",
+  "visible_content": "发票 CRM 与税务通道接口均要求管理员账号（403），真实开票需税务通道开通与证书，发票链路未通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-invoice/macos/operation.webm"
+  ],
+  "full_feature_acceptance": false,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-invoice/macos/result.png"
+}

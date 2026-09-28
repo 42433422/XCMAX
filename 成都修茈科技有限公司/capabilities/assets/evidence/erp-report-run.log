@@ -1,0 +1,7 @@
+2026-09-29T06:47:36+0800 [erp-report] 开始验收 erp-report 价格表 / 报表 / 统计分析；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T06:47:36+0800 [erp-report] M1 passed :: HTTP 200 68ms；{"product_count": 2, "supplier_count": 4, "monthly_sales": {"order_count": 0, "total_amount": null}, "monthly_purchases": {"order_count": 2, "total_amount": 100}, "alerts": {"low_stock": 0, "pending_o
+2026-09-29T06:47:36+0800 [erp-report] M2 passed :: HTTP 200 26ms；{"total_quantity": 0, "total_amount": 0}
+2026-09-29T06:47:36+0800 [erp-report] M3 passed :: HTTP 200 23ms；["型号", "品名", "规格", "单位", "数量", "单价", "金额"]
+2026-09-29T06:47:40+0800 [erp-report] M4 passed :: 导航后路径 /kitten-finance；命中文本 ['分析']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 财务分析 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 🐱 | 小猫财务分析 |  | 一键查看本月经营状况 |  | 🚀 开始分析 | 🐱 | 还没有分析数据 |  | 点击上方「开始分析」按钮，一键生成财务报告
+2026-09-29T06:47:41+0800 [erp-report] screenshot result.png
+2026-09-29T06:47:45+0800 [erp-report] video operation.webm bytes=230514
