@@ -1,1 +1,1 @@
-export { hostViewGlob } from './hostViewGlob.full'
+export { hostViewGlob } from './hostViewGlob.full' // CI 提速复测：前端改动（注释，行为不变）
