@@ -144,6 +144,23 @@ jobs:
           printf '%s\n' "${ADDED_FILES}" | python3 scripts/ci/guard_temp_scripts.py --added-from-stdin
           echo "✅ Temporary script location guard passed."
 
+  # 统一 changed-path 分类（desktop/macOS 专项检查按需触发；SSOT: scripts/dev/change_classifier.py）
+  classify:
+    runs-on: ubuntu-latest
+    outputs:
+      macos: ${{ steps.c.outputs.run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha || github.sha }}
+          fetch-depth: 0
+      - name: Classify changed paths (unified classifier)
+        id: c
+        run: |
+          python ../scripts/dev/change_classifier.py --category macos \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --head "${{ github.event.pull_request.head.sha }}"
+
   # Backend Tests & Quality
   backend-test:
     needs: guard-temp-scripts
@@ -1006,7 +1023,9 @@ jobs:
 
   desktop-build-smoke:
     name: desktop-build-smoke
-    needs: [frontend-test]
+    needs: [frontend-test, classify]
+    # 仅 desktop/runtime/updater/打包/签名相关改动才跑（日常前端/后端改动不触发）。
+    if: needs.classify.outputs.macos != 'false'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -1025,7 +1044,9 @@ jobs:
 
   desktop-test:
     name: desktop-test
-    needs: [frontend-test]
+    needs: [frontend-test, classify]
+    # 仅 desktop/runtime/updater/打包/签名相关改动才跑（日常前端/后端改动不触发）。
+    if: needs.classify.outputs.macos != 'false'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -1045,7 +1066,9 @@ jobs:
 
   desktop-windows-release-script-smoke:
     name: desktop-windows-release-script-smoke
-    needs: [guard-temp-scripts]
+    needs: [guard-temp-scripts, classify]
+    # 仅 desktop/runtime/updater/打包/签名相关改动才跑（日常前端/后端改动不触发）。
+    if: needs.classify.outputs.macos != 'false'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
