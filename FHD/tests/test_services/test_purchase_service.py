@@ -331,16 +331,16 @@ class TestCreatePurchaseOrder:
     def test_rejects_item_without_product_before_db(self, svc):
         mock_db = MagicMock()
         with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
-            result = svc.create_purchase_order(
-                {"supplier_id": 1, "items": [{"product_id": 1, "quantity": 1}, {"product_id": "", "quantity": 2}]}
-            )
+            items = [{"product_id": 1, "quantity": 1}, {"product_id": "", "quantity": 2}]
+            result = svc.create_purchase_order({"supplier_id": 1, "items": items})
         assert result == {"success": False, "message": "第 2 行明细未选择产品"}
         mock_db.add.assert_not_called()
 
     def test_inbound_rejects_item_without_product(self, svc):
         mock_db = MagicMock()
         with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
-            result = svc.create_purchase_inbound({"items": [{"product_name": "散料", "quantity": 1}]})
+            items = [{"product_name": "散料", "quantity": 1}]
+            result = svc.create_purchase_inbound({"items": items})
         assert result["success"] is False and "第 1 行" in result["message"]
         mock_db.add.assert_not_called()
 

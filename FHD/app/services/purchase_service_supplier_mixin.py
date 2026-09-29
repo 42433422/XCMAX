@@ -82,7 +82,7 @@ class PurchaseSupplierMixin:
         name = str(data.get("name") or "").strip()
         if not name:
             return {"success": False, "message": "供应商名称不能为空"}
-        code = str(data.get("code") or "").strip() or f"SUP{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
+        code = str(data.get("code") or "").strip() or f"SUP{datetime.now():%Y%m%d%H%M%S%f}"
         with _get_db() as db:
             try:
                 supplier = Supplier(

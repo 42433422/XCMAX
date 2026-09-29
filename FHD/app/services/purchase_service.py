@@ -30,7 +30,6 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
-
 def _items_without_product(items: list[dict[str, Any]]) -> dict[str, Any] | None:
     """明细 product_id 为非空外键：缺失时返回业务错误，而不是在 flush 时抛完整性异常。"""
     missing = [str(i) for i, item in enumerate(items, 1) if not (item or {}).get("product_id")]

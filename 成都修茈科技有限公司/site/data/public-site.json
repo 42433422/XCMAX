@@ -16,7 +16,7 @@
     "version": "1.0.0.5",
     "toolchain_version": "1.0.0"
   },
-  "data_updated_at": "2026-09-24",
+  "data_updated_at": "2026-09-29",
   "pricing": {
     "trial": {
       "id": "saas-trial-30",
@@ -174,10 +174,10 @@
     {
       "key": "macos",
       "applicable": 100,
-      "verified": 1,
-      "partial": 0,
-      "pending": 99,
-      "last_verified_at": "2026-09-22",
+      "verified": 67,
+      "partial": 29,
+      "pending": 4,
+      "last_verified_at": "2026-09-29",
       "label": "macOS 桌面",
       "level": "签约级"
     },
@@ -215,14 +215,14 @@
   "capabilities": {
     "total": 158,
     "by_status": {
-      "verified": 1,
-      "partial": 0,
-      "implemented": 153,
+      "verified": 3,
+      "partial": 93,
+      "implemented": 58,
       "planned": 4
     },
     "domains": 10,
     "modules": 28,
-    "completion": 39,
+    "completion": 58,
     "catalog_version": "2026-09-16",
     "platforms": [
       {
@@ -238,10 +238,10 @@
       {
         "key": "macos",
         "applicable": 100,
-        "verified": 1,
-        "partial": 0,
-        "pending": 99,
-        "last_verified_at": "2026-09-22",
+        "verified": 67,
+        "partial": 29,
+        "pending": 4,
+        "last_verified_at": "2026-09-29",
         "label": "macOS 桌面",
         "level": "签约级"
       },
@@ -341,8 +341,8 @@
           "caption": "行业考勤入口客户端实机截图（macOS 实机）",
           "public_path": "/capabilities/assets/evidence/ind-attendance-03-launched.png",
           "sha256": "8b914547b71951b9143bce19c8533f563cb71fa0e58983bd5dbcc37dd5ac8596",
-          "acceptance_status": "no-acceptance-record",
-          "verified_at": null
+          "acceptance_status": "passed",
+          "verified_at": "2026-09-29"
         }
       ],
       "videos": [],
@@ -376,8 +376,8 @@
           "caption": "订单管理模块实机界面（公共演示环境，含真实订单记录）",
           "public_path": "/capabilities/assets/evidence/erp-sales-order-erp-sales-order-01-sales-order-list.png",
           "sha256": "b318aa6db10d4865268b66a0b660b5e54240fcf7c0df364c097a94c637ca4bca",
-          "acceptance_status": "no-acceptance-record",
-          "verified_at": null
+          "acceptance_status": "failed",
+          "verified_at": "2026-09-29"
         },
         {
           "feature": "erp-inventory",
@@ -385,8 +385,8 @@
           "caption": "库存管理模块实机界面（演示环境，初始列表为空）",
           "public_path": "/capabilities/assets/evidence/erp-inventory-erp-inventory-01-inventory-management.png",
           "sha256": "80b44bcd485f2cf203a1ca7c91907321425ae3399e954807083147dbf9983bca",
-          "acceptance_status": "no-acceptance-record",
-          "verified_at": null
+          "acceptance_status": "passed",
+          "verified_at": "2026-09-29"
         },
         {
           "feature": "erp-label",
@@ -394,8 +394,8 @@
           "caption": "标签编辑器模块实机界面（演示环境，模板待创建）",
           "public_path": "/capabilities/assets/evidence/erp-label-erp-label-01-label-editor.png",
           "sha256": "1ae11035044673214f12f5b958b1195f660bbbd5e705d78cedb6e1d1777917bf",
-          "acceptance_status": "no-acceptance-record",
-          "verified_at": null
+          "acceptance_status": "failed",
+          "verified_at": "2026-09-29"
         },
         {
           "feature": "erp-excel-io",
@@ -403,8 +403,8 @@
           "caption": "Excel 导入导出中心实机界面（macOS 实机截图）",
           "public_path": "/capabilities/assets/evidence/erp-excel-io-erp-excel-io-01-etl-center.png",
           "sha256": "8a5c162df67bb4d4571c54aeb2546ea9b363b7e8b47fe9b6a6bdbaa47ba23274",
-          "acceptance_status": "failed",
-          "verified_at": "2026-09-20"
+          "acceptance_status": "passed",
+          "verified_at": "2026-09-29"
         }
       ],
       "videos": [],
@@ -422,85 +422,725 @@
     "features": [
       {
         "feature": "ai-chat-core",
-        "platform": null,
-        "status": "failed",
-        "passed": 0,
-        "failed": 2,
-        "verified_at": "2026-09-20",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
         "media": [
           {
-            "file": "ai-chat-core-03-product-exists.png",
-            "sha256": "9ad982968dc3d6f652dff255cb0ea3a470e87acb83d67af7d880adfca30e56c8",
+            "file": "ai-chat-core-result.png",
+            "sha256": "c411e5f9b36bd67c9c9c12f89155da2b61cb7c9935f05f3a0291029ab76a147e",
             "visual_review": "accepted",
-            "visible_result": "产品管理页面中 DEMO-001 确实存在，单价 99，库存 10。",
+            "visible_result": "智能对话页：两轮问答（「你好，请用一句话介绍你能帮我做什么」及其回复、「第二轮测试」续问与回复），右侧会话列表，底部输入框与「发送」。",
             "kind": "screenshot",
-            "public_path": "/capabilities/assets/evidence/ai-chat-core-03-product-exists.png"
+            "public_path": "/capabilities/assets/evidence/ai-chat-core-result.png"
           },
           {
-            "file": "ai-chat-core-05-query-failure-visible.png",
-            "sha256": "c376f24ec312129e1c377fa7a93aef99ebb222ec55f85aa535fd48efe4b78745",
+            "file": "ai-chat-core-operation.webm",
+            "sha256": "d23d1767edbdf7e3223b909badbad26f156d94285769f4f3c595c7eaaed5f1ae",
             "visual_review": "accepted",
-            "visible_result": "两个只读查询输入和失败响应同时可见：写入目标未找到、查询关键词错误地包含字段说明。",
-            "kind": "screenshot",
-            "public_path": "/capabilities/assets/evidence/ai-chat-core-05-query-failure-visible.png"
+            "visible_result": "录屏中在输入框键入带时间标签的问题并点击发送，AI 流式回复出现；随后发送续问，回复承接上一轮内容。",
+            "kind": "video",
+            "size_bytes": 900707,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
           }
         ],
-        "run_log": null,
-        "source_run": "/capabilities/assets/evidence/ai-chat-core-ai-chat-core-run.json"
+        "run_log": {
+          "file": "ai-chat-core-run.log",
+          "public_path": "/capabilities/assets/evidence/ai-chat-core-run.log",
+          "sha256": "fc2297a26d0f3c6cd9e288eab41f2c595e7b8f083931792e1046347a54814ff4",
+          "size_bytes": 1068
+        },
+        "source_run": "/capabilities/assets/evidence/ai-chat-core-ai-chat-core-macos-run.json"
+      },
+      {
+        "feature": "ai-csv",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ai-csv-result.png",
+            "sha256": "5851e17493b5edff8261de7ed60b064f82a8c7ad90839ff322006b4bd0b1fbf7",
+            "visual_review": "accepted",
+            "visible_result": "「工具表 · AI Planner 可调用的工具」卡片网格。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ai-csv-result.png"
+          },
+          {
+            "file": "ai-csv-operation.webm",
+            "sha256": "7f33230174c5d131bf1d8f6196b7ef72f8f76a0b80342b654ff47cee342d8948",
+            "visual_review": "accepted",
+            "visible_result": "录屏为工具表页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 381591,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ai-csv-run.log",
+          "public_path": "/capabilities/assets/evidence/ai-csv-run.log",
+          "sha256": "cd29a15607f8a5b1e92fa100aa160282d7dc2fbbf3ad61d73ff8efee7d1814d5",
+          "size_bytes": 1840
+        },
+        "source_run": "/capabilities/assets/evidence/ai-csv-ai-csv-macos-run.json"
+      },
+      {
+        "feature": "ai-employee-pack",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ai-employee-pack-result.png",
+            "sha256": "cbc9031c65a0413b31f9deac5a2bab558375d349405b6783ca52f9b2c72ade6d",
+            "visual_review": "accepted",
+            "visible_result": "「工具」页（办公员工包桥）：标题「AI Planner 可调用的工具」，卡片含 excel_analysis、import_excel_to_database、generate_office_document、update_order、delete_customer 等，左上角 饰品包装助手 / SUNBIRD。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ai-employee-pack-result.png"
+          },
+          {
+            "file": "ai-employee-pack-operation.webm",
+            "sha256": "58e5179234674834ed9b7d7595b61713df3285e1c4ed4de085eb1c725da7a48f",
+            "visual_review": "accepted",
+            "visible_result": "录屏从智能对话页切到工具页，逐帧可见工具卡片网格加载完成。",
+            "kind": "video",
+            "size_bytes": 578249,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ai-employee-pack-run.log",
+          "public_path": "/capabilities/assets/evidence/ai-employee-pack-run.log",
+          "sha256": "958311f485c7a160c213b87c9d530130d1e499e2406380dfca797cdd8c14fc41",
+          "size_bytes": 1442
+        },
+        "source_run": "/capabilities/assets/evidence/ai-employee-pack-ai-employee-pack-macos-run.json"
+      },
+      {
+        "feature": "ai-employees-workflow",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ai-employees-workflow-result.png",
+            "sha256": "10cacb78e0e48fe34b5505107c6399f8a78bd5d25ef3e58f5e447cb3ed593fdd",
+            "visual_review": "accepted",
+            "visible_result": "员工工作台 → 员工空间：企业工位 1、工位实况中「考勤 AI 助手」卡片、右侧员工与状态面板。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ai-employees-workflow-result.png"
+          },
+          {
+            "file": "ai-employees-workflow-operation.webm",
+            "sha256": "cffd61023372f2a0c24556d8717854ee91e8926a295e537d02c0e9cd5fbfa037",
+            "visual_review": "accepted",
+            "visible_result": "录屏为员工空间页，工位卡片与统计区在各帧稳定显示。",
+            "kind": "video",
+            "size_bytes": 368637,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ai-employees-workflow-run.log",
+          "public_path": "/capabilities/assets/evidence/ai-employees-workflow-run.log",
+          "sha256": "e2525173ebbc3d4c0a2b2ffca2ed36b97256128e31fcf3586a476c7a3369c85a",
+          "size_bytes": 1724
+        },
+        "source_run": "/capabilities/assets/evidence/ai-employees-workflow-ai-employees-workflow-macos-run.json"
+      },
+      {
+        "feature": "ai-excel",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ai-excel-result.png",
+            "sha256": "5851e17493b5edff8261de7ed60b064f82a8c7ad90839ff322006b4bd0b1fbf7",
+            "visual_review": "accepted",
+            "visible_result": "「工具表 · AI Planner 可调用的工具」：excel_analysis、excel_schema_understand、excel_join_compare、import_excel_to_database、generate_office_document 等卡片。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ai-excel-result.png"
+          },
+          {
+            "file": "ai-excel-operation.webm",
+            "sha256": "eece00b1d7de8e0944594a6adfe4a57ecf3958d9791194df24c59e08a1a07f90",
+            "visual_review": "accepted",
+            "visible_result": "录屏为工具表页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 403367,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ai-excel-run.log",
+          "public_path": "/capabilities/assets/evidence/ai-excel-run.log",
+          "sha256": "d5a1b5b745139c418d3d5c6eeceb2999a94824cc728e917a1bda3385a89a58bf",
+          "size_bytes": 1533
+        },
+        "source_run": "/capabilities/assets/evidence/ai-excel-ai-excel-macos-run.json"
       },
       {
         "feature": "ai-intent",
-        "platform": null,
-        "status": "failed",
-        "passed": 0,
-        "failed": 2,
-        "verified_at": "2026-09-20",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
         "media": [
           {
-            "file": "ai-intent-03-product-exists.png",
-            "sha256": "9ad982968dc3d6f652dff255cb0ea3a470e87acb83d67af7d880adfca30e56c8",
+            "file": "ai-intent-result.png",
+            "sha256": "b64dab46c0c90ee16a7b44df6c9cf50a27df60d53bdb9b4b77dfb936f5329725",
             "visual_review": "accepted",
-            "visible_result": "产品管理页面中 DEMO-001 确实存在，单价 99，库存 10。",
+            "visible_result": "「对话调试 / 聊天调试工作台」页：快速测试样例、模式（普通版/专业版）、测试输入框与「单模式模拟」「双模式对比」按钮、意图测试包区。",
             "kind": "screenshot",
-            "public_path": "/capabilities/assets/evidence/ai-intent-03-product-exists.png"
+            "public_path": "/capabilities/assets/evidence/ai-intent-result.png"
           },
           {
-            "file": "ai-intent-05-query-failure-visible.png",
-            "sha256": "c376f24ec312129e1c377fa7a93aef99ebb222ec55f85aa535fd48efe4b78745",
+            "file": "ai-intent-operation.webm",
+            "sha256": "5ad0e15053ace1839a8e8cb2be1876ac41b92c559114725d3ce31e0421331af3",
             "visual_review": "accepted",
-            "visible_result": "两个只读查询输入和失败响应同时可见：写入目标未找到、查询关键词错误地包含字段说明。",
-            "kind": "screenshot",
-            "public_path": "/capabilities/assets/evidence/ai-intent-05-query-failure-visible.png"
+            "visible_result": "录屏为聊天调试工作台，样例按钮与测试区完整。",
+            "kind": "video",
+            "size_bytes": 293464,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
           }
         ],
-        "run_log": null,
-        "source_run": "/capabilities/assets/evidence/ai-intent-ai-intent-run.json"
+        "run_log": {
+          "file": "ai-intent-run.log",
+          "public_path": "/capabilities/assets/evidence/ai-intent-run.log",
+          "sha256": "6841576e41fc88ae2242f2ae33b31ee5a4979a76b5234ff1dc0afc219971e698",
+          "size_bytes": 1320
+        },
+        "source_run": "/capabilities/assets/evidence/ai-intent-ai-intent-macos-run.json"
       },
       {
         "feature": "ai-knowledge",
-        "platform": null,
+        "platform": "macos",
         "status": "failed",
-        "passed": 0,
-        "failed": 1,
-        "verified_at": "2026-09-20",
+        "passed": 2,
+        "failed": 2,
+        "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
         "media": [
           {
-            "file": "ai-knowledge-11-knowledge-import-assistant-overlap.png",
-            "sha256": "20c08148005439ec2c8c1cef7061b9eb5ed6cfc2dad78ed5383044de6f6f0148",
+            "file": "ai-knowledge-result.png",
+            "sha256": "e8908ab0273f92a9b1bb4522fac5382360813953c60c2b6fe8cdcf5f038e53b8",
             "visual_review": "accepted",
-            "visible_result": "添加知识来源抽屉仍打开；小C 助理浮层挡住表单，下方悬浮按钮与加入 Persy 按钮重叠。",
+            "visible_result": "知识库页「企业知识网络」：Persy 节点图（Persy、偏能知识、财务记忆、客户资料）与右侧节点详情，底部「问 Persy」输入栏。",
             "kind": "screenshot",
-            "public_path": "/capabilities/assets/evidence/ai-knowledge-11-knowledge-import-assistant-overlap.png"
+            "public_path": "/capabilities/assets/evidence/ai-knowledge-result.png"
+          },
+          {
+            "file": "ai-knowledge-operation.webm",
+            "sha256": "c31c08d5697ee0612464fb806aa2c7f8eb0ed0f17f8765245f84c1d8e18a85ef",
+            "visual_review": "accepted",
+            "visible_result": "录屏为知识库节点图页面，各帧一致。",
+            "kind": "video",
+            "size_bytes": 367157,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
           }
         ],
-        "run_log": null,
-        "source_run": "/capabilities/assets/evidence/ai-knowledge-ai-knowledge-run.json"
+        "run_log": {
+          "file": "ai-knowledge-run.log",
+          "public_path": "/capabilities/assets/evidence/ai-knowledge-run.log",
+          "sha256": "70086de186ac7696429263c3f7e03a09850e84d621956591281968652dfabde5",
+          "size_bytes": 1482
+        },
+        "source_run": "/capabilities/assets/evidence/ai-knowledge-ai-knowledge-macos-run.json"
+      },
+      {
+        "feature": "ai-ocr-doc",
+        "platform": "macos",
+        "status": "failed",
+        "passed": 3,
+        "failed": 1,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ai-ocr-doc-result.png",
+            "sha256": "e610311e6d4067878e5c7e34602a11a7ae545f513a309e28a2f9a97cd6266055",
+            "visual_review": "accepted",
+            "visible_result": "智能对话页：底部「上传附件」「解析办公文件」按钮与输入框。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ai-ocr-doc-result.png"
+          },
+          {
+            "file": "ai-ocr-doc-operation.webm",
+            "sha256": "b0abd05f0d39d8732cb8edbc143ad335807d5293716f66580d34ff2581044465",
+            "visual_review": "accepted",
+            "visible_result": "录屏为智能对话页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 253744,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ai-ocr-doc-run.log",
+          "public_path": "/capabilities/assets/evidence/ai-ocr-doc-run.log",
+          "sha256": "dc21f00181fc2412cc09c3bdd58e972c413262a8c6d5c668a04086f8939a2a7b",
+          "size_bytes": 1696
+        },
+        "source_run": "/capabilities/assets/evidence/ai-ocr-doc-ai-ocr-doc-macos-run.json"
+      },
+      {
+        "feature": "ai-pdf",
+        "platform": "macos",
+        "status": "failed",
+        "passed": 2,
+        "failed": 2,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ai-pdf-result.png",
+            "sha256": "5851e17493b5edff8261de7ed60b064f82a8c7ad90839ff322006b4bd0b1fbf7",
+            "visual_review": "accepted",
+            "visible_result": "「工具表 · AI Planner 可调用的工具」：excel_analysis、generate_office_document 等工具卡片。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ai-pdf-result.png"
+          },
+          {
+            "file": "ai-pdf-operation.webm",
+            "sha256": "d491068f20b11848cd8f9a597b1a0e173b5e862f10e0e199fdb824aeeca297a9",
+            "visual_review": "accepted",
+            "visible_result": "录屏为工具表页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 360943,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ai-pdf-run.log",
+          "public_path": "/capabilities/assets/evidence/ai-pdf-run.log",
+          "sha256": "3aecdd97482c3d6907ac22b28af2fe50ef880ff84e697541ae6f0aabee516f00",
+          "size_bytes": 1811
+        },
+        "source_run": "/capabilities/assets/evidence/ai-pdf-ai-pdf-macos-run.json"
+      },
+      {
+        "feature": "ai-ppt",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ai-ppt-result.png",
+            "sha256": "fa3a461fdd2cfd08f8eb6acc1da37731c3411fc69271282dbffaa0e3fe6c3dcf",
+            "visual_review": "accepted",
+            "visible_result": "「员工工作流管理」页：流程与员工、员工空间（进入员工空间）、六部门编制图说明。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ai-ppt-result.png"
+          },
+          {
+            "file": "ai-ppt-operation.webm",
+            "sha256": "3da57ff04aaa773a9636b2bcc4375ec240ee4ccf747d010ae42b7a48509efa36",
+            "visual_review": "accepted",
+            "visible_result": "录屏为员工工作流管理页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 357692,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ai-ppt-run.log",
+          "public_path": "/capabilities/assets/evidence/ai-ppt-run.log",
+          "sha256": "c632b7cdd1f94f320ec5d92fc87fbc699a1c5ae5e82cdf693ec91ed019dc9344",
+          "size_bytes": 1854
+        },
+        "source_run": "/capabilities/assets/evidence/ai-ppt-ai-ppt-macos-run.json"
+      },
+      {
+        "feature": "ai-task-workspace",
+        "platform": "macos",
+        "status": "failed",
+        "passed": 3,
+        "failed": 1,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ai-task-workspace-result.png",
+            "sha256": "853d413a36bb32703ebb7412583cfd43c476fffbbfff352effb1f15df103b1ad",
+            "visual_review": "accepted",
+            "visible_result": "「独立工作区」页：标题「MAC验收0929任务」与待审批进度，下方对话区与右侧任务/对话面板。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ai-task-workspace-result.png"
+          },
+          {
+            "file": "ai-task-workspace-operation.webm",
+            "sha256": "bb1b0ff6b7c8fe51d2cebc22969eb42233cd944df8546ad0669c9ddaa9fa986b",
+            "visual_review": "accepted",
+            "visible_result": "录屏为独立工作区页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 244769,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ai-task-workspace-run.log",
+          "public_path": "/capabilities/assets/evidence/ai-task-workspace-run.log",
+          "sha256": "d44830ed7f02f426bba4e44032d88d162e45a3cdf9f84230bcbb5caf4006cb99",
+          "size_bytes": 1476
+        },
+        "source_run": "/capabilities/assets/evidence/ai-task-workspace-ai-task-workspace-macos-run.json"
+      },
+      {
+        "feature": "ai-tts",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ai-tts-result.png",
+            "sha256": "749ce214ba3a0dff81571cf42c3db4b0a549f6973d840a244ddfbe5f400a7124",
+            "visual_review": "accepted",
+            "visible_result": "系统设置页：个人主页（SUNBIRD）、角色与权限、模型服务与账户余额卡片。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ai-tts-result.png"
+          },
+          {
+            "file": "ai-tts-operation.webm",
+            "sha256": "5ec26bdce32ce13b15d583c9addd9d1f9c42cea2d92ca742fd8ca54bfce2990a",
+            "visual_review": "accepted",
+            "visible_result": "录屏从智能对话页切到系统设置页。",
+            "kind": "video",
+            "size_bytes": 325036,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ai-tts-run.log",
+          "public_path": "/capabilities/assets/evidence/ai-tts-run.log",
+          "sha256": "a81335450164bedc7ae76a68c479f80e2be0d3785b8d93d58e8587100d64372a",
+          "size_bytes": 1165
+        },
+        "source_run": "/capabilities/assets/evidence/ai-tts-ai-tts-macos-run.json"
+      },
+      {
+        "feature": "ai-word",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ai-word-result.png",
+            "sha256": "5851e17493b5edff8261de7ed60b064f82a8c7ad90839ff322006b4bd0b1fbf7",
+            "visual_review": "accepted",
+            "visible_result": "「工具表 · AI Planner 可调用的工具」卡片网格。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ai-word-result.png"
+          },
+          {
+            "file": "ai-word-operation.webm",
+            "sha256": "bea0446a6b4c1fb77ff9824f17d2bbda8494490cade15e23b745d5be40d63111",
+            "visual_review": "accepted",
+            "visible_result": "录屏为工具表页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 317938,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ai-word-run.log",
+          "public_path": "/capabilities/assets/evidence/ai-word-run.log",
+          "sha256": "24fb122abc20ee81574728b570e7ec2e0bd7050e2362fc195b37cdd7d35b6b08",
+          "size_bytes": 1818
+        },
+        "source_run": "/capabilities/assets/evidence/ai-word-ai-word-macos-run.json"
+      },
+      {
+        "feature": "base-config",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "base-config-result.png",
+            "sha256": "6bbcbc2685cfdaad5cd5bfee6a816589c87357f126211642b4833b1b5a1e76b1",
+            "visual_review": "accepted",
+            "visible_result": "系统设置页：个人主页 SUNBIRD（显示名称、邮箱、登录名）、角色与权限、模型服务与账户余额 ¥97.60。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-config-result.png"
+          },
+          {
+            "file": "base-config-operation.webm",
+            "sha256": "a266c50ff8284f4e7ea811beaf68fd0824ddc67233f47a803b55861be013eb7a",
+            "visual_review": "accepted",
+            "visible_result": "录屏为系统设置页滚动加载，各帧一致。",
+            "kind": "video",
+            "size_bytes": 269792,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "base-config-run.log",
+          "public_path": "/capabilities/assets/evidence/base-config-run.log",
+          "sha256": "55cadc7a836aee3bf60f4e3369604377438ac5cae8fd89d1be19c6699cef6837",
+          "size_bytes": 1288
+        },
+        "source_run": "/capabilities/assets/evidence/base-config-base-config-macos-run.json"
+      },
+      {
+        "feature": "base-db",
+        "platform": "macos",
+        "status": "failed",
+        "passed": 3,
+        "failed": 1,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "base-db-result.png",
+            "sha256": "5671972587655054450f42f6ee23849cf469c5d2fc377d8b44a920f4efe08ba1",
+            "visual_review": "accepted",
+            "visible_result": "「数据来源 · 私人数据库读取助手」：本地信息数据库卡片与 QQ/钉钉/企业微信/飞书/Telegram/WhatsApp/Skype 等规划中来源。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-db-result.png"
+          },
+          {
+            "file": "base-db-operation.webm",
+            "sha256": "b4e0e497367531c4860fa6b5d9301a9bc6b0d1514114e35fe8e1c8202d250988",
+            "visual_review": "accepted",
+            "visible_result": "录屏为数据来源页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 382966,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "base-db-run.log",
+          "public_path": "/capabilities/assets/evidence/base-db-run.log",
+          "sha256": "19c7dde6cb44ece53f5cc1aa01f5b78b971d86096924a81458ff56b002762e5e",
+          "size_bytes": 1359
+        },
+        "source_run": "/capabilities/assets/evidence/base-db-base-db-macos-run.json"
+      },
+      {
+        "feature": "base-device-bind",
+        "platform": "macos",
+        "status": "failed",
+        "passed": 2,
+        "failed": 2,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "base-device-bind-result.png",
+            "sha256": "749ce214ba3a0dff81571cf42c3db4b0a549f6973d840a244ddfbe5f400a7124",
+            "visual_review": "accepted",
+            "visible_result": "系统设置页：个人主页 SUNBIRD、模型服务与余额 ¥97.51。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-device-bind-result.png"
+          },
+          {
+            "file": "base-device-bind-operation.webm",
+            "sha256": "ce1a10b61123f1ca858e1438778bd8c9c9e104b663f316f2c0aac456d3ab603d",
+            "visual_review": "accepted",
+            "visible_result": "录屏从智能对话页切到系统设置页。",
+            "kind": "video",
+            "size_bytes": 318095,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "base-device-bind-run.log",
+          "public_path": "/capabilities/assets/evidence/base-device-bind-run.log",
+          "sha256": "099658dba7b75bf0152701794e335d5255fd225b66e5533fb73f2080eb184376",
+          "size_bytes": 1455
+        },
+        "source_run": "/capabilities/assets/evidence/base-device-bind-base-device-bind-macos-run.json"
+      },
+      {
+        "feature": "base-edition-pack",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "base-edition-pack-result.png",
+            "sha256": "b8a18f6c03ba1da3464c71bb3c6cac4aafd5def019719a67d599ae532a8219ec",
+            "visual_review": "accepted",
+            "visible_result": "「能力库 · AI 员工市场」：左侧分类（宿主基础员工、办公员工包等），主区「宿主基础能力（预装员工）」卡片带「已安装」标记。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-edition-pack-result.png"
+          },
+          {
+            "file": "base-edition-pack-operation.webm",
+            "sha256": "4c9894b1560751804589cacb37c7dcb7ba21ca780aa143b4e321d03714c9c3d7",
+            "visual_review": "accepted",
+            "visible_result": "录屏为能力库页，分类列表与预装员工卡片逐帧可见。",
+            "kind": "video",
+            "size_bytes": 352633,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "base-edition-pack-run.log",
+          "public_path": "/capabilities/assets/evidence/base-edition-pack-run.log",
+          "sha256": "17dd92addf341e281e1077ebcb4a041108bceebc5a7c87b5ee5bec52d0468f32",
+          "size_bytes": 1412
+        },
+        "source_run": "/capabilities/assets/evidence/base-edition-pack-base-edition-pack-macos-run.json"
+      },
+      {
+        "feature": "base-health",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "base-health-result.png",
+            "sha256": "5edcc79f5e41d724ed00182cc2fde18418d9b42c45643d3bce9ab69e25ae9fa9",
+            "visual_review": "accepted",
+            "visible_result": "系统设置页（左下角「系统正常」状态）：个人主页、模型服务与余额卡片。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-health-result.png"
+          },
+          {
+            "file": "base-health-operation.webm",
+            "sha256": "65a0106b6a554cf18e9011217a4358db120269ba782226c94f46e64c40877e55",
+            "visual_review": "accepted",
+            "visible_result": "录屏为系统设置页，左下系统状态灯为「系统正常」。",
+            "kind": "video",
+            "size_bytes": 338832,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "base-health-run.log",
+          "public_path": "/capabilities/assets/evidence/base-health-run.log",
+          "sha256": "30315d70535732527bb0ae4210e46ab5b993ef48dd2c58ae5c30d7348c01e104",
+          "size_bytes": 1261
+        },
+        "source_run": "/capabilities/assets/evidence/base-health-base-health-macos-run.json"
+      },
+      {
+        "feature": "base-install-guide",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "base-install-guide-result.png",
+            "sha256": "73c42a0d307c82912401ff006df65faba49516e093a60f67a0573f70e0348d59",
+            "visual_review": "accepted",
+            "visible_result": "新手引导「XCAGI · 创建您的数字公司」第 1 步「您的公司叫什么？」，公司名称输入框为 SUNBIRD，按钮「让 XC 认识我的公司」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-install-guide-result.png"
+          },
+          {
+            "file": "base-install-guide-operation.webm",
+            "sha256": "ff4346fcd5feae82795d950faa64eaf824e93a36b1ba4d84aafdd0a55299ae91",
+            "visual_review": "accepted",
+            "visible_result": "录屏为引导页第 1 步，各帧一致。",
+            "kind": "video",
+            "size_bytes": 184199,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "base-install-guide-run.log",
+          "public_path": "/capabilities/assets/evidence/base-install-guide-run.log",
+          "sha256": "a9c5380bf10abc0e2bfd548e8b279267f733c7eeb19f4c00266f84a1b3e8b1a6",
+          "size_bytes": 1354
+        },
+        "source_run": "/capabilities/assets/evidence/base-install-guide-base-install-guide-macos-run.json"
       },
       {
         "feature": "base-login",
@@ -600,125 +1240,2930 @@
         "source_run": "/capabilities/assets/evidence/base-login-base-login-windows-run.json"
       },
       {
-        "feature": "base-rbac",
-        "platform": "windows",
-        "status": "blocked",
-        "passed": 0,
+        "feature": "base-mac-client",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
         "failed": 0,
-        "verified_at": "2026-09-20",
+        "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
         "media": [
           {
-            "file": "base-rbac.png",
-            "sha256": "8dc8864213eb1d02cbd15173f510b349bdd5ae47affe5da68921111a38cf58e6",
+            "file": "base-mac-client-result.png",
+            "sha256": "84d5cc239f0c0dbf1ca673455527653d56e953bf8bdc98eb59ee03b7be71c6c2",
             "visual_review": "accepted",
-            "visible_result": "/api/rbac/roles and /api/rbac/permissions return 401 before login; /api/xcmax/admin/session returns 403 ADMIN_DESKTOP_FORBIDDEN; health component business_route:rbac reports ok=true",
+            "visible_result": "「桌面运行时」页：运行状态表（桌面模式 是、数据目录/数据库/存储模式 本地 SQLite/Mod 目录/模型目录均指向 /Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer），本地模型区。",
             "kind": "screenshot",
-            "public_path": null
+            "public_path": "/capabilities/assets/evidence/base-mac-client-result.png"
           },
           {
-            "file": "base-rbac-base-rbac.mp4",
-            "sha256": "3ec07a3eb50509ef7f39def5724afc61a8f8e189d081f581a1395f9b7aea5e0d",
+            "file": "base-mac-client-operation.webm",
+            "sha256": "6121c22cfc9f8f8ef4fbc8c76c2e1a7817d66da44ab198eda42318a71404ecff",
             "visual_review": "accepted",
-            "visible_result": "/api/rbac/roles and /api/rbac/permissions return 401 before login; /api/xcmax/admin/session returns 403 ADMIN_DESKTOP_FORBIDDEN; health component business_route:rbac reports ok=true",
+            "visible_result": "录屏为桌面运行时页，运行状态表逐帧一致。",
             "kind": "video",
-            "size_bytes": 3356866,
-            "duration_seconds": 24.0,
-            "codec": "avc1",
+            "size_bytes": 274375,
+            "duration_seconds": null,
+            "codec": "webm",
             "public_path": null
           }
         ],
-        "run_log": null,
-        "source_run": "/capabilities/assets/evidence/base-rbac-windows-base-rbac-run.json"
+        "run_log": {
+          "file": "base-mac-client-run.log",
+          "public_path": "/capabilities/assets/evidence/base-mac-client-run.log",
+          "sha256": "1ce4a3f9735cce09bf0d43bf1a61f547020090b7f2e2c575640fd77039f117be",
+          "size_bytes": 1338
+        },
+        "source_run": "/capabilities/assets/evidence/base-mac-client-base-mac-client-macos-run.json"
+      },
+      {
+        "feature": "base-rbac",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "base-rbac-result.png",
+            "sha256": "0169747ae76f7fb24c948bea91bc853acfaaf1b77a2765ab499a7355dc031059",
+            "visual_review": "accepted",
+            "visible_result": "「角色与权限」页：角色列表含 MAC验收0929角色（新建），右侧权限勾选项（执行 ETL / 查看数据对接 / 回滚 ETL / 管理 ETL 目标 等）与「保存角色」、用户角色分配区。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-rbac-result.png"
+          },
+          {
+            "file": "base-rbac-operation.webm",
+            "sha256": "b4e0597acad57a2c0b3aead3e33c7fca6e7e15524ae3a02d1857be85f2466632",
+            "visual_review": "accepted",
+            "visible_result": "录屏为角色与权限页，新建角色出现在左侧列表并被选中。",
+            "kind": "video",
+            "size_bytes": 300521,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "base-rbac-run.log",
+          "public_path": "/capabilities/assets/evidence/base-rbac-run.log",
+          "sha256": "d12c4fa5351e76511688c6ba56177b64f42e4273473bac99e0a3aa3c9a8b0773",
+          "size_bytes": 1356
+        },
+        "source_run": "/capabilities/assets/evidence/base-rbac-base-rbac-macos-run.json"
+      },
+      {
+        "feature": "base-settings",
+        "platform": "macos",
+        "status": "failed",
+        "passed": 3,
+        "failed": 1,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "base-settings-result.png",
+            "sha256": "6bbcbc2685cfdaad5cd5bfee6a816589c87357f126211642b4833b1b5a1e76b1",
+            "visual_review": "accepted",
+            "visible_result": "系统设置页：个人主页 SUNBIRD、角色与权限、模型服务与账户余额 ¥97.60。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-settings-result.png"
+          },
+          {
+            "file": "base-settings-operation.webm",
+            "sha256": "3a4055c73eb7dfc44d161df2c61fc0590342112aee0eab09b7664ff677754701",
+            "visual_review": "accepted",
+            "visible_result": "录屏为系统设置页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 280156,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "base-settings-run.log",
+          "public_path": "/capabilities/assets/evidence/base-settings-run.log",
+          "sha256": "3f3609165ca671e322a525e6a557228aba15c5d9f71374389a1926ba7b9ecc8a",
+          "size_bytes": 1379
+        },
+        "source_run": "/capabilities/assets/evidence/base-settings-base-settings-macos-run.json"
       },
       {
         "feature": "base-update-mgmt",
-        "platform": null,
-        "status": "failed",
-        "passed": 0,
-        "failed": 1,
-        "verified_at": "2026-09-20",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 2,
+        "failed": 0,
+        "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
         "media": [
           {
-            "file": "base-update-mgmt-12-about-version-mismatch.png",
-            "sha256": "802bb2164cef46ecffc254064e093f221b885e57e0206e2f949539a71ad473d1",
+            "file": "base-update-mgmt-result.png",
+            "sha256": "6bbcbc2685cfdaad5cd5bfee6a816589c87357f126211642b4833b1b5a1e76b1",
             "visual_review": "accepted",
-            "visible_result": "同一张未经修改的实机截图可读出左下角 v1.0.0.5 和关于页当前版本 1.0.0；设备配对卡片已在应用内收起。",
+            "visible_result": "系统设置页：个人主页、角色与权限、模型服务卡片，版本号 v1.0.0.5 在左下角。",
             "kind": "screenshot",
-            "public_path": "/capabilities/assets/evidence/base-update-mgmt-12-about-version-mismatch.png"
+            "public_path": "/capabilities/assets/evidence/base-update-mgmt-result.png"
+          },
+          {
+            "file": "base-update-mgmt-operation.webm",
+            "sha256": "3d668b6f4d715d35b1190b5dfe154c30bd357732ede06ab0e83928d281d87cee",
+            "visual_review": "accepted",
+            "visible_result": "录屏先在智能对话页，再切到系统设置页。",
+            "kind": "video",
+            "size_bytes": 373960,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
           }
         ],
-        "run_log": null,
-        "source_run": "/capabilities/assets/evidence/base-update-mgmt-base-update-mgmt-run.json"
+        "run_log": {
+          "file": "base-update-mgmt-run.log",
+          "public_path": "/capabilities/assets/evidence/base-update-mgmt-run.log",
+          "sha256": "6247741816ec3e585589d17d23fa67336770645cc52f0b63c60f4a7eb4aad7cb",
+          "size_bytes": 1121
+        },
+        "source_run": "/capabilities/assets/evidence/base-update-mgmt-base-update-mgmt-macos-run.json"
+      },
+      {
+        "feature": "ch-asr",
+        "platform": "macos",
+        "status": "failed",
+        "passed": 2,
+        "failed": 1,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ch-asr-result.png",
+            "sha256": "bfc6de624382f339fb0c2461332b59830df563979eedc260fc55f42537a1588c",
+            "visual_review": "accepted",
+            "visible_result": "智能对话页：底部「按住说话」按钮与输入框。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ch-asr-result.png"
+          },
+          {
+            "file": "ch-asr-operation.webm",
+            "sha256": "694ac1c32f2891fea759581a1bdbd9d969691828f48b9fde411253d6928cbae0",
+            "visual_review": "accepted",
+            "visible_result": "录屏为智能对话页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 186895,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ch-asr-run.log",
+          "public_path": "/capabilities/assets/evidence/ch-asr-run.log",
+          "sha256": "11fdfabb2281ebcc296b8de3eafee4a15c03a034f53abef9b0d7fa8fe5523360",
+          "size_bytes": 1226
+        },
+        "source_run": "/capabilities/assets/evidence/ch-asr-ch-asr-macos-run.json"
+      },
+      {
+        "feature": "ch-im-core",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ch-im-core-result.png",
+            "sha256": "c16257b2ea88f69be7f7ffe37672d047034e302432aac598bf4a72e0394b2ff1",
+            "visual_review": "accepted",
+            "visible_result": "「信息 · 企业专属客服」会话：顶部「AI 已转人工」提示，右侧三条「MAC验收0929 站内消息」气泡与客服自动回复「这个问题已为您转接人工客服…」；消息时间显示为 9/28 11:xx PM（UTC 未换算本地时区）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ch-im-core-result.png"
+          },
+          {
+            "file": "ch-im-core-operation.webm",
+            "sha256": "13db30af45f6d712b6eee85a5d888e7fd1e715a3b7a9a3f5758f7c3ad69bb6ef",
+            "visual_review": "accepted",
+            "visible_result": "录屏先在信息页会话列表，点击「企业专属客服」后打开会话，新消息气泡出现。",
+            "kind": "video",
+            "size_bytes": 413548,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ch-im-core-run.log",
+          "public_path": "/capabilities/assets/evidence/ch-im-core-run.log",
+          "sha256": "8a5a20a43558f692c660105e101ebf81edb598c18528d94f570d0bd9427931eb",
+          "size_bytes": 1263
+        },
+        "source_run": "/capabilities/assets/evidence/ch-im-core-ch-im-core-macos-run.json"
+      },
+      {
+        "feature": "ch-im-cs",
+        "platform": "macos",
+        "status": "failed",
+        "passed": 2,
+        "failed": 1,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ch-im-cs-result.png",
+            "sha256": "76ca854cd36ca7091b7dd30d5955b4ea357feca42749d0e8d86e535131847568",
+            "visual_review": "accepted",
+            "visible_result": "「信息」页：左侧会话列表（客户消息 · 客来来、用户客服员工、需求接入员、需求分析员工…企业专属客服），右侧「选择左侧会话开始聊天」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ch-im-cs-result.png"
+          },
+          {
+            "file": "ch-im-cs-operation.webm",
+            "sha256": "b533e91a27b407228b729dc9b9e0641beaa5b4693c52239e44fa7185cf837ff9",
+            "visual_review": "accepted",
+            "visible_result": "录屏为信息页会话列表，各帧一致。",
+            "kind": "video",
+            "size_bytes": 257503,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ch-im-cs-run.log",
+          "public_path": "/capabilities/assets/evidence/ch-im-cs-run.log",
+          "sha256": "49abca339a7dc551235b54f5389aa907ed3cd5ff3a673d30b28754a36bc467ee",
+          "size_bytes": 1477
+        },
+        "source_run": "/capabilities/assets/evidence/ch-im-cs-ch-im-cs-macos-run.json"
+      },
+      {
+        "feature": "ch-im-super",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 2,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ch-im-super-result.png",
+            "sha256": "76ca854cd36ca7091b7dd30d5955b4ea357feca42749d0e8d86e535131847568",
+            "visual_review": "accepted",
+            "visible_result": "「信息」页：实时已连接，会话列表含客户消息、各 AI 员工与企业专属客服。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ch-im-super-result.png"
+          },
+          {
+            "file": "ch-im-super-operation.webm",
+            "sha256": "f65407b1daf7f30e747247602ce38877380ca08627ec9894bd8256616767f9e7",
+            "visual_review": "accepted",
+            "visible_result": "录屏为信息页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 241067,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ch-im-super-run.log",
+          "public_path": "/capabilities/assets/evidence/ch-im-super-run.log",
+          "sha256": "0ebe87c20c516f34d460906349c0df059662bf521df093389fac2082a9bca6c0",
+          "size_bytes": 1230
+        },
+        "source_run": "/capabilities/assets/evidence/ch-im-super-ch-im-super-macos-run.json"
+      },
+      {
+        "feature": "ch-im-ws",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 2,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ch-im-ws-result.png",
+            "sha256": "76ca854cd36ca7091b7dd30d5955b4ea357feca42749d0e8d86e535131847568",
+            "visual_review": "accepted",
+            "visible_result": "「信息」页：左上「实时已连接」，会话列表完整。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ch-im-ws-result.png"
+          },
+          {
+            "file": "ch-im-ws-operation.webm",
+            "sha256": "12429ea7262bf00033478435c0a5c476b2b7953f38dfab2f74e0055ffe316708",
+            "visual_review": "accepted",
+            "visible_result": "录屏为信息页，实时连接状态持续显示。",
+            "kind": "video",
+            "size_bytes": 230788,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ch-im-ws-run.log",
+          "public_path": "/capabilities/assets/evidence/ch-im-ws-run.log",
+          "sha256": "1e3f52c191cbbbecb671ed05cad559ecee990ee5f10b05774bba0b8c864d1eb4",
+          "size_bytes": 543
+        },
+        "source_run": "/capabilities/assets/evidence/ch-im-ws-ch-im-ws-macos-run.json"
+      },
+      {
+        "feature": "ch-notify",
+        "platform": "macos",
+        "status": "failed",
+        "passed": 2,
+        "failed": 1,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ch-notify-result.png",
+            "sha256": "1dbed5747f1520fcf75073fa41176066fecde4d3a61c5d3268c66b4b0da83b6d",
+            "visual_review": "accepted",
+            "visible_result": "「信息」页：实时已连接与会话列表。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ch-notify-result.png"
+          },
+          {
+            "file": "ch-notify-operation.webm",
+            "sha256": "222dde8d0e93e5a12e8fab3d408a0b0eafb95a2ddff02a07f4b0ca49c6e3a23b",
+            "visual_review": "accepted",
+            "visible_result": "录屏为信息页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 269167,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ch-notify-run.log",
+          "public_path": "/capabilities/assets/evidence/ch-notify-run.log",
+          "sha256": "75e71a0727607096d0b652946ffdf50a6278f955959bb38f57fd795e70aa6c28",
+          "size_bytes": 1123
+        },
+        "source_run": "/capabilities/assets/evidence/ch-notify-ch-notify-macos-run.json"
+      },
+      {
+        "feature": "ch-realtime-voice",
+        "platform": "macos",
+        "status": "failed",
+        "passed": 2,
+        "failed": 1,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ch-realtime-voice-result.png",
+            "sha256": "bfc6de624382f339fb0c2461332b59830df563979eedc260fc55f42537a1588c",
+            "visual_review": "accepted",
+            "visible_result": "智能对话页：「按住说话」与输入框。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ch-realtime-voice-result.png"
+          },
+          {
+            "file": "ch-realtime-voice-operation.webm",
+            "sha256": "d894f36a589c3ffd6efd6bb888015eecb37c1ecbeb650c5f50a74f8f3a87b5f6",
+            "visual_review": "accepted",
+            "visible_result": "录屏为智能对话页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 186895,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ch-realtime-voice-run.log",
+          "public_path": "/capabilities/assets/evidence/ch-realtime-voice-run.log",
+          "sha256": "4059342779195d415ecbe7d0736d8c88b9e399799c1fac7994100a7b1a4e390f",
+          "size_bytes": 1242
+        },
+        "source_run": "/capabilities/assets/evidence/ch-realtime-voice-ch-realtime-voice-macos-run.json"
+      },
+      {
+        "feature": "ch-task-center",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ch-task-center-result.png",
+            "sha256": "63cf01c028c1ed437cf9651fb6cd1e22ea03d0ce5fe5941ee06c76e92d8efc14",
+            "visual_review": "accepted",
+            "visible_result": "「业务审批 · 审批工作台」：待审批 0 / 我发起的 0 / 已通过 0 / 已拒绝 0 统计卡与「暂无待审批事项」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ch-task-center-result.png"
+          },
+          {
+            "file": "ch-task-center-operation.webm",
+            "sha256": "aa0d54e81a998de9be73f973efd81c147c4a8756122a444f27d8176df70edc05",
+            "visual_review": "accepted",
+            "visible_result": "录屏为审批工作台页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 254794,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ch-task-center-run.log",
+          "public_path": "/capabilities/assets/evidence/ch-task-center-run.log",
+          "sha256": "e6031fee29baeb8867499e82b74450f82a4ca7dfba8d46848b67a84353f77de4",
+          "size_bytes": 1227
+        },
+        "source_run": "/capabilities/assets/evidence/ch-task-center-ch-task-center-macos-run.json"
+      },
+      {
+        "feature": "ch-wechat-contacts",
+        "platform": "macos",
+        "status": "failed",
+        "passed": 2,
+        "failed": 1,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ch-wechat-contacts-result.png",
+            "sha256": "8d318c173c7a00126f809ff19d5238d3c336529c1eadae87b0a822d62530d6f2",
+            "visual_review": "accepted",
+            "visible_result": "「数据对接中心」：上传与目标区、智能识别（推荐）目标下拉。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ch-wechat-contacts-result.png"
+          },
+          {
+            "file": "ch-wechat-contacts-operation.webm",
+            "sha256": "68ecdd2b956a956dafa7e19f1192fb32b178b0e581873d8e906e39e72bcd8ec1",
+            "visual_review": "accepted",
+            "visible_result": "录屏为数据对接中心页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 408959,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ch-wechat-contacts-run.log",
+          "public_path": "/capabilities/assets/evidence/ch-wechat-contacts-run.log",
+          "sha256": "aa8d1e305d94454681b3e3dd3595a17c10e07677fefc0b3d9d0830f3486ce1db",
+          "size_bytes": 1338
+        },
+        "source_run": "/capabilities/assets/evidence/ch-wechat-contacts-ch-wechat-contacts-macos-run.json"
+      },
+      {
+        "feature": "ch-wechat-context",
+        "platform": "macos",
+        "status": "failed",
+        "passed": 2,
+        "failed": 1,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ch-wechat-context-result.png",
+            "sha256": "8d318c173c7a00126f809ff19d5238d3c336529c1eadae87b0a822d62530d6f2",
+            "visual_review": "accepted",
+            "visible_result": "「数据对接中心」：四步流程条与上传区。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ch-wechat-context-result.png"
+          },
+          {
+            "file": "ch-wechat-context-operation.webm",
+            "sha256": "edbd4396f5a6a3a8a1f722913ad149e5aa6b08b82718ea2086b14f4c2c8f4c8b",
+            "visual_review": "accepted",
+            "visible_result": "录屏为数据对接中心页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 383031,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ch-wechat-context-run.log",
+          "public_path": "/capabilities/assets/evidence/ch-wechat-context-run.log",
+          "sha256": "13856e4a2a9ef9ff7abb007023f8230244030826afed27ae1acb1918ea69a7d8",
+          "size_bytes": 1247
+        },
+        "source_run": "/capabilities/assets/evidence/ch-wechat-context-ch-wechat-context-macos-run.json"
+      },
+      {
+        "feature": "ch-wechat-ingest",
+        "platform": "macos",
+        "status": "failed",
+        "passed": 2,
+        "failed": 1,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ch-wechat-ingest-result.png",
+            "sha256": "8d318c173c7a00126f809ff19d5238d3c336529c1eadae87b0a822d62530d6f2",
+            "visual_review": "accepted",
+            "visible_result": "「数据对接中心 · 企业版通用 ETL」：上传文件 → 字段映射 → 规则写入 → 运行历史四步，拖入文件区与「上传并写入数据库」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ch-wechat-ingest-result.png"
+          },
+          {
+            "file": "ch-wechat-ingest-operation.webm",
+            "sha256": "23342542c0af56ea4c3d87489519226c44c7a1e97bbf2ee3bd612fc513e48f9b",
+            "visual_review": "accepted",
+            "visible_result": "录屏为数据对接中心页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 394514,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ch-wechat-ingest-run.log",
+          "public_path": "/capabilities/assets/evidence/ch-wechat-ingest-run.log",
+          "sha256": "2fd86684a8fa40196e36e1492bf083bf4b09734a51c486017c537993e505c26b",
+          "size_bytes": 1363
+        },
+        "source_run": "/capabilities/assets/evidence/ch-wechat-ingest-ch-wechat-ingest-macos-run.json"
+      },
+      {
+        "feature": "ch-wechat-phone",
+        "platform": "macos",
+        "status": "failed",
+        "passed": 2,
+        "failed": 1,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ch-wechat-phone-result.png",
+            "sha256": "8d318c173c7a00126f809ff19d5238d3c336529c1eadae87b0a822d62530d6f2",
+            "visual_review": "accepted",
+            "visible_result": "「数据对接中心」：四步流程条与上传区。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ch-wechat-phone-result.png"
+          },
+          {
+            "file": "ch-wechat-phone-operation.webm",
+            "sha256": "9b5b99ac9fdc4503790b1049d2b8c0923a974344732b601a879a7ecc6e4211bd",
+            "visual_review": "accepted",
+            "visible_result": "录屏为数据对接中心页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 378903,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ch-wechat-phone-run.log",
+          "public_path": "/capabilities/assets/evidence/ch-wechat-phone-run.log",
+          "sha256": "0a817dab16a8735ab9977ec4baaa341ee440a6495258515c248138653f26a582",
+          "size_bytes": 1227
+        },
+        "source_run": "/capabilities/assets/evidence/ch-wechat-phone-ch-wechat-phone-macos-run.json"
+      },
+      {
+        "feature": "dt-cold-start-rollback",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 2,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "dt-cold-start-rollback-result.png",
+            "sha256": "bd761fad9ff69e622f077a5c37b3e747b6a8a0731cdb47185d3f0b425f0a736e",
+            "visual_review": "accepted",
+            "visible_result": "智能对话主页：欢迎语、历史问答、右侧会话列表，左下「系统正常」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/dt-cold-start-rollback-result.png"
+          },
+          {
+            "file": "dt-cold-start-rollback-operation.webm",
+            "sha256": "285af91d011db923748003e5427ec14c2cc31becb236f09198fc13365420ff33",
+            "visual_review": "accepted",
+            "visible_result": "录屏为智能对话页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 172396,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "dt-cold-start-rollback-run.log",
+          "public_path": "/capabilities/assets/evidence/dt-cold-start-rollback-run.log",
+          "sha256": "da79ac318eb30379b858baa34b20beebe1e4985492a300f64e1bd68fcd4e8942",
+          "size_bytes": 1131
+        },
+        "source_run": "/capabilities/assets/evidence/dt-cold-start-rollback-dt-cold-start-rollback-macos-run.json"
+      },
+      {
+        "feature": "dt-evidence-store",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "dt-evidence-store-result.png",
+            "sha256": "901343d8134be41a3e613dfe185878627c8a5fac132990eb5f97ff9efece9a93",
+            "visual_review": "accepted",
+            "visible_result": "「桌面运行时」页：运行状态表与本地模型区。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/dt-evidence-store-result.png"
+          },
+          {
+            "file": "dt-evidence-store-operation.webm",
+            "sha256": "dc4bd334ad78a0d5e48cfc38d73420a360a24f85b1ac785356a273b3565acb91",
+            "visual_review": "accepted",
+            "visible_result": "录屏为桌面运行时页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 339714,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "dt-evidence-store-run.log",
+          "public_path": "/capabilities/assets/evidence/dt-evidence-store-run.log",
+          "sha256": "c4c49ca51a643eeb91bfb7bb8099eb618a16e023adbda4a464bcc684e5851743",
+          "size_bytes": 1523
+        },
+        "source_run": "/capabilities/assets/evidence/dt-evidence-store-dt-evidence-store-macos-run.json"
+      },
+      {
+        "feature": "dt-install-sign",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "dt-install-sign-result.png",
+            "sha256": "749ce214ba3a0dff81571cf42c3db4b0a549f6973d840a244ddfbe5f400a7124",
+            "visual_review": "accepted",
+            "visible_result": "系统设置页：个人主页 SUNBIRD、模型服务与余额，左下角版本 v1.0.0.5。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/dt-install-sign-result.png"
+          },
+          {
+            "file": "dt-install-sign-operation.webm",
+            "sha256": "6f81de5fe16ce7b3193ba6af46ae4c443317ed933507c46421062652abd85370",
+            "visual_review": "accepted",
+            "visible_result": "录屏从智能对话页切到系统设置页。",
+            "kind": "video",
+            "size_bytes": 383461,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "dt-install-sign-run.log",
+          "public_path": "/capabilities/assets/evidence/dt-install-sign-run.log",
+          "sha256": "a6b7533a972b7e677cd66e1bed2fe432e9e96a6fd6120dd13049795fc182ee63",
+          "size_bytes": 1500
+        },
+        "source_run": "/capabilities/assets/evidence/dt-install-sign-dt-install-sign-macos-run.json"
+      },
+      {
+        "feature": "dt-integrity",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "dt-integrity-result.png",
+            "sha256": "901343d8134be41a3e613dfe185878627c8a5fac132990eb5f97ff9efece9a93",
+            "visual_review": "accepted",
+            "visible_result": "「桌面运行时」页：运行状态表（桌面模式、本地 SQLite、各目录）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/dt-integrity-result.png"
+          },
+          {
+            "file": "dt-integrity-operation.webm",
+            "sha256": "672ce3577edbd374448660401aeff087cd2a3ab1311dd2354ca409ba578396d2",
+            "visual_review": "accepted",
+            "visible_result": "录屏为桌面运行时页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 360206,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "dt-integrity-run.log",
+          "public_path": "/capabilities/assets/evidence/dt-integrity-run.log",
+          "sha256": "1e0b180200b9c49efc267f5cd20c5f835e67f8700dc08c7b45ff0d9b02e38ad8",
+          "size_bytes": 1377
+        },
+        "source_run": "/capabilities/assets/evidence/dt-integrity-dt-integrity-macos-run.json"
+      },
+      {
+        "feature": "dt-mac-control",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "dt-mac-control-result.png",
+            "sha256": "901343d8134be41a3e613dfe185878627c8a5fac132990eb5f97ff9efece9a93",
+            "visual_review": "accepted",
+            "visible_result": "「桌面运行时」页：运行状态表。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/dt-mac-control-result.png"
+          },
+          {
+            "file": "dt-mac-control-operation.webm",
+            "sha256": "ad9e338320438026e0aea4b81a39976ee486bad732c508dbbcd635b6e91415fd",
+            "visual_review": "accepted",
+            "visible_result": "录屏为桌面运行时页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 352443,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "dt-mac-control-run.log",
+          "public_path": "/capabilities/assets/evidence/dt-mac-control-run.log",
+          "sha256": "d7b648e890758e9723daa97f4310689bae5b78fb791c6ff9b8ffb03e415023da",
+          "size_bytes": 1243
+        },
+        "source_run": "/capabilities/assets/evidence/dt-mac-control-dt-mac-control-macos-run.json"
+      },
+      {
+        "feature": "dt-neurobus",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "dt-neurobus-result.png",
+            "sha256": "901343d8134be41a3e613dfe185878627c8a5fac132990eb5f97ff9efece9a93",
+            "visual_review": "accepted",
+            "visible_result": "「桌面运行时」页：运行状态表。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/dt-neurobus-result.png"
+          },
+          {
+            "file": "dt-neurobus-operation.webm",
+            "sha256": "85f7ffc133cfbcc7dffc6ab1220a0a11dac447c1498c82689b8c10ea9242ac2d",
+            "visual_review": "accepted",
+            "visible_result": "录屏为桌面运行时页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 324029,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "dt-neurobus-run.log",
+          "public_path": "/capabilities/assets/evidence/dt-neurobus-run.log",
+          "sha256": "fb7e4fd60bcabb084f4ef5a13c80534ef89ecad80af49f97c7373b9d5f245e78",
+          "size_bytes": 1563
+        },
+        "source_run": "/capabilities/assets/evidence/dt-neurobus-dt-neurobus-macos-run.json"
+      },
+      {
+        "feature": "dt-ota",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 2,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "dt-ota-result.png",
+            "sha256": "c6fb518c47ac56f17ebe840ecd5edd2dd1b05c1004f66a540cc7c34e3f2e433c",
+            "visual_review": "accepted",
+            "visible_result": "系统设置页：个人主页、模型服务与余额卡片。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/dt-ota-result.png"
+          },
+          {
+            "file": "dt-ota-operation.webm",
+            "sha256": "4738e49ed100a5b4ea02df12bd5199a0bea6d898732dcb77e090eae40356bfc2",
+            "visual_review": "accepted",
+            "visible_result": "录屏先在智能对话页，后切到系统设置页。",
+            "kind": "video",
+            "size_bytes": 473144,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "dt-ota-run.log",
+          "public_path": "/capabilities/assets/evidence/dt-ota-run.log",
+          "sha256": "b7cde366fec5d7692e55b03b325183a278855b3fa417d46dcee7fef2ccf82d5e",
+          "size_bytes": 1061
+        },
+        "source_run": "/capabilities/assets/evidence/dt-ota-dt-ota-macos-run.json"
+      },
+      {
+        "feature": "dt-process-mgmt",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "dt-process-mgmt-result.png",
+            "sha256": "901343d8134be41a3e613dfe185878627c8a5fac132990eb5f97ff9efece9a93",
+            "visual_review": "accepted",
+            "visible_result": "「桌面运行时」页：运行状态表与本地模型区。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/dt-process-mgmt-result.png"
+          },
+          {
+            "file": "dt-process-mgmt-operation.webm",
+            "sha256": "28fc2702fd8e063f82b92c5268e6b52b31a6f337836106f713fffe664f445b1c",
+            "visual_review": "accepted",
+            "visible_result": "录屏为桌面运行时页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 314394,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "dt-process-mgmt-run.log",
+          "public_path": "/capabilities/assets/evidence/dt-process-mgmt-run.log",
+          "sha256": "c32733c5448b1e717bf93465b1cecd372d5fdad4ee2152f28243f96280860d0d",
+          "size_bytes": 1184
+        },
+        "source_run": "/capabilities/assets/evidence/dt-process-mgmt-dt-process-mgmt-macos-run.json"
+      },
+      {
+        "feature": "dt-rpa",
+        "platform": "macos",
+        "status": "failed",
+        "passed": 2,
+        "failed": 2,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "dt-rpa-result.png",
+            "sha256": "901343d8134be41a3e613dfe185878627c8a5fac132990eb5f97ff9efece9a93",
+            "visual_review": "accepted",
+            "visible_result": "「桌面运行时」页：运行状态与本地模型区。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/dt-rpa-result.png"
+          },
+          {
+            "file": "dt-rpa-operation.webm",
+            "sha256": "31cd9f9f604f2541bc7eaf3b652190e9c90768d52443bcc7b7cfafe2af490528",
+            "visual_review": "accepted",
+            "visible_result": "录屏为桌面运行时页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 352320,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "dt-rpa-run.log",
+          "public_path": "/capabilities/assets/evidence/dt-rpa-run.log",
+          "sha256": "f14c38616a414ee784be79f96d9a631ecb0260872762c34f4f16aa51e7a8d382",
+          "size_bytes": 1397
+        },
+        "source_run": "/capabilities/assets/evidence/dt-rpa-dt-rpa-macos-run.json"
+      },
+      {
+        "feature": "dt-shell",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 2,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "dt-shell-result.png",
+            "sha256": "b671d4e12b8713a93721e365bfb4ee4cf2dd67d72145a09bc03e42b8ad55477c",
+            "visual_review": "accepted",
+            "visible_result": "「桌面运行时」页：运行状态（桌面模式 是、本地 SQLite、各目录）与本地模型区。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/dt-shell-result.png"
+          },
+          {
+            "file": "dt-shell-operation.webm",
+            "sha256": "eb0c8a31606cd922c044316c155aece2818ba0732aaa8cb0bf4c7a57fa9c3b3b",
+            "visual_review": "accepted",
+            "visible_result": "录屏为桌面运行时页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 288914,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "dt-shell-run.log",
+          "public_path": "/capabilities/assets/evidence/dt-shell-run.log",
+          "sha256": "79fec66dd3f83356ab538ce70dd89f72e5888715b6d33923e9bfbce56eba2829",
+          "size_bytes": 1084
+        },
+        "source_run": "/capabilities/assets/evidence/dt-shell-dt-shell-macos-run.json"
+      },
+      {
+        "feature": "erp-approval",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "erp-approval-result.png",
+            "sha256": "d26330afc94cc9596d1db9763ea9b219130c63ead734a90cb7a4b8fc1b4f4650",
+            "visual_review": "accepted",
+            "visible_result": "「业务审批 · 审批工作台」：我发起的 2、已通过 2，「我发起的」列表两条「MAC验收0929审批」均为已通过。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-approval-result.png"
+          },
+          {
+            "file": "erp-approval-operation.webm",
+            "sha256": "8162651cc06f3c85a5d7c295c7c08be5c471c182af271d05cc7f4899ed194b61",
+            "visual_review": "accepted",
+            "visible_result": "录屏为审批工作台页，新审批单与已通过状态逐帧可见。",
+            "kind": "video",
+            "size_bytes": 274313,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "erp-approval-run.log",
+          "public_path": "/capabilities/assets/evidence/erp-approval-run.log",
+          "sha256": "254ba82aca45ee38424cf3176d85823ebba1a8afe9c72b0f0863e2c1d52535c5",
+          "size_bytes": 1504
+        },
+        "source_run": "/capabilities/assets/evidence/erp-approval-erp-approval-macos-run.json"
+      },
+      {
+        "feature": "erp-ar-ap",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "erp-ar-ap-result.png",
+            "sha256": "9d1409ef7a584a4280ca2cba1ce8fee90d3693cfc9ad9fa67714ac1a8fb421f1",
+            "visual_review": "accepted",
+            "visible_result": "「财务分析 · 小猫财务分析」：「还没有分析数据」与「立即开始」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-ar-ap-result.png"
+          },
+          {
+            "file": "erp-ar-ap-operation.webm",
+            "sha256": "3336ab2260a4e57f0034b552f6fe0b383e7d1f28d3be844ff18a2474c5e726bf",
+            "visual_review": "accepted",
+            "visible_result": "录屏为财务分析页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 224773,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "erp-ar-ap-run.log",
+          "public_path": "/capabilities/assets/evidence/erp-ar-ap-run.log",
+          "sha256": "4654a3639754afad2b880cb9f2093e812b4030c08030c8afd6af44adafd4159b",
+          "size_bytes": 1382
+        },
+        "source_run": "/capabilities/assets/evidence/erp-ar-ap-erp-ar-ap-macos-run.json"
+      },
+      {
+        "feature": "erp-contract",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "erp-contract-result.png",
+            "sha256": "a985ec497e401e310d710e20eff2dda229dcab265cef2999d89f000ac819e0f0",
+            "visual_review": "accepted",
+            "visible_result": "「模板库 · 模板预览」：分类按钮、Excel 网格解析工具、出货明细表/出货记录管理/产品目录表等模板卡片。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-contract-result.png"
+          },
+          {
+            "file": "erp-contract-operation.webm",
+            "sha256": "0001d0955b3ae19291759f567b2c904123cf96d88e4b9ae274d67f70850e2aa6",
+            "visual_review": "accepted",
+            "visible_result": "录屏为模板库页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 418015,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "erp-contract-run.log",
+          "public_path": "/capabilities/assets/evidence/erp-contract-run.log",
+          "sha256": "e5d12f5d4a7bbbd5e83a66677396f195313ab7eb60dbeec5860c8576f5e6ce95",
+          "size_bytes": 1645
+        },
+        "source_run": "/capabilities/assets/evidence/erp-contract-erp-contract-macos-run.json"
       },
       {
         "feature": "erp-excel-io",
-        "platform": null,
-        "status": "failed",
-        "passed": 0,
-        "failed": 1,
-        "verified_at": "2026-09-20",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
         "media": [
           {
-            "file": "erp-excel-io-06-product-export-route-failure.png",
-            "sha256": "fb2bcc7c7ac0b036d730e411091282bcbbdf74db86676447b24d4ebac8de5247",
+            "file": "erp-excel-io-result.png",
+            "sha256": "42daee040a8de5ef22475e859b9de45edf8f8e0d71c7981949aca0e89b81e8de",
             "visual_review": "accepted",
-            "visible_result": "截图清晰显示产品列表背景及 Excel 导出失败弹窗，缺失地址为 /api/mod/xcagi-erp-domain-bridge/products/export.xlsx。",
+            "visible_result": "产品页「饰品包装品管理」：导入Excel / 导出价格表 / 导出Excel / 添加产品按钮，列表含 M35511「MAC验收0929产品35507」与 MAC-0929「MAC验收0929产品」，价格 ¥3.50。页头标题显示「人员管理」与正文不一致。",
             "kind": "screenshot",
-            "public_path": "/capabilities/assets/evidence/erp-excel-io-06-product-export-route-failure.png"
+            "public_path": "/capabilities/assets/evidence/erp-excel-io-result.png"
+          },
+          {
+            "file": "erp-excel-io-operation.webm",
+            "sha256": "69f4ee9e692ed4850d337cc36fe8dc00084fa54b86392ee07ffd860b051abbe9",
+            "visual_review": "accepted",
+            "visible_result": "录屏为产品管理页，导入导出按钮与验收产品行各帧可见。",
+            "kind": "video",
+            "size_bytes": 312092,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
           }
         ],
-        "run_log": null,
-        "source_run": "/capabilities/assets/evidence/erp-excel-io-erp-excel-io-run.json"
+        "run_log": {
+          "file": "erp-excel-io-run.log",
+          "public_path": "/capabilities/assets/evidence/erp-excel-io-run.log",
+          "sha256": "c0447ebb43098f5417f325a1faaa2067e5d67a13a41984685dc18258e5d1aaa8",
+          "size_bytes": 1345
+        },
+        "source_run": "/capabilities/assets/evidence/erp-excel-io-erp-excel-io-macos-run.json"
+      },
+      {
+        "feature": "erp-finance-ledger",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "erp-finance-ledger-result.png",
+            "sha256": "9d1409ef7a584a4280ca2cba1ce8fee90d3693cfc9ad9fa67714ac1a8fb421f1",
+            "visual_review": "accepted",
+            "visible_result": "「财务分析 · 小猫财务分析」页：「还没有分析数据」与「立即开始」按钮。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-finance-ledger-result.png"
+          },
+          {
+            "file": "erp-finance-ledger-operation.webm",
+            "sha256": "e8015540f573ad111668e189a41becff4bd0f9e7b38706eddac46d6b75f94f32",
+            "visual_review": "accepted",
+            "visible_result": "录屏为小猫财务分析页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 238722,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "erp-finance-ledger-run.log",
+          "public_path": "/capabilities/assets/evidence/erp-finance-ledger-run.log",
+          "sha256": "30b3c9e9f7ce3a4ae5f6a3b5b881942076206ad896606801fe74fdb09aad3c5a",
+          "size_bytes": 1443
+        },
+        "source_run": "/capabilities/assets/evidence/erp-finance-ledger-erp-finance-ledger-macos-run.json"
+      },
+      {
+        "feature": "erp-inventory",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "erp-inventory-result.png",
+            "sha256": "46ddb3febf0afb1d19227455e5b08f4c0896155463e18a67e8fc5fa71680cc52",
+            "visual_review": "accepted",
+            "visible_result": "「库存管理」页：仓库筛选「全部仓库」、库存明细表（暂无库存数据）、库存预警表（暂无预警信息），入库/出库按钮。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-inventory-result.png"
+          },
+          {
+            "file": "erp-inventory-operation.webm",
+            "sha256": "c9b909adb3dedd8426ad180cfb56b1c0dd002ebd1a62de3ec0acebab8c90d71a",
+            "visual_review": "accepted",
+            "visible_result": "录屏为库存管理页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 288697,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "erp-inventory-run.log",
+          "public_path": "/capabilities/assets/evidence/erp-inventory-run.log",
+          "sha256": "2c9e6f67eb297dff4615a46fd3cb954777db585762d1c404ca3fa1198134d345",
+          "size_bytes": 1231
+        },
+        "source_run": "/capabilities/assets/evidence/erp-inventory-erp-inventory-macos-run.json"
+      },
+      {
+        "feature": "erp-inventory-warehouse",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "erp-inventory-warehouse-result.png",
+            "sha256": "32a5a2d070f36411614ab3ce2c9b53afabd0cb6f529c0297b9d4dd65166e3ec3",
+            "visual_review": "accepted",
+            "visible_result": "「库存管理」页：「全部仓库」下拉、库存明细与库存预警两张空表。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-inventory-warehouse-result.png"
+          },
+          {
+            "file": "erp-inventory-warehouse-operation.webm",
+            "sha256": "a98aa5b69eff11b1725f0cdd368eb7dc987a47c0dec2653c4d66bf4fd3d3f5ff",
+            "visual_review": "accepted",
+            "visible_result": "录屏先在智能对话页，后切到库存管理页。",
+            "kind": "video",
+            "size_bytes": 371427,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "erp-inventory-warehouse-run.log",
+          "public_path": "/capabilities/assets/evidence/erp-inventory-warehouse-run.log",
+          "sha256": "a25352f4fde06946e97cced94af35b7f1d6efb32997e38c76378ec222dd4c300",
+          "size_bytes": 1489
+        },
+        "source_run": "/capabilities/assets/evidence/erp-inventory-warehouse-erp-inventory-warehouse-macos-run.json"
+      },
+      {
+        "feature": "erp-invoice",
+        "platform": "macos",
+        "status": "failed",
+        "passed": 1,
+        "failed": 3,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "erp-invoice-result.png",
+            "sha256": "9d1409ef7a584a4280ca2cba1ce8fee90d3693cfc9ad9fa67714ac1a8fb421f1",
+            "visual_review": "accepted",
+            "visible_result": "「财务分析 · 小猫财务分析」空态页。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-invoice-result.png"
+          },
+          {
+            "file": "erp-invoice-operation.webm",
+            "sha256": "1e1a8221f70031fbe42ed92cff6eff9c95d7b44686f565eae5b2af953a4da2e1",
+            "visual_review": "accepted",
+            "visible_result": "录屏先在智能对话页，后切到财务分析页。",
+            "kind": "video",
+            "size_bytes": 390051,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "erp-invoice-run.log",
+          "public_path": "/capabilities/assets/evidence/erp-invoice-run.log",
+          "sha256": "892b97e0bf4cec0f8960a2a115e70786ee539659bd82489a9df8a00ec2d21c88",
+          "size_bytes": 1429
+        },
+        "source_run": "/capabilities/assets/evidence/erp-invoice-erp-invoice-macos-run.json"
+      },
+      {
+        "feature": "erp-label",
+        "platform": "macos",
+        "status": "failed",
+        "passed": 1,
+        "failed": 3,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "erp-label-result.png",
+            "sha256": "425fb87fbe0223744f99bf3b877e794f9869f43b0259563825e44a456f3f15f4",
+            "visual_review": "accepted",
+            "visible_result": "「标签输出与打印」页：红字提示「该旧业务接口尚未提供安全的租户数据隔离」，产品/模板下拉为空（已显示 0/0 个产品）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-label-result.png"
+          },
+          {
+            "file": "erp-label-operation.webm",
+            "sha256": "d9584ad5744a2e4fe391e8e23bf8eb17b104e789728dea6f70d4d3ea0302fd1d",
+            "visual_review": "accepted",
+            "visible_result": "录屏为标签页，红字错误提示持续显示。",
+            "kind": "video",
+            "size_bytes": 407460,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "erp-label-run.log",
+          "public_path": "/capabilities/assets/evidence/erp-label-run.log",
+          "sha256": "6ce736e3f93d9e0f643d9e4758108f274495befcaa92610a9cdf4b4c6d899963",
+          "size_bytes": 1692
+        },
+        "source_run": "/capabilities/assets/evidence/erp-label-erp-label-macos-run.json"
+      },
+      {
+        "feature": "erp-master-data",
+        "platform": "macos",
+        "status": "failed",
+        "passed": 3,
+        "failed": 1,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "erp-master-data-result.png",
+            "sha256": "42daee040a8de5ef22475e859b9de45edf8f8e0d71c7981949aca0e89b81e8de",
+            "visual_review": "accepted",
+            "visible_result": "产品页「饰品包装品管理」：两条验收产品行，页头标题「人员管理」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-master-data-result.png"
+          },
+          {
+            "file": "erp-master-data-operation.webm",
+            "sha256": "c6eb3dca32641f2d7228f23eaa9803edc259ee537d645103a30d6fb19a87f4e3",
+            "visual_review": "accepted",
+            "visible_result": "录屏先在智能对话页，后切到产品管理页。",
+            "kind": "video",
+            "size_bytes": 369962,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "erp-master-data-run.log",
+          "public_path": "/capabilities/assets/evidence/erp-master-data-run.log",
+          "sha256": "8b6955a3947031ee60d96f3e290feb84baf099bf2ec0d80cbb4c93d6cc66f247",
+          "size_bytes": 1272
+        },
+        "source_run": "/capabilities/assets/evidence/erp-master-data-erp-master-data-macos-run.json"
+      },
+      {
+        "feature": "erp-ocr",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "erp-ocr-result.png",
+            "sha256": "e610311e6d4067878e5c7e34602a11a7ae545f513a309e28a2f9a97cd6266055",
+            "visual_review": "accepted",
+            "visible_result": "智能对话页：底部「上传附件」按钮与输入框。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-ocr-result.png"
+          },
+          {
+            "file": "erp-ocr-operation.webm",
+            "sha256": "2f868cb55177690992a64f25a95b5eb8a93ee3523fc9c4a8bd5119c57ed39b61",
+            "visual_review": "accepted",
+            "visible_result": "录屏为智能对话页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 207090,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "erp-ocr-run.log",
+          "public_path": "/capabilities/assets/evidence/erp-ocr-run.log",
+          "sha256": "e779ae741eac110ea0c2bf4491b4c2afd0a66a50a6f0023fb21cb8e4e0ba6c6b",
+          "size_bytes": 1342
+        },
+        "source_run": "/capabilities/assets/evidence/erp-ocr-erp-ocr-macos-run.json"
+      },
+      {
+        "feature": "erp-ocr-clean",
+        "platform": "macos",
+        "status": "failed",
+        "passed": 2,
+        "failed": 1,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "erp-ocr-clean-result.png",
+            "sha256": "2f855e60095ffbd083728a492375258ea8d90158640c23d56c38e34a369f40ba",
+            "visual_review": "accepted",
+            "visible_result": "「数据对接中心 · 企业版通用 ETL」：上传文件/字段映射/规则写入/运行历史四步与上传区。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-ocr-clean-result.png"
+          },
+          {
+            "file": "erp-ocr-clean-operation.webm",
+            "sha256": "98d1fded3465318b3eab38c24eb044633183cc4c500e3213b7edc1e12b0c1fd4",
+            "visual_review": "accepted",
+            "visible_result": "录屏从智能对话页切到数据对接中心页。",
+            "kind": "video",
+            "size_bytes": 562388,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "erp-ocr-clean-run.log",
+          "public_path": "/capabilities/assets/evidence/erp-ocr-clean-run.log",
+          "sha256": "2d8c47b9bc867ea30c1539f6251fa0c6241aa5121d642afa5e152385552856d9",
+          "size_bytes": 1565
+        },
+        "source_run": "/capabilities/assets/evidence/erp-ocr-clean-erp-ocr-clean-macos-run.json"
+      },
+      {
+        "feature": "erp-print-agent",
+        "platform": "macos",
+        "status": "failed",
+        "passed": 0,
+        "failed": 3,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "erp-print-agent-result.png",
+            "sha256": "c210950d887e85b215ccf52f0c314e9cdb5dadf3e64e3f3139a7803e81849cd2",
+            "visual_review": "accepted",
+            "visible_result": "「打印机列表」页：发货单打印机/标签打印机均为「未设置（自动识别）」，全部打印机表「暂无打印机」，底部红字「加载失败：该旧业务接口尚未提供安全的租户数据隔离」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-print-agent-result.png"
+          },
+          {
+            "file": "erp-print-agent-operation.webm",
+            "sha256": "b75cd93e1ac9e121d003baf8d39fab63e8956ff33c7f4f1e5390e87fed4c9dcf",
+            "visual_review": "accepted",
+            "visible_result": "录屏为打印机列表页，红字加载失败持续显示。",
+            "kind": "video",
+            "size_bytes": 284401,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "erp-print-agent-run.log",
+          "public_path": "/capabilities/assets/evidence/erp-print-agent-run.log",
+          "sha256": "67f83187b3c49d70ef225292b533d70623398cae774e6506366797716480969a",
+          "size_bytes": 1430
+        },
+        "source_run": "/capabilities/assets/evidence/erp-print-agent-erp-print-agent-macos-run.json"
+      },
+      {
+        "feature": "erp-purchase",
+        "platform": "macos",
+        "status": "failed",
+        "passed": 3,
+        "failed": 1,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "erp-purchase-result.png",
+            "sha256": "63ec2ed5cc2d2cc2e26e1aaa75e9f49ba7bbbc250f53323825d195f0b2589cb4",
+            "visual_review": "accepted",
+            "visible_result": "「采购管理」页：三条采购单（PO20260929072616、PO20260929064445、PO20260929063458，MAC验收0929供应商，¥50.00，草稿）；页头「耗材申领」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-purchase-result.png"
+          },
+          {
+            "file": "erp-purchase-operation.webm",
+            "sha256": "4b68199082b1b92d9b9984d55a53cf89b5f130b18a047a359dbed95950e30c29",
+            "visual_review": "accepted",
+            "visible_result": "录屏为采购管理页，新订单行可见。",
+            "kind": "video",
+            "size_bytes": 313221,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "erp-purchase-run.log",
+          "public_path": "/capabilities/assets/evidence/erp-purchase-run.log",
+          "sha256": "abc8cb13726aa4d984714597bdf123a21a992e97984b279864a04362df63bb6c",
+          "size_bytes": 1211
+        },
+        "source_run": "/capabilities/assets/evidence/erp-purchase-erp-purchase-macos-run.json"
+      },
+      {
+        "feature": "erp-purchase-inbound",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "erp-purchase-inbound-result.png",
+            "sha256": "b20ed2cfa40a94914715f2ae2d65ab39ab145c23946a47b68dcc8643ccaf9eb1",
+            "visual_review": "accepted",
+            "visible_result": "「采购管理」页：采购订单/采购入库/供应商标签，两条验收采购单（¥50.00 草稿）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-purchase-inbound-result.png"
+          },
+          {
+            "file": "erp-purchase-inbound-operation.webm",
+            "sha256": "d56a4b8b61d7b731c412b6f65b36c25bbe6c0b25cfccd4b7bfcd039164c87812",
+            "visual_review": "accepted",
+            "visible_result": "录屏主要为智能对话页，最后切到采购管理页。",
+            "kind": "video",
+            "size_bytes": 1347225,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "erp-purchase-inbound-run.log",
+          "public_path": "/capabilities/assets/evidence/erp-purchase-inbound-run.log",
+          "sha256": "7f8e90ab52a28685d894ae55bcb8796a6cc32e0250f2d740e826c407bb423b9c",
+          "size_bytes": 1515
+        },
+        "source_run": "/capabilities/assets/evidence/erp-purchase-inbound-erp-purchase-inbound-macos-run.json"
+      },
+      {
+        "feature": "erp-reconcile",
+        "platform": "macos",
+        "status": "failed",
+        "passed": 3,
+        "failed": 1,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "erp-reconcile-result.png",
+            "sha256": "9d1409ef7a584a4280ca2cba1ce8fee90d3693cfc9ad9fa67714ac1a8fb421f1",
+            "visual_review": "accepted",
+            "visible_result": "「财务分析 · 小猫财务分析」页：「还没有分析数据」空态。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-reconcile-result.png"
+          },
+          {
+            "file": "erp-reconcile-operation.webm",
+            "sha256": "ea5890753ded48ef17bf721d8f971fd3a2b59c615c0ffd26de49031ad7607916",
+            "visual_review": "accepted",
+            "visible_result": "录屏为财务分析页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 376145,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "erp-reconcile-run.log",
+          "public_path": "/capabilities/assets/evidence/erp-reconcile-run.log",
+          "sha256": "41edccf7c152786e4fc603651e352375009d84ffb34d50a6eb2770ee35c1bd1d",
+          "size_bytes": 1513
+        },
+        "source_run": "/capabilities/assets/evidence/erp-reconcile-erp-reconcile-macos-run.json"
+      },
+      {
+        "feature": "erp-replenishment",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "erp-replenishment-result.png",
+            "sha256": "e952b3a28ecfc1e3232ec0974d4a86cdbcb819f9f4628fb12bf2fb9473d625fb",
+            "visual_review": "accepted",
+            "visible_result": "「库存管理」页：库存明细与库存预警空表。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-replenishment-result.png"
+          },
+          {
+            "file": "erp-replenishment-operation.webm",
+            "sha256": "e812a33afe7dc9afe27e89223dfb0c9ed27a4f8539ba285693361252267a2d40",
+            "visual_review": "accepted",
+            "visible_result": "录屏在智能对话页发起补货询问并得到回复，随后切到库存管理页。",
+            "kind": "video",
+            "size_bytes": 491192,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "erp-replenishment-run.log",
+          "public_path": "/capabilities/assets/evidence/erp-replenishment-run.log",
+          "sha256": "0cd3c90cc99d0db12dea350f6f8e59faae0a180e66dca1c8867a936260dd9de3",
+          "size_bytes": 1654
+        },
+        "source_run": "/capabilities/assets/evidence/erp-replenishment-erp-replenishment-macos-run.json"
+      },
+      {
+        "feature": "erp-report",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "erp-report-result.png",
+            "sha256": "574d46177caf64dd7a865cded78464adedb0406ffe73b96391273d3e2631a8a6",
+            "visual_review": "accepted",
+            "visible_result": "「财务分析 · 小猫财务分析」页：「还没有分析数据」与「立即开始」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-report-result.png"
+          },
+          {
+            "file": "erp-report-operation.webm",
+            "sha256": "24cd0ad59023c611195e356c295f047eccb95053f1a6ea18037319aebefd9f1c",
+            "visual_review": "accepted",
+            "visible_result": "录屏为小猫财务分析页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 230514,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "erp-report-run.log",
+          "public_path": "/capabilities/assets/evidence/erp-report-run.log",
+          "sha256": "9986fc82a5066467e23b8018300d06a9137e59aa3ff99bc2f3a8c4091c7ce54e",
+          "size_bytes": 1521
+        },
+        "source_run": "/capabilities/assets/evidence/erp-report-erp-report-macos-run.json"
+      },
+      {
+        "feature": "erp-sales-order",
+        "platform": "macos",
+        "status": "failed",
+        "passed": 2,
+        "failed": 1,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "erp-sales-order-result.png",
+            "sha256": "5578c5909677b977c14f2690bfd4944a8bdeefa2c5d6c4e2c5576ad655692e91",
+            "visual_review": "accepted",
+            "visible_result": "「新建发货单」页：选择发货单模板、基础信息（购买单位、联系人、日期 09/28/2026、订单编号）、产品信息区；页头标题「新建考勤单」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-sales-order-result.png"
+          },
+          {
+            "file": "erp-sales-order-operation.webm",
+            "sha256": "303949c2c32de0844526eac85291e11084c40d8697ab41de2b59549088d5cd65",
+            "visual_review": "accepted",
+            "visible_result": "录屏为新建发货单表单页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 314595,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "erp-sales-order-run.log",
+          "public_path": "/capabilities/assets/evidence/erp-sales-order-run.log",
+          "sha256": "849786e7942a34263ef15a04c8d6251d0fd31dc676df35be6d5db18baf71df03",
+          "size_bytes": 1427
+        },
+        "source_run": "/capabilities/assets/evidence/erp-sales-order-erp-sales-order-macos-run.json"
+      },
+      {
+        "feature": "erp-shipment",
+        "platform": "macos",
+        "status": "failed",
+        "passed": 1,
+        "failed": 2,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "erp-shipment-result.png",
+            "sha256": "cb8687f8ad97bdcd212a1134b170ac4d533ebc4b9249669279365a530764b3d3",
+            "visual_review": "accepted",
+            "visible_result": "「出货记录管理」页：购买单位下拉、状态筛选、查看记录/新建/导出Excel，提示「请先选择购买单位后点击查看记录加载数据」；页头标题「考勤记录」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-shipment-result.png"
+          },
+          {
+            "file": "erp-shipment-operation.webm",
+            "sha256": "31549c5bf60e77b8bbef19d9872496912b61b5c01b39cf2435282e732b73728a",
+            "visual_review": "accepted",
+            "visible_result": "录屏从智能对话页切到出货记录页。",
+            "kind": "video",
+            "size_bytes": 432800,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "erp-shipment-run.log",
+          "public_path": "/capabilities/assets/evidence/erp-shipment-run.log",
+          "sha256": "ba5aabaa16604ca11feea230289de1b3bb3ede1720107c578faace98cacdd6cf",
+          "size_bytes": 1383
+        },
+        "source_run": "/capabilities/assets/evidence/erp-shipment-erp-shipment-macos-run.json"
       },
       {
         "feature": "erp-templates",
-        "platform": null,
-        "status": "failed",
-        "passed": 0,
-        "failed": 1,
-        "verified_at": "2026-09-20",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
         "media": [
           {
-            "file": "erp-templates-07-product-word-export-route-failure.png",
-            "sha256": "1c081b5571bcca89e0cf9624648f7f6ef50beeb9ab505db1c1fbe55d17fecfb8",
+            "file": "erp-templates-result.png",
+            "sha256": "67dd3d35e1dc34da37891fc4caa625de2772149e4dee15be7a7c26208b3dfcca",
             "visual_review": "accepted",
-            "visible_result": "默认 Word 模板和产品列表背景可见，弹窗显示 /api/mod/xcagi-erp-domain-bridge/products/export.docx 资源不存在。",
+            "visible_result": "「模板库 · 模板预览」页：分类按钮、Excel 网格解析工具、模板卡片（出货明细表模板、出货记录管理模板、产品目录表模板…）与「快速创建」。",
             "kind": "screenshot",
-            "public_path": "/capabilities/assets/evidence/erp-templates-07-product-word-export-route-failure.png"
+            "public_path": "/capabilities/assets/evidence/erp-templates-result.png"
+          },
+          {
+            "file": "erp-templates-operation.webm",
+            "sha256": "621cb1c45bca34af3355446b0efb662b93e69b9a05530fab8aafc1181cdc8efd",
+            "visual_review": "accepted",
+            "visible_result": "录屏为模板库页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 413373,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
           }
         ],
-        "run_log": null,
-        "source_run": "/capabilities/assets/evidence/erp-templates-erp-templates-run.json"
+        "run_log": {
+          "file": "erp-templates-run.log",
+          "public_path": "/capabilities/assets/evidence/erp-templates-run.log",
+          "sha256": "1edfc692a8e8dcc0ed348f8cfd3bb8d23126708cbc7fef30d875be5de22a2958",
+          "size_bytes": 1298
+        },
+        "source_run": "/capabilities/assets/evidence/erp-templates-erp-templates-macos-run.json"
+      },
+      {
+        "feature": "erp-uom",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "erp-uom-result.png",
+            "sha256": "42daee040a8de5ef22475e859b9de45edf8f8e0d71c7981949aca0e89b81e8de",
+            "visual_review": "accepted",
+            "visible_result": "产品页「饰品包装品管理」：产品单位下拉「请选择产品单位」、两条验收产品；页头「人员管理」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-uom-result.png"
+          },
+          {
+            "file": "erp-uom-operation.webm",
+            "sha256": "efae7bee07ff4cccaab755b35303035f06e7f2405a011bcc71c10f9c50b8458c",
+            "visual_review": "accepted",
+            "visible_result": "录屏为产品管理页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 312645,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "erp-uom-run.log",
+          "public_path": "/capabilities/assets/evidence/erp-uom-run.log",
+          "sha256": "c5ca7736773228d802951f1725c784361c784b753d2a43d98265bfbb15431026",
+          "size_bytes": 1542
+        },
+        "source_run": "/capabilities/assets/evidence/erp-uom-erp-uom-macos-run.json"
+      },
+      {
+        "feature": "ind-attendance",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ind-attendance-result.png",
+            "sha256": "20a3fb76188c4d1823ee436a2ffad704db2b660ee734396b2428a7576fcee258",
+            "visual_review": "accepted",
+            "visible_result": "「考勤工作区 · 人员管理」：两名员工 MAC验收0929员工（工号 M35907、M38964，部门 MAC验收0929部门…），状态「未设置」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ind-attendance-result.png"
+          },
+          {
+            "file": "ind-attendance-operation.webm",
+            "sha256": "0d4b332fd28fe40e1a001948386babc216f8bb16cc0f5e77d582a133049aef84",
+            "visual_review": "accepted",
+            "visible_result": "录屏为考勤人员管理页，新员工行各帧可见。",
+            "kind": "video",
+            "size_bytes": 301805,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ind-attendance-run.log",
+          "public_path": "/capabilities/assets/evidence/ind-attendance-run.log",
+          "sha256": "16156f4c610e523e9a9131d0677feff49b88d96564817b9a83221819a368e938",
+          "size_bytes": 1424
+        },
+        "source_run": "/capabilities/assets/evidence/ind-attendance-ind-attendance-macos-run.json"
+      },
+      {
+        "feature": "ind-coating",
+        "platform": "macos",
+        "status": "blocked",
+        "passed": 0,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ind-coating-result.png",
+            "sha256": "5e1a29c5f4579e28c0e89b47279a9a0718a84049172dfa5265b3fd3cedb70c22",
+            "visual_review": "accepted",
+            "visible_result": "智能对话主页：历史问答与右侧会话列表。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ind-coating-result.png"
+          },
+          {
+            "file": "ind-coating-operation.webm",
+            "sha256": "7d8e6ab0247e298645e979418a0ca641630dc70be455121f4c39f09d487408b0",
+            "visual_review": "accepted",
+            "visible_result": "录屏为智能对话页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 122947,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ind-coating-run.log",
+          "public_path": "/capabilities/assets/evidence/ind-coating-run.log",
+          "sha256": "5c0d1b0a3e877cf62ea446ff8400629d6d88380436b266a89223cba2001e52c1",
+          "size_bytes": 681
+        },
+        "source_run": "/capabilities/assets/evidence/ind-coating-ind-coating-macos-run.json"
       },
       {
         "feature": "ind-custom-delivery",
-        "platform": null,
-        "status": "failed",
-        "passed": 0,
-        "failed": 1,
-        "verified_at": "2026-09-20",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 2,
+        "failed": 0,
+        "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "54325894cc6e3fc2becfcbc98697a099310d9420",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
         "media": [
           {
-            "file": "ind-custom-delivery-02-workspace-entitlement-block.png",
-            "sha256": "83f5701bf6bc683056201377d8c4e141cd9baeb0e4b63ea7eaca66ea5dc69905",
+            "file": "ind-custom-delivery-result.png",
+            "sha256": "70a0fc7b5d7f6c08ec9c3068072f601b0320cecb3e6aa8efc9198bc5c9a46587",
             "visual_review": "accepted",
-            "visible_result": "配置页与完整提示可读：仍缺必需项 taiyangniao-pro；安装失败；sunbird-attendance-custom 交付数据：当前账号未授权该客户交付包。",
+            "visible_result": "「生产员工 · 私有交付 / 客户私有 Mod 生产中心」：说明你要的模块或员工 输入区与「发起定制」按钮，下方「正在读取客户私有 Mod…」。",
             "kind": "screenshot",
-            "public_path": "/capabilities/assets/evidence/ind-custom-delivery-02-workspace-entitlement-block.png"
+            "public_path": "/capabilities/assets/evidence/ind-custom-delivery-result.png"
+          },
+          {
+            "file": "ind-custom-delivery-operation.webm",
+            "sha256": "06a33739cc16d1d711cb1d1b022ab2fb250a0667fd74ae0c6f900810ce05e7b9",
+            "visual_review": "accepted",
+            "visible_result": "录屏从智能对话页切到私有 Mod 生产中心页。",
+            "kind": "video",
+            "size_bytes": 360551,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
           }
         ],
-        "run_log": null,
-        "source_run": "/capabilities/assets/evidence/ind-custom-delivery-ind-custom-delivery-run.json"
+        "run_log": {
+          "file": "ind-custom-delivery-run.log",
+          "public_path": "/capabilities/assets/evidence/ind-custom-delivery-run.log",
+          "sha256": "79b07efafff058f27deb9bd658e2cc77830ee1aa131044931d22c3af66ab9095",
+          "size_bytes": 1307
+        },
+        "source_run": "/capabilities/assets/evidence/ind-custom-delivery-ind-custom-delivery-macos-run.json"
+      },
+      {
+        "feature": "ind-fields",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ind-fields-result.png",
+            "sha256": "a10bbffd26e0334c068821f78791afc39bd3e118a8e5785921adbf5b6b9462ff",
+            "visual_review": "accepted",
+            "visible_result": "产品页「饰品包装品管理」：产品单位下拉、两条验收产品；页头「人员管理」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ind-fields-result.png"
+          },
+          {
+            "file": "ind-fields-operation.webm",
+            "sha256": "1bd9643e34a4049032879706179a5c00b646b2967eb1a26e1b1742fe1bca0cad",
+            "visual_review": "accepted",
+            "visible_result": "录屏为产品管理页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 315290,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ind-fields-run.log",
+          "public_path": "/capabilities/assets/evidence/ind-fields-run.log",
+          "sha256": "c7a4a49f2bd512b3141bf4cce8b6d80a8cdb6f7a54277e4ca2130ba34b7ade6a",
+          "size_bytes": 1535
+        },
+        "source_run": "/capabilities/assets/evidence/ind-fields-ind-fields-macos-run.json"
+      },
+      {
+        "feature": "ind-lan-license",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ind-lan-license-result.png",
+            "sha256": "038db54377b5a14055c7f70774a30a8ac1cf790081bb4929ff9d62bd31e330a5",
+            "visual_review": "accepted",
+            "visible_result": "「FHD · 局域网授权」卡片：「当前未启用局域网模式，无需授权」「进入系统」，状态 未启用、本机 IP 127.0.0.1、主机管理员位。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ind-lan-license-result.png"
+          },
+          {
+            "file": "ind-lan-license-operation.webm",
+            "sha256": "1e0238d74952709055ccb08773ce841d78cd06299957f10a7ba06032ae1e391e",
+            "visual_review": "accepted",
+            "visible_result": "录屏为局域网授权页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 119618,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ind-lan-license-run.log",
+          "public_path": "/capabilities/assets/evidence/ind-lan-license-run.log",
+          "sha256": "2a957c2ff28e9846d71ce5f6ba8f3bb09a729c72035bf9a539983563fbf9f472",
+          "size_bytes": 1269
+        },
+        "source_run": "/capabilities/assets/evidence/ind-lan-license-ind-lan-license-macos-run.json"
+      },
+      {
+        "feature": "ind-modstore-pay",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ind-modstore-pay-result.png",
+            "sha256": "c86365458a1af1eb7f31d59fa8b03edaac7453162841e879830cc0c4ee0b8715",
+            "visual_review": "accepted",
+            "visible_result": "「模型服务」页：账户余额（本机汇总）¥97.60、会员 普通用户、快捷充值、修茈会员套餐（10 档）、模型支持说明。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ind-modstore-pay-result.png"
+          },
+          {
+            "file": "ind-modstore-pay-operation.webm",
+            "sha256": "a5037ba93b489eecde4056b3ddbf8eadbcc45dfcf3eef7ecc7bf8bfd665cad48",
+            "visual_review": "accepted",
+            "visible_result": "录屏为模型服务页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 350581,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ind-modstore-pay-run.log",
+          "public_path": "/capabilities/assets/evidence/ind-modstore-pay-run.log",
+          "sha256": "fdd3fc1bb32dde07081223d47b67302246dd9b782d790f87d6b656cf0e428363",
+          "size_bytes": 1532
+        },
+        "source_run": "/capabilities/assets/evidence/ind-modstore-pay-ind-modstore-pay-macos-run.json"
+      },
+      {
+        "feature": "ind-packaging",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ind-packaging-result.png",
+            "sha256": "32a5a2d070f36411614ab3ce2c9b53afabd0cb6f529c0297b9d4dd65166e3ec3",
+            "visual_review": "accepted",
+            "visible_result": "「库存管理」页：库存明细与库存预警表（空）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ind-packaging-result.png"
+          },
+          {
+            "file": "ind-packaging-operation.webm",
+            "sha256": "d02b5b11582a3a1ce4f60897c3af2387732dd130322e06f0191999e3f2c6d23e",
+            "visual_review": "accepted",
+            "visible_result": "录屏先在产品页「饰品包装品管理」（两条验收产品），后切到库存管理页。",
+            "kind": "video",
+            "size_bytes": 431110,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ind-packaging-run.log",
+          "public_path": "/capabilities/assets/evidence/ind-packaging-run.log",
+          "sha256": "fdca39e42e531645de7ea39cb2bd5484f4ae7af7c92e82fe878fe39e990c686f",
+          "size_bytes": 1729
+        },
+        "source_run": "/capabilities/assets/evidence/ind-packaging-ind-packaging-macos-run.json"
+      },
+      {
+        "feature": "ind-planner",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ind-planner-result.png",
+            "sha256": "bd761fad9ff69e622f077a5c37b3e747b6a8a0731cdb47185d3f0b425f0a736e",
+            "visual_review": "accepted",
+            "visible_result": "智能对话主页：欢迎语、历史问答、右侧会话列表。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ind-planner-result.png"
+          },
+          {
+            "file": "ind-planner-operation.webm",
+            "sha256": "ebf9e6f358b5489c86a3d6b0b2dad15f89eb75b47ebc81536dbbf084b4ec63e5",
+            "visual_review": "accepted",
+            "visible_result": "录屏为智能对话页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 172396,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ind-planner-run.log",
+          "public_path": "/capabilities/assets/evidence/ind-planner-run.log",
+          "sha256": "3c5fd13ad6c6f2cbda0ebf6b4e0fdb28c760c20c9a9d97dae04171e6d4611edb",
+          "size_bytes": 1505
+        },
+        "source_run": "/capabilities/assets/evidence/ind-planner-ind-planner-macos-run.json"
+      },
+      {
+        "feature": "ind-szqsm",
+        "platform": "macos",
+        "status": "failed",
+        "passed": 1,
+        "failed": 1,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ind-szqsm-result.png",
+            "sha256": "7fc0718d001ab8ec6574de07a6f74981b704d48e2afb4ef6ef59bce4d3a23c67",
+            "visual_review": "accepted",
+            "visible_result": "「奇士美 PRO」页：Mod ID sz-qsm-pro 说明「当前为仓库样板，…按 entitlement 安装后方可使用」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ind-szqsm-result.png"
+          },
+          {
+            "file": "ind-szqsm-operation.webm",
+            "sha256": "5c202b51fecafff3654d6a7c09e7273ab10d1d3176ce4535a4ba9cecb0a38c24",
+            "visual_review": "accepted",
+            "visible_result": "录屏为奇士美 PRO 说明页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 191024,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ind-szqsm-run.log",
+          "public_path": "/capabilities/assets/evidence/ind-szqsm-run.log",
+          "sha256": "ec1bd5b234383193d6120c248e5edf7f15b6486441bc2c91db8a446998126727",
+          "size_bytes": 1083
+        },
+        "source_run": "/capabilities/assets/evidence/ind-szqsm-ind-szqsm-macos-run.json"
+      },
+      {
+        "feature": "ind-taiyangniao",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ind-taiyangniao-result.png",
+            "sha256": "dc5d719328abdf9515d1148c2fb78eb30cb16a34bfb3d4bdd657255c6a3d7848",
+            "visual_review": "accepted",
+            "visible_result": "「考勤表转换」页：上传转化区（打卡考勤表、输出相对路径、模板相对路径、统计月份）与右侧考勤规则、打卡时段说明。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ind-taiyangniao-result.png"
+          },
+          {
+            "file": "ind-taiyangniao-operation.webm",
+            "sha256": "cb50a90e36f2c86fd1087280c9a4941b557ee67c06c51481bdd21801ddeae07c",
+            "visual_review": "accepted",
+            "visible_result": "录屏从智能对话页切到考勤表转换页。",
+            "kind": "video",
+            "size_bytes": 575969,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ind-taiyangniao-run.log",
+          "public_path": "/capabilities/assets/evidence/ind-taiyangniao-run.log",
+          "sha256": "276e9df7dd1312aa7495f39300fbb2a272514dad4ba9333824ed1d3b038be359",
+          "size_bytes": 1511
+        },
+        "source_run": "/capabilities/assets/evidence/ind-taiyangniao-ind-taiyangniao-macos-run.json"
+      },
+      {
+        "feature": "ind-workflow-viz",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 2,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ind-workflow-viz-result.png",
+            "sha256": "3542fd4ea9d882f025ce7970427af9ff0b576b1ff1164c2a2917a0a1242ccac7",
+            "visual_review": "accepted",
+            "visible_result": "「员工空间」：企业工位 1、工位实况「考勤 AI 助手」、员工与状态面板。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ind-workflow-viz-result.png"
+          },
+          {
+            "file": "ind-workflow-viz-operation.webm",
+            "sha256": "61ac9a5668ae6cec4a2c44496fa5cc3ff96d7e8f526758afe4a8b7fba74403dd",
+            "visual_review": "accepted",
+            "visible_result": "录屏为员工空间页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 348088,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ind-workflow-viz-run.log",
+          "public_path": "/capabilities/assets/evidence/ind-workflow-viz-run.log",
+          "sha256": "7c02747ec5ee2a83306727e85a9cadf05cde0502186d64fe9baa611f8f50a5f7",
+          "size_bytes": 1229
+        },
+        "source_run": "/capabilities/assets/evidence/ind-workflow-viz-ind-workflow-viz-macos-run.json"
+      },
+      {
+        "feature": "ind-workspace",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "ind-workspace-result.png",
+            "sha256": "93e339c3de02163a8eb1ba2d812ef8b2a0253d18285022faf9aa12a4d2a5d4fe",
+            "visual_review": "accepted",
+            "visible_result": "「考勤工作区 · 人员管理」：员工 MAC验收0929员工（M35907），共 1 条。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ind-workspace-result.png"
+          },
+          {
+            "file": "ind-workspace-operation.webm",
+            "sha256": "93f2c68027d87dd23194a07503553af7d5903c01447d92489b23b9e2055ce962",
+            "visual_review": "accepted",
+            "visible_result": "录屏为考勤人员管理页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 265787,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "ind-workspace-run.log",
+          "public_path": "/capabilities/assets/evidence/ind-workspace-run.log",
+          "sha256": "b2478f1e1d70debf14e328ea1697a14916ee505668841d36518505f49166848c",
+          "size_bytes": 1319
+        },
+        "source_run": "/capabilities/assets/evidence/ind-workspace-ind-workspace-macos-run.json"
+      },
+      {
+        "feature": "mods-bridge",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "mods-bridge-result.png",
+            "sha256": "80f9588589ac2fbb18bf4a617ef84773e44891832cbb0df471eb9a986a45a86e",
+            "visual_review": "accepted",
+            "visible_result": "「能力库 · AI 员工市场」：宿主基础能力分类（截图时目录加载中显示空态）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-bridge-result.png"
+          },
+          {
+            "file": "mods-bridge-operation.webm",
+            "sha256": "16e2711e8b11cb463f9de2cdfd0a3a6d4be4730d90f4ec1e05fa06a99c6ea7ef",
+            "visual_review": "accepted",
+            "visible_result": "录屏从智能对话页切到能力库页。",
+            "kind": "video",
+            "size_bytes": 336530,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "mods-bridge-run.log",
+          "public_path": "/capabilities/assets/evidence/mods-bridge-run.log",
+          "sha256": "5d7802a2559671e4b1fe3531610f2786a88c8e637c184220ef7fef666b9678f7",
+          "size_bytes": 1600
+        },
+        "source_run": "/capabilities/assets/evidence/mods-bridge-mods-bridge-macos-run.json"
+      },
+      {
+        "feature": "mods-host-mount",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "mods-host-mount-result.png",
+            "sha256": "42daee040a8de5ef22475e859b9de45edf8f8e0d71c7981949aca0e89b81e8de",
+            "visual_review": "accepted",
+            "visible_result": "产品页「饰品包装品管理」：两条验收产品。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-host-mount-result.png"
+          },
+          {
+            "file": "mods-host-mount-operation.webm",
+            "sha256": "03a70a113d646d5d7d0e2c356f4b5e731933618efa92d940c261da05332c7725",
+            "visual_review": "accepted",
+            "visible_result": "录屏为产品管理页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 296201,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "mods-host-mount-run.log",
+          "public_path": "/capabilities/assets/evidence/mods-host-mount-run.log",
+          "sha256": "f70f37900e076887b4f8cf9b5a7a741ae97eda176ceefabb339f976b21a56335",
+          "size_bytes": 1390
+        },
+        "source_run": "/capabilities/assets/evidence/mods-host-mount-mods-host-mount-macos-run.json"
+      },
+      {
+        "feature": "mods-loader",
+        "platform": "macos",
+        "status": "failed",
+        "passed": 3,
+        "failed": 1,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "mods-loader-result.png",
+            "sha256": "47e74d9a432208f3f9fbcd3a600afa4874f3576a8ca8b97869c73d5b64dac4d0",
+            "visual_review": "accepted",
+            "visible_result": "「能力库 · AI 员工市场」：「宿主基础能力（预装员工）」卡片。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-loader-result.png"
+          },
+          {
+            "file": "mods-loader-operation.webm",
+            "sha256": "76d66c0b8812f0ca2d6b3b66c72fd36e29eb531f9ea9478dc4d9b828f2314bb1",
+            "visual_review": "accepted",
+            "visible_result": "录屏为能力库页，目录加载后出现预装员工卡片。",
+            "kind": "video",
+            "size_bytes": 371056,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "mods-loader-run.log",
+          "public_path": "/capabilities/assets/evidence/mods-loader-run.log",
+          "sha256": "5a1d398012fe2b658acf69635f9c10548b88ccb12fa4ff55f464e184952747f8",
+          "size_bytes": 1247
+        },
+        "source_run": "/capabilities/assets/evidence/mods-loader-mods-loader-macos-run.json"
+      },
+      {
+        "feature": "mods-open-api",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "mods-open-api-result.png",
+            "sha256": "7b5f83deea5fb5a4d7daa58552757e9d1e0a4707d8ceedf4b21063ff8c1bb31d",
+            "visual_review": "accepted",
+            "visible_result": "「智能生态 · AI生态应用」：智慧分析、AIOPEN 开放智控、生产员工、员工商店四张卡片。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-open-api-result.png"
+          },
+          {
+            "file": "mods-open-api-operation.webm",
+            "sha256": "e875b5fd526821c3865cb8287e78f26e99076317cf32565a5829dcafde4c1d3e",
+            "visual_review": "accepted",
+            "visible_result": "录屏为智能生态页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 283334,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "mods-open-api-run.log",
+          "public_path": "/capabilities/assets/evidence/mods-open-api-run.log",
+          "sha256": "b753f4ae74994d76b61ade8e521a3a682e60bf06965f243013eaaafc8bfe252b",
+          "size_bytes": 1305
+        },
+        "source_run": "/capabilities/assets/evidence/mods-open-api-mods-open-api-macos-run.json"
+      },
+      {
+        "feature": "mods-shell",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "mods-shell-result.png",
+            "sha256": "34c32f1f091aab04cee3b0f53a557347dda40a96609e99b6c6546be3c06aaa82",
+            "visual_review": "accepted",
+            "visible_result": "「能力库 · AI 员工市场」：分类列表，右侧「宿主基础能力（预装员工）共 0 件 暂无商品」（截图时目录尚在加载）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-shell-result.png"
+          },
+          {
+            "file": "mods-shell-operation.webm",
+            "sha256": "ab70da2aa5462239788002cf6938c26dacfd9f14b77fa4948cbb949520f31353",
+            "visual_review": "accepted",
+            "visible_result": "录屏为能力库页，目录加载中各帧显示空态。",
+            "kind": "video",
+            "size_bytes": 265316,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "mods-shell-run.log",
+          "public_path": "/capabilities/assets/evidence/mods-shell-run.log",
+          "sha256": "9c541b8e8c175c094d05ca13eb8e1ce4349b3dd25db4dd430b861a2aa51f6076",
+          "size_bytes": 1427
+        },
+        "source_run": "/capabilities/assets/evidence/mods-shell-mods-shell-macos-run.json"
+      },
+      {
+        "feature": "mods-store",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "mods-store-result.png",
+            "sha256": "b01bee147584b1a976705d94eeb0b90e94988479ad829cc8eea712da68456c42",
+            "visual_review": "accepted",
+            "visible_result": "「能力库 · AI 员工市场」：「宿主基础能力（预装员工）」卡片，已安装标记。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-store-result.png"
+          },
+          {
+            "file": "mods-store-operation.webm",
+            "sha256": "a4859f27ed7e561a6abaa8f3b91e91e9c636240ed35626047c8580350f7b76cf",
+            "visual_review": "accepted",
+            "visible_result": "录屏从智能对话页切到能力库页，目录加载后出现预装员工卡片。",
+            "kind": "video",
+            "size_bytes": 472428,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "mods-store-run.log",
+          "public_path": "/capabilities/assets/evidence/mods-store-run.log",
+          "sha256": "a7f7d13aedb7d300b4bafadc395cf2acb31bc60cfe0a8c96bc0d67bb26370153",
+          "size_bytes": 1127
+        },
+        "source_run": "/capabilities/assets/evidence/mods-store-mods-store-macos-run.json"
+      },
+      {
+        "feature": "mods-webhook",
+        "platform": "macos",
+        "status": "failed",
+        "passed": 2,
+        "failed": 1,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "mods-webhook-result.png",
+            "sha256": "7929ca20c8687f44228a9850e0dc8a62185d3e4fc080db85ddb27aa20338f4d8",
+            "visual_review": "accepted",
+            "visible_result": "「能力库 · AI 员工市场」：宿主基础能力分类，截图时目录尚在加载显示空态。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-webhook-result.png"
+          },
+          {
+            "file": "mods-webhook-operation.webm",
+            "sha256": "d8f084e7a7079c4362e422eca3394f1163c0f99576c2e2acc1560bb848347ad9",
+            "visual_review": "accepted",
+            "visible_result": "录屏为能力库页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 277405,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "mods-webhook-run.log",
+          "public_path": "/capabilities/assets/evidence/mods-webhook-run.log",
+          "sha256": "6a933d651dd4809890d1e2d073c5e19dfaa65aca8a8a12497d987ca9c8fb525d",
+          "size_bytes": 1262
+        },
+        "source_run": "/capabilities/assets/evidence/mods-webhook-mods-webhook-macos-run.json"
+      },
+      {
+        "feature": "pay-alipay",
+        "platform": "macos",
+        "status": "failed",
+        "passed": 3,
+        "failed": 1,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "pay-alipay-result.png",
+            "sha256": "749ce214ba3a0dff81571cf42c3db4b0a549f6973d840a244ddfbe5f400a7124",
+            "visual_review": "accepted",
+            "visible_result": "系统设置 · 模型服务：账户余额 ¥97.51、会员套餐入口。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-alipay-result.png"
+          },
+          {
+            "file": "pay-alipay-operation.webm",
+            "sha256": "9ff9964d296b232ff277a139ddc0f3007b2d12d4c76908c98bd455ff7e2cf747",
+            "visual_review": "accepted",
+            "visible_result": "录屏为系统设置/模型服务区，各帧一致。",
+            "kind": "video",
+            "size_bytes": 308414,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "pay-alipay-run.log",
+          "public_path": "/capabilities/assets/evidence/pay-alipay-run.log",
+          "sha256": "e8927b42156c59cf99f4fecb1aaa8e0e050b5d15354b54ea47729d9aeb39e9e7",
+          "size_bytes": 1328
+        },
+        "source_run": "/capabilities/assets/evidence/pay-alipay-pay-alipay-macos-run.json"
+      },
+      {
+        "feature": "pay-lan",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "pay-lan-result.png",
+            "sha256": "038db54377b5a14055c7f70774a30a8ac1cf790081bb4929ff9d62bd31e330a5",
+            "visual_review": "accepted",
+            "visible_result": "「FHD · 局域网授权」卡片：未启用局域网模式，无需授权；本机 IP 127.0.0.1。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-lan-result.png"
+          },
+          {
+            "file": "pay-lan-operation.webm",
+            "sha256": "6266372d1b69d008ec7267a4a09dddb08f00661ab6866cd3a910ae11d8be65f7",
+            "visual_review": "accepted",
+            "visible_result": "录屏为局域网授权页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 118469,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "pay-lan-run.log",
+          "public_path": "/capabilities/assets/evidence/pay-lan-run.log",
+          "sha256": "5f1be5c922aeea67a2b02aa26bb829d84724d8a2ea062f366a8b56ffa8132ceb",
+          "size_bytes": 1100
+        },
+        "source_run": "/capabilities/assets/evidence/pay-lan-pay-lan-macos-run.json"
+      },
+      {
+        "feature": "pay-lan-settings",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "pay-lan-settings-result.png",
+            "sha256": "038db54377b5a14055c7f70774a30a8ac1cf790081bb4929ff9d62bd31e330a5",
+            "visual_review": "accepted",
+            "visible_result": "「FHD · 局域网授权」卡片：状态 未启用、本机 IP、主机管理员位。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-lan-settings-result.png"
+          },
+          {
+            "file": "pay-lan-settings-operation.webm",
+            "sha256": "b6835afb59ac59be4383d2a97c47c9cccc4dc0528add8178431ce252737b7080",
+            "visual_review": "accepted",
+            "visible_result": "录屏为局域网授权页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 117688,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "pay-lan-settings-run.log",
+          "public_path": "/capabilities/assets/evidence/pay-lan-settings-run.log",
+          "sha256": "28ad0ca3893876e333507d5eef470d43775c4fed6bd63a09638b51989090d44d",
+          "size_bytes": 1075
+        },
+        "source_run": "/capabilities/assets/evidence/pay-lan-settings-pay-lan-settings-macos-run.json"
+      },
+      {
+        "feature": "pay-member-plan",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "pay-member-plan-result.png",
+            "sha256": "749ce214ba3a0dff81571cf42c3db4b0a549f6973d840a244ddfbe5f400a7124",
+            "visual_review": "accepted",
+            "visible_result": "系统设置 · 模型服务：余额 ¥97.51、修茈会员套餐入口。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-member-plan-result.png"
+          },
+          {
+            "file": "pay-member-plan-operation.webm",
+            "sha256": "b27fa88546c9f3f963a7471eba5acad93865c8792bb43e56b30f2d7db0a707e1",
+            "visual_review": "accepted",
+            "visible_result": "录屏从智能对话页切到模型服务设置区。",
+            "kind": "video",
+            "size_bytes": 380244,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "pay-member-plan-run.log",
+          "public_path": "/capabilities/assets/evidence/pay-member-plan-run.log",
+          "sha256": "d05d7e108c871e800ad9d4c1ff12597ded54e8cc8c1ff3ba12bd0f0abd0173ef",
+          "size_bytes": 1291
+        },
+        "source_run": "/capabilities/assets/evidence/pay-member-plan-pay-member-plan-macos-run.json"
+      },
+      {
+        "feature": "pay-wallet",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "pay-wallet-result.png",
+            "sha256": "91fec6c92197c41fab6f3d43420fb41d2c935d2ce765dc55e8d71913ce1f8379",
+            "visual_review": "accepted",
+            "visible_result": "系统设置 · 模型服务：账户余额 ¥97.51、会员 普通用户、快捷充值、修茈会员套餐、AI 意图能力卡片。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-wallet-result.png"
+          },
+          {
+            "file": "pay-wallet-operation.webm",
+            "sha256": "a64b3155369fe7ac6df678d90d568e434542f05321d82ddfd837f4b5428a737c",
+            "visual_review": "accepted",
+            "visible_result": "录屏从智能对话页切到模型服务设置区。",
+            "kind": "video",
+            "size_bytes": 387473,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "pay-wallet-run.log",
+          "public_path": "/capabilities/assets/evidence/pay-wallet-run.log",
+          "sha256": "8301428215fe71095cae4f27838a03900eebcd4ab365fc021c0fd580c21ca106",
+          "size_bytes": 1275
+        },
+        "source_run": "/capabilities/assets/evidence/pay-wallet-pay-wallet-macos-run.json"
+      },
+      {
+        "feature": "sec-csp",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 2,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "sec-csp-result.png",
+            "sha256": "bd761fad9ff69e622f077a5c37b3e747b6a8a0731cdb47185d3f0b425f0a736e",
+            "visual_review": "accepted",
+            "visible_result": "智能对话主页。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-csp-result.png"
+          },
+          {
+            "file": "sec-csp-operation.webm",
+            "sha256": "df2199e23a5dbfca093d9aa35dcc08c8b0efe3152175c710478e6c7820b30695",
+            "visual_review": "accepted",
+            "visible_result": "录屏为智能对话页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 148131,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "sec-csp-run.log",
+          "public_path": "/capabilities/assets/evidence/sec-csp-run.log",
+          "sha256": "fa4ad24e71650fa461244602eef1614fbd06d95992c82ea03fe78ea47da68954",
+          "size_bytes": 842
+        },
+        "source_run": "/capabilities/assets/evidence/sec-csp-sec-csp-macos-run.json"
+      },
+      {
+        "feature": "sec-e2e",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 2,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "sec-e2e-result.png",
+            "sha256": "bd761fad9ff69e622f077a5c37b3e747b6a8a0731cdb47185d3f0b425f0a736e",
+            "visual_review": "accepted",
+            "visible_result": "智能对话主页。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-e2e-result.png"
+          },
+          {
+            "file": "sec-e2e-operation.webm",
+            "sha256": "9bab4259ae209140fd7f22bb7d3db9b5df3eaeb22f5d1420ec37b3900903bf73",
+            "visual_review": "accepted",
+            "visible_result": "录屏为智能对话页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 172396,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "sec-e2e-run.log",
+          "public_path": "/capabilities/assets/evidence/sec-e2e-run.log",
+          "sha256": "0e58e6d1f539cc3eedcc38c0f5eaf54b99201ad230f28201ebf40a0e70064e3c",
+          "size_bytes": 1133
+        },
+        "source_run": "/capabilities/assets/evidence/sec-e2e-sec-e2e-macos-run.json"
+      },
+      {
+        "feature": "sec-identity",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "sec-identity-result.png",
+            "sha256": "bd761fad9ff69e622f077a5c37b3e747b6a8a0731cdb47185d3f0b425f0a736e",
+            "visual_review": "accepted",
+            "visible_result": "智能对话主页。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-identity-result.png"
+          },
+          {
+            "file": "sec-identity-operation.webm",
+            "sha256": "3b16bd1a341d6f88aaa830d01e8af4ee2d4cc02925ee72dd0009add7c464f526",
+            "visual_review": "accepted",
+            "visible_result": "录屏为智能对话页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 113552,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "sec-identity-run.log",
+          "public_path": "/capabilities/assets/evidence/sec-identity-run.log",
+          "sha256": "f9acec857a0d1caa13c089bb6e769ef28a87443920f767125f13e957c2094a6a",
+          "size_bytes": 789
+        },
+        "source_run": "/capabilities/assets/evidence/sec-identity-sec-identity-macos-run.json"
+      },
+      {
+        "feature": "sec-release-gate",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "sec-release-gate-result.png",
+            "sha256": "901343d8134be41a3e613dfe185878627c8a5fac132990eb5f97ff9efece9a93",
+            "visual_review": "accepted",
+            "visible_result": "「桌面运行时」页：运行状态表。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-release-gate-result.png"
+          },
+          {
+            "file": "sec-release-gate-operation.webm",
+            "sha256": "674c27bcc9853e0c30eb5b4bdbc51f9d69bf1dd131b4f235c2c55c4f334b52c9",
+            "visual_review": "accepted",
+            "visible_result": "录屏为桌面运行时页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 342888,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "sec-release-gate-run.log",
+          "public_path": "/capabilities/assets/evidence/sec-release-gate-run.log",
+          "sha256": "761b4d542d2c3b728ce89d98d90e2e762c021a7ed1c2520653be9a1a8b7e5fae",
+          "size_bytes": 1262
+        },
+        "source_run": "/capabilities/assets/evidence/sec-release-gate-sec-release-gate-macos-run.json"
+      },
+      {
+        "feature": "sec-runtime-gate",
+        "platform": "macos",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "media": [
+          {
+            "file": "sec-runtime-gate-result.png",
+            "sha256": "901343d8134be41a3e613dfe185878627c8a5fac132990eb5f97ff9efece9a93",
+            "visual_review": "accepted",
+            "visible_result": "「桌面运行时」页：运行状态表。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-runtime-gate-result.png"
+          },
+          {
+            "file": "sec-runtime-gate-operation.webm",
+            "sha256": "39fba3e82436cfee06eb646d1f17785ee517cbc9efdc508cd17476f0027920f7",
+            "visual_review": "accepted",
+            "visible_result": "录屏为桌面运行时页，各帧一致。",
+            "kind": "video",
+            "size_bytes": 333444,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": {
+          "file": "sec-runtime-gate-run.log",
+          "public_path": "/capabilities/assets/evidence/sec-runtime-gate-run.log",
+          "sha256": "7ebc6f84f51bcf570313b3ff064edc25cd303ac2ac85668f46e436480ceca0cc",
+          "size_bytes": 1307
+        },
+        "source_run": "/capabilities/assets/evidence/sec-runtime-gate-sec-runtime-gate-macos-run.json"
       }
     ],
     "videos": [
@@ -767,6 +4212,196 @@
     ],
     "integrity_problems": [
       {
+        "feature": "ai-chat-core",
+        "file": "ai-chat-core-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ai-csv",
+        "file": "ai-csv-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ai-employee-pack",
+        "file": "ai-employee-pack-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ai-employees-workflow",
+        "file": "ai-employees-workflow-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ai-excel",
+        "file": "ai-excel-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ai-intent",
+        "file": "ai-intent-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ai-knowledge",
+        "file": "ai-knowledge-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ai-ocr-doc",
+        "file": "ai-ocr-doc-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ai-pdf",
+        "file": "ai-pdf-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ai-ppt",
+        "file": "ai-ppt-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ai-task-workspace",
+        "file": "ai-task-workspace-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ai-tts",
+        "file": "ai-tts-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ai-word",
+        "file": "ai-word-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "base-config",
+        "file": "base-config-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "base-db",
+        "file": "base-db-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "base-device-bind",
+        "file": "base-device-bind-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "base-edition-pack",
+        "file": "base-edition-pack-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "base-health",
+        "file": "base-health-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "base-install-guide",
+        "file": "base-install-guide-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
         "feature": "base-login",
         "file": "base-login-base-login-web-20260924-015410.mp4",
         "issues": [
@@ -793,11 +4428,23 @@
         "action": "not-published"
       },
       {
+        "feature": "base-mac-client",
+        "file": "base-mac-client-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
         "feature": "base-rbac",
-        "file": "base-rbac-base-rbac.png",
-        "kind": "sha-mismatch-not-published",
-        "recorded_sha256": "8dc8864213eb1d02cbd15173f510b349bdd5ae47affe5da68921111a38cf58e6",
-        "actual_sha256": "9c62e8a431250b1720eeab6c03dd6a72fecab906b6d087cd510acc9dd645ec17",
+        "file": "base-rbac-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
         "action": "not-published"
       },
       {
@@ -810,26 +4457,768 @@
       },
       {
         "feature": "base-rbac",
-        "file": "base-rbac-base-rbac.png",
-        "kind": "sha-mismatch-not-published",
-        "recorded_sha256": "8dc8864213eb1d02cbd15173f510b349bdd5ae47affe5da68921111a38cf58e6",
-        "actual_sha256": "9c62e8a431250b1720eeab6c03dd6a72fecab906b6d087cd510acc9dd645ec17",
+        "file": "base-rbac-base-rbac.mp4",
+        "issues": [
+          "原始录像不可追溯"
+        ],
         "action": "not-published"
       },
       {
-        "feature": "base-rbac",
-        "file": "base-rbac-base-rbac.mp4",
+        "feature": "base-settings",
+        "file": "base-settings-operation.webm",
         "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "base-update-mgmt",
+        "file": "base-update-mgmt-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ch-asr",
+        "file": "ch-asr-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ch-im-core",
+        "file": "ch-im-core-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ch-im-cs",
+        "file": "ch-im-cs-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ch-im-super",
+        "file": "ch-im-super-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ch-im-ws",
+        "file": "ch-im-ws-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ch-notify",
+        "file": "ch-notify-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ch-realtime-voice",
+        "file": "ch-realtime-voice-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ch-task-center",
+        "file": "ch-task-center-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ch-wechat-contacts",
+        "file": "ch-wechat-contacts-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ch-wechat-context",
+        "file": "ch-wechat-context-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ch-wechat-ingest",
+        "file": "ch-wechat-ingest-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ch-wechat-phone",
+        "file": "ch-wechat-phone-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "dt-cold-start-rollback",
+        "file": "dt-cold-start-rollback-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "dt-evidence-store",
+        "file": "dt-evidence-store-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "dt-install-sign",
+        "file": "dt-install-sign-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "dt-integrity",
+        "file": "dt-integrity-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "dt-mac-control",
+        "file": "dt-mac-control-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "dt-neurobus",
+        "file": "dt-neurobus-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "dt-ota",
+        "file": "dt-ota-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "dt-process-mgmt",
+        "file": "dt-process-mgmt-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "dt-rpa",
+        "file": "dt-rpa-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "dt-shell",
+        "file": "dt-shell-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "erp-approval",
+        "file": "erp-approval-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "erp-ar-ap",
+        "file": "erp-ar-ap-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "erp-contract",
+        "file": "erp-contract-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "erp-excel-io",
+        "file": "erp-excel-io-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "erp-finance-ledger",
+        "file": "erp-finance-ledger-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "erp-inventory",
+        "file": "erp-inventory-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "erp-inventory-warehouse",
+        "file": "erp-inventory-warehouse-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "erp-invoice",
+        "file": "erp-invoice-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "erp-label",
+        "file": "erp-label-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "erp-master-data",
+        "file": "erp-master-data-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "erp-ocr-clean",
+        "file": "erp-ocr-clean-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "erp-ocr",
+        "file": "erp-ocr-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "erp-print-agent",
+        "file": "erp-print-agent-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "erp-purchase",
+        "file": "erp-purchase-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "erp-purchase-inbound",
+        "file": "erp-purchase-inbound-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "erp-reconcile",
+        "file": "erp-reconcile-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "erp-replenishment",
+        "file": "erp-replenishment-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "erp-report",
+        "file": "erp-report-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "erp-sales-order",
+        "file": "erp-sales-order-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "erp-shipment",
+        "file": "erp-shipment-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "erp-templates",
+        "file": "erp-templates-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "erp-uom",
+        "file": "erp-uom-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ind-attendance",
+        "file": "ind-attendance-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ind-coating",
+        "file": "ind-coating-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ind-custom-delivery",
+        "file": "ind-custom-delivery-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ind-fields",
+        "file": "ind-fields-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ind-lan-license",
+        "file": "ind-lan-license-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ind-modstore-pay",
+        "file": "ind-modstore-pay-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ind-packaging",
+        "file": "ind-packaging-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ind-planner",
+        "file": "ind-planner-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ind-szqsm",
+        "file": "ind-szqsm-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ind-taiyangniao",
+        "file": "ind-taiyangniao-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ind-workflow-viz",
+        "file": "ind-workflow-viz-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ind-workspace",
+        "file": "ind-workspace-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "mods-bridge",
+        "file": "mods-bridge-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "mods-host-mount",
+        "file": "mods-host-mount-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "mods-loader",
+        "file": "mods-loader-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "mods-open-api",
+        "file": "mods-open-api-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "mods-shell",
+        "file": "mods-shell-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "mods-store",
+        "file": "mods-store-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "mods-webhook",
+        "file": "mods-webhook-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "pay-alipay",
+        "file": "pay-alipay-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "pay-lan",
+        "file": "pay-lan-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "pay-lan-settings",
+        "file": "pay-lan-settings-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "pay-member-plan",
+        "file": "pay-member-plan-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "pay-wallet",
+        "file": "pay-wallet-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "sec-csp",
+        "file": "sec-csp-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "sec-e2e",
+        "file": "sec-e2e-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "sec-identity",
+        "file": "sec-identity-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "sec-release-gate",
+        "file": "sec-release-gate-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "sec-runtime-gate",
+        "file": "sec-runtime-gate-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
           "原始录像不可追溯"
         ],
         "action": "not-published"
       }
     ],
     "summary": {
-      "total": 9,
-      "passed": 1,
-      "failed": 7,
-      "last_verified_at": "2026-09-24"
+      "total": 97,
+      "passed": 67,
+      "failed": 29,
+      "last_verified_at": "2026-09-29"
     }
   },
   "hero_media": null

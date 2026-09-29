@@ -1340,10 +1340,9 @@ class TestSimpleGetRoutes:
     def test_validate_loaded_mod_checks_manifest_and_dependencies(self, tmp_path):
         import json as _json
 
-        (tmp_path / "manifest.json").write_text(
-            _json.dumps({"id": "demo", "name": "Demo", "version": "1.2.0", "dependencies": {"base": ">=1.0"}}),
-            encoding="utf-8",
-        )
+        deps = {"base": ">=1.0"}
+        manifest = {"id": "demo", "name": "Demo", "version": "1.2.0", "dependencies": deps}
+        (tmp_path / "manifest.json").write_text(_json.dumps(manifest), encoding="utf-8")
         manager = MagicMock()
         manager.get_mod.return_value = types.SimpleNamespace(id="demo", mod_path=str(tmp_path))
         manager.list_loaded_mods.return_value = [types.SimpleNamespace(id="demo")]
@@ -1354,11 +1353,9 @@ class TestSimpleGetRoutes:
             with _make_client() as client:
                 ok = client.get("/validate", params={"mod_id": "demo"}).json()
         assert missing["success"] is False and missing["data"]["dependencies_satisfied"] is False
-        assert ok == {
-            "success": True,
-            "message": "清单校验通过",
-            "data": {"mod_id": "demo", "version": "1.2.0", "dependencies": {"base": ">=1.0"}, "dependencies_satisfied": True},
-        }
+        assert (ok["success"], ok["message"]) == (True, "清单校验通过")
+        expected = {"mod_id": "demo", "version": "1.2.0", "dependencies": deps}
+        assert ok["data"] == {**expected, "dependencies_satisfied": True}
 
     def test_updates_returns_empty_list_only_after_all_sources_checked(self, update_catalog):
         rows, headers = update_catalog

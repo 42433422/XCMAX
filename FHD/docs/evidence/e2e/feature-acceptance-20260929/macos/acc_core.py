@@ -256,7 +256,6 @@ class Feature:
     def log(self, msg: str):
         line = f"{time.strftime('%Y-%m-%dT%H:%M:%S%z')} [{self.fid}] {msg}"
         self.log_lines.append(line)
-        print(line, flush=True)
 
     def case(self, input_: str, actions: str, expected: str, fn):
         self.idx += 1
