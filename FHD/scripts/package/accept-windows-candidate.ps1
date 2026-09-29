@@ -20,7 +20,8 @@ function Check([bool]$ok, [string]$name, [string]$detail) {
 }
 function Digest([string]$text) {
   $bytes = [Text.Encoding]::UTF8.GetBytes($text)
-  return [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
+  $hash = [Security.Cryptography.SHA256]::Create().ComputeHash($bytes)
+  return ([BitConverter]::ToString($hash) -replace '-', '').ToLowerInvariant()
 }
 function Stop-App {
   Get-Process -Name XCAGI,xcagi-backend -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
@@ -66,8 +67,11 @@ function Login([string]$label) {
   Check ($http -eq 200 -and $j.success -eq $true) "$label.login" "http=$http; success=$($j.success)"
   $me = Invoke-RestMethod "$base/api/auth/me" -WebSession $session -TimeoutSec 15
   $identity = $me.data
-  $kind = [string]($identity.account_kind ?? $identity.user.account_kind ?? '')
-  $tenant = [string]($identity.tenant_id ?? $identity.tenant.id ?? $identity.user.tenant_id ?? '')
+  $kind = [string]$identity.account_kind
+  if (-not $kind) { $kind = [string]$identity.user.account_kind }
+  $tenant = [string]$identity.tenant_id
+  if (-not $tenant) { $tenant = [string]$identity.tenant.id }
+  if (-not $tenant) { $tenant = [string]$identity.user.tenant_id }
   Check ($kind -eq 'enterprise' -and $tenant) "$label.enterprise" "kind=$kind; tenant_sha256=$(Digest $tenant)"
   return @{ session=$session; tenant=$tenant }
 }
