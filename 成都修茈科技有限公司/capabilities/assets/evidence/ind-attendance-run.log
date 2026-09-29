@@ -1,0 +1,7 @@
+2026-09-29T07:09:13+0800 [ind-attendance] 开始验收 ind-attendance 考勤行业包；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T07:09:14+0800 [ind-attendance] M1 passed :: HTTP 200 26ms；{"success": true, "data": {"id": 1, "department": "MAC验收0929部门6953", "main_department": "MAC验收0929部门6953", "attendance_group": "", "employee_count": 0}}
+2026-09-29T07:09:14+0800 [ind-attendance] M2 passed :: HTTP 200 22ms；{"success": true, "data": {"id": 2, "employee_name": "MAC验收0929员工", "department": "MAC验收0929部门6953", "main_department": "", "attendance_group": "", "employee_no
+2026-09-29T07:09:14+0800 [ind-attendance] M3 passed :: HTTP 200 37ms；员工 2
+2026-09-29T07:09:17+0800 [ind-attendance] M4 passed :: 已在 /attendance-industry/personnel 页面看到「MAC验收0929员工」；上下文：、所属部门与考勤组。 |  | 新增人员 | 刷新 | ⌕ | 查询 | 共 2 条 | 姓名	工号	部门	上级部门	考勤组	岗位 / 性质	操作 | MAC验收0929员工	M35907	MAC验收0929部门5907	—	未设置	—	 | 编辑 | 删除 |  | MAC验收0929员工	M36954	MAC验收0929部门6953	—	未设置	—	 | 编辑 | 删除 | 小C助理
+2026-09-29T07:09:18+0800 [ind-attendance] screenshot result.png
+2026-09-29T07:09:20+0800 [ind-attendance] video operation.webm bytes=301805

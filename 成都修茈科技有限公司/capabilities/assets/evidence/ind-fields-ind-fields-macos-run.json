@@ -1,0 +1,66 @@
+{
+  "_comment": "2026-09-29 macOS 已安装 XCAGI.app 实机验收（CDP 驱动界面 + 同会话接口读写 + 界面读回）；原图与录屏逐项人工目检。",
+  "kind": "feature-acceptance",
+  "feature": "ind-fields",
+  "platform": "macos",
+  "round": "feature-acceptance-20260929",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "app_version": "1.0.0.5",
+  "method": "经 CDP(127.0.0.1:9222) 驱动已安装的 /Applications/XCAGI.app：界面导航、键入与点击 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏转 VP8 webm。",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "visible_content": "行业基线与行业配置（units、product_fields、order_types 等）可读，产品页按饰品包装字段渲染。",
+  "cases": [
+    {
+      "id": "M1",
+      "input": "GET /api/platform-shell/industry-baseline",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/platform-shell/industry-baseline（写操作自动附带 CSRF）：行业基线字段",
+      "expected": "行业基线字段：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 14ms；{\"schema_version\": 1, \"industry_id\": \"general\", \"summary\": \"保持干净页面：对话与智能生态即可起步，其它能力按需再补。\", \"industry_package\": null, \"groups\": [{\"id\": \"core\", \"title\": \"侧栏对话底座\", \"hint\": \"干净起步：侧栏挂上智能对话与智能生态入口（宿主桥接，非员工",
+      "result": "passed"
+    },
+    {
+      "id": "M2",
+      "input": "GET /api/system/industry",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/system/industry（写操作自动附带 CSRF）：行业配置",
+      "expected": "行业配置：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 35ms；config keys ['units', 'quantity_fields', 'product_fields', 'order_types', 'print_config', 'subsystems']",
+      "result": "passed"
+    },
+    {
+      "id": "M3",
+      "input": "界面路由 /mod/xcagi-erp-domain-bridge/products",
+      "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /mod/xcagi-erp-domain-bridge/products，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+      "expected": "停留在 /mod/xcagi-erp-domain-bridge/products，页面可见 ，该页请求无 4xx/5xx",
+      "observed": "导航后路径 /mod/xcagi-erp-domain-bridge/products；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 人员管理 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 饰品包装品管理 | 导入Excel | 导出价格表 | 导出Excel | + 添加产品 | 产品单位： | 请选择产品单位 | MAC验收0929客户 | MAC",
+      "result": "passed"
+    }
+  ],
+  "media": [
+    {
+      "feature": "ind-fields",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ind-fields/macos/result.png",
+      "sha256": "a10bbffd26e0334c068821f78791afc39bd3e118a8e5785921adbf5b6b9462ff",
+      "visual_review": "accepted",
+      "visible_result": "产品页「饰品包装品管理」：产品单位下拉、两条验收产品；页头「人员管理」。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ind-fields",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ind-fields/macos/operation.webm",
+      "sha256": "1bd9643e34a4049032879706179a5c00b646b2967eb1a26e1b1742fe1bca0cad",
+      "visual_review": "accepted",
+      "visible_result": "录屏为产品管理页，各帧一致。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ind-fields/macos/run.log",
+    "sha256": "c7a4a49f2bd512b3141bf4cce8b6d80a8cdb6f7a54277e4ca2130ba34b7ade6a",
+    "bytes": 1535
+  }
+}

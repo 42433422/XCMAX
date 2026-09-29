@@ -145,6 +145,15 @@ def test_empty_tenant_does_not_deduplicate_another_tenants_task():
     assert repeated.json()["data"]["run_id"] == unscoped.json()["data"]["run_id"]
 
 
+def test_create_task_reports_unregistered_tool_reason():
+    response = _client().post(
+        "/api/agent/tasks",
+        json={"task_id": "bad-tool", "title": "x", "tool_id": "nope", "action": "run"},
+    )
+    assert response.status_code == 400
+    assert "未注册的工具动作" in response.json()["message"]
+
+
 @pytest.mark.parametrize("second_mod", ["mod-b", ""])
 def test_unified_task_deduplication_rejects_different_mod_scope(second_mod):
     body = {

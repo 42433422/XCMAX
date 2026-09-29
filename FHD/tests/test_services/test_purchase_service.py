@@ -135,11 +135,29 @@ class TestCreateSupplier:
     def test_uses_default_values(self, svc):
         mock_db = MagicMock()
         with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
-            svc.create_supplier({})
+            svc.create_supplier({"name": "默认值供应商"})
         call_args = mock_db.add.call_args[0][0]
+        assert call_args.code.startswith("SUP")
         assert call_args.payment_terms == "月结"
         assert call_args.status == "active"
         assert call_args.rating == 3
+
+    def test_rejects_missing_name_without_touching_db(self, svc):
+        mock_db = MagicMock()
+        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+            result = svc.create_supplier({"code": "S002"})
+        assert result == {"success": False, "message": "供应商名称不能为空"}
+        mock_db.add.assert_not_called()
+
+    def test_duplicate_code_is_business_error(self, svc):
+        from sqlalchemy.exc import IntegrityError
+
+        mock_db = MagicMock()
+        mock_db.commit.side_effect = IntegrityError("INSERT", {}, Exception("UNIQUE"))
+        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+            result = svc.create_supplier({"code": "S001", "name": "重复"})
+        assert result["success"] is False and "S001" in result["message"]
+        mock_db.rollback.assert_called_once()
 
 
 class TestUpdateSupplier:
@@ -309,6 +327,22 @@ class TestCreatePurchaseOrder:
         with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
             result = svc.create_purchase_order({"supplier_id": 1})
         assert result["success"] is False
+
+    def test_rejects_item_without_product_before_db(self, svc):
+        mock_db = MagicMock()
+        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+            items = [{"product_id": 1, "quantity": 1}, {"product_id": "", "quantity": 2}]
+            result = svc.create_purchase_order({"supplier_id": 1, "items": items})
+        assert result == {"success": False, "message": "第 2 行明细未选择产品"}
+        mock_db.add.assert_not_called()
+
+    def test_inbound_rejects_item_without_product(self, svc):
+        mock_db = MagicMock()
+        with patch("app.services.purchase_service.get_db", _mock_get_db(mock_db)):
+            items = [{"product_name": "散料", "quantity": 1}]
+            result = svc.create_purchase_inbound({"items": items})
+        assert result["success"] is False and "第 1 行" in result["message"]
+        mock_db.add.assert_not_called()
 
 
 class TestAsDate:

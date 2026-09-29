@@ -1,0 +1,7 @@
+2026-09-29T06:43:13+0800 [ai-knowledge] 开始验收 ai-knowledge 知识库与向量检索；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T06:43:13+0800 [ai-knowledge] M1 passed :: HTTP 200 23ms；dataset=persy-knowledge 文档 0 片段 0
+2026-09-29T06:43:13+0800 [ai-knowledge] M2 failed :: HTTP 403 27ms；{"success": false, "error_code": "http_403", "message": "旧知识索引未提供租户隔离", "path": "/api/knowledge/v1/ingest"}
+2026-09-29T06:43:13+0800 [ai-knowledge] M3 failed :: HTTP 403 34ms；{"success": false, "error_code": "http_403", "message": "旧知识索引未提供租户隔离", "path": "/api/knowledge/v1/query"}
+2026-09-29T06:43:17+0800 [ai-knowledge] M4 passed :: 导航后路径 /persy/knowledge；命中文本 ['知识']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 知识库 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | PERSY COGNITIVE MAP | 企业知识网络 | 图谱 | 记忆 | 卡片 | 来源 | 关键词召回 | 导入 |  | 当前没有知识内容，图中显示
+2026-09-29T06:43:18+0800 [ai-knowledge] screenshot result.png
+2026-09-29T06:43:27+0800 [ai-knowledge] video operation.webm bytes=367157

@@ -1,0 +1,5 @@
+2026-09-29T06:53:33+0800 [ind-workflow-viz] 开始验收 ind-workflow-viz 工作流可视化桥接 Mod；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T06:53:33+0800 [ind-workflow-viz] M1 passed :: HTTP 200 48ms；{"success": true, "data": {"mod_id": "xcagi-workflow-visualization-bridge", "role": "workflow_visualization_bridge"}}
+2026-09-29T06:53:37+0800 [ind-workflow-viz] M2 passed :: 导航后路径 /workflow-employee-space；命中文本 ['员工']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 员工空间 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 员工空间 |  | 像素入口与工位实况；数据与副窗工作流开关、智能对话任务快照同步。 |  | 员工工作流：入口与工位实况 |  | 企业版全景 
+2026-09-29T06:53:38+0800 [ind-workflow-viz] screenshot result.png
+2026-09-29T06:53:43+0800 [ind-workflow-viz] video operation.webm bytes=348088

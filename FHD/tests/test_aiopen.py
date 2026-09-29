@@ -47,7 +47,9 @@ def test_manifest_public(client):
     data = resp.json()
     assert data["success"] is True
     assert data["name"] == "AIOPEN"
-    assert data["version"] == "1.0.0.3"
+    from app.infrastructure.mods.manifest import host_xcagi_version
+
+    assert data["version"] == host_xcagi_version()
     assert data["protocol"]["guide"] == "/api/aiopen/guide"
     tool_names = {t["name"] for t in data["tools"]}
     assert {"api_catalog", "api_call", "chat", "ui_snapshot", "ui_click", "ui_type"} <= tool_names

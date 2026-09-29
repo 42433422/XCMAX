@@ -1,0 +1,61 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "ch-wechat-phone",
+ "name": "微信电话员工（来电监控）",
+ "platform": "macos",
+ "status": "failed",
+ "verdict": "FAIL",
+ "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+ "app_version": "1.0.0.5",
+ "verified_at": "2026-09-29",
+ "passed": 2,
+ "failed": 1,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/ai/qclaw/panel",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/ai/qclaw/panel（写操作自动附带 CSRF）：微信网关面板",
+   "expected": "微信网关面板：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 13ms；wechat_open=True",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "微信来电监控",
+   "actions": "尝试执行：微信来电监控",
+   "expected": "微信来电监控 成功",
+   "observed": "受阻：需要微信 PC 版登录并有真实来电",
+   "result": "failed"
+  },
+  {
+   "id": "M3",
+   "input": "界面路由 /business-docking",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /business-docking，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /business-docking，页面可见 数据对接中心，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /business-docking；命中文本 ['数据对接中心']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 数据对接中心 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 企业版 · 通用 ETL | 数据对接中心 |  | 上传业务文件后解析映射并直接写入业务库。AI 只给建议，最终写入由确定性规则执行。 |  | ",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "ch-wechat-phone",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-wechat-phone/macos/result.png",
+   "sha256": "8d318c173c7a00126f809ff19d5238d3c336529c1eadae87b0a822d62530d6f2",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "ch-wechat-phone",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-wechat-phone/macos/operation.webm",
+   "sha256": "9b5b99ac9fdc4503790b1049d2b8c0923a974344732b601a879a7ecc6e4211bd",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-wechat-phone/macos/run.log",
+  "sha256": "0a817dab16a8735ab9977ec4baaa341ee440a6495258515c248138653f26a582",
+  "bytes": 1227
+ },
+ "method": "经 CDP(127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { get, post } from '@/api'
 import { appAlert } from '@/utils/appDialog'
 
 /**
@@ -17,8 +18,7 @@ export function useApprovalRulesConfig() {
 
   const loadConfig = async () => {
     try {
-      const response = await fetch('/api/ai/approval/pending')
-      const data = await response.json()
+      const data = await get('/api/approval/tool-rules/pending')
       if (data.success) {
         pendingApprovals.value = data.data?.pending_approvals || []
       }
@@ -27,8 +27,7 @@ export function useApprovalRulesConfig() {
     }
 
     try {
-      const response = await fetch('/api/ai/config/approval')
-      const data = await response.json()
+      const data = await get('/api/approval/tool-rules')
       if (data.enabled !== undefined) {
         enabled.value = data.enabled
       }
@@ -42,14 +41,7 @@ export function useApprovalRulesConfig() {
 
   const saveConfig = async () => {
     try {
-      await fetch('/api/ai/config/approval', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          enabled: enabled.value,
-          rules: rules.value
-        })
-      })
+      await post('/api/approval/tool-rules', { enabled: enabled.value, rules: rules.value })
     } catch (e) {
       console.error('保存审批配置失败', e)
     }
@@ -57,12 +49,7 @@ export function useApprovalRulesConfig() {
 
   const approveItem = async (item) => {
     try {
-      const response = await fetch('/api/ai/approval/approve', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan_id: item.plan_id })
-      })
-      const data = await response.json()
+      const data = await post('/api/approval/tool-rules/approve', { plan_id: item.plan_id })
       if (data.success) {
         await appAlert(data.message || '审批已通过')
         if (data.data?.workflow_executed && data.data?.workflow_result) {
@@ -86,12 +73,7 @@ export function useApprovalRulesConfig() {
 
   const rejectItem = async (item) => {
     try {
-      const response = await fetch('/api/ai/approval/reject', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan_id: item.plan_id })
-      })
-      const data = await response.json()
+      const data = await post('/api/approval/tool-rules/reject', { plan_id: item.plan_id })
       if (data.success) {
         await loadConfig()
       }

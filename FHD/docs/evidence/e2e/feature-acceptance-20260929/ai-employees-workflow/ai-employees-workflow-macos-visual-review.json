@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ai-employees-workflow",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "10cacb78e0e48fe34b5505107c6399f8a78bd5d25ef3e58f5e447cb3ed593fdd",
+  "visible_content": "工作流员工目录与出货管理员工状态接口可读，员工空间页展示在岗工位。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-employees-workflow/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-employees-workflow/macos/result.png"
+}

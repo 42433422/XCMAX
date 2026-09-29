@@ -365,25 +365,6 @@ class TestMemoryV2AgentOutput:
 
 
 # ===========================================================================
-# 10. Preferences routes
-# ===========================================================================
-
-
-class TestPreferences:
-    def test_get_preferences(self, client: TestClient):
-        r = client.get("/preferences?user_id=user1")
-        assert r.status_code == 200
-        data = r.json()
-        assert data["success"] is True
-        assert data["data"]["user_id"] == "user1"
-
-    def test_post_preferences(self, client: TestClient):
-        r = client.post("/preferences", json={"theme": "dark"})
-        assert r.status_code == 200
-        assert r.json()["data"].get("theme") == "dark"
-
-
-# ===========================================================================
 # 11. Tools / Tool-categories routes
 # ===========================================================================
 

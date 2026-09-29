@@ -1,0 +1,23 @@
+{
+  "schema": "xcagi.gate.evidence.v1",
+  "gate": "macos-install",
+  "at_utc": "2026-09-28T20:52:17Z",
+  "dmg": "/Users/Shared/XCAGI-FULLCLOSED-20260928/artifact/XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg",
+  "installed_app": "/Applications/XCAGI.app",
+  "destination_is_applications": true,
+  "dmg_sha256": "a05a482e4936d11e64d475cca6e0cffab3abfb84db13801df8bb2e531875dcf7",
+  "codesign_ok": true,
+  "gatekeeper": [
+    0,
+    "/Applications/XCAGI.app: accepted\nsource=Notarized Developer ID\norigin=Developer ID Application: jialong Li (G26WSH472M)"
+  ],
+  "gatekeeper_ok": true,
+  "build_info": {
+    "schema_version": 1,
+    "gitSha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+    "version": "1.0.0.5",
+    "releaseId": "xcagi-1.0.0.5-37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+    "builtAt": "2026-09-28T01:42:42.396Z"
+  },
+  "verdict": "PASS"
+}

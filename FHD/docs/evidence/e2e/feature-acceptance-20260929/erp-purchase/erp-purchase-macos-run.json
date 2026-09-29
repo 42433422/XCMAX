@@ -1,0 +1,74 @@
+{
+  "_comment": "2026-09-29 macOS 已安装 XCAGI.app 实机验收（CDP 驱动界面 + 同会话接口读写 + 界面读回）；原图与录屏逐项人工目检。",
+  "kind": "feature-acceptance",
+  "feature": "erp-purchase",
+  "platform": "macos",
+  "round": "feature-acceptance-20260929",
+  "status": "failed",
+  "verdict": "FAIL",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "app_version": "1.0.0.5",
+  "method": "经 CDP(127.0.0.1:9222) 驱动已安装的 /Applications/XCAGI.app：界面导航、键入与点击 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏转 VP8 webm。",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 1,
+  "visible_content": "同会话新建供应商与采购单，采购页读回新订单号 PO20260929072616；明细未选产品时已安装构建返回 500（已修复为业务提示，待新构建验收）。",
+  "cases": [
+    {
+      "id": "M1",
+      "input": "POST /api/purchase/suppliers 请求体 {\"code\": \"MACSUP637976\", \"name\": \"MAC验收0929供应商\", \"contact_person\": \"李四\"}",
+      "actions": "在 App 页面内以同一登录会话调用 POST /api/purchase/suppliers（写操作自动附带 CSRF）：新建供应商（带编码）",
+      "expected": "新建供应商（带编码）：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 86ms；供应商 id=5 code=MACSUP637976",
+      "result": "passed"
+    },
+    {
+      "id": "M2",
+      "input": "POST /api/purchase/orders 请求体 {\"supplier_id\": 5, \"order_date\": \"2026-09-29\", \"delivery_date\": \"2026-10-08\", \"items\": [{\"product_id\": 2, \"quantity\": 10, \"unit_price\": 5.0}], \"remark\": \"MAC验收0",
+      "actions": "在 App 页面内以同一登录会话调用 POST /api/purchase/orders（写操作自动附带 CSRF）：新建采购订单（选定产品，字符串日期）",
+      "expected": "新建采购订单（选定产品，字符串日期）：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 67ms；订单 id=3 no=PO20260929072616 金额=50",
+      "result": "passed"
+    },
+    {
+      "id": "M3",
+      "input": "POST /api/purchase/orders 请求体 {\"supplier_id\": 5, \"items\": [{\"product_id\": \"\", \"quantity\": 1, \"unit_price\": 1}]}",
+      "actions": "在 App 页面内以同一登录会话调用 POST /api/purchase/orders（写操作自动附带 CSRF）：缺陷回归：明细未选产品应得到业务提示而非 500",
+      "expected": "返回「第 1 行明细未选择产品」",
+      "observed": "HTTP 500 172ms；{\"success\": false, \"error_code\": \"internal_error\", \"message\": \"服务器内部错误\", \"path\": \"/api/purchase/orders\"}",
+      "result": "failed"
+    },
+    {
+      "id": "M4",
+      "input": "界面读回：采购订单列表出现新订单号",
+      "actions": "导航到 /mod/xcagi-erp-domain-bridge/purchase 并在页面文本中查找新写入的数据",
+      "expected": "界面列表/详情中出现新写入的数据",
+      "observed": "已在 /mod/xcagi-erp-domain-bridge/purchase 页面看到「PO20260929072616」；上下文：9供应商 | MAC验收0929供应商 | 采购订单 | 采购入库 | 供应商 | 订单号\t供应商\t订单日期\t交货日期\t总金额\t状态\t操作 | PO20260929072616\tMAC验收0929供应商\t2026-09-29\t2026-10-08\t¥50.00\t草稿\t查看编辑审核 | PO20260929064445\tMAC验收0929供应商\t2026-09-29\t2026-10-08",
+      "result": "passed"
+    }
+  ],
+  "media": [
+    {
+      "feature": "erp-purchase",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-purchase/macos/result.png",
+      "sha256": "63ec2ed5cc2d2cc2e26e1aaa75e9f49ba7bbbc250f53323825d195f0b2589cb4",
+      "visual_review": "accepted",
+      "visible_result": "「采购管理」页：三条采购单（PO20260929072616、PO20260929064445、PO20260929063458，MAC验收0929供应商，¥50.00，草稿）；页头「耗材申领」。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-purchase",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-purchase/macos/operation.webm",
+      "sha256": "4b68199082b1b92d9b9984d55a53cf89b5f130b18a047a359dbed95950e30c29",
+      "visual_review": "accepted",
+      "visible_result": "录屏为采购管理页，新订单行可见。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-purchase/macos/run.log",
+    "sha256": "abc8cb13726aa4d984714597bdf123a21a992e97984b279864a04362df63bb6c",
+    "bytes": 1211
+  }
+}

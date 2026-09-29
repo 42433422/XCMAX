@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "mods-webhook",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "7929ca20c8687f44228a9850e0dc8a62185d3e4fc080db85ddb27aa20338f4d8",
+  "visible_content": "Mod 通信端点接口可读（空）；订单 webhook 接口对企业租户被租户隔离门禁拒绝（403），webhook 链路未通过。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/mods-webhook/macos/operation.webm"
+  ],
+  "full_feature_acceptance": false,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/mods-webhook/macos/result.png"
+}

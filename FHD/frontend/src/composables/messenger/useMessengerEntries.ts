@@ -228,10 +228,13 @@ export function avatarText(name: string): string {
   return s ? s.slice(0, 1).toUpperCase() : '?'
 }
 
+/** IM 后端以不带时区的 UTC ISO 返回时间戳 */
+const NAIVE_ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$/
+
 export function formatTime(iso: string | null): string {
   if (!iso) return ''
   try {
-    return new Date(iso).toLocaleString()
+    return new Date(NAIVE_ISO.test(iso) ? `${iso}Z` : iso).toLocaleString()
   } catch {
     return iso
   }

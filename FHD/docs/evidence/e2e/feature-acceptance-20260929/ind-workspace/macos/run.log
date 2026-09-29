@@ -1,0 +1,6 @@
+2026-09-29T06:52:03+0800 [ind-workspace] 开始验收 ind-workspace 行业工作台与报表；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T06:52:03+0800 [ind-workspace] M1 passed :: HTTP 200 20ms；优先读取钉钉「每日统计」，再用「原始记录」补充打卡时间与去重。
+2026-09-29T06:52:03+0800 [ind-workspace] M2 passed :: HTTP 200 16ms；{"items": [], "total": 0, "page": 1, "page_size": 50, "months": []}
+2026-09-29T06:52:07+0800 [ind-workspace] M3 passed :: 导航后路径 /attendance-industry；命中文本 ['考勤']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 考勤工作区 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 考勤工作区 |  | 主系统统一维护部门、人员、排班资源和考勤记录。 |  | 部门管理 | 人员管理 | 排班资源 | 考勤记录 | 考勤表转换（定制
+2026-09-29T06:52:08+0800 [ind-workspace] screenshot result.png
+2026-09-29T06:52:11+0800 [ind-workspace] video operation.webm bytes=265787

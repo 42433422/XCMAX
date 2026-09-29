@@ -319,6 +319,17 @@ def test_ai_config_approval_get(shipment_client: TestClient) -> None:
     assert "enabled" in r.json()
 
 
+def test_approval_router_mounts_tool_rules_used_by_rules_page() -> None:
+    from app.fastapi_routes.approval import router as approval_router
+
+    app = FastAPI()
+    app.include_router(approval_router)
+    client = TestClient(app, raise_server_exceptions=False)
+    assert "enabled" in client.get("/api/approval/tool-rules").json()
+    assert "pending_approvals" in client.get("/api/approval/tool-rules/pending").json()["data"]
+    assert client.post("/api/approval/tool-rules/approve", json={}).status_code == 400
+
+
 def test_ai_approval_request_missing_ids(shipment_client: TestClient) -> None:
     r = shipment_client.post("/api/ai/approval/request", json={})
     assert r.status_code == 400

@@ -1,0 +1,6 @@
+2026-09-29T06:55:54+0800 [sec-identity] 开始验收 sec-identity 身份认证与权限控制；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T06:55:54+0800 [sec-identity] M1 passed :: HTTP 200 47ms；tenant_id=1
+2026-09-29T06:55:54+0800 [sec-identity] M2 passed :: 不带 CSRF 头的写请求返回 HTTP 403
+2026-09-29T06:55:54+0800 [sec-identity] M3 passed :: HTTP 403 2ms；{"success": false, "message": "桌面端不支持管理员账号登录，请使用网页版管理端", "error": {"code": "ADMIN_DESKTOP_FORBIDDEN", "message": "桌面端不支持
+2026-09-29T06:55:55+0800 [sec-identity] screenshot result.png
+2026-09-29T06:55:56+0800 [sec-identity] video operation.webm bytes=113552

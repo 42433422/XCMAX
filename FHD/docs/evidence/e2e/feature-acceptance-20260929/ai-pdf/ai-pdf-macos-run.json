@@ -1,0 +1,74 @@
+{
+  "_comment": "2026-09-29 macOS 已安装 XCAGI.app 实机验收（CDP 驱动界面 + 同会话接口读写 + 界面读回）；原图与录屏逐项人工目检。",
+  "kind": "feature-acceptance",
+  "feature": "ai-pdf",
+  "platform": "macos",
+  "round": "feature-acceptance-20260929",
+  "status": "failed",
+  "verdict": "FAIL",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "app_version": "1.0.0.5",
+  "method": "经 CDP(127.0.0.1:9222) 驱动已安装的 /Applications/XCAGI.app：界面导航、键入与点击 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏转 VP8 webm。",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 2,
+  "failed": 2,
+  "visible_content": "PDF 生成员工由文本生成 .pdf 成功；PDF 读取员工在已安装构建中忽略调用方的 output_relpath、只写 document_full.txt，返回「转换未生成输出文件」，解析结果无法读回——已修复待新构建验收。",
+  "cases": [
+    {
+      "id": "M1",
+      "input": "POST /api/mod/pdf-generate-employee/employees/pdf-generate-employee/run 请求体 {\"workspace_root\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-pdf-1790637778\", \"file_path\": \"/Users/Shared/XCAGI-FULLCLOSE",
+      "actions": "在 App 页面内以同一登录会话调用 POST /api/mod/pdf-generate-employee/employees/pdf-generate-employee/run（写操作自动附带 CSRF）：PDF 生成员工：由文本生成 .pdf",
+      "expected": "ok=true 且产出 .pdf 文件",
+      "observed": "HTTP 200 15ms；ok=True；{\"output_path\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-pdf-1790637778/outputs/document_parsed.json\", \"pdf_output_path\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer",
+      "result": "passed"
+    },
+    {
+      "id": "M2",
+      "input": "POST /api/mod/pdf-full-read-employee/employees/pdf-full-read-employee/run 请求体 {\"workspace_root\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-pdf-1790637778\", \"file_path\": \"/Users/Shared/XCAGI-FULLCLOSE",
+      "actions": "在 App 页面内以同一登录会话调用 POST /api/mod/pdf-full-read-employee/employees/pdf-full-read-employee/run（写操作自动附带 CSRF）：PDF 读取员工：解析刚生成的 .pdf",
+      "expected": "ok=true 且写出解析结果 JSON",
+      "observed": "HTTP 200 16ms；{\"success\": true, \"data\": {\"ok\": false, \"summary\": \"转换未生成输出文件：/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-pdf-1790637778/outputs/pdf-read.json\", \"items\": [], \"warnings\": [], \"error\": \"转换未生成输出文件：/Users/Sha",
+      "result": "failed"
+    },
+    {
+      "id": "M3",
+      "input": "POST /api/platform-shell/workspace-read-files 请求体 {\"workspace_root\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-pdf-1790637778\", \"file_paths\": [\"/Users/Shared/XCAGI-FULLCLO",
+      "actions": "在 App 页面内以同一登录会话调用 POST /api/platform-shell/workspace-read-files（写操作自动附带 CSRF）：读回 PDF 解析结果（界面同一读取接口）",
+      "expected": "解析结果含原文「太阳鸟」「包装盒」",
+      "observed": "HTTP 200 8ms；{\"success\": true, \"data\": {\"files\": [{\"path\": \"temp_excel/mac0929-ai-pdf-1790637778/outputs/pdf-read.json\", \"kind\": \"text\", \"error\": \"file_not_found\"}]}}",
+      "result": "failed"
+    },
+    {
+      "id": "M4",
+      "input": "界面路由 /mod/xcagi-office-employee-pack-bridge/tools",
+      "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /mod/xcagi-office-employee-pack-bridge/tools，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+      "expected": "停留在 /mod/xcagi-office-employee-pack-bridge/tools，页面可见 ，该页请求无 4xx/5xx",
+      "observed": "导航后路径 /mod/xcagi-office-employee-pack-bridge/tools；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 工具 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 工具表 | 全部分类 | AI Planner | 产品管理 | 客户管理 | 出货单 | Excel处理 | 图片OCR | 原材料仓库 | 标签打印 | 数据库管理 | 系统设",
+      "result": "passed"
+    }
+  ],
+  "media": [
+    {
+      "feature": "ai-pdf",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-pdf/macos/result.png",
+      "sha256": "5851e17493b5edff8261de7ed60b064f82a8c7ad90839ff322006b4bd0b1fbf7",
+      "visual_review": "accepted",
+      "visible_result": "「工具表 · AI Planner 可调用的工具」：excel_analysis、generate_office_document 等工具卡片。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ai-pdf",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-pdf/macos/operation.webm",
+      "sha256": "d491068f20b11848cd8f9a597b1a0e173b5e862f10e0e199fdb824aeeca297a9",
+      "visual_review": "accepted",
+      "visible_result": "录屏为工具表页，各帧一致。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-pdf/macos/run.log",
+    "sha256": "3aecdd97482c3d6907ac22b28af2fe50ef880ff84e697541ae6f0aabee516f00",
+    "bytes": 1811
+  }
+}

@@ -205,9 +205,10 @@ def validate_dependencies(metadata: ModMetadata, loaded_mods: list[str]) -> bool
         if dep_id == "xcagi":
             if not _check_xcagi_version(version_spec):
                 logger.warning(
-                    "Mod %s requires xcagi %s but host version is 1.0.0.3",
+                    "Mod %s requires xcagi %s but host version is %s",
                     metadata.id,
                     version_spec,
+                    host_xcagi_version(),
                 )
                 return False
         elif dep_id not in loaded_mods:
@@ -221,15 +222,19 @@ def validate_dependencies(metadata: ModMetadata, loaded_mods: list[str]) -> bool
     return True
 
 
+def host_xcagi_version() -> str:
+    """宿主产品版本（版本锚点，由 scripts/dev/version_sync.py 按 VERSION.md 同步）。"""
+    current_version = "1.0.0.5"
+    return current_version
+
+
 def _check_xcagi_version(version_spec: str) -> bool:
     import re
-
-    current_version = "1.0.0.5"
 
     match = re.match(r">=([\d.]+)", version_spec)
     if match:
         required = match.group(1)
-        return _compare_versions(current_version, required) >= 0
+        return _compare_versions(host_xcagi_version(), required) >= 0
 
     return True
 

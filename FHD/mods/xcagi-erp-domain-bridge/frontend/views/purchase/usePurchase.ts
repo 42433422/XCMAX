@@ -1,4 +1,4 @@
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onActivated } from 'vue'
 import { get, post, productsApi } from '@/api'
 import { appAlert, appConfirm } from '@/utils/appDialog'
 
@@ -255,6 +255,11 @@ export function usePurchase() {
         await appAlert('请添加订单明细')
         return
       }
+      const missing = orderForm.value.items.findIndex((item: OrderItem) => !item.product_id)
+      if (missing >= 0) {
+        await appAlert(`第 ${missing + 1} 行明细未选择产品`)
+        return
+      }
       try {
         const res = isEditOrder.value
           ? await post<ApiWriteResponse>(`/api/purchase/orders/${orderForm.value.id}`, orderForm.value)
@@ -329,11 +334,18 @@ export function usePurchase() {
       }
     }
 
-    onMounted(() => {
+    const refreshPurchaseView = () => {
       loadOrders()
       loadInbounds()
       loadSuppliers()
       loadProducts()
+    }
+    let activatedOnce = false
+    onMounted(refreshPurchaseView)
+    // App 以 keep-alive 缓存路由页：再次进入时重新拉取，避免显示离开前的旧列表。
+    onActivated(() => {
+      if (activatedOnce) refreshPurchaseView()
+      activatedOnce = true
     })
 
     return {

@@ -436,7 +436,9 @@ class TestAiopenManifest:
         m = aiopen_manifest()
         assert m["name"] == AIOPEN_PRODUCT_NAME
         assert m["tagline"] == AIOPEN_PRODUCT_TAGLINE
-        assert m["version"] == "1.0.0.3"
+        from app.infrastructure.mods.manifest import host_xcagi_version
+
+        assert m["version"] == host_xcagi_version()
         assert "protocol" in m
         assert "tools" in m
         assert len(m["tools"]) == len(TOOL_DEFINITIONS)

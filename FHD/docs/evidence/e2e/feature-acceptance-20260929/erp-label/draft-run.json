@@ -1,0 +1,69 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "erp-label",
+ "name": "标签打印",
+ "platform": "macos",
+ "status": "failed",
+ "verdict": "FAIL",
+ "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+ "app_version": "1.0.0.5",
+ "verified_at": "2026-09-29",
+ "passed": 1,
+ "failed": 3,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/print/label-jobs/products",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/print/label-jobs/products?keyword=&page=1&per_page=50（写操作自动附带 CSRF）：标签任务可选产品",
+   "expected": "标签任务可选产品：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 403 22ms；{\"success\": false, \"error_code\": \"http_403\", \"message\": \"该旧业务接口尚未提供安全的租户数据隔离\", \"path\": \"/api/print/label-jobs/products\"}",
+   "result": "failed"
+  },
+  {
+   "id": "M2",
+   "input": "GET /api/mod/xcagi-core-workflow-employees/employees/label_print/status",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/mod/xcagi-core-workflow-employees/employees/label_print/status（写操作自动附带 CSRF）：标签打印员工状态",
+   "expected": "标签打印员工状态：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 14ms；{\"success\": true, \"data\": {\"ok\": true, \"summary\": \"标签打印员工就绪；星标命中标签/打印意图后宿主派发 xcagi:workflow-label-print-signal。\", \"items\": [], \"warnings\": [], \"error\": \"\", \"met",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "界面路由 /mod/xcagi-erp-domain-bridge/print",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /mod/xcagi-erp-domain-bridge/print，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /mod/xcagi-erp-domain-bridge/print，页面可见 标签，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /mod/xcagi-erp-domain-bridge/print；命中文本 ['标签']；缺失 []；界面请求失败 [(403, '/api/print/label-jobs/products?keyword=&page=1&per_page=50')]；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 标签输出与打印 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 标签输出与打印 | 1. 选择产品与标签模板 |  | 该旧业务接口尚未提供安全的租户数据隔离 重新加载 |  | 暂无已保存的标签模板",
+   "result": "failed"
+  },
+  {
+   "id": "M4",
+   "input": "物理标签打印出纸",
+   "actions": "尝试执行：物理标签打印出纸",
+   "expected": "物理标签打印出纸 成功",
+   "observed": "受阻：需要连接并选择实体标签打印机（本机未连接打印机）",
+   "result": "failed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "erp-label",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-label/macos/result.png",
+   "sha256": "425fb87fbe0223744f99bf3b877e794f9869f43b0259563825e44a456f3f15f4",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "erp-label",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-label/macos/operation.webm",
+   "sha256": "d9584ad5744a2e4fe391e8e23bf8eb17b104e789728dea6f70d4d3ea0302fd1d",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-label/macos/run.log",
+  "sha256": "6ce736e3f93d9e0f643d9e4758108f274495befcaa92610a9cdf4b4c6d899963",
+  "bytes": 1692
+ },
+ "method": "经 CDP(127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

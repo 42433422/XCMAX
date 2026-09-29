@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "base-db",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "5671972587655054450f42f6ee23849cf469c5d2fc377d8b44a920f4efe08ba1",
+  "visible_content": "数据库探针 healthy；偏好写入返回回显但读回为空（已安装构建 /api/preferences 为桩）——已修复为按工作区持久化，待新构建验收。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-db/macos/operation.webm"
+  ],
+  "full_feature_acceptance": false,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-db/macos/result.png"
+}

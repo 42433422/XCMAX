@@ -1,10 +1,11 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent } from 'vue'
 import { afterEach, expect, it, vi } from 'vitest'
 import { useCreateOrder } from '../../../mods/xcagi-erp-domain-bridge/frontend/views/create-order/useCreateOrder'
 
-const { post, listTemplates, download, saveBlob } = vi.hoisted(() => ({ post: vi.fn(), listTemplates: vi.fn(), download: vi.fn(), saveBlob: vi.fn() }))
-vi.mock('@/api/index', () => ({ default: { post, download, get: vi.fn().mockResolvedValue({ success: false }) } }))
+const { post, get, listTemplates, download, saveBlob } = vi.hoisted(() => ({ post: vi.fn(), get: vi.fn().mockResolvedValue({ success: false }), listTemplates: vi.fn(), download: vi.fn(), saveBlob: vi.fn() }))
+vi.mock('@/api/index', () => ({ default: { post, download, get } }))
+vi.mock('@/utils/erpDomainPaths', () => ({ resolveErpApiPath: (p: string) => `/api/mod/xcagi-erp-domain-bridge${p.slice(4)}` }))
 vi.mock('@/api/products', () => ({ productsApi: { getProducts: vi.fn().mockResolvedValue({ success: true, data: [{ id: 1, name: '清漆', model_number: 'RX', specification: '25', price: 18 }] }) } }))
 vi.mock('@/api/templatePreview', () => ({ templatePreviewApi: { listTemplates } }))
 vi.mock('@/utils', () => ({ downloadBlob: saveBlob }))
@@ -38,5 +39,16 @@ it('uses the selected template ID and preserves shipment values through generati
   await state.downloadShipment()
   expect(download).toHaveBeenCalledWith(`/api/shipment/download/${encodeURIComponent('验收单.xlsx')}`)
   expect(saveBlob).toHaveBeenCalledWith(blob, '验收单.xlsx')
+  wrapper.unmount()
+})
+
+it('loads purchase units and order number through the tenant-scoped ERP bridge', async () => {
+  get.mockClear()
+  const wrapper = mount(defineComponent({ setup() { useCreateOrder(); return () => null } }))
+  await flushPromises()
+  const paths = get.mock.calls.map(c => c[0])
+  expect(paths).toContain('/api/mod/xcagi-erp-domain-bridge/purchase_units')
+  expect(paths).toContain('/api/mod/xcagi-erp-domain-bridge/orders/next_number')
+  expect(paths).not.toContain('/api/purchase_units')
   wrapper.unmount()
 })

@@ -1,0 +1,7 @@
+2026-09-29T07:13:23+0800 [base-device-bind] 开始验收 base-device-bind 设备绑定与配对授权；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T07:13:23+0800 [base-device-bind] M1 passed :: HTTP 200 17ms；{"paired": false, "mobileUsername": "", "lastRelaySyncAt": 1790637198}
+2026-09-29T07:13:25+0800 [base-device-bind] M2 failed :: HTTP 503 1864ms；{"code": 503, "message": "云端设备码暂不可用，请稍后刷新", "success": false, "data": null}
+2026-09-29T07:13:25+0800 [base-device-bind] M3 failed :: 受阻：需要安装 XCAGI 移动端的 Android/iOS 真机在同网段扫码，本轮只有 macOS 单机
+2026-09-29T07:13:29+0800 [base-device-bind] M4 passed :: 导航后路径 /settings；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 系统设置 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | S | 更换 |  | SUNBIRD |  | SUNBIRD |  | 退出登录 | 系统设置 | 个人主页 | SUNBIRD · 头像与资料 | 展示名称 | 邮箱 | 登录名
+2026-09-29T07:13:30+0800 [base-device-bind] screenshot result.png
+2026-09-29T07:13:35+0800 [base-device-bind] video operation.webm bytes=318095

@@ -1,0 +1,7 @@
+2026-09-29T07:25:43+0800 [ai-task-workspace] 开始验收 ai-task-workspace 任务工作区与多步骤规划；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T07:25:44+0800 [ai-task-workspace] M1 failed :: HTTP 400 34ms；{"success": false, "message": "任务参数无效"}
+2026-09-29T07:25:44+0800 [ai-task-workspace] M2 passed :: HTTP 202 96ms；{"success": true, "data": {"run_id": "run_8f41751dd8be49debcc99888dfb27549", "user_id": "2", "message": "MAC验收0929查询产品", "status": "waiting_user", "plan_id": "plan_a79afb60821545c69b408c869af85674", "
+2026-09-29T07:25:44+0800 [ai-task-workspace] M3 passed :: HTTP 200 44ms；任务数 9
+2026-09-29T07:25:47+0800 [ai-task-workspace] M4 passed :: 已在 /workspaces/mac-acc-1790637943 页面看到「MAC验收0929」；上下文：正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 独立工作区 | SUNBIRD | 副窗 | ◈ | 工作区 | 2 | 独立对话工作区 | MAC验收0929任务 | 等待审批 | 待审批 | 第 1 次尝试 · 1 次运行 | 等待审批或用户确认 | 0% | 审批并执行 | 暂停 | 取消 | 查产品 | 订单 | 库存预警 | 打印标签 | 考勤 | 已为您解决 7 次任务 · 预计节约人工费用 ¥27 |  | 你好，我是饰品包装助
+2026-09-29T07:25:48+0800 [ai-task-workspace] screenshot result.png
+2026-09-29T07:25:51+0800 [ai-task-workspace] video operation.webm bytes=244769

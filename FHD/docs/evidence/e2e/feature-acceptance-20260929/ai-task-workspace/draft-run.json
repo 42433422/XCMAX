@@ -1,0 +1,69 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "ai-task-workspace",
+ "name": "任务工作区与多步骤规划",
+ "platform": "macos",
+ "status": "failed",
+ "verdict": "FAIL",
+ "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+ "app_version": "1.0.0.5",
+ "verified_at": "2026-09-29",
+ "passed": 3,
+ "failed": 1,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "POST /api/agent/tasks 请求体 {\"task_id\": \"mac-acc-1790637943-bad\", \"title\": \"x\", \"tool_id\": \"nope\", \"action\": \"run\"}",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/agent/tasks（写操作自动附带 CSRF）：未注册工具应返回具体原因",
+   "expected": "400 且提示「未注册的工具动作」",
+   "observed": "HTTP 400 34ms；{\"success\": false, \"message\": \"任务参数无效\"}",
+   "result": "failed"
+  },
+  {
+   "id": "M2",
+   "input": "POST /api/agent/tasks 请求体 {\"task_id\": \"mac-acc-1790637943\", \"title\": \"MAC验收0929任务\", \"message\": \"MAC验收0929查询产品\", \"tool_id\": \"products\", \"action\": \"query\", \"params\": {}}",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/agent/tasks（写操作自动附带 CSRF）：新建任务工作区（只读产品查询）",
+   "expected": "新建任务工作区（只读产品查询）：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 202 96ms；{\"success\": true, \"data\": {\"run_id\": \"run_8f41751dd8be49debcc99888dfb27549\", \"user_id\": \"2\", \"message\": \"MAC验收0929查询产品\", \"status\": \"waiting_user\", \"plan_id\": \"plan_a79afb60821545c69b408c869af85674\", \"",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "GET /api/agent/tasks",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/agent/tasks（写操作自动附带 CSRF）：读回任务列表",
+   "expected": "读回任务列表：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 44ms；任务数 9",
+   "result": "passed"
+  },
+  {
+   "id": "M4",
+   "input": "界面读回：独立工作区打开新任务",
+   "actions": "导航到 /workspaces/mac-acc-1790637943 并在页面文本中查找「MAC验收0929」",
+   "expected": "界面列表/详情中出现「MAC验收0929」",
+   "observed": "已在 /workspaces/mac-acc-1790637943 页面看到「MAC验收0929」；上下文：正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 独立工作区 | SUNBIRD | 副窗 | ◈ | 工作区 | 2 | 独立对话工作区 | MAC验收0929任务 | 等待审批 | 待审批 | 第 1 次尝试 · 1 次运行 | 等待审批或用户确认 | 0% | 审批并执行 | 暂停 | 取消 | 查产品 | 订单 | 库存预警 | 打印标签 | 考勤 | 已为您解决 7 次任务 · 预计节约人工费用 ¥27 |  | 你好，我是饰品包装助",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "ai-task-workspace",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-task-workspace/macos/result.png",
+   "sha256": "853d413a36bb32703ebb7412583cfd43c476fffbbfff352effb1f15df103b1ad",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "ai-task-workspace",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-task-workspace/macos/operation.webm",
+   "sha256": "bb1b0ff6b7c8fe51d2cebc22969eb42233cd944df8546ad0669c9ddaa9fa986b",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-task-workspace/macos/run.log",
+  "sha256": "d44830ed7f02f426bba4e44032d88d162e45a3cdf9f84230bcbb5caf4006cb99",
+  "bytes": 1476
+ },
+ "method": "经 CDP(127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

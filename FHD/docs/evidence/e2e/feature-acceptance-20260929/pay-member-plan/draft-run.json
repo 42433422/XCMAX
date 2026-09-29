@@ -1,0 +1,69 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "pay-member-plan",
+ "name": "支付订单与会员计划",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+ "app_version": "1.0.0.5",
+ "verified_at": "2026-09-29",
+ "passed": 4,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/market/membership-plans",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/market/membership-plans（写操作自动附带 CSRF）：会员套餐",
+   "expected": "会员套餐：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 1899ms；10 档",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "GET /api/market/payment/orders",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/market/payment/orders（写操作自动附带 CSRF）：支付订单",
+   "expected": "支付订单：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 2071ms；{\"total\": 0, \"orders\": []}",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "GET /api/auth/subscription/status",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/auth/subscription/status（写操作自动附带 CSRF）：订阅状态",
+   "expected": "订阅状态：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 19ms；active=True plan=saas-permanent-growth",
+   "result": "passed"
+  },
+  {
+   "id": "M4",
+   "input": "界面路由 /settings?section=model-payment",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /settings?section=model-payment，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /settings?section=model-payment，页面可见 模型服务，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /settings?section=model-payment；命中文本 ['模型服务']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 系统设置 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | S | 更换 |  | SUNBIRD |  | SUNBIRD |  | 退出登录 | 系统设置 | 个人主页 | SUNBIRD · 头像与资料 | 展示名称 | 邮箱 | 登录名",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "pay-member-plan",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/pay-member-plan/macos/result.png",
+   "sha256": "749ce214ba3a0dff81571cf42c3db4b0a549f6973d840a244ddfbe5f400a7124",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "pay-member-plan",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/pay-member-plan/macos/operation.webm",
+   "sha256": "b27fa88546c9f3f963a7471eba5acad93865c8792bb43e56b30f2d7db0a707e1",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/pay-member-plan/macos/run.log",
+  "sha256": "d05d7e108c871e800ad9d4c1ff12597ded54e8cc8c1ff3ba12bd0f0abd0173ef",
+  "bytes": 1291
+ },
+ "method": "经 CDP(127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

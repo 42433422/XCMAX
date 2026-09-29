@@ -349,6 +349,15 @@ class TestProductsAddDeep:
         result = pf.products_add(req, {"name": "P1"})
         assert result["data"]["id"] is None
 
+    def test_top_level_product_id_from_repository_is_returned(self, fake_service) -> None:
+        fake_service.create_product.return_value = {
+            "success": True,
+            "data": {"success": True, "message": "产品创建成功", "product_id": 7},
+            "product_id": 7,
+        }
+        result = pf.products_add(MagicMock(spec=Request), {"name": "P1"})
+        assert result["data"]["id"] == 7
+
     def test_data_not_dict_with_id_attr(self, fake_service) -> None:
         mock_data = MagicMock()
         mock_data.id = 42

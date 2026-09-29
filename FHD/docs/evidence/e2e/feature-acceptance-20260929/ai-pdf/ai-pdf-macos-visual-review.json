@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ai-pdf",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "5851e17493b5edff8261de7ed60b064f82a8c7ad90839ff322006b4bd0b1fbf7",
+  "visible_content": "PDF 生成员工由文本生成 .pdf 成功；PDF 读取员工在已安装构建中忽略调用方的 output_relpath、只写 document_full.txt，返回「转换未生成输出文件」，解析结果无法读回——已修复待新构建验收。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-pdf/macos/operation.webm"
+  ],
+  "full_feature_acceptance": false,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-pdf/macos/result.png"
+}

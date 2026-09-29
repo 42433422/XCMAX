@@ -37,6 +37,8 @@ function run(argv) {
   const request = $.VNRecognizeTextRequest.alloc.init;
   request.recognitionLevel = $.VNRequestTextRecognitionLevelAccurate;
   request.usesLanguageCorrection = true;
+  // Vision 默认仅识别英文，中文单据必须显式声明识别语言。
+  request.recognitionLanguages = $(['zh-Hans', 'zh-Hant', 'en-US']);
   const handler = $.VNImageRequestHandler.alloc.initWithCIImageOptions(
     image, $.NSDictionary.dictionary
   );

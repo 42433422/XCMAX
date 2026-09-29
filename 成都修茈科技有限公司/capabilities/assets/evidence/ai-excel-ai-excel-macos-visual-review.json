@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ai-excel",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "5851e17493b5edff8261de7ed60b064f82a8c7ad90839ff322006b4bd0b1fbf7",
+  "visible_content": "同会话生成 xlsx（1 行）并按生成路径抽取表头读回，Excel 生成员工 ready，工具表页可见 Excel 工具。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-excel/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-excel/macos/result.png"
+}

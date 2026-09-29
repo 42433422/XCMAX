@@ -1,0 +1,61 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "erp-templates",
+ "name": "单据模板与套打",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+ "app_version": "1.0.0.5",
+ "verified_at": "2026-09-29",
+ "passed": 3,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/document-templates",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/document-templates（写操作自动附带 CSRF）：单据模板列表",
+   "expected": "单据模板列表：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 30ms；默认 sales_contract_default；共 2",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "GET /api/excel/templates",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/excel/templates（写操作自动附带 CSRF）：Excel 模板库",
+   "expected": "Excel 模板库：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 30ms；模板 ['客户资料初始化表', '产品资料初始化表', '销售订单标准表', '出货记录初始化表']",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "界面路由 /mod/xcagi-erp-domain-bridge/template-preview",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /mod/xcagi-erp-domain-bridge/template-preview，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /mod/xcagi-erp-domain-bridge/template-preview，页面可见 模板，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /mod/xcagi-erp-domain-bridge/template-preview；命中文本 ['模板']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 模板库 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 模板预览 |  | 展示导出用 Excel 与 Word 模板：可按业务分组管理，也可选「自定义」自由新建任意模板；Word 若有「",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "erp-templates",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-templates/macos/result.png",
+   "sha256": "67dd3d35e1dc34da37891fc4caa625de2772149e4dee15be7a7c26208b3dfcca",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "erp-templates",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-templates/macos/operation.webm",
+   "sha256": "621cb1c45bca34af3355446b0efb662b93e69b9a05530fab8aafc1181cdc8efd",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-templates/macos/run.log",
+  "sha256": "1edfc692a8e8dcc0ed348f8cfd3bb8d23126708cbc7fef30d875be5de22a2958",
+  "bytes": 1298
+ },
+ "method": "经 CDP(127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

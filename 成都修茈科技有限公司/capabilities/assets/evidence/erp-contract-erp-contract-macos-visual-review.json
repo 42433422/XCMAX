@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "erp-contract",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "a985ec497e401e310d710e20eff2dda229dcab265cef2999d89f000ac819e0f0",
+  "visible_content": "销售合同模板读回「销售合同默认模板」，合同生命周期状态可读（SUNBIRD，stage idle），从文本解析出合同产品「定制软件服务」；模板库页可见。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-contract/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-contract/macos/result.png"
+}

@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "erp-templates",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "67dd3d35e1dc34da37891fc4caa625de2772149e4dee15be7a7c26208b3dfcca",
+  "visible_content": "模板列表接口可读，模板库页展示模板卡片。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-templates/macos/operation.webm"
+  ],
+  "full_feature_acceptance": true,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-templates/macos/result.png"
+}

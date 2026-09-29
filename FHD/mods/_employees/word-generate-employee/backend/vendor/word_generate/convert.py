@@ -152,10 +152,8 @@ async def convert_file(
     output_dir.mkdir(parents=True, exist_ok=True)
     docx_path = output_path
     if output_path.suffix.lower() != ".docx":
-        docx_path = output_dir / "generated_document.docx"
-    rel = str(rule_spec.get("default_output_relpath") or "")
-    if rel.endswith(".docx"):
-        docx_path = output_dir / Path(rel).name
+        rel = str(rule_spec.get("default_output_relpath") or "")
+        docx_path = output_dir / (Path(rel).name if rel.endswith(".docx") else "generated_document.docx")
 
     tpl = template_path
     if tpl is None or not tpl.is_file():

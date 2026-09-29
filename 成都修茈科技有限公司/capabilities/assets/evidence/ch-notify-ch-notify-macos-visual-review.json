@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ch-notify",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "1dbed5747f1520fcf75073fa41176066fecde4d3a61c5d3268c66b4b0da83b6d",
+  "visible_content": "未读总数接口返回 0，信息页可见；移动端推送需要已配对真机，送达用例受阻。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-notify/macos/operation.webm"
+  ],
+  "full_feature_acceptance": false,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-notify/macos/result.png"
+}

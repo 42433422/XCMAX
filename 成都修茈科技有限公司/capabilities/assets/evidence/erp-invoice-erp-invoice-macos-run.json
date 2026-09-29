@@ -1,0 +1,74 @@
+{
+  "_comment": "2026-09-29 macOS 已安装 XCAGI.app 实机验收（CDP 驱动界面 + 同会话接口读写 + 界面读回）；原图与录屏逐项人工目检。",
+  "kind": "feature-acceptance",
+  "feature": "erp-invoice",
+  "platform": "macos",
+  "round": "feature-acceptance-20260929",
+  "status": "failed",
+  "verdict": "FAIL",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "app_version": "1.0.0.5",
+  "method": "经 CDP(127.0.0.1:9222) 驱动已安装的 /Applications/XCAGI.app：界面导航、键入与点击 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏转 VP8 webm。",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 1,
+  "failed": 3,
+  "visible_content": "发票 CRM 与税务通道接口均要求管理员账号（403），真实开票需税务通道开通与证书，发票链路未通过。",
+  "cases": [
+    {
+      "id": "M1",
+      "input": "GET /api/finance/invoices/crm",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/finance/invoices/crm（写操作自动附带 CSRF）：CRM 发票列表",
+      "expected": "CRM 发票列表：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 403 9063ms；{\"success\": false, \"message\": \"需要管理员账号登录后访问\"}",
+      "result": "failed"
+    },
+    {
+      "id": "M2",
+      "input": "GET /api/finance/invoices/tax-channel",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/finance/invoices/tax-channel（写操作自动附带 CSRF）：税务通道",
+      "expected": "税务通道：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 403 52ms；{\"success\": false, \"message\": \"需要管理员账号登录后访问\"}",
+      "result": "failed"
+    },
+    {
+      "id": "M3",
+      "input": "开具真实税务发票",
+      "actions": "尝试执行：开具真实税务发票",
+      "expected": "开具真实税务发票 成功",
+      "observed": "受阻：需要企业在税务开票通道（百望/航信等）开通并配置税号与证书，本机未配置",
+      "result": "failed"
+    },
+    {
+      "id": "M4",
+      "input": "界面路由 /kitten-finance",
+      "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /kitten-finance，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+      "expected": "停留在 /kitten-finance，页面可见 ，该页请求无 4xx/5xx",
+      "observed": "导航后路径 /kitten-finance；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 财务分析 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 🐱 | 小猫财务分析 |  | 一键查看本月经营状况 |  | 🚀 开始分析 | 🐱 | 还没有分析数据 |  | 点击上方「开始分析」按钮，一键生成财务报告 |  | 立即开",
+      "result": "passed"
+    }
+  ],
+  "media": [
+    {
+      "feature": "erp-invoice",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-invoice/macos/result.png",
+      "sha256": "9d1409ef7a584a4280ca2cba1ce8fee90d3693cfc9ad9fa67714ac1a8fb421f1",
+      "visual_review": "accepted",
+      "visible_result": "「财务分析 · 小猫财务分析」空态页。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-invoice",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-invoice/macos/operation.webm",
+      "sha256": "1e1a8221f70031fbe42ed92cff6eff9c95d7b44686f565eae5b2af953a4da2e1",
+      "visual_review": "accepted",
+      "visible_result": "录屏先在智能对话页，后切到财务分析页。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-invoice/macos/run.log",
+    "sha256": "892b97e0bf4cec0f8960a2a115e70786ee539659bd82489a9df8a00ec2d21c88",
+    "bytes": 1429
+  }
+}

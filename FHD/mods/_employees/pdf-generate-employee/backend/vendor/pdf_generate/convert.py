@@ -96,6 +96,9 @@ async def convert_file(
     pdf_path = output_dir / "generated_document.pdf"
     if str(rule_spec.get("default_pdf_output_relpath") or "").endswith(".pdf"):
         pdf_path = output_dir / Path(str(rule_spec.get("default_pdf_output_relpath"))).name
+    if output_path.suffix.lower() == ".pdf":
+        pdf_path = output_path
+        json_path = output_path.with_suffix(".json")
 
     if suffix in (".json", ".txt"):
         spec, _warnings = await resolve_pdf_document_spec(

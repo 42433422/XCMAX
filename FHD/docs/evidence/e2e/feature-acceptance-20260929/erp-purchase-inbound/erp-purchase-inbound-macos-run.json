@@ -1,0 +1,74 @@
+{
+  "_comment": "2026-09-29 macOS 已安装 XCAGI.app 实机验收（CDP 驱动界面 + 同会话接口读写 + 界面读回）；原图与录屏逐项人工目检。",
+  "kind": "feature-acceptance",
+  "feature": "erp-purchase-inbound",
+  "platform": "macos",
+  "round": "feature-acceptance-20260929",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "app_version": "1.0.0.5",
+  "method": "经 CDP(127.0.0.1:9222) 驱动已安装的 /Applications/XCAGI.app：界面导航、键入与点击 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏转 VP8 webm。",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 4,
+  "failed": 0,
+  "visible_content": "采购入库接口可读写，采购页展示验收采购单。",
+  "cases": [
+    {
+      "id": "M1",
+      "input": "POST /api/purchase/suppliers 请求体 {\"code\": \"MACIN635529\", \"name\": \"MAC验收0929入库供应商\"}",
+      "actions": "在 App 页面内以同一登录会话调用 POST /api/purchase/suppliers（写操作自动附带 CSRF）：准备供应商",
+      "expected": "准备供应商：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 118ms；供应商 id=4",
+      "result": "passed"
+    },
+    {
+      "id": "M2",
+      "input": "POST /api/purchase/inbounds 请求体 {\"supplier_id\": 4, \"warehouse_id\": 1, \"inbound_date\": \"2026-09-29\", \"remark\": \"MAC验收0929入库\", \"items\": [{\"product_id\": 2, \"quantity\": 10, \"unit_price\": 5.0}]}",
+      "actions": "在 App 页面内以同一登录会话调用 POST /api/purchase/inbounds（写操作自动附带 CSRF）：采购入库登记",
+      "expected": "采购入库登记：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 48113ms；{\"id\": 1, \"inbound_no\": \"PI20260929064530\", \"order_id\": null, \"supplier_id\": 4, \"warehouse_id\": 1, \"inbound_date\": \"2026-09-29\", \"total_amount\": 50, \"status\": \"completed\", \"handler\": null, \"remark\": \"",
+      "result": "passed"
+    },
+    {
+      "id": "M3",
+      "input": "GET /api/purchase/inbounds",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/purchase/inbounds（写操作自动附带 CSRF）：读回入库单",
+      "expected": "读回入库单：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 2571ms；入库单 1",
+      "result": "passed"
+    },
+    {
+      "id": "M4",
+      "input": "界面路由 /mod/xcagi-erp-domain-bridge/purchase",
+      "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /mod/xcagi-erp-domain-bridge/purchase，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+      "expected": "停留在 /mod/xcagi-erp-domain-bridge/purchase，页面可见 采购入库，该页请求无 4xx/5xx",
+      "observed": "导航后路径 /mod/xcagi-erp-domain-bridge/purchase；命中文本 ['采购入库']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 耗材申领 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 采购管理 | 新建采购订单 | 全部状态 | 草稿 | 已审核 | 部分入库 | 已完成 | 已取消 | 全部供应商 | MAC验收0929供应商 | MAC验收",
+      "result": "passed"
+    }
+  ],
+  "media": [
+    {
+      "feature": "erp-purchase-inbound",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-purchase-inbound/macos/result.png",
+      "sha256": "b20ed2cfa40a94914715f2ae2d65ab39ab145c23946a47b68dcc8643ccaf9eb1",
+      "visual_review": "accepted",
+      "visible_result": "「采购管理」页：采购订单/采购入库/供应商标签，两条验收采购单（¥50.00 草稿）。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-purchase-inbound",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-purchase-inbound/macos/operation.webm",
+      "sha256": "d56a4b8b61d7b731c412b6f65b36c25bbe6c0b25cfccd4b7bfcd039164c87812",
+      "visual_review": "accepted",
+      "visible_result": "录屏主要为智能对话页，最后切到采购管理页。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-purchase-inbound/macos/run.log",
+    "sha256": "7f8e90ab52a28685d894ae55bcb8796a6cc32e0250f2d740e826c407bb423b9c",
+    "bytes": 1515
+  }
+}

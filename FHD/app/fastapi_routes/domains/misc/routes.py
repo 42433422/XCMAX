@@ -4,12 +4,14 @@ XCAGI 前端兼容 API — 系统 / 认证 / 偏好 / 工具目录等杂项路�
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any, cast
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
+from app.application import tenant_workspace_prefs as _prefs
 from app.domain.ai.tools_directory import (
     get_tool_categories_payload,
     get_tools_payload,
@@ -186,17 +188,25 @@ async def system_test_db_disable(body: dict | None = Body(default=None)) -> dict
 
 @router.get("/preferences")
 @router.get("/preferences/", include_in_schema=False)
-def preferences_get(user_id: str = Query(default="default")) -> dict:
-    return {
-        "success": True,
-        "data": {"user_id": user_id, "preferences": {}},
-    }
+def preferences_get(request: Request) -> dict:
+    owner = _prefs.session_workspace_owner_id(request)
+    prefs = _prefs.get_owner_preferences(owner) if owner else {}
+    return {"success": True, "preferences": prefs, "data": {"user_id": owner, "preferences": prefs}}
 
 
 @router.post("/preferences")
 @router.post("/preferences/", include_in_schema=False)
-def preferences_post(body: dict = Body(default_factory=dict)) -> dict:
-    return {"success": True, "data": body or {}}
+def preferences_post(request: Request, body: dict = Body(default_factory=dict)) -> dict:
+    owner = _prefs.session_workspace_owner_id(request)
+    if not owner:
+        raise HTTPException(status_code=401, detail="请先登录后再保存偏好")
+    key = str(body.get("key") or "").strip()
+    if not key or len(key) > 120:
+        raise HTTPException(status_code=400, detail="偏好 key 不能为空且不超过 120 字符")
+    raw = body.get("value")
+    value = raw if isinstance(raw, str) else json.dumps(raw, ensure_ascii=False)
+    _prefs.set_owner_preference(owner, key, value)
+    return {"success": True, "data": {"key": key, "value": value}}
 
 
 def _memory_v2_service():

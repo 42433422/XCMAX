@@ -1,0 +1,69 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "ch-im-core",
+ "name": "站内 IM 与实时通道",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+ "app_version": "1.0.0.5",
+ "verified_at": "2026-09-29",
+ "passed": 4,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/im/contacts",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/im/contacts（写操作自动附带 CSRF）：联系人",
+   "expected": "联系人：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 19ms；['企业专属客服']",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "POST /api/im/enterprise-cs/messages 请求体 {\"body\": \"MAC验收0929 站内消息\"}",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/im/enterprise-cs/messages（写操作自动附带 CSRF）：企业专属客服会话发消息",
+   "expected": "企业专属客服会话发消息：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 2578ms；{\"success\": true, \"conversation_id\": 58, \"message\": {\"id\": 21590, \"conversation_id\": 58, \"sender_user_id\": 25, \"sender_display_name\": \"SUNBIRD\", \"body\": \"MAC验收0929 站内消息\", \"origin\": \"customer\", \"operat",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "GET /api/im/enterprise-cs/messages",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/im/enterprise-cs/messages（写操作自动附带 CSRF）：读回消息",
+   "expected": "读回消息：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 1895ms；会话 企业专属客服",
+   "result": "passed"
+  },
+  {
+   "id": "M4",
+   "input": "界面操作：在信息页点开「企业专属客服」会话",
+   "actions": "在信息页点开「企业专属客服」会话",
+   "expected": "会话消息区出现刚发送的站内消息",
+   "observed": "已在会话中看到新消息；上下文： | 企 | 企业专属客服 | @enterprise-cs | 企 | 企业专属客服 | 待人工 | AI 已转人工 | AI置信度不足或风险较高 |  | MAC验收0929 站内消息 |  | 9/28/2026, 11:08:46 PM | 企业专属客服 |  | 这个问题已为您转接人工客服，客服人员会在本会话继续回复，请稍候。 |  | 9/28/2026, 11:09:21",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "ch-im-core",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-im-core/macos/result.png",
+   "sha256": "c16257b2ea88f69be7f7ffe37672d047034e302432aac598bf4a72e0394b2ff1",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "ch-im-core",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-im-core/macos/operation.webm",
+   "sha256": "13db30af45f6d712b6eee85a5d888e7fd1e715a3b7a9a3f5758f7c3ad69bb6ef",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-im-core/macos/run.log",
+  "sha256": "8a5a20a43558f692c660105e101ebf81edb598c18528d94f570d0bd9427931eb",
+  "bytes": 1263
+ },
+ "method": "经 CDP(127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

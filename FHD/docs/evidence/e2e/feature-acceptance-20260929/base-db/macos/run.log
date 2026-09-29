@@ -1,0 +1,7 @@
+2026-09-29T07:25:53+0800 [base-db] 开始验收 base-db 数据库 WAL 与自恢复；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T07:25:54+0800 [base-db] M1 passed :: HTTP 200 158ms；{"status": "healthy", "latency_ms": 0}
+2026-09-29T07:25:54+0800 [base-db] M2 passed :: HTTP 200 14ms；{"key": "acc_db_probe", "value": "MAC验收0929持久化37954"}
+2026-09-29T07:25:54+0800 [base-db] M3 failed :: HTTP 200 13ms；{"success": true, "data": {"user_id": "default", "preferences": {}}}
+2026-09-29T07:25:57+0800 [base-db] M4 passed :: 导航后路径 /mod/xcagi-erp-domain-bridge/data-sources；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 数据来源 | SUNBIRD | 副窗 | ◈ | 工作区 | 2 | 数据来源 | 私人数据库读取助手 |  | 这里管理 AI 员工可读取的数据来源。市场展示为通用员工；启用具体适配器前，需要用户在本页明确选择并
+2026-09-29T07:25:58+0800 [base-db] screenshot result.png
+2026-09-29T07:26:03+0800 [base-db] video operation.webm bytes=382966

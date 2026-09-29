@@ -1,0 +1,74 @@
+{
+  "_comment": "2026-09-29 macOS 已安装 XCAGI.app 实机验收（CDP 驱动界面 + 同会话接口读写 + 界面读回）；原图与录屏逐项人工目检。",
+  "kind": "feature-acceptance",
+  "feature": "erp-report",
+  "platform": "macos",
+  "round": "feature-acceptance-20260929",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "app_version": "1.0.0.5",
+  "method": "经 CDP(127.0.0.1:9222) 驱动已安装的 /Applications/XCAGI.app：界面导航、键入与点击 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏转 VP8 webm。",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 4,
+  "failed": 0,
+  "visible_content": "报表/统计接口可读，财务分析看板入口可见，当前为空态。",
+  "cases": [
+    {
+      "id": "M1",
+      "input": "GET /api/report/dashboard",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/report/dashboard（写操作自动附带 CSRF）：经营看板",
+      "expected": "经营看板：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 68ms；{\"product_count\": 2, \"supplier_count\": 4, \"monthly_sales\": {\"order_count\": 0, \"total_amount\": null}, \"monthly_purchases\": {\"order_count\": 2, \"total_amount\": 100}, \"alerts\": {\"low_stock\": 0, \"pending_o",
+      "result": "passed"
+    },
+    {
+      "id": "M2",
+      "input": "GET /api/report/sales",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/report/sales（写操作自动附带 CSRF）：销售报表",
+      "expected": "销售报表：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 26ms；{\"total_quantity\": 0, \"total_amount\": 0}",
+      "result": "passed"
+    },
+    {
+      "id": "M3",
+      "input": "GET /api/sales-contract/template-preview",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/sales-contract/template-preview（写操作自动附带 CSRF）：价格表模板预览",
+      "expected": "价格表模板预览：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 23ms；[\"型号\", \"品名\", \"规格\", \"单位\", \"数量\", \"单价\", \"金额\"]",
+      "result": "passed"
+    },
+    {
+      "id": "M4",
+      "input": "界面路由 /kitten-finance",
+      "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /kitten-finance，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+      "expected": "停留在 /kitten-finance，页面可见 分析，该页请求无 4xx/5xx",
+      "observed": "导航后路径 /kitten-finance；命中文本 ['分析']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 财务分析 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 🐱 | 小猫财务分析 |  | 一键查看本月经营状况 |  | 🚀 开始分析 | 🐱 | 还没有分析数据 |  | 点击上方「开始分析」按钮，一键生成财务报告",
+      "result": "passed"
+    }
+  ],
+  "media": [
+    {
+      "feature": "erp-report",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-report/macos/result.png",
+      "sha256": "574d46177caf64dd7a865cded78464adedb0406ffe73b96391273d3e2631a8a6",
+      "visual_review": "accepted",
+      "visible_result": "「财务分析 · 小猫财务分析」页：「还没有分析数据」与「立即开始」。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-report",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-report/macos/operation.webm",
+      "sha256": "24cd0ad59023c611195e356c295f047eccb95053f1a6ea18037319aebefd9f1c",
+      "visual_review": "accepted",
+      "visible_result": "录屏为小猫财务分析页，各帧一致。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-report/macos/run.log",
+    "sha256": "9986fc82a5066467e23b8018300d06a9137e59aa3ff99bc2f3a8c4091c7ce54e",
+    "bytes": 1521
+  }
+}

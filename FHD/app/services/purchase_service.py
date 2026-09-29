@@ -24,6 +24,8 @@ from app.services.purchase_service_supplier_mixin import (
     DATE_FIELDS,
     PurchaseSupplierMixin,
     as_date,
+    items_without_product,
+    page_result,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -71,13 +73,7 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                 )
                 result.append(order_dict)
 
-            return {
-                "success": True,
-                "data": result,
-                "total": total,
-                "page": page,
-                "per_page": per_page,
-            }
+            return page_result(result, total, page, per_page)
 
     def get_purchase_order(self, order_id: int) -> dict[str, Any]:
         with get_db() as db:
@@ -97,6 +93,8 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
             return {"success": True, "data": order_dict}
 
     def create_purchase_order(self, data: dict[str, Any]) -> dict[str, Any]:
+        if invalid := items_without_product(data.get("items") or []):
+            return invalid
         with get_db() as db:
             try:
                 order_no = data.get("order_no") or self._generate_order_no()
@@ -172,6 +170,8 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                 return {"success": False, "message": str(e)}
 
     def update_purchase_order(self, order_id: int, data: dict[str, Any]) -> dict[str, Any]:
+        if invalid := items_without_product(data.get("items") or []):
+            return invalid
         with get_db() as db:
             try:
                 order = db.query(PurchaseOrder).filter(PurchaseOrder.id == order_id).first()
@@ -285,6 +285,8 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                 return {"success": False, "message": str(e)}
 
     def create_purchase_inbound(self, data: dict[str, Any]) -> dict[str, Any]:
+        if invalid := items_without_product(data.get("items") or []):
+            return invalid
         with get_db() as db:
             try:
                 inbound_no = data.get("inbound_no") or self._generate_inbound_no()
@@ -483,13 +485,7 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                 )
                 result.append(inbound_dict)
 
-            return {
-                "success": True,
-                "data": result,
-                "total": total,
-                "page": page,
-                "per_page": per_page,
-            }
+            return page_result(result, total, page, per_page)
 
 
 # NEURO-DDD: 为 Services 层类添加 instrumentation

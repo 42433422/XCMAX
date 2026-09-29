@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ch-asr",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "bfc6de624382f339fb0c2461332b59830df563979eedc260fc55f42537a1588c",
+  "visible_content": "语音服务健康（ready，small 模型 CPU），界面有「按住说话」入口；真实转写需要麦克风权限与真人语音，受阻。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-asr/macos/operation.webm"
+  ],
+  "full_feature_acceptance": false,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-asr/macos/result.png"
+}

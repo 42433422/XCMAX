@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "ai-ocr-doc",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "e610311e6d4067878e5c7e34602a11a7ae545f513a309e28a2f9a97cd6266055",
+  "visible_content": "OCR 后端为 macOS Vision；英文/数字单据识别出「1# NO.20260929」，中文「太阳鸟」未被识别（已安装构建未设 zh-Hans 识别语言，已修复待新构建验收）。OCR 接口在前端没有直接调用入口，界面以对话附件为用户入口。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-ocr-doc/macos/operation.webm"
+  ],
+  "full_feature_acceptance": false,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-ocr-doc/macos/result.png"
+}

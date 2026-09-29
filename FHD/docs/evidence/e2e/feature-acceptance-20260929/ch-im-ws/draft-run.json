@@ -1,0 +1,53 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "ch-im-ws",
+ "name": "实时通道（WebSocket）",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+ "app_version": "1.0.0.5",
+ "verified_at": "2026-09-29",
+ "passed": 2,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "界面操作：在页面内建立 IM WebSocket 连接",
+   "actions": "在页面内建立 IM WebSocket 连接",
+   "expected": "握手成功（onopen）",
+   "observed": "WebSocket /ws/im 握手结果 {'ok': True}",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "GET /api/im/unread-total",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/im/unread-total（写操作自动附带 CSRF）：未读计数",
+   "expected": "未读计数：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 15ms；{\"success\": true, \"unread_total\": 0}",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "ch-im-ws",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-im-ws/macos/result.png",
+   "sha256": "76ca854cd36ca7091b7dd30d5955b4ea357feca42749d0e8d86e535131847568",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "ch-im-ws",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-im-ws/macos/operation.webm",
+   "sha256": "12429ea7262bf00033478435c0a5c476b2b7953f38dfab2f74e0055ffe316708",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-im-ws/macos/run.log",
+  "sha256": "1e3f52c191cbbbecb671ed05cad559ecee990ee5f10b05774bba0b8c864d1eb4",
+  "bytes": 543
+ },
+ "method": "经 CDP(127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

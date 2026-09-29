@@ -133,6 +133,8 @@ def products_add(request: Request | None, body: dict[str, Any]) -> dict[str, Any
         raise HTTPException(status_code=400, detail=result.get("message") or "添加失败")
     data = result.get("data") or {}
     pid = data.get("id") if isinstance(data, dict) else getattr(data, "id", None)
+    if pid is None:
+        pid = result.get("product_id")
     return {
         "success": True,
         "data": {"id": int(pid) if pid is not None else None},

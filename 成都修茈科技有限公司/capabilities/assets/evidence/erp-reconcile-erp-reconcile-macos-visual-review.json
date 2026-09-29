@@ -1,0 +1,16 @@
+{
+  "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+  "kind": "visual-review",
+  "feature": "erp-reconcile",
+  "platform": "macos",
+  "reviewed_at": "2026-09-29",
+  "app_version": "1.0.0.5",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "screenshot_sha256": "9d1409ef7a584a4280ca2cba1ce8fee90d3693cfc9ad9fa67714ac1a8fb421f1",
+  "visible_content": "内部对账接口在无内部密钥时拒绝（503 internal api not configured，符合预期）；运营线对账 run 返回 success 但 status 的 last_run 仍为空——运营线对账为桩实现，未落地对账记录。",
+  "videos": [
+    "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-reconcile/macos/operation.webm"
+  ],
+  "full_feature_acceptance": false,
+  "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-reconcile/macos/result.png"
+}

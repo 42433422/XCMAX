@@ -257,8 +257,10 @@ def create_agent_task(
         )
     except UnifiedTaskConflictError:
         return JSONResponse({"success": False, "message": "任务状态冲突"}, status_code=409)
-    except UnifiedTaskError:
-        return JSONResponse({"success": False, "message": "任务参数无效"}, status_code=400)
+    except UnifiedTaskError as exc:
+        return JSONResponse(
+            {"success": False, "message": str(exc) or "任务参数无效"}, status_code=400
+        )
     except RECOVERABLE_ERRORS:
         return internal_error_response("create agent task")
 

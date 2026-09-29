@@ -1,0 +1,5 @@
+2026-09-29T06:52:48+0800 [ind-custom-delivery] 开始验收 ind-custom-delivery 客户定制开发与交付；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T06:52:54+0800 [ind-custom-delivery] M1 passed :: HTTP 200 6192ms；{"mod_id": "taiyangniao-pro", "runtime_mod_id": "sunbird-attendance-custom", "delivery_mode": "private_mod", "custom_features": ["attendance-convert"], "name": "太阳鸟 PRO", "description": "标准 main Enter
+2026-09-29T06:52:57+0800 [ind-custom-delivery] M2 passed :: 导航后路径 /private-mod-delivery；命中文本 ['交付']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 生产员工 · 私有交付 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 返回 AI 生态 | 生产员工 | 客户私有 Mod 生产中心 | 客户定制交付 | 私有 Mod 生产中心 |  | 模块轨与员工
+2026-09-29T06:52:59+0800 [ind-custom-delivery] screenshot result.png
+2026-09-29T06:53:03+0800 [ind-custom-delivery] video operation.webm bytes=360551
