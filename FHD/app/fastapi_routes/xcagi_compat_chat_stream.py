@@ -19,7 +19,7 @@ def _facade():
 def _client_issue_reply(receipt: dict | None) -> str:
     if not receipt:
         return ""
-    return {
+    replies: dict[str, str] = {
         "ROUTED": f"已向 Owner 提交产品问题，Work Order：{receipt.get('work_order_id')}，市场工单：{receipt.get('owner_ticket_no')}。支持包 SHA256：{receipt.get('support_bundle_sha256')}。",
         "NEEDS_MORE_EVIDENCE": (
             "这看起来是产品缺陷上报，但还缺少必要信息，暂未自动建单。"
@@ -28,7 +28,8 @@ def _client_issue_reply(receipt: dict | None) -> str:
         ),
         "OWNER_ROUTE_UNAVAILABLE": f"Owner 候选 Work Order {receipt.get('work_order_id') or '受理服务'}尚未送达。",
         "not_confirmed": "目前无法以足够把握确认是产品缺陷，因此没有自动建单。",
-    }.get(str(receipt.get("state") or ""), "")
+    }
+    return replies.get(str(receipt.get("state") or ""), "")
 
 
 async def _classify_and_submit_client_issue_async(

@@ -154,6 +154,7 @@ async def submit_product_issue(
         f"work_order_id：{wo_id}\n客户原话：{reason}\n"
         f"预期：{triage['expected']}\n实际：{triage['actual']}"
     )
+    result: dict[str, Any] = {}
     try:
         result = await custom_delivery_remote_json(
             token,
@@ -179,7 +180,6 @@ async def submit_product_issue(
         # 市场会以 409 拒绝而不是重放。此时必须回查已有工单并复用其编号，否则
         # 客户重复上报同一问题只会得到「受理服务尚未送达」。
         logger.info("client product issue intake not replayed; falling back to lookup")
-        result = {}
     if (
         result.get("success") is not True
         or not result.get("ticket_id")
