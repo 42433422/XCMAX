@@ -191,6 +191,8 @@ $electronBuilderArgs = @(
   "--config.appId=$ebAppId",
   "--config.publish.url=$ebPublishUrl",
   "--config.nsis.artifactName=$ebArtifact",
+  "--config.buildVersion=$Version",
+  "--config.extraMetadata.shortVersionWindows=$Version",
   "--config.extraMetadata.productSku=$ProductSku"
 )
 
