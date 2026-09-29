@@ -184,9 +184,9 @@
     {
       "key": "web",
       "applicable": 128,
-      "verified": 124,
+      "verified": 125,
       "partial": 0,
-      "pending": 4,
+      "pending": 3,
       "last_verified_at": "2026-09-29",
       "label": "Web / 后端",
       "level": "签约级"
@@ -216,8 +216,8 @@
     "total": 158,
     "by_status": {
       "verified": 55,
-      "partial": 89,
-      "implemented": 10,
+      "partial": 90,
+      "implemented": 9,
       "planned": 4
     },
     "domains": 10,
@@ -248,9 +248,9 @@
       {
         "key": "web",
         "applicable": 128,
-        "verified": 124,
+        "verified": 125,
         "partial": 0,
-        "pending": 4,
+        "pending": 3,
         "last_verified_at": "2026-09-29",
         "label": "Web / 后端",
         "level": "签约级"
@@ -2523,29 +2523,69 @@
       },
       {
         "feature": "ch-realtime-voice",
-        "platform": "macos",
-        "status": "blocked",
-        "passed": 0,
+        "platform": "web",
+        "status": "passed",
+        "passed": 5,
         "failed": 0,
         "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "app_git_sha": "98ab909a4520965091bdda2be90ebf72685924c3",
         "media": [
           {
-            "file": "ch-realtime-voice-result.png",
-            "sha256": "1f6aded2c7bb85d0da5c7cc95f9db00ee05c0adbcefc863dec72ea57ebd0d9e3",
+            "file": "ch-realtime-voice-00-login-form.png",
+            "sha256": "411c7dc2804a0a650a32a922bd2ab2b588e73c0eeb4e61f3816886978e73730f",
             "visual_review": "accepted",
-            "visible_result": "「智能对话」默认页；本项全部用例受阻。",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
             "kind": "screenshot",
-            "public_path": "/capabilities/assets/evidence/ch-realtime-voice-result.png"
+            "public_path": "/capabilities/assets/evidence/ch-realtime-voice-00-login-form.png"
           },
           {
-            "file": "ch-realtime-voice-operation.webm",
-            "sha256": "39cbe0232d9e98d2609bd4f0925a15541c914e59a96805775faf862a6e179a4e",
+            "file": "ch-realtime-voice-V1-voice-health.png",
+            "sha256": "67dd88ad94bfd8f1f397274e273d91c83fa7a0e1c2ccd06d2f2dfe3aff3a1a08",
             "visual_review": "accepted",
-            "visible_result": "2.38s 录屏为默认对话页。",
+            "visible_result": "卡片显示 GET /api/voice/health 本轮真实响应：status=200，data.ready=true、model=small、device_hint=cpu。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ch-realtime-voice-V1-voice-health.png"
+          },
+          {
+            "file": "ch-realtime-voice-V2-voice-synthesize-real.png",
+            "sha256": "2e65ad154d0b47269ecc583c4442b01814972fdaf70b4e0bfabe4d1e12bdcd0e",
+            "visual_review": "accepted",
+            "visible_result": "卡片显示 POST /api/tts 本轮真实响应：status=200、success=true、provider=edge、voice=zh-CN-XiaoxiaoNeural、负载以 data:audio/mpeg;base64 开头；同一浏览器 decodeAudioData 返回 decoded=true、bytes=44064、duration=7.34、sample_rate=48000、channels=1；并附旧兼容路由 /api/tts/synthesize 的硬桩响应。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ch-realtime-voice-V2-voice-synthesize-real.png"
+          },
+          {
+            "file": "ch-realtime-voice-V3-voice-synthesize-en.png",
+            "sha256": "7dfaf5ecd0acad9e5e8639ab7640d7aceec85eb6942956856f3461b1da94020e",
+            "visual_review": "accepted",
+            "visible_result": "卡片显示英文请求 POST /api/tts 返回 200、success=true、voice=zh-CN-XiaoxiaoNeural、provider=edge，decodeAudioData decoded=true（含 bytes/duration），并注明 lang=en 仍用默认中文音色。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ch-realtime-voice-V3-voice-synthesize-en.png"
+          },
+          {
+            "file": "ch-realtime-voice-V4-voice-empty-text.png",
+            "sha256": "976fbe81845156ac11b1c5e6b736b038a496930f4c45caffc2fa0153bc6deb5a",
+            "visual_review": "accepted",
+            "visible_result": "卡片显示 POST /api/tts {text:''} 返回 400，body.success=false、message=text 不能为空。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ch-realtime-voice-V4-voice-empty-text.png"
+          },
+          {
+            "file": "ch-realtime-voice-V5-voice-long-text.png",
+            "sha256": "4e9b32512339a391c874d6ee607c7864cd7306881a1ad4b946599f25d15621d2",
+            "visual_review": "accepted",
+            "visible_result": "卡片显示 1800 字文本 POST /api/tts 返回 200、success=true、近似音频字节数（>=500000）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ch-realtime-voice-V5-voice-long-text.png"
+          },
+          {
+            "file": "ch-realtime-voice-ch-realtime-voice-web-20260929-214433.webm",
+            "sha256": "b12cc8ff3cd6046f4b7b1a0c96a14e751f52aa16047f8ded0e0993e1ea57318d",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，ffmpeg 实测 17.72s，1600x1000 VP8/25fps）：管理员登录 → 语音链路健康 → 中文真实合成与浏览器解码 → 英文合成解码 → 空文本 400 → 长文本合成。",
             "kind": "video",
-            "size_bytes": 95169,
+            "size_bytes": 1336732,
             "duration_seconds": null,
             "codec": "webm",
             "public_path": null
@@ -2557,7 +2597,7 @@
           "sha256": "06f168e1f682a7bc7db933aa4e5e0faca51f5b8da2aa1b698bb369b9997f6704",
           "size_bytes": 863
         },
-        "source_run": "/capabilities/assets/evidence/ch-realtime-voice-ch-realtime-voice-macos-run.json"
+        "source_run": "/capabilities/assets/evidence/ch-realtime-voice-ch-realtime-voice-web-run.json"
       },
       {
         "feature": "ch-task-center",
@@ -9491,6 +9531,16 @@
         "action": "not-published"
       },
       {
+        "feature": "ch-realtime-voice",
+        "file": "ch-realtime-voice-ch-realtime-voice-web-20260929-214433.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
         "feature": "ch-task-center",
         "file": "ch-task-center-operation.webm",
         "issues": [
@@ -11043,7 +11093,7 @@
     ],
     "summary": {
       "total": 153,
-      "passed": 144,
+      "passed": 145,
       "failed": 0,
       "last_verified_at": "2026-09-29"
     }
