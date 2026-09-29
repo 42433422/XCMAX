@@ -1,6 +1,6 @@
 {
   "schema": "xcagi.product_lines_status/v1",
-  "generated_at": "2026-09-29 01:21 UTC",
+  "generated_at": "2026-09-29 03:35 UTC",
   "generator": "FHD/scripts/dev/product_lines_status.py",
   "config": "FHD/config/product_lines.yaml",
   "policy": "本文件为生成物：版本/发布/能力/覆盖率的数字全部取自各自权威源，禁止手改；三线「成熟度」只呈现能力目录自有的证据分级计数与 Release Gate 结论，不合成任何自造评分。",
@@ -93,15 +93,15 @@
   "capability_totals": {
     "total": 158,
     "by_status": {
-      "verified": 3,
+      "verified": 55,
       "partial": 93,
-      "implemented": 58,
+      "implemented": 6,
       "planned": 4
     },
     "cancelled_count": 0,
     "domains": 10,
     "modules": 28,
-    "verified_total": 3,
+    "verified_total": 55,
     "last_verified_at": "2026-09-29",
     "platform_counts": {
       "windows": 99,
@@ -127,10 +127,10 @@
       },
       "web": {
         "applicable": 128,
-        "verified": 1,
+        "verified": 53,
         "partial": 0,
-        "pending": 127,
-        "last_verified_at": "2026-09-24"
+        "pending": 75,
+        "last_verified_at": "2026-09-29"
       },
       "android": {
         "applicable": 8,
@@ -147,7 +147,7 @@
         "last_verified_at": null
       }
     },
-    "completion": 58
+    "completion": 78
   },
   "capability_warnings": [],
   "capability_domains_unassigned": [],
@@ -179,12 +179,12 @@
         ],
         "total": 102,
         "by_status": {
-          "verified": 3,
+          "verified": 41,
           "partial": 58,
-          "implemented": 39,
+          "implemented": 1,
           "planned": 2
         },
-        "verified": 3
+        "verified": 41
       },
       "releases": {
         "macos": {
@@ -266,10 +266,11 @@
         "total": 39,
         "by_status": {
           "partial": 23,
-          "implemented": 15,
+          "verified": 14,
+          "implemented": 1,
           "planned": 1
         },
-        "verified": 0
+        "verified": 14
       },
       "releases": {
         "web": {

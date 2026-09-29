@@ -82,8 +82,8 @@ def _wait_run(page, run_id, tries=14, wait_ms=1500):
 
 def _panel(page, env, name, title, obj):
     page.evaluate(
-        "([t,o]) => { document.documentElement.lang='zh-CN'; document.head.innerHTML='';"
-        " document.body.innerHTML=''; document.body.style.cssText='margin:0;padding:22px;background:#0b1b2b;"
+        "([t,o]) => { document.documentElement.lang='zh-CN'; document.head.replaceChildren();"
+        " document.body.replaceChildren(); document.body.style.cssText='margin:0;padding:22px;background:#0b1b2b;"
         " color:#e8f1fb;font:13px/1.7 -apple-system,sans-serif';"
         " const h=document.createElement('h2'); h.textContent=t; h.style.cssText='font-size:15px;margin:0 0 12px';"
         " const p=document.createElement('pre'); p.style.cssText='background:#08131f;border-radius:8px;padding:14px;"
