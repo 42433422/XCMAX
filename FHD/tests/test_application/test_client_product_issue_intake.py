@@ -7,11 +7,52 @@ import io
 import zipfile
 from types import SimpleNamespace as NS
 
+import pytest
+
 from app.application.client_product_issue_intake import (
     classify_report,
     looks_like_issue_report,
     submit_product_issue,
 )
+
+
+@pytest.fixture
+def intake_env(tmp_path, monkeypatch):
+    """客户上报所需的最小环境：脱敏支持包、市场凭据、可覆盖的客户端身份。"""
+    from app import build_identity
+    from app.application import desktop_delivery_receipt
+    from app.desktop_runtime import support_bundle
+    from app.fastapi_routes import private_mod_delivery_context
+
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w") as bundle:
+        bundle.writestr("manifest.json", '{"redacted":true}')
+    raw = archive.getvalue()
+    path = tmp_path / "support.zip"
+    path.write_bytes(raw)
+    sha = hashlib.sha256(raw).hexdigest()
+    monkeypatch.setattr(
+        support_bundle,
+        "build_evidence_ref",
+        lambda: {"kind": "support_bundle", "path": str(path), "sha256": sha, "bytes": len(raw)},
+    )
+
+    async def _token():
+        return "test-account-token"
+
+    monkeypatch.setattr(
+        private_mod_delivery_context, "_private_delivery_market_token", lambda _r: _token()
+    )
+
+    def identity(*, instance: str, version: str, git_sha: str) -> None:
+        monkeypatch.setattr(desktop_delivery_receipt, "desktop_installation_id", lambda: instance)
+        monkeypatch.setattr(
+            build_identity,
+            "build_identity",
+            lambda: {"product_version": version, "git_sha": git_sha},
+        )
+
+    return NS(raw=raw, sha=sha, identity=identity)
 
 
 def _client(content: str):
@@ -52,36 +93,10 @@ def test_report_classifier_does_not_escalate_usage_question_or_bad_json():
     assert classify_report(broken, "按钮没反应", "请联系支持。") is None
 
 
-def test_product_issue_routes_one_work_order_and_support_bundle(tmp_path, monkeypatch):
-    from app import build_identity
+def test_product_issue_routes_one_work_order_and_support_bundle(intake_env, monkeypatch):
     from app.application import client_product_issue_intake as intake
-    from app.application import desktop_delivery_receipt
-    from app.desktop_runtime import support_bundle
-    from app.fastapi_routes import private_mod_delivery_context
 
-    archive = io.BytesIO()
-    with zipfile.ZipFile(archive, "w") as bundle:
-        bundle.writestr("manifest.json", '{"redacted":true}')
-    raw = archive.getvalue()
-    path = tmp_path / "support.zip"
-    path.write_bytes(raw)
-    sha = hashlib.sha256(raw).hexdigest()
-    monkeypatch.setattr(
-        support_bundle,
-        "build_evidence_ref",
-        lambda: {"kind": "support_bundle", "path": str(path), "sha256": sha, "bytes": len(raw)},
-    )
-    monkeypatch.setattr(
-        desktop_delivery_receipt, "desktop_installation_id", lambda: "client-instance-41"
-    )
-    monkeypatch.setattr(
-        build_identity,
-        "build_identity",
-        lambda: {"product_version": "1.0.0.5", "git_sha": "c" * 40},
-    )
-    monkeypatch.setattr(
-        private_mod_delivery_context, "_private_delivery_market_token", lambda _r: _token()
-    )
+    intake_env.identity(instance="client-instance-41", version="1.0.0.5", git_sha="c" * 40)
     calls = []
 
     async def remote(token, route, *, method="GET", payload=None):
@@ -89,9 +104,6 @@ def test_product_issue_routes_one_work_order_and_support_bundle(tmp_path, monkey
         if route.endswith("customer-candidate"):
             return {"wo_id": "WO-abcdef123456", "status": "candidate", "created": True}
         return {"success": True, "ticket_id": 12, "ticket_no": "CS-12"}
-
-    async def _token():
-        return "test-account-token"
 
     monkeypatch.setattr(intake, "custom_delivery_remote_json", remote)
     result = asyncio.run(
@@ -113,60 +125,31 @@ def test_product_issue_routes_one_work_order_and_support_bundle(tmp_path, monkey
         "work_order_id": "WO-abcdef123456",
         "owner_ticket_id": 12,
         "owner_ticket_no": "CS-12",
-        "support_bundle_sha256": sha,
+        "support_bundle_sha256": intake_env.sha,
     }
     assert len(calls) == 2 and calls[0][1].endswith("customer-candidate")
     assert calls[0][3]["expected"] == "保存成功"
     assert calls[0][3]["client_instance_id"] == "client-instance-41"
     assert calls[1][3]["source_ref"] == calls[1][3]["work_order_id"]
-    assert base64.b64decode(calls[1][3]["support_bundle_base64"]) == raw
+    assert base64.b64decode(calls[1][3]["support_bundle_base64"]) == intake_env.raw
     # 同一工单重复上报（客户重测/补报）必须原样复用 description：市场端据此判定
     # 「同一需求标识是否绑定同一内容」，混入每次都变的支持包摘要会被判 409。
-    assert sha not in calls[1][3]["description"]
-    assert calls[1][3]["support_bundle_sha256"] == sha
+    assert intake_env.sha not in calls[1][3]["description"]
+    assert calls[1][3]["support_bundle_sha256"] == intake_env.sha
 
 
-def test_intake_still_creates_work_order_when_client_version_is_unresolvable(tmp_path, monkeypatch):
+def test_intake_still_creates_work_order_when_client_version_is_unresolvable(
+    intake_env, monkeypatch
+):
     """无法解析版本标识的客户端也必须能建单。
 
     市场端 customer-candidate 要求 product_version 非空且至少 1 字符；未打包运行或
     构建身份文件损坏的客户端拿到空串时，接口会以 422 拒绝，客户上报缺陷只得到
     「受理服务尚未送达」。本用例锁定「版本未知 → unknown 回退」，让闭环不被挡住。
     """
-    import io
-    import zipfile
-
-    from app import build_identity
     from app.application import client_product_issue_intake as intake
-    from app.application import desktop_delivery_receipt
-    from app.desktop_runtime import support_bundle
-    from app.fastapi_routes import private_mod_delivery_context
 
-    archive = io.BytesIO()
-    with zipfile.ZipFile(archive, "w") as bundle:
-        bundle.writestr("manifest.json", '{"redacted":true}')
-    raw = archive.getvalue()
-    path = tmp_path / "support.zip"
-    path.write_bytes(raw)
-    monkeypatch.setattr(
-        support_bundle,
-        "build_evidence_ref",
-        lambda: {
-            "kind": "support_bundle",
-            "path": str(path),
-            "sha256": hashlib.sha256(raw).hexdigest(),
-            "bytes": len(raw),
-        },
-    )
-    monkeypatch.setattr(
-        desktop_delivery_receipt, "desktop_installation_id", lambda: "client-instance-77"
-    )
-    monkeypatch.setattr(
-        build_identity, "build_identity", lambda: {"product_version": "", "git_sha": "d" * 40}
-    )
-    monkeypatch.setattr(
-        private_mod_delivery_context, "_private_delivery_market_token", lambda _r: _token()
-    )
+    intake_env.identity(instance="client-instance-77", version="", git_sha="d" * 40)
     calls = []
 
     async def remote(token, route, *, method="GET", payload=None):
@@ -174,9 +157,6 @@ def test_intake_still_creates_work_order_when_client_version_is_unresolvable(tmp
         if route.endswith("customer-candidate"):
             return {"wo_id": "WO-versionless00", "status": "candidate", "created": True}
         return {"success": True, "ticket_id": 9, "ticket_no": "CS-9"}
-
-    async def _token():
-        return "test-account-token"
 
     monkeypatch.setattr(intake, "custom_delivery_remote_json", remote)
     result = asyncio.run(
@@ -198,48 +178,15 @@ def test_intake_still_creates_work_order_when_client_version_is_unresolvable(tmp
     assert calls[1]["product_version"] == "unknown"
 
 
-def test_repeat_report_reuses_existing_ticket_when_market_refuses_replay(tmp_path, monkeypatch):
+def test_repeat_report_reuses_existing_ticket_when_market_refuses_replay(intake_env, monkeypatch):
     """客户重复上报同一问题时，即使市场拒绝重放也必须拿回同一个工单编号。
 
     市场按 source_ref 绑定需求内容；客户端格式升级或客户补报会让摘要变化，市场以
     409 拒绝。若不回查已有工单，客户重测原问题只会再次收到「受理服务尚未送达」。
     """
-    import io
-    import zipfile
-
-    from app import build_identity
     from app.application import client_product_issue_intake as intake
-    from app.application import desktop_delivery_receipt
-    from app.desktop_runtime import support_bundle
-    from app.fastapi_routes import private_mod_delivery_context
 
-    archive = io.BytesIO()
-    with zipfile.ZipFile(archive, "w") as bundle:
-        bundle.writestr("manifest.json", '{"redacted":true}')
-    raw = archive.getvalue()
-    path = tmp_path / "support.zip"
-    path.write_bytes(raw)
-    monkeypatch.setattr(
-        support_bundle,
-        "build_evidence_ref",
-        lambda: {
-            "kind": "support_bundle",
-            "path": str(path),
-            "sha256": hashlib.sha256(raw).hexdigest(),
-            "bytes": len(raw),
-        },
-    )
-    monkeypatch.setattr(
-        desktop_delivery_receipt, "desktop_installation_id", lambda: "client-instance-55"
-    )
-    monkeypatch.setattr(
-        build_identity,
-        "build_identity",
-        lambda: {"product_version": "1.0.0.5", "git_sha": "e" * 40},
-    )
-    monkeypatch.setattr(
-        private_mod_delivery_context, "_private_delivery_market_token", lambda _r: _token()
-    )
+    intake_env.identity(instance="client-instance-55", version="1.0.0.5", git_sha="e" * 40)
     routes = []
 
     async def remote(token, route, *, method="GET", payload=None):
@@ -258,9 +205,6 @@ def test_repeat_report_reuses_existing_ticket_when_market_refuses_replay(tmp_pat
                 },
             ]
         }
-
-    async def _token():
-        return "test-account-token"
 
     monkeypatch.setattr(intake, "custom_delivery_remote_json", remote)
     result = asyncio.run(
