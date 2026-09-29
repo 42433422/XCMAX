@@ -6,15 +6,15 @@
   "stats": {
     "total": 158,
     "by_status": {
-      "verified": 2,
-      "partial": 94,
+      "verified": 3,
+      "partial": 93,
       "implemented": 58,
       "planned": 4
     },
     "cancelled_count": 0,
     "domains": 10,
     "modules": 28,
-    "verified_total": 2,
+    "verified_total": 3,
     "last_verified_at": "2026-09-29",
     "platform_counts": {
       "windows": 99,
@@ -33,17 +33,17 @@
       },
       "macos": {
         "applicable": 100,
-        "verified": 66,
+        "verified": 67,
         "partial": 29,
-        "pending": 5,
+        "pending": 4,
         "last_verified_at": "2026-09-29"
       },
       "web": {
         "applicable": 128,
-        "verified": 0,
+        "verified": 1,
         "partial": 0,
-        "pending": 128,
-        "last_verified_at": null
+        "pending": 127,
+        "last_verified_at": "2026-09-24"
       },
       "android": {
         "applicable": 8,
@@ -124,7 +124,7 @@
             {
               "id": "base-login",
               "name": "登录与会话管理",
-              "status": "partial",
+              "status": "verified",
               "platforms": [
                 "windows",
                 "macos",
@@ -142,18 +142,18 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-22",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-24",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "企业统一的账号登录、会话保持与安全退出，桌面端与 Web 端共用同一套账户体系。",
@@ -176,7 +176,7 @@
                   "name": "Windows 桌面",
                   "status": "pending",
                   "verified_at": null,
-                  "run_count": 0,
+                  "run_count": 1,
                   "accepted_count": 0
                 },
                 {
