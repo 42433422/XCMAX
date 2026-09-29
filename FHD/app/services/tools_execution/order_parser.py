@@ -14,6 +14,7 @@ from app.services.tools_execution.order_parser_helpers import (
     normalize_quantity_token,
     normalize_trailing_unit_name,
     parse_cn_number,
+    strip_bill_keywords,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -38,11 +39,8 @@ def _parse_order_text(order_text: str) -> dict:
         # the fallback parser into a CPU denial-of-service vector.
         original_text = (order_text or "").strip()[:4096]
 
-        text = original_text
-        # 先剥完整动词再剥单据名：「开发货单」若不先整体剥掉，会残留「开」并被当成客户名。
-        verb_keywords = ["生成发货单", "开发货单", "开单", "打单", "下单", "出单", "发货单", "送货单", "出货单"]
-        for kw in verb_keywords:
-            text = text.replace(kw, " ")
+        # 先剥完整动词再剥单据名（见 strip_bill_keywords：避免「开发货单」残留「开」被当成客户名）。
+        text = strip_bill_keywords(original_text)
 
         text = (
             text.replace("。", " ")
@@ -54,11 +52,8 @@ def _parse_order_text(order_text: str) -> dict:
         )
 
         text = text.replace("的规格", "规格")
-        slot_source = original_text
-        for kw in verb_keywords:
-            slot_source = slot_source.replace(kw, " ")
         slot_text = (
-            slot_source.replace("。", " ")
+            strip_bill_keywords(original_text).replace("。", " ")
             .replace("，", " ")
             .replace(",", " ")
             .replace("、", " ")
@@ -317,9 +312,7 @@ def _parse_order_text(order_text: str) -> dict:
                 unit_candidate = cleanup_unit_name(prefix_text)
                 if not unit_candidate:
                     unit_candidate = cleanup_unit_name(text.split()[0] if text.split() else "")
-                # 与常规槽位路径一致：显式写法（引号/键值「客户=X」「客户 X」）优先，
-                # 否则「客户=某客户 商品=…」会把键名残留进单位名。
-                explicit_unit = extract_explicit_unit_name(original_text)
+                explicit_unit = extract_explicit_unit_name(original_text)  # 显式客户名优先（同常规槽位路径）
                 if explicit_unit:
                     unit_candidate = explicit_unit
 

@@ -184,9 +184,9 @@
     {
       "key": "web",
       "applicable": 128,
-      "verified": 125,
+      "verified": 126,
       "partial": 0,
-      "pending": 3,
+      "pending": 2,
       "last_verified_at": "2026-09-29",
       "label": "Web / 后端",
       "level": "签约级"
@@ -248,9 +248,9 @@
       {
         "key": "web",
         "applicable": 128,
-        "verified": 125,
+        "verified": 126,
         "partial": 0,
-        "pending": 3,
+        "pending": 2,
         "last_verified_at": "2026-09-29",
         "label": "Web / 后端",
         "level": "签约级"
@@ -4677,29 +4677,69 @@
       },
       {
         "feature": "erp-sales-order",
-        "platform": "macos",
+        "platform": "web",
         "status": "passed",
-        "passed": 4,
+        "passed": 5,
         "failed": 0,
         "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "app_git_sha": "2ce620dad868c18f577ad03189be53ddd6bf752f",
         "media": [
           {
-            "file": "erp-sales-order-result.png",
-            "sha256": "223a568a3c36181d18a6ac40f34fba8d74baffd92652b2df9b35e9cc572a411d",
+            "file": "erp-sales-order-00-login-form.png",
+            "sha256": "aa552b4c876d86260da70d816cec3fa68ef4245bb988f64669ed7c51e4859247",
             "visual_review": "accepted",
-            "visible_result": "「新建发货单」页：模板、基础信息(购买单位/日期/订单编号)、产品信息区渲染完整。",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
             "kind": "screenshot",
-            "public_path": "/capabilities/assets/evidence/erp-sales-order-result.png"
+            "public_path": "/capabilities/assets/evidence/erp-sales-order-00-login-form.png"
           },
           {
-            "file": "erp-sales-order-operation.webm",
-            "sha256": "1cdc8e9f7503a94b5068d22d56be73771040bde44f27ec06990133e09410bd52",
+            "file": "erp-sales-order-SO1-orders-read.png",
+            "sha256": "ea3b3183a91d0152e384c378a649baeb7482a90efd6940cfc1ade98ed6eb9bd0",
             "visual_review": "accepted",
-            "visible_result": "6.13s 录屏为新建发货单页(模板为未绑定空态)。",
+            "visible_result": "卡片显示本轮真实响应：GET /api/mod/xcagi-erp-domain-bridge/orders 返回 200（清单条数）、orders/next_number 返回 200 且 next_order_number 形如 26-09-00001A。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-sales-order-SO1-orders-read.png"
+          },
+          {
+            "file": "erp-sales-order-SO2-master-data.png",
+            "sha256": "3f2bf35c70aad254b4fac7836f9ce63cf20af7d4a73f022d6d314e2cc5634b0b",
+            "visual_review": "accepted",
+            "visible_result": "卡片显示本租户真实客户清单与产品清单（均 200）及选中的客户名与型号。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-sales-order-SO2-master-data.png"
+          },
+          {
+            "file": "erp-sales-order-SO3-planner-generate.png",
+            "sha256": "586309ef7dd6a72ac52c70f49b0001e66026815102a55c416c6294b90ec4e3a2",
+            "visual_review": "accepted",
+            "visible_result": "卡片显示对话成单真实响应：chat 200、action=tool_call、document.success=true、doc_name=发货单_<单号>_<时间>.xlsx、file_path 指向服务端文件，并附该文件真实存在与非空字节数。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-sales-order-SO3-planner-generate.png"
+          },
+          {
+            "file": "erp-sales-order-SO4-records-readback.png",
+            "sha256": "02d3f79e4360e1e4b47d68d254a519b7d41a1a4496e63565b46e4752e8b546ba",
+            "visual_review": "accepted",
+            "visible_result": "卡片显示发货记录清单条数前后对比（after>before）、命中该客户(purchase_unit)的记录数与最新一条记录内容。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-sales-order-SO4-records-readback.png"
+          },
+          {
+            "file": "erp-sales-order-SO5-legacy-fail-closed.png",
+            "sha256": "72316dfe5cc40ae2bbe003317ef329021865a02f8d14c60cd7a0718f765b8f88",
+            "visual_review": "accepted",
+            "visible_result": "卡片显示 POST /api/orders 403（detail 指明「该旧业务接口尚未提供安全的租户数据隔离」）、GET /api/shipment/orders 403、POST /api/shipment/orders 405（旧路由无写面）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-sales-order-SO5-legacy-fail-closed.png"
+          },
+          {
+            "file": "erp-sales-order-erp-sales-order-web-20260929-221144.webm",
+            "sha256": "46fb8e878a58d6381c665859a9536560d4b4dafbc72559e1bacd626da8419a2a",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，ffmpeg 实测 20.16s，1600x1000 VP8/25fps）：管理员登录 → 订单清单/单号 → 真实客户与产品 → 对话成单并生成发货单文件 → 发货记录读回 → 旧接口 403/405 负例。",
             "kind": "video",
-            "size_bytes": 328239,
+            "size_bytes": 1481714,
             "duration_seconds": null,
             "codec": "webm",
             "public_path": null
@@ -4711,7 +4751,7 @@
           "sha256": "6d2b7661f049c0d98d83495edce8298f9e02a046431b0633239e7422eb7187a1",
           "size_bytes": 1489
         },
-        "source_run": "/capabilities/assets/evidence/erp-sales-order-erp-sales-order-macos-run.json"
+        "source_run": "/capabilities/assets/evidence/erp-sales-order-erp-sales-order-web-run.json"
       },
       {
         "feature": "erp-shipment",
@@ -10143,6 +10183,16 @@
       {
         "feature": "erp-sales-order",
         "file": "erp-sales-order-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "erp-sales-order",
+        "file": "erp-sales-order-erp-sales-order-web-20260929-221144.webm",
         "issues": [
           "时长超 60s 或不可解析(None)",
           "webm 不作官网展示",

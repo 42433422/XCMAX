@@ -227,6 +227,17 @@ def looks_like_conversational_filler(token: str) -> bool:
     return any(frag in t for frag in _FILLER_FRAGMENTS)
 
 
+_BILL_VERB_KEYWORDS = ("生成发货单", "开发货单", "开单", "打单", "下单", "出单", "发货单", "送货单", "出货单")
+
+
+def strip_bill_keywords(text: str) -> str:
+    """剥掉下单动词与单据名；「开发货单」整体剥，避免残留「开」被当成客户名。"""
+    out = text
+    for kw in _BILL_VERB_KEYWORDS:
+        out = out.replace(kw, " ")
+    return out
+
+
 def looks_like_customer_name_token(token: str) -> bool:
     """判断 token 是否像客户名（用于末位兜底，拒绝动词残片与键值残片）。"""
     t = re.sub(r"\s+", "", token or "")
