@@ -6,15 +6,15 @@
   "stats": {
     "total": 158,
     "by_status": {
-      "verified": 3,
+      "verified": 54,
       "partial": 93,
-      "implemented": 58,
+      "implemented": 7,
       "planned": 4
     },
     "cancelled_count": 0,
     "domains": 10,
     "modules": 28,
-    "verified_total": 3,
+    "verified_total": 54,
     "last_verified_at": "2026-09-29",
     "platform_counts": {
       "windows": 99,
@@ -40,10 +40,10 @@
       },
       "web": {
         "applicable": 128,
-        "verified": 1,
+        "verified": 52,
         "partial": 0,
-        "pending": 127,
-        "last_verified_at": "2026-09-24"
+        "pending": 76,
+        "last_verified_at": "2026-09-29"
       },
       "android": {
         "applicable": 8,
@@ -60,7 +60,7 @@
         "last_verified_at": null
       }
     },
-    "completion": 78
+    "completion": 77
   },
   "product_version": "1.0.0.5",
   "platform_levels": {
@@ -2274,7 +2274,7 @@
             {
               "id": "erp-business-api",
               "name": "业务对接与外部系统集成",
-              "status": "verified",
+              "status": "implemented",
               "platforms": [
                 "web"
               ],
@@ -2282,10 +2282,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "verified",
-                  "verified_at": "2026-09-29",
-                  "run_count": 1,
-                  "accepted_count": 1
+                  "status": "pending",
+                  "verified_at": null,
+                  "run_count": 0,
+                  "accepted_count": 0
                 }
               ],
               "summary": "业务 API 与外部系统服务桥接。",
