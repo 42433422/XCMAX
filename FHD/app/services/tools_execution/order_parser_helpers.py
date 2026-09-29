@@ -178,6 +178,14 @@ def normalize_quantity_token(quantity_token: str):
 # 引号包裹的客户名（「客户A」/“客户A”/【客户A】）与键值写法（客户=客户A）优先级最高。
 _QUOTED_UNIT = re.compile(r"[「『“\"'《【\[]([^」』”\"'》】\]]{1,120})[」』”\"'》】\]]")
 _KEYED_UNIT = re.compile(r"(?:客户|购买单位|单位|公司)\s*[:：=]\s*([^\s，,。；;]{1,120})")
+# 无分隔符的口语写法「客户 验收客户」「客户验收客户」：客户名与标签之间只有空格/直接相连。
+# 名称必须像名字（≥2 字、非标签词、非数字串），避免把「客户编号」「客户列表」当成客户名。
+_KEYED_UNIT_LOOSE = re.compile(r"(?:客户|购买单位|购货单位)\s{0,8}([^\s，,。；;:：=]{2,20})")
+_UNIT_LABEL_TOKENS = frozenset(
+    {"客户", "编号", "名称", "列表", "清单", "信息", "资料", "产品", "订单", "发货", "采购", "对象", "为", "是"}
+)
+
+
 # 会话填充词与助手话术，绝不能被当成客户名（#2067）。
 _FILLER_FRAGMENTS = ("正在", "稍候", "确认执行", "处理", "发货单", "送货单", "出货单", "识别")
 _CONVERSATIONAL_FILLERS = frozenset(
@@ -219,6 +227,19 @@ def looks_like_conversational_filler(token: str) -> bool:
     return any(frag in t for frag in _FILLER_FRAGMENTS)
 
 
+def looks_like_customer_name_token(token: str) -> bool:
+    """判断 token 是否像客户名（用于末位兜底，拒绝动词残片与键值残片）。"""
+    t = re.sub(r"\s+", "", token or "")
+    if len(t) < 2 or t in _UNIT_LABEL_TOKENS:
+        return False
+    if re.search(r"\d", t) or re.search(r"[:：=]", t):
+        return False
+    # 兜底与口语键值只认可读中文名：避免把【shipment_generate】这类标识当成客户名（#2067）。
+    if not re.search(r"[\u4e00-\u9fff]", t):
+        return False
+    return not looks_like_conversational_filler(t)
+
+
 def extract_explicit_unit_name(text: str) -> str:
     """显式写法给出的客户名（引号/键值），无则返回空串。"""
     for pattern in (_QUOTED_UNIT, _KEYED_UNIT):
@@ -227,19 +248,36 @@ def extract_explicit_unit_name(text: str) -> str:
             name = cleanup_unit_name(m.group(1))
             if name:
                 return name
+    # 口语键值写法「客户 验收客户」：只在名称像客户名时采信，避免「客户编号」等标签误伤。
+    m = _KEYED_UNIT_LOOSE.search(text or "")
+    if m:
+        name = cleanup_unit_name(m.group(1))
+        if looks_like_customer_name_token(name):
+            return name
     return ""
 
 
 def loose_order_fallback(text: str) -> dict | None:
     """末位兜底：仅当首个 token 像客户名时，按「客户名 + 产品名」兜底（#2067）。"""
     parts = (text or "").split()
-    if len(parts) >= 2 and not looks_like_conversational_filler(parts[0]):
-        return {
-            "success": True,
-            "unit_name": parts[0].strip(),
-            "products": [{"name": " ".join(parts[1:]), "quantity_tins": 1, "tin_spec": 10.0}],
-        }
-    return None
+    if len(parts) < 2:
+        return None
+    # 显式键值写法（「客户=X」「客户 X」）优先，避免「客户=某客户」整体被当成客户名；
+    # 仍要走可读性校验，避免把助手话术里的【shipment_generate】当成客户名（#2067 回归）。
+    unit = extract_explicit_unit_name(text or "")
+    if unit and not looks_like_customer_name_token(unit):
+        unit = ""
+    if not unit and looks_like_customer_name_token(parts[0]):
+        unit = parts[0].strip()
+    if not unit:
+        return None
+    product_name = " ".join(parts[1:]).strip()
+    product_name = re.sub(r"^(?:商品|产品)\s*[:：=]\s*", "", product_name)
+    return {
+        "success": True,
+        "unit_name": unit,
+        "products": [{"name": product_name, "quantity_tins": 1, "tin_spec": 10.0}],
+    }
 
 
 def normalize_model_number_token(model_token: str) -> str:
