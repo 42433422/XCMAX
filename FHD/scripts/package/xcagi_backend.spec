@@ -245,7 +245,6 @@ desktop_excludes = [
     "numba",
     "onnxruntime",
     "OpenGL",
-    "opentelemetry",
     "patsy",
     "plotly",
     "playwright",
