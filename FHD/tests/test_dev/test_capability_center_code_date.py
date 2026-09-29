@@ -27,3 +27,20 @@ def test_commit_date_preserves_product_local_offset() -> None:
 
 def test_commit_date_rejects_missing_timezone() -> None:
     assert MODULE.project_code_date("2026-09-26T07:37:08") is None
+
+
+def test_completion_rounds_half_up_with_exact_integer_weights() -> None:
+    assert MODULE.completion([{"status": "partial"}] + [{"status": "planned"}] * 3) == 18
+    assert (
+        MODULE.completion(
+            [{"status": "partial"}, {"status": "verified"}] * 3 + [{"status": "planned"}] * 2
+        )
+        == 64
+    )
+
+
+def test_engineering_intro_quotes_the_live_completion_not_a_stale_number() -> None:
+    data, _warnings, domains = MODULE.build()
+    page = MODULE.render_index(data, domains)
+    pct = data["stats"]["completion"]
+    assert f"不表示“产品只有 {pct}% 已开发”" in page
