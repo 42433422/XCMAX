@@ -98,7 +98,12 @@ class ProductsService(NeuroEventPublisherMixin):
             return {"success": False, "message": "服务未正确初始化", "data": [], "total": 0}
 
         start_time = time.perf_counter()
-        cache_key = f"products:list:{unit_name}:{model_number}:{keyword}:{page}:{per_page}"
+        from app.infrastructure.tenant_scope import current_tenant_id
+
+        cache_key = (
+            f"products:list:{current_tenant_id()}:"
+            f"{unit_name}:{model_number}:{keyword}:{page}:{per_page}"
+        )
 
         # 尝试从缓存获取（仅对第一页和简单查询启用缓存）
         use_cache = (page == 1 and not model_number) or (keyword is None)

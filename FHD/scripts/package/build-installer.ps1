@@ -127,7 +127,8 @@ $buildInfo = @{
   version = $Version
   releaseId = $releaseId
 }
-$buildInfo | ConvertTo-Json -Compress | Set-Content -Path $buildInfoPath -Encoding UTF8
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText($buildInfoPath, (($buildInfo | ConvertTo-Json -Compress) + "`n"), $utf8NoBom)
 $backendSku = Join-Path $Root "dist\xcagi-backend\_internal\product-sku.json"
 $backendSkuDir = Split-Path $backendSku -Parent
 if (Test-Path $backendSkuDir) {
@@ -169,6 +170,18 @@ npm version $ToolchainVersion --no-git-tag-version --allow-same-version
 $ebAppId = $skuAppIds[$ProductSku]
 $ebPublishUrl = $skuUpdateUrls[$ProductSku]
 $ebArtifact = "XCAGI-$label-Setup-$Version-`${arch}.`${ext}"
+$installerNsh = Join-Path $Root "desktop\build\installer.nsh"
+$nshText = [System.IO.File]::ReadAllText($installerNsh)
+if ($nshText -notmatch '(?m)^!define XCAGI_PRODUCT_DISPLAY_VERSION "') {
+  throw "desktop/build/installer.nsh is missing XCAGI_PRODUCT_DISPLAY_VERSION"
+}
+$nshUpdated = [regex]::Replace(
+  $nshText,
+  '(?m)^!define XCAGI_PRODUCT_DISPLAY_VERSION ".*"',
+  "!define XCAGI_PRODUCT_DISPLAY_VERSION `"$Version`""
+)
+[System.IO.File]::WriteAllText($installerNsh, $nshUpdated)
+
 $electronBuilderArgs = @(
   'electron-builder',
   '--win', 'nsis', 'zip',

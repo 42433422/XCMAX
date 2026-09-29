@@ -26,6 +26,11 @@ on:
         required: false
         default: false
         type: boolean
+      candidate_only:
+        description: "Keep the Windows installer as a private acceptance candidate; do not publish the download pointer"
+        required: false
+        default: false
+        type: boolean
       frontend_run_id:
         description: "Run ID of the orchestrator's build-frontend job producing the shared xcagi-vue-dist artifact"
         required: false
@@ -174,6 +179,7 @@ jobs:
       always() &&
       inputs.windows_installer_only == true &&
       inputs.verify_only != true &&
+      inputs.candidate_only != true &&
       needs.windows-installer-delivery.result == 'success'
     runs-on: ubuntu-latest
     defaults:

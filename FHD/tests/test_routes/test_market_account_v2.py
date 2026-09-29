@@ -26,6 +26,12 @@ class TestMarketBaseUrl:
         monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "")
         assert ma._market_base_url() == "http://127.0.0.1:8765"
 
+    def test_market_spa_prefix_is_not_the_auth_api_origin(self, monkeypatch):
+        monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "https://xiu-ci.com/market")
+        assert ma._market_base_url() == "https://xiu-ci.com/market"
+        assert ma._market_api_base_url() == "https://xiu-ci.com"
+        assert f"{ma._market_api_base_url()}/api/auth/login" == "https://xiu-ci.com/api/auth/login"
+
 
 # ========================= _auth_header =======================================
 
