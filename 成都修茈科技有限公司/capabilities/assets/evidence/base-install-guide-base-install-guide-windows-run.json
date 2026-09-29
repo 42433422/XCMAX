@@ -1,0 +1,62 @@
+{
+  "kind": "feature-acceptance",
+  "feature": "base-install-guide",
+  "platform": "windows",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "ac10f29f1d2ad5d53123200070e81d406cb587ca",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "cases": [
+    {
+      "id": "W1",
+      "input": "打开 base-install-guide 对应的 Windows 客户端页面 /onboarding",
+      "actions": "在已安装的 XCAGI 企业版里用真实会话进入该页并停留",
+      "expected": "页面渲染出该能力的标题或工作区，而不是空白或登录页",
+      "observed": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「首次设置 - XCAGI」，主标题「SUNBIRD的配置方案」，地址 /onboarding。 画面文字节选：XCAGI · 创建您的数字公司 确认真实可用的工作空间能力 1 公司 2 行业 3 配置 为您的公司准备工作空间 SUNBIRD的配置方案 饰品包装 · 按账号授权准备行业功能。确认后进入系统，业务资料由您决定何时导入。 XC SUNBIRD 从真实可用的能力开始 智能对话 · 企业知识 · 数据对接 · AI 员工协作 这里只准备功能，不创建客户、商品或",
+      "result": "passed"
+    },
+    {
+      "id": "W2",
+      "input": "使用当前登录会话请求该能力相关接口",
+      "actions": "在页面上下文里 fetch 已登录接口",
+      "expected": "接口返回且不是 5xx",
+      "observed": "/api/health=200",
+      "result": "passed"
+    },
+    {
+      "id": "W3",
+      "input": "保留该页的截图与窗口录像",
+      "actions": "CDP 截图，并只录 XCAGI 窗口 3 秒",
+      "expected": "截图和 mp4 都非空，且与这次打开的页面一致",
+      "observed": "png=763604 mp4=170300 title=首次设置 - XCAGI",
+      "result": "passed"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/base-install-guide/base-install-guide.log",
+    "sha256": "4e604059f99ab2e2787cb3b152acf831d8a935b7b05e97cb181a66b7dcaa2af0",
+    "bytes": 1477
+  },
+  "media": [
+    {
+      "feature": "base-install-guide",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/base-install-guide/base-install-guide.png",
+      "sha256": "1bc7bbb40c7c59b7c7202fd50aeb07034dd8f702494b419a36c8eeb6b30a8eba",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「首次设置 - XCAGI」，主标题「SUNBIRD的配置方案」，地址 /onboarding。 画面文字节选：XCAGI · 创建您的数字公司 确认真实可用的工作空间能力 1 公司 2 行业 3 配置 为您的公司准备工作空间 SUNBIRD的配置方案 饰品包装 · 按账号授权准备行业功能。确认后进入系统，业务资料由您决定何时导入。 XC SUNBIRD 从真实可用的能力开始 智能对话 · 企业知识 · 数据对接 · AI 员工协作 这里只准备功能，不创建客户、商品或",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "base-install-guide",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/base-install-guide/base-install-guide.mp4",
+      "sha256": "463170cb185920497121f94484aa291f9150610b670412bf5eb843f99548ef81",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「首次设置 - XCAGI」，主标题「SUNBIRD的配置方案」，地址 /onboarding。 画面文字节选：XCAGI · 创建您的数字公司 确认真实可用的工作空间能力 1 公司 2 行业 3 配置 为您的公司准备工作空间 SUNBIRD的配置方案 饰品包装 · 按账号授权准备行业功能。确认后进入系统，业务资料由您决定何时导入。 XC SUNBIRD 从真实可用的能力开始 智能对话 · 企业知识 · 数据对接 · AI 员工协作 这里只准备功能，不创建客户、商品或",
+      "reviewed_at": "2026-09-29"
+    }
+  ]
+}

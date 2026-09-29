@@ -1,0 +1,10 @@
+feature=ind-taiyangniao
+at=2026-09-29T11:10:52.801Z
+route=/taiyangniao-pro
+landed=/taiyangniao-pro
+title=考勤表转换 - XCAGI
+heading=考勤表转换
+redirected=false
+navError=
+apis=[{"api":"/api/mods","status":200,"body":"{\"success\":true,\"data\":[{\"id\":\"accessories-packaging-industry\",\"name\":\"饰品包装行业包\",\"version\":\"1.0.0\",\"author\":\"成都修茈科技有限公司\",\"description\":\"饰品与包装制品行业壳：提供产品、订单、库存、客户与标签业务语义；考勤由通用 attendance-industry 模块提供。\",\"primary\":false,\"artifact\":\"mod\",\"scope\":\"global\",\"industry\":{\"id\":\"饰品包装\",\"name\":\"饰品包装行业\",\"description\":\"适用于饰品、展示包装与包装制品的产品、订单、库存和标签管理\",\"units\":{\"primary\":\"件\",\"secondary\":\"箱\",\"primary_label\":\"件数\",\"sec"}]
+text=饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 考勤表转换 SUNBIRD 副窗 ◈ 工作区 考勤行业包 Mod ID: taiyangniao-pro — 在库项目中编辑后执行 modman push 部署到 XCAGI。 考勤转换设置 （钉钉 → 明细裁窗、加班规则；原在「审批中心 → 流程规则」中，已迁于此） 上传转化 将钉钉导出的考勤 xlsx 上传后，由考勤模块 attendance-industry: backend/attendance_engine/ 按列别名解析「每日统计」等表。默认按侧栏「人员管理」（主库产品表：姓名、部门对应「单位」、性质对应「规格」）重排「明细」每人 6 行，再按姓名把钉钉数据一一填入；无钉钉记录则打卡区留空。取消勾选下方选项时，改为仅使用固定模板「明细」里原有姓名名单。路径相对 WORKSPACE_ROOT（默认写入 424/）。成功后会自动下载，也可点「再次下载」。 钉钉考勤表 输出相对路径 模板相对路径（固定） 按你指定的固定模板回填：424/考勤-2026-3月份考勤统计表.xlsx 统计月份（可选） 表头所在行（0 为自动识别） 按「人员管理」名单重排明细并回填（有钉钉则填，无则空） 与侧栏「人员管理」同一数据源；请先在其中维护员工名单。 本地规则识别不出时，调用我的 LLM 智能识别表头 仅当出现 "表头未识别" 或 "0 行" 时才会真正调用模型；需后端配置 OPENAI_API_KEY 或 DEEPSEEK_API_KEY。 上传并转换 考勤规则 与考勤模块 attendance-industry: backend/attendance_engine/rules.py 默认配置一致；转换时使用同一套逻辑。 加载中… 小C助理

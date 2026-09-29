@@ -95,7 +95,7 @@ test.describe('P0 critical paths', () => {
       expect(exported.sha256).toHaveLength(64)
       await captureEvidence(page, '06-customer-data-loop.png')
       await page.goto('/orders', { waitUntil: 'domcontentloaded', timeout: 30_000 })
-      await expect(page).toHaveURL((url) => url.pathname === '/settings', { timeout: 25_000 })
+      await expect(page).toHaveURL((url) => url.pathname === '/mod/xcagi-erp-domain-bridge/orders', { timeout: 25_000 })
       return
     }
     const order = {
@@ -196,6 +196,6 @@ test.describe('P0 critical paths', () => {
     expect(exported.sha256).toHaveLength(64)
     await captureEvidence(page, '07-product-data-loop.png')
     await page.goto('/materials', { waitUntil: 'domcontentloaded', timeout: 30_000 })
-    await expect(page).toHaveURL((url) => url.pathname === '/settings', { timeout: 25_000 })
+    await expect(page).toHaveURL((url) => url.pathname === '/mod/xcagi-erp-domain-bridge/materials', { timeout: 25_000 })
   })
 })

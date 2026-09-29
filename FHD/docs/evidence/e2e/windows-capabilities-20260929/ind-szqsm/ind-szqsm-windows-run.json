@@ -1,0 +1,62 @@
+{
+  "kind": "feature-acceptance",
+  "feature": "ind-szqsm",
+  "platform": "windows",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "ac10f29f1d2ad5d53123200070e81d406cb587ca",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "cases": [
+    {
+      "id": "W1",
+      "input": "打开 ind-szqsm 对应的 Windows 客户端页面 /sz-qsm-pro",
+      "actions": "在已安装的 XCAGI 企业版里用真实会话进入该页并停留",
+      "expected": "页面渲染出该能力的标题或工作区，而不是空白或登录页",
+      "observed": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「奇士美 PRO - XCAGI」，主标题「奇士美 PRO」，地址 /sz-qsm-pro。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 奇士美 PRO SUNBIRD 副窗 ◈ 工作区 奇士美 PRO Mod ID: sz-qsm-pro — 账号定制包：产品/客户侧栏、涂料 AI 助手与微信电话业务员。",
+      "result": "passed"
+    },
+    {
+      "id": "W2",
+      "input": "使用当前登录会话请求该能力相关接口",
+      "actions": "在页面上下文里 fetch 已登录接口",
+      "expected": "接口返回且不是 5xx",
+      "observed": "/api/mods=200",
+      "result": "passed"
+    },
+    {
+      "id": "W3",
+      "input": "保留该页的截图与窗口录像",
+      "actions": "CDP 截图，并只录 XCAGI 窗口 3 秒",
+      "expected": "截图和 mp4 都非空，且与这次打开的页面一致",
+      "observed": "png=971503 mp4=134637 title=奇士美 PRO - XCAGI",
+      "result": "passed"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ind-szqsm/ind-szqsm.log",
+    "sha256": "370aa5cde1ded51ccff5f414e005b456caa469cb28372c4ec1e5d25bd2fcd498",
+    "bytes": 1407
+  },
+  "media": [
+    {
+      "feature": "ind-szqsm",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ind-szqsm/ind-szqsm.png",
+      "sha256": "968d29fdd08e2e8dcb090139d53883cbe033f9f783b798b48ed256ed0df52144",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「奇士美 PRO - XCAGI」，主标题「奇士美 PRO」，地址 /sz-qsm-pro。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 奇士美 PRO SUNBIRD 副窗 ◈ 工作区 奇士美 PRO Mod ID: sz-qsm-pro — 账号定制包：产品/客户侧栏、涂料 AI 助手与微信电话业务员。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ind-szqsm",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ind-szqsm/ind-szqsm.mp4",
+      "sha256": "542b8c31370f2ea86a03a79e58679e3c9b65b7388fc40e8f781f615471665e82",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「奇士美 PRO - XCAGI」，主标题「奇士美 PRO」，地址 /sz-qsm-pro。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 奇士美 PRO SUNBIRD 副窗 ◈ 工作区 奇士美 PRO Mod ID: sz-qsm-pro — 账号定制包：产品/客户侧栏、涂料 AI 助手与微信电话业务员。",
+      "reviewed_at": "2026-09-29"
+    }
+  ]
+}

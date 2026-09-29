@@ -1,0 +1,10 @@
+feature=ind-packaging
+at=2026-09-29T11:10:16.687Z
+route=/
+landed=/
+title=智能对话 - XCAGI
+heading=智能对话
+redirected=false
+navError=
+apis=[{"api":"/api/mods","status":200,"body":"{\"success\":true,\"data\":[{\"id\":\"accessories-packaging-industry\",\"name\":\"饰品包装行业包\",\"version\":\"1.0.0\",\"author\":\"成都修茈科技有限公司\",\"description\":\"饰品与包装制品行业壳：提供产品、订单、库存、客户与标签业务语义；考勤由通用 attendance-industry 模块提供。\",\"primary\":false,\"artifact\":\"mod\",\"scope\":\"global\",\"industry\":{\"id\":\"饰品包装\",\"name\":\"饰品包装行业\",\"description\":\"适用于饰品、展示包装与包装制品的产品、订单、库存和标签管理\",\"units\":{\"primary\":\"件\",\"secondary\":\"箱\",\"primary_label\":\"件数\",\"sec"}]
+text=饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 智能对话 SUNBIRD 副窗 ◈ 工作区 查产品 订单 库存预警 打印标签 考勤 已为您解决 0 次任务 · 预计节约人工费用 ¥0 你好，我是饰品包装助手。 查产品与订单 管库存与标签 请说出需求。 02:53 任务 对话 新建对话 清空 暂无历史 发送消息后会自动记录在这里 新对话 审批 上传附件 解析办公文件 主动意识启用 语音播报 按住说话 发送 请输入内容后再发送

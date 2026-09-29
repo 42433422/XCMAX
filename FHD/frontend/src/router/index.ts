@@ -25,7 +25,7 @@ import { DESKTOP_ADMIN_FORBIDDEN_MESSAGE, isAdminConsoleSpa, resolveAdminConsole
 import { isDesktopShell } from '@/utils/desktopShell'
 import { ADMIN_HOST_ROUTE_RECORDS } from '@admin-console-inject/adminHostRoutes'
 import { ADMIN_OPERATOR_BLOCKED_ROUTE_NAMES, ADMIN_OPERATOR_HOME_ROUTE } from '@/constants/adminOperatorNav'
-import { buildRoleMenuProfile, canShowCoreMenuKey, UNSCOPED_HOST_BUSINESS_KEYS } from '@/utils/roleMenuProfile'
+import { buildRoleMenuProfile, canShowCoreMenuKey, tenantScopedBusinessPath, UNSCOPED_HOST_BUSINESS_KEYS } from '@/utils/roleMenuProfile'
 import { isClientErpSidebarContext } from '@/constants/genericModPack'
 import { resolveInitialRoutes } from './initialRouteSelection'
 import { CORE_ROUTES } from './routes/core'
@@ -142,6 +142,11 @@ router.beforeEach(async (to, _from, next) => {
       }
     }
     if (to.name && UNSCOPED_HOST_BUSINESS_KEYS.has(String(to.name)) && profile.loaded && profile.tenantId != null) {
+      const modPage = tenantScopedBusinessPath(String(to.name))
+      if (modPage && router.resolve(modPage).matched.length > 0 && to.path !== modPage) {
+        next({ path: modPage, replace: true })
+        return
+      }
       next({ name: 'settings', replace: true })
       return
     }

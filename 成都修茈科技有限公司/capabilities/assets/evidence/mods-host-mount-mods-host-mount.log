@@ -1,0 +1,10 @@
+feature=mods-host-mount
+at=2026-09-29T11:09:31.454Z
+route=/private-mod-delivery
+landed=/private-mod-delivery
+title=生产员工 · 私有交付 - XCAGI
+heading=生产员工 · 私有交付
+redirected=false
+navError=
+apis=[{"api":"/api/mods/loading-status","status":200,"body":"{\"success\":true,\"data\":{\"mods_root\":\"C:\\\\Users\\\\97088\\\\AppData\\\\Roaming\\\\XCAGI\\\\mods\",\"mods_search_roots\":[\"C:\\\\Users\\\\97088\\\\AppData\\\\Roaming\\\\XCAGI\\\\mods\",\"C:\\\\XCAGI-r2\\\\resources\\\\backend\\\\_internal\\\\mods\"],\"discovered_mod_ids\":[\"accessories-packaging-industry\",\"attendance-industry\",\"lan-gate-ai-employee\",\"xcagi-approval-bridge\",\"xcagi-core-workflow-employees\",\"xcagi-customer-service-bridge\",\"x"}]
+text=饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 生产员工 · 私有交付 SUNBIRD 副窗 ◈ 工作区 返回 AI 生态 生产员工 客户私有 Mod 生产中心 客户定制交付 私有 Mod 生产中心 模块轨与员工轨分开推进。每个节点是一条有先后约束的流程： 制作 → 测试 → 验收 → 交付；不通过只能转返工，不能跨阶段跳跃。 同步中… 定制入口 说明你要的模块或员工 提交后生产员工会自动制作和测试；验收后自动安装，运行与业务验证通过才算交付。 发起定制 正在读取客户私有 Mod… 小C助理

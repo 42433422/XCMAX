@@ -1,0 +1,10 @@
+feature=erp-approval
+at=2026-09-29T11:07:54.961Z
+route=/approval-hub/workspace
+landed=/approval-hub/workspace
+title=审批工作台 - XCAGI
+heading=业务审批
+redirected=false
+navError=
+apis=[{"api":"/api/auth/me","status":200,"body":"{\"success\":true,\"data\":{\"user\":{\"id\":2,\"username\":\"SUNBIRD\",\"display_name\":\"SUNBIRD\",\"email\":\"sunbird@xcagi.local\",\"email_display\":\"sunbird@xcagi.local\",\"no_email\":false,\"role\":\"user\",\"is_active\":true,\"avatar_url\":\"\"},\"permissions\":[\"shipment.edit\",\"product.edit\",\"etl.execute\",\"dataset.read\",\"material.edit\",\"shipment.create\",\"shipment.view\",\"material.view\",\"dataset.write\",\"etl.read\",\"etl.template."}]
+text=饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 业务审批 SUNBIRD 副窗 ◈ 工作区 工作台 流程管理 流程规则 审批工作台 处理待审批事项，跟踪审批进度 0 待审批 0 我发起的 0 已通过 0 已拒绝 待我审批 查看全部 暂无待审批事项 我发起的 清理 查看全部 暂无发起的审批 小C助理

@@ -26,6 +26,27 @@ export const UNSCOPED_HOST_BUSINESS_KEYS = new Set([
   'traditional-mode', 'approval-hub', 'tools',
 ])
 
+/** Host routes above are not tenant-scoped. Enterprise tenants land on these Mod pages instead of settings. */
+export const TENANT_SCOPED_BUSINESS_PATHS: Record<string, string> = {
+  products: '/mod/xcagi-erp-domain-bridge/products',
+  customers: '/mod/xcagi-erp-domain-bridge/customers',
+  orders: '/mod/xcagi-erp-domain-bridge/orders',
+  'orders-create': '/mod/xcagi-erp-domain-bridge/orders/create',
+  'shipment-records': '/mod/xcagi-erp-domain-bridge/shipment-records',
+  materials: '/mod/xcagi-erp-domain-bridge/materials',
+  inventory: '/mod/xcagi-erp-domain-bridge/inventory',
+  print: '/mod/xcagi-erp-domain-bridge/print',
+  'printer-list': '/mod/xcagi-erp-domain-bridge/printer-list',
+  'template-preview': '/mod/xcagi-erp-domain-bridge/template-preview',
+  'traditional-mode': '/mod/xcagi-erp-domain-bridge/traditional-mode',
+  'approval-hub': '/mod/xcagi-approval-bridge/approval-hub/workspace',
+  tools: '/mod/xcagi-office-employee-pack-bridge/tools',
+}
+
+export function tenantScopedBusinessPath(routeName: string): string | null {
+  return TENANT_SCOPED_BUSINESS_PATHS[routeName] || null
+}
+
 const ENTERPRISE_GENERIC_CORE_KEYS = new Set([
   'chat',
   'im',
@@ -86,10 +107,7 @@ export function buildRoleMenuProfile(source: AccountRoleSource, hasIndustryBusin
   }
 
   const visibleCoreKeys = new Set(ENTERPRISE_GENERIC_CORE_KEYS)
-  if (source.tenantId != null) {
-    for (const key of UNSCOPED_HOST_BUSINESS_KEYS) visibleCoreKeys.delete(key)
-  }
-  if (hasIndustryBusinessMod && source.tenantId == null) {
+  if (hasIndustryBusinessMod) {
     for (const key of ENTERPRISE_BUSINESS_CORE_KEYS) visibleCoreKeys.add(key)
   }
   return {
