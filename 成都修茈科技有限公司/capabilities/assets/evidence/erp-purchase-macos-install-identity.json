@@ -1,11 +1,11 @@
 {
   "schema": "xcagi.gate.evidence.v1",
   "gate": "macos-install",
-  "at_utc": "2026-09-28T20:52:17Z",
-  "dmg": "/Users/Shared/XCAGI-FULLCLOSED-20260928/artifact/XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg",
+  "at_utc": "2026-09-29T12:18:27Z",
+  "dmg": "/private/tmp/xcmax-mac-build-027c/FHD/release/xcagi-v1.0.0.5/enterprise/XCAGI-Enterprise-1.0.0.5-mac-arm64.dmg",
   "installed_app": "/Applications/XCAGI.app",
   "destination_is_applications": true,
-  "dmg_sha256": "a05a482e4936d11e64d475cca6e0cffab3abfb84db13801df8bb2e531875dcf7",
+  "dmg_sha256": "591da087bfd77b903178cf4baad1f5e96c3e0e9beff5654b1efa98c0dc5f66b4",
   "codesign_ok": true,
   "gatekeeper": [
     0,
@@ -14,10 +14,10 @@
   "gatekeeper_ok": true,
   "build_info": {
     "schema_version": 1,
-    "gitSha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+    "gitSha": "027c8ec59443f1be9d7934e77282348e7483f883",
     "version": "1.0.0.5",
-    "releaseId": "xcagi-1.0.0.5-37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
-    "builtAt": "2026-09-28T01:42:42.396Z"
+    "releaseId": "xcagi-1.0.0.5-027c8ec59443f1be9d7934e77282348e7483f883",
+    "builtAt": "2026-09-29T11:16:03.975Z"
   },
   "verdict": "PASS"
 }

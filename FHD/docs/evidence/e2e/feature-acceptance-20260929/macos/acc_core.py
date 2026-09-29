@@ -24,14 +24,22 @@ for _k in ("ALL_PROXY", "all_proxy", "HTTP_PROXY", "http_proxy", "HTTPS_PROXY", 
 
 import websocket  # noqa: E402
 
-# 端口可用环境变量覆盖：默认仍是已安装客户端的标准端口（9222 / 17500）；
-# 当本机另有实例占用标准端口时，可用隔离端口启动同一份已安装客户端后再验收。
-CDP = os.environ.get("ACC_CDP", "http://127.0.0.1:9222")
-BASE = os.environ.get("ACC_BASE", "http://127.0.0.1:17500")
-FFMPEG = str(Path.home() / "Library/Caches/ms-playwright/ffmpeg-1011/ffmpeg-mac")
+# 端口可用环境变量覆盖：默认仍是已安装客户端的标准端口（9222 / 17500）。
+# XCAGI_* 与较早的 ACC_* 都认，便于隔离端口时同一份已安装客户端再验收。
+CDP = os.environ.get("XCAGI_CDP") or os.environ.get("ACC_CDP", "http://127.0.0.1:9222")
+BASE = os.environ.get("XCAGI_API_BASE") or os.environ.get("ACC_BASE", "http://127.0.0.1:17500")
+FFMPEG = os.environ.get(
+    "XCAGI_FFMPEG", str(Path.home() / "Library/Caches/ms-playwright/ffmpeg-1011/ffmpeg-mac"))
 HERE = Path(__file__).resolve().parent
-REPO_REL = "FHD/docs/evidence/e2e/feature-acceptance-20260929"
-OUT = HERE.parent
+REPO = HERE.parents[4].parent
+REPO_REL = os.environ.get("XCAGI_ACCEPT_REL", "FHD/docs/evidence/e2e/feature-acceptance-20260929")
+OUT = REPO / REPO_REL
+APP_PATH = Path(os.environ.get("XCAGI_APP_PATH", "/Applications/XCAGI.app"))
+
+
+def accept_account() -> str:
+    """运行记录里的账号用户名。密码只留在 XCAGI_TEST_PASS，不读取、不落盘。"""
+    return os.environ.get("XCAGI_ACCEPT_ACCOUNT") or os.environ.get("XCAGI_TEST_USER") or ""
 _opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
@@ -239,8 +247,9 @@ class Page:
 
 
 def identity() -> dict:
-    info = json.loads(Path("/Applications/XCAGI.app/Contents/Resources/build-info.json").read_text())
-    return {"app_version": info["version"], "app_git_sha": info["gitSha"], "built_at": info["builtAt"]}
+    info = json.loads((APP_PATH / "Contents/Resources/build-info.json").read_text())
+    return {"app_version": info["version"], "app_git_sha": info["gitSha"], "built_at": info["builtAt"],
+            "account": accept_account()}
 
 
 class Feature:
@@ -301,14 +310,16 @@ class Feature:
             "kind": "feature-acceptance", "feature": self.fid, "name": self.name, "platform": "macos",
             "status": status, "verdict": {"blocked": "BLOCKED", "failed": "FAIL", "passed": "PASS"}[status],
             "app_git_sha": ident["app_git_sha"], "app_version": ident["app_version"],
-            "verified_at": time.strftime("%Y-%m-%d"), "passed": passed, "failed": failed,
+            "account": ident.get("account") or accept_account(),
+            "verified_at": os.environ.get("XCAGI_ACCEPT_DAY") or time.strftime("%Y-%m-%d"),
+            "passed": passed, "failed": failed,
             "cases": self.cases,
             "media": [{"feature": self.fid, "path": f"{REPO_REL}/{self.fid}/macos/{m['path'].name}",
                        "sha256": sha256(m["path"]), "kind": m["kind"], "tag": m["tag"]}
                       for m in self.media],
             "log": {"path": f"{REPO_REL}/{self.fid}/macos/run.log", "sha256": sha256(log_path),
                     "bytes": log_path.stat().st_size},
-            "method": "经 CDP(127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏",
+            "method": f"经 CDP({CDP}) 直连驱动已安装 {APP_PATH}：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏",
         }
         (OUT / self.fid / "draft-run.json").write_text(json.dumps(draft, ensure_ascii=False, indent=1),
                                                         encoding="utf-8")

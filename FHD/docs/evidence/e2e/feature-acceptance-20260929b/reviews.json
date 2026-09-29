@@ -1,0 +1,482 @@
+{
+  "ai-chat-core": {
+    "result": "智能对话页。助手回复可管产品、客户、订单和库存，以及数据查询、Excel 导入导出、生成文档。右栏 19 条消息仅本地。底栏有按住说话、发送，语音播报已勾选。左下 v1.0.0.5，系统正常，顶栏 SUNBIRD。",
+    "operation": "录屏结束停在上述结果画面。智能对话页。助手回复可管产品、客户、订单和库存，以及数据查询、Excel 导入导出、生成文档。右栏 19 条消息仅本地。底栏有按住说话、发送，语音播报已勾选。左下 v1.0.0.5，系统正常，顶栏 SUNBIRD。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。智能对话页。助手回复可管产品、客户、订单和库存，以及数据查询、Excel 导入导出、生成文档。右栏 19 条消息仅本地。底栏有按住说话、发送，语音播报已勾选。左下 v1.0.0.5，系统正常，顶栏 SUNBIRD。 各步结果均为通过。"
+  },
+  "ai-csv": {
+    "result": "工具表，与 Excel 工具同一画面，列出 excel_analysis、import_excel_to_database、generate_office_document 等 AI Planner 卡片。",
+    "operation": "录屏结束停在上述结果画面。工具表，与 Excel 工具同一画面，列出 excel_analysis、import_excel_to_database、generate_office_document 等 AI Planner 卡片。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。工具表，与 Excel 工具同一画面，列出 excel_analysis、import_excel_to_database、generate_office_document 等 AI Planner 卡片。 各步结果均为通过。"
+  },
+  "ai-employee-pack": {
+    "result": "工具表，与 Excel 工具同一画面，列出 excel_analysis、import_excel_to_database、generate_office_document 等 AI Planner 卡片。",
+    "operation": "录屏结束停在上述结果画面。工具表，与 Excel 工具同一画面，列出 excel_analysis、import_excel_to_database、generate_office_document 等 AI Planner 卡片。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。工具表，与 Excel 工具同一画面，列出 excel_analysis、import_excel_to_database、generate_office_document 等 AI Planner 卡片。 各步结果均为通过。"
+  },
+  "ai-employees-workflow": {
+    "result": "员工空间。企业工位 1，饰品包装行业包定制。已托管副窗一键托管开。工作中最近活跃视觉全忙。待命已托管但暂无忙态。工位「考勤 AI 助手」副窗未启用，开关已关。",
+    "operation": "录屏结束停在上述结果画面。员工空间。企业工位 1，饰品包装行业包定制。已托管副窗一键托管开。工作中最近活跃视觉全忙。待命已托管但暂无忙态。工位「考勤 AI 助手」副窗未启用，开关已关。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。员工空间。企业工位 1，饰品包装行业包定制。已托管副窗一键托管开。工作中最近活跃视觉全忙。待命已托管但暂无忙态。工位「考勤 AI 助手」副窗未启用，开关已关。 各步结果均为通过。"
+  },
+  "ai-excel": {
+    "result": "工具表，标题为 AI Planner 可调用的工具。可见 excel_analysis、excel_schema_understand、excel_join_compare、excel_chart_recommend、import_excel_to_database、template_preview、generate_office_document。",
+    "operation": "录屏结束停在上述结果画面。工具表，标题为 AI Planner 可调用的工具。可见 excel_analysis、excel_schema_understand、excel_join_compare、excel_chart_recommend、import_excel_to_database、template_preview、generate_office_document。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。工具表，标题为 AI Planner 可调用的工具。可见 excel_analysis、excel_schema_understand、excel_join_compare、excel_chart_recommend、import_excel_to_database、template_preview、generate_office_document。 各步结果均为通过。"
+  },
+  "ai-intent": {
+    "result": "聊天调试工作台。模式普通版高亮、专业版未选。输入示例「给成都客户生成并打印今天发货单」。意图测试包为空，写着暂无测试句子。页眉说明此页只做本地模拟，不调用真实工具。",
+    "operation": "录屏结束停在上述结果画面。聊天调试工作台。模式普通版高亮、专业版未选。输入示例「给成都客户生成并打印今天发货单」。意图测试包为空，写着暂无测试句子。页眉说明此页只做本地模拟，不调用真实工具。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。聊天调试工作台。模式普通版高亮、专业版未选。输入示例「给成都客户生成并打印今天发货单」。意图测试包为空，写着暂无测试句子。页眉说明此页只做本地模拟，不调用真实工具。 各步结果均为通过。"
+  },
+  "ai-knowledge": {
+    "result": "企业知识网络图谱。可见 Persy 核心、内容与关系节点，底部提问「客户续约需要谁审批?」。",
+    "operation": "录屏结束停在上述结果画面。企业知识网络图谱。可见 Persy 核心、内容与关系节点，底部提问「客户续约需要谁审批?」。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。failed。企业知识网络图谱。可见 Persy 核心、内容与关系节点，底部提问「客户续约需要谁审批?」。 未通过明细：M2 failed：HTTP 403 40ms；{\"success\": false, \"error_code\": \"http_403\", \"message\": \"旧知识索引未提供租户隔离\", \"path\": \"/api/knowledge/v1/ingest\"}；M3 failed：HTTP 403 37ms；{\"success\": false, \"error_code\": \"http_403\", \"message\": \"旧知识索引未提供租户隔离\", \"path\": \"/api/knowledge/v1/query\"}"
+  },
+  "ai-ocr-doc": {
+    "result": "智能对话页，与对话验收同一界面。可见第二轮测试问答，右栏 15 条消息仅本地，按住说话可用。画面不是 OCR 结果文件本身。",
+    "operation": "录屏结束停在上述结果画面。智能对话页，与对话验收同一界面。可见第二轮测试问答，右栏 15 条消息仅本地，按住说话可用。画面不是 OCR 结果文件本身。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。智能对话页，与对话验收同一界面。可见第二轮测试问答，右栏 15 条消息仅本地，按住说话可用。画面不是 OCR 结果文件本身。 各步结果均为通过。"
+  },
+  "ai-pdf": {
+    "result": "工具表列出 generate_office_document 等 AI Planner 卡片。画面里没有打开 PDF 转换产物。",
+    "operation": "录屏结束停在上述结果画面。工具表列出 generate_office_document 等 AI Planner 卡片。画面里没有打开 PDF 转换产物。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。failed。工具表列出 generate_office_document 等 AI Planner 卡片。画面里没有打开 PDF 转换产物。 未通过明细：M2 failed：HTTP 200 89ms；{\"success\": true, \"data\": {\"ok\": false, \"summary\": \"转换未生成输出文件：/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-ai-pdf-1790684494/outputs/p；M3 failed：HTTP 200 25ms；{\"success\": true, \"data\": {\"files\": [{\"path\": \"temp_excel/mac0929-ai-pdf-1790684494/outputs/pdf-read.json\", \"kind\": \"text\", \"error\": \"file_not_found\"}]}}"
+  },
+  "ai-ppt": {
+    "result": "员工工作流管理。有流程可视化、进入员工空间、六部门编制图。正文写按六线六部门分组展示 52 岗 AI 员工。",
+    "operation": "录屏结束停在上述结果画面。员工工作流管理。有流程可视化、进入员工空间、六部门编制图。正文写按六线六部门分组展示 52 岗 AI 员工。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。员工工作流管理。有流程可视化、进入员工空间、六部门编制图。正文写按六线六部门分组展示 52 岗 AI 员工。 各步结果均为通过。"
+  },
+  "ai-task-workspace": {
+    "result": "独立工作区，标题「MAC验收0929任务」，状态等待审批，第 1 次尝试 1 次运行。进度 0%，按钮审批并执行、暂停、取消。",
+    "operation": "录屏结束停在上述结果画面。独立工作区，标题「MAC验收0929任务」，状态等待审批，第 1 次尝试 1 次运行。进度 0%，按钮审批并执行、暂停、取消。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。独立工作区，标题「MAC验收0929任务」，状态等待审批，第 1 次尝试 1 次运行。进度 0%，按钮审批并执行、暂停、取消。 各步结果均为通过。"
+  },
+  "ai-tts": {
+    "result": "系统设置个人主页。展示名称和登录名 SUNBIRD，邮箱 sunbird@xcagi.local，余额 ¥97.06。画面没有打开语音试听。",
+    "operation": "录屏结束停在上述结果画面。系统设置个人主页。展示名称和登录名 SUNBIRD，邮箱 sunbird@xcagi.local，余额 ¥97.06。画面没有打开语音试听。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。系统设置个人主页。展示名称和登录名 SUNBIRD，邮箱 sunbird@xcagi.local，余额 ¥97.06。画面没有打开语音试听。 各步结果均为通过。"
+  },
+  "ai-word": {
+    "result": "工具表，标题为 AI Planner 可调用的工具。可见 excel_analysis、excel_schema_understand、excel_join_compare、excel_chart_recommend、import_excel_to_database、template_preview、generate_office_document。",
+    "operation": "录屏结束停在上述结果画面。工具表，标题为 AI Planner 可调用的工具。可见 excel_analysis、excel_schema_understand、excel_join_compare、excel_chart_recommend、import_excel_to_database、template_preview、generate_office_document。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。工具表，标题为 AI Planner 可调用的工具。可见 excel_analysis、excel_schema_understand、excel_join_compare、excel_chart_recommend、import_excel_to_database、template_preview、generate_office_document。 各步结果均为通过。"
+  },
+  "base-config": {
+    "result": "系统设置个人主页。展示名称和登录名 SUNBIRD，邮箱 sunbird@xcagi.local，余额 ¥97.06。画面没有打开语音试听。",
+    "operation": "录屏结束停在上述结果画面。系统设置个人主页。展示名称和登录名 SUNBIRD，邮箱 sunbird@xcagi.local，余额 ¥97.06。画面没有打开语音试听。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。系统设置个人主页。展示名称和登录名 SUNBIRD，邮箱 sunbird@xcagi.local，余额 ¥97.06。画面没有打开语音试听。 各步结果均为通过。"
+  },
+  "base-db": {
+    "result": "数据来源页。私人数据库读取助手，当前来源本地消息数据库，状态不可用。通用卡「本地消息数据库」标规划中、需要授权。下方 QQ、钉钉、企业微信、飞书等也标规划中。",
+    "operation": "录屏结束停在上述结果画面。数据来源页。私人数据库读取助手，当前来源本地消息数据库，状态不可用。通用卡「本地消息数据库」标规划中、需要授权。下方 QQ、钉钉、企业微信、飞书等也标规划中。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。数据来源页。私人数据库读取助手，当前来源本地消息数据库，状态不可用。通用卡「本地消息数据库」标规划中、需要授权。下方 QQ、钉钉、企业微信、飞书等也标规划中。 各步结果均为通过。"
+  },
+  "base-device-bind": {
+    "result": "系统设置。拟人 Persy 暂无入数，可见「登录」和「登录后同步修茈市场」。",
+    "operation": "录屏结束停在上述结果画面。系统设置。拟人 Persy 暂无入数，可见「登录」和「登录后同步修茈市场」。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。failed。系统设置。拟人 Persy 暂无入数，可见「登录」和「登录后同步修茈市场」。 未通过明细：M3 failed：受阻：需要安装 XCAGI 移动端的 Android/iOS 真机在同网段扫码，本轮只有 macOS 单机"
+  },
+  "base-edition-pack": {
+    "result": "AI 员工市场，宿主基础能力分类下共 0 件，写暂无商品。分类菜单已打开。",
+    "operation": "录屏结束停在上述结果画面。AI 员工市场，宿主基础能力分类下共 0 件，写暂无商品。分类菜单已打开。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。AI 员工市场，宿主基础能力分类下共 0 件，写暂无商品。分类菜单已打开。 各步结果均为通过。"
+  },
+  "base-health": {
+    "result": "系统设置个人主页，登录名 SUNBIRD，邮箱 sunbird@xcagi.local，模型服务余额约 ¥97。左下系统正常 v1.0.0.5。",
+    "operation": "录屏结束停在上述结果画面。系统设置个人主页，登录名 SUNBIRD，邮箱 sunbird@xcagi.local，模型服务余额约 ¥97。左下系统正常 v1.0.0.5。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。系统设置个人主页，登录名 SUNBIRD，邮箱 sunbird@xcagi.local，模型服务余额约 ¥97。左下系统正常 v1.0.0.5。 各步结果均为通过。"
+  },
+  "base-install-guide": {
+    "result": "创建您的数字公司，步骤停在公司。公司名称已填 SUNBIRD，按钮「让 XC 认识我的公司」。",
+    "operation": "录屏结束停在上述结果画面。创建您的数字公司，步骤停在公司。公司名称已填 SUNBIRD，按钮「让 XC 认识我的公司」。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。创建您的数字公司，步骤停在公司。公司名称已填 SUNBIRD，按钮「让 XC 认识我的公司」。 各步结果均为通过。"
+  },
+  "base-mac-client": {
+    "result": "桌面运行时。桌面模式是。数据目录、数据库、Mod、模型都指向 /Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer。存储本地 SQLite。本地模型暂无已安装模型。",
+    "operation": "录屏结束停在上述结果画面。桌面运行时。桌面模式是。数据目录、数据库、Mod、模型都指向 /Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer。存储本地 SQLite。本地模型暂无已安装模型。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。桌面运行时。桌面模式是。数据目录、数据库、Mod、模型都指向 /Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer。存储本地 SQLite。本地模型暂无已安装模型。 各步结果均为通过。"
+  },
+  "base-rbac": {
+    "result": "角色与权限。左侧有多条「MAC验收0929角色」，选中项说明为验收，权限勾选全空。右侧用户角色未选择用户。",
+    "operation": "录屏结束停在上述结果画面。角色与权限。左侧有多条「MAC验收0929角色」，选中项说明为验收，权限勾选全空。右侧用户角色未选择用户。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。角色与权限。左侧有多条「MAC验收0929角色」，选中项说明为验收，权限勾选全空。右侧用户角色未选择用户。 各步结果均为通过。"
+  },
+  "base-settings": {
+    "result": "系统设置个人主页已展开。展示名称和登录名都是 SUNBIRD，邮箱 sunbird@xcagi.local，登录名不可修改。余额 ¥97.06。有退出登录按钮。",
+    "operation": "录屏结束停在上述结果画面。系统设置个人主页已展开。展示名称和登录名都是 SUNBIRD，邮箱 sunbird@xcagi.local，登录名不可修改。余额 ¥97.06。有退出登录按钮。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。系统设置个人主页已展开。展示名称和登录名都是 SUNBIRD，邮箱 sunbird@xcagi.local，登录名不可修改。余额 ¥97.06。有退出登录按钮。 各步结果均为通过。"
+  },
+  "base-update-mgmt": {
+    "result": "系统设置模型服务区，余额 ¥97.06。头像下是蓝色「登录」按钮和「登录后同步修茈市场」，个人主页未展开。",
+    "operation": "录屏结束停在上述结果画面。系统设置模型服务区，余额 ¥97.06。头像下是蓝色「登录」按钮和「登录后同步修茈市场」，个人主页未展开。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。系统设置模型服务区，余额 ¥97.06。头像下是蓝色「登录」按钮和「登录后同步修茈市场」，个人主页未展开。 各步结果均为通过。"
+  },
+  "ch-asr": {
+    "result": "智能对话页，底栏有按住说话和发送，语音播报已勾选。画面上没有正在录音的波形或识别出的语句。",
+    "operation": "录屏结束停在上述结果画面。智能对话页，底栏有按住说话和发送，语音播报已勾选。画面上没有正在录音的波形或识别出的语句。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。failed。智能对话页，底栏有按住说话和发送，语音播报已勾选。画面上没有正在录音的波形或识别出的语句。 未通过明细：M2 failed：受阻：需要授予 XCAGI 麦克风权限并由真人说话，自动化无法提供真实语音输入"
+  },
+  "ch-im-core": {
+    "result": "信息页，实时已连接。企业专属客服会话里有人工转接提示，右侧多条蓝色「MAC验收0929 站内消息」，标注 9/29/2026。",
+    "operation": "录屏结束停在上述结果画面。信息页，实时已连接。企业专属客服会话里有人工转接提示，右侧多条蓝色「MAC验收0929 站内消息」，标注 9/29/2026。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。信息页，实时已连接。企业专属客服会话里有人工转接提示，右侧多条蓝色「MAC验收0929 站内消息」，标注 9/29/2026。 各步结果均为通过。"
+  },
+  "ch-im-cs": {
+    "result": "信息页实时已连接。客户消息·客来来仅只读查看。多数员工位写未安装。底部有企业专属客服 @enterprise-cs。",
+    "operation": "录屏结束停在上述结果画面。信息页实时已连接。客户消息·客来来仅只读查看。多数员工位写未安装。底部有企业专属客服 @enterprise-cs。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。信息页实时已连接。客户消息·客来来仅只读查看。多数员工位写未安装。底部有企业专属客服 @enterprise-cs。 各步结果均为通过。"
+  },
+  "ch-im-super": {
+    "result": "信息页企业专属客服会话。实时已连接。提示已转接人工客服。右侧多条「MAC验收0929 站内消息」。",
+    "operation": "录屏结束停在上述结果画面。信息页企业专属客服会话。实时已连接。提示已转接人工客服。右侧多条「MAC验收0929 站内消息」。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。信息页企业专属客服会话。实时已连接。提示已转接人工客服。右侧多条「MAC验收0929 站内消息」。 各步结果均为通过。"
+  },
+  "ch-im-ws": {
+    "result": "信息页企业专属客服会话。实时已连接。提示已转接人工客服。右侧多条「MAC验收0929 站内消息」。",
+    "operation": "录屏结束停在上述结果画面。信息页企业专属客服会话。实时已连接。提示已转接人工客服。右侧多条「MAC验收0929 站内消息」。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。信息页企业专属客服会话。实时已连接。提示已转接人工客服。右侧多条「MAC验收0929 站内消息」。 各步结果均为通过。"
+  },
+  "ch-notify": {
+    "result": "信息页会话列表，实时已连接。中间是空态「选择左侧会话开始聊天」，没有手机推送回执。",
+    "operation": "录屏结束停在上述结果画面。信息页会话列表，实时已连接。中间是空态「选择左侧会话开始聊天」，没有手机推送回执。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。failed。信息页会话列表，实时已连接。中间是空态「选择左侧会话开始聊天」，没有手机推送回执。 未通过明细：M2 failed：受阻：需要已配对的 Android/iOS 真机接收推送"
+  },
+  "ch-realtime-voice": {
+    "result": "智能对话页，底栏有按住说话和发送，语音播报已勾选。画面上没有正在录音的波形或识别出的语句。",
+    "operation": "录屏结束停在上述结果画面。智能对话页，底栏有按住说话和发送，语音播报已勾选。画面上没有正在录音的波形或识别出的语句。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。failed。智能对话页，底栏有按住说话和发送，语音播报已勾选。画面上没有正在录音的波形或识别出的语句。 未通过明细：M2 failed：受阻：需要麦克风权限与真人语音"
+  },
+  "ch-task-center": {
+    "result": "业务审批工作台。待我审批为 0。我发起的 3、已通过 3。列表含「MAC验收0929通知」2026/9/29 已通过。",
+    "operation": "录屏结束停在上述结果画面。业务审批工作台。待我审批为 0。我发起的 3、已通过 3。列表含「MAC验收0929通知」2026/9/29 已通过。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。业务审批工作台。待我审批为 0。我发起的 3、已通过 3。列表含「MAC验收0929通知」2026/9/29 已通过。 各步结果均为通过。"
+  },
+  "ch-wechat-contacts": {
+    "result": "数据对接中心，四步上传页。画面不是微信 PC 采集端，也没有来电记录。",
+    "operation": "录屏结束停在上述结果画面。数据对接中心，四步上传页。画面不是微信 PC 采集端，也没有来电记录。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。failed。数据对接中心，四步上传页。画面不是微信 PC 采集端，也没有来电记录。 未通过明细：M2 failed：受阻：需要微信采集端与 sync token"
+  },
+  "ch-wechat-context": {
+    "result": "数据对接中心，四步上传页。画面不是微信 PC 采集端，也没有来电记录。",
+    "operation": "录屏结束停在上述结果画面。数据对接中心，四步上传页。画面不是微信 PC 采集端，也没有来电记录。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。failed。数据对接中心，四步上传页。画面不是微信 PC 采集端，也没有来电记录。 未通过明细：M2 failed：受阻：需要微信采集端先同步联系人情报"
+  },
+  "ch-wechat-ingest": {
+    "result": "数据对接中心，四步上传页。画面不是微信 PC 采集端，也没有来电记录。",
+    "operation": "录屏结束停在上述结果画面。数据对接中心，四步上传页。画面不是微信 PC 采集端，也没有来电记录。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。failed。数据对接中心，四步上传页。画面不是微信 PC 采集端，也没有来电记录。 未通过明细：M2 failed：受阻：需要本机运行微信 PC 版与 XCAGI 微信采集端，并配置 wechat sync token"
+  },
+  "ch-wechat-phone": {
+    "result": "数据对接中心，四步上传页。画面不是微信 PC 采集端，也没有来电记录。",
+    "operation": "录屏结束停在上述结果画面。数据对接中心，四步上传页。画面不是微信 PC 采集端，也没有来电记录。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。failed。数据对接中心，四步上传页。画面不是微信 PC 采集端，也没有来电记录。 未通过明细：M2 failed：受阻：需要微信 PC 版登录并有真实来电"
+  },
+  "dt-cold-start-rollback": {
+    "result": "智能对话页，助手说明已保存的能力范围。右栏 19 条消息。底栏按住说话。画面不是回滚日志。",
+    "operation": "录屏结束停在上述结果画面。智能对话页，助手说明已保存的能力范围。右栏 19 条消息。底栏按住说话。画面不是回滚日志。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。智能对话页，助手说明已保存的能力范围。右栏 19 条消息。底栏按住说话。画面不是回滚日志。 各步结果均为通过。"
+  },
+  "dt-evidence-store": {
+    "result": "桌面运行时。用户数据目录 customer，库 xcagi.db。更新事件文本含 update-not-available，version 1.0.0，productVersion 1.0.0.5。",
+    "operation": "录屏结束停在上述结果画面。桌面运行时。用户数据目录 customer，库 xcagi.db。更新事件文本含 update-not-available，version 1.0.0，productVersion 1.0.0.5。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。桌面运行时。用户数据目录 customer，库 xcagi.db。更新事件文本含 update-not-available，version 1.0.0，productVersion 1.0.0.5。 各步结果均为通过。"
+  },
+  "dt-install-sign": {
+    "result": "系统设置个人主页 SUNBIRD，版本区为 v1.0.0.5。余额截图时约 ¥96.86。画面本身看不出 codesign 结果。",
+    "operation": "录屏结束停在上述结果画面。系统设置个人主页 SUNBIRD，版本区为 v1.0.0.5。余额截图时约 ¥96.86。画面本身看不出 codesign 结果。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。failed。系统设置个人主页 SUNBIRD，版本区为 v1.0.0.5。余额截图时约 ¥96.86。画面本身看不出 codesign 结果。 未通过明细：M2 failed：codesign rc=1；spctl rc=1：/Applications/XCAGI.app: a sealed resource is missing or invalid"
+  },
+  "dt-integrity": {
+    "result": "桌面运行时。用户数据目录 customer，库 xcagi.db。更新事件文本含 update-not-available，version 1.0.0，productVersion 1.0.0.5。",
+    "operation": "录屏结束停在上述结果画面。桌面运行时。用户数据目录 customer，库 xcagi.db。更新事件文本含 update-not-available，version 1.0.0，productVersion 1.0.0.5。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。桌面运行时。用户数据目录 customer，库 xcagi.db。更新事件文本含 update-not-available，version 1.0.0，productVersion 1.0.0.5。 各步结果均为通过。"
+  },
+  "dt-mac-control": {
+    "result": "桌面运行时。用户数据目录 customer，库 xcagi.db。更新事件文本含 update-not-available，version 1.0.0，productVersion 1.0.0.5。",
+    "operation": "录屏结束停在上述结果画面。桌面运行时。用户数据目录 customer，库 xcagi.db。更新事件文本含 update-not-available，version 1.0.0，productVersion 1.0.0.5。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。桌面运行时。用户数据目录 customer，库 xcagi.db。更新事件文本含 update-not-available，version 1.0.0，productVersion 1.0.0.5。 各步结果均为通过。"
+  },
+  "dt-neurobus": {
+    "result": "桌面运行时。用户数据目录 customer，库 xcagi.db。更新事件文本含 update-not-available，version 1.0.0，productVersion 1.0.0.5。",
+    "operation": "录屏结束停在上述结果画面。桌面运行时。用户数据目录 customer，库 xcagi.db。更新事件文本含 update-not-available，version 1.0.0，productVersion 1.0.0.5。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。桌面运行时。用户数据目录 customer，库 xcagi.db。更新事件文本含 update-not-available，version 1.0.0，productVersion 1.0.0.5。 各步结果均为通过。"
+  },
+  "dt-ota": {
+    "result": "系统设置个人主页 SUNBIRD，版本区为 v1.0.0.5。余额截图时约 ¥96.86。画面本身看不出 codesign 结果。",
+    "operation": "录屏结束停在上述结果画面。系统设置个人主页 SUNBIRD，版本区为 v1.0.0.5。余额截图时约 ¥96.86。画面本身看不出 codesign 结果。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。系统设置个人主页 SUNBIRD，版本区为 v1.0.0.5。余额截图时约 ¥96.86。画面本身看不出 codesign 结果。 各步结果均为通过。"
+  },
+  "dt-process-mgmt": {
+    "result": "桌面运行时。用户数据目录 customer，库 xcagi.db。更新事件文本含 update-not-available，version 1.0.0，productVersion 1.0.0.5。",
+    "operation": "录屏结束停在上述结果画面。桌面运行时。用户数据目录 customer，库 xcagi.db。更新事件文本含 update-not-available，version 1.0.0，productVersion 1.0.0.5。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。桌面运行时。用户数据目录 customer，库 xcagi.db。更新事件文本含 update-not-available，version 1.0.0，productVersion 1.0.0.5。 各步结果均为通过。"
+  },
+  "dt-rpa": {
+    "result": "桌面运行时。桌面模式是。数据目录、数据库、Mod、模型都指向 /Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer。存储本地 SQLite。本地模型暂无已安装模型。",
+    "operation": "录屏结束停在上述结果画面。桌面运行时。桌面模式是。数据目录、数据库、Mod、模型都指向 /Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer。存储本地 SQLite。本地模型暂无已安装模型。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。桌面运行时。桌面模式是。数据目录、数据库、Mod、模型都指向 /Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer。存储本地 SQLite。本地模型暂无已安装模型。 各步结果均为通过。"
+  },
+  "dt-shell": {
+    "result": "桌面运行时。用户数据目录 customer，库 xcagi.db。更新事件文本含 update-not-available，version 1.0.0，productVersion 1.0.0.5。",
+    "operation": "录屏结束停在上述结果画面。桌面运行时。用户数据目录 customer，库 xcagi.db。更新事件文本含 update-not-available，version 1.0.0，productVersion 1.0.0.5。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。桌面运行时。用户数据目录 customer，库 xcagi.db。更新事件文本含 update-not-available，version 1.0.0，productVersion 1.0.0.5。 各步结果均为通过。"
+  },
+  "erp-approval": {
+    "result": "业务审批工作台。待审批 0，我发起的 4，已通过 4，已拒绝 0。列表含「MAC验收0929审批」2026/9/29 12:36 已通过，以及「MAC验收0929通知」。",
+    "operation": "录屏结束停在上述结果画面。业务审批工作台。待审批 0，我发起的 4，已通过 4，已拒绝 0。列表含「MAC验收0929审批」2026/9/29 12:36 已通过，以及「MAC验收0929通知」。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。业务审批工作台。待审批 0，我发起的 4，已通过 4，已拒绝 0。列表含「MAC验收0929审批」2026/9/29 12:36 已通过，以及「MAC验收0929通知」。 各步结果均为通过。"
+  },
+  "erp-ar-ap": {
+    "result": "小猫财务分析空态，写着还没有分析数据。画面不是发票开具页。",
+    "operation": "录屏结束停在上述结果画面。小猫财务分析空态，写着还没有分析数据。画面不是发票开具页。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。小猫财务分析空态，写着还没有分析数据。画面不是发票开具页。 各步结果均为通过。"
+  },
+  "erp-contract": {
+    "result": "模板库预览。出货明细表、出货记录、产品目录等模板卡状态未配置，要求待上传 Excel / Word 模板，有快速创建。",
+    "operation": "录屏结束停在上述结果画面。模板库预览。出货明细表、出货记录、产品目录等模板卡状态未配置，要求待上传 Excel / Word 模板，有快速创建。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。模板库预览。出货明细表、出货记录、产品目录等模板卡状态未配置，要求待上传 Excel / Word 模板，有快速创建。 各步结果均为通过。"
+  },
+  "erp-excel-io": {
+    "result": "饰品包装品管理表。可见 MAC验收0929产品，型号 MAC-0929 规格标准 ¥3.50，以及 M84657、M58099、M35511 等行。有导入 Excel、导出价格表、添加产品。",
+    "operation": "录屏结束停在上述结果画面。饰品包装品管理表。可见 MAC验收0929产品，型号 MAC-0929 规格标准 ¥3.50，以及 M84657、M58099、M35511 等行。有导入 Excel、导出价格表、添加产品。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。饰品包装品管理表。可见 MAC验收0929产品，型号 MAC-0929 规格标准 ¥3.50，以及 M84657、M58099、M35511 等行。有导入 Excel、导出价格表、添加产品。 各步结果均为通过。"
+  },
+  "erp-finance-ledger": {
+    "result": "小猫财务分析空态，写着还没有分析数据。画面不是发票开具页。",
+    "operation": "录屏结束停在上述结果画面。小猫财务分析空态，写着还没有分析数据。画面不是发票开具页。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。小猫财务分析空态，写着还没有分析数据。画面不是发票开具页。 各步结果均为通过。"
+  },
+  "erp-inventory": {
+    "result": "库存管理。表格「暂无库存数据」，库存预警「暂无预警信息」。有导出 Excel、入库、出库。",
+    "operation": "录屏结束停在上述结果画面。库存管理。表格「暂无库存数据」，库存预警「暂无预警信息」。有导出 Excel、入库、出库。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。库存管理。表格「暂无库存数据」，库存预警「暂无预警信息」。有导出 Excel、入库、出库。 各步结果均为通过。"
+  },
+  "erp-inventory-warehouse": {
+    "result": "库存管理。表格「暂无库存数据」，库存预警「暂无预警信息」。有导出 Excel、入库、出库。",
+    "operation": "录屏结束停在上述结果画面。库存管理。表格「暂无库存数据」，库存预警「暂无预警信息」。有导出 Excel、入库、出库。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。库存管理。表格「暂无库存数据」，库存预警「暂无预警信息」。有导出 Excel、入库、出库。 各步结果均为通过。"
+  },
+  "erp-invoice": {
+    "result": "小猫财务分析空态，写着还没有分析数据。画面不是发票开具页。",
+    "operation": "录屏结束停在上述结果画面。小猫财务分析空态，写着还没有分析数据。画面不是发票开具页。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。failed。小猫财务分析空态，写着还没有分析数据。画面不是发票开具页。 未通过明细：M1 failed：HTTP 403 21ms；{\"success\": false, \"message\": \"需要管理员账号登录后访问\"}；M2 failed：HTTP 403 23ms；{\"success\": false, \"message\": \"需要管理员账号登录后访问\"}；M3 failed：受阻：需要企业在税务开票通道（百望/航信等）开通并配置税号与证书，本机未配置"
+  },
+  "erp-label": {
+    "result": "标签输出与打印。红字「该旧业务接口尚未提供安全的租户数据隔离」，暂无已保存的标签模板，产品 0/0。生成标签 PDF 按钮在。",
+    "operation": "录屏结束停在上述结果画面。标签输出与打印。红字「该旧业务接口尚未提供安全的租户数据隔离」，暂无已保存的标签模板，产品 0/0。生成标签 PDF 按钮在。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。failed。标签输出与打印。红字「该旧业务接口尚未提供安全的租户数据隔离」，暂无已保存的标签模板，产品 0/0。生成标签 PDF 按钮在。 未通过明细：M1 failed：HTTP 403 22ms；{\"success\": false, \"error_code\": \"http_403\", \"message\": \"该旧业务接口尚未提供安全的租户数据隔离\", \"path\": \"/api/print/label-jobs/products\"}；M3 failed：导航后路径 /mod/xcagi-erp-domain-bridge/print；命中文本 ['标签']；缺失 []；界面请求失败 [(403, '/api/print/label-jobs/products?keyword=&page=1&per_page=50')]；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | ；M4 failed：受阻：需要连接并选择实体标签打印机（本机未连接打印机）"
+  },
+  "erp-master-data": {
+    "result": "饰品包装品管理表。可见 MAC验收0929产品，型号 MAC-0929 规格标准 ¥3.50，以及 M84657、M58099、M35511 等行。有导入 Excel、导出价格表、添加产品。",
+    "operation": "录屏结束停在上述结果画面。饰品包装品管理表。可见 MAC验收0929产品，型号 MAC-0929 规格标准 ¥3.50，以及 M84657、M58099、M35511 等行。有导入 Excel、导出价格表、添加产品。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。饰品包装品管理表。可见 MAC验收0929产品，型号 MAC-0929 规格标准 ¥3.50，以及 M84657、M58099、M35511 等行。有导入 Excel、导出价格表、添加产品。 各步结果均为通过。"
+  },
+  "erp-ocr": {
+    "result": "智能对话页，助手说明已保存的能力范围。右栏 19 条消息。底栏按住说话。画面不是回滚日志。",
+    "operation": "录屏结束停在上述结果画面。智能对话页，助手说明已保存的能力范围。右栏 19 条消息。底栏按住说话。画面不是回滚日志。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。智能对话页，助手说明已保存的能力范围。右栏 19 条消息。底栏按住说话。画面不是回滚日志。 各步结果均为通过。"
+  },
+  "erp-ocr-clean": {
+    "result": "数据对接中心，四步上传页。画面不是微信 PC 采集端，也没有来电记录。",
+    "operation": "录屏结束停在上述结果画面。数据对接中心，四步上传页。画面不是微信 PC 采集端，也没有来电记录。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。failed。数据对接中心，四步上传页。画面不是微信 PC 采集端，也没有来电记录。 未通过明细：M2 failed：HTTP 403 369ms；{\"success\": false, \"error_code\": \"http_403\", \"message\": \"旧送货单 ETL 未提供租户数据隔离\", \"path\": \"/api/excel/data/shipment-etl/ocr-preview\"}"
+  },
+  "erp-print-agent": {
+    "result": "打印机列表。Canon_TS3700_series 显示就绪并设为默认，类型发货单打印机。标签打印机未设置、未连接。",
+    "operation": "录屏结束停在上述结果画面。打印机列表。Canon_TS3700_series 显示就绪并设为默认，类型发货单打印机。标签打印机未设置、未连接。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。failed。打印机列表。Canon_TS3700_series 显示就绪并设为默认，类型发货单打印机。标签打印机未设置、未连接。 未通过明细：M3 failed：受阻：需要本机安装实体打印机"
+  },
+  "erp-purchase": {
+    "result": "采购管理。供应商「MAC验收0929供应商」，金额 ¥50.00，日期 2026-09-29，状态草稿，有审核按钮。页头是采购管理。",
+    "operation": "录屏结束停在上述结果画面。采购管理。供应商「MAC验收0929供应商」，金额 ¥50.00，日期 2026-09-29，状态草稿，有审核按钮。页头是采购管理。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。采购管理。供应商「MAC验收0929供应商」，金额 ¥50.00，日期 2026-09-29，状态草稿，有审核按钮。页头是采购管理。 各步结果均为通过。"
+  },
+  "erp-purchase-inbound": {
+    "result": "采购管理。供应商「MAC验收0929供应商」，金额 ¥50.00，日期 2026-09-29，状态草稿，有审核按钮。页头是采购管理。",
+    "operation": "录屏结束停在上述结果画面。采购管理。供应商「MAC验收0929供应商」，金额 ¥50.00，日期 2026-09-29，状态草稿，有审核按钮。页头是采购管理。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。采购管理。供应商「MAC验收0929供应商」，金额 ¥50.00，日期 2026-09-29，状态草稿，有审核按钮。页头是采购管理。 各步结果均为通过。"
+  },
+  "erp-reconcile": {
+    "result": "小猫财务分析空态，还没有分析数据、立即开始。画面不是对账明细表。",
+    "operation": "录屏结束停在上述结果画面。小猫财务分析空态，还没有分析数据、立即开始。画面不是对账明细表。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。小猫财务分析空态，还没有分析数据、立即开始。画面不是对账明细表。 各步结果均为通过。"
+  },
+  "erp-replenishment": {
+    "result": "库存管理。表格「暂无库存数据」，库存预警「暂无预警信息」。有导出 Excel、入库、出库。",
+    "operation": "录屏结束停在上述结果画面。库存管理。表格「暂无库存数据」，库存预警「暂无预警信息」。有导出 Excel、入库、出库。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。库存管理。表格「暂无库存数据」，库存预警「暂无预警信息」。有导出 Excel、入库、出库。 各步结果均为通过。"
+  },
+  "erp-report": {
+    "result": "小猫财务分析空态，写着还没有分析数据。画面不是发票开具页。",
+    "operation": "录屏结束停在上述结果画面。小猫财务分析空态，写着还没有分析数据。画面不是发票开具页。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。小猫财务分析空态，写着还没有分析数据。画面不是发票开具页。 各步结果均为通过。"
+  },
+  "erp-sales-order": {
+    "result": "新建发货单，订单编号 26-09-00001A，日期 09/29/2026。提示暂无可用发货单模板，没有产品行。",
+    "operation": "录屏结束停在上述结果画面。新建发货单，订单编号 26-09-00001A，日期 09/29/2026。提示暂无可用发货单模板，没有产品行。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。新建发货单，订单编号 26-09-00001A，日期 09/29/2026。提示暂无可用发货单模板，没有产品行。 各步结果均为通过。"
+  },
+  "erp-shipment": {
+    "result": "出货记录管理。未选择购买单位，表内暂无数据。",
+    "operation": "录屏结束停在上述结果画面。出货记录管理。未选择购买单位，表内暂无数据。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。failed。出货记录管理。未选择购买单位，表内暂无数据。 未通过明细：M2 failed：HTTP 200 154ms；{\"success\": true, \"data\": [], \"source\": \"mod:xcagi-erp-domain-bridge\", \"execution_path\": \"mod_domain_handler\"}；M3 failed：未在 /mod/xcagi-erp-domain-bridge/shipment-records 页面看到「MAC验收0929出货客户」；上下文：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5"
+  },
+  "erp-templates": {
+    "result": "模板库预览。出货明细表、出货记录、产品目录等模板卡状态未配置，要求待上传 Excel / Word 模板，有快速创建。",
+    "operation": "录屏结束停在上述结果画面。模板库预览。出货明细表、出货记录、产品目录等模板卡状态未配置，要求待上传 Excel / Word 模板，有快速创建。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。模板库预览。出货明细表、出货记录、产品目录等模板卡状态未配置，要求待上传 Excel / Word 模板，有快速创建。 各步结果均为通过。"
+  },
+  "erp-uom": {
+    "result": "饰品包装品管理表。可见 MAC验收0929产品，型号 MAC-0929 规格标准 ¥3.50，以及 M84657、M58099、M35511 等行。有导入 Excel、导出价格表、添加产品。",
+    "operation": "录屏结束停在上述结果画面。饰品包装品管理表。可见 MAC验收0929产品，型号 MAC-0929 规格标准 ¥3.50，以及 M84657、M58099、M35511 等行。有导入 Excel、导出价格表、添加产品。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。饰品包装品管理表。可见 MAC验收0929产品，型号 MAC-0929 规格标准 ¥3.50，以及 M84657、M58099、M35511 等行。有导入 Excel、导出价格表、添加产品。 各步结果均为通过。"
+  },
+  "ind-attendance": {
+    "result": "考勤工作区·人员管理。共 3 条「MAC验收0929员工」，工号 M35907、M36954、M85613，考勤组未设置。",
+    "operation": "录屏结束停在上述结果画面。考勤工作区·人员管理。共 3 条「MAC验收0929员工」，工号 M35907、M36954、M85613，考勤组未设置。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。考勤工作区·人员管理。共 3 条「MAC验收0929员工」，工号 M35907、M36954、M85613，考勤组未设置。 各步结果均为通过。"
+  },
+  "ind-coating": {
+    "result": "智能对话页，底栏有按住说话和发送，语音播报已勾选。画面上没有正在录音的波形或识别出的语句。",
+    "operation": "录屏结束停在上述结果画面。智能对话页，底栏有按住说话和发送，语音播报已勾选。画面上没有正在录音的波形或识别出的语句。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。blocked。智能对话页，底栏有按住说话和发送，语音播报已勾选。画面上没有正在录音的波形或识别出的语句。 未通过明细：M1 blocked：受阻：该行业包需涂装行业企业账号授权；SUNBIRD 为饰品包装行业账号，已加载 Mod 与行业清单中均无涂装包；M2 blocked：受阻：同上：未授权涂装行业包，无法在本账号打开涂装字段页"
+  },
+  "ind-custom-delivery": {
+    "result": "客户私有 Mod 生产中心。流程说明制作、测试、验收、交付。正在读取客户私有 Mod，发起定制按钮在。",
+    "operation": "录屏结束停在上述结果画面。客户私有 Mod 生产中心。流程说明制作、测试、验收、交付。正在读取客户私有 Mod，发起定制按钮在。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。客户私有 Mod 生产中心。流程说明制作、测试、验收、交付。正在读取客户私有 Mod，发起定制按钮在。 各步结果均为通过。"
+  },
+  "ind-fields": {
+    "result": "饰品包装品管理表。可见 MAC验收0929产品，型号 MAC-0929 规格标准 ¥3.50，以及 M84657、M58099、M35511 等行。有导入 Excel、导出价格表、添加产品。",
+    "operation": "录屏结束停在上述结果画面。饰品包装品管理表。可见 MAC验收0929产品，型号 MAC-0929 规格标准 ¥3.50，以及 M84657、M58099、M35511 等行。有导入 Excel、导出价格表、添加产品。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。饰品包装品管理表。可见 MAC验收0929产品，型号 MAC-0929 规格标准 ¥3.50，以及 M84657、M58099、M35511 等行。有导入 Excel、导出价格表、添加产品。 各步结果均为通过。"
+  },
+  "ind-lan-license": {
+    "result": "深色页「FHD · 局域网授权」。绿条写当前未启用局域网模式，无需授权。本机 IP 127.0.0.1，主机管理员位。",
+    "operation": "录屏结束停在上述结果画面。深色页「FHD · 局域网授权」。绿条写当前未启用局域网模式，无需授权。本机 IP 127.0.0.1，主机管理员位。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。深色页「FHD · 局域网授权」。绿条写当前未启用局域网模式，无需授权。本机 IP 127.0.0.1，主机管理员位。 各步结果均为通过。"
+  },
+  "ind-modstore-pay": {
+    "result": "模型服务页。余额 ¥96.86，会员普通用户，经验 99，BYOK 未开通。修茈会员套餐入口可见。",
+    "operation": "录屏结束停在上述结果画面。模型服务页。余额 ¥96.86，会员普通用户，经验 99，BYOK 未开通。修茈会员套餐入口可见。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。模型服务页。余额 ¥96.86，会员普通用户，经验 99，BYOK 未开通。修茈会员套餐入口可见。 各步结果均为通过。"
+  },
+  "ind-packaging": {
+    "result": "库存管理空表，暂无库存数据，与库存页同一画面。",
+    "operation": "录屏结束停在上述结果画面。库存管理空表，暂无库存数据，与库存页同一画面。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。库存管理空表，暂无库存数据，与库存页同一画面。 各步结果均为通过。"
+  },
+  "ind-planner": {
+    "result": "智能对话。右上已为您解决 10 次事务、预计节约人工费用 ¥41。右栏 21 条消息仅本地。",
+    "operation": "录屏结束停在上述结果画面。智能对话。右上已为您解决 10 次事务、预计节约人工费用 ¥41。右栏 21 条消息仅本地。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。智能对话。右上已为您解决 10 次事务、预计节约人工费用 ¥41。右栏 21 条消息仅本地。 各步结果均为通过。"
+  },
+  "ind-szqsm": {
+    "result": "奇士美 PRO。页面写明当前为仓库脚手架，供 entitlement 安装与员工上岗联调。",
+    "operation": "录屏结束停在上述结果画面。奇士美 PRO。页面写明当前为仓库脚手架，供 entitlement 安装与员工上岗联调。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。failed。奇士美 PRO。页面写明当前为仓库脚手架，供 entitlement 安装与员工上岗联调。 未通过明细：M2 failed：受阻：该 Mod 为奇士美客户受保护定制，需奇士美企业账号授权；SUNBIRD 账号无该权益"
+  },
+  "ind-taiyangniao": {
+    "result": "考勤表转换。Mod ID taiyangniao-pro。钉钉考勤表选文件，输出「424/考勤转换输出.xlsx」。右侧惠州工厂正班 08:00–12:00 / 13:30–17:30。",
+    "operation": "录屏结束停在上述结果画面。考勤表转换。Mod ID taiyangniao-pro。钉钉考勤表选文件，输出「424/考勤转换输出.xlsx」。右侧惠州工厂正班 08:00–12:00 / 13:30–17:30。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。考勤表转换。Mod ID taiyangniao-pro。钉钉考勤表选文件，输出「424/考勤转换输出.xlsx」。右侧惠州工厂正班 08:00–12:00 / 13:30–17:30。 各步结果均为通过。"
+  },
+  "ind-workflow-viz": {
+    "result": "员工空间工位实况，考勤 AI 助手副窗未启用，与员工空间验收同一画面。",
+    "operation": "录屏结束停在上述结果画面。员工空间工位实况，考勤 AI 助手副窗未启用，与员工空间验收同一画面。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。员工空间工位实况，考勤 AI 助手副窗未启用，与员工空间验收同一画面。 各步结果均为通过。"
+  },
+  "ind-workspace": {
+    "result": "考勤工作区人员管理，3 名 MAC验收0929员工，与考勤人员页同一画面。",
+    "operation": "录屏结束停在上述结果画面。考勤工作区人员管理，3 名 MAC验收0929员工，与考勤人员页同一画面。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。考勤工作区人员管理，3 名 MAC验收0929员工，与考勤人员页同一画面。 各步结果均为通过。"
+  },
+  "mods-bridge": {
+    "result": "AI 员工市场「宿主基础能力（预装员工）」正在拉取修茈 AI 员工目录，分类菜单已展开。",
+    "operation": "录屏结束停在上述结果画面。AI 员工市场「宿主基础能力（预装员工）」正在拉取修茈 AI 员工目录，分类菜单已展开。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。AI 员工市场「宿主基础能力（预装员工）」正在拉取修茈 AI 员工目录，分类菜单已展开。 各步结果均为通过。"
+  },
+  "mods-host-mount": {
+    "result": "饰品包装品管理，表内有 MAC验收0929产品 MAC-0929 ¥3.50。",
+    "operation": "录屏结束停在上述结果画面。饰品包装品管理，表内有 MAC验收0929产品 MAC-0929 ¥3.50。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。饰品包装品管理，表内有 MAC验收0929产品 MAC-0929 ¥3.50。 各步结果均为通过。"
+  },
+  "mods-loader": {
+    "result": "AI 员工市场。宿主基础能力（预装员工）已安装，包名 xcagi-host-foundation-employee v1.0.0，员工包含饰品包装行业包、太阳鸟 PRO 等，本机 L3。有卸载、详情。",
+    "operation": "录屏结束停在上述结果画面。AI 员工市场。宿主基础能力（预装员工）已安装，包名 xcagi-host-foundation-employee v1.0.0，员工包含饰品包装行业包、太阳鸟 PRO 等，本机 L3。有卸载、详情。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。AI 员工市场。宿主基础能力（预装员工）已安装，包名 xcagi-host-foundation-employee v1.0.0，员工包含饰品包装行业包、太阳鸟 PRO 等，本机 L3。有卸载、详情。 各步结果均为通过。"
+  },
+  "mods-open-api": {
+    "result": "AI 生态应用四块：智慧分析、AIOPEN 开放智控、生产员工、员工商店。",
+    "operation": "录屏结束停在上述结果画面。AI 生态应用四块：智慧分析、AIOPEN 开放智控、生产员工、员工商店。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。AI 生态应用四块：智慧分析、AIOPEN 开放智控、生产员工、员工商店。 各步结果均为通过。"
+  },
+  "mods-shell": {
+    "result": "AI 员工市场，宿主基础能力分类下共 0 件，写暂无商品。分类菜单已打开。",
+    "operation": "录屏结束停在上述结果画面。AI 员工市场，宿主基础能力分类下共 0 件，写暂无商品。分类菜单已打开。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。AI 员工市场，宿主基础能力分类下共 0 件，写暂无商品。分类菜单已打开。 各步结果均为通过。"
+  },
+  "mods-store": {
+    "result": "AI 员工市场，宿主基础能力分类下共 0 件，写暂无商品。分类菜单已打开。",
+    "operation": "录屏结束停在上述结果画面。AI 员工市场，宿主基础能力分类下共 0 件，写暂无商品。分类菜单已打开。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。AI 员工市场，宿主基础能力分类下共 0 件，写暂无商品。分类菜单已打开。 各步结果均为通过。"
+  },
+  "mods-webhook": {
+    "result": "AI 员工市场宿主基础能力共 0 件，与商店空态同一画面。",
+    "operation": "录屏结束停在上述结果画面。AI 员工市场宿主基础能力共 0 件，与商店空态同一画面。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。failed。AI 员工市场宿主基础能力共 0 件，与商店空态同一画面。 未通过明细：M1 failed：HTTP 403 49ms；{\"success\": false, \"error_code\": \"http_403\", \"message\": \"该旧业务接口尚未提供安全的租户数据隔离\", \"path\": \"/api/orders/webhooks\"}"
+  },
+  "pay-alipay": {
+    "result": "模型服务。账户余额约 ¥97.06，会员普通用户，有快捷充值入口。画面没有支付宝付款二维码。",
+    "operation": "录屏结束停在上述结果画面。模型服务。账户余额约 ¥97.06，会员普通用户，有快捷充值入口。画面没有支付宝付款二维码。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。failed。模型服务。账户余额约 ¥97.06，会员普通用户，有快捷充值入口。画面没有支付宝付款二维码。 未通过明细：M3 failed：受阻：需要真实支付宝账户扫码付款；本机 alipay_configured=false 且自动化不得真实扣款"
+  },
+  "pay-lan": {
+    "result": "深色页「FHD · 局域网授权」。绿条写当前未启用局域网模式，无需授权。本机 IP 127.0.0.1，主机管理员位。",
+    "operation": "录屏结束停在上述结果画面。深色页「FHD · 局域网授权」。绿条写当前未启用局域网模式，无需授权。本机 IP 127.0.0.1，主机管理员位。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。深色页「FHD · 局域网授权」。绿条写当前未启用局域网模式，无需授权。本机 IP 127.0.0.1，主机管理员位。 各步结果均为通过。"
+  },
+  "pay-lan-settings": {
+    "result": "深色页「FHD · 局域网授权」。绿条写当前未启用局域网模式，无需授权。本机 IP 127.0.0.1，主机管理员位。",
+    "operation": "录屏结束停在上述结果画面。深色页「FHD · 局域网授权」。绿条写当前未启用局域网模式，无需授权。本机 IP 127.0.0.1，主机管理员位。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。深色页「FHD · 局域网授权」。绿条写当前未启用局域网模式，无需授权。本机 IP 127.0.0.1，主机管理员位。 各步结果均为通过。"
+  },
+  "pay-member-plan": {
+    "result": "系统设置模型服务。余额 ¥96.86，会员普通用户，修茈会员套餐 3 档。当前行业未加载。",
+    "operation": "录屏结束停在上述结果画面。系统设置模型服务。余额 ¥96.86，会员普通用户，修茈会员套餐 3 档。当前行业未加载。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。系统设置模型服务。余额 ¥96.86，会员普通用户，修茈会员套餐 3 档。当前行业未加载。 各步结果均为通过。"
+  },
+  "pay-wallet": {
+    "result": "系统设置个人主页 SUNBIRD，版本区为 v1.0.0.5。余额截图时约 ¥96.86。画面本身看不出 codesign 结果。",
+    "operation": "录屏结束停在上述结果画面。系统设置个人主页 SUNBIRD，版本区为 v1.0.0.5。余额截图时约 ¥96.86。画面本身看不出 codesign 结果。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。系统设置个人主页 SUNBIRD，版本区为 v1.0.0.5。余额截图时约 ¥96.86。画面本身看不出 codesign 结果。 各步结果均为通过。"
+  },
+  "sec-csp": {
+    "result": "智能对话。右上已为您解决 10 次事务、预计节约人工费用 ¥41。右栏 21 条消息仅本地。",
+    "operation": "录屏结束停在上述结果画面。智能对话。右上已为您解决 10 次事务、预计节约人工费用 ¥41。右栏 21 条消息仅本地。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。智能对话。右上已为您解决 10 次事务、预计节约人工费用 ¥41。右栏 21 条消息仅本地。 各步结果均为通过。"
+  },
+  "sec-e2e": {
+    "result": "智能对话。右上已为您解决 10 次事务、预计节约人工费用 ¥41。右栏 21 条消息仅本地。",
+    "operation": "录屏结束停在上述结果画面。智能对话。右上已为您解决 10 次事务、预计节约人工费用 ¥41。右栏 21 条消息仅本地。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。智能对话。右上已为您解决 10 次事务、预计节约人工费用 ¥41。右栏 21 条消息仅本地。 各步结果均为通过。"
+  },
+  "sec-identity": {
+    "result": "智能对话。右上已为您解决 10 次事务、预计节约人工费用 ¥41。右栏 21 条消息仅本地。",
+    "operation": "录屏结束停在上述结果画面。智能对话。右上已为您解决 10 次事务、预计节约人工费用 ¥41。右栏 21 条消息仅本地。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。智能对话。右上已为您解决 10 次事务、预计节约人工费用 ¥41。右栏 21 条消息仅本地。 各步结果均为通过。"
+  },
+  "sec-release-gate": {
+    "result": "桌面运行时。桌面模式是。数据目录、数据库、Mod、模型都指向 /Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer。存储本地 SQLite。本地模型暂无已安装模型。",
+    "operation": "录屏结束停在上述结果画面。桌面运行时。桌面模式是。数据目录、数据库、Mod、模型都指向 /Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer。存储本地 SQLite。本地模型暂无已安装模型。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。桌面运行时。桌面模式是。数据目录、数据库、Mod、模型都指向 /Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer。存储本地 SQLite。本地模型暂无已安装模型。 各步结果均为通过。"
+  },
+  "sec-runtime-gate": {
+    "result": "桌面运行时。桌面模式是。数据目录、数据库、Mod、模型都指向 /Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer。存储本地 SQLite。本地模型暂无已安装模型。",
+    "operation": "录屏结束停在上述结果画面。桌面运行时。桌面模式是。数据目录、数据库、Mod、模型都指向 /Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer。存储本地 SQLite。本地模型暂无已安装模型。",
+    "summary": "账号 SUNBIRD，构建 027c8ec59。passed。桌面运行时。桌面模式是。数据目录、数据库、Mod、模型都指向 /Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer。存储本地 SQLite。本地模型暂无已安装模型。 各步结果均为通过。"
+  }
+}

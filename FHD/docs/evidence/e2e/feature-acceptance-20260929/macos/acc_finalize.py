@@ -8,20 +8,25 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
 
+import acc_core as core
+
 HERE = Path(__file__).resolve().parent
-ROUND = HERE.parent
-REPO = ROUND.parents[3].parent
+REPO = core.REPO
+ROUND = core.OUT
 REL = lambda p: p.resolve().relative_to(REPO).as_posix()  # noqa: E731
 CATALOG = REPO / "成都修茈科技有限公司/data/capabilities/catalog.json"
-DAY = "2026-09-29"
+DAY = os.environ.get("XCAGI_ACCEPT_DAY", "2026-09-29")
 SKIP = {"base-login"}  # 保留 2026-09-22 的完整 GUI 登录/退出验收
-GATE = Path("/Users/Shared/XCAGI-FULLCLOSED-20260928/evidence")
+GATE = Path(os.environ.get("XCAGI_ACCEPT_GATE", "/Users/Shared/XCAGI-FULLCLOSED-20260928/evidence"))
 IDENTITY = ROUND / "identity" / "macos-install-identity.json"
 ARTIFACT = ROUND / "identity" / "macos-dmg-artifact.json"
+REVIEWS = Path(os.environ.get("XCAGI_ACCEPT_REVIEWS", "")) if os.environ.get("XCAGI_ACCEPT_REVIEWS") else (
+    ROUND / "reviews.json" if os.environ.get("XCAGI_ACCEPT_REL") else HERE / "reviews.json")
 
 
 def sha(p: Path) -> str:
@@ -54,11 +59,13 @@ def build_run(fid: str, review: dict) -> tuple[Path, dict]:
                       "visual_review": "accepted", "visible_result": review[tag], "reviewed_at": DAY})
     log = REPO / draft["log"]["path"]
     run = {
-        "_comment": "2026-09-29 macOS 已安装 XCAGI.app 实机验收（CDP 驱动界面 + 同会话接口读写 + 界面读回）；原图与录屏逐项人工目检。",
+        "_comment": f"{DAY} macOS 已安装 XCAGI.app 实机验收（CDP 驱动界面 + 同会话接口读写 + 界面读回）；原图与录屏逐项人工目检。账号仅记录用户名。",
         "kind": "feature-acceptance", "feature": fid, "platform": "macos", "round": ROUND.name,
         "status": draft["status"], "verdict": "BLOCKED" if blocked else ("FAIL" if failed else "PASS"),
         "app_git_sha": draft["app_git_sha"], "app_version": draft["app_version"],
-        "method": "经 CDP(127.0.0.1:9222) 驱动已安装的 /Applications/XCAGI.app：界面导航、键入与点击 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏转 VP8 webm。",
+        "account": draft.get("account") or core.accept_account(),
+        "method": draft.get("method") or (
+            f"经 CDP({core.CDP}) 驱动已安装的 {core.APP_PATH}：界面导航、键入与点击 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏转 VP8 webm。"),
         "verified_at": DAY, "reviewed_at": DAY,
         "passed": passed, "failed": failed, "visible_content": review["summary"],
         "cases": cases, "media": media,
@@ -71,7 +78,7 @@ def write_review(fid: str, run: dict, review: dict) -> Path:
     p = ROUND / fid / f"{fid}-macos-visual-review.json"
     shot = next((m for m in run["media"] if m["path"].endswith(".png")), run["media"][0])
     p.write_text(dumps({
-        "_comment": "2026-09-29 macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
+        "_comment": f"{DAY} macOS 原图与录屏逐项人工复核记录；哈希与同目录 macos-run.json 的 media 一致。",
         "kind": "visual-review", "feature": fid, "platform": "macos", "reviewed_at": DAY,
         "app_version": run["app_version"], "app_git_sha": run["app_git_sha"],
         "screenshot_sha256": shot["sha256"], "visible_content": review["summary"],
@@ -129,7 +136,7 @@ def patch_catalog(updates: dict[str, callable]):
 
 
 def main(ids: list[str]):
-    reviews = json.loads((HERE / "reviews.json").read_text(encoding="utf-8"))
+    reviews = json.loads(REVIEWS.read_text(encoding="utf-8"))
     ensure_identity()
     updates = {}
     for fid in ids or sorted(reviews):

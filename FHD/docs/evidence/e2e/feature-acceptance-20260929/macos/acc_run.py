@@ -14,7 +14,7 @@ import acc_core as a
 from acc_dsl import R
 from acc_specs import SPECS
 
-CATALOG = a.HERE.parents[4].parent / "成都修茈科技有限公司/data/capabilities/catalog.json"
+CATALOG = a.REPO / "成都修茈科技有限公司/data/capabilities/catalog.json"
 
 
 def names() -> dict:
