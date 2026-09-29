@@ -57,8 +57,9 @@ def _(r: R):
     r.api("桌面运行态", "GET", "/api/desktop/status",
           check=lambda d: d["desktopMode"] and d["readyForUi"] and d["runtimeStatus"] == "healthy",
           show=lambda d: f"desktopMode={d['desktopMode']} readyForUi={d['readyForUi']} storage={d['storageMode']}")
-    r.api("客户端构建身份", "GET", "/api/health", check=lambda d: d["git_sha"].startswith("37f22bcb"),
-          show=lambda d: f"version={d['version']} git_sha={d['git_sha']} release={d['release_id']}")
+    installed = json.loads((Path("/Applications/XCAGI.app/Contents/Resources/build-info.json")).read_text())["gitSha"]
+    r.api("客户端构建身份", "GET", "/api/health", check=lambda d, installed=installed: d.get("git_sha") == installed,
+          show=lambda d, installed=installed: f"version={d['version']} git_sha={d['git_sha']} installed={installed}")
     r.ui("/desktop-runtime", ["桌面"])
 
 
@@ -1203,23 +1204,15 @@ def _(r: R):
 
 @spec("dt-rpa")
 def _(r: R):
-    r.block("桌面自动化执行", "本机客户端构建未安装桌面自动化后端：GET /api/desktop/automation/status 显示 drivers 全为 false；写入 profile 返回「desktop automation backend not installed in this build」")
-    r.block("桌面元素查找", "GET /api/desktop/automation/find-element 返回「desktop automation backend not installed in this build」")
-    r.block("桌面工作流执行", "POST /api/desktop/automation/workflow/run 返回「desktop automation backend not installed in this build」")
-
-
-@spec("dt-element-find")
-def _(r: R):
-    r.block("元素查找与应用引导", "能力目录标注为「占位实现」；GET /api/desktop/automation/find-element 返回「desktop automation backend not installed in this build」")
-    r.block("应用引导流程", "本机未安装桌面自动化后端，无法验证元素查找与应用引导")
-    r.block("端到端验证", "功能未实现（占位），无法验证")
-
-
-@spec("dt-desktop-workflow")
-def _(r: R):
-    r.block("桌面工作流编排执行", "能力目录标注为「占位」；POST /api/desktop/automation/workflow/run 返回「desktop automation backend not installed in this build」")
-    r.block("工作流落盘与回放", "本机未安装桌面自动化后端，profile 落盘返回 backend not installed")
-    r.block("端到端验证", "功能未实现（占位），无法验证")
+    r.api("自动化状态", "GET", "/api/desktop/automation/status", check=succ, show=lambda d: dump(d["data"]))
+    r.api("写入自动化 profile", "POST", "/api/desktop/automation/profiles",
+          {"profile": {"app_id": "mac-acc-0929", "name": "mac-acc-0929",
+                       "mac_bundle_id": "com.apple.TextEdit"}},
+          check=lambda d: succ(d) and (d.get("data") or {}).get("success") is not False,
+          show=lambda d: dump(d, 160))
+    r.api("读回 profile", "GET", "/api/desktop/automation/profiles", check=lambda d: "mac-acc-0929" in dump(d, 100000),
+          show=lambda d: dump(d["data"], 160))
+    r.ui("/desktop-runtime", [])
 
 
 @spec("dt-neurobus")
