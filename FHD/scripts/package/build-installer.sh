@@ -141,6 +141,7 @@ build_one_sku() {
       "--config.artifactName=${artifact_name}" \
       "--config.appId=$(sku_app_id "$sku")" \
       "--config.publish.url=$(sku_update_url "$sku")" \
+      "--config.dmg.title=XCAGI${label}" \
       "--config.extraMetadata.productSku=${sku}"); then
       package_ok=1
       break
@@ -170,11 +171,10 @@ build_one_sku() {
     x86_64) artifact_arch="x64" ;;
     *) artifact_arch="$(uname -m)" ;;
   esac
-  # hdiutil rejects volume names containing spaces on this macOS build
-  # ("could not access /Volumes/XCAGI Enterprise/XCAGI.app - 操作不被允许").
-  # Use a hyphenated, space-free volume name for the mount, while keeping the
-  # public artifact file name unchanged.
-  local dmg_volume_name="XCAGI-${label}"
+  # hdiutil on this Mac rejects both spaces and the hyphenated name
+  # XCAGI-Enterprise ("could not access /Volumes/XCAGI-Enterprise/XCAGI.app").
+  # Keep the public file name, and mount as XCAGIEnterprise / XCAGIPersonal.
+  local dmg_volume_name="XCAGI${label}"
   if [ -n "${XCAGI_DMG_VOLUME_SUFFIX:-}" ]; then
     dmg_volume_name="${dmg_volume_name}-${XCAGI_DMG_VOLUME_SUFFIX}"
   fi
