@@ -1,0 +1,10 @@
+feature=dt-shell
+at=2026-09-29T11:12:25.821Z
+route=/
+landed=/
+title=智能对话 - XCAGI
+heading=智能对话
+redirected=false
+navError=
+apis=[{"api":"/api/desktop/status","status":200,"body":"{\"desktopMode\":true,\"dataDir\":\"C:\\\\Users\\\\97088\\\\AppData\\\\Roaming\\\\XCAGI\",\"database\":\"C:\\\\Users\\\\97088\\\\AppData\\\\Roaming\\\\XCAGI\\\\data\\\\xcagi.db\",\"modsDir\":\"C:\\\\Users\\\\97088\\\\AppData\\\\Roaming\\\\XCAGI\\\\mods\",\"modelsDir\":\"C:\\\\Users\\\\97088\\\\AppData\\\\Roaming\\\\XCAGI\\\\models\",\"webModeCompatible\":true,\"storageMode\":\"local_sqlite\",\"databaseUrlRedacted\":\"sqlite:///C:/Users/97088/AppData/Roaming/XCAGI/data/xc"}]
+text=饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 智能对话 SUNBIRD 副窗 ◈ 工作区 查产品 订单 库存预警 打印标签 考勤 已为您解决 — 次任务 · 预计节约人工费用 — 你好，我是饰品包装助手。 查产品与订单 管库存与标签 请说出需求。 02:53 任务 对话 新建对话 清空 正在加载历史对话... 新对话 审批 上传附件 解析办公文件 主动意识启用 语音播报 按住说话 发送 请输入内容后再发送

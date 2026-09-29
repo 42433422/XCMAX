@@ -1,0 +1,10 @@
+feature=ind-workspace
+at=2026-09-29T11:10:36.453Z
+route=/attendance-industry
+landed=/attendance-industry
+title=考勤工作区 - XCAGI
+heading=考勤工作区
+redirected=false
+navError=
+apis=[{"api":"/api/auth/me","status":200,"body":"{\"success\":true,\"data\":{\"user\":{\"id\":2,\"username\":\"SUNBIRD\",\"display_name\":\"SUNBIRD\",\"email\":\"sunbird@xcagi.local\",\"email_display\":\"sunbird@xcagi.local\",\"no_email\":false,\"role\":\"user\",\"is_active\":true,\"avatar_url\":\"\"},\"permissions\":[\"shipment.edit\",\"product.edit\",\"etl.execute\",\"dataset.read\",\"material.edit\",\"shipment.create\",\"shipment.view\",\"material.view\",\"dataset.write\",\"etl.read\",\"etl.template."}]
+text=饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 考勤工作区 SUNBIRD 副窗 ◈ 工作区 考勤工作区 主系统统一维护部门、人员、排班资源和考勤记录。 部门管理 人员管理 排班资源 考勤记录 考勤表转换（定制） 转换规则（定制） 人员管理 维护考勤名单、工号、所属部门与考勤组。 新增人员 刷新 ⌕ 查询 共 0 条 姓名 工号 部门 上级部门 考勤组 岗位 / 性质 操作 暂无人员 当前人员管理还没有符合条件的数据。 新增第一位人员 小C助理

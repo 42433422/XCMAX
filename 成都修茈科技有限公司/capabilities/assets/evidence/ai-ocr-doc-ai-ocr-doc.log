@@ -1,0 +1,10 @@
+feature=ai-ocr-doc
+at=2026-09-29T11:21:54.159Z
+route=/batch-analyze
+landed=/batch-analyze
+title=批量分析 - XCAGI
+heading=批量分析
+redirected=false
+navError=
+apis=[{"api":"/api/auth/me","status":200,"body":"{\"success\":true,\"data\":{\"user\":{\"id\":2,\"username\":\"SUNBIRD\",\"display_name\":\"SUNBIRD\",\"email\":\"sunbird@xcagi.local\",\"email_display\":\"sunbird@xcagi.local\",\"no_email\":false,\"role\":\"user\",\"is_active\":true,\"avatar_url\":\"\"},\"permissions\":[\"shipment.edit\",\"product.edit\",\"etl.execute\",\"dataset.read\",\"material.edit\",\"shipment.create\",\"shipment.view\",\"material.view\",\"dataset.write\",\"etl.read\",\"etl.template."}]
+text=饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 批量分析 SUNBIRD 副窗 ◈ 工作区 批量分析 自动拆解、分组并匹配模板 📊 暂无分析数据 请从「业务对接」页面选择文件夹进行批量上传 前往业务对接 小C助理

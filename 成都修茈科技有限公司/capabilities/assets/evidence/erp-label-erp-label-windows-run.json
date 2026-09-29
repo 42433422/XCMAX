@@ -1,0 +1,62 @@
+{
+  "kind": "feature-acceptance",
+  "feature": "erp-label",
+  "platform": "windows",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "ac10f29f1d2ad5d53123200070e81d406cb587ca",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "cases": [
+    {
+      "id": "W1",
+      "input": "打开 erp-label 对应的 Windows 客户端页面 /label-editor",
+      "actions": "在已安装的 XCAGI 企业版里用真实会话进入该页并停留",
+      "expected": "页面渲染出该能力的标题或工作区，而不是空白或登录页",
+      "observed": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「标签编辑器 - XCAGI」，主标题「模板编辑器」，地址 /label-editor。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 模板编辑器 SUNBIRD 副窗 ◈ 工作区 标签模板编辑器 上传识别 返回 保存新模板 模板名称 保存模板后，可在标签输出与打印页选择业务产品，生成标签 PDF 并核对",
+      "result": "passed"
+    },
+    {
+      "id": "W2",
+      "input": "使用当前登录会话请求该能力相关接口",
+      "actions": "在页面上下文里 fetch 已登录接口",
+      "expected": "接口返回且不是 5xx",
+      "observed": "/api/auth/me=200",
+      "result": "passed"
+    },
+    {
+      "id": "W3",
+      "input": "保留该页的截图与窗口录像",
+      "actions": "CDP 截图，并只录 XCAGI 窗口 3 秒",
+      "expected": "截图和 mp4 都非空，且与这次打开的页面一致",
+      "observed": "png=154507 mp4=123644 title=标签编辑器 - XCAGI",
+      "result": "passed"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-label/erp-label.log",
+    "sha256": "467b49dd751b584eb1b62bff7c2bf80786b3e63189826bd243e64eb269d681f6",
+    "bytes": 1254
+  },
+  "media": [
+    {
+      "feature": "erp-label",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-label/erp-label.png",
+      "sha256": "ac2ed4382c313f1438083bfedad889a443d08f3ba91d4eb575e582469d5e56e8",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「标签编辑器 - XCAGI」，主标题「模板编辑器」，地址 /label-editor。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 模板编辑器 SUNBIRD 副窗 ◈ 工作区 标签模板编辑器 上传识别 返回 保存新模板 模板名称 保存模板后，可在标签输出与打印页选择业务产品，生成标签 PDF 并核对",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-label",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-label/erp-label.mp4",
+      "sha256": "25c82959ff67a85fbb853c74b1e96cf6e44eb3aa67514fe990837f7c633d5d48",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「标签编辑器 - XCAGI」，主标题「模板编辑器」，地址 /label-editor。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 模板编辑器 SUNBIRD 副窗 ◈ 工作区 标签模板编辑器 上传识别 返回 保存新模板 模板名称 保存模板后，可在标签输出与打印页选择业务产品，生成标签 PDF 并核对",
+      "reviewed_at": "2026-09-29"
+    }
+  ]
+}

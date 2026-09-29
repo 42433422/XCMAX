@@ -1,0 +1,62 @@
+{
+  "kind": "feature-acceptance",
+  "feature": "ai-chat-core",
+  "platform": "windows",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "ac10f29f1d2ad5d53123200070e81d406cb587ca",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "cases": [
+    {
+      "id": "W1",
+      "input": "打开 ai-chat-core 对应的 Windows 客户端页面 /",
+      "actions": "在已安装的 XCAGI 企业版里用真实会话进入该页并停留",
+      "expected": "页面渲染出该能力的标题或工作区，而不是空白或登录页",
+      "observed": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「智能对话 - XCAGI」，主标题「智能对话」，地址 /。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 智能对话 SUNBIRD 副窗 ◈ 工作区 查产品 订单 库存预警 打印标签 考勤 已为您解决 0 次任务 · 预计节约人工费用 ¥0 你好，我是饰品包装助手。 查产品与订单 管库",
+      "result": "passed"
+    },
+    {
+      "id": "W2",
+      "input": "使用当前登录会话请求该能力相关接口",
+      "actions": "在页面上下文里 fetch 已登录接口",
+      "expected": "接口返回且不是 5xx",
+      "observed": "/api/auth/me=200",
+      "result": "passed"
+    },
+    {
+      "id": "W3",
+      "input": "保留该页的截图与窗口录像",
+      "actions": "CDP 截图，并只录 XCAGI 窗口 3 秒",
+      "expected": "截图和 mp4 都非空，且与这次打开的页面一致",
+      "observed": "png=764481 mp4=105128 title=智能对话 - XCAGI",
+      "result": "passed"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-chat-core/ai-chat-core.log",
+    "sha256": "b1e2e55f05960c439ee0456acf93a12909c6338f391ea0b946d89779cc024d5a",
+    "bytes": 1321
+  },
+  "media": [
+    {
+      "feature": "ai-chat-core",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-chat-core/ai-chat-core.png",
+      "sha256": "4997497e5c146a36c747efc8e6891d25703a64a8957e0f4f48923077259ae46b",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「智能对话 - XCAGI」，主标题「智能对话」，地址 /。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 智能对话 SUNBIRD 副窗 ◈ 工作区 查产品 订单 库存预警 打印标签 考勤 已为您解决 0 次任务 · 预计节约人工费用 ¥0 你好，我是饰品包装助手。 查产品与订单 管库",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ai-chat-core",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-chat-core/ai-chat-core.mp4",
+      "sha256": "4456cf374ae259982b75c5a8cf41e6f6b7d99f1e028b7282c93ba01b3ba3f2b0",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「智能对话 - XCAGI」，主标题「智能对话」，地址 /。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 智能对话 SUNBIRD 副窗 ◈ 工作区 查产品 订单 库存预警 打印标签 考勤 已为您解决 0 次任务 · 预计节约人工费用 ¥0 你好，我是饰品包装助手。 查产品与订单 管库",
+      "reviewed_at": "2026-09-29"
+    }
+  ]
+}

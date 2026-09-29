@@ -1,0 +1,62 @@
+{
+  "kind": "feature-acceptance",
+  "feature": "erp-templates",
+  "platform": "windows",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "ac10f29f1d2ad5d53123200070e81d406cb587ca",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "cases": [
+    {
+      "id": "W1",
+      "input": "打开 erp-templates 对应的 Windows 客户端页面 /mod/xcagi-erp-domain-bridge/print",
+      "actions": "在已安装的 XCAGI 企业版里用真实会话进入该页并停留",
+      "expected": "页面渲染出该能力的标题或工作区，而不是空白或登录页",
+      "observed": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「标签输出与打印 - XCAGI」，主标题「标签输出与打印」，地址 /mod/xcagi-erp-domain-bridge/print。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 标签输出与打印 SUNBIRD 副窗 ◈ 工作区 标签输出与打印 1. 选择产品与标签模板 该旧业务接口尚未提供安全的租户数据隔离 重新加载 暂无已保存的标签模板，请先在",
+      "result": "passed"
+    },
+    {
+      "id": "W2",
+      "input": "使用当前登录会话请求该能力相关接口",
+      "actions": "在页面上下文里 fetch 已登录接口",
+      "expected": "接口返回且不是 5xx",
+      "observed": "/api/auth/me=200",
+      "result": "passed"
+    },
+    {
+      "id": "W3",
+      "input": "保留该页的截图与窗口录像",
+      "actions": "CDP 截图，并只录 XCAGI 窗口 3 秒",
+      "expected": "截图和 mp4 都非空，且与这次打开的页面一致",
+      "observed": "png=602546 mp4=246045 title=标签输出与打印 - XCAGI",
+      "result": "passed"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-templates/erp-templates.log",
+    "sha256": "fb2ad2729461b0b337ea9d4d788c14b04fe137326ee4c4cc44d19207b995b5c8",
+    "bytes": 1783
+  },
+  "media": [
+    {
+      "feature": "erp-templates",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-templates/erp-templates.png",
+      "sha256": "b89977b70e9389f7f7d1c1dc654bf86cdbc9110671d78b5b19f8e1c38c1e9b34",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「标签输出与打印 - XCAGI」，主标题「标签输出与打印」，地址 /mod/xcagi-erp-domain-bridge/print。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 标签输出与打印 SUNBIRD 副窗 ◈ 工作区 标签输出与打印 1. 选择产品与标签模板 该旧业务接口尚未提供安全的租户数据隔离 重新加载 暂无已保存的标签模板，请先在",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-templates",
+      "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-templates/erp-templates.mp4",
+      "sha256": "b3e7191e10f3ca6c50e4692ad082b635bbbc54c2fda2f5ef09885fcfbf970551",
+      "visual_review": "accepted",
+      "visible_result": "Windows 客户端 1.0.0.5 已登录 SUNBIRD。页面标题「标签输出与打印 - XCAGI」，主标题「标签输出与打印」，地址 /mod/xcagi-erp-domain-bridge/print。 画面文字节选：饰品包装助手 SUNBIRD 智能对话 考勤工作区 数据对接中心 信息 智能生态 知识库 员工工作台 员工空间 数据来源 系统设置 系统正常 通用考勤模块 v1.0.0.5 SUNBIRD 标签输出与打印 SUNBIRD 副窗 ◈ 工作区 标签输出与打印 1. 选择产品与标签模板 该旧业务接口尚未提供安全的租户数据隔离 重新加载 暂无已保存的标签模板，请先在",
+      "reviewed_at": "2026-09-29"
+    }
+  ]
+}
