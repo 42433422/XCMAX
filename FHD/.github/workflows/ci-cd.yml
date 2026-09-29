@@ -137,7 +137,6 @@ jobs:
           printf '%s\n' "${ADDED_FILES}" | python3 scripts/ci/guard_temp_scripts.py --added-from-stdin
           echo "✅ Temporary script location guard passed."
 
-  # 统一 changed-path 分类（macOS/Windows 专项检查按需触发；SSOT: scripts/dev/change_classifier.py）
   classify:
     runs-on: ubuntu-latest
     outputs:
@@ -161,10 +160,11 @@ jobs:
             --base "${{ github.event.pull_request.base.sha }}" \
             --head "${{ github.event.pull_request.head.sha }}"
 
-  # Backend Tests & Quality
   backend-test:
     needs: guard-temp-scripts
     runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.paths.outputs.skip }}
     services:
       redis:
         image: redis:7-alpine
@@ -186,7 +186,6 @@ jobs:
         id: paths
         if: github.event_name == 'pull_request'
         run: |
-          # 统一分类器（scripts/dev/change_classifier.py）——禁止此处再写死路径正则。
           python ../scripts/dev/change_classifier.py --category backend \
             --base "${{ github.event.pull_request.base.sha }}" \
             --head "${{ github.event.pull_request.head.sha }}"
@@ -338,6 +337,8 @@ jobs:
   frontend-test:
     needs: guard-temp-scripts
     runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.paths.outputs.skip }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -348,7 +349,6 @@ jobs:
         id: paths
         if: github.event_name == 'pull_request'
         run: |
-          # 统一分类器（scripts/dev/change_classifier.py）——禁止此处再写死路径正则。
           python ../scripts/dev/change_classifier.py --category frontend \
             --base "${{ github.event.pull_request.base.sha }}" \
             --head "${{ github.event.pull_request.head.sha }}"
@@ -420,6 +420,7 @@ jobs:
   # Full-stack 14/14: root e2e.yml on schedule or workflow_dispatch (see e2e-playwright-reusable.yml).
   frontend-e2e:
     needs: [backend-test, frontend-test]
+    if: needs.backend-test.outputs.skip != 'true' || needs.frontend-test.outputs.skip != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -487,7 +488,6 @@ jobs:
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:5001
         run: npm run test:e2e:p0 -- --reporter=line
 
-  # Architecture Fitness Check
   arch-fitness:
     needs: guard-temp-scripts
     runs-on: ubuntu-latest
@@ -535,7 +535,6 @@ jobs:
       - name: claimed-vs-actual-freshness
         run: python scripts/dev/gen_claimed_vs_actual.py --check
 
-  # Security & Dependency Scanning
   security-scan:
     needs: guard-temp-scripts
     runs-on: ubuntu-latest
@@ -565,6 +564,7 @@ jobs:
   # Container image vulnerability scan (built image from CI Dockerfile)
   container-scan:
     needs: [backend-test, frontend-test, frontend-e2e, security-scan, pack-verify]
+    if: needs.backend-test.outputs.skip != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -628,6 +628,7 @@ jobs:
   # FHD 服务器 API 发布包（tarball + manifest；不含生产 SSH 部署）
   pack-verify:
     needs: [backend-test, frontend-test]
+    if: needs.backend-test.outputs.skip != 'true' || needs.frontend-test.outputs.skip != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -671,11 +672,9 @@ jobs:
   # FHD API 生产镜像（xcagi-fhd-api → GHCR；manifest v2 含 image_digest）
   docker-build-fhd-api:
     needs: [backend-test, frontend-test, frontend-e2e, security-scan, container-scan, pack-verify, arch-fitness]
-    # Nightly（schedule）只做全量测试，不构建/推送生产镜像。
-    if: github.event_name != 'schedule'
+    if: github.event_name != 'schedule' && needs.backend-test.outputs.skip != 'true'
     runs-on: ubuntu-latest
-    # image_tag = the exact tag metadata-action produced (rely on outputs.version, not a
-    # hand-rolled short sha — see docker/metadata-action#479).
+    # image_tag: 用 metadata-action outputs.version（勿手搓短 sha）— docker/metadata-action#479
     outputs:
       image_tag: ${{ steps.meta_fhd.outputs.version }}
     permissions:
@@ -977,6 +976,7 @@ jobs:
   release-verify:
     name: release-verify
     needs: [backend-test, frontend-test, frontend-e2e, pack-verify, arch-fitness]
+    if: needs.backend-test.outputs.skip != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
