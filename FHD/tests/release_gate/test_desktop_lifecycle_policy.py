@@ -16,6 +16,9 @@ def test_windows_uninstall_preserves_user_data_and_cleans_scheduled_task() -> No
     assert "uninstallDisplayName: XCAGI 桌面版" in builder
     assert "!macro customUnInstall" in installer
     assert "Uninstall-BackupTask.ps1" in installer
+    assert "XCAGI_PRODUCT_DISPLAY_VERSION" in installer
+    assert "non-fatal" not in installer
+    assert "Abort" in installer
 
 
 def test_release_contains_upgrade_rollback_crash_and_window_recovery() -> None:

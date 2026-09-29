@@ -144,6 +144,45 @@ export async function waitForBackendPing(
 /** @deprecated 使用 waitForBackendPing；保留别名供测试/旧引用。 */
 export const waitForBackendHealth = waitForBackendPing
 
+const STARTUP_HEALTH_LIMIT_MS = 180_000
+
+/** 同一进程内轮询 /api/health，直到 healthy 或超过启动时限。不改写 health 返回值。 */
+async function waitForStartupHealth(port: number, timeoutMs: number): Promise<boolean> {
+  const budget = Math.min(Math.max(timeoutMs, 0), STARTUP_HEALTH_LIMIT_MS)
+  const started = Date.now()
+  let last = ''
+  while (Date.now() - started <= budget) {
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/api/health`, {
+        signal: AbortSignal.timeout(2_000)
+      })
+      if (response.ok) {
+        const body = (await response.json()) as {
+          status?: string
+          degradedReasons?: string[]
+        }
+        const status = String(body.status || '')
+        const reasons = Array.isArray(body.degradedReasons) ? body.degradedReasons.join(',') : ''
+        const line = `${status}|${reasons}`
+        if (line !== last) {
+          console.log(`[xcagi-desktop] startup health status=${status} reasons=${reasons || '-'}`)
+          last = line
+        }
+        if (status === 'healthy') {
+          return true
+        }
+      }
+    } catch {
+      /* health route still coming up */
+    }
+    await new Promise(resolve => setTimeout(resolve, 500))
+  }
+  console.warn(
+    `[xcagi-desktop] startup health stayed non-healthy for ${budget}ms last=${last || 'none'}`
+  )
+  return false
+}
+
 /** ping 就绪且业务路由已挂载（fast-start deferred 完成后）再加载主应用。 */
 export async function waitForBackendApplicationReady(
   port: number,
@@ -165,8 +204,9 @@ export async function waitForBackendApplicationReady(
           appRoutesReady?: boolean
           readyForUi?: boolean
         }
-        const routesReady = body.appRoutesReady ?? body.readyForUi
-        if (routesReady !== false) {
+        const routesReady = body.appRoutesReady === true || body.readyForUi === true
+        if (routesReady) {
+          await waitForStartupHealth(port, remaining())
           return
         }
       }
