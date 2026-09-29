@@ -3,36 +3,34 @@
   "kind": "web-admin-identity",
   "feature": "erp-business-api",
   "platform": "web",
-  "captured_at": "2026-09-29 08:55:47",
+  "captured_at": "2026-09-29 10:59:06",
   "entry_url": "http://127.0.0.1:42423/admin/login",
   "site_health": {
-    "status": "degraded",
+    "status": "healthy",
     "version": "1.0.0.5",
     "service": "xcagi-fastapi",
-    "degradedReasons": [
-      "LLM_RUNTIME_UNAVAILABLE"
-    ],
+    "degradedReasons": [],
     "build": {
       "admin_console_sha256": "",
       "admin_console_git_sha": "",
       "artifact_sha256": "",
       "built_at": "",
-      "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+      "git_sha": "2544874de585bd700b1b1ee4aec0b45861dd7268",
       "image_digest": "",
       "product_version": "",
       "release_id": ""
     },
-    "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+    "git_sha": "2544874de585bd700b1b1ee4aec0b45861dd7268",
     "release_id": "",
     "neuro": {
       "status": "healthy",
       "running": true,
-      "published": 29273,
-      "processed": 29273,
+      "published": 0,
+      "processed": 0,
       "errors": 0,
       "dropped": 0,
       "queue_size": 0,
-      "handlers": 136,
+      "handlers": 39,
       "global_handlers": 0,
       "reliability": {
         "fhd_env": "",
@@ -133,7 +131,7 @@
           "running": false
         },
         "cognition": {
-          "llm_port_available": false
+          "llm_port_available": true
         },
         "subconscious_ml": {
           "anomaly_detector": {
@@ -161,12 +159,12 @@
             "total_success": 0,
             "success_rate": 0.0,
             "supported_events": [
-              "evolution.search",
               "evolution.export",
+              "error.occurred",
               "evolution.mine",
               "evolution.reflect",
-              "error.occurred",
-              "evolution.index"
+              "evolution.index",
+              "evolution.search"
             ],
             "kb_stats": {
               "total_entries": 65,
@@ -235,7 +233,7 @@
       }
     }
   },
-  "site_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+  "site_git_sha": "2544874de585bd700b1b1ee4aec0b45861dd7268",
   "site_version": "1.0.0.5",
   "site_release_id": "",
   "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368"

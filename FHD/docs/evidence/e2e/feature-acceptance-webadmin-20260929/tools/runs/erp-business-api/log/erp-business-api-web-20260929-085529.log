@@ -1,9 +1,0 @@
-[08:55:29] feature=erp-business-api base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-business-api
-[08:55:41] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
-[08:55:46] case BAP1: passed - 业务 API 出口与宿主服务桥接存活（真实读取）
-[08:55:46] case BAP2: passed - 业务 API 真实发布外部业务事件（OCR 请求）
-[08:55:47] case BAP3: passed - 服务桥接工单落库与读回（应答子面 500 缺陷观察）
-[08:55:47] case BAP4: passed - 非法优先级与必填缺参被校验拒绝（负例）
-[08:55:47] case BAP5: passed - 缺少 CSRF 令牌的写请求被拒（负例）
-[08:55:47] video: erp-business-api-web-20260929-085529.webm (1185040 bytes)
-[08:55:47] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-business-api/log/erp-business-api-web-20260929-085529.log

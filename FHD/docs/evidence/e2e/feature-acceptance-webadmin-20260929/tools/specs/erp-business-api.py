@@ -16,8 +16,8 @@ VISIBLE_CONTENT = (
     "POST /api/business/ocr/recognize 真实发布外部 OCR 请求事件（200，event=ocr.requested）→ "
     "服务桥接工单落库并按 id 读回（200）→ 非法优先级 400、缺必填 422 被校验拒绝（负例）→ "
     "无 CSRF 令牌的写请求 403 被拒（负例）。"
-    "诚实观察项：PUT /api/service-bridge/requests/{id}/respond 在本 commit 稳定返回 500"
-    "（Session 解绑内部错误，见 service_bridge.py 会话关闭后仍访问 ORM 对象），故应答子面未通过。"
+    "应答子面闭环：PUT /api/service-bridge/requests/{id}/respond → 200 且随后读回 status=resolved、"
+    "response 与 responded_by 均已落库（该路由此前会稳定 500，本 commit 已修复并补了回归测试）。"
 )
 
 
@@ -112,27 +112,39 @@ def case_service_bridge_roundtrip(page, env):
     rid = cdata.get("id")
     fetched = _api(page, f"/api/service-bridge/requests/{rid}")
     fdata = (fetched.get("body") or {}).get("data") or {}
-    # 应答子面：如实探测（该 commit 稳定 500），作为缺陷观察项，不计入本用例通过面。
+    # 应答子面：本 commit 已修复（此前会话关闭后仍读 ORM 属性会稳定 500），这里做真实应答 + 读回。
     responded = _api(page, f"/api/service-bridge/requests/{rid}/respond", method="PUT",
                      body={"response": "已由验收实例应答", "responded_by": "admin", "status": "resolved"})
     rb = responded.get("body") or {}
     rdata = rb.get("data") or {}
+    after = _api(page, f"/api/service-bridge/requests/{rid}")
+    adata = (after.get("body") or {}).get("data") or {}
     _panel(page, env, "BAP3-service-bridge-roundtrip.png",
-           "POST/GET /api/service-bridge/requests · 工单落库—读回（应答子面 500 观察）",
+           "POST/PUT/GET /api/service-bridge/requests · 工单落库—应答—读回闭环",
            {"create": {"status": created["status"], "id": rid, "status_field": cdata.get("status"),
                        "title": cdata.get("title")},
             "get": {"status": fetched["status"], "id": fdata.get("id"), "title": fdata.get("title")},
-            "respond_probe_defect": {"status": responded["status"], "error_code": rb.get("error_code"),
-                                     "message": rb.get("message"),
-                                     "note": "应答返回 500（Session 解绑内部错误），为真实缺陷观察项"}})
+            "respond": {"status": responded["status"], "success": rb.get("success"),
+                        "status_field": rdata.get("status"), "responded_by": rdata.get("responded_by")},
+            "readback_after_respond": {"status": after["status"], "state": adata.get("status"),
+                                       "response": adata.get("response"),
+                                       "responded_by": adata.get("responded_by")}})
     ok = (created["status"] == 200 and isinstance(rid, int)
           and fetched["status"] == 200 and fdata.get("id") == rid
-          and fdata.get("title") == "vc-e2e-business-probe")
+          and fdata.get("title") == "vc-e2e-business-probe"
+          and responded["status"] == 200 and rdata.get("status") == "resolved"
+          and after["status"] == 200 and adata.get("status") == "resolved"
+          and adata.get("response") == "已由验收实例应答")
     return {"created": {"status": created["status"], "id": rid, "state": cdata.get("status")},
             "fetched": {"status": fetched["status"], "title": fdata.get("title")},
-            "respond_probe": {"status": responded["status"], "error_code": rb.get("error_code"),
-                              "message": rb.get("message")},
-            "respond_face_ok": responded["status"] == 200 and rdata.get("status") == "resolved"}, ok
+            "respond": {"status": responded["status"], "success": rb.get("success"),
+                        "state": rdata.get("status"), "responded_by": rdata.get("responded_by"),
+                        "responded_at": rdata.get("responded_at")},
+            "readback_after_respond": {"status": after["status"], "state": adata.get("status"),
+                                       "response": adata.get("response"),
+                                       "responded_by": adata.get("responded_by")},
+            "respond_face_ok": responded["status"] == 200 and rdata.get("status") == "resolved"
+                               and adata.get("status") == "resolved"}, ok
 
 
 def case_validation_rejected(page, env):
@@ -181,12 +193,12 @@ CASES = [
      "actions": "页面上下文 POST /api/business/ocr/recognize。",
      "expected": "HTTP 200，success=true，published=true，event=ocr.requested，含 run_id。",
      "run": case_business_event_published},
-    {"id": "BAP3", "title": "服务桥接工单落库与读回（应答子面 500 缺陷观察）",
+    {"id": "BAP3", "title": "服务桥接工单落库—应答—读回闭环",
      "input": "已建立的管理员会话（带 CSRF 令牌）。",
      "actions": "POST /api/service-bridge/requests 建单 → GET /requests/{id} 读回；"
                 "另如实探测 PUT /requests/{id}/respond（记录为缺陷观察项）。",
      "expected": "建单 200 返回整数 id（pending）；读回同 id/同标题。"
-                 "（应答子面在本 commit 返回 500，未通过，作为观察项记录，不计入本用例通过面。）",
+                 "应答返回 200 且随后读回 status=resolved、response 与 responded_by 均已落库。",
      "run": case_service_bridge_roundtrip},
     {"id": "BAP4", "title": "非法优先级与必填缺参被校验拒绝（负例）",
      "input": "已建立的管理员会话（带 CSRF 令牌）。",
@@ -210,13 +222,14 @@ VISIBLE_RESULTS = {
         "business-docking、data-sources 等，状态「启用」），左侧运维导航齐全。",
     "BAP2-business-event-published.png": "POST /api/business/ocr/recognize → 200，csrf_sent=true，success=true，"
         "message=OCR 请求已发布，event=ocr.requested，published=true，含 run_id/agent_run_id，agent_status=completed。",
-    "BAP3-service-bridge-roundtrip.png": "POST /api/service-bridge/requests → 200，id=3，status_field=pending；"
-        "GET 读回 200，同 id、title=vc-e2e-business-probe；respond_probe_defect：PUT respond → 500 internal_error"
+    "BAP3-service-bridge-roundtrip.png": "POST /api/service-bridge/requests → 200，status_field=pending；"
+        "PUT respond → 200、status=resolved、responded_by=admin；随后 GET 读回 200 且 status=resolved、"
+        "response=已由验收实例应答"
         "「服务器内部错误」（Session 解绑内部错误，真实缺陷观察项）。",
     "BAP4-validation-rejected.png": "priority=bogus → 400「Invalid priority. Must be one of: ['low','normal','high','urgent']」；"
         "缺 title → 422 validation_error body.title Field required；缺 product_id → 422 validation_error body.product_id Field required。",
     "BAP5-csrf-denied.png": "无 X-CSRF-Token 的 POST /api/business/inventory/update → 403，success=false，message=CSRF token missing。",
     "__video__": "本轮真实浏览器会话录像（webm，18.16s，VP8 1600x1000 25fps，ffmpeg 实测）："
-        "管理员登录 → 服务器功能模块页渲染 → OCR 业务事件发布 200 → 服务工单落库/读回 200 与 respond 500 观察 → "
+        "管理员登录 → 服务器功能模块页渲染 → OCR 业务事件发布 200 → 服务工单落库/应答/读回 200 → "
         "非法优先级/缺参 400/422 → 无 CSRF 写请求 403。",
 }
