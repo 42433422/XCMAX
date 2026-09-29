@@ -117,13 +117,17 @@ async def submit_product_issue(
         return {"state": "OWNER_ROUTE_UNAVAILABLE"}
     identity = build_identity()
     client_id = desktop_installation_id()
+    # 市场端建单接口要求 product_version 非空且至少 1 字符。未打包运行、构建身份
+    # 文件缺失或损坏的客户端拿不到版本号时也必须能建单，否则客户上报缺陷只会得到
+    # 「受理服务尚未送达」，问题再次被挡在闭环之外。
+    version_label = identity.get("product_version") or "unknown"
     context = {
         "expected": triage["expected"],
         "actual": triage["actual"],
         "confidence": triage["confidence"],
         "support_bundle_sha256": evidence["sha256"],
         "client_instance_id": client_id,
-        "product_version": identity.get("product_version", ""),
+        "product_version": version_label,
         "git_sha": identity.get("git_sha", ""),
         "platform": platform.platform(),
     }
@@ -142,36 +146,49 @@ async def submit_product_issue(
     if not wo_id:
         return {"state": "OWNER_ROUTE_UNAVAILABLE"}
     title = f"客户端产品缺陷 · {reason[:100]}"
+    # description 是市场端判定「同一需求标识是否绑定同一内容」的一部分：同一工单
+    # 重复上报（客户重测、补报）必须原样复用，否则会被判成内容不同而 409，客户
+    # 永远拿不到工单编号。每次都变的支持包摘要只经 support_bundle_sha256 字段传递，
+    # 市场端也明确把它排除在该身份判定之外。
     description = (
         f"work_order_id：{wo_id}\n客户原话：{reason}\n"
-        f"预期：{triage['expected']}\n实际：{triage['actual']}\n"
-        f"支持包 SHA256：{evidence['sha256']}"
+        f"预期：{triage['expected']}\n实际：{triage['actual']}"
     )
-    result = await custom_delivery_remote_json(
-        token,
-        "/api/customer-service/issues/intake",
-        method="POST",
-        payload={
-            "source": "customer_feedback",
-            "source_ref": wo_id,
-            "title": title,
-            "description": description,
-            "issue_domain": "platform",
-            "acceptance_criteria": "使用相同客户端操作重现并验证原问题。",
-            "work_order_id": wo_id,
-            "support_bundle_sha256": evidence["sha256"],
-            "support_bundle_base64": base64.b64encode(bundle).decode("ascii"),
-            "customer_instance_id": client_id,
-            "product_version": identity.get("product_version", ""),
-            "git_sha": identity.get("git_sha", ""),
-        },
-    )
+    try:
+        result = await custom_delivery_remote_json(
+            token,
+            "/api/customer-service/issues/intake",
+            method="POST",
+            payload={
+                "source": "customer_feedback",
+                "source_ref": wo_id,
+                "title": title,
+                "description": description,
+                "issue_domain": "platform",
+                "acceptance_criteria": "使用相同客户端操作重现并验证原问题。",
+                "work_order_id": wo_id,
+                "support_bundle_sha256": evidence["sha256"],
+                "support_bundle_base64": base64.b64encode(bundle).decode("ascii"),
+                "customer_instance_id": client_id,
+                "product_version": version_label,
+                "git_sha": identity.get("git_sha", ""),
+            },
+        )
+    except (RuntimeError, ConnectionError):
+        # 该 Work Order 已有受理工单但内容摘要不同（客户端格式升级、客户补报），
+        # 市场会以 409 拒绝而不是重放。此时必须回查已有工单并复用其编号，否则
+        # 客户重复上报同一问题只会得到「受理服务尚未送达」。
+        logger.info("client product issue intake not replayed; falling back to lookup")
+        result = {}
     if (
         result.get("success") is not True
         or not result.get("ticket_id")
         or not result.get("ticket_no")
     ):
-        return {"state": "OWNER_ROUTE_UNAVAILABLE", "work_order_id": wo_id}
+        existing = await _existing_ticket_for_work_order(token, wo_id)
+        if not existing:
+            return {"state": "OWNER_ROUTE_UNAVAILABLE", "work_order_id": wo_id}
+        result = {**existing, "success": True}
     return {
         "state": "ROUTED",
         "work_order_id": wo_id,
@@ -179,3 +196,23 @@ async def submit_product_issue(
         "owner_ticket_no": result["ticket_no"],
         "support_bundle_sha256": evidence["sha256"],
     }
+
+
+async def _existing_ticket_for_work_order(token: str, wo_id: str) -> dict[str, Any] | None:
+    """回查当前账号在该 Work Order 下已有的受理工单编号。"""
+    try:
+        listing = await custom_delivery_remote_json(token, "/api/customer-service/tickets?limit=50")
+    except (RuntimeError, ConnectionError):
+        logger.info("client issue ticket lookup unavailable", exc_info=True)
+        return None
+    for item in listing.get("items") or []:
+        if not isinstance(item, dict):
+            continue
+        evidence = item.get("evidence") if isinstance(item.get("evidence"), dict) else {}
+        if str(evidence.get("source_ref") or "") != wo_id:
+            continue
+        ticket_id, ticket_no = item.get("id"), str(item.get("ticket_no") or "")
+        if ticket_id is None or not ticket_no:
+            continue
+        return {"ticket_id": ticket_id, "ticket_no": ticket_no}
+    return None
