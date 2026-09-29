@@ -3,7 +3,7 @@
   "kind": "web-admin-identity",
   "feature": "erp-business-api",
   "platform": "web",
-  "captured_at": "2026-09-29 10:59:06",
+  "captured_at": "2026-09-29 11:20:10",
   "entry_url": "http://127.0.0.1:42423/admin/login",
   "site_health": {
     "status": "healthy",
@@ -15,12 +15,12 @@
       "admin_console_git_sha": "",
       "artifact_sha256": "",
       "built_at": "",
-      "git_sha": "2544874de585bd700b1b1ee4aec0b45861dd7268",
+      "git_sha": "200a37d9a5e7cc8433c814cbe7e8ea0215dd36a2",
       "image_digest": "",
       "product_version": "",
       "release_id": ""
     },
-    "git_sha": "2544874de585bd700b1b1ee4aec0b45861dd7268",
+    "git_sha": "200a37d9a5e7cc8433c814cbe7e8ea0215dd36a2",
     "release_id": "",
     "neuro": {
       "status": "healthy",
@@ -159,12 +159,12 @@
             "total_success": 0,
             "success_rate": 0.0,
             "supported_events": [
-              "evolution.export",
-              "error.occurred",
-              "evolution.mine",
+              "evolution.search",
               "evolution.reflect",
+              "evolution.mine",
               "evolution.index",
-              "evolution.search"
+              "error.occurred",
+              "evolution.export"
             ],
             "kb_stats": {
               "total_entries": 65,
@@ -233,7 +233,7 @@
       }
     }
   },
-  "site_git_sha": "2544874de585bd700b1b1ee4aec0b45861dd7268",
+  "site_git_sha": "200a37d9a5e7cc8433c814cbe7e8ea0215dd36a2",
   "site_version": "1.0.0.5",
   "site_release_id": "",
   "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368"
