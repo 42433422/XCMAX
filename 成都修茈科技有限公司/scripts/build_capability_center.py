@@ -798,7 +798,7 @@ def render_index(data: dict, domains_full: list[dict]) -> str:
   {customer_view}
   <details class="cap-engineering" id="technical-matrix">
     <summary>查看完整技术验证矩阵（{s['total']} 项 · {s['completion']}% 加权工程进度）</summary>
-    <p class="cap-engineering-intro">{s['completion']}% 是目录中不同实现/验证状态的加权工程进度，不表示“产品只有 39% 已开发”。所有状态、覆盖率和证据都由能力 SSOT、平台验收记录及 CI 门禁生成。</p>
+    <p class="cap-engineering-intro">{s['completion']}% 是目录中不同实现/验证状态的加权工程进度，不表示“产品只有 {s['completion']}% 已开发”。所有状态、覆盖率和证据都由能力 SSOT、平台验收记录及 CI 门禁生成。</p>
   <section class="capm-hero">
     <div class="container capm-hero-inner">
       <div class="capm-hero-main">

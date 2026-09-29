@@ -5,15 +5,20 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.desktop_automation.service import get_desktop_automation_service
+from app.infrastructure.auth.dependencies import get_logged_in_user
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/desktop/automation", tags=["desktop-automation"])
+router = APIRouter(
+    prefix="/api/desktop/automation",
+    tags=["desktop-automation"],
+    dependencies=[Depends(get_logged_in_user)],
+)
 
 
 class RunWorkflowBody(BaseModel):

@@ -31,8 +31,6 @@ ALLOWLIST_SUFFIXES = (
     # init_db 拆分 part 与其母文件同类（schema/列引导 DDL）。
     "app/db/init_db_part03.py",
     "app/db/init_db_part03_part01.py",
-    # Postgres schema 引导（CREATE SCHEMA / SHOW search_path，schema_name 来自可信参数）。
-    "app/infrastructure/database/mod_schema_router.py",
 )
 
 TEXT_F_PATTERN = re.compile(r"\btext\s*\(\s*f[\"']", re.MULTILINE)

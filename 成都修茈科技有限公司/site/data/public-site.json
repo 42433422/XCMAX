@@ -184,9 +184,9 @@
     {
       "key": "web",
       "applicable": 128,
-      "verified": 53,
+      "verified": 52,
       "partial": 0,
-      "pending": 75,
+      "pending": 76,
       "last_verified_at": "2026-09-29",
       "label": "Web / 后端",
       "level": "签约级"
@@ -215,14 +215,14 @@
   "capabilities": {
     "total": 158,
     "by_status": {
-      "verified": 55,
+      "verified": 54,
       "partial": 93,
-      "implemented": 6,
+      "implemented": 7,
       "planned": 4
     },
     "domains": 10,
     "modules": 28,
-    "completion": 78,
+    "completion": 77,
     "catalog_version": "2026-09-16",
     "platforms": [
       {
@@ -248,9 +248,9 @@
       {
         "key": "web",
         "applicable": 128,
-        "verified": 53,
+        "verified": 52,
         "partial": 0,
-        "pending": 75,
+        "pending": 76,
         "last_verified_at": "2026-09-29",
         "label": "Web / 后端",
         "level": "签约级"
