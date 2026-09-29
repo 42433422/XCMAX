@@ -127,7 +127,8 @@ $buildInfo = @{
   version = $Version
   releaseId = $releaseId
 }
-$buildInfo | ConvertTo-Json -Compress | Set-Content -Path $buildInfoPath -Encoding UTF8
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText($buildInfoPath, (($buildInfo | ConvertTo-Json -Compress) + "`n"), $utf8NoBom)
 $backendSku = Join-Path $Root "dist\xcagi-backend\_internal\product-sku.json"
 $backendSkuDir = Split-Path $backendSku -Parent
 if (Test-Path $backendSkuDir) {
