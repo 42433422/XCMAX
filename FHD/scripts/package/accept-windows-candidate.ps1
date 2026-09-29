@@ -1,4 +1,4 @@
-param(
+﻿param(
   [Parameter(Mandatory=$true)][ValidateSet('Clean','Upgrade')][string]$Mode,
   [Parameter(Mandatory=$true)][string]$CandidatePath,
   [Parameter(Mandatory=$true)][string]$CandidateSha,
@@ -7,6 +7,8 @@ param(
   [string]$OldSha256 = '95b8d6b11adc204cc7b6f5e3ae62af648f6be0ee94604ad850d5b9a978e98e99'
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'product-version.ps1')
+$productVersion = Resolve-ProductVersion
 $installRoot = Join-Path $env:RUNNER_TEMP "xcagi-candidate-$Mode"
 $dataRoot = Join-Path $env:APPDATA 'XCAGI'
 $base = 'http://127.0.0.1:17500'
@@ -86,9 +88,9 @@ function Create-Record($session, [string]$marker, [string]$label) {
 function Backup-And-Version {
   $infoPath = Join-Path $installRoot 'resources/build-info.json'
   $info = Get-Content $infoPath -Raw | ConvertFrom-Json
-  Check ($info.gitSha -eq $CandidateSha -and $info.version -eq '1.0.0.5') 'build_info' "sha=$($info.gitSha); version=$($info.version)"
+  Check ($info.gitSha -eq $CandidateSha -and $info.version -eq $productVersion) 'build_info' "sha=$($info.gitSha); version=$($info.version)"
   $display = @('HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*') | ForEach-Object { Get-ItemProperty $_ -ErrorAction SilentlyContinue } | Where-Object { $_.InstallLocation -eq $installRoot } | Select-Object -First 1
-  Check ($display.DisplayVersion -eq '1.0.0.5') 'installer_display_version' "display=$($display.DisplayVersion)"
+  Check ($display.DisplayVersion -eq $productVersion) 'installer_display_version' "display=$($display.DisplayVersion)"
   $daily = Get-ScheduledTask -TaskName XcagiDailyBackup -ErrorAction Stop
   $weekly = Get-ScheduledTask -TaskName XcagiWeeklyBackup -ErrorAction Stop
   Check ($daily.Actions[0].Execute -match 'powershell.exe' -and $daily.Actions[0].Arguments -match 'XcagiBackup.ps1') 'backup_task_action' 'daily and weekly tasks registered; daily action points to packaged backup script'
