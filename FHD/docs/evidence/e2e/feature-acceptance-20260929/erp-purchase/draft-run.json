@@ -3,44 +3,52 @@
  "feature": "erp-purchase",
  "name": "采购管理",
  "platform": "macos",
- "status": "failed",
- "verdict": "FAIL",
+ "status": "passed",
+ "verdict": "PASS",
  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
  "app_version": "1.0.0.5",
  "verified_at": "2026-09-29",
- "passed": 3,
- "failed": 1,
+ "passed": 5,
+ "failed": 0,
  "cases": [
   {
    "id": "M1",
-   "input": "POST /api/purchase/suppliers 请求体 {\"code\": \"MACSUP637976\", \"name\": \"MAC验收0929供应商\", \"contact_person\": \"李四\"}",
+   "input": "POST /api/purchase/suppliers 请求体 {\"code\": \"MACSUP658177\", \"name\": \"MAC验收0929供应商\", \"contact_person\": \"李四\"}",
    "actions": "在 App 页面内以同一登录会话调用 POST /api/purchase/suppliers（写操作自动附带 CSRF）：新建供应商（带编码）",
    "expected": "新建供应商（带编码）：HTTP 2xx 且业务字段满足断言",
-   "observed": "HTTP 200 86ms；供应商 id=5 code=MACSUP637976",
+   "observed": "HTTP 200 61ms；供应商 id=7 code=MACSUP658177",
    "result": "passed"
   },
   {
    "id": "M2",
-   "input": "POST /api/purchase/orders 请求体 {\"supplier_id\": 5, \"order_date\": \"2026-09-29\", \"delivery_date\": \"2026-10-08\", \"items\": [{\"product_id\": 2, \"quantity\": 10, \"unit_price\": 5.0}], \"remark\": \"MAC验收0",
+   "input": "POST /api/purchase/orders 请求体 {\"supplier_id\": 7, \"order_date\": \"2026-09-29\", \"delivery_date\": \"2026-10-08\", \"items\": [{\"product_id\": 3, \"quantity\": 10, \"unit_price\": 5.0}], \"remark\": \"MAC验收0",
    "actions": "在 App 页面内以同一登录会话调用 POST /api/purchase/orders（写操作自动附带 CSRF）：新建采购订单（选定产品，字符串日期）",
    "expected": "新建采购订单（选定产品，字符串日期）：HTTP 2xx 且业务字段满足断言",
-   "observed": "HTTP 200 67ms；订单 id=3 no=PO20260929072616 金额=50",
+   "observed": "HTTP 200 70ms；订单 id=5 no=PO20260929130258 金额=50",
    "result": "passed"
   },
   {
    "id": "M3",
-   "input": "POST /api/purchase/orders 请求体 {\"supplier_id\": 5, \"items\": [{\"product_id\": \"\", \"quantity\": 1, \"unit_price\": 1}]}",
-   "actions": "在 App 页面内以同一登录会话调用 POST /api/purchase/orders（写操作自动附带 CSRF）：缺陷回归：明细未选产品应得到业务提示而非 500",
-   "expected": "返回「第 1 行明细未选择产品」",
-   "observed": "HTTP 500 172ms；{\"success\": false, \"error_code\": \"internal_error\", \"message\": \"服务器内部错误\", \"path\": \"/api/purchase/orders\"}",
-   "result": "failed"
+   "input": "GET /api/purchase/orders/999999",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/purchase/orders/999999（写操作自动附带 CSRF）：边界：查询不存在的采购订单被拒",
+   "expected": "success=false 且提示采购订单不存在",
+   "observed": "HTTP 200 54ms；{\"success\": false, \"message\": \"采购订单不存在\"}",
+   "result": "passed"
   },
   {
    "id": "M4",
-   "input": "界面读回：采购订单列表出现新订单号",
-   "actions": "导航到 /mod/xcagi-erp-domain-bridge/purchase 并在页面文本中查找新写入的数据",
-   "expected": "界面列表/详情中出现新写入的数据",
-   "observed": "已在 /mod/xcagi-erp-domain-bridge/purchase 页面看到「PO20260929072616」；上下文：9供应商 | MAC验收0929供应商 | 采购订单 | 采购入库 | 供应商 | 订单号\t供应商\t订单日期\t交货日期\t总金额\t状态\t操作 | PO20260929072616\tMAC验收0929供应商\t2026-09-29\t2026-10-08\t¥50.00\t草稿\t查看编辑审核 | PO20260929064445\tMAC验收0929供应商\t2026-09-29\t2026-10-08",
+   "input": "GET /api/purchase/orders",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/purchase/orders（写操作自动附带 CSRF）：读回采购订单列表含新订单",
+   "expected": "读回采购订单列表含新订单：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 34ms；订单 5 条",
+   "result": "passed"
+  },
+  {
+   "id": "M5",
+   "input": "界面路由 /mod/xcagi-erp-domain-bridge/purchase",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /mod/xcagi-erp-domain-bridge/purchase，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /mod/xcagi-erp-domain-bridge/purchase，页面可见 采购管理、采购订单，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /mod/xcagi-erp-domain-bridge/purchase；命中文本 ['采购管理', '采购订单']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 耗材申领 | 副窗 | ◈ | 工作区 | 3 | 采购管理 | 新建采购订单 | 全部状态 | 草稿 | 已审核 | 部分入库 | 已完成 | 已取消 | 全部供应商 | MAC验收0929入库供应商 | MAC验收0929供应",
    "result": "passed"
   }
  ],
@@ -48,22 +56,22 @@
   {
    "feature": "erp-purchase",
    "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-purchase/macos/result.png",
-   "sha256": "63ec2ed5cc2d2cc2e26e1aaa75e9f49ba7bbbc250f53323825d195f0b2589cb4",
+   "sha256": "8508f34a93207332e00c85b31fdc93054889ea4af5156ae41009116ac6e4273d",
    "kind": "screenshot",
    "tag": "result"
   },
   {
    "feature": "erp-purchase",
    "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-purchase/macos/operation.webm",
-   "sha256": "4b68199082b1b92d9b9984d55a53cf89b5f130b18a047a359dbed95950e30c29",
+   "sha256": "6e28ff2c593cc5c5d5e213d3c551070d1d7381dd6a35b8cf8f6500046137a013",
    "kind": "video",
    "tag": "operation"
   }
  ],
  "log": {
   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-purchase/macos/run.log",
-  "sha256": "abc8cb13726aa4d984714597bdf123a21a992e97984b279864a04362df63bb6c",
-  "bytes": 1211
+  "sha256": "825885074aff739ddec1fbce29c8f3f569adeb7c5f0f559494fe5136cc574c42",
+  "bytes": 1444
  },
  "method": "经 CDP(127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
 }

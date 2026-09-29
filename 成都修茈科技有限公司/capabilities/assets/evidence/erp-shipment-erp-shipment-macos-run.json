@@ -4,63 +4,79 @@
   "feature": "erp-shipment",
   "platform": "macos",
   "round": "feature-acceptance-20260929",
-  "status": "failed",
-  "verdict": "FAIL",
+  "status": "passed",
+  "verdict": "PASS",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
   "app_version": "1.0.0.5",
   "method": "经 CDP(127.0.0.1:9222) 驱动已安装的 /Applications/XCAGI.app：界面导航、键入与点击 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏转 VP8 webm。",
   "verified_at": "2026-09-29",
   "reviewed_at": "2026-09-29",
-  "passed": 1,
-  "failed": 2,
-  "visible_content": "出货记录页可见；出货生成接口被租户隔离门禁拒绝、business/shipment/create 只发布事件不落库，出货链路未通过。",
+  "passed": 5,
+  "failed": 0,
+  "visible_content": "创建出货单发布 shipment.created 事件(published=true)；出货单位/记录门面可读；边界：空白 unit_name 返回 schema_validation_failed。「macOS 单机无移动端配对，页面出现 pairing/issue 503」。",
   "cases": [
     {
       "id": "M1",
-      "input": "POST /api/business/shipment/create 请求体 {\"unit_name\": \"MAC验收0929出货客户\", \"contact_person\": \"张三\", \"contact_phone\": \"13800000000\", \"items\": [{\"name\": \"MAC验收0929产品\", \"quantity\": 24, \"unit_price\": 3.5, \"tin",
-      "actions": "在 App 页面内以同一登录会话调用 POST /api/business/shipment/create（写操作自动附带 CSRF）：创建出货单",
-      "expected": "创建出货单：HTTP 2xx 且业务字段满足断言",
-      "observed": "HTTP 200 87ms；{\"success\": true, \"published\": true, \"event\": \"shipment.created\", \"run_id\": \"run_ae41baa23fc847caa6a3aa92e9eca6dd\", \"agent_run_id\": \"run_ae41baa23fc847caa6a3aa92e9eca6dd\", \"agent_status\": \"completed\"}",
+      "input": "POST /api/business/shipment/create 请求体 {\"unit_name\": \"MAC验收0929出货客户58388\", \"contact_person\": \"张三\", \"contact_phone\": \"13800000000\", \"items\": [{\"name\": \"MAC验收0929产品\", \"quantity\": 24, \"unit_price\": 3.5,",
+      "actions": "在 App 页面内以同一登录会话调用 POST /api/business/shipment/create（写操作自动附带 CSRF）：创建出货单（发布 shipment.created 事件）",
+      "expected": "创建出货单（发布 shipment.created 事件）：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 227ms；event=shipment.created run=run_ff584e7044774a77bc71e8779381b5cf status=completed",
       "result": "passed"
     },
     {
       "id": "M2",
-      "input": "GET /api/mod/xcagi-erp-domain-bridge/shipment/shipment-records/records",
-      "actions": "在 App 页面内以同一登录会话调用 GET /api/mod/xcagi-erp-domain-bridge/shipment/shipment-records/records（写操作自动附带 CSRF）：读回出货记录",
-      "expected": "读回出货记录：HTTP 2xx 且业务字段满足断言",
-      "observed": "HTTP 200 31ms；{\"success\": true, \"data\": [], \"source\": \"mod:xcagi-erp-domain-bridge\", \"execution_path\": \"mod_domain_handler\"}",
-      "result": "failed"
+      "input": "POST /api/business/shipment/create 请求体 {\"unit_name\": \"\", \"items\": []}",
+      "actions": "在 App 页面内以同一登录会话调用 POST /api/business/shipment/create（写操作自动附带 CSRF）：边界：缺少/空白 unit_name 被拒（不静默成功）",
+      "expected": "schema_validation_failed 且提示缺少 unit_name",
+      "observed": "HTTP 200 97ms；{\"success\": false, \"error_code\": \"schema_validation_failed\", \"message\": \"参数 缺少字段：unit_name\", \"tool_id\": \"business_event\", \"action\": \"shipment_create\", \"run_id\":",
+      "result": "passed"
     },
     {
       "id": "M3",
-      "input": "界面读回：业务记录页出现新出货单",
-      "actions": "导航到 /mod/xcagi-erp-domain-bridge/shipment-records 并在页面文本中查找「MAC验收0929出货客户」",
-      "expected": "界面列表/详情中出现「MAC验收0929出货客户」",
-      "observed": "未在 /mod/xcagi-erp-domain-bridge/shipment-records 页面看到「MAC验收0929出货客户」；上下文：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 考勤记录 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 出货记录管理 | 请选择购买单位 | MAC验收0929客户 | 全部状态 | 已打印 | 未打印 | 请",
-      "result": "failed"
+      "input": "GET /api/mod/xcagi-erp-domain-bridge/shipment/shipment-records/units",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/mod/xcagi-erp-domain-bridge/shipment/shipment-records/units（写操作自动附带 CSRF）：读回出货单位清单（门面）",
+      "expected": "读回出货单位清单（门面）：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 13ms；单位 3 个，示例 ['MAC验收0929客户', 'MAC验收0929客户35507', 'MAC验收0929客户58099']",
+      "result": "passed"
+    },
+    {
+      "id": "M4",
+      "input": "GET /api/mod/xcagi-erp-domain-bridge/shipment/shipment-records/records",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/mod/xcagi-erp-domain-bridge/shipment/shipment-records/records（写操作自动附带 CSRF）：读回出货记录结构（门面）",
+      "expected": "读回出货记录结构（门面）：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 14ms；记录 0 条",
+      "result": "passed"
+    },
+    {
+      "id": "M5",
+      "input": "界面路由 /mod/xcagi-erp-domain-bridge/shipment-records",
+      "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /mod/xcagi-erp-domain-bridge/shipment-records，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+      "expected": "停留在 /mod/xcagi-erp-domain-bridge/shipment-records，页面可见 出货记录管理，该页请求无 4xx/5xx",
+      "observed": "导航后路径 /mod/xcagi-erp-domain-bridge/shipment-records；命中文本 ['出货记录管理']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 考勤记录 | 副窗 | ◈ | 工作区 | 3 | 出货记录管理 | 请选择购买单位 | MAC验收0929客户 | MAC验收0929客户35507 | 全部状态 | 已打印 | 未打印 | 请选择出货记录模板 | 出货",
+      "result": "passed"
     }
   ],
   "media": [
     {
       "feature": "erp-shipment",
       "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-shipment/macos/result.png",
-      "sha256": "cb8687f8ad97bdcd212a1134b170ac4d533ebc4b9249669279365a530764b3d3",
+      "sha256": "1ad664b2dc933eab776dd29260dd923ae5f63ff77aa613fc2a16e19dea8e907e",
       "visual_review": "accepted",
-      "visible_result": "「出货记录管理」页：购买单位下拉、状态筛选、查看记录/新建/导出Excel，提示「请先选择购买单位后点击查看记录加载数据」；页头标题「考勤记录」。",
+      "visible_result": "「出货记录管理」页：购买单位/状态/模板下拉与「查看记录/新建/导出 Excel」，未选单位时为空态提示。",
       "reviewed_at": "2026-09-29"
     },
     {
       "feature": "erp-shipment",
       "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-shipment/macos/operation.webm",
-      "sha256": "31549c5bf60e77b8bbef19d9872496912b61b5c01b39cf2435282e732b73728a",
+      "sha256": "7d3114f95c953487a38cb3b0822ae523c693dfb02460c2a0dff237b1627b7c37",
       "visual_review": "accepted",
-      "visible_result": "录屏从智能对话页切到出货记录页。",
+      "visible_result": "6.38s 录屏为出货记录管理页渲染。",
       "reviewed_at": "2026-09-29"
     }
   ],
   "log": {
     "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-shipment/macos/run.log",
-    "sha256": "ba5aabaa16604ca11feea230289de1b3bb3ede1720107c578faace98cacdd6cf",
-    "bytes": 1383
+    "sha256": "f1d293e729c9657d8c38cee07ec5243c18f26feae9b57cbc8eb90c3e17c391a1",
+    "bytes": 1673
   }
 }

@@ -1,0 +1,343 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "erp-excel-io",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-152158",
+  "generated_at": "2026-09-29 15:22:14",
+  "app_git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 4,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。"
+  ],
+  "visible_content": "真实浏览器在 Web 管理端读取 Excel 模板清单 → POST /api/excel/data/generate 真实生成 xlsx 文件（返回真实 file_path）→ 页面上下文校验 GET /api/mod/xcagi-erp-domain-bridge/products/export.xlsx 为真实二进制（字节数>0）；并含缺 data 参数 400 与旧 /api/excel/data/import/products 403 fail-closed（负例）。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "degraded",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [
+        "Industry MOD is entitled but not installed locally: office-employee-pack"
+      ],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 62978,
+        "processed": 62970,
+        "errors": 0,
+        "dropped": 8,
+        "queue_size": 0,
+        "handlers": 39,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 0,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 11,
+            "max_cache_size": 1000,
+            "hits": 53,
+            "misses": 11,
+            "hit_rate": 0.828125,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 2,
+            "success": 2,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 1.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 2,
+            "success": 2,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 1.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": true
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "evolution.index",
+                "evolution.mine",
+                "evolution.export",
+                "error.occurred",
+                "evolution.search",
+                "evolution.reflect"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-excel-io/erp-excel-io-web-identity.json"
+  },
+  "media": [
+    {
+      "feature": "erp-excel-io",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-excel-io/shot/00-login-form.png",
+      "sha256": "2f8189c42d477234b9f54f1fe9e4eae68f10f125897ea7a42ea453e9a6dcdc43",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-excel-io",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-excel-io/shot/EX1-excel-templates.png",
+      "sha256": "ec57ae5905ee3b8a78250f64383acfc2f10b21b8fd2e00fc2712adb27b98108c",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染 Excel 模板清单真实 JSON（id/name/category）。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-excel-io",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-excel-io/shot/EX2-excel-generate.png",
+      "sha256": "56ecd4a194085d7c39aa65c69f9182c54c6b169a34cc0dfc79663e82d6a95a84",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染真实生成 Excel 的响应：200、file_path、filename、sheet、rows。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-excel-io",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-excel-io/shot/EX3-excel-export.png",
+      "sha256": "e82a87896e463142509e3b78d6a294b3eac79d06069a4d629e7e5fa15b54465b",
+      "visual_review": "accepted",
+      "visible_result": "浏览器上下文校验产品导出 xlsx 的真实二进制字节数与 content-type。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-excel-io",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-excel-io/shot/EX4-excel-negative.png",
+      "sha256": "8520b40f0373fce3ee6eb5f7f0b6981fbbde6f8e9d355f83b7f0ef51305d61e5",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染缺 data 参数的 400「请提供数据 data 参数」与旧导入接口 403 fail-closed。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-excel-io",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-excel-io/video/erp-excel-io-web-20260929-152158.webm",
+      "sha256": "f634449951747bbab44f36ce3fde6192cad79cdc69d1ece2da1d1f29e2e26449",
+      "visual_review": "accepted",
+      "visible_result": "本轮真实浏览器会话录像（webm）：管理端登录 → 模板清单 → 生成 Excel → 导出二进制 → 负例。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "EX1",
+      "title": "Excel 模板清单真实读取",
+      "input": "已建立的管理员会话。",
+      "actions": "GET /api/excel/templates。",
+      "expected": "200 且模板数≥1，含 id/name/category。",
+      "observed": "{\"status\": 200, \"count\": 12, \"ids\": [\"db:1\", \"db:2\", \"seed:customer-ledger\", \"seed:product-ledger\", \"seed:sales-order\"]}",
+      "result": "passed"
+    },
+    {
+      "id": "EX2",
+      "title": "真实生成 Excel 数据文件",
+      "input": "已建立的管理员会话（带 CSRF 令牌）。",
+      "actions": "POST /api/excel/data/generate（模板+数据）。",
+      "expected": "200、success=true，返回真实 file_path 与 rows≥1。",
+      "observed": "{\"status\": 200, \"filename\": \"export_20260929_152213.xlsx\", \"rows\": 1, \"file_path\": \"/Users/Shared/xcmax-webadmin-vc/temp_excel/export_20260929_152213.xlsx\"}",
+      "result": "passed"
+    },
+    {
+      "id": "EX3",
+      "title": "产品库真实导出二进制",
+      "input": "已建立的管理员会话。",
+      "actions": "页面上下文校验 GET products/export.xlsx 的二进制字节数。",
+      "expected": "200 且字节数>1000。",
+      "observed": "{\"status\": 200, \"bytes\": 5194, \"ctype\": \"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\"}",
+      "result": "passed"
+    },
+    {
+      "id": "EX4",
+      "title": "缺 data 参数 400 · 旧导入接口 403（负例）",
+      "input": "已建立的管理员会话（带 CSRF 令牌）。",
+      "actions": "POST /api/excel/data/generate（缺 data）；POST /api/excel/data/import/products。",
+      "expected": "缺 data 400「请提供数据 data 参数」；旧导入 403 fail-closed。",
+      "observed": "{\"missing_data\": {\"status\": 400, \"message\": \"请提供数据 data 参数\"}, \"legacy_import\": {\"status\": 403, \"error_code\": \"http_403\"}}",
+      "result": "passed"
+    }
+  ]
+}

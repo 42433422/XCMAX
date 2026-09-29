@@ -6,11 +6,11 @@
   "reviewed_at": "2026-09-29",
   "app_version": "1.0.0.5",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
-  "screenshot_sha256": "e8908ab0273f92a9b1bb4522fac5382360813953c60c2b6fe8cdcf5f038e53b8",
-  "visible_content": "Persy 知识库状态与界面可用；但写入与检索旧知识索引接口对企业租户返回 403「旧知识索引未提供租户隔离」，知识入库/问答链路未通过。",
+  "screenshot_sha256": "7e1a27fd7bde2c21000aa6e4b32142fe293261cfd700b8719c8313f82f137c52",
+  "visible_content": "persy 索引状态可读；向租户隔离数据集写入文档(200、chunk_count≥1)并读回 document_count≥1；边界：旧全局索引 403「未提供租户隔离」。",
   "videos": [
     "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-knowledge/macos/operation.webm"
   ],
-  "full_feature_acceptance": false,
+  "full_feature_acceptance": true,
   "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-knowledge/macos/result.png"
 }

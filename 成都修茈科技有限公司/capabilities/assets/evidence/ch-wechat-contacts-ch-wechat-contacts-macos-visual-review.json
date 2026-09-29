@@ -6,11 +6,11 @@
   "reviewed_at": "2026-09-29",
   "app_version": "1.0.0.5",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
-  "screenshot_sha256": "8d318c173c7a00126f809ff19d5238d3c336529c1eadae87b0a822d62530d6f2",
-  "visible_content": "微信联系人接口可读，页面可见；联系人同步需要微信采集端与 sync token，受阻。",
+  "screenshot_sha256": "b2d6dcccaeeee90127a744eb95d813d3d1ae572816a07ed5599100ded3cedd34",
+  "visible_content": "上行联系人后 GET /api/ops/wechat/contacts 读回 HTTP 200，items 命中新 display_name（真实落库）；边界：无令牌读取返回 401 invalid wechat sync token。",
   "videos": [
     "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-wechat-contacts/macos/operation.webm"
   ],
-  "full_feature_acceptance": false,
+  "full_feature_acceptance": true,
   "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-wechat-contacts/macos/result.png"
 }

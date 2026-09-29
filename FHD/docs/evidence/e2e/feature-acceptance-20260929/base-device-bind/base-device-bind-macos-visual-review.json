@@ -6,8 +6,8 @@
   "reviewed_at": "2026-09-29",
   "app_version": "1.0.0.5",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
-  "screenshot_sha256": "749ce214ba3a0dff81571cf42c3db4b0a549f6973d840a244ddfbe5f400a7124",
-  "visible_content": "本机配对状态可读（未配对）；向云端申请设备码返回 503「云端设备码暂不可用」，且需要移动端真机扫码，设备绑定未通过。",
+  "screenshot_sha256": "ebff0cdaeb9c2bbefc0089489d358ed419107fa49336718fff907f3521dc535c",
+  "visible_content": "阻塞：需移动端真机同网段扫码，且云端设备码服务 503「云端设备码暂不可用」，桌面端无法生成可扫码设备码；配对状态恒 paired=false。",
   "videos": [
     "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-device-bind/macos/operation.webm"
   ],

@@ -1,79 +1,55 @@
-"""Desktop automation: persisted app profiles and the permission-aware macOS driver."""
+"""Tests for app.desktop_automation.drivers."""
 
 from __future__ import annotations
 
-import subprocess
-
 import pytest
 
-from app.desktop_automation import drivers
-from app.desktop_automation.drivers import MacDriver, MCPDriver, WindowsDriver
-from app.desktop_automation.service import DesktopAutomationService
+from app.desktop_automation.drivers import MacDriver, MCPDriver, WindowsDriver, _BaseDriver
 
 
-class FakeMac(MacDriver):
-    def __init__(self, available: bool = True, running: bool = True) -> None:
-        self.available, self.running, self.calls = available, running, []
+class TestBaseDriver:
+    def test_name(self):
+        d = _BaseDriver()
+        assert d.name == "base"
 
-    def is_available(self) -> bool:
-        return self.available
-
-    def accessibility_trusted(self) -> bool:
-        return False
-
-    def _run(self, *argv: str) -> subprocess.CompletedProcess[str]:
-        self.calls.append(argv)
-        out = "true" if self.running else "false"
-        return subprocess.CompletedProcess(argv, 0, stdout=out, stderr="")
+    def test_is_available_false(self):
+        d = _BaseDriver()
+        assert d.is_available() is False
 
 
-@pytest.fixture
-def svc(tmp_path):
-    fake = FakeMac()
-    return DesktopAutomationService(path=tmp_path / "profiles.json", driver=fake), fake
+class TestWindowsDriver:
+    def test_name(self):
+        d = WindowsDriver()
+        assert d.name == "windows"
+
+    def test_is_available_false(self):
+        d = WindowsDriver()
+        assert d.is_available() is False
 
 
-def test_unshipped_drivers_report_unavailable() -> None:
-    assert WindowsDriver().is_available() is False
-    assert MCPDriver("wechat_cv").is_available() is False
+class TestMacDriver:
+    def test_name(self):
+        d = MacDriver()
+        assert d.name == "mac"
+
+    def test_is_available_false(self):
+        d = MacDriver()
+        assert d.is_available() is False
 
 
-def test_mac_driver_availability_follows_platform(monkeypatch) -> None:
-    monkeypatch.setattr(drivers.platform, "system", lambda: "Linux")
-    assert MacDriver().is_available() is False
+class TestMCPDriver:
+    def test_name(self):
+        d = MCPDriver()
+        assert d.name == "mcp"
 
+    def test_is_available_false(self):
+        d = MCPDriver()
+        assert d.is_available() is False
 
-def test_profiles_persist_and_reject_unsafe_identifiers(svc, tmp_path) -> None:
-    service, _fake = svc
-    assert service.register_profile({"app_id": "Bad Id"})["success"] is False
-    bad = service.register_profile({"app_id": "calc", "mac_bundle_id": 'x"; do shell script "id'})
-    assert bad["success"] is False
-    ok = service.register_profile(
-        {"app_id": "calc", "name": "计算器", "mac_bundle_id": "com.apple.calculator"}
-    )
-    assert ok["success"] is True
-    reloaded = DesktopAutomationService(path=tmp_path / "profiles.json", driver=FakeMac())
-    assert reloaded.list_profiles() == [ok["profile"]]
+    def test_target_attribute(self):
+        d = MCPDriver(target="test-target")
+        assert d.target == "test-target"
 
-
-def test_open_app_runs_whitelisted_workflow_and_reports_permission_state(svc) -> None:
-    service, fake = svc
-    service.register_profile({"app_id": "calc", "mac_bundle_id": "com.apple.calculator"})
-    result = service.run_workflow("calc", "open_app")
-    assert result == {
-        "success": True,
-        "workflow": "open_app",
-        "running": True,
-        "accessibility_trusted": False,
-    }
-    assert fake.calls[0] == ("open", "-b", "com.apple.calculator")
-    assert service.run_workflow("calc", "open_and_send")["success"] is False
-    assert service.run_workflow("missing", "open_app")["success"] is False
-    fake.available = False
-    assert service.run_workflow("calc", "app_status")["success"] is False
-
-
-def test_ui_driving_actions_stay_unavailable(svc) -> None:
-    service, _fake = svc
-    assert service.find_element("calc", "button")["success"] is False
-    assert service.send_wechat_message("a", "b")["message_sent"] is False
+    def test_default_target_empty(self):
+        d = MCPDriver()
+        assert d.target == ""

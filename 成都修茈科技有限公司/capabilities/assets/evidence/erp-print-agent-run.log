@@ -1,6 +1,6 @@
-2026-09-29T06:48:31+0800 [erp-print-agent] 开始验收 erp-print-agent 打印代理与套打通道；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
-2026-09-29T06:48:31+0800 [erp-print-agent] M1 failed :: HTTP 403 18ms；{"success": false, "error_code": "http_403", "message": "该旧业务接口尚未提供安全的租户数据隔离", "path": "/api/print/printers"}
-2026-09-29T06:48:35+0800 [erp-print-agent] M2 failed :: 导航后路径 /mod/xcagi-erp-domain-bridge/printer-list；命中文本 ['打印机']；缺失 []；界面请求失败 [(403, '/api/printers'), (403, '/api/print/printer-selection')]；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 打印机列表 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 打印机列表 | 刷新 | 打印机分类 | 发货单打印机 | 未设置（自动识别） | 状态：- | 标签打印机 | 未设置（自动识别） | 状态：- | 保存
-2026-09-29T06:48:35+0800 [erp-print-agent] M3 failed :: 受阻：需要本机安装实体打印机
-2026-09-29T06:48:36+0800 [erp-print-agent] screenshot result.png
-2026-09-29T06:48:37+0800 [erp-print-agent] video operation.webm bytes=284401
+2026-09-29T13:05:23+0800 [erp-print-agent] 开始验收 erp-print-agent 打印代理与套打通道；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T13:05:23+0800 [erp-print-agent] M1 failed :: 受阻：打印代理接口未开租户隔离：GET /api/print/printers 与 /api/print/document-printer 均返回 403；本机未安装实体打印机
+2026-09-29T13:05:23+0800 [erp-print-agent] M2 failed :: 受阻：GET /api/print/printer-selection 返回 403；无可用打印设备
+2026-09-29T13:05:23+0800 [erp-print-agent] M3 failed :: 受阻：需要本机安装实体打印机，本机未连接打印机
+2026-09-29T13:05:24+0800 [erp-print-agent] screenshot result.png
+2026-09-29T13:05:24+0800 [erp-print-agent] video operation.webm bytes=95169

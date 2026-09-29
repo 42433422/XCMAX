@@ -1,0 +1,8 @@
+[15:15:34] feature=ind-workflow-viz platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-workflow-viz
+[15:15:48] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[15:15:50] case WV1: passed - 工作流可视化桥接与平台能力读取
+[15:15:50] case WV2: passed - 工作流员工目录真实读取
+[15:15:50] case WV3: passed - 真实工作流图读取（time rail graph）
+[15:15:51] case WV4: passed - 工作流运行缺参被拒（负例）
+[15:15:51] video: ind-workflow-viz-web-20260929-151534.webm (1252158 bytes)
+[15:15:51] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-workflow-viz/log/ind-workflow-viz-web-20260929-151534.log

@@ -1,0 +1,8 @@
+[15:27:17] feature=erp-purchase-inbound platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-purchase-inbound
+[15:27:31] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[15:28:22] case PI1: passed - 采购入库真实写-读回
+[15:28:22] case PI2: passed - 入库明细真实读回（并观察库存联动）
+[15:28:22] case PI3: passed - 采购汇总真实读取
+[15:28:23] case PI4: passed - 缺产品明细被拒（负例）
+[15:28:26] video: erp-purchase-inbound-web-20260929-152717.webm (5285511 bytes)
+[15:28:26] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-purchase-inbound/log/erp-purchase-inbound-web-20260929-152717.log

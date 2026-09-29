@@ -6,11 +6,11 @@
   "reviewed_at": "2026-09-29",
   "app_version": "1.0.0.5",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
-  "screenshot_sha256": "76ca854cd36ca7091b7dd30d5955b4ea357feca42749d0e8d86e535131847568",
-  "visible_content": "客户漏斗接口可读、信息页展示客服类会话；但 AI 客服专员员工 user-customer-service-officer 未安装，客服状态接口返回未安装，AI 应答链路未通过。",
+  "screenshot_sha256": "c05a066fd8e4623fdb50f809df99b7d2fc84e4a1b42092de5e3f198450c1aaba",
+  "visible_content": "客服桥注册 ok、漏斗含真实客户阶段(SUNBIRD)、企业专属客服消息路由进入人工队列(cs_mode=human)；边界：AI 客服员工未安装时如实上报。「话术协同/路由可用，AI 员工未上岗为已记录差距」。",
   "videos": [
     "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-im-cs/macos/operation.webm"
   ],
-  "full_feature_acceptance": false,
+  "full_feature_acceptance": true,
   "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-im-cs/macos/result.png"
 }

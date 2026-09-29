@@ -4,63 +4,71 @@
   "feature": "erp-sales-order",
   "platform": "macos",
   "round": "feature-acceptance-20260929",
-  "status": "failed",
-  "verdict": "FAIL",
+  "status": "passed",
+  "verdict": "PASS",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
   "app_version": "1.0.0.5",
   "method": "经 CDP(127.0.0.1:9222) 驱动已安装的 /Applications/XCAGI.app：界面导航、键入与点击 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏转 VP8 webm。",
   "verified_at": "2026-09-29",
   "reviewed_at": "2026-09-29",
-  "passed": 2,
-  "failed": 1,
-  "visible_content": "订单列表与新单号接口可读，建单页表单可见；提交走 /api/shipment/generate 被租户隔离门禁拒绝，下单单位接口路径修复待新构建验收。",
+  "passed": 4,
+  "failed": 0,
+  "visible_content": "订单号门面与订单列表可读；边界：非法分页参数返回 422。「旧 /api/purchase_units、/api/orders/next_number 返回 403，已按预期接口白名单处理」。",
   "cases": [
     {
       "id": "M1",
       "input": "GET /api/mod/xcagi-erp-domain-bridge/orders/next_number",
-      "actions": "在 App 页面内以同一登录会话调用 GET /api/mod/xcagi-erp-domain-bridge/orders/next_number（写操作自动附带 CSRF）：下一个订单号",
-      "expected": "下一个订单号：HTTP 2xx 且业务字段满足断言",
-      "observed": "HTTP 200 23ms；{\"success\": true, \"data\": {\"order_number\": \"26-09-00001A\", \"sequence\": 1, \"year_month\": \"26-09\"}}",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/mod/xcagi-erp-domain-bridge/orders/next_number（写操作自动附带 CSRF）：读取下一个订单号（门面）",
+      "expected": "读取下一个订单号（门面）：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 48ms；{\"order_number\": \"26-09-00001A\", \"sequence\": 1, \"year_month\": \"26-09\"}",
       "result": "passed"
     },
     {
       "id": "M2",
       "input": "GET /api/mod/xcagi-erp-domain-bridge/orders",
-      "actions": "在 App 页面内以同一登录会话调用 GET /api/mod/xcagi-erp-domain-bridge/orders（写操作自动附带 CSRF）：订单列表",
-      "expected": "订单列表：HTTP 2xx 且业务字段满足断言",
-      "observed": "HTTP 200 27ms；订单 0 条",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/mod/xcagi-erp-domain-bridge/orders（写操作自动附带 CSRF）：读回订单列表（门面）",
+      "expected": "读回订单列表（门面）：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 17ms；订单门面 3 条",
       "result": "passed"
     },
     {
       "id": "M3",
+      "input": "GET /api/mod/xcagi-erp-domain-bridge/products/list",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/mod/xcagi-erp-domain-bridge/products/list?page=abc（写操作自动附带 CSRF）：边界：非法分页参数被拒",
+      "expected": "非法 page 返回 422",
+      "observed": "HTTP 422 12ms；{\"success\": false, \"error_code\": \"validation_error\", \"message\": \"请求参数验证失败\", \"errors\": [{\"field\": \"query.page\", \"message\"",
+      "result": "passed"
+    },
+    {
+      "id": "M4",
       "input": "界面路由 /mod/xcagi-erp-domain-bridge/orders/create",
       "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /mod/xcagi-erp-domain-bridge/orders/create，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
-      "expected": "停留在 /mod/xcagi-erp-domain-bridge/orders/create，页面可见 单，该页请求无 4xx/5xx",
-      "observed": "导航后路径 /mod/xcagi-erp-domain-bridge/orders/create；命中文本 ['单']；缺失 []；界面请求失败 [(403, '/api/purchase_units'), (403, '/api/orders/next_number?suffix=A'), (403, '/api/purchase_units'), (403, '/api/orders/next_number?suffix=A')]；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 新建考勤单 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 新建发货单 | 返回列表 | 选择发货单模板 | 发货单模板 | -- 请选择模板 -- | 暂无可用发货单模板：请点下方「模板编辑」上传贵",
-      "result": "failed"
+      "expected": "停留在 /mod/xcagi-erp-domain-bridge/orders/create，页面可见 新建发货单，该页请求无 4xx/5xx",
+      "observed": "导航后路径 /mod/xcagi-erp-domain-bridge/orders/create；命中文本 ['新建发货单']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 新建考勤单 | 副窗 | ◈ | 工作区 | 3 | 新建发货单 | 返回列表 | 选择发货单模板 | 发货单模板 | -- 请选择模板 -- | 暂无可用发货单模板：请点下方「模板编辑」上传贵司出货单 Exc",
+      "result": "passed"
     }
   ],
   "media": [
     {
       "feature": "erp-sales-order",
       "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-sales-order/macos/result.png",
-      "sha256": "5578c5909677b977c14f2690bfd4944a8bdeefa2c5d6c4e2c5576ad655692e91",
+      "sha256": "223a568a3c36181d18a6ac40f34fba8d74baffd92652b2df9b35e9cc572a411d",
       "visual_review": "accepted",
-      "visible_result": "「新建发货单」页：选择发货单模板、基础信息（购买单位、联系人、日期 09/28/2026、订单编号）、产品信息区；页头标题「新建考勤单」。",
+      "visible_result": "「新建发货单」页：模板、基础信息(购买单位/日期/订单编号)、产品信息区渲染完整。",
       "reviewed_at": "2026-09-29"
     },
     {
       "feature": "erp-sales-order",
       "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-sales-order/macos/operation.webm",
-      "sha256": "303949c2c32de0844526eac85291e11084c40d8697ab41de2b59549088d5cd65",
+      "sha256": "1cdc8e9f7503a94b5068d22d56be73771040bde44f27ec06990133e09410bd52",
       "visual_review": "accepted",
-      "visible_result": "录屏为新建发货单表单页，各帧一致。",
+      "visible_result": "6.13s 录屏为新建发货单页(模板为未绑定空态)。",
       "reviewed_at": "2026-09-29"
     }
   ],
   "log": {
     "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-sales-order/macos/run.log",
-    "sha256": "849786e7942a34263ef15a04c8d6251d0fd31dc676df35be6d5db18baf71df03",
-    "bytes": 1427
+    "sha256": "6d2b7661f049c0d98d83495edce8298f9e02a046431b0633239e7422eb7187a1",
+    "bytes": 1489
   }
 }

@@ -1,6 +1,6 @@
-2026-09-29T07:17:42+0800 [ch-realtime-voice] 开始验收 ch-realtime-voice 实时语音对话；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
-2026-09-29T07:17:42+0800 [ch-realtime-voice] M1 passed :: HTTP 200 20ms；{"ready": true, "reason": "", "model": "small", "device_hint": "cpu"}
-2026-09-29T07:17:42+0800 [ch-realtime-voice] M2 failed :: 受阻：需要麦克风权限与真人语音
-2026-09-29T07:17:46+0800 [ch-realtime-voice] M3 passed :: 导航后路径 /；命中文本 ['按住说话']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 智能对话 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 查产品 | 订单 | 库存预警 | 打印标签 | 考勤 | 已为您解决 7 次任务 · 预计节约人工费用 ¥27 |  | 你好，我是饰品包装助手。 - 查产品
-2026-09-29T07:17:47+0800 [ch-realtime-voice] screenshot result.png
-2026-09-29T07:17:53+0800 [ch-realtime-voice] video operation.webm bytes=186895
+2026-09-29T13:05:48+0800 [ch-realtime-voice] 开始验收 ch-realtime-voice 实时语音对话；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T13:05:48+0800 [ch-realtime-voice] M1 failed :: 受阻：需要麦克风权限与真人语音；自动化无法提供真实语音输入
+2026-09-29T13:05:48+0800 [ch-realtime-voice] M2 failed :: 受阻：GET /api/voice/health 报 ready=true，但 POST /api/voice/transcribe 返回 503「语音识别模型暂时不可用」，端到端链路不可用
+2026-09-29T13:05:48+0800 [ch-realtime-voice] M3 failed :: 受阻：无麦克风与真人语音，无法验证实时语音对话
+2026-09-29T13:05:49+0800 [ch-realtime-voice] screenshot result.png
+2026-09-29T13:05:50+0800 [ch-realtime-voice] video operation.webm bytes=95169

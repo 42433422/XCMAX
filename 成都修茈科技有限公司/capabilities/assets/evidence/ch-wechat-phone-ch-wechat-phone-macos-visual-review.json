@@ -6,8 +6,8 @@
   "reviewed_at": "2026-09-29",
   "app_version": "1.0.0.5",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
-  "screenshot_sha256": "8d318c173c7a00126f809ff19d5238d3c336529c1eadae87b0a822d62530d6f2",
-  "visible_content": "微信来电相关接口可读，页面可见；需要微信 PC 版登录与真实来电，受阻。",
+  "screenshot_sha256": "1f6aded2c7bb85d0da5c7cc95f9db00ee05c0adbcefc863dec72ea57ebd0d9e3",
+  "visible_content": "阻塞：需微信 PC 版登录并有真实来电硬件/会话，本轮无真实微信通话，无法验证来电监控链路。",
   "videos": [
     "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-wechat-phone/macos/operation.webm"
   ],

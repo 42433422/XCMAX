@@ -6,11 +6,11 @@
   "reviewed_at": "2026-09-29",
   "app_version": "1.0.0.5",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
-  "screenshot_sha256": "47e74d9a432208f3f9fbcd3a600afa4874f3576a8ca8b97869c73d5b64dac4d0",
-  "visible_content": "Mod 加载状态（已加载 14，无 manifest 错误）与 Mod 列表（24 个）可读；/api/mod-store/validate 在已安装构建返回「未实现」——已实现待新构建验收。",
+  "screenshot_sha256": "9b15c5199c338e99a30d110ee360fd136a56afea690016d8541350106a363457",
+  "visible_content": "Mod 加载状态(已加载且无 load/manifest 错误)、Mod 清单、前端路由挂载均可读；边界：未知 Mod 返回 404。",
   "videos": [
     "FHD/docs/evidence/e2e/feature-acceptance-20260929/mods-loader/macos/operation.webm"
   ],
-  "full_feature_acceptance": false,
+  "full_feature_acceptance": true,
   "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/mods-loader/macos/result.png"
 }

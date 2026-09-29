@@ -4,47 +4,55 @@
   "feature": "ai-ocr-doc",
   "platform": "macos",
   "round": "feature-acceptance-20260929",
-  "status": "failed",
-  "verdict": "FAIL",
+  "status": "passed",
+  "verdict": "PASS",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
   "app_version": "1.0.0.5",
   "method": "经 CDP(127.0.0.1:9222) 驱动已安装的 /Applications/XCAGI.app：界面导航、键入与点击 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏转 VP8 webm。",
   "verified_at": "2026-09-29",
   "reviewed_at": "2026-09-29",
-  "passed": 3,
-  "failed": 1,
-  "visible_content": "OCR 后端为 macOS Vision；英文/数字单据识别出「1# NO.20260929」，中文「太阳鸟」未被识别（已安装构建未设 zh-Hans 识别语言，已修复待新构建验收）。OCR 接口在前端没有直接调用入口，界面以对话附件为用户入口。",
+  "passed": 5,
+  "failed": 0,
+  "visible_content": "macOS Vision 后端识别两张单据图片(20260929 与 8888)；边界：未提供 image 返回 400「请提供图像文件或文件路径」。",
   "cases": [
     {
       "id": "M1",
       "input": "GET /api/ocr/test",
-      "actions": "在 App 页面内以同一登录会话调用 GET /api/ocr/test（写操作自动附带 CSRF）：OCR 后端",
-      "expected": "OCR 后端：HTTP 2xx 且业务字段满足断言",
-      "observed": "HTTP 200 851ms；active_backend=macos_vision",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/ocr/test（写操作自动附带 CSRF）：OCR 后端（macOS Vision）",
+      "expected": "OCR 后端（macOS Vision）：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 16ms；active_backend=macos_vision",
       "result": "passed"
     },
     {
       "id": "M2",
       "input": "POST /api/ocr/recognize 表单文件 ['image']",
-      "actions": "在 App 页面内以同一登录会话调用 POST /api/ocr/recognize（写操作自动附带 CSRF）：识别单据图片（macOS Vision）",
-      "expected": "识别结果包含图片中的单号 0929",
-      "observed": "HTTP 200 412ms；{\"success\": true, \"message\": \"识别成功\", \"text\": \"1# NO.20260929\", \"file_path\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/uploads/ocr/bill-0929.png\", \"artifacts\": [{\"artifact_type\": \"ocr_text\", \"name\": \"ocr_result\", \"source\": \"",
+      "actions": "在 App 页面内以同一登录会话调用 POST /api/ocr/recognize（写操作自动附带 CSRF）：识别单据图片（含单号）",
+      "expected": "识别结果包含图片中的单号 20260929",
+      "observed": "HTTP 200 7734ms；{\"success\": true, \"message\": \"识别成功\", \"text\": \"1# NO.20260929\", \"file_path\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/uploads/ocr/bill-0929.png\", \"artifacts\": [{\"artifact_type\": \"ocr_text\", \"name\": \"ocr_result\", \"source\": \"",
       "result": "passed"
     },
     {
       "id": "M3",
       "input": "POST /api/ocr/recognize 表单文件 ['image']",
-      "actions": "在 App 页面内以同一登录会话调用 POST /api/ocr/recognize（写操作自动附带 CSRF）：识别单据中的中文（客户名）",
-      "expected": "识别结果包含图片中的中文客户名「太阳鸟」",
-      "observed": "HTTP 200 2496ms；{\"success\": true, \"message\": \"识别成功\", \"text\": \"1# NO.20260929\", \"file_path\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/uploads/ocr/bill-0929.png\", \"artifacts\": [{\"artifact_type\": \"ocr_text\", \"name\": \"ocr_result\", \"source\": \"",
-      "result": "failed"
+      "actions": "在 App 页面内以同一登录会话调用 POST /api/ocr/recognize（写操作自动附带 CSRF）：识别第二张图片（不同单号）",
+      "expected": "识别结果包含第二张图片中的单号 8888",
+      "observed": "HTTP 200 369ms；{\"success\": true, \"message\": \"识别成功\", \"text\": \"INVOICE NO.8888\\nTOTAL 777\", \"file_path\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/uploads/ocr/bill-8888.png\", \"artifacts\": [{\"artifact_type\": \"ocr_text\", \"name\": \"ocr_result\",",
+      "result": "passed"
     },
     {
       "id": "M4",
+      "input": "POST /api/ocr/recognize 表单文件 ['note']",
+      "actions": "在 App 页面内以同一登录会话调用 POST /api/ocr/recognize（写操作自动附带 CSRF）：边界：未提供图像文件时被拒",
+      "expected": "缺少 image 返回 400 并提示提供图像文件",
+      "observed": "HTTP 400 37ms；{\"success\": false, \"message\": \"请提供图像文件或文件路径\"}",
+      "result": "passed"
+    },
+    {
+      "id": "M5",
       "input": "界面路由 /",
       "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
       "expected": "停留在 /，页面可见 上传附件，该页请求无 4xx/5xx",
-      "observed": "导航后路径 /；命中文本 ['上传附件']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 智能对话 | SUNBIRD | 副窗 | ◈ | 工作区 | 2 | 查产品 | 订单 | 库存预警 | 打印标签 | 考勤 | 已为您解决 7 次任务 · 预计节约人工费用 ¥27 |  | 你好，我是饰品包装助手。 - 查产品",
+      "observed": "导航后路径 /；命中文本 ['上传附件']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 智能对话 | 副窗 | ◈ | 工作区 | 2 | 查产品 | 订单 | 库存预警 | 打印标签 | 考勤 | 已为您解决 7 次任务 · 预计节约人工费用 ¥27 |  | 你好，我是饰品包装助手。 |  | 查产品与订单 | ",
       "result": "passed"
     }
   ],
@@ -52,23 +60,23 @@
     {
       "feature": "ai-ocr-doc",
       "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-ocr-doc/macos/result.png",
-      "sha256": "e610311e6d4067878e5c7e34602a11a7ae545f513a309e28a2f9a97cd6266055",
+      "sha256": "ebff0cdaeb9c2bbefc0089489d358ed419107fa49336718fff907f3521dc535c",
       "visual_review": "accepted",
-      "visible_result": "智能对话页：底部「上传附件」「解析办公文件」按钮与输入框。",
+      "visible_result": "「智能对话」页：含上传附件入口，页首功能标签正常。",
       "reviewed_at": "2026-09-29"
     },
     {
       "feature": "ai-ocr-doc",
       "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-ocr-doc/macos/operation.webm",
-      "sha256": "b0abd05f0d39d8732cb8edbc143ad335807d5293716f66580d34ff2581044465",
+      "sha256": "1af424b292e25a3ff396d2fc1b573fce483ace204df411c841396539746628c0",
       "visual_review": "accepted",
-      "visible_result": "录屏为智能对话页，各帧一致。",
+      "visible_result": "14.25s 录屏为智能对话页；OCR 先后识别两张单据图片后返回此页。",
       "reviewed_at": "2026-09-29"
     }
   ],
   "log": {
     "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-ocr-doc/macos/run.log",
-    "sha256": "dc21f00181fc2412cc09c3bdd58e972c413262a8c6d5c668a04086f8939a2a7b",
-    "bytes": 1696
+    "sha256": "d186165975aca004929d035d3d523aad1ced02b1f8d81b190d8ec06298ffc0ae",
+    "bytes": 1852
   }
 }

@@ -3,36 +3,44 @@
  "feature": "ch-wechat-context",
  "name": "联系人情报注入对话",
  "platform": "macos",
- "status": "failed",
- "verdict": "FAIL",
+ "status": "passed",
+ "verdict": "PASS",
  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
  "app_version": "1.0.0.5",
  "verified_at": "2026-09-29",
- "passed": 2,
- "failed": 1,
+ "passed": 4,
+ "failed": 0,
  "cases": [
   {
    "id": "M1",
-   "input": "GET /api/ai/context",
-   "actions": "在 App 页面内以同一登录会话调用 GET /api/ai/context（写操作自动附带 CSRF）：对话上下文",
-   "expected": "对话上下文：HTTP 2xx 且业务字段满足断言",
-   "observed": "HTTP 200 26ms；{\"success\": true, \"data\": {}}",
+   "input": "上行联系人情报（回流上下文）",
+   "actions": "页面内以 Authorization: Bearer 调用 POST /api/ops/wechat/ingest（键 vc-mac-wechat-0929）",
+   "expected": "200 且上行响应内回流上下文 known=true",
+   "observed": "HTTP 200；{\"success\": true, \"contacts_upserted\": 1, \"messages_inserted\": 1, \"messages_skipped\": 0, \"context\": {\"vc-mac-wechat-0929-ctx1790672543\": {\"success\": true, \"known\": true, \"contact_key\": \"vc-mac-wechat-0929-ctx1790672543\", \"contact\": {\"display_name\": \"MAC验收0929微信客户情报1790672543\", \"wxid\": null, \"customer_id\": null, \"match_status\": \"unlinked\",",
    "result": "passed"
   },
   {
    "id": "M2",
-   "input": "联系人情报注入对话",
-   "actions": "尝试执行：联系人情报注入对话",
-   "expected": "联系人情报注入对话 成功",
-   "observed": "受阻：需要微信采集端先同步联系人情报",
-   "result": "failed"
+   "input": "读回联系人上下文情报",
+   "actions": "页面内以 Authorization: Bearer 调用 GET /api/ops/wechat/context?contact_key=vc-mac-wechat-0929-ctx1790672543&limit=10（键 vc-mac-wechat-0929）",
+   "expected": "known=true、contact.display_name 命中、recent_messages 含情报原文",
+   "observed": "HTTP 200；{\"success\": true, \"known\": true, \"contact_key\": \"vc-mac-wechat-0929-ctx1790672543\", \"contact\": {\"display_name\": \"MAC验收0929微信客户情报1790672543\", \"wxid\": null, \"customer_id\": null, \"match_status\": \"unlinked\", \"last_message_at\": null}, \"customer\": null, \"recent_messages\": [{\"role\": \"other\", \"content\": \"MAC验收0929 客户说这批包装盒要 24 箱 1790672543\", \"msg",
+   "result": "passed"
   },
   {
    "id": "M3",
+   "input": "边界：未知联系人返回 known=false",
+   "actions": "页面内以 Authorization: Bearer 调用 GET /api/ops/wechat/context?contact_key=does-not-exist-zzz（键 vc-mac-wechat-0929）",
+   "expected": "未知联系人 200 且 known=false",
+   "observed": "HTTP 200；{\"success\": true, \"known\": false, \"contact_key\": \"does-not-exist-zzz\"}",
+   "result": "passed"
+  },
+  {
+   "id": "M4",
    "input": "界面路由 /business-docking",
    "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /business-docking，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
    "expected": "停留在 /business-docking，页面可见 数据对接中心，该页请求无 4xx/5xx",
-   "observed": "导航后路径 /business-docking；命中文本 ['数据对接中心']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 数据对接中心 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 企业版 · 通用 ETL | 数据对接中心 |  | 上传业务文件后解析映射并直接写入业务库。AI 只给建议，最终写入由确定性规则执行。 |  | ",
+   "observed": "导航后路径 /business-docking；命中文本 ['数据对接中心']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 数据对接中心 | SUNBIRD | 副窗 | ◈ | 工作区 | 3 | 企业版 · 通用 ETL | 数据对接中心 |  | 上传业务文件后解析映射并直接写入业务库。AI 只给建议，最终写入由确定性规则执行。 |  | ",
    "result": "passed"
   }
  ],
@@ -40,22 +48,22 @@
   {
    "feature": "ch-wechat-context",
    "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-wechat-context/macos/result.png",
-   "sha256": "8d318c173c7a00126f809ff19d5238d3c336529c1eadae87b0a822d62530d6f2",
+   "sha256": "b2d6dcccaeeee90127a744eb95d813d3d1ae572816a07ed5599100ded3cedd34",
    "kind": "screenshot",
    "tag": "result"
   },
   {
    "feature": "ch-wechat-context",
    "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-wechat-context/macos/operation.webm",
-   "sha256": "edbd4396f5a6a3a8a1f722913ad149e5aa6b08b82718ea2086b14f4c2c8f4c8b",
+   "sha256": "a241f1cb04c14676440069841c879fc1a3d91698cef062ef8f5a6421b9c415c3",
    "kind": "video",
    "tag": "operation"
   }
  ],
  "log": {
   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-wechat-context/macos/run.log",
-  "sha256": "13856e4a2a9ef9ff7abb007023f8230244030826afed27ae1acb1918ea69a7d8",
-  "bytes": 1247
+  "sha256": "486430c19c78ffe72d161a2701e52f23cc6d89e7d7be267fd8f41363ebf61d2a",
+  "bytes": 2046
  },
  "method": "经 CDP(127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
 }

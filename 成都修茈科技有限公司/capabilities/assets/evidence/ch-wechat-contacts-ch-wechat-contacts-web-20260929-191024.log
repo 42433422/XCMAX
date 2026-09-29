@@ -1,0 +1,7 @@
+[19:10:24] feature=ch-wechat-contacts platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-wechat-contacts
+[19:10:37] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[19:10:39] case C1: passed - 联系人同步→读回（核心正向闭环）
+[19:10:39] case C2: passed - 无令牌访问联系人入口被拒（负例）
+[19:10:40] case C3: passed - 单联系人子路径未注册（边界/负例）
+[19:10:40] video: ch-wechat-contacts-web-20260929-191024.webm (1232360 bytes)
+[19:10:40] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-wechat-contacts/log/ch-wechat-contacts-web-20260929-191024.log

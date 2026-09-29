@@ -1,0 +1,8 @@
+[13:58:10] feature=sec-csp platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-csp
+[13:58:22] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[13:58:23] case P1: passed - 接口响应下发 CSP 与安全头
+[13:58:23] case P2: passed - 管理端文档同样下发安全头
+[13:58:23] case P3: passed - CSP 不放行任意外部源（边界）
+[13:58:25] case P4: passed - 浏览器内跨源连接被 CSP 真实拦截（负例/边界）
+[13:58:25] video: sec-csp-web-20260929-135810.webm (1115492 bytes)
+[13:58:25] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-csp/log/sec-csp-web-20260929-135810.log

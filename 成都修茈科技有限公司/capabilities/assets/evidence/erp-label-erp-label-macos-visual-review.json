@@ -6,8 +6,8 @@
   "reviewed_at": "2026-09-29",
   "app_version": "1.0.0.5",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
-  "screenshot_sha256": "425fb87fbe0223744f99bf3b877e794f9869f43b0259563825e44a456f3f15f4",
-  "visible_content": "标签任务接口对企业租户被租户隔离门禁拒绝（403），界面同样显示该错误；需要标签链路做租户隔离迁移后才能通过。",
+  "screenshot_sha256": "1f6aded2c7bb85d0da5c7cc95f9db00ee05c0adbcefc863dec72ea57ebd0d9e3",
+  "visible_content": "阻塞：旧标签打印接口未开租户隔离(/api/print/label-jobs/products 403)，标签生成/派发接口 403；本机未连接实体标签打印机。",
   "videos": [
     "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-label/macos/operation.webm"
   ],

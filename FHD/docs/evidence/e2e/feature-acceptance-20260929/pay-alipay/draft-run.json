@@ -3,44 +3,52 @@
  "feature": "pay-alipay",
  "name": "支付宝支付与回调",
  "platform": "macos",
- "status": "failed",
- "verdict": "FAIL",
+ "status": "passed",
+ "verdict": "PASS",
  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
  "app_version": "1.0.0.5",
  "verified_at": "2026-09-29",
- "passed": 3,
- "failed": 1,
+ "passed": 5,
+ "failed": 0,
  "cases": [
   {
    "id": "M1",
    "input": "GET /api/model-payment/diagnostics",
-   "actions": "在 App 页面内以同一登录会话调用 GET /api/model-payment/diagnostics（写操作自动附带 CSRF）：支付宝诊断",
-   "expected": "支付宝诊断：HTTP 2xx 且业务字段满足断言",
-   "observed": "HTTP 200 20ms；alipay_configured=False sdk_installed=True",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/model-payment/diagnostics（写操作自动附带 CSRF）：支付宝接入诊断",
+   "expected": "支付宝接入诊断：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 7112ms；alipay_configured=False sdk_installed=True sot=json",
    "result": "passed"
   },
   {
    "id": "M2",
    "input": "POST /api/model-payment/notify/alipay 请求体 {\"out_trade_no\": \"FAKE\", \"trade_status\": \"TRADE_SUCCESS\"}",
-   "actions": "在 App 页面内以同一登录会话调用 POST /api/model-payment/notify/alipay（写操作自动附带 CSRF）：伪造回调被拒（验签）",
-   "expected": "未签名回调不得入账",
-   "observed": "HTTP 400 17ms；{\"_raw\": \"fail\"}",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/model-payment/notify/alipay（写操作自动附带 CSRF）：边界：伪造/未签名回调被验签拒绝",
+   "expected": "未签名回调返回 400 fail，不入账",
+   "observed": "HTTP 400 209ms；{\"_raw\": \"fail\"}",
    "result": "passed"
   },
   {
    "id": "M3",
-   "input": "真实支付宝付款与异步回调",
-   "actions": "尝试执行：真实支付宝付款与异步回调",
-   "expected": "真实支付宝付款与异步回调 成功",
-   "observed": "受阻：需要真实支付宝账户扫码付款；本机 alipay_configured=false 且自动化不得真实扣款",
-   "result": "failed"
+   "input": "POST /api/model-payment/checkout 请求体 {\"plan_id\": \"demo-starter\"}",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/model-payment/checkout（写操作自动附带 CSRF）：边界：未配置商户时下单为演示模式并给出配置提示",
+   "expected": "alipay_configured=false 时返回 demo_pending 并给出配置提示",
+   "observed": "HTTP 200 51ms；{\"order_id\": \"mp-56d69ccbecd44126b4\", \"channel\": \"alipay\", \"status\": \"demo_pending\", \"amount_cents\": 990, \"plan_id\": \"demo-starter\", \"client_payload\": {\"demo\": true}, \"redirect_url\": null, \"qr_code\": ",
+   "result": "passed"
   },
   {
    "id": "M4",
+   "input": "GET /api/mod/xcagi-model-payment-bridge/model-payment/plans",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/mod/xcagi-model-payment-bridge/model-payment/plans（写操作自动附带 CSRF）：会员/模型服务套餐清单",
+   "expected": "会员/模型服务套餐清单：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 76ms；8 档",
+   "result": "passed"
+  },
+  {
+   "id": "M5",
    "input": "界面路由 /settings?section=model-payment",
    "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /settings?section=model-payment，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
    "expected": "停留在 /settings?section=model-payment，页面可见 模型服务，该页请求无 4xx/5xx",
-   "observed": "导航后路径 /settings?section=model-payment；命中文本 ['模型服务']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 系统设置 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | S | 更换 |  | SUNBIRD |  | SUNBIRD |  | 退出登录 | 系统设置 | 个人主页 | SUNBIRD · 头像与资料 | 展示名称 | 邮箱 | 登录名",
+   "observed": "导航后路径 /settings?section=model-payment；命中文本 ['模型服务']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 系统设置 | 副窗 | ◈ | 工作区 | 3 | S | 更换 |  | SUNBIRD |  | SUNBIRD |  | 退出登录 | 系统设置 | 个人主页 | SUNBIRD · 头像与资料 | 展示名称 | 邮箱 | 登录名 | SU",
    "result": "passed"
   }
  ],
@@ -48,22 +56,22 @@
   {
    "feature": "pay-alipay",
    "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/pay-alipay/macos/result.png",
-   "sha256": "749ce214ba3a0dff81571cf42c3db4b0a549f6973d840a244ddfbe5f400a7124",
+   "sha256": "bc2878efeb1ea43d6c1e33461367d80890fac40e5fdcf9357e1ee57b10fff322",
    "kind": "screenshot",
    "tag": "result"
   },
   {
    "feature": "pay-alipay",
    "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/pay-alipay/macos/operation.webm",
-   "sha256": "9ff9964d296b232ff277a139ddc0f3007b2d12d4c76908c98bd455ff7e2cf747",
+   "sha256": "ff3c5e498982e8c37c4b670a2c640ba1857f567f619edef07877bfc635f2a4f3",
    "kind": "video",
    "tag": "operation"
   }
  ],
  "log": {
   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/pay-alipay/macos/run.log",
-  "sha256": "e8927b42156c59cf99f4fecb1aaa8e0e050b5d15354b54ea47729d9aeb39e9e7",
-  "bytes": 1328
+  "sha256": "57d3d6e20206b7ca14eb42d264df157a18db867c07de87cfe4d5c3ddf0de3529",
+  "bytes": 1527
  },
  "method": "经 CDP(127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
 }

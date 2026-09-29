@@ -4,63 +4,63 @@
   "feature": "erp-print-agent",
   "platform": "macos",
   "round": "feature-acceptance-20260929",
-  "status": "failed",
-  "verdict": "FAIL",
+  "status": "blocked",
+  "verdict": "BLOCKED",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
   "app_version": "1.0.0.5",
   "method": "经 CDP(127.0.0.1:9222) 驱动已安装的 /Applications/XCAGI.app：界面导航、键入与点击 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏转 VP8 webm。",
   "verified_at": "2026-09-29",
   "reviewed_at": "2026-09-29",
   "passed": 0,
-  "failed": 3,
-  "visible_content": "打印机接口对企业租户被租户隔离门禁拒绝，本机也无连接的打印机；打印代理链路未通过。",
+  "failed": 0,
+  "visible_content": "阻塞：打印代理接口(/api/print/printers、/document-printer、/printer-selection)全部 403；本机未安装实体打印机，无法验证套打出纸。",
   "cases": [
     {
       "id": "M1",
-      "input": "GET /api/print/printers",
-      "actions": "在 App 页面内以同一登录会话调用 GET /api/print/printers（写操作自动附带 CSRF）：打印代理打印机列表",
-      "expected": "打印代理打印机列表：HTTP 2xx 且业务字段满足断言",
-      "observed": "HTTP 403 18ms；{\"success\": false, \"error_code\": \"http_403\", \"message\": \"该旧业务接口尚未提供安全的租户数据隔离\", \"path\": \"/api/print/printers\"}",
-      "result": "failed"
+      "input": "枚举本机打印机",
+      "actions": "尝试执行：枚举本机打印机",
+      "expected": "枚举本机打印机 成功",
+      "observed": "受阻：打印代理接口未开租户隔离：GET /api/print/printers 与 /api/print/document-printer 均返回 403；本机未安装实体打印机",
+      "result": "blocked"
     },
     {
       "id": "M2",
-      "input": "界面路由 /mod/xcagi-erp-domain-bridge/printer-list",
-      "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /mod/xcagi-erp-domain-bridge/printer-list，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
-      "expected": "停留在 /mod/xcagi-erp-domain-bridge/printer-list，页面可见 打印机，该页请求无 4xx/5xx",
-      "observed": "导航后路径 /mod/xcagi-erp-domain-bridge/printer-list；命中文本 ['打印机']；缺失 []；界面请求失败 [(403, '/api/printers'), (403, '/api/print/printer-selection')]；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 打印机列表 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 打印机列表 | 刷新 | 打印机分类 | 发货单打印机 | 未设置（自动识别） | 状态：- | 标签打印机 | 未设置（自动识别） | 状态：- | 保存",
-      "result": "failed"
+      "input": "选择套打通道与默认打印机",
+      "actions": "尝试执行：选择套打通道与默认打印机",
+      "expected": "选择套打通道与默认打印机 成功",
+      "observed": "受阻：GET /api/print/printer-selection 返回 403；无可用打印设备",
+      "result": "blocked"
     },
     {
       "id": "M3",
       "input": "套打出纸",
       "actions": "尝试执行：套打出纸",
       "expected": "套打出纸 成功",
-      "observed": "受阻：需要本机安装实体打印机",
-      "result": "failed"
+      "observed": "受阻：需要本机安装实体打印机，本机未连接打印机",
+      "result": "blocked"
     }
   ],
   "media": [
     {
       "feature": "erp-print-agent",
       "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-print-agent/macos/result.png",
-      "sha256": "c210950d887e85b215ccf52f0c314e9cdb5dadf3e64e3f3139a7803e81849cd2",
+      "sha256": "1f6aded2c7bb85d0da5c7cc95f9db00ee05c0adbcefc863dec72ea57ebd0d9e3",
       "visual_review": "accepted",
-      "visible_result": "「打印机列表」页：发货单打印机/标签打印机均为「未设置（自动识别）」，全部打印机表「暂无打印机」，底部红字「加载失败：该旧业务接口尚未提供安全的租户数据隔离」。",
+      "visible_result": "「智能对话」默认页；本项全部用例受阻，未进入打印机列表页。",
       "reviewed_at": "2026-09-29"
     },
     {
       "feature": "erp-print-agent",
       "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-print-agent/macos/operation.webm",
-      "sha256": "b75cd93e1ac9e121d003baf8d39fab63e8956ff33c7f4f1e5390e87fed4c9dcf",
+      "sha256": "fad2d8b8544c65dd6a2b4bef276afeaa762d0a2b30275f3855669fc10d3c43f6",
       "visual_review": "accepted",
-      "visible_result": "录屏为打印机列表页，红字加载失败持续显示。",
+      "visible_result": "2.38s 录屏为默认对话页。",
       "reviewed_at": "2026-09-29"
     }
   ],
   "log": {
     "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-print-agent/macos/run.log",
-    "sha256": "67f83187b3c49d70ef225292b533d70623398cae774e6506366797716480969a",
-    "bytes": 1430
+    "sha256": "ef8db72582a8701e646b3a1b25fc8b72cedcbff07d308a983dad5fe1aa2b7256",
+    "bytes": 842
   }
 }

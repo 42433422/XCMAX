@@ -1,7 +1,8 @@
-2026-09-29T07:27:09+0800 [ai-ocr-doc] 开始验收 ai-ocr-doc 单据图像识别解析；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
-2026-09-29T07:27:10+0800 [ai-ocr-doc] M1 passed :: HTTP 200 851ms；active_backend=macos_vision
-2026-09-29T07:27:11+0800 [ai-ocr-doc] M2 passed :: HTTP 200 412ms；{"success": true, "message": "识别成功", "text": "1# NO.20260929", "file_path": "/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/uploads/ocr/bill-0929.png", "artifacts": [{"artifact_type": "ocr_text", "name": "ocr_result", "source": "
-2026-09-29T07:27:13+0800 [ai-ocr-doc] M3 failed :: HTTP 200 2496ms；{"success": true, "message": "识别成功", "text": "1# NO.20260929", "file_path": "/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/uploads/ocr/bill-0929.png", "artifacts": [{"artifact_type": "ocr_text", "name": "ocr_result", "source": "
-2026-09-29T07:27:17+0800 [ai-ocr-doc] M4 passed :: 导航后路径 /；命中文本 ['上传附件']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 智能对话 | SUNBIRD | 副窗 | ◈ | 工作区 | 2 | 查产品 | 订单 | 库存预警 | 打印标签 | 考勤 | 已为您解决 7 次任务 · 预计节约人工费用 ¥27 |  | 你好，我是饰品包装助手。 - 查产品
-2026-09-29T07:27:18+0800 [ai-ocr-doc] screenshot result.png
-2026-09-29T07:27:22+0800 [ai-ocr-doc] video operation.webm bytes=253744
+2026-09-29T12:59:48+0800 [ai-ocr-doc] 开始验收 ai-ocr-doc 单据图像识别解析；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T12:59:48+0800 [ai-ocr-doc] M1 passed :: HTTP 200 16ms；active_backend=macos_vision
+2026-09-29T12:59:56+0800 [ai-ocr-doc] M2 passed :: HTTP 200 7734ms；{"success": true, "message": "识别成功", "text": "1# NO.20260929", "file_path": "/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/uploads/ocr/bill-0929.png", "artifacts": [{"artifact_type": "ocr_text", "name": "ocr_result", "source": "
+2026-09-29T12:59:56+0800 [ai-ocr-doc] M3 passed :: HTTP 200 369ms；{"success": true, "message": "识别成功", "text": "INVOICE NO.8888\nTOTAL 777", "file_path": "/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/uploads/ocr/bill-8888.png", "artifacts": [{"artifact_type": "ocr_text", "name": "ocr_result",
+2026-09-29T12:59:56+0800 [ai-ocr-doc] M4 passed :: HTTP 400 37ms；{"success": false, "message": "请提供图像文件或文件路径"}
+2026-09-29T13:00:00+0800 [ai-ocr-doc] M5 passed :: 导航后路径 /；命中文本 ['上传附件']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 智能对话 | 副窗 | ◈ | 工作区 | 2 | 查产品 | 订单 | 库存预警 | 打印标签 | 考勤 | 已为您解决 7 次任务 · 预计节约人工费用 ¥27 |  | 你好，我是饰品包装助手。 |  | 查产品与订单 | 
+2026-09-29T13:00:01+0800 [ai-ocr-doc] screenshot result.png
+2026-09-29T13:00:03+0800 [ai-ocr-doc] video operation.webm bytes=268333

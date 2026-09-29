@@ -1,0 +1,7 @@
+[15:22:50] feature=erp-ocr platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-ocr
+[15:23:03] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[15:23:04] case OC1: passed - OCR 服务健康真实读取
+[15:23:12] case OC2: passed - 真实上传文档图并识别（写-读回）
+[15:23:13] case OC3: passed - 未提供图像被拒（负例）
+[15:23:13] video: erp-ocr-web-20260929-152250.webm (1245448 bytes)
+[15:23:13] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-ocr/log/erp-ocr-web-20260929-152250.log

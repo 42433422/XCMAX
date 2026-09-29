@@ -6,11 +6,11 @@
   "reviewed_at": "2026-09-29",
   "app_version": "1.0.0.5",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
-  "screenshot_sha256": "63ec2ed5cc2d2cc2e26e1aaa75e9f49ba7bbbc250f53323825d195f0b2589cb4",
-  "visible_content": "同会话新建供应商与采购单，采购页读回新订单号 PO20260929072616；明细未选产品时已安装构建返回 500（已修复为业务提示，待新构建验收）。",
+  "screenshot_sha256": "8508f34a93207332e00c85b31fdc93054889ea4af5156ae41009116ac6e4273d",
+  "visible_content": "新建供应商与采购订单成功；订单列表读回含新订单(remark=MAC验收0929)；边界：查询不存在订单返回「采购订单不存在」。",
   "videos": [
     "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-purchase/macos/operation.webm"
   ],
-  "full_feature_acceptance": false,
+  "full_feature_acceptance": true,
   "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-purchase/macos/result.png"
 }

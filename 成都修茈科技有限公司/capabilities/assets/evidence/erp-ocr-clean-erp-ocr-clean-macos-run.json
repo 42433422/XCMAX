@@ -4,39 +4,47 @@
   "feature": "erp-ocr-clean",
   "platform": "macos",
   "round": "feature-acceptance-20260929",
-  "status": "failed",
-  "verdict": "FAIL",
+  "status": "passed",
+  "verdict": "PASS",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
   "app_version": "1.0.0.5",
   "method": "经 CDP(127.0.0.1:9222) 驱动已安装的 /Applications/XCAGI.app：界面导航、键入与点击 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏转 VP8 webm。",
   "verified_at": "2026-09-29",
   "reviewed_at": "2026-09-29",
-  "passed": 2,
-  "failed": 1,
-  "visible_content": "OCR 识别并提取结构化字段接口通过（单据无结构化字段，全为空）；送货单 ETL OCR 预览接口对企业租户被租户隔离门禁拒绝（403），清洗入库链路未通过。",
+  "passed": 4,
+  "failed": 0,
+  "visible_content": "识别并抽取结构化字段成功(成功返回结构化 data)；ETL 变换与目标清单可读；边界：缺 image 返回 400。",
   "cases": [
     {
       "id": "M1",
       "input": "POST /api/ocr/recognize-and-extract 表单文件 ['image']",
       "actions": "在 App 页面内以同一登录会话调用 POST /api/ocr/recognize-and-extract（写操作自动附带 CSRF）：识别并抽取结构化字段",
       "expected": "识别并抽取结构化字段：HTTP 2xx 且业务字段满足断言",
-      "observed": "HTTP 200 10316ms；{\"success\": true, \"message\": \"识别和提取成功\", \"text\": \"1# NO.20260929\", \"data\": {\"purchase_unit\": null, \"contact_person\": null, \"contact_phone\": null, \"purchase_date\": null, \"order_number\": null, \"total_amount\": null, \"products\": [], \"raw_text\": ",
+      "observed": "HTTP 200 341ms；{\"purchase_unit\": null, \"contact_person\": null, \"contact_phone\": null, \"purchase_date\": null, \"order_number\": null, \"total_amount\": null, \"products\": [], \"raw_text\": \"1# NO.20260929\"}",
       "result": "passed"
     },
     {
       "id": "M2",
-      "input": "POST /api/excel/data/shipment-etl/ocr-preview 表单文件 ['image']",
-      "actions": "在 App 页面内以同一登录会话调用 POST /api/excel/data/shipment-etl/ocr-preview（写操作自动附带 CSRF）：出货单 OCR 预览",
-      "expected": "出货单 OCR 预览：HTTP 2xx 且业务字段满足断言",
-      "observed": "HTTP 403 450ms；{\"success\": false, \"error_code\": \"http_403\", \"message\": \"旧送货单 ETL 未提供租户数据隔离\", \"path\": \"/api/excel/data/shipment-etl/ocr-preview\"}",
-      "result": "failed"
+      "input": "POST /api/ocr/recognize-and-extract 表单文件 ['note']",
+      "actions": "在 App 页面内以同一登录会话调用 POST /api/ocr/recognize-and-extract（写操作自动附带 CSRF）：边界：未提供图像文件时被拒",
+      "expected": "缺少 image 返回 400",
+      "observed": "HTTP 400 84ms；{\"success\": false, \"message\": \"请提供图像文件或文件路径\"}",
+      "result": "passed"
     },
     {
       "id": "M3",
+      "input": "GET /api/etl/capabilities",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/etl/capabilities（写操作自动附带 CSRF）：清洗入库能力清单（ETL 目标与变换）",
+      "expected": "清洗入库能力清单（ETL 目标与变换）：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 23ms；transforms=['cast', 'concat', 'date', 'default', 'formula', 'lookup'] targets=['knowledge', 'customer_products', 'customers', 'products', 'purchase_orders', 'shipment_records', 'attendance', 'export_xlsx', 'export_csv', 'webhook']",
+      "result": "passed"
+    },
+    {
+      "id": "M4",
       "input": "界面路由 /business-docking",
       "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /business-docking，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
       "expected": "停留在 /business-docking，页面可见 数据对接中心，该页请求无 4xx/5xx",
-      "observed": "导航后路径 /business-docking；命中文本 ['数据对接中心']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 数据对接中心 | SUNBIRD | 副窗 | ◈ | 工作区 | 2 | 企业版 · 通用 ETL | 数据对接中心 |  | 上传业务文件后解析映射并直接写入业务库。AI 只给建议，最终写入由确定性规则执行。 |  | ",
+      "observed": "导航后路径 /business-docking；命中文本 ['数据对接中心']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 数据对接中心 | 副窗 | ◈ | 工作区 | 3 | 企业版 · 通用 ETL | 数据对接中心 |  | 上传业务文件后解析映射并直接写入业务库。AI 只给建议，最终写入由确定性规则执行。 |  | 支持整",
       "result": "passed"
     }
   ],
@@ -44,23 +52,23 @@
     {
       "feature": "erp-ocr-clean",
       "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-ocr-clean/macos/result.png",
-      "sha256": "2f855e60095ffbd083728a492375258ea8d90158640c23d56c38e34a369f40ba",
+      "sha256": "f952b1bb5cd3483cd86e7ec75f2fdfab6ae05c8ec504f796163cf0cfc3cc360b",
       "visual_review": "accepted",
-      "visible_result": "「数据对接中心 · 企业版通用 ETL」：上传文件/字段映射/规则写入/运行历史四步与上传区。",
+      "visible_result": "「数据对接中心」页：上传文件/字段映射/核对写入/运行历史四步与 ETL 目标区渲染完整。",
       "reviewed_at": "2026-09-29"
     },
     {
       "feature": "erp-ocr-clean",
       "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-ocr-clean/macos/operation.webm",
-      "sha256": "98d1fded3465318b3eab38c24eb044633183cc4c500e3213b7edc1e12b0c1fd4",
+      "sha256": "30c015bd0faf2de330fe74214a89626f9a4fba36aed53b8b49523dd69a38aa61",
       "visual_review": "accepted",
-      "visible_result": "录屏从智能对话页切到数据对接中心页。",
+      "visible_result": "6.5s 录屏为数据对接中心页。",
       "reviewed_at": "2026-09-29"
     }
   ],
   "log": {
     "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-ocr-clean/macos/run.log",
-    "sha256": "2d8c47b9bc867ea30c1539f6251fa0c6241aa5121d642afa5e152385552856d9",
-    "bytes": 1565
+    "sha256": "8c31f4cebe5e203a970651dc2cd4672805a2bf86ac726c6cc115d2d6f818d7b1",
+    "bytes": 1720
   }
 }

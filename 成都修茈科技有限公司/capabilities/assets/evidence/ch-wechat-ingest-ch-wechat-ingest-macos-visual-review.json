@@ -6,11 +6,11 @@
   "reviewed_at": "2026-09-29",
   "app_version": "1.0.0.5",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
-  "screenshot_sha256": "8d318c173c7a00126f809ff19d5238d3c336529c1eadae87b0a822d62530d6f2",
-  "visible_content": "微信采集状态接口可读，数据对接中心页可见；真实采集需要本机运行微信 PC 版与采集端并配置 sync token，受阻。",
+  "screenshot_sha256": "b2d6dcccaeeee90127a744eb95d813d3d1ae572816a07ed5599100ded3cedd34",
+  "visible_content": "以 Authorization: Bearer 调用 /api/ops/wechat/ingest 真实上行入库(HTTP 200，contacts_upserted=1、messages_inserted=1)，再以 /api/ops/wechat/context 读回 known=true 且 recent_messages 含本次上行原文；边界：错误 Bearer 令牌返回 401 invalid wechat sync token。",
   "videos": [
     "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-wechat-ingest/macos/operation.webm"
   ],
-  "full_feature_acceptance": false,
+  "full_feature_acceptance": true,
   "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-wechat-ingest/macos/result.png"
 }

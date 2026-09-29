@@ -6,11 +6,11 @@
   "reviewed_at": "2026-09-29",
   "app_version": "1.0.0.5",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
-  "screenshot_sha256": "7929ca20c8687f44228a9850e0dc8a62185d3e4fc080db85ddb27aa20338f4d8",
-  "visible_content": "Mod 通信端点接口可读（空）；订单 webhook 接口对企业租户被租户隔离门禁拒绝（403），webhook 链路未通过。",
+  "screenshot_sha256": "ff86503fd23aa09a419150361fc9b70f30a819507ab97a32cfae251541e089a8",
+  "visible_content": "业务事件发布到事件总线(published=true)、总线健康(handlers≥1)、通信端点注册表可读；边界：旧订单 Webhook 配置 403 无租户隔离。「本机未注册外部 Webhook 端点，为已记录限制」。",
   "videos": [
     "FHD/docs/evidence/e2e/feature-acceptance-20260929/mods-webhook/macos/operation.webm"
   ],
-  "full_feature_acceptance": false,
+  "full_feature_acceptance": true,
   "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/mods-webhook/macos/result.png"
 }

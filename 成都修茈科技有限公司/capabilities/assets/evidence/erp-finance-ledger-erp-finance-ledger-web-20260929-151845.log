@@ -1,0 +1,8 @@
+[15:18:45] feature=erp-finance-ledger platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-finance-ledger
+[15:18:58] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[15:19:00] case FL1: passed - 财务流水真实写-读回
+[15:19:00] case FL2: passed - 统一账本包含本轮流水
+[15:19:01] case FL3: passed - 账本汇总与财务看板
+[15:19:01] case FL4: passed - 缺 transaction_type 被拒（负例）
+[15:19:01] video: erp-finance-ledger-web-20260929-151845.webm (1197761 bytes)
+[15:19:01] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-finance-ledger/log/erp-finance-ledger-web-20260929-151845.log

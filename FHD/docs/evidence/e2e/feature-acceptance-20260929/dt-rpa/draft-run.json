@@ -3,67 +3,59 @@
  "feature": "dt-rpa",
  "name": "桌面自动化与运行时状态",
  "platform": "macos",
- "status": "failed",
- "verdict": "FAIL",
+ "status": "blocked",
+ "verdict": "BLOCKED",
  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
  "app_version": "1.0.0.5",
  "verified_at": "2026-09-29",
- "passed": 2,
- "failed": 2,
+ "passed": 0,
+ "failed": 0,
  "cases": [
   {
    "id": "M1",
-   "input": "GET /api/desktop/automation/status",
-   "actions": "在 App 页面内以同一登录会话调用 GET /api/desktop/automation/status（写操作自动附带 CSRF）：自动化状态",
-   "expected": "自动化状态：HTTP 2xx 且业务字段满足断言",
-   "observed": "HTTP 200 22ms；{\"profiles\": 0, \"drivers\": {\"windows\": false, \"mac\": false, \"mcp_wechat\": false}}",
-   "result": "passed"
+   "input": "桌面自动化执行",
+   "actions": "尝试执行：桌面自动化执行",
+   "expected": "桌面自动化执行 成功",
+   "observed": "受阻：本机客户端构建未安装桌面自动化后端：GET /api/desktop/automation/status 显示 drivers 全为 false；写入 profile 返回「desktop automation backend not installed in this build」",
+   "result": "blocked"
   },
   {
    "id": "M2",
-   "input": "POST /api/desktop/automation/profiles 请求体 {\"profile\": {\"id\": \"mac-acc-0929\", \"name\": \"MAC验收0929\", \"platform\": \"mac\", \"steps\": []}}",
-   "actions": "在 App 页面内以同一登录会话调用 POST /api/desktop/automation/profiles（写操作自动附带 CSRF）：写入自动化 profile",
-   "expected": "写入自动化 profile：HTTP 2xx 且业务字段满足断言",
-   "observed": "HTTP 200 22ms；{\"success\": true, \"data\": {\"success\": false, \"error\": \"desktop automation backend not installed in this build\"}}",
-   "result": "failed"
+   "input": "桌面元素查找",
+   "actions": "尝试执行：桌面元素查找",
+   "expected": "桌面元素查找 成功",
+   "observed": "受阻：GET /api/desktop/automation/find-element 返回「desktop automation backend not installed in this build」",
+   "result": "blocked"
   },
   {
    "id": "M3",
-   "input": "GET /api/desktop/automation/profiles",
-   "actions": "在 App 页面内以同一登录会话调用 GET /api/desktop/automation/profiles（写操作自动附带 CSRF）：读回 profile",
-   "expected": "读回 profile：HTTP 2xx 且业务字段满足断言",
-   "observed": "HTTP 200 15ms；{\"success\": true, \"data\": {\"profiles\": []}}",
-   "result": "failed"
-  },
-  {
-   "id": "M4",
-   "input": "界面路由 /desktop-runtime",
-   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /desktop-runtime，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
-   "expected": "停留在 /desktop-runtime，页面可见 ，该页请求无 4xx/5xx",
-   "observed": "导航后路径 /desktop-runtime；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 桌面运行时 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 桌面运行时 |  | 该页面在 web 版与桌面版共用，用于查看本地数据目录、模型目录和更新入口。 |  | 刷新状态检查桌面更新 | 运行状态 | 桌面",
-   "result": "passed"
+   "input": "桌面工作流执行",
+   "actions": "尝试执行：桌面工作流执行",
+   "expected": "桌面工作流执行 成功",
+   "observed": "受阻：POST /api/desktop/automation/workflow/run 返回「desktop automation backend not installed in this build」",
+   "result": "blocked"
   }
  ],
  "media": [
   {
    "feature": "dt-rpa",
    "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/dt-rpa/macos/result.png",
-   "sha256": "901343d8134be41a3e613dfe185878627c8a5fac132990eb5f97ff9efece9a93",
+   "sha256": "1f6aded2c7bb85d0da5c7cc95f9db00ee05c0adbcefc863dec72ea57ebd0d9e3",
    "kind": "screenshot",
    "tag": "result"
   },
   {
    "feature": "dt-rpa",
    "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/dt-rpa/macos/operation.webm",
-   "sha256": "31cd9f9f604f2541bc7eaf3b652190e9c90768d52443bcc7b7cfafe2af490528",
+   "sha256": "60798448daa9fd4c3836ebeb99f0cd8799fcd78038495f063362dfabb07cf386",
    "kind": "video",
    "tag": "operation"
   }
  ],
  "log": {
   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/dt-rpa/macos/run.log",
-  "sha256": "f14c38616a414ee784be79f96d9a631ecb0260872762c34f4f16aa51e7a8d382",
-  "bytes": 1397
+  "sha256": "40f54dcf12af5aae00d4232c039d53d11eeac3eb7b5d391d90f32f3991f299d9",
+  "bytes": 932
  },
  "method": "经 CDP(127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
 }

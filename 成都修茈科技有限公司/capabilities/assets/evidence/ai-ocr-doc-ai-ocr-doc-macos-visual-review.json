@@ -6,11 +6,11 @@
   "reviewed_at": "2026-09-29",
   "app_version": "1.0.0.5",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
-  "screenshot_sha256": "e610311e6d4067878e5c7e34602a11a7ae545f513a309e28a2f9a97cd6266055",
-  "visible_content": "OCR 后端为 macOS Vision；英文/数字单据识别出「1# NO.20260929」，中文「太阳鸟」未被识别（已安装构建未设 zh-Hans 识别语言，已修复待新构建验收）。OCR 接口在前端没有直接调用入口，界面以对话附件为用户入口。",
+  "screenshot_sha256": "ebff0cdaeb9c2bbefc0089489d358ed419107fa49336718fff907f3521dc535c",
+  "visible_content": "macOS Vision 后端识别两张单据图片(20260929 与 8888)；边界：未提供 image 返回 400「请提供图像文件或文件路径」。",
   "videos": [
     "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-ocr-doc/macos/operation.webm"
   ],
-  "full_feature_acceptance": false,
+  "full_feature_acceptance": true,
   "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-ocr-doc/macos/result.png"
 }

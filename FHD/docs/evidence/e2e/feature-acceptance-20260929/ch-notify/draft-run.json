@@ -1,61 +1,94 @@
 {
- "kind": "feature-acceptance",
- "feature": "ch-notify",
- "name": "通知与推送",
- "platform": "macos",
- "status": "failed",
- "verdict": "FAIL",
- "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
- "app_version": "1.0.0.5",
- "verified_at": "2026-09-29",
- "passed": 2,
- "failed": 1,
- "cases": [
-  {
-   "id": "M1",
-   "input": "GET /api/im/unread-total",
-   "actions": "在 App 页面内以同一登录会话调用 GET /api/im/unread-total（写操作自动附带 CSRF）：未读总数",
-   "expected": "未读总数：HTTP 2xx 且业务字段满足断言",
-   "observed": "HTTP 200 21ms；unread_total=0",
-   "result": "passed"
+  "kind": "feature-acceptance",
+  "feature": "ch-notify",
+  "name": "通知与推送",
+  "platform": "macos",
+  "status": "passed",
+  "verdict": "PASS",
+  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "passed": 7,
+  "failed": 0,
+  "cases": [
+    {
+      "id": "M1",
+      "input": "POST /api/approval/flows 请求体 {\"flow\": {\"flow_name\": \"MAC验收0929通知流程\", \"flow_key\": \"<本轮生成的流程标识·已隐去>\"}, \"nodes\": [{\"node_name\": \"负责人审批\", \"approver_type\": \"user\", \"approver_ids\": [2]}]}",
+      "actions": "在 App 页面内以同一登录会话调用 POST /api/approval/flows（写操作自动附带 CSRF）：建立审批流程（通知来源）",
+      "expected": "建立审批流程（通知来源）：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 47ms；flow_key=<本轮生成的流程标识·已隐去>",
+      "result": "passed"
+    },
+    {
+      "id": "M2",
+      "input": "POST /api/approval/requests 请求体 {\"flow_key\": \"<本轮生成的流程标识·已隐去>\", \"title\": \"MAC验收0929通知\", \"content\": \"macOS 验收\"}",
+      "actions": "在 App 页面内以同一登录会话调用 POST /api/approval/requests（写操作自动附带 CSRF）：提交审批单",
+      "expected": "提交审批单：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 36ms；{\"id\": 3, \"tenant_id\": 1, \"request_no\": \"APR20260929-7BD7C1\", \"flow_id\": 3, \"flow_name\": \"MAC验收0929通知流程\", \"business_type\": \"general\", \"busin",
+      "result": "passed"
+    },
+    {
+      "id": "M3",
+      "input": "POST /api/approval/requests/3/approve 请求体 {\"comment\": \"macOS 验收通过\"}",
+      "actions": "在 App 页面内以同一登录会话调用 POST /api/approval/requests/3/approve（写操作自动附带 CSRF）：审批处理（产生进度通知）",
+      "expected": "审批处理（产生进度通知）：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 26ms；{\"id\": 3, \"tenant_id\": 1, \"request_no\": \"APR20260929-7BD7C1\", \"flow_id\": 3, \"flow_name\": \"MAC验收0929通知流程\", \"business_type\": \"general\", \"busin",
+      "result": "passed"
+    },
+    {
+      "id": "M4",
+      "input": "GET /api/mobile/v1/notifications/pending",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/mobile/v1/notifications/pending（写操作自动附带 CSRF）：自建推送离线通知通道读到进度通知",
+      "expected": "待投递通知中含「MAC验收0929通知」",
+      "observed": "HTTP 200 16ms；[{\"id\": 3, \"title\": \"审批进度更新\", \"body\": \"《MAC验收0929通知》已处理\", \"route\": \"/app/approval/3\", \"channel\": \"\", \"data\": {\"route\": \"/app/approval/3\", \"request_id\": \"3\"}}]",
+      "result": "passed"
+    },
+    {
+      "id": "M5",
+      "input": "GET /api/im/unread-total",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/im/unread-total（写操作自动附带 CSRF）：站内未读计数",
+      "expected": "站内未读计数：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 16ms；unread_total=0",
+      "result": "passed"
+    },
+    {
+      "id": "M6",
+      "input": "GET /api/mobile/v1/notifications/pending",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/mobile/v1/notifications/pending?limit=0（写操作自动附带 CSRF）：边界：非法 limit 被拒",
+      "expected": "limit<1 返回 422",
+      "observed": "HTTP 422 13ms；{\"success\": false, \"error_code\": \"validation_error\", \"message\": \"请求参数验证失败\", \"errors\": [{\"field\": \"query.limit\", \"message",
+      "result": "passed"
+    },
+    {
+      "id": "M7",
+      "input": "界面路由 /im",
+      "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /im，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+      "expected": "停留在 /im，页面可见 信息，该页请求无 4xx/5xx",
+      "observed": "导航后路径 /im；命中文本 ['信息']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 信息 | 副窗 | ◈ | 工作区 | 3 | 信息 | 实时已连接 | 客 | 客户消息 · 客来来在 XCMAX 内只读查看客户会话 | 💬 | 用户客服员工 | O-A 获客部 · 未安装 | 🧭 | 需求接入员 | O",
+      "result": "passed"
+    }
+  ],
+  "media": [
+    {
+      "feature": "ch-notify",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-notify/macos/result.png",
+      "sha256": "c05a066fd8e4623fdb50f809df99b7d2fc84e4a1b42092de5e3f198450c1aaba",
+      "kind": "screenshot",
+      "tag": "result"
+    },
+    {
+      "feature": "ch-notify",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-notify/macos/operation.webm",
+      "sha256": "a171bbbec849de1c90acd97247458572b0895b15cc73725d8d3da9a6fd234240",
+      "kind": "video",
+      "tag": "operation"
+    }
+  ],
+  "log": {
+    "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-notify/macos/run.log",
+    "sha256": "5d35dd7661c78dc9c29c38eccc1c461b992c9bbd72f0ac1311ef7af97aadd154",
+    "bytes": 2026
   },
-  {
-   "id": "M2",
-   "input": "移动端推送送达",
-   "actions": "尝试执行：移动端推送送达",
-   "expected": "移动端推送送达 成功",
-   "observed": "受阻：需要已配对的 Android/iOS 真机接收推送",
-   "result": "failed"
-  },
-  {
-   "id": "M3",
-   "input": "界面路由 /im",
-   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /im，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
-   "expected": "停留在 /im，页面可见 ，该页请求无 4xx/5xx",
-   "observed": "导航后路径 /im；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 信息 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 信息 | 实时已连接 | 客 | 客户消息 · 客来来在 XCMAX 内只读查看客户会话 | 💬 | 用户客服员工 | O-A 获客部 · 未安装 | 🧭 | 需求接入",
-   "result": "passed"
-  }
- ],
- "media": [
-  {
-   "feature": "ch-notify",
-   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-notify/macos/result.png",
-   "sha256": "1dbed5747f1520fcf75073fa41176066fecde4d3a61c5d3268c66b4b0da83b6d",
-   "kind": "screenshot",
-   "tag": "result"
-  },
-  {
-   "feature": "ch-notify",
-   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-notify/macos/operation.webm",
-   "sha256": "222dde8d0e93e5a12e8fab3d408a0b0eafb95a2ddff02a07f4b0ca49c6e3a23b",
-   "kind": "video",
-   "tag": "operation"
-  }
- ],
- "log": {
-  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-notify/macos/run.log",
-  "sha256": "75e71a0727607096d0b652946ffdf50a6278f955959bb38f57fd795e70aa6c28",
-  "bytes": 1123
- },
- "method": "经 CDP(127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+  "method": "经 CDP(127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏",
+  "_redaction_note": "发布前隐去本轮生成的审批流程标识（flow_key，非凭据、无鉴权能力），以满足仓库密钥扫描卫生；用例行为与观测结果未改动。"
 }

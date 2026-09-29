@@ -1,6 +1,7 @@
-2026-09-29T06:45:20+0800 [erp-sales-order] 开始验收 erp-sales-order 销售订单管理；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
-2026-09-29T06:45:20+0800 [erp-sales-order] M1 passed :: HTTP 200 23ms；{"success": true, "data": {"order_number": "26-09-00001A", "sequence": 1, "year_month": "26-09"}}
-2026-09-29T06:45:20+0800 [erp-sales-order] M2 passed :: HTTP 200 27ms；订单 0 条
-2026-09-29T06:45:23+0800 [erp-sales-order] M3 failed :: 导航后路径 /mod/xcagi-erp-domain-bridge/orders/create；命中文本 ['单']；缺失 []；界面请求失败 [(403, '/api/purchase_units'), (403, '/api/orders/next_number?suffix=A'), (403, '/api/purchase_units'), (403, '/api/orders/next_number?suffix=A')]；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 新建考勤单 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 新建发货单 | 返回列表 | 选择发货单模板 | 发货单模板 | -- 请选择模板 -- | 暂无可用发货单模板：请点下方「模板编辑」上传贵
-2026-09-29T06:45:25+0800 [erp-sales-order] screenshot result.png
-2026-09-29T06:45:27+0800 [erp-sales-order] video operation.webm bytes=314595
+2026-09-29T13:01:49+0800 [erp-sales-order] 开始验收 erp-sales-order 销售订单管理；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T13:01:49+0800 [erp-sales-order] M1 passed :: HTTP 200 48ms；{"order_number": "26-09-00001A", "sequence": 1, "year_month": "26-09"}
+2026-09-29T13:01:49+0800 [erp-sales-order] M2 passed :: HTTP 200 17ms；订单门面 3 条
+2026-09-29T13:01:49+0800 [erp-sales-order] M3 passed :: HTTP 422 12ms；{"success": false, "error_code": "validation_error", "message": "请求参数验证失败", "errors": [{"field": "query.page", "message"
+2026-09-29T13:01:53+0800 [erp-sales-order] M4 passed :: 导航后路径 /mod/xcagi-erp-domain-bridge/orders/create；命中文本 ['新建发货单']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 新建考勤单 | 副窗 | ◈ | 工作区 | 3 | 新建发货单 | 返回列表 | 选择发货单模板 | 发货单模板 | -- 请选择模板 -- | 暂无可用发货单模板：请点下方「模板编辑」上传贵司出货单 Exc
+2026-09-29T13:01:54+0800 [erp-sales-order] screenshot result.png
+2026-09-29T13:01:56+0800 [erp-sales-order] video operation.webm bytes=328239

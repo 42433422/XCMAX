@@ -1,0 +1,8 @@
+[13:57:52] feature=sec-runtime-gate platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-runtime-gate
+[13:58:04] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[13:58:05] case G1: passed - 会话运行时门控：即时校验通过
+[13:58:05] case G2: passed - 会话 Cookie 为 HttpOnly（JS 不可读）
+[13:58:08] case G3: passed - 真实退出使会话立即失效
+[13:58:09] case G4: passed - 无会话上下文门控 fail-closed（负例/边界）
+[13:58:10] video: sec-runtime-gate-web-20260929-135752.webm (1167748 bytes)
+[13:58:10] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-runtime-gate/log/sec-runtime-gate-web-20260929-135752.log

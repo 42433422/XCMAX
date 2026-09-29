@@ -1,0 +1,7 @@
+[16:40:59] feature=ind-custom-delivery platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-custom-delivery
+[16:41:13] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[16:41:17] case CD1: passed - 本地 Mod 目录真实读取
+[16:41:19] case CD2: passed - 定制需求接口非法入参被拒（负例）
+[16:41:26] case CD3: passed - 租户安全的私有 Mod 交付同步与未授权门禁（真实读写）
+[16:41:27] video: ind-custom-delivery-web-20260929-164059.webm (1776270 bytes)
+[16:41:27] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-custom-delivery/log/ind-custom-delivery-web-20260929-164059.log
