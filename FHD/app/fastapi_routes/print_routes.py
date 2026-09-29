@@ -26,7 +26,7 @@ from app.fastapi_routes.print_agent_helpers import (
 from app.fastapi_routes.print_agent_helpers import (
     run_print_agent as _run_print_agent,
 )
-from app.infrastructure.auth.business_scope_gate import require_scoped_business_permission
+from app.infrastructure.auth.business_scope_gate import require_print_permission
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.security.safe_download_path import (
     UnsafeDownloadPathError,
@@ -40,7 +40,7 @@ from app.fastapi_routes.label_jobs import router as label_jobs_router
 router = APIRouter(
     prefix="/api/print",
     tags=["print"],
-    dependencies=[Depends(require_scoped_business_permission("print.label"))],
+    dependencies=[Depends(require_print_permission())],
 )
 router.include_router(label_jobs_router)
 

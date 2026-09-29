@@ -8,6 +8,10 @@ from app.infrastructure.auth.dependencies import get_logged_in_user, resolve_ses
 from app.mod_sdk.product_skus import resolve_product_sku
 
 _TENANT_SCOPED_PREFIXES = ("/api/print/label-jobs",)
+_PRINTER_DEVICE_PATHS = frozenset(
+    f"/api/print/{p}"
+    for p in ("printers", "printer-selection", "default", "test", "validate", "diagnose")
+) | {"/api/print/document-printer", "/api/print/label-printer", "/api/printers"}
 
 
 def _permission_code(request: Request, read_code: str, write_code: str | None) -> str:
@@ -66,6 +70,25 @@ def require_scoped_business_permission(read_code: str, write_code: str | None = 
         code = (
             read_code if request.method in {"GET", "HEAD", "OPTIONS"} else write_code or read_code
         )
+        if not get_auth_service().has_permission(user, code):
+            raise HTTPException(status_code=403, detail="权限不足")
+        return user
+
+    return guard
+
+
+def require_print_permission(code: str = "print.label"):
+    """本机打印机路径不含租户业务数据：租户会话凭权限即可访问，其余打印路径仍走租户门禁。"""
+    scoped = require_scoped_business_permission(code)
+
+    def guard(request: Request):
+        if request.url.path.rstrip("/") not in _PRINTER_DEVICE_PATHS:
+            return scoped(request)
+        if resolve_product_sku() != "enterprise":
+            return None
+        user = get_logged_in_user(request)
+        from app.application.facades.session_facade import get_auth_service
+
         if not get_auth_service().has_permission(user, code):
             raise HTTPException(status_code=403, detail="权限不足")
         return user
