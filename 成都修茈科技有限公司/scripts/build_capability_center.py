@@ -43,7 +43,7 @@ STATUS_LEGEND = (
 
 PLATFORM_META = {"windows": "Windows 桌面", "macos": "macOS 桌面", "web": "Web", "android": "Android", "ios": "iOS"}
 
-COMPLETION_WEIGHT = {"verified": 1.0, "partial": 0.7, "implemented": 0.4, "planned": 0.0}
+COMPLETION_WEIGHT = {"verified": 10, "partial": 7, "implemented": 4, "planned": 0}
 
 TICK_CLASS = {"verified": "t-ok", "partial": "t-part", "implemented": "t-wip", "planned": "t-todo"}
 
@@ -487,11 +487,11 @@ def load_product_version() -> str:
 
 
 def completion(features: list[dict]) -> int:
-    """按 COMPLETION_WEIGHT 加权计算一组能力的完成度百分比（四舍五入）。"""
+    """按十分制 COMPLETION_WEIGHT 整数加权、四舍五入；浮点求和在 .5 处会随 Python 版本取整不一致。"""
     if not features:
         return 0
-    weighted = sum(COMPLETION_WEIGHT.get(f["status"], 0.0) for f in features)
-    return int(round(weighted / len(features) * 100))
+    weighted = sum(COMPLETION_WEIGHT.get(f["status"], 0) for f in features)
+    return (weighted * 20 + len(features)) // (2 * len(features))
 
 
 def build(repo_root_note: bool = True) -> tuple[dict, list[str], list[dict]]:
