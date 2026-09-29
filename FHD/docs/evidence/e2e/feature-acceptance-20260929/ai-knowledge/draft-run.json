@@ -3,44 +3,52 @@
  "feature": "ai-knowledge",
  "name": "知识库与向量检索",
  "platform": "macos",
- "status": "failed",
- "verdict": "FAIL",
+ "status": "passed",
+ "verdict": "PASS",
  "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
  "app_version": "1.0.0.5",
  "verified_at": "2026-09-29",
- "passed": 2,
- "failed": 2,
+ "passed": 5,
+ "failed": 0,
  "cases": [
   {
    "id": "M1",
    "input": "GET /api/persy/knowledge",
-   "actions": "在 App 页面内以同一登录会话调用 GET /api/persy/knowledge（写操作自动附带 CSRF）：Persy 知识库状态",
-   "expected": "Persy 知识库状态：HTTP 2xx 且业务字段满足断言",
-   "observed": "HTTP 200 23ms；dataset=persy-knowledge 文档 0 片段 0",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/persy/knowledge（写操作自动附带 CSRF）：Persy 知识库索引状态",
+   "expected": "Persy 知识库索引状态：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 42ms；dataset=persy-knowledge 文档 1 片段 1 retriever=hybrid_bm25_vector",
    "result": "passed"
   },
   {
    "id": "M2",
-   "input": "POST /api/knowledge/v1/ingest 请求体 {\"text\": \"MAC验收0929：迟到超过10分钟计半天。\", \"source\": \"mac-acceptance\"}",
-   "actions": "在 App 页面内以同一登录会话调用 POST /api/knowledge/v1/ingest（写操作自动附带 CSRF）：写入知识",
-   "expected": "写入知识：HTTP 2xx 且业务字段满足断言",
-   "observed": "HTTP 403 27ms；{\"success\": false, \"error_code\": \"http_403\", \"message\": \"旧知识索引未提供租户隔离\", \"path\": \"/api/knowledge/v1/ingest\"}",
-   "result": "failed"
+   "input": "POST /api/knowledge/v1/datasets/persy-knowledge/documents 请求体 {\"text\": \"MAC验收0929：迟到超过10分钟计半天。\", \"title\": \"MAC验收0929制度\"}",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/knowledge/v1/datasets/persy-knowledge/documents（写操作自动附带 CSRF）：写入知识文档（租户隔离数据集）",
+   "expected": "写入知识文档（租户隔离数据集）：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 106ms；doc=doc_299ae9665f37e4a3 chunks=1 tenant=1",
+   "result": "passed"
   },
   {
    "id": "M3",
-   "input": "POST /api/knowledge/v1/query 请求体 {\"query\": \"迟到超过多少分钟计半天\", \"top_k\": 3}",
-   "actions": "在 App 页面内以同一登录会话调用 POST /api/knowledge/v1/query（写操作自动附带 CSRF）：检索知识",
-   "expected": "检索知识：HTTP 2xx 且业务字段满足断言",
-   "observed": "HTTP 403 34ms；{\"success\": false, \"error_code\": \"http_403\", \"message\": \"旧知识索引未提供租户隔离\", \"path\": \"/api/knowledge/v1/query\"}",
-   "result": "failed"
+   "input": "GET /api/knowledge/v1/datasets/persy-knowledge/status",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/knowledge/v1/datasets/persy-knowledge/status（写操作自动附带 CSRF）：读回数据集状态含新文档",
+   "expected": "读回数据集状态含新文档：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 43ms；documents=2 chunk=2 latest=doc_299ae9665f37e4a3",
+   "result": "passed"
   },
   {
    "id": "M4",
+   "input": "POST /api/knowledge/v1/query 请求体 {\"query\": \"迟到\", \"top_k\": 3}",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/knowledge/v1/query（写操作自动附带 CSRF）：边界：旧全局知识索引无租户隔离被拒",
+   "expected": "旧索引 403「未提供租户隔离」",
+   "observed": "HTTP 403 26ms；{\"success\": false, \"error_code\": \"http_403\", \"message\": \"旧知识索引未提供租户隔离\", \"path\": \"/api/knowledge/v1/query\"}",
+   "result": "passed"
+  },
+  {
+   "id": "M5",
    "input": "界面路由 /persy/knowledge",
    "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /persy/knowledge，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
    "expected": "停留在 /persy/knowledge，页面可见 知识，该页请求无 4xx/5xx",
-   "observed": "导航后路径 /persy/knowledge；命中文本 ['知识']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 知识库 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | PERSY COGNITIVE MAP | 企业知识网络 | 图谱 | 记忆 | 卡片 | 来源 | 关键词召回 | 导入 |  | 当前没有知识内容，图中显示",
+   "observed": "导航后路径 /persy/knowledge；命中文本 ['知识']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 知识库 | 副窗 | ◈ | 工作区 | 2 | PERSY COGNITIVE MAP | 企业知识网络 | 图谱 | 记忆 | 卡片 | 来源 | 关键词召回 | 导入 |  | 当前显示 2 个知识节点与 2 条关系。 | ",
    "result": "passed"
   }
  ],
@@ -48,22 +56,22 @@
   {
    "feature": "ai-knowledge",
    "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-knowledge/macos/result.png",
-   "sha256": "e8908ab0273f92a9b1bb4522fac5382360813953c60c2b6fe8cdcf5f038e53b8",
+   "sha256": "7e1a27fd7bde2c21000aa6e4b32142fe293261cfd700b8719c8313f82f137c52",
    "kind": "screenshot",
    "tag": "result"
   },
   {
    "feature": "ai-knowledge",
    "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-knowledge/macos/operation.webm",
-   "sha256": "c31c08d5697ee0612464fb806aa2c7f8eb0ed0f17f8765245f84c1d8e18a85ef",
+   "sha256": "fe47ad957b2ef9749d5e0d4d3e1e654238d8adfaed3ee4364f4879eeb70fa617",
    "kind": "video",
    "tag": "operation"
   }
  ],
  "log": {
   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-knowledge/macos/run.log",
-  "sha256": "70086de186ac7696429263c3f7e03a09850e84d621956591281968652dfabde5",
-  "bytes": 1482
+  "sha256": "acb096304c878b534325200c5cce71722ae3adde71a840b2c9ed5b48d9c1f5ac",
+  "bytes": 1542
  },
  "method": "经 CDP(127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
 }

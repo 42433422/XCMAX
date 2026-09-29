@@ -33,12 +33,10 @@ def _check_database() -> dict[str, Any]:
 
 
 def _check_redis() -> dict[str, Any]:
-    redis_url = os.environ.get("REDIS_URL") or os.environ.get("CACHE_REDIS_URL")
-    if not redis_url:
-        return {"status": "disabled", "detail": "Redis 未配置（桌面单机使用进程内缓存）"}
     try:
         import redis
 
+        redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379")
         client = redis.from_url(redis_url)
         client.ping()
         return {"status": "healthy", "latency_ms": 0}

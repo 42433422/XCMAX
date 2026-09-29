@@ -1,0 +1,343 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "erp-ocr-clean",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-152313",
+  "generated_at": "2026-09-29 15:23:29",
+  "app_git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 4,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。"
+  ],
+  "visible_content": "真实浏览器在 Web 管理端对识别文本做结构化清洗：POST /api/ocr/extract 提取结构化字段 → POST /api/ocr/analyze 分析文本类型/缺失字段 → 页面内 canvas 绘制的文档图 POST /api/ocr/recognize-and-extract 完成识别+提取闭环；并含空文本 400（负例）。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "degraded",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [
+        "Industry MOD is entitled but not installed locally: office-employee-pack"
+      ],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 64498,
+        "processed": 64486,
+        "errors": 0,
+        "dropped": 12,
+        "queue_size": 0,
+        "handlers": 39,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 0,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 11,
+            "max_cache_size": 1000,
+            "hits": 53,
+            "misses": 11,
+            "hit_rate": 0.828125,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 2,
+            "success": 2,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 1.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 2,
+            "success": 2,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 1.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": true
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "evolution.index",
+                "evolution.mine",
+                "evolution.export",
+                "error.occurred",
+                "evolution.search",
+                "evolution.reflect"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-ocr-clean/erp-ocr-clean-web-identity.json"
+  },
+  "media": [
+    {
+      "feature": "erp-ocr-clean",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-ocr-clean/shot/00-login-form.png",
+      "sha256": "2f5f26173889f35c4e5d3ac00917da0e19ea11921e137274d21fb80369db4df6",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-ocr-clean",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-ocr-clean/shot/OCC1-ocr-extract.png",
+      "sha256": "994ff20b0b010a11419cc0498c69f52e2a465a9b2985f5e5e60b243577e9d0de",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染文本结构化提取真实 JSON：success=true、结构化字段键、raw_text。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-ocr-clean",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-ocr-clean/shot/OCC2-ocr-analyze.png",
+      "sha256": "8991f6f8069387bd1eaac9f14ebd6ddc66f3c3a310e5bbb39c16dd5fc88adeba",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染文本分析真实 JSON：text_type、confidence、missing_fields。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-ocr-clean",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-ocr-clean/shot/OCC3-ocr-recognize-extract.png",
+      "sha256": "d235638ccc13548b6ef0c8ed68d6017cf6841d620dc406735d9e5ebc1574c06e",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染识别+提取闭环真实 JSON：识别文本、结构化 data 与 analysis。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-ocr-clean",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-ocr-clean/shot/OCC4-ocr-clean-negative.png",
+      "sha256": "d08cc527904576e07cd2bdd9e43e4e1b2bc7d68e3ba2e85075ef5b9c8f36c8e8",
+      "visual_review": "accepted",
+      "visible_result": "浏览器渲染空文本的 400「文本不能为空」。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-ocr-clean",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-ocr-clean/video/erp-ocr-clean-web-20260929-152313.webm",
+      "sha256": "28d3f8e0fe606d355f896c6e60656a5a51c68635934e8ac00ada81755815e6a6",
+      "visual_review": "accepted",
+      "visible_result": "本轮真实浏览器会话录像（webm）：管理端登录 → 文本提取 → 文本分析 → 识别+提取闭环 → 负例。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "OCC1",
+      "title": "识别文本结构化提取",
+      "input": "已建立的管理员会话（带 CSRF 令牌）。",
+      "actions": "POST /api/ocr/extract（含购买单位/联系人/金额的文本）。",
+      "expected": "200、success=true，返回结构化字段集合（含 raw_text/products）。",
+      "observed": "{\"status\": 200, \"structured_keys\": [\"contact_person\", \"contact_phone\", \"order_number\", \"products\", \"purchase_date\", \"purchase_unit\", \"raw_text\", \"total_amount\"], \"raw_text\": \"购买单位：张三商贸 联系人：李四 电话：13800000000 采购日期：2026-09-29 金额：100.00\"}",
+      "result": "passed"
+    },
+    {
+      "id": "OCC2",
+      "title": "文本类型与缺失字段分析",
+      "input": "已建立的管理员会话（带 CSRF 令牌）。",
+      "actions": "POST /api/ocr/analyze。",
+      "expected": "200、success=true，返回 text_type/confidence/missing_fields。",
+      "observed": "{\"status\": 200, \"text_type\": \"payment\", \"confidence\": 0.3333333333333333, \"missing_fields\": [\"purchase_unit\", \"contact_person\", \"date\"]}",
+      "result": "passed"
+    },
+    {
+      "id": "OCC3",
+      "title": "图像识别+提取闭环",
+      "input": "已建立的管理员会话；页面内 canvas 绘制文档图。",
+      "actions": "multipart POST /api/ocr/recognize-and-extract。",
+      "expected": "200、success=true，返回识别文本与结构化 data。",
+      "observed": "{\"status\": 200, \"text\": \"PURCHASE UNIT ACME\\nCONTACT JOHN 13800000000\\nTOTAL CNY 100.00\", \"data_keys\": [\"contact_person\", \"contact_phone\", \"order_number\", \"products\", \"purchase_date\", \"purchase_unit\", \"raw_text\", \"total_amount\"]}",
+      "result": "passed"
+    },
+    {
+      "id": "OCC4",
+      "title": "空文本被拒（负例）",
+      "input": "已建立的管理员会话（带 CSRF 令牌）。",
+      "actions": "POST /api/ocr/extract（text 为空）。",
+      "expected": "400「文本不能为空」。",
+      "observed": "{\"status\": 400, \"message\": \"文本不能为空\"}",
+      "result": "passed"
+    }
+  ]
+}

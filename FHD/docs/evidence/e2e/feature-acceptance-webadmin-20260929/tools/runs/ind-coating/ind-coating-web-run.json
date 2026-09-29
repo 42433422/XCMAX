@@ -1,0 +1,327 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "ind-coating",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-143319",
+  "generated_at": "2026-09-29 14:33:34",
+  "app_git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 4,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。"
+  ],
+  "visible_content": "真实浏览器（Chromium）在自托管 Web 管理端建立管理员会话后：读取涂装行业 Mod 运行状态 → 读取「涂料/化工行业」的字段与规则配置（型号/批号/桶数/KG/金额派生规则）→ 在 Mod 注册表中确认 coating-industry 已装 → 以真实 404 记录涂装包内不存在路由被拒（边界/负例）。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "degraded",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [
+        "Industry MOD is entitled but not installed locally: office-employee-pack"
+      ],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 48693,
+        "processed": 48687,
+        "errors": 0,
+        "dropped": 6,
+        "queue_size": 0,
+        "handlers": 39,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 0,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 2,
+            "max_cache_size": 1000,
+            "hits": 25,
+            "misses": 2,
+            "hit_rate": 0.9259259259259259,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": true
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "evolution.index",
+                "evolution.mine",
+                "evolution.export",
+                "error.occurred",
+                "evolution.search",
+                "evolution.reflect"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-coating/ind-coating-web-identity.json"
+  },
+  "media": [
+    {
+      "feature": "ind-coating",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-coating/shot/00-login-form.png",
+      "sha256": "c2bc8fb2c98d7a18923fb61bf9ef60f8b642671ade35bdd20eaf10d4dd98e0e3",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ind-coating",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-coating/shot/C1-coating-surface.png",
+      "sha256": "ed586e9a4c06f685ee1db1f275928fc5804aba922877f8f582d8c369b8139b13",
+      "visual_review": "accepted",
+      "visible_result": "卡片汇总三处真实响应：coating-industry.status 200 success=true mod_id=coating-industry（placeholder 提示装完整 .xcmod）；GET /api/system/industry/涂料 200 id=涂料、name=涂料/化工行业，产品字段含 model_number/batch_no/expire_date，发货单字段含 tin_spec/quantity_tins/quantity_kg/amount，quantity_kg 规则为 mul(quantity_tins, tin_spec)；/api/mods 注册表含 coating-industry（version 1.0.0）。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ind-coating",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-coating/shot/C4-coating-unknown-route.png",
+      "sha256": "faaceb57d1bacebaf74262df3b2ef5cf2e1a333b564f23f6e2039f04a1f96324",
+      "visual_review": "accepted",
+      "visible_result": "本轮响应：GET /api/mods/coating-industry/nonexistent-route 返回 404，message=资源不存在。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ind-coating",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-coating/video/ind-coating-web-20260929-143319.webm",
+      "sha256": "6a4ca4db6433ea4e73cabfc39315e186eb4e9f1d667354e0c4021e947e6534a0",
+      "visual_review": "accepted",
+      "visible_result": "本轮真实浏览器会话录像（webm，14.56s，ffmpeg 实测）：管理员登录 → 涂装 Mod 状态 → 涂料行业字段与规则 → 注册表确认 → 未知路由 404。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "C1",
+      "title": "涂装行业 Mod 运行状态真实读取",
+      "input": "已建立的管理员会话。",
+      "actions": "页面上下文 fetch GET /api/mods/coating-industry/status。",
+      "expected": "HTTP 200，success=true，mod_id=coating-industry。",
+      "observed": "{\"status\": 200, \"success\": true, \"mod_id\": \"coating-industry\", \"message\": \"coating-industry placeholder; install full .xcmod for production\"}",
+      "result": "passed"
+    },
+    {
+      "id": "C2",
+      "title": "涂料/化工行业字段与派生规则真实读取",
+      "input": "同上。",
+      "actions": "页面上下文 fetch GET /api/system/industry/涂料（URL 编码）。",
+      "expected": "HTTP 200，id=涂料，发货单字段含 batch_no/tin_spec/quantity_kg。",
+      "observed": "{\"status\": 200, \"id\": \"涂料\", \"product_field_keys\": [\"model_number\", \"name\", \"specification\", \"price\", \"unit\", \"batch_no\", \"expire_date\"], \"order_field_keys\": [\"purchase_unit\", \"product_name\", \"model_number\", \"quantity_tins\", \"tin_spec\", \"quantity_kg\", \"unit_price\", \"amount\"]}",
+      "result": "passed"
+    },
+    {
+      "id": "C3",
+      "title": "涂装 Mod 已注册且版本可读",
+      "input": "同上。",
+      "actions": "页面上下文 fetch GET /api/mods。",
+      "expected": "注册表中存在 coating-industry 且含版本号。",
+      "observed": "{\"status\": 200, \"mod\": {\"id\": \"coating-industry\", \"name\": \"涂料行业包\", \"version\": \"1.0.0\"}}",
+      "result": "passed"
+    },
+    {
+      "id": "C4",
+      "title": "涂装包内不存在路由被拒（负例/边界）",
+      "input": "同上。",
+      "actions": "页面上下文 fetch GET /api/mods/coating-industry/nonexistent-route。",
+      "expected": "HTTP 404。",
+      "observed": "{\"status\": 404, \"body\": {\"success\": false, \"message\": \"资源不存在：/api/mods/coating-industry/nonexistent-route\"}}",
+      "result": "passed"
+    }
+  ]
+}

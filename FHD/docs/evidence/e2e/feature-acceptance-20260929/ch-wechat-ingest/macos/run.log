@@ -1,6 +1,7 @@
-2026-09-29T07:23:45+0800 [ch-wechat-ingest] 开始验收 ch-wechat-ingest 微信消息接入；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
-2026-09-29T07:23:45+0800 [ch-wechat-ingest] M1 passed :: HTTP 401 14ms；{"success": false, "error_code": "http_401", "message": "invalid wechat sync token", "path": "/api/ops/wechat/contacts"}
-2026-09-29T07:23:45+0800 [ch-wechat-ingest] M2 failed :: 受阻：需要本机运行微信 PC 版与 XCAGI 微信采集端，并配置 wechat sync token
-2026-09-29T07:23:48+0800 [ch-wechat-ingest] M3 passed :: 导航后路径 /business-docking；命中文本 ['数据对接中心']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 数据对接中心 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 企业版 · 通用 ETL | 数据对接中心 |  | 上传业务文件后解析映射并直接写入业务库。AI 只给建议，最终写入由确定性规则执行。 |  | 
-2026-09-29T07:23:50+0800 [ch-wechat-ingest] screenshot result.png
-2026-09-29T07:23:53+0800 [ch-wechat-ingest] video operation.webm bytes=394514
+2026-09-29T16:58:49+0800 [ch-wechat-ingest] 开始验收 ch-wechat-ingest 微信消息接入；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T16:58:49+0800 [ch-wechat-ingest] M1 passed :: HTTP 200；{"success": true, "contacts_upserted": 1, "messages_inserted": 1, "messages_skipped": 0, "context": {"vc-mac-wechat-0929": {"success": true, "known": true, "contact_key": "vc-mac-wechat-0929", "contact": {"display_name": "MAC验收0929微信客户", "wxid": "wxid_mac0929", "customer_id": null, "match_status": "unlinked", "last_message_at": null}, "cu
+2026-09-29T16:58:50+0800 [ch-wechat-ingest] M2 passed :: HTTP 200；{"success": true, "known": true, "contact_key": "vc-mac-wechat-0929", "contact": {"display_name": "MAC验收0929微信客户", "wxid": "wxid_mac0929", "customer_id": null, "match_status": "unlinked", "last_message_at": null}, "customer": null, "recent_messages": [{"role": "other", "content": "MAC验收0929 微信上行消息 1790672329", "msg_ts": null, "source": "d
+2026-09-29T16:58:50+0800 [ch-wechat-ingest] M3 passed :: HTTP 401；{"success": false, "error_code": "http_401", "message": "invalid wechat sync token", "path": "/api/ops/wechat/ingest"}
+2026-09-29T16:58:53+0800 [ch-wechat-ingest] M4 passed :: 导航后路径 /business-docking；命中文本 ['数据对接中心']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 数据对接中心 | SUNBIRD | 副窗 | ◈ | 工作区 | 3 | 企业版 · 通用 ETL | 数据对接中心 |  | 上传业务文件后解析映射并直接写入业务库。AI 只给建议，最终写入由确定性规则执行。 |  | 
+2026-09-29T16:58:54+0800 [ch-wechat-ingest] screenshot result.png
+2026-09-29T16:58:59+0800 [ch-wechat-ingest] video operation.webm bytes=351630

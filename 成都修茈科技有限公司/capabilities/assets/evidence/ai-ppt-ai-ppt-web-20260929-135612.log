@@ -1,0 +1,8 @@
+[13:56:12] feature=ai-ppt platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-ppt
+[13:56:24] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[13:56:25] case P1: passed - PPT 生成员真实写出文件
+[13:56:25] case P2: passed - PPT 全量读取员真实解析生成件
+[13:56:26] case P3: passed - PPT 员工真实注册可查
+[13:56:26] case P4: passed - 缺输入文件时如实 fail-closed（负例/边界）
+[13:56:26] video: ai-ppt-web-20260929-135612.webm (1095872 bytes)
+[13:56:26] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-ppt/log/ai-ppt-web-20260929-135612.log

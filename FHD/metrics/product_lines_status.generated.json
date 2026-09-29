@@ -1,6 +1,6 @@
 {
   "schema": "xcagi.product_lines_status/v1",
-  "generated_at": "2026-09-29 10:06 UTC",
+  "generated_at": "2026-09-29 11:11 UTC",
   "generator": "FHD/scripts/dev/product_lines_status.py",
   "config": "FHD/config/product_lines.yaml",
   "policy": "本文件为生成物：版本/发布/能力/覆盖率的数字全部取自各自权威源，禁止手改；三线「成熟度」只呈现能力目录自有的证据分级计数与 Release Gate 结论，不合成任何自造评分。",
@@ -93,15 +93,15 @@
   "capability_totals": {
     "total": 158,
     "by_status": {
-      "verified": 54,
-      "partial": 93,
-      "implemented": 7,
+      "verified": 55,
+      "partial": 89,
+      "implemented": 10,
       "planned": 4
     },
     "cancelled_count": 0,
     "domains": 10,
     "modules": 28,
-    "verified_total": 54,
+    "verified_total": 55,
     "last_verified_at": "2026-09-29",
     "platform_counts": {
       "windows": 99,
@@ -120,16 +120,16 @@
       },
       "macos": {
         "applicable": 100,
-        "verified": 67,
-        "partial": 29,
-        "pending": 4,
+        "verified": 88,
+        "partial": 0,
+        "pending": 12,
         "last_verified_at": "2026-09-29"
       },
       "web": {
         "applicable": 128,
-        "verified": 52,
+        "verified": 124,
         "partial": 0,
-        "pending": 76,
+        "pending": 4,
         "last_verified_at": "2026-09-29"
       },
       "android": {
@@ -179,12 +179,12 @@
         ],
         "total": 102,
         "by_status": {
-          "verified": 40,
-          "partial": 58,
-          "implemented": 2,
+          "verified": 41,
+          "partial": 55,
+          "implemented": 4,
           "planned": 2
         },
-        "verified": 40
+        "verified": 41
       },
       "releases": {
         "macos": {
@@ -267,8 +267,8 @@
         "by_status": {
           "partial": 23,
           "verified": 14,
-          "implemented": 1,
-          "planned": 1
+          "planned": 1,
+          "implemented": 1
         },
         "verified": 14
       },
@@ -299,8 +299,8 @@
         ],
         "total": 17,
         "by_status": {
-          "partial": 12,
-          "implemented": 4,
+          "partial": 11,
+          "implemented": 5,
           "planned": 1
         },
         "verified": 0

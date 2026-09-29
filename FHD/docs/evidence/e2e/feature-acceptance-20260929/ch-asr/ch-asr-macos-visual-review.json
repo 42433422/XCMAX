@@ -6,11 +6,11 @@
   "reviewed_at": "2026-09-29",
   "app_version": "1.0.0.5",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
-  "screenshot_sha256": "bfc6de624382f339fb0c2461332b59830df563979eedc260fc55f42537a1588c",
-  "visible_content": "语音服务健康（ready，small 模型 CPU），界面有「按住说话」入口；真实转写需要麦克风权限与真人语音，受阻。",
+  "screenshot_sha256": "e6f162b3a51a3b67b44a0523afece561c4c4905e74ac94d98108e93fbaf6078f",
+  "visible_content": "voice/health ready=true；TTS→ASR 真实往返：合成「请把二十四箱包装盒发到仓库」转写为「请把24箱包装和发到仓库。」(真实文本)；边界：纯正弦音转写为空(不臆造)、缺 file 返回 422。",
   "videos": [
     "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-asr/macos/operation.webm"
   ],
-  "full_feature_acceptance": false,
+  "full_feature_acceptance": true,
   "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-asr/macos/result.png"
 }

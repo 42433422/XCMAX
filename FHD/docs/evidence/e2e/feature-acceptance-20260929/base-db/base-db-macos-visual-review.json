@@ -6,11 +6,11 @@
   "reviewed_at": "2026-09-29",
   "app_version": "1.0.0.5",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
-  "screenshot_sha256": "5671972587655054450f42f6ee23849cf469c5d2fc377d8b44a920f4efe08ba1",
-  "visible_content": "数据库探针 healthy；偏好写入返回回显但读回为空（已安装构建 /api/preferences 为桩）——已修复为按工作区持久化，待新构建验收。",
+  "screenshot_sha256": "f57a70ec7d6d7de0dd512d5e9774b2237a37f565e46238a809bc7ed8e3a1cb89",
+  "visible_content": "数据库运行态(backend=sqlite、mode=production、test_db_enabled=false)、db-tools 注册表、桌面存储指向同一库均可读；边界：FHD 兼容层跨层读写令牌未配置(false)。",
   "videos": [
     "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-db/macos/operation.webm"
   ],
-  "full_feature_acceptance": false,
+  "full_feature_acceptance": true,
   "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-db/macos/result.png"
 }

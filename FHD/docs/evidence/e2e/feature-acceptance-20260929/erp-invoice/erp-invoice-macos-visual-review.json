@@ -6,8 +6,8 @@
   "reviewed_at": "2026-09-29",
   "app_version": "1.0.0.5",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
-  "screenshot_sha256": "9d1409ef7a584a4280ca2cba1ce8fee90d3693cfc9ad9fa67714ac1a8fb421f1",
-  "visible_content": "发票 CRM 与税务通道接口均要求管理员账号（403），真实开票需税务通道开通与证书，发票链路未通过。",
+  "screenshot_sha256": "1f6aded2c7bb85d0da5c7cc95f9db00ee05c0adbcefc863dec72ea57ebd0d9e3",
+  "visible_content": "阻塞：/api/finance/invoices/crm 与 /tax-channel 均 403「需要管理员账号登录后访问」，发票接口仅管理员可用；本机未配置企业税号与开票证书，无法真实开票。",
   "videos": [
     "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-invoice/macos/operation.webm"
   ],

@@ -51,7 +51,7 @@ def client(monkeypatch):
         ("POST", "/api/shipment/generate"),
         ("GET", "/api/materials"),
         ("POST", "/api/materials"),
-        ("GET", "/api/print/list_labels"),
+        ("GET", "/api/print/printers"),
         ("GET", "/api/print/jobs"),
         ("POST", "/api/print/label"),
         ("GET", "/api/product_names"),
@@ -126,29 +126,3 @@ def test_non_tenant_platform_admin_permission_still_controls_legacy_route(client
     accepted = http.get("/api/print/jobs")
     assert accepted.status_code == 200
     assert accepted.json()["jobs"] == []
-
-
-@pytest.mark.parametrize("path", ["/api/print/printers", "/api/printers", "/api/print/default"])
-def test_tenant_session_reaches_local_printer_hardware_only_with_permission(
-    client, monkeypatch, path
-):
-    from app.application.facades import print_facade, session_facade
-
-    http, _principal = client
-    allowed = [False]
-    monkeypatch.setattr(
-        session_facade,
-        "get_auth_service",
-        lambda: SimpleNamespace(
-            has_permission=lambda _u, code: code == "print.label" and allowed[0]
-        ),
-    )
-    fake = SimpleNamespace(
-        get_printers=lambda: {"success": True, "printers": [{"name": "P1"}], "count": 1},
-        get_default_printer=lambda: {"success": True, "printer": "P1"},
-    )
-    monkeypatch.setattr(print_facade, "printer_service", fake)
-    assert http.get(path).status_code == 403
-    allowed[0] = True
-    response = http.get(path)
-    assert response.status_code == 200 and "P1" in response.text

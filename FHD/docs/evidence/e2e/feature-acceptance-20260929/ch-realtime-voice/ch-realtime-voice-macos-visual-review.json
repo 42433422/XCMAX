@@ -6,8 +6,8 @@
   "reviewed_at": "2026-09-29",
   "app_version": "1.0.0.5",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
-  "screenshot_sha256": "bfc6de624382f339fb0c2461332b59830df563979eedc260fc55f42537a1588c",
-  "visible_content": "语音服务 ready，界面入口可见；实时语音对话需要麦克风与真人，受阻。",
+  "screenshot_sha256": "1f6aded2c7bb85d0da5c7cc95f9db00ee05c0adbcefc863dec72ea57ebd0d9e3",
+  "visible_content": "阻塞：需麦克风权限与真人语音；voice/health 报 ready=true 但 /api/voice/transcribe 返回 503「语音识别模型暂时不可用」，端到端实时链路不可用。",
   "videos": [
     "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-realtime-voice/macos/operation.webm"
   ],

@@ -1,0 +1,8 @@
+[13:56:26] feature=ai-word platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-word
+[13:56:39] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[13:56:40] case W1: passed - Word 生成员真实写出文件
+[13:56:40] case W2: passed - Word 全量读取员真实解析生成件
+[13:56:40] case W3: passed - Word 员工真实注册可查
+[13:56:40] case W4: passed - 缺输入文件时如实 fail-closed（负例/边界）
+[13:56:41] video: ai-word-web-20260929-135626.webm (1087257 bytes)
+[13:56:41] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-word/log/ai-word-web-20260929-135626.log

@@ -1,0 +1,8 @@
+[13:57:18] feature=dt-evidence-store platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/dt-evidence-store
+[13:57:31] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[13:57:32] case D1: passed - 发布事件后服务端计数递增（存证落地）
+[13:57:33] case D2: passed - 智能任务运行的持久化事件流可回读
+[13:57:33] case D3: passed - neuro 栈自检真实读取
+[13:57:33] case D4: passed - 不存在的运行事件流被拒（负例/边界）
+[13:57:34] video: dt-evidence-store-web-20260929-135718.webm (1136420 bytes)
+[13:57:34] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/dt-evidence-store/log/dt-evidence-store-web-20260929-135718.log

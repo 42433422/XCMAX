@@ -24,8 +24,10 @@ for _k in ("ALL_PROXY", "all_proxy", "HTTP_PROXY", "http_proxy", "HTTPS_PROXY", 
 
 import websocket  # noqa: E402
 
-CDP = os.environ.get("XCAGI_CDP", "http://127.0.0.1:9222")
-BASE = os.environ.get("XCAGI_API_BASE", "http://127.0.0.1:17500")
+# 端口可用环境变量覆盖：默认仍是已安装客户端的标准端口（9222 / 17500）。
+# XCAGI_* 与较早的 ACC_* 都认，便于隔离端口时同一份已安装客户端再验收。
+CDP = os.environ.get("XCAGI_CDP") or os.environ.get("ACC_CDP", "http://127.0.0.1:9222")
+BASE = os.environ.get("XCAGI_API_BASE") or os.environ.get("ACC_BASE", "http://127.0.0.1:17500")
 FFMPEG = os.environ.get(
     "XCAGI_FFMPEG", str(Path.home() / "Library/Caches/ms-playwright/ffmpeg-1011/ffmpeg-mac"))
 HERE = Path(__file__).resolve().parent

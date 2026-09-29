@@ -1,0 +1,8 @@
+[13:55:58] feature=ai-pdf platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-pdf
+[13:56:10] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[13:56:11] case P1: passed - PDF 生成员真实写出文件
+[13:56:11] case P2: passed - PDF 全量读取员真实解析生成件
+[13:56:11] case P3: passed - PDF 员工真实注册可查
+[13:56:11] case P4: passed - 缺输入文件时如实 fail-closed（负例/边界）
+[13:56:12] video: ai-pdf-web-20260929-135558.webm (1039025 bytes)
+[13:56:12] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-pdf/log/ai-pdf-web-20260929-135558.log

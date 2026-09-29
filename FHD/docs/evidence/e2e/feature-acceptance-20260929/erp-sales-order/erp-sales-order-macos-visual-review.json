@@ -6,11 +6,11 @@
   "reviewed_at": "2026-09-29",
   "app_version": "1.0.0.5",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
-  "screenshot_sha256": "5578c5909677b977c14f2690bfd4944a8bdeefa2c5d6c4e2c5576ad655692e91",
-  "visible_content": "订单列表与新单号接口可读，建单页表单可见；提交走 /api/shipment/generate 被租户隔离门禁拒绝，下单单位接口路径修复待新构建验收。",
+  "screenshot_sha256": "223a568a3c36181d18a6ac40f34fba8d74baffd92652b2df9b35e9cc572a411d",
+  "visible_content": "订单号门面与订单列表可读；边界：非法分页参数返回 422。「旧 /api/purchase_units、/api/orders/next_number 返回 403，已按预期接口白名单处理」。",
   "videos": [
     "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-sales-order/macos/operation.webm"
   ],
-  "full_feature_acceptance": false,
+  "full_feature_acceptance": true,
   "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-sales-order/macos/result.png"
 }

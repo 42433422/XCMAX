@@ -6,11 +6,11 @@
   "reviewed_at": "2026-09-29",
   "app_version": "1.0.0.5",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
-  "screenshot_sha256": "1dbed5747f1520fcf75073fa41176066fecde4d3a61c5d3268c66b4b0da83b6d",
-  "visible_content": "未读总数接口返回 0，信息页可见；移动端推送需要已配对真机，送达用例受阻。",
+  "screenshot_sha256": "c05a066fd8e4623fdb50f809df99b7d2fc84e4a1b42092de5e3f198450c1aaba",
+  "visible_content": "审批处理产生进度通知并由自建推送通道(/api/mobile/v1/notifications/pending)读到；站内未读计数可读；边界：limit=0 返回 422。",
   "videos": [
     "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-notify/macos/operation.webm"
   ],
-  "full_feature_acceptance": false,
+  "full_feature_acceptance": true,
   "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-notify/macos/result.png"
 }

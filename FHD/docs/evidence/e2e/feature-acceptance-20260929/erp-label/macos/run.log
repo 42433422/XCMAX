@@ -1,7 +1,6 @@
-2026-09-29T06:48:08+0800 [erp-label] 开始验收 erp-label 标签打印；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
-2026-09-29T06:48:08+0800 [erp-label] M1 failed :: HTTP 403 22ms；{"success": false, "error_code": "http_403", "message": "该旧业务接口尚未提供安全的租户数据隔离", "path": "/api/print/label-jobs/products"}
-2026-09-29T06:48:08+0800 [erp-label] M2 passed :: HTTP 200 14ms；{"success": true, "data": {"ok": true, "summary": "标签打印员工就绪；星标命中标签/打印意图后宿主派发 xcagi:workflow-label-print-signal。", "items": [], "warnings": [], "error": "", "met
-2026-09-29T06:48:11+0800 [erp-label] M3 failed :: 导航后路径 /mod/xcagi-erp-domain-bridge/print；命中文本 ['标签']；缺失 []；界面请求失败 [(403, '/api/print/label-jobs/products?keyword=&page=1&per_page=50')]；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 标签输出与打印 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 标签输出与打印 | 1. 选择产品与标签模板 |  | 该旧业务接口尚未提供安全的租户数据隔离 重新加载 |  | 暂无已保存的标签模板
-2026-09-29T06:48:11+0800 [erp-label] M4 failed :: 受阻：需要连接并选择实体标签打印机（本机未连接打印机）
-2026-09-29T06:48:12+0800 [erp-label] screenshot result.png
-2026-09-29T06:48:15+0800 [erp-label] video operation.webm bytes=407460
+2026-09-29T13:05:18+0800 [erp-label] 开始验收 erp-label 标签打印；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T13:05:18+0800 [erp-label] M1 failed :: 受阻：旧标签打印接口未开租户隔离：GET /api/print/label-jobs/products 返回 403「尚未提供安全的租户数据隔离」，界面标签页因此加载失败
+2026-09-29T13:05:18+0800 [erp-label] M2 failed :: 受阻：GET /api/print/label-jobs 与 POST /api/print/workflow/label-print/dispatch 均 403；本机未连接实体标签打印机
+2026-09-29T13:05:18+0800 [erp-label] M3 failed :: 受阻：需要连接并选择实体标签打印机，本机未连接打印机
+2026-09-29T13:05:19+0800 [erp-label] screenshot result.png
+2026-09-29T13:05:20+0800 [erp-label] video operation.webm bytes=96919

@@ -1,0 +1,8 @@
+[13:57:34] feature=sec-identity platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-identity
+[13:57:46] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[13:57:47] case I1: passed - 身份与权限清单真实读取
+[13:57:47] case I2: passed - 会话校验真实应答
+[13:57:49] case I3: passed - 无会话上下文身份与管理接口被拒（负例/边界）
+[13:57:51] case I4: passed - 缺 CSRF 双提交的写操作被拒（负例/边界）
+[13:57:52] video: sec-identity-web-20260929-135734.webm (1172725 bytes)
+[13:57:52] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-identity/log/sec-identity-web-20260929-135734.log

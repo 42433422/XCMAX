@@ -1,0 +1,8 @@
+[14:26:36] feature=ch-task-center platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-task-center
+[14:26:49] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[14:26:50] case T1: passed - 审批请求列表（分页）真实读取
+[14:26:51] case T2: passed - 审批流程定义真实读取
+[14:26:51] case T3: passed - 任务中心任务真实读取
+[14:26:51] case T4: passed - 查询不存在审批请求被拒（负例/边界）
+[14:26:51] video: ch-task-center-web-20260929-142636.webm (1094327 bytes)
+[14:26:51] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-task-center/log/ch-task-center-web-20260929-142636.log

@@ -1,0 +1,9 @@
+[13:53:11] feature=ai-task-workspace platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-task-workspace
+[13:53:23] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[13:53:24] case T1: passed - 任务运行池与进度真实读取
+[13:53:24] case T2: passed - 任务工作区清单真实读取
+[13:53:24] case T3: passed - 智能任务运行记录真实读取
+[13:54:26] case T4: passed - 任务事件流快照真实读取
+[13:54:26] case T5: passed - 缺 task_id 的任务创建被拒（负例/边界）
+[13:54:32] video: ai-task-workspace-web-20260929-135311.webm (2901517 bytes)
+[13:54:32] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-task-workspace/log/ai-task-workspace-web-20260929-135311.log

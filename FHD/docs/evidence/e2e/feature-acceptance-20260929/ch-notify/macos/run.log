@@ -1,6 +1,11 @@
-2026-09-29T07:16:22+0800 [ch-notify] 开始验收 ch-notify 通知与推送；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
-2026-09-29T07:16:23+0800 [ch-notify] M1 passed :: HTTP 200 21ms；unread_total=0
-2026-09-29T07:16:23+0800 [ch-notify] M2 failed :: 受阻：需要已配对的 Android/iOS 真机接收推送
-2026-09-29T07:16:26+0800 [ch-notify] M3 passed :: 导航后路径 /im；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 信息 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 信息 | 实时已连接 | 客 | 客户消息 · 客来来在 XCMAX 内只读查看客户会话 | 💬 | 用户客服员工 | O-A 获客部 · 未安装 | 🧭 | 需求接入
-2026-09-29T07:16:27+0800 [ch-notify] screenshot result.png
-2026-09-29T07:16:30+0800 [ch-notify] video operation.webm bytes=269167
+2026-09-29T13:05:04+0800 [ch-notify] 开始验收 ch-notify 通知与推送；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T13:05:05+0800 [ch-notify] M1 passed :: HTTP 200 47ms；flow_key=<本轮生成的流程标识·已隐去>
+2026-09-29T13:05:05+0800 [ch-notify] M2 passed :: HTTP 200 36ms；{"id": 3, "tenant_id": 1, "request_no": "APR20260929-7BD7C1", "flow_id": 3, "flow_name": "MAC验收0929通知流程", "business_type": "general", "busin
+2026-09-29T13:05:05+0800 [ch-notify] M3 passed :: HTTP 200 26ms；{"id": 3, "tenant_id": 1, "request_no": "APR20260929-7BD7C1", "flow_id": 3, "flow_name": "MAC验收0929通知流程", "business_type": "general", "busin
+2026-09-29T13:05:05+0800 [ch-notify] M4 passed :: HTTP 200 16ms；[{"id": 3, "title": "审批进度更新", "body": "《MAC验收0929通知》已处理", "route": "/app/approval/3", "channel": "", "data": {"route": "/app/approval/3", "request_id": "3"}}]
+2026-09-29T13:05:05+0800 [ch-notify] M5 passed :: HTTP 200 16ms；unread_total=0
+2026-09-29T13:05:05+0800 [ch-notify] M6 passed :: HTTP 422 13ms；{"success": false, "error_code": "validation_error", "message": "请求参数验证失败", "errors": [{"field": "query.limit", "message
+2026-09-29T13:05:08+0800 [ch-notify] M7 passed :: 导航后路径 /im；命中文本 ['信息']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 信息 | 副窗 | ◈ | 工作区 | 3 | 信息 | 实时已连接 | 客 | 客户消息 · 客来来在 XCMAX 内只读查看客户会话 | 💬 | 用户客服员工 | O-A 获客部 · 未安装 | 🧭 | 需求接入员 | O
+2026-09-29T13:05:09+0800 [ch-notify] screenshot result.png
+2026-09-29T13:05:12+0800 [ch-notify] video operation.webm bytes=252129
+2026-09-29T19:20:00+0800 [ch-notify] 发布前隐去本轮生成的流程标识（非凭据）；其余内容未改动。
