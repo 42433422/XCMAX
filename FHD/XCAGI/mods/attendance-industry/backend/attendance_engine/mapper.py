@@ -946,6 +946,48 @@ def _monthly_sheet_is_roster_layout(ws) -> bool:
     return "序号" in t
 
 
+def _monthly_roster_columns(ws) -> tuple[int, int, dict[str, int], dict[str, int]]:
+    """定位月度表头，返回 (表头行, 姓名列, 指标列, 身份列)。
+
+    身份列的键与月度行字典一致（姓名、部门、考勤组、工号）。姓名可能不在第 1 行；
+    只扫第 1 行时会把当前名单写进别的列，模板里的旧姓名就原样留下。
+    """
+    identity_rules = (
+        ("姓名", ("姓名", "员工")),
+        ("部门", ("部门",)),
+        ("考勤组", ("考勤组", "岗位", "性质")),
+        ("工号", ("工号",)),
+    )
+    fallback: tuple[int, int, dict[str, int], dict[str, int]] | None = None
+    carried: dict[str, int] = {}
+    for header_row in (1, 2, 3):
+        name_col, metric_cols = _scan_monthly_roster_header_row(ws, header_row)
+        identity: dict[str, int] = {}
+        max_c = min(ws.max_column or 20, 40)
+        for col in range(1, max_c + 1):
+            label = (
+                unicodedata.normalize("NFKC", _plain_cell_text(ws.cell(header_row, col).value))
+                .replace(" ", "")
+                .replace("\n", "")
+            )
+            if not label or "正常" in label or "加班" in label or "请假" in label:
+                continue
+            for key, needles in identity_rules:
+                if key not in identity and any(needle in label for needle in needles):
+                    identity[key] = col
+                    break
+        merged = {**carried, **identity}
+        if "姓名" in identity:
+            return header_row, identity["姓名"], metric_cols, merged
+        carried.update(identity)
+        if metric_cols and fallback is None:
+            fallback = (header_row, name_col, metric_cols, merged)
+    if fallback is not None:
+        return fallback
+    name_col, metric_cols = _scan_monthly_roster_header_row(ws, 1)
+    return 1, name_col, metric_cols, {"姓名": name_col}
+
+
 def _scan_monthly_roster_header_row(ws, header_row: int = 1) -> tuple[int, dict[str, int]]:
     """返回 (姓名列号, 指标列号→逻辑键)。姓名列默认 2（A 为序号）。"""
     name_col = 2
@@ -1060,27 +1102,38 @@ def write_monthly_sheet(
     detail_title = str(detail_ws.title) if detail_ws is not None else "明细"
 
     use_roster = _monthly_sheet_is_roster_layout(ws)
-    name_col_roster, metric_cols_roster = (2, {})
+    header_row, name_col_roster, metric_cols_roster, identity_cols = (1, 2, {}, {})
     if use_roster:
-        name_col_roster, metric_cols_roster = _scan_monthly_roster_header_row(ws, 1)
+        header_row, name_col_roster, metric_cols_roster, identity_cols = _monthly_roster_columns(ws)
         if not metric_cols_roster:
             use_roster = False
 
     if use_roster:
-        data_end = len(rows) + 1
+        data_start = header_row + 1
+        data_end = header_row + len(rows)
+        last_col = max(
+            [ws.max_column or 1, name_col_roster, *metric_cols_roster.values(), *identity_cols.values()]
+        )
         for r in range(data_end + 1, (ws.max_row or data_end) + 1):
-            for c in metric_cols_roster.values():
+            for c in range(1, last_col + 1):
                 ws.cell(r, c).value = None
         h1 = ws.cell(1, 1).value
         h1t = unicodedata.normalize("NFKC", _plain_cell_text(h1)).replace(" ", "")
         use_seq_formula = "序号" in h1t
-        for ridx, row in enumerate(rows, start=2):
+        for offset, row in enumerate(rows):
+            ridx = data_start + offset
             if use_seq_formula:
                 c_seq = ws.cell(ridx, 1)
-                c_seq.value = "=ROW()-1"
+                c_seq.value = f"=ROW()-{header_row}"
                 _force_arabic_number_format(c_seq, None)
             name_key = str(row.get("姓名", "") or "").strip()
-            ws.cell(ridx, name_col_roster).value = name_key or None
+            for key, col in identity_cols.items():
+                if key == "姓名":
+                    ws.cell(ridx, col).value = name_key or None
+                else:
+                    ws.cell(ridx, col).value = row.get(key) or None
+            if "姓名" not in identity_cols:
+                ws.cell(ridx, name_col_roster).value = name_key or None
             base_r = name_to_base.get(name_key) if name_key else None
             for key, cidx in metric_cols_roster.items():
                 cell = ws.cell(ridx, cidx)
