@@ -162,6 +162,7 @@ vi.mock('@/utils/roleMenuProfile', () => ({
   buildRoleMenuProfile: vi.fn(() => ({})),
   canShowCoreMenuKey: () => true,
   UNSCOPED_HOST_BUSINESS_KEYS: new Set(['products', 'customers', 'orders', 'orders-create', 'shipment-records', 'materials', 'inventory', 'print', 'printer-list', 'template-preview', 'traditional-mode', 'approval-hub', 'tools']),
+  tenantScopedBusinessPath: () => null,
 }))
 
 vi.mock('@/constants/adminOperatorNav', () => ({
