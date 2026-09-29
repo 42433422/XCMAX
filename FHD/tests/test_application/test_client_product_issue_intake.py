@@ -257,6 +257,17 @@ def test_defect_report_is_not_swallowed_when_classification_unavailable():
     reply = stream._client_issue_reply(receipt)
     assert "期望" in reply and "实际" in reply
 
+    # 受理成功时客户必须看到真实编号（原客户问题：永远拿不到工单编号）
+    routed = stream._client_issue_reply(
+        {
+            "state": "ROUTED",
+            "work_order_id": "WO-18443017efd5",
+            "owner_ticket_no": "CI5a10d66d11e4d49777fccc2af13235a88df742fa3c82bf97",
+        }
+    )
+    assert "WO-18443017efd5" in routed, "回执必须包含 Work Order 编号"
+    assert "CI5a10" in routed, "回执必须包含市场工单号"
+
     # 规划器已给出答案后的二次判定：不追加引导噪声
     assert (
         stream._classify_and_submit_client_issue(
