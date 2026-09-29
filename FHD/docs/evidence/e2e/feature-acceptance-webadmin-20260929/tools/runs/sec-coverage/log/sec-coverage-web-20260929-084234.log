@@ -1,0 +1,12 @@
+[08:42:34] feature=sec-coverage base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-coverage
+[08:42:46] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[08:42:47] case C1: passed - 覆盖率唯一对外口径 SSOT 在 Web 后端真实可读
+[08:42:48] case C2: passed - 棘轮基线（只升不降的 floor）真实可读
+[08:42:50] case C3: passed - 覆盖率历史趋势真实可读
+[08:42:50] COVERAGE-RATCHET --check exit=0 stdout='[cov-ratchet] 跳过后端（无 /private/tmp/xcmax-verifycenter-main/FHD/coverage.json）\n[cov-ratchet] 跳过前端（无 /private/tmp/xcmax-verifycenter-main/FHD/frontend/coverage/coverage-summary.json）\n[cov-ratchet] OK — 覆'
+[08:42:50] case C4: passed - 棘轮门禁在本机真实执行且放行（正例）
+[08:42:50] COVERAGE-RATCHET --check --require-backend exit=1 stderr='ERROR: 缺后端 coverage.json：/private/tmp/xcmax-verifycenter-main/FHD/coverage.json'
+[08:42:50] case C5: passed - 缺测量数据时棘轮拒绝放行（fail-closed 负例）
+[08:42:50] case C6: passed - 不存在的 SSOT 工件不静默回退（负例）
+[08:42:51] video: sec-coverage-web-20260929-084234.webm (1114213 bytes)
+[08:42:51] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-coverage/log/sec-coverage-web-20260929-084234.log

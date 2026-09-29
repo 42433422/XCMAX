@@ -1,0 +1,8 @@
+[06:47:09] feature=ind-modstore-gateway base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-modstore-gateway
+[06:47:21] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[06:47:29] case G1: passed - 宿主消费市场网关目录
+[06:47:38] case G2: passed - 上游网关不可达时给出显式诊断（观察项）
+[06:47:45] case G3: passed - 未绑定市场账号时网关代理被拒绝（负例）
+[06:47:52] case G4: passed - 支付回调空信封被拒绝（负例）
+[06:47:52] video: ind-modstore-gateway-web-20260929-064709.webm (3084893 bytes)
+[06:47:52] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-modstore-gateway/log/ind-modstore-gateway-web-20260929-064709.log

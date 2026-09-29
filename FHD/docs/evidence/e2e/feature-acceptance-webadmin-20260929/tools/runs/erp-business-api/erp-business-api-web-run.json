@@ -1,0 +1,358 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "erp-business-api",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-111950",
+  "generated_at": "2026-09-29 11:20:10",
+  "app_git_sha": "200a37d9a5e7cc8433c814cbe7e8ea0215dd36a2",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 5,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。"
+  ],
+  "visible_content": "真实浏览器（Chromium）在自托管 Web 管理端建立管理员会话后：读取业务 API 健康与宿主服务桥接配置/统计（/api/business/health、/api/service-bridge/config、/stats）→ POST /api/business/ocr/recognize 真实发布外部 OCR 请求事件（200，event=ocr.requested）→ 服务桥接工单落库并按 id 读回（200）→ 非法优先级 400、缺必填 422 被校验拒绝（负例）→ 无 CSRF 令牌的写请求 403 被拒（负例）。应答子面闭环：PUT /api/service-bridge/requests/{id}/respond → 200 且随后读回 status=resolved、response 与 responded_by 均已落库（该路由此前会稳定 500，本 commit 已修复并补了回归测试）。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "healthy",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "200a37d9a5e7cc8433c814cbe7e8ea0215dd36a2",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "200a37d9a5e7cc8433c814cbe7e8ea0215dd36a2",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 0,
+        "processed": 0,
+        "errors": 0,
+        "dropped": 0,
+        "queue_size": 0,
+        "handlers": 39,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 0,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 0,
+            "max_cache_size": 1000,
+            "hits": 0,
+            "misses": 0,
+            "hit_rate": 0.0,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": true
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "evolution.search",
+                "evolution.reflect",
+                "evolution.mine",
+                "evolution.index",
+                "error.occurred",
+                "evolution.export"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-business-api/erp-business-api-web-identity.json"
+  },
+  "media": [
+    {
+      "feature": "erp-business-api",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-business-api/shot/00-login-form.png",
+      "sha256": "f4c78f4f86e84180e4fa2bb83ca0977af5ab12640099072c1a15662e4257f9aa",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-business-api",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-business-api/shot/BAP1-integration-console.png",
+      "sha256": "fc0c82da53518c8256e431a2294ee5b26f0c360fce96e2776a0c2a2cd027245e",
+      "visual_review": "accepted",
+      "visible_result": "/admin/server-functions「服务器功能模块」页真实渲染：标题「服务器功能模块」、副标题「对接修茈服务器的模块注册、每日摘要记录和员工大会能力」、标签页（服务器模块/每日摘要记录/员工大会）、「服务器功能注册表 90 个模块」表格（含 xcmax-admin、business-docking、data-sources 等，状态「启用」），左侧运维导航齐全。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-business-api",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-business-api/shot/BAP2-business-event-published.png",
+      "sha256": "c818e6b561b9d2d71df895718ead1d67e27cad3fea158edc96f4e788b86ad191",
+      "visual_review": "accepted",
+      "visible_result": "POST /api/business/ocr/recognize → 200，csrf_sent=true，success=true，message=OCR 请求已发布，event=ocr.requested，published=true，含 run_id/agent_run_id，agent_status=completed。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-business-api",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-business-api/shot/BAP3-service-bridge-roundtrip.png",
+      "sha256": "ac2c563bb2e8fe89d6eae0884f70426495cf52ab033a465a2460e99473216873",
+      "visual_review": "accepted",
+      "visible_result": "POST /api/service-bridge/requests → 200，status_field=pending；PUT respond → 200、status=resolved、responded_by=admin；随后 GET 读回 200 且 status=resolved、response=已由验收实例应答「服务器内部错误」（Session 解绑内部错误，真实缺陷观察项）。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-business-api",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-business-api/shot/BAP4-validation-rejected.png",
+      "sha256": "cab11e1d0ee24563befb7a7fa0f2550445796658546d481f3be01c46e153301d",
+      "visual_review": "accepted",
+      "visible_result": "priority=bogus → 400「Invalid priority. Must be one of: ['low','normal','high','urgent']」；缺 title → 422 validation_error body.title Field required；缺 product_id → 422 validation_error body.product_id Field required。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-business-api",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-business-api/shot/BAP5-csrf-denied.png",
+      "sha256": "0d49d2179dda05c06d17bceca601520dde9b116ef8e6965b58f88154ca7442ba",
+      "visual_review": "accepted",
+      "visible_result": "无 X-CSRF-Token 的 POST /api/business/inventory/update → 403，success=false，message=CSRF token missing。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "erp-business-api",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-business-api/video/erp-business-api-web-20260929-111950.webm",
+      "sha256": "73fe37811df510dfc1b7ad397b7c53ed9db4e365095b30b145fae62e822ef3c4",
+      "visual_review": "accepted",
+      "visible_result": "本轮真实浏览器会话录像（webm，18.16s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → 服务器功能模块页渲染 → OCR 业务事件发布 200 → 服务工单落库/应答/读回 200 → 非法优先级/缺参 400/422 → 无 CSRF 写请求 403。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "BAP1",
+      "title": "业务 API 出口与宿主服务桥接存活（真实读取）",
+      "input": "已建立的管理员会话。",
+      "actions": "浏览器打开 /admin/server-functions；随后 fetch GET /api/business/health、GET /api/service-bridge/config、GET /api/service-bridge/stats。",
+      "expected": "三者均 200；business_api=up；桥接实例含 instance_id；统计含 total 计数。",
+      "observed": "{\"business_health\": {\"status\": 200, \"business_api\": \"up\", \"key_required\": false}, \"bridge_config\": {\"status\": 200, \"instance_id\": \"xcagi-host-ad9ab32f\", \"instance_name\": \"XCAGI 宿主\", \"main_server_url\": \"\"}, \"bridge_stats\": {\"status\": 200, \"data\": {\"total\": 6, \"pending\": 2, \"processing\": 0, \"resolved\": 3}}, \"ui_url\": \"http://127.0.0.1:42423/admin/server-functions\", \"ui_has_module_registry\": true}",
+      "result": "passed"
+    },
+    {
+      "id": "BAP2",
+      "title": "业务 API 真实发布外部业务事件（OCR 请求）",
+      "input": "已建立的管理员会话（带 CSRF 令牌）。",
+      "actions": "页面上下文 POST /api/business/ocr/recognize。",
+      "expected": "HTTP 200，success=true，published=true，event=ocr.requested，含 run_id。",
+      "observed": "{\"status\": 200, \"event\": \"ocr.requested\", \"published\": true, \"run_id\": \"run_b20fedd11d63415caa134fdf51389e69\", \"agent_status\": \"completed\", \"csrf_sent\": true}",
+      "result": "passed"
+    },
+    {
+      "id": "BAP3",
+      "title": "服务桥接工单落库—应答—读回闭环",
+      "input": "已建立的管理员会话（带 CSRF 令牌）。",
+      "actions": "POST /api/service-bridge/requests 建单 → GET /requests/{id} 读回；另如实探测 PUT /requests/{id}/respond（记录为缺陷观察项）。",
+      "expected": "建单 200 返回整数 id（pending）；读回同 id/同标题。应答返回 200 且随后读回 status=resolved、response 与 responded_by 均已落库。",
+      "observed": "{\"created\": {\"status\": 200, \"id\": 7, \"state\": \"pending\"}, \"fetched\": {\"status\": 200, \"title\": \"vc-e2e-business-probe\"}, \"respond\": {\"status\": 200, \"success\": true, \"state\": \"resolved\", \"responded_by\": \"admin\", \"responded_at\": \"2026-09-29T03:20:09.940854+00:00\"}, \"readback_after_respond\": {\"status\": 200, \"state\": \"resolved\", \"response\": \"已由验收实例应答\", \"responded_by\": \"admin\"}, \"respond_face_ok\": true}",
+      "result": "passed"
+    },
+    {
+      "id": "BAP4",
+      "title": "非法优先级与必填缺参被校验拒绝（负例）",
+      "input": "已建立的管理员会话（带 CSRF 令牌）。",
+      "actions": "POST /api/service-bridge/requests（priority=bogus）、POST /api/service-bridge/requests（缺 title）、POST /api/business/inventory/update（空 body）。",
+      "expected": "非法优先级 400；缺 title 422 validation_error；缺 product_id 422 validation_error。",
+      "observed": "{\"bad_priority\": 400, \"missing_title\": 422, \"missing_product_id\": 422}",
+      "result": "passed"
+    },
+    {
+      "id": "BAP5",
+      "title": "缺少 CSRF 令牌的写请求被拒（负例）",
+      "input": "已建立的管理员会话，但不带 X-CSRF-Token 头。",
+      "actions": "页面上下文 POST /api/business/inventory/update（合法载荷）。",
+      "expected": "HTTP 403，success=false，message 含 CSRF token missing（未执行任何写操作）。",
+      "observed": "{\"status\": 403, \"message\": \"CSRF token missing\"}",
+      "result": "passed"
+    }
+  ]
+}

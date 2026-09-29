@@ -1,0 +1,17 @@
+[09:17:35] feature=erp-etl base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-etl
+[09:17:49] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[09:17:50] case E1: passed - ETL 能力清单在真实部署中已启用且目标类型完整
+[09:17:51] ETL upload status=201
+[09:17:51] ETL preview status=202
+[09:19:23] case E2: passed - 真实 CSV 上传并建立预览运行
+[09:19:23] case E3: passed - 运行行与解析结果真实读回
+[09:19:23] ETL template create status=201
+[09:19:23] case E4: passed - ETL 模板创建与列表读回（往返一致）
+[09:19:24] ETL execute status=202
+[09:19:24] ETL rollback status=200
+[09:21:25] case E5: passed - 真实执行入库并在业务接口读回，再回滚撤销
+[09:21:25] ETL negatives: bogus_upload=404 missing_field=422 no_csrf=403
+[09:21:25] case E6: passed - 非法入参被拒（负例）
+[09:21:27] case E7: passed - 未认证会话不得读取 ETL 数据（负例）
+[09:21:35] video: erp-etl-web-20260929-091735.webm (13305423 bytes)
+[09:21:35] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-etl/log/erp-etl-web-20260929-091735.log

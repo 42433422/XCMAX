@@ -6,15 +6,15 @@
   "stats": {
     "total": 158,
     "by_status": {
-      "verified": 3,
+      "verified": 55,
       "partial": 93,
-      "implemented": 58,
+      "implemented": 6,
       "planned": 4
     },
     "cancelled_count": 0,
     "domains": 10,
     "modules": 28,
-    "verified_total": 3,
+    "verified_total": 55,
     "last_verified_at": "2026-09-29",
     "platform_counts": {
       "windows": 99,
@@ -40,10 +40,10 @@
       },
       "web": {
         "applicable": 128,
-        "verified": 1,
+        "verified": 53,
         "partial": 0,
-        "pending": 127,
-        "last_verified_at": "2026-09-24"
+        "pending": 75,
+        "last_verified_at": "2026-09-29"
       },
       "android": {
         "applicable": 8,
@@ -60,7 +60,7 @@
         "last_verified_at": null
       }
     },
-    "completion": 58
+    "completion": 78
   },
   "product_version": "1.0.0.5",
   "platform_levels": {
@@ -248,7 +248,7 @@
             {
               "id": "base-web-admin",
               "name": "Web 管理端（自托管）",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -256,10 +256,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "浏览器访问的自托管管理端界面。",
@@ -270,7 +270,7 @@
             {
               "id": "base-register",
               "name": "账户注册与找回",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -278,10 +278,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "账号注册、找回密码与账号找回流程。",
@@ -292,7 +292,7 @@
             {
               "id": "base-account-security",
               "name": "账户安全与锁定",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -300,10 +300,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "登录失败锁定、账号安全策略与凭证校验。",
@@ -610,7 +610,7 @@
             {
               "id": "base-diagnostics",
               "name": "日志与诊断",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -618,10 +618,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "客户端日志上报与诊断排查入口。",
@@ -632,7 +632,7 @@
             {
               "id": "base-help",
               "name": "帮助与教程",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -640,10 +640,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "内置新手引导与帮助文档入口。",
@@ -796,7 +796,7 @@
             {
               "id": "ai-model-access",
               "name": "模型接入与使用计费",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -804,10 +804,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "模型服务接入、调用与用量计费口径。",
@@ -818,7 +818,7 @@
             {
               "id": "ai-chat-debug",
               "name": "对话调试与工具路由",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -826,10 +826,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "对话调试台与工具调用路由。",
@@ -840,7 +840,7 @@
             {
               "id": "ai-multimodal",
               "name": "多模态（文本 / 图像 / 语音）",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -848,10 +848,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "文本、图像与语音的多模态输入输出。",
@@ -948,7 +948,7 @@
             {
               "id": "ai-employee-runtime",
               "name": "员工空间与执行调度",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -956,10 +956,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "数字员工运行空间与任务调度。",
@@ -970,7 +970,7 @@
             {
               "id": "ai-eskill",
               "name": "工作流编排与 ESkill 制作",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -978,10 +978,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "工作流定义与 ESkill 技能编排。",
@@ -992,7 +992,7 @@
             {
               "id": "ai-employee-publish",
               "name": "员工打包与发布",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -1000,10 +1000,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "员工包打包与发布流程。",
@@ -1014,7 +1014,7 @@
             {
               "id": "ai-run-monitor",
               "name": "运行监测与任务历史",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -1022,10 +1022,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "任务运行状态与历史回执。",
@@ -1362,7 +1362,7 @@
             {
               "id": "ai-vector-rag",
               "name": "知识库向量检索（RAG 工具链）",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -1370,10 +1370,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "检索增强生成的工具链实现。",
@@ -2252,7 +2252,7 @@
             {
               "id": "erp-etl",
               "name": "数据对接与 ETL",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -2260,10 +2260,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "外部数据源对接与 ETL 目标管理。",
@@ -2274,7 +2274,7 @@
             {
               "id": "erp-business-api",
               "name": "业务对接与外部系统集成",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -2282,10 +2282,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "业务 API 与外部系统服务桥接。",
@@ -3059,7 +3059,7 @@
             {
               "id": "mods-toolchain",
               "name": "Mod 制作工具链",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -3067,10 +3067,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "Mod 脚手架与制作工具链。",
@@ -3121,7 +3121,7 @@
             {
               "id": "mods-pack-io",
               "name": "包导入导出与发布",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -3129,10 +3129,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "Mod 包规范化、导入导出与发布。",
@@ -3143,7 +3143,7 @@
             {
               "id": "mods-version",
               "name": "版本管理与蓝绿",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -3151,10 +3151,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "Mod 版本与蓝绿切换管理。",
@@ -3165,7 +3165,7 @@
             {
               "id": "mods-template",
               "name": "行业 Mod 模板",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -3173,10 +3173,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "行业 Mod 种子与模板。",
@@ -3353,7 +3353,7 @@
             {
               "id": "mods-store-sync",
               "name": "市场库同步与可见性",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -3361,10 +3361,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "Mod 市场库同步与目录可见性控制。",
@@ -3375,7 +3375,7 @@
             {
               "id": "mods-pat",
               "name": "PAT / JWT 与权限控制",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -3383,10 +3383,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "Mod 接入凭证与权限校验。",
@@ -3397,7 +3397,7 @@
             {
               "id": "mods-aiopen-support",
               "name": "开放 API 支撑与能力探询",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -3405,10 +3405,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "开放接口的能力探询与路由支撑。",
@@ -3922,7 +3922,7 @@
             {
               "id": "ind-modstore-gateway",
               "name": "Mod 市场网关（服务端）",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -3930,10 +3930,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "Mod 市场服务端网关实现。",
@@ -4046,7 +4046,7 @@
             {
               "id": "pay-reconcile",
               "name": "平台对账与发票",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -4054,10 +4054,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "支付对账与发票处理。",
@@ -4068,7 +4068,7 @@
             {
               "id": "pay-backend-bridge",
               "name": "支付后端桥接（json / postgres / modstore）",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -4076,10 +4076,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "按配置选择支付后端并桥接。",
@@ -4090,7 +4090,7 @@
             {
               "id": "pay-refund",
               "name": "退款申请与审核",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -4098,10 +4098,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "退款申请受理与审核调度。",
@@ -4149,7 +4149,7 @@
             {
               "id": "pay-entitlement",
               "name": "企业授权与权益管理",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -4157,10 +4157,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "企业套餐、账号授权与权益开通管理，前后端行为均有自动化测试。",
@@ -4211,7 +4211,7 @@
             {
               "id": "pay-entitlement-delivery",
               "name": "权益开通与资产交付",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -4219,10 +4219,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "套餐权益开通与资产交付。",
@@ -4233,7 +4233,7 @@
             {
               "id": "pay-author-revenue",
               "name": "作者收益与分成结算",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -4241,10 +4241,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "作者收益与分成结算口径。",
@@ -4299,7 +4299,7 @@
             {
               "id": "ops-admin-console",
               "name": "企业管理总后台",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -4307,10 +4307,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "企业、账号、模块与运营数据的统一管理后台，行为覆盖会话与管理操作测试。",
@@ -4321,7 +4321,7 @@
             {
               "id": "ops-employee-gov",
               "name": "员工治理与自治策略",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -4329,10 +4329,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "员工治理总览与自治策略配置。",
@@ -4343,7 +4343,7 @@
             {
               "id": "ops-pipeline",
               "name": "制作与运营流水线（P1-P10）",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -4351,10 +4351,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "制作与运营流水线的编排图。",
@@ -4365,7 +4365,7 @@
             {
               "id": "ops-work-order",
               "name": "需求工单与验收回执",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -4373,10 +4373,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "需求工单、验收回执与状态机。",
@@ -4387,7 +4387,7 @@
             {
               "id": "ops-monitor",
               "name": "监控告警与运行健康",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -4395,10 +4395,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "运行健康监控与告警。",
@@ -4415,7 +4415,7 @@
             {
               "id": "ops-self-heal",
               "name": "AI 自愈与自治运维",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -4423,10 +4423,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "线上问题自动生成修复 PR 的自治流水线：机械变更自动合并、语义变更定级守卫、高危永远人工审核。",
@@ -4437,7 +4437,7 @@
             {
               "id": "ops-project-factory",
               "name": "项目工厂与任务分流",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -4445,10 +4445,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "项目工厂与任务分流控制台。",
@@ -4459,7 +4459,7 @@
             {
               "id": "ops-customer-value",
               "name": "行动事项与客户价值",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -4467,10 +4467,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "客户价值行动事项与主门禁。",
@@ -4481,7 +4481,7 @@
             {
               "id": "ops-version-evolution",
               "name": "版本演进与自驱迭代",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -4489,10 +4489,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "版本演进与自驱迭代编排。",
@@ -4509,7 +4509,7 @@
             {
               "id": "ops-delivery",
               "name": "专属交付与同步",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -4517,10 +4517,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "客户专属 Mod 的交付进度、上下文与同步链路，交付状态可跟踪可回执。",
@@ -4531,7 +4531,7 @@
             {
               "id": "ops-delivery-center",
               "name": "客户交付中心",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -4539,10 +4539,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "交付中心视图与交付进度同步。",
@@ -4553,7 +4553,7 @@
             {
               "id": "ops-delivery-sync",
               "name": "交付进度与上下文同步",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -4561,10 +4561,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "专属交付进度与上下文同步。",
@@ -4575,7 +4575,7 @@
             {
               "id": "ops-issue-runtime",
               "name": "工单与问题运行时",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -4583,10 +4583,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "问题工单运行时与留痕。",
@@ -5010,7 +5010,7 @@
             {
               "id": "sec-gdpr",
               "name": "数据隐私与导出（GDPR）",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -5018,10 +5018,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "企业数据的隐私导出与删除合规接口底座。",
@@ -5032,7 +5032,7 @@
             {
               "id": "sec-audit",
               "name": "操作审计与日志",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -5040,10 +5040,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "关键操作落审计日志并可检索，支撑事后追溯与合规检查。",
@@ -5054,7 +5054,7 @@
             {
               "id": "sec-scan",
               "name": "安全扫描门禁",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -5062,10 +5062,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "全量安全扫描作为发布前置门禁：正式构建要求同一提交的两次零漏洞扫描证据。",
@@ -5116,7 +5116,7 @@
             {
               "id": "sec-tenant-isolation",
               "name": "企业数据隔离",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -5124,10 +5124,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "多租户数据范围隔离。",
@@ -5218,7 +5218,7 @@
             {
               "id": "sec-ai-trace",
               "name": "AI 调用追溯",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -5226,10 +5226,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "AI 调用与动作的审计追溯。",
@@ -5286,7 +5286,7 @@
             {
               "id": "sec-coverage",
               "name": "测试覆盖率与棘轮门禁",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -5294,10 +5294,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "后端行覆盖率实测 88.19%、前端 93.21%（对外口径见覆盖清单），棘轮只升不降，防止质量回退。",
@@ -5339,7 +5339,7 @@
             {
               "id": "sec-audit-standard",
               "name": "审计标准与证据体系",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -5347,10 +5347,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "审计基准目录与证据口径。",
@@ -5361,7 +5361,7 @@
             {
               "id": "sec-model-gate",
               "name": "真实模型验货门禁",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -5369,10 +5369,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "真实模型调用验货门禁。",
@@ -5383,7 +5383,7 @@
             {
               "id": "sec-continuous-observe",
               "name": "持续运行观察",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -5391,10 +5391,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "持续运行指标与 SLO 观察。",
@@ -5405,7 +5405,7 @@
             {
               "id": "sec-slo",
               "name": "服务拓扑与 SLO 配置",
-              "status": "implemented",
+              "status": "verified",
               "platforms": [
                 "web"
               ],
@@ -5413,10 +5413,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "服务拓扑与 SLO 门限配置。",

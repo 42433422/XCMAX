@@ -1,0 +1,326 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "sec-tenant-isolation",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-082630",
+  "generated_at": "2026-09-29 08:26:44",
+  "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 3,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。"
+  ],
+  "visible_content": "真实浏览器（Chromium）核验多租户数据范围与平台/企业边界：平台管理员读 /api/rbac/tenants 与/api/rbac/tenants/1/data-scopes（200）→ 新建的个人租户账号登录后访问平台级 /api/rbac/roles 被拒（403，当前企业账号无角色管理权限）→ 无会话访问被拒（401）。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "degraded",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [
+        "LLM_RUNTIME_UNAVAILABLE"
+      ],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 25832,
+        "processed": 25832,
+        "errors": 0,
+        "dropped": 0,
+        "queue_size": 0,
+        "handlers": 136,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 0,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 0,
+            "max_cache_size": 1000,
+            "hits": 0,
+            "misses": 0,
+            "hit_rate": 0.0,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": false
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "evolution.search",
+                "evolution.export",
+                "evolution.mine",
+                "evolution.reflect",
+                "error.occurred",
+                "evolution.index"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/runs/sec-tenant-isolation/sec-tenant-isolation-web-identity.json"
+  },
+  "media": [
+    {
+      "feature": "sec-tenant-isolation",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-tenant-isolation/shot/00-login-form.png",
+      "sha256": "ebb3b808d380eb1fe82a06dddd58bd7187dfa2d56e7abb6b2927919ccf94b424",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页（管理员登录，账号 admin）。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "sec-tenant-isolation",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-tenant-isolation/shot/T1-platform-tenants.png",
+      "sha256": "48bc2c03259ea7feb22970e62de1edaf5d42e638adc8ad9a61bc6c55d87c16d5",
+      "visual_review": "accepted",
+      "visible_result": "GET /api/rbac/tenants（平台管理员）200 success=true data=[]。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "sec-tenant-isolation",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-tenant-isolation/shot/T2-tenant-data-scopes.png",
+      "sha256": "76506b541a947134946ca7c6a1b8b2a75d442bc697d74118ef9bc5de48aa7895",
+      "visual_review": "accepted",
+      "visible_result": "GET /api/rbac/tenants/1/data-scopes 200 success=true data=[]。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "sec-tenant-isolation",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-tenant-isolation/shot/T3-tenant-user-denied.png",
+      "sha256": "89bc6cf889d5957949be1ed6374a9f96911b312f86f6833cc915207f6753cdb1",
+      "visual_review": "accepted",
+      "visible_result": "新建个人租户账号 qa_ten_… 登录成功(role=viewer)，GET /api/rbac/roles → 403 http_403 message=当前企业账号无角色管理权限（越权被拒）。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "sec-tenant-isolation",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-tenant-isolation/video/sec-tenant-isolation-web-20260929-082630.webm",
+      "sha256": "c1645a513fe2095437d9ff53bc30bf86acd284c7177de8aa92eaa739f94fbc42",
+      "visual_review": "accepted",
+      "visible_result": "录像（webm，11.96s）：平台租户清单/数据范围 → 个人租户越权被拒。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "T1",
+      "title": "平台管理员读取租户清单",
+      "input": "平台管理员会话。",
+      "actions": "页面上下文 GET /api/rbac/tenants。",
+      "expected": "200、success=true、data 为数组。",
+      "observed": "{\"status\": 200, \"count\": 0}",
+      "result": "passed"
+    },
+    {
+      "id": "T2",
+      "title": "读取指定租户数据范围",
+      "input": "平台管理员会话。",
+      "actions": "页面上下文 GET /api/rbac/tenants/1/data-scopes。",
+      "expected": "200、success=true、data 为数组。",
+      "observed": "{\"status\": 200, \"scopes\": []}",
+      "result": "passed"
+    },
+    {
+      "id": "T3",
+      "title": "个人租户账号越权访问平台级接口被拒（负例）",
+      "input": "新建个人租户账号。",
+      "actions": "新上下文以该账号登录后 GET /api/rbac/roles。",
+      "expected": "403（当前企业账号无角色管理权限）。",
+      "observed": "{\"registered_tenant_id\": null, \"login_status\": 200, \"rbac_roles_status\": 403, \"detail\": \"当前企业账号无角色管理权限\"}",
+      "result": "passed"
+    }
+  ]
+}

@@ -184,10 +184,10 @@
     {
       "key": "web",
       "applicable": 128,
-      "verified": 1,
+      "verified": 53,
       "partial": 0,
-      "pending": 127,
-      "last_verified_at": "2026-09-24",
+      "pending": 75,
+      "last_verified_at": "2026-09-29",
       "label": "Web / 后端",
       "level": "签约级"
     },
@@ -215,14 +215,14 @@
   "capabilities": {
     "total": 158,
     "by_status": {
-      "verified": 3,
+      "verified": 55,
       "partial": 93,
-      "implemented": 58,
+      "implemented": 6,
       "planned": 4
     },
     "domains": 10,
     "modules": 28,
-    "completion": 58,
+    "completion": 78,
     "catalog_version": "2026-09-16",
     "platforms": [
       {
@@ -248,10 +248,10 @@
       {
         "key": "web",
         "applicable": 128,
-        "verified": 1,
+        "verified": 53,
         "partial": 0,
-        "pending": 127,
-        "last_verified_at": "2026-09-24",
+        "pending": 75,
+        "last_verified_at": "2026-09-29",
         "label": "Web / 后端",
         "level": "签约级"
       },
@@ -459,6 +459,47 @@
         "source_run": "/capabilities/assets/evidence/ai-chat-core-ai-chat-core-macos-run.json"
       },
       {
+        "feature": "ai-chat-debug",
+        "platform": "web",
+        "status": "passed",
+        "passed": 6,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "ai-chat-debug-00-login-form.png",
+            "sha256": "050e8ca97ae256de17a35de1fc030118ddd38f08857e3783e847c9e2327ba200",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「管理员登录」：左侧蓝色品牌栏「XCMAX 服务器后台 · 平台运维 / 服务器后台与自动化治理」；右侧账号框已填 admin、密码框为掩码，可点「登 录」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ai-chat-debug-00-login-form.png"
+          },
+          {
+            "file": "ai-chat-debug-C-chat-debug-console.png",
+            "sha256": "5521e87b9f5295269db8ab417d233c338b6fbc5643d7eee50b2046b32483c9e6",
+            "visual_review": "accepted",
+            "visible_result": "登录后进入「对话调试」：「聊天调试工作台」副标题「测试普通版/专业版的意图和流程分支。此页只做本地模拟，不调用真实工具。」；含「输入与模式」（快速测试样例：产品查询/客户查询/开单需求/打印命令/复合任务、普通版/专业版切换、测试输入框）与「单模式模拟/双模式对比/加入测试包/清空」及意图测试包导出（JSON/TXT）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ai-chat-debug-C-chat-debug-console.png"
+          },
+          {
+            "file": "ai-chat-debug-ai-chat-debug-web-20260929-062651.webm",
+            "sha256": "c337e4d880de708ef4a5031e0f22435f809304fd86b6ba3b4671981d2f572b1f",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，14.08s，1600x1000，ffmpeg 实测）：管理员登录 → 工具目录/分类读取 → Planner 注册表读取 → 工具路由执行 → 空请求与未知工具被拒 → 对话调试工作台渲染。",
+            "kind": "video",
+            "size_bytes": 944119,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/ai-chat-debug-ai-chat-debug-web-run.json"
+      },
+      {
         "feature": "ai-csv",
         "platform": "macos",
         "status": "passed",
@@ -535,6 +576,88 @@
         "source_run": "/capabilities/assets/evidence/ai-employee-pack-ai-employee-pack-macos-run.json"
       },
       {
+        "feature": "ai-employee-publish",
+        "platform": "web",
+        "status": "passed",
+        "passed": 6,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "ai-employee-publish-00-login-form.png",
+            "sha256": "1d3cd73d0e81323a2f7e407840bda3c330b8d8a723cf1bad6d690349cd0b939a",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「管理员登录」：左侧蓝色品牌栏「XCMAX 服务器后台 · 平台运维 / 服务器后台与自动化治理」；右侧账号框已填 admin、密码框为掩码，可点「登 录」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ai-employee-publish-00-login-form.png"
+          },
+          {
+            "file": "ai-employee-publish-P-private-delivery.png",
+            "sha256": "788adee605f306ec5f5ae5f8bff03b75bdf5a66d613d7f1248bbc94ba943e4d5",
+            "visual_review": "accepted",
+            "visible_result": "登录后进入「生产员工 · 私有交付」：标题「客户私有 Mod 生产中心」，说明「制作 → 测试 → 验收 → 交付；不通过只能转返工，不能跨阶段跳跃」，含定制入口（说明你要的模块或员工 / 发起定制）与企业端未绑定市场账号的红色提示，证明员工包/Mod 打包发布生产面真实渲染。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ai-employee-publish-P-private-delivery.png"
+          },
+          {
+            "file": "ai-employee-publish-ai-employee-publish-web-20260929-062919.webm",
+            "sha256": "e914d68398f67eafa31cc4d73a4ab4d0221aed6e3302324e3134049b572d2043",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，13.00s，1600x1000，ffmpeg 实测）：管理员登录 → 员工包目录 → 已安装清单 → 配置预览 → 缺失包/非法编号被拒 → 私有交付页渲染。",
+            "kind": "video",
+            "size_bytes": 785661,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/ai-employee-publish-ai-employee-publish-web-run.json"
+      },
+      {
+        "feature": "ai-employee-runtime",
+        "platform": "web",
+        "status": "passed",
+        "passed": 5,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "ai-employee-runtime-00-login-form.png",
+            "sha256": "b943437e287d96d9439c707d11b082daff38f240e965cb0919e22b1b6a3b4e95",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「管理员登录」：左侧蓝色品牌栏「XCMAX 服务器后台 · 平台运维 / 服务器后台与自动化治理」；右侧账号框已填 admin、密码框为掩码，可点「登 录」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ai-employee-runtime-00-login-form.png"
+          },
+          {
+            "file": "ai-employee-runtime-R-employee-space.png",
+            "sha256": "fdae17f59ef8af8afe12872b74be0c1e54f4c859b0f41607a0441467ba69e2f0",
+            "visual_review": "accepted",
+            "visible_result": "登录后进入「员工空间」：顶部「管理端可视化 · 六部门」横幅（55 岗 AI 员工在编制图谱、流程派发、执行回写中的状态）与「编制驱动流程：编制→员工空间→流程可视化→执行回写」；含编制员工 55（编制主索引）、本机安装/Catalog 与员工包登记卡片（此帧读取中显示 0/55）、六部门进度条（获客部/伙伴部/网站部/Mod部/软件部/归核部）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ai-employee-runtime-R-employee-space.png"
+          },
+          {
+            "file": "ai-employee-runtime-ai-employee-runtime-web-20260929-062731.webm",
+            "sha256": "446b740daacf94789c7c5d3d811e77cc524c0aa32010662465600a2550f374cf",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，15.84s，1600x1000，ffmpeg 实测）：管理员登录 → 调度运行态 → 编制目录 → 提交任务进入队列 → 无会话被拒 → 员工空间渲染。",
+            "kind": "video",
+            "size_bytes": 1037414,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/ai-employee-runtime-ai-employee-runtime-web-run.json"
+      },
+      {
         "feature": "ai-employees-workflow",
         "platform": "macos",
         "status": "passed",
@@ -571,6 +694,47 @@
           "size_bytes": 1724
         },
         "source_run": "/capabilities/assets/evidence/ai-employees-workflow-ai-employees-workflow-macos-run.json"
+      },
+      {
+        "feature": "ai-eskill",
+        "platform": "web",
+        "status": "passed",
+        "passed": 6,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "ai-eskill-00-login-form.png",
+            "sha256": "db6e2ee726965dd1aa5c3746ea4a7759cf9e4c1982421ae3cb2628c46d02259f",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「管理员登录」：左侧蓝色品牌栏「XCMAX 服务器后台 · 平台运维 / 服务器后台与自动化治理」；右侧账号框已填 admin、密码框为掩码，可点「登 录」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ai-eskill-00-login-form.png"
+          },
+          {
+            "file": "ai-eskill-E-workflow-visualization.png",
+            "sha256": "f29ca26183fac7a70964bb4a647cf8dd0e10398f6af200fd58396ec50cf335c6",
+            "visual_review": "accepted",
+            "visible_result": "登录后进入「流程可视化」：副标题「以编制图谱为主源，可视化六部门员工、流程派发和执行回写是否在同一条链路上。」；含「编制驱动流程：编制→员工空间→流程可视化→执行回写」（编制 55 岗）、编制/员工空间/流程可视化/执行回写四态卡片、六部门进度条，以及「员工说明：52 个编制员工如何进入流程」的员工卡（静态内容编辑员、SEO 站点地图管理员）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ai-eskill-E-workflow-visualization.png"
+          },
+          {
+            "file": "ai-eskill-ai-eskill-web-20260929-062747.webm",
+            "sha256": "9fc07f6d0a434ae73de4ee37e41b4ba87f49fa8f80c10c3f63dd54a311cf7760",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，14.04s，1600x1000，ffmpeg 实测）：管理员登录 → 编制目录 → 可视化桥状态 → ESkill 路由执行 → 空请求被拒 → workflow-definitions 探面 404 → 流程可视化渲染。",
+            "kind": "video",
+            "size_bytes": 950179,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/ai-eskill-ai-eskill-web-run.json"
       },
       {
         "feature": "ai-excel",
@@ -687,6 +851,88 @@
         "source_run": "/capabilities/assets/evidence/ai-knowledge-ai-knowledge-macos-run.json"
       },
       {
+        "feature": "ai-model-access",
+        "platform": "web",
+        "status": "passed",
+        "passed": 5,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "ai-model-access-00-login-form.png",
+            "sha256": "3f0f3fe64ca4d651e4d3c6bdec51c96ed3f0fba1a5141e53f7f7c37833b497ff",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「管理员登录」：左侧蓝色品牌栏「XCMAX 服务器后台 · 平台运维 / 服务器后台与自动化治理」；右侧账号框已填 admin、密码框为掩码（●●●●●●●●），可点「登 录」，含忘记账号/忘记密码/帮助链接。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ai-model-access-00-login-form.png"
+          },
+          {
+            "file": "ai-model-access-M-settings-model-payment.png",
+            "sha256": "a917718e93dc4f9cd70abad8d7d90d8bbc2572bdd747f3b1e94fbdef3e7dafde",
+            "visual_review": "accepted",
+            "visible_result": "登录后进入「系统设置」，右侧「模型服务」区：副标题「余额与充值走修茈市场；本页汇总展示，支付在 钱包/套餐 完成」，含「打开修茈钱包 / 会员套餐 / 刷新」按钮、账户余额（本机汇总）与「尚未绑定修茈市场账号，请先登录软件」提示、快捷充值、修茈会员套餐（3 档）与「模型支持」条目。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ai-model-access-M-settings-model-payment.png"
+          },
+          {
+            "file": "ai-model-access-ai-model-access-web-20260929-062451.webm",
+            "sha256": "e0ceb034fdb64da3a2da3f69d8a1f232adc5b600a64f8c04307db4b00535b0f6",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，17.28s，1600x1000，ffmpeg 实测）：管理员登录 → 用量账本/token 用量读取 → 市场模型目录被拒 → 无会话被拒 → 模型服务页渲染。",
+            "kind": "video",
+            "size_bytes": 1069082,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/ai-model-access-ai-model-access-web-run.json"
+      },
+      {
+        "feature": "ai-multimodal",
+        "platform": "web",
+        "status": "passed",
+        "passed": 5,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "ai-multimodal-00-login-form.png",
+            "sha256": "a4eb3c116c092f23eda45cbc73d57fc190949ee0b975fdb808a14f47944932cc",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「管理员登录」：左侧蓝色品牌栏「XCMAX 服务器后台 · 平台运维 / 服务器后台与自动化治理」；右侧账号框已填 admin、密码框为掩码，可点「登 录」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ai-multimodal-00-login-form.png"
+          },
+          {
+            "file": "ai-multimodal-MM-tools-ocr.png",
+            "sha256": "01ce38dc0dfb155ffb5c0bbedafc7d1141fa200e1b2dbe7e84d51a9ac6acfa09",
+            "visual_review": "accepted",
+            "visible_result": "登录后进入「运维工具 · 工具表」：右上分类下拉已选中「图片OCR」，下方「业务工作台入口」仅显示一张「图片 OCR / 图片识别与文字提取」卡片及「查看」按钮，证明图像模态工具面真实存在。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ai-multimodal-MM-tools-ocr.png"
+          },
+          {
+            "file": "ai-multimodal-ai-multimodal-web-20260929-063048.webm",
+            "sha256": "2f349761309f9a2500566b1cfd8b2c5907570bc43abe3c2755faede8f04815dd",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，17.36s，1600x1000，ffmpeg 实测）：管理员登录 → 语音识别就绪 → 语音转写/图像识别入参被拒 → TTS 结构化返回 → 工具表切到图片OCR 分类。",
+            "kind": "video",
+            "size_bytes": 1071844,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/ai-multimodal-ai-multimodal-web-run.json"
+      },
+      {
         "feature": "ai-ocr-doc",
         "platform": "macos",
         "status": "failed",
@@ -801,6 +1047,47 @@
         "source_run": "/capabilities/assets/evidence/ai-ppt-ai-ppt-macos-run.json"
       },
       {
+        "feature": "ai-run-monitor",
+        "platform": "web",
+        "status": "passed",
+        "passed": 5,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "ai-run-monitor-00-login-form.png",
+            "sha256": "3e96a8d0ca0ffdb7f649c6ae6b79882cbbf6163d79d7aafeda68840c8e6b16b4",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「管理员登录」：左侧蓝色品牌栏「XCMAX 服务器后台 · 平台运维 / 服务器后台与自动化治理」；右侧账号框已填 admin、密码框为掩码，可点「登 录」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ai-run-monitor-00-login-form.png"
+          },
+          {
+            "file": "ai-run-monitor-RM-workspace-run.png",
+            "sha256": "c00392d91cd525fd8e239de5bbaffbca389f39f138393ab0d93b8116368e86f9",
+            "visual_review": "accepted",
+            "visible_result": "登录后进入该次运行的「独立对话工作区」：标题显示运行消息「运行监测验收样本」与执行状态「等待审批 / 第 1 次尝试 · 1 次运行」及进度百分比，提供运维总览/自动化方针/功能模块/员工图谱快捷入口；底部输入条含新对话/审批/上传附件/解析办公文件、主动意识启用、语音播报与「按住说话」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ai-run-monitor-RM-workspace-run.png"
+          },
+          {
+            "file": "ai-run-monitor-ai-run-monitor-web-20260929-062820.webm",
+            "sha256": "93d1866c2b4326acfd63452d8df57c32d4066ceef9f1eae9853431dd6ee1e9cc",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，17.40s，1600x1000，ffmpeg 实测）：管理员登录 → 运行历史 → 提交运行 → 运行回执/事件流 → 独立工作区页 → 无会话被拒。",
+            "kind": "video",
+            "size_bytes": 1170006,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/ai-run-monitor-ai-run-monitor-web-run.json"
+      },
+      {
         "feature": "ai-task-workspace",
         "platform": "macos",
         "status": "failed",
@@ -877,6 +1164,47 @@
         "source_run": "/capabilities/assets/evidence/ai-tts-ai-tts-macos-run.json"
       },
       {
+        "feature": "ai-vector-rag",
+        "platform": "web",
+        "status": "passed",
+        "passed": 6,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "ai-vector-rag-00-login-form.png",
+            "sha256": "232179d8c5b909897f0e9e1553ac0dd5f0c059e81b5af44bb714aebeb39affd8",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「管理员登录」：左侧蓝色品牌栏「XCMAX 服务器后台 · 平台运维 / 服务器后台与自动化治理」；右侧账号框已填 admin、密码框为掩码，可点「登 录」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ai-vector-rag-00-login-form.png"
+          },
+          {
+            "file": "ai-vector-rag-V-persy-knowledge.png",
+            "sha256": "eabd98d15515078ecd946c4bf93e6e1bc245b1ba705736c6b1ab87663f197902",
+            "visual_review": "accepted",
+            "visible_result": "登录后进入「知识库 / OMNISCIENT CONSOLE 全知知识网络」：空间显示 persy-knowledge，视图切换「图谱/记忆/卡片/来源」与「关键词召回」及导入入口；画布显示 Persy 节点与「粘贴知识/对话记忆/导入资料」，右侧为节点/召回面板，底部为「问 Persy」提问框。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ai-vector-rag-V-persy-knowledge.png"
+          },
+          {
+            "file": "ai-vector-rag-ai-vector-rag-web-20260929-062839.webm",
+            "sha256": "788336cca67180510e35401f83d7703a39562f80f83d752857847fd538abd973",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，13.96s，1600x1000，ffmpeg 实测）：管理员登录 → 引擎健康 → 入库唯一标记 → 语义召回命中 → 缺参被拒 → 知识网络页渲染。",
+            "kind": "video",
+            "size_bytes": 689855,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/ai-vector-rag-ai-vector-rag-web-run.json"
+      },
+      {
         "feature": "ai-word",
         "platform": "macos",
         "status": "passed",
@@ -913,6 +1241,63 @@
           "size_bytes": 1818
         },
         "source_run": "/capabilities/assets/evidence/ai-word-ai-word-macos-run.json"
+      },
+      {
+        "feature": "base-account-security",
+        "platform": "web",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "base-account-security-00-login-form.png",
+            "sha256": "46d4560ad17097f3750a1098bdee5838c8eb019d16a933946524c39937df81a7",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页（管理员登录，账号 admin）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-account-security-00-login-form.png"
+          },
+          {
+            "file": "base-account-security-BS1-mfa-setup.png",
+            "sha256": "6a28f682d24f38d894e417d633b3a6ec97a74988ee1fab9e61feedbd6d6d8151",
+            "visual_review": "accepted",
+            "visible_result": "POST /api/auth/mfa/setup 200 success=true，data.secret=IOODU4BJ3LISUP9MBCIRFXVUV4EO8QBQ、otpauth_uri=otpauth://totp/XCMAX:admin?…issuer=XCMAX&algorithm=SHA1&digits=6&period=30。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-account-security-BS1-mfa-setup.png"
+          },
+          {
+            "file": "base-account-security-BS2-password-change-wrong.png",
+            "sha256": "6ab10c879dd290aec44b37549f069e9a1c4874dd96f8b01d3b445cf183de5dc7",
+            "visual_review": "accepted",
+            "visible_result": "POST /api/auth/password/change 原密码错误 → 400 success=false message=原密码错误。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-account-security-BS2-password-change-wrong.png"
+          },
+          {
+            "file": "base-account-security-BS3-unauth-mfa-denied.png",
+            "sha256": "381c1ba6341a4732041acb7a80aa000caac4a29702b196f4bd8b4561a882a7ad",
+            "visual_review": "accepted",
+            "visible_result": "无会话 POST /api/auth/mfa/setup → HTTP 200 但 body.success=false、error.code=UNAUTHORIZED、message=请先登录。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-account-security-BS3-unauth-mfa-denied.png"
+          },
+          {
+            "file": "base-account-security-base-account-security-web-20260929-082903.webm",
+            "sha256": "808eb6a1148afa43c074a7d0335b7ef5f22cd52d674d20dcb66e6fb5747911fa",
+            "visual_review": "accepted",
+            "visible_result": "录像（webm，11.84s）：MFA 绑定 → 错误旧密码拒改 → 无会话绑定被拒。",
+            "kind": "video",
+            "size_bytes": 593919,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/base-account-security-base-account-security-web-run.json"
       },
       {
         "feature": "base-config",
@@ -1029,6 +1414,63 @@
         "source_run": "/capabilities/assets/evidence/base-device-bind-base-device-bind-macos-run.json"
       },
       {
+        "feature": "base-diagnostics",
+        "platform": "web",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "base-diagnostics-00-login-form.png",
+            "sha256": "a1ed134d71385f534dd8b1850ab7de91c73585bb08387868a6f5476323c09316",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页（管理员登录，账号 admin）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-diagnostics-00-login-form.png"
+          },
+          {
+            "file": "base-diagnostics-BD1-diagnostics-capabilities.png",
+            "sha256": "94f3bc05256baf36a3eb836e8ac4a167fca08c706faa3af73bf27df22c3a6f83",
+            "visual_review": "accepted",
+            "visible_result": "GET /api/diagnostics/capabilities 200，keys=[timestamp,rasa,pyvector,engines,ai_service]；rasa.status=degraded available=false（model_not_found）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-diagnostics-BD1-diagnostics-capabilities.png"
+          },
+          {
+            "file": "base-diagnostics-BD2-client-log-upload.png",
+            "sha256": "af68217290f0d7e3f7e6f8f8a8f190498d704a3215a6267ac599713eedc4c30d",
+            "visual_review": "accepted",
+            "visible_result": "POST /api/debug/client-log 200 success=true（客户端日志已接收）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-diagnostics-BD2-client-log-upload.png"
+          },
+          {
+            "file": "base-diagnostics-BD3-client-log-get-rejected.png",
+            "sha256": "1c97efd06c0f59cd4400ed01c4c5a247a02603da53125e99781577863b2c1d13",
+            "visual_review": "accepted",
+            "visible_result": "GET /api/debug/client-log（仅有 POST 路由）→ 404 success=false 资源不存在。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-diagnostics-BD3-client-log-get-rejected.png"
+          },
+          {
+            "file": "base-diagnostics-base-diagnostics-web-20260929-082917.webm",
+            "sha256": "f5140a8762d81c2597e9653f2ce0a46fd90a687eb87aa6b98676025eaa452820",
+            "visual_review": "accepted",
+            "visible_result": "录像（webm，11.56s）：诊断快照 → 日志上报 → GET 拒绝。",
+            "kind": "video",
+            "size_bytes": 592761,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/base-diagnostics-base-diagnostics-web-run.json"
+      },
+      {
         "feature": "base-edition-pack",
         "platform": "macos",
         "status": "passed",
@@ -1103,6 +1545,63 @@
           "size_bytes": 1261
         },
         "source_run": "/capabilities/assets/evidence/base-health-base-health-macos-run.json"
+      },
+      {
+        "feature": "base-help",
+        "platform": "web",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "base-help-00-login-form.png",
+            "sha256": "3d886ff484e0d908881f48a43ea3b7fa10abaadce7427fca6fc3c7223be97f46",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页（管理员登录，账号 admin）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-help-00-login-form.png"
+          },
+          {
+            "file": "base-help-BH1-tutorial-workbook.png",
+            "sha256": "be2f769aef7a089f02421e0f30cf48397579e94bb2370c83874610c17a5c4f1c",
+            "visual_review": "accepted",
+            "visible_result": "GET /api/tutorial/v2/assets/business-import.xlsx 200、content_type=application/vnd.openxmlformats-officedocument.spreadsheetml.sheet、bytes=5103（真实下发教学练习工作簿）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-help-BH1-tutorial-workbook.png"
+          },
+          {
+            "file": "base-help-BH2-courses-tenant-gate.png",
+            "sha256": "cebcc0dda16efbec7d67699427935a3b6a0f2211ff97a4f59b9003567ffdb5bf",
+            "visual_review": "accepted",
+            "visible_result": "GET /api/tutorial/v2/courses → 409、error.code=source_tenant_required、hint=当前账号尚未加入企业，无法创建教学空间。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-help-BH2-courses-tenant-gate.png"
+          },
+          {
+            "file": "base-help-BH3-unauth-courses.png",
+            "sha256": "b714a248ea1a93f16aebb7aadc344174e38bd999287673a7a82b7571e6d6409b",
+            "visual_review": "accepted",
+            "visible_result": "无会话 GET courses → 401 http_401 UNAUTHORIZED 请先登录。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-help-BH3-unauth-courses.png"
+          },
+          {
+            "file": "base-help-base-help-web-20260929-082538.webm",
+            "sha256": "82894177ace3b3b5269ceb757ebcb4d6951cfe188c2eeb9f4a95535545706f68",
+            "visual_review": "accepted",
+            "visible_result": "录像（webm，11.40s）：教学资源下发 → 课程租户前置拒绝 → 无会话拒绝。",
+            "kind": "video",
+            "size_bytes": 552096,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/base-help-base-help-web-run.json"
       },
       {
         "feature": "base-install-guide",
@@ -1316,6 +1815,63 @@
         "source_run": "/capabilities/assets/evidence/base-rbac-base-rbac-macos-run.json"
       },
       {
+        "feature": "base-register",
+        "platform": "web",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "base-register-00-login-form.png",
+            "sha256": "414431fe7c69a21a2a1ef30b66120404bce84b51051110e5dee1c3977f037958",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页（管理员登录，账号 admin）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-register-00-login-form.png"
+          },
+          {
+            "file": "base-register-BR1-register-ok.png",
+            "sha256": "564c79067fb7acd9e0813e060272fb64b419027dde2cd74ff88a81b4cb7234bf",
+            "visual_review": "accepted",
+            "visible_result": "POST /api/auth/register 200 success=true，user.username=qa_reg_…、role=viewer、tenant_id=2、account_kind=personal，并建立 session_id。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-register-BR1-register-ok.png"
+          },
+          {
+            "file": "base-register-BR2-register-missing.png",
+            "sha256": "cd72535366ea86f8ce29e11a39141ebf13043aa8e33da3d8b2839db00e877a54",
+            "visual_review": "accepted",
+            "visible_result": "空 body 注册 → 400、error.code=INVALID_INPUT、message=用户名和密码不能为空。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-register-BR2-register-missing.png"
+          },
+          {
+            "file": "base-register-BR3-forgot-account-negative.png",
+            "sha256": "897c3a1141cc6673be7b4b164d017831cc2ba3cd8cb2132683152e124507c8dc",
+            "visual_review": "accepted",
+            "visible_result": "POST /api/auth/forgot-account 仅给 username → 400、INVALID_INPUT、请填写有效邮箱。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-register-BR3-forgot-account-negative.png"
+          },
+          {
+            "file": "base-register-base-register-web-20260929-082459.webm",
+            "sha256": "3a3418bb0b7cda21aadafe4da7651e0e9978c269f919eab8ff8087a9dee4064a",
+            "visual_review": "accepted",
+            "visible_result": "录像（webm，11.64s）：页面上下文真实完成 注册成功 / 空参拒绝 / 找回缺邮箱拒绝。",
+            "kind": "video",
+            "size_bytes": 611127,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/base-register-base-register-web-run.json"
+      },
+      {
         "feature": "base-settings",
         "platform": "macos",
         "status": "failed",
@@ -1390,6 +1946,71 @@
           "size_bytes": 1121
         },
         "source_run": "/capabilities/assets/evidence/base-update-mgmt-base-update-mgmt-macos-run.json"
+      },
+      {
+        "feature": "base-web-admin",
+        "platform": "web",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "base-web-admin-00-login-form.png",
+            "sha256": "f8f4ff197718c12ee3a6085d63fc667ce3cd2d08731e6a44d8892967a5c40f38",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「管理员登录 · 管理员账号 · 仅限运营人员」，账号框已填 admin、密码框掩码，按钮「登 录」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-web-admin-00-login-form.png"
+          },
+          {
+            "file": "base-web-admin-BW1-session-me.png",
+            "sha256": "03cbe43a5c8d2e1b483f28209a172dbdd2328a1a7ce093273af55109b371dab1",
+            "visual_review": "accepted",
+            "visible_result": "JSON：GET /api/auth/me 200 success=true，user.username=admin、role=admin、account_kind=admin、tenant_id=null。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-web-admin-BW1-session-me.png"
+          },
+          {
+            "file": "base-web-admin-BW2-admin-overview.png",
+            "sha256": "10a618992206fceea753770bd87070cdfa5861cd6165c0cbd68e4f91f5ac910c",
+            "visual_review": "accepted",
+            "visible_result": "「服务器后台总览」页真实渲染：本地节点 版本 1.0.0.5、数据库 ok、本地地址 127.0.0.1:42423；远端服务器离线；模块注册表 90 个模块；左侧运维导航。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-web-admin-BW2-admin-overview.png"
+          },
+          {
+            "file": "base-web-admin-BW3-module-registry.png",
+            "sha256": "09bed5b0592fdcb621b13338aaeacf9801b3a81f2078abd54b1c12120708dfc9",
+            "visual_review": "accepted",
+            "visible_result": "JSON：modules_status=200、module_count=90（xcmax-admin/chat/ai-ecosystem…）；capabilities_status=200、edition=full。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-web-admin-BW3-module-registry.png"
+          },
+          {
+            "file": "base-web-admin-BW4-unauth-denied.png",
+            "sha256": "b45f42315b1cb3a9cdced26dd65de4f6dc8c397d0ffc53276b0d6165ac670c68",
+            "visual_review": "accepted",
+            "visible_result": "无会话 GET /api/admin/audit-logs → status=401、error_code=http_401、UNAUTHORIZED 请先登录。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/base-web-admin-BW4-unauth-denied.png"
+          },
+          {
+            "file": "base-web-admin-base-web-admin-web-20260929-082432.webm",
+            "sha256": "d60c4ed8daffc2ffb8b288535e5fe558fdad38c0dce5884e2e01f75fc7c3d4c5",
+            "visual_review": "accepted",
+            "visible_result": "录像（webm，25.96s，VP8 1600x1000）：登录 → 总览页渲染 → 会话/模块接口应答 → 无会话拒绝。",
+            "kind": "video",
+            "size_bytes": 1761912,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/base-web-admin-base-web-admin-web-run.json"
       },
       {
         "feature": "ch-asr",
@@ -2304,6 +2925,79 @@
         "source_run": "/capabilities/assets/evidence/erp-ar-ap-erp-ar-ap-macos-run.json"
       },
       {
+        "feature": "erp-business-api",
+        "platform": "web",
+        "status": "passed",
+        "passed": 5,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "200a37d9a5e7cc8433c814cbe7e8ea0215dd36a2",
+        "media": [
+          {
+            "file": "erp-business-api-00-login-form.png",
+            "sha256": "f4c78f4f86e84180e4fa2bb83ca0977af5ab12640099072c1a15662e4257f9aa",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-business-api-00-login-form.png"
+          },
+          {
+            "file": "erp-business-api-BAP1-integration-console.png",
+            "sha256": "fc0c82da53518c8256e431a2294ee5b26f0c360fce96e2776a0c2a2cd027245e",
+            "visual_review": "accepted",
+            "visible_result": "/admin/server-functions「服务器功能模块」页真实渲染：标题「服务器功能模块」、副标题「对接修茈服务器的模块注册、每日摘要记录和员工大会能力」、标签页（服务器模块/每日摘要记录/员工大会）、「服务器功能注册表 90 个模块」表格（含 xcmax-admin、business-docking、data-sources 等，状态「启用」），左侧运维导航齐全。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-business-api-BAP1-integration-console.png"
+          },
+          {
+            "file": "erp-business-api-BAP2-business-event-published.png",
+            "sha256": "c818e6b561b9d2d71df895718ead1d67e27cad3fea158edc96f4e788b86ad191",
+            "visual_review": "accepted",
+            "visible_result": "POST /api/business/ocr/recognize → 200，csrf_sent=true，success=true，message=OCR 请求已发布，event=ocr.requested，published=true，含 run_id/agent_run_id，agent_status=completed。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-business-api-BAP2-business-event-published.png"
+          },
+          {
+            "file": "erp-business-api-BAP3-service-bridge-roundtrip.png",
+            "sha256": "ac2c563bb2e8fe89d6eae0884f70426495cf52ab033a465a2460e99473216873",
+            "visual_review": "accepted",
+            "visible_result": "POST /api/service-bridge/requests → 200，status_field=pending；PUT respond → 200、status=resolved、responded_by=admin；随后 GET 读回 200 且 status=resolved、response=已由验收实例应答「服务器内部错误」（Session 解绑内部错误，真实缺陷观察项）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-business-api-BAP3-service-bridge-roundtrip.png"
+          },
+          {
+            "file": "erp-business-api-BAP4-validation-rejected.png",
+            "sha256": "cab11e1d0ee24563befb7a7fa0f2550445796658546d481f3be01c46e153301d",
+            "visual_review": "accepted",
+            "visible_result": "priority=bogus → 400「Invalid priority. Must be one of: ['low','normal','high','urgent']」；缺 title → 422 validation_error body.title Field required；缺 product_id → 422 validation_error body.product_id Field required。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-business-api-BAP4-validation-rejected.png"
+          },
+          {
+            "file": "erp-business-api-BAP5-csrf-denied.png",
+            "sha256": "0d49d2179dda05c06d17bceca601520dde9b116ef8e6965b58f88154ca7442ba",
+            "visual_review": "accepted",
+            "visible_result": "无 X-CSRF-Token 的 POST /api/business/inventory/update → 403，success=false，message=CSRF token missing。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-business-api-BAP5-csrf-denied.png"
+          },
+          {
+            "file": "erp-business-api-erp-business-api-web-20260929-111950.webm",
+            "sha256": "73fe37811df510dfc1b7ad397b7c53ed9db4e365095b30b145fae62e822ef3c4",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，18.16s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → 服务器功能模块页渲染 → OCR 业务事件发布 200 → 服务工单落库/应答/读回 200 → 非法优先级/缺参 400/422 → 无 CSRF 写请求 403。",
+            "kind": "video",
+            "size_bytes": 1706180,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/erp-business-api-erp-business-api-web-run.json"
+      },
+      {
         "feature": "erp-contract",
         "platform": "macos",
         "status": "passed",
@@ -2340,6 +3034,95 @@
           "size_bytes": 1645
         },
         "source_run": "/capabilities/assets/evidence/erp-contract-erp-contract-macos-run.json"
+      },
+      {
+        "feature": "erp-etl",
+        "platform": "web",
+        "status": "passed",
+        "passed": 7,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "erp-etl-00-login-form.png",
+            "sha256": "53f60ce26c29e46ca35e7cde1bf29492f9d1e2e8bad928f9849054645cf1287f",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-etl-00-login-form.png"
+          },
+          {
+            "file": "erp-etl-E1-etl-capabilities.png",
+            "sha256": "2b0b40c22bb70fb6bbcc9220bb3b65a95f30368750d6ff805cb02e19070dc120",
+            "visual_review": "accepted",
+            "visible_result": "浏览器渲染 /api/etl/capabilities 的真实 JSON：enabled=true、targets（knowledge / customer_products / customers / products / purchase_orders / shipment_records 等）及各自 required_fields 与 reversible。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-etl-E1-etl-capabilities.png"
+          },
+          {
+            "file": "erp-etl-E2-etl-upload-and-preview.png",
+            "sha256": "cf540220c6a6fbd56aca12ac9525b92b85844698fdb3fb084ea711f0d18fbef7",
+            "visual_review": "accepted",
+            "visible_result": "浏览器渲染 ETL 上传与预览运行的真实 JSON 响应（upload_id / file_sha256 / run id / target_type=customers / status）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-etl-E2-etl-upload-and-preview.png"
+          },
+          {
+            "file": "erp-etl-E3-etl-rows.png",
+            "sha256": "cf540220c6a6fbd56aca12ac9525b92b85844698fdb3fb084ea711f0d18fbef7",
+            "visual_review": "accepted",
+            "visible_result": "浏览器渲染 ETL 运行行读取接口的真实 JSON（运行列表与解析出的行）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-etl-E3-etl-rows.png"
+          },
+          {
+            "file": "erp-etl-E4-etl-template.png",
+            "sha256": "cf540220c6a6fbd56aca12ac9525b92b85844698fdb3fb084ea711f0d18fbef7",
+            "visual_review": "accepted",
+            "visible_result": "浏览器渲染 ETL 模板创建与列表读回的真实 JSON（template_id / name / target_type / draft）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-etl-E4-etl-template.png"
+          },
+          {
+            "file": "erp-etl-E5-etl-negative.png",
+            "sha256": "cf540220c6a6fbd56aca12ac9525b92b85844698fdb3fb084ea711f0d18fbef7",
+            "visual_review": "accepted",
+            "visible_result": "浏览器渲染非法入参时的真实拒绝响应（不存在的 upload_id、缺必填字段、缺 CSRF）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-etl-E5-etl-negative.png"
+          },
+          {
+            "file": "erp-etl-E6-etl-unauth.png",
+            "sha256": "cf540220c6a6fbd56aca12ac9525b92b85844698fdb3fb084ea711f0d18fbef7",
+            "visual_review": "accepted",
+            "visible_result": "无会话的新浏览器上下文访问 ETL 接口，返回未认证拒绝而非数据。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-etl-E6-etl-unauth.png"
+          },
+          {
+            "file": "erp-etl-E7-etl-execute-rollback.png",
+            "sha256": "cf540220c6a6fbd56aca12ac9525b92b85844698fdb3fb084ea711f0d18fbef7",
+            "visual_review": "accepted",
+            "visible_result": "浏览器渲染 ETL 真实执行与回滚的响应，以及执行后/回滚后 GET /api/customers 的真实返回（含本轮新增客户名）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-etl-E7-etl-execute-rollback.png"
+          },
+          {
+            "file": "erp-etl-erp-etl-web-20260929-091735.webm",
+            "sha256": "869c21db59304767a2fad2307274cc7c1b914ff81c0313820bbcfd1cb4ca916c",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm）：管理端登录 → ETL 能力清单 → 真实 CSV 上传与预览 → 行读取 → 模板往返 → 负例与未认证拒绝。",
+            "kind": "video",
+            "size_bytes": 13305423,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/erp-etl-erp-etl-web-run.json"
       },
       {
         "feature": "erp-excel-io",
@@ -3254,6 +4037,71 @@
         "source_run": "/capabilities/assets/evidence/ind-lan-license-ind-lan-license-macos-run.json"
       },
       {
+        "feature": "ind-modstore-gateway",
+        "platform": "web",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "ind-modstore-gateway-00-login-form.png",
+            "sha256": "02cf96db3bcae452efc0341a50397d2d0ad107a0e1a2bc4b526677fb08d64965",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码，可点蓝色「登 录」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ind-modstore-gateway-00-login-form.png"
+          },
+          {
+            "file": "ind-modstore-gateway-G1-discover.png",
+            "sha256": "b469cd6d9029965632b94bb790e539bfe94b269734828fb2617d5ee8247798da",
+            "visual_review": "accepted",
+            "visible_result": "「发现」页真实渲染：工作台（MODstore 网页版 · 完整 Mod 能力）、MOD 市场（浏览与安装行业 Mod）、工具箱。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ind-modstore-gateway-G1-discover.png"
+          },
+          {
+            "file": "ind-modstore-gateway-G2-overview.png",
+            "sha256": "0e4bb890fa4ecb7955fc274d9230b73c716c841121089dced0200e5d82e7f698",
+            "visual_review": "accepted",
+            "visible_result": "「服务器后台总览」页真实渲染：本地节点 127.0.0.1:42423、远程服务器「离线」、软件版本「检测中」、模块注册表 0 个模块。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ind-modstore-gateway-G2-overview.png"
+          },
+          {
+            "file": "ind-modstore-gateway-G3-server-functions.png",
+            "sha256": "c0d568c29f64a66fa161d3055a28315366487884287f40c61065a2e814de4247",
+            "visual_review": "accepted",
+            "visible_result": "「服务器功能模块」页真实渲染：服务器功能注册表 90 个模块（xcmax-admin、ai-ecosystem、model-payment 等）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ind-modstore-gateway-G3-server-functions.png"
+          },
+          {
+            "file": "ind-modstore-gateway-G4-settings.png",
+            "sha256": "6b07c463b88f1dd35e12929a10cd0e37c4518e6ea84ca2268c050a81e5820ea3",
+            "visual_review": "accepted",
+            "visible_result": "「系统设置」页真实渲染：个人主页 管理员 / admin@local，模型服务卡片显示尚未绑定修茈市场账号。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ind-modstore-gateway-G4-settings.png"
+          },
+          {
+            "file": "ind-modstore-gateway-ind-modstore-gateway-web-20260929-064709.webm",
+            "sha256": "88bb64cce98528d23765fed72c478915e8bf866e2b421faa759aca7a3dd944bc",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，41.44s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → 发现 → 总览 → 服务器功能模块 → 系统设置，并 fetch 复核 /api/mod-store/market-catalog、/api/market/status(502)、market-proxy(401)、支付回调(400)。注意：独立 MODstore 服务端未运行。",
+            "kind": "video",
+            "size_bytes": 3084893,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/ind-modstore-gateway-ind-modstore-gateway-web-run.json"
+      },
+      {
         "feature": "ind-modstore-pay",
         "platform": "macos",
         "status": "passed",
@@ -3520,6 +4368,71 @@
         "source_run": "/capabilities/assets/evidence/ind-workspace-ind-workspace-macos-run.json"
       },
       {
+        "feature": "mods-aiopen-support",
+        "platform": "web",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "mods-aiopen-support-00-login-form.png",
+            "sha256": "32449fe3e06a4206c9e0b8d63f395611a9c3955b3394bc901dc7d47bb2676ad4",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码，可点蓝色「登 录」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-aiopen-support-00-login-form.png"
+          },
+          {
+            "file": "mods-aiopen-support-O1-settings.png",
+            "sha256": "6cbf0e22a05607722f4a626697ecf752f851d5a04ece0c7d117c923bd21270b3",
+            "visual_review": "accepted",
+            "visible_result": "「系统设置」页真实渲染：个人主页 管理员 / admin / admin@local，模型服务卡片显示尚未绑定修茈市场账号。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-aiopen-support-O1-settings.png"
+          },
+          {
+            "file": "mods-aiopen-support-O2-overview.png",
+            "sha256": "5b6dff48be2615eeba58b0acc68ab99eb04e2c95f0acdb65d0cdd50bd906ecee",
+            "visual_review": "accepted",
+            "visible_result": "「服务器后台总览」页真实渲染：本地节点 127.0.0.1:42423、远程服务器「离线」、模块注册表 0 个模块。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-aiopen-support-O2-overview.png"
+          },
+          {
+            "file": "mods-aiopen-support-O3-tools.png",
+            "sha256": "d176a4fa2fe869eaf6d8a33ee50e20b598283c59f26251a11c736d19429f40b5",
+            "visual_review": "accepted",
+            "visible_result": "「运维工具」页真实渲染：工具表区域显示「加载中…」，本轮尚未刷新出工具列表。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-aiopen-support-O3-tools.png"
+          },
+          {
+            "file": "mods-aiopen-support-O4-server-functions.png",
+            "sha256": "75ea77326eb8d485c44f208fd1dbb3321a3a6577de1ed9887a07764460f206ed",
+            "visual_review": "accepted",
+            "visible_result": "管理端整体加载占位页「XCMAX 管理中心 正在加载管理页面，请稍候…」（该步 SPA 尚未完成渲染）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-aiopen-support-O4-server-functions.png"
+          },
+          {
+            "file": "mods-aiopen-support-mods-aiopen-support-web-20260929-064631.webm",
+            "sha256": "5e39b1f314bbb7f0b01772e594c1a7487b364e468d4ee9628e149f70a0fbd46e",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，37.48s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → 系统设置 → 总览 → 运维工具 → 加载中占位，并 fetch 复核 /api/aiopen/manifest、mcp initialize、invoke api_catalog 与未知方法 -32601。",
+            "kind": "video",
+            "size_bytes": 2775862,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/mods-aiopen-support-mods-aiopen-support-web-run.json"
+      },
+      {
         "feature": "mods-bridge",
         "platform": "macos",
         "status": "passed",
@@ -3672,6 +4585,136 @@
         "source_run": "/capabilities/assets/evidence/mods-open-api-mods-open-api-macos-run.json"
       },
       {
+        "feature": "mods-pack-io",
+        "platform": "web",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "mods-pack-io-00-login-form.png",
+            "sha256": "232179d8c5b909897f0e9e1553ac0dd5f0c059e81b5af44bb714aebeb39affd8",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码，可点蓝色「登 录」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-pack-io-00-login-form.png"
+          },
+          {
+            "file": "mods-pack-io-P1-discover.png",
+            "sha256": "8df794fd759c2418cbaa26b0002f69f9f4c6f3c7ac64cefcba3ae324cdc5ec65",
+            "visual_review": "accepted",
+            "visible_result": "「发现」页真实渲染：工作台（MODstore 网页版 · 完整 Mod 能力）、扩展与市场下 MOD 市场（浏览与安装行业 Mod）与工具箱入口。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-pack-io-P1-discover.png"
+          },
+          {
+            "file": "mods-pack-io-P2-settings.png",
+            "sha256": "6b07c463b88f1dd35e12929a10cd0e37c4518e6ea84ca2268c050a81e5820ea3",
+            "visual_review": "accepted",
+            "visible_result": "「系统设置」页真实渲染：个人主页 管理员 / admin@local，模型服务卡片。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-pack-io-P2-settings.png"
+          },
+          {
+            "file": "mods-pack-io-P3-tools.png",
+            "sha256": "ba75e17451a2b32449b17166df4fa0ff318ac575ef8f03fb66d54c36254f39ff",
+            "visual_review": "accepted",
+            "visible_result": "「运维工具」页真实渲染：工具表区域显示「加载中…」，本轮尚未刷新出工具列表。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-pack-io-P3-tools.png"
+          },
+          {
+            "file": "mods-pack-io-P4-overview.png",
+            "sha256": "7800ff64cc4da1ed6252dbcd25bffbde87f66c681469eb246804bdb3e7575251",
+            "visual_review": "accepted",
+            "visible_result": "「服务器后台总览」页真实渲染：本地节点 127.0.0.1:42423、远程服务器「离线」、模块注册表 0 个模块。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-pack-io-P4-overview.png"
+          },
+          {
+            "file": "mods-pack-io-mods-pack-io-web-20260929-064246.webm",
+            "sha256": "ae5bc79ffed5cc2b922f931dcd0e8713f353d1cfcf62d2b278cb624bed6115fa",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，45.60s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → 发现 → 系统设置 → 运维工具 → 总览，并逐项 fetch 复核 /api/mod-store 包目录/校验/下载接口。",
+            "kind": "video",
+            "size_bytes": 3569526,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/mods-pack-io-mods-pack-io-web-run.json"
+      },
+      {
+        "feature": "mods-pat",
+        "platform": "web",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "mods-pat-00-login-form.png",
+            "sha256": "41d72598a586a1157bef356f14558b42b7490076f3e359b9ec8d3b1b69d9585c",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码，可点蓝色「登 录」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-pat-00-login-form.png"
+          },
+          {
+            "file": "mods-pat-A1-settings.png",
+            "sha256": "6b3b8c819a118019cdc783836976572a988d8c55978b1c85f39992307ac9e5f0",
+            "visual_review": "accepted",
+            "visible_result": "「系统设置」页真实渲染：个人主页 管理员 / admin / admin@local，模型服务卡片。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-pat-A1-settings.png"
+          },
+          {
+            "file": "mods-pat-A2-server-functions.png",
+            "sha256": "c0d568c29f64a66fa161d3055a28315366487884287f40c61065a2e814de4247",
+            "visual_review": "accepted",
+            "visible_result": "「服务器功能模块」页真实渲染：服务器功能注册表 90 个模块（xcmax-admin、ai-ecosystem、model-payment 等）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-pat-A2-server-functions.png"
+          },
+          {
+            "file": "mods-pat-A3-overview.png",
+            "sha256": "cbc70dd41823d650562a3ceceec62204a00acbe756e92e6d94e219047e29d72d",
+            "visual_review": "accepted",
+            "visible_result": "「服务器后台总览」页真实渲染：本地节点 127.0.0.1:42423、远程服务器「离线」、模块注册表 0 个模块。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-pat-A3-overview.png"
+          },
+          {
+            "file": "mods-pat-A4-tools.png",
+            "sha256": "ba75e17451a2b32449b17166df4fa0ff318ac575ef8f03fb66d54c36254f39ff",
+            "visual_review": "accepted",
+            "visible_result": "「运维工具」页真实渲染：工具表区域显示「加载中…」，本轮尚未刷新出工具列表。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-pat-A4-tools.png"
+          },
+          {
+            "file": "mods-pat-mods-pat-web-20260929-064549.webm",
+            "sha256": "8df7160813abf5d1f2b7fbed2428d59e44437c9805686c7d60edcaabf7469e89",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，40.76s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → 系统设置 → 服务器功能模块 → 总览 → 运维工具，并 fetch 复核 session/validate、/api/mod/{mod_id} 命名空间、市场管理 401 与无 CSRF 写操作 403。",
+            "kind": "video",
+            "size_bytes": 3485203,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/mods-pat-mods-pat-web-run.json"
+      },
+      {
         "feature": "mods-shell",
         "platform": "macos",
         "status": "passed",
@@ -3748,6 +4791,266 @@
         "source_run": "/capabilities/assets/evidence/mods-store-mods-store-macos-run.json"
       },
       {
+        "feature": "mods-store-sync",
+        "platform": "web",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "mods-store-sync-00-login-form.png",
+            "sha256": "414431fe7c69a21a2a1ef30b66120404bce84b51051110e5dee1c3977f037958",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码，可点蓝色「登 录」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-store-sync-00-login-form.png"
+          },
+          {
+            "file": "mods-store-sync-S1-discover.png",
+            "sha256": "3e2521d624cde3522212ce6e1e0775db837ac147d5a158e443e74a95f074753f",
+            "visual_review": "accepted",
+            "visible_result": "「发现」页真实渲染：工作台（MODstore 网页版 · 完整 Mod 能力）、MOD 市场（浏览与安装行业 Mod）、工具箱。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-store-sync-S1-discover.png"
+          },
+          {
+            "file": "mods-store-sync-S2-overview.png",
+            "sha256": "13322b977c87470432e76183e839631a0a812362060af7fa10a4fbc4479b94f1",
+            "visual_review": "accepted",
+            "visible_result": "「服务器后台总览」页真实渲染：本地节点 127.0.0.1:42423、远程服务器「离线」、模块注册表 0 个模块。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-store-sync-S2-overview.png"
+          },
+          {
+            "file": "mods-store-sync-S3-settings.png",
+            "sha256": "6b07c463b88f1dd35e12929a10cd0e37c4518e6ea84ca2268c050a81e5820ea3",
+            "visual_review": "accepted",
+            "visible_result": "「系统设置」页真实渲染：个人主页 管理员 / admin@local，模型服务卡片显示尚未绑定修茈市场账号。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-store-sync-S3-settings.png"
+          },
+          {
+            "file": "mods-store-sync-S4-tools.png",
+            "sha256": "2ccbbbbf216ed2b86c3d92c481e7c82ac3706dc321fb979c876ad05434f6b5ea",
+            "visual_review": "accepted",
+            "visible_result": "「运维工具」页真实渲染：工具表区域显示「加载中…」，本轮尚未刷新出工具列表。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-store-sync-S4-tools.png"
+          },
+          {
+            "file": "mods-store-sync-mods-store-sync-web-20260929-064508.webm",
+            "sha256": "10d931dbb96c8bfa2826d0bb58082a7edb7ed50ef89b45d6af5e1f0a231b3e54",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，38.68s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → 发现 → 总览 → 系统设置 → 运维工具，并 fetch 复核 /api/mod-store/catalog、/api/state/client-mods-off、/api/platform-shell/capabilities 与缺 PAT 同步（400）。",
+            "kind": "video",
+            "size_bytes": 2816600,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/mods-store-sync-mods-store-sync-web-run.json"
+      },
+      {
+        "feature": "mods-template",
+        "platform": "web",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "mods-template-00-login-form.png",
+            "sha256": "a16d34293474866360cb5eb4d606936b4c5075e6252e6588e1427ff018331f3d",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码，可点蓝色「登 录」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-template-00-login-form.png"
+          },
+          {
+            "file": "mods-template-M1-discover.png",
+            "sha256": "8df794fd759c2418cbaa26b0002f69f9f4c6f3c7ac64cefcba3ae324cdc5ec65",
+            "visual_review": "accepted",
+            "visible_result": "「发现」页真实渲染：工作台（MODstore 网页版 · 完整 Mod 能力）、MOD 市场（浏览与安装行业 Mod）、工具箱。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-template-M1-discover.png"
+          },
+          {
+            "file": "mods-template-M2-server-functions.png",
+            "sha256": "c0d568c29f64a66fa161d3055a28315366487884287f40c61065a2e814de4247",
+            "visual_review": "accepted",
+            "visible_result": "「服务器功能模块」页真实渲染：服务器功能注册表 90 个模块（xcmax-admin、ai-ecosystem、model-payment 等）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-template-M2-server-functions.png"
+          },
+          {
+            "file": "mods-template-M3-tools.png",
+            "sha256": "cdeaef10ed0f91425c8becb9c6928cf2431a9c38bcdef2067e5d7e7f79facffa",
+            "visual_review": "accepted",
+            "visible_result": "「运维工具」页真实渲染：工具表渲染出 AI Planner 可调用工具网格（excel_analysis、template_preview、create_role 等）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-template-M3-tools.png"
+          },
+          {
+            "file": "mods-template-M4-settings.png",
+            "sha256": "6b07c463b88f1dd35e12929a10cd0e37c4518e6ea84ca2268c050a81e5820ea3",
+            "visual_review": "accepted",
+            "visible_result": "「系统设置」页真实渲染：个人主页 管理员 / admin@local，模型服务卡片。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-template-M4-settings.png"
+          },
+          {
+            "file": "mods-template-mods-template-web-20260929-064418.webm",
+            "sha256": "b12d50147e20389935c35d93525da7232624bbe52cb14f987ff3929aad2bb90a",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，44.64s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → 发现 → 服务器功能模块 → 运维工具 → 系统设置，并 fetch 复核 /api/mod-store/market-catalog、catalog、search 与行业种子安装（403）。",
+            "kind": "video",
+            "size_bytes": 3307671,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/mods-template-mods-template-web-run.json"
+      },
+      {
+        "feature": "mods-toolchain",
+        "platform": "web",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "mods-toolchain-00-login-form.png",
+            "sha256": "f6ac9a391fce43a957c3ddb1a636bad78898b245bfd764b34eb70fac11981d97",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码，可点蓝色「登 录」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-toolchain-00-login-form.png"
+          },
+          {
+            "file": "mods-toolchain-T1-server-functions.png",
+            "sha256": "77bf74fad08ea7e13210878b49c9cbd3b05c3a82eb68bd1b430851e935476bcc",
+            "visual_review": "accepted",
+            "visible_result": "「服务器功能模块」页真实渲染：服务器功能注册表 90 个模块，含 xcmax-admin（/xcmax-admin）、chat、ai-ecosystem、model-payment 等系统内置模块与路由。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-toolchain-T1-server-functions.png"
+          },
+          {
+            "file": "mods-toolchain-T2-tools.png",
+            "sha256": "d176a4fa2fe869eaf6d8a33ee50e20b598283c59f26251a11c736d19429f40b5",
+            "visual_review": "accepted",
+            "visible_result": "「运维工具」页真实渲染：工具表区域显示「加载中…」，本轮尚未刷新出工具列表。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-toolchain-T2-tools.png"
+          },
+          {
+            "file": "mods-toolchain-T3-overview.png",
+            "sha256": "b029f8b69a714ded998742d1a911df565e77359d8942b1c734b1aeb61d2a20c5",
+            "visual_review": "accepted",
+            "visible_result": "「服务器后台总览」页真实渲染：本地节点 127.0.0.1:42423、远程服务器显示「离线」、软件版本「检测中」、模块注册表显示 0 个模块（异步未回填）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-toolchain-T3-overview.png"
+          },
+          {
+            "file": "mods-toolchain-T4-settings.png",
+            "sha256": "6b07c463b88f1dd35e12929a10cd0e37c4518e6ea84ca2268c050a81e5820ea3",
+            "visual_review": "accepted",
+            "visible_result": "「系统设置」页真实渲染：个人主页 管理员 / admin / admin@local，模型服务卡片显示尚未绑定修茈市场账号。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-toolchain-T4-settings.png"
+          },
+          {
+            "file": "mods-toolchain-mods-toolchain-web-20260929-064201.webm",
+            "sha256": "607e8b6a058d3b116dc5c57fb43016bc23173c68488a94b78d99f945d38c4237",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，44.08s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → 服务器功能模块 → 运维工具 → 总览 → 系统设置，并逐项 fetch 复核 /api/mods/*。",
+            "kind": "video",
+            "size_bytes": 3208160,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/mods-toolchain-mods-toolchain-web-run.json"
+      },
+      {
+        "feature": "mods-version",
+        "platform": "web",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "mods-version-00-login-form.png",
+            "sha256": "c05fc921770fa4511caf10362e1e04e5cb753fde72f976bf49846067648e1c5d",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码，可点蓝色「登 录」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-version-00-login-form.png"
+          },
+          {
+            "file": "mods-version-V1-overview.png",
+            "sha256": "3091de79b5b3b2e19f01db85e747a206c60059a2277b8a9ca6daf0f223debbd4",
+            "visual_review": "accepted",
+            "visible_result": "「服务器后台总览」页真实渲染：本地节点 127.0.0.1:42423、远程服务器「离线」、模块注册表 0 个模块（异步未回填）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-version-V1-overview.png"
+          },
+          {
+            "file": "mods-version-V2-server-functions.png",
+            "sha256": "12ab7596915caa172cf38fa04e1e348596cc211a489a4f6f81c7ad431593023a",
+            "visual_review": "accepted",
+            "visible_result": "「服务器功能模块」页真实渲染，本轮注册表显示 0 个模块并提示「暂无模块数据，点击刷新或检查 /api/xcmax/admin/modules」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-version-V2-server-functions.png"
+          },
+          {
+            "file": "mods-version-V3-settings.png",
+            "sha256": "6b07c463b88f1dd35e12929a10cd0e37c4518e6ea84ca2268c050a81e5820ea3",
+            "visual_review": "accepted",
+            "visible_result": "「系统设置」页真实渲染：个人主页 管理员 / admin / admin@local，模型服务卡片显示尚未绑定修茈市场账号。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-version-V3-settings.png"
+          },
+          {
+            "file": "mods-version-V4-tools.png",
+            "sha256": "cdc427d7f0a06543b512ddc36fdbb915de33519e8f95af5d3c83cf84140667f1",
+            "visual_review": "accepted",
+            "visible_result": "「运维工具」页真实渲染：工具表渲染出 AI Planner 可调用工具网格（excel_analysis、template_preview、create_role 等）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/mods-version-V4-tools.png"
+          },
+          {
+            "file": "mods-version-mods-version-web-20260929-064332.webm",
+            "sha256": "db7a7167ae62b4bf58c7dd084add9c484ba6b006e3007d1bb363c54de023aba1",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，43.96s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → 总览 → 服务器功能模块 → 系统设置 → 运维工具，并 fetch 复核 /api/mods?all=1、/api/mod-store/updates、/api/mod-store/dependencies 等。",
+            "kind": "video",
+            "size_bytes": 3335935,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/mods-version-mods-version-web-run.json"
+      },
+      {
         "feature": "mods-webhook",
         "platform": "macos",
         "status": "failed",
@@ -3786,6 +5089,843 @@
         "source_run": "/capabilities/assets/evidence/mods-webhook-mods-webhook-macos-run.json"
       },
       {
+        "feature": "ops-admin-console",
+        "platform": "web",
+        "status": "passed",
+        "passed": 5,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "ops-admin-console-00-login-form.png",
+            "sha256": "8ea72c13a3dd42d42df1381eae0ff6900e16f2a91556eca6d0d9843451d5adfa",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码，可点「登 录」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-admin-console-00-login-form.png"
+          },
+          {
+            "file": "ops-admin-console-W2-console-overview.png",
+            "sha256": "739574de399480bb4085a92c3425b08aff3c94f22ee957085a62054e1c16141e",
+            "visual_review": "accepted",
+            "visible_result": "登录后进入「服务器后台总览」：左上 XCMAX 服务器后台，左侧运维导航（服务器后台总览/客户交付中心/创始人状态/自动化方针/服务器功能模块/业务审批/员工自治/用户管理/运维数据源/运维工具/系统设置），本地节点版本 1.0.0.5、数据库 ok、本地地址 127.0.0.1:42423，模块注册表 90 个模块。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-admin-console-W2-console-overview.png"
+          },
+          {
+            "file": "ops-admin-console-W4-unauthenticated-denied.png",
+            "sha256": "485d9d1ec64ebc24aa999e91a7817e029e8535d26cff234fc92cbb40df259926",
+            "visual_review": "accepted",
+            "visible_result": "无会话的新浏览器上下文停留在管理员登录页，未出现任何管理数据。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-admin-console-W4-unauthenticated-denied.png"
+          },
+          {
+            "file": "ops-admin-console-ops-admin-console-web-20260929-061306.webm",
+            "sha256": "a08bd7201db1028469ef239e66ecfa89da62903372638a5861e80567e91ac9ff",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，36.48s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → 总览页渲染 → 审计接口应答 → 无会话上下文被拒 → 模块注册表读取。",
+            "kind": "video",
+            "size_bytes": 2848606,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/ops-admin-console-ops-admin-console-web-run.json"
+      },
+      {
+        "feature": "ops-customer-value",
+        "platform": "web",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "ops-customer-value-00-login-form.png",
+            "sha256": "9ff705a3d22898023247e3c0b22e1bbd4ce914723115c04bafd2e4b692bf033c",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码，可点「登 录」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-customer-value-00-login-form.png"
+          },
+          {
+            "file": "ops-customer-value-CV1-founder-autonomy-customer.png",
+            "sha256": "629f0142e4a1aba4bb8e2b4281e0a796670ba89d86b8788fae5389270e090d94",
+            "visual_review": "accepted",
+            "visible_result": "「创始人自治驾驶舱」页已滚动到「七项真实进度」区：「客户状态 0% · 能力早期」，副标「客户为可验证产出付费」，缺口「接入可排除测试、内部与退款记录的权威价值账本」，「查看 0/6 项证据门槛」；同屏可见 创始人状态 40%、系统/代码/故障/进化状态 0%（进化 0/7）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-customer-value-CV1-founder-autonomy-customer.png"
+          },
+          {
+            "file": "ops-customer-value-CV2-customer-gates-api.png",
+            "sha256": "1a98d42f4f8e7e1b046e87233dccdc1c7e48be6a96a3c2d70ac1fb55edaea49f",
+            "visual_review": "accepted",
+            "visible_result": "本工具在真实浏览器中渲染的本轮响应：GET /api/xcmax/ops/founder-autonomy → 200；customer 门禁 6 项 value_ledger/paid/goals/delivered/capacity/outcome，progress 0、total_gate_count 6、attention_total 57。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-customer-value-CV2-customer-gates-api.png"
+          },
+          {
+            "file": "ops-customer-value-CV3-unauth-denied.png",
+            "sha256": "485d9d1ec64ebc24aa999e91a7817e029e8535d26cff234fc92cbb40df259926",
+            "visual_review": "accepted",
+            "visible_result": "无会话的新浏览器上下文停留在管理员登录页，未出现任何客户价值数据。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-customer-value-CV3-unauth-denied.png"
+          },
+          {
+            "file": "ops-customer-value-CV4-autonomy-overview.png",
+            "sha256": "a88aca332bea3dd65b610f82eadf0f1eb390cb595c76877da35105c6c351bfd8",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：GET /api/xcmax/admin/autonomy/overview → 200，ok=true，health ok，pending.count=0、items_len=0，audit_items=1，审计样本 decision=config_loaded、risk_level=LOW。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-customer-value-CV4-autonomy-overview.png"
+          },
+          {
+            "file": "ops-customer-value-ops-customer-value-web-20260929-080227.webm",
+            "sha256": "fa05da62478e396bbcf0d8673c2993265dc6274bb58d5d6841c4d1cf8c9cab25",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，25.12s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → 创始人自治驾驶舱客户状态卡片 → 客户价值门禁接口 → 无会话被拒 → 自治总览。",
+            "kind": "video",
+            "size_bytes": 1640373,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/ops-customer-value-ops-customer-value-web-run.json"
+      },
+      {
+        "feature": "ops-delivery",
+        "platform": "web",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "ops-delivery-00-login-form.png",
+            "sha256": "a1ed134d71385f534dd8b1850ab7de91c73585bb08387868a6f5476323c09316",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-delivery-00-login-form.png"
+          },
+          {
+            "file": "ops-delivery-OD1-delivery-center.png",
+            "sha256": "714b8aad9a52b44908493505eec50cbb1bcd5e7499ba2bc0f14ed04dd54edf37",
+            "visual_review": "accepted",
+            "visible_result": "「客户交付中心」页真实渲染：顶部「Mac 主控 · 四设备协同」（目标/执行设备/任务类型/关联工单）与红字「尚未绑定修茈服务器账号…」及「客户安装与业务验收独立核对；执行器报告完成不等于已交付。」；下方 CUSTOMER DELIVERY CONTROL「客户交付中心」台账：企业用户/永久购买账户/体验账户/永久待安装/待首次登录/永久交付完成/内部本机排除/定制交付工单/生产进行中 均为 0，含搜索框与「全部阶段｜定制工单」筛选。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-delivery-OD1-delivery-center.png"
+          },
+          {
+            "file": "ops-delivery-OD2-request-market-gate.png",
+            "sha256": "293bf83d2e813722d12419a6384627183bc57d8f294cb48ad0f5c9f6da3f82f9",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：POST /api/mod-store/private-delivery/requests → 401，success=false，error_code=http_401，message=请先登录并绑定修茈市场账号。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-delivery-OD2-request-market-gate.png"
+          },
+          {
+            "file": "ops-delivery-OD3-invalid-kind.png",
+            "sha256": "b6aad993fd7dcf8dbbff401e1534046d80b9da2f6b7e8e9b8801b406983f3073",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：POST /api/mod-store/private-delivery/requests（kind=__bad__）→ 400，success=false，message=kind 必须是 module、employee 或 bundle。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-delivery-OD3-invalid-kind.png"
+          },
+          {
+            "file": "ops-delivery-OD4-cs-delivery-progress.png",
+            "sha256": "ebff9bbfb517eefb94d41409136974e06245fbbfec2541f47046e3df90d7307f",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：GET /api/mod/xcagi-customer-service-bridge/user-cs/delivery?market_user_id=1 → 200，success=true，delivery={milestones:[], status:'planned'}，payment={}，invoice={}。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-delivery-OD4-cs-delivery-progress.png"
+          },
+          {
+            "file": "ops-delivery-ops-delivery-web-20260929-075821.webm",
+            "sha256": "b865dd96e00e989747b2cc8fc86eebfc185db0baf769d10cf360596e684c96b3",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，17.56s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → 客户交付中心 → 定制需求 401 → kind 非法 400 → 交付进度 200。",
+            "kind": "video",
+            "size_bytes": 1163669,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/ops-delivery-ops-delivery-web-run.json"
+      },
+      {
+        "feature": "ops-delivery-center",
+        "platform": "web",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "ops-delivery-center-00-login-form.png",
+            "sha256": "a4eb3c116c092f23eda45cbc73d57fc190949ee0b975fdb808a14f47944932cc",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-delivery-center-00-login-form.png"
+          },
+          {
+            "file": "ops-delivery-center-DC1-delivery-center.png",
+            "sha256": "6833d90894d09d13d0a48f17e7cbd2d63c64d7ed0902b1f1e84455899e03d3f5",
+            "visual_review": "accepted",
+            "visible_result": "「客户交付中心」页真实渲染并点击「刷新」：CUSTOMER DELIVERY CONTROL 客户交付中心台账可见 企业用户/永久购买账户/体验账户/永久待安装/待首次登录/永久交付完成/内部本机排除/定制交付工单（均 0）/生产进行中 0，含「同步交付状态」按钮与「全部阶段」筛选。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-delivery-center-DC1-delivery-center.png"
+          },
+          {
+            "file": "ops-delivery-center-DC2-sync-market-gate.png",
+            "sha256": "cffec9dd76dafcb3755c7dcdcf25685e0c50a69c9c4991ff96407663f4090c6a",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：POST /api/mod-store/private-delivery/sync → 401，success=false，message=请登录已绑定市场的账号，path=/api/mod-store/private-delivery/sync。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-delivery-center-DC2-sync-market-gate.png"
+          },
+          {
+            "file": "ops-delivery-center-DC3-sync-no-csrf.png",
+            "sha256": "2f848eb0c1cfec7741a32f145b49d49c64a306328c361d6d479409838427ab48",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：POST /api/mod-store/private-delivery/sync（无 X-CSRF-Token）→ 403，success=false，message=CSRF token missing。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-delivery-center-DC3-sync-no-csrf.png"
+          },
+          {
+            "file": "ops-delivery-center-ops-delivery-center-web-20260929-075932.webm",
+            "sha256": "92429ae61ceeb6ef4232a1a14273bec5f354be7dd9db9636e0b96260f4cfa82d",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，18.60s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → 客户交付中心渲染并刷新 → 同步 401 → 缺 CSRF 403。",
+            "kind": "video",
+            "size_bytes": 1324126,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/ops-delivery-center-ops-delivery-center-web-run.json"
+      },
+      {
+        "feature": "ops-delivery-sync",
+        "platform": "web",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "ops-delivery-sync-00-login-form.png",
+            "sha256": "27e61c54c0487a33b47467a840c57b516753d91685e3ffe37423c078d9fb34a5",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-delivery-sync-00-login-form.png"
+          },
+          {
+            "file": "ops-delivery-sync-DS1-status-missing-params.png",
+            "sha256": "7c30ab5424016b601be033f2a129250c8bff4685736eb23e21f8cf5c8f8a97d0",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：POST /api/mod-store/private-delivery/status（空 body）→ 400，success=false，message=缺少 mod_id、track 或 status。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-delivery-sync-DS1-status-missing-params.png"
+          },
+          {
+            "file": "ops-delivery-sync-DS2-status-unauthorized.png",
+            "sha256": "80aaa7f8d88a05fe43ce229b0498a80b1b17c9b14a5fa63b5a4ab6bf6c337a29",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：POST /api/mod-store/private-delivery/status（mod_id=xcagi-probe-mod, track=modules, status=testing）→ 403，success=false，message=当前账号未授权该客户私有 Mod。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-delivery-sync-DS2-status-unauthorized.png"
+          },
+          {
+            "file": "ops-delivery-sync-DS3-update-unauthorized.png",
+            "sha256": "e1136a9a76ea9b4a6a26f5b494af3f32b950caa1e6d6636fd08a9892c4c3784c",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：POST /api/mod-store/private-mod/update（mod_id=xcagi-probe-mod）→ 403，success=false，message=当前账号未授权该客户私有 Mod。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-delivery-sync-DS3-update-unauthorized.png"
+          },
+          {
+            "file": "ops-delivery-sync-DS4-delivery-progress-ui.png",
+            "sha256": "f0a30ae91f662e701d06d6a6d4692a72ee41cc62c853f9f121c0a0aa1d9435f3",
+            "visual_review": "accepted",
+            "visible_result": "「客户交付中心」页渲染 CUSTOMER DELIVERY CONTROL 台账（企业用户/永久交付完成/定制交付工单/生产进行中各 0），红字「尚未绑定修茈服务器账号…」；已真实点击「同步交付状态」（画面中该按钮为高亮态）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-delivery-sync-DS4-delivery-progress-ui.png"
+          },
+          {
+            "file": "ops-delivery-sync-ops-delivery-sync-web-20260929-080543.webm",
+            "sha256": "3b89f7c474dc7fc0412f02b6fa5d3fdfe3ebe34565ba2c0378cccc3981db18cb",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，16.68s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → 交付阶段缺参 400 → 未授权 403 → 私有 Mod 更新 403 → 交付中心台账并点击同步。",
+            "kind": "video",
+            "size_bytes": 1235094,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/ops-delivery-sync-ops-delivery-sync-web-run.json"
+      },
+      {
+        "feature": "ops-employee-gov",
+        "platform": "web",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "ops-employee-gov-00-login-form.png",
+            "sha256": "fba6b9347b8771922c78589cc5d38b0f82737ef04c35c545c9ec8f392f9d907e",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-employee-gov-00-login-form.png"
+          },
+          {
+            "file": "ops-employee-gov-G1-founder-autonomy.png",
+            "sha256": "5dc00e444ae7621aeb085180cdd542f1ecf4f662b40fb67a925a3c34af362093",
+            "visual_review": "accepted",
+            "visible_result": "「创始人自治驾驶舱」页真实渲染：FOUNDER MODE · STRATEGIC ONLY，说明「日常运营交给 AI 员工与 Loops；这里只保留战略方向、少量例外与 veto」，并显示正在汇总审批/知识库/员工/Goals/Loop 账本。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-employee-gov-G1-founder-autonomy.png"
+          },
+          {
+            "file": "ops-employee-gov-G2-employee-groups.png",
+            "sha256": "9112b9d0632ff0091c49c4adb5752c2e11b7b80cabe56c585eecfa21d7bd31a4",
+            "visual_review": "accepted",
+            "visible_result": "「员工自治」页真实渲染：子导航「自洽总览 / 建议看板 / 问答 / 成绩单」，系统运行态显示「降级」，含定时履职/能力证明/生产履职 0/0 卡片与「需人工审批岗位：没有待审批的高风险岗位」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-employee-gov-G2-employee-groups.png"
+          },
+          {
+            "file": "ops-employee-gov-G3-duty-roster.png",
+            "sha256": "986c22974fbdedc5cc8c3691c98ff80f967b0c4828dfa9cab3b98345ef59b03d",
+            "visual_review": "accepted",
+            "visible_result": "「员工图谱」页真实渲染：顶部「在岗员工节点图 编制 55 岗」，含中心图/六部门/物理分区/客户端车间/自进化 Loop 视图切换，图区显示正在拉取在岗员工列表。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-employee-gov-G3-duty-roster.png"
+          },
+          {
+            "file": "ops-employee-gov-G4-unauth-denied.png",
+            "sha256": "485d9d1ec64ebc24aa999e91a7817e029e8535d26cff234fc92cbb40df259926",
+            "visual_review": "accepted",
+            "visible_result": "无会话的新浏览器上下文停留在管理员登录页，未出现任何自治数据。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-employee-gov-G4-unauth-denied.png"
+          },
+          {
+            "file": "ops-employee-gov-ops-employee-gov-web-20260929-074113.webm",
+            "sha256": "f522f5c193aa07e38ea3dc77142b64f10e0bf8c54f1cb6d1eccb8d97ecd1aa8c",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，31.32s，1600x1000 25fps，ffmpeg 实测）：管理员登录 → 创始人状态 → 员工自治 → 员工图谱 → 无会话被拒，并 fetch 复核自治快照/员工分组/编制健康三个接口。",
+            "kind": "video",
+            "size_bytes": 1979977,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/ops-employee-gov-ops-employee-gov-web-run.json"
+      },
+      {
+        "feature": "ops-issue-runtime",
+        "platform": "web",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "ops-issue-runtime-00-login-form.png",
+            "sha256": "7a9441865b72e797f56dab1678392f5913ae2a3409e547644e6efe2837017e52",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-issue-runtime-00-login-form.png"
+          },
+          {
+            "file": "ops-issue-runtime-IR1-confirm-note-required.png",
+            "sha256": "587b7723855125f15f067d05e297550be12ac914831b37e909885a6bfdd56462",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：POST /api/mod-store/issue-runtime/1（confirmed=true, note=x）→ 400，success=false，message=请说明原问题现在的使用结果（至少4个字）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-issue-runtime-IR1-confirm-note-required.png"
+          },
+          {
+            "file": "ops-issue-runtime-IR2-list-market-required.png",
+            "sha256": "02a88579c741441c5fd746ce955cc476f09bc0d38e4bc64fa30f392bb49dd802",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：GET /api/mod-store/issue-runtime → 401，success=false，message=请登录市场账号查看修复交付。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-issue-runtime-IR2-list-market-required.png"
+          },
+          {
+            "file": "ops-issue-runtime-IR3-submit-market-required.png",
+            "sha256": "53fb6ae910b6cf5a236d22938025e0cde1a0017368cfe9a07bf085a12a4951ea",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：POST /api/mod-store/issue-runtime/1（confirmed=false, note=''）→ 401，success=false，message=请登录市场账号查看修复交付。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-issue-runtime-IR3-submit-market-required.png"
+          },
+          {
+            "file": "ops-issue-runtime-IR4-receipts-retry-401.png",
+            "sha256": "b71bf8203b882a4097382477417f3c2d92460174dc7f94f8f34ac77b627b19e7",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：POST /api/mod-store/receipts/retry → 401，success=false，message=请登录市场账号后同步交付回执。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-issue-runtime-IR4-receipts-retry-401.png"
+          },
+          {
+            "file": "ops-issue-runtime-ops-issue-runtime-web-20260929-080007.webm",
+            "sha256": "0441efc513b97a585ab763c786ab54154e0f28df5eac517c95fd855b831161e6",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，11.52s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → 确认缺说明 400 → 列表/提交/回执重试均 401。",
+            "kind": "video",
+            "size_bytes": 624755,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/ops-issue-runtime-ops-issue-runtime-web-run.json"
+      },
+      {
+        "feature": "ops-monitor",
+        "platform": "web",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "ops-monitor-00-login-form.png",
+            "sha256": "630541b3faec9e1b71fb7395579b236c32382be98a840beea57029f903efb2f6",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-monitor-00-login-form.png"
+          },
+          {
+            "file": "ops-monitor-M1-health-overview.png",
+            "sha256": "e0d9031e29f9ed70a58d5803bdcbd5117e21d22c7426a2c2a12ebbbd59f3d2a9",
+            "visual_review": "accepted",
+            "visible_result": "「服务器后台总览」页真实渲染：本地节点「异常」、本地地址 127.0.0.1:42423、远端服务器「离线」、自治健康「不可达」，左下角提示「部分 AI 能力未就绪」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-monitor-M1-health-overview.png"
+          },
+          {
+            "file": "ops-monitor-M2-health-details.png",
+            "sha256": "97ac2677544c5ef19df39dfc738be4c6adcb574e1948c6bf390c9073c4f101c5",
+            "visual_review": "accepted",
+            "visible_result": "「服务器功能模块」页真实渲染：服务器功能注册表 90 个模块列表与路由/同步范围列。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-monitor-M2-health-details.png"
+          },
+          {
+            "file": "ops-monitor-M3-neurobus.png",
+            "sha256": "4021f5f62f109794834a12ca12527761178be41d5ddf83ce66708844d84301c5",
+            "visual_review": "accepted",
+            "visible_result": "「员工图谱」页真实渲染：顶部「在岗员工节点图 编制 55 岗」与中心图/六部门等视图切换。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-monitor-M3-neurobus.png"
+          },
+          {
+            "file": "ops-monitor-M4-unauth-denied.png",
+            "sha256": "485d9d1ec64ebc24aa999e91a7817e029e8535d26cff234fc92cbb40df259926",
+            "visual_review": "accepted",
+            "visible_result": "无会话的新浏览器上下文停留在管理员登录页，未出现任何健康数据。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-monitor-M4-unauth-denied.png"
+          },
+          {
+            "file": "ops-monitor-ops-monitor-web-20260929-074256.webm",
+            "sha256": "e2b23c702b0e1dcc24c3d818ecc6462bff487f472a3b5be46907bb23c2f9f4f2",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，36.28s，1600x1000 25fps，ffmpeg 实测）：管理员登录 → 总览 → 服务器功能模块 → 员工图谱 → 无会话被拒，并 fetch 复核 /api/health、/health/details、/api/neurobus/health。",
+            "kind": "video",
+            "size_bytes": 2441492,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/ops-monitor-ops-monitor-web-run.json"
+      },
+      {
+        "feature": "ops-pipeline",
+        "platform": "web",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "ops-pipeline-00-login-form.png",
+            "sha256": "232179d8c5b909897f0e9e1553ac0dd5f0c059e81b5af44bb714aebeb39affd8",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-pipeline-00-login-form.png"
+          },
+          {
+            "file": "ops-pipeline-P1-time-rail.png",
+            "sha256": "5f09dadb17833eaef0a24d0149f47756ce87e71798694c86e56b2e296bc026b0",
+            "visual_review": "accepted",
+            "visible_result": "「同时完成时间架构」页真实渲染：副标题「日更时间壳 · Mermaid 全景（XCAGI-Full-Pipeline 嵌入）」，首屏显示正在加载。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-pipeline-P1-time-rail.png"
+          },
+          {
+            "file": "ops-pipeline-P2-time-rail-graph.png",
+            "sha256": "61b7b7577fe31c8de31d51a7ab370ddab3d1917d87090fa8d7526cdc172291bc",
+            "visual_review": "accepted",
+            "visible_result": "「员工图谱」页真实渲染：顶部「在岗员工节点图 编制 55 岗」，含中心图/六部门/物理分区/客户端车间/自进化 Loop 视图切换。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-pipeline-P2-time-rail-graph.png"
+          },
+          {
+            "file": "ops-pipeline-P3-event-rail.png",
+            "sha256": "4e56cae97f50285eae7d592a13daa881d07a874c3e365aa725007c72eac7de14",
+            "visual_review": "accepted",
+            "visible_result": "「服务器后台总览」页真实渲染：本地节点「异常」、本地地址 127.0.0.1:42423、远端服务器「离线」、自治健康「不可达」、模块注册表异步显示 0 个模块。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-pipeline-P3-event-rail.png"
+          },
+          {
+            "file": "ops-pipeline-P4-invalid-param.png",
+            "sha256": "c0d568c29f64a66fa161d3055a28315366487884287f40c61065a2e814de4247",
+            "visual_review": "accepted",
+            "visible_result": "「服务器功能模块」页真实渲染：服务器功能注册表 90 个模块列表。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-pipeline-P4-invalid-param.png"
+          },
+          {
+            "file": "ops-pipeline-ops-pipeline-web-20260929-074146.webm",
+            "sha256": "6973296562a2db6995abe8ce34696fcd028de2954285788005712ac441abe893",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，36.96s，1600x1000 25fps，ffmpeg 实测）：管理员登录 → 时间架构 → 员工图谱 → 总览 → 服务器功能模块，并 fetch 复核时间轨/事件轨/运营线接口与 422 参数校验。",
+            "kind": "video",
+            "size_bytes": 2567674,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/ops-pipeline-ops-pipeline-web-run.json"
+      },
+      {
+        "feature": "ops-project-factory",
+        "platform": "web",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "ops-project-factory-00-login-form.png",
+            "sha256": "414431fe7c69a21a2a1ef30b66120404bce84b51051110e5dee1c3977f037958",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-project-factory-00-login-form.png"
+          },
+          {
+            "file": "ops-project-factory-F1-workspaces.png",
+            "sha256": "714b8aad9a52b44908493505eec50cbb1bcd5e7499ba2bc0f14ed04dd54edf37",
+            "visual_review": "accepted",
+            "visible_result": "「客户交付中心」页真实渲染：Mac 主控·四设备协同，交付台账与企业用户计数卡片。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-project-factory-F1-workspaces.png"
+          },
+          {
+            "file": "ops-project-factory-F2-employees.png",
+            "sha256": "97ac2677544c5ef19df39dfc738be4c6adcb574e1948c6bf390c9073c4f101c5",
+            "visual_review": "accepted",
+            "visible_result": "「服务器功能模块」页真实渲染：服务器功能注册表 90 个模块列表。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-project-factory-F2-employees.png"
+          },
+          {
+            "file": "ops-project-factory-F3-project-factory.png",
+            "sha256": "e945cf0111459c29f1f73c6d0fc959754c1b08ccfcae97a890ea5b4d0911efb0",
+            "visual_review": "accepted",
+            "visible_result": "「项目工厂」页真实渲染：项目下拉「XCMAX 主项目（none）」、工厂员工下拉「工厂员工-Claude」、刷新按钮与派工输入区（提示「还没有派工记录。选好项目和员工，下面发条指令试试。」），并说明需配置 XCMAX_FACTORY_CAPABILITY_TOKEN 才启用工厂能力。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-project-factory-F3-project-factory.png"
+          },
+          {
+            "file": "ops-project-factory-F4-unauth-denied.png",
+            "sha256": "485d9d1ec64ebc24aa999e91a7817e029e8535d26cff234fc92cbb40df259926",
+            "visual_review": "accepted",
+            "visible_result": "无会话的新浏览器上下文停留在管理员登录页，未出现任何工作区数据。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-project-factory-F4-unauth-denied.png"
+          },
+          {
+            "file": "ops-project-factory-ops-project-factory-web-20260929-074415.webm",
+            "sha256": "921ef36a4e9cce1fe6f18b591fd1eba7eb3f746d5e61e5485ac44d9883f4d3c8",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，27.88s，1600x1000 25fps，ffmpeg 实测）：管理员登录 → 客户交付中心 → 服务器功能模块 → 项目工厂页渲染 → 无会话被拒，并 fetch 复核工作区与员工接口。",
+            "kind": "video",
+            "size_bytes": 2092187,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/ops-project-factory-ops-project-factory-web-run.json"
+      },
+      {
+        "feature": "ops-self-heal",
+        "platform": "web",
+        "status": "passed",
+        "passed": 5,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "ops-self-heal-00-login-form.png",
+            "sha256": "414431fe7c69a21a2a1ef30b66120404bce84b51051110e5dee1c3977f037958",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-self-heal-00-login-form.png"
+          },
+          {
+            "file": "ops-self-heal-S1-overview.png",
+            "sha256": "e3975053ef8e16bd395db12dd19cbe8c2536518a2387642163c0f427aa7619b8",
+            "visual_review": "accepted",
+            "visible_result": "「自治审批中心」页真实渲染：产品问题工单审批、共享 Work Order 与完整闸门时间线、每 30 秒刷新。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-self-heal-S1-overview.png"
+          },
+          {
+            "file": "ops-self-heal-S2-operating-metrics.png",
+            "sha256": "793a52860b9797b1b0e07051929fd48c88c101dd3a10d08219aeb35fc3d8bbf1",
+            "visual_review": "accepted",
+            "visible_result": "「创始人自治驾驶舱」页真实渲染：FOUNDER MODE · STRATEGIC ONLY，说明只保留战略方向/少量例外/veto。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-self-heal-S2-operating-metrics.png"
+          },
+          {
+            "file": "ops-self-heal-S3-audit-log.png",
+            "sha256": "8ba818c68ee8920ea26d47bf072c8738417086ba4aedff4fff89ec7779e75280",
+            "visual_review": "accepted",
+            "visible_result": "「服务器后台总览」页真实渲染：本地节点「异常」、本地地址 127.0.0.1:42423、自治健康「不可达」、模块注册表异步显示 0 个模块。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-self-heal-S3-audit-log.png"
+          },
+          {
+            "file": "ops-self-heal-S4-machine-token.png",
+            "sha256": "c0d568c29f64a66fa161d3055a28315366487884287f40c61065a2e814de4247",
+            "visual_review": "accepted",
+            "visible_result": "「服务器功能模块」页真实渲染：服务器功能注册表 90 个模块。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-self-heal-S4-machine-token.png"
+          },
+          {
+            "file": "ops-self-heal-S5-unauth-denied.png",
+            "sha256": "485d9d1ec64ebc24aa999e91a7817e029e8535d26cff234fc92cbb40df259926",
+            "visual_review": "accepted",
+            "visible_result": "无会话的新浏览器上下文停留在管理员登录页，未出现任何自治数据。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-self-heal-S5-unauth-denied.png"
+          },
+          {
+            "file": "ops-self-heal-ops-self-heal-web-20260929-074334.webm",
+            "sha256": "344fe04d1ac8772964b60a935d90aff107e730a1f8fb15bb85373cd4d7448065",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，38.72s，1600x1000 25fps，ffmpeg 实测）：管理员登录 → 自治审批中心 → 创始人状态 → 总览 → 服务器功能模块 → 无会话被拒，并 fetch 复核自治总览/运行指标/审计账本与 401。",
+            "kind": "video",
+            "size_bytes": 2740327,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/ops-self-heal-ops-self-heal-web-run.json"
+      },
+      {
+        "feature": "ops-version-evolution",
+        "platform": "web",
+        "status": "passed",
+        "passed": 5,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "ops-version-evolution-00-login-form.png",
+            "sha256": "4327a8483397b2a2f31ee353c183f692b499200cc2e35285bb69e02ad4b98f6c",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-version-evolution-00-login-form.png"
+          },
+          {
+            "file": "ops-version-evolution-EV1-version-panel.png",
+            "sha256": "27d75f4767c28074c4a01646a899cef911a06155131fe6cb8e5836fc172a8794",
+            "visual_review": "accepted",
+            "visible_result": "「服务器后台总览」页渲染三栏：本地节点（本地地址 127.0.0.1:42423、异常）、远端服务器（离线）、软件版本与更新包（管理端版本/管理端 Git/update 站版本/update 站 Git/企业端 不可达/安装回执 0 台已安装），含「检测中...」「推送更新安装包」按钮。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-version-evolution-EV1-version-panel.png"
+          },
+          {
+            "file": "ops-version-evolution-EV2-release-train.png",
+            "sha256": "4b4e2060b8d90074a3800ba72b610617aaf10922d7e238a9bf3b0943563ac85b",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：GET /api/xcmax/release-train → 200，epoch=1.0.0.0，product_version=current=1.0.0.5，started_at 2026-07-12，day_index=1，reset_reason=stable-1.0.0.0-ssot。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-version-evolution-EV2-release-train.png"
+          },
+          {
+            "file": "ops-version-evolution-EV3-evolution-gates.png",
+            "sha256": "d8b70daef63e5d1af199ceefdf3292142b1b9c887d9c135f04639d82ae1e72e5",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：GET /api/xcmax/ops/founder-autonomy → 200，evolution 维度门禁 7 项 detect/knowledge/implement/metrics/council/package/publish，total_gate_count 7，progress 0。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-version-evolution-EV3-evolution-gates.png"
+          },
+          {
+            "file": "ops-version-evolution-EV4-deploy-events.png",
+            "sha256": "e5ae162d54efac52cf20c6b6842c2abe2e7de4ea45c8427764385b5b25a4aaee",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：GET /api/xcmax/admin/autonomy/deploy-events → 200，ok=true，count=20；样本 deploy_id=7e4092b6d7b6 status=failed、711be1d036e3 status=success，source_workflow=fhd-auto-update、head_branch=main。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-version-evolution-EV4-deploy-events.png"
+          },
+          {
+            "file": "ops-version-evolution-EV5-unauth-denied.png",
+            "sha256": "485d9d1ec64ebc24aa999e91a7817e029e8535d26cff234fc92cbb40df259926",
+            "visual_review": "accepted",
+            "visible_result": "无会话的新浏览器上下文停留在管理员登录页，未出现任何部署事件数据。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-version-evolution-EV5-unauth-denied.png"
+          },
+          {
+            "file": "ops-version-evolution-ops-version-evolution-web-20260929-075726.webm",
+            "sha256": "5147a12a764de495a6045866228c051c525fbbce3ad9dc241c984b1d6e02d9a6",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，24.52s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → 服务器后台总览版本面板 → 版本列车 → 进化门禁 → 部署事件 → 无会话被拒。",
+            "kind": "video",
+            "size_bytes": 1633242,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/ops-version-evolution-ops-version-evolution-web-run.json"
+      },
+      {
+        "feature": "ops-work-order",
+        "platform": "web",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "ops-work-order-00-login-form.png",
+            "sha256": "5d5d0fa0ef69a2f5cb2e19bd14173f052035e99fe591b44f5a9a4eeaa5cde614",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-work-order-00-login-form.png"
+          },
+          {
+            "file": "ops-work-order-W1-work-orders.png",
+            "sha256": "96e62deeaf231a6947a284d2ecf8259420b4df09393eb5f614916b4d0460ce74",
+            "visual_review": "accepted",
+            "visible_result": "「自治审批中心」页真实渲染：标题「产品问题工单审批」，副标题「共享 Work Order 与完整闸门时间线；每 30 秒刷新」，含刷新工单按钮，显示「当前没有共享工单」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-work-order-W1-work-orders.png"
+          },
+          {
+            "file": "ops-work-order-W2-invalid-limit.png",
+            "sha256": "1d9ae324d45a7ebc8a8b9c0e778597abe40dabaeb682cdae3093313a499a479b",
+            "visual_review": "accepted",
+            "visible_result": "「客户交付中心」页真实渲染：Mac 主控·四设备协同，企业用户/永久购买账户/体验账户/永久待安装/定制交付工单等计数卡片（均为 0）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-work-order-W2-invalid-limit.png"
+          },
+          {
+            "file": "ops-work-order-W3-non-owner.png",
+            "sha256": "97ac2677544c5ef19df39dfc738be4c6adcb574e1948c6bf390c9073c4f101c5",
+            "visual_review": "accepted",
+            "visible_result": "「服务器功能模块」页真实渲染：服务器功能注册表 90 个模块列表。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-work-order-W3-non-owner.png"
+          },
+          {
+            "file": "ops-work-order-W4-unauth-denied.png",
+            "sha256": "485d9d1ec64ebc24aa999e91a7817e029e8535d26cff234fc92cbb40df259926",
+            "visual_review": "accepted",
+            "visible_result": "无会话的新浏览器上下文停留在管理员登录页，未出现任何工单数据。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/ops-work-order-W4-unauth-denied.png"
+          },
+          {
+            "file": "ops-work-order-ops-work-order-web-20260929-074224.webm",
+            "sha256": "469690cbb991c62c82fb993ece21fcbec0513f749868732da793790a75bb7e4a",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，30.16s，1600x1000 25fps，ffmpeg 实测）：管理员登录 → 自治审批中心 → 客户交付中心 → 服务器功能模块 → 无会话被拒，并 fetch/POST 复核工单列表与 422/403/401。",
+            "kind": "video",
+            "size_bytes": 2026663,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/ops-work-order-ops-work-order-web-run.json"
+      },
+      {
         "feature": "pay-alipay",
         "platform": "macos",
         "status": "failed",
@@ -3822,6 +5962,298 @@
           "size_bytes": 1328
         },
         "source_run": "/capabilities/assets/evidence/pay-alipay-pay-alipay-macos-run.json"
+      },
+      {
+        "feature": "pay-author-revenue",
+        "platform": "web",
+        "status": "passed",
+        "passed": 6,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "pay-author-revenue-00-login-form.png",
+            "sha256": "4787ba44290c6c205f4a73ff77f2f4e727589a04be9181fa5e869741c3de699a",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号 admin、密码为掩码。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-author-revenue-00-login-form.png"
+          },
+          {
+            "file": "pay-author-revenue-PA1-employee-autonomy.png",
+            "sha256": "f253cd6e6caabb8797d736a24d9c6c41b199ca0bf232ef28d32e1c261af7854e",
+            "visual_review": "accepted",
+            "visible_result": "「员工自治」页真实渲染：副标题「运行自洽 · 履职覆盖 · 建议看板 · 问答 · 成绩单」，含 批量通过(0)、刷新 控件；红条如实提示「部分数据刷新失败：运行态/履职覆盖/建议/问答/成绩单：尚未绑定修茈服务器账号…」；分页 自治总览/建议看板/问答/成绩单 与 系统运行态/定时履职/能力证明/生产履职 指标卡。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-author-revenue-PA1-employee-autonomy.png"
+          },
+          {
+            "file": "pay-author-revenue-PA2-catalog-author.png",
+            "sha256": "24a8aac9863d9d3e0220127d58d9eed7f9654eedbc52c2ada7d3c5ac97cd27f3",
+            "visual_review": "accepted",
+            "visible_result": "本工具在真实浏览器中渲染的本轮响应：GET /api/mod-store/catalog 返回 200，success=true，installed_count=6，样例 author 含「成都修茈科技有限公司」「XCAGI」「XCAGI」「成都修茈科技有限公司」，均非空。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-author-revenue-PA2-catalog-author.png"
+          },
+          {
+            "file": "pay-author-revenue-PA3-revenue-chart.png",
+            "sha256": "504969f7ff90db300318423a7170383c0531bff6f2a3a33e1a17c1d59ad87c4b",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：GET /api/ai/kitten/charts/revenue 返回 200，type=line，title=月度营收趋势，labels=['2026-05'…'2026-09']，revenue 与 orders 等长并列（本轮全为 0）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-author-revenue-PA3-revenue-chart.png"
+          },
+          {
+            "file": "pay-author-revenue-PA4-share-reconciler.png",
+            "sha256": "3bdeea7f2cf2ffd6ad82ee8550cd8dff113e6361e8a40a5f3ec6feb57af033d0",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：GET /api/mod/ecosystem-revenue-share-reconciler/employees 返回 200（label=生态分润对账员）；.../status 返回 200 且 {employee_id:'ecosystem-revenue-share-reconciler', status:'ready'}。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-author-revenue-PA4-share-reconciler.png"
+          },
+          {
+            "file": "pay-author-revenue-PA5-payables-ledger.png",
+            "sha256": "703dd2701733d3af33601a042dbd686786312a4a52073bd07c0900ced84640bb",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：GET /api/finance/payables?page=1&per_page=20 返回 200，success=true，data=[]，total=0，page=1，per_page=20。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-author-revenue-PA5-payables-ledger.png"
+          },
+          {
+            "file": "pay-author-revenue-PA6-wallets-denied.png",
+            "sha256": "b049dbf89ba3ed4ca9faf58260c03243ef82e241badc847fccb800598cd2cdee",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：GET /api/xcmax/admin/market/wallets 返回 401，success=false，message=尚未绑定修茈服务器账号；请重新登录或在设置中同步市场 Authorization。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-author-revenue-PA6-wallets-denied.png"
+          },
+          {
+            "file": "pay-author-revenue-pay-author-revenue-web-20260929-070223.webm",
+            "sha256": "1a73917002c05cb15c3304485179bfb5c9e0ed6965d16f80f5ea524326829a6e",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，21.44s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → 员工自治页渲染 → 商品作者归属读取 → 营收趋势 → 分润对账员工状态 → 应付台账 → 结算钱包 401。",
+            "kind": "video",
+            "size_bytes": 1474139,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/pay-author-revenue-pay-author-revenue-web-run.json"
+      },
+      {
+        "feature": "pay-backend-bridge",
+        "platform": "web",
+        "status": "passed",
+        "passed": 5,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "pay-backend-bridge-00-login-form.png",
+            "sha256": "5d5d0fa0ef69a2f5cb2e19bd14173f052035e99fe591b44f5a9a4eeaa5cde614",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号 admin、密码为掩码。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-backend-bridge-00-login-form.png"
+          },
+          {
+            "file": "pay-backend-bridge-PB1-server-functions.png",
+            "sha256": "1bab1dddd7d55f98400b03995f35bc6dab6a242e935d9f1e6bd6a1c6607bec99",
+            "visual_review": "accepted",
+            "visible_result": "「服务器功能模块」页：说明「对接修茈服务器的模块注册、每日摘要记录和员工大会能力。」，含 服务器模块/每日摘要记录/员工大会 分页；下方「服务器功能注册表 90 个模块」表内可见 model-payment（模型服务，系统内置，路由 /model-payment，启用）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-backend-bridge-PB1-server-functions.png"
+          },
+          {
+            "file": "pay-backend-bridge-PB2-plans-route-flags.png",
+            "sha256": "f14ef6612215292678486ddf434573cd99c2d51fec8a40b635414e40f9af40ae",
+            "visual_review": "accepted",
+            "visible_result": "本工具在真实浏览器中渲染的本轮响应：GET /api/model-payment/plans 返回 200，success=true，integration={alipay_configured:false, market_sot:false, postgres_sot:false, backend:'json'}，含 demo-* 与 saas-* 套餐。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-backend-bridge-PB2-plans-route-flags.png"
+          },
+          {
+            "file": "pay-backend-bridge-PB3-checkout-unknown-plan.png",
+            "sha256": "4ec33998a36a5bd260c35533871a45e7f1add24793a046fdce5c9f0aad5bcc87",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：POST /api/model-payment/checkout {plan_id:'__no_such_plan__'} 返回 400，success=false，error_code=PAYMENT_ORDER_NOT_FOUND，message=未知套餐: __no_such_plan__。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-backend-bridge-PB3-checkout-unknown-plan.png"
+          },
+          {
+            "file": "pay-backend-bridge-PB4-webhook-invalid-envelope.png",
+            "sha256": "274f9b11e26bcb47570f6147ea9534533f2b31d9a09e13a94a7fd1bcb0ac633a",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：POST /api/xcmax/webhooks/modstore/payment 送 type=not.a.paid.event 返回 400，success=false，reason=invalid_envelope。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-backend-bridge-PB4-webhook-invalid-envelope.png"
+          },
+          {
+            "file": "pay-backend-bridge-PB5-modstore-unreachable.png",
+            "sha256": "924149336eadc658c67ae9da3fb290532de945b6063b6c1a7b9e3d8aa95c5606",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：GET /api/market/status 返回 502，success=false，error.code=MARKET_AUTH_UNAVAILABLE，data.market_base_url=http://127.0.0.1:8765。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-backend-bridge-PB5-modstore-unreachable.png"
+          },
+          {
+            "file": "pay-backend-bridge-pay-backend-bridge-web-20260929-070001.webm",
+            "sha256": "127246603d3e8dee32b37183c72edacdcff4835139a9d143a2234e4be8437e90",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，17.64s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → 服务器功能模块页（含 model-payment 模块行）→ 诊断/套餐路由标志读取 → 未知套餐 400 → webhook 非法事件 400 → modstore 502。",
+            "kind": "video",
+            "size_bytes": 1156681,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/pay-backend-bridge-pay-backend-bridge-web-run.json"
+      },
+      {
+        "feature": "pay-entitlement",
+        "platform": "web",
+        "status": "passed",
+        "passed": 5,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "pay-entitlement-00-login-form.png",
+            "sha256": "5d988796e21596de88825ee59080f917a50904f0f46ce6ffa708c67d36f489cd",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号 admin、密码为掩码。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-entitlement-00-login-form.png"
+          },
+          {
+            "file": "pay-entitlement-PE1-entitlements-ui.png",
+            "sha256": "6126024d4550578dee7cef6d49311501b61bda5463048c8ddbb6d4bd69e65579",
+            "visual_review": "accepted",
+            "visible_result": "「账号权益 / 用户管理」页真实渲染：顶栏面包屑「账号权益」，标题「用户管理」，说明「管理用户等级与行业，分配客户 Mod 权益，或进入代管模式代为配置。」，含「新建账号」按钮；红条「尚未绑定修茈服务器账号；请重新登录或在设置中同步市场 Authorization」与「余额查询失败：…」；「本地宿主状态 7 个 Mod 已安装」；筛选 全部等级/全部行业、「共 0 / 0 人」，主体「没有匹配的用户」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-entitlement-PE1-entitlements-ui.png"
+          },
+          {
+            "file": "pay-entitlement-PE2-model-entitlements.png",
+            "sha256": "2ed799026c9772bde276ccc3a310a561dc9bdd6cd90728e0bcffa6cc67c1d032",
+            "visual_review": "accepted",
+            "visible_result": "本工具在真实浏览器中渲染的本轮响应：GET /api/model-payment/entitlements 返回 200，success=true，data.entitlements=[]，data.backend='json'。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-entitlement-PE2-model-entitlements.png"
+          },
+          {
+            "file": "pay-entitlement-PE3-sync-current-entitlements.png",
+            "sha256": "daa6a9ae62ed53247d333f93b7fd8c39655c296d877dca70e084a472db7b6955",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：GET /api/xcmax/sync/entitlements/current 返回 200，success=true，data.has_snapshot=false，data.account={username:'admin', account_kind:'admin', market_is_enterprise:true, market_is_admin:true}。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-entitlement-PE3-sync-current-entitlements.png"
+          },
+          {
+            "file": "pay-entitlement-PE4-fast-lane-plans-denied.png",
+            "sha256": "57be8d33dbba13c3889534738898cd88bc5bc91c76d27ff696919740201133ea",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：GET /api/xcmax/admin/market/entitlement-fast-lane/plans 返回 401，success=false，message=尚未绑定修茈服务器账号；请重新登录或在设置中同步市场 Authorization。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-entitlement-PE4-fast-lane-plans-denied.png"
+          },
+          {
+            "file": "pay-entitlement-PE5-market-users-denied.png",
+            "sha256": "13998aee85bfc8413763a7cc6d500aad36d33833162655350db062925829668a",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：GET /api/xcmax/admin/market/users 返回 401，success=false，同一未绑定市场账号消息。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-entitlement-PE5-market-users-denied.png"
+          },
+          {
+            "file": "pay-entitlement-pay-entitlement-web-20260929-070139.webm",
+            "sha256": "2f83dde3ea8d7f18f477bc72b8ac0b7ddafe854144835278d88cf18481d0ea2f",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，18.80s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → 用户管理（账号权益）页渲染 → 权益清单/强推快照读取 → 快车道套餐与市场用户 401。",
+            "kind": "video",
+            "size_bytes": 1349952,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/pay-entitlement-pay-entitlement-web-run.json"
+      },
+      {
+        "feature": "pay-entitlement-delivery",
+        "platform": "web",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "pay-entitlement-delivery-00-login-form.png",
+            "sha256": "60c9caf50c5c8bcad7259904bd9036eea0bc81c5ec4f50383a24d68977285912",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号 admin、密码为掩码。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-entitlement-delivery-00-login-form.png"
+          },
+          {
+            "file": "pay-entitlement-delivery-PD1-delivery-center.png",
+            "sha256": "be7ee51e7b75c24869773ef9247abd7d069e0644cbfca6340f0f61463e661941",
+            "visual_review": "accepted",
+            "visible_result": "「客户交付中心」页真实渲染：「Mac 主控 · 四设备协同」任务单（目标/执行设备/任务类型/关联工单）与「客户安装与业务验收独立核对；执行器报告完成不等于已交付。」，红条提示「尚未绑定修茈服务器账号…」；下方「CUSTOMER DELIVERY CONTROL 客户交付中心」说明「所有企业用户统一进入交付台账；内部本 Mac 永不计入客户交付；购买权益、定制、安装与首次登录证据分别如实展示。」，含 企业用户/永久购买账户/体验账户/永久待安装/待首次登录/永久交付完成/内部本机排除/定义交付工单/生产中 等指标卡（本轮多为 0）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-entitlement-delivery-PD1-delivery-center.png"
+          },
+          {
+            "file": "pay-entitlement-delivery-PD2-tier-derivation.png",
+            "sha256": "238079ab24ecbe258fd8a0063c024ad7240a5d6e377a90d7e90b4c7aad5d141f",
+            "visual_review": "accepted",
+            "visible_result": "本工具在真实浏览器中渲染的本轮响应：GET /api/model-payment/plans?budget_range=5–10 万 推荐 saas-permanent-growth(account_tier=pro)；budget_range=50–100 万 推荐 saas-permanent-ultra(account_tier=ultra)。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-entitlement-delivery-PD2-tier-derivation.png"
+          },
+          {
+            "file": "pay-entitlement-delivery-PD3-unknown-budget-fallback.png",
+            "sha256": "77e132651494d112491d84f5e31f22ac00fe3626320be6448552e48bd39c9628",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：GET /api/model-payment/plans?budget_range=__unknown_budget__ 返回 200，budget_range 原样回显，推荐档回退 saas-permanent-starter(account_tier=normal)。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-entitlement-delivery-PD3-unknown-budget-fallback.png"
+          },
+          {
+            "file": "pay-entitlement-delivery-PD4-user-mods-denied.png",
+            "sha256": "5ed5b7954997b5cd076735167a26475df2bdc67cc9bbf94992f0de2957921b0d",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：GET /api/xcmax/admin/market/users/1/mods 返回 401，success=false，message=尚未绑定修茈服务器账号；请重新登录或在设置中同步市场 Authorization。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-entitlement-delivery-PD4-user-mods-denied.png"
+          },
+          {
+            "file": "pay-entitlement-delivery-pay-entitlement-delivery-web-20260929-070204.webm",
+            "sha256": "0431db2e2485f478f6ed1c0b35f36954b4b261cd1a13dd5d73c4c3d889e1c97a",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，18.72s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → 客户交付中心页渲染 → 预算派生推荐档（pro/ultra）→ 未知预算回退 normal → 用户 Mod 清单 401。",
+            "kind": "video",
+            "size_bytes": 1370818,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/pay-entitlement-delivery-pay-entitlement-delivery-web-run.json"
       },
       {
         "feature": "pay-lan",
@@ -3938,6 +6370,144 @@
         "source_run": "/capabilities/assets/evidence/pay-member-plan-pay-member-plan-macos-run.json"
       },
       {
+        "feature": "pay-reconcile",
+        "platform": "web",
+        "status": "passed",
+        "passed": 4,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "pay-reconcile-00-login-form.png",
+            "sha256": "926aa41bb27a133e920425c5b81f2bd93a3b0b6ffcfe7a9b61c1b1239a993392",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号 admin、密码为掩码。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-reconcile-00-login-form.png"
+          },
+          {
+            "file": "pay-reconcile-PR1-console-overview.png",
+            "sha256": "9b4ce7589101c03e7769874da26123f3eccd35ae2ac6aa8163ad1c9a4e65214b",
+            "visual_review": "accepted",
+            "visible_result": "登录后进入「服务器后台总览」，本地节点版本 1.0.0.5、数据库 ok、本地地址 127.0.0.1:42423，顶部导航含 订单经营/基础设施 等对账入口。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-reconcile-PR1-console-overview.png"
+          },
+          {
+            "file": "pay-reconcile-PR2-internal-key-required.png",
+            "sha256": "595c979e277d0741fe36d2ec4e2493bff24262757e595b419fc3c3ef22320a37",
+            "visual_review": "accepted",
+            "visible_result": "本工具在真实浏览器中渲染的本轮响应：GET /api/internal/payment/reconciliation-period 返回 503，success=false，error_code=http_503，message=internal api not configured（未配置内部 Key 即失败关闭）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-reconcile-PR2-internal-key-required.png"
+          },
+          {
+            "file": "pay-reconcile-PR3-internal-missing-params.png",
+            "sha256": "9721f3dcde500ab98673b71156c6832e2e0a3dbc2de698524f632d74eb5f1355",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：同一接口不带 period_start/period_end 返回 422，error_code=validation_error，errors 列出 query.period_start 与 query.period_end 缺失。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-reconcile-PR3-internal-missing-params.png"
+          },
+          {
+            "file": "pay-reconcile-PR4-invoice-denied.png",
+            "sha256": "9e7393b37b031b178bb3b87f544533d6953a36074c788cb8d1e5999d93299c61",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：GET /api/finance/invoices/market 返回 401，success=false，message=尚未绑定修茈服务器账号；请重新登录或在设置中同步市场 Authorization。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-reconcile-PR4-invoice-denied.png"
+          },
+          {
+            "file": "pay-reconcile-pay-reconcile-web-20260929-065856.webm",
+            "sha256": "9a4d15cfaf0ad91e3704f896795a014b167b11b41c00d71b9ab8b28525d5ab5c",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，23.84s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → 总览页渲染 → 统一账本对账读取 → 对账区间接口 503/422 → 市场发票 401。",
+            "kind": "video",
+            "size_bytes": 1542524,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/pay-reconcile-pay-reconcile-web-run.json"
+      },
+      {
+        "feature": "pay-refund",
+        "platform": "web",
+        "status": "passed",
+        "passed": 5,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "pay-refund-00-login-form.png",
+            "sha256": "9595ac74f775d10826c297d4805ed442657e48c368668f6d747c716a4fa75583",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号 admin、密码为掩码。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-refund-00-login-form.png"
+          },
+          {
+            "file": "pay-refund-PF1-approval-hub.png",
+            "sha256": "3c4c1820c9efb8eb1f09797e3b5a82eff998eccf9785add144fdd1539ad01b4e",
+            "visual_review": "accepted",
+            "visible_result": "「自治审批中心」页（产品问题工单审批）：说明「共享 Work Order 与完整闸门时间线；每 30 秒刷新」，含 更新时间与「刷新工单」按钮，主体显示「当前没有共享工单」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-refund-PF1-approval-hub.png"
+          },
+          {
+            "file": "pay-refund-PF2-refund-application-validation.png",
+            "sha256": "91d20a4543f2fb5bff90fbf9f36f45f285fbe33f4634f33fa12cbb7b2a444b79",
+            "visual_review": "accepted",
+            "visible_result": "本工具在真实浏览器中渲染的本轮响应：POST /api/model-payment/refund 空 body 返回 400，success=false，message=out_trade_no 必填。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-refund-PF2-refund-application-validation.png"
+          },
+          {
+            "file": "pay-refund-PF3-refund-query-rejected.png",
+            "sha256": "aad1fea3951d5c9b5c2245cfc313686683c8c38b6d294eb98e07e0f65a2e874f",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：GET /api/model-payment/refund/query?out_trade_no=PF-PROBE-NOT-EXIST-0001 返回 200，success=false，message=支付宝服务暂时不可用（纯查询，无资金动作）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-refund-PF3-refund-query-rejected.png"
+          },
+          {
+            "file": "pay-refund-PF4-pending-refunds-denied.png",
+            "sha256": "b57b47514781314e4fb5148e7aa2c821f924890c5e1e6ed2d6ab5a4b5b39dc5b",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：GET /api/xcmax/admin/market/commerce/refunds/pending 返回 401，success=false，message=尚未绑定修茈服务器账号；请重新登录或在设置中同步市场 Authorization。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-refund-PF4-pending-refunds-denied.png"
+          },
+          {
+            "file": "pay-refund-PF5-refund-review-denied.png",
+            "sha256": "9a36fee9a92e2557aa7e67906d9096102e7e524bc0d9fd9ea869bb7c314a082e",
+            "visual_review": "accepted",
+            "visible_result": "本轮响应：POST /api/xcmax/admin/market/commerce/refunds/999999/review 返回 401，success=false，同一未绑定市场账号消息（审核未执行）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/pay-refund-PF5-refund-review-denied.png"
+          },
+          {
+            "file": "pay-refund-pay-refund-web-20260929-070024.webm",
+            "sha256": "371f4ac4cf6a658e109ac48b303fad33fe61107940661f2fb3ce6165a569a1ba",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，17.72s，VP8 1600x1000 25fps，ffmpeg 实测）：管理员登录 → 审批中心页渲染 → 审核调度状态读取 → 退款申请缺参 400 → 退款查询被拒 → 待审列表/审核入口 401。",
+            "kind": "video",
+            "size_bytes": 1088034,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/pay-refund-pay-refund-web-run.json"
+      },
+      {
         "feature": "pay-wallet",
         "platform": "macos",
         "status": "passed",
@@ -3974,6 +6544,299 @@
           "size_bytes": 1275
         },
         "source_run": "/capabilities/assets/evidence/pay-wallet-pay-wallet-macos-run.json"
+      },
+      {
+        "feature": "sec-ai-trace",
+        "platform": "web",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "sec-ai-trace-00-login-form.png",
+            "sha256": "994b43758d680b5f0ea6f45e35c5057384d539488ab475126222e7cedc613344",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页（管理员登录，账号 admin）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-ai-trace-00-login-form.png"
+          },
+          {
+            "file": "sec-ai-trace-AI1-genai-traces.png",
+            "sha256": "284414c4c11cde2f973d6477e1af29f2da749dfd62ac9ed5b50882e92955861a",
+            "visual_review": "accepted",
+            "visible_result": "GET /api/admin/genai/traces 200 success=true data.items=[]、total=0（当前无真实 LLM 调用记录，LLM_RUNTIME_UNAVAILABLE）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-ai-trace-AI1-genai-traces.png"
+          },
+          {
+            "file": "sec-ai-trace-AI2-agent-runs.png",
+            "sha256": "15822a600a2697ae9b18f730996b4ab041a5555794a01a7baab6dd848b95adf3",
+            "visual_review": "accepted",
+            "visible_result": "GET /api/agent/runs 200 success=true count=4，样本 run_925c… status=waiting_user、message=运行监测验收样本、含 steps/tool_calls/llm_calls/retrieval_calls。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-ai-trace-AI2-agent-runs.png"
+          },
+          {
+            "file": "sec-ai-trace-AI3-unauth-traces-denied.png",
+            "sha256": "1a142d35e67bd099525fb4af8623d0b842cfca568dddea433dbd1b777d6549d8",
+            "visual_review": "accepted",
+            "visible_result": "无会话 GET genai/traces → 401 UNAUTHORIZED 请先登录。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-ai-trace-AI3-unauth-traces-denied.png"
+          },
+          {
+            "file": "sec-ai-trace-sec-ai-trace-web-20260929-082644.webm",
+            "sha256": "37e6e1fb22383f83225e3b555de64c265f89bcdf3df7f76e16538c04beefc873",
+            "visual_review": "accepted",
+            "visible_result": "录像（webm，11.44s）：GenAI 追溯 → agent 运行记录 → 无会话拒绝。",
+            "kind": "video",
+            "size_bytes": 645600,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/sec-ai-trace-sec-ai-trace-web-run.json"
+      },
+      {
+        "feature": "sec-audit",
+        "platform": "web",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "sec-audit-00-login-form.png",
+            "sha256": "414431fe7c69a21a2a1ef30b66120404bce84b51051110e5dee1c3977f037958",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页（管理员登录，账号 admin）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-audit-00-login-form.png"
+          },
+          {
+            "file": "sec-audit-A1-audit-logs.png",
+            "sha256": "08a93d305d121117dd0fe82d0610c54b55fa7c91c7599c4c048a74fc3dcc1238",
+            "visual_review": "accepted",
+            "visible_result": "GET /api/admin/audit-logs 200 success=true，data.items=[]、total=0、path_configured=false、requested_by=admin。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-audit-A1-audit-logs.png"
+          },
+          {
+            "file": "sec-audit-A2-autonomy-audit-ledger.png",
+            "sha256": "ba206e7092ffa68e8f2fe83092c7d01dd341a096fb3c51f007622ff5b67415e7",
+            "visual_review": "accepted",
+            "visible_result": "GET /api/xcmax/admin/autonomy/audit-log 200 append_only=true，count=6，样本 employee_execute/auto_approve（含 risk_level/source/rollback_path/metadata）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-audit-A2-autonomy-audit-ledger.png"
+          },
+          {
+            "file": "sec-audit-A3-unauth-audit-denied.png",
+            "sha256": "b45f42315b1cb3a9cdced26dd65de4f6dc8c397d0ffc53276b0d6165ac670c68",
+            "visual_review": "accepted",
+            "visible_result": "无会话 GET /api/admin/audit-logs → 401 UNAUTHORIZED 请先登录。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-audit-A3-unauth-audit-denied.png"
+          },
+          {
+            "file": "sec-audit-sec-audit-web-20260929-082604.webm",
+            "sha256": "90e8793c90a3eeabdc55e7fa52ad6c4be122a19f7c4b069b9108aeb7874f40d0",
+            "visual_review": "accepted",
+            "visible_result": "录像（webm，11.40s）：审计分页 → 只追加自治账本 → 无会话拒绝。",
+            "kind": "video",
+            "size_bytes": 622229,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/sec-audit-sec-audit-web-run.json"
+      },
+      {
+        "feature": "sec-audit-standard",
+        "platform": "web",
+        "status": "passed",
+        "passed": 5,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "sec-audit-standard-00-login-form.png",
+            "sha256": "60c9caf50c5c8bcad7259904bd9036eea0bc81c5ec4f50383a24d68977285912",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-audit-standard-00-login-form.png"
+          },
+          {
+            "file": "sec-audit-standard-A1-audit-catalog.png",
+            "sha256": "6f899d3035913eaf77f6e7abf71c208020a02c32b6e17b9b06d1c91e2cb1b391",
+            "visual_review": "accepted",
+            "visible_result": "浏览器直接渲染运行中后端返回的 /xcmax-dashboard/FHD/config/audit_benchmark_ssot.json：可见 standard_version 1.0.0、scoring_version external-anchors-v1、domain_count 18、commercial_anchor_score 90、open_source_pass_score 60 等真实 JSON 原文。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-audit-standard-A1-audit-catalog.png"
+          },
+          {
+            "file": "sec-audit-standard-A2-reading-view.png",
+            "sha256": "86ccc9252957ee8148136c87c143dbdd2abd15d165317969a41670691e49393f",
+            "visual_review": "accepted",
+            "visible_result": "浏览器以 text/markdown 渲染生成阅读视图 AUDIT_BENCHMARK_SSOT.md，正文开头即「# XCMAX 审计对标 SSOT · 生成视图 · 唯一维护源：FHD/config/audit_benchmark_ssot.json」。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-audit-standard-A2-reading-view.png"
+          },
+          {
+            "file": "sec-audit-standard-A3-anchor-invariants.png",
+            "sha256": "6f899d3035913eaf77f6e7abf71c208020a02c32b6e17b9b06d1c91e2cb1b391",
+            "visual_review": "accepted",
+            "visible_result": "浏览器渲染基准目录的锚点与状态字段（measurement_status=anchors_defined_not_benchmarked 等），真实 JSON 原文。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-audit-standard-A3-anchor-invariants.png"
+          },
+          {
+            "file": "sec-audit-standard-sec-audit-standard-web-20260929-084414.webm",
+            "sha256": "9d95769a382c0dd55331d84c6a5478b189324e75e440bcb78a58eb4c21b782d1",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm）：管理端登录 → 读取审计基准目录与生成阅读视图 → 锚点不变量核对。",
+            "kind": "video",
+            "size_bytes": 1077222,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/sec-audit-standard-sec-audit-standard-web-run.json"
+      },
+      {
+        "feature": "sec-continuous-observe",
+        "platform": "web",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "sec-continuous-observe-00-login-form.png",
+            "sha256": "8848a7c6b1587ae53d7b393e3cf3e2f33b8eb6ccdd8574df133f50f7cbaee80f",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页（管理员登录，账号 admin）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-continuous-observe-00-login-form.png"
+          },
+          {
+            "file": "sec-continuous-observe-O1-health-runtime.png",
+            "sha256": "8ea865dfc44b552d20081ffefd5e65160d1f40d9a25e467c490fe8fa65cbb49f",
+            "visual_review": "accepted",
+            "visible_result": "GET /api/health 200：version=1.0.0.5、git_sha=8d1fd8f6…、runtime_status=healthy、components_total=37、neuro_running=true。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-continuous-observe-O1-health-runtime.png"
+          },
+          {
+            "file": "sec-continuous-observe-O2-neurobus-health.png",
+            "sha256": "a05bbb6fca2574e95a95e8ddceb8d6824a4fb029993ece838f26e73c95e58d3e",
+            "visual_review": "accepted",
+            "visible_result": "GET /api/neurobus/health 200：health=healthy、running=true、published=26068、processed=26068、handlers=136。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-continuous-observe-O2-neurobus-health.png"
+          },
+          {
+            "file": "sec-continuous-observe-O3-readiness-gate.png",
+            "sha256": "735debe9cf8548d4ec68370ef0328b583acbd0c6b1d2d81a10c0ebee2bd4303c",
+            "visual_review": "accepted",
+            "visible_result": "GET /health/details 200（database healthy、redis unhealthy、ai_service healthy 且 engines 已加载）；GET /health/readiness 因 redis unavailable 返回 503 not_ready。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-continuous-observe-O3-readiness-gate.png"
+          },
+          {
+            "file": "sec-continuous-observe-sec-continuous-observe-web-20260929-082656.webm",
+            "sha256": "fe0626609db5865710d209d8d9b026e2b5e45d3b46db0edfc46c1331d28d56e1",
+            "visual_review": "accepted",
+            "visible_result": "录像（webm，11.76s）：运行健康 → 神经总线计数 → 就绪门禁（降级）。",
+            "kind": "video",
+            "size_bytes": 607817,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/sec-continuous-observe-sec-continuous-observe-web-run.json"
+      },
+      {
+        "feature": "sec-coverage",
+        "platform": "web",
+        "status": "passed",
+        "passed": 6,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "sec-coverage-00-login-form.png",
+            "sha256": "a22f769ebe6a2aff7f1bc230a31ac4ccf0712d48a80181f24b1dc8e7cd67773e",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-coverage-00-login-form.png"
+          },
+          {
+            "file": "sec-coverage-C1-coverage-ssot.png",
+            "sha256": "c513e6c1bba1bbbbc22457d6c1e0912c985b45d67d1035ea4e8727de968ec6f4",
+            "visual_review": "accepted",
+            "visible_result": "浏览器直接渲染运行中后端返回的 /xcmax-dashboard/FHD/metrics/coverage-dual-summary.json：可见 \"_ssot\": \"FHD 覆盖率唯一对外口径…\"、\"backend_line_pct\": 88.19、\"backend_branch_pct\": 81.5、\"frontend_line_pct\": 93.21、\"commit\": \"92505cab6\"。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-coverage-C1-coverage-ssot.png"
+          },
+          {
+            "file": "sec-coverage-C2-ratchet-baseline.png",
+            "sha256": "69556204d84d1cf89189157ea9712c37c2b2ea3cfd6e5cfde6c30f231ec67fd1",
+            "visual_review": "accepted",
+            "visible_result": "浏览器渲染 coverage_ratchet_baseline.json，可见 \"_note\": \"覆盖率棘轮基线（只升不降）…\" 与后端行/分支 floor 字段，真实 JSON 原文。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-coverage-C2-ratchet-baseline.png"
+          },
+          {
+            "file": "sec-coverage-C3-coverage-trend.png",
+            "sha256": "8fdb5d3fd5c7b9c358a89ff9d93ea163042493752383ed8d465218f516a16b09",
+            "visual_review": "accepted",
+            "visible_result": "浏览器渲染覆盖率 SSOT 文档滚到实测读数区，可见 committed_head/wip_local 的实测百分比字段原文（历史趋势 coverage-history.jsonl 由同源文件提供，逐行 JSONL 记录）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-coverage-C3-coverage-trend.png"
+          },
+          {
+            "file": "sec-coverage-C4-missing-artifact.png",
+            "sha256": "7d35aefda1b26846d154960d62a02735db767cda2360029ed1461ae401573910",
+            "visual_review": "accepted",
+            "visible_result": "请求不存在的 SSOT 工件路径，浏览器显示 404 响应体，未静默回退到其它文件。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-coverage-C4-missing-artifact.png"
+          },
+          {
+            "file": "sec-coverage-sec-coverage-web-20260929-084234.webm",
+            "sha256": "f8ac0df4e6bea16ca20ae46c4df6bd58deb864220a9f12c21d1e6aad61640442",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm）：管理端登录 → 读取覆盖率 SSOT 三个工件 → 不存在的工件返回 404。",
+            "kind": "video",
+            "size_bytes": 1114213,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/sec-coverage-sec-coverage-web-run.json"
       },
       {
         "feature": "sec-csp",
@@ -4052,6 +6915,63 @@
         "source_run": "/capabilities/assets/evidence/sec-e2e-sec-e2e-macos-run.json"
       },
       {
+        "feature": "sec-gdpr",
+        "platform": "web",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "sec-gdpr-00-login-form.png",
+            "sha256": "414431fe7c69a21a2a1ef30b66120404bce84b51051110e5dee1c3977f037958",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页（管理员登录，账号 admin）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-gdpr-00-login-form.png"
+          },
+          {
+            "file": "sec-gdpr-G1-gdpr-routes-registered.png",
+            "sha256": "3d7130b0fe5c5b03ca7536bb0546c00e23a4ddb77f3c23c3391389945f5869ab",
+            "visual_review": "accepted",
+            "visible_result": "GET /api/health：git_sha=8d1fd8f686884c7fc637ef2fa3e3e048a0074bec；runtime.components.gdpr_routes.ok=true（/api/gdpr/* 端点已注册）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-gdpr-G1-gdpr-routes-registered.png"
+          },
+          {
+            "file": "sec-gdpr-G2-gdpr-status-feature-gate.png",
+            "sha256": "1d8a07092cdea73bbf66f15a32f8cc071190f585431dab32cb94937d810f71b9",
+            "visual_review": "accepted",
+            "visible_result": "GET /api/gdpr/status/e2e-probe → 503 http_503，message 含 FEATURE_DISABLED / Feature Flag: experimental.gdpr_api。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-gdpr-G2-gdpr-status-feature-gate.png"
+          },
+          {
+            "file": "sec-gdpr-G3-gdpr-export-csrf-gate.png",
+            "sha256": "640552460bd30f1dec3a41402d7035555f8aa9bb37cb35072578b9d9f0e5b351",
+            "visual_review": "accepted",
+            "visible_result": "无 CSRF 的 POST /api/gdpr/export → 403 success=false message=CSRF token missing。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-gdpr-G3-gdpr-export-csrf-gate.png"
+          },
+          {
+            "file": "sec-gdpr-sec-gdpr-web-20260929-082551.webm",
+            "sha256": "ec201d3c4a900c881a0b22d43be9792c5cc39547c963d11a48449f89d8aa9a29",
+            "visual_review": "accepted",
+            "visible_result": "录像（webm，11.48s）：路由注册核验 → 特性开关门禁 → CSRF 双提交门禁。",
+            "kind": "video",
+            "size_bytes": 565097,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/sec-gdpr-sec-gdpr-web-run.json"
+      },
+      {
         "feature": "sec-identity",
         "platform": "macos",
         "status": "passed",
@@ -4088,6 +7008,63 @@
           "size_bytes": 789
         },
         "source_run": "/capabilities/assets/evidence/sec-identity-sec-identity-macos-run.json"
+      },
+      {
+        "feature": "sec-model-gate",
+        "platform": "web",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "sec-model-gate-00-login-form.png",
+            "sha256": "c2880c86bc8b6f3e112f573d93b7b6f2d03820c8d68d9f9141c4611a5c6bcacf",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页（管理员登录，账号 admin）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-model-gate-00-login-form.png"
+          },
+          {
+            "file": "sec-model-gate-M1-llm-gate-signal.png",
+            "sha256": "181b715d6625c3161f104da620f44f29a3fc10c8583a746ba542f41c51483c80",
+            "visual_review": "accepted",
+            "visible_result": "GET /api/health 200：build.git_sha=8d1fd8f6…、cognition.llm_port_available=false、degradedReasons=[LLM_RUNTIME_UNAVAILABLE]（真实模型端口不可用，门禁信号可见）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-model-gate-M1-llm-gate-signal.png"
+          },
+          {
+            "file": "sec-model-gate-M2-model-registry.png",
+            "sha256": "fb4e6c5df850ac3b037425d7831dd0d9539222337fc2a343fccf107d4b44bbe1",
+            "visual_review": "accepted",
+            "visible_result": "GET /api/desktop/models 200 body.models=[]（当前无已登记模型）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-model-gate-M2-model-registry.png"
+          },
+          {
+            "file": "sec-model-gate-M3-download-validation.png",
+            "sha256": "7261a4629063338ae7593c9f8405c40873250b68728eeeef3db3ba70bb463224",
+            "visual_review": "accepted",
+            "visible_result": "POST /api/desktop/models/download 空 body → 422 validation_error，缺 body.name/version/url/sha256。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-model-gate-M3-download-validation.png"
+          },
+          {
+            "file": "sec-model-gate-sec-model-gate-web-20260929-082930.webm",
+            "sha256": "e941897a776594465e5b69392bb36ab33e9f0731dcc825d6b97e5448e321350f",
+            "visual_review": "accepted",
+            "visible_result": "录像（webm，11.44s）：模型门禁信号 → 模型清单 → 下载缺参拒绝。",
+            "kind": "video",
+            "size_bytes": 588269,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/sec-model-gate-sec-model-gate-web-run.json"
       },
       {
         "feature": "sec-release-gate",
@@ -4164,6 +7141,177 @@
           "size_bytes": 1307
         },
         "source_run": "/capabilities/assets/evidence/sec-runtime-gate-sec-runtime-gate-macos-run.json"
+      },
+      {
+        "feature": "sec-scan",
+        "platform": "web",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "sec-scan-00-login-form.png",
+            "sha256": "07c5f4101b70ab9bb8ffb7795cff6319cf88bc5509165aab25fc2d47787f6332",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页（管理员登录，账号 admin）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-scan-00-login-form.png"
+          },
+          {
+            "file": "sec-scan-S1-gate-employees.png",
+            "sha256": "b160ab7047da484a0e44036160d69baebac3d58b816af41785740e1ae74a498e",
+            "visual_review": "accepted",
+            "visible_result": "JSON：{security_secrets_guard:ready, github_pr_gatekeeper:ready, deploy_release_officer:ready}。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-scan-S1-gate-employees.png"
+          },
+          {
+            "file": "sec-scan-S2-secret-audit-run.png",
+            "sha256": "aa2880b386858e30be58191b65515e453078942f6c5b6a94c30e9330c5dd4282",
+            "visual_review": "accepted",
+            "visible_result": "POST 安全密钥守卫 run → 200 data.ok=true status=approved summary='redacted finding summary is clear' evidence=[fixture_only,redacted_counts_only,no_repository_scan,no_secret_output] read_only=true side_effects=[]。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-scan-S2-secret-audit-run.png"
+          },
+          {
+            "file": "sec-scan-S3-scan-run-csrf-gate.png",
+            "sha256": "a5e7068c0912dcc2f8e2389467036a16eb49dcf71f33d55c4a03e083d912fe23",
+            "visual_review": "accepted",
+            "visible_result": "无 CSRF 的 POST run → 403 success=false message=CSRF token missing。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-scan-S3-scan-run-csrf-gate.png"
+          },
+          {
+            "file": "sec-scan-sec-scan-web-20260929-082617.webm",
+            "sha256": "8400702d4df0670a22902789854b6301941c1fd5028fd991dc8b65d827083410",
+            "visual_review": "accepted",
+            "visible_result": "录像（webm，11.64s）：门禁员工就绪 → 脱敏审计执行 → CSRF 拒绝。",
+            "kind": "video",
+            "size_bytes": 595044,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/sec-scan-sec-scan-web-run.json"
+      },
+      {
+        "feature": "sec-slo",
+        "platform": "web",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "sec-slo-00-login-form.png",
+            "sha256": "b033108ea3b2506d829ce39e0f9f1951779e80f63f80ac9d7a128d0855bf32ef",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页（管理员登录，账号 admin）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-slo-00-login-form.png"
+          },
+          {
+            "file": "sec-slo-SL1-runtime-inventory.png",
+            "sha256": "80e14d2fd405a3f7f45413bc7ef345ccb55ac91ae6fffd87778aa2c60d358d2f",
+            "visual_review": "accepted",
+            "visible_result": "GET /api/xcmax/ops/runtime-inventory 200：schema=xcagi.runtime_inventory/v1、source.topology=config/topology.generated.json、public_host=xiu-ci.com；counts total=14 running=2 stopped=7 unknown=5 must_run_failed=5；items 含 desktop-fhd desired=optional actual=running。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-slo-SL1-runtime-inventory.png"
+          },
+          {
+            "file": "sec-slo-SL2-closure-status.png",
+            "sha256": "62cd405f310dfbdac211f8843f6a0700aa65d5573b0501f72a7bbfa870bd6494",
+            "visual_review": "accepted",
+            "visible_result": "GET /api/xcmax/ops/closure-status 200 success=true deliverable=true staffing planned_count=55 registered_count=55 missing_employees=[]。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-slo-SL2-closure-status.png"
+          },
+          {
+            "file": "sec-slo-SL3-unauth-inventory.png",
+            "sha256": "1675cc888014ec127f6b66e9433aea512962390f755871aa6a8b81259b4e5625",
+            "visual_review": "accepted",
+            "visible_result": "无会话 GET runtime-inventory → 401 请先登录。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-slo-SL3-unauth-inventory.png"
+          },
+          {
+            "file": "sec-slo-sec-slo-web-20260929-082709.webm",
+            "sha256": "11ec343d8903e29d5089d0a448d6d0b25ca7e717faa2dbdcaf1479f64acf4fc0",
+            "visual_review": "accepted",
+            "visible_result": "录像（webm，13.92s）：拓扑运行时清单 → 编制收敛 → 无会话拒绝。",
+            "kind": "video",
+            "size_bytes": 695250,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/sec-slo-sec-slo-web-run.json"
+      },
+      {
+        "feature": "sec-tenant-isolation",
+        "platform": "web",
+        "status": "passed",
+        "passed": 3,
+        "failed": 0,
+        "verified_at": "2026-09-29",
+        "app_version": "1.0.0.5",
+        "app_git_sha": "8d1fd8f686884c7fc637ef2fa3e3e048a0074bec",
+        "media": [
+          {
+            "file": "sec-tenant-isolation-00-login-form.png",
+            "sha256": "ebb3b808d380eb1fe82a06dddd58bd7187dfa2d56e7abb6b2927919ccf94b424",
+            "visual_review": "accepted",
+            "visible_result": "管理端登录页（管理员登录，账号 admin）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-tenant-isolation-00-login-form.png"
+          },
+          {
+            "file": "sec-tenant-isolation-T1-platform-tenants.png",
+            "sha256": "48bc2c03259ea7feb22970e62de1edaf5d42e638adc8ad9a61bc6c55d87c16d5",
+            "visual_review": "accepted",
+            "visible_result": "GET /api/rbac/tenants（平台管理员）200 success=true data=[]。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-tenant-isolation-T1-platform-tenants.png"
+          },
+          {
+            "file": "sec-tenant-isolation-T2-tenant-data-scopes.png",
+            "sha256": "76506b541a947134946ca7c6a1b8b2a75d442bc697d74118ef9bc5de48aa7895",
+            "visual_review": "accepted",
+            "visible_result": "GET /api/rbac/tenants/1/data-scopes 200 success=true data=[]。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-tenant-isolation-T2-tenant-data-scopes.png"
+          },
+          {
+            "file": "sec-tenant-isolation-T3-tenant-user-denied.png",
+            "sha256": "89bc6cf889d5957949be1ed6374a9f96911b312f86f6833cc915207f6753cdb1",
+            "visual_review": "accepted",
+            "visible_result": "新建个人租户账号 qa_ten_… 登录成功(role=viewer)，GET /api/rbac/roles → 403 http_403 message=当前企业账号无角色管理权限（越权被拒）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/sec-tenant-isolation-T3-tenant-user-denied.png"
+          },
+          {
+            "file": "sec-tenant-isolation-sec-tenant-isolation-web-20260929-082630.webm",
+            "sha256": "c1645a513fe2095437d9ff53bc30bf86acd284c7177de8aa92eaa739f94fbc42",
+            "visual_review": "accepted",
+            "visible_result": "录像（webm，11.96s）：平台租户清单/数据范围 → 个人租户越权被拒。",
+            "kind": "video",
+            "size_bytes": 535513,
+            "duration_seconds": null,
+            "codec": "webm",
+            "public_path": null
+          }
+        ],
+        "run_log": null,
+        "source_run": "/capabilities/assets/evidence/sec-tenant-isolation-sec-tenant-isolation-web-run.json"
       }
     ],
     "videos": [
@@ -4222,6 +7370,16 @@
         "action": "not-published"
       },
       {
+        "feature": "ai-chat-debug",
+        "file": "ai-chat-debug-ai-chat-debug-web-20260929-062651.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
         "feature": "ai-csv",
         "file": "ai-csv-operation.webm",
         "issues": [
@@ -4242,8 +7400,38 @@
         "action": "not-published"
       },
       {
+        "feature": "ai-employee-publish",
+        "file": "ai-employee-publish-ai-employee-publish-web-20260929-062919.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ai-employee-runtime",
+        "file": "ai-employee-runtime-ai-employee-runtime-web-20260929-062731.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
         "feature": "ai-employees-workflow",
         "file": "ai-employees-workflow-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ai-eskill",
+        "file": "ai-eskill-ai-eskill-web-20260929-062747.webm",
         "issues": [
           "时长超 60s 或不可解析(None)",
           "webm 不作官网展示",
@@ -4282,6 +7470,26 @@
         "action": "not-published"
       },
       {
+        "feature": "ai-model-access",
+        "file": "ai-model-access-ai-model-access-web-20260929-062451.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ai-multimodal",
+        "file": "ai-multimodal-ai-multimodal-web-20260929-063048.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
         "feature": "ai-ocr-doc",
         "file": "ai-ocr-doc-operation.webm",
         "issues": [
@@ -4312,6 +7520,16 @@
         "action": "not-published"
       },
       {
+        "feature": "ai-run-monitor",
+        "file": "ai-run-monitor-ai-run-monitor-web-20260929-062820.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
         "feature": "ai-task-workspace",
         "file": "ai-task-workspace-operation.webm",
         "issues": [
@@ -4332,8 +7550,28 @@
         "action": "not-published"
       },
       {
+        "feature": "ai-vector-rag",
+        "file": "ai-vector-rag-ai-vector-rag-web-20260929-062839.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
         "feature": "ai-word",
         "file": "ai-word-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "base-account-security",
+        "file": "base-account-security-base-account-security-web-20260929-082903.webm",
         "issues": [
           "时长超 60s 或不可解析(None)",
           "webm 不作官网展示",
@@ -4372,6 +7610,16 @@
         "action": "not-published"
       },
       {
+        "feature": "base-diagnostics",
+        "file": "base-diagnostics-base-diagnostics-web-20260929-082917.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
         "feature": "base-edition-pack",
         "file": "base-edition-pack-operation.webm",
         "issues": [
@@ -4384,6 +7632,16 @@
       {
         "feature": "base-health",
         "file": "base-health-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "base-help",
+        "file": "base-help-base-help-web-20260929-082538.webm",
         "issues": [
           "时长超 60s 或不可解析(None)",
           "webm 不作官网展示",
@@ -4464,6 +7722,16 @@
         "action": "not-published"
       },
       {
+        "feature": "base-register",
+        "file": "base-register-base-register-web-20260929-082459.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
         "feature": "base-settings",
         "file": "base-settings-operation.webm",
         "issues": [
@@ -4476,6 +7744,16 @@
       {
         "feature": "base-update-mgmt",
         "file": "base-update-mgmt-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "base-web-admin",
+        "file": "base-web-admin-base-web-admin-web-20260929-082432.webm",
         "issues": [
           "时长超 60s 或不可解析(None)",
           "webm 不作官网展示",
@@ -4724,8 +8002,28 @@
         "action": "not-published"
       },
       {
+        "feature": "erp-business-api",
+        "file": "erp-business-api-erp-business-api-web-20260929-111950.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
         "feature": "erp-contract",
         "file": "erp-contract-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "erp-etl",
+        "file": "erp-etl-erp-etl-web-20260929-091735.webm",
         "issues": [
           "时长超 60s 或不可解析(None)",
           "webm 不作官网展示",
@@ -4974,6 +8272,16 @@
         "action": "not-published"
       },
       {
+        "feature": "ind-modstore-gateway",
+        "file": "ind-modstore-gateway-ind-modstore-gateway-web-20260929-064709.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
         "feature": "ind-modstore-pay",
         "file": "ind-modstore-pay-operation.webm",
         "issues": [
@@ -5044,6 +8352,16 @@
         "action": "not-published"
       },
       {
+        "feature": "mods-aiopen-support",
+        "file": "mods-aiopen-support-mods-aiopen-support-web-20260929-064631.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
         "feature": "mods-bridge",
         "file": "mods-bridge-operation.webm",
         "issues": [
@@ -5084,6 +8402,26 @@
         "action": "not-published"
       },
       {
+        "feature": "mods-pack-io",
+        "file": "mods-pack-io-mods-pack-io-web-20260929-064246.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "mods-pat",
+        "file": "mods-pat-mods-pat-web-20260929-064549.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
         "feature": "mods-shell",
         "file": "mods-shell-operation.webm",
         "issues": [
@@ -5104,6 +8442,46 @@
         "action": "not-published"
       },
       {
+        "feature": "mods-store-sync",
+        "file": "mods-store-sync-mods-store-sync-web-20260929-064508.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "mods-template",
+        "file": "mods-template-mods-template-web-20260929-064418.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "mods-toolchain",
+        "file": "mods-toolchain-mods-toolchain-web-20260929-064201.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "mods-version",
+        "file": "mods-version-mods-version-web-20260929-064332.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
         "feature": "mods-webhook",
         "file": "mods-webhook-operation.webm",
         "issues": [
@@ -5114,8 +8492,178 @@
         "action": "not-published"
       },
       {
+        "feature": "ops-admin-console",
+        "file": "ops-admin-console-ops-admin-console-web-20260929-061306.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ops-customer-value",
+        "file": "ops-customer-value-ops-customer-value-web-20260929-080227.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ops-delivery-center",
+        "file": "ops-delivery-center-ops-delivery-center-web-20260929-075932.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ops-delivery",
+        "file": "ops-delivery-ops-delivery-web-20260929-075821.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ops-delivery-sync",
+        "file": "ops-delivery-sync-ops-delivery-sync-web-20260929-080543.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ops-employee-gov",
+        "file": "ops-employee-gov-ops-employee-gov-web-20260929-074113.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ops-issue-runtime",
+        "file": "ops-issue-runtime-ops-issue-runtime-web-20260929-080007.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ops-monitor",
+        "file": "ops-monitor-ops-monitor-web-20260929-074256.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ops-pipeline",
+        "file": "ops-pipeline-ops-pipeline-web-20260929-074146.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ops-project-factory",
+        "file": "ops-project-factory-ops-project-factory-web-20260929-074415.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ops-self-heal",
+        "file": "ops-self-heal-ops-self-heal-web-20260929-074334.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ops-version-evolution",
+        "file": "ops-version-evolution-ops-version-evolution-web-20260929-075726.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "ops-work-order",
+        "file": "ops-work-order-ops-work-order-web-20260929-074224.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
         "feature": "pay-alipay",
         "file": "pay-alipay-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "pay-author-revenue",
+        "file": "pay-author-revenue-pay-author-revenue-web-20260929-070223.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "pay-backend-bridge",
+        "file": "pay-backend-bridge-pay-backend-bridge-web-20260929-070001.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "pay-entitlement-delivery",
+        "file": "pay-entitlement-delivery-pay-entitlement-delivery-web-20260929-070204.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "pay-entitlement",
+        "file": "pay-entitlement-pay-entitlement-web-20260929-070139.webm",
         "issues": [
           "时长超 60s 或不可解析(None)",
           "webm 不作官网展示",
@@ -5154,8 +8702,78 @@
         "action": "not-published"
       },
       {
+        "feature": "pay-reconcile",
+        "file": "pay-reconcile-pay-reconcile-web-20260929-065856.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "pay-refund",
+        "file": "pay-refund-pay-refund-web-20260929-070024.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
         "feature": "pay-wallet",
         "file": "pay-wallet-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "sec-ai-trace",
+        "file": "sec-ai-trace-sec-ai-trace-web-20260929-082644.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "sec-audit",
+        "file": "sec-audit-sec-audit-web-20260929-082604.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "sec-audit-standard",
+        "file": "sec-audit-standard-sec-audit-standard-web-20260929-084414.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "sec-continuous-observe",
+        "file": "sec-continuous-observe-sec-continuous-observe-web-20260929-082656.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "sec-coverage",
+        "file": "sec-coverage-sec-coverage-web-20260929-084234.webm",
         "issues": [
           "时长超 60s 或不可解析(None)",
           "webm 不作官网展示",
@@ -5184,8 +8802,28 @@
         "action": "not-published"
       },
       {
+        "feature": "sec-gdpr",
+        "file": "sec-gdpr-sec-gdpr-web-20260929-082551.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
         "feature": "sec-identity",
         "file": "sec-identity-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "sec-model-gate",
+        "file": "sec-model-gate-sec-model-gate-web-20260929-082930.webm",
         "issues": [
           "时长超 60s 或不可解析(None)",
           "webm 不作官网展示",
@@ -5212,11 +8850,41 @@
           "原始录像不可追溯"
         ],
         "action": "not-published"
+      },
+      {
+        "feature": "sec-scan",
+        "file": "sec-scan-sec-scan-web-20260929-082617.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "sec-slo",
+        "file": "sec-slo-sec-slo-web-20260929-082709.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "sec-tenant-isolation",
+        "file": "sec-tenant-isolation-sec-tenant-isolation-web-20260929-082630.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
       }
     ],
     "summary": {
-      "total": 97,
-      "passed": 67,
+      "total": 149,
+      "passed": 119,
       "failed": 29,
       "last_verified_at": "2026-09-29"
     }

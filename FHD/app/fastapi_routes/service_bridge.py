@@ -229,7 +229,10 @@ async def respond_request(request_id: int, body: ServiceRequestRespond):
         req.status = body.status
         db.flush()
         result = req.to_dict()
-    logger.info("Responded to service request %d from %s", request_id, req.source_instance_name)
+        # 会话关闭后 ORM 实例会进入 detached 态，之后再读属性会抛 DetachedInstanceError（曾导致本路由 500）。
+        # 因此该字段必须在会话内取出。
+        source_instance_name = req.source_instance_name
+    logger.info("Responded to service request %d from %s", request_id, source_instance_name)
     return {"success": True, "data": result}
 
 

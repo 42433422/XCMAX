@@ -1,0 +1,7 @@
+[08:26:30] feature=sec-tenant-isolation base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-tenant-isolation
+[08:26:42] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[08:26:42] case T1: passed - 平台管理员读取租户清单
+[08:26:42] case T2: passed - 读取指定租户数据范围
+[08:26:43] case T3: passed - 个人租户账号越权访问平台级接口被拒（负例）
+[08:26:44] video: sec-tenant-isolation-web-20260929-082630.webm (535513 bytes)
+[08:26:44] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-tenant-isolation/log/sec-tenant-isolation-web-20260929-082630.log

@@ -1,0 +1,9 @@
+[07:00:01] feature=pay-backend-bridge base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-backend-bridge
+[07:00:13] login: url=http://127.0.0.1:42423/admin/login?redirect=/xcmax-admin&error=%E9%9C%80%E8%A6%81%E7%AE%A1%E7%90%86%E5%91%98%E8%B4%A6%E5%8F%B7%E7%99%BB%E5%BD%95%E5%90%8E%E8%AE%BF%E9%97%AE me_success=True user=admin
+[07:00:19] case PB1: passed - 模型支付 SOT 后端可只读诊断，且功能模块页真实登记该模块
+[07:00:19] case PB2: passed - 套餐接口回传支付后端路由标志
+[07:00:19] case PB3: passed - 未知套餐下单被拒（不触发任何真实扣款）
+[07:00:19] case PB4: passed - MODstore 支付 webhook 桥接拒绝非法事件
+[07:00:19] case PB5: passed - modstore 支付分支不可达时显式失败
+[07:00:19] video: pay-backend-bridge-web-20260929-070001.webm (1156681 bytes)
+[07:00:19] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/pay-backend-bridge/log/pay-backend-bridge-web-20260929-070001.log
