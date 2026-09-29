@@ -168,7 +168,6 @@ def require_legacy_global_knowledge(request: Request) -> None:
 
 
 def require_tenant_knowledge(request: Request) -> None:
-    """旧知识索引按当前租户分片；没有租户仍拒绝。"""
     if resolve_product_sku() != "enterprise":
         return
     user = get_logged_in_user(request)

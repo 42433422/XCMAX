@@ -28,8 +28,7 @@ class ShipmentDocumentWorkflowMixin:
         contact_person: str = "",
         contact_phone: str = "",
     ) -> dict[str, Any]:
-        """把业务创建的出货写入出货记录表，供记录页读回。"""
-        _ = (contact_person, contact_phone)
+        _ = contact_person or contact_phone
         if self._record_store is None:
             return {"success": False, "message": "record_store 未配置"}
         return self._record_store.record_document_generation(

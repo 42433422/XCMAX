@@ -83,9 +83,7 @@ def test_desktop_tenant_without_membership_cannot_query_legacy_knowledge(
     assert response.status_code == 403
 
 
-def test_desktop_tenant_can_query_its_own_legacy_knowledge(
-    enterprise_desktop, monkeypatch
-) -> None:
+def test_desktop_tenant_can_query_its_own_legacy_knowledge(enterprise_desktop, monkeypatch) -> None:
     user = SimpleNamespace(id=8, tenant_id=23, role="user", is_active=True)
     monkeypatch.setattr(dataset_access, "get_logged_in_user", lambda _request: user)
     monkeypatch.setattr(

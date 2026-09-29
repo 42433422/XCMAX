@@ -275,11 +275,7 @@ class _KnowledgeIndex:
                         chunk_index=base + i,
                         char_start=c.char_start,
                         char_end=c.char_end,
-                        metadata={
-                            "source": source,
-                            "strategy": c.strategy,
-                            "tenant_id": tenant_id,
-                        },
+                        metadata={"source": source, "strategy": c.strategy, "tenant_id": tenant_id},
                     )
                 )
             self._sources.add(source)
@@ -289,28 +285,24 @@ class _KnowledgeIndex:
     def query(
         self, q: str, top_k: int, tenant_id: str | None = None
     ) -> list[_facade().RetrievedChunk]:
+        def tenant_of(chunk) -> str:
+            return str((getattr(chunk, "metadata", None) or {}).get("tenant_id") or "")
+
         with self._lock:
             visible = self._chunks
             if tenant_id is not None:
-                visible = [
-                    chunk
-                    for chunk in self._chunks
-                    if str((getattr(chunk, "metadata", None) or {}).get("tenant_id") or "")
-                    == str(tenant_id)
-                ]
+                visible = [chunk for chunk in self._chunks if tenant_of(chunk) == str(tenant_id)]
             self._retriever.index(visible)
             self._rebuild_needed = False
             found = _facade().cast("list[Any]", self._retriever.retrieve(q))
             if tenant_id is None:
                 return found[:top_k]
             allowed = {str(chunk.text) for chunk in visible}
-            kept = []
-            for chunk in found:
-                meta = getattr(chunk, "metadata", None) or {}
-                same_tenant = str(meta.get("tenant_id") or "") == str(tenant_id)
-                if same_tenant or str(getattr(chunk, "text", "")) in allowed:
-                    kept.append(chunk)
-            return kept[:top_k]
+            return [
+                c
+                for c in found
+                if tenant_of(c) == str(tenant_id) or str(getattr(c, "text", "")) in allowed
+            ][:top_k]
 
     def status(self) -> dict[str, int]:
         with self._lock:

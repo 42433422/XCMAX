@@ -1,5 +1,3 @@
-"""把业务开出的出货写入购买单位和出货记录，供列表读回。"""
-
 from __future__ import annotations
 
 from fastapi import HTTPException
@@ -18,7 +16,12 @@ def remember_business_shipment(payload: dict) -> dict:
     if not unit:
         return {"success": False}
     try:
-        _customer_pg_insert(unit, str(payload.get("contact_person") or ""), str(payload.get("contact_phone") or ""), "")
+        _customer_pg_insert(
+            unit,
+            str(payload.get("contact_person") or ""),
+            str(payload.get("contact_phone") or ""),
+            "",
+        )
     except _QUIET:
         pass
     try:

@@ -21,7 +21,6 @@ def _request_path(request: Request) -> str:
 
 
 def uses_tenant_scoped_store(request: Request) -> bool:
-    """Routes whose handlers already partition rows by the session tenant."""
     path = _request_path(request)
     if path == "/api/orders/webhooks":
         return True
@@ -31,8 +30,6 @@ def uses_tenant_scoped_store(request: Request) -> bool:
 
 
 def require_tenant_scoped_permission(read_code: str, write_code: str | None = None):
-    """Allow a logged-in tenant through; refuse the same path with no tenant."""
-
     def guard(request: Request):
         user = resolve_session_user(request)
         if user is None:
