@@ -291,7 +291,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/base-rbac/base-rbac-windows-run.json",
-                                            "sha256": "c69be0fe0753e7050b8c0ac600724e0cde768b4ecaeb2dae4b2f4e747def63eb",
+                                            "sha256": "8b6f157b04d06c8f51b6fd868436b2ee39ff7991bbad6b79808353b5cf7b7e14",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -438,7 +438,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/base-win-client/base-win-client-windows-run.json",
-                                            "sha256": "6cf1c9488e7d7bf0aac0e9e9fd107becc581d628f58ca0ef3a96d30621aa80f5",
+                                            "sha256": "1da194bd204bcd1758026e793b2b3cfac6efe8f8bbd7374d57797f09b5d11870",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -868,7 +868,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/base-edition-pack/base-edition-pack-windows-run.json",
-                                            "sha256": "1c7a52a944347d9593549a4463d0d77632af61d99a850bc21e417632364277ca",
+                                            "sha256": "70edb7639a43f6c730249154b60e5cd5722aefeb187cc8f81667089dd1222779",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -980,7 +980,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/base-install-guide/base-install-guide-windows-run.json",
-                                            "sha256": "a9b2ac093a3f360e7da10035f7ae42e73338678cb1c8670195b4760da45a4b54",
+                                            "sha256": "77ac8777a3d54cae719a8ec2e0e9cc8b0b5dcc9d2d68dbea4b2f7154071b7dea",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -1089,7 +1089,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/base-device-bind/base-device-bind-windows-run.json",
-                                            "sha256": "e1885b16374014e337fc93f8d1f6ee495a50f9fbb67b8fa77037bdb258d68ea6",
+                                            "sha256": "81cfc324bbf332f8c63b3c1732c12d5c1483d0b0035b7d049d84482958777584",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -1249,7 +1249,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/base-health/base-health-windows-run.json",
-                                            "sha256": "2085b91ed1ae866f66cd16fd8534554953b59c90117da2b50217fb3e527a2a44",
+                                            "sha256": "e7d53458cb620301e0568deba3cf4d99d3beb1c0336ac7abea8f9ff9540a66a9",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -1367,7 +1367,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/base-db/base-db-windows-run.json",
-                                            "sha256": "9b7d4a276813c220fcd3ca50565018e885b811ecdf0cce3c35634dfdecc497f9",
+                                            "sha256": "6b4a661b9b73f74a2c41d8bd13260c279061033414e9f249f4e22b760119b470",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -1475,7 +1475,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/base-config/base-config-windows-run.json",
-                                            "sha256": "19993c1aaa424a7c1264e914523359306ca044f01b10e681afe54cc33726c377",
+                                            "sha256": "8caf536396d9bc6d659b084778e500ae3732d0750192163ef87702026a4ef769",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -1590,7 +1590,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/base-update-mgmt/base-update-mgmt-windows-run.json",
-                                            "sha256": "89332deb7447f54d08aa32541f89738e873183ae6513b0593351049363022b38",
+                                            "sha256": "a844c73a78594f861d4792028546543908fc282e14cc6e2060504b1e47ee1d26",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -1739,7 +1739,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/base-settings/base-settings-windows-run.json",
-                                            "sha256": "567190128be9d2c3454aa7db8bd1c714c761e1ec68aa578ec83ba536ba68f28c",
+                                            "sha256": "1833607f98744dcb08a8aa09882646a0e3f78a0fc356229fc3a1830457063453",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -2078,7 +2078,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-chat-core/ai-chat-core-windows-run.json",
-                                            "sha256": "a35cc6f7b84945f7641b6edeba0337f0619ddf8c2dc11af8028fd9f049023e4e",
+                                            "sha256": "829f3c41ef32c0e690fda842a40cba001906101de012de936c4de6f2511b7378",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -2239,7 +2239,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-intent/ai-intent-windows-run.json",
-                                            "sha256": "602ee249a27ab0ed55897986a21c8ad84c558031468ad67c9c72bdc410169d2f",
+                                            "sha256": "e461cfa4924d0caf8b68a8d3d88e74dee68b1e5b4177b22ca2b0611e73e72595",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -2389,7 +2389,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-task-workspace/ai-task-workspace-windows-run.json",
-                                            "sha256": "7559ae6a7e79eba3617008abcacd45ce29020a445e91cdecf90ecfe58f1d3213",
+                                            "sha256": "78f3d11e9f4c75019386d98ea4c14fb481898278f507f36276f0db36af598dd2",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -2767,7 +2767,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-employees-workflow/ai-employees-workflow-windows-run.json",
-                                            "sha256": "17de1e38ba1bcc4e5394304eeef8351a2c373c329a67c23dd98ffd680f160fda",
+                                            "sha256": "900f403e7134be6a7ca0942e2898caed09728e48dec6e38bfe1fee10f090cece",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -2919,7 +2919,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-employee-pack/ai-employee-pack-windows-run.json",
-                                            "sha256": "940412922fb1f930c3f3d904bde57a6a6441c2a4d4b30023651de1243f26c598",
+                                            "sha256": "bce9b8945a7ebf69f39df7718028d88d80933ccdd8cc0fb007df35c0726461b6",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -3373,7 +3373,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-excel/ai-excel-windows-run.json",
-                                            "sha256": "8ba83d5ecf6ecef0a5b40a0777fe75b1f34706c338a90c4485f5dad83a323940",
+                                            "sha256": "cb604d4947b75c3a3b400372a9782f12277aa4cf7b29766c4e03636a05e324a6",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -3525,7 +3525,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-tts/ai-tts-windows-run.json",
-                                            "sha256": "72a660f292a8af91fb347ff8f2b3f30f9b81ec28762cbb5fa6b6055e51680908",
+                                            "sha256": "96a448547be9103d521b891ebcf878d632b87c29a9b59538a9b2252923403b4e",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -3679,7 +3679,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-knowledge/ai-knowledge-windows-run.json",
-                                            "sha256": "1e4499ea402320c999979f20c87e2757eb85f8e86b054debe764784032c0967a",
+                                            "sha256": "2769100f991c790ec9b4f7c3d5ad51694fe66eb5a4ecfb947ab726504b70640d",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -3827,7 +3827,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-csv/ai-csv-windows-run.json",
-                                            "sha256": "4a2fc7fe0cb26e58ebbf799bd7594c67b2b59ae6e017099081c0735a9479fbfc",
+                                            "sha256": "495edd4b3ac7b6c82bdfa890d1bd236bb40b6730f7538749ec320e97daf663bd",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -3976,7 +3976,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-pdf/ai-pdf-windows-run.json",
-                                            "sha256": "cef97b0f01a7f1842ab742453fee6e573d63f3fd6d47b678ae901c2d1cfa0dab",
+                                            "sha256": "36c61c572ce8fd5019fc37965dcc0492ba1426457e8979065dc7ad93106db128",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -4124,7 +4124,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-ppt/ai-ppt-windows-run.json",
-                                            "sha256": "353ede99b8402a5d1b5d5495c58eb4cc2ad66ba8d1ebc2da3b7ec9b7e13dbc3c",
+                                            "sha256": "07ff08f7619e34c309931ae16b598f7d7b5cba37aab0106bde23c1ab157db755",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -4272,7 +4272,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-word/ai-word-windows-run.json",
-                                            "sha256": "0e3b0e376f9647fab2d4c337751504c3230b1d5d5557cb352e70c872a2cb106f",
+                                            "sha256": "b24d4f68f67e8b54e87c1ad9a388253edfe32e772e9aa53cb51fa4a967e1ca59",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -4423,7 +4423,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-ocr-doc/ai-ocr-doc-windows-run.json",
-                                            "sha256": "3029b7869d2567500040ef3ffbb7d3c29d4fa0182bf9236da998c6bfa790703a",
+                                            "sha256": "2e50af95f438bc0af6a29f9846d0b3a34de66182afaef910e770d9c87faec8c1",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -4673,7 +4673,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-shipment/erp-shipment-windows-run.json",
-                                            "sha256": "9829882ab7ddc326e98219c5a150dfc4023f873daafbac0bba36f5550285b61a",
+                                            "sha256": "45d1fde823e79c3bc49a5a2ec8407775d2cb495102b462fab44c957f6adc2a5d",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -4828,7 +4828,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-purchase/erp-purchase-windows-run.json",
-                                            "sha256": "6d10c919b90f798a8f3b00c45d9541de8c4a80b4a70b63b73e3cc7df329c49ab",
+                                            "sha256": "5a623acbc3d0c55171b732dcd20d2c48dc07a0e3e309f1883ef0dd7db4758601",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -4982,7 +4982,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-inventory/erp-inventory-windows-run.json",
-                                            "sha256": "3b5f9921c8900cf803d028a3428d5971282efeb7cb7d5ede36b5d12cdc8a1ebd",
+                                            "sha256": "ee765307e17f9f558e30a50726fa11641e74d173eb07212188705ba3b0976027",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -5138,7 +5138,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-master-data/erp-master-data-windows-run.json",
-                                            "sha256": "35e1293e4558bdb08b0ed7963eeb5869afca0059fc2f12cbc72a89a7ed716abc",
+                                            "sha256": "859abca549f978d0fbe93594bbd6fcfd64d2a3d12404aeaaed6a500c8942cf63",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -5248,7 +5248,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-sales-order/erp-sales-order-windows-run.json",
-                                            "sha256": "9dcc9b46d718579558b98f00a5829edeb04e398dfdac53781147f5c3a861c4b5",
+                                            "sha256": "f691f885fc9ee400164f2896fc429554e0fb3d29f6fc25b87142e911a2fdc5ea",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -5399,7 +5399,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-purchase-inbound/erp-purchase-inbound-windows-run.json",
-                                            "sha256": "ee9ffea3b02d53fdd8ad02404b0a9966f3b069e2c43324d87adad6758d039476",
+                                            "sha256": "ceed425a32e39f40e708bb9c3e6e9171820c86a1128e967b49a84fa0784a7054",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -5551,7 +5551,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-inventory-warehouse/erp-inventory-warehouse-windows-run.json",
-                                            "sha256": "1c13e4c82bcd562194a1d01e1bb08e07ac29d2def0c4e2023e71920f83c0e6a8",
+                                            "sha256": "9c61d84a0d91b7e879b52c0c30a5251e19c3eb0565062bdb83b0e130aadf8a40",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -5704,7 +5704,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-replenishment/erp-replenishment-windows-run.json",
-                                            "sha256": "0d1bd6430dd3c8850de7184dd607d063286e075252c800a2a511b4136c0c2ad3",
+                                            "sha256": "0574354da04312a7683ea3bc86e9bff1d6ff77a095fb24d6f6d528f03fdcde47",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -5816,7 +5816,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-uom/erp-uom-windows-run.json",
-                                            "sha256": "8ed456b7cc2565ee5941f98d6b6e6999451a2bed1852433a8fd98ed2c44f075c",
+                                            "sha256": "d4bb514de92e2acbbeb8633d6b6b8acdccb06dd44be5e37b043815ee659b8424",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -5978,7 +5978,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-finance-ledger/erp-finance-ledger-windows-run.json",
-                                            "sha256": "3a767500fa8d8f8958f1f13cbb0f27a0b88795d81e861bb6c41a0f4aee32be39",
+                                            "sha256": "5224ab2126d2f630937117ae0f9d2e6d40c78699abd53c56ad3a5bce13054401",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -6129,7 +6129,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-ar-ap/erp-ar-ap-windows-run.json",
-                                            "sha256": "82994cdb4920b54ddde5964ef5bcf3141c558d5ffb5b2ee004ed58cd22a6328e",
+                                            "sha256": "1ec43819dbb1a788c04e72ccb386604e75a974401eb8fee35bc903b46c8a2d8d",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -6279,7 +6279,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-report/erp-report-windows-run.json",
-                                            "sha256": "b858bd2b0b29c375b5cca8b8a465dabb29f3f748736be8bcedfab9c78c9fa6f9",
+                                            "sha256": "c97811ce8ad30b3344915e94e9ddc3764623d60fdd941da02d6ed08e982f1c5e",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -6432,7 +6432,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-invoice/erp-invoice-windows-run.json",
-                                            "sha256": "54ab32e411f62a5fd8ea17c34c50155460528dbec033e45bc79e15745af7bd5f",
+                                            "sha256": "16eeeef41691d297036d1be7020481521b033e62dd6052a2feed1af337a9f858",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -6583,7 +6583,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-reconcile/erp-reconcile-windows-run.json",
-                                            "sha256": "e34199fae34fc9ff279b69e68384ecc4fa5e8f65e0accaefd3701beaa2e31b5f",
+                                            "sha256": "d17458d590f8669e8b3dce1f47bc6c2bdfa15c705017d1f85530b296a75dfa4a",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -6748,7 +6748,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-templates/erp-templates-windows-run.json",
-                                            "sha256": "328e5bbbd6831415d230b6f0ae246b88631a424fefcddad787c38310138ba25b",
+                                            "sha256": "12f35b27b68ee9d5f06ead997c4424889acdaaf6ac1030f92a5b08e77ba56b6e",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -6910,7 +6910,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-label/erp-label-windows-run.json",
-                                            "sha256": "ded8844fe71849f2cbcf21def5224b47ff2a5303b0abead28b96d6be539e2dc1",
+                                            "sha256": "9edea7febb546738a5f7cb506f25486c7f207d71213dc1d0e490047d6fafb9fc",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -7074,7 +7074,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-excel-io/erp-excel-io-windows-run.json",
-                                            "sha256": "9e0f16e701371f2726ac5107042c5fb67f3d7d16b399044e0477e791d905cc1f",
+                                            "sha256": "63c4fc8ccd1e94a6910e91657434df8c6c86adca86334e948793ba556ae77abd",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -7224,7 +7224,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-contract/erp-contract-windows-run.json",
-                                            "sha256": "58562f9c9434f65d56c897198140e4c0f8b08c8da219cb378e1533462b921de3",
+                                            "sha256": "f0c38d1d23e6566402e3099ca599fc8a71359a7714fe682ae4e5cf55b90a19e5",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -7332,7 +7332,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-print-agent/erp-print-agent-windows-run.json",
-                                            "sha256": "d9a207d9c94493d30bb5b8a3a61c126ba5f54909e6d72842ef5a3981a375d218",
+                                            "sha256": "e89a73eba9779455c0c431e33d700ab824cfab60b69e8b1718d709170e138f51",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -7490,7 +7490,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-ocr/erp-ocr-windows-run.json",
-                                            "sha256": "e3a9c34d5f3016540240ff05a142a58e5200d1fcd4c1ff98cf6754c04e9ce94a",
+                                            "sha256": "b17061c57299dda9fc3f816dd627c7a0c632171c378e89babf490f4a1be409a3",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -7641,7 +7641,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-ocr-clean/erp-ocr-clean-windows-run.json",
-                                            "sha256": "491e5b1ddde9c825985bb67f714ef1fa75734559f61cdb28f4c547834b382611",
+                                            "sha256": "065dd5c1bf5e72499dfacaf335871fae494e59aa110662a3ac05216e2d290496",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -7959,7 +7959,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/erp-approval/erp-approval-windows-run.json",
-                                            "sha256": "d4db9281e708cbb368ce60b4af24799776540ad786eb3398d0286258150241dd",
+                                            "sha256": "225f0fa5c84cd3a55d50a557fb215aff78833b221067c28f3e78f815ab8d2377",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -8131,7 +8131,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ch-im-core/ch-im-core-windows-run.json",
-                                            "sha256": "11ca95e7a4ed340380c0e16ed1d0242e8bf2658dda0134aca92326796ed5cae4",
+                                            "sha256": "da16d62fd058e0a425aa39576343b387f6e5d61f841e78e0b457c2f1b29e3b69",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -8285,7 +8285,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ch-im-cs/ch-im-cs-windows-run.json",
-                                            "sha256": "c086b71405194590eaa042f5f43315596c45a2a487606b41a0698b4dc50434f6",
+                                            "sha256": "f2f73cfe05bda3b45ecdee33584f18b4acb1cb18d0ef2211dfdbc1cc3e8b22c0",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -8436,7 +8436,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ch-notify/ch-notify-windows-run.json",
-                                            "sha256": "f259e0c02d4c8154a12e3e6f7cbf29a9d3163b337d5987e258837372a5170169",
+                                            "sha256": "156e185b102a0fd59c546c0f52f13603c7d18cb290ae1c76160d8d00a894a982",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -8584,7 +8584,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ch-task-center/ch-task-center-windows-run.json",
-                                            "sha256": "13faa4c1c3feacde15b7b47d9578a322ada8bca0f5aed9e33482c09a94d8ff44",
+                                            "sha256": "e6fadda3db38f919a5e7282aeea18984acc62e18ed84187ab6808274ef108a9c",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -8732,7 +8732,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ch-im-super/ch-im-super-windows-run.json",
-                                            "sha256": "53cf7de23c0aaa88057323c596706127ee722139a50d68aa7d02a11b871f6644",
+                                            "sha256": "55bbae723249a84949e2fc0961be8151bb7b86502160d1aa45add5e947305114",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -8878,7 +8878,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ch-im-ws/ch-im-ws-windows-run.json",
-                                            "sha256": "5752402820a96387371baf07d0816f2fd9ec97df8e5a8ee3af7ba5592c092ce5",
+                                            "sha256": "2a9396b509b72c4f6042df51364ba1f069b0de57cf3997f25a6ea4496e70f868",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -9042,7 +9042,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ch-wechat-ingest/ch-wechat-ingest-windows-run.json",
-                                            "sha256": "53998d6b5cecd0181a9892cea6101f3252317ce5dfd46b0a6eaf96b3bf40ff9f",
+                                            "sha256": "00bcd5d7cf8d00b06bc0a523b562f390c15d57d1221d56fa15279d51fc428100",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -9195,7 +9195,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ch-wechat-contacts/ch-wechat-contacts-windows-run.json",
-                                            "sha256": "676bf735f01c2de9fa3350e90809d8d0cb98f1452054d215b26b289951e3c632",
+                                            "sha256": "28e15739942b4929905d5bbaeb82fdd314507bbce6904cd7f4b55e8b377bc946",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -9303,7 +9303,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ch-wechat-phone/ch-wechat-phone-windows-run.json",
-                                            "sha256": "b8e061a50b45510294fbb221646dde30f0fd5ff919ebc1a04b43b17f745baf52",
+                                            "sha256": "719ed58ffcb730315bae03fa8def00d9f40af3e6cded9a74cba1e4e1d65142ce",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -9454,7 +9454,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ch-wechat-context/ch-wechat-context-windows-run.json",
-                                            "sha256": "3dbb3690ff394264945b0c52ab6a78efb559a8a034eabb41be71f0f1b936bc48",
+                                            "sha256": "09ec9d3fd00d882c8132d64c0ef9a4436b263d32e1133b4be176d28717d15057",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -9788,7 +9788,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ch-asr/ch-asr-windows-run.json",
-                                            "sha256": "2cd7f7bc43ae02c54ee0e5a6e2e211e12893d619794a9cc8f1b65cba3cdd8318",
+                                            "sha256": "edb02490306d320587fb3538e2ff3bde6474ee417c442d867aa6f9a18548609b",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -9897,7 +9897,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ch-realtime-voice/ch-realtime-voice-windows-run.json",
-                                            "sha256": "e46eb4d9eb572ff41eae93472f164fe482ea6eda4b7672aee6199910e7231883",
+                                            "sha256": "a176dfee2c588a89d77465ad3dc2b15055422ca8fb4aeb3e5a9667f28e299481",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -10069,7 +10069,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/mods-loader/mods-loader-windows-run.json",
-                                            "sha256": "52db105b7f40651bd99ff9fa656ec813b2fbb602b3427800d20dbb6bc002faac",
+                                            "sha256": "0d217c7e3708a774c44ce713c237a998f9796008403235d18bd9f50315e1dcb6",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -10226,7 +10226,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/mods-store/mods-store-windows-run.json",
-                                            "sha256": "befe9a8a23b3e2a21f873391c6b343f71ebfaaa1fad27c4b65f5dd162981f776",
+                                            "sha256": "e5460c4c10590e6bc4921b24ad095622102c704b5044e7b31b8edd77cecff59a",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -10448,7 +10448,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/mods-host-mount/mods-host-mount-windows-run.json",
-                                            "sha256": "d88f3e264b416d038da971e31125cffc64af559c6a1bbbd57eb5b2470d8540bd",
+                                            "sha256": "0b17f8e65b7f2302cbff286975a181a841761744a9e81528aceeea3ec61bbf53",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -10819,7 +10819,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/mods-shell/mods-shell-windows-run.json",
-                                            "sha256": "9af4d57ee0f3fe83b6f5f5d0530e65c1e7c95ed8b2fc745ecf0aa6d4141439d8",
+                                            "sha256": "85de9bafd12d62de020d4c25f3a5e128a1781cb2e75a8a666380aaf6b056ed79",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -10985,7 +10985,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/mods-open-api/mods-open-api-windows-run.json",
-                                            "sha256": "fd6c69e1816faa58a373b2ad913c60662818ed159936b0179d5b8e5f14469270",
+                                            "sha256": "0fa04feba5b9fd1c60883e299d830cb2e45b6bf0e92202a65a5677cbec68cbfa",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -11137,7 +11137,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/mods-webhook/mods-webhook-windows-run.json",
-                                            "sha256": "a443339c35588dc9db86f16773f28bfb7b1f5ae82c35d184a3aa727ca1c1f8e4",
+                                            "sha256": "4591ff10c4ac9494b195c8a7ebe70cbf4feb3653dfe9c4a6ee55669e5cd5e974",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -11290,7 +11290,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/mods-bridge/mods-bridge-windows-run.json",
-                                            "sha256": "71aad6e39dc7a3c32e5399c30577ea4a214ac77eff79811fc0b86cf3f8a36e50",
+                                            "sha256": "79858ca1cf2d8a9307ebb2d9fc27a3ff6c06f1a6ed88f149dd8f6190b9599c22",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -11677,7 +11677,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ind-coating/ind-coating-windows-run.json",
-                                            "sha256": "985840c7e79e976b3038a55a4f66fcef28a3102e9d8c06461db1a4cc538755ae",
+                                            "sha256": "e77236baa879b2f9599f0cb955024940e1fc6226af8980243b409ade3431623b",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -11787,7 +11787,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ind-packaging/ind-packaging-windows-run.json",
-                                            "sha256": "93580b224b9c8003ffc425042aff3cb6fa2dcdda803ead289cee567bf64d8c81",
+                                            "sha256": "35d1abfe71bf920c5c7804b9eb72b3b9357c38f18fd2c2cf5e4120c17d2584d5",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -11943,7 +11943,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ind-attendance/ind-attendance-windows-run.json",
-                                            "sha256": "73b0bb987effc9883cde3e28948c7d4251df9ce005d7efaba0edd67a90787c06",
+                                            "sha256": "47619eea729b0c35a6bf3b0e6b9ca744a2f712c06e8ff616f7ae93f3016feb04",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -12091,7 +12091,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ind-fields/ind-fields-windows-run.json",
-                                            "sha256": "b9a7dddc9faff0725b558b5b1e9c6913a31238bb15805b5c94aeeb5ae1e6dcc6",
+                                            "sha256": "799bba86c13ec933a71b2ac3d4158b4f40aed7cd83e1d1be4648a4c20faf4c6d",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -12239,7 +12239,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ind-workspace/ind-workspace-windows-run.json",
-                                            "sha256": "9b611dceeb199c0f8345a110776cd17aa86a25df859fb6ec149b1ecc7076ddd4",
+                                            "sha256": "4e71329897351cb90f78adfac98a180ab6784a4abf6283c8b1200b099a80ee77",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -12346,7 +12346,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ind-ai-assistant/ind-ai-assistant-windows-run.json",
-                                            "sha256": "0938c893060da2ea240354c19bf50b1f551c34a6789c0f9cf779a2af6e4d3642",
+                                            "sha256": "95a1b86673412978aa1d9b97d77a13c057ea2a7439b93a498adfabd34d1e2e62",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -12463,7 +12463,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ind-taiyangniao/ind-taiyangniao-windows-run.json",
-                                            "sha256": "9f88ca46ed0282faacb93094f76da49d66832002692be6995f97a9429dfe37c1",
+                                            "sha256": "c63c57eef41476d706017cb684bff426fac09f21678d6012dae4de3b9d017855",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -12574,7 +12574,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ind-szqsm/ind-szqsm-windows-run.json",
-                                            "sha256": "01e2b009d065dea6f04fbc2d0460cd9d734d0f3dc03d1e930bc719869bec0d91",
+                                            "sha256": "c53b5adf3b40f1f6115b41401875b8037dad60d7363837ddbba0ede1a12b4663",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -12723,7 +12723,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ind-custom-delivery/ind-custom-delivery-windows-run.json",
-                                            "sha256": "06725c73470c5cf1a3cc03d6b284451a4f5c286aea01b9d4ccb6fae9b4e766ee",
+                                            "sha256": "7e107d919da82f02ccf1f8fb280333d9821909f57ea0ffed3052fae120293651",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -12831,7 +12831,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ind-lan-license/ind-lan-license-windows-run.json",
-                                            "sha256": "b0bb91561c31fbf2eedb87fb45454f59f81f60bd88feea2f5aa880e309d4e884",
+                                            "sha256": "e134ca5ac9c116d09726f1f491b01a17343337d0a443148db59a1f617cf611d9",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -12980,7 +12980,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ind-modstore-pay/ind-modstore-pay-windows-run.json",
-                                            "sha256": "75c5f2fdff8f82cc8565e291b6a3a5137bb4f9b95f11ded0c5ce8a35a08f57d3",
+                                            "sha256": "6acf550f34c69b854803024f930b31297e662052122c2f114b2caccebbae70b8",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -13130,7 +13130,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ind-planner/ind-planner-windows-run.json",
-                                            "sha256": "df28227f6671ceccc0e28ebfd862eb8aea0c8f101547dfe598ca28802901162e",
+                                            "sha256": "31eb53caf16728e756570f7f0403332f41a54dd6b2d21a7936da9f4343fc2dda",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -13279,7 +13279,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ind-workflow-viz/ind-workflow-viz-windows-run.json",
-                                            "sha256": "d91ceab40e8e83dafbb8460c024b00050f28aa795555d191913ad3b09b8b0b32",
+                                            "sha256": "a60ec9ae2ed4476596e2ec5a1bb0f9333f9c2590f989fde510d416a6124a8e4f",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -13529,7 +13529,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/pay-alipay/pay-alipay-windows-run.json",
-                                            "sha256": "2b6da2e35d994c50b89aade574744bbc261d2813df07214207f6b305c2bee19c",
+                                            "sha256": "fb487127dfec30e835862c35d68bafde0bf4ac221976016bd99b591f11921501",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -13677,7 +13677,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/pay-wallet/pay-wallet-windows-run.json",
-                                            "sha256": "483517954e6879e7a444ccea44166529fa5cc72c2a8ce58c138c76ec1f783e6b",
+                                            "sha256": "a30f8762de25d157d0ce24b7ae5816443eec4ab70704998e7a3f49049c19b714",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -14021,7 +14021,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/pay-lan/pay-lan-windows-run.json",
-                                            "sha256": "256910ea1f263686db1aa1d5db07ee216abedd120505569a839186ece9dc9d4c",
+                                            "sha256": "425fc61de842db2e504889a2981ae83c5ed0a4b0f757d670bc0f6c25918b99cc",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -14252,7 +14252,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/pay-member-plan/pay-member-plan-windows-run.json",
-                                            "sha256": "8eff0c7f984f1f195106b14ffea3fd60ae5d88adcea0ccf3df5a488cc311b7ad",
+                                            "sha256": "1a599337dbd9c9943637bce2dc91107c1f6f2a1b83f3fa20dbbd28ef66248bff",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -14515,7 +14515,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/pay-lan-settings/pay-lan-settings-windows-run.json",
-                                            "sha256": "7ecd2e6938b1a582cbafc46a2dd7cf063dd10c7f3b63eacba60f7581fe94e715",
+                                            "sha256": "aa9c5d234af930d820c56f46b13b5c48ff7228d3c9fad8478668149ee0a8904f",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -15663,7 +15663,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/dt-shell/dt-shell-windows-run.json",
-                                            "sha256": "f375d611433fa6f8282f776c4acb6db4de6e2453023e20201dd22b2441b7fe65",
+                                            "sha256": "57fbfe23c6fc9a3d32f484c292dcd7ef6a3c9e97c11e924b31053b52e432e53e",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -15782,7 +15782,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/dt-ota/dt-ota-windows-run.json",
-                                            "sha256": "2248b721042818d85b8ec4637c87b0bb4080338faf9a40cf847695557741718e",
+                                            "sha256": "8ec9e5d7b72a5e02df7c48f0358f24dfa3cd92e0d2e1ae124a739643cea3aadc",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -15891,7 +15891,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/dt-install-sign/dt-install-sign-windows-run.json",
-                                            "sha256": "8f2e92a4b8e71da7c743aea85f70b61ef36e87a5090fc3379e42a41bc205db5d",
+                                            "sha256": "7d7f34763aa68c04504e2c0b572e3932744fef9cdd5c51669cc44c3d6f5a76e9",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -16000,7 +16000,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/dt-cold-start-rollback/dt-cold-start-rollback-windows-run.json",
-                                            "sha256": "da64a8241a290e1c733d1053a72c2b0e4f1f7a635adcf671aa9997f5924eb188",
+                                            "sha256": "a9d39afc5d24a49f04656d9a4eae6c46a0170df4cdf7408b34c5ef5365b3faea",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -16108,7 +16108,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/dt-process-mgmt/dt-process-mgmt-windows-run.json",
-                                            "sha256": "ca1f2e35cd809aa32a1c03c01a028cac65969bb8f821cdc809018ea2c1cce74b",
+                                            "sha256": "51d975bde1e9e1f01194eb0903b8950be83b27b0088e8561063c1b1e444a737e",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -16218,7 +16218,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/dt-integrity/dt-integrity-windows-run.json",
-                                            "sha256": "5bd0ddeee39f7825fe759255347ab0c185bdd77423cb005f1196e6e799732cce",
+                                            "sha256": "0dc6e021e0c76da214bfb26a3a62776690969f98a3ca2d2ffe0f393e55327c38",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -16340,7 +16340,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/dt-rpa/dt-rpa-windows-run.json",
-                                            "sha256": "3e0fbb77c5a630407a35f2a32514ab6e86b6c9ba1c456c67bdd9190cb733f810",
+                                            "sha256": "6544a308e2aae2ba32311abab84e5dae2582bc483f1f52f249531150a7fb93e5",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -16446,7 +16446,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/dt-element-find/dt-element-find-windows-run.json",
-                                            "sha256": "b3203fc9d231f5a4ca9e4418ecdd28e90aca9616435446365f3f4f86a423e6d4",
+                                            "sha256": "a74df92d89a49f1a40de08d28a42328705034749e74a34f1a3a4b6dee956fc72",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -16552,7 +16552,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/dt-desktop-workflow/dt-desktop-workflow-windows-run.json",
-                                            "sha256": "f050bd4387341d7f8c9937abc9a7dacbef37a48f390612520401f1c139d531e4",
+                                            "sha256": "b6671682305d17431eb3097c15608905c273cc1280721410685f5ad53887d50d",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -16701,7 +16701,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/dt-neurobus/dt-neurobus-windows-run.json",
-                                            "sha256": "5931a4d6fc5bc15e7fb41e923ab848f72241d2f33baf12ab75c11e68f1aec68b",
+                                            "sha256": "c39c8ce10153883ddd68bfa2fb56c581a03c5f5b753972203fdcead0aa134c92",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -16852,7 +16852,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/dt-evidence-store/dt-evidence-store-windows-run.json",
-                                            "sha256": "160134610fdee3c132ced42de4a6551764c9857dae32c73dfdb8dbd8b69200b1",
+                                            "sha256": "717913935583e4dc9c7e3089a304627f4939e8bd9d75fd31d4ec6e0419252b11",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -17312,7 +17312,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/sec-identity/sec-identity-windows-run.json",
-                                            "sha256": "209d83080522d1ec4ba332ba1912ccc04c7c37faae91a0295ac0e8e38684bfd2",
+                                            "sha256": "d62677d52d9b40b8497527096b215fb988f42c9d094d6fdcc778c67fba4017ce",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -17534,7 +17534,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/sec-runtime-gate/sec-runtime-gate-windows-run.json",
-                                            "sha256": "b2902e7249f7cfe78911df0417b4a2eb31b379665e0beeef94bbbe37bc551d2f",
+                                            "sha256": "d5d4b3f707f64d6cdc6e9b53bcd83785a92895d9ed0fe49be60d8cddc8e5f7c4",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -17685,7 +17685,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/sec-csp/sec-csp-windows-run.json",
-                                            "sha256": "af0470a6b3ad87ddcd298498993e336da151477530bb756c030ccce5748ced97",
+                                            "sha256": "6150585c180422eda85e3e86d7d6d5a10bc890f298385b200952121af21a8a5c",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -17922,7 +17922,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/sec-e2e/sec-e2e-windows-run.json",
-                                            "sha256": "2e5b9fda9692570c497f7ba59991d888d895eac9f650a2f579e954b93415f1be",
+                                            "sha256": "edf135b9b0f0cb0b1bfb5793a3eb9a61f85c60bd3bb611b0dec3057ec632d162",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
@@ -18120,7 +18120,7 @@
                                     "windows": {
                                         "acceptance": {
                                             "path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/sec-release-gate/sec-release-gate-windows-run.json",
-                                            "sha256": "c4f970e562c9dfb5c77028b1b227333662f4e8c778132f048585365e34ebc069",
+                                            "sha256": "42ea5fa8ecf162c719b87bed06c152685334731b06195cfa38efb54eb417e838",
                                             "required_case_ids": [
                                                 "W1",
                                                 "W2",
