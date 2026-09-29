@@ -208,7 +208,9 @@ async def _existing_ticket_for_work_order(token: str, wo_id: str) -> dict[str, A
     for item in listing.get("items") or []:
         if not isinstance(item, dict):
             continue
-        evidence = item.get("evidence") if isinstance(item.get("evidence"), dict) else {}
+        evidence = item.get("evidence")
+        if not isinstance(evidence, dict):
+            continue
         if str(evidence.get("source_ref") or "") != wo_id:
             continue
         ticket_id, ticket_no = item.get("id"), str(item.get("ticket_no") or "")
