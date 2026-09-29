@@ -22,7 +22,8 @@ async def _proxy_json(
     timeout: float | None = None,
     retries: int | None = None,
 ):
-    url = f"{_facade()._market_base_url()}{path}"
+    api_base = _facade()._market_api_base_url()
+    url = f"{api_base}{path}"
     headers: dict[str, str] = {"Accept": "application/json"}
     if authorization:
         headers["Authorization"] = _facade()._auth_header(authorization)
@@ -40,7 +41,7 @@ async def _proxy_json(
                 req_headers = dict(headers)
                 if mutating:
                     try:
-                        await client.get(f"{_facade()._market_base_url()}/api/csrf")
+                        await client.get(f"{api_base}/api/csrf")
                         csrf = client.cookies.get("csrf_token")
                         if csrf:
                             req_headers["X-CSRF-Token"] = csrf

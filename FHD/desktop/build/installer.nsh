@@ -1,33 +1,36 @@
-; XCAGI NSIS 安装包自定义脚本
-; =============================================================================
-; 此文件由 electron-builder 的 nsis.include 加载，可定义自定义宏覆盖安装行为。
-; 文档: https://electron.build/configuration/nsis#custom-nsscript
-;
-; 自定义安装步骤：
-;   - customInstall：安装完成后注册 SQLite 定时备份 Windows 计划任务
-;     （每日 12:30 + 每周日 12:30，满足灾备硬约束）
-;   - customUnInstall：卸载时删除备份计划任务
-;
-; 备份脚本随 backend PyInstaller 包一同分发到 resources\backend\scripts\backup\，
-; 由 NSIS 安装时调用 PowerShell 注册。
+!define XCAGI_PRODUCT_DISPLAY_VERSION "1.0.0.5"
+
+; XCAGI NSIS include. build-installer.ps1 rewrites XCAGI_PRODUCT_DISPLAY_VERSION
+; from VERSION.md before electron-builder runs. npm/Electron stay on the
+; three-part toolchain version; the uninstall DisplayVersion is the four-part
+; product version.
 
 !macro customInstall
-  ; 注册定时备份计划任务（幂等，重复安装不会重复注册）
-  ; 备份脚本随 PyInstaller datas 打包到 _internal\scripts\backup\
+  WriteRegStr SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY}" "DisplayVersion" "${XCAGI_PRODUCT_DISPLAY_VERSION}"
+
   DetailPrint "Registering XCAGI backup scheduled tasks..."
-  nsExec::ExecToLog 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$INSTDIR\resources\backend\_internal\scripts\backup\Install-BackupTask.ps1"'
+  StrCpy $R9 "$WINDIR\Sysnative\WindowsPowerShell\v1.0\powershell.exe"
+  ${IfNot} ${FileExists} "$R9"
+    StrCpy $R9 "$WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe"
+  ${EndIf}
+  nsExec::ExecToLog '"$R9" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$INSTDIR\resources\backend\_internal\scripts\backup\Install-BackupTask.ps1"'
   Pop $0
   ${If} $0 != 0
-    DetailPrint "WARNING: backup task registration exited with code $0 (non-fatal)"
+    DetailPrint "ERROR: backup task registration exited with code $0"
+    MessageBox MB_ICONSTOP "XCAGI backup scheduled task registration failed (exit $0). Backup is not delivered."
+    Abort
   ${Else}
     DetailPrint "XCAGI backup scheduled tasks registered."
   ${EndIf}
 !macroend
 
 !macro customUnInstall
-  ; 卸载时清理计划任务
   DetailPrint "Removing XCAGI backup scheduled tasks..."
-  nsExec::ExecToLog 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$INSTDIR\resources\backend\_internal\scripts\backup\Uninstall-BackupTask.ps1"'
+  StrCpy $R9 "$WINDIR\Sysnative\WindowsPowerShell\v1.0\powershell.exe"
+  ${IfNot} ${FileExists} "$R9"
+    StrCpy $R9 "$WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe"
+  ${EndIf}
+  nsExec::ExecToLog '"$R9" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$INSTDIR\resources\backend\_internal\scripts\backup\Uninstall-BackupTask.ps1"'
   Pop $0
   DetailPrint "XCAGI backup scheduled tasks cleanup done (exit code $0)."
 !macroend
