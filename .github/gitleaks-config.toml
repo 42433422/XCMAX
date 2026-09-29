@@ -42,6 +42,9 @@ paths = [
     # 验收证据中的 feed 签名回执：publicKeySha256 是公钥 SHA256 指纹（公开信息），非凭据；
     # 文件名绑定回执 schema（仅含公开哈希），误报 generic-api-key
     '''FHD/docs/evidence/.*feed-signature-receipt\.json''',
+    # 审批验收日志里的 flow_key 是本机流程编号，不是访问密钥。
+    '''feature-acceptance-20260929b/erp-approval/macos/run\.log''',
+    '''capabilities/assets/evidence/erp-approval-run\.log''',
 ]
 
 # 项目特定的密钥模式（XCMAX 自定义）

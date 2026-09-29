@@ -184,9 +184,9 @@
     {
       "key": "web",
       "applicable": 128,
-      "verified": 55,
+      "verified": 124,
       "partial": 0,
-      "pending": 73,
+      "pending": 4,
       "last_verified_at": "2026-09-29",
       "label": "Web / 后端",
       "level": "签约级"
@@ -215,14 +215,14 @@
   "capabilities": {
     "total": 158,
     "by_status": {
-      "verified": 54,
-      "partial": 93,
-      "implemented": 7,
+      "verified": 55,
+      "partial": 95,
+      "implemented": 4,
       "planned": 4
     },
     "domains": 10,
     "modules": 28,
-    "completion": 77,
+    "completion": 78,
     "catalog_version": "2026-09-16",
     "platforms": [
       {
@@ -248,9 +248,9 @@
       {
         "key": "web",
         "applicable": 128,
-        "verified": 55,
+        "verified": 124,
         "partial": 0,
-        "pending": 73,
+        "pending": 4,
         "last_verified_at": "2026-09-29",
         "label": "Web / 后端",
         "level": "签约级"
@@ -3358,8 +3358,8 @@
         "run_log": {
           "file": "erp-approval-run.log",
           "public_path": "/capabilities/assets/evidence/erp-approval-run.log",
-          "sha256": "4c04461e9122c104fa8cf8a9a4233e9e43966861895da0f23083cfe2909e6dfa",
-          "size_bytes": 1604
+          "sha256": "ff791de5ce9c0dfede839284659a806d8fd6b3073a578ddfd566a7b32ccf4b4f",
+          "size_bytes": 1597
         },
         "source_run": "/capabilities/assets/evidence/erp-approval-erp-approval-web-run.json"
       },
