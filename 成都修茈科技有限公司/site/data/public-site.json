@@ -174,9 +174,9 @@
     {
       "key": "macos",
       "applicable": 100,
-      "verified": 88,
-      "partial": 0,
-      "pending": 12,
+      "verified": 77,
+      "partial": 19,
+      "pending": 4,
       "last_verified_at": "2026-09-29",
       "label": "macOS 桌面",
       "level": "签约级"
@@ -216,13 +216,13 @@
     "total": 158,
     "by_status": {
       "verified": 55,
-      "partial": 89,
-      "implemented": 10,
+      "partial": 95,
+      "implemented": 4,
       "planned": 4
     },
     "domains": 10,
     "modules": 28,
-    "completion": 77,
+    "completion": 78,
     "catalog_version": "2026-09-16",
     "platforms": [
       {
@@ -238,9 +238,9 @@
       {
         "key": "macos",
         "applicable": 100,
-        "verified": 88,
-        "partial": 0,
-        "pending": 12,
+        "verified": 77,
+        "partial": 19,
+        "pending": 4,
         "last_verified_at": "2026-09-29",
         "label": "macOS 桌面",
         "level": "签约级"
@@ -461,8 +461,8 @@
         "run_log": {
           "file": "ai-chat-core-run.log",
           "public_path": "/capabilities/assets/evidence/ai-chat-core-run.log",
-          "sha256": "fc2297a26d0f3c6cd9e288eab41f2c595e7b8f083931792e1046347a54814ff4",
-          "size_bytes": 1068
+          "sha256": "00633dc5115865a0c8dcdab7bd2db3a6eed27169ea6594ee2da791a222812a5c",
+          "size_bytes": 1350
         },
         "source_run": "/capabilities/assets/evidence/ai-chat-core-ai-chat-core-web-run.json"
       },
@@ -548,8 +548,8 @@
         "run_log": {
           "file": "ai-csv-run.log",
           "public_path": "/capabilities/assets/evidence/ai-csv-run.log",
-          "sha256": "cd29a15607f8a5b1e92fa100aa160282d7dc2fbbf3ad61d73ff8efee7d1814d5",
-          "size_bytes": 1840
+          "sha256": "f4e12e0502151934085fd5c18279aaa6d71a7e85df765d340cd7e1b1827949cd",
+          "size_bytes": 1863
         },
         "source_run": "/capabilities/assets/evidence/ai-csv-ai-csv-web-run.json"
       },
@@ -594,8 +594,8 @@
         "run_log": {
           "file": "ai-employee-pack-run.log",
           "public_path": "/capabilities/assets/evidence/ai-employee-pack-run.log",
-          "sha256": "958311f485c7a160c213b87c9d530130d1e499e2406380dfca797cdd8c14fc41",
-          "size_bytes": 1442
+          "sha256": "cd5422db4fb1313dd8863ba219ffdab17877086fa8eabb9e9faef00511abb5b9",
+          "size_bytes": 1462
         },
         "source_run": "/capabilities/assets/evidence/ai-employee-pack-ai-employee-pack-web-run.json"
       },
@@ -722,8 +722,8 @@
         "run_log": {
           "file": "ai-employees-workflow-run.log",
           "public_path": "/capabilities/assets/evidence/ai-employees-workflow-run.log",
-          "sha256": "e2525173ebbc3d4c0a2b2ffca2ed36b97256128e31fcf3586a476c7a3369c85a",
-          "size_bytes": 1724
+          "sha256": "21e4315f2661680bf43c1440370a2656376dd55c036e686605de16d8c5c8a12a",
+          "size_bytes": 1746
         },
         "source_run": "/capabilities/assets/evidence/ai-employees-workflow-ai-employees-workflow-web-run.json"
       },
@@ -809,8 +809,8 @@
         "run_log": {
           "file": "ai-excel-run.log",
           "public_path": "/capabilities/assets/evidence/ai-excel-run.log",
-          "sha256": "d5a1b5b745139c418d3d5c6eeceb2999a94824cc728e917a1bda3385a89a58bf",
-          "size_bytes": 1533
+          "sha256": "b5a17d14ca8d43ac82299282ff3687c4e6a82530bd73a94c5a7ba20ba38fa2b6",
+          "size_bytes": 1555
         },
         "source_run": "/capabilities/assets/evidence/ai-excel-ai-excel-web-run.json"
       },
@@ -855,8 +855,8 @@
         "run_log": {
           "file": "ai-intent-run.log",
           "public_path": "/capabilities/assets/evidence/ai-intent-run.log",
-          "sha256": "6841576e41fc88ae2242f2ae33b31ee5a4979a76b5234ff1dc0afc219971e698",
-          "size_bytes": 1320
+          "sha256": "536c5998baad48b4077c73dc443a0d7e9d3b1d5e7795fe975368c9fd7a28f35e",
+          "size_bytes": 1345
         },
         "source_run": "/capabilities/assets/evidence/ai-intent-ai-intent-web-run.json"
       },
@@ -901,8 +901,8 @@
         "run_log": {
           "file": "ai-knowledge-run.log",
           "public_path": "/capabilities/assets/evidence/ai-knowledge-run.log",
-          "sha256": "acb096304c878b534325200c5cce71722ae3adde71a840b2c9ed5b48d9c1f5ac",
-          "size_bytes": 1542
+          "sha256": "015bc664b43d52dc3ee3c4528a7208ed8c51c068effedb97a0b7366fba24a15c",
+          "size_bytes": 1492
         },
         "source_run": "/capabilities/assets/evidence/ai-knowledge-ai-knowledge-web-run.json"
       },
@@ -1029,8 +1029,8 @@
         "run_log": {
           "file": "ai-ocr-doc-run.log",
           "public_path": "/capabilities/assets/evidence/ai-ocr-doc-run.log",
-          "sha256": "d186165975aca004929d035d3d523aad1ced02b1f8d81b190d8ec06298ffc0ae",
-          "size_bytes": 1852
+          "sha256": "c3187481703d530a050ebf8be90b0c812a1513fcae4000e8b3d25f5ebf4b21de",
+          "size_bytes": 1789
         },
         "source_run": "/capabilities/assets/evidence/ai-ocr-doc-ai-ocr-doc-web-run.json"
       },
@@ -1075,8 +1075,8 @@
         "run_log": {
           "file": "ai-pdf-run.log",
           "public_path": "/capabilities/assets/evidence/ai-pdf-run.log",
-          "sha256": "d6b4599fa7b3d99e5d193ae9f2f8c714e27bdfa08658d91a6ffea5a0e9e14e34",
-          "size_bytes": 1586
+          "sha256": "8af5cf6dd8e268ad8147b76e85901a709ae3ccaf26a734ddf8fbdc0b047e0283",
+          "size_bytes": 1834
         },
         "source_run": "/capabilities/assets/evidence/ai-pdf-ai-pdf-web-run.json"
       },
@@ -1121,8 +1121,8 @@
         "run_log": {
           "file": "ai-ppt-run.log",
           "public_path": "/capabilities/assets/evidence/ai-ppt-run.log",
-          "sha256": "c632b7cdd1f94f320ec5d92fc87fbc699a1c5ae5e82cdf693ec91ed019dc9344",
-          "size_bytes": 1854
+          "sha256": "80ef2f0be50454bcd18e8f2e9954e9e437098055a360a73de4566d02b624dbe4",
+          "size_bytes": 1878
         },
         "source_run": "/capabilities/assets/evidence/ai-ppt-ai-ppt-web-run.json"
       },
@@ -1208,8 +1208,8 @@
         "run_log": {
           "file": "ai-task-workspace-run.log",
           "public_path": "/capabilities/assets/evidence/ai-task-workspace-run.log",
-          "sha256": "ff3d55677e1cc48102db65a860fdd6b976e269305f5efd11fa968c42ed007bf4",
-          "size_bytes": 1465
+          "sha256": "d1670527ff54226f69b724e414cd4af9ed9c689f9b678d27c2a195d879693639",
+          "size_bytes": 1522
         },
         "source_run": "/capabilities/assets/evidence/ai-task-workspace-ai-task-workspace-web-run.json"
       },
@@ -1254,8 +1254,8 @@
         "run_log": {
           "file": "ai-tts-run.log",
           "public_path": "/capabilities/assets/evidence/ai-tts-run.log",
-          "sha256": "a81335450164bedc7ae76a68c479f80e2be0d3785b8d93d58e8587100d64372a",
-          "size_bytes": 1165
+          "sha256": "7836d833d0a440470fb8304704be63ccb47c70c019584b93eaff14ab1a852e8c",
+          "size_bytes": 1187
         },
         "source_run": "/capabilities/assets/evidence/ai-tts-ai-tts-web-run.json"
       },
@@ -1341,8 +1341,8 @@
         "run_log": {
           "file": "ai-word-run.log",
           "public_path": "/capabilities/assets/evidence/ai-word-run.log",
-          "sha256": "24fb122abc20ee81574728b570e7ec2e0bd7050e2362fc195b37cdd7d35b6b08",
-          "size_bytes": 1818
+          "sha256": "8a5d8186b096a6162a71ada3f0d28a29de302db2eff2574a86c92e36c0c3744a",
+          "size_bytes": 1842
         },
         "source_run": "/capabilities/assets/evidence/ai-word-ai-word-web-run.json"
       },
@@ -1411,23 +1411,23 @@
         "failed": 0,
         "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
         "media": [
           {
             "file": "base-config-result.png",
-            "sha256": "6bbcbc2685cfdaad5cd5bfee6a816589c87357f126211642b4833b1b5a1e76b1",
+            "sha256": "36155b3df26f93a8e60f6cbf80e90a4f10d234ecafb27c6104324080648d4ab4",
             "visual_review": "accepted",
-            "visible_result": "系统设置页：个人主页 SUNBIRD（显示名称、邮箱、登录名）、角色与权限、模型服务与账户余额 ¥97.60。",
+            "visible_result": "系统设置个人主页。展示名称和登录名 SUNBIRD，邮箱 sunbird@xcagi.local，余额 ¥97.06。画面没有打开语音试听。",
             "kind": "screenshot",
             "public_path": "/capabilities/assets/evidence/base-config-result.png"
           },
           {
             "file": "base-config-operation.webm",
-            "sha256": "a266c50ff8284f4e7ea811beaf68fd0824ddc67233f47a803b55861be013eb7a",
+            "sha256": "4b6f45b8a4aa258d28cb971ccb290cbf657760b19acbcfe7c6ae05ba1b94bd54",
             "visual_review": "accepted",
-            "visible_result": "录屏为系统设置页滚动加载，各帧一致。",
+            "visible_result": "录屏结束停在上述结果画面。系统设置个人主页。展示名称和登录名 SUNBIRD，邮箱 sunbird@xcagi.local，余额 ¥97.06。画面没有打开语音试听。",
             "kind": "video",
-            "size_bytes": 269792,
+            "size_bytes": 300557,
             "duration_seconds": null,
             "codec": "webm",
             "public_path": null
@@ -1436,8 +1436,8 @@
         "run_log": {
           "file": "base-config-run.log",
           "public_path": "/capabilities/assets/evidence/base-config-run.log",
-          "sha256": "55cadc7a836aee3bf60f4e3369604377438ac5cae8fd89d1be19c6699cef6837",
-          "size_bytes": 1288
+          "sha256": "6397f2008bfe8d9714b927c82c8bee4dcb047e9dac7919b5ece6fd2dcc3d7343",
+          "size_bytes": 1310
         },
         "source_run": "/capabilities/assets/evidence/base-config-base-config-macos-run.json"
       },
@@ -1445,27 +1445,27 @@
         "feature": "base-db",
         "platform": "macos",
         "status": "passed",
-        "passed": 5,
+        "passed": 4,
         "failed": 0,
         "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
         "media": [
           {
             "file": "base-db-result.png",
-            "sha256": "f57a70ec7d6d7de0dd512d5e9774b2237a37f565e46238a809bc7ed8e3a1cb89",
+            "sha256": "5bf805fc0ea520e08a33226e21716d080dfd11b3894157587976a5abfc872704",
             "visual_review": "accepted",
-            "visible_result": "「桌面运行时」页：运行状态明确显示 桌面模式=是、数据库=/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/data/xcagi.db、存储模式=本地 SQLite、连接(脱敏) sqlite:///…/xcagi.db。",
+            "visible_result": "数据来源页。私人数据库读取助手，当前来源本地消息数据库，状态不可用。通用卡「本地消息数据库」标规划中、需要授权。下方 QQ、钉钉、企业微信、飞书等也标规划中。",
             "kind": "screenshot",
             "public_path": "/capabilities/assets/evidence/base-db-result.png"
           },
           {
             "file": "base-db-operation.webm",
-            "sha256": "8f7e0d7b0adc0ea63238784018687389786d97bb89dd6fe437d3c4a79d2c5702",
+            "sha256": "ba59feb142d0831aa2e0dba171775b7d85c1897767f1bd4a5d9ffeae8785a656",
             "visual_review": "accepted",
-            "visible_result": "6.0s 录屏为桌面运行时页，展示本地数据目录与同一 SQLite 存储路径。",
+            "visible_result": "录屏结束停在上述结果画面。数据来源页。私人数据库读取助手，当前来源本地消息数据库，状态不可用。通用卡「本地消息数据库」标规划中、需要授权。下方 QQ、钉钉、企业微信、飞书等也标规划中。",
             "kind": "video",
-            "size_bytes": 324946,
+            "size_bytes": 403329,
             "duration_seconds": null,
             "codec": "webm",
             "public_path": null
@@ -1474,36 +1474,36 @@
         "run_log": {
           "file": "base-db-run.log",
           "public_path": "/capabilities/assets/evidence/base-db-run.log",
-          "sha256": "44be5140320ac6ad8f44f7a5a4106810d8d3991a47358620727dcb13fa40e464",
-          "size_bytes": 1630
+          "sha256": "93a22eae715836069a51b75becdc2adb4e5dd0582d78c90e564744cc1afc39db",
+          "size_bytes": 1360
         },
         "source_run": "/capabilities/assets/evidence/base-db-base-db-macos-run.json"
       },
       {
         "feature": "base-device-bind",
         "platform": "macos",
-        "status": "blocked",
-        "passed": 0,
-        "failed": 0,
+        "status": "failed",
+        "passed": 3,
+        "failed": 1,
         "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
         "media": [
           {
             "file": "base-device-bind-result.png",
-            "sha256": "ebff0cdaeb9c2bbefc0089489d358ed419107fa49336718fff907f3521dc535c",
+            "sha256": "f48db08c3c01e3b5119f979eb2520375e91d104cbd978d263f99febef6bde7bc",
             "visual_review": "accepted",
-            "visible_result": "「智能对话」默认页(无配对交互)；本项全部用例受阻，未发生真实绑定操作。",
+            "visible_result": "系统设置。拟人 Persy 暂无入数，可见「登录」和「登录后同步修茈市场」。",
             "kind": "screenshot",
             "public_path": "/capabilities/assets/evidence/base-device-bind-result.png"
           },
           {
             "file": "base-device-bind-operation.webm",
-            "sha256": "32327db0ec0041598e553be226b66438f04289b082df9fb87dfb70499bb1d728",
+            "sha256": "271d68a5e491338574602aac9a14c483d6561efc05d6d28427d764b12f0b7854",
             "visual_review": "accepted",
-            "visible_result": "2.38s 录屏为默认对话页，无配对流程。",
+            "visible_result": "录屏结束停在上述结果画面。系统设置。拟人 Persy 暂无入数，可见「登录」和「登录后同步修茈市场」。",
             "kind": "video",
-            "size_bytes": 95213,
+            "size_bytes": 350912,
             "duration_seconds": null,
             "codec": "webm",
             "public_path": null
@@ -1512,8 +1512,8 @@
         "run_log": {
           "file": "base-device-bind-run.log",
           "public_path": "/capabilities/assets/evidence/base-device-bind-run.log",
-          "sha256": "342f63a483c265f583b3fba2412dbdf3f629b2a7c7b7ff010cd110c74b528e6e",
-          "size_bytes": 966
+          "sha256": "c6a37bfa92643d312481b23128728c385ae5e9b80496dded4810fba20073a803",
+          "size_bytes": 1640
         },
         "source_run": "/capabilities/assets/evidence/base-device-bind-base-device-bind-macos-run.json"
       },
@@ -1615,8 +1615,8 @@
         "run_log": {
           "file": "base-edition-pack-run.log",
           "public_path": "/capabilities/assets/evidence/base-edition-pack-run.log",
-          "sha256": "17dd92addf341e281e1077ebcb4a041108bceebc5a7c87b5ee5bec52d0468f32",
-          "size_bytes": 1412
+          "sha256": "598253bfd247c3f1e53d94242602a459601c6667118d55917f4a00cfa68dbe89",
+          "size_bytes": 1432
         },
         "source_run": "/capabilities/assets/evidence/base-edition-pack-base-edition-pack-web-run.json"
       },
@@ -1661,8 +1661,8 @@
         "run_log": {
           "file": "base-health-run.log",
           "public_path": "/capabilities/assets/evidence/base-health-run.log",
-          "sha256": "30315d70535732527bb0ae4210e46ab5b993ef48dd2c58ae5c30d7348c01e104",
-          "size_bytes": 1261
+          "sha256": "f680b2987d86b562943eff43f76aab585754a5e1a48bf12d978c739b3fb18165",
+          "size_bytes": 1282
         },
         "source_run": "/capabilities/assets/evidence/base-health-base-health-web-run.json"
       },
@@ -1731,23 +1731,23 @@
         "failed": 0,
         "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
         "media": [
           {
             "file": "base-install-guide-result.png",
             "sha256": "73c42a0d307c82912401ff006df65faba49516e093a60f67a0573f70e0348d59",
             "visual_review": "accepted",
-            "visible_result": "新手引导「XCAGI · 创建您的数字公司」第 1 步「您的公司叫什么？」，公司名称输入框为 SUNBIRD，按钮「让 XC 认识我的公司」。",
+            "visible_result": "创建您的数字公司，步骤停在公司。公司名称已填 SUNBIRD，按钮「让 XC 认识我的公司」。",
             "kind": "screenshot",
             "public_path": "/capabilities/assets/evidence/base-install-guide-result.png"
           },
           {
             "file": "base-install-guide-operation.webm",
-            "sha256": "ff4346fcd5feae82795d950faa64eaf824e93a36b1ba4d84aafdd0a55299ae91",
+            "sha256": "edbdf08a995cf04e7780ffe3e084898f0753b03ce1eec07b36bd3229e6ba86b4",
             "visual_review": "accepted",
-            "visible_result": "录屏为引导页第 1 步，各帧一致。",
+            "visible_result": "录屏结束停在上述结果画面。创建您的数字公司，步骤停在公司。公司名称已填 SUNBIRD，按钮「让 XC 认识我的公司」。",
             "kind": "video",
-            "size_bytes": 184199,
+            "size_bytes": 197476,
             "duration_seconds": null,
             "codec": "webm",
             "public_path": null
@@ -1756,8 +1756,8 @@
         "run_log": {
           "file": "base-install-guide-run.log",
           "public_path": "/capabilities/assets/evidence/base-install-guide-run.log",
-          "sha256": "a9c5380bf10abc0e2bfd548e8b279267f733c7eeb19f4c00266f84a1b3e8b1a6",
-          "size_bytes": 1354
+          "sha256": "6684945934cd2747e633e2e53c9912c489f066cdd518756564975f00991ebf89",
+          "size_bytes": 1377
         },
         "source_run": "/capabilities/assets/evidence/base-install-guide-base-install-guide-macos-run.json"
       },
@@ -1866,23 +1866,23 @@
         "failed": 0,
         "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
         "media": [
           {
             "file": "base-mac-client-result.png",
-            "sha256": "84d5cc239f0c0dbf1ca673455527653d56e953bf8bdc98eb59ee03b7be71c6c2",
+            "sha256": "4be91959f7381ee1e18d04080068524ef470e7025ec0e842db11c4b3b3001512",
             "visual_review": "accepted",
-            "visible_result": "「桌面运行时」页：运行状态表（桌面模式 是、数据目录/数据库/存储模式 本地 SQLite/Mod 目录/模型目录均指向 /Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer），本地模型区。",
+            "visible_result": "桌面运行时。桌面模式是。数据目录、数据库、Mod、模型都指向 /Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer。存储本地 SQLite。本地模型暂无已安装模型。",
             "kind": "screenshot",
             "public_path": "/capabilities/assets/evidence/base-mac-client-result.png"
           },
           {
             "file": "base-mac-client-operation.webm",
-            "sha256": "6121c22cfc9f8f8ef4fbc8c76c2e1a7817d66da44ab198eda42318a71404ecff",
+            "sha256": "3045879aa6ea0b2f65efc73bfc474b13c5824bd26f0c7479c692b15dd0017ebd",
             "visual_review": "accepted",
-            "visible_result": "录屏为桌面运行时页，运行状态表逐帧一致。",
+            "visible_result": "录屏结束停在上述结果画面。桌面运行时。桌面模式是。数据目录、数据库、Mod、模型都指向 /Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer。存储本地 SQLite。本地模型暂无已安装模型。",
             "kind": "video",
-            "size_bytes": 274375,
+            "size_bytes": 329899,
             "duration_seconds": null,
             "codec": "webm",
             "public_path": null
@@ -1891,8 +1891,8 @@
         "run_log": {
           "file": "base-mac-client-run.log",
           "public_path": "/capabilities/assets/evidence/base-mac-client-run.log",
-          "sha256": "1ce4a3f9735cce09bf0d43bf1a61f547020090b7f2e2c575640fd77039f117be",
-          "size_bytes": 1338
+          "sha256": "c2beeda8486b81bd705d1f8524cbd8061eae30f5eaac9559132f0c5e3b9253e6",
+          "size_bytes": 1346
         },
         "source_run": "/capabilities/assets/evidence/base-mac-client-base-mac-client-macos-run.json"
       },
@@ -1937,8 +1937,8 @@
         "run_log": {
           "file": "base-rbac-run.log",
           "public_path": "/capabilities/assets/evidence/base-rbac-run.log",
-          "sha256": "d12c4fa5351e76511688c6ba56177b64f42e4273473bac99e0a3aa3c9a8b0773",
-          "size_bytes": 1356
+          "sha256": "7445331789486b81fb35b8b1cdfb9ec4ef4d2d01ed59505d807c75e2c3262cfb",
+          "size_bytes": 1379
         },
         "source_run": "/capabilities/assets/evidence/base-rbac-base-rbac-web-run.json"
       },
@@ -2040,8 +2040,8 @@
         "run_log": {
           "file": "base-settings-run.log",
           "public_path": "/capabilities/assets/evidence/base-settings-run.log",
-          "sha256": "e34ad7f6e1175302e3b24177252f33ec8c6aa5755b97aef3d4dbba0e6906caaf",
-          "size_bytes": 1627
+          "sha256": "bd4284f1b67eea383676420ec4c8559f44a86376e8b12db2e2f8239c564639ec",
+          "size_bytes": 1494
         },
         "source_run": "/capabilities/assets/evidence/base-settings-base-settings-web-run.json"
       },
@@ -2053,23 +2053,23 @@
         "failed": 0,
         "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
         "media": [
           {
             "file": "base-update-mgmt-result.png",
-            "sha256": "6bbcbc2685cfdaad5cd5bfee6a816589c87357f126211642b4833b1b5a1e76b1",
+            "sha256": "fdaf1147f7fc1db8ba6275e3b52184a600a9c472ec436b831ec8f0c845f387a1",
             "visual_review": "accepted",
-            "visible_result": "系统设置页：个人主页、角色与权限、模型服务卡片，版本号 v1.0.0.5 在左下角。",
+            "visible_result": "系统设置模型服务区，余额 ¥97.06。头像下是蓝色「登录」按钮和「登录后同步修茈市场」，个人主页未展开。",
             "kind": "screenshot",
             "public_path": "/capabilities/assets/evidence/base-update-mgmt-result.png"
           },
           {
             "file": "base-update-mgmt-operation.webm",
-            "sha256": "3d668b6f4d715d35b1190b5dfe154c30bd357732ede06ab0e83928d281d87cee",
+            "sha256": "abbb70e099f6505274520d7487af553e54e9064e6169184d786f31045e711fdf",
             "visual_review": "accepted",
-            "visible_result": "录屏先在智能对话页，再切到系统设置页。",
+            "visible_result": "录屏结束停在上述结果画面。系统设置模型服务区，余额 ¥97.06。头像下是蓝色「登录」按钮和「登录后同步修茈市场」，个人主页未展开。",
             "kind": "video",
-            "size_bytes": 373960,
+            "size_bytes": 541715,
             "duration_seconds": null,
             "codec": "webm",
             "public_path": null
@@ -2078,8 +2078,8 @@
         "run_log": {
           "file": "base-update-mgmt-run.log",
           "public_path": "/capabilities/assets/evidence/base-update-mgmt-run.log",
-          "sha256": "6247741816ec3e585589d17d23fa67336770645cc52f0b63c60f4a7eb4aad7cb",
-          "size_bytes": 1121
+          "sha256": "89b7288fc66badb619563c6ac74087aeb44a121703a47d93e0ab8e1bd26a747d",
+          "size_bytes": 1174
         },
         "source_run": "/capabilities/assets/evidence/base-update-mgmt-base-update-mgmt-macos-run.json"
       },
@@ -2197,8 +2197,8 @@
         "run_log": {
           "file": "ch-asr-run.log",
           "public_path": "/capabilities/assets/evidence/ch-asr-run.log",
-          "sha256": "376668087963fa5d160b86e38294bf6888e5241101f5aadc71f52f904ea8f69e",
-          "size_bytes": 1614
+          "sha256": "233e8c6e8cd0b238ae449e7a2d2d15467c5a7e728b996dcc0326c020f7db58fb",
+          "size_bytes": 1250
         },
         "source_run": "/capabilities/assets/evidence/ch-asr-ch-asr-web-run.json"
       },
@@ -2251,8 +2251,8 @@
         "run_log": {
           "file": "ch-im-core-run.log",
           "public_path": "/capabilities/assets/evidence/ch-im-core-run.log",
-          "sha256": "8a5a20a43558f692c660105e101ebf81edb598c18528d94f570d0bd9427931eb",
-          "size_bytes": 1263
+          "sha256": "e476719fde691e20ddfa7ae64086e074974c53901efd55133ab00b0bccb7265a",
+          "size_bytes": 1287
         },
         "source_run": "/capabilities/assets/evidence/ch-im-core-ch-im-core-web-run.json"
       },
@@ -2305,8 +2305,8 @@
         "run_log": {
           "file": "ch-im-cs-run.log",
           "public_path": "/capabilities/assets/evidence/ch-im-cs-run.log",
-          "sha256": "d301c30214643cd9b110c962a5c6db1729548eac169055572540619565c29fa8",
-          "size_bytes": 1659
+          "sha256": "928226e3b4e28de88d976638a8c4a1a3e334211b5e5910a989494d2b9e45db4f",
+          "size_bytes": 1589
         },
         "source_run": "/capabilities/assets/evidence/ch-im-cs-ch-im-cs-web-run.json"
       },
@@ -2359,8 +2359,8 @@
         "run_log": {
           "file": "ch-im-super-run.log",
           "public_path": "/capabilities/assets/evidence/ch-im-super-run.log",
-          "sha256": "0ebe87c20c516f34d460906349c0df059662bf521df093389fac2082a9bca6c0",
-          "size_bytes": 1230
+          "sha256": "389bc251ef3b4bccedde54cbf8e8432f664266a730a0fb4e39dfa833f8d01ea4",
+          "size_bytes": 1252
         },
         "source_run": "/capabilities/assets/evidence/ch-im-super-ch-im-super-web-run.json"
       },
@@ -2413,8 +2413,8 @@
         "run_log": {
           "file": "ch-im-ws-run.log",
           "public_path": "/capabilities/assets/evidence/ch-im-ws-run.log",
-          "sha256": "1e3f52c191cbbbecb671ed05cad559ecee990ee5f10b05774bba0b8c864d1eb4",
-          "size_bytes": 543
+          "sha256": "05d915d6534400fd595b6777fcb4d2b5f18e0a457624c17293f237eadb4d7991",
+          "size_bytes": 565
         },
         "source_run": "/capabilities/assets/evidence/ch-im-ws-ch-im-ws-web-run.json"
       },
@@ -2516,36 +2516,36 @@
         "run_log": {
           "file": "ch-notify-run.log",
           "public_path": "/capabilities/assets/evidence/ch-notify-run.log",
-          "sha256": "2056f86b6d08ac916a1d5dc7454fde3952cc02edac417e1e97e39d326aabfa53",
-          "size_bytes": 2168
+          "sha256": "87feaa6f7519b322ab7bc090ac1e8ae4d42c2e329dae7719cb0b0c42f97f7e3f",
+          "size_bytes": 1145
         },
         "source_run": "/capabilities/assets/evidence/ch-notify-ch-notify-web-run.json"
       },
       {
         "feature": "ch-realtime-voice",
         "platform": "macos",
-        "status": "blocked",
-        "passed": 0,
-        "failed": 0,
+        "status": "failed",
+        "passed": 2,
+        "failed": 1,
         "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
         "media": [
           {
             "file": "ch-realtime-voice-result.png",
-            "sha256": "1f6aded2c7bb85d0da5c7cc95f9db00ee05c0adbcefc863dec72ea57ebd0d9e3",
+            "sha256": "e16f0f1e0dc5afbbf7317b30cfaa4d6c5d92eb902370c313168f8d6f176da21f",
             "visual_review": "accepted",
-            "visible_result": "「智能对话」默认页；本项全部用例受阻。",
+            "visible_result": "智能对话页，底栏有按住说话和发送，语音播报已勾选。画面上没有正在录音的波形或识别出的语句。",
             "kind": "screenshot",
             "public_path": "/capabilities/assets/evidence/ch-realtime-voice-result.png"
           },
           {
             "file": "ch-realtime-voice-operation.webm",
-            "sha256": "39cbe0232d9e98d2609bd4f0925a15541c914e59a96805775faf862a6e179a4e",
+            "sha256": "88841309b7d08370d1a4938fd53a5c8c37b3784db8a4b446ac5f84efb319845b",
             "visual_review": "accepted",
-            "visible_result": "2.38s 录屏为默认对话页。",
+            "visible_result": "录屏结束停在上述结果画面。智能对话页，底栏有按住说话和发送，语音播报已勾选。画面上没有正在录音的波形或识别出的语句。",
             "kind": "video",
-            "size_bytes": 95169,
+            "size_bytes": 187416,
             "duration_seconds": null,
             "codec": "webm",
             "public_path": null
@@ -2554,8 +2554,8 @@
         "run_log": {
           "file": "ch-realtime-voice-run.log",
           "public_path": "/capabilities/assets/evidence/ch-realtime-voice-run.log",
-          "sha256": "06f168e1f682a7bc7db933aa4e5e0faca51f5b8da2aa1b698bb369b9997f6704",
-          "size_bytes": 863
+          "sha256": "fd81982568095c165eec4eac5702a93a2528057fcd42e16752a13e5d2d28ed76",
+          "size_bytes": 1264
         },
         "source_run": "/capabilities/assets/evidence/ch-realtime-voice-ch-realtime-voice-macos-run.json"
       },
@@ -2608,8 +2608,8 @@
         "run_log": {
           "file": "ch-task-center-run.log",
           "public_path": "/capabilities/assets/evidence/ch-task-center-run.log",
-          "sha256": "e6031fee29baeb8867499e82b74450f82a4ca7dfba8d46848b67a84353f77de4",
-          "size_bytes": 1227
+          "sha256": "cd0d9f194ad1ae8cbb8342fb3bec39a5605e18326ef60d5a99b7b44178b61731",
+          "size_bytes": 1250
         },
         "source_run": "/capabilities/assets/evidence/ch-task-center-ch-task-center-web-run.json"
       },
@@ -2662,8 +2662,8 @@
         "run_log": {
           "file": "ch-wechat-contacts-run.log",
           "public_path": "/capabilities/assets/evidence/ch-wechat-contacts-run.log",
-          "sha256": "eae4d1dbc467b8029374924e0a00265bf059d6a78b2b42c918ede1c9db0eb09a",
-          "size_bytes": 2091
+          "sha256": "b4d9f51bbd6832e36164c2eebd9a6bd050fb1fb8930908b5f0bbf3459e5cccf9",
+          "size_bytes": 1362
         },
         "source_run": "/capabilities/assets/evidence/ch-wechat-contacts-ch-wechat-contacts-web-run.json"
       },
@@ -2716,8 +2716,8 @@
         "run_log": {
           "file": "ch-wechat-context-run.log",
           "public_path": "/capabilities/assets/evidence/ch-wechat-context-run.log",
-          "sha256": "486430c19c78ffe72d161a2701e52f23cc6d89e7d7be267fd8f41363ebf61d2a",
-          "size_bytes": 2046
+          "sha256": "9c80343a767a6ae5335551d444bb16299bb4e1e52ba50718d0395ab8413b633e",
+          "size_bytes": 1269
         },
         "source_run": "/capabilities/assets/evidence/ch-wechat-context-ch-wechat-context-web-run.json"
       },
@@ -2770,36 +2770,36 @@
         "run_log": {
           "file": "ch-wechat-ingest-run.log",
           "public_path": "/capabilities/assets/evidence/ch-wechat-ingest-run.log",
-          "sha256": "b5fddab117ac0b5e9d472eb4f2b23adbc0aef7633caaa1050047f0946f71aaef",
-          "size_bytes": 2061
+          "sha256": "78b2138ef9eff7a6b26199c569535969021b4cf90b0bef57d9c0435c2ef7fc11",
+          "size_bytes": 1385
         },
         "source_run": "/capabilities/assets/evidence/ch-wechat-ingest-ch-wechat-ingest-web-run.json"
       },
       {
         "feature": "ch-wechat-phone",
         "platform": "macos",
-        "status": "blocked",
-        "passed": 0,
-        "failed": 0,
+        "status": "failed",
+        "passed": 2,
+        "failed": 1,
         "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
         "media": [
           {
             "file": "ch-wechat-phone-result.png",
-            "sha256": "1f6aded2c7bb85d0da5c7cc95f9db00ee05c0adbcefc863dec72ea57ebd0d9e3",
+            "sha256": "48773f785ea52f522e00e78fcca86f60867596b0b5193b408cc7035708d5ea1e",
             "visual_review": "accepted",
-            "visible_result": "「智能对话」默认页；本项全部用例受阻。",
+            "visible_result": "数据对接中心，四步上传页。画面不是微信 PC 采集端，也没有来电记录。",
             "kind": "screenshot",
             "public_path": "/capabilities/assets/evidence/ch-wechat-phone-result.png"
           },
           {
             "file": "ch-wechat-phone-operation.webm",
-            "sha256": "4ef9d42b26bd002bfa692ea5ca6afd65cdc4def6c0851bf5a3f9cdd9bbe898b7",
+            "sha256": "a3e61042e98c0b78eed92626f4e0109fbe0550c2fc1e1e03902227e613016d15",
             "visual_review": "accepted",
-            "visible_result": "2.38s 录屏为默认对话页。",
+            "visible_result": "录屏结束停在上述结果画面。数据对接中心，四步上传页。画面不是微信 PC 采集端，也没有来电记录。",
             "kind": "video",
-            "size_bytes": 95169,
+            "size_bytes": 341012,
             "duration_seconds": null,
             "codec": "webm",
             "public_path": null
@@ -2808,8 +2808,8 @@
         "run_log": {
           "file": "ch-wechat-phone-run.log",
           "public_path": "/capabilities/assets/evidence/ch-wechat-phone-run.log",
-          "sha256": "643e242087859706c9ffdcdb3cdcfc31766e85e8dfb2767fad2bdcb9f11466b2",
-          "size_bytes": 847
+          "sha256": "40ca794dd66d1a719d3352b353ed6eb81be250540a68a4565055f6d2780bee9e",
+          "size_bytes": 1249
         },
         "source_run": "/capabilities/assets/evidence/ch-wechat-phone-ch-wechat-phone-macos-run.json"
       },
@@ -2821,23 +2821,23 @@
         "failed": 0,
         "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
         "media": [
           {
             "file": "dt-cold-start-rollback-result.png",
-            "sha256": "bd761fad9ff69e622f077a5c37b3e747b6a8a0731cdb47185d3f0b425f0a736e",
+            "sha256": "75b83d1d2846e94e2c158fef7b07150bbba29860fcfaf9e0fbb9f08014c4fc60",
             "visual_review": "accepted",
-            "visible_result": "智能对话主页：欢迎语、历史问答、右侧会话列表，左下「系统正常」。",
+            "visible_result": "智能对话页，助手说明已保存的能力范围。右栏 19 条消息。底栏按住说话。画面不是回滚日志。",
             "kind": "screenshot",
             "public_path": "/capabilities/assets/evidence/dt-cold-start-rollback-result.png"
           },
           {
             "file": "dt-cold-start-rollback-operation.webm",
-            "sha256": "285af91d011db923748003e5427ec14c2cc31becb236f09198fc13365420ff33",
+            "sha256": "e7c808784e797d7b76657fc0352c433da694fdde0e72371a92088107c6d88115",
             "visual_review": "accepted",
-            "visible_result": "录屏为智能对话页，各帧一致。",
+            "visible_result": "录屏结束停在上述结果画面。智能对话页，助手说明已保存的能力范围。右栏 19 条消息。底栏按住说话。画面不是回滚日志。",
             "kind": "video",
-            "size_bytes": 172396,
+            "size_bytes": 185295,
             "duration_seconds": null,
             "codec": "webm",
             "public_path": null
@@ -2846,8 +2846,8 @@
         "run_log": {
           "file": "dt-cold-start-rollback-run.log",
           "public_path": "/capabilities/assets/evidence/dt-cold-start-rollback-run.log",
-          "sha256": "da79ac318eb30379b858baa34b20beebe1e4985492a300f64e1bd68fcd4e8942",
-          "size_bytes": 1131
+          "sha256": "088d008736ef2a2256aaf6fd4c79949f07838b64c0e48354b9538590ff5af394",
+          "size_bytes": 1151
         },
         "source_run": "/capabilities/assets/evidence/dt-cold-start-rollback-dt-cold-start-rollback-macos-run.json"
       },
@@ -2968,36 +2968,36 @@
         "run_log": {
           "file": "dt-evidence-store-run.log",
           "public_path": "/capabilities/assets/evidence/dt-evidence-store-run.log",
-          "sha256": "c4c49ca51a643eeb91bfb7bb8099eb618a16e023adbda4a464bcc684e5851743",
-          "size_bytes": 1523
+          "sha256": "26d167831eebf0520cb76847f0c0ab6c383584ef7e07a469c138a6d771e0d630",
+          "size_bytes": 1545
         },
         "source_run": "/capabilities/assets/evidence/dt-evidence-store-dt-evidence-store-web-run.json"
       },
       {
         "feature": "dt-install-sign",
         "platform": "macos",
-        "status": "passed",
-        "passed": 3,
-        "failed": 0,
+        "status": "failed",
+        "passed": 2,
+        "failed": 1,
         "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
         "media": [
           {
             "file": "dt-install-sign-result.png",
-            "sha256": "749ce214ba3a0dff81571cf42c3db4b0a549f6973d840a244ddfbe5f400a7124",
+            "sha256": "25a94a14e8352db12b4623dac8d2d3c55e88f4fbe5210737297b8aac507257f8",
             "visual_review": "accepted",
-            "visible_result": "系统设置页：个人主页 SUNBIRD、模型服务与余额，左下角版本 v1.0.0.5。",
+            "visible_result": "系统设置个人主页 SUNBIRD，版本区为 v1.0.0.5。余额截图时约 ¥96.86。画面本身看不出 codesign 结果。",
             "kind": "screenshot",
             "public_path": "/capabilities/assets/evidence/dt-install-sign-result.png"
           },
           {
             "file": "dt-install-sign-operation.webm",
-            "sha256": "6f81de5fe16ce7b3193ba6af46ae4c443317ed933507c46421062652abd85370",
+            "sha256": "ce10684502d45be0f22da2286685ab5daba968d1ee44b881229bc8b2c863367e",
             "visual_review": "accepted",
-            "visible_result": "录屏从智能对话页切到系统设置页。",
+            "visible_result": "录屏结束停在上述结果画面。系统设置个人主页 SUNBIRD，版本区为 v1.0.0.5。余额截图时约 ¥96.86。画面本身看不出 codesign 结果。",
             "kind": "video",
-            "size_bytes": 383461,
+            "size_bytes": 390963,
             "duration_seconds": null,
             "codec": "webm",
             "public_path": null
@@ -3006,8 +3006,8 @@
         "run_log": {
           "file": "dt-install-sign-run.log",
           "public_path": "/capabilities/assets/evidence/dt-install-sign-run.log",
-          "sha256": "a6b7533a972b7e677cd66e1bed2fe432e9e96a6fd6120dd13049795fc182ee63",
-          "size_bytes": 1500
+          "sha256": "822b11436c85a2528856a8dfe978d1da89261eda8cfe34f29769b9852852b8f4",
+          "size_bytes": 1462
         },
         "source_run": "/capabilities/assets/evidence/dt-install-sign-dt-install-sign-macos-run.json"
       },
@@ -3019,23 +3019,23 @@
         "failed": 0,
         "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
         "media": [
           {
             "file": "dt-integrity-result.png",
-            "sha256": "901343d8134be41a3e613dfe185878627c8a5fac132990eb5f97ff9efece9a93",
+            "sha256": "448d5f718ae871d01fc2a980e493e11aadb3d220b0b5a2f74f6c9a02c15bcb41",
             "visual_review": "accepted",
-            "visible_result": "「桌面运行时」页：运行状态表（桌面模式、本地 SQLite、各目录）。",
+            "visible_result": "桌面运行时。用户数据目录 customer，库 xcagi.db。更新事件文本含 update-not-available，version 1.0.0，productVersion 1.0.0.5。",
             "kind": "screenshot",
             "public_path": "/capabilities/assets/evidence/dt-integrity-result.png"
           },
           {
             "file": "dt-integrity-operation.webm",
-            "sha256": "672ce3577edbd374448660401aeff087cd2a3ab1311dd2354ca409ba578396d2",
+            "sha256": "11465a33cc6a0ab246f95ef9e150923512dde45fb542476936b4b47656f2ebf9",
             "visual_review": "accepted",
-            "visible_result": "录屏为桌面运行时页，各帧一致。",
+            "visible_result": "录屏结束停在上述结果画面。桌面运行时。用户数据目录 customer，库 xcagi.db。更新事件文本含 update-not-available，version 1.0.0，productVersion 1.0.0.5。",
             "kind": "video",
-            "size_bytes": 360206,
+            "size_bytes": 361066,
             "duration_seconds": null,
             "codec": "webm",
             "public_path": null
@@ -3044,8 +3044,8 @@
         "run_log": {
           "file": "dt-integrity-run.log",
           "public_path": "/capabilities/assets/evidence/dt-integrity-run.log",
-          "sha256": "1e0b180200b9c49efc267f5cd20c5f835e67f8700dc08c7b45ff0d9b02e38ad8",
-          "size_bytes": 1377
+          "sha256": "a14513ef4ad92337b6514ba54aa997e2a84001a8063c463ef474424ff0dd6576",
+          "size_bytes": 1399
         },
         "source_run": "/capabilities/assets/evidence/dt-integrity-dt-integrity-macos-run.json"
       },
@@ -3057,23 +3057,23 @@
         "failed": 0,
         "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
         "media": [
           {
             "file": "dt-mac-control-result.png",
-            "sha256": "901343d8134be41a3e613dfe185878627c8a5fac132990eb5f97ff9efece9a93",
+            "sha256": "448d5f718ae871d01fc2a980e493e11aadb3d220b0b5a2f74f6c9a02c15bcb41",
             "visual_review": "accepted",
-            "visible_result": "「桌面运行时」页：运行状态表。",
+            "visible_result": "桌面运行时。用户数据目录 customer，库 xcagi.db。更新事件文本含 update-not-available，version 1.0.0，productVersion 1.0.0.5。",
             "kind": "screenshot",
             "public_path": "/capabilities/assets/evidence/dt-mac-control-result.png"
           },
           {
             "file": "dt-mac-control-operation.webm",
-            "sha256": "ad9e338320438026e0aea4b81a39976ee486bad732c508dbbcd635b6e91415fd",
+            "sha256": "38da7acaf55bbb50fd09701a2a184417b5b095e323ab56339cecce2c55747bb1",
             "visual_review": "accepted",
-            "visible_result": "录屏为桌面运行时页，各帧一致。",
+            "visible_result": "录屏结束停在上述结果画面。桌面运行时。用户数据目录 customer，库 xcagi.db。更新事件文本含 update-not-available，version 1.0.0，productVersion 1.0.0.5。",
             "kind": "video",
-            "size_bytes": 352443,
+            "size_bytes": 380964,
             "duration_seconds": null,
             "codec": "webm",
             "public_path": null
@@ -3082,8 +3082,8 @@
         "run_log": {
           "file": "dt-mac-control-run.log",
           "public_path": "/capabilities/assets/evidence/dt-mac-control-run.log",
-          "sha256": "d7b648e890758e9723daa97f4310689bae5b78fb791c6ff9b8ffb03e415023da",
-          "size_bytes": 1243
+          "sha256": "b6a5d81364fa9016dcf52a2a0ed2fde2a905a53dd4fcfc2f5a369d2460a79c5d",
+          "size_bytes": 1264
         },
         "source_run": "/capabilities/assets/evidence/dt-mac-control-dt-mac-control-macos-run.json"
       },
@@ -3128,8 +3128,8 @@
         "run_log": {
           "file": "dt-neurobus-run.log",
           "public_path": "/capabilities/assets/evidence/dt-neurobus-run.log",
-          "sha256": "fb7e4fd60bcabb084f4ef5a13c80534ef89ecad80af49f97c7373b9d5f245e78",
-          "size_bytes": 1563
+          "sha256": "64d2d896bc3d498daf03d75e69909c5f03d05858eab90ddfcd58ffe331d445d1",
+          "size_bytes": 1583
         },
         "source_run": "/capabilities/assets/evidence/dt-neurobus-dt-neurobus-web-run.json"
       },
@@ -3141,23 +3141,23 @@
         "failed": 0,
         "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
         "media": [
           {
             "file": "dt-ota-result.png",
-            "sha256": "c6fb518c47ac56f17ebe840ecd5edd2dd1b05c1004f66a540cc7c34e3f2e433c",
+            "sha256": "25a94a14e8352db12b4623dac8d2d3c55e88f4fbe5210737297b8aac507257f8",
             "visual_review": "accepted",
-            "visible_result": "系统设置页：个人主页、模型服务与余额卡片。",
+            "visible_result": "系统设置个人主页 SUNBIRD，版本区为 v1.0.0.5。余额截图时约 ¥96.86。画面本身看不出 codesign 结果。",
             "kind": "screenshot",
             "public_path": "/capabilities/assets/evidence/dt-ota-result.png"
           },
           {
             "file": "dt-ota-operation.webm",
-            "sha256": "4738e49ed100a5b4ea02df12bd5199a0bea6d898732dcb77e090eae40356bfc2",
+            "sha256": "9d7904d2d00da769725b0a571ccc197709031f53ea35556062212d9a690386cf",
             "visual_review": "accepted",
-            "visible_result": "录屏先在智能对话页，后切到系统设置页。",
+            "visible_result": "录屏结束停在上述结果画面。系统设置个人主页 SUNBIRD，版本区为 v1.0.0.5。余额截图时约 ¥96.86。画面本身看不出 codesign 结果。",
             "kind": "video",
-            "size_bytes": 473144,
+            "size_bytes": 474706,
             "duration_seconds": null,
             "codec": "webm",
             "public_path": null
@@ -3166,8 +3166,8 @@
         "run_log": {
           "file": "dt-ota-run.log",
           "public_path": "/capabilities/assets/evidence/dt-ota-run.log",
-          "sha256": "b7cde366fec5d7692e55b03b325183a278855b3fa417d46dcee7fef2ccf82d5e",
-          "size_bytes": 1061
+          "sha256": "4d8d7aad87a2b7b8a7e5cc8744c1ea126ae8da05d88f494e361fe86fa9ad3f6b",
+          "size_bytes": 1083
         },
         "source_run": "/capabilities/assets/evidence/dt-ota-dt-ota-macos-run.json"
       },
@@ -3179,23 +3179,23 @@
         "failed": 0,
         "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
         "media": [
           {
             "file": "dt-process-mgmt-result.png",
-            "sha256": "901343d8134be41a3e613dfe185878627c8a5fac132990eb5f97ff9efece9a93",
+            "sha256": "448d5f718ae871d01fc2a980e493e11aadb3d220b0b5a2f74f6c9a02c15bcb41",
             "visual_review": "accepted",
-            "visible_result": "「桌面运行时」页：运行状态表与本地模型区。",
+            "visible_result": "桌面运行时。用户数据目录 customer，库 xcagi.db。更新事件文本含 update-not-available，version 1.0.0，productVersion 1.0.0.5。",
             "kind": "screenshot",
             "public_path": "/capabilities/assets/evidence/dt-process-mgmt-result.png"
           },
           {
             "file": "dt-process-mgmt-operation.webm",
-            "sha256": "28fc2702fd8e063f82b92c5268e6b52b31a6f337836106f713fffe664f445b1c",
+            "sha256": "cd90d0a68deb41e83f481d0c4142c5c27e1eceaed33ece0a0d968fd43f62bac9",
             "visual_review": "accepted",
-            "visible_result": "录屏为桌面运行时页，各帧一致。",
+            "visible_result": "录屏结束停在上述结果画面。桌面运行时。用户数据目录 customer，库 xcagi.db。更新事件文本含 update-not-available，version 1.0.0，productVersion 1.0.0.5。",
             "kind": "video",
-            "size_bytes": 314394,
+            "size_bytes": 382782,
             "duration_seconds": null,
             "codec": "webm",
             "public_path": null
@@ -3204,36 +3204,36 @@
         "run_log": {
           "file": "dt-process-mgmt-run.log",
           "public_path": "/capabilities/assets/evidence/dt-process-mgmt-run.log",
-          "sha256": "c32733c5448b1e717bf93465b1cecd372d5fdad4ee2152f28243f96280860d0d",
-          "size_bytes": 1184
+          "sha256": "95d2cf66f2cc4bff01e6fdafcfa581a665bd5d0c2be33551b43f6be7c16cbb1b",
+          "size_bytes": 1205
         },
         "source_run": "/capabilities/assets/evidence/dt-process-mgmt-dt-process-mgmt-macos-run.json"
       },
       {
         "feature": "dt-rpa",
         "platform": "macos",
-        "status": "blocked",
-        "passed": 0,
+        "status": "passed",
+        "passed": 4,
         "failed": 0,
         "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
         "media": [
           {
             "file": "dt-rpa-result.png",
-            "sha256": "1f6aded2c7bb85d0da5c7cc95f9db00ee05c0adbcefc863dec72ea57ebd0d9e3",
+            "sha256": "4be91959f7381ee1e18d04080068524ef470e7025ec0e842db11c4b3b3001512",
             "visual_review": "accepted",
-            "visible_result": "「智能对话」默认页；本项全部用例受阻。",
+            "visible_result": "桌面运行时。桌面模式是。数据目录、数据库、Mod、模型都指向 /Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer。存储本地 SQLite。本地模型暂无已安装模型。",
             "kind": "screenshot",
             "public_path": "/capabilities/assets/evidence/dt-rpa-result.png"
           },
           {
             "file": "dt-rpa-operation.webm",
-            "sha256": "60798448daa9fd4c3836ebeb99f0cd8799fcd78038495f063362dfabb07cf386",
+            "sha256": "9e0d03f7d3a7bca85717c587b49b51fead1e092264bc6eeea1da663fb28e9a72",
             "visual_review": "accepted",
-            "visible_result": "2.38s 录屏为默认对话页。",
+            "visible_result": "录屏结束停在上述结果画面。桌面运行时。桌面模式是。数据目录、数据库、Mod、模型都指向 /Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer。存储本地 SQLite。本地模型暂无已安装模型。",
             "kind": "video",
-            "size_bytes": 95169,
+            "size_bytes": 303338,
             "duration_seconds": null,
             "codec": "webm",
             "public_path": null
@@ -3242,8 +3242,8 @@
         "run_log": {
           "file": "dt-rpa-run.log",
           "public_path": "/capabilities/assets/evidence/dt-rpa-run.log",
-          "sha256": "40f54dcf12af5aae00d4232c039d53d11eeac3eb7b5d391d90f32f3991f299d9",
-          "size_bytes": 932
+          "sha256": "fc7a71e5c079579fa373da81ccb532fa946cbedf21e33c47f04f057efa5e0d88",
+          "size_bytes": 1514
         },
         "source_run": "/capabilities/assets/evidence/dt-rpa-dt-rpa-macos-run.json"
       },
@@ -3255,23 +3255,23 @@
         "failed": 0,
         "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
         "media": [
           {
             "file": "dt-shell-result.png",
-            "sha256": "b671d4e12b8713a93721e365bfb4ee4cf2dd67d72145a09bc03e42b8ad55477c",
+            "sha256": "448d5f718ae871d01fc2a980e493e11aadb3d220b0b5a2f74f6c9a02c15bcb41",
             "visual_review": "accepted",
-            "visible_result": "「桌面运行时」页：运行状态（桌面模式 是、本地 SQLite、各目录）与本地模型区。",
+            "visible_result": "桌面运行时。用户数据目录 customer，库 xcagi.db。更新事件文本含 update-not-available，version 1.0.0，productVersion 1.0.0.5。",
             "kind": "screenshot",
             "public_path": "/capabilities/assets/evidence/dt-shell-result.png"
           },
           {
             "file": "dt-shell-operation.webm",
-            "sha256": "eb0c8a31606cd922c044316c155aece2818ba0732aaa8cb0bf4c7a57fa9c3b3b",
+            "sha256": "06e3fea02b510b01ec65090edb3e29ac2396f3503f355a472f47350ea8a15e76",
             "visual_review": "accepted",
-            "visible_result": "录屏为桌面运行时页，各帧一致。",
+            "visible_result": "录屏结束停在上述结果画面。桌面运行时。用户数据目录 customer，库 xcagi.db。更新事件文本含 update-not-available，version 1.0.0，productVersion 1.0.0.5。",
             "kind": "video",
-            "size_bytes": 288914,
+            "size_bytes": 349766,
             "duration_seconds": null,
             "codec": "webm",
             "public_path": null
@@ -3280,8 +3280,8 @@
         "run_log": {
           "file": "dt-shell-run.log",
           "public_path": "/capabilities/assets/evidence/dt-shell-run.log",
-          "sha256": "79fec66dd3f83356ab538ce70dd89f72e5888715b6d33923e9bfbce56eba2829",
-          "size_bytes": 1084
+          "sha256": "08a54ec442591b7e6aa0288c88855d8965a1ae742eb5798bf1bea10f640d4edf",
+          "size_bytes": 1106
         },
         "source_run": "/capabilities/assets/evidence/dt-shell-dt-shell-macos-run.json"
       },
@@ -3358,8 +3358,8 @@
         "run_log": {
           "file": "erp-approval-run.log",
           "public_path": "/capabilities/assets/evidence/erp-approval-run.log",
-          "sha256": "254ba82aca45ee38424cf3176d85823ebba1a8afe9c72b0f0863e2c1d52535c5",
-          "size_bytes": 1504
+          "sha256": "ff791de5ce9c0dfede839284659a806d8fd6b3073a578ddfd566a7b32ccf4b4f",
+          "size_bytes": 1597
         },
         "source_run": "/capabilities/assets/evidence/erp-approval-erp-approval-web-run.json"
       },
@@ -3428,8 +3428,8 @@
         "run_log": {
           "file": "erp-ar-ap-run.log",
           "public_path": "/capabilities/assets/evidence/erp-ar-ap-run.log",
-          "sha256": "4654a3639754afad2b880cb9f2093e812b4030c08030c8afd6af44adafd4159b",
-          "size_bytes": 1382
+          "sha256": "2a876efa99052cc7c9ecba57a848edbf36154f950737a2950b36596ab18f3075",
+          "size_bytes": 1406
         },
         "source_run": "/capabilities/assets/evidence/erp-ar-ap-erp-ar-ap-web-run.json"
       },
@@ -3563,8 +3563,8 @@
         "run_log": {
           "file": "erp-contract-run.log",
           "public_path": "/capabilities/assets/evidence/erp-contract-run.log",
-          "sha256": "e5d12f5d4a7bbbd5e83a66677396f195313ab7eb60dbeec5860c8576f5e6ce95",
-          "size_bytes": 1645
+          "sha256": "4f83f698d12b7e3a951c69f5ffc81f4a64a41d9a803f70886bc49276583b4f44",
+          "size_bytes": 1667
         },
         "source_run": "/capabilities/assets/evidence/erp-contract-erp-contract-web-run.json"
       },
@@ -3722,8 +3722,8 @@
         "run_log": {
           "file": "erp-excel-io-run.log",
           "public_path": "/capabilities/assets/evidence/erp-excel-io-run.log",
-          "sha256": "c0447ebb43098f5417f325a1faaa2067e5d67a13a41984685dc18258e5d1aaa8",
-          "size_bytes": 1345
+          "sha256": "f20788b082b46bcbf8239a0d0280486c99d43e3a5a4aac4ddcce169b035d9dc2",
+          "size_bytes": 1361
         },
         "source_run": "/capabilities/assets/evidence/erp-excel-io-erp-excel-io-web-run.json"
       },
@@ -3792,8 +3792,8 @@
         "run_log": {
           "file": "erp-finance-ledger-run.log",
           "public_path": "/capabilities/assets/evidence/erp-finance-ledger-run.log",
-          "sha256": "30b3c9e9f7ce3a4ae5f6a3b5b881942076206ad896606801fe74fdb09aad3c5a",
-          "size_bytes": 1443
+          "sha256": "8dbe8f6039e21e05664702497f2a181a7b8b15769d98ba376a3e33582a1b3c81",
+          "size_bytes": 1464
         },
         "source_run": "/capabilities/assets/evidence/erp-finance-ledger-erp-finance-ledger-web-run.json"
       },
@@ -3862,8 +3862,8 @@
         "run_log": {
           "file": "erp-inventory-run.log",
           "public_path": "/capabilities/assets/evidence/erp-inventory-run.log",
-          "sha256": "2c9e6f67eb297dff4615a46fd3cb954777db585762d1c404ca3fa1198134d345",
-          "size_bytes": 1231
+          "sha256": "62cbf88dc404cda2719b219504705a01e03e06db61fdf9f4da40501e31458155",
+          "size_bytes": 1247
         },
         "source_run": "/capabilities/assets/evidence/erp-inventory-erp-inventory-web-run.json"
       },
@@ -3932,8 +3932,8 @@
         "run_log": {
           "file": "erp-inventory-warehouse-run.log",
           "public_path": "/capabilities/assets/evidence/erp-inventory-warehouse-run.log",
-          "sha256": "a25352f4fde06946e97cced94af35b7f1d6efb32997e38c76378ec222dd4c300",
-          "size_bytes": 1489
+          "sha256": "1ec8893ef814e81eaa1af3fc2aa8517dec2f7d2a37fe2ca62d85215962e83336",
+          "size_bytes": 1502
         },
         "source_run": "/capabilities/assets/evidence/erp-inventory-warehouse-erp-inventory-warehouse-web-run.json"
       },
@@ -4002,8 +4002,8 @@
         "run_log": {
           "file": "erp-invoice-run.log",
           "public_path": "/capabilities/assets/evidence/erp-invoice-run.log",
-          "sha256": "b6f7d163a4ba034edde127ad2c0c42948993da82eb1dc0a0d3357b65ef4b37d2",
-          "size_bytes": 883
+          "sha256": "dd15b14fc715dd8f4161c838fe6062f31171047f16076c494a09f142815e234a",
+          "size_bytes": 1449
         },
         "source_run": "/capabilities/assets/evidence/erp-invoice-erp-invoice-web-run.json"
       },
@@ -4064,8 +4064,8 @@
         "run_log": {
           "file": "erp-label-run.log",
           "public_path": "/capabilities/assets/evidence/erp-label-run.log",
-          "sha256": "314a76e57753d9af0892c881c085afbb671b181f092451782011cc942b123d2f",
-          "size_bytes": 876
+          "sha256": "0499976c3ebfe8d6559adf665293a3b9b15a2ea548efc8ee8645cb31f0c0f9f4",
+          "size_bytes": 1714
         },
         "source_run": "/capabilities/assets/evidence/erp-label-erp-label-web-run.json"
       },
@@ -4134,8 +4134,8 @@
         "run_log": {
           "file": "erp-master-data-run.log",
           "public_path": "/capabilities/assets/evidence/erp-master-data-run.log",
-          "sha256": "87cd0e720da967b2de8bb58e295d7af734013d1901b9afb35b9a6d9121c1bfa7",
-          "size_bytes": 1393
+          "sha256": "833b1e5b2575161e7fbc10a1b6ad162a5e0a4b3928d018544335ca298e855a29",
+          "size_bytes": 1182
         },
         "source_run": "/capabilities/assets/evidence/erp-master-data-erp-master-data-web-run.json"
       },
@@ -4196,8 +4196,8 @@
         "run_log": {
           "file": "erp-ocr-run.log",
           "public_path": "/capabilities/assets/evidence/erp-ocr-run.log",
-          "sha256": "e779ae741eac110ea0c2bf4491b4c2afd0a66a50a6f0023fb21cb8e4e0ba6c6b",
-          "size_bytes": 1342
+          "sha256": "7d8c9edb59293a2a4dd12a142d57c072598ca3f81aef8648dede61bf04d2b90b",
+          "size_bytes": 1400
         },
         "source_run": "/capabilities/assets/evidence/erp-ocr-erp-ocr-web-run.json"
       },
@@ -4266,36 +4266,36 @@
         "run_log": {
           "file": "erp-ocr-clean-run.log",
           "public_path": "/capabilities/assets/evidence/erp-ocr-clean-run.log",
-          "sha256": "8c31f4cebe5e203a970651dc2cd4672805a2bf86ac726c6cc115d2d6f818d7b1",
-          "size_bytes": 1720
+          "sha256": "4ade9685c2cf9e2fb1b1565b57b6ea7c86503f7c4e4fdac2bf12dff06817dedf",
+          "size_bytes": 1622
         },
         "source_run": "/capabilities/assets/evidence/erp-ocr-clean-erp-ocr-clean-web-run.json"
       },
       {
         "feature": "erp-print-agent",
         "platform": "macos",
-        "status": "blocked",
-        "passed": 0,
-        "failed": 0,
+        "status": "failed",
+        "passed": 2,
+        "failed": 1,
         "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
         "media": [
           {
             "file": "erp-print-agent-result.png",
-            "sha256": "1f6aded2c7bb85d0da5c7cc95f9db00ee05c0adbcefc863dec72ea57ebd0d9e3",
+            "sha256": "c267a0d66c3d98d93f20318f4bc80ccd5b3281341e7e2378cfba5f2329aa188d",
             "visual_review": "accepted",
-            "visible_result": "「智能对话」默认页；本项全部用例受阻，未进入打印机列表页。",
+            "visible_result": "打印机列表。Canon_TS3700_series 显示就绪并设为默认，类型发货单打印机。标签打印机未设置、未连接。",
             "kind": "screenshot",
             "public_path": "/capabilities/assets/evidence/erp-print-agent-result.png"
           },
           {
             "file": "erp-print-agent-operation.webm",
-            "sha256": "fad2d8b8544c65dd6a2b4bef276afeaa762d0a2b30275f3855669fc10d3c43f6",
+            "sha256": "1cc25cdee29f6351c90e957a0c4a8f15009ef8d11ab9547598157497451ccc73",
             "visual_review": "accepted",
-            "visible_result": "2.38s 录屏为默认对话页。",
+            "visible_result": "录屏结束停在上述结果画面。打印机列表。Canon_TS3700_series 显示就绪并设为默认，类型发货单打印机。标签打印机未设置、未连接。",
             "kind": "video",
-            "size_bytes": 95169,
+            "size_bytes": 319028,
             "duration_seconds": null,
             "codec": "webm",
             "public_path": null
@@ -4304,8 +4304,8 @@
         "run_log": {
           "file": "erp-print-agent-run.log",
           "public_path": "/capabilities/assets/evidence/erp-print-agent-run.log",
-          "sha256": "ef8db72582a8701e646b3a1b25fc8b72cedcbff07d308a983dad5fe1aa2b7256",
-          "size_bytes": 842
+          "sha256": "1321f985f2e46c2a30fb7bde3e40b6a4fb7e5a5db2ffa02d22f818de79ce3347",
+          "size_bytes": 1459
         },
         "source_run": "/capabilities/assets/evidence/erp-print-agent-erp-print-agent-macos-run.json"
       },
@@ -4374,8 +4374,8 @@
         "run_log": {
           "file": "erp-purchase-run.log",
           "public_path": "/capabilities/assets/evidence/erp-purchase-run.log",
-          "sha256": "825885074aff739ddec1fbce29c8f3f569adeb7c5f0f559494fe5136cc574c42",
-          "size_bytes": 1444
+          "sha256": "8c33cb723587e5ab9ada0b3342f7fb0cc1e39c0cca97e46cc82d16c9ec2a50e8",
+          "size_bytes": 1311
         },
         "source_run": "/capabilities/assets/evidence/erp-purchase-erp-purchase-web-run.json"
       },
@@ -4444,8 +4444,8 @@
         "run_log": {
           "file": "erp-purchase-inbound-run.log",
           "public_path": "/capabilities/assets/evidence/erp-purchase-inbound-run.log",
-          "sha256": "7f8e90ab52a28685d894ae55bcb8796a6cc32e0250f2d740e826c407bb423b9c",
-          "size_bytes": 1515
+          "sha256": "affc100db323df709e60cae66089756df0e584d4eab1e7ece2319452b6271874",
+          "size_bytes": 1531
         },
         "source_run": "/capabilities/assets/evidence/erp-purchase-inbound-erp-purchase-inbound-web-run.json"
       },
@@ -4498,8 +4498,8 @@
         "run_log": {
           "file": "erp-reconcile-run.log",
           "public_path": "/capabilities/assets/evidence/erp-reconcile-run.log",
-          "sha256": "0d30d4388a5013b6a3ff9e943bf3c1a0acfc66c540172c6f6d2f77e24856c266",
-          "size_bytes": 1632
+          "sha256": "6b59f662720bb973eb5a34fbc583c7077444f413da4568e1617dfd1b72ee4ba6",
+          "size_bytes": 1778
         },
         "source_run": "/capabilities/assets/evidence/erp-reconcile-erp-reconcile-web-run.json"
       },
@@ -4568,8 +4568,8 @@
         "run_log": {
           "file": "erp-replenishment-run.log",
           "public_path": "/capabilities/assets/evidence/erp-replenishment-run.log",
-          "sha256": "0cd3c90cc99d0db12dea350f6f8e59faae0a180e66dca1c8867a936260dd9de3",
-          "size_bytes": 1654
+          "sha256": "b0fe91561cf37912a72ac91386cfe4f267986b3a428334189a682b4693a1acd5",
+          "size_bytes": 2002
         },
         "source_run": "/capabilities/assets/evidence/erp-replenishment-erp-replenishment-web-run.json"
       },
@@ -4630,8 +4630,8 @@
         "run_log": {
           "file": "erp-report-run.log",
           "public_path": "/capabilities/assets/evidence/erp-report-run.log",
-          "sha256": "9986fc82a5066467e23b8018300d06a9137e59aa3ff99bc2f3a8c4091c7ce54e",
-          "size_bytes": 1521
+          "sha256": "57b662cae43521c34df58b5e2dd4a23d028a2c5e6909878a7d3f15103ea234f4",
+          "size_bytes": 1543
         },
         "source_run": "/capabilities/assets/evidence/erp-report-erp-report-web-run.json"
       },
@@ -4639,27 +4639,27 @@
         "feature": "erp-sales-order",
         "platform": "macos",
         "status": "passed",
-        "passed": 4,
+        "passed": 3,
         "failed": 0,
         "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
         "media": [
           {
             "file": "erp-sales-order-result.png",
-            "sha256": "223a568a3c36181d18a6ac40f34fba8d74baffd92652b2df9b35e9cc572a411d",
+            "sha256": "69c56fc26bac8491a1074bc2de88d68170bcc2b59fb11490c290c90c4563d75a",
             "visual_review": "accepted",
-            "visible_result": "「新建发货单」页：模板、基础信息(购买单位/日期/订单编号)、产品信息区渲染完整。",
+            "visible_result": "新建发货单，订单编号 26-09-00001A，日期 09/29/2026。提示暂无可用发货单模板，没有产品行。",
             "kind": "screenshot",
             "public_path": "/capabilities/assets/evidence/erp-sales-order-result.png"
           },
           {
             "file": "erp-sales-order-operation.webm",
-            "sha256": "1cdc8e9f7503a94b5068d22d56be73771040bde44f27ec06990133e09410bd52",
+            "sha256": "d603b302399d8b067121beceeedc3dbe2dc73ce5b8bcc263543189535dcf7d53",
             "visual_review": "accepted",
-            "visible_result": "6.13s 录屏为新建发货单页(模板为未绑定空态)。",
+            "visible_result": "录屏结束停在上述结果画面。新建发货单，订单编号 26-09-00001A，日期 09/29/2026。提示暂无可用发货单模板，没有产品行。",
             "kind": "video",
-            "size_bytes": 328239,
+            "size_bytes": 333553,
             "duration_seconds": null,
             "codec": "webm",
             "public_path": null
@@ -4668,8 +4668,8 @@
         "run_log": {
           "file": "erp-sales-order-run.log",
           "public_path": "/capabilities/assets/evidence/erp-sales-order-run.log",
-          "sha256": "6d2b7661f049c0d98d83495edce8298f9e02a046431b0633239e7422eb7187a1",
-          "size_bytes": 1489
+          "sha256": "70919864642602181f733de91b9bf4db65f13beb2830c54362cf9723f5f9f3f6",
+          "size_bytes": 1307
         },
         "source_run": "/capabilities/assets/evidence/erp-sales-order-erp-sales-order-macos-run.json"
       },
@@ -4738,8 +4738,8 @@
         "run_log": {
           "file": "erp-shipment-run.log",
           "public_path": "/capabilities/assets/evidence/erp-shipment-run.log",
-          "sha256": "f1d293e729c9657d8c38cee07ec5243c18f26feae9b57cbc8eb90c3e17c391a1",
-          "size_bytes": 1673
+          "sha256": "21a0f1a2d68d54dc163128b0e4a9907239af76fe4efcfe020dfaf3d8773ecffb",
+          "size_bytes": 1379
         },
         "source_run": "/capabilities/assets/evidence/erp-shipment-erp-shipment-web-run.json"
       },
@@ -4800,8 +4800,8 @@
         "run_log": {
           "file": "erp-templates-run.log",
           "public_path": "/capabilities/assets/evidence/erp-templates-run.log",
-          "sha256": "1edfc692a8e8dcc0ed348f8cfd3bb8d23126708cbc7fef30d875be5de22a2958",
-          "size_bytes": 1298
+          "sha256": "65db4845ec63539c9d77dfa6de7adbaaa4e11422a19a40bc16bf50537df82ae6",
+          "size_bytes": 1322
         },
         "source_run": "/capabilities/assets/evidence/erp-templates-erp-templates-web-run.json"
       },
@@ -4813,23 +4813,23 @@
         "failed": 0,
         "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
         "media": [
           {
             "file": "erp-uom-result.png",
-            "sha256": "42daee040a8de5ef22475e859b9de45edf8f8e0d71c7981949aca0e89b81e8de",
+            "sha256": "a26a9b7b7686badaeadef2f96da011d2ff6dcfa3be099b8b99ed62d2f8f53fc4",
             "visual_review": "accepted",
-            "visible_result": "产品页「饰品包装品管理」：产品单位下拉「请选择产品单位」、两条验收产品；页头「人员管理」。",
+            "visible_result": "饰品包装品管理表。可见 MAC验收0929产品，型号 MAC-0929 规格标准 ¥3.50，以及 M84657、M58099、M35511 等行。有导入 Excel、导出价格表、添加产品。",
             "kind": "screenshot",
             "public_path": "/capabilities/assets/evidence/erp-uom-result.png"
           },
           {
             "file": "erp-uom-operation.webm",
-            "sha256": "efae7bee07ff4cccaab755b35303035f06e7f2405a011bcc71c10f9c50b8458c",
+            "sha256": "0e305c8c60a63e907a55de03e81a7b188262316431e32065b6515a9de90e5992",
             "visual_review": "accepted",
-            "visible_result": "录屏为产品管理页，各帧一致。",
+            "visible_result": "录屏结束停在上述结果画面。饰品包装品管理表。可见 MAC验收0929产品，型号 MAC-0929 规格标准 ¥3.50，以及 M84657、M58099、M35511 等行。有导入 Excel、导出价格表、添加产品。",
             "kind": "video",
-            "size_bytes": 312645,
+            "size_bytes": 326765,
             "duration_seconds": null,
             "codec": "webm",
             "public_path": null
@@ -4838,8 +4838,8 @@
         "run_log": {
           "file": "erp-uom-run.log",
           "public_path": "/capabilities/assets/evidence/erp-uom-run.log",
-          "sha256": "c5ca7736773228d802951f1725c784361c784b753d2a43d98265bfbb15431026",
-          "size_bytes": 1542
+          "sha256": "f6c6003c52a19cbdcefc72fd4182654e202b7d0518a5d792da23d7a11384512c",
+          "size_bytes": 1566
         },
         "source_run": "/capabilities/assets/evidence/erp-uom-erp-uom-macos-run.json"
       },
@@ -4930,8 +4930,8 @@
         "run_log": {
           "file": "ind-attendance-run.log",
           "public_path": "/capabilities/assets/evidence/ind-attendance-run.log",
-          "sha256": "16156f4c610e523e9a9131d0677feff49b88d96564817b9a83221819a368e938",
-          "size_bytes": 1424
+          "sha256": "c18ea0c8aa320a3a4d5330aded3935c2fd13c993466591ff441b0f708f701e87",
+          "size_bytes": 1465
         },
         "source_run": "/capabilities/assets/evidence/ind-attendance-ind-attendance-web-run.json"
       },
@@ -4984,8 +4984,8 @@
         "run_log": {
           "file": "ind-coating-run.log",
           "public_path": "/capabilities/assets/evidence/ind-coating-run.log",
-          "sha256": "2a34914fdc9c1cd700cf36e22c39fa97c68cfba03cbef0623927e82ba82bb114",
-          "size_bytes": 845
+          "sha256": "8f983f91a2e9e523aeadf31a078b5793f2d7409db9f90461d7f329b9e87e2986",
+          "size_bytes": 703
         },
         "source_run": "/capabilities/assets/evidence/ind-coating-ind-coating-web-run.json"
       },
@@ -5046,8 +5046,8 @@
         "run_log": {
           "file": "ind-custom-delivery-run.log",
           "public_path": "/capabilities/assets/evidence/ind-custom-delivery-run.log",
-          "sha256": "79b07efafff058f27deb9bd658e2cc77830ee1aa131044931d22c3af66ab9095",
-          "size_bytes": 1307
+          "sha256": "404ab6c96db2d8a12eb6a9d4c99999d3992ab1bc048bcdb9ec06c5673ae2cfea",
+          "size_bytes": 1329
         },
         "source_run": "/capabilities/assets/evidence/ind-custom-delivery-ind-custom-delivery-web-run.json"
       },
@@ -5100,8 +5100,8 @@
         "run_log": {
           "file": "ind-fields-run.log",
           "public_path": "/capabilities/assets/evidence/ind-fields-run.log",
-          "sha256": "c7a4a49f2bd512b3141bf4cce8b6d80a8cdb6f7a54277e4ca2130ba34b7ade6a",
-          "size_bytes": 1535
+          "sha256": "6954e3b19fb05582ba924853d48a4c6407e2063dcf69d506a134402c452c1c3b",
+          "size_bytes": 1557
         },
         "source_run": "/capabilities/assets/evidence/ind-fields-ind-fields-web-run.json"
       },
@@ -5113,23 +5113,23 @@
         "failed": 0,
         "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
         "media": [
           {
             "file": "ind-lan-license-result.png",
             "sha256": "038db54377b5a14055c7f70774a30a8ac1cf790081bb4929ff9d62bd31e330a5",
             "visual_review": "accepted",
-            "visible_result": "「FHD · 局域网授权」卡片：「当前未启用局域网模式，无需授权」「进入系统」，状态 未启用、本机 IP 127.0.0.1、主机管理员位。",
+            "visible_result": "深色页「FHD · 局域网授权」。绿条写当前未启用局域网模式，无需授权。本机 IP 127.0.0.1，主机管理员位。",
             "kind": "screenshot",
             "public_path": "/capabilities/assets/evidence/ind-lan-license-result.png"
           },
           {
             "file": "ind-lan-license-operation.webm",
-            "sha256": "1e0238d74952709055ccb08773ce841d78cd06299957f10a7ba06032ae1e391e",
+            "sha256": "4386f6a3149f529066d4bf5e1c732df90b296db667c04671575181182f8e02a9",
             "visual_review": "accepted",
-            "visible_result": "录屏为局域网授权页，各帧一致。",
+            "visible_result": "录屏结束停在上述结果画面。深色页「FHD · 局域网授权」。绿条写当前未启用局域网模式，无需授权。本机 IP 127.0.0.1，主机管理员位。",
             "kind": "video",
-            "size_bytes": 119618,
+            "size_bytes": 149416,
             "duration_seconds": null,
             "codec": "webm",
             "public_path": null
@@ -5138,8 +5138,8 @@
         "run_log": {
           "file": "ind-lan-license-run.log",
           "public_path": "/capabilities/assets/evidence/ind-lan-license-run.log",
-          "sha256": "2a957c2ff28e9846d71ce5f6ba8f3bb09a729c72035bf9a539983563fbf9f472",
-          "size_bytes": 1269
+          "sha256": "aac3a8e2c3060f69e3e342711a88e392f85930b324b9b33d880bb60f0d0dccd3",
+          "size_bytes": 1293
         },
         "source_run": "/capabilities/assets/evidence/ind-lan-license-ind-lan-license-macos-run.json"
       },
@@ -5265,8 +5265,8 @@
         "run_log": {
           "file": "ind-modstore-pay-run.log",
           "public_path": "/capabilities/assets/evidence/ind-modstore-pay-run.log",
-          "sha256": "fdd3fc1bb32dde07081223d47b67302246dd9b782d790f87d6b656cf0e428363",
-          "size_bytes": 1532
+          "sha256": "d84d8f330e1ed4e81310c347cbf3d9bfd2d514360349758b3155c633100ed55d",
+          "size_bytes": 1554
         },
         "source_run": "/capabilities/assets/evidence/ind-modstore-pay-ind-modstore-pay-web-run.json"
       },
@@ -5278,23 +5278,23 @@
         "failed": 0,
         "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
         "media": [
           {
             "file": "ind-packaging-result.png",
-            "sha256": "32a5a2d070f36411614ab3ce2c9b53afabd0cb6f529c0297b9d4dd65166e3ec3",
+            "sha256": "aaadaa7842fb23294e5f32f6fe533f7c4cba77011f44c7c1516dd7a2843f910c",
             "visual_review": "accepted",
-            "visible_result": "「库存管理」页：库存明细与库存预警表（空）。",
+            "visible_result": "库存管理空表，暂无库存数据，与库存页同一画面。",
             "kind": "screenshot",
             "public_path": "/capabilities/assets/evidence/ind-packaging-result.png"
           },
           {
             "file": "ind-packaging-operation.webm",
-            "sha256": "d02b5b11582a3a1ce4f60897c3af2387732dd130322e06f0191999e3f2c6d23e",
+            "sha256": "d98020a93890faec2a94773d2c8e748197c93c62353bd76be63949524f00b74b",
             "visual_review": "accepted",
-            "visible_result": "录屏先在产品页「饰品包装品管理」（两条验收产品），后切到库存管理页。",
+            "visible_result": "录屏结束停在上述结果画面。库存管理空表，暂无库存数据，与库存页同一画面。",
             "kind": "video",
-            "size_bytes": 431110,
+            "size_bytes": 511742,
             "duration_seconds": null,
             "codec": "webm",
             "public_path": null
@@ -5303,8 +5303,8 @@
         "run_log": {
           "file": "ind-packaging-run.log",
           "public_path": "/capabilities/assets/evidence/ind-packaging-run.log",
-          "sha256": "fdca39e42e531645de7ea39cb2bd5484f4ae7af7c92e82fe878fe39e990c686f",
-          "size_bytes": 1729
+          "sha256": "17e50ad6f18418cc119178583b0361daeadccc94e2e89fd4e167824c079c9f6a",
+          "size_bytes": 1739
         },
         "source_run": "/capabilities/assets/evidence/ind-packaging-ind-packaging-macos-run.json"
       },
@@ -5373,36 +5373,36 @@
         "run_log": {
           "file": "ind-planner-run.log",
           "public_path": "/capabilities/assets/evidence/ind-planner-run.log",
-          "sha256": "3c5fd13ad6c6f2cbda0ebf6b4e0fdb28c760c20c9a9d97dae04171e6d4611edb",
-          "size_bytes": 1505
+          "sha256": "efddf31dcb19970361193eec0dd036283ebb4837f6746b76d4a39f97745989c2",
+          "size_bytes": 1523
         },
         "source_run": "/capabilities/assets/evidence/ind-planner-ind-planner-web-run.json"
       },
       {
         "feature": "ind-szqsm",
         "platform": "macos",
-        "status": "blocked",
-        "passed": 0,
-        "failed": 0,
+        "status": "failed",
+        "passed": 1,
+        "failed": 1,
         "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
         "media": [
           {
             "file": "ind-szqsm-result.png",
-            "sha256": "1f6aded2c7bb85d0da5c7cc95f9db00ee05c0adbcefc863dec72ea57ebd0d9e3",
+            "sha256": "eb3207ed70aa17f890ee0f428dbc71558af6e0a7d92c643e25657d947c6d430c",
             "visual_review": "accepted",
-            "visible_result": "「智能对话」默认页；本项全部用例受阻。",
+            "visible_result": "奇士美 PRO。页面写明当前为仓库脚手架，供 entitlement 安装与员工上岗联调。",
             "kind": "screenshot",
             "public_path": "/capabilities/assets/evidence/ind-szqsm-result.png"
           },
           {
             "file": "ind-szqsm-operation.webm",
-            "sha256": "77169af9386bd6bc2c1c74a8a060da2e4549b030033acd8745db1430442978c8",
+            "sha256": "786b7117355084327028f2a5ce29fae31e2e75545a5ef4947b70617f0d630705",
             "visual_review": "accepted",
-            "visible_result": "2.5s 录屏为默认对话页。",
+            "visible_result": "录屏结束停在上述结果画面。奇士美 PRO。页面写明当前为仓库脚手架，供 entitlement 安装与员工上岗联调。",
             "kind": "video",
-            "size_bytes": 96919,
+            "size_bytes": 226114,
             "duration_seconds": null,
             "codec": "webm",
             "public_path": null
@@ -5411,8 +5411,8 @@
         "run_log": {
           "file": "ind-szqsm-run.log",
           "public_path": "/capabilities/assets/evidence/ind-szqsm-run.log",
-          "sha256": "c7f075e91833f892a48a22dd75b238336e0e546899e0e2ffd79632c6a1140752",
-          "size_bytes": 900
+          "sha256": "167a082d2fd0e75d7d648a16ed1f779d3db495d8dd5ea357c58c2fcefef8b0f5",
+          "size_bytes": 1105
         },
         "source_run": "/capabilities/assets/evidence/ind-szqsm-ind-szqsm-macos-run.json"
       },
@@ -5424,23 +5424,23 @@
         "failed": 0,
         "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
         "media": [
           {
             "file": "ind-taiyangniao-result.png",
-            "sha256": "dc5d719328abdf9515d1148c2fb78eb30cb16a34bfb3d4bdd657255c6a3d7848",
+            "sha256": "42ea2e222aad4c12b5ea5012d89f241d5d1d9ab4f48d6885afdbde1a4bba0ae5",
             "visual_review": "accepted",
-            "visible_result": "「考勤表转换」页：上传转化区（打卡考勤表、输出相对路径、模板相对路径、统计月份）与右侧考勤规则、打卡时段说明。",
+            "visible_result": "考勤表转换。Mod ID taiyangniao-pro。钉钉考勤表选文件，输出「424/考勤转换输出.xlsx」。右侧惠州工厂正班 08:00–12:00 / 13:30–17:30。",
             "kind": "screenshot",
             "public_path": "/capabilities/assets/evidence/ind-taiyangniao-result.png"
           },
           {
             "file": "ind-taiyangniao-operation.webm",
-            "sha256": "cb50a90e36f2c86fd1087280c9a4941b557ee67c06c51481bdd21801ddeae07c",
+            "sha256": "363a7df0031569631bc29e1f42bc44b54c84efc503c62b8ba8b0fa0f6a9f2c39",
             "visual_review": "accepted",
-            "visible_result": "录屏从智能对话页切到考勤表转换页。",
+            "visible_result": "录屏结束停在上述结果画面。考勤表转换。Mod ID taiyangniao-pro。钉钉考勤表选文件，输出「424/考勤转换输出.xlsx」。右侧惠州工厂正班 08:00–12:00 / 13:30–17:30。",
             "kind": "video",
-            "size_bytes": 575969,
+            "size_bytes": 723376,
             "duration_seconds": null,
             "codec": "webm",
             "public_path": null
@@ -5449,8 +5449,8 @@
         "run_log": {
           "file": "ind-taiyangniao-run.log",
           "public_path": "/capabilities/assets/evidence/ind-taiyangniao-run.log",
-          "sha256": "276e9df7dd1312aa7495f39300fbb2a272514dad4ba9333824ed1d3b038be359",
-          "size_bytes": 1511
+          "sha256": "fa0c1a5e08cc1715d5408e69edd55c8618562ff91f326a42bf067c11fae87b2e",
+          "size_bytes": 1524
         },
         "source_run": "/capabilities/assets/evidence/ind-taiyangniao-ind-taiyangniao-macos-run.json"
       },
@@ -5519,8 +5519,8 @@
         "run_log": {
           "file": "ind-workflow-viz-run.log",
           "public_path": "/capabilities/assets/evidence/ind-workflow-viz-run.log",
-          "sha256": "7c02747ec5ee2a83306727e85a9cadf05cde0502186d64fe9baa611f8f50a5f7",
-          "size_bytes": 1229
+          "sha256": "3f82edad60c22ad5803099e8700a2663005ccf05609e1f7fd0c6165f6cb06c42",
+          "size_bytes": 1251
         },
         "source_run": "/capabilities/assets/evidence/ind-workflow-viz-ind-workflow-viz-web-run.json"
       },
@@ -5573,8 +5573,8 @@
         "run_log": {
           "file": "ind-workspace-run.log",
           "public_path": "/capabilities/assets/evidence/ind-workspace-run.log",
-          "sha256": "b2478f1e1d70debf14e328ea1697a14916ee505668841d36518505f49166848c",
-          "size_bytes": 1319
+          "sha256": "2ac4f3d0f2073c77c0a1ffe40beb189fb2e3dfd376fee5db1be0ffa30e447307",
+          "size_bytes": 1342
         },
         "source_run": "/capabilities/assets/evidence/ind-workspace-ind-workspace-web-run.json"
       },
@@ -5692,8 +5692,8 @@
         "run_log": {
           "file": "mods-bridge-run.log",
           "public_path": "/capabilities/assets/evidence/mods-bridge-run.log",
-          "sha256": "5d7802a2559671e4b1fe3531610f2786a88c8e637c184220ef7fef666b9678f7",
-          "size_bytes": 1600
+          "sha256": "437695e536866aa9615b39857be7968695558d461b48e07ff2da09a8dd93ed4e",
+          "size_bytes": 1619
         },
         "source_run": "/capabilities/assets/evidence/mods-bridge-mods-bridge-web-run.json"
       },
@@ -5746,8 +5746,8 @@
         "run_log": {
           "file": "mods-host-mount-run.log",
           "public_path": "/capabilities/assets/evidence/mods-host-mount-run.log",
-          "sha256": "f70f37900e076887b4f8cf9b5a7a741ae97eda176ceefabb339f976b21a56335",
-          "size_bytes": 1390
+          "sha256": "990b3f9dd5668272eda3538a058f0498adb8889e612e255a0ce041f33d1bddcc",
+          "size_bytes": 1412
         },
         "source_run": "/capabilities/assets/evidence/mods-host-mount-mods-host-mount-web-run.json"
       },
@@ -5792,8 +5792,8 @@
         "run_log": {
           "file": "mods-loader-run.log",
           "public_path": "/capabilities/assets/evidence/mods-loader-run.log",
-          "sha256": "8c8d8745c6bd12cd3514b7d9aa5d0c80c4e4b4f389d9bec356ecc9e3b16c23c6",
-          "size_bytes": 1348
+          "sha256": "fc2033df0786605b8af35ac841e320bf9541fb673f02ad1826cf7dadc31949a3",
+          "size_bytes": 1404
         },
         "source_run": "/capabilities/assets/evidence/mods-loader-mods-loader-web-run.json"
       },
@@ -5846,8 +5846,8 @@
         "run_log": {
           "file": "mods-open-api-run.log",
           "public_path": "/capabilities/assets/evidence/mods-open-api-run.log",
-          "sha256": "b753f4ae74994d76b61ade8e521a3a682e60bf06965f243013eaaafc8bfe252b",
-          "size_bytes": 1305
+          "sha256": "409c41264653325745c5446341a2c10ef2da2bae2d493d4528c7d79baef0aa2a",
+          "size_bytes": 1327
         },
         "source_run": "/capabilities/assets/evidence/mods-open-api-mods-open-api-web-run.json"
       },
@@ -6030,8 +6030,8 @@
         "run_log": {
           "file": "mods-shell-run.log",
           "public_path": "/capabilities/assets/evidence/mods-shell-run.log",
-          "sha256": "9c541b8e8c175c094d05ca13eb8e1ce4349b3dd25db4dd430b861a2aa51f6076",
-          "size_bytes": 1427
+          "sha256": "732bea57c6cb3be0992c94b70eed56bd2cda446e2e5e20bc0ae4087bd519b90f",
+          "size_bytes": 1449
         },
         "source_run": "/capabilities/assets/evidence/mods-shell-mods-shell-web-run.json"
       },
@@ -6076,8 +6076,8 @@
         "run_log": {
           "file": "mods-store-run.log",
           "public_path": "/capabilities/assets/evidence/mods-store-run.log",
-          "sha256": "a7f7d13aedb7d300b4bafadc395cf2acb31bc60cfe0a8c96bc0d67bb26370153",
-          "size_bytes": 1127
+          "sha256": "ccfb3506b3f6b53d4e3d1f3d9b5264f1aa1ba42c0a7558a8fa9378e75b052801",
+          "size_bytes": 1149
         },
         "source_run": "/capabilities/assets/evidence/mods-store-mods-store-web-run.json"
       },
@@ -6390,8 +6390,8 @@
         "run_log": {
           "file": "mods-webhook-run.log",
           "public_path": "/capabilities/assets/evidence/mods-webhook-run.log",
-          "sha256": "6dd1a1edbf36f3fc270bb883eb3ed0157e28dace8eab5439f0d17f74f1f7de17",
-          "size_bytes": 1645
+          "sha256": "501305aa08b829354a555789685d48a43b2e347da13d2bc0018756348526116e",
+          "size_bytes": 1284
         },
         "source_run": "/capabilities/assets/evidence/mods-webhook-mods-webhook-web-run.json"
       },
@@ -7281,8 +7281,8 @@
         "run_log": {
           "file": "pay-alipay-run.log",
           "public_path": "/capabilities/assets/evidence/pay-alipay-run.log",
-          "sha256": "57d3d6e20206b7ca14eb42d264df157a18db867c07de87cfe4d5c3ddf0de3529",
-          "size_bytes": 1527
+          "sha256": "3d42ded027df1d6ebcf7e8e91ed8b20403c5d3c28e8a691b3aa28e5eb953d082",
+          "size_bytes": 1381
         },
         "source_run": "/capabilities/assets/evidence/pay-alipay-pay-alipay-web-run.json"
       },
@@ -7586,23 +7586,23 @@
         "failed": 0,
         "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
         "media": [
           {
             "file": "pay-lan-result.png",
             "sha256": "038db54377b5a14055c7f70774a30a8ac1cf790081bb4929ff9d62bd31e330a5",
             "visual_review": "accepted",
-            "visible_result": "「FHD · 局域网授权」卡片：未启用局域网模式，无需授权；本机 IP 127.0.0.1。",
+            "visible_result": "深色页「FHD · 局域网授权」。绿条写当前未启用局域网模式，无需授权。本机 IP 127.0.0.1，主机管理员位。",
             "kind": "screenshot",
             "public_path": "/capabilities/assets/evidence/pay-lan-result.png"
           },
           {
             "file": "pay-lan-operation.webm",
-            "sha256": "6266372d1b69d008ec7267a4a09dddb08f00661ab6866cd3a910ae11d8be65f7",
+            "sha256": "29649fc5aa140a05a2e690885dbce677c6933ddd29eb6bec4fdfede6e341815f",
             "visual_review": "accepted",
-            "visible_result": "录屏为局域网授权页，各帧一致。",
+            "visible_result": "录屏结束停在上述结果画面。深色页「FHD · 局域网授权」。绿条写当前未启用局域网模式，无需授权。本机 IP 127.0.0.1，主机管理员位。",
             "kind": "video",
-            "size_bytes": 118469,
+            "size_bytes": 129659,
             "duration_seconds": null,
             "codec": "webm",
             "public_path": null
@@ -7611,8 +7611,8 @@
         "run_log": {
           "file": "pay-lan-run.log",
           "public_path": "/capabilities/assets/evidence/pay-lan-run.log",
-          "sha256": "5f1be5c922aeea67a2b02aa26bb829d84724d8a2ea062f366a8b56ffa8132ceb",
-          "size_bytes": 1100
+          "sha256": "8316436b3702d72de228c887d1c8980a7250e2551b56e7770369aa2d9c1fa6ec",
+          "size_bytes": 1122
         },
         "source_run": "/capabilities/assets/evidence/pay-lan-pay-lan-macos-run.json"
       },
@@ -7624,23 +7624,23 @@
         "failed": 0,
         "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
         "media": [
           {
             "file": "pay-lan-settings-result.png",
             "sha256": "038db54377b5a14055c7f70774a30a8ac1cf790081bb4929ff9d62bd31e330a5",
             "visual_review": "accepted",
-            "visible_result": "「FHD · 局域网授权」卡片：状态 未启用、本机 IP、主机管理员位。",
+            "visible_result": "深色页「FHD · 局域网授权」。绿条写当前未启用局域网模式，无需授权。本机 IP 127.0.0.1，主机管理员位。",
             "kind": "screenshot",
             "public_path": "/capabilities/assets/evidence/pay-lan-settings-result.png"
           },
           {
             "file": "pay-lan-settings-operation.webm",
-            "sha256": "b6835afb59ac59be4383d2a97c47c9cccc4dc0528add8178431ce252737b7080",
+            "sha256": "9ab00a420f24d4696a30f3ded12be0a9c9897f6c1bb55c6987eb45cf35f9b55b",
             "visual_review": "accepted",
-            "visible_result": "录屏为局域网授权页，各帧一致。",
+            "visible_result": "录屏结束停在上述结果画面。深色页「FHD · 局域网授权」。绿条写当前未启用局域网模式，无需授权。本机 IP 127.0.0.1，主机管理员位。",
             "kind": "video",
-            "size_bytes": 117688,
+            "size_bytes": 128227,
             "duration_seconds": null,
             "codec": "webm",
             "public_path": null
@@ -7649,8 +7649,8 @@
         "run_log": {
           "file": "pay-lan-settings-run.log",
           "public_path": "/capabilities/assets/evidence/pay-lan-settings-run.log",
-          "sha256": "28ad0ca3893876e333507d5eef470d43775c4fed6bd63a09638b51989090d44d",
-          "size_bytes": 1075
+          "sha256": "1c635cfc361f9c76b1ace3994258a31b0f4d4627b6ac3a1049001126b4e12167",
+          "size_bytes": 1097
         },
         "source_run": "/capabilities/assets/evidence/pay-lan-settings-pay-lan-settings-macos-run.json"
       },
@@ -7703,8 +7703,8 @@
         "run_log": {
           "file": "pay-member-plan-run.log",
           "public_path": "/capabilities/assets/evidence/pay-member-plan-run.log",
-          "sha256": "d05d7e108c871e800ad9d4c1ff12597ded54e8cc8c1ff3ba12bd0f0abd0173ef",
-          "size_bytes": 1291
+          "sha256": "66bbf4fef1aa15caa84237159c6eb0251845d2d46fd4996da9f0a339e43b3b65",
+          "size_bytes": 1343
         },
         "source_run": "/capabilities/assets/evidence/pay-member-plan-pay-member-plan-web-run.json"
       },
@@ -7895,8 +7895,8 @@
         "run_log": {
           "file": "pay-wallet-run.log",
           "public_path": "/capabilities/assets/evidence/pay-wallet-run.log",
-          "sha256": "8301428215fe71095cae4f27838a03900eebcd4ab365fc021c0fd580c21ca106",
-          "size_bytes": 1275
+          "sha256": "e69502f47fadece8058d809cbebf62bb3194efd6fed00a5cbe017160a431c530",
+          "size_bytes": 1297
         },
         "source_run": "/capabilities/assets/evidence/pay-wallet-pay-wallet-web-run.json"
       },
@@ -8242,8 +8242,8 @@
         "run_log": {
           "file": "sec-csp-run.log",
           "public_path": "/capabilities/assets/evidence/sec-csp-run.log",
-          "sha256": "fa4ad24e71650fa461244602eef1614fbd06d95992c82ea03fe78ea47da68954",
-          "size_bytes": 842
+          "sha256": "f2913fe5835e22c407f794623abee44b08e8ae31f0f5e03116ef9083f306cf79",
+          "size_bytes": 864
         },
         "source_run": "/capabilities/assets/evidence/sec-csp-sec-csp-web-run.json"
       },
@@ -8296,8 +8296,8 @@
         "run_log": {
           "file": "sec-e2e-run.log",
           "public_path": "/capabilities/assets/evidence/sec-e2e-run.log",
-          "sha256": "0e58e6d1f539cc3eedcc38c0f5eaf54b99201ad230f28201ebf40a0e70064e3c",
-          "size_bytes": 1133
+          "sha256": "c3e9da1ff8588c02d50b0da59f48da12fc7a4e09bd7dd0abd97c59dd2bf2366c",
+          "size_bytes": 1153
         },
         "source_run": "/capabilities/assets/evidence/sec-e2e-sec-e2e-web-run.json"
       },
@@ -8407,8 +8407,8 @@
         "run_log": {
           "file": "sec-identity-run.log",
           "public_path": "/capabilities/assets/evidence/sec-identity-run.log",
-          "sha256": "f9acec857a0d1caa13c089bb6e769ef28a87443920f767125f13e957c2094a6a",
-          "size_bytes": 789
+          "sha256": "519ed8100e9987ecff3c1935a83dd78bcd0158cabde88e19a410918f31e7cab8",
+          "size_bytes": 811
         },
         "source_run": "/capabilities/assets/evidence/sec-identity-sec-identity-web-run.json"
       },
@@ -8477,23 +8477,23 @@
         "failed": 0,
         "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "app_git_sha": "027c8ec59443f1be9d7934e77282348e7483f883",
         "media": [
           {
             "file": "sec-release-gate-result.png",
-            "sha256": "901343d8134be41a3e613dfe185878627c8a5fac132990eb5f97ff9efece9a93",
+            "sha256": "4be91959f7381ee1e18d04080068524ef470e7025ec0e842db11c4b3b3001512",
             "visual_review": "accepted",
-            "visible_result": "「桌面运行时」页：运行状态表。",
+            "visible_result": "桌面运行时。桌面模式是。数据目录、数据库、Mod、模型都指向 /Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer。存储本地 SQLite。本地模型暂无已安装模型。",
             "kind": "screenshot",
             "public_path": "/capabilities/assets/evidence/sec-release-gate-result.png"
           },
           {
             "file": "sec-release-gate-operation.webm",
-            "sha256": "674c27bcc9853e0c30eb5b4bdbc51f9d69bf1dd131b4f235c2c55c4f334b52c9",
+            "sha256": "4792076d0284d57b584ce50d56ed5c107a520ec9a5a135231c6dc87a5d99f0fc",
             "visual_review": "accepted",
-            "visible_result": "录屏为桌面运行时页，各帧一致。",
+            "visible_result": "录屏结束停在上述结果画面。桌面运行时。桌面模式是。数据目录、数据库、Mod、模型都指向 /Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer。存储本地 SQLite。本地模型暂无已安装模型。",
             "kind": "video",
-            "size_bytes": 342888,
+            "size_bytes": 314979,
             "duration_seconds": null,
             "codec": "webm",
             "public_path": null
@@ -8502,8 +8502,8 @@
         "run_log": {
           "file": "sec-release-gate-run.log",
           "public_path": "/capabilities/assets/evidence/sec-release-gate-run.log",
-          "sha256": "761b4d542d2c3b728ce89d98d90e2e762c021a7ed1c2520653be9a1a8b7e5fae",
-          "size_bytes": 1262
+          "sha256": "68961c3f2fa66908b79f3aa3666ab9119b761506b69b512369bf1ad9e8bef24a",
+          "size_bytes": 1284
         },
         "source_run": "/capabilities/assets/evidence/sec-release-gate-sec-release-gate-macos-run.json"
       },
@@ -8556,8 +8556,8 @@
         "run_log": {
           "file": "sec-runtime-gate-run.log",
           "public_path": "/capabilities/assets/evidence/sec-runtime-gate-run.log",
-          "sha256": "7ebc6f84f51bcf570313b3ff064edc25cd303ac2ac85668f46e436480ceca0cc",
-          "size_bytes": 1307
+          "sha256": "95745424a84ef68e07dbab001b08f0edf3d9e3c39fb5579328bb061ef506ffb0",
+          "size_bytes": 1329
         },
         "source_run": "/capabilities/assets/evidence/sec-runtime-gate-sec-runtime-gate-web-run.json"
       },
@@ -11044,7 +11044,7 @@
     "summary": {
       "total": 153,
       "passed": 144,
-      "failed": 0,
+      "failed": 6,
       "last_verified_at": "2026-09-29"
     }
   },

@@ -7,8 +7,8 @@
     "total": 158,
     "by_status": {
       "verified": 55,
-      "partial": 89,
-      "implemented": 10,
+      "partial": 95,
+      "implemented": 4,
       "planned": 4
     },
     "cancelled_count": 0,
@@ -33,9 +33,9 @@
       },
       "macos": {
         "applicable": 100,
-        "verified": 88,
-        "partial": 0,
-        "pending": 12,
+        "verified": 77,
+        "partial": 19,
+        "pending": 4,
         "last_verified_at": "2026-09-29"
       },
       "web": {
@@ -60,7 +60,7 @@
         "last_verified_at": null
       }
     },
-    "completion": 77
+    "completion": 78
   },
   "product_version": "1.0.0.5",
   "platform_levels": {
@@ -391,7 +391,7 @@
             {
               "id": "base-device-bind",
               "name": "设备绑定与配对授权",
-              "status": "implemented",
+              "status": "partial",
               "platforms": [
                 "windows",
                 "macos",
@@ -409,7 +409,7 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "pending",
+                  "status": "partial",
                   "verified_at": null,
                   "run_count": 1,
                   "accepted_count": 0
@@ -1140,10 +1140,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "status": "partial",
+                  "verified_at": null,
                   "run_count": 1,
-                  "accepted_count": 1
+                  "accepted_count": 0
                 },
                 {
                   "id": "web",
@@ -1220,10 +1220,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "status": "partial",
+                  "verified_at": null,
                   "run_count": 1,
-                  "accepted_count": 1
+                  "accepted_count": 0
                 },
                 {
                   "id": "web",
@@ -1415,10 +1415,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "status": "partial",
+                  "verified_at": null,
                   "run_count": 1,
-                  "accepted_count": 1
+                  "accepted_count": 0
                 },
                 {
                   "id": "web",
@@ -1901,7 +1901,7 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "pending",
+                  "status": "partial",
                   "verified_at": null,
                   "run_count": 1,
                   "accepted_count": 0
@@ -2027,7 +2027,7 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "pending",
+                  "status": "partial",
                   "verified_at": null,
                   "run_count": 1,
                   "accepted_count": 0
@@ -2129,7 +2129,7 @@
             {
               "id": "erp-print-agent",
               "name": "打印代理与套打通道",
-              "status": "implemented",
+              "status": "partial",
               "platforms": [
                 "windows",
                 "macos"
@@ -2146,7 +2146,7 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "pending",
+                  "status": "partial",
                   "verified_at": null,
                   "run_count": 1,
                   "accepted_count": 0
@@ -2224,10 +2224,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "status": "partial",
+                  "verified_at": null,
                   "run_count": 1,
-                  "accepted_count": 1
+                  "accepted_count": 0
                 },
                 {
                   "id": "web",
@@ -2456,10 +2456,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "status": "partial",
+                  "verified_at": null,
                   "run_count": 1,
-                  "accepted_count": 1
+                  "accepted_count": 0
                 },
                 {
                   "id": "web",
@@ -2622,10 +2622,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "status": "partial",
+                  "verified_at": null,
                   "run_count": 1,
-                  "accepted_count": 1
+                  "accepted_count": 0
                 },
                 {
                   "id": "web",
@@ -2662,10 +2662,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "status": "partial",
+                  "verified_at": null,
                   "run_count": 1,
-                  "accepted_count": 1
+                  "accepted_count": 0
                 },
                 {
                   "id": "web",
@@ -2684,7 +2684,7 @@
             {
               "id": "ch-wechat-phone",
               "name": "微信电话员工（来电监控）",
-              "status": "implemented",
+              "status": "partial",
               "platforms": [
                 "windows",
                 "macos"
@@ -2701,7 +2701,7 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "pending",
+                  "status": "partial",
                   "verified_at": null,
                   "run_count": 1,
                   "accepted_count": 0
@@ -2733,10 +2733,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "status": "partial",
+                  "verified_at": null,
                   "run_count": 1,
-                  "accepted_count": 1
+                  "accepted_count": 0
                 },
                 {
                   "id": "web",
@@ -2904,10 +2904,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "status": "partial",
+                  "verified_at": null,
                   "run_count": 1,
-                  "accepted_count": 1
+                  "accepted_count": 0
                 },
                 {
                   "id": "web",
@@ -2926,7 +2926,7 @@
             {
               "id": "ch-realtime-voice",
               "name": "实时语音对话",
-              "status": "implemented",
+              "status": "partial",
               "platforms": [
                 "windows",
                 "macos",
@@ -2944,7 +2944,7 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "pending",
+                  "status": "partial",
                   "verified_at": null,
                   "run_count": 1,
                   "accepted_count": 0
@@ -3291,10 +3291,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "status": "partial",
+                  "verified_at": null,
                   "run_count": 1,
-                  "accepted_count": 1
+                  "accepted_count": 0
                 },
                 {
                   "id": "web",
@@ -3700,7 +3700,7 @@
             {
               "id": "ind-szqsm",
               "name": "奇士美专属 Mod",
-              "status": "implemented",
+              "status": "partial",
               "platforms": [
                 "windows",
                 "macos"
@@ -3717,7 +3717,7 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "pending",
+                  "status": "partial",
                   "verified_at": null,
                   "run_count": 1,
                   "accepted_count": 0
@@ -3976,10 +3976,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "status": "partial",
+                  "verified_at": null,
                   "run_count": 1,
-                  "accepted_count": 1
+                  "accepted_count": 0
                 },
                 {
                   "id": "web",
@@ -4689,10 +4689,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "status": "partial",
+                  "verified_at": null,
                   "run_count": 1,
-                  "accepted_count": 1
+                  "accepted_count": 0
                 }
               ],
               "summary": "安装包签名、公证与身份校验。",
@@ -4802,7 +4802,7 @@
             {
               "id": "dt-rpa",
               "name": "桌面自动化与运行时状态",
-              "status": "implemented",
+              "status": "partial",
               "platforms": [
                 "windows",
                 "macos"
@@ -4819,10 +4819,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "pending",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 }
               ],
               "summary": "桌面自动化执行与运行时状态上报的接口底座；完整 RPA 能力按客户场景逐步开放。",
