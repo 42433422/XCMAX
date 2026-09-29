@@ -6,8 +6,8 @@
   "reviewed_at": "2026-09-29",
   "app_version": "1.0.0.5",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
-  "screenshot_sha256": "5e1a29c5f4579e28c0e89b47279a9a0718a84049172dfa5265b3fd3cedb70c22",
-  "visible_content": "涂料行业包需要行业权益，验收账号未开通，按外部条件记为 blocked。",
+  "screenshot_sha256": "1f6aded2c7bb85d0da5c7cc95f9db00ee05c0adbcefc863dec72ea57ebd0d9e3",
+  "visible_content": "阻塞：涂装行业包需涂装行业企业账号授权，SUNBIRD 为饰品包装行业账号，已加载 Mod 与行业清单中均无涂装包(属 protected_client_mod_ids)。",
   "videos": [
     "FHD/docs/evidence/e2e/feature-acceptance-20260929/ind-coating/macos/operation.webm"
   ],

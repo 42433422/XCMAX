@@ -1,0 +1,8 @@
+[13:51:43] feature=base-rbac platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/base-rbac
+[13:51:55] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[13:51:56] case R1: passed - 角色与权限清单真实下发
+[13:51:57] case R2: passed - 门控矩阵真实读取
+[13:51:57] case R3: passed - 越权调用角色管理被拒（负例/边界）
+[13:51:57] case R4: passed - 越权管理全局权限被拒（负例/边界）
+[13:51:57] video: base-rbac-web-20260929-135143.webm (1077661 bytes)
+[13:51:57] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/base-rbac/log/base-rbac-web-20260929-135143.log

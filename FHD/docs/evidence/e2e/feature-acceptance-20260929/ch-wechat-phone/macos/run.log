@@ -1,6 +1,6 @@
-2026-09-29T07:24:06+0800 [ch-wechat-phone] 开始验收 ch-wechat-phone 微信电话员工（来电监控）；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
-2026-09-29T07:24:06+0800 [ch-wechat-phone] M1 passed :: HTTP 200 13ms；wechat_open=True
-2026-09-29T07:24:06+0800 [ch-wechat-phone] M2 failed :: 受阻：需要微信 PC 版登录并有真实来电
-2026-09-29T07:24:10+0800 [ch-wechat-phone] M3 passed :: 导航后路径 /business-docking；命中文本 ['数据对接中心']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 数据对接中心 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 企业版 · 通用 ETL | 数据对接中心 |  | 上传业务文件后解析映射并直接写入业务库。AI 只给建议，最终写入由确定性规则执行。 |  | 
-2026-09-29T07:24:11+0800 [ch-wechat-phone] screenshot result.png
-2026-09-29T07:24:14+0800 [ch-wechat-phone] video operation.webm bytes=378903
+2026-09-29T13:05:35+0800 [ch-wechat-phone] 开始验收 ch-wechat-phone 微信电话员工（来电监控）；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T13:05:35+0800 [ch-wechat-phone] M1 failed :: 受阻：需要微信 PC 版登录并有真实来电；本轮无真实微信通话硬件/会话
+2026-09-29T13:05:35+0800 [ch-wechat-phone] M2 failed :: 受阻：qclaw 网关仅暴露路由清单（wechat_open=true），无采集端与真实来电无法验证来电监控链路
+2026-09-29T13:05:35+0800 [ch-wechat-phone] M3 failed :: 受阻：无真实微信电话硬件，无法验证端到端来电处理
+2026-09-29T13:05:36+0800 [ch-wechat-phone] screenshot result.png
+2026-09-29T13:05:37+0800 [ch-wechat-phone] video operation.webm bytes=95169

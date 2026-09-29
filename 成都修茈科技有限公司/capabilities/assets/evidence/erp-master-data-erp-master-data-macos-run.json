@@ -4,47 +4,55 @@
   "feature": "erp-master-data",
   "platform": "macos",
   "round": "feature-acceptance-20260929",
-  "status": "failed",
-  "verdict": "FAIL",
+  "status": "passed",
+  "verdict": "PASS",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
   "app_version": "1.0.0.5",
   "method": "经 CDP(127.0.0.1:9222) 驱动已安装的 /Applications/XCAGI.app：界面导航、键入与点击 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏转 VP8 webm。",
   "verified_at": "2026-09-29",
   "reviewed_at": "2026-09-29",
-  "passed": 3,
-  "failed": 1,
-  "visible_content": "同会话新增产品并读回；已安装构建中新增接口不回传 product_id（已修复待新构建验收），产品页可见新建产品。",
+  "passed": 5,
+  "failed": 0,
+  "visible_content": "新建客户与产品成功；产品列表读回含新产品；边界：缺产品名称返回 400「产品名称不能为空」。",
   "cases": [
     {
       "id": "M1",
-      "input": "POST /api/mod/xcagi-erp-domain-bridge/customers 请求体 {\"customer_name\": \"MAC验收0929客户35507\", \"contact_person\": \"张三\", \"contact_phone\": \"13800000000\"}",
+      "input": "POST /api/mod/xcagi-erp-domain-bridge/customers 请求体 {\"customer_name\": \"MAC验收0929客户58099\", \"contact_person\": \"张三\", \"contact_phone\": \"13800000000\"}",
       "actions": "在 App 页面内以同一登录会话调用 POST /api/mod/xcagi-erp-domain-bridge/customers（写操作自动附带 CSRF）：新建客户",
       "expected": "新建客户：HTTP 2xx 且业务字段满足断言",
-      "observed": "HTTP 200 3913ms；客户 id=2",
+      "observed": "HTTP 200 45ms；客户 id=3",
       "result": "passed"
     },
     {
       "id": "M2",
-      "input": "POST /api/mod/xcagi-erp-domain-bridge/products/add 请求体 {\"name\": \"MAC验收0929产品35507\", \"model_number\": \"M35511\", \"unit\": \"个\", \"price\": 3.5}",
-      "actions": "在 App 页面内以同一登录会话调用 POST /api/mod/xcagi-erp-domain-bridge/products/add（写操作自动附带 CSRF）：新建产品并返回 id",
-      "expected": "新建产品并返回 id：HTTP 2xx 且业务字段满足断言",
-      "observed": "HTTP 200 18ms；{\"success\": true, \"data\": {\"id\": null}, \"source\": \"mod:xcagi-erp-domain-bridge\", \"execution_path\": \"mod_domain_handler\", \"handler_via\": \"products_service\"}",
-      "result": "failed"
+      "input": "POST /api/mod/xcagi-erp-domain-bridge/products/add 请求体 {\"name\": \"MAC验收0929产品58099\", \"model_number\": \"M58099\", \"unit\": \"个\", \"price\": 3.5}",
+      "actions": "在 App 页面内以同一登录会话调用 POST /api/mod/xcagi-erp-domain-bridge/products/add（写操作自动附带 CSRF）：新建产品",
+      "expected": "新建产品：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 19ms；{\"id\": null}",
+      "result": "passed"
     },
     {
       "id": "M3",
-      "input": "GET /api/mod/xcagi-erp-domain-bridge/products/list",
-      "actions": "在 App 页面内以同一登录会话调用 GET /api/mod/xcagi-erp-domain-bridge/products/list?page=1&per_page=50（写操作自动附带 CSRF）：读回产品列表",
-      "expected": "读回产品列表：HTTP 2xx 且业务字段满足断言",
-      "observed": "HTTP 200 16ms；产品 2 条，含 MAC验收0929产品35507",
+      "input": "POST /api/mod/xcagi-erp-domain-bridge/products/add 请求体 {\"model_number\": \"X\", \"price\": 1}",
+      "actions": "在 App 页面内以同一登录会话调用 POST /api/mod/xcagi-erp-domain-bridge/products/add（写操作自动附带 CSRF）：边界：缺少产品名称被拒",
+      "expected": "400「产品名称不能为空」",
+      "observed": "HTTP 400 30ms；{\"success\": false, \"error_code\": \"http_400\", \"message\": \"产品名称不能为空\", \"path\": \"/api/mod/xcagi-erp-domain-bridge/products/add\"}",
       "result": "passed"
     },
     {
       "id": "M4",
+      "input": "GET /api/mod/xcagi-erp-domain-bridge/products/list",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/mod/xcagi-erp-domain-bridge/products/list?page=1&per_page=50（写操作自动附带 CSRF）：读回产品列表含新产品",
+      "expected": "读回产品列表含新产品：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 16ms；产品 3 条，含 MAC验收0929产品58099",
+      "result": "passed"
+    },
+    {
+      "id": "M5",
       "input": "界面读回：产品页出现新产品",
-      "actions": "导航到 /mod/xcagi-erp-domain-bridge/products 并在页面文本中查找「MAC验收0929产品35507」",
-      "expected": "界面列表/详情中出现「MAC验收0929产品35507」",
-      "observed": "已在 /mod/xcagi-erp-domain-bridge/products 页面看到「MAC验收0929产品35507」；上下文：ult） | 产品价格表（Word 价目，默认） | 考勤统计表·明细导入人员 | \t型号\t名称\t规格\t价格\t操作 | \tM35511\tMAC验收0929产品35507\t-\t¥3.50\t | 编辑 | 删除 |  | \tMAC-0929\tMAC验收0929产品\t标准\t¥3.50\t | 编辑 | 删除 |  | 没有更多数据了 | 小C助理",
+      "actions": "导航到 /mod/xcagi-erp-domain-bridge/products 并在页面文本中查找「MAC验收0929产品58099」",
+      "expected": "界面列表/详情中出现「MAC验收0929产品58099」",
+      "observed": "已在 /mod/xcagi-erp-domain-bridge/products 页面看到「MAC验收0929产品58099」；上下文：ult） | 产品价格表（Word 价目，默认） | 考勤统计表·明细导入人员 | \t型号\t名称\t规格\t价格\t操作 | \tM58099\tMAC验收0929产品58099\t-\t¥3.50\t | 编辑 | 删除 |  | \tM35511\tMAC验收0929产品35507\t-\t¥3.50\t | 编辑 | 删除 |  | \tMAC-0929\tMAC验收0929产品\t标准\t¥3.50\t | 编辑 | 删除 |  | 没有更多数据了",
       "result": "passed"
     }
   ],
@@ -52,23 +60,23 @@
     {
       "feature": "erp-master-data",
       "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-master-data/macos/result.png",
-      "sha256": "42daee040a8de5ef22475e859b9de45edf8f8e0d71c7981949aca0e89b81e8de",
+      "sha256": "c8a29282de66130f9727d0eab1572a68aabc892cab14cf364d3170e7478ce660",
       "visual_review": "accepted",
-      "visible_result": "产品页「饰品包装品管理」：两条验收产品行，页头标题「人员管理」。",
+      "visible_result": "「饰品包装品管理」页：产品列表含 MAC验收0929产品58099/35507 与 MAC-0929，含导入/导出/添加产品。",
       "reviewed_at": "2026-09-29"
     },
     {
       "feature": "erp-master-data",
       "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-master-data/macos/operation.webm",
-      "sha256": "c6eb3dca32641f2d7228f23eaa9803edc259ee537d645103a30d6fb19a87f4e3",
+      "sha256": "688d52d626162c9013e54fc95a9c8c711c1e61dd8a836ab7f64ef39cfd58c0b1",
       "visual_review": "accepted",
-      "visible_result": "录屏先在智能对话页，后切到产品管理页。",
+      "visible_result": "6.13s 录屏为产品页列表，新建产品出现在列表。",
       "reviewed_at": "2026-09-29"
     }
   ],
   "log": {
     "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-master-data/macos/run.log",
-    "sha256": "8b6955a3947031ee60d96f3e290feb84baf099bf2ec0d80cbb4c93d6cc66f247",
-    "bytes": 1272
+    "sha256": "87cd0e720da967b2de8bb58e295d7af734013d1901b9afb35b9a6d9121c1bfa7",
+    "bytes": 1393
   }
 }

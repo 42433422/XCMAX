@@ -1,0 +1,8 @@
+[13:58:25] feature=sec-e2e platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-e2e
+[13:58:38] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[13:58:39] case E1: passed - e2e 套件说明与矩阵真实可读
+[13:58:40] case E2: passed - 16 个 Playwright 场景文件真实可读
+[13:58:41] case E3: passed - 实机留档截图真实可读并在浏览器渲染
+[13:58:42] case E4: passed - 不存在的场景文件被拒（负例/边界）
+[13:58:42] video: sec-e2e-web-20260929-135825.webm (1245810 bytes)
+[13:58:42] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/sec-e2e/log/sec-e2e-web-20260929-135825.log

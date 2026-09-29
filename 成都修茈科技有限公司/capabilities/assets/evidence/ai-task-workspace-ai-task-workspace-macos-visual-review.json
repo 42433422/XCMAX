@@ -6,11 +6,11 @@
   "reviewed_at": "2026-09-29",
   "app_version": "1.0.0.5",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
-  "screenshot_sha256": "853d413a36bb32703ebb7412583cfd43c476fffbbfff352effb1f15df103b1ad",
-  "visible_content": "只读产品查询任务创建（202）并在任务列表读回，独立工作区显示该任务；未注册工具的错误原因在已安装构建仍为笼统「任务参数无效」——已修复待新构建验收。",
+  "screenshot_sha256": "82f1daf3b34b0d010c6d6170e99cc58330918dd991b5ecaf3af33679bac443bd",
+  "visible_content": "新建任务(202，run_id 非空)、任务列表/详情读回、工作区页打开；边界：缺必要参数任务被拒 400「任务参数无效」。",
   "videos": [
     "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-task-workspace/macos/operation.webm"
   ],
-  "full_feature_acceptance": false,
+  "full_feature_acceptance": true,
   "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ai-task-workspace/macos/result.png"
 }

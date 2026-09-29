@@ -1,6 +1,9 @@
-2026-09-29T07:17:33+0800 [ch-asr] 开始验收 ch-asr 语音识别（ASR）；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
-2026-09-29T07:17:33+0800 [ch-asr] M1 passed :: HTTP 200 36ms；{"ready": true, "reason": "", "model": "small", "device_hint": "cpu"}
-2026-09-29T07:17:33+0800 [ch-asr] M2 failed :: 受阻：需要授予 XCAGI 麦克风权限并由真人说话，自动化无法提供真实语音输入
-2026-09-29T07:17:37+0800 [ch-asr] M3 passed :: 导航后路径 /；命中文本 ['按住说话']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 智能对话 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 查产品 | 订单 | 库存预警 | 打印标签 | 考勤 | 已为您解决 7 次任务 · 预计节约人工费用 ¥27 |  | 你好，我是饰品包装助手。 - 查产品
-2026-09-29T07:17:38+0800 [ch-asr] screenshot result.png
-2026-09-29T07:17:40+0800 [ch-asr] video operation.webm bytes=186895
+2026-09-29T16:59:28+0800 [ch-asr] 开始验收 ch-asr 语音识别（ASR）；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T16:59:28+0800 [ch-asr] M1 passed :: HTTP 200 19ms；{"ready": true, "reason": "", "model": "small", "device_hint": "cpu"}
+2026-09-29T16:59:31+0800 [ch-asr] M2 passed :: HTTP 200 2662ms；audioBase64 长度 27863
+2026-09-29T16:59:32+0800 [ch-asr] M3 passed :: HTTP 200；识别文本：'请把24箱包装和发到仓库。'
+2026-09-29T16:59:34+0800 [ch-asr] M4 passed :: HTTP 200；纯正弦音转写文本：''（无语音不臆造）
+2026-09-29T16:59:34+0800 [ch-asr] M5 passed :: HTTP 422 71ms；{"success": false, "error_code": "validation_error", "message": "请求参数验证失败", "errors": [{"field": "body.file", "message": "Field required", "
+2026-09-29T16:59:37+0800 [ch-asr] M6 passed :: 导航后路径 /；命中文本 ['按住说话']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 智能对话 | SUNBIRD | 副窗 | ◈ | 工作区 | 3 | 查产品 | 订单 | 库存预警 | 打印标签 | 考勤 | 已为您解决 7 次任务 · 预计节约人工费用 ¥27 |  | 你好，我是饰品包装助手。 |  | 查产品与
+2026-09-29T16:59:39+0800 [ch-asr] screenshot result.png
+2026-09-29T16:59:41+0800 [ch-asr] video operation.webm bytes=227647

@@ -1,7 +1,8 @@
-2026-09-29T07:17:55+0800 [mods-loader] 开始验收 mods-loader Mod 加载与清单校验；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
-2026-09-29T07:17:55+0800 [mods-loader] M1 passed :: HTTP 200 18ms；已加载 14，manifest_errors=[]
-2026-09-29T07:17:55+0800 [mods-loader] M2 failed :: HTTP 200 15ms；{"success": false, "message": "未实现", "data": null}
-2026-09-29T07:17:55+0800 [mods-loader] M3 passed :: HTTP 200 44ms；24 个
-2026-09-29T07:17:59+0800 [mods-loader] M4 passed :: 导航后路径 /mod-store；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 能力库 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 返回 AI 生态 |  | XCAGI · 能力库 |  | AI 员工市场 |  | 浏览并安装 AI 员工包；分类与修茈 AI 市场同源，安装后自动上岗至
-2026-09-29T07:18:00+0800 [mods-loader] screenshot result.png
-2026-09-29T07:18:09+0800 [mods-loader] video operation.webm bytes=371056
+2026-09-29T13:03:51+0800 [mods-loader] 开始验收 mods-loader Mod 加载与清单校验；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T13:03:51+0800 [mods-loader] M1 passed :: HTTP 200 19ms；已加载 14，manifest_errors=[]
+2026-09-29T13:03:51+0800 [mods-loader] M2 passed :: HTTP 200 28ms；24 个
+2026-09-29T13:03:51+0800 [mods-loader] M3 passed :: HTTP 200 127ms；12 条路由挂载
+2026-09-29T13:03:51+0800 [mods-loader] M4 passed :: HTTP 404 26ms；{"success": false, "error": "Mod not found"}
+2026-09-29T13:03:55+0800 [mods-loader] M5 passed :: 导航后路径 /mod-store；命中文本 ['能力库']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 能力库 | 副窗 | ◈ | 工作区 | 3 | 返回 AI 生态 |  | XCAGI · 能力库 |  | AI 员工市场 |  | 浏览并安装 AI 员工包；分类与修茈 AI 市场同源，安装后自动上岗至企业四
+2026-09-29T13:03:56+0800 [mods-loader] screenshot result.png
+2026-09-29T13:03:59+0800 [mods-loader] video operation.webm bytes=341903

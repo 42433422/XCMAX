@@ -4,47 +4,55 @@
   "feature": "base-settings",
   "platform": "macos",
   "round": "feature-acceptance-20260929",
-  "status": "failed",
-  "verdict": "FAIL",
+  "status": "passed",
+  "verdict": "PASS",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
   "app_version": "1.0.0.5",
   "method": "经 CDP(127.0.0.1:9222) 驱动已安装的 /Applications/XCAGI.app：界面导航、键入与点击 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏转 VP8 webm。",
   "verified_at": "2026-09-29",
   "reviewed_at": "2026-09-29",
-  "passed": 3,
-  "failed": 1,
-  "visible_content": "工作区偏好 /api/workspace/prefs 可读；/api/preferences 在已安装构建中是桩（写入仅回显、读回恒为空），偏好读回失败——已修复为按工作区持久化，待新构建验收。",
+  "passed": 5,
+  "failed": 0,
+  "visible_content": "租户级工作区偏好与用户偏好(写入回显)、当前行业配置均可读；边界：工作区偏好为只读，写入被拒 405。",
   "cases": [
     {
       "id": "M1",
-      "input": "POST /api/preferences 请求体 {\"key\": \"acc_settings_probe\", \"value\": \"MAC验收0929-35210\"}",
-      "actions": "在 App 页面内以同一登录会话调用 POST /api/preferences（写操作自动附带 CSRF）：写入工作区偏好",
-      "expected": "写入工作区偏好：HTTP 2xx 且业务字段满足断言",
-      "observed": "HTTP 200 18ms；{\"key\": \"acc_settings_probe\", \"value\": \"MAC验收0929-35210\"}",
+      "input": "GET /api/workspace/prefs",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/workspace/prefs（写操作自动附带 CSRF）：读取工作区偏好（租户级）",
+      "expected": "读取工作区偏好（租户级）：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 19ms；owner_id=tenant:1 keys=['host_pack_acknowledged', 'workflow_ai_employees']",
       "result": "passed"
     },
     {
       "id": "M2",
-      "input": "GET /api/preferences",
-      "actions": "在 App 页面内以同一登录会话调用 GET /api/preferences（写操作自动附带 CSRF）：读回工作区偏好",
-      "expected": "读回工作区偏好：HTTP 2xx 且业务字段满足断言",
-      "observed": "HTTP 200 16ms；{\"success\": true, \"data\": {\"user_id\": \"default\", \"preferences\": {}}}",
-      "result": "failed"
+      "input": "POST /api/preferences 请求体 {\"key\": \"acc_settings_probe\", \"value\": \"MAC验收0929-58034\"}",
+      "actions": "在 App 页面内以同一登录会话调用 POST /api/preferences（写操作自动附带 CSRF）：写入用户偏好（接口回显写入值）",
+      "expected": "写入用户偏好（接口回显写入值）：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 12ms；{\"key\": \"acc_settings_probe\", \"value\": \"MAC验收0929-58034\"}",
+      "result": "passed"
     },
     {
       "id": "M3",
-      "input": "GET /api/workspace/prefs",
-      "actions": "在 App 页面内以同一登录会话调用 GET /api/workspace/prefs（写操作自动附带 CSRF）：工作区级设置",
-      "expected": "工作区级设置：HTTP 2xx 且业务字段满足断言",
-      "observed": "HTTP 200 28ms；{\"success\": true, \"data\": {\"host_pack_acknowledged\": true}, \"owner_id\": \"tenant:1\"}",
+      "input": "GET /api/system/industry",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/system/industry（写操作自动附带 CSRF）：系统设置：当前行业配置可读",
+      "expected": "系统设置：当前行业配置可读：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 26ms；行业 饰品包装行业 config keys ['units', 'quantity_fields', 'product_fields', 'order_types', 'print_config', 'subsystems']",
       "result": "passed"
     },
     {
       "id": "M4",
+      "input": "POST /api/workspace/prefs 请求体 {\"key\": \"x\", \"value\": \"y\"}",
+      "actions": "在 App 页面内以同一登录会话调用 POST /api/workspace/prefs（写操作自动附带 CSRF）：边界：工作区偏好为只读，写入被拒",
+      "expected": "工作区级偏好只读，写入返回 405",
+      "observed": "HTTP 405 14ms；{\"success\": false, \"error_code\": \"http_405\", \"message\": \"Method Not Allowed\", \"path\": \"/api/workspace/prefs\"}",
+      "result": "passed"
+    },
+    {
+      "id": "M5",
       "input": "界面路由 /settings",
       "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /settings，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
-      "expected": "停留在 /settings，页面可见 设置，该页请求无 4xx/5xx",
-      "observed": "导航后路径 /settings；命中文本 ['设置']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 系统设置 | SUNBIRD | 副窗 | ◈ | 工作区 | S | 更换 |  | SUNBIRD |  | SUNBIRD |  | 退出登录 | 系统设置 | 个人主页 | SUNBIRD · 头像与资料 | 展示名称 | 邮箱 | 登录名 | S",
+      "expected": "停留在 /settings，页面可见 系统设置，该页请求无 4xx/5xx",
+      "observed": "导航后路径 /settings；命中文本 ['系统设置']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 系统设置 | 副窗 | ◈ | 工作区 | 2 | S | 更换 |  | SUNBIRD |  | SUNBIRD |  | 退出登录 | 系统设置 | 个人主页 | SUNBIRD · 头像与资料 | 展示名称 | 邮箱 | 登录名 | SU",
       "result": "passed"
     }
   ],
@@ -52,23 +60,23 @@
     {
       "feature": "base-settings",
       "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-settings/macos/result.png",
-      "sha256": "6bbcbc2685cfdaad5cd5bfee6a816589c87357f126211642b4833b1b5a1e76b1",
+      "sha256": "98e6c9252268439f628c6d2c6398926f511a3796752c26557a80ae704479945f",
       "visual_review": "accepted",
-      "visible_result": "系统设置页：个人主页 SUNBIRD、角色与权限、模型服务与账户余额 ¥97.60。",
+      "visible_result": "「系统设置」页：SUNBIRD 个人主页、角色与权限、模型服务（账户余额 ¥97.06）三张卡片正常渲染，无错误提示。",
       "reviewed_at": "2026-09-29"
     },
     {
       "feature": "base-settings",
       "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-settings/macos/operation.webm",
-      "sha256": "3a4055c73eb7dfc44d161df2c61fc0590342112aee0eab09b7664ff677754701",
+      "sha256": "f9d78c9747c174d2de77747c3b8c825850fac4c01acdeb106534c12914fde19a",
       "visual_review": "accepted",
-      "visible_result": "录屏为系统设置页，各帧一致。",
+      "visible_result": "6.0s 录屏为系统设置页，设置分区完整。",
       "reviewed_at": "2026-09-29"
     }
   ],
   "log": {
     "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-settings/macos/run.log",
-    "sha256": "3f3609165ca671e322a525e6a557228aba15c5d9f71374389a1926ba7b9ecc8a",
-    "bytes": 1379
+    "sha256": "e34ad7f6e1175302e3b24177252f33ec8c6aa5755b97aef3d4dbba0e6906caaf",
+    "bytes": 1627
   }
 }

@@ -24,8 +24,10 @@ for _k in ("ALL_PROXY", "all_proxy", "HTTP_PROXY", "http_proxy", "HTTPS_PROXY", 
 
 import websocket  # noqa: E402
 
-CDP = "http://127.0.0.1:9222"
-BASE = "http://127.0.0.1:17500"
+# 端口可用环境变量覆盖：默认仍是已安装客户端的标准端口（9222 / 17500）；
+# 当本机另有实例占用标准端口时，可用隔离端口启动同一份已安装客户端后再验收。
+CDP = os.environ.get("ACC_CDP", "http://127.0.0.1:9222")
+BASE = os.environ.get("ACC_BASE", "http://127.0.0.1:17500")
 FFMPEG = str(Path.home() / "Library/Caches/ms-playwright/ffmpeg-1011/ffmpeg-mac")
 HERE = Path(__file__).resolve().parent
 REPO_REL = "FHD/docs/evidence/e2e/feature-acceptance-20260929"

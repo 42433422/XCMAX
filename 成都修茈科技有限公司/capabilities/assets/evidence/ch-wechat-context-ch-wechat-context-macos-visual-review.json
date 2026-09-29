@@ -6,11 +6,11 @@
   "reviewed_at": "2026-09-29",
   "app_version": "1.0.0.5",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
-  "screenshot_sha256": "8d318c173c7a00126f809ff19d5238d3c336529c1eadae87b0a822d62530d6f2",
-  "visible_content": "微信上下文接口可读，页面可见；需要采集端先同步联系人情报，受阻。",
+  "screenshot_sha256": "b2d6dcccaeeee90127a744eb95d813d3d1ae572816a07ed5599100ded3cedd34",
+  "visible_content": "上行联系人+情报(200，上行响应内回流 known=true)后，GET /api/ops/wechat/context 读回 known=true、contact.display_name 命中、message_count≥1、recent_messages 含情报原文；边界：未知联系人返回 known=false。工作区库含 wechat_contacts/wechat_messages 表，数据真实落库。",
   "videos": [
     "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-wechat-context/macos/operation.webm"
   ],
-  "full_feature_acceptance": false,
+  "full_feature_acceptance": true,
   "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-wechat-context/macos/result.png"
 }

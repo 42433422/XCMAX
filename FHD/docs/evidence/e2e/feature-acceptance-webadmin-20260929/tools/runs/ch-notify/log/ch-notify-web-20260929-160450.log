@@ -1,0 +1,7 @@
+[16:04:50] feature=ch-notify platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-notify
+[16:05:03] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[16:05:04] case N1: passed - 移动端待推送通知队列真实读取
+[16:05:05] case N2: passed - 缺 fcm_token 的设备注册被校验拒绝（负例）
+[16:05:05] case N3: passed - 对只读注销路径的 POST 不被允许（边界/负例）
+[16:05:05] video: ch-notify-web-20260929-160450.webm (1142553 bytes)
+[16:05:05] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-notify/log/ch-notify-web-20260929-160450.log

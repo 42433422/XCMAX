@@ -1,7 +1,8 @@
-2026-09-29T06:45:07+0800 [erp-master-data] 开始验收 erp-master-data 产品 / 客户 / 供应商主数据；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
-2026-09-29T06:45:11+0800 [erp-master-data] M1 passed :: HTTP 200 3913ms；客户 id=2
-2026-09-29T06:45:11+0800 [erp-master-data] M2 failed :: HTTP 200 18ms；{"success": true, "data": {"id": null}, "source": "mod:xcagi-erp-domain-bridge", "execution_path": "mod_domain_handler", "handler_via": "products_service"}
-2026-09-29T06:45:11+0800 [erp-master-data] M3 passed :: HTTP 200 16ms；产品 2 条，含 MAC验收0929产品35507
-2026-09-29T06:45:15+0800 [erp-master-data] M4 passed :: 已在 /mod/xcagi-erp-domain-bridge/products 页面看到「MAC验收0929产品35507」；上下文：ult） | 产品价格表（Word 价目，默认） | 考勤统计表·明细导入人员 | 	型号	名称	规格	价格	操作 | 	M35511	MAC验收0929产品35507	-	¥3.50	 | 编辑 | 删除 |  | 	MAC-0929	MAC验收0929产品	标准	¥3.50	 | 编辑 | 删除 |  | 没有更多数据了 | 小C助理
-2026-09-29T06:45:16+0800 [erp-master-data] screenshot result.png
-2026-09-29T06:45:17+0800 [erp-master-data] video operation.webm bytes=369962
+2026-09-29T13:01:39+0800 [erp-master-data] 开始验收 erp-master-data 产品 / 客户 / 供应商主数据；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T13:01:39+0800 [erp-master-data] M1 passed :: HTTP 200 45ms；客户 id=3
+2026-09-29T13:01:39+0800 [erp-master-data] M2 passed :: HTTP 200 19ms；{"id": null}
+2026-09-29T13:01:39+0800 [erp-master-data] M3 passed :: HTTP 400 30ms；{"success": false, "error_code": "http_400", "message": "产品名称不能为空", "path": "/api/mod/xcagi-erp-domain-bridge/products/add"}
+2026-09-29T13:01:39+0800 [erp-master-data] M4 passed :: HTTP 200 16ms；产品 3 条，含 MAC验收0929产品58099
+2026-09-29T13:01:43+0800 [erp-master-data] M5 passed :: 已在 /mod/xcagi-erp-domain-bridge/products 页面看到「MAC验收0929产品58099」；上下文：ult） | 产品价格表（Word 价目，默认） | 考勤统计表·明细导入人员 | 	型号	名称	规格	价格	操作 | 	M58099	MAC验收0929产品58099	-	¥3.50	 | 编辑 | 删除 |  | 	M35511	MAC验收0929产品35507	-	¥3.50	 | 编辑 | 删除 |  | 	MAC-0929	MAC验收0929产品	标准	¥3.50	 | 编辑 | 删除 |  | 没有更多数据了
+2026-09-29T13:01:44+0800 [erp-master-data] screenshot result.png
+2026-09-29T13:01:47+0800 [erp-master-data] video operation.webm bytes=286120

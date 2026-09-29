@@ -4,47 +4,55 @@
   "feature": "base-db",
   "platform": "macos",
   "round": "feature-acceptance-20260929",
-  "status": "failed",
-  "verdict": "FAIL",
+  "status": "passed",
+  "verdict": "PASS",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
   "app_version": "1.0.0.5",
   "method": "经 CDP(127.0.0.1:9222) 驱动已安装的 /Applications/XCAGI.app：界面导航、键入与点击 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏转 VP8 webm。",
   "verified_at": "2026-09-29",
   "reviewed_at": "2026-09-29",
-  "passed": 3,
-  "failed": 1,
-  "visible_content": "数据库探针 healthy；偏好写入返回回显但读回为空（已安装构建 /api/preferences 为桩）——已修复为按工作区持久化，待新构建验收。",
+  "passed": 5,
+  "failed": 0,
+  "visible_content": "数据库运行态(backend=sqlite、mode=production、test_db_enabled=false)、db-tools 注册表、桌面存储指向同一库均可读；边界：FHD 兼容层跨层读写令牌未配置(false)。",
   "cases": [
     {
       "id": "M1",
-      "input": "GET /health/details",
-      "actions": "在 App 页面内以同一登录会话调用 GET /health/details（写操作自动附带 CSRF）：数据库探针",
-      "expected": "数据库探针：HTTP 2xx 且业务字段满足断言",
-      "observed": "HTTP 200 158ms；{\"status\": \"healthy\", \"latency_ms\": 0}",
+      "input": "GET /api/system/test-db/status",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/system/test-db/status（写操作自动附带 CSRF）：数据库运行态（后端/模式/真实库路径）",
+      "expected": "数据库运行态（后端/模式/真实库路径）：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 14ms；backend=sqlite mode=production db=xcagi.db test_db_enabled=False",
       "result": "passed"
     },
     {
       "id": "M2",
-      "input": "POST /api/preferences 请求体 {\"key\": \"acc_db_probe\", \"value\": \"MAC验收0929持久化37954\"}",
-      "actions": "在 App 页面内以同一登录会话调用 POST /api/preferences（写操作自动附带 CSRF）：写入偏好并读回（验证库可写）",
-      "expected": "写入偏好并读回（验证库可写）：HTTP 2xx 且业务字段满足断言",
-      "observed": "HTTP 200 14ms；{\"key\": \"acc_db_probe\", \"value\": \"MAC验收0929持久化37954\"}",
+      "input": "GET /api/db-tools",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/db-tools（写操作自动附带 CSRF）：数据库工具注册表（读自库元数据）",
+      "expected": "数据库工具注册表（读自库元数据）：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 14ms；工具 12 个，示例 ['products', 'customers', 'orders', 'shipment_template', 'excel_decompose']",
       "result": "passed"
     },
     {
       "id": "M3",
-      "input": "GET /api/preferences",
-      "actions": "在 App 页面内以同一登录会话调用 GET /api/preferences（写操作自动附带 CSRF）：读回持久化偏好",
-      "expected": "读回持久化偏好：HTTP 2xx 且业务字段满足断言",
-      "observed": "HTTP 200 13ms；{\"success\": true, \"data\": {\"user_id\": \"default\", \"preferences\": {}}}",
-      "result": "failed"
+      "input": "GET /api/desktop/status",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/desktop/status（写操作自动附带 CSRF）：桌面运行态指向同一 SQLite 存储",
+      "expected": "桌面运行态指向同一 SQLite 存储：HTTP 2xx 且业务字段满足断言",
+      "observed": "HTTP 200 28ms；storageMode=local_sqlite database=/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/data/xcagi.db",
+      "result": "passed"
     },
     {
       "id": "M4",
-      "input": "界面路由 /mod/xcagi-erp-domain-bridge/data-sources",
-      "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /mod/xcagi-erp-domain-bridge/data-sources，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
-      "expected": "停留在 /mod/xcagi-erp-domain-bridge/data-sources，页面可见 ，该页请求无 4xx/5xx",
-      "observed": "导航后路径 /mod/xcagi-erp-domain-bridge/data-sources；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 数据来源 | SUNBIRD | 副窗 | ◈ | 工作区 | 2 | 数据来源 | 私人数据库读取助手 |  | 这里管理 AI 员工可读取的数据来源。市场展示为通用员工；启用具体适配器前，需要用户在本页明确选择并",
+      "input": "GET /api/fhd/db-tokens/status",
+      "actions": "在 App 页面内以同一登录会话调用 GET /api/fhd/db-tokens/status（写操作自动附带 CSRF）：边界：FHD 兼容层数据库读写令牌未配置（不放开跨层写库）",
+      "expected": "令牌未配置时如实返回 false，不放开跨层写库",
+      "observed": "HTTP 200 15ms；{\"read_token_configured\": false, \"write_token_configured\": false, \"active_mod_id\": \"attendance-industry\"}",
+      "result": "passed"
+    },
+    {
+      "id": "M5",
+      "input": "界面路由 /desktop-runtime",
+      "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /desktop-runtime，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+      "expected": "停留在 /desktop-runtime，页面可见 桌面运行时，该页请求无 4xx/5xx",
+      "observed": "导航后路径 /desktop-runtime；命中文本 ['桌面运行时']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 桌面运行时 | 副窗 | ◈ | 工作区 | 2 | 桌面运行时 |  | 该页面在 web 版与桌面版共用，用于查看本地数据目录、模型目录和更新入口。 |  | 刷新状态检查桌面更新 | 运行状态 | 桌面模式 | ",
       "result": "passed"
     }
   ],
@@ -52,23 +60,23 @@
     {
       "feature": "base-db",
       "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-db/macos/result.png",
-      "sha256": "5671972587655054450f42f6ee23849cf469c5d2fc377d8b44a920f4efe08ba1",
+      "sha256": "f57a70ec7d6d7de0dd512d5e9774b2237a37f565e46238a809bc7ed8e3a1cb89",
       "visual_review": "accepted",
-      "visible_result": "「数据来源 · 私人数据库读取助手」：本地信息数据库卡片与 QQ/钉钉/企业微信/飞书/Telegram/WhatsApp/Skype 等规划中来源。",
+      "visible_result": "「桌面运行时」页：运行状态明确显示 桌面模式=是、数据库=/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/data/xcagi.db、存储模式=本地 SQLite、连接(脱敏) sqlite:///…/xcagi.db。",
       "reviewed_at": "2026-09-29"
     },
     {
       "feature": "base-db",
       "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-db/macos/operation.webm",
-      "sha256": "b4e0e497367531c4860fa6b5d9301a9bc6b0d1514114e35fe8e1c8202d250988",
+      "sha256": "8f7e0d7b0adc0ea63238784018687389786d97bb89dd6fe437d3c4a79d2c5702",
       "visual_review": "accepted",
-      "visible_result": "录屏为数据来源页，各帧一致。",
+      "visible_result": "6.0s 录屏为桌面运行时页，展示本地数据目录与同一 SQLite 存储路径。",
       "reviewed_at": "2026-09-29"
     }
   ],
   "log": {
     "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-db/macos/run.log",
-    "sha256": "19c7dde6cb44ece53f5cc1aa01f5b78b971d86096924a81458ff56b002762e5e",
-    "bytes": 1359
+    "sha256": "44be5140320ac6ad8f44f7a5a4106810d8d3991a47358620727dcb13fa40e464",
+    "bytes": 1630
   }
 }

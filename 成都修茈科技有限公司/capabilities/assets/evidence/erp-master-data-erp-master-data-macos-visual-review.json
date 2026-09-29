@@ -6,11 +6,11 @@
   "reviewed_at": "2026-09-29",
   "app_version": "1.0.0.5",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
-  "screenshot_sha256": "42daee040a8de5ef22475e859b9de45edf8f8e0d71c7981949aca0e89b81e8de",
-  "visible_content": "同会话新增产品并读回；已安装构建中新增接口不回传 product_id（已修复待新构建验收），产品页可见新建产品。",
+  "screenshot_sha256": "c8a29282de66130f9727d0eab1572a68aabc892cab14cf364d3170e7478ce660",
+  "visible_content": "新建客户与产品成功；产品列表读回含新产品；边界：缺产品名称返回 400「产品名称不能为空」。",
   "videos": [
     "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-master-data/macos/operation.webm"
   ],
-  "full_feature_acceptance": false,
+  "full_feature_acceptance": true,
   "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-master-data/macos/result.png"
 }

@@ -1,0 +1,7 @@
+[15:20:47] feature=erp-templates platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-templates
+[15:21:00] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[15:21:02] case TPL1: passed - 租户模板真实写-读回
+[15:21:02] case TPL2: passed - 内置单据模板读取
+[15:21:03] case TPL3: passed - 缺字段创建 400 · 不存在模板 404（负例）
+[15:21:03] video: erp-templates-web-20260929-152047.webm (1223346 bytes)
+[15:21:03] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-templates/log/erp-templates-web-20260929-152047.log

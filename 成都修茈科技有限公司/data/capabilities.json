@@ -7,8 +7,8 @@
     "total": 158,
     "by_status": {
       "verified": 55,
-      "partial": 93,
-      "implemented": 6,
+      "partial": 89,
+      "implemented": 10,
       "planned": 4
     },
     "cancelled_count": 0,
@@ -33,16 +33,16 @@
       },
       "macos": {
         "applicable": 100,
-        "verified": 67,
-        "partial": 29,
-        "pending": 4,
+        "verified": 88,
+        "partial": 0,
+        "pending": 12,
         "last_verified_at": "2026-09-29"
       },
       "web": {
         "applicable": 128,
-        "verified": 53,
+        "verified": 124,
         "partial": 0,
-        "pending": 75,
+        "pending": 4,
         "last_verified_at": "2026-09-29"
       },
       "android": {
@@ -60,7 +60,7 @@
         "last_verified_at": null
       }
     },
-    "completion": 78
+    "completion": 77
   },
   "product_version": "1.0.0.5",
   "platform_levels": {
@@ -190,10 +190,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "按角色分配功能与数据权限，管理员、业务员工各见其职，降低误操作与越权风险。",
@@ -346,10 +346,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "同一套系统可按需裁剪为空壳对话版、通用行业版或完整 ERP 版，适配不同规模客户的落地节奏。",
@@ -391,7 +391,7 @@
             {
               "id": "base-device-bind",
               "name": "设备绑定与配对授权",
-              "status": "partial",
+              "status": "implemented",
               "platforms": [
                 "windows",
                 "macos",
@@ -409,7 +409,7 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
+                  "status": "pending",
                   "verified_at": null,
                   "run_count": 1,
                   "accepted_count": 0
@@ -463,10 +463,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "持续自检服务与数据库状态，运维与监控可直接对接；内部实测健康接口 P50 响应约 11ms。",
@@ -494,10 +494,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 }
               ],
               "summary": "桌面端数据库启用 WAL 日志与自动检查点，断电等异常后启动时自动体检，损坏时自动从最近有效备份恢复。",
@@ -588,18 +588,18 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "工作区级设置与用户偏好项。",
@@ -694,10 +694,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "android",
@@ -742,10 +742,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "规则引擎 + 模型混合的意图识别，把自然语言请求路由到正确的业务工具；配套基准测试流水线防止识别质量回退。",
@@ -774,18 +774,18 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "对话式任务工作区与多步骤任务编排。",
@@ -894,10 +894,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "把重复业务流程编排成可分工的 AI 数字员工，多步骤任务自动执行、可分配、可监督。",
@@ -934,10 +934,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "面向通用办公场景的员工扩展包，作为 Mod 生态的「家具」按需安装。",
@@ -1068,10 +1068,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "对话中直接让 AI 员工读取、生成 Excel，覆盖出货单、价格表等常见单据场景。",
@@ -1108,10 +1108,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "AI 员工回复可转为语音播报，支持安装本地语音模型，适合车间、门店等免手持场景。",
@@ -1140,18 +1140,18 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "把企业文档、表格沉淀为可检索知识库，AI 员工回答时自动引用企业自己的资料。",
@@ -1188,10 +1188,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "CSV 数据的生成与解析。",
@@ -1220,18 +1220,18 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "PDF 文档生成与内容解析。",
@@ -1268,10 +1268,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "演示文稿生成与解析。",
@@ -1308,10 +1308,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "Word 文档生成与解析。",
@@ -1340,18 +1340,18 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "单据图片的 OCR 结构化解析。",
@@ -1415,18 +1415,18 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "从销售订单到出货单、单据生成的一体化流程，支持产品解析校验与文档自动产出。",
@@ -1455,18 +1455,18 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "采购订单与供应商到货的业务记录能力，与库存、财务模块衔接。",
@@ -1503,10 +1503,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "多仓库、批次、调拨与预警的库存账目能力。",
@@ -1535,18 +1535,18 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "主数据的维护与变更。",
@@ -1575,10 +1575,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
@@ -1623,10 +1623,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "采购到货与入库登记。",
@@ -1663,10 +1663,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "多仓库存、库位、调拨与库存预警。",
@@ -1703,10 +1703,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "基于库存与消耗的补货建议。",
@@ -1789,10 +1789,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "应收应付、统一账本与发票管理，业务单据自动生成财务记录。",
@@ -1829,10 +1829,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "应收应付账目与毛利核算。",
@@ -1869,10 +1869,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "价格表、经营报表与统计分析。",
@@ -1901,7 +1901,7 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
+                  "status": "pending",
                   "verified_at": null,
                   "run_count": 1,
                   "accepted_count": 0
@@ -1909,10 +1909,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "发票开具与税务信息处理。",
@@ -1941,18 +1941,18 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "经营流水对账与结算。",
@@ -1995,10 +1995,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "自定义发货单、合同等单据模板，支持导入与套打，适配企业现有单据格式。",
@@ -2027,7 +2027,7 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
+                  "status": "pending",
                   "verified_at": null,
                   "run_count": 1,
                   "accepted_count": 0
@@ -2035,10 +2035,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "单张标签打印与工作流批量标签调度，支持产品查找联动，面向生产现场贴标场景。",
@@ -2075,10 +2075,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "客户、产品等主数据的 Excel 批量导入与业务报表导出。",
@@ -2115,10 +2115,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "销售合同单据的生成与生命周期。",
@@ -2129,7 +2129,7 @@
             {
               "id": "erp-print-agent",
               "name": "打印代理与套打通道",
-              "status": "partial",
+              "status": "implemented",
               "platforms": [
                 "windows",
                 "macos"
@@ -2146,7 +2146,7 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
+                  "status": "pending",
                   "verified_at": null,
                   "run_count": 1,
                   "accepted_count": 0
@@ -2192,10 +2192,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "拍照或扫描的单据自动识别为结构化数据，减少手工录入；已纳入端到端验收链路。",
@@ -2224,18 +2224,18 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "识别结果的结构化清洗与确认入库。",
@@ -2322,10 +2322,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "业务单据审批与流程流转。",
@@ -2376,10 +2376,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "android",
@@ -2416,18 +2416,18 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "客服会话中 AI 协助应答、话术建议与人工接管，服务号场景可平滑切换人机。",
@@ -2456,18 +2456,18 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "站内通知与移动推送。",
@@ -2504,10 +2504,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "任务中心与审批消息通知。",
@@ -2544,10 +2544,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "群聊中的超级员工与 AI 协助。",
@@ -2584,10 +2584,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "双端实时消息通道。",
@@ -2622,18 +2622,18 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "本机采集端把微信消息安全接入平台，幂等去重入库，作为客户沟通情报的唯一入口。",
@@ -2662,18 +2662,18 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "微信联系人身份解析入客户档案，并在对话上下文中注入联系人情报。",
@@ -2684,7 +2684,7 @@
             {
               "id": "ch-wechat-phone",
               "name": "微信电话员工（来电监控）",
-              "status": "partial",
+              "status": "implemented",
               "platforms": [
                 "windows",
                 "macos"
@@ -2701,7 +2701,7 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
+                  "status": "pending",
                   "verified_at": null,
                   "run_count": 1,
                   "accepted_count": 0
@@ -2733,18 +2733,18 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "把联系人背景注入 AI 对话上下文。",
@@ -2849,7 +2849,7 @@
             {
               "id": "ch-mobile-qr",
               "name": "二维码扫码登录",
-              "status": "implemented",
+              "status": "partial",
               "platforms": [
                 "android",
                 "web"
@@ -2866,10 +2866,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "扫码确认登录与深链回调。",
@@ -2904,18 +2904,18 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "语音转写与语音指令链路。",
@@ -2926,7 +2926,7 @@
             {
               "id": "ch-realtime-voice",
               "name": "实时语音对话",
-              "status": "partial",
+              "status": "implemented",
               "platforms": [
                 "windows",
                 "macos",
@@ -2944,7 +2944,7 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
+                  "status": "pending",
                   "verified_at": null,
                   "run_count": 1,
                   "accepted_count": 0
@@ -2997,18 +2997,18 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "行业标准化的模块包机制：清单校验、依赖检查、路由与菜单挂载，行业定制不侵入核心。",
@@ -3045,10 +3045,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "在系统内浏览、安装、卸载 Mod；支持按 edition 一键安装整包，端到端验收覆盖安装闭环。",
@@ -3107,10 +3107,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "Mod 身份校验、路由与菜单挂载。",
@@ -3213,10 +3213,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "平台壳裁剪与 edition 包引导。",
@@ -3259,10 +3259,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "把对话与业务能力以开放接口暴露给企业自有系统，配套能力闭环测试。",
@@ -3291,18 +3291,18 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "订单等业务事件可回调通知企业外部系统，实现双向集成。",
@@ -3339,10 +3339,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "以 Mod 形式桥接核心能力的桥接包。",
@@ -3432,7 +3432,7 @@
             {
               "id": "ind-coating",
               "name": "涂装行业包",
-              "status": "implemented",
+              "status": "partial",
               "platforms": [
                 "windows",
                 "macos",
@@ -3458,10 +3458,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "面向涂装行业的工序、批号与出货协同 Mod。",
@@ -3529,10 +3529,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "考勤转换、排班、考勤机打印与人事管理的行业工作区，已在实机验收中运行。",
@@ -3569,10 +3569,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "行业字段、规则与能力模块配置。",
@@ -3609,10 +3609,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "行业工作区与考勤导入、参考数据。",
@@ -3643,7 +3643,7 @@
                   "name": "macOS 桌面",
                   "status": "pending",
                   "verified_at": null,
-                  "run_count": 0,
+                  "run_count": 1,
                   "accepted_count": 0
                 },
                 {
@@ -3700,7 +3700,7 @@
             {
               "id": "ind-szqsm",
               "name": "奇士美专属 Mod",
-              "status": "partial",
+              "status": "implemented",
               "platforms": [
                 "windows",
                 "macos"
@@ -3717,7 +3717,7 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
+                  "status": "pending",
                   "verified_at": null,
                   "run_count": 1,
                   "accepted_count": 0
@@ -3757,10 +3757,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "客户专属定制的开发与交付链路。",
@@ -3828,10 +3828,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "Mod 市场支付的桥接 Mod。",
@@ -3868,10 +3868,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "规划器能力的桥接 Mod。",
@@ -3908,10 +3908,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "工作流可视化桥接 Mod。",
@@ -3976,18 +3976,18 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 },
                 {
                   "id": "android",
@@ -4032,10 +4032,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "Token 余额、套餐与模型用量计费。",
@@ -4197,10 +4197,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "订单与会员套餐计划。",
@@ -4802,7 +4802,7 @@
             {
               "id": "dt-rpa",
               "name": "桌面自动化与运行时状态",
-              "status": "partial",
+              "status": "implemented",
               "platforms": [
                 "windows",
                 "macos"
@@ -4819,7 +4819,7 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
+                  "status": "pending",
                   "verified_at": null,
                   "run_count": 1,
                   "accepted_count": 0
@@ -4852,7 +4852,7 @@
                   "name": "macOS 桌面",
                   "status": "pending",
                   "verified_at": null,
-                  "run_count": 0,
+                  "run_count": 1,
                   "accepted_count": 0
                 }
               ],
@@ -4883,7 +4883,7 @@
                   "name": "macOS 桌面",
                   "status": "pending",
                   "verified_at": null,
-                  "run_count": 0,
+                  "run_count": 1,
                   "accepted_count": 0
                 }
               ],
@@ -4921,10 +4921,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "事件总线与事件存储。",
@@ -4961,10 +4961,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "本地与服务端双向存证。",
@@ -5102,10 +5102,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "安全中间件与认证装饰器。",
@@ -5164,10 +5164,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "运行时安全门控与会话安全。",
@@ -5204,10 +5204,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "内容安全策略与安全响应头。",
@@ -5272,10 +5272,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "16 个 Playwright 端到端场景覆盖登录、核心业务、Mod 安装、双端会话等关键路径，实机截图随验收留档。",

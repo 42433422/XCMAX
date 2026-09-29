@@ -1,0 +1,8 @@
+[16:04:13] feature=mods-webhook platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-webhook
+[16:04:27] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[16:04:29] case W1: passed - 合法 payment.paid 信封被受理且幂等去重（正向）
+[16:04:29] case W2: passed - 空信封被拒（负例）
+[16:04:29] case W3: passed - 伪造事件且缺签名的信封被拒（负例）
+[16:04:30] case W4: passed - 回调路径非 POST 被拒（边界/负例）
+[16:04:30] video: mods-webhook-web-20260929-160413.webm (1327142 bytes)
+[16:04:30] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/mods-webhook/log/mods-webhook-web-20260929-160413.log

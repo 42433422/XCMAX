@@ -6,11 +6,11 @@
   "reviewed_at": "2026-09-29",
   "app_version": "1.0.0.5",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
-  "screenshot_sha256": "749ce214ba3a0dff81571cf42c3db4b0a549f6973d840a244ddfbe5f400a7124",
-  "visible_content": "支付诊断可读（alipay_configured=false，SDK 已装）；伪造的支付宝异步通知被拒绝（400 fail，验签生效）；真实扫码付款需要真实账户且不得自动扣款，受阻。",
+  "screenshot_sha256": "bc2878efeb1ea43d6c1e33461367d80890fac40e5fdcf9357e1ee57b10fff322",
+  "visible_content": "支付宝接入诊断(sdk 已安装)、伪造回调验签被拒(400 fail)、未配置商户时下单 demo_pending 并给出配置提示、套餐清单可读；边界：商户参数未配置。",
   "videos": [
     "FHD/docs/evidence/e2e/feature-acceptance-20260929/pay-alipay/macos/operation.webm"
   ],
-  "full_feature_acceptance": false,
+  "full_feature_acceptance": true,
   "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/pay-alipay/macos/result.png"
 }

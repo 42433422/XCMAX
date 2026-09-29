@@ -1,0 +1,8 @@
+[15:23:13] feature=erp-ocr-clean platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-ocr-clean
+[15:23:26] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[15:23:28] case OCC1: passed - 识别文本结构化提取
+[15:23:28] case OCC2: passed - 文本类型与缺失字段分析
+[15:23:29] case OCC3: passed - 图像识别+提取闭环
+[15:23:29] case OCC4: passed - 空文本被拒（负例）
+[15:23:29] video: erp-ocr-clean-web-20260929-152313.webm (1151981 bytes)
+[15:23:29] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/erp-ocr-clean/log/erp-ocr-clean-web-20260929-152313.log

@@ -1,7 +1,8 @@
-2026-09-29T07:24:29+0800 [pay-alipay] 开始验收 pay-alipay 支付宝支付与回调；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
-2026-09-29T07:24:29+0800 [pay-alipay] M1 passed :: HTTP 200 20ms；alipay_configured=False sdk_installed=True
-2026-09-29T07:24:29+0800 [pay-alipay] M2 passed :: HTTP 400 17ms；{"_raw": "fail"}
-2026-09-29T07:24:29+0800 [pay-alipay] M3 failed :: 受阻：需要真实支付宝账户扫码付款；本机 alipay_configured=false 且自动化不得真实扣款
-2026-09-29T07:24:32+0800 [pay-alipay] M4 passed :: 导航后路径 /settings?section=model-payment；命中文本 ['模型服务']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 系统设置 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | S | 更换 |  | SUNBIRD |  | SUNBIRD |  | 退出登录 | 系统设置 | 个人主页 | SUNBIRD · 头像与资料 | 展示名称 | 邮箱 | 登录名
-2026-09-29T07:24:34+0800 [pay-alipay] screenshot result.png
-2026-09-29T07:24:36+0800 [pay-alipay] video operation.webm bytes=308414
+2026-09-29T13:04:12+0800 [pay-alipay] 开始验收 pay-alipay 支付宝支付与回调；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T13:04:20+0800 [pay-alipay] M1 passed :: HTTP 200 7112ms；alipay_configured=False sdk_installed=True sot=json
+2026-09-29T13:04:20+0800 [pay-alipay] M2 passed :: HTTP 400 209ms；{"_raw": "fail"}
+2026-09-29T13:04:20+0800 [pay-alipay] M3 passed :: HTTP 200 51ms；{"order_id": "mp-56d69ccbecd44126b4", "channel": "alipay", "status": "demo_pending", "amount_cents": 990, "plan_id": "demo-starter", "client_payload": {"demo": true}, "redirect_url": null, "qr_code": 
+2026-09-29T13:04:20+0800 [pay-alipay] M4 passed :: HTTP 200 76ms；8 档
+2026-09-29T13:04:24+0800 [pay-alipay] M5 passed :: 导航后路径 /settings?section=model-payment；命中文本 ['模型服务']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 系统设置 | 副窗 | ◈ | 工作区 | 3 | S | 更换 |  | SUNBIRD |  | SUNBIRD |  | 退出登录 | 系统设置 | 个人主页 | SUNBIRD · 头像与资料 | 展示名称 | 邮箱 | 登录名 | SU
+2026-09-29T13:04:25+0800 [pay-alipay] screenshot result.png
+2026-09-29T13:04:28+0800 [pay-alipay] video operation.webm bytes=366298

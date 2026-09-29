@@ -1,0 +1,8 @@
+[15:15:18] feature=ind-planner platform=web base=http://127.0.0.1:42423 out=/private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-planner
+[15:15:31] login: url=http://127.0.0.1:42423/admin/xcmax-admin me_success=True user=admin
+[15:15:33] case PL1: passed - 规划器桥接状态与宿主能力真实读取
+[15:15:33] case PL2: passed - 真实对话触发 agent run
+[15:15:34] case PL3: passed - 意图识别与工具注册表真实读取
+[15:15:34] case PL4: passed - 空消息与缺 tool_name 被拒（负例）
+[15:15:34] video: ind-planner-web-20260929-151518.webm (1296662 bytes)
+[15:15:34] log -> /private/tmp/xcmax-verifycenter-main/FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ind-planner/log/ind-planner-web-20260929-151518.log

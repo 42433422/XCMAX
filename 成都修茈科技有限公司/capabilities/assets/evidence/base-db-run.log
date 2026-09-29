@@ -1,7 +1,8 @@
-2026-09-29T07:25:53+0800 [base-db] 开始验收 base-db 数据库 WAL 与自恢复；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
-2026-09-29T07:25:54+0800 [base-db] M1 passed :: HTTP 200 158ms；{"status": "healthy", "latency_ms": 0}
-2026-09-29T07:25:54+0800 [base-db] M2 passed :: HTTP 200 14ms；{"key": "acc_db_probe", "value": "MAC验收0929持久化37954"}
-2026-09-29T07:25:54+0800 [base-db] M3 failed :: HTTP 200 13ms；{"success": true, "data": {"user_id": "default", "preferences": {}}}
-2026-09-29T07:25:57+0800 [base-db] M4 passed :: 导航后路径 /mod/xcagi-erp-domain-bridge/data-sources；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 数据来源 | SUNBIRD | 副窗 | ◈ | 工作区 | 2 | 数据来源 | 私人数据库读取助手 |  | 这里管理 AI 员工可读取的数据来源。市场展示为通用员工；启用具体适配器前，需要用户在本页明确选择并
-2026-09-29T07:25:58+0800 [base-db] screenshot result.png
-2026-09-29T07:26:03+0800 [base-db] video operation.webm bytes=382966
+2026-09-29T12:59:28+0800 [base-db] 开始验收 base-db 数据库 WAL 与自恢复；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T12:59:28+0800 [base-db] M1 passed :: HTTP 200 14ms；backend=sqlite mode=production db=xcagi.db test_db_enabled=False
+2026-09-29T12:59:28+0800 [base-db] M2 passed :: HTTP 200 14ms；工具 12 个，示例 ['products', 'customers', 'orders', 'shipment_template', 'excel_decompose']
+2026-09-29T12:59:28+0800 [base-db] M3 passed :: HTTP 200 28ms；storageMode=local_sqlite database=/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/data/xcagi.db
+2026-09-29T12:59:28+0800 [base-db] M4 passed :: HTTP 200 15ms；{"read_token_configured": false, "write_token_configured": false, "active_mod_id": "attendance-industry"}
+2026-09-29T12:59:32+0800 [base-db] M5 passed :: 导航后路径 /desktop-runtime；命中文本 ['桌面运行时']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 桌面运行时 | 副窗 | ◈ | 工作区 | 2 | 桌面运行时 |  | 该页面在 web 版与桌面版共用，用于查看本地数据目录、模型目录和更新入口。 |  | 刷新状态检查桌面更新 | 运行状态 | 桌面模式 | 
+2026-09-29T12:59:33+0800 [base-db] screenshot result.png
+2026-09-29T12:59:35+0800 [base-db] video operation.webm bytes=324946

@@ -131,24 +131,34 @@ def main() -> int:
         return 7
 
     ev = target.setdefault("evidence", {})
-    ev["runs"] = [run_rel]
-    ev["screenshots"] = shots
-    ev["videos"] = vids
-    ev["logs"] = [log_rel]
-    ev["raw"] = sorted({id_rel, ident["path"], art["path"]})
-    ev["platform_assets"] = {
-        platform: {
-            "acceptance": {
-                "path": run_rel,
-                "sha256": sha256_file(run_path),
-                "required_case_ids": [c["id"] for c in run["cases"]],
-            },
-            "identity": ident,
-            "artifact": art,
-            "logs": [{"path": log_rel, "sha256": sha256_file(REPO_ROOT / log_rel)}],
-            "raw": sorted({id_rel, ident["path"], art["path"]}),
-        }
+    # 只增不替换：同仓其它平台（如 macOS 轮次）的资产与媒体必须保留，否则会把别的平台证据抹掉。
+    # 但同一能力的本轮目录（EVID_ROOT/<feature>/）里，若旧条目指向已被本轮重跑删除的产物
+    # （重跑前会清掉上一轮录像/截图），必须同步剔除，否则目录会引用不存在的文件。
+    prefix = f"{EVID_ROOT}/{feature}/"
+
+    def merge_list(key: str, add: list) -> None:
+        kept = [x for x in (ev.get(key) or []) if x not in add and not x.startswith(prefix)]
+        ev[key] = kept + add
+
+    merge_list("runs", [run_rel])
+    merge_list("screenshots", shots)
+    merge_list("videos", vids)
+    merge_list("logs", [log_rel])
+    merge_list("raw", sorted({id_rel, ident["path"], art["path"]}))
+
+    assets = dict(ev.get("platform_assets") or {})
+    assets[platform] = {
+        "acceptance": {
+            "path": run_rel,
+            "sha256": sha256_file(run_path),
+            "required_case_ids": [c["id"] for c in run["cases"]],
+        },
+        "identity": ident,
+        "artifact": art,
+        "logs": [{"path": log_rel, "sha256": sha256_file(REPO_ROOT / log_rel)}],
+        "raw": sorted({id_rel, ident["path"], art["path"]}),
     }
+    ev["platform_assets"] = assets
     rewrite_evidence_block(feature, ev)
     print(json.dumps({"feature": feature, "run": run_rel, "cases": len(run["cases"]),
                       "screenshots": len(shots), "videos": len(vids), "log": log_rel},

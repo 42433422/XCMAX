@@ -4,39 +4,47 @@
   "feature": "ch-wechat-contacts",
   "platform": "macos",
   "round": "feature-acceptance-20260929",
-  "status": "failed",
-  "verdict": "FAIL",
+  "status": "passed",
+  "verdict": "PASS",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
   "app_version": "1.0.0.5",
   "method": "经 CDP(127.0.0.1:9222) 驱动已安装的 /Applications/XCAGI.app：界面导航、键入与点击 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏转 VP8 webm。",
   "verified_at": "2026-09-29",
   "reviewed_at": "2026-09-29",
-  "passed": 2,
-  "failed": 1,
-  "visible_content": "微信联系人接口可读，页面可见；联系人同步需要微信采集端与 sync token，受阻。",
+  "passed": 4,
+  "failed": 0,
+  "visible_content": "上行联系人后 GET /api/ops/wechat/contacts 读回 HTTP 200，items 命中新 display_name（真实落库）；边界：无令牌读取返回 401 invalid wechat sync token。",
   "cases": [
     {
       "id": "M1",
-      "input": "GET /api/ops/wechat/contacts",
-      "actions": "在 App 页面内以同一登录会话调用 GET /api/ops/wechat/contacts（写操作自动附带 CSRF）：联系人同步接口鉴权",
-      "expected": "无令牌拒绝",
-      "observed": "HTTP 401 14ms；{\"success\": false, \"error_code\": \"http_401\", \"message\": \"invalid wechat sync token\", \"path\": \"/api/ops/wechat/contacts\"}",
+      "input": "上行联系人（身份解析入档案）",
+      "actions": "页面内以 Authorization: Bearer 调用 POST /api/ops/wechat/ingest（键 vc-mac-wechat-0929）",
+      "expected": "上行联系人（身份解析入档案）",
+      "observed": "HTTP 200；{\"success\": true, \"contacts_upserted\": 1, \"messages_inserted\": 0, \"messages_skipped\": 0, \"context\": {\"vc-mac-wechat-0929-c1790672341\": {\"success\": true, \"known\": true, \"contact_key\": \"vc-mac-wechat-0929-c1790672341\", \"contact\": {\"display_name\": \"MAC验收0929微信联系人1790672341\", \"wxid\": \"wxid_c0929\", \"customer_id\": null, \"match_status\": \"unlinke",
       "result": "passed"
     },
     {
       "id": "M2",
-      "input": "微信联系人同步入客户档案",
-      "actions": "尝试执行：微信联系人同步入客户档案",
-      "expected": "微信联系人同步入客户档案 成功",
-      "observed": "受阻：需要微信采集端与 sync token",
-      "result": "failed"
+      "input": "读回联系人列表命中新联系人",
+      "actions": "页面内以 Authorization: Bearer 调用 GET /api/ops/wechat/contacts?limit=200（键 vc-mac-wechat-0929）",
+      "expected": "items 含 display_name=MAC验收0929微信联系人1790672341",
+      "observed": "HTTP 200；{\"success\": true, \"items\": [{\"id\": 3, \"contact_key\": \"vc-mac-wechat-0929-c1790672341\", \"display_name\": \"MAC验收0929微信联系人1790672341\", \"wxid\": \"wxid_c0929\", \"customer_id\": null, \"match_status\": \"unlinked\", \"last_message_at\": null}, {\"id\": 2, \"contact_key\": \"vc-mac-wechat-0929\", \"display_name\": \"MAC验收0929微信客户\", \"wxid\": \"wxid_mac0929\", \"custome",
+      "result": "passed"
     },
     {
       "id": "M3",
+      "input": "边界：无令牌读取被拒",
+      "actions": "页面内以 Authorization: Bearer 调用 GET /api/ops/wechat/contacts（键 vc-mac-wechat-0929）",
+      "expected": "无令牌返回 401 invalid wechat sync token",
+      "observed": "HTTP 401；{\"success\": false, \"error_code\": \"http_401\", \"message\": \"invalid wechat sync token\", \"path\": \"/api/ops/wechat/contacts\"}",
+      "result": "passed"
+    },
+    {
+      "id": "M4",
       "input": "界面路由 /business-docking",
       "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /business-docking，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
       "expected": "停留在 /business-docking，页面可见 数据对接中心，该页请求无 4xx/5xx",
-      "observed": "导航后路径 /business-docking；命中文本 ['数据对接中心']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 数据对接中心 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 企业版 · 通用 ETL | 数据对接中心 |  | 上传业务文件后解析映射并直接写入业务库。AI 只给建议，最终写入由确定性规则执行。 |  | ",
+      "observed": "导航后路径 /business-docking；命中文本 ['数据对接中心']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 数据对接中心 | SUNBIRD | 副窗 | ◈ | 工作区 | 3 | 企业版 · 通用 ETL | 数据对接中心 |  | 上传业务文件后解析映射并直接写入业务库。AI 只给建议，最终写入由确定性规则执行。 |  | ",
       "result": "passed"
     }
   ],
@@ -44,23 +52,23 @@
     {
       "feature": "ch-wechat-contacts",
       "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-wechat-contacts/macos/result.png",
-      "sha256": "8d318c173c7a00126f809ff19d5238d3c336529c1eadae87b0a822d62530d6f2",
+      "sha256": "b2d6dcccaeeee90127a744eb95d813d3d1ae572816a07ed5599100ded3cedd34",
       "visual_review": "accepted",
-      "visible_result": "「数据对接中心」：上传与目标区、智能识别（推荐）目标下拉。",
+      "visible_result": "「数据对接中心」页：企业版·通用 ETL 界面正常渲染。",
       "reviewed_at": "2026-09-29"
     },
     {
       "feature": "ch-wechat-contacts",
       "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-wechat-contacts/macos/operation.webm",
-      "sha256": "68ecdd2b956a956dafa7e19f1192fb32b178b0e581873d8e906e39e72bcd8ec1",
+      "sha256": "822548f78cf8fc2c9b3cc50a62f953d3880dabecb8c61506550eb7cf5999fde7",
       "visual_review": "accepted",
-      "visible_result": "录屏为数据对接中心页，各帧一致。",
+      "visible_result": "6.13s 录屏为数据对接中心页；联系人上行与读回经 Bearer 接口完成。",
       "reviewed_at": "2026-09-29"
     }
   ],
   "log": {
     "path": "FHD/docs/evidence/e2e/feature-acceptance-20260929/ch-wechat-contacts/macos/run.log",
-    "sha256": "aa8d1e305d94454681b3e3dd3595a17c10e07677fefc0b3d9d0830f3486ce1db",
-    "bytes": 1338
+    "sha256": "eae4d1dbc467b8029374924e0a00265bf059d6a78b2b42c918ede1c9db0eb09a",
+    "bytes": 2091
   }
 }

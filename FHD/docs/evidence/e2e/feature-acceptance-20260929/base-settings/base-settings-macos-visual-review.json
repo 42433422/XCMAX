@@ -6,11 +6,11 @@
   "reviewed_at": "2026-09-29",
   "app_version": "1.0.0.5",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
-  "screenshot_sha256": "6bbcbc2685cfdaad5cd5bfee6a816589c87357f126211642b4833b1b5a1e76b1",
-  "visible_content": "工作区偏好 /api/workspace/prefs 可读；/api/preferences 在已安装构建中是桩（写入仅回显、读回恒为空），偏好读回失败——已修复为按工作区持久化，待新构建验收。",
+  "screenshot_sha256": "98e6c9252268439f628c6d2c6398926f511a3796752c26557a80ae704479945f",
+  "visible_content": "租户级工作区偏好与用户偏好(写入回显)、当前行业配置均可读；边界：工作区偏好为只读，写入被拒 405。",
   "videos": [
     "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-settings/macos/operation.webm"
   ],
-  "full_feature_acceptance": false,
+  "full_feature_acceptance": true,
   "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/base-settings/macos/result.png"
 }

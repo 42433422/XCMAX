@@ -1,7 +1,8 @@
-2026-09-29T07:12:36+0800 [erp-reconcile] 开始验收 erp-reconcile 经营对账与结算；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
-2026-09-29T07:12:45+0800 [erp-reconcile] M1 passed :: HTTP 503 8810ms；{"success": false, "error_code": "http_503", "message": "internal api not configured", "path": "/api/internal/payment/reconciliation-period"}
-2026-09-29T07:12:45+0800 [erp-reconcile] M2 passed :: HTTP 200 56ms；{"success": true, "data": {"success": true, "dry_run": false}}
-2026-09-29T07:12:45+0800 [erp-reconcile] M3 failed :: HTTP 200 33ms；{"success": true, "data": {"last_run": null, "auto_confirm_enabled": false, "success": true}}
-2026-09-29T07:12:49+0800 [erp-reconcile] M4 passed :: 导航后路径 /kitten-finance；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 财务分析 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 🐱 | 小猫财务分析 |  | 一键查看本月经营状况 |  | 🚀 开始分析 | 🐱 | 还没有分析数据 |  | 点击上方「开始分析」按钮，一键生成财务报告 |  | 立即开
-2026-09-29T07:12:50+0800 [erp-reconcile] screenshot result.png
-2026-09-29T07:12:57+0800 [erp-reconcile] video operation.webm bytes=376145
+2026-09-29T13:01:58+0800 [erp-reconcile] 开始验收 erp-reconcile 经营对账与结算；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T13:01:58+0800 [erp-reconcile] M1 passed :: HTTP 200 37ms；{"success": true, "dry_run": false}
+2026-09-29T13:01:58+0800 [erp-reconcile] M2 passed :: HTTP 200 16ms；{"last_run": null, "auto_confirm_enabled": false, "success": true}
+2026-09-29T13:01:58+0800 [erp-reconcile] M3 passed :: HTTP 503 23ms；{"success": false, "error_code": "http_503", "message": "internal api not configured", "path": "/api/internal/payment/reconciliation-period"}
+2026-09-29T13:02:00+0800 [erp-reconcile] M4 passed :: HTTP 200 2038ms；pipeline 1，步骤 ['O1', 'O2', 'O3', 'O4', 'O5', 'O6', 'O7', 'O8', 'O9']
+2026-09-29T13:02:04+0800 [erp-reconcile] M5 passed :: 导航后路径 /kitten-finance；命中文本 ['财务分析']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 财务分析 | 副窗 | ◈ | 工作区 | 3 | 🐱 | 小猫财务分析 |  | 一键查看本月经营状况 |  | 🚀 开始分析 | 🐱 | 还没有分析数据 |  | 点击上方「开始分析」按钮，一键生成财务报告 |  | 立即开始 | 小
+2026-09-29T13:02:05+0800 [erp-reconcile] screenshot result.png
+2026-09-29T13:02:07+0800 [erp-reconcile] video operation.webm bytes=225552

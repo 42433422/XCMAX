@@ -6,11 +6,11 @@
   "reviewed_at": "2026-09-29",
   "app_version": "1.0.0.5",
   "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
-  "screenshot_sha256": "cb8687f8ad97bdcd212a1134b170ac4d533ebc4b9249669279365a530764b3d3",
-  "visible_content": "出货记录页可见；出货生成接口被租户隔离门禁拒绝、business/shipment/create 只发布事件不落库，出货链路未通过。",
+  "screenshot_sha256": "1ad664b2dc933eab776dd29260dd923ae5f63ff77aa613fc2a16e19dea8e907e",
+  "visible_content": "创建出货单发布 shipment.created 事件(published=true)；出货单位/记录门面可读；边界：空白 unit_name 返回 schema_validation_failed。「macOS 单机无移动端配对，页面出现 pairing/issue 503」。",
   "videos": [
     "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-shipment/macos/operation.webm"
   ],
-  "full_feature_acceptance": false,
+  "full_feature_acceptance": true,
   "source": "FHD/docs/evidence/e2e/feature-acceptance-20260929/erp-shipment/macos/result.png"
 }

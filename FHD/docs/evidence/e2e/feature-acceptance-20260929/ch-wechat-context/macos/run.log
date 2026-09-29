@@ -1,6 +1,7 @@
-2026-09-29T07:24:16+0800 [ch-wechat-context] 开始验收 ch-wechat-context 联系人情报注入对话；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
-2026-09-29T07:24:16+0800 [ch-wechat-context] M1 passed :: HTTP 200 26ms；{"success": true, "data": {}}
-2026-09-29T07:24:16+0800 [ch-wechat-context] M2 failed :: 受阻：需要微信采集端先同步联系人情报
-2026-09-29T07:24:20+0800 [ch-wechat-context] M3 passed :: 导航后路径 /business-docking；命中文本 ['数据对接中心']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 数据对接中心 | SUNBIRD | 副窗 | ◈ | 工作区 | 1 | 企业版 · 通用 ETL | 数据对接中心 |  | 上传业务文件后解析映射并直接写入业务库。AI 只给建议，最终写入由确定性规则执行。 |  | 
-2026-09-29T07:24:21+0800 [ch-wechat-context] screenshot result.png
-2026-09-29T07:24:26+0800 [ch-wechat-context] video operation.webm bytes=383031
+2026-09-29T17:02:23+0800 [ch-wechat-context] 开始验收 ch-wechat-context 联系人情报注入对话；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T17:02:23+0800 [ch-wechat-context] M1 passed :: HTTP 200；{"success": true, "contacts_upserted": 1, "messages_inserted": 1, "messages_skipped": 0, "context": {"vc-mac-wechat-0929-ctx1790672543": {"success": true, "known": true, "contact_key": "vc-mac-wechat-0929-ctx1790672543", "contact": {"display_name": "MAC验收0929微信客户情报1790672543", "wxid": null, "customer_id": null, "match_status": "unlinked",
+2026-09-29T17:02:23+0800 [ch-wechat-context] M2 passed :: HTTP 200；{"success": true, "known": true, "contact_key": "vc-mac-wechat-0929-ctx1790672543", "contact": {"display_name": "MAC验收0929微信客户情报1790672543", "wxid": null, "customer_id": null, "match_status": "unlinked", "last_message_at": null}, "customer": null, "recent_messages": [{"role": "other", "content": "MAC验收0929 客户说这批包装盒要 24 箱 1790672543", "msg
+2026-09-29T17:02:23+0800 [ch-wechat-context] M3 passed :: HTTP 200；{"success": true, "known": false, "contact_key": "does-not-exist-zzz"}
+2026-09-29T17:02:27+0800 [ch-wechat-context] M4 passed :: 导航后路径 /business-docking；命中文本 ['数据对接中心']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 数据对接中心 | SUNBIRD | 副窗 | ◈ | 工作区 | 3 | 企业版 · 通用 ETL | 数据对接中心 |  | 上传业务文件后解析映射并直接写入业务库。AI 只给建议，最终写入由确定性规则执行。 |  | 
+2026-09-29T17:02:28+0800 [ch-wechat-context] screenshot result.png
+2026-09-29T17:02:34+0800 [ch-wechat-context] video operation.webm bytes=325728

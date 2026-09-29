@@ -1,0 +1,6 @@
+2026-09-29T13:06:09+0800 [dt-element-find] 开始验收 dt-element-find 元素查找与应用引导（占位）；被测 {'app_version': '1.0.0.5', 'app_git_sha': '37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e', 'built_at': '2026-09-28T01:42:42.396Z'}
+2026-09-29T13:06:09+0800 [dt-element-find] M1 failed :: 受阻：能力目录标注为「占位实现」；GET /api/desktop/automation/find-element 返回「desktop automation backend not installed in this build」
+2026-09-29T13:06:09+0800 [dt-element-find] M2 failed :: 受阻：本机未安装桌面自动化后端，无法验证元素查找与应用引导
+2026-09-29T13:06:09+0800 [dt-element-find] M3 failed :: 受阻：功能未实现（占位），无法验证
+2026-09-29T13:06:10+0800 [dt-element-find] screenshot result.png
+2026-09-29T13:06:11+0800 [dt-element-find] video operation.webm bytes=95169

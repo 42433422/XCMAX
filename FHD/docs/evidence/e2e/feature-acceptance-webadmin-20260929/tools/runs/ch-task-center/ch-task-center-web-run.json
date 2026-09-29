@@ -1,0 +1,327 @@
+{
+  "_comment": "Web 管理端真机验收记录，由 tools/webadmin_accept.py 自动生成，请勿手改（DO NOT EDIT）。仅 media[].visual_review / visible_result / reviewed_at 可在实际查看该文件后填写。",
+  "kind": "feature-acceptance",
+  "feature": "ch-task-center",
+  "platform": "web",
+  "status": "passed",
+  "verdict": "PASS",
+  "round": "20260929-142636",
+  "generated_at": "2026-09-29 14:26:51",
+  "app_git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+  "app_version": "1.0.0.5",
+  "verified_at": "2026-09-29",
+  "reviewed_at": "2026-09-29",
+  "passed": 4,
+  "failed": 0,
+  "operator_observations": [
+    "登录入口 http://127.0.0.1:42423/admin/login，账号 admin（指纹 8c6976e5b5410415），登录后 /api/auth/me success=True。"
+  ],
+  "visible_content": "真实浏览器（Chromium）在自托管 Web 管理端建立管理员会话后：读取审批请求列表（分页）→ 读取审批流程定义 → 读取任务中心任务 → 以真实 404 记录查询不存在审批请求被拒（边界/负例）。",
+  "app_identity": {
+    "entry_url": "http://127.0.0.1:42423/admin/login",
+    "site_health": {
+      "status": "degraded",
+      "version": "1.0.0.5",
+      "service": "xcagi-fastapi",
+      "degradedReasons": [
+        "Industry MOD is entitled but not installed locally: office-employee-pack"
+      ],
+      "build": {
+        "admin_console_sha256": "",
+        "admin_console_git_sha": "",
+        "artifact_sha256": "",
+        "built_at": "",
+        "git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+        "image_digest": "",
+        "product_version": "",
+        "release_id": ""
+      },
+      "git_sha": "086a98f1fbad9f9b357692a85e656d8972cb6bc3",
+      "release_id": "",
+      "neuro": {
+        "status": "healthy",
+        "running": true,
+        "published": 40239,
+        "processed": 40233,
+        "errors": 0,
+        "dropped": 6,
+        "queue_size": 0,
+        "handlers": 39,
+        "global_handlers": 0,
+        "reliability": {
+          "fhd_env": "",
+          "dedup": false,
+          "rate_limit": false,
+          "circuit_breaker": false,
+          "lifeline": false,
+          "tracer": false,
+          "sla_log": false,
+          "sla_controller": false,
+          "retry": false,
+          "dlq_auto": false,
+          "redis_pubsub": false,
+          "trace_sample_rate": null
+        },
+        "components": {
+          "bus_running": true,
+          "queue_size": 0,
+          "domains": [
+            "intent",
+            "order",
+            "inventory",
+            "product",
+            "customer",
+            "ai_service",
+            "print",
+            "ocr",
+            "payment",
+            "safety",
+            "shipment"
+          ]
+        },
+        "processors": {
+          "coordinator": {
+            "reflex": 0,
+            "subconscious": 0,
+            "conscious": 0,
+            "total": 0,
+            "fallbacks": 0,
+            "errors": 0,
+            "reflex_rate": 0.0,
+            "fallback_rate": 0.0
+          },
+          "reflex": {
+            "cache_size": 2,
+            "max_cache_size": 1000,
+            "hits": 25,
+            "misses": 2,
+            "hit_rate": 0.9259259259259259,
+            "timeouts": 0,
+            "patterns": 5
+          },
+          "subconscious": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "conscious": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          }
+        },
+        "cognition": {
+          "enabled": true,
+          "conscious_processor": {
+            "processed": 0,
+            "success": 0,
+            "errors": 0,
+            "deduplicated": 0,
+            "circuit_open": 0,
+            "sandbox_rejected": 0,
+            "sla_violations": 0,
+            "success_rate": 0.0,
+            "handlers": 7,
+            "reliability_enabled": true
+          },
+          "subconscious_processor": {
+            "processed": 0,
+            "batched": 0,
+            "errors": 0,
+            "timeouts": 0,
+            "avg_latency_ms": 0.0,
+            "handlers": 1,
+            "batch_handlers": 0,
+            "running": false
+          },
+          "cognition": {
+            "llm_port_available": true
+          },
+          "subconscious_ml": {
+            "anomaly_detector": {
+              "total_samples": 0,
+              "total_predictions": 0,
+              "anomalies_detected": 0,
+              "anomaly_rate": 0.0,
+              "model_ready": false,
+              "samples_since_fit": 0
+            },
+            "pattern_predictor": {
+              "total_observations": 0,
+              "ngram_order": 3,
+              "ngram_patterns": 0,
+              "markov_states": 0,
+              "history_size": 0
+            },
+            "local_embedder": {
+              "cache_size": 65
+            }
+          },
+          "evolution": {
+            "handler": {
+              "total_handled": 0,
+              "total_success": 0,
+              "success_rate": 0.0,
+              "supported_events": [
+                "evolution.index",
+                "evolution.mine",
+                "evolution.export",
+                "error.occurred",
+                "evolution.search",
+                "evolution.reflect"
+              ],
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              },
+              "miner_stats": {
+                "log_path": "routing_decisions.jsonl",
+                "log_exists": false,
+                "records_scanned": 0,
+                "min_occurrences": 3,
+                "min_confidence": 0.8
+              },
+              "fixer_stats": {
+                "total_proposals": 0,
+                "actionable_proposals": 0,
+                "actionable_rate": 0.0,
+                "min_score": 0.3,
+                "kb_stats": {
+                  "total_entries": 65,
+                  "by_kind": {
+                    "pattern": 13,
+                    "fix": 52
+                  },
+                  "indexed": true,
+                  "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+                }
+              }
+            },
+            "kb_retriever": {
+              "total_entries": 65,
+              "by_kind": {
+                "pattern": 13,
+                "fix": 52
+              },
+              "indexed": true,
+              "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+            },
+            "reflex_pattern_miner": {
+              "log_path": "routing_decisions.jsonl",
+              "log_exists": false,
+              "records_scanned": 0,
+              "min_occurrences": 3,
+              "min_confidence": 0.8
+            },
+            "runtime_self_fix": {
+              "total_proposals": 0,
+              "actionable_proposals": 0,
+              "actionable_rate": 0.0,
+              "min_score": 0.3,
+              "kb_stats": {
+                "total_entries": 65,
+                "by_kind": {
+                  "pattern": 13,
+                  "fix": 52
+                },
+                "indexed": true,
+                "kb_root": "/private/tmp/xcmax-verifycenter-main/FHD/XCAGI/kb"
+              }
+            }
+          }
+        }
+      }
+    },
+    "admin_console_dist_sha256": "cfa52148ab19fd69e6bea715cc2b9ad046f9607dbdee31033cb9d5357d3c7368",
+    "identity_capture": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-task-center/ch-task-center-web-identity.json"
+  },
+  "media": [
+    {
+      "feature": "ch-task-center",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-task-center/shot/00-login-form.png",
+      "sha256": "f34af147de21b6915a80bb19c674656ea626532b3fcb769a245b6305ac0cc1dc",
+      "visual_review": "accepted",
+      "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ch-task-center",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-task-center/shot/T1-task-center.png",
+      "sha256": "026f970e34d339565ca379586a66ce469dc3322f863ae7e4471316b0c453cc18",
+      "visual_review": "accepted",
+      "visible_result": "卡片汇总三处真实响应：GET /api/approval/requests 200 success=true、pagination.total=0；GET /api/approval/flows 200 success=true data=[]；GET /api/agent/tasks 200 success=true（任务中心真实返回）。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ch-task-center",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-task-center/shot/T4-missing-request.png",
+      "sha256": "ed3da99359a683e8b945448098d9d241a351a7d22957b82d22620837367ee714",
+      "visual_review": "accepted",
+      "visible_result": "本轮响应：GET /api/approval/requests/999999 返回 404，message=审批请求不存在。",
+      "reviewed_at": "2026-09-29"
+    },
+    {
+      "feature": "ch-task-center",
+      "path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ch-task-center/video/ch-task-center-web-20260929-142636.webm",
+      "sha256": "080e85b40f1165b455d62e4928e02f43d5fce8fdfd3a57e663d4c56d8dd2ea35",
+      "visual_review": "accepted",
+      "visible_result": "本轮真实浏览器会话录像（webm，14.40s，ffmpeg 实测）：管理员登录 → 审批请求 → 审批流程 → 任务中心 → 不存在审批 404。",
+      "reviewed_at": "2026-09-29"
+    }
+  ],
+  "cases": [
+    {
+      "id": "T1",
+      "title": "审批请求列表（分页）真实读取",
+      "input": "已建立的管理员会话。",
+      "actions": "页面上下文 fetch GET /api/approval/requests。",
+      "expected": "HTTP 200，success=true，data 为数组且带分页总数。",
+      "observed": "{\"status\": 200, \"success\": true, \"total\": 0, \"returned\": 0}",
+      "result": "passed"
+    },
+    {
+      "id": "T2",
+      "title": "审批流程定义真实读取",
+      "input": "同上。",
+      "actions": "页面上下文 fetch GET /api/approval/flows。",
+      "expected": "HTTP 200，success=true，data 为数组。",
+      "observed": "{\"status\": 200, \"success\": true, \"flow_count\": 0}",
+      "result": "passed"
+    },
+    {
+      "id": "T3",
+      "title": "任务中心任务真实读取",
+      "input": "同上。",
+      "actions": "页面上下文 fetch GET /api/agent/tasks。",
+      "expected": "HTTP 200，任务非空且每项含 task_id。",
+      "observed": "{\"status\": 200, \"task_count\": 7, \"sample\": [{\"task_id\": \"run_45c096692ec345f1b91eee04507f1348\", \"status\": \"failed\", \"task_type\": \"agent\"}, {\"task_id\": \"task_6361d6ca87da4f768eefd9442111070c\", \"status\": \"completed\", \"task_type\": \"agent\"}, {\"task_id\": \"run_d55e7826f51e42708b4abe4b6b8dda3b\", \"status\": \"failed\", \"task_type\": \"agent\"}]}",
+      "result": "passed"
+    },
+    {
+      "id": "T4",
+      "title": "查询不存在审批请求被拒（负例/边界）",
+      "input": "同上。",
+      "actions": "页面上下文 fetch GET /api/approval/requests/999999。",
+      "expected": "HTTP 404，提示审批请求不存在。",
+      "observed": "{\"status\": 404, \"message\": \"审批请求不存在\"}",
+      "result": "passed"
+    }
+  ]
+}
