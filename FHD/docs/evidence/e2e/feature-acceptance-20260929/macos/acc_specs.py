@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
 
@@ -54,8 +55,9 @@ def _(r: R):
     r.api("桌面运行态", "GET", "/api/desktop/status",
           check=lambda d: d["desktopMode"] and d["readyForUi"] and d["runtimeStatus"] == "healthy",
           show=lambda d: f"desktopMode={d['desktopMode']} readyForUi={d['readyForUi']} storage={d['storageMode']}")
-    r.api("客户端构建身份", "GET", "/api/health", check=lambda d: d["git_sha"].startswith("37f22bcb"),
-          show=lambda d: f"version={d['version']} git_sha={d['git_sha']} release={d['release_id']}")
+    installed = json.loads((Path("/Applications/XCAGI.app/Contents/Resources/build-info.json")).read_text())["gitSha"]
+    r.api("客户端构建身份", "GET", "/api/health", check=lambda d, installed=installed: d.get("git_sha") == installed,
+          show=lambda d, installed=installed: f"version={d['version']} git_sha={d['git_sha']} installed={installed}")
     r.ui("/desktop-runtime", ["桌面"])
 
 
@@ -966,7 +968,8 @@ def _(r: R):
 def _(r: R):
     r.api("自动化状态", "GET", "/api/desktop/automation/status", check=succ, show=lambda d: dump(d["data"]))
     r.api("写入自动化 profile", "POST", "/api/desktop/automation/profiles",
-          {"profile": {"id": "mac-acc-0929", "name": f"{MARK}", "platform": "mac", "steps": []}},
+          {"profile": {"app_id": "mac-acc-0929", "name": "mac-acc-0929",
+                       "mac_bundle_id": "com.apple.TextEdit"}},
           check=lambda d: succ(d) and (d.get("data") or {}).get("success") is not False,
           show=lambda d: dump(d, 160))
     r.api("读回 profile", "GET", "/api/desktop/automation/profiles", check=lambda d: "mac-acc-0929" in dump(d, 100000),

@@ -33,8 +33,8 @@
       },
       "macos": {
         "applicable": 100,
-        "verified": 67,
-        "partial": 29,
+        "verified": 77,
+        "partial": 19,
         "pending": 4,
         "last_verified_at": "2026-09-29"
       },
@@ -494,10 +494,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 }
               ],
               "summary": "桌面端数据库启用 WAL 日志与自动检查点，断电等异常后启动时自动体检，损坏时自动从最近有效备份恢复。",
@@ -588,10 +588,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
@@ -774,10 +774,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
@@ -1340,10 +1340,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
@@ -1455,10 +1455,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
@@ -1535,10 +1535,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
@@ -1575,10 +1575,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
@@ -1941,10 +1941,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
@@ -2416,10 +2416,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
@@ -2997,10 +2997,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
@@ -4689,10 +4689,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "status": "partial",
+                  "verified_at": null,
                   "run_count": 1,
-                  "accepted_count": 1
+                  "accepted_count": 0
                 }
               ],
               "summary": "安装包签名、公证与身份校验。",
@@ -4819,10 +4819,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 }
               ],
               "summary": "桌面自动化执行与运行时状态上报的接口底座；完整 RPA 能力按客户场景逐步开放。",
