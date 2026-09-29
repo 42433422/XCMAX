@@ -1,0 +1,70 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "erp-approval",
+ "name": "业务审批与流程",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+ "app_version": "1.0.0.5",
+ "account": "SUNBIRD",
+ "verified_at": "2026-09-30",
+ "passed": 4,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "POST /api/approval/flows 请求体 {\"flow\": {\"flow_name\": \"MAC验收0929流程\", \"flow_key\": \"mac0929_1790713621\"}, \"nodes\": [{\"node_name\": \"负责人审批\", \"approver_type\": \"user\", \"approver_ids\": [2]}]}",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/approval/flows（写操作自动附带 CSRF）：新建审批流程（单节点，本人审批）",
+   "expected": "新建审批流程（单节点，本人审批）：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 25ms；{\"id\": 5, \"flow_key\": \"mac0929_1790713621\", \"flow_name\": \"MAC验收0929流程\", \"description\": null, \"industry\": \"通用\", \"business_type\": \"general\", \"node_type\": \"serial\"",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "POST /api/approval/requests 请求体 {\"flow_key\": \"mac0929_1790713621\", \"title\": \"MAC验收0929审批\", \"content\": \"macOS 验收\"}",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/approval/requests（写操作自动附带 CSRF）：提交审批单",
+   "expected": "提交审批单：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 89ms；{\"id\": 5, \"tenant_id\": 1, \"request_no\": \"APR20260930-839EAA\", \"flow_id\": 5, \"flow_name\": \"MAC验收0929流程\", \"business_type\": \"general\", \"business_id\": null, \"busine",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "POST /api/approval/requests/5/approve 请求体 {\"comment\": \"macOS 验收通过\"}",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/approval/requests/5/approve（写操作自动附带 CSRF）：审批通过",
+   "expected": "审批通过：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 42ms；{\"id\": 5, \"tenant_id\": 1, \"request_no\": \"APR20260930-839EAA\", \"flow_id\": 5, \"flow_name\": \"MAC验收0929流程\", \"business_type\": \"general\", \"business_id\": null, \"busine",
+   "result": "passed"
+  },
+  {
+   "id": "M4",
+   "input": "界面读回：审批工作台出现新审批单",
+   "actions": "导航到 /approval-hub/workspace 并在页面文本中查找「MAC验收0929审批」",
+   "expected": "界面列表/详情中出现「MAC验收0929审批」",
+   "observed": "已在 /approval-hub/workspace 页面看到「MAC验收0929审批」；上下文：0 | 待审批 | 5 | 我发起的 | 5 | 已通过 | 0 | 已拒绝 | 待我审批 | 查看全部 |  | 暂无待审批事项 |  | 我发起的 | 清理 | 5 | 查看全部 | MAC验收0929审批 | 已通过 | 2026/9/29 20:27:01 | MAC验收0929审批 | 已通过 | 2026/9/29 12:36:38 | MAC验收0929通知 | 已通过 | 2026/9/29 05:05:05 | MAC验收0929审批 | 已通过",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "erp-approval",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-approval/macos/result.png",
+   "sha256": "91af71f995c9fc68ccc7b711710647b2dfba9a467bc32ffd3ed986562e67a046",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "erp-approval",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-approval/macos/operation.webm",
+   "sha256": "1bb6de969234a0211063361405ebf4e96b06771c7f0f0016706838b8704e634e",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-approval/macos/run.log",
+  "sha256": "8d7c532d10805c3f4ca2b7125556499350c708572ba0da264bf2df847e68cb17",
+  "bytes": 1602
+ },
+ "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

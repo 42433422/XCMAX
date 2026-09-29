@@ -15,7 +15,7 @@
     "domains": 10,
     "modules": 28,
     "verified_total": 55,
-    "last_verified_at": "2026-09-29",
+    "last_verified_at": "2026-09-30",
     "platform_counts": {
       "windows": 99,
       "macos": 100,
@@ -33,10 +33,10 @@
       },
       "macos": {
         "applicable": 100,
-        "verified": 77,
-        "partial": 19,
+        "verified": 82,
+        "partial": 14,
         "pending": 4,
-        "last_verified_at": "2026-09-29"
+        "last_verified_at": "2026-09-30"
       },
       "web": {
         "applicable": 128,
@@ -183,7 +183,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -235,7 +235,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 }
@@ -339,7 +339,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -378,7 +378,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 }
@@ -456,7 +456,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -495,7 +495,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 }
@@ -526,7 +526,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 }
@@ -557,7 +557,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 }
@@ -589,7 +589,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -687,7 +687,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -735,7 +735,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -774,10 +774,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "status": "partial",
+                  "verified_at": null,
                   "run_count": 1,
-                  "accepted_count": 1
+                  "accepted_count": 0
                 },
                 {
                   "id": "web",
@@ -887,7 +887,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -927,7 +927,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -1061,7 +1061,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -1101,7 +1101,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -1140,10 +1140,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
@@ -1181,7 +1181,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -1220,10 +1220,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
@@ -1261,7 +1261,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -1301,7 +1301,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -1341,7 +1341,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -1415,10 +1415,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
@@ -1456,7 +1456,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -1496,7 +1496,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -1536,7 +1536,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -1576,7 +1576,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -1616,7 +1616,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -1656,7 +1656,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -1696,7 +1696,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -1736,7 +1736,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -1782,7 +1782,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -1822,7 +1822,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -1862,7 +1862,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -1942,7 +1942,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -1988,7 +1988,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -2068,7 +2068,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -2108,7 +2108,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -2185,7 +2185,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -2224,10 +2224,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
@@ -2315,7 +2315,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -2369,7 +2369,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -2417,7 +2417,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -2497,7 +2497,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -2537,7 +2537,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -2577,7 +2577,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -2998,7 +2998,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -3038,7 +3038,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -3100,7 +3100,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -3206,7 +3206,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -3252,7 +3252,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -3291,10 +3291,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 },
                 {
                   "id": "web",
@@ -3332,7 +3332,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -3490,7 +3490,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 }
@@ -3522,7 +3522,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -3562,7 +3562,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -3602,7 +3602,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -3687,7 +3687,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 }
@@ -3750,7 +3750,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -3789,7 +3789,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 }
@@ -3821,7 +3821,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -3861,7 +3861,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -3901,7 +3901,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -4025,7 +4025,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -4136,7 +4136,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 }
@@ -4190,7 +4190,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -4273,7 +4273,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 }
@@ -4628,7 +4628,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 }
@@ -4651,7 +4651,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -4689,10 +4689,10 @@
                 {
                   "id": "macos",
                   "name": "macOS 桌面",
-                  "status": "partial",
-                  "verified_at": null,
+                  "status": "verified",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
-                  "accepted_count": 0
+                  "accepted_count": 1
                 }
               ],
               "summary": "安装包签名、公证与身份校验。",
@@ -4721,7 +4721,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 }
@@ -4752,7 +4752,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 }
@@ -4783,7 +4783,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 }
@@ -4820,7 +4820,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 }
@@ -4914,7 +4914,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -4954,7 +4954,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -4984,7 +4984,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 }
@@ -5095,7 +5095,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -5157,7 +5157,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -5197,7 +5197,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -5265,7 +5265,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 },
@@ -5326,7 +5326,7 @@
                   "id": "macos",
                   "name": "macOS 桌面",
                   "status": "verified",
-                  "verified_at": "2026-09-29",
+                  "verified_at": "2026-09-30",
                   "run_count": 1,
                   "accepted_count": 1
                 }

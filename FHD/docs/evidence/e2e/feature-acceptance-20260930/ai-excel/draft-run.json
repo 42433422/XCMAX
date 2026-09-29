@@ -1,0 +1,70 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "ai-excel",
+ "name": "Excel 生成与解析",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+ "app_version": "1.0.0.5",
+ "account": "SUNBIRD",
+ "verified_at": "2026-09-30",
+ "passed": 4,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "POST /api/excel/data/generate 请求体 {\"data\": [{\"名称\": \"MAC验收0929产品\", \"数量\": 3, \"单价\": 2.5}], \"filename\": \"mac0929-1790713279.xlsx\"}",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/excel/data/generate（写操作自动附带 CSRF）：生成 Excel",
+   "expected": "生成 Excel：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 21ms；mac0929-1790713279.xlsx rows=1",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "POST /api/excel/data/extract 请求体 {\"file_path\": \"/Users/Shared/XCAGI-FULLCLOSED-20260928/userdata/customer/temp_excel/mac0929-1790713279.xlsx\"}",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/excel/data/extract（写操作自动附带 CSRF）：解析刚生成的 Excel",
+   "expected": "解析刚生成的 Excel：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 26ms；{\"success\": true, \"file\": \"mac0929-1790713279.xlsx\", \"sheet\": \"Sheet1\", \"header_row\": 1, \"headers\": [{\"column\": \"A\", \"column_index\": 1, \"value\": \"名称\"}, {\"column\": \"B\", \"column_index\": 2, \"value\": \"数量\"}, {\"column\": \"C\", \"column_index\": 3, \"v",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "GET /api/mod/excel-generate-employee/employees/excel-generate-employee/status",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/mod/excel-generate-employee/employees/excel-generate-employee/status（写操作自动附带 CSRF）：Excel 生成员工在岗",
+   "expected": "Excel 生成员工在岗：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 77ms；{\"success\": true, \"data\": {\"employee_id\": \"excel-generate-employee\", \"status\": \"ready\"}}",
+   "result": "passed"
+  },
+  {
+   "id": "M4",
+   "input": "界面路由 /mod/xcagi-office-employee-pack-bridge/tools",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /mod/xcagi-office-employee-pack-bridge/tools，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /mod/xcagi-office-employee-pack-bridge/tools，页面可见 ，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /mod/xcagi-office-employee-pack-bridge/tools；命中文本 []；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 员工空间 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 工具 | SUNBIRD | 副窗 | ◈ | 工作区 | 4 | 工具表 | 全部分类 | AI Planner | 产品管理 | 客户管理 | 出货单 | Excel处理 | 图片OCR | 原材料仓库 | 标签打印 | 数据库管",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "ai-excel",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-excel/macos/result.png",
+   "sha256": "0bc8c2662b12266262954b4bf444c7a76733adaa2a9d2cfb68e08238d7c502a4",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "ai-excel",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-excel/macos/operation.webm",
+   "sha256": "fc84dad5b07506f2a3cc545d56199293795a17477aef7a6db691e623042dee65",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-excel/macos/run.log",
+  "sha256": "5a610f1c142b069c9bed154400cf9535801a0107f130a16d9f5c0311b311e50f",
+  "bytes": 1555
+ },
+ "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

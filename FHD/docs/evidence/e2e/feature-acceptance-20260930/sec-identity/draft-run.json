@@ -1,0 +1,62 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "sec-identity",
+ "name": "身份认证与权限控制",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+ "app_version": "1.0.0.5",
+ "account": "SUNBIRD",
+ "verified_at": "2026-09-30",
+ "passed": 3,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/auth/me",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/auth/me（写操作自动附带 CSRF）：已登录身份",
+   "expected": "已登录身份：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 81ms；tenant_id=1",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "界面操作：在页面内发起不带 CSRF 头的写请求",
+   "actions": "在页面内发起不带 CSRF 头的写请求",
+   "expected": "被拒绝 403",
+   "observed": "不带 CSRF 头的写请求返回 HTTP 403",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "GET /api/admin/audit-logs",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/admin/audit-logs（写操作自动附带 CSRF）：非管理员访问管理端接口被拒",
+   "expected": "HTTP 403",
+   "observed": "HTTP 403 21ms；{\"success\": false, \"message\": \"桌面端不支持管理员账号登录，请使用网页版管理端\", \"error\": {\"code\": \"ADMIN_DESKTOP_FORBIDDEN\", \"message\": \"桌面端不支持",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "sec-identity",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/sec-identity/macos/result.png",
+   "sha256": "1c8c440c847c8f00b9ce0c7811b97930e8d146eb44cd23f0289a979f7b60330a",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "sec-identity",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/sec-identity/macos/operation.webm",
+   "sha256": "3283b0b34da8c673c0660411584d6d30585fe8f8d53144af59eee7325b9d7791",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/sec-identity/macos/run.log",
+  "sha256": "acff2a712ced46a9efc99b686c11dd298d4891d053bb455b928d7e11a525e36d",
+  "bytes": 812
+ },
+ "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}
