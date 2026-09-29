@@ -17,10 +17,7 @@ def _shipment_etl_must_check() -> bool:
 
 
 def require_tenant_etl_preview(request: Request) -> None:
-    """OCR preview of an uploaded file, scoped to the session tenant.
-
-    Global execute/batch routes stay on ``require_legacy_shipment_etl_access``.
-    """
+    """上传件的 OCR 预览按当前租户放行；入库写库仍走旧门禁。"""
     if not _shipment_etl_must_check():
         return
     from app.application.facades.session_facade import get_auth_service

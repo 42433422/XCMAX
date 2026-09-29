@@ -187,7 +187,9 @@ def api_orders_update(
 
 @router.get("/api/orders/webhooks")
 def api_orders_webhooks(request: Request):
-    user = _facade().get_logged_in_user(request)
+    from app.infrastructure.auth.dependencies import get_logged_in_user
+
+    user = get_logged_in_user(request)
     tenant_id = getattr(user, "tenant_id", None)
     if not isinstance(tenant_id, int):
         raise _facade().HTTPException(
