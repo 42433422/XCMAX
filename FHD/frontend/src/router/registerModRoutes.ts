@@ -156,6 +156,19 @@ export async function registerAllModRoutesFromGlob(router: Router): Promise<void
   }
 }
 
+let globRegistration: Promise<void> | null = null
+
+/** 首屏与路由守卫共用一次 glob 注册，避免业务页在 addRoute 之前被打进设置页。 */
+export function ensureGlobModRoutes(router: Router): Promise<void> {
+  if (!globRegistration) {
+    globRegistration = registerAllModRoutesFromGlob(router).catch((error) => {
+      globRegistration = null
+      throw error
+    })
+  }
+  return globRegistration
+}
+
 /**
  * Registers mod Vue routes (from mods/<id>/frontend/routes.js) on the app router.
  * Must run after router is created and before navigating to mod paths.

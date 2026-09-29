@@ -143,6 +143,12 @@ router.beforeEach(async (to, _from, next) => {
     }
     if (to.name && UNSCOPED_HOST_BUSINESS_KEYS.has(String(to.name)) && profile.loaded && profile.tenantId != null) {
       const modPage = tenantScopedBusinessPath(String(to.name))
+      if (modPage && router.resolve(modPage).matched.length === 0) {
+        const { ensureGlobModRoutes } = await import('@/router/registerModRoutes')
+        if (typeof ensureGlobModRoutes === 'function') {
+          await ensureGlobModRoutes(router).catch(() => undefined)
+        }
+      }
       if (modPage && router.resolve(modPage).matched.length > 0 && to.path !== modPage) {
         next({ path: modPage, replace: true })
         return
