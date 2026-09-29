@@ -53,7 +53,8 @@ def _parse_order_text(order_text: str) -> dict:
 
         text = text.replace("的规格", "规格")
         slot_text = (
-            strip_bill_keywords(original_text).replace("。", " ")
+            strip_bill_keywords(original_text)
+            .replace("。", " ")
             .replace("，", " ")
             .replace(",", " ")
             .replace("、", " ")
@@ -312,9 +313,8 @@ def _parse_order_text(order_text: str) -> dict:
                 unit_candidate = cleanup_unit_name(prefix_text)
                 if not unit_candidate:
                     unit_candidate = cleanup_unit_name(text.split()[0] if text.split() else "")
-                explicit_unit = extract_explicit_unit_name(original_text)  # 显式客户名优先（同常规槽位路径）
-                if explicit_unit:
-                    unit_candidate = explicit_unit
+                explicit_unit = extract_explicit_unit_name(original_text)
+                unit_candidate = explicit_unit or unit_candidate  # 显式客户名优先
 
                 if unit_candidate:
                     return {"success": True, "unit_name": unit_candidate, "products": products}

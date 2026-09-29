@@ -182,7 +182,22 @@ _KEYED_UNIT = re.compile(r"(?:客户|购买单位|单位|公司)\s*[:：=]\s*([^
 # 名称必须像名字（≥2 字、非标签词、非数字串），避免把「客户编号」「客户列表」当成客户名。
 _KEYED_UNIT_LOOSE = re.compile(r"(?:客户|购买单位|购货单位)\s{0,8}([^\s，,。；;:：=]{2,20})")
 _UNIT_LABEL_TOKENS = frozenset(
-    {"客户", "编号", "名称", "列表", "清单", "信息", "资料", "产品", "订单", "发货", "采购", "对象", "为", "是"}
+    {
+        "客户",
+        "编号",
+        "名称",
+        "列表",
+        "清单",
+        "信息",
+        "资料",
+        "产品",
+        "订单",
+        "发货",
+        "采购",
+        "对象",
+        "为",
+        "是",
+    }
 )
 
 
@@ -227,7 +242,17 @@ def looks_like_conversational_filler(token: str) -> bool:
     return any(frag in t for frag in _FILLER_FRAGMENTS)
 
 
-_BILL_VERB_KEYWORDS = ("生成发货单", "开发货单", "开单", "打单", "下单", "出单", "发货单", "送货单", "出货单")
+_BILL_VERB_KEYWORDS = (
+    "生成发货单",
+    "开发货单",
+    "开单",
+    "打单",
+    "下单",
+    "出单",
+    "发货单",
+    "送货单",
+    "出货单",
+)
 
 
 def strip_bill_keywords(text: str) -> str:
