@@ -30,10 +30,7 @@ class TestMarketBaseUrl:
         monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "https://xiu-ci.com/market")
         assert ma._market_base_url() == "https://xiu-ci.com/market"
         assert ma._market_api_base_url() == "https://xiu-ci.com"
-        assert (
-            f"{ma._market_api_base_url()}/api/auth/login"
-            == "https://xiu-ci.com/api/auth/login"
-        )
+        assert f"{ma._market_api_base_url()}/api/auth/login" == "https://xiu-ci.com/api/auth/login"
 
 
 # ========================= _auth_header =======================================
