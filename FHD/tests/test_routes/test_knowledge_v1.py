@@ -121,7 +121,7 @@ class TestQueryEndpoint:
         mock_index.query.return_value = [mock_chunk]
 
         req = QueryRequest(query="test query")
-        result = query(req)
+        result = query(req, request=MagicMock())
         assert result.success is True
         assert len(result.chunks) == 1
         assert result.rag_enabled is True

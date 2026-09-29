@@ -1495,7 +1495,7 @@ class TestBusinessEventRouter:
             result = _registered_router_business_event(
                 "shipment_create", {"unit_name": "acme"}, _ctx(), "normal", ""
             )
-            assert result["success"] is False
+            assert result["published"] is False and result["success"] is True
 
     def test_unknown_action(self) -> None:
         result = _registered_router_business_event("unknown", {}, _ctx(), "normal", "")

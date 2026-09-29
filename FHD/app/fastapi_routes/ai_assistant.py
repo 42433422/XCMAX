@@ -18,6 +18,7 @@ from app.build_identity import build_identity
 from app.fastapi_routes.ai_assistant_responses import fail as _fail
 from app.fastapi_routes.ai_assistant_responses import ok as _ok
 from app.fastapi_routes.ai_assistant_tts import router as tts_router
+from app.infrastructure.auth.business_scope_gate import require_print_permission as _print_gate
 from app.infrastructure.auth.business_scope_gate import require_scoped_business_permission
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.security.safe_download_path import (
@@ -30,7 +31,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["ai-assistant-compat"])
 router.include_router(tts_router)
 _shipment_access = [Depends(require_scoped_business_permission("shipment.view", "shipment.edit"))]
-_print_access = [Depends(require_scoped_business_permission("print.label"))]
+_print_access = [Depends(_print_gate())]
 _product_access = [Depends(require_scoped_business_permission("product.view", "product.edit"))]
 
 _TRACE_MAX_STRING = 500

@@ -20,6 +20,25 @@ class ShipmentDocumentWorkflowMixin:
     def get_shipment_records(self, unit_name: str | None = None) -> list[dict[str, Any]]:
         raise NotImplementedError
 
+    def record_created_shipment(
+        self,
+        *,
+        unit_name: str,
+        items: list[dict[str, Any]],
+        contact_person: str = "",
+        contact_phone: str = "",
+    ) -> dict[str, Any]:
+        _ = contact_person or contact_phone
+        if self._record_store is None:
+            return {"success": False, "message": "record_store 未配置"}
+        return self._record_store.record_document_generation(
+            unit_name=unit_name,
+            unit_id=None,
+            products=items,
+            document_result={"doc_name": unit_name},
+            raw_text="source=business_shipment_create",
+        )
+
     def export_shipment_records(
         self,
         unit_name: str | None = None,

@@ -249,6 +249,16 @@ def get_entitlement(plan_id: str) -> dict[str, Any] | None:
     return None
 
 
+def list_orders() -> list[dict[str, Any]]:
+    """本地订单记录快照（按创建时间升序）。"""
+    with _lock:
+        data = _load()
+    orders = data.get("orders")
+    items = [dict(v) for v in (orders or {}).values() if isinstance(v, dict)]
+    items.sort(key=lambda r: str(r.get("created_at") or ""))
+    return items
+
+
 def get_order(out_trade_no: str) -> dict[str, Any] | None:
     """读取本地订单记录快照。"""
     if not out_trade_no:

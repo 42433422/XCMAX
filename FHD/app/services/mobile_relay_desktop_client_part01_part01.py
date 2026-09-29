@@ -198,6 +198,10 @@ def _write_config(data: dict[str, _facade().Any]) -> None:
             temp_path.unlink(missing_ok=True)
 
 
+# 旧版云端没有续期端点（405）时改为重新注册；404 表示身份已吊销，不回退。
+_RENEW_UNSUPPORTED: dict[str, _facade().Any] = {}
+
+
 def _renew_desktop_relay(config: dict[str, _facade().Any]) -> dict[str, _facade().Any] | None:
     relay_id = str(config.get("relay_id") or "").strip()
     token = str(config.get("desktop_token") or "").strip()
@@ -208,6 +212,8 @@ def _renew_desktop_relay(config: dict[str, _facade().Any]) -> dict[str, _facade(
                 _facade()._api_url("/api/mobile/v1/relay/desktop/renew", base_url),
                 json={"relay_id": relay_id, "desktop_token": token},
             )
+            if response.status_code == 405:
+                return _RENEW_UNSUPPORTED
             response.raise_for_status()
             data = response.json().get("data")
     except (_facade().httpx.HTTPError, ValueError, KeyError, AttributeError) as exc:
@@ -242,7 +248,10 @@ def register_desktop_relay(
             and str(existing.get("desktop_token") or "").strip()
         )
         if has_identity:
-            return _renew_desktop_relay(existing)
+            renewed = _renew_desktop_relay(existing)
+            if renewed is not _RENEW_UNSUPPORTED:
+                return renewed
+            _facade().logger.warning("cloud relay lacks the renew endpoint; re-registering desktop")
     base_url = _facade()._relay_base_url()
     device_label = label.strip() or f"XCAGI 桌面执行端 - {_facade().socket.gethostname()}"
     body = {

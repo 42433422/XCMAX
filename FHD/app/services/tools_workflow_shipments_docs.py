@@ -344,6 +344,12 @@ def _registered_router_business_docking_family(
     }
 
 
+def _remember_business_shipment(payload: dict) -> dict:
+    from app.application.shipment_business_record import remember_business_shipment
+
+    return remember_business_shipment(payload)
+
+
 def _registered_router_business_event(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
@@ -381,7 +387,14 @@ def _registered_router_business_event(
         ok = publish_neuro_event("shipment.created", payload, "shipment")
         if not ok:
             logger.info("business shipment.create: neuro publish skipped or failed (stack off?)")
-        return {"success": bool(ok), "published": ok, "event": "shipment.created"}
+        remembered = _remember_business_shipment(payload)
+        return {
+            "success": bool(ok or remembered.get("success")),
+            "published": ok,
+            "event": "shipment.created",
+            "record_id": remembered.get("record_id"),
+            "unit_name": payload["unit_name"],
+        }
     return {"success": False, "message": f"未知 business_event action: {action}"}
 
 

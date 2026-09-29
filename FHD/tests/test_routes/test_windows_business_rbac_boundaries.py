@@ -72,19 +72,33 @@ def test_desktop_read_only_role_cannot_ingest_dataset_document(
     assert response.status_code == 403
 
 
-def test_desktop_tenant_cannot_query_unscoped_legacy_knowledge(
+def test_desktop_tenant_without_membership_cannot_query_legacy_knowledge(
     enterprise_desktop, monkeypatch
 ) -> None:
+    user = SimpleNamespace(id=8, tenant_id=None, role="user", is_active=True)
+    monkeypatch.setattr(dataset_access, "get_logged_in_user", lambda _request: user)
+    response = _client(knowledge_router).post(
+        "/api/knowledge/v1/query", json={"query": "private customer data"}
+    )
+    assert response.status_code == 403
+
+
+def test_desktop_tenant_can_query_its_own_legacy_knowledge(enterprise_desktop, monkeypatch) -> None:
     user = SimpleNamespace(id=8, tenant_id=23, role="user", is_active=True)
     monkeypatch.setattr(dataset_access, "get_logged_in_user", lambda _request: user)
     monkeypatch.setattr(
         "app.application.facades.session_facade.get_auth_service",
         lambda: SimpleNamespace(has_permission=lambda *_args: True),
     )
+    chunk = SimpleNamespace(text="tenant-23-only", chunk_index=0, score=1.0, source="t")
+    monkeypatch.setattr(
+        "app.fastapi_routes.knowledge_v1._index.query", lambda *_args, **_kwargs: [chunk]
+    )
     response = _client(knowledge_router).post(
         "/api/knowledge/v1/query", json={"query": "private customer data"}
     )
-    assert response.status_code == 403
+    assert response.status_code == 200
+    assert "tenant-23-only" in response.text
 
 
 @pytest.mark.parametrize(
@@ -115,6 +129,25 @@ def test_dormant_compat_etl_fails_closed_when_mounted(enterprise_desktop, monkey
         "/api/legacy/shipment-etl/execute", data={"notes_json": "[]"}
     )
     assert response.status_code == 403
+
+
+def test_desktop_tenant_ocr_preview_is_not_blocked_as_unscoped(
+    enterprise_desktop, monkeypatch
+) -> None:
+    user = SimpleNamespace(id=8, tenant_id=23, role="user", is_active=True)
+    monkeypatch.setattr(dependencies, "get_logged_in_user", lambda _request: user)
+    monkeypatch.setattr(
+        "app.application.facades.session_facade.get_auth_service",
+        lambda: SimpleNamespace(has_permission=lambda *_args: True),
+    )
+    preview = _client(excel_router).post(
+        "/api/excel/data/shipment-etl/ocr-preview", data={"file_path": "missing.png"}
+    )
+    assert preview.status_code != 403
+    execute = _client(excel_router).post(
+        "/api/excel/data/shipment-etl/execute", data={"file_path": "other-user.xlsx"}
+    )
+    assert execute.status_code == 403
 
 
 def test_desktop_shipment_etl_requires_session_even_with_user_header(

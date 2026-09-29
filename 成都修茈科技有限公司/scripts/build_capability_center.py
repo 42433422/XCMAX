@@ -422,7 +422,9 @@ def validate_feature(feat: dict, warnings: list[str]) -> dict:
     }
 
     paths = impl_ok + tests_ok
-    commit_time = git("log", "-1", "--format=%cI", "--", *paths) if paths else None
+    base = (git("rev-parse", "--verify", "HEAD^1") if git("rev-parse", "--verify", "HEAD^2") else git("rev-parse", "--verify", "origin/main")) if paths else None
+    ref = [base] if base and all(git("rev-parse", f"HEAD:{p}") == git("rev-parse", f"{base}:{p}") for p in paths) else []
+    commit_time = git("log", "-1", "--format=%cI", *ref, "--", *paths) if paths else None
     verified_at = project_code_date(commit_time)
     accepted_at = max((v["verified_at"] for v in verdicts if v["verified_at"]), default=None)
 

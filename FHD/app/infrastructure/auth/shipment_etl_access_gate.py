@@ -6,14 +6,36 @@ from app.mod_sdk.product_skus import resolve_product_sku
 from app.utils.deployment import deployment_is_production, deployment_is_staging, env_flag
 
 
-def require_legacy_shipment_etl_access(request: Request) -> None:
+def _shipment_etl_must_check() -> bool:
     enterprise = resolve_product_sku() == "enterprise"
-    if not (
+    return bool(
         enterprise
         or deployment_is_production()
         or deployment_is_staging()
         or env_flag("FHD_SHIPMENT_ETL_REQUIRE_RBAC")
+    )
+
+
+def require_tenant_etl_preview(request: Request) -> None:
+    """上传件的 OCR 预览按当前租户放行；入库写库仍走旧门禁。"""
+    if not _shipment_etl_must_check():
+        return
+    from app.application.facades.session_facade import get_auth_service
+    from app.infrastructure.auth.dependencies import get_logged_in_user
+
+    user = get_logged_in_user(request)
+    if getattr(user, "tenant_id", None) is None:
+        raise HTTPException(403, "旧送货单 ETL 未提供租户数据隔离")
+    auth = get_auth_service()
+    if not (
+        auth.has_permission(user, "etl.execute") or auth.has_permission(user, "shipment.create")
     ):
+        raise HTTPException(403, "权限不足")
+
+
+def require_legacy_shipment_etl_access(request: Request) -> None:
+    enterprise = resolve_product_sku() == "enterprise"
+    if not _shipment_etl_must_check():
         return
     from app.application.facades.session_facade import get_auth_service
     from app.infrastructure.auth.dependencies import get_logged_in_user

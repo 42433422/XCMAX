@@ -60,12 +60,17 @@ def _knowledge_runtime_snapshot(
 @_facade().router.post(
     "/ingest",
     response_model=_facade().IngestResponse,
-    dependencies=[_facade().Depends(_facade().require_legacy_global_knowledge)],
+    dependencies=[_facade().Depends(_facade().require_tenant_knowledge)],
 )
 def ingest(req: _facade().IngestRequest, request: _facade().Request) -> _facade().IngestResponse:
     try:
         count = _facade()._index.ingest(
-            req.text, req.source, req.chunk_strategy, req.chunk_size, req.chunk_overlap
+            req.text,
+            req.source,
+            req.chunk_strategy,
+            req.chunk_size,
+            req.chunk_overlap,
+            tenant_id=_facade()._request_tenant_key(request),
         )
         mirrored = _facade()._mirror_ingest_to_persy(
             text=req.text,
@@ -98,10 +103,12 @@ def ingest(req: _facade().IngestRequest, request: _facade().Request) -> _facade(
 @_facade().router.post(
     "/query",
     response_model=_facade().QueryResponse,
-    dependencies=[_facade().Depends(_facade().require_legacy_global_knowledge)],
+    dependencies=[_facade().Depends(_facade().require_tenant_knowledge)],
 )
-def query(req: _facade().QueryRequest) -> _facade().QueryResponse:
-    chunks = _facade()._index.query(req.query, req.top_k)
+def query(req: _facade().QueryRequest, request: _facade().Request) -> _facade().QueryResponse:
+    chunks = _facade()._index.query(
+        req.query, req.top_k, tenant_id=_facade()._request_tenant_key(request)
+    )
     return _facade().QueryResponse(
         success=True,
         query=req.query,
