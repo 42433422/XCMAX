@@ -228,6 +228,8 @@ async def convert_file(
         "images_index": str(images_index_path.name),
     }
     meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    if output_path.suffix.lower() == ".json" and output_path != meta_path:
+        output_path.write_text(meta_path.read_text(encoding="utf-8"), encoding="utf-8")
 
     return {
         "output_path": str(txt_path),
@@ -235,6 +237,7 @@ async def convert_file(
         "images_index_path": str(images_index_path),
         "page_count": len(pages_meta),
         "char_count": len(plain),
+        "plain_text": plain,
         "image_count": len(catalog),
         "warnings": warnings,
         "output_schema": list(rule_spec.get("output_schema") or []),

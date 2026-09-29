@@ -184,7 +184,7 @@ async def shipment_etl_execute(
 
 @_facade().router.post(
     "/shipment-etl/ocr-preview",
-    dependencies=[_facade().Depends(_facade().require_legacy_shipment_etl_access)],
+    dependencies=[_facade().Depends(_facade().require_tenant_etl_preview)],
 )
 async def shipment_etl_ocr_preview(
     file: _facade().UploadFile | None = _facade().File(default=None),

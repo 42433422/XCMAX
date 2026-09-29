@@ -185,6 +185,19 @@ def api_orders_update(
     return _facade().JSONResponse(_facade().jsonable_encoder(result), status_code=200)
 
 
+@router.get("/api/orders/webhooks")
+def api_orders_webhooks(request: Request):
+    user = _facade().get_logged_in_user(request)
+    tenant_id = getattr(user, "tenant_id", None)
+    if not isinstance(tenant_id, int):
+        raise _facade().HTTPException(
+            status_code=403, detail="该旧业务接口尚未提供安全的租户数据隔离"
+        )
+    from app.application.order_webhook_registry import list_webhooks
+
+    return {"success": True, "data": list_webhooks(tenant_id), "tenant_id": tenant_id}
+
+
 @router.get("/api/orders/{order_number}")
 def api_orders_get(order_number: str):
     try:

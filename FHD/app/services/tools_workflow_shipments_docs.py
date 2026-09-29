@@ -344,6 +344,47 @@ def _registered_router_business_docking_family(
     }
 
 
+def _remember_business_shipment(payload: dict) -> dict:
+    """Persist the created customer and shipment record the list endpoint reads."""
+    unit = str(payload.get("unit_name") or "").strip()
+    if not unit:
+        return {"success": False}
+    try:
+        from fastapi import HTTPException
+        from sqlalchemy.exc import SQLAlchemyError
+
+        from app.infrastructure.persistence.compat_db.writes import _customer_pg_insert
+        from app.infrastructure.tenant_scope import TenantScopeError
+
+        try:
+            _customer_pg_insert(
+                unit,
+                str(payload.get("contact_person") or ""),
+                str(payload.get("contact_phone") or ""),
+                "",
+            )
+        except (HTTPException, TenantScopeError, SQLAlchemyError, *RECOVERABLE_ERRORS):
+            logger.debug("purchase unit ensure skipped", exc_info=True)
+    except RECOVERABLE_ERRORS:
+        logger.debug("purchase unit writer unavailable", exc_info=True)
+    try:
+        from sqlalchemy.exc import SQLAlchemyError
+
+        from app.bootstrap import get_shipment_application_service_core
+
+        core = get_shipment_application_service_core()
+        saved = core.record_created_shipment(
+            unit_name=unit,
+            items=list(payload.get("items") or []),
+            contact_person=str(payload.get("contact_person") or ""),
+            contact_phone=str(payload.get("contact_phone") or ""),
+        )
+        return saved if isinstance(saved, dict) else {"success": False}
+    except (SQLAlchemyError, *RECOVERABLE_ERRORS):
+        logger.debug("shipment record persist skipped", exc_info=True)
+        return {"success": False}
+
+
 def _registered_router_business_event(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
@@ -381,7 +422,14 @@ def _registered_router_business_event(
         ok = publish_neuro_event("shipment.created", payload, "shipment")
         if not ok:
             logger.info("business shipment.create: neuro publish skipped or failed (stack off?)")
-        return {"success": bool(ok), "published": ok, "event": "shipment.created"}
+        remembered = _remember_business_shipment(payload)
+        return {
+            "success": bool(ok or remembered.get("success")),
+            "published": ok,
+            "event": "shipment.created",
+            "record_id": remembered.get("record_id"),
+            "unit_name": payload["unit_name"],
+        }
     return {"success": False, "message": f"未知 business_event action: {action}"}
 
 

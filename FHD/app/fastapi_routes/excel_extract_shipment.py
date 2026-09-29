@@ -20,7 +20,10 @@ from app.fastapi_routes.excel_extract import (
     router,
 )
 from app.infrastructure.auth.dependencies import require_identified_user
-from app.infrastructure.auth.shipment_etl_access_gate import require_legacy_shipment_etl_access
+from app.infrastructure.auth.shipment_etl_access_gate import (
+    require_legacy_shipment_etl_access,
+    require_tenant_etl_preview,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _PUBLIC_ETL_ERRORS = {

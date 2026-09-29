@@ -167,6 +167,24 @@ def require_legacy_global_knowledge(request: Request) -> None:
         raise HTTPException(403, "权限不足")
 
 
+def require_tenant_knowledge(request: Request) -> None:
+    """Legacy in-memory index, partitioned by the session tenant.
+
+    A session with no tenant stays blocked. The index itself filters chunks.
+    """
+    if resolve_product_sku() != "enterprise":
+        return
+    user = get_logged_in_user(request)
+    if getattr(user, "tenant_id", None) is None:
+        raise HTTPException(403, "旧知识索引未提供租户隔离")
+    read = request.method in {"GET", "HEAD"} or request.url.path.rstrip("/").endswith("/query")
+    code = DATASET_READ_PERMISSION if read else DATASET_WRITE_PERMISSION
+    from app.application.facades.session_facade import get_auth_service
+
+    if not get_auth_service().has_permission(user, code):
+        raise HTTPException(403, "权限不足")
+
+
 def require_desktop_knowledge_access(request: Request) -> None:
     """Require a real session and RBAC permission before desktop knowledge actions."""
     if not is_desktop_mode() or resolve_product_sku() != "enterprise":

@@ -80,6 +80,11 @@ class SQLAlchemyShipmentRecordStore(ShipmentRecordStorePort):
                 raw_text=raw_text or "",
                 parsed_data=parsed_data_json,
             )
+            from app.infrastructure.tenant_scope import current_tenant_id
+
+            tenant_id = current_tenant_id()
+            if isinstance(tenant_id, int):
+                record.tenant_id = tenant_id
             db.add(record)
             db.commit()
             db.refresh(record)

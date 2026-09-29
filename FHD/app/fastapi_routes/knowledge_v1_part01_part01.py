@@ -250,7 +250,13 @@ class _KnowledgeIndex:
         self._rebuild_needed: bool = True
 
     def ingest(
-        self, text: str, source: str, strategy: str, chunk_size: int, chunk_overlap: int
+        self,
+        text: str,
+        source: str,
+        strategy: str,
+        chunk_size: int,
+        chunk_overlap: int,
+        tenant_id: str | None = None,
     ) -> int:
         with self._lock:
             if strategy == "semantic":
@@ -269,19 +275,42 @@ class _KnowledgeIndex:
                         chunk_index=base + i,
                         char_start=c.char_start,
                         char_end=c.char_end,
-                        metadata={"source": source, "strategy": c.strategy},
+                        metadata={
+                            "source": source,
+                            "strategy": c.strategy,
+                            "tenant_id": tenant_id,
+                        },
                     )
                 )
             self._sources.add(source)
             self._rebuild_needed = True
             return len(chunks)
 
-    def query(self, q: str, top_k: int) -> list[_facade().RetrievedChunk]:
+    def query(
+        self, q: str, top_k: int, tenant_id: str | None = None
+    ) -> list[_facade().RetrievedChunk]:
         with self._lock:
-            if self._rebuild_needed:
-                self._retriever.index(self._chunks)
-                self._rebuild_needed = False
-            return _facade().cast("list[Any]", self._retriever.retrieve(q))
+            visible = self._chunks
+            if tenant_id is not None:
+                visible = [
+                    chunk
+                    for chunk in self._chunks
+                    if str((getattr(chunk, "metadata", None) or {}).get("tenant_id") or "")
+                    == str(tenant_id)
+                ]
+            self._retriever.index(visible)
+            self._rebuild_needed = False
+            found = _facade().cast("list[Any]", self._retriever.retrieve(q))
+            if tenant_id is None:
+                return found[:top_k]
+            allowed = {str(chunk.text) for chunk in visible}
+            kept = []
+            for chunk in found:
+                meta = getattr(chunk, "metadata", None) or {}
+                same_tenant = str(meta.get("tenant_id") or "") == str(tenant_id)
+                if same_tenant or str(getattr(chunk, "text", "")) in allowed:
+                    kept.append(chunk)
+            return kept[:top_k]
 
     def status(self) -> dict[str, int]:
         with self._lock:
