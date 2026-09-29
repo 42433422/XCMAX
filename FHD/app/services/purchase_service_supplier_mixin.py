@@ -30,6 +30,18 @@ def as_date(value: Any, default: date | None = None) -> date | None:
         return default
 
 
+def items_without_product(items: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """明细 product_id 为非空外键：缺失时返回业务错误，而不是在 flush 时抛完整性异常。"""
+    missing = [str(i) for i, item in enumerate(items, 1) if not (item or {}).get("product_id")]
+    if missing:
+        return {"success": False, "message": f"第 {'、'.join(missing)} 行明细未选择产品"}
+    return None
+
+
+def page_result(data: list[Any], total: int, page: int, per_page: int) -> dict[str, Any]:
+    return {"success": True, "data": data, "total": total, "page": page, "per_page": per_page}
+
+
 def _get_db():
     """Resolve through the compatibility module so existing dependency patches apply."""
     from app.services import purchase_service

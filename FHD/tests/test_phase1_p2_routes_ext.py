@@ -153,7 +153,9 @@ def test_preferences_persist_per_workspace_owner(misc_client: TestClient) -> Non
     svc.get_all_preferences.side_effect = lambda owner: dict(store.get(owner, {}))
     svc.set_preference.side_effect = lambda o, k, v: store.setdefault(o, {}).update({k: v}) or True
     with (
-        patch("app.fastapi_routes.domains.misc.routes._preferences_owner", return_value="tenant:7"),
+        patch(
+            "app.application.tenant_workspace_prefs.session_workspace_owner_id", return_value="t:7"
+        ),
         patch("app.services.user_preference_service.get_user_preference_service", return_value=svc),
     ):
         for key, value in (("aiMode", "offline"), ("pack", {"a": 1})):
@@ -161,7 +163,7 @@ def test_preferences_persist_per_workspace_owner(misc_client: TestClient) -> Non
             assert r.status_code == 200
         body = misc_client.get("/preferences", params={"user_id": "default"}).json()
     assert body["preferences"] == {"aiMode": "offline", "pack": '{"a": 1}'}
-    assert body["data"]["user_id"] == "tenant:7"
+    assert body["data"]["user_id"] == "t:7"
 
 
 def test_distillation_and_intent_packages(misc_client: TestClient) -> None:

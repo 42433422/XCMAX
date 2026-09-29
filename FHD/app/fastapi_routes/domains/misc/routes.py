@@ -11,6 +11,7 @@ from typing import Any, cast
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
+from app.application import tenant_workspace_prefs as _prefs
 from app.domain.ai.tools_directory import (
     get_tool_categories_payload,
     get_tools_payload,
@@ -185,30 +186,18 @@ async def system_test_db_disable(body: dict | None = Body(default=None)) -> dict
     return system_test_db_enable(merged)
 
 
-def _preferences_owner(request: Request) -> str | None:
-    from app.application.tenant_workspace_prefs import resolve_workspace_owner_id
-    from app.infrastructure.auth.dependencies import resolve_session_user
-
-    user = resolve_session_user(request)
-    return resolve_workspace_owner_id(request, user) if user is not None else None
-
-
 @router.get("/preferences")
 @router.get("/preferences/", include_in_schema=False)
 def preferences_get(request: Request) -> dict:
-    from app.application.tenant_workspace_prefs import get_owner_preferences
-
-    owner = _preferences_owner(request)
-    prefs = get_owner_preferences(owner) if owner else {}
+    owner = _prefs.session_workspace_owner_id(request)
+    prefs = _prefs.get_owner_preferences(owner) if owner else {}
     return {"success": True, "preferences": prefs, "data": {"user_id": owner, "preferences": prefs}}
 
 
 @router.post("/preferences")
 @router.post("/preferences/", include_in_schema=False)
 def preferences_post(request: Request, body: dict = Body(default_factory=dict)) -> dict:
-    from app.application.tenant_workspace_prefs import set_owner_preference
-
-    owner = _preferences_owner(request)
+    owner = _prefs.session_workspace_owner_id(request)
     if not owner:
         raise HTTPException(status_code=401, detail="请先登录后再保存偏好")
     key = str(body.get("key") or "").strip()
@@ -216,7 +205,7 @@ def preferences_post(request: Request, body: dict = Body(default_factory=dict)) 
         raise HTTPException(status_code=400, detail="偏好 key 不能为空且不超过 120 字符")
     raw = body.get("value")
     value = raw if isinstance(raw, str) else json.dumps(raw, ensure_ascii=False)
-    set_owner_preference(owner, key, value)
+    _prefs.set_owner_preference(owner, key, value)
     return {"success": True, "data": {"key": key, "value": value}}
 
 

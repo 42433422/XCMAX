@@ -24,18 +24,12 @@ from app.services.purchase_service_supplier_mixin import (
     DATE_FIELDS,
     PurchaseSupplierMixin,
     as_date,
+    items_without_product,
+    page_result,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-
-
-def _items_without_product(items: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """明细 product_id 为非空外键：缺失时返回业务错误，而不是在 flush 时抛完整性异常。"""
-    missing = [str(i) for i, item in enumerate(items, 1) if not (item or {}).get("product_id")]
-    if missing:
-        return {"success": False, "message": f"第 {'、'.join(missing)} 行明细未选择产品"}
-    return None
 
 
 class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
@@ -79,13 +73,7 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                 )
                 result.append(order_dict)
 
-            return {
-                "success": True,
-                "data": result,
-                "total": total,
-                "page": page,
-                "per_page": per_page,
-            }
+            return page_result(result, total, page, per_page)
 
     def get_purchase_order(self, order_id: int) -> dict[str, Any]:
         with get_db() as db:
@@ -105,7 +93,7 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
             return {"success": True, "data": order_dict}
 
     def create_purchase_order(self, data: dict[str, Any]) -> dict[str, Any]:
-        if invalid := _items_without_product(data.get("items") or []):
+        if invalid := items_without_product(data.get("items") or []):
             return invalid
         with get_db() as db:
             try:
@@ -182,7 +170,7 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                 return {"success": False, "message": str(e)}
 
     def update_purchase_order(self, order_id: int, data: dict[str, Any]) -> dict[str, Any]:
-        if invalid := _items_without_product(data.get("items") or []):
+        if invalid := items_without_product(data.get("items") or []):
             return invalid
         with get_db() as db:
             try:
@@ -297,7 +285,7 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                 return {"success": False, "message": str(e)}
 
     def create_purchase_inbound(self, data: dict[str, Any]) -> dict[str, Any]:
-        if invalid := _items_without_product(data.get("items") or []):
+        if invalid := items_without_product(data.get("items") or []):
             return invalid
         with get_db() as db:
             try:
@@ -497,13 +485,7 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                 )
                 result.append(inbound_dict)
 
-            return {
-                "success": True,
-                "data": result,
-                "total": total,
-                "page": page,
-                "per_page": per_page,
-            }
+            return page_result(result, total, page, per_page)
 
 
 # NEURO-DDD: 为 Services 层类添加 instrumentation

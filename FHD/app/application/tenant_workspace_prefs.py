@@ -8,7 +8,7 @@ from typing import Any
 
 from fastapi import Request
 
-from app.infrastructure.auth.dependencies import session_id_from_request
+from app.infrastructure.auth.dependencies import resolve_session_user, session_id_from_request
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -64,6 +64,11 @@ def resolve_workspace_owner_id(request: Request, user: Any) -> str | None:
     if uid is not None:
         return f"session:{uid}"
     return None
+
+
+def session_workspace_owner_id(request: Request) -> str | None:
+    user = resolve_session_user(request)
+    return resolve_workspace_owner_id(request, user) if user is not None else None
 
 
 def get_workspace_prefs(owner_id: str) -> dict[str, Any]:
