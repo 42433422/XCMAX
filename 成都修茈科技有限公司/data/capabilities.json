@@ -40,9 +40,9 @@
       },
       "web": {
         "applicable": 128,
-        "verified": 126,
+        "verified": 127,
         "partial": 0,
-        "pending": 2,
+        "pending": 1,
         "last_verified_at": "2026-09-29"
       },
       "android": {
@@ -1743,10 +1743,10 @@
                 {
                   "id": "web",
                   "name": "Web",
-                  "status": "pending",
-                  "verified_at": null,
-                  "run_count": 0,
-                  "accepted_count": 0
+                  "status": "verified",
+                  "verified_at": "2026-09-29",
+                  "run_count": 1,
+                  "accepted_count": 1
                 }
               ],
               "summary": "多计量单位与换算。",

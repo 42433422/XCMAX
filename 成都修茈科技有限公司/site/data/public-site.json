@@ -184,9 +184,9 @@
     {
       "key": "web",
       "applicable": 128,
-      "verified": 126,
+      "verified": 127,
       "partial": 0,
-      "pending": 2,
+      "pending": 1,
       "last_verified_at": "2026-09-29",
       "label": "Web / 后端",
       "level": "签约级"
@@ -248,9 +248,9 @@
       {
         "key": "web",
         "applicable": 128,
-        "verified": 126,
+        "verified": 127,
         "partial": 0,
-        "pending": 2,
+        "pending": 1,
         "last_verified_at": "2026-09-29",
         "label": "Web / 后端",
         "level": "签约级"
@@ -4887,29 +4887,61 @@
       },
       {
         "feature": "erp-uom",
-        "platform": "macos",
+        "platform": "web",
         "status": "passed",
-        "passed": 3,
+        "passed": 4,
         "failed": 0,
         "verified_at": "2026-09-29",
         "app_version": "1.0.0.5",
-        "app_git_sha": "37f22bcbd5cb76ea6373e4cfcb8f76c6735c124e",
+        "app_git_sha": "dcc03e0a549f70c1e47f99c4e9cfc0287673f96a",
         "media": [
           {
-            "file": "erp-uom-result.png",
-            "sha256": "42daee040a8de5ef22475e859b9de45edf8f8e0d71c7981949aca0e89b81e8de",
+            "file": "erp-uom-00-login-form.png",
+            "sha256": "cd07ddef58cf63bc3713468a51ce784481075f24b8409b13785ee4289c1835cc",
             "visual_review": "accepted",
-            "visible_result": "产品页「饰品包装品管理」：产品单位下拉「请选择产品单位」、两条验收产品；页头「人员管理」。",
+            "visible_result": "管理端登录页「XCMAX 服务器后台 · 管理员登录」，账号框已填 admin、密码框为掩码。",
             "kind": "screenshot",
-            "public_path": "/capabilities/assets/evidence/erp-uom-result.png"
+            "public_path": "/capabilities/assets/evidence/erp-uom-00-login-form.png"
           },
           {
-            "file": "erp-uom-operation.webm",
-            "sha256": "efae7bee07ff4cccaab755b35303035f06e7f2405a011bcc71c10f9c50b8458c",
+            "file": "erp-uom-UOM1-units-read.png",
+            "sha256": "55467edbc4024bfba35dc3b0f7734e478596655e0c10ab5a83d395b289abd0b5",
             "visual_review": "accepted",
-            "visible_result": "录屏为产品管理页，各帧一致。",
+            "visible_result": "卡片显示 GET /purchase_units 200（条数、首个 unit_name）与 GET /products/list 200（条数、首个产品 unit 与 model_number）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-uom-UOM1-units-read.png"
+          },
+          {
+            "file": "erp-uom-UOM2-conversion.png",
+            "sha256": "ebeecddf5e697e209efaa059cd2f70e34e25e91908ca2010459fca239290ab8b",
+            "visual_review": "accepted",
+            "visible_result": "卡片显示成单消息、chat 200/action=tool_call，以及发货记录中 quantity_tins=5、tin_spec=20、quantity_kg=100、expected_kg=100、consistent=true。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-uom-UOM2-conversion.png"
+          },
+          {
+            "file": "erp-uom-UOM3-conversion-scales.png",
+            "sha256": "91825308205fa902d91ee4269c644a25cd38639472998d07e8a8fce755dcd328",
+            "visual_review": "accepted",
+            "visible_result": "卡片显示 3 桶同规格的成单消息与记录值（record_tins=3、record_kg=60、expected_kg=60）。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-uom-UOM3-conversion-scales.png"
+          },
+          {
+            "file": "erp-uom-UOM4-document.png",
+            "sha256": "9a60bf2bd32507a57c16104b4351f21100a0c6780771ad64950690d1a14757dd",
+            "visual_review": "accepted",
+            "visible_result": "卡片显示发货单 document.success=true、doc_name、file_path，以及服务端文件存在与字节数>0。",
+            "kind": "screenshot",
+            "public_path": "/capabilities/assets/evidence/erp-uom-UOM4-document.png"
+          },
+          {
+            "file": "erp-uom-erp-uom-web-20260929-222223.webm",
+            "sha256": "b68d787ce39a7a366e1c8295cae9cdb66d0b0f661901ff9aa37ac9af2f97936b",
+            "visual_review": "accepted",
+            "visible_result": "本轮真实浏览器会话录像（webm，ffmpeg 实测 19.64s，1600x1000 VP8/25fps）：管理员登录 → 单位读面 → 5桶换算一致 → 3桶线性换算 → 换算入单生成文档。",
             "kind": "video",
-            "size_bytes": 312645,
+            "size_bytes": 1372342,
             "duration_seconds": null,
             "codec": "webm",
             "public_path": null
@@ -4921,7 +4953,7 @@
           "sha256": "c5ca7736773228d802951f1725c784361c784b753d2a43d98265bfbb15431026",
           "size_bytes": 1542
         },
-        "source_run": "/capabilities/assets/evidence/erp-uom-erp-uom-macos-run.json"
+        "source_run": "/capabilities/assets/evidence/erp-uom-erp-uom-web-run.json"
       },
       {
         "feature": "ind-ai-assistant",
@@ -10243,6 +10275,16 @@
       {
         "feature": "erp-uom",
         "file": "erp-uom-operation.webm",
+        "issues": [
+          "时长超 60s 或不可解析(None)",
+          "webm 不作官网展示",
+          "原始录像不可追溯"
+        ],
+        "action": "not-published"
+      },
+      {
+        "feature": "erp-uom",
+        "file": "erp-uom-erp-uom-web-20260929-222223.webm",
         "issues": [
           "时长超 60s 或不可解析(None)",
           "webm 不作官网展示",
