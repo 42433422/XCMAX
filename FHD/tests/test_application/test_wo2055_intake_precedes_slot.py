@@ -33,8 +33,10 @@ def _collect(agen) -> list[dict]:
     return asyncio.run(_run())
 
 
-@pytest.mark.parametrize("guide", [{"state": "ROUTED", "work_order_id": "WO-fixed-path",
-                                    "owner_ticket_no": "CI-fixed-path"}])
+@pytest.mark.parametrize(
+    "guide",
+    [{"state": "ROUTED", "work_order_id": "WO-fixed-path", "owner_ticket_no": "CI-fixed-path"}],
+)
 def test_intake_precedes_normal_slot_fast_path(monkeypatch, guide):
     import importlib
 
@@ -44,11 +46,15 @@ def test_intake_precedes_normal_slot_fast_path(monkeypatch, guide):
 
     # 快路径会返回业务答复——它绝不能在受理之前被采用
     monkeypatch.setattr(
-        dispatch, "try_normal_slot_read_payload",
-        lambda message, request=None: {"response": "当前没有采购订单。",
-                                       "data": {"intent": "purchase_query"}},
+        dispatch,
+        "try_normal_slot_read_payload",
+        lambda message, request=None: {
+            "response": "当前没有采购订单。",
+            "data": {"intent": "purchase_query"},
+        },
         raising=False,
     )
+
     # 受理返回一条带工单号的真回执
     async def _fake_intake_async(*a, **k):
         return dict(guide)
@@ -65,8 +71,7 @@ def test_intake_precedes_normal_slot_fast_path(monkeypatch, guide):
     )
     chunks = _collect(part03.compat_chat_stream_async(request, body, ai_tier="basic"))
     text = "".join(
-        c.decode("utf-8", "ignore") if isinstance(c, (bytes, bytearray)) else str(c)
-        for c in chunks
+        c.decode("utf-8", "ignore") if isinstance(c, (bytes, bytearray)) else str(c) for c in chunks
     )
 
     assert "当前没有采购订单。" not in text, "缺陷上报被 normal-slot 快路径吃掉"
