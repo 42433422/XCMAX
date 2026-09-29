@@ -1,0 +1,84 @@
+# CI SSOT: generated from FHD/.github/workflows/windows-candidate-acceptance.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+name: Windows Candidate Acceptance
+run-name: "Windows candidate ${{ inputs.candidate_sha }} · clean + upgrade"
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_run_id:
+        description: "Release Desktop run containing the private candidate artifact"
+        required: true
+        type: string
+      candidate_sha:
+        description: "Exact 40-character source SHA embedded in the candidate"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  isolated-install:
+    name: "${{ matrix.mode }} install on isolated Windows runner"
+    runs-on: windows-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [Clean, Upgrade]
+    defaults:
+      run:
+        working-directory: FHD
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.candidate_sha }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: xcagi-windows-installer-${{ inputs.candidate_sha }}
+          run-id: ${{ inputs.candidate_run_id }}
+          github-token: ${{ github.token }}
+          path: FHD/candidate
+      - name: Fetch immutable old installer for upgrade
+        if: matrix.mode == 'Upgrade'
+        shell: pwsh
+        run: |
+          $url = 'https://xiu-ci.com/xcagi-v1.0.0.5/enterprise/ac10f29f1d2ad5d53123200070e81d406cb587ca/95b8d6b11adc204cc7b6f5e3ae62af648f6be0ee94604ad850d5b9a978e98e99/XCAGI-Enterprise-Setup-1.0.0.5-x64-unsigned.exe'
+          Invoke-WebRequest -Uri $url -OutFile candidate/old-installer.exe -TimeoutSec 600
+      - name: Verify candidate and run customer installation path
+        shell: pwsh
+        env:
+          XCAGI_TEST_USER: ${{ secrets.XCAGI_TEST_USER }}
+          XCAGI_TEST_PASS: ${{ secrets.XCAGI_TEST_PASS }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          MODE: ${{ matrix.mode }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $receipt = Get-Content candidate/delivery-receipt.json -Raw | ConvertFrom-Json
+          if ($receipt.git_sha -ne $env:CANDIDATE_SHA) { throw 'Candidate receipt SHA mismatch' }
+          $installer = Get-ChildItem candidate -Filter 'XCAGI-Enterprise-Setup-*.exe' -File | Select-Object -First 1
+          if (-not $installer) { throw 'Candidate installer missing' }
+          $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne $receipt.sha256) { throw 'Candidate file SHA-256 mismatch' }
+          $args = @{
+            Mode = $env:MODE
+            CandidatePath = $installer.FullName
+            CandidateSha = $env:CANDIDATE_SHA
+            EvidenceDir = "candidate/evidence-$env:MODE"
+          }
+          if ($env:MODE -eq 'Upgrade') { $args.OldPath = (Resolve-Path candidate/old-installer.exe).Path }
+          scripts/package/accept-windows-candidate.ps1 @args
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-candidate-evidence-${{ matrix.mode }}-${{ inputs.candidate_sha }}
+          path: FHD/candidate/evidence-${{ matrix.mode }}/
+          if-no-files-found: warn
+          retention-days: 30
