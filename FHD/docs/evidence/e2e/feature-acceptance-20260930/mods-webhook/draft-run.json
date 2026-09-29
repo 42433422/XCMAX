@@ -1,0 +1,78 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "mods-webhook",
+ "name": "业务事件 Webhook",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+ "app_version": "1.0.0.5",
+ "account": "SUNBIRD",
+ "verified_at": "2026-09-30",
+ "passed": 5,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "POST /api/mod/xcagi-neuro-bus-bridge/events/publish 请求体 {\"event_type\": \"mac.acc.webhook\", \"payload\": {\"mark\": \"MAC验收0929\", \"ts\": 1790713185}}",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/mod/xcagi-neuro-bus-bridge/events/publish（写操作自动附带 CSRF）：业务事件发布到事件总线",
+   "expected": "业务事件发布到事件总线：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 16ms；{\"published\": true, \"event_type\": \"mac.acc.webhook\", \"domain\": \"global\", \"source\": \"mod:xcagi-neuro-bus-bridge\", \"execution_path\": \"mod_event_facade\"}",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "GET /api/neurobus/health",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/neurobus/health（写操作自动附带 CSRF）：事件总线健康（Webhook 派发依赖）",
+   "expected": "事件总线健康（Webhook 派发依赖）：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 18ms；published=5843 processed=5837 handlers=39",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "GET /api/mods/comms/endpoints",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/mods/comms/endpoints（写操作自动附带 CSRF）：Mod 通信端点注册表（当前无外部端点）",
+   "expected": "Mod 通信端点注册表（当前无外部端点）：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 16ms；端点 0 个（本机未注册外部 Webhook 端点）",
+   "result": "passed"
+  },
+  {
+   "id": "M4",
+   "input": "GET /api/orders/webhooks",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/orders/webhooks（写操作自动附带 CSRF）：已登录单位读取订单通知地址",
+   "expected": "按当前租户返回通知地址",
+   "observed": "HTTP 200 28ms；{\"success\": true, \"data\": [], \"tenant_id\": 1}",
+   "result": "passed"
+  },
+  {
+   "id": "M5",
+   "input": "界面路由 /mod-store",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /mod-store，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /mod-store，页面可见 能力库，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /mod-store；命中文本 ['能力库']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 能力库 | SUNBIRD | 副窗 | ◈ | 工作区 | 4 | 返回 AI 生态 |  | XCAGI · 能力库 |  | AI 员工市场 |  | 浏览并安装 AI 员工包；分类与修茈 AI 市场同源，安装后自动上岗至",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "mods-webhook",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/mods-webhook/macos/result.png",
+   "sha256": "24f7bc9214e382611d7e300ed6b0ef37c766103db75e5542fe3fcc07b4d33e58",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "mods-webhook",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/mods-webhook/macos/operation.webm",
+   "sha256": "7ba850a232b3bc42ed298697fe631083869af65f2ae334dc66ef329a7b5d4d6a",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/mods-webhook/macos/run.log",
+  "sha256": "186f96b391d25d3ddcc4c6f53f088b8a5a7075255cd2e539194f244555916f36",
+  "bytes": 1548
+ },
+ "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

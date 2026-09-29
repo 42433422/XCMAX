@@ -1,0 +1,62 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "ind-planner",
+ "name": "规划器桥接 Mod",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+ "app_version": "1.0.0.5",
+ "account": "SUNBIRD",
+ "verified_at": "2026-09-30",
+ "passed": 3,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/mod/xcagi-planner-bridge/host-capabilities",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/mod/xcagi-planner-bridge/host-capabilities（写操作自动附带 CSRF）：规划器宿主能力",
+   "expected": "规划器宿主能力：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 89ms；{\"success\": true, \"data\": {\"schema_version\": 1, \"edition\": \"full\", \"core_workflow_mod_id\": \"xcagi-workflow-visualization-bridge\", \"protected_client_mod_ids\": [\"attendance-industry\", \"coating-industry\"",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "GET /api/mod/xcagi-planner-bridge/tools/registry",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/mod/xcagi-planner-bridge/tools/registry（写操作自动附带 CSRF）：规划器工具注册表",
+   "expected": "规划器工具注册表：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 18ms；{\"success\": true, \"data\": {\"success\": true, \"tool_count\": 34, \"tool_names\": [\"excel_analysis\", \"excel_schema_understand\", \"excel_join_compare\", \"excel_chart_recommend\", \"import_excel_to_database\", \"te",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "界面路由 /",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /，页面可见 智能对话，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /；命中文本 ['智能对话']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 智能对话 | SUNBIRD | 副窗 | ◈ | 工作区 | 5 | 查产品 | 订单 | 库存预警 | 打印标签 | 考勤 | 已为您解决 13 次任务 · 预计节约人工费用 ¥55 |  | 你好，我是饰品包装助手。 - 查产",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "ind-planner",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ind-planner/macos/result.png",
+   "sha256": "a99240ab98a369bb759c7c2fd350cf79d0bd636f76e362f63dfa22430aa08f57",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "ind-planner",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ind-planner/macos/operation.webm",
+   "sha256": "90f2122bf95a547d11895f3bf90ccd9dde18e3e8599a99c8935de4252aba4ecf",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ind-planner/macos/run.log",
+  "sha256": "cca46b489ad48c4e5cb11352f6a429c4b50688454f23863fab9d46da779b851a",
+  "bytes": 1523
+ },
+ "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

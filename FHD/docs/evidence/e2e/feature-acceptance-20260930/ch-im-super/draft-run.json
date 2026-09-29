@@ -1,0 +1,54 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "ch-im-super",
+ "name": "超级员工与 AI 群聊",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+ "app_version": "1.0.0.5",
+ "account": "SUNBIRD",
+ "verified_at": "2026-09-30",
+ "passed": 2,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "GET /api/ai/qclaw/routes",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/ai/qclaw/routes（写操作自动附带 CSRF）：超级员工能力路由",
+   "expected": "超级员工能力路由：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 44ms；{\"success\": true, \"source\": \"qclaw\", \"permissions\": {\"normal_routes\": [\"/api/ai/unified_chat\", \"/api/tools/execute\", \"/api/products/*\", \"/api/customers/*\", \"/api/materials/*\"], \"pro_routes\": [\"/api/ai",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "界面路由 /im",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /im，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /im，页面可见 信息，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /im；命中文本 ['信息']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 信息 | SUNBIRD | 副窗 | ◈ | 工作区 | 5 | 信息 | 实时已连接 | 客 | 客户消息 · 客来来在 XCMAX 内只读查看客户会话 | 💬 | 用户客服员工 | O-A 获客部 · 未安装 | 🧭 | 需求接入",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "ch-im-super",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ch-im-super/macos/result.png",
+   "sha256": "aa97ca85fb461b2e2b6f8c899845fde7f3234133e047faf0d199f736f46ece27",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "ch-im-super",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ch-im-super/macos/operation.webm",
+   "sha256": "1fafc7985d50aec3d2b037bd3fff6ba5e086538263318524ab6e77f3fe4ac64e",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ch-im-super/macos/run.log",
+  "sha256": "bc0bdedb3d284584e7e5888400ed855063c31d3a329bce8529578f8ceeae8001",
+  "bytes": 1252
+ },
+ "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

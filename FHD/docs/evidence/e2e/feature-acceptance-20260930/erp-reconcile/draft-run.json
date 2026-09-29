@@ -1,0 +1,78 @@
+{
+ "kind": "feature-acceptance",
+ "feature": "erp-reconcile",
+ "name": "经营对账与结算",
+ "platform": "macos",
+ "status": "passed",
+ "verdict": "PASS",
+ "app_git_sha": "50f51b6ad65512a3342a833a2dc696f54b5921e8",
+ "app_version": "1.0.0.5",
+ "account": "SUNBIRD",
+ "verified_at": "2026-09-30",
+ "passed": 5,
+ "failed": 0,
+ "cases": [
+  {
+   "id": "M1",
+   "input": "POST /api/operations-line/reconciliation/run 请求体 {}",
+   "actions": "在 App 页面内以同一登录会话调用 POST /api/operations-line/reconciliation/run（写操作自动附带 CSRF）：执行一次经营对账",
+   "expected": "执行一次经营对账：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 19ms；{\"success\": true, \"dry_run\": false, \"ran_at\": \"2026-09-29T20:29:45.421430+00:00\", \"period_start\": \"2026-09-28T20:29:45.421430+00:00\", \"period_end\": \"2026-09-29T",
+   "result": "passed"
+  },
+  {
+   "id": "M2",
+   "input": "GET /api/operations-line/reconciliation/status",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/operations-line/reconciliation/status（写操作自动附带 CSRF）：读回对账状态",
+   "expected": "读回对账状态：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 17ms；{\"last_run\": {\"ran_at\": \"2026-09-29T20:29:45.421430+00:00\", \"period_start\": \"2026-09-28T20:29:45.421430+00:00\", \"period_end\": \"2026-09-29T20:29:45.421430+00:00\"",
+   "result": "passed"
+  },
+  {
+   "id": "M3",
+   "input": "GET /api/internal/payment/reconciliation-period",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/internal/payment/reconciliation-period?period_start=2026-09-01T00:00:00Z&period_end=2026-09-30T00:00:00Z（写操作自动附带 CSRF）：边界：内部支付对账接口拒绝无密钥调用",
+   "expected": "403 invalid internal api key 或 503 internal api not configured",
+   "observed": "HTTP 503 14ms；{\"success\": false, \"error_code\": \"http_503\", \"message\": \"internal api not configured\", \"path\": \"/api/internal/payment/reconciliation-period\"}",
+   "result": "passed"
+  },
+  {
+   "id": "M4",
+   "input": "GET /api/operations-line/health",
+   "actions": "在 App 页面内以同一登录会话调用 GET /api/operations-line/health（写操作自动附带 CSRF）：读回经营运营线健康（O1–O9）",
+   "expected": "读回经营运营线健康（O1–O9）：HTTP 2xx 且业务字段满足断言",
+   "observed": "HTTP 200 1889ms；pipeline 1，步骤 ['O1', 'O2', 'O3', 'O4', 'O5', 'O6', 'O7', 'O8', 'O9']",
+   "result": "passed"
+  },
+  {
+   "id": "M5",
+   "input": "界面路由 /kitten-finance",
+   "actions": "在已登录的 XCAGI.app 窗口内经 Vue Router 导航到 /kitten-finance，等待渲染后读取页面文本，并统计该页自身发出的 HTTP 请求",
+   "expected": "停留在 /kitten-finance，页面可见 财务分析，该页请求无 4xx/5xx",
+   "observed": "导航后路径 /kitten-finance；命中文本 ['财务分析']；缺失 []；界面请求失败 []；页面摘录：饰品包装助手 | SUNBIRD | 智能对话 | 考勤工作区 | 信息 | 智能生态 | 知识库 | 数据对接中心 | 员工工作台 | 数据来源 | 系统设置 | 系统正常 | 通用考勤模块 | v1.0.0.5 | SUNBIRD | 财务分析 | SUNBIRD | 副窗 | ◈ | 工作区 | 5 | 🐱 | 小猫财务分析 |  | 一键查看本月经营状况 |  | 🚀 开始分析 | 🐱 | 还没有分析数据 |  | 点击上方「开始分析」按钮，一键生成财务报告 |  | 立即开",
+   "result": "passed"
+  }
+ ],
+ "media": [
+  {
+   "feature": "erp-reconcile",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-reconcile/macos/result.png",
+   "sha256": "f415de48369d50b4d3f9d311bf569d6bd17f1cd8e8a6a34b03f4b21da59cc870",
+   "kind": "screenshot",
+   "tag": "result"
+  },
+  {
+   "feature": "erp-reconcile",
+   "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-reconcile/macos/operation.webm",
+   "sha256": "9860ba1655f1251435cb9df5f67e482cceaa2f6135f3bad3c37cea25e05cf03a",
+   "kind": "video",
+   "tag": "operation"
+  }
+ ],
+ "log": {
+  "path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/erp-reconcile/macos/run.log",
+  "sha256": "38ab4ba0ea079048af3eda867e734342d1ee6210aadf33ccbf9b5830302c477a",
+  "bytes": 1859
+ },
+ "method": "经 CDP(http://127.0.0.1:9222) 直连驱动已安装 /Applications/XCAGI.app：界面导航 + 页面内同会话 API 调用 + 界面读回；CDP screencast 录屏"
+}

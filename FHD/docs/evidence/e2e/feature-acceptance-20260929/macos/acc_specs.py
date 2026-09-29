@@ -278,8 +278,8 @@ def _(r: R):
     r.api("读回数据集状态含新文档", "GET", "/api/knowledge/v1/datasets/persy-knowledge/status",
           check=lambda d: d["document_count"] >= 1 and len(d["documents"]) >= 1 and d["chunk_count"] >= 1,
           show=lambda d: f"documents={d['document_count']} chunk={d['chunk_count']} latest={d['documents'][-1]['document_id']}")
-    r.api("边界：旧全局知识索引无租户隔离被拒", "POST", "/api/knowledge/v1/query", {"query": "迟到", "top_k": 3},
-          status=(403,), check=lambda d: "租户隔离" in dump(d), expected="旧索引 403「未提供租户隔离」", show=lambda d: dump(d))
+    r.api("已登录单位检索知识", "POST", "/api/knowledge/v1/query", {"query": "迟到", "top_k": 3},
+          check=lambda d: d.get("success") is True, expected="当前租户可检索并返回 success", show=lambda d: dump(d))
     r.ui("/persy/knowledge", ["知识"])
 
 
@@ -608,8 +608,7 @@ def _(r: R):
 
 @spec("erp-label")
 def _(r: R):
-    r.block("读取标签任务可选产品", "旧标签打印接口未开租户隔离：GET /api/print/label-jobs/products 返回 403「尚未提供安全的租户数据隔离」，界面标签页因此加载失败")
-    r.block("标签生成/派发到打印通道", "GET /api/print/label-jobs 与 POST /api/print/workflow/label-print/dispatch 均 403；本机未连接实体标签打印机")
+    r.api("读取当前单位可选标签产品", "GET", "/api/print/label-jobs/products", check=lambda d: d.get("success") is True and isinstance(d.get("data"), list), show=lambda d: f"产品 {len(d.get('data') or [])} 个")
     r.block("物理标签打印出纸", "需要连接并选择实体标签打印机，本机未连接打印机")
 
 
@@ -713,9 +712,9 @@ def _(r: R):
           {"body": f"{MARK} 客服路由"},
           check=lambda d: d.get("success") is True and (d.get("state") or {}).get("cs_mode") in ("human", "ai"),
           show=lambda d: f"conversation={d.get('conversation_id')} cs_mode={(d.get('state') or {}).get('cs_mode')} status={(d.get('state') or {}).get('cs_status')}")
-    r.api("边界：AI 客服员工未安装时如实上报", "GET", "/api/mod/xcagi-customer-service-bridge/user-cs/status",
-          status=(200,), check=lambda d: d.get("success") is False and "未安装" in dump(d),
-          expected="如实返回 user-customer-service-officer 未安装（转人工）", show=lambda d: dump(d, 160))
+    r.api("随包客服员工状态", "GET", "/api/mod/xcagi-customer-service-bridge/user-cs/status",
+          status=(200,), check=lambda d: (d.get("data") or {}).get("status") == "ready",
+          expected="安装包内用户客服员工已就绪", show=lambda d: dump(d, 160))
     r.ui("/im", ["信息"])
 
 
@@ -985,8 +984,8 @@ def _(r: R):
           show=lambda d: f"published={d['published']} processed={d['processed']} handlers={d['handlers']}")
     r.api("Mod 通信端点注册表（当前无外部端点）", "GET", "/api/mods/comms/endpoints", check=succ,
           show=lambda d: f"端点 {len(d['data'])} 个（本机未注册外部 Webhook 端点）")
-    r.api("边界：旧订单 Webhook 配置因无租户隔离被拒", "GET", "/api/orders/webhooks", status=(403,),
-          check=lambda d: "租户" in dump(d), expected="403 旧接口未提供租户隔离", show=lambda d: dump(d))
+    r.api("已登录单位读取订单通知地址", "GET", "/api/orders/webhooks",
+          check=lambda d: d.get("success") is True and isinstance(d.get("data"), list) and isinstance(d.get("tenant_id"), int), expected="按当前租户返回通知地址", show=lambda d: dump(d))
     r.ui("/mod-store", ["能力库"])
 
 
